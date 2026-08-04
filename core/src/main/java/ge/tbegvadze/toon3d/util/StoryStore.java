@@ -27,10 +27,11 @@ public final class StoryStore implements StoryProgressStore {
 
     /**
      * Bumped by order-7 when the persisted narrative schema changes.  Version 2 added the order-4
-     * keys (the three hidden stance leanings, consequential outcomes, codex unlocks); every one of
-     * them reads a default when absent, so a version-1 save loads cleanly with no migration.
+     * keys (the three hidden stance leanings, consequential outcomes, codex unlocks); version 3 the
+     * order-6 keys (which codex entries have been READ, and the accessibility settings).  Every one
+     * of them reads a default when absent, so an older save loads cleanly with no migration.
      */
-    public static final int STORY_SCHEMA_VERSION = 2;
+    public static final int STORY_SCHEMA_VERSION = 3;
 
     private static final String KEY_SCHEMA_VERSION = "story.schemaVersion";
     private static final String KEY_DEEPEST_REGION = "story.deepestRegion";
@@ -39,6 +40,8 @@ public final class StoryStore implements StoryProgressStore {
     private static final String KEY_STANCE_PREFIX  = "story.stance.";
     private static final String KEY_OUTCOME_PREFIX = "story.outcome.";
     private static final String KEY_CODEX_PREFIX   = "story.codex.";
+    private static final String KEY_CODEX_READ_PREFIX = "story.codexRead.";
+    private static final String KEY_SETTING_PREFIX = "story.setting.";
 
     /** Prefix shared by every narrative key — used by a "new game" wipe. */
     public static final String STORY_KEY_PREFIX = "story.";
@@ -151,6 +154,43 @@ public final class StoryStore implements StoryProgressStore {
         if (prefs == null || codexId == null) return;
         prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
         prefs.putBoolean(KEY_CODEX_PREFIX + codexId, true);
+        prefs.flush();
+    }
+
+    // -------------------------------------------------------------------------
+    // Order-6: which codex entries have actually been READ, and the accessibility settings.
+    // Both are written only when the player does something — opens an entry, changes a setting.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public boolean isCodexEntryRead(String codexId) {
+        Preferences prefs = preferences();
+        if (prefs == null || codexId == null) return false;
+        return prefs.getBoolean(KEY_CODEX_READ_PREFIX + codexId, false);
+    }
+
+    @Override
+    public void markCodexEntryRead(String codexId) {
+        Preferences prefs = preferences();
+        if (prefs == null || codexId == null) return;
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.putBoolean(KEY_CODEX_READ_PREFIX + codexId, true);
+        prefs.flush();
+    }
+
+    @Override
+    public int loadSettingInt(String settingKey, int defaultValue) {
+        Preferences prefs = preferences();
+        if (prefs == null || settingKey == null) return defaultValue;
+        return prefs.getInteger(KEY_SETTING_PREFIX + settingKey, defaultValue);
+    }
+
+    @Override
+    public void saveSettingInt(String settingKey, int value) {
+        Preferences prefs = preferences();
+        if (prefs == null || settingKey == null) return;
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.putInteger(KEY_SETTING_PREFIX + settingKey, value);
         prefs.flush();
     }
 }

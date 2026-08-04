@@ -1,7 +1,43 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 6 — Codex, pacing, anti-skip & accessibility (wrap-up)
 ---
+
+IMPLEMENTATION NOTES (what shipped, and where the design moved)
+- PART A — CODEX: narrative/CodexCategory, CodexEntry, CodexRegistry, CodexCatalog (33 entries),
+  CodexStrings, CodexSystem (headless); render/CodexOverlayRenderer; RunPhase.CODEX_OPEN in World.
+  ACCESS: the inventory header's CODEX button, because the inventory overlay IS the game's menu
+  today. World.openCodex()/closeCodex() remember the phase they were opened from, so order-8's
+  pause menu and title screen can call the same seam without changing anything here.
+  UNLOCKS: two paths, both permanent — a bark/exchange DELIVERED in the world archives the entry it
+  was about (CodexEntry.unlockedByLine), and an order-4 PROBE answer names an entry id directly.
+  Locked entries are NOT listed (a wall of "???" reads as homework); the NEW dot is a persistent
+  per-entry read flag that clears on first open and never re-nags.
+  COMPLETION PERK: deliberately cosmetic — BarkTrigger.CODEX_COMPLETE (one one-shot ORA line per
+  category) plus a COMPLETE mark on the tab. Never a gameplay bonus; the archive is opt-in and
+  paying it in power would make it a grind.
+  MEMORIES fills off the region-entry beats, so the block lifts exactly as the descent deepens.
+- PART B — PACING: the rate limits already lived in StoryUiConstants; what was missing was the
+  combat-spike rule. BarkSystem.setCombatSpike() HOLDS non-critical lines (and freezes their queue
+  ageing, so a long fight cannot silently eat one) until the lull; STORY_CRITICAL still lands,
+  because a dropped control hint is a stuck player. World feeds it EnemyManager.countAwakeEnemies().
+- PART C — ANTI-SKIP: no new code; a TEST. StorySkimmerPathTest asserts the spine (region entries,
+  gate orders, the two reveal logs, the cold open, every control hint) is one-shot STORY_CRITICAL,
+  that a critical beat survives a full queue plus a fight, that the reprint card opens at every
+  depth, that the ending is a blocking exchange with no way past it, that no channel advances
+  itself, and that the codex is never load-bearing.
+- PART D — ACCESSIBILITY: narrative/StorySettings + StoryTextSize (text size, reveal pacing,
+  reduced motion), persisted through the StoryProgressStore port (schema v3). Applied by
+  World.applyStoryAccessibilitySettings(): wrap width to the headless systems, glyph scale to the
+  renderers, so larger text wraps SOONER rather than overflowing. Exposed on the codex's footer
+  strip, which is the only settings surface until order-8 builds one.
+  NOTE ON TIMERS: Part D asks that timed moments carry a disable toggle. The layer's answer is that
+  it has NO timed moments — barks wait to be closed, exchanges wait for an answer, the boot card
+  waits for a tap — so there is nothing to disable, and no such toggle was added.
+- PART E — TELEMETRY: narrative/StoryTelemetry. In-memory counters only: no identifiers, no I/O,
+  no PII. The number that matters is the fast-dismiss fraction (a line closed inside
+  STORY_TELEMETRY_FAST_DISMISS_SECONDS was skipped, not read), which is how Part B's "if in doubt,
+  cut" gets measured.
 
 PURPOSE
 The opt-in archive plus the whole-system rules that keep story UI from annoying the

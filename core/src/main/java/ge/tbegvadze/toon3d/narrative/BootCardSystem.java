@@ -82,6 +82,9 @@ public final class BootCardSystem {
     /** Accessibility: the "reduce text hold" setting shortens the staggered line reveal. */
     private boolean reducedTextHold;
 
+    /** Accessibility: wrap width of ORA's wake line, narrowed as the text-size setting grows. */
+    private int lineMaxChars = StoryUiConstants.STORY_LINE_MAX_CHARS;
+
     /** Reused selection scratch — cleared and refilled per present(), never allocated per frame. */
     private final List<BootWakeLine> candidateScratch = new ArrayList<>();
 
@@ -118,6 +121,22 @@ public final class BootCardSystem {
 
     public boolean isReducedTextHold() {
         return reducedTextHold;
+    }
+
+    /**
+     * Narrows the wrap width of ORA's wake line (order-6 Part D's text-size setting).  Values below
+     * 1 are ignored — a cap of zero would hard-break every character onto its own line.
+     *
+     * <p>The SYSTEM status lines are deliberately NOT affected: they are authored to fit on one row
+     * each, and a wrapped machine readout reads as a bug rather than as a status.
+     */
+    public void setLineMaxChars(int value) {
+        if (value < 1) return;
+        this.lineMaxChars = value;
+    }
+
+    public int getLineMaxChars() {
+        return lineMaxChars;
     }
 
     // -------------------------------------------------------------------------
@@ -188,7 +207,7 @@ public final class BootCardSystem {
                     GameMath.formatInstanceCounter(reprintCount,
                             StoryUiConstants.STORY_BOOT_COUNTER_DIGITS));
         }
-        List<String> wrapped = StoryText.wrapToMaxChars(text, StoryUiConstants.STORY_LINE_MAX_CHARS);
+        List<String> wrapped = StoryText.wrapToMaxChars(text, lineMaxChars);
         wakeLineCount = Math.min(wrapped.size(), wakeLines.length);
         for (int lineIndex = 0; lineIndex < wakeLineCount; lineIndex++) {
             wakeLines[lineIndex] = wrapped.get(lineIndex);

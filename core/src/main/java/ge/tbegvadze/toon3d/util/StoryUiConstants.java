@@ -304,7 +304,7 @@ public final class StoryUiConstants {
     // PER-TRIGGER COOLDOWNS (seconds) — indexed by narrative/BarkTrigger.ordinal(), in that enum's
     // declaration order: 0 FLOOR_ARRIVAL, 1 REGION_ENTERED, 2 REGION_GATE_ORDER,
     // 3 ENEMY_FAMILY_FIRST_SEEN, 4 KILL, 5 LOW_HEALTH, 6 DEEP_STRATA, 7 IDLE, 8 BACKTRACK,
-    // 9 RUN_START, 10 CONTROL_HINT, 11 LOG_FOUND.
+    // 9 RUN_START, 10 CONTROL_HINT, 11 LOG_FOUND, 12 CODEX_COMPLETE.
     // A test guards this array against the enum drifting.  Zero = the moment is naturally rare
     // (a floor arrival, a one-shot beat) and needs no cooldown beyond the global rate limit.
     public static final float[] STORY_BARK_TRIGGER_COOLDOWN_SECONDS = {
@@ -320,6 +320,7 @@ public final class StoryUiConstants {
             0f,     // RUN_START                — one-shot cold open, twice in a lifetime
             0f,     // CONTROL_HINT             — one-shot tutorial; a dropped hint is a stuck player
             120f,   // LOG_FOUND                — a room full of terminals must yield ONE take
+            0f,     // CODEX_COMPLETE           — one-shot per category, six times in a lifetime
     };
 
     // =====================================================================
@@ -439,4 +440,153 @@ public final class StoryUiConstants {
     public static final boolean[] STORY_STING_IS_SQUARE  = { false, false, true, false };
     // Short attack/release envelope (fraction of duration) to avoid clicks — soft edges.
     public static final float STORY_STING_ENVELOPE_FRACTION = 0.15f;
+
+    // =====================================================================
+    // CODEX (order-6 Part A) — the ARCHIVE, and the ONE place in the whole game where long text is
+    // allowed.  Everything the story channels already said is filed here, plus the full text of the
+    // logs the player walked up to.  Nothing in it is forced: the ~20% who love lore can read for
+    // hours, the ~80% never open it and still get the whole story off the barks and exchanges.
+    //
+    // LAYOUT is a fixed three-band frame inside the near-full-screen panel above:
+    //   header  (title / BACK, close X)            — the top band
+    //   tabs    (one per CodexCategory, left)      + body (entry list -> entry detail, right)
+    //   footer  (the accessibility strip, under the body)
+    // Every anchor below is derived from the panel rect, so the whole screen re-spaces by moving
+    // STORY_CODEX_MARGIN alone.
+    // =====================================================================
+    public static final float STORY_CODEX_TOP_Y   = STORY_CODEX_Y + STORY_CODEX_HEIGHT;
+    public static final float STORY_CODEX_RIGHT_X = STORY_CODEX_X + STORY_CODEX_WIDTH;
+    public static final float STORY_CODEX_PADDING = 18f;
+    // Backdrop behind the panel: dark, but NOT the boot card's blackout — the codex is a menu the
+    // player chose to open, not a beat that happened to them.
+    public static final float STORY_CODEX_SCRIM_ALPHA = 0.86f;
+    public static final float STORY_CODEX_SCRIM_R = 0.02f, STORY_CODEX_SCRIM_G = 0.02f,
+                              STORY_CODEX_SCRIM_B = 0.03f;
+
+    // 1. HEADER — the archive title (or BACK, in an entry) and the close X.
+    public static final float STORY_CODEX_HEADER_HEIGHT   = 62f;
+    public static final float STORY_CODEX_HEADER_Y        = STORY_CODEX_TOP_Y - STORY_CODEX_HEADER_HEIGHT;
+    public static final float STORY_CODEX_TITLE_TEXT_SIZE = 1.5f;
+    /** Everything under the header — the tab column and the body share this top edge. */
+    public static final float STORY_CODEX_CONTENT_TOP_Y   = STORY_CODEX_HEADER_Y - STORY_CODEX_PADDING;
+    // The close X reuses the bark's glyph geometry so every dismissable panel closes the same way.
+    public static final float STORY_CODEX_CLOSE_CENTER_X =
+            STORY_CODEX_RIGHT_X - STORY_BARK_CLOSE_MARGIN - STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
+    public static final float STORY_CODEX_CLOSE_CENTER_Y =
+            STORY_CODEX_TOP_Y - STORY_BARK_CLOSE_MARGIN - STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
+    /** BACK sits where the title does, so returning from an entry is always the same thumb spot. */
+    public static final float STORY_CODEX_BACK_X      = STORY_CODEX_X + STORY_CODEX_PADDING;
+    public static final float STORY_CODEX_BACK_WIDTH  = 190f;
+    public static final float STORY_CODEX_BACK_HEIGHT = 46f;
+    public static final float STORY_CODEX_BACK_Y      =
+            STORY_CODEX_HEADER_Y + (STORY_CODEX_HEADER_HEIGHT - STORY_CODEX_BACK_HEIGHT) / 2f;
+
+    // 2. CATEGORY TABS — one per CodexCategory, stacked down the left.  Big plates, because this is
+    // a phone and a tab that needs aiming is a tab nobody presses.
+    public static final float STORY_CODEX_TAB_WIDTH     = 300f;
+    public static final float STORY_CODEX_TAB_HEIGHT    = 74f;
+    public static final float STORY_CODEX_TAB_GAP       = 8f;
+    public static final float STORY_CODEX_TAB_X         = STORY_CODEX_X + STORY_CODEX_PADDING;
+    public static final float STORY_CODEX_TABS_TOP_Y    = STORY_CODEX_CONTENT_TOP_Y;
+    public static final float STORY_CODEX_TAB_TEXT_SIZE = 1.15f;
+    /** Progress readout under a tab's name ("3/5") — dim, never a score. */
+    public static final float STORY_CODEX_TAB_COUNT_TEXT_SIZE = 0.95f;
+
+    // 3. BODY — the entry list, and the entry detail that replaces it.  Both scroll inside it.
+    public static final float STORY_CODEX_BODY_GAP    = 20f;
+    public static final float STORY_CODEX_BODY_X      =
+            STORY_CODEX_TAB_X + STORY_CODEX_TAB_WIDTH + STORY_CODEX_BODY_GAP;
+    public static final float STORY_CODEX_BODY_WIDTH  =
+            STORY_CODEX_RIGHT_X - STORY_CODEX_PADDING - STORY_CODEX_BODY_X;
+    public static final float STORY_CODEX_BODY_TOP_Y  = STORY_CODEX_CONTENT_TOP_Y;
+
+    // 4. FOOTER — the accessibility strip (Part D), directly under the body and only as wide as it.
+    public static final float STORY_CODEX_FOOTER_HEIGHT     = 56f;
+    public static final float STORY_CODEX_FOOTER_GAP        = 14f;
+    public static final float STORY_CODEX_FOOTER_Y          = STORY_CODEX_Y + STORY_CODEX_PADDING;
+    public static final float STORY_CODEX_FOOTER_TEXT_SIZE  = 1.0f;
+    /** How many settings buttons the strip holds — text size, reveal pacing, motion. */
+    public static final int   STORY_CODEX_SETTING_COUNT     = 3;
+    public static final float STORY_CODEX_SETTING_GAP       = 12f;
+    public static final float STORY_CODEX_SETTING_WIDTH     =
+            (STORY_CODEX_BODY_WIDTH - (STORY_CODEX_SETTING_COUNT - 1) * STORY_CODEX_SETTING_GAP)
+                    / STORY_CODEX_SETTING_COUNT;
+    public static final float STORY_CODEX_BODY_BOTTOM_Y     =
+            STORY_CODEX_FOOTER_Y + STORY_CODEX_FOOTER_HEIGHT + STORY_CODEX_FOOTER_GAP;
+    public static final float STORY_CODEX_BODY_HEIGHT       =
+            STORY_CODEX_BODY_TOP_Y - STORY_CODEX_BODY_BOTTOM_Y;
+
+    // ENTRY LIST rows — one tappable plate per unlocked entry.  A locked entry is not listed at all:
+    // a wall of "???" is a chore list, and the codex must never feel like homework.
+    public static final float STORY_CODEX_ROW_HEIGHT     = 66f;
+    public static final float STORY_CODEX_ROW_GAP        = 8f;
+    public static final float STORY_CODEX_ROW_TEXT_SIZE  = 1.2f;
+    /** Source line under a row's title (where the entry came from) — dim and small. */
+    public static final float STORY_CODEX_ROW_SOURCE_TEXT_SIZE = 0.9f;
+    /** The "NEW" dot: an invitation to look, never a badge that nags.  Cleared once read. */
+    public static final float STORY_CODEX_NEW_DOT_RADIUS = 7f;
+    public static final float STORY_CODEX_NEW_DOT_INSET  = 22f;
+
+    // ENTRY DETAIL — the long text.  Generous line pitch; the whole point of this screen is that it
+    // is comfortable to read for a long time on a phone.
+    public static final float STORY_CODEX_DETAIL_LINE_PITCH   = 32f;
+    public static final float STORY_CODEX_DETAIL_TEXT_SIZE    = 1.3f;
+    /** Wrap width in characters at the default text size; scaled down as the size setting grows. */
+    public static final int   STORY_CODEX_LINE_MAX_CHARS      = 62;
+    /** Blank-line pitch between the detail's blocks (title / source / ORA's take / body). */
+    public static final float STORY_CODEX_DETAIL_BLOCK_GAP    = 16f;
+
+    // SCROLLING — drag the body with a thumb.  Vertical only: nothing in the codex ever scrolls
+    // sideways, and content is wrapped to fit rather than clipped.
+    public static final float STORY_CODEX_SCROLL_DRAG_SCALE = 1.0f;
+    /** A drag shorter than this is a TAP, not a scroll — so a slightly shaky finger still opens an entry. */
+    public static final float STORY_CODEX_TAP_SLOP          = 12f;
+
+    // Plate styling, shared by tabs, rows and setting buttons (the exchange plates' language).
+    public static final float STORY_CODEX_PLATE_BORDER          = 2f;
+    public static final float STORY_CODEX_PLATE_FILL_ALPHA      = 0.16f;
+    public static final float STORY_CODEX_PLATE_SELECTED_ALPHA  = 0.46f;
+    public static final float STORY_CODEX_PLATE_CORNER          = 10f;
+
+    /** Seconds the codex panel takes to fade in / out — a menu, so brisk. */
+    public static final float STORY_CODEX_FADE_SECONDS = 0.18f;
+
+    // Localisation ids for the codex's own chrome (localisation rule: never a literal in render).
+    public static final String STORY_CODEX_TITLE_ID            = "story.codex.title";
+    public static final String STORY_CODEX_BACK_LABEL_ID       = "story.codex.back";
+    public static final String STORY_CODEX_EMPTY_ID            = "story.codex.empty";
+    public static final String STORY_CODEX_NEW_LABEL_ID        = "story.codex.new";
+    public static final String STORY_CODEX_COMPLETE_LABEL_ID   = "story.codex.complete";
+    public static final String STORY_CODEX_TAKE_LABEL_ID       = "story.codex.take";
+    public static final String STORY_CODEX_SETTING_TEXT_ID     = "story.codex.setting.text";
+    public static final String STORY_CODEX_SETTING_REVEAL_ID   = "story.codex.setting.reveal";
+    public static final String STORY_CODEX_SETTING_MOTION_ID   = "story.codex.setting.motion";
+
+    // =====================================================================
+    // ACCESSIBILITY SETTINGS (order-6 Part D) — the player-facing knobs, and their persisted keys.
+    // Defaults are the COMFORTABLE end of every scale: big text, paced reveal, motion on.  Nothing
+    // here is ever required to understand the game — a setting may only make reading easier.
+    // =====================================================================
+    /** Multipliers over {@link #STORY_TEXT_SIZE}, indexed by {@code StoryTextSize.ordinal()}. */
+    public static final float[] STORY_TEXT_SIZE_MULTIPLIER = { 1.0f, 1.2f, 1.45f };
+    /** Persisted setting keys.  Stable once shipped — they are baked into saves. */
+    public static final String STORY_SETTING_TEXT_SIZE      = "textSize";
+    public static final String STORY_SETTING_REDUCE_HOLD    = "reduceTextHold";
+    public static final String STORY_SETTING_REDUCE_MOTION  = "reduceMotion";
+
+    // =====================================================================
+    // PACING BUDGET (order-6 Part B) — the anti-overwhelm rules that are NOT already a cooldown.
+    // The rate limits live in the bark section above; this is the one rule they cannot express:
+    // no story UI lands during a combat spike.  It is HELD, not dropped — the line arrives in the
+    // lull right after, which is when the player can actually read it.
+    // =====================================================================
+    /** This many awake enemies (or more) is a spike: nothing non-critical is delivered until it ends. */
+    public static final int STORY_COMBAT_SPIKE_AWAKE_ENEMIES = 2;
+
+    // =====================================================================
+    // TELEMETRY (order-6 Part E) — in-memory tuning counters only.  No PII, no identifiers, no I/O:
+    // the numbers exist so a designer can ask "which lines are being skipped?" and prune them.
+    // =====================================================================
+    /** A bark dismissed faster than this was skipped, not read — the signal Part E exists to collect. */
+    public static final float STORY_TELEMETRY_FAST_DISMISS_SECONDS = 1.5f;
 }

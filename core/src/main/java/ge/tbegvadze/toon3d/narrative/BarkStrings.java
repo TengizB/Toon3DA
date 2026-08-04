@@ -37,7 +37,27 @@ public final class BarkStrings {
         registerLowHealth(strings);
         registerPlanet(strings);
         registerIdleAndBacktrack(strings);
+        registerCodexCompletion(strings);
         return strings;
+    }
+
+    /**
+     * Codex completion (order-6) — ORA noticing that the player filled a shelf of the archive.  The
+     * whole reward, and deliberately so: warm, one line, never a fanfare and never a bonus.
+     */
+    private static void registerCodexCompletion(StoryStrings strings) {
+        strings.put("story.bark.codex.complete.logs",
+                                                     "You read all the paperwork. Every page. Wow.");
+        strings.put("story.bark.codex.complete.people",
+                                                     "You know all their names now. Somebody should.");
+        strings.put("story.bark.codex.complete.planet",
+                                                     "That's everything it's managed to tell us.");
+        strings.put("story.bark.codex.complete.organization",
+                                                     "The whole file on them. It's worse assembled.");
+        strings.put("story.bark.codex.complete.ora",
+                                                     "You looked me up. All of it. Thank you, actually.");
+        strings.put("story.bark.codex.complete.memories",
+                                                     "That's all of you I could get back. It's enough.");
     }
 
     /** The cold open (order-5) — the first voice the player ever hears, twice in a lifetime. */

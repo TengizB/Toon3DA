@@ -58,6 +58,7 @@ public final class BarkCatalog {
         registerLowHealth(registry);
         registerDeepStrata(registry);
         registerIdleAndBacktrack(registry);
+        registerCodexCompletion(registry);
     }
 
     /** A fresh registry with the v1 catalog already in it (tests, showcases). */
@@ -384,6 +385,24 @@ public final class BarkCatalog {
                 .regionBand(firstRegion, lastRegion)
                 .tone(tone)
                 .build());
+    }
+
+    // -------------------------------------------------------------------------
+    // CODEX COMPLETION (order-6 Part A) — the "completion perk", which is deliberately just ORA
+    // noticing.  One one-shot line per category, region-unrestricted because a player may fill a tab
+    // at any depth, and REACTIVE rather than critical: it is a nice thing to hear, and a player who
+    // never sees it has lost nothing.  Paying completion in POWER would turn an opt-in archive into
+    // a chore, which is the one thing order-6 must not do.
+    // -------------------------------------------------------------------------
+    private static void registerCodexCompletion(BarkRegistry registry) {
+        for (CodexCategory category : CodexCategory.values()) {
+            String id = "bark.codex.complete." + category.getCatalogKey();
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.CODEX_COMPLETE)
+                    .subjectKey(category.getCatalogKey())
+                    .oneShot(true)
+                    .build());
+        }
     }
 
     /** Shared row prologue: ORA, reactive priority, lore tone — the defaults most rows keep. */

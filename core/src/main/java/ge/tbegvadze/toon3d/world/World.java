@@ -49,13 +49,18 @@ import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.BootCardCatalog;
 import ge.tbegvadze.toon3d.narrative.BootCardSystem;
 import ge.tbegvadze.toon3d.narrative.BootCardVariant;
+import ge.tbegvadze.toon3d.narrative.CodexCatalog;
+import ge.tbegvadze.toon3d.narrative.CodexCategory;
+import ge.tbegvadze.toon3d.narrative.CodexSystem;
 import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
+import ge.tbegvadze.toon3d.narrative.StorySettings;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
+import ge.tbegvadze.toon3d.narrative.StoryTelemetry;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
@@ -119,7 +124,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE }
+    private enum RunPhase { BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE, CODEX_OPEN }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -395,6 +400,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private float                    barkSwipeStartY;
 
     // -------------------------------------------------------------------------
+    // Story UI — CODEX, PACING, ACCESSIBILITY, TELEMETRY (order-6): the wrap-up.
+    // The codex is the opt-in ARCHIVE of everything the story channels already said, opened from a
+    // MENU and never from play; codexSystem is the headless brain (what is unlocked, which tab and
+    // entry are open, where the body is scrolled) and codexOverlayRenderer only draws what it
+    // reports.  storySettings holds the three accessibility knobs, persisted alongside every other
+    // narrative flag.  storyTelemetry is in-memory tuning counters only — no identifiers, no I/O.
+    // -------------------------------------------------------------------------
+    private final StorySettings        storySettings;
+    private final CodexSystem          codexSystem;
+    private final CodexOverlayRenderer codexOverlayRenderer;
+    private final StoryTelemetry       storyTelemetry = new StoryTelemetry();
+    /** The phase to restore when the archive closes — it is a page of a menu, not a detour. */
+    private RunPhase                   codexReturnPhase = RunPhase.PLAYING;
+    /** Drag-to-scroll tracking for the codex body: where the finger went down, and how far it went. */
+    private boolean                    codexDragTracking;
+    private float                      codexDragLastY;
+    private float                      codexDragTravel;
+    private float                      codexTouchDownX;
+    private float                      codexTouchDownY;
+    private float                      codexScrollAtTouchDown;
+
+    // -------------------------------------------------------------------------
     // Timing accumulators
     // -------------------------------------------------------------------------
     private float alertTimeSeconds    = 0f;
@@ -499,6 +526,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         storyExchangeRenderer = new StoryExchangeRenderer();
         storyExchangeRenderer.setExchangeSystem(exchangeSystem);
         storyExchangeRenderer.setStrings(storyStrings);
+
+        // Story UI codex + accessibility (order-6) — the archive shares the same persistent
+        // StoryProgress as every other channel, so an entry unlocked two runs ago is still there,
+        // and the settings persist beside it. Applying them here (rather than per frame) is what
+        // makes a size change take effect on the next line rather than on the next launch.
+        storySettings        = new StorySettings(new StoryStore());
+        codexSystem          = new CodexSystem(CodexCatalog.defaultRegistry(), storyStrings,
+                                               barkSystem.getProgress(), storySettings);
+        codexOverlayRenderer = new CodexOverlayRenderer();
+        codexOverlayRenderer.setCodexSystem(codexSystem);
+        codexOverlayRenderer.setStrings(storyStrings);
+        applyStoryAccessibilitySettings();
         // EVERY run opens on the reprint card, the very first one included: in-fiction the original
         // self has just died, so the player's first boot shows the same death notice as their
         // hundredth (story/01-timeline.md). A file-loaded or test world skips it — it is not a run.
@@ -1786,6 +1825,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // CODEX_OPEN phase (order-6) — the archive owns the screen. It is a MENU: the world is
+        // frozen, no turn passes, no bark is delivered (the queue is suppressed above and resumes
+        // intact), and nothing in here is on a timer. The player asked for this screen and the
+        // player decides when it ends.
+        if (runPhase == RunPhase.CODEX_OPEN) {
+            codexSystem.update(deltaTime);
+            updateCodexTouch();
+            return;
+        }
+
         // DEAD phase — death beat then death screen; no game simulation
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
@@ -1877,6 +1926,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     closeInventory(false);
                 } else if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
                     closeInventory(true);
+                } else if (touchAction == InventoryOverlayRenderer.CloseAction.OPEN_CODEX) {
+                    openCodex();
                 }
             }
             return;
@@ -2054,7 +2105,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // then hand its speaker sting to the renderer (audio is an update-path side effect, never a
         // draw-path one). The idle clock only runs here, in PLAYING, so time spent inside an overlay
         // is never mistaken for the player standing still.
+        // PACING BUDGET (order-6 Part B): tell the bark layer whether the player is in a fight
+        // BEFORE it decides what to deliver, so a line queued mid-spike waits for the lull.
+        barkSystem.setCombatSpike(isCombatSpike());
         barkSystem.update(deltaTime);
+        archiveDeliveredStoryLine();
+        requestCodexCompletionBarks();
         storyBarkRenderer.playPendingSpeakerSting();
         updateStoryBarkTouch();
         if (storyBarkTickSubscriber != null) storyBarkTickSubscriber.update(deltaTime);
@@ -2203,7 +2259,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && runPhase != RunPhase.ROUTE_SELECT
                 && runPhase != RunPhase.EVENT_CHOICE
                 && runPhase != RunPhase.BOOT_CARD
-                && runPhase != RunPhase.STORY_EXCHANGE) {
+                && runPhase != RunPhase.STORY_EXCHANGE
+                && runPhase != RunPhase.CODEX_OPEN) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -2253,6 +2310,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // lower screen those buttons normally own.
         if (runPhase == RunPhase.STORY_EXCHANGE) {
             storyExchangeRenderer.render(camera);
+        }
+
+        // Codex (order-6) — the archive. Brings its own scrim over the frozen world, so it sits
+        // above the HUD and every in-run overlay, and below only the boot card and the fade. It is
+        // opened from a menu and never from play, so it never covers a beat in progress.
+        if (runPhase == RunPhase.CODEX_OPEN) {
+            codexOverlayRenderer.render(camera);
         }
 
         // Reprint / boot card (order-3) — the modal that opens every run. Its own dark full-bleed
@@ -2314,6 +2378,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Story exchanges (order-4): the renderer owns the story panel primitive, its own
         // shapes/batch/font and the per-speaker stings. ExchangeSystem itself is headless.
         storyExchangeRenderer.dispose();
+        // Codex (order-6): the archive renderer owns its own shapes, batch and font. CodexSystem
+        // itself is headless — no GPU handles.
+        codexOverlayRenderer.dispose();
         hitVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
@@ -2784,6 +2851,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (touchInputState != null) touchInputState.resetAllButtonStates();
         exchangePressedIndex = -1;
         runPhase             = RunPhase.STORY_EXCHANGE;
+        // The archive (order-6) files whatever this conversation is about, exactly as a delivered
+        // bark does: the codex only ever holds the long version of something already on screen.
+        codexSystem.noteLineSpoken(exchangeSystem.getActiveExchangeId());
         storyExchangeRenderer.playPendingSpeakerSting();
         return true;
     }
@@ -2831,7 +2901,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         exchangePressedIndex = -1;
         exchangeSystem.setPressedOptionIndex(-1);
         if (exchangeSystem.isAwaitingChoice()) {
+            storyTelemetry.recordExchangeAnswered(exchangeSystem.getOptionKind(committedIndex));
             exchangeSystem.selectOption(committedIndex);
+            // A PROBE answer may have named a codex entry; re-check completion so the tab's mark and
+            // ORA's completion beat land on the same tap that earned them.
+            codexSystem.refresh();
         } else {
             exchangeSystem.requestContinue();
         }
@@ -2895,6 +2969,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         if (Gdx.input.justTouched()) {
             if (StoryBarkRenderer.isInsideCloseButton(cardTouchPosition.x, cardTouchPosition.y)) {
+                recordBarkDismissalForTuning();
                 barkSystem.dismissActiveBark();
                 barkSwipeTracking = false;
                 return;
@@ -2910,9 +2985,218 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         float travelY = cardTouchPosition.y - barkSwipeStartY;
         float travelDistance = (float) Math.sqrt(travelX * travelX + travelY * travelY);
         if (travelDistance >= StoryUiConstants.STORY_BARK_SWIPE_DISMISS_DISTANCE) {
+            recordBarkDismissalForTuning();
             barkSystem.dismissActiveBark();
             barkSwipeTracking = false;
         }
+    }
+
+    /**
+     * Files how long the player kept the bark on screen before closing it (order-6 Part E).  A line
+     * swiped away instantly was skipped, not read, and a pool that keeps getting skipped is a pool
+     * to DELETE rather than one to make louder — "if in doubt, cut" is Part B's rule, and this is
+     * the only measurement behind it.
+     */
+    private void recordBarkDismissalForTuning() {
+        if (!barkSystem.hasActiveBark() || barkSystem.isActiveBarkDismissed()) return;
+        storyTelemetry.recordBarkDismissed(barkSystem.getActiveElapsedSeconds());
+    }
+
+    // -------------------------------------------------------------------------
+    // Story UI order-6 — the codex, the pacing budget, accessibility and telemetry
+    // -------------------------------------------------------------------------
+
+    /**
+     * Opens the CODEX (order-6 Part A).  It is reached from a MENU — today the inventory header,
+     * tomorrow order-8's pause menu — and never from play, which is the whole point: the archive is
+     * opt-in, so it must never be able to interrupt anything.
+     *
+     * <p>The phase it was opened from is remembered and restored on close, so the archive reads as a
+     * page of the menu the player was already in rather than as a detour out of it.
+     */
+    public void openCodex() {
+        if (runPhase == RunPhase.CODEX_OPEN) return;
+        codexReturnPhase = runPhase == RunPhase.INVENTORY_OPEN ? RunPhase.INVENTORY_OPEN
+                                                               : RunPhase.PLAYING;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        codexSystem.open();
+        codexOverlayRenderer.refreshLabels();
+        storyTelemetry.recordCodexOpened();
+        resetCodexDragTracking();
+        runPhase = RunPhase.CODEX_OPEN;
+    }
+
+    /** Closes the archive and returns to whichever menu (or to play) it was opened from. */
+    public void closeCodex() {
+        codexSystem.close();
+        resetCodexDragTracking();
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+        runPhase = codexReturnPhase;
+    }
+
+    /**
+     * Routes touches to the archive: tap a tab, tap an entry, drag the body to scroll, tap BACK or
+     * the close X to leave.  Standard phone behaviour — a drag that travels further than
+     * {@code STORY_CODEX_TAP_SLOP} is a SCROLL and never also opens whatever was under the finger,
+     * so flicking through a long list can never fling the player into an entry they did not want.
+     *
+     * <p>Nothing here is timed and nothing auto-advances; the codex waits exactly as long as the
+     * player wants to read.
+     */
+    private void updateCodexTouch() {
+        if (gameViewport == null) return;
+
+        if (!Gdx.input.isTouched()) {
+            if (codexDragTracking) commitCodexTap();
+            resetCodexDragTracking();
+            return;
+        }
+
+        cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+        gameViewport.unproject(cardTouchPosition);
+
+        if (Gdx.input.justTouched()) {
+            codexDragTracking      = true;
+            codexTouchDownX        = cardTouchPosition.x;
+            codexTouchDownY        = cardTouchPosition.y;
+            codexDragLastY         = cardTouchPosition.y;
+            codexDragTravel        = 0f;
+            codexScrollAtTouchDown = codexSystem.getScrollOffset();
+            return;
+        }
+        if (!codexDragTracking) return;
+
+        // Drag inside the body scrolls it. Y is UP in world space, so dragging the finger DOWN
+        // (a decreasing Y) pulls the content up and reveals what is further down the document —
+        // which is why the delta is added rather than subtracted.
+        float dragDeltaY = codexDragLastY - cardTouchPosition.y;
+        codexDragLastY   = cardTouchPosition.y;
+        codexDragTravel += Math.abs(dragDeltaY);
+        if (CodexOverlayRenderer.isInsideBody(codexTouchDownX, codexTouchDownY)
+                && codexDragTravel >= StoryUiConstants.STORY_CODEX_TAP_SLOP) {
+            codexSystem.scrollBy(-dragDeltaY * StoryUiConstants.STORY_CODEX_SCROLL_DRAG_SCALE);
+        }
+    }
+
+    /** The finger lifted: everything that is a TAP rather than a scroll resolves here. */
+    private void commitCodexTap() {
+        if (codexDragTravel >= StoryUiConstants.STORY_CODEX_TAP_SLOP) {
+            // That was a scroll, not a tap. Leave the new offset where the drag put it.
+            return;
+        }
+        float tapX = codexTouchDownX;
+        float tapY = codexTouchDownY;
+
+        if (CodexOverlayRenderer.isInsideCloseButton(tapX, tapY)
+                || CodexOverlayRenderer.isOutsidePanel(tapX, tapY)) {
+            closeCodex();
+            return;
+        }
+        if (codexSystem.isShowingEntry() && CodexOverlayRenderer.isInsideBackButton(tapX, tapY)) {
+            codexSystem.closeEntry();
+            return;
+        }
+        int settingIndex = CodexOverlayRenderer.settingIndexAt(tapX, tapY);
+        if (settingIndex >= 0) {
+            codexSystem.getSettings().cycleSetting(settingIndex);
+            applyStoryAccessibilitySettings();
+            codexOverlayRenderer.refreshLabels();
+            return;
+        }
+        int tabIndex = CodexOverlayRenderer.categoryTabIndexAt(tapX, tapY);
+        if (tabIndex >= 0) {
+            codexSystem.selectCategory(CodexCategory.values()[tabIndex]);
+            return;
+        }
+        if (codexSystem.isShowingEntry()) return;   // the body is text, not buttons
+        int rowIndex = CodexOverlayRenderer.entryRowIndexAt(tapX, tapY,
+                codexSystem.getVisibleEntryCount(), codexScrollAtTouchDown);
+        if (rowIndex >= 0 && codexSystem.openEntry(rowIndex)) {
+            storyTelemetry.recordCodexEntryOpened();
+            codexOverlayRenderer.refreshLabels();   // the NEW dot it just cleared
+        }
+    }
+
+    private void resetCodexDragTracking() {
+        codexDragTracking = false;
+        codexDragTravel   = 0f;
+    }
+
+    /**
+     * Pushes the order-6 accessibility settings into every system and renderer that draws story
+     * text.  Called once at construction and again whenever the player changes a setting — never per
+     * frame, because a setting change is a tap and a tap is not a frame.
+     *
+     * <p>The wrap width goes to the HEADLESS systems and the glyph scale to the RENDERERS, and both
+     * come from the same setting: that pairing is what makes larger text wrap sooner instead of
+     * running off the end of a panel ("wrap, never shrink").
+     */
+    private void applyStoryAccessibilitySettings() {
+        int   lineMaxChars = storySettings.getPanelLineMaxChars();
+        float textScale    = storySettings.getStoryTextScale();
+        boolean reduceMotion = storySettings.isReduceMotion();
+
+        barkSystem.setLineMaxChars(lineMaxChars);
+        exchangeSystem.setLineMaxChars(lineMaxChars);
+        bootCardSystem.setLineMaxChars(lineMaxChars);
+        bootCardSystem.setReducedTextHold(storySettings.isReduceTextHold());
+
+        storyBarkRenderer.applyAccessibilitySettings(textScale, reduceMotion);
+        storyExchangeRenderer.applyAccessibilitySettings(textScale, reduceMotion);
+        bootCardRenderer.applyAccessibilitySettings(textScale, reduceMotion);
+    }
+
+    /**
+     * PACING BUDGET (order-6 Part B): true while enough enemies are awake for this to count as a
+     * combat spike.  Non-critical barks are HELD while it is true and arrive in the lull afterwards
+     * — a line delivered mid-fight is a line nobody reads, and one that covers the moment the player
+     * needed to look at the room is worse than no line at all.
+     */
+    private boolean isCombatSpike() {
+        if (enemyManager == null) return false;
+        return enemyManager.countAwakeEnemies() >= StoryUiConstants.STORY_COMBAT_SPIKE_AWAKE_ENEMIES;
+    }
+
+    /**
+     * ARCHIVING (order-6 Part A): a line that actually reached the screen files the full text of
+     * whatever it was about into the codex, and lands in the tuning counters (Part E).
+     *
+     * <p>Delivery is the trigger, not the request: a queued line that went stale was never told to
+     * the player, and archiving it would put a document in the codex that nothing on screen ever
+     * pointed at.
+     */
+    private void archiveDeliveredStoryLine() {
+        String deliveredBarkId = barkSystem.consumeJustDeliveredBarkId();
+        if (deliveredBarkId == null) return;
+        storyTelemetry.recordBarkShown();
+        codexSystem.noteLineSpoken(deliveredBarkId);
+    }
+
+    /**
+     * The codex's completion "perk" (order-6 Part A): ORA notices that the player filled a shelf.
+     * That is the entire reward, deliberately — the archive is opt-in, and paying completion in
+     * power would turn a thing nobody has to read into a thing everybody has to grind.
+     *
+     * <p>The beat is fired here rather than inside the narrative layer for the same reason a probe's
+     * reward is granted here: the narrative layer names things, and the engine does them.
+     */
+    private void requestCodexCompletionBarks() {
+        CodexCategory completed = codexSystem.consumePendingCompletion();
+        if (completed == null) return;
+        barkSystem.request(BarkTrigger.CODEX_COMPLETE, completed.getCatalogKey());
+    }
+
+    /** In-memory story tuning counters (order-6 Part E).  No identifiers, no I/O, no PII. */
+    public StoryTelemetry getStoryTelemetry() {
+        return storyTelemetry;
+    }
+
+    /** The persisted story accessibility settings (order-6 Part D) — order-8's settings menu reads this. */
+    public StorySettings getStorySettings() {
+        return storySettings;
     }
 
     /**

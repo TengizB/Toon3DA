@@ -94,6 +94,8 @@ public final class StoryStrings {
         BootCardStrings.registerDefaults(strings);
         // Order-4 exchanges: every blocking prompt, the answers the player may tap, and the replies.
         ExchangeStrings.registerDefaults(strings);
+        // Order-6 codex: the archive's entries (the only long-form text in the game) and its chrome.
+        CodexStrings.registerDefaults(strings);
 
         return strings;
     }

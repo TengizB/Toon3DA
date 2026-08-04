@@ -71,4 +71,24 @@ public interface StoryProgressStore {
 
     /** Records a codex entry as unlocked, permanently. */
     void markCodexUnlocked(String codexId);
+
+    /**
+     * True when the player has actually OPENED a codex entry (order-6).  Separate from the unlock
+     * flag on purpose: unlocked-but-unopened is what wears the NEW dot, and reading one is what
+     * clears it — permanently, so the archive never re-nags across a death or an app restart.
+     */
+    boolean isCodexEntryRead(String codexId);
+
+    /** Records a codex entry as read, permanently.  Written once, the first time it is opened. */
+    void markCodexEntryRead(String codexId);
+
+    /**
+     * One persisted accessibility SETTING (order-6 Part D), or {@code defaultValue} when the player
+     * has never changed it.  Ints rather than a typed method per setting, so adding a knob is a new
+     * key rather than a new port method — enums persist as their ordinal, flags as 0/1.
+     */
+    int loadSettingInt(String settingKey, int defaultValue);
+
+    /** Persists one accessibility setting.  Written when the player changes it, never per frame. */
+    void saveSettingInt(String settingKey, int value);
 }

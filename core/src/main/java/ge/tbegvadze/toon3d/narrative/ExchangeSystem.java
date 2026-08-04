@@ -83,6 +83,12 @@ public final class ExchangeSystem {
     private final List<ExchangeDefinition> candidateScratch = new ArrayList<>();
 
     /**
+     * Wrap width for the prompt / reply block.  Settable so the order-6 accessibility text-size
+     * setting can narrow it as the glyphs grow — wrap, never shrink.
+     */
+    private int lineMaxChars = StoryUiConstants.STORY_LINE_MAX_CHARS;
+
+    /**
      * @param registry      the exchange catalog (see {@link ExchangeCatalog#defaultRegistry})
      * @param strings       the resolved localisation table
      * @param progress      persistent narrative state — the region gate, one-shot flags and stance
@@ -102,6 +108,19 @@ public final class ExchangeSystem {
     /** The persistent narrative state this system gates on and writes answers into. */
     public StoryProgress getProgress() {
         return progress;
+    }
+
+    /**
+     * Narrows the wrap width for blocks resolved from now on (order-6 Part D's text-size setting).
+     * Values below 1 are ignored — a cap of zero would hard-break every character onto its own line.
+     */
+    public void setLineMaxChars(int value) {
+        if (value < 1) return;
+        this.lineMaxChars = value;
+    }
+
+    public int getLineMaxChars() {
+        return lineMaxChars;
     }
 
     // -------------------------------------------------------------------------
@@ -250,7 +269,7 @@ public final class ExchangeSystem {
         if (speaker != null && speaker.getTypeStyle().isUpperCase()) {
             text = text.toUpperCase(Locale.ROOT);   // the Organization is drawn ALL-CAPS
         }
-        List<String> wrapped = StoryText.wrapToMaxChars(text, StoryUiConstants.STORY_LINE_MAX_CHARS);
+        List<String> wrapped = StoryText.wrapToMaxChars(text, lineMaxChars);
         bodyLineCount = Math.min(wrapped.size(), bodyLines.length);
         for (int lineIndex = 0; lineIndex < bodyLineCount; lineIndex++) {
             bodyLines[lineIndex] = wrapped.get(lineIndex);

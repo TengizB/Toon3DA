@@ -42,12 +42,30 @@ public final class StoryPanelRenderer implements Disposable {
     // Number of quarter-circle segments per rounded corner (cheap, smooth enough at UI scale).
     private static final int CORNER_SEGMENTS = 10;
 
+    // ACCESSIBILITY (order-6 Part D) — the two settings that change how a panel DRAWS.  Both default
+    // to the order-1 baseline, so a renderer that never sets them behaves exactly as before.
+    private float   bodyTextScale = StoryUiConstants.STORY_TEXT_SIZE;
+    private boolean reduceMotion;
+
     public StoryPanelRenderer() {
         this.batch  = new SpriteBatch();
         this.shapes = new ShapeRenderer();
         this.font   = new BitmapFont();
         this.font.getData().markupEnabled = false;
         this.layout = new GlyphLayout();
+    }
+
+    /**
+     * Applies the order-6 accessibility settings to every panel this renderer draws from now on.
+     * Call from the update path when the player changes a setting — never per frame.
+     *
+     * <p>The caller passes the ALREADY-SCALED text size (see {@code StorySettings.getStoryTextScale})
+     * and must narrow the wrap width to match on the headless side, or a larger size would run past
+     * the panel instead of wrapping sooner.
+     */
+    public void applyAccessibilitySettings(float bodyTextScale, boolean reduceMotion) {
+        if (bodyTextScale > 0f) this.bodyTextScale = bodyTextScale;
+        this.reduceMotion = reduceMotion;
     }
 
     /**
@@ -238,13 +256,16 @@ public final class StoryPanelRenderer implements Disposable {
         font.getData().setScale(StoryUiConstants.STORY_NAME_TEXT_SIZE);
         drawWithShadow(speakerName, nameX, nameTopY, accentRed, accentGreen, accentBlue, fade, shadow);
 
-        // Body — light text, pre-wrapped.  Planet gets a tiny bounded vertical jitter.
+        // Body — light text, pre-wrapped.  Planet gets a tiny bounded vertical jitter, unless the
+        // "reduce motion" accessibility setting is on: movement under text is exactly the kind of
+        // decoration order-6 Part D lets a player switch off, and the Planet is still told apart by
+        // its accent colour, its icon and its name without it.
         float jitter = 0f;
-        if (speaker.getTypeStyle().hasJitter()) {
+        if (speaker.getTypeStyle().hasJitter() && !reduceMotion) {
             jitter = MathUtils.sin(elapsedSeconds * MathUtils.PI2 * StoryUiConstants.STORY_PLANET_JITTER_HZ)
                     * StoryUiConstants.STORY_PLANET_JITTER_PIXELS;
         }
-        font.getData().setScale(StoryUiConstants.STORY_TEXT_SIZE);
+        font.getData().setScale(bodyTextScale);
         float lineTopY = chipTopY - StoryUiConstants.STORY_CHIP_HEIGHT - StoryUiConstants.STORY_CHIP_TO_BODY_GAP;
         for (int lineIndex = 0; lineIndex < bodyLineCount; lineIndex++) {
             drawWithShadow(bodyLines[lineIndex], contentLeft, lineTopY + jitter,

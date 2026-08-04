@@ -73,6 +73,15 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
         this.layout        = new GlyphLayout();
     }
 
+    /**
+     * Applies the order-6 accessibility settings (text size, reduced motion) to the shared story
+     * panel this renderer draws the prompt with.  The answer plates keep their own fixed size: a
+     * plate is a fixed-height thumb target, and its label is capped to one short line by the catalog.
+     */
+    public void applyAccessibilitySettings(float bodyTextScale, boolean reduceMotion) {
+        panelRenderer.applyAccessibilitySettings(bodyTextScale, reduceMotion);
+    }
+
     /** Binds the headless brain this renderer reads from.  Null hides the layer entirely. */
     public void setExchangeSystem(ExchangeSystem exchangeSystem) {
         this.exchangeSystem = exchangeSystem;

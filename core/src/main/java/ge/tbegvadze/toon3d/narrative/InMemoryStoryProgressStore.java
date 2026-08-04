@@ -18,6 +18,8 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     private final Map<String, Integer>     stanceValues    = new HashMap<>();
     private final Map<String, String>      outcomes        = new HashMap<>();
     private final Set<String>              unlockedCodexIds = new HashSet<>();
+    private final Set<String>              readCodexIds     = new HashSet<>();
+    private final Map<String, Integer>     settings         = new HashMap<>();
     private int deepestRegionOrdinal;
     private int reprintCount;
 
@@ -82,12 +84,35 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
         unlockedCodexIds.add(codexId);
     }
 
+    @Override
+    public boolean isCodexEntryRead(String codexId) {
+        return readCodexIds.contains(codexId);
+    }
+
+    @Override
+    public void markCodexEntryRead(String codexId) {
+        readCodexIds.add(codexId);
+    }
+
+    @Override
+    public int loadSettingInt(String settingKey, int defaultValue) {
+        Integer value = settings.get(settingKey);
+        return value != null ? value.intValue() : defaultValue;
+    }
+
+    @Override
+    public void saveSettingInt(String settingKey, int value) {
+        settings.put(settingKey, Integer.valueOf(value));
+    }
+
     /** Wipes everything — the headless half of a "new game" reset. */
     public void clear() {
         seenBeatIds.clear();
         stanceValues.clear();
         outcomes.clear();
         unlockedCodexIds.clear();
+        readCodexIds.clear();
+        settings.clear();
         deepestRegionOrdinal = 0;
         reprintCount         = 0;
     }
