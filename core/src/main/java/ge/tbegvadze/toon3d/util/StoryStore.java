@@ -25,13 +25,20 @@ import ge.tbegvadze.toon3d.narrative.StoryProgressStore;
  */
 public final class StoryStore implements StoryProgressStore {
 
-    /** Bumped by order-7 when the persisted narrative schema changes. */
-    public static final int STORY_SCHEMA_VERSION = 1;
+    /**
+     * Bumped by order-7 when the persisted narrative schema changes.  Version 2 added the order-4
+     * keys (the three hidden stance leanings, consequential outcomes, codex unlocks); every one of
+     * them reads a default when absent, so a version-1 save loads cleanly with no migration.
+     */
+    public static final int STORY_SCHEMA_VERSION = 2;
 
     private static final String KEY_SCHEMA_VERSION = "story.schemaVersion";
     private static final String KEY_DEEPEST_REGION = "story.deepestRegion";
     private static final String KEY_BEAT_PREFIX    = "story.beat.";
     private static final String KEY_REPRINT_COUNT  = "story.reprintCount";
+    private static final String KEY_STANCE_PREFIX  = "story.stance.";
+    private static final String KEY_OUTCOME_PREFIX = "story.outcome.";
+    private static final String KEY_CODEX_PREFIX   = "story.codex.";
 
     /** Prefix shared by every narrative key — used by a "new game" wipe. */
     public static final String STORY_KEY_PREFIX = "story.";
@@ -90,6 +97,60 @@ public final class StoryStore implements StoryProgressStore {
         if (prefs == null) return;
         prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
         prefs.putInteger(KEY_REPRINT_COUNT, reprintCount);
+        prefs.flush();
+    }
+
+    // -------------------------------------------------------------------------
+    // Order-4: the hidden stance model, consequential outcomes, codex unlocks.
+    // All three are written only when the player ANSWERS something — a handful of writes per run.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public int loadStance(String stanceName) {
+        Preferences prefs = preferences();
+        if (prefs == null || stanceName == null) return 0;
+        return prefs.getInteger(KEY_STANCE_PREFIX + stanceName, 0);
+    }
+
+    @Override
+    public void saveStance(String stanceName, int value) {
+        Preferences prefs = preferences();
+        if (prefs == null || stanceName == null) return;
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.putInteger(KEY_STANCE_PREFIX + stanceName, value);
+        prefs.flush();
+    }
+
+    @Override
+    public String loadOutcome(String exchangeId) {
+        Preferences prefs = preferences();
+        if (prefs == null || exchangeId == null) return null;
+        String optionId = prefs.getString(KEY_OUTCOME_PREFIX + exchangeId, "");
+        return optionId.isEmpty() ? null : optionId;
+    }
+
+    @Override
+    public void saveOutcome(String exchangeId, String optionId) {
+        Preferences prefs = preferences();
+        if (prefs == null || exchangeId == null || optionId == null) return;
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.putString(KEY_OUTCOME_PREFIX + exchangeId, optionId);
+        prefs.flush();
+    }
+
+    @Override
+    public boolean isCodexUnlocked(String codexId) {
+        Preferences prefs = preferences();
+        if (prefs == null || codexId == null) return false;
+        return prefs.getBoolean(KEY_CODEX_PREFIX + codexId, false);
+    }
+
+    @Override
+    public void markCodexUnlocked(String codexId) {
+        Preferences prefs = preferences();
+        if (prefs == null || codexId == null) return;
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.putBoolean(KEY_CODEX_PREFIX + codexId, true);
         prefs.flush();
     }
 }

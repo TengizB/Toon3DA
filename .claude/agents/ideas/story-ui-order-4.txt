@@ -1,7 +1,27 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 4 — Interactive dialog & choice system (multiple response options)
 ---
+
+AS BUILT (differences from the spec above, all deliberate)
+- Panel position: the spec said "lower-center, never over touch zones". Built as a top-anchored
+  stack (prompt panel + answer plates) that DOES use the lower screen, because an exchange is a
+  blocking modal: the world is dimmed and frozen and the thumb clusters are not drawn at all in
+  RunPhase.STORY_EXCHANGE. Same precedent as the order-3 boot card's CONTINUE. It stays clear of
+  the HUD band so health and ammo remain readable while deciding.
+- The reply is shown IN the exchange panel with one acknowledge button, not handed to the bark
+  queue: it keeps the beat in one system and never risks the reply being dropped by the bark
+  layer's rate limit. The anti-skip rule still holds — the PROMPT has no blank "next".
+- TIMED CHOICES: not built, per the file's own default stance. There is no clock anywhere in the
+  layer, which also means no accessibility carve-out is needed yet.
+- Stance is persisted (StoryStore schema v2) rather than run-local, matching the roguelike
+  story-gating rule: a death wipes the body, not who the player has been.
+- Codex unlocks are recorded now (persistently) even though order-6 does not exist yet, so probes
+  answered today are already unlocked when the codex ships.
+- Rewards are named as an ItemType string and granted by World, keeping …toon3d.narrative headless.
+  One v1 reward exists (the Galleries ledger probe -> a small medkit).
+- Triggers: REGION_ENTERED (one deliberate beat per region) and DEEP_STRATA (quiet check-ins), plus
+  MANUAL for order-5's hand-placed beats and for option chaining.
 
 PURPOSE
 The engagement layer the player asked for: certain story moments PAUSE the game and

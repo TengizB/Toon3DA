@@ -172,17 +172,77 @@ public final class StoryUiConstants {
     public static final float STORY_BARK_CLOSE_CENTER_Y =
             STORY_BARK_TOP_Y - STORY_BARK_CLOSE_MARGIN - STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
 
-    // Exchange panel (order-4): a prompt + a couple of tappable choices, upper-centre.
+    // Exchange panel (order-4): a prompt panel with 2-3 big tappable answers stacked under it.
+    // Unlike the bark, an exchange is a BLOCKING modal: the world is dimmed and frozen behind it and
+    // the thumb clusters are not drawn at all, so — exactly like the order-3 boot card's CONTINUE —
+    // the stack is free to use the lower screen the touch buttons normally own.  It stays clear of
+    // the HUD band so health and ammo remain readable while the player decides.
     public static final float STORY_EXCHANGE_WIDTH  = 640f;
-    public static final float STORY_EXCHANGE_HEIGHT = 300f;
     public static final float STORY_EXCHANGE_X      = (Constants.WORLD_WIDTH - STORY_EXCHANGE_WIDTH) / 2f;
-    public static final float STORY_EXCHANGE_Y      = 372f;   // bottom edge (spans 372..672, clear of clusters)
+    // The prompt panel is the TOP of the stack and the anchor everything else hangs off, so the whole
+    // exchange can be re-spaced by moving this one number.  It is set as low as the stack allows:
+    // prompt(160) + gap(24) + 3 plates(228) + 2 gaps(28) = 440 tall, which lands the last plate a
+    // comfortable margin above the HUD band while keeping the panel clear of the screen's top edge.
+    public static final float STORY_EXCHANGE_PROMPT_TOP_Y = 664f;
+    // Panel height for N body lines, by the same rule the bark and boot card are sized with:
+    //   30 * lines + 70.  N = STORY_EXCHANGE_MAX_LINES (3).
+    public static final float STORY_EXCHANGE_PROMPT_HEIGHT = 160f;
+    public static final float STORY_EXCHANGE_PROMPT_Y      =
+            STORY_EXCHANGE_PROMPT_TOP_Y - STORY_EXCHANGE_PROMPT_HEIGHT;
 
     // Choice button (order-4): min height must be a comfortable thumb target.
     public static final float STORY_CHOICE_BUTTON_MIN_HEIGHT = 72f;
     public static final float STORY_CHOICE_BUTTON_WIDTH      = STORY_EXCHANGE_WIDTH - STORY_PANEL_PADDING * 2f;
     public static final float STORY_CHOICE_BUTTON_GAP        = 14f;
     public static final float STORY_CHOICE_BUTTON_CORNER     = 12f;
+
+    // How many answers an exchange may carry.  Two is the floor because an exchange with one answer
+    // is a wall of text with a dismiss button — the exact thing order-4 exists to avoid.  Three is
+    // the ceiling the button stack is sized for, and more than three is a menu, not a conversation.
+    public static final int   STORY_EXCHANGE_MIN_OPTIONS = 2;
+    public static final int   STORY_EXCHANGE_MAX_OPTIONS = 3;
+
+    // The button stack: TOP-anchored under the prompt panel, so a two-answer exchange and a
+    // three-answer one put their first button in the same place and the thumb learns one spot.
+    public static final float STORY_EXCHANGE_BUTTON_STACK_GAP = 24f;
+    public static final float STORY_EXCHANGE_BUTTON_HEIGHT    = 76f;
+    public static final float STORY_EXCHANGE_BUTTONS_TOP_Y    =
+            STORY_EXCHANGE_PROMPT_Y - STORY_EXCHANGE_BUTTON_STACK_GAP;
+    public static final float STORY_EXCHANGE_BUTTON_X         = STORY_EXCHANGE_X + STORY_PANEL_PADDING;
+    /** Bottom edge of the LAST button when all three slots are used — the stack's floor. */
+    public static final float STORY_EXCHANGE_BUTTONS_BOTTOM_Y =
+            STORY_EXCHANGE_BUTTONS_TOP_Y
+                    - STORY_EXCHANGE_MAX_OPTIONS * STORY_EXCHANGE_BUTTON_HEIGHT
+                    - (STORY_EXCHANGE_MAX_OPTIONS - 1) * STORY_CHOICE_BUTTON_GAP;
+    // Overall footprint of the exchange (the rect the whole modal occupies), derived from the stack.
+    public static final float STORY_EXCHANGE_Y      = STORY_EXCHANGE_BUTTONS_BOTTOM_Y;
+    public static final float STORY_EXCHANGE_HEIGHT = STORY_EXCHANGE_PROMPT_TOP_Y - STORY_EXCHANGE_Y;
+
+    // Button plate styling — an accent border with a dim fill, matching the boot card's CONTINUE.
+    // The PRESSED fill is much brighter: a tap must be visibly acknowledged before the panel changes,
+    // or a player who has just committed to an answer cannot tell whether the game heard them.
+    public static final float STORY_EXCHANGE_BUTTON_BORDER        = 2f;
+    public static final float STORY_EXCHANGE_BUTTON_FILL_ALPHA    = 0.22f;
+    public static final float STORY_EXCHANGE_BUTTON_PRESSED_ALPHA = 0.55f;
+    /** Answer text scale — a touch under the body size so one short line always fits the plate. */
+    public static final float STORY_EXCHANGE_OPTION_TEXT_SIZE     = 1.4f;
+    /** Hard cap on an answer's length.  ONE short line per button; a test enforces it. */
+    public static final int   STORY_EXCHANGE_OPTION_MAX_CHARS     = 34;
+
+    // The world DIMS behind the panel — "we've paused for this".  Lighter than the boot card's
+    // near-blackout on purpose: the player must still see the room they are standing in.
+    public static final float STORY_EXCHANGE_DIM_ALPHA = 0.62f;
+    public static final float STORY_EXCHANGE_DIM_R = 0.02f, STORY_EXCHANGE_DIM_G = 0.02f,
+                              STORY_EXCHANGE_DIM_B = 0.04f;
+
+    // MOTION — a shade slower than a bark (the world just stopped for this), and NO timers of any
+    // kind anywhere in the exchange: it waits for a tap, forever, exactly like the boot card.
+    public static final float STORY_EXCHANGE_FADE_IN_SECONDS  = 0.25f;
+    public static final float STORY_EXCHANGE_FADE_OUT_SECONDS = 0.25f;
+    /** Localisation id of the label on the reply's acknowledge button (never a literal in render). */
+    public static final String STORY_EXCHANGE_CONTINUE_LABEL_ID = "story.exchange.continue";
+    /** Seed salt for which of several eligible exchanges opens (joins the reproducible run stream). */
+    public static final long  STORY_EXCHANGE_SELECTION_SEED_SALT = 0xE8C4A9E5A17L;
 
     // Boot / respawn card (order-3, System voice): a centred modal shown on every run start.
     // The rect below is the card's overall footprint; the order-3 BOOT CARD section further down
