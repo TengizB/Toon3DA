@@ -235,3 +235,19 @@ tasks.withType(JavaExec.class).configureEach {
 if(enableGraalNative == 'true') {
   apply from: file("nativeimage.gradle")
 }
+// Dev-only: launches the Story UI order-3 REPRINT / BOOT CARD showcase (the definition-of-done
+// screen for the card shown on every reprint). Development testing only — the game ships on Android.
+// Run: ./gradlew lwjgl3:bootCardShowcase
+// Headless capture: ./gradlew lwjgl3:bootCardShowcase -DbootCard.screenshotDirectory=/tmp/bootcards
+tasks.register('bootCardShowcase', JavaExec) {
+  description = 'Runs the Story UI order-3 reprint boot card showcase test screen.'
+  group       = 'application'
+  workingDir  = rootProject.file('assets').path
+  classpath   = sourceSets.main.runtimeClasspath
+  mainClass   = 'ge.tbegvadze.toon3d.lwjgl3.BootCardShowcaseLauncher'
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  if (os.contains('mac')) jvmArgs += "-XstartOnFirstThread"
+  if (System.getProperty('bootCard.screenshotDirectory') != null) {
+    systemProperty 'bootCard.screenshotDirectory', System.getProperty('bootCard.screenshotDirectory')
+  }
+}

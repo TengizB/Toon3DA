@@ -14,6 +14,13 @@ package ge.tbegvadze.toon3d.narrative;
  *       intro lines on a later run.</li>
  * </ul>
  *
+ * <p>Order-3 adds one more, for the reprint card's instance counter:
+ * <ul>
+ *   <li>the REPRINT COUNT — how many times the player has been printed, ever.  It only climbs, it
+ *       is never reset by a death or a new run, and it is never celebrated; the number quietly
+ *       growing over a long session is the whole point (story/dialog/system-cards.md).</li>
+ * </ul>
+ *
  * <p>Implementations write on meaningful change (a beat seen, a region reached), never per frame.
  */
 public interface StoryProgressStore {
@@ -29,4 +36,10 @@ public interface StoryProgressStore {
 
     /** Records that a one-shot beat fired, so it never fires again. */
     void markBeatSeen(String beatId);
+
+    /** The persisted reprint count, or 0 when the player has never been printed (order-3). */
+    int loadReprintCount();
+
+    /** Persists a new reprint count.  Callers only ever pass a higher value. */
+    void saveReprintCount(int reprintCount);
 }

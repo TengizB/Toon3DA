@@ -26,6 +26,7 @@ public final class StoryProgress {
     private final StoryProgressStore store;
     private final Set<String>        seenBeatIds = new HashSet<>();
     private StoryRegion              deepestRegion;
+    private int                      reprintCount;
 
     /** Uses an in-memory store — nothing survives the process (tests, showcases). */
     public StoryProgress() {
@@ -37,6 +38,7 @@ public final class StoryProgress {
         if (store == null) throw new IllegalArgumentException("store must not be null");
         this.store         = store;
         this.deepestRegion = StoryRegion.fromOrdinal(store.loadDeepestRegionOrdinal());
+        this.reprintCount  = Math.max(0, store.loadReprintCount());
     }
 
     /** The deepest story region ever reached.  Never null; never moves backwards. */
@@ -74,5 +76,27 @@ public final class StoryProgress {
         if (beatId == null) return;
         if (!seenBeatIds.add(beatId)) return;   // already known — no redundant write
         store.markBeatSeen(beatId);
+    }
+
+    /**
+     * How many times the player has been printed, ever (Story UI order-3).  Zero before the first
+     * reprint; the reprint card's "INSTANCE #0048" counter reads this.  Like the deepest region, it
+     * only ever climbs — a death is what makes it climb, so nothing resets it.
+     */
+    public int getReprintCount() {
+        return reprintCount;
+    }
+
+    /**
+     * Records one more reprint and persists it immediately.  Called once per boot card presented,
+     * so the number the player reads is the instance they are currently wearing.
+     *
+     * @return the new reprint count (1 on the very first run — in-fiction the original self has
+     *         just died, which is why the first boot shows the same death notice as the hundredth)
+     */
+    public int recordReprint() {
+        reprintCount++;
+        store.saveReprintCount(reprintCount);
+        return reprintCount;
     }
 }

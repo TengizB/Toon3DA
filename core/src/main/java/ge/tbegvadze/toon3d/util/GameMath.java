@@ -5069,4 +5069,54 @@ public final class GameMath {
         float falling = 1f - MathUtils.clamp(dismissElapsedSeconds / fadeOutSeconds, 0f, 1f);
         return MathUtils.clamp(risen * falling, 0f, 1f);
     }
+
+    /*
+     * Formula: boot-card revealed line count (the terminal "printing in" reveal, Story UI order-3)
+     * Derivation:
+     *   The reprint card's SYSTEM status lines print one after another, like a terminal waking up,
+     *   rather than appearing as a block.  Line i (0-based) is on screen once
+     *       elapsed >= i * perLineSeconds
+     *   so the number of lines revealed at time t is
+     *       revealed = floor(t / perLineSeconds) + 1
+     *   clamped into [0, totalLines].  The +1 makes the FIRST line visible at t = 0, which is what
+     *   keeps the card from starting as an empty panel.
+     * Edge cases:
+     *   elapsedSeconds < 0    -> 0 (nothing drawn before the card is presented).
+     *   perLineSeconds <= 0   -> every line at once (the "reduce text hold" setting can drive the
+     *                            per-line delay to zero; this must not divide by zero).
+     *   totalLines <= 0       -> 0.
+     *   A very large elapsed cannot overflow: the quotient is clamped before the cast is used.
+     */
+    public static int bootCardRevealedLineCount(float elapsedSeconds, float perLineSeconds,
+                                                int totalLines) {
+        if (totalLines <= 0 || elapsedSeconds < 0f) return 0;
+        if (perLineSeconds <= 0f) return totalLines;
+        float revealedSpans = elapsedSeconds / perLineSeconds;
+        if (revealedSpans >= totalLines) return totalLines;
+        return Math.min(totalLines, (int) revealedSpans + 1);
+    }
+
+    /*
+     * Formula: instance counter text ("INSTANCE #0048", Story UI order-3)
+     * Derivation:
+     *   Renders a reprint number zero-padded to a fixed width so the counter's glyph box never
+     *   changes size as the number climbs — a counter that grows a digit mid-session reads as a
+     *   layout bug rather than as the quiet horror it is.
+     *       padding = max(0, minimumDigits - digitsIn(value))
+     *       text    = '0' * padding + value
+     * Edge cases:
+     *   Negative input clamps to 0 (a reprint count is never negative).
+     *   A value with MORE digits than minimumDigits is printed in full — never truncated, because
+     *   truncating would silently reset the number the whole beat is built on.
+     *   minimumDigits <= 0 -> no padding.
+     */
+    public static String formatInstanceCounter(int instanceNumber, int minimumDigits) {
+        int safeNumber = Math.max(0, instanceNumber);
+        String digits  = Integer.toString(safeNumber);
+        int padding    = minimumDigits - digits.length();
+        if (padding <= 0) return digits;
+        StringBuilder padded = new StringBuilder(minimumDigits);
+        for (int padIndex = 0; padIndex < padding; padIndex++) padded.append('0');
+        return padded.append(digits).toString();
+    }
 }

@@ -46,8 +46,12 @@ import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.narrative.BarkCatalog;
 import ge.tbegvadze.toon3d.narrative.BarkSystem;
 import ge.tbegvadze.toon3d.narrative.BarkTrigger;
+import ge.tbegvadze.toon3d.narrative.BootCardCatalog;
+import ge.tbegvadze.toon3d.narrative.BootCardSystem;
+import ge.tbegvadze.toon3d.narrative.BootCardVariant;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
+import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
@@ -111,7 +115,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE }
+    private enum RunPhase { BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -331,6 +335,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private final BarkSystem         barkSystem;
     private final StoryBarkRenderer  storyBarkRenderer;
+    // Story UI — REPRINT / BOOT CARD (order-3): the modal card shown at the start of every run,
+    // which is to say on every reprint. bootCardSystem is the headless brain (which variant, which
+    // region-appropriate ORA line, what the instance counter reads, whether continuing is even
+    // allowed); bootCardRenderer only draws what it reports.
+    private final BootCardSystem     bootCardSystem;
+    private final BootCardRenderer   bootCardRenderer;
     /** Seeded stream for "does this moment even ask for a line" rolls (kills). */
     private final java.util.Random   storyMomentRandom;
     private StoryBarkTickSubscriber  storyBarkTickSubscriber;
@@ -425,6 +435,23 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         storyMomentRandom = new java.util.Random(runSeed ^ StoryUiConstants.STORY_MOMENT_SEED_SALT);
         storyBarkRenderer = new StoryBarkRenderer();
         storyBarkRenderer.setBarkSystem(barkSystem);
+
+        // Story UI boot card (order-3) — shares the bark layer's StoryProgress, so the card's ORA
+        // line is gated by the same persistent deepest-region-reached and its instance counter
+        // climbs across deaths and app restarts alike. The string table is loaded once, above.
+        StoryStrings storyStrings = StoryStringsLoader.load();
+        bootCardSystem = new BootCardSystem(BootCardCatalog.defaultRegistry(), storyStrings,
+                                            barkSystem.getProgress(),
+                                            runSeed ^ StoryUiConstants.STORY_BOOT_WAKE_SEED_SALT);
+        bootCardRenderer = new BootCardRenderer();
+        bootCardRenderer.setBootCardSystem(bootCardSystem);
+        bootCardRenderer.setStrings(storyStrings);
+        // EVERY run opens on the reprint card, the very first one included: in-fiction the original
+        // self has just died, so the player's first boot shows the same death notice as their
+        // hundredth (story/01-timeline.md). A file-loaded or test world skips it — it is not a run.
+        if (startRoom && bootCardSystem.present(BootCardVariant.REPRINT)) {
+            runPhase = RunPhase.BOOT_CARD;
+        }
 
         // Event text and hit vignette — run-persistent feedback systems
         eventTextSystem     = new EventTextSystem();
@@ -1629,6 +1656,36 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // a modal.
         barkSystem.setSuppressed(runPhase != RunPhase.PLAYING);
 
+        // BOOT_CARD phase (order-3) — the reprint card owns the screen before control is handed
+        // back at the checkpoint. The world is frozen behind it: no sim, no ticks, no barks.
+        //
+        // The card is NEVER on a timer and NEVER auto-advances, so a player who wants to sit with
+        // the beat can. One tap on CONTINUE always proceeds — even mid-reveal — and a tap anywhere
+        // else just finishes the staggered print-in, so the card can never trap anyone.
+        //
+        // A TERMINAL card (the FREE / KILL endings) refuses continue by design: it prints "NO
+        // CHECKPOINT AUTHORIZED FOR REPRINT" and then nothing reloads. That absence IS the ending,
+        // so this phase deliberately has no exit for it — the framing flow around that screen
+        // (return to title, credits) is order-8's, and it reads isTerminal() to take over.
+        if (runPhase == RunPhase.BOOT_CARD) {
+            bootCardSystem.update(deltaTime);
+            if (gameViewport != null && Gdx.input.justTouched()) {
+                if (touchInputState != null) touchInputState.consumeTapAction();
+                cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+                gameViewport.unproject(cardTouchPosition);
+                if (BootCardRenderer.isInsideContinueButton(cardTouchPosition.x, cardTouchPosition.y)) {
+                    bootCardSystem.requestContinue();
+                } else {
+                    bootCardSystem.skipReveal();
+                }
+            }
+            if (bootCardSystem.isContinueRequested()) {
+                bootCardSystem.clear();
+                runPhase = RunPhase.PLAYING;
+            }
+            return;
+        }
+
         // DEAD phase — death beat then death screen; no game simulation
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
@@ -2016,7 +2073,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && runPhase != RunPhase.INVENTORY_OPEN
                 && runPhase != RunPhase.SHOP_OPEN
                 && runPhase != RunPhase.ROUTE_SELECT
-                && runPhase != RunPhase.EVENT_CHOICE) {
+                && runPhase != RunPhase.EVENT_CHOICE
+                && runPhase != RunPhase.BOOT_CARD) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -2057,6 +2115,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Narrative EVENT choice overlay (order-10) — paused choice cards, drawn below fade/death overlays.
         if (runPhase == RunPhase.EVENT_CHOICE) {
             eventChoiceOverlayRenderer.render(camera);
+        }
+
+        // Reprint / boot card (order-3) — the modal that opens every run. Its own dark full-bleed
+        // background covers the frozen world behind it, so it is drawn above every other overlay
+        // and below only the fade, exactly like the other hard-pause modals.
+        if (runPhase == RunPhase.BOOT_CARD) {
+            bootCardRenderer.render(camera);
         }
 
         // Fade overlay drawn last — covers every other layer including the HUD.
@@ -2105,6 +2170,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Story bark layer (order-2): the renderer owns the story panel primitive (batch, shapes,
         // font) and the per-speaker stings. BarkSystem itself is headless — no GPU/audio handles.
         storyBarkRenderer.dispose();
+        // Reprint / boot card (order-3): the renderer owns a story panel primitive, its own shapes,
+        // batch and font. BootCardSystem itself is headless — no GPU handles.
+        bootCardRenderer.dispose();
         hitVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
@@ -2478,6 +2546,37 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         } else if (healthFraction > StoryUiConstants.STORY_BARK_LOW_HEALTH_FRACTION) {
             healthAboveLowThreshold = true;
         }
+    }
+
+    /**
+     * Replaces the reprint card with an ENDING's subversion of it (Story UI order-3, the payload of
+     * story/06-endings.md).  The card the player has read a hundred times is the strongest
+     * instrument the endings have, so each one spends it differently:
+     * <ul>
+     *   <li>FREE / KILL — the reserve is gone, no checkpoint is authorized, and the run does NOT
+     *       reload.  The card has no CONTINUE and this phase has no exit; that absence is the
+     *       ending.  Ask {@link #isBootCardTerminal()} to detect it.</li>
+     *   <li>OBEY — a cold promotion card, which still continues, because the reward is more of the
+     *       same forever.</li>
+     *   <li>MERGE — no card at all: {@link BootCardSystem#present} returns false and the run phase
+     *       is left alone, because the interface simply stops being the player's.</li>
+     * </ul>
+     *
+     * <p>WHICH ending fires, and what surrounds this screen afterwards, is order-5's schedule and
+     * order-8's framing flow.  Order-3 owns only the card itself, so this is the seam they call.
+     *
+     * @return true when an ending card is now on screen
+     */
+    public boolean presentEndingCard(BootCardVariant variant) {
+        if (variant == null || !bootCardSystem.present(variant)) return false;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        runPhase = RunPhase.BOOT_CARD;
+        return true;
+    }
+
+    /** True while a card that ends the run is on screen — the "no reprint" state (order-8 reads it). */
+    public boolean isBootCardTerminal() {
+        return runPhase == RunPhase.BOOT_CARD && bootCardSystem.isTerminal();
     }
 
     private void applyInventoryConsumableEffect() {

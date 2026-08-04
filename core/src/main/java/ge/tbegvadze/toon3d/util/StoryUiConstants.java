@@ -184,7 +184,9 @@ public final class StoryUiConstants {
     public static final float STORY_CHOICE_BUTTON_GAP        = 14f;
     public static final float STORY_CHOICE_BUTTON_CORNER     = 12f;
 
-    // Boot / respawn card (order-5, System voice): a centred modal shown on every run start.
+    // Boot / respawn card (order-3, System voice): a centred modal shown on every run start.
+    // The rect below is the card's overall footprint; the order-3 BOOT CARD section further down
+    // splits it into the three stacked elements (system lines, instance counter, ORA wake line).
     public static final float STORY_BOOT_CARD_WIDTH  = 720f;
     public static final float STORY_BOOT_CARD_HEIGHT = 300f;
     public static final float STORY_BOOT_CARD_X      = (Constants.WORLD_WIDTH - STORY_BOOT_CARD_WIDTH) / 2f;
@@ -255,6 +257,89 @@ public final class StoryUiConstants {
             300f,   // IDLE                     — a quip every five minutes at most
             300f,   // BACKTRACK
     };
+
+    // =====================================================================
+    // BOOT / REPRINT CARD (order-3) — the full-screen card shown every time the player is
+    // reprinted after death, and on the very first run too (in-fiction the original self has just
+    // died).  It is the game's most reliable story channel, so it doubles as a guaranteed
+    // bite-sized beat: three stacked elements over a dark full-bleed background —
+    //   1. the SYSTEM status lines (the machine voice, which never editorialises),
+    //   2. the quiet instance counter (never celebrated),
+    //   3. one region-appropriate ORA wake-up line (the story beat).
+    // Layout is a TOP-DOWN stack: each element's anchor is derived from the one above it, so the
+    // card can be re-spaced by moving STORY_BOOT_SYSTEM_TOP_Y alone and nothing drifts.
+    // =====================================================================
+    // Dark full-bleed background behind the card.  Calm and near-opaque: this screen appears on a
+    // player who has just died, so it must never flash or strobe.
+    public static final float STORY_BOOT_BACKDROP_ALPHA = 0.94f;
+    public static final float STORY_BOOT_BACKDROP_R = 0.02f, STORY_BOOT_BACKDROP_G = 0.02f,
+                              STORY_BOOT_BACKDROP_B = 0.03f;
+
+    // Body-line caps per block.  System cards are exactly three status lines; ORA gets a bark's
+    // two, because the boot line is a bark in every way except that it stops the world.
+    public static final int   STORY_BOOT_SYSTEM_MAX_LINES = 3;
+    public static final int   STORY_BOOT_WAKE_MAX_LINES   = 2;
+    // Panel height for N body lines, from the geometry StoryPanelRenderer actually draws with:
+    //   padding(18) + chip(34) + chip-to-body(8) + (N-1) * line pitch(30) + a glyph box(~24)
+    //   + bottom room(16)  =  30N + 70.   N = 2 reproduces the bark's 130 exactly.
+    public static final float STORY_BOOT_SYSTEM_PANEL_HEIGHT = 160f;   // N = 3
+    public static final float STORY_BOOT_WAKE_PANEL_HEIGHT   = 130f;   // N = 2
+    // Both blocks share the boot card's horizontal footprint, so the stack reads as one card.
+    public static final float STORY_BOOT_PANEL_X     = STORY_BOOT_CARD_X;
+    public static final float STORY_BOOT_PANEL_WIDTH = STORY_BOOT_CARD_WIDTH;
+
+    // 1. SYSTEM status lines — the top of the stack; every other anchor hangs off it.
+    public static final float STORY_BOOT_SYSTEM_TOP_Y = 596f;
+    public static final float STORY_BOOT_SYSTEM_Y     =
+            STORY_BOOT_SYSTEM_TOP_Y - STORY_BOOT_SYSTEM_PANEL_HEIGHT;
+
+    // 2. Instance counter — a single quiet line under the system panel.  Deliberately dim and
+    // small: the number climbing over a long session is its own horror and is never annotated.
+    public static final float STORY_BOOT_COUNTER_GAP       = 34f;
+    public static final float STORY_BOOT_COUNTER_TOP_Y     = STORY_BOOT_SYSTEM_Y - STORY_BOOT_COUNTER_GAP;
+    public static final float STORY_BOOT_COUNTER_TEXT_SIZE = 1.1f;
+    public static final float STORY_BOOT_COUNTER_R = 0.46f, STORY_BOOT_COUNTER_G = 0.48f,
+                              STORY_BOOT_COUNTER_B = 0.52f;
+    /** Machine label, not story prose — the counter is chrome, so it is not a localised line. */
+    public static final String STORY_BOOT_COUNTER_PREFIX = "INSTANCE #";
+    /** Zero-padded width of the printed instance number ("INSTANCE #0048"). */
+    public static final int    STORY_BOOT_COUNTER_DIGITS = 4;
+
+    // 3. ORA's wake-up line — the story beat, in the AI speaker's amber.
+    public static final float STORY_BOOT_WAKE_GAP   = 44f;
+    public static final float STORY_BOOT_WAKE_TOP_Y = STORY_BOOT_COUNTER_TOP_Y - STORY_BOOT_WAKE_GAP;
+    public static final float STORY_BOOT_WAKE_Y     = STORY_BOOT_WAKE_TOP_Y - STORY_BOOT_WAKE_PANEL_HEIGHT;
+
+    // CONTINUE — one large, thumb-friendly tap target at the bottom.  A tap ALWAYS proceeds: the
+    // card is never a trap, and it is never on a timer either, so a slow reader can take the beat
+    // in.  The endgame FREE/KILL variant draws no button at all — that absence is the ending.
+    public static final float STORY_BOOT_CONTINUE_WIDTH  = 380f;
+    public static final float STORY_BOOT_CONTINUE_HEIGHT = 96f;
+    public static final float STORY_BOOT_CONTINUE_X      =
+            (Constants.WORLD_WIDTH - STORY_BOOT_CONTINUE_WIDTH) / 2f;
+    public static final float STORY_BOOT_CONTINUE_Y      = 96f;
+    public static final float STORY_BOOT_CONTINUE_CORNER = 12f;
+    public static final float STORY_BOOT_CONTINUE_BORDER = 2f;
+    public static final float STORY_BOOT_CONTINUE_TEXT_SIZE = 1.5f;
+    public static final float STORY_BOOT_CONTINUE_FILL_ALPHA = 0.28f;
+    /** Localisation id of the button label (localisation rule: never a literal in the renderer). */
+    public static final String STORY_BOOT_CONTINUE_LABEL_ID = "story.boot.continue";
+
+    // MOTION — the card fades in a touch slower than a bark (it is a beat, not a notification) and
+    // its status lines print one after another, like a terminal waking up.  Nothing flashes.
+    public static final float STORY_BOOT_FADE_IN_SECONDS   = 0.50f;
+    public static final float STORY_BOOT_FADE_OUT_SECONDS  = 0.35f;
+    /** Seconds between successive SYSTEM status lines printing in. */
+    public static final float STORY_BOOT_LINE_REVEAL_SECONDS = 0.45f;
+    /**
+     * ACCESSIBILITY — the "reduce text hold" setting (order-1's accessibility baseline).  When on,
+     * every boot-card reveal delay is multiplied by this, so the whole card is legible sooner for a
+     * player who does not want a paced reveal.  A tap still skips straight to the full card either
+     * way — the reveal is mood, never a gate.
+     */
+    public static final float STORY_TEXT_HOLD_SCALE_REDUCED = 0.35f;
+    /** Seed salt for which ORA wake line a reprint draws (joins the reproducible run stream). */
+    public static final long  STORY_BOOT_WAKE_SEED_SALT = 0xB007CA2D5A17L;
 
     // =====================================================================
     // SPEAKER STINGS (audio) — one short non-verbal sting per speaker, pre-attentively

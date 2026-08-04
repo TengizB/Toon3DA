@@ -14,6 +14,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
 
     private final Set<String> seenBeatIds = new HashSet<>();
     private int deepestRegionOrdinal;
+    private int reprintCount;
 
     @Override
     public int loadDeepestRegionOrdinal() {
@@ -35,9 +36,20 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
         seenBeatIds.add(beatId);
     }
 
+    @Override
+    public int loadReprintCount() {
+        return reprintCount;
+    }
+
+    @Override
+    public void saveReprintCount(int reprintCount) {
+        this.reprintCount = reprintCount;
+    }
+
     /** Wipes everything — the headless half of a "new game" reset. */
     public void clear() {
         seenBeatIds.clear();
         deepestRegionOrdinal = 0;
+        reprintCount         = 0;
     }
 }
