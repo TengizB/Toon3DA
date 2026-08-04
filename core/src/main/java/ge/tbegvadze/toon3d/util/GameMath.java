@@ -5119,4 +5119,28 @@ public final class GameMath {
         for (int padIndex = 0; padIndex < padding; padIndex++) padded.append('0');
         return padded.append(digits).toString();
     }
+
+    /*
+     * Formula: stacked button bottom edge (the Story UI order-4 choice stack)
+     * Derivation:
+     *   Buttons of equal height are stacked DOWNWARD from a fixed top edge, separated by a constant
+     *   gap.  Slot k therefore starts one full pitch (height + gap) below slot k-1:
+     *       topY(k)    = stackTopY - k * (buttonHeight + buttonGap)
+     *       bottomY(k) = topY(k) - buttonHeight
+     *                  = stackTopY - k * (buttonHeight + buttonGap) - buttonHeight
+     *   World coordinates are Y-UP with the origin bottom-left, so "down the stack" is subtraction
+     *   and bottomY is the LibGDX rect origin the caller draws and hit-tests from.
+     *   The stack is top-anchored on purpose: a two-answer exchange and a three-answer one put
+     *   their first button in the same place, so the thumb only ever learns one spot.
+     * Edge cases:
+     *   buttonIndex 0 returns stackTopY - buttonHeight (the first plate hangs from the top edge).
+     *   A negative index is clamped to 0 rather than drawing a plate above the stack.
+     *   Zero gap simply abuts the plates; zero height degenerates to a line at the anchor — both are
+     *   layout choices, not error states, so neither is special-cased beyond the clamp.
+     */
+    public static float stackedButtonBottomY(float stackTopY, float buttonHeight, float buttonGap,
+                                             int buttonIndex) {
+        int safeIndex = Math.max(0, buttonIndex);
+        return stackTopY - safeIndex * (buttonHeight + buttonGap) - buttonHeight;
+    }
 }

@@ -49,6 +49,9 @@ import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.BootCardCatalog;
 import ge.tbegvadze.toon3d.narrative.BootCardSystem;
 import ge.tbegvadze.toon3d.narrative.BootCardVariant;
+import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
+import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
+import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
@@ -115,7 +118,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE }
+    private enum RunPhase { BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -341,6 +344,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // allowed); bootCardRenderer only draws what it reports.
     private final BootCardSystem     bootCardSystem;
     private final BootCardRenderer   bootCardRenderer;
+    // Story UI — EXCHANGES (order-4): the BLOCKING half of the channel. A handful of moments per
+    // region stop the world and ask the player to tap one of 2-3 answers; exchangeSystem is the
+    // headless brain (which exchange, what the answers do to the hidden stance model, which reply
+    // comes back), storyExchangeRenderer only draws what it reports. Rare by design — the bark
+    // layer carries ~80% of the story precisely so this one can stay special.
+    private final ExchangeSystem         exchangeSystem;
+    private final StoryExchangeRenderer  storyExchangeRenderer;
+    /** Which answer plate the thumb went down on, so a tap that slides off is cancelled. */
+    private int                          exchangePressedIndex = -1;
     /** Seeded stream for "does this moment even ask for a line" rolls (kills). */
     private final java.util.Random   storyMomentRandom;
     private StoryBarkTickSubscriber  storyBarkTickSubscriber;
@@ -446,6 +458,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         bootCardRenderer = new BootCardRenderer();
         bootCardRenderer.setBootCardSystem(bootCardSystem);
         bootCardRenderer.setStrings(storyStrings);
+
+        // Story UI exchanges (order-4) — shares the same persistent StoryProgress as the bark layer
+        // and the boot card, so a one-shot exchange answered on an earlier run never re-asks, and
+        // the hidden stance those answers build survives every death.
+        exchangeSystem = new ExchangeSystem(ExchangeCatalog.defaultRegistry(), storyStrings,
+                                            barkSystem.getProgress(),
+                                            runSeed ^ StoryUiConstants.STORY_EXCHANGE_SELECTION_SEED_SALT);
+        storyExchangeRenderer = new StoryExchangeRenderer();
+        storyExchangeRenderer.setExchangeSystem(exchangeSystem);
+        storyExchangeRenderer.setStrings(storyStrings);
         // EVERY run opens on the reprint card, the very first one included: in-fiction the original
         // self has just died, so the player's first boot shows the same death notice as their
         // hundredth (story/01-timeline.md). A file-loaded or test world skips it — it is not a run.
@@ -1686,6 +1708,30 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // STORY_EXCHANGE phase (order-4) — a conversation owns the screen. The world takes NO turns
+        // while it is up: this is a turn-based game with an action lock, so pausing for an answer
+        // costs the player nothing and there is no real-time pressure on the choice.
+        //
+        // There is no timer of any kind and nothing auto-selects. The only way past the prompt is to
+        // tap an actual answer, which is the whole anti-skip design: the player has to at least
+        // glance at what they are choosing between.
+        if (runPhase == RunPhase.STORY_EXCHANGE) {
+            exchangeSystem.update(deltaTime);
+            updateStoryExchangeTouch();
+            applyPendingExchangeReward();
+            if (exchangeSystem.consumeFinished()) {
+                exchangePressedIndex = -1;
+                // The taps that answered the exchange also reached the touch controller behind it.
+                // Clear them, or the finger that picked an answer immediately steps the player.
+                if (touchInputState != null) {
+                    touchInputState.resetAllButtonStates();
+                    touchInputState.consumeTapAction();
+                }
+                runPhase = RunPhase.PLAYING;
+            }
+            return;
+        }
+
         // DEAD phase — death beat then death screen; no game simulation
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
@@ -1870,6 +1916,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     runPhase = RunPhase.PLAYING;
                 }
             }
+            return;
+        }
+
+        // Story exchange (order-4): a moment (a region entry, a deep-strata milestone) may have held
+        // one back while the world was fading between floors — stopping the player inside a modal
+        // over a black screen would read as a bug. It opens HERE instead: in play, with the player
+        // standing still and nothing else owning the screen. The exchange takes the phase, so the
+        // sim below does not run this frame and the world takes no turn while it is up.
+        if (openPendingStoryExchange()) {
             return;
         }
 
@@ -2074,7 +2129,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && runPhase != RunPhase.SHOP_OPEN
                 && runPhase != RunPhase.ROUTE_SELECT
                 && runPhase != RunPhase.EVENT_CHOICE
-                && runPhase != RunPhase.BOOT_CARD) {
+                && runPhase != RunPhase.BOOT_CARD
+                && runPhase != RunPhase.STORY_EXCHANGE) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -2115,6 +2171,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Narrative EVENT choice overlay (order-10) — paused choice cards, drawn below fade/death overlays.
         if (runPhase == RunPhase.EVENT_CHOICE) {
             eventChoiceOverlayRenderer.render(camera);
+        }
+
+        // Story exchange (order-4) — the blocking conversation panel. Brings its own dim, which
+        // covers the frozen world behind it, so it is drawn above the HUD and event text and below
+        // the boot card and the fade. The thumb clusters are not drawn at all in this phase (see
+        // the touch-controller condition above), which is why the answer plates are free to use the
+        // lower screen those buttons normally own.
+        if (runPhase == RunPhase.STORY_EXCHANGE) {
+            storyExchangeRenderer.render(camera);
         }
 
         // Reprint / boot card (order-3) — the modal that opens every run. Its own dark full-bleed
@@ -2173,6 +2238,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Reprint / boot card (order-3): the renderer owns a story panel primitive, its own shapes,
         // batch and font. BootCardSystem itself is headless — no GPU handles.
         bootCardRenderer.dispose();
+        // Story exchanges (order-4): the renderer owns the story panel primitive, its own
+        // shapes/batch/font and the per-speaker stings. ExchangeSystem itself is headless.
+        storyExchangeRenderer.dispose();
         hitVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
@@ -2445,6 +2513,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // beats: a later run re-entering a cleared region says nothing here.
         barkSystem.request(BarkTrigger.REGION_ENTERED);
         barkSystem.request(BarkTrigger.REGION_GATE_ORDER);
+        // ...and the region's one deliberate EXCHANGE (order-4), if it has not been answered on an
+        // earlier run. Only HELD here: the region change happens mid-transition, and the exchange
+        // opens once the player is actually standing on the floor (openPendingStoryExchange).
+        exchangeSystem.request(ExchangeTrigger.REGION_ENTERED);
 
         RegionAmbience ambience = RouteRegistries.regionAmbience().getOrFallback(region.themeId());
         String regionName = ambience != null ? ambience.displayName() : region.displayName();
@@ -2479,6 +2551,113 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (currentDepth > 0 && currentDepth % StoryUiConstants.STORY_BARK_DEEP_STRATA_INTERVAL == 0) {
             barkSystem.request(BarkTrigger.DEEP_STRATA);
+            // The quiet deep-strata check-in (order-4). Every row is one-shot, so this asks often
+            // and almost always gets nothing — which is exactly the budget an exchange should have.
+            exchangeSystem.request(ExchangeTrigger.DEEP_STRATA);
+        }
+    }
+
+    /**
+     * Opens an exchange a moment held back, if the world is genuinely ready to stop (order-4).
+     *
+     * <p>The bars are deliberate.  The player must be IDLE (never yanked out of a step or a
+     * rotation), alive, and not mid-fade — and any bark on screen is left alone, because two story
+     * panels never stack and a line the player is still reading must never be covered.  Nothing is
+     * lost by waiting: the exchange simply stays pending until the next frame that qualifies.
+     *
+     * @return true when an exchange just took the screen (the caller must skip this frame's sim)
+     */
+    private boolean openPendingStoryExchange() {
+        if (runPhase != RunPhase.PLAYING || !exchangeSystem.hasPending()) return false;
+        if (player.isDead() || !playerController.isIdle())                return false;
+        if (barkSystem.hasActiveBark())                                   return false;
+        if (!exchangeSystem.openPending())                                return false;
+
+        // Release every held touch button, so a finger resting on FORWARD does not immediately step
+        // the moment the exchange closes.
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        exchangePressedIndex = -1;
+        runPhase             = RunPhase.STORY_EXCHANGE;
+        storyExchangeRenderer.playPendingSpeakerSting();
+        return true;
+    }
+
+    /**
+     * Routes touches to the exchange on screen (order-4): press an answer plate, release on it to
+     * commit.  Standard phone button behaviour — sliding off a plate before releasing CANCELS the
+     * tap, which matters here more than anywhere else in the game, because an exchange answer is
+     * recorded permanently and a mis-tap must always be recoverable.
+     *
+     * <p>There is no blank "next" and no timer: while the prompt is up the only way onward is an
+     * actual answer, and the panel waits as long as the player needs.
+     */
+    private void updateStoryExchangeTouch() {
+        if (gameViewport == null || !exchangeSystem.isActive()) {
+            exchangePressedIndex = -1;
+            return;
+        }
+        int buttonCount = exchangeSystem.isAwaitingChoice() ? exchangeSystem.getOptionCount()
+                        : exchangeSystem.isShowingReply()   ? 1
+                        : 0;
+        if (buttonCount <= 0) {
+            exchangePressedIndex = -1;
+            exchangeSystem.setPressedOptionIndex(-1);
+            return;
+        }
+
+        if (Gdx.input.isTouched()) {
+            cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+            gameViewport.unproject(cardTouchPosition);
+            if (Gdx.input.justTouched()) {
+                exchangePressedIndex = StoryExchangeRenderer.buttonIndexAt(
+                        cardTouchPosition.x, cardTouchPosition.y, buttonCount);
+            } else if (exchangePressedIndex >= 0 && !StoryExchangeRenderer.isInsideButton(
+                    cardTouchPosition.x, cardTouchPosition.y, exchangePressedIndex)) {
+                exchangePressedIndex = -1;   // the finger slid off: the tap is cancelled
+            }
+            exchangeSystem.setPressedOptionIndex(exchangePressedIndex);
+            return;
+        }
+
+        // Finger lifted while still on the plate it went down on — that is the answer.
+        if (exchangePressedIndex < 0) return;
+        int committedIndex = exchangePressedIndex;
+        exchangePressedIndex = -1;
+        exchangeSystem.setPressedOptionIndex(-1);
+        if (exchangeSystem.isAwaitingChoice()) {
+            exchangeSystem.selectOption(committedIndex);
+        } else {
+            exchangeSystem.requestContinue();
+        }
+        storyExchangeRenderer.playPendingSpeakerSting();
+    }
+
+    /**
+     * Grants the small cache a PROBE answer just revealed (order-4's "pay them for reading" lever).
+     * The narrative layer never touches the inventory itself — it names an {@code ItemType} and the
+     * engine resolves it here, which is what keeps {@code …toon3d.narrative} headless.  Reading the
+     * reward clears it, so it can never be granted twice.
+     */
+    private void applyPendingExchangeReward() {
+        int    quantity     = exchangeSystem.getPendingRewardQuantity();
+        String itemTypeName = exchangeSystem.consumePendingRewardItemTypeName();
+        if (itemTypeName == null || quantity <= 0) return;
+        ItemType rewardType;
+        try {
+            rewardType = ItemType.valueOf(itemTypeName);
+        } catch (IllegalArgumentException unknownItem) {
+            // A catalog typo must never take the run down; a test guards the shipped names.
+            Gdx.app.error("StoryExchange", "unknown reward item type: " + itemTypeName);
+            return;
+        }
+        if (itemInventory.tryAdd(rewardType, quantity)) {
+            eventTextSystem.spawnWithColor("FOUND: " + rewardType.getDisplayName().toUpperCase(),
+                    EventTextSystem.COLOR_GOLD);
+        } else {
+            // A full pack must never swallow the payoff silently: the player asked a question, was
+            // promised something for it, and has to be told why they did not get it.
+            eventTextSystem.spawnWithColor("NO ROOM FOR: " + rewardType.getDisplayName().toUpperCase(),
+                    EventTextSystem.COLOR_WHITE);
         }
     }
 

@@ -27,6 +27,8 @@ public final class StoryProgress {
     private final Set<String>        seenBeatIds = new HashSet<>();
     private StoryRegion              deepestRegion;
     private int                      reprintCount;
+    /** The three hidden leanings (order-4), indexed by {@link Stance#ordinal()}.  Cached on load. */
+    private final int[]              stanceValues = new int[Stance.values().length];
 
     /** Uses an in-memory store — nothing survives the process (tests, showcases). */
     public StoryProgress() {
@@ -39,6 +41,9 @@ public final class StoryProgress {
         this.store         = store;
         this.deepestRegion = StoryRegion.fromOrdinal(store.loadDeepestRegionOrdinal());
         this.reprintCount  = Math.max(0, store.loadReprintCount());
+        for (Stance stance : Stance.values()) {
+            stanceValues[stance.ordinal()] = store.loadStance(stance.name());
+        }
     }
 
     /** The deepest story region ever reached.  Never null; never moves backwards. */
@@ -98,5 +103,93 @@ public final class StoryProgress {
         reprintCount++;
         store.saveReprintCount(reprintCount);
         return reprintCount;
+    }
+
+    // -------------------------------------------------------------------------
+    // The hidden STANCE model (Story UI order-4)
+    // -------------------------------------------------------------------------
+
+    /**
+     * How far the player leans one way, from every exchange they have ever answered.  Signed and
+     * unbounded in principle; in practice it drifts by ones and twos over a whole campaign.
+     *
+     * <p>NEVER show this number, and never gate content on it.  It exists to flavour which lines
+     * ORA offers and which ending the run resonates with — see {@link Stance}.
+     */
+    public int getStance(Stance stance) {
+        if (stance == null) return 0;
+        return stanceValues[stance.ordinal()];
+    }
+
+    /**
+     * Nudges one leaning and persists it immediately.  Called once per answered option, so this is
+     * a handful of writes across a whole run — never a per-frame path.  A zero nudge writes nothing.
+     */
+    public void nudgeStance(Stance stance, int amount) {
+        if (stance == null || amount == 0) return;
+        int updated = stanceValues[stance.ordinal()] + amount;
+        stanceValues[stance.ordinal()] = updated;
+        store.saveStance(stance.name(), updated);
+    }
+
+    /**
+     * The leaning the player has expressed most, or null when nothing has been expressed yet or two
+     * leanings are exactly tied.  A null dominant is a perfectly normal state — the caller must
+     * always have a neutral fallback, because a stance may never make a moment go silent.
+     */
+    public Stance getDominantStance() {
+        Stance dominant     = null;
+        int    bestValue    = 0;
+        boolean tiedAtBest  = false;
+        for (Stance stance : Stance.values()) {
+            int value = stanceValues[stance.ordinal()];
+            if (value <= 0) continue;                 // a negative or unexpressed leaning never leads
+            if (dominant == null || value > bestValue) {
+                dominant   = stance;
+                bestValue  = value;
+                tiedAtBest = false;
+            } else if (value == bestValue) {
+                tiedAtBest = true;
+            }
+        }
+        return tiedAtBest ? null : dominant;
+    }
+
+    // -------------------------------------------------------------------------
+    // Consequential outcomes and codex unlocks (Story UI order-4)
+    // -------------------------------------------------------------------------
+
+    /** Which option the player chose for a consequential exchange, or null if never answered. */
+    public String getOutcome(String exchangeId) {
+        if (exchangeId == null) return null;
+        return store.loadOutcome(exchangeId);
+    }
+
+    /** True when this consequential exchange has been answered, either way. */
+    public boolean hasOutcome(String exchangeId) {
+        return getOutcome(exchangeId) != null;
+    }
+
+    /**
+     * Records how a consequential exchange was answered, permanently.  This is the "changes a
+     * tracked outcome" half of order-4: order-5 (which ending fires) and order-8 (what surrounds it)
+     * read it back, and a death never erases it.
+     */
+    public void recordOutcome(String exchangeId, String optionId) {
+        if (exchangeId == null || optionId == null) return;
+        store.saveOutcome(exchangeId, optionId);
+    }
+
+    /** True when a codex entry is already unlocked (order-6 reads this to list its entries). */
+    public boolean isCodexUnlocked(String codexId) {
+        if (codexId == null) return false;
+        return store.isCodexUnlocked(codexId);
+    }
+
+    /** Unlocks a codex entry, permanently — the reward a PROBE option pays for curiosity. */
+    public void unlockCodexEntry(String codexId) {
+        if (codexId == null) return;
+        if (store.isCodexUnlocked(codexId)) return;   // already known — no redundant write
+        store.markCodexUnlocked(codexId);
     }
 }

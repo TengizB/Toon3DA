@@ -68,9 +68,10 @@ public final class StoryStrings {
     /**
      * The built-in fallback table.  Holds the four speaker names, the four order-1 sample lines
      * (one per speaker) used by the showcase / definition-of-done, and — folded in from
-     * {@link BarkStrings} and {@link BootCardStrings} — every order-2 bark line and every order-3
-     * boot-card line.  It is the safety net when the properties asset is unavailable.  Keep in sync
-     * with {@code assets/story/story-strings.properties}.
+     * {@link BarkStrings}, {@link BootCardStrings} and {@link ExchangeStrings} — every order-2 bark
+     * line, every order-3 boot-card line and every order-4 exchange line.  It is the safety net when
+     * the properties asset is unavailable.  Keep in sync with
+     * {@code assets/story/story-strings.properties}.
      */
     public static StoryStrings defaults() {
         StoryStrings strings = new StoryStrings();
@@ -91,6 +92,8 @@ public final class StoryStrings {
         BarkStrings.registerDefaults(strings);
         // Order-3 boot card: the machine-voice status cards and ORA's reprint wake-up lines.
         BootCardStrings.registerDefaults(strings);
+        // Order-4 exchanges: every blocking prompt, the answers the player may tap, and the replies.
+        ExchangeStrings.registerDefaults(strings);
 
         return strings;
     }

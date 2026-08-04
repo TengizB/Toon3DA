@@ -118,9 +118,14 @@ class StoryUiFoundationTest {
     }
 
     @Test
-    void exchangePanelClearsTouchClustersAndChoiceButtonIsAThumbTarget() {
-        assertTrue(StoryUiConstants.STORY_EXCHANGE_Y >= StoryUiConstants.STORY_TOUCH_CLUSTER_TOP_Y,
-                "exchange panel overlaps the touch clusters");
+    void exchangePanelClearsTheHudAndChoiceButtonIsAThumbTarget() {
+        // The exchange (order-4) is a BLOCKING modal: it dims the world and the thumb clusters are
+        // not drawn at all while it is up, so — like the boot card's CONTINUE — its answer stack is
+        // free to use the lower screen those buttons normally own.  What it must never cover is the
+        // HUD band, because health and ammo stay readable while the player decides.  The full stack
+        // geometry is asserted in StoryExchangeTest.
+        assertTrue(StoryUiConstants.STORY_EXCHANGE_Y >= HudConstants.HUD_HEIGHT,
+                "exchange stack overlaps the HUD band");
         // A comfortable thumb target — generous minimum tap height.
         assertTrue(StoryUiConstants.STORY_CHOICE_BUTTON_MIN_HEIGHT >= 64f,
                 "choice button too short for a thumb");
