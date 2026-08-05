@@ -65,33 +65,10 @@ public final class HudConstants {
     // Baseline Y (world units) for the centred medkit-reminder text, just above the HUD chrome.
     public static final float HUD_MEDKIT_WARN_Y               = HUD_HEIGHT + 70f;
 
-    // Death overlay — full-screen incursion-terminated report
-    public static final float DEATH_OVERLAY_PANEL_X        = 280f;
-    public static final float DEATH_OVERLAY_PANEL_Y        = 80f;
-    public static final float DEATH_OVERLAY_PANEL_WIDTH    = 720f;
-    public static final float DEATH_OVERLAY_PANEL_HEIGHT   = 560f;
-    public static final float DEATH_OVERLAY_LABEL_X        = DEATH_OVERLAY_PANEL_X + 60f;
-    public static final float DEATH_OVERLAY_VALUE_X_MAX    = DEATH_OVERLAY_PANEL_X + DEATH_OVERLAY_PANEL_WIDTH - 60f;
-    public static final float DEATH_OVERLAY_HEADER_SCALE   = 2.5f;
-    public static final float DEATH_OVERLAY_SUBHEAD_SCALE  = 1.3f;
-    public static final float DEATH_OVERLAY_STAT_SCALE     = 1.2f;
-    public static final float DEATH_OVERLAY_NEWBEST_SCALE  = 0.9f;
-    public static final float DEATH_OVERLAY_FLAVOR_SCALE   = 1.0f;
-    public static final float DEATH_OVERLAY_PROMPT_SCALE   = 1.3f;
-    // Y positions relative to panel top (PANEL_Y + PANEL_HEIGHT)
-    public static final float DEATH_OVERLAY_HEADER_Y_BELOW_TOP   = 55f;
-    public static final float DEATH_OVERLAY_SUBHEAD_Y_BELOW_TOP  = 100f;
-    public static final float DEATH_OVERLAY_FIRST_STAT_Y_BELOW_TOP = 175f;
-    public static final float DEATH_OVERLAY_STAT_LINE_STEP        = 48f;
-    // RUN AUTOPSY block (new-game-balancr order 9) — six compact lines under the stat block.
-    public static final float DEATH_OVERLAY_AUTOPSY_SCALE          = 0.85f;
-    public static final float DEATH_OVERLAY_AUTOPSY_Y_BELOW_STATS  = 46f;
-    public static final float DEATH_OVERLAY_AUTOPSY_LINE_STEP      = 26f;
-    // Y positions relative to panel bottom (PANEL_Y)
-    public static final float DEATH_OVERLAY_FLAVOR_Y_ABOVE_BOTTOM = 130f;
-    public static final float DEATH_OVERLAY_PROMPT_Y_ABOVE_BOTTOM = 50f;
-    // Horizontal gap between right-edge of value text and "NEW BEST" tag
-    public static final float DEATH_OVERLAY_NEWBEST_GAP            = 18f;
+    // The full-screen death report used to live here.  Story UI order-8 folded it into the
+    // death -> reprint framing: the run's numbers are now a PAGE of the reprint card's screen
+    // (render/InstanceReportRenderer), so its geometry lives with the other framing screens in
+    // util/StoryUiConstants (STORY_REPORT_*) rather than in the HUD's constants.
 
     // Status-effect icon row — small procedural squares along the bottom of the left panel,
     // in the clear band beneath the weapon-slot strip (no overlap with the slots).

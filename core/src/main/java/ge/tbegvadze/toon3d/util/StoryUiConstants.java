@@ -614,4 +614,179 @@ public final class StoryUiConstants {
     // =====================================================================
     /** A bark dismissed faster than this was skipped, not read — the signal Part E exists to collect. */
     public static final float STORY_TELEMETRY_FAST_DISMISS_SECONDS = 1.5f;
+
+    // =====================================================================
+    // FRAMING SCREENS (order-8) — the screens that BOOK-END play: the launch / title screen, the
+    // pause menu, the settings screen, the reprint report folded into the death->reprint beat, and
+    // the way out of an ending that authorises no reprint.
+    //
+    // They all speak the boot card's visual language on purpose (the same near-black full-bleed
+    // backdrop, the same plate styling), because the launch screen's death notice and the reprint
+    // card are the SAME machine talking — that continuity is the whole trick order-8 plays.
+    // =====================================================================
+    /**
+     * Where the ENDING the player committed to is filed (order-8 Part D).  Stored through the
+     * order-4 consequential-outcome mechanism — the ending IS a consequential outcome — so it needs
+     * no new persisted key and no schema bump, and a "new game" wipe clears it with everything else.
+     * The value is a {@code BootCardVariant} name; the launch screen reads it back to decide which
+     * card's status lines it prints.
+     */
+    public static final String STORY_ENDING_OUTCOME_ID = "ending";
+
+    // Full-bleed backdrop shared by every framing screen — the boot card's blackout, reused.
+    public static final float STORY_FRAME_BACKDROP_ALPHA = STORY_BOOT_BACKDROP_ALPHA;
+    public static final float STORY_FRAME_BACKDROP_R = STORY_BOOT_BACKDROP_R,
+                              STORY_FRAME_BACKDROP_G = STORY_BOOT_BACKDROP_G,
+                              STORY_FRAME_BACKDROP_B = STORY_BOOT_BACKDROP_B;
+    /** Seconds any framing element takes to fade in.  Gentle: nothing on these screens flashes. */
+    public static final float STORY_FRAME_FADE_SECONDS = 0.30f;
+    /**
+     * Backdrop of a framing screen drawn OVER a live floor (the pause and settings menus).  Darker
+     * than the exchange's dim, lighter than the launch screen's blackout: the player is still in a
+     * room, and a paused suit should not pretend otherwise.
+     */
+    public static final float STORY_FRAME_SCRIM_ALPHA = 0.86f;
+
+    // --- MENU PLATES (the title menu, the pause menu, the settings rows) ---------------------
+    // Big, high-contrast, thumb-first: a menu row that needs aiming is a row nobody presses.
+    /** Hard cap on a framing menu's rows — five is the longest menu the game has (title, settings). */
+    public static final int   STORY_FRAME_MENU_MAX_ROWS   = 6;
+    public static final float STORY_FRAME_MENU_WIDTH      = 460f;
+    public static final float STORY_FRAME_MENU_X          = (Constants.WORLD_WIDTH - STORY_FRAME_MENU_WIDTH) / 2f;
+    public static final float STORY_FRAME_MENU_ROW_HEIGHT = 68f;
+    public static final float STORY_FRAME_MENU_ROW_GAP    = 12f;
+    /** Vertical pitch from one row's top edge to the next — the geometry hit-testing inverts. */
+    public static final float STORY_FRAME_MENU_ROW_PITCH  =
+            STORY_FRAME_MENU_ROW_HEIGHT + STORY_FRAME_MENU_ROW_GAP;
+    public static final float STORY_FRAME_MENU_CORNER     = 12f;
+    public static final float STORY_FRAME_MENU_BORDER     = 2f;
+    public static final float STORY_FRAME_MENU_FILL_ALPHA         = 0.20f;
+    public static final float STORY_FRAME_MENU_PRESSED_ALPHA      = 0.55f;
+    /** A row that is offered but not available (nothing to continue yet) reads as dimmed, not absent. */
+    public static final float STORY_FRAME_MENU_DISABLED_ALPHA     = 0.35f;
+    public static final float STORY_FRAME_MENU_TEXT_SIZE          = 1.3f;
+    /** A settings row shows its current value on the right, a shade smaller than its name. */
+    public static final float STORY_FRAME_MENU_VALUE_TEXT_SIZE    = 1.1f;
+    /** Top edge of the first row on the pause / settings screens (the title screen sits lower). */
+    public static final float STORY_FRAME_MENU_TOP_Y   = 540f;
+    /** The screen's own heading ("SUIT PAUSED", "SETTINGS"), centred above the rows. */
+    public static final float STORY_FRAME_HEADER_TOP_Y   = 624f;
+    public static final float STORY_FRAME_HEADER_TEXT_SIZE = 1.7f;
+
+    // --- LAUNCH SEQUENCE (the title screen's top-down stack) ----------------------------------
+    // 1. the death notice types out, unhurried;  2. the title resolves quietly beneath it;
+    // 3. the menu fades in under that.  A tap prints all of it at once — the reveal is mood, and
+    // mood is never allowed to be a gate (order-6 Part C).
+    /** How many of the reprint card's status lines the launch screen borrows.  The first two. */
+    public static final int   STORY_TITLE_STATUS_LINE_COUNT   = 2;
+    public static final float STORY_TITLE_STATUS_TOP_Y        = 668f;
+    public static final float STORY_TITLE_STATUS_TEXT_SIZE    = 1.35f;
+    public static final float STORY_TITLE_STATUS_LINE_PITCH   = 46f;
+    /** Seconds between status lines printing.  Slower than the boot card's: nothing is happening yet. */
+    public static final float STORY_TITLE_LINE_REVEAL_SECONDS = 0.90f;
+    /** The beat between the machine finishing and the title resolving. */
+    public static final float STORY_TITLE_TITLE_DELAY_SECONDS = 0.60f;
+    /** The beat between the title resolving and the menu arriving under it. */
+    public static final float STORY_TITLE_MENU_DELAY_SECONDS  = 0.50f;
+    /** The whole screen rises out of black this slowly — a low, quiet start, never a splash. */
+    public static final float STORY_TITLE_FADE_IN_SECONDS     = 0.80f;
+    public static final float STORY_TITLE_GAME_TOP_Y          = 560f;
+    public static final float STORY_TITLE_GAME_TEXT_SIZE      = 3.2f;
+    public static final float STORY_TITLE_TAGLINE_TOP_Y       = 486f;
+    public static final float STORY_TITLE_TAGLINE_TEXT_SIZE   = 1.1f;
+    /** Top edge of the title menu's first row: five rows clear the screen's bottom edge. */
+    public static final float STORY_TITLE_MENU_TOP_Y          = 424f;
+    /** The title itself is dim white, not accented: this screen is cold, not branded. */
+    public static final float STORY_TITLE_GAME_R = 0.88f, STORY_TITLE_GAME_G = 0.90f,
+                              STORY_TITLE_GAME_B = 0.93f;
+    public static final float STORY_TITLE_TAGLINE_R = 0.46f, STORY_TITLE_TAGLINE_G = 0.48f,
+                              STORY_TITLE_TAGLINE_B = 0.52f;
+
+    // --- CONFIRMATION (the wipe, the abandon) --------------------------------------------------
+    // A consequence is never one tap away, and every confirmation carries a way back.
+    public static final float STORY_FRAME_CONFIRM_WIDTH  = 680f;
+    public static final float STORY_FRAME_CONFIRM_X      =
+            (Constants.WORLD_WIDTH - STORY_FRAME_CONFIRM_WIDTH) / 2f;
+    /** Panel height for 3 body lines by the same rule the other panels use: 30 * lines + 70. */
+    public static final float STORY_FRAME_CONFIRM_HEIGHT = 160f;
+    public static final float STORY_FRAME_CONFIRM_TOP_Y  = 470f;
+    public static final float STORY_FRAME_CONFIRM_Y      =
+            STORY_FRAME_CONFIRM_TOP_Y - STORY_FRAME_CONFIRM_HEIGHT;
+    /** Max wrapped lines of the question — it must be ONE plain sentence, so three is plenty. */
+    public static final int   STORY_FRAME_CONFIRM_MAX_LINES = 3;
+    public static final float STORY_FRAME_CONFIRM_BUTTON_WIDTH  = 300f;
+    public static final float STORY_FRAME_CONFIRM_BUTTON_HEIGHT = 84f;
+    public static final float STORY_FRAME_CONFIRM_BUTTON_GAP    = 40f;
+    public static final float STORY_FRAME_CONFIRM_BUTTON_Y      =
+            STORY_FRAME_CONFIRM_Y - 26f - STORY_FRAME_CONFIRM_BUTTON_HEIGHT;
+    /** PROCEED sits left of centre, CANCEL right of it — both a full thumb apart. */
+    public static final float STORY_FRAME_CONFIRM_YES_X =
+            Constants.WORLD_WIDTH / 2f - STORY_FRAME_CONFIRM_BUTTON_GAP / 2f
+                    - STORY_FRAME_CONFIRM_BUTTON_WIDTH;
+    public static final float STORY_FRAME_CONFIRM_NO_X  =
+            Constants.WORLD_WIDTH / 2f + STORY_FRAME_CONFIRM_BUTTON_GAP / 2f;
+
+    // --- THE ENDING'S WAY OUT ------------------------------------------------------------------
+    // A terminal card (FREE / KILL) draws no CONTINUE — that absence IS the ending (order-3).  What
+    // order-8 adds is the way OFF that final screen, once the card has finished printing: a dim
+    // plate in the CONTINUE's place that returns to a title screen the ending has changed.
+    public static final float STORY_FRAME_RETURN_FILL_ALPHA = 0.14f;
+    /** MERGE presents no card at all; the frozen view holds this long, fading, then stands down. */
+    public static final float STORY_ENDING_MERGE_HOLD_SECONDS = 6.0f;
+
+    // --- THE REPRINT REPORT (the folded death overlay) -----------------------------------------
+    // The run that just ended is not a second screen competing with the reprint card: it is a page
+    // OF that screen, reached by a small plate and dismissed by one tap.  The default path through a
+    // death is untouched — fade, card, CONTINUE — and the numbers are there for whoever wants them.
+    public static final float STORY_REPORT_PANEL_WIDTH  = 860f;
+    public static final float STORY_REPORT_PANEL_X      =
+            (Constants.WORLD_WIDTH - STORY_REPORT_PANEL_WIDTH) / 2f;
+    public static final float STORY_REPORT_PANEL_HEIGHT = 452f;
+    public static final float STORY_REPORT_PANEL_TOP_Y  = 656f;
+    public static final float STORY_REPORT_PANEL_Y      =
+            STORY_REPORT_PANEL_TOP_Y - STORY_REPORT_PANEL_HEIGHT;
+    public static final float STORY_REPORT_TITLE_TEXT_SIZE = 1.5f;
+    public static final float STORY_REPORT_TEXT_SIZE       = 1.0f;
+    public static final float STORY_REPORT_LINE_PITCH      = 30f;
+    /** Distance from the panel's top edge to the heading, and from the heading to the first line. */
+    public static final float STORY_REPORT_TITLE_INSET_Y   = 28f;
+    public static final float STORY_REPORT_FIRST_LINE_INSET_Y = 86f;
+    public static final float STORY_REPORT_TEXT_INSET_X    = 40f;
+    /** Four stat lines, a blank, and the six-line RUN AUTOPSY (new-game-balancr order 9, part C). */
+    public static final int   STORY_REPORT_MAX_LINES       = 12;
+    public static final float STORY_REPORT_R = 0.72f, STORY_REPORT_G = 0.75f, STORY_REPORT_B = 0.80f;
+    /** The record marker beside a stat that beat the save's best — dim gold, never a fanfare. */
+    public static final float STORY_REPORT_RECORD_R = 1.0f, STORY_REPORT_RECORD_G = 0.85f,
+                              STORY_REPORT_RECORD_B = 0.35f;
+    /** Column the stat VALUES start at, so the four readouts line up like a machine printout. */
+    public static final float STORY_REPORT_VALUE_INSET_X = 380f;
+    /** The plate on the reprint card that opens the report, tucked bottom-left out of the way. */
+    public static final float STORY_REPORT_OPEN_WIDTH  = 220f;
+    public static final float STORY_REPORT_OPEN_HEIGHT = 76f;
+    public static final float STORY_REPORT_OPEN_X      = 60f;
+    public static final float STORY_REPORT_OPEN_Y      = 110f;
+    /** BACK out of the report page, in the CONTINUE button's spot so the thumb knows where to go. */
+    public static final float STORY_REPORT_BACK_WIDTH  = 300f;
+    public static final float STORY_REPORT_BACK_HEIGHT = 84f;
+    public static final float STORY_REPORT_BACK_X      =
+            (Constants.WORLD_WIDTH - STORY_REPORT_BACK_WIDTH) / 2f;
+    public static final float STORY_REPORT_BACK_Y      = 96f;
+
+    // --- Localisation ids for the framing chrome (never a literal in a renderer) ----------------
+    public static final String STORY_TITLE_GAME_ID        = "story.title.game";
+    public static final String STORY_TITLE_TAGLINE_ID     = "story.title.tagline";
+    public static final String STORY_PAUSE_TITLE_ID       = "story.pause.title";
+    public static final String STORY_SETTINGS_TITLE_ID    = "story.settings.title";
+    public static final String STORY_SETTINGS_BACK_ID     = "story.settings.back";
+    public static final String STORY_FRAME_CONFIRM_YES_ID = "story.frame.confirm.yes";
+    public static final String STORY_FRAME_CONFIRM_NO_ID  = "story.frame.confirm.no";
+    public static final String STORY_FRAME_RETURN_ID      = "story.frame.return";
+    public static final String STORY_REPORT_TITLE_ID      = "story.report.title";
+    public static final String STORY_REPORT_OPEN_ID       = "story.report.open";
+    public static final String STORY_REPORT_BACK_ID       = "story.report.back";
+    public static final String STORY_REPORT_FLOOR_ID      = "story.report.floor";
+    public static final String STORY_REPORT_KILLS_ID      = "story.report.kills";
+    public static final String STORY_REPORT_DAMAGE_ID     = "story.report.damage";
+    public static final String STORY_REPORT_TIME_ID       = "story.report.time";
+    public static final String STORY_REPORT_BEST_ID       = "story.report.best";
 }

@@ -23,6 +23,7 @@ public final class TouchInputState extends InputAdapter implements ActionSource 
     private static final int INDEX_INSPECT_WEAPON  = 12;
     private static final int INDEX_USE_MACHINE     = 13;
     private static final int INDEX_GUARD           = 14;
+    private static final int INDEX_PAUSE           = 15;
 
     private final TouchButton[]  buttons;
     private final Viewport       viewport;
@@ -43,7 +44,7 @@ public final class TouchInputState extends InputAdapter implements ActionSource 
         float centerX = TouchConstants.TOUCH_GRID_CENTER_X;
         float baseY   = TouchConstants.TOUCH_GRID_BASE_Y;    // center Y of row 1 (BACK)
 
-        buttons = new TouchButton[15];
+        buttons = new TouchButton[16];
 
         // Row 1 (bottom) — center column only
         buttons[INDEX_BACK] = new TouchButton(
@@ -114,6 +115,19 @@ public final class TouchInputState extends InputAdapter implements ActionSource 
             true);
         inspectButton.visible = false;
         buttons[INDEX_INSPECT_WEAPON] = inspectButton;
+
+        // PAUSE — top-right corner, far from both thumb clusters (Story UI order-8 Part C). Tap-only,
+        // and always visible: the way into the suit menu must never be something the player has to
+        // hunt for, and never something a movement thumb can hit by accident.
+        float pauseHalf = TouchConstants.PAUSE_BUTTON_SIZE / 2f;
+        buttons[INDEX_PAUSE] = new TouchButton(
+            TouchConstants.PAUSE_BUTTON_CENTER_X - pauseHalf,
+            TouchConstants.PAUSE_BUTTON_CENTER_Y - pauseHalf,
+            TouchConstants.PAUSE_BUTTON_SIZE,
+            TouchConstants.PAUSE_BUTTON_SIZE,
+            TouchAction.PAUSE,
+            TouchButton.Shape.ROUNDED_SQUARE,
+            true);
 
         // Contextual USE button — centred on screen; hidden until player faces a vending machine
         float useHalf = TouchConstants.USE_BUTTON_SIZE / 2f;

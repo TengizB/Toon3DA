@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Story UI 8 — Framing screens: title/start, death phrase, transitions, menus
 ---
@@ -101,3 +101,35 @@ DEFINITION OF DONE
   Quit with a wipe-confirm; death→reprint is one calm tap-through transition; pause
   suppresses story UI; each ending resolves on the correct subverted framing screen, with
   FREE/KILL ending the run with no reprint.
+
+============================================================
+AS BUILT (implementation notes — see docs/story-ui-system.txt "THE FRAMING SCREENS")
+============================================================
+Everything in the DEFINITION OF DONE shipped. Where the build made a decision the spec left open:
+
+- OWNERSHIP: the framing screens are RunPhases of World (TITLE, PAUSE_MENU, SETTINGS_MENU,
+  ENDING_HOLD), not a new Screen stack. World is already the game's single top-level screen manager,
+  so this reuses the codex, the settings, the persistence, the viewport and the touch plumbing
+  instead of duplicating them. Headless brains: narrative/TitleScreenSystem + FramingMenu.
+- THE DEATH PHRASE IS LITERALLY SHARED: the launch screen prints the reprint card's own
+  story.boot.system.* ids (order-3's catalog) rather than copies of them, so the two can never drift.
+  An ending changes WHICH card it borrows from, which is how the launch framing subverts itself with
+  no conditional in a renderer.
+- THE DEATH REPORT: folded in as a PAGE of the reprint card's screen (a REPORT plate opens it, any
+  tap closes it) rather than deleted. The default path through a death is fade -> card -> CONTINUE,
+  one tap, and the RUN AUTOPSY (new-game-balancr order 9) survives for playtesters.
+  render/DeathOverlayRenderer and HudConstants.DEATH_OVERLAY_* were deleted; the geometry moved to
+  StoryUiConstants.STORY_REPORT_*.
+- THE REPRINT COUNTER now climbs when a RUN STARTS rather than when a World is constructed, so
+  opening the app and quitting from the title does not charge the player an instance.
+- ENDING PERSISTENCE rides order-4's consequential-outcome mechanism (story.outcome.ending), so no
+  new persisted key and no SCHEMA_VERSION bump were needed.
+- NO CREDITS SCREEN: "resolves to a quiet end screen (credits / return to a changed title)" was
+  built as the second option. The terminal card's dim RETURN plate stands the game down to a launch
+  screen the ending has permanently changed, which is the same instrument the rest of order-8 uses.
+- MERGE holds the frozen view, fading, for STORY_ENDING_MERGE_HOLD_SECONDS with no input accepted,
+  then stands down. No card, per the spec.
+- PAUSE is reached by a new touch button in the top-right corner (TouchAction.PAUSE), far from both
+  thumb clusters, and is read before the stun check so a menu can never be refused.
+- Mood (order-9) is still unimplemented, so the framing screens use the existing procedural visual
+  language and the order-7 audio cues; no drone, no new sounds.
