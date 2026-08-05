@@ -1,0 +1,134 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Narrative rework 3 — The vocabulary ladder
+---
+
+PURPOSE
+Fixes failure F2: nine undefined proper nouns in the first five minutes. Makes doctrine rule
+D2 ("plain before proper") a mechanical property of the catalog rather than a thing writers
+have to remember. Every term this fiction runs on gets ONE plain-language introduction, at a
+moment the player can see the thing being named, and no channel may use the word before it.
+
+READ FIRST
+- order-1 (D2), order-2 (which already applies the ladder to the opening)
+- assets/story/story-strings.properties (the offenders)
+- narrative/BarkCatalog, StoryProgress (one-shot beat flags), CodexCatalog
+
+============================================================
+THE PATTERN — name the thing after you have described it
+============================================================
+Three steps, always in this order, and never more than one term per step:
+
+  1. PLAIN — the thing is described in ordinary words, at the moment it is first relevant.
+        "They keep a copy of you and grow a new body from it."
+  2. NAMED — the word arrives attached to the description, once.
+        "The paperwork calls that a reprint. You're on your second."
+  3. USED — from then on the word is free, on every channel, including as jargon.
+        "Print eleven. I know what that costs now."
+
+Today the game starts at step 3 and never performs steps 1 and 2.
+
+============================================================
+THE TERM TABLE — every proper noun this fiction owns
+============================================================
+"Intro at" is the moment the NAMED step fires. "Free from" is the earliest region band a
+catalog row may contain the word. A term with no NAMED beat scheduled is not allowed in any
+channel at all — it lives in the codex or it does not exist.
+
+  | Term            | Plain version said first                        | Intro at            | Free from |
+  |-----------------|-------------------------------------------------|---------------------|-----------|
+  | reprint / print | they keep a copy and grow a new body from it     | cold open (order-2) | R1        |
+  | operator        | the job you hold; the word on your file          | Org briefing        | R1        |
+  | the Deepworks   | this facility; forty years of digging            | floor 1 arrival     | R1        |
+  | Erebus          | the world it is dug into                         | floor 1 arrival     | R1        |
+  | contaminant     | the Organization's word for everything that moves| Org briefing + ORA's aside | R1 |
+  | the Organization| the company that owns the site, the job and you  | Org briefing        | R1        |
+  | Overseer        | whoever is holding the standing channel today    | first gate order    | R1        |
+  | instance        | which print you are; the number on the card      | first QUIET_MOMENT  | R1        |
+  | serial          | the number stamped on operators, incl. you       | first undead sighted| R1        |
+  | checkpoint      | the stored read of you they print from           | first real death    | R1        |
+  | yield           | what the harvest floors send up, measured by weight | Galleries arrival| R2        |
+  | Cradle          | the machines that print bodies                   | Reliquary arrival   | R3        |
+  | pattern         | the stored you; the data, not the body           | Reliquary arrival   | R3        |
+  | soul reserve    | the metered fuel a print burns                   | the cradle log beat | R3        |
+  | the reserve     | (same term, short form)                          | as above            | R3        |
+  | the Wound       | where the facility stops being facility          | Wound arrival       | R4        |
+
+Sixteen terms; six of them are free in Region 1 and that is already generous. Everything below
+Region 1 arrives with the region that makes it mean something.
+
+INTRO LINES (the NAMED step), all one-shot, STORY_CRITICAL, ORA unless noted:
+    story.term.reprint=The paperwork calls that a reprint. You're on your second.
+    story.term.deepworks=This is the Deepworks. Forty years of digging, straight down.
+    story.term.erebus=The rock it's dug into is Erebus. Survey named it in an afternoon.
+    story.term.contaminant=They call it the contaminant. That's the word on the form,
+                           not a description.
+    story.term.overseer=(SYSTEM) The voice on that channel is the Overseer. It's a desk,
+                           not a person.
+    story.term.instance=That number is which print you are. Two. I'll keep count.
+    story.term.serial=Crew wear serials. So do you - check your cuff sometime.
+    story.term.checkpoint=They print from a checkpoint: the last stored read of you.
+    story.term.yield=Yield is whatever these floors were cutting out and sending up.
+    story.term.cradle=Those are Cradles. That's where you get printed. Where I do, too.
+    story.term.pattern=Your pattern is the stored you. The data. Not this body.
+    story.term.reserve=The reserve is what a print burns to run. Metered. Finite.
+    story.term.wound=Nobody calls this part anything. The old notes say the Wound.
+
+Each intro line also unlocks its codex entry — the entries already exist and mostly already
+carry these definitions in long form (story.codex.contaminant, .soul.reserve, .overseer, …).
+This order changes nothing in the codex except which line unlocks it.
+
+============================================================
+ENFORCEMENT — data, not vigilance
+============================================================
+NEW HEADLESS TYPE: narrative/StoryTerm — an enum with, per value:
+  - the term's match tokens (e.g. REPRINT -> {"reprint", "reprints", "print", "prints"});
+  - the string id of its intro line;
+  - the earliest StoryRegion its word may appear in;
+  - the codex entry id it unlocks.
+Plus narrative/StoryTermCatalog with one register() row per term. No switch statements; the
+same registry discipline as every other catalog.
+
+THE TEST (order-10 owns the file, this order owns the rule):
+  For every row in every catalog (bark, exchange, boot card, framing chrome):
+    resolve its text -> scan for term tokens -> for each hit, assert the row's region band
+    does not start earlier than that term's "free from" region, and that the row is not the
+    term's own intro line's predecessor on the same trigger.
+  Case-insensitive, word-boundary matched, with an explicit ALLOW list for the intro lines
+  themselves and for the codex (long text is where terms get explained, so the codex is
+  exempt by construction).
+The test reads the SHIPPED properties file, so a translator or a writer who reintroduces
+"Cradle" into a Region-1 bark fails the build with the term named in the message.
+
+WHY NOT A RUNTIME GATE: gating text at delivery time would mean lines silently vanishing in
+play, which trades a comprehension bug for an invisible-content bug. The right time to catch
+this is the build.
+
+============================================================
+THE SECOND HALF OF THE RULE — one new idea per panel
+============================================================
+A panel introduces AT MOST ONE unfamiliar thing. This is why order-2 splits the cold open into
+three barks instead of one dense paragraph, and why the REPORT plate is taught on the second
+death rather than the first. Concretely, for every row:
+  - at most one term token from the table above (excluding terms already free two regions up);
+  - at most one instruction (order-4's teaching lines obey this too);
+  - never a term and an instruction in the same line unless the term IS the instruction.
+LineQualityTest (order-10) counts tokens per row and fails rows carrying two.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           narrative/StoryTerm, narrative/StoryTermCatalog (headless, ~2 small files)
+CHANGED       BarkCatalog gains 13 one-shot intro rows (existing triggers: FLOOR_ARRIVAL,
+              REGION_ENTERED, LOG_FOUND, QUIET_MOMENT, ENEMY_FAMILY_FIRST_SEEN, boot card)
+              CodexEntry.unlockedByLine repointed to the intro line ids
+STRINGS       13 new ids; several existing rows rewritten by order-6 to drop early jargon
+PERSISTENCE   no schema bump — intro lines are one-shot beat ids in the existing seen-set
+RENDERER      none
+
+DEFINITION OF DONE
+- Every term in the table has exactly one intro line, on an unskippable channel, at its moment.
+- VocabularyLadderTest is green against the shipped properties file.
+- No panel in the game introduces two new ideas at once.
+- The codex entries for the six "big" terms unlock from their intro lines, so a player who
+  wants the long version has it the moment they hear the short one.

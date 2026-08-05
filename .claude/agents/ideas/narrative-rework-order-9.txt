@@ -1,0 +1,135 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Narrative rework 9 — Re-entry, recap & missed-beat recovery
+---
+
+PURPOSE
+This is a phone game with a story told across dozens of sessions. Two things break it that no
+earlier order covers: a player who comes back after three days and has forgotten where they
+were, and a player who tapped a one-shot line away before reading it and can never see it
+again (order-1's F7). Both are fixed with the channels that already exist — no new screen, no
+quest log, no markers.
+
+READ FIRST
+- order-1 (F7, D5), order-4 (the competence model, whose evidence hooks this order reuses)
+- order-6 of the old series (the codex; access is a MENU, never play)
+- narrative/StoryProgress, CodexSystem, BootCardSystem
+
+============================================================
+A. THE THREE-DAY PROBLEM
+============================================================
+A player opens the app after a week. They get: a title screen, a menu, a status card, and then
+a corridor. Nothing anywhere says which region they are in, what they last learned, or what
+they were told to do. The story is gated on DEEPEST REGION and their memory of it is the one
+piece of state the game does not persist.
+
+THE FIX — ONE LINE, ON THE CARD, ONLY WHEN IT IS NEEDED.
+The boot card already prints one ORA wake line. When the gap since the last session exceeds a
+threshold (STORY_REENTRY_GAP_HOURS, default 24), that slot is filled by a RE-ENTRY line
+instead of the ordinary wake line: one sentence naming where they are and what they were last
+told, drawn from the deepest region and the most recent unlocked codex entry.
+
+    R1  You're at the rings again. Same job: down, find it, restart the works.
+    R2  We were in the cutting floors. Trying to work out what they were cutting.
+    R3  Reliquary. We'd just found out what the printers run on. You remember that much.
+    R4  We were in the warm part. Where it stops being a facility.
+    R5  The core. You know what's down there now. Whenever you're ready.
+
+Five rows, one per region, one-shot per RE-ENTRY EVENT (not one-shot for the save — this is
+the one deliberate exception to D5, and it is legitimate: the evidence is a real absence).
+It replaces the wake line rather than stacking with it, so the card never grows.
+
+============================================================
+B. THE "WHERE AM I" PAGE — always unlocked, always current
+============================================================
+One codex entry, in a new position: pinned at the top of the archive, never locked, rewritten
+by the game rather than authored once. It says, in ORA's voice, four things:
+
+    WHERE WE ARE     the deepest region reached, in plain words
+    THE JOB          the standing order as most recently transmitted (order-7's escalation
+                     means this text CHANGES four times across the game — which is the point)
+    WHAT WE KNOW     the last three codex entries unlocked, by title
+    WHAT YOU DECIDED the consequential outcomes recorded so far, one line each
+
+This is assembled from state the game already persists (deepest region, unlock order, the
+outcome keys). It is the only piece of "long text" that is genuinely dynamic, and it lives in
+the one screen where long text is allowed. It must NOT become a checklist: no percentages, no
+"next objective", no markers on the map. It reads like her summarising, because that is what
+she does.
+
+Implementation: a CodexEntry whose body is composed at open time by CodexSystem from a small
+composer (narrative/StoryRecap — headless, pure, testable: state in, list of string ids +
+substitutions out). The renderer is unchanged.
+
+============================================================
+C. MISSED-BEAT RECOVERY
+============================================================
+Every STORY_CRITICAL one-shot beat currently gets exactly one chance to be read, and
+StoryTelemetry already knows when one was dismissed inside the fast-dismiss window without
+being read. Two recoveries, both cheap:
+
+  1. ARCHIVE IT ANYWAY. A critical beat that was fast-dismissed unlocks its codex entry (if it
+     has one) AND is added to a small "you may have missed this" shelf under the LOGS tab,
+     showing the line itself. The archive is opt-in, so this costs a player who does not care
+     precisely nothing.
+  2. ONE RE-DELIVERY, EVIDENCE-GATED. A fast-dismissed CRITICAL TEACHING beat is eligible for
+     order-4's re-teach path immediately (it does not have to wait for a gameplay failure).
+     Story beats — region entries, reveal logs, gate orders — are NEVER re-delivered in play:
+     they go to the archive only. Re-showing a story beat is how a narrative layer becomes
+     something to escape from; re-showing an instruction is how a player gets unstuck.
+
+That distinction is the rule: MECHANICS may be repeated once, on evidence. STORY is never
+repeated, only archived.
+
+============================================================
+D. THE RUN-ONE-OF-MANY PROBLEM
+============================================================
+By run 20, the opening beats are long spent and the boot card is the only story the player
+sees for whole sessions — because everything is one-shot and they have seen it. The layer goes
+quiet exactly when a player is most invested. Two answers, both content, no new machinery:
+
+  1. ORA'S DEPTH REACTIONS. A small pool (4 per region) that fires only when the player is
+     deeper than they have ever been ON THIS RUN but not deeper than ever overall — i.e. the
+     grind floors. She talks about the RUN, not the plot: what they are carrying, how it is
+     going, what she noticed. It is the one place small talk belongs.
+        You've still got both guns and half a bag. That's a first.
+        Fourth floor without a scratch. Say nothing. Don't jinx it.
+  2. THE COUNTER EARNS ITS KEEP. Every tenth print, one line about the number itself, region
+     appropriate. It is the game's oldest running joke and its slowest turn:
+        R1  Print ten. Round numbers. I'd get you a cake.
+        R3  Print thirty. I've stopped rounding it off in my head.
+        R4  Print forty. I know exactly what that is, now. I'd rather not say it out loud.
+     Ten-ish rows across the game, and they land on the one screen every player always sees.
+
+============================================================
+E. GUARDS
+============================================================
+- The recap never appears in play. It is on the card and in the archive, both of which are
+  places the player has already stopped.
+- No objective marker, no waypoint, no "next: descend to region 3". The recap says where you
+  ARE and what you were TOLD, never what to do next.
+- The re-entry line replaces the wake line; the card never grows a fourth block.
+- Missed-beat recovery never re-opens an exchange. A blocking beat is spent when answered
+  (order-7 of the old series) and stays spent.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           narrative/StoryRecap (headless composer for the WHERE AM I entry)
+              STORY_REENTRY_GAP_HOURS + the last-session timestamp (one new persisted key ->
+              StoryProgressStore SCHEMA_VERSION 4 -> 5, additive, no migration needed)
+CHANGED       BootCardSystem: re-entry line takes the wake-line slot when the gap is exceeded
+              CodexSystem: one pinned always-unlocked entry + the "may have missed" shelf
+              StoryTelemetry: fast-dismiss records the beat id, so recovery can act on it
+STRINGS       ~25 ids (5 re-entry, ~8 recap chrome, 4x5 depth reactions, ~6 counter milestones)
+RENDERER      none
+
+DEFINITION OF DONE
+- A player returning after a day is told where they are and what the job is, in one sentence,
+  on a screen they were going to tap anyway.
+- The archive has a page that answers "what is going on" from live state, and it never tells
+  the player what to do next.
+- A critical beat dismissed unread is recoverable: instructions once in play, story in the
+  archive.
+- Late runs are not silent: depth reactions and counter milestones keep her present without
+  replaying the plot.

@@ -1,0 +1,147 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Narrative rework 5 — The bestiary voice
+---
+
+PURPOSE
+ORA introduces the things trying to kill you, and every introduction does two jobs at once:
+it tells you WHAT IT IS (which is the story — the moral geometry of the bestiary is the whole
+premise) and HOW TO SURVIVE IT (which is the reason the player reads it). Today the six
+family lines are pure flavour with no tactical content, and per-type knowledge is not
+delivered at all.
+
+READ FIRST
+- order-1 (D1: teach, reveal, or land a beat — these lines do two), order-4 (the topic table)
+- story/00-premise.md — "the system-as-story table": which family means what
+- enemy/EnemyType.tacticalVerb(), EnemyFamily, EnemyRole, SpecialAbility
+- docs/enemy-system.txt
+
+============================================================
+THE FIND: twenty tactical verbs already written, and nobody ever sees them
+============================================================
+Every EnemyType overrides tacticalVerb() with a real, well-written piece of advice —
+    EYE_TYRANT: "SNIPER: break its line — step off its row or column to deny the shot."
+    RIMESHELL_LANCER: "LANCER: armoured until it fires — bait the lance, step off the lane,
+                       then burst it through the open shell."
+— and `grep -rn "tacticalVerb()"` finds NO caller outside the enum itself. Twenty lines of
+finished tactical design are dead data in the build.
+
+This order does not print them raw (they are written in designer voice: caps-prefixed,
+em-dashed, too long for a bark panel). It uses them as the SOURCE OF TRUTH for what each
+line must convey, and ships an ORA translation of each. A test asserts every EnemyType with
+a tacticalVerb has a bestiary row, so the two can never drift.
+
+============================================================
+A. THE FIRST-SIGHT LINE — one per FAMILY, rewritten
+============================================================
+Fires on ENEMY_FAMILY_FIRST_SEEN (already wired). One-shot per family, per save. The pattern
+is: NAME IT (what it was) + WHAT IT DOES TO YOU. Both halves in one line.
+
+  UNDEAD      Crew serials on those. Same format as the tags on your cuff.
+              (second row, at the moment one closes) They're slow. Back up and let it walk
+              into your shot.
+  INSECT      Not escaped specimens. Grown here, out of the walls. They come in numbers -
+              don't let them get around you.
+  MACHINE     Site security. Still working, still on shift. Armoured from the front - it has
+              to turn to hit you, so make it turn.
+  ABERRATION  Nothing on file matches that. Whatever it is, it's slow and it hits hard -
+              stay at range.
+  DEMON       That's not crew and it isn't machinery. It's fast. Don't let it start the fight
+              on top of you.
+  GOLEM       Mineral, and moving. The walls are standing up. It's tough from the front and
+              slow to turn.
+
+Region-4 and below, the SAME families get their reframe lines (already the design, kept):
+"That wasn't an enemy. That was a body defending itself." The tactical half is not repeated
+down there — by Region 4 the player knows how to fight; what changes is what they are told
+they are fighting. The bestiary line is where the premise's moral geometry actually reaches
+a player who never opens a codex, so each family's later row must carry its column from
+story/00-premise.md: undead + insect = the human cost, machine = the Organization's own
+immune system, demon + golem = the planet defending itself.
+
+============================================================
+B. THE ARCHETYPE LINE — one per EnemyType, on first sight of that TYPE
+============================================================
+New subject key on the existing ENEMY_FAMILY_FIRST_SEEN trigger: EnemyType.name(). One-shot
+per type per save, TACTICAL tier (order-4), so it is held during a combat spike unless the
+type is a boss. Each is ORA's translation of that type's tacticalVerb, under 2x40 chars:
+
+  PLAGUE_HULK        Big one. Don't trade punches - shoot it while it's walking.
+  EYE_TYRANT         It only fires straight down a row or a column. Step off its line.
+  GORE_BITER         They come as a pack. Find a doorway and make them queue.
+  SHELL_BRUTE        It charges in a straight line. Step aside, then hit it while it recovers.
+  MIRE_WRAITH        The acid stacks. Kill it first, argue later.
+  IRON_STALKER       That's a step up. Spend something on it or walk around it.
+  ACID_DRONE         It keeps backing off. Corner it - it can't kite through a wall.
+  VOID_SHROUD        It goes for your back. Turn and face it before it gets there.
+  GHOUL              Slow, and it never stops. Keep walking and never let it corner you.
+  CRAWLER            Fast, thin. Drop it now, before the rest arrive.
+  REVENANT           Fast and heavy. Do not let that one reach you.
+  VORTEX_EYE         Short range only. Break its line or get right on top of it.
+  BLIGHT_CORRUPTOR   Thick. Wear it down from range; don't stand in front of it.
+  AURIC_SENTINEL     Those shards are its armour and its ammo. Strip them fast.
+  CINDERFORGE_COLOSSUS  It re-hardens the second you stop shooting. Don't stop shooting.
+  RIMESHELL_LANCER   Armoured until it fires. Bait the lance, step off the lane, then hit it.
+  VERDANT_SPIRESOWER The spires heal it. Break those first or it never dies.
+  THE_OVERSEER       (boss) It telegraphs everything. Watch one full cycle before you commit.
+  THE_CORRUPTOR      (boss) Same deal - it tells you what's coming. Learn it, then punish it.
+  HELL_BARON         (boss) Patterns, not reflexes. Read the mark, then move.
+
+Rule: an archetype line names ONE behaviour. Where a type does two things, ORA says the one
+that kills players (see order-3's one-idea-per-panel rule); the rest is codex.
+
+============================================================
+C. SPECIAL ABILITIES — taught by the enemy that first uses one
+============================================================
+Five abilities exist and none is ever explained. Each gets one line, fired the first time the
+player SEES it resolve (not the first time it is telegraphed), one-shot ever, CRITICAL —
+these are the ones that kill a player who does not know the rule:
+
+  SELF_DESTRUCT  It's counting down to blow. Get two tiles clear or kill it now.
+  SUMMON         It's calling more in. Kill the caller or you'll be here all day.
+  AREA_STRIKE    That hits the whole cross, not just your tile. Get off the line.
+  BUFF_SELF      It just made itself harder. Whatever you were doing, do it faster.
+  DEBUFF_PLAYER  That did something to you, not to your health. Check the bar.
+
+============================================================
+D. THE FIRST BOSS — the one enemy that deserves a stop
+============================================================
+The first time a boss arena is entered, one bark (not an exchange — the player is about to
+fight and a modal here is cruel):
+    story.bark.boss.first=This one's on the plans. They built the room around it.
+and, on its death, the region's own beat gets a home:
+    story.bark.boss.first.dead=They knew it was down here. They built a door for it and kept
+                               sending shifts past.
+That second line is a REVEAL riding a moment the player is guaranteed to reach — exactly the
+kind of spine beat order-8 is short of.
+
+============================================================
+E. WHAT THIS ORDER DELIBERATELY DOES NOT ADD
+============================================================
+- No bestiary screen, no enemy health-inspect panel, no "scan" verb. The codex already has a
+  place for long enemy text if it is ever wanted; the delivery channel here is ORA.
+- No per-kill commentary beyond what exists — kills are already rate-limited and rolled, and
+  order-6 cuts several of them.
+- No enemy line that reveals a stat. She says "slow", "thick", "fast" — never numbers. The
+  HUD owns numbers.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           TYPE-keyed rows on the existing ENEMY_FAMILY_FIRST_SEEN trigger (subject key =
+              EnemyType.name()); ability rows keyed by SpecialAbility.name()
+CHANGED       BarkCatalog family section rewritten; EnemyManager fires two new one-shot
+              subjects (first sight of type, first resolution of ability) alongside the family
+              one it already fires
+STRINGS       ~33 ids (6 families x up-to-2 + 20 types + 5 abilities + 2 boss)
+TESTS         BestiaryCoverageTest: every EnemyType with a tacticalVerb has a bestiary row;
+              every SpecialAbility has a row; every EnemyFamily has both an early tactical row
+              and a late reframe row
+BALANCE       none — no mechanic changes, and no line may state a number
+
+DEFINITION OF DONE
+- Every enemy family, type and special ability introduces itself once, in ORA's voice, with
+  one survivable fact.
+- tacticalVerb() is no longer dead data: it is the tested source of truth behind every row.
+- A player who never opens the codex still learns that the undead were crew, the insects were
+  grown here, and the golems are the planet standing up.

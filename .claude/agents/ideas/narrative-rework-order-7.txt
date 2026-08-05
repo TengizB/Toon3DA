@@ -1,0 +1,155 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Narrative rework 7 — The Organization, reworked
+---
+
+PURPOSE
+Fixes failure F7 of the fiction rather than of the UI: the Organization is currently a voice
+that threatens and never explains. Five gate orders, escalating in menace, containing no
+mission, no rationale and no checkable claims. A player cannot be betrayed by a briefing they
+were never given. This order gives the Organization a job to hand out, a reasonable-sounding
+case for it, and a set of specific claims the world later disproves — so the turn is something
+the player CATCHES rather than something ORA announces.
+
+READ FIRST
+- order-1 (D7), order-2 section E (the floor-1 briefing, which this order completes)
+- order-3 (contaminant / operator / Overseer / yield sit on the ladder)
+- story/04-the-organization.md, story/dialog/organization-comms.md
+- narrative/BarkCatalog.registerGateOrders, ExchangeCatalog (the four Org exchanges)
+
+============================================================
+A. WHAT IS WRONG TODAY
+============================================================
+The five gate orders in full:
+    R1  Operator. Go down. Purge the contaminant.
+    R2  There's noise in your head. It's a fault. Ignore it.
+    R3  You've stopped answering. We own your next body.
+    R4  Pattern flagged. Reprint authorization: pending.
+    R5  You're not an operator now. You're a loss.
+As a tone curve this is good writing. As a story it has three holes:
+  1. NO MISSION. Nothing states what the player is supposed to achieve, why it matters, or
+     what happens to anyone if they fail. "Purge the contaminant" is not a goal; it is a mood.
+  2. NOTHING FALSIFIABLE. Every line is an assertion about the player. None is a claim about
+     the WORLD that the player can later walk into a room and see is untrue. The betrayal is
+     therefore delivered by ORA telling you about it, which is second-hand.
+  3. IT NEVER SOUNDS REASONABLE. It opens hostile, so the player never believes it, so there
+     is nothing to lose. story/04 is explicit that the horror is banality — nobody in the
+     chair is cruel, the chair is (and the codex entry story.codex.overseer says so beautifully,
+     where almost nobody reads it).
+
+============================================================
+B. THE NEW SHAPE — five transmissions, and what each one is FOR
+============================================================
+  R1 HABITATION RINGS — THE BRIEFING (bark + the order-2 exchange)
+     A job, with a reason a reasonable person accepts. Ten weeks of silence, a dead crew,
+     something biological from the lower levels, restart the works. Cold, procedural, not
+     cruel. THE PLANTED CLAIMS (each one is disproved later, in a room, by an object):
+        "the crew were killed by the contaminant"      -> the rosters and the sedation logs
+                                                          show the facility was killing them
+                                                          for years before anything woke up
+        "it came up from the deep levels"              -> everything down there is walled IN,
+                                                          drilled INTO; nothing came up
+        "you are the operator on file"                 -> the file says nine descents; the
+                                                          player remembers four
+     Bark, at the gate:
+        story.bark.gate.rings=Operator. Descend, locate the contaminant, restore the works.
+     ORA's aside, one-shot, immediately after (the model for how she handles their words):
+        story.bark.gate.rings.ora=That's the whole brief. Ten weeks and one paragraph.
+
+  R2 HARVESTING GALLERIES — THE CORRECTION
+     The player is now standing in an abattoir the briefing did not mention. The Organization
+     does not escalate; it CORRECTS THE RECORD, which is worse.
+        story.bark.gate.galleries=Operator. Gallery works are routine extraction. Auditory
+                                   artifacts in your feed originate in you. Continue.
+     The claim ("routine extraction") is falsifiable by the tolerance sheet in the same region
+     — the one that specifies live weight.
+
+  R3 THE RELIQUARY — THE REMINDER OF OWNERSHIP
+     First time it mentions the leash, and it does so as HR, not as a threat:
+        story.bark.gate.reliquary=Operator. Reprint authorization is a condition of
+                                   employment. Your compliance record is under review.
+     Falsifiable claim: "reprint authorization is a benefit". The fuel intake sheet in the
+     same region shows what the benefit is made of.
+
+  R4 THE WOUND — THE INSTRUCTION NOBODY WILL SIGN
+     The mask comes off, and the tell is that the order stops pretending to be about a
+     contaminant:
+        story.bark.gate.wound=Operator. Restraint assemblies are to be restored to service.
+                               This supersedes the purge order.
+     This is the line where a paying-attention player realises the mission was never a purge.
+     It is the single most important transmission in the game and it currently does not exist.
+
+  R5 THE CORE — THE WRITE-OFF
+        story.bark.gate.core=Operator. Your pattern is under review for write-off. Return the
+                              asset to restraint.
+     "The asset" is the being. The word choice is the whole characterisation.
+
+============================================================
+C. THE OVERSEER IS A DESK — surface it on a channel
+============================================================
+The best idea in the Organization's material is buried in a codex entry: the voice is not a
+person, it is a role in rotation, reading from a script. Put it in play, once, as a PROBE
+answer in the R3 exchange (a probe pays curiosity — order-4 of the old series):
+    Q  Who is actually speaking?
+    A  Nobody. Routing headers change every transmission. The phrasing never does. It's a
+       desk, and whoever's sitting at it today.
+And ORA's flat follow-up, one-shot, delivered on the next floor:
+    story.bark.org.desk=I checked. Six different people have said the same paragraph to you.
+
+============================================================
+D. THE ORGANIZATION'S EXCHANGES — one per region, no more
+============================================================
+Four exist (briefing, demand, coercion, last order). Keep four; rewrite two:
+  KEEP    R1 briefing (rewritten by order-2 section E — it now contains the mission)
+  REWRITE R2 demand — currently "your feed carries auditory artifacts, acknowledge". Fine
+          shape, but the answers must include one that CHECKS a claim rather than three that
+          take a stance:
+             "Acknowledged."              (stance)
+             "Your own sensors have it."  (probe -> it declines to answer; ORA notes she also
+                                           logged it and did not flag it)
+             (say nothing)                (stance)
+  KEEP    R4 coercion — the strongest Organization writing in the game.
+  REWRITE R5 last order — it currently asks the player to confirm the purge. It should ask
+          them to confirm the RESTRAINTS, matching the R4 gate order, so the final exchange
+          and the ending choice are about the same thing:
+             prompt  Operator. Final descent. Restraint assemblies to be restored. Confirm.
+
+============================================================
+E. THE RULE THAT KEEPS IT COLD
+============================================================
+  - The Organization NEVER speaks twice on the same floor and never in a fight.
+  - It never answers a question about itself. Its probe replies are procedural non-answers,
+    which is characterisation, not evasion by the writer.
+  - It never uses ORA's name and never addresses her. She is equipment.
+  - It never insults the player. Every line is correct, filed, and defensible, which is the
+    horror story/04 asks for.
+  - Nothing it says is ever corrected on screen by narration. If a claim is false, the player
+    must be able to walk into the room that proves it. If no such room exists, the claim does
+    not ship.
+
+============================================================
+F. THE LIE LEDGER (build it, then check it)
+============================================================
+A small table in docs/story-ui-system.txt: every Organization claim, the region it is made in,
+and the specific object/log/room that disproves it. Order-10 turns it into a test: for every
+row in the ledger, the disproving artefact's string id must exist and be registered in a
+region band at or before the region where the player can act on it. A claim with no
+counter-evidence in the build is a claim the player can only be told about — which is the
+failure this whole order exists to fix.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+CHANGED       BarkCatalog gate orders (5 rewritten + 2 new ORA asides + 1 desk line);
+              ExchangeCatalog Org rows (2 rewritten); story-strings + Java defaults
+NEW           the LIE LEDGER table in docs/story-ui-system.txt (documentation + test fixture)
+STRINGS       ~14 ids
+RENDERER      none. The Organization already draws ALL-CAPS in its own type style
+PERSISTENCE   none
+
+DEFINITION OF DONE
+- A player can state, after floor one, what they were sent here to do and why.
+- Every Organization claim has a physical counter-artefact in the same or an earlier region.
+- The R4 transmission ("restore the restraints, this supersedes the purge order") ships, and
+  is the moment the mission's real shape becomes readable without ORA explaining it.
+- Nothing the Organization says is cruel, and everything it says is worse for that.

@@ -1,0 +1,188 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Narrative rework 6 — The line rewrite: cut, fix, keep
+---
+
+PURPOSE
+The cleanup pass. Applies order-1's doctrine to every string that ships today: cuts the lines
+that do no job, rewrites the ones that assume unrevealed facts or land as noise, and keeps
+(with sharpening) the ones that work. This is the order that answers "some messages do not
+make sense — remove them; some jokes stay, refined."
+
+READ FIRST
+- order-1 (D1 the three jobs, D4 the joke policy, D8 cut is the default)
+- order-3 (no term before its intro), order-4 and 5 (which replace whole sections outright)
+- assets/story/story-strings.properties
+
+============================================================
+THE THREE VERDICTS
+============================================================
+  CUT      does none of the three jobs, or its only content is a joke that references nothing.
+  REWRITE  the moment is worth a line but this text is wrong: unrevealed fact, wrong voice,
+           unparseable, or jargon ahead of its ladder rung.
+  KEEP     does a job and passes the joke policy. Some are sharpened; the id stays.
+
+POOL-DEPTH CONSTRAINT (do not break it while cutting)
+Every REPEATABLE trigger must keep at least 4 rows per region band — BarkSystem's no-repeat
+memory (STORY_BARK_RECENT_MEMORY = 10) silences a moment entirely when its pool empties. So
+cutting a weak row obliges either a replacement row or the demotion of the whole moment.
+Where this order cuts below four, it says what replaces it.
+
+============================================================
+A. LINES THAT ARE REPLACED WHOLESALE BY EARLIER ORDERS
+============================================================
+  story.bark.coldopen.1/.2              -> order-2 (five new rows)
+  story.bark.control.*                  -> order-4 (twenty topics + re-teach rows)
+  story.bark.family.*                   -> order-5 (families + types + abilities)
+  story.boot.system.reprint.*           -> order-2 (plus the first-print block)
+  story.bark.gate.* and the Org exchanges -> order-7
+Nothing below re-litigates those.
+
+============================================================
+B. CUT (with the reason)
+============================================================
+  story.bark.floor.rings.5   "Air's breathable down here. You're welcome, I suppose."
+        No job. She did not make the air; nothing in the fiction suggests it would be
+        otherwise. A joke with no observation under it (D4).
+  story.bark.log.galleries.3 "A form for reporting screaming. Box was ticked."
+        KEEP the idea, CUT the duplicate: story.bark.log.galleries.1/.2 already carry the
+        "the paperwork knew" beat, and the codex entry says it better. Retained as codex only.
+  story.bark.kill.rings.2    "Textbook. Efficient. The yield thanks you."
+        Uses "yield" three regions before its ladder rung (order-3) and says nothing else.
+  story.bark.kill.galleries.4 "That was loud. Let's pretend nothing else heard it."
+        Implies a noise-aggro mechanic the game does not have. A line that describes a rule
+        that is not real is worse than no line.
+  story.bark.lowhealth.rings.2 "You're leaking. The Cradle bill for this is mine."
+        "Cradle" in Region 1 (ladder violation) and "the bill is mine" is not true of her.
+  story.bark.idle.mid.2      "The resonance stops when you stop. Did you notice?"
+        Describes a phenomenon the player cannot observe. Unparseable in play.
+  story.bark.backtrack.deep.2 "It moves the rooms. I'm fairly sure it moves the rooms."
+        The rooms do not move. Do not tell the player the world does something it does not do.
+  story.exchange.deep.duty.*  (the "ahead of schedule" check-in)
+        Three exchanges float free of any region beat; this is the weakest, it blocks play,
+        and "ahead of schedule" contradicts an endless descent. Cutting one blocking beat is
+        cheap and the layer is better for it.
+  story.sample.*  (four order-1 showcase lines)
+        Dev-only sample rows still shipping in the player-facing table. Move to test fixtures.
+
+Nine cuts. Two of them (kill.rings.2, kill.galleries.4) drop those pools to four and three
+rows; the Galleries kill pool gets one replacement below.
+
+============================================================
+C. REWRITE (old -> new, with the fault named)
+============================================================
+FAULT: assumes a fact the player has not been told
+  story.bark.floor.rings.3
+    old  Crew bunks. Serial tags on them, same format as yours.
+    new  Crew bunks. Tags still in the racks - same kind of tag you're wearing.
+    (and it becomes order-3's NAMED beat for "serial": first use, with the plain description
+     attached, at a moment the player can see the thing.)
+  story.bark.region.rings
+    old  New body, same job. Down we go. I'll keep count.
+    new  Habitation rings. People lived up here. The job's below them.
+    (the cloning reveal moves to order-2's cold open, where it gets three lines instead of a
+     subordinate clause.)
+  story.boot.wake.rings.1
+    old  Morning, sunshine. Reprint {instance}. New record.
+    new  Morning. Print {instance}. All limbs where they should be.
+    (D6: she never celebrates their death. The counter still climbs; it just stops cheering.)
+  story.boot.wake.rings.4
+    old  Reprint {instance}. Don't worry, I keep the good copies.
+    new  Print {instance}. Same as the last one, near enough.
+    ("I keep the good copies" implies she stores patterns. She does not; the Cradles do.)
+
+FAULT: unparseable or wrong voice
+  story.bark.floor.galleries.1
+    old  Okay, the smell in here is a war crime. Touch nothing.
+    new  The air reads wrong in here. Organic, and a lot of it. Touch nothing.
+    (she has sensors, not a nose; and the idiom sits badly in this register — D4.)
+  story.bark.kill.galleries.1
+    old  It screamed on the room's note. ...Just me? Great.
+    new  It screamed on the same note as the room. That's twice now.
+  story.bark.log.rings.3
+    old  A lunch order, dated the last day. Soup. Bold.
+    new  A lunch order, dated the last day. Nobody came to collect it.
+    (the joke survives as dryness; the observation is now the line — D4.)
+  story.bark.log.rings.4
+    old  Safety notice, sixty pages. None about the deep.
+    new  Sixty pages of safety notices. Four on ladders. None on the deep levels.
+  story.bark.idle.rings.1
+    old  Take your time. The contaminant isn't going anywhere.
+    new  Take your time. Whatever's down there has waited longer than us.
+
+FAULT: jargon ahead of its ladder rung (order-3)
+  story.bark.floor.rings.4  drop "yield"    -> Clear it, restart the works, go home. That's
+                                               the whole brief.
+  story.bark.kill.rings.3   keep, it EARNS the word: "Logged as hostile stock. That's the
+                            word they use." — the line is ABOUT the vocabulary, which is
+                            allowed and good.
+  story.bark.lowhealth.mid.2 "Every reprint costs something. I know what now."
+                            -> gated to Region 3+, where "costs something" has a referent.
+
+REPLACEMENT ROWS (restoring pool depth after the cuts)
+  story.bark.kill.galleries.5  Harvest tag on its leg. It was inventory before it was a threat.
+  story.bark.kill.rings.5      Down. I'd feel better if I knew what it used to be.
+  story.bark.idle.mid.3        You've stopped. Fine by me. It's quieter when you're still.
+
+============================================================
+D. KEEP (the lines that already work — do not touch them)
+============================================================
+  All twelve planet fragments (story.bark.strata.*). Minimal, wrong-order grammar, no jargon.
+  The Reliquary and Wound floor-arrival pools — the best writing in the table.
+  story.bark.log.reliquary.4 "An operator's note. The handwriting is yours."
+  story.bark.log.wound.3     "Someone stopped writing halfway through a word."
+  story.bark.backtrack.rings.2 "Lost? Say nothing. I'll log it as a patrol route."
+        The model joke: it rides a true observation (she files reports), it costs nothing to
+        parse, and it characterises her as staff who is on your side.
+  story.bark.idle.rings.2 "I can wait. I'm contractually excellent at waiting."  (same reason)
+  story.bark.kill.rings.4 "One down. I'd cheer, but I'm a professional."
+  The whole codex. Long text is allowed there and it is the strongest writing in the game.
+  Every boot wake line from the Reliquary down.
+
+============================================================
+E. THE EXCHANGES — three fixes
+============================================================
+  1. story.exchange.rings.teaching.prompt
+       old  Quick thing while it's quiet. How are you doing with all this?
+       new  While it's quiet - do you actually remember doing this before? Because your file
+            says you have.
+       Answers: "Some of it." / "None of it." / "Does it matter?"
+       The first choice ever offered still decides nothing mechanically, but it is now ABOUT
+       something the player was told sixty seconds earlier (order-2's gap), so answering is a
+       thought rather than a mood check.
+  2. story.exchange.galleries.arrival.prompt — keep, but drop "defence works" (a term nobody
+       has met): "These floors were built for cutting things up, not for keeping anyone out.
+       Does that land wrong for you too?"
+  3. Cut story.exchange.deep.duty.* (section B). The catalog goes from 18 to 17 rows, still
+       inside the 20-row budget, and the two surviving floating check-ins (warm, quiet) cover
+       both leanings plus neutral.
+
+============================================================
+F. THE STANDING RULES THIS PASS ESTABLISHES
+============================================================
+  - No line describes a mechanic the game does not have.
+  - No line uses a sense ORA does not have (smell, taste, pain).
+  - No line celebrates or scores the player's death, ever, in any region.
+  - No line states a number the HUD already states.
+  - A joke is the DELIVERY of an observation, never the payload.
+  - When a pool is cut below four rows, either replace or demote the moment. Never leave a
+    moment able to go silent.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+CHANGED       assets/story/story-strings.properties + the mirrored Java defaults
+              (BarkStrings, BootCardStrings, ExchangeStrings) — they must stay in lock-step or
+              StoryLocalizationTest fails, which is exactly the guard we want
+NET EFFECT    flavour rows: -9 cut, +3 replacement, ~14 rewritten. Teaching and reveal rows
+              rise sharply via orders 2-5. The table gets LONGER overall and the proportion of
+              rows that do one of the three jobs goes to 100%
+RENDERER      none
+TESTS         existing StoryLocalizationTest and StoryBarkTest cover the mechanics; order-10
+              adds the quality gates that would have caught these faults in the first place
+
+DEFINITION OF DONE
+- Every id in section B is gone from the properties file AND the Java defaults.
+- Every id in section C reads as the new text, and no rewritten line breaks 2x40 chars.
+- No repeatable trigger has fewer than four rows in any region band it serves.
+- The standing rules in section F are copied into docs/story-ui-system.txt as writing rules.

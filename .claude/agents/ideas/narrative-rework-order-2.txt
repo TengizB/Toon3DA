@@ -1,0 +1,198 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Narrative rework 2 — The first ten minutes
+---
+
+PURPOSE
+Fixes failures F1, F3 and F6 of order-1: the launch screen that announces a death nobody can
+parse, and an AI who introduces herself with a name and nothing else. Rewrites the opening as
+one continuous, comprehensible sequence — launch screen, boot card, ORA's introduction, the
+memory gap, the first orders — so that a player sixty seconds in knows who is talking, what
+happened to them, and which way is on.
+
+READ FIRST
+- order-1 (the doctrine; especially D2 plain-before-proper, D3 the gap is the license)
+- docs/story-ui-system.txt — THE FRAMING SCREENS, PART F: FIRST BOOT / COLD OPEN
+- narrative/TitleScreenSystem, BootCardCatalog, BarkCatalog.registerColdOpen
+- story/02-player-and-cloning.md (this order deviates from it; see THE DEVIATION below)
+
+============================================================
+A. THE LAUNCH SCREEN — say the thing in words a stranger can read
+============================================================
+TODAY (first launch ever, before the player has touched anything):
+    PREVIOUS INSTANCE - TERMINATED
+    SOUL RESERVE .......... SUFFICIENT
+Two undefined nouns and a status readout for a system nobody has heard of. And it spends the
+Region-3 reveal ("soul reserve") on screen one, where it means nothing — by the time the
+player learns what a soul reserve IS, the line has been wallpaper for hours.
+
+REPLACE WITH the FIRST-PRINT status block, printed one line at a time (same paced reveal, same
+tap-to-print-all). Machine voice, no editorialising, every line under 40 chars, and between
+them they say: a person died, that person is you, there is a copy, the copy is being made.
+
+    story.boot.system.firstprint.1=OPERATOR ............. DECEASED
+    story.boot.system.firstprint.2=BODY RECOVERY ........ NOT POSSIBLE
+    story.boot.system.firstprint.3=BACKUP COPY .......... ON FILE
+    story.boot.system.firstprint.4=PRINTING NEW BODY .... STAND BY
+
+Then the title resolves under it, exactly as today (EREBUS / THE DEEPWORKS), then the menu.
+
+WHICH BLOCK THE LAUNCH SCREEN PRINTS
+  - reprint count == 0  -> FIRST-PRINT block (above). The player has never been printed.
+  - reprint count > 0   -> the ordinary reprint block, which order-3 also rewrites (see C).
+  - an ending recorded  -> that ending's card, unchanged (order-8 of the old series).
+This keeps the existing "the launch screen borrows the boot card's own ids" design — one
+machine, one voice — and it means the horror version arrives once the words are earned.
+
+MENU LABEL: with zero prints, CONTINUE DESCENT reads as a lie about a thing that never
+happened. Add the first-run label:
+    story.title.begin=BEGIN DESCENT
+TitleMenuItem.CONTINUE resolves to `story.title.begin` while reprintCount == 0. One extra
+string id, no new menu row, no new confirmation.
+
+============================================================
+B. THE BOOT CARD ON RUN 1 — a new variant, not a special case
+============================================================
+Add BootCardVariant.FIRST_PRINT. One registerCard() call in BootCardCatalog; the system picks
+it when reprintCount == 0 and the ordinary REPRINT variant thereafter. It prints the
+firstprint status block above, the instance counter, and ORA's first wake line.
+
+Do NOT hide the counter on run 1. It reads as INSTANCE 002 — the player is the second body —
+and ORA explains the number herself, on the floor, when the player has a moment (see D).
+
+ORA's run-1 wake line (one row, one-shot, chosen only by the FIRST_PRINT variant):
+    story.boot.wake.first.1=Easy. Give the eyes a second. I'm right here.
+No name yet: this is thirty seconds after a stranger's death notice and the card is not the
+place for a CV. She introduces herself the moment the player has control, where a line can be
+answered by looking around.
+
+============================================================
+C. THE ORDINARY REPRINT CARD — what it says once the player has died for real
+============================================================
+The default block (story.boot.system.reprint.*) stays three lines but drops the unearned
+noun. "SOUL RESERVE .......... SUFFICIENT" moves out of the every-run card and becomes a
+REGION-GATED line: it appears on the card only from the Harvesting Galleries down, which is
+exactly where ORA starts asking what the printers run on. Before that the card prints:
+
+    story.boot.system.reprint.1=PREVIOUS BODY ........ DECEASED
+    story.boot.system.reprint.2=BACKUP COPY .......... ON FILE
+    story.boot.system.reprint.3=PRINTING NEW BODY .... STAND BY
+
+and from Region 2:
+
+    story.boot.system.reprint.deep.1=PREVIOUS BODY ........ DECEASED
+    story.boot.system.reprint.deep.2=SOUL RESERVE ......... SUFFICIENT
+    story.boot.system.reprint.deep.3=PRINTING NEW BODY .... STAND BY
+
+Implementation: BootCardDefinition already carries its status ids as data; add a second
+region-banded status set to the same registration idiom the wake lines already use
+(deepest-region gate, no `if` in game code). The player who has been to the Galleries reads
+SOUL RESERVE on every card from then on, understanding it — which is the beat that was being
+thrown away.
+
+FIRST REAL DEATH (the player's own, not the off-screen one). One-shot, on that card, ORA:
+    story.boot.wake.firstdeath.1=You died. It's alright. That's what the copy is for.
+    story.boot.wake.firstdeath.2=Nothing you were carrying came back. You did. Again.
+Row 1 fires on the first death; row 2 the second. Both one-shot, both Region-1 band, both
+STORY_CRITICAL. This is the moment the loop is explained, and it is currently a joke about a
+new record.
+
+Also teach the REPORT plate here, once, because a plate nobody taps is a page nobody reads:
+    story.boot.wake.firstdeath.report=There's a REPORT plate if you want to see what got you.
+(delivered as the wake line on the SECOND death only — one new thing per screen.)
+
+============================================================
+D. THE COLD OPEN — ORA introduces herself properly
+============================================================
+Three one-shot STORY_CRITICAL barks at RUN_START on run 1, in this order. Each is one small
+dose; the player taps the X to move on, exactly as with every other bark. Then the MOVE hint
+(order-4) lands as the fourth panel and the game starts.
+
+    story.bark.coldopen.1=That's you awake. I'm ORA - the assistant in your suit.
+    story.bark.coldopen.2=You died about an hour ago. They keep a copy. This is the new you.
+    story.bark.coldopen.3=Your memory came back short. Normal. I'll fill in the gaps as we go.
+
+Line 1 answers "who is talking" WITH what she is. Line 2 answers "what happened" in plain
+words, no proper nouns. Line 3 is THE GAP — see D3 — and it is the sentence that licenses
+every explanation for the rest of the game.
+
+RUN 2 (one-shot, fires at the start of the second run ever):
+    story.bark.coldopen.4=Back already. I don't get printed, by the way - I just reload.
+    story.bark.coldopen.5=Which makes me the only one here who remembers your last one.
+Two rows, one per run start, so the second thing a player learns about ORA is the thing that
+makes her matter: she is continuous and they are not. Then she never introduces herself again.
+
+THE REST OF HER INTRODUCTION IS DISTRIBUTED, not front-loaded. Five one-shot Region-1 rows,
+each hung on a moment that already happens on floor one, so the player meets her by watching
+her be useful rather than by reading a biography:
+
+  | Moment (existing firing site)     | Line                                                  |
+  |-----------------------------------|-------------------------------------------------------|
+  | first door opened                 | I can do doors and locks. Guns are your department.   |
+  | first terminal read (LOG_FOUND)   | I read the paperwork so you don't have to. Roster.    |
+  |                                   | Forty-one signed out. Nobody signed back in.          |
+  | first pickup                      | Anything you carry is yours until you die. Then it    |
+  |                                   | stays here and you don't.                             |
+  | reprint counter first questioned  | That number on the wake card is which print you are.  |
+  | (first QUIET_MOMENT)              | You're the second. I'll keep count.                   |
+  | first portal reached (order-4)    | I keep the map. You pick the road.                    |
+
+============================================================
+E. THE ORGANIZATION'S FIRST WORDS — a mission, not a mood
+============================================================
+Today the first thing the Organization says is "Operator. Go down. Purge the contaminant." —
+an order containing one undefined noun and no reason. It stays cold, but it must be a
+briefing a reasonable person could accept (order-7 owns the full rework; this is its floor-1
+half, and it must land inside the first ten minutes):
+
+    story.exchange.rings.briefing.prompt=Operator. Ten weeks ago this facility stopped
+        reporting. Something in the lower works killed the crew. Go down, find it, kill it,
+        restart the yield.
+    answers: "Understood."  /  "What killed them?"  /  "Why me?"
+        what.reply=Unknown. Biological. It came up from the deep levels. That is the brief.
+        why.reply=You are the operator on file. You have done this descent before.
+
+Note "you have done this descent before" — the player's first hint that the gap in their head
+has a shape. ORA's aside after the briefing, one-shot:
+    story.bark.briefing.after=They're not wrong. Your file says nine descents. You remember four.
+
+============================================================
+F. THE DEVIATION FROM story/02-player-and-cloning.md (record it, then update that file)
+============================================================
+story/02 says the memory block "is not a hole you can feel at the start — it reads as settled
+fact". That is elegant on paper and unplayable: it means nobody ever explains anything to the
+player, because the character already knows it all. The block stays exactly what it is in the
+fiction (the Organization cut one region of the pattern), but the EXPERIENCE changes:
+
+  - This print came back with obvious, ordinary-looking gaps, and ORA says so in her third
+    sentence. Both of them attribute it to printing noise, because that is what it looks like.
+  - So ORA re-explains the job, the place, the equipment and the enemies — diegetically, as
+    the assistant helping a print that came up short. This is the tutorial, and it costs the
+    fiction nothing.
+  - The reveal (Region 3-4) is that the gaps are not noise. They are a clean excision, in one
+    subject area, done deliberately. Everything ORA cheerfully re-explained on floor one was
+    a thing somebody paid to remove.
+That upgrade turns a tutorial into a plant. Update story/02-player-and-cloning.md ("What you
+remember, and what you don't") in the same commit, and add the payoff line to the Region-3
+log take (order-6 owns the text).
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           BootCardVariant.FIRST_PRINT (+ one registerCard row)
+              Region-banded status blocks on BootCardDefinition (same idiom as wake lines)
+              TitleMenuItem label override when reprintCount == 0
+STRINGS       ~20 new ids, ~6 rewritten, 2 deleted (coldopen.1/.2 as written today)
+FIRING SITES  all existing: RUN_START, the boot card, LOG_FOUND, QUIET_MOMENT, first-door and
+              first-pickup hooks in world/StoryBarkTickSubscriber (new one-shot subjects, no
+              new trigger enum values)
+PERSISTENCE   no schema bump — every new flag is a one-shot beat id in the existing seen-set
+RENDERER      none
+
+DEFINITION OF DONE
+- A cold player, sixty seconds in, can say who is talking to them and what happened to them.
+- No proper noun of this fiction appears before the plain sentence that introduces it.
+- "SOUL RESERVE" is not on screen until the player has reached the Harvesting Galleries.
+- The first real death explains the loop, and does not congratulate anybody.
+- StoryFramingTest extended: first-launch prints the FIRST-PRINT block; a save with prints
+  prints the reprint block; an ending still overrides both.

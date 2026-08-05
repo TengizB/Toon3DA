@@ -1,0 +1,159 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Narrative rework 8 — The lore drip & the region beat maps
+---
+
+PURPOSE
+"Now and then" made concrete. Sets the per-floor budget for how much the game may say, which
+CHANNEL each kind of fact comes from, and the five region beat maps — the short list of things
+that MUST land in each region for the story to be followable. It also fills the two structural
+holes order-1 found: nothing explains why the descent repeats, and nothing explains what the
+portals and the route map are for.
+
+READ FIRST
+- order-1 (D1, D8), order-4 (teaching lines compete for the same budget)
+- docs/story-ui-system.txt — THE MOMENT SCHEDULE, PACING
+- docs/route-map-system.txt — the endless map, regions, node types
+- story/05-descent-structure.md, story/03-the-planet.md
+
+============================================================
+A. FOUR CHANNELS, FOUR KINDS OF FACT
+============================================================
+Each source gives a DIFFERENT KIND of information. Overlap is the main cause of "the game
+keeps telling me things and none of them stick."
+
+  TERMINALS (SYSTEM/paperwork)  what the facility DID, in its own words. Dates, quotas,
+                                tickets, sign-offs. Never interpretation.
+  ORA (AI)                      what the paperwork MEANS, one sentence, and what to do about
+                                the room you are in. Never a document read aloud.
+  THE PLANET                    what it FEELS like from underneath. Never facts, never
+                                instructions, never more than a fragment.
+  THE ORGANIZATION              what you are SUPPOSED to believe. Never true detail, never
+                                twice on a floor.
+
+A fact that arrives from the wrong channel is a fault, not a duplicate: if ORA reads a whole
+document, the terminals stop mattering; if the planet explains something, it stops being the
+planet.
+
+============================================================
+B. THE PER-FLOOR BUDGET
+============================================================
+An ordinary floor may deliver:
+    1  terminal take (already capped: STORY_LOG_TAKES_PER_FLOOR = 1)
+    2  flavour barks maximum (floor arrival + one of kill/idle/backtrack/low-health)
+    0  exchanges — an ordinary floor never blocks
+  + any number of CRITICAL beats (teaching, region entry, gate orders, reveal logs), which do
+    not count against the budget because a stuck or lost player costs more than a talkative one.
+
+A REGION-GATE floor may add: the region-entry bark, the gate order, and ONE exchange.
+A floor never carries two exchanges, and never an exchange within one floor of another.
+
+The existing machinery already enforces most of this (per-trigger cooldowns in minutes,
+probability rolls, combat-spike hold, no-repeat memory). What is missing is the CEILING: add
+a per-floor delivered-count on BarkSystem for non-critical rows, reset on floor arrival. Two
+non-critical lines per floor, then silence until the next floor. That single number is the
+strongest anti-annoyance lever in the layer and it does not exist today.
+
+============================================================
+C. THE FIVE REGION BEAT MAPS
+============================================================
+Each region has THREE things that must land, on unskippable channels, plus its texture. If a
+beat cannot be placed on region entry, a reveal log, or a control-flow moment the player
+cannot route around, it is not a spine beat and must be demoted.
+
+  R1 HABITATION RINGS — belief
+     1. This is a workplace and everyone in it is gone.   (floor arrival + roster terminal)
+     2. You have a job, a file, and a history you do not remember.  (Org briefing + ORA aside)
+     3. Dying is normal here and it is not free.          (first real death card, order-2)
+     texture: fluorescent, ordinary, nothing visibly wrong.
+
+  R2 HARVESTING GALLERIES — first doubt
+     1. This place was cutting something living, by weight, on a quota. (yield report, one-shot)
+     2. The paperwork knew and had a form for it.          (tolerance sheet take)
+     3. The Organization corrects your senses rather than the record. (gate order, order-7)
+     texture: wet, warm, the same note under everything.
+
+  R3 THE RELIQUARY — the inversion
+     1. This is where bodies are printed — yours and ORA's. (region entry + cradle bank)
+     2. What they are printed FROM is the thing being cut.  (cradle log, one-shot, CRITICAL)
+     3. ORA cannot un-know it, and starts hiding things for you. (trust exchange)
+     texture: clinical, bright, humming.
+
+  R4 THE WOUND — grief
+     1. The facility stops. The walls are a body.           (region entry)
+     2. It has been awake and sedated for forty years.      (sedation schedule, one-shot)
+     3. The order changes from "purge" to "restore the restraints". (gate order, order-7)
+     texture: warm, red, a slow beat felt more than heard.
+
+  R5 THE CORE — recognition
+     1. You were here before. You opened it. You died doing it.  (memory beat)
+     2. The "contaminant" is what was done to it, not what it is.
+     3. The choice, and what each option costs.             (the ending exchange)
+     texture: vast, intimate, almost tender.
+
+============================================================
+D. THE TWO STRUCTURAL HOLES
+============================================================
+HOLE 1 — WHY DOES THE DESCENT REPEAT?
+A roguelike player accepts a reset without a reason. A story player asks. The answer must be
+said out loud, once, on the second run, in ORA's voice, because it is also the game's premise:
+    story.bark.loop.1=They print you at the last checkpoint, not where you died. So we start
+                       at the top. Again.
+    story.bark.loop.2=The works don't stay cleared either. Whatever's down there fills them
+                       back in.
+Two one-shot rows, run 2, RUN_START. This is the single missing sentence that makes a roguelike
+structure diegetic, and it costs two lines.
+
+HOLE 2 — WHAT IS THE MAP, AND WHY IS THERE A CHOICE?
+Order-4 teaches the console's controls. This order gives it its MEANING, one line per region
+band, delivered the first time the map opens in that band (one-shot, LORE):
+    R1  Nobody built one way down. They built dozens, and kept digging.
+    R2  The routes follow the cutting faces. That's why they branch.
+    R3  Every road down here ends at the same racks.
+    R4  These aren't corridors anymore. We're picking which part of it to walk through.
+    R5  It's all one room down here. The map's just being polite.
+Five lines, and the route map stops being a menu bolted onto a story.
+
+============================================================
+E. THE PLANET'S SCHEDULE (it is the easiest voice to overuse)
+============================================================
+  R1  silent. No rows. The absence is the design and it must be protected — the first time
+      anything speaks that is not ORA or the company, it should be alarming.
+  R2  single words, at deep-strata milestones only. Never a sentence. Never a response.
+  R3  it addresses you. First full sentences, wrong order, present tense.
+  R4  it speaks plainly and it grieves. This is where it gets its exchanges.
+  R5  it and ORA are the only voices left.
+Hard cap: the planet never delivers more than one line per floor, in any region, ever. Its
+power is entirely in scarcity, and it is the one voice with no rate limit of its own today.
+
+============================================================
+F. STALENESS AND SILENCE
+============================================================
+  - A queued non-critical line older than its staleness window is DROPPED, not delivered late.
+    (Already implemented; this order raises it to a rule: a line that arrives after its moment
+    is worse than no line, because it teaches the player that the voice is not about the room.)
+  - Silence is a legitimate result. Every repeatable moment must be able to produce nothing at
+    all, and roughly a third of them should. ORA going quiet in a bad room is the cheapest
+    horror effect in the game and it is currently unavailable because something always fires.
+  - Add one deliberate silence: from Region 4 down, floor arrival has a 40% chance of NO line
+    at all, and the pools shrink accordingly. Down there, her not saying anything is the beat.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           per-floor non-critical delivery ceiling on BarkSystem (one counter, reset on
+              floor arrival) + STORY_BARK_FLOOR_BUDGET in StoryUiConstants
+              per-speaker floor cap for PLANET (one line per floor, any trigger)
+              deliberate-silence chance for deep floor arrivals (one constant)
+CHANGED       BarkCatalog: +2 loop rows, +5 map-meaning rows, planet pools re-banded
+STRINGS       ~7 new ids
+DOCS          the region beat maps replace the thinner MOMENT SCHEDULE table in
+              docs/story-ui-system.txt
+TESTS         a beat-map test: for each region, the three listed beats resolve to rows that are
+              one-shot, STORY_CRITICAL, and registered on a trigger the player cannot avoid
+
+DEFINITION OF DONE
+- An ordinary floor never delivers more than one terminal take and two flavour lines.
+- Every region's three spine beats are placed on unavoidable channels and proven by test.
+- The player is told, once, why the run resets and what the map is.
+- The planet cannot exceed one line per floor, and deep floors are sometimes silent on purpose.
