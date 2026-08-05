@@ -78,6 +78,24 @@ public final class StatsStore {
         prefs.flush();
     }
 
+    /**
+     * The "new game" wipe (Story UI order-7 Part B): clears the ENTIRE preferences file — run
+     * records, first-encounter tips and every {@code story.} narrative key — in one flush.
+     *
+     * <p>They go together on purpose.  Meta-progression and narrative progression are two halves of
+     * the same single save: a wipe that reset the records but left the story at the Core (or the
+     * reverse) would produce a save state no ordinary play can reach, with every one-shot beat
+     * already spent and no way to earn them back.
+     *
+     * <p>Callers must reload anything they cached from the store afterwards —
+     * {@code World.wipeAllPersistentProgress()} does exactly that for the narrative systems.
+     */
+    public static void wipeAllPersistentProgress() {
+        Preferences prefs = Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
+        prefs.clear();
+        prefs.flush();
+    }
+
     /** Updates persistent records from the completed run and saves to disk. */
     public static void updateAndSave(RunStats run, PersistentStats persistent) {
         persistent.totalRuns++;

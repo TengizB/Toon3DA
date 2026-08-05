@@ -1,0 +1,314 @@
+STORY UI SYSTEM
+===============
+The game's narrative delivery layer: how a linear, five-region story is told to a player who is
+playing a permadeath roguelike on a phone, in small doses, without ever being trapped in text.
+
+This is the SINGLE SOURCE OF TRUTH for the story UI subsystem (`…toon3d.narrative`, the story
+renderers in `…toon3d.render`, `util/StoryUiConstants`, `util/StoryStore`). It documents SHIPPED
+behaviour: where an order changed its design during implementation, this doc reflects how the code
+actually works today. The original intent lives in `.claude/agents/ideas/story-ui-order-N.txt`
+(orders 1-7), and the fiction itself lives in `story/00..08` and `story/dialog/*`.
+
+
+UPDATE CONTRACT (mandatory — mirrors docs/route-map-system.txt)
+==============================================================
+Any change to the story UI MUST update THIS document in the SAME commit:
+   - new channel / renderer            -> THE FIVE CHANNELS + the render order section;
+   - new persisted narrative fact      -> PART B: PERSISTED STATE (schema table + version history);
+   - new string id family / new locale -> PART C: LOCALISATION;
+   - new sound                         -> PART D: AUDIO (cue table);
+   - new overlay that can own the screen -> PART E: PRECEDENCE;
+   - new gameplay moment that fires a beat -> THE MOMENT SCHEDULE table.
+The governing invariant behind every recipe below: "if you had to edit a switch statement to add a
+line, the registries are being bypassed — fix that instead." Adding narrative content is always ONE
+`register()` call plus one string-table row.
+
+
+OVERVIEW — WHAT THE PLAYER EXPERIENCES
+======================================
+Almost nobody reads optional text on a phone. So the story is delivered in five channels, ordered by
+how hard they are to avoid, and the plot spine rides only the ones a skimmer cannot skip:
+
+  BOOT CARD    every run starts here (it is a reprint — you died). Full-screen, blocking, waits for
+               a tap. SYSTEM status lines, the quiet instance counter, one ORA wake-up line.
+  BARKS        ~80% of the story. One-line panels during play; non-blocking, choice-less, and they
+               NEVER auto-dismiss — the player closes them with the X or a swipe.
+  EXCHANGES    the blocking half: a prompt and 2-3 big tappable answers. Rare and deliberate; the
+               tap is the point, because answering is what makes a non-reader read.
+  CODEX        the opt-in archive. The only screen where long text is allowed. Never required.
+  CONTROL HINTS  the entire tutorial, delivered as barks by ORA, one line per control at the moment
+               that control first matters. There is no tutorial screen and there must never be one.
+
+Four SPEAKERS carry all of it — ORA (the AI), the Planet, the Organization, SYSTEM — each with a
+name chip, an icon, a type style, an accent colour and an audio sting, so identity never rests on
+colour alone.
+
+
+ARCHITECTURE — HEADLESS BRAIN, DUMB RENDERER
+============================================
+    …toon3d.narrative     NO LibGDX imports. Data + decisions: which line, when, for how long,
+                          what an answer does, what is unlocked. Unit-tested headlessly.
+    …toon3d.render        Draws whatever the brain reports. Owns GPU/audio handles. Decides nothing.
+    util/StoryUiConstants Every number and every localisation id used by either half.
+    util/StoryStore       The Preferences-backed persistence adapter (the engine half of the port).
+
+Per channel:
+
+  | Channel   | Headless brain    | Catalog (content)  | Renderer                |
+  |-----------|-------------------|--------------------|-------------------------|
+  | Bark      | BarkSystem        | BarkCatalog        | StoryBarkRenderer       |
+  | Boot card | BootCardSystem    | BootCardCatalog    | BootCardRenderer        |
+  | Exchange  | ExchangeSystem    | ExchangeCatalog    | StoryExchangeRenderer   |
+  | Codex     | CodexSystem       | CodexCatalog       | CodexOverlayRenderer    |
+
+Shared render pieces: `StoryPanelRenderer` (the one panel primitive every channel draws with),
+`StoryAudio` (all seven sounds, ONE world-owned instance), `StoryStringsLoader` (the one place the
+string asset is read).
+
+Render order (World.render, after the HUD): bark -> exchange -> codex -> boot card -> fade.
+Each modal brings its own dim/scrim, so nothing behind it needs to know it is there.
+
+
+PART A — ROGUELIKE STORY-GATING (the critical reconciliation)
+============================================================
+THE PROBLEM: the story is a linear descent through five regions; the game is a permadeath roguelike
+with a branching route map, played across dozens of runs. Tying beats to the current run would make
+death rewind the plot and replay every beat, every attempt.
+
+THE RULE: **story progress is gated by the DEEPEST STORY REGION EVER REACHED, which is PERSISTENT.
+Death never rewinds the story.**
+
+  - `StoryRegion` is the gating axis: HABITATION_RINGS -> HARVESTING_GALLERIES -> RELIQUARY ->
+    WOUND -> CORE. Route regions map onto it via `StoryRegion.fromRouteRegionIndex()`.
+  - `StoryProgress.getDeepestRegion()` only ever climbs (`reachRegion` keeps the deeper of the two),
+    so an out-of-order branch can only deepen the story and a fresh run at the surface cannot
+    rewind it.
+  - Every one-shot beat is keyed by id in `StoryProgress.hasSeen()/markSeen()`, persisted. Re-entering
+    a region on a later run does not replay its intro.
+  - ORA's tone, the planet's voice stage and the Organization's escalation are expressed PURELY by
+    which region band a row is registered in — never by an `if (region == …)` in game code.
+  - The boot card is the one beat that fires every death by design; its ORA line is chosen by the
+    same deepest-region gate, so it also only moves forward.
+
+DIEGETIC FIT: this is the premise, not a hand-wave. The clone remembers every run, ORA is never
+wiped, the planet never forgets you (story/02-player-and-cloning.md, 03-the-planet.md).
+
+EDGE CASES
+  - Branching route: gate strictly by depth; every region's beats are self-contained so any path
+    reads correctly.
+  - The Core is many floors (the route map is endless), so the ENDING exchange is guarded twice:
+    deepest region == CORE **and** the Core's boss is down. That convergence is what makes one Core
+    floor final.
+
+TESTS: `StoryPersistenceTest` (Part A section), `StoryBarkTest`.
+
+
+PART B — PERSISTED NARRATIVE STATE
+==================================
+Port: `narrative/StoryProgressStore` (headless interface).
+Implementations: `util/StoryStore` (LibGDX Preferences — the game) and
+`narrative/InMemoryStoryProgressStore` (tests).
+All narrative keys share the `StatsStore` preferences file under a `story.` prefix, so a single-save
+"new game" can clear meta-progression and story together.
+
+  | Persisted fact          | Key                       | Written when                        |
+  |-------------------------|---------------------------|-------------------------------------|
+  | deepest region reached  | story.deepestRegion       | a region is entered for the 1st time|
+  | one-shot beat flags     | story.beat.<id>           | a one-shot beat fires               |
+  | reprint (instance) count| story.reprintCount        | a boot card is presented            |
+  | hidden stance leanings  | story.stance.<STANCE>     | an exchange option is answered      |
+  | consequential outcomes  | story.outcome.<exchangeId>| a CONSEQUENTIAL option is answered  |
+  | codex unlocks           | story.codex.<id>          | a line is delivered / a PROBE pays  |
+  | codex read-flags        | story.codexRead.<id>      | an entry is opened                  |
+  | accessibility settings  | story.setting.<key>       | the player changes a setting        |
+  | schema version          | story.schemaVersion       | stamped on every write              |
+
+RULES
+  - Write on meaningful change only — never per frame. A whole run is a handful of writes.
+  - Treat as SINGLE-SAVE meta-progression that survives permadeath.
+  - Reads/writes degrade to no-ops with no LibGDX app present, so narrative logic never depends on a
+    live Preferences backend.
+
+SCHEMA VERSION (`StoryProgressStore.SCHEMA_VERSION`, currently 4)
+  v1 order-2/3 (region, beat flags, reprint count) -> v2 order-4 (stance, outcomes, codex unlocks)
+  -> v3 order-6 (codex read-flags, settings) -> v4 order-7 (story-audio setting).
+  Every version so far has only ADDED keys, and every key reads a default when absent, so no data
+  migration has ever been needed: `StoryStore.migrateIfNeeded()` (run in its constructor) re-stamps
+  an older save and leaves a NEWER-than-this-build save completely untouched. Bump the constant and
+  add the migration beside it whenever the persisted shape actually changes.
+
+"NEW GAME" (the only thing that moves the story backwards)
+  `World.wipeAllPersistentProgress()` -> `StatsStore.wipeAllPersistentProgress()` clears the whole
+  preferences file (records + tips + story keys), then the world re-reads everything it cached:
+  `StoryProgress.reloadFromStore()`, `StorySettings.reloadFromStore()`, `CodexSystem.refresh()`,
+  `PersistentStats.reset()`. `StoryProgress.wipeAllNarrativeState()` is the narrative-only variant.
+  Everything clears TOGETHER: a save with the region reset but the one-shot flags spent would start a
+  story that can never be told. Death does not call this; nothing in a run calls this. It exists for
+  order-8's title/settings screen, behind a confirmation.
+
+TESTS: `StoryPersistenceTest` (round-trip, versioning, wipe, reload).
+
+
+PART C — LOCALISATION / STRING EXTERNALISATION
+=============================================
+**No story string is hardcoded in Java.** Every line — barks, exchange prompts, the player's own
+answers, replies, boot-card status lines, codex entries, and all screen chrome — is referenced by a
+stable STRING ID and resolved through `StoryStrings`.
+
+  - Shipped table: `assets/story/story-strings.properties` (`StoryUiConstants.STORY_STRINGS_ASSET_PATH`).
+  - Loaded once by `render/StoryStringsLoader.load()`, which falls back to `StoryStrings.defaults()`
+    (the per-order Java tables: BarkStrings, BootCardStrings, ExchangeStrings, CodexStrings) when the
+    asset is missing or unreadable. The game must never fail to boot over a text file.
+  - A missing id resolves to a VISIBLE `!id!` marker, never to blank — a hole you can read is a hole
+    you fix in playtest.
+  - Ids are stable once shipped (translations key off them): lower case, dotted, `story.`-namespaced,
+    no whitespace.
+  - An id family per channel: `story.bark.*`, `story.boot.*`, `story.exchange.*`, `story.codex.*`,
+    plus `story.speaker.*` for the name chips. ORA's one-line TAKE on a log and the log's full codex
+    text are deliberately separate ids (bark vs archive).
+
+TESTS: `StoryLocalizationTest` sweeps EVERY id from every catalog and every piece of chrome against
+the shipped asset, checks the Java fallback agrees with it, and rejects duplicate keys.
+
+
+PART D — AUDIO CUES
+===================
+There is no voice acting. There are seven short procedural tones, and every one of them is redundant
+polish: **the game must be fully understandable with audio off.** Nothing is ever conveyed by sound
+alone.
+
+  - `render/StoryAudio` — ONE world-owned `Disposable` that owns every story sound and is injected
+    into the bark, exchange and boot-card renderers (`setStoryAudio`). Renderers never build their
+    own: four channels each synthesising the same seven sounds is four times the voices for
+    identical audio.
+  - Synthesised at construction with `GameMath.storyStingSample()` into a minimal 16-bit mono WAV
+    (no asset files). If the audio backend is unavailable, synthesis is skipped and every play call
+    is a silent no-op.
+  - Played from the UPDATE path, never from render — audio is a simulation side effect.
+
+  SPEAKER STINGS (`STORY_STING_*`, indexed by `Speaker.ordinal()`)
+    ORA soft blip · Planet low organic tone · Organization cold square-wave beep · SYSTEM neutral click
+
+  INTERFACE CUES (`StoryCue`, `STORY_CUE_*`)
+    | Cue           | Fires when                                    |
+    |---------------|-----------------------------------------------|
+    | PANEL_OPEN    | an exchange takes the screen                  |
+    | CHOICE_PICKED | an answer is committed (firm, low, square)     |
+    | REVEAL_TICK   | one more boot-card status line prints          |
+
+  THE SWITCH: the codex's accessibility strip carries a SOUND knob
+  (`StorySettings.isStoryAudioEnabled()`, persisted as `story.setting.storyAudio`, default ON) which
+  `World.applyStoryAccessibilitySettings()` pushes into `StoryAudio.setEnabled()`. One switch for the
+  whole layer, not a per-cue submenu.
+
+
+PART E — OVERLAY PRECEDENCE & INTERRUPTS
+========================================
+The story UI shares the screen with the inventory, level-up card, shop, weapon inspect, event choice,
+nav console, death screen and boot card. Three promises:
+
+1. A HARD-PAUSE OVERLAY WINS. `World.update` runs `barkSystem.setSuppressed(runPhase != PLAYING)`
+   every frame: while any modal is open, bark requests still QUEUE, nothing is delivered, and queue
+   ageing is FROZEN so a long menu visit cannot silently eat a line. An EXCHANGE never opens outside
+   PLAYING — it is held PENDING until the player is idle, alive, not mid-fade, with no bark on
+   screen (`World.openPendingStoryExchange`).
+2. NEVER TWO STORY PANELS. One story element is visible at a time, ever — enforced in the systems
+   themselves (`ExchangeSystem.request/openPending` refuse while one is active, and the active row
+   is excluded from its own candidate pool).
+3. COMBAT SPIKE. `BarkSystem.setCombatSpike()` (fed by `EnemyManager.countAwakeEnemies()`) holds
+   non-critical lines until the lull; a `STORY_CRITICAL` beat still lands mid-fight, because a
+   dropped control hint is a stuck player.
+
+APP LIFECYCLE (Android): `Main.pause()/resume()` -> `World.onApplicationPause()/onApplicationResume()`.
+Nothing story-side is torn down, and that is deliberate — a modal owns `runPhase`, so an exchange, a
+boot card or the codex is exactly where it was when the app returns; "re-open on resume" costs
+nothing because the layer never left. What IS dropped is transient TOUCH state (a pressed answer
+plate, a codex drag, a bark swipe, held buttons), because the finger that left never sends its
+release, and a tap that merely restored the app must not also answer the prompt it restored into.
+On resume the accessibility settings are re-pushed, since Android may have lost the GL context.
+
+INTERRUPTION SAFETY: a one-shot exchange is marked seen when it is ANSWERED, not when it opens. If
+the OS kills the process mid-prompt, the beat is asked again on the next run instead of being spent
+on a conversation nobody read.
+
+TESTS: `StoryOverlayPrecedenceTest`.
+
+
+PART F — FIRST BOOT / COLD OPEN
+===============================
+The first launch introduces ORA and the world in the same small doses as everything else:
+  - the boot card fires before the player has done anything — even run 1 is a reprint, because
+    in-fiction the original self has just died;
+  - `BarkTrigger.RUN_START` carries two one-shot COLD OPEN rows, one per run start, so a new player
+    meets ORA on run 1 and hears the second line on run 2, and never again;
+  - `ControlHint` teaches each control as a single bark the first time it matters (MOVE, FIRE,
+    RELOAD, HEAL, SWITCH_WEAPON, INVENTORY) — one-shot for the life of the save and STORY_CRITICAL;
+  - the Region-1 `QUIET_MOMENT` teaching exchange is the first choice ever offered and deliberately
+    decides nothing, so the blocking layer is learned with no enemy in the room.
+
+
+THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
+===========================================
+  | Moment                                            | Channel        | Fires                    |
+  |---------------------------------------------------|----------------|--------------------------|
+  | control handed to the player                      | bark           | RUN_START (cold open)    |
+  | a control first becomes useful                    | bark           | CONTROL_HINT (tutorial)  |
+  | floor arrival / deep-strata milestone             | bark (+exch)   | FLOOR_ARRIVAL, DEEP_STRATA|
+  | region gate crossed                               | bark + exchange| REGION_ENTERED, gate order|
+  | one floor AFTER a region gate                     | exchange       | ORGANIZATION_ORDER       |
+  | stepping beside a 'T' terminal                    | bark + exchange| LOG_FOUND                |
+  | 14 fresh tiles walked with nothing awake          | exchange       | QUIET_MOMENT             |
+  | a kill / low health / first sight of a family     | bark           | KILL, LOW_HEALTH, …      |
+  | a codex category filled                           | bark           | CODEX_COMPLETE           |
+  | deepest region CORE and the Core boss is down     | exchange       | THE ENDING               |
+Firing sites: `World` (arrival, region entry, kills, health, logs, the ending) and
+`world/StoryBarkTickSubscriber` (first sight of a family, backtracking, idle).
+
+
+PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
+===========================================
+  - PACING: rate limits, per-trigger cooldowns (minutes, not seconds), no-repeat memory, probability
+    rolls on frequent moments, and the combat-spike hold. **If in doubt, CUT** — the fix for "too
+    much story" is deleting rows, never adding a skip toggle.
+  - ANTI-SKIP: one tap always advances, and NO channel advances itself or runs on a timer. The spine
+    therefore rides the boot card, one-shot STORY_CRITICAL barks and the blocking ending exchange;
+    `StorySkimmerPathTest` asserts a skimmer still gets the whole plot.
+  - ACCESSIBILITY (`StorySettings`, four knobs): text size (wrap sooner, never overflow), boot-card
+    reveal pacing, reduced motion, story audio. Every default is the comfortable end of its scale.
+    There is no "disable timers" toggle because there are no timers.
+  - TELEMETRY (`StoryTelemetry`): in-memory counters only — no identifiers, no I/O, no PII. The
+    number that matters is the fast-dismiss fraction: a line closed inside
+    `STORY_TELEMETRY_FAST_DISMISS_SECONDS` was skipped, not read.
+
+
+RECIPES
+=======
+ADD A BARK               one `register()` in `BarkCatalog` (trigger, region band, speaker, tone,
+                         priority, one-shot?) + one row in `story-strings.properties` and its
+                         `BarkStrings` default. No switch, anywhere.
+ADD AN EXCHANGE          one `register()` in `ExchangeCatalog` (trigger, region, 2-3 options, each
+                         STANCE / PROBE / CONSEQUENTIAL) + its string rows. Remember: exchanges BLOCK,
+                         so if they start to feel frequent, delete rows.
+ADD AN ORA REPRINT LINE  one `registerWakeLine()` in `BootCardCatalog` (+ string rows).
+ADD A CODEX ENTRY        one `register()` in `CodexCatalog` (category, unlockedByLine or a PROBE that
+                         names it) + its string rows. Locked entries are never listed.
+ADD A CONTROL HINT       one `ControlHint` value + its bark row + the firing condition in `World`.
+ADD A PERSISTED FACT     a port method on `StoryProgressStore`, both implementations, a `story.` key,
+                         a bump of `SCHEMA_VERSION` + migration note, and the schema table above.
+ADD A SOUND              one `StoryCue` value + its four numbers in `StoryUiConstants` (same order)
+                         + the play site in the update path. Never make it load-bearing.
+ADD A SETTING            a `story.setting.*` key, a knob on `StorySettings`, a bump of
+                         `STORY_CODEX_SETTING_COUNT`, and its name/value string ids.
+
+
+TEST GATES (`./gradlew test`)
+=============================
+  StoryUiFoundationTest      speakers, panel geometry, wrapping, safe zones (order-1)
+  StoryBarkTest              catalog integrity, region gating, queue/priority/cooldowns (order-2)
+  StoryBootCardTest          card variants, counter, reveal, continue policy (order-3)
+  StoryExchangeTest          options, stance model, chains, effects, catalog size cap (order-4)
+  StoryCodexTest             unlocks, tabs, scroll, NEW dots, completion, settings (order-6)
+  StorySkimmerPathTest       the spine rides unskippable channels; nothing self-advances (order-6 C)
+  StoryPersistenceTest       death does not rewind; round-trip, schema version, new-game wipe (7 A/B)
+  StoryLocalizationTest      every id in every channel resolves in the shipped table (7 C)
+  StoryOverlayPrecedenceTest suppression, no stacked panels, interrupted beats survive (7 E)

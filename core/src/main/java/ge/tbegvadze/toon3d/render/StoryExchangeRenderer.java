@@ -42,7 +42,6 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
 public final class StoryExchangeRenderer implements Renderable, Disposable {
 
     private final StoryPanelRenderer panelRenderer;
-    private final StorySpeakerStings speakerStings;
     private final ShapeRenderer      shapes;
     private final SpriteBatch        batch;
     private final BitmapFont         font;
@@ -50,6 +49,7 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
     private final Color              scratchColor = new Color();
 
     private ExchangeSystem exchangeSystem;
+    private StoryAudio     storyAudio;
 
     /** Resolved label for the reply's acknowledge button (localisation rule: never a literal here). */
     private String acknowledgeLabel = "";
@@ -65,7 +65,6 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
 
     public StoryExchangeRenderer() {
         this.panelRenderer = new StoryPanelRenderer();
-        this.speakerStings = new StorySpeakerStings();
         this.shapes        = new ShapeRenderer();
         this.batch         = new SpriteBatch();
         this.font          = new BitmapFont();
@@ -87,6 +86,14 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
         this.exchangeSystem = exchangeSystem;
     }
 
+    /**
+     * Binds the world's shared story audio (order-7 Part D).  Null means silence — every cue here
+     * is redundant with something the panel already shows.
+     */
+    public void setStoryAudio(StoryAudio storyAudio) {
+        this.storyAudio = storyAudio;
+    }
+
     /** Resolves the acknowledge-button label ONCE.  Call at construction time, not per frame. */
     public void setStrings(StoryStrings strings) {
         if (strings == null) return;
@@ -101,8 +108,8 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
     public void playPendingSpeakerSting() {
         if (exchangeSystem == null) return;
         Speaker appeared = exchangeSystem.consumeJustAppearedSpeaker();
-        if (appeared != null) {
-            speakerStings.play(appeared);
+        if (appeared != null && storyAudio != null) {
+            storyAudio.playSpeakerSting(appeared);
         }
     }
 
@@ -275,8 +282,7 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
 
     @Override
     public void dispose() {
-        panelRenderer.dispose();
-        speakerStings.dispose();
+        panelRenderer.dispose();   // storyAudio is world-owned and disposed there
         shapes.dispose();
         batch.dispose();
         font.dispose();

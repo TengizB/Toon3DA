@@ -209,4 +209,43 @@ public final class StoryProgress {
         if (store.isCodexEntryRead(codexId)) return;  // already read — no redundant write
         store.markCodexEntryRead(codexId);
     }
+
+    // -------------------------------------------------------------------------
+    // "New game" (Story UI order-7 Part B)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Erases every scrap of narrative progress — in the store AND in this object's caches — so the
+     * next line the player hears is the one a brand-new player hears.
+     *
+     * <p>This is the ONE operation allowed to move the story backwards, and it exists precisely
+     * because everything else cannot: the deepest region, the one-shot flags, the reprint counter,
+     * the hidden stance.  They all clear together, because a save with the region reset but the
+     * one-shot beats still spent would start a story that can never be told.
+     *
+     * <p>Death does not call this.  Nothing in a run calls this.  Only an explicit "new game" does.
+     */
+    public void wipeAllNarrativeState() {
+        store.wipeNarrativeState();
+        seenBeatIds.clear();
+        deepestRegion = StoryRegion.fromOrdinal(0);
+        reprintCount  = 0;
+        for (int stanceIndex = 0; stanceIndex < stanceValues.length; stanceIndex++) {
+            stanceValues[stanceIndex] = 0;
+        }
+    }
+
+    /**
+     * Re-reads everything cached in memory from the store.  Needed after the store is cleared behind
+     * this object's back — a whole-file wipe ({@code StatsStore.wipeAllPersistentProgress()}) does
+     * exactly that — so the in-memory copy cannot go on reporting a story the save no longer holds.
+     */
+    public void reloadFromStore() {
+        seenBeatIds.clear();
+        deepestRegion = StoryRegion.fromOrdinal(store.loadDeepestRegionOrdinal());
+        reprintCount  = Math.max(0, store.loadReprintCount());
+        for (Stance stance : Stance.values()) {
+            stanceValues[stance.ordinal()] = store.loadStance(stance.name());
+        }
+    }
 }

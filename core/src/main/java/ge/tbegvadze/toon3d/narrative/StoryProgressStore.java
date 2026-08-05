@@ -29,9 +29,44 @@ package ge.tbegvadze.toon3d.narrative;
  *   <li>the set of unlocked codex ids, so a probe answered two runs ago is still readable.</li>
  * </ul>
  *
+ * <p>Order-6 adds the accessibility settings, and order-7 closes the schema with the two operations
+ * every save format eventually needs:
+ * <ul>
+ *   <li>{@link #loadSchemaVersion()} — which version of the narrative schema wrote this save, so a
+ *       future change can migrate instead of guessing;</li>
+ *   <li>{@link #wipeNarrativeState()} — the "new game" reset.  Everything above clears TOGETHER:
+ *       a save with the deepest region wiped but the one-shot flags intact would start a story that
+ *       can never be told again, which is worse than either extreme.</li>
+ * </ul>
+ *
  * <p>Implementations write on meaningful change (a beat seen, a region reached), never per frame.
  */
 public interface StoryProgressStore {
+
+    /**
+     * The current narrative schema version — stamped on every save, by every implementation.
+     *
+     * <p>History: v1 was order-2/3 (deepest region, one-shot flags, reprint count); v2 added the
+     * order-4 keys (stances, consequential outcomes, codex unlocks); v3 the order-6 keys (codex
+     * read-flags, accessibility settings); v4 the order-7 story-audio setting.  Every key added so
+     * far reads a default when absent, which is why no version has ever needed a data migration —
+     * an older save loads cleanly.  Bump this whenever the persisted shape changes, and add the
+     * migration next to the bump.
+     */
+    int SCHEMA_VERSION = 4;
+
+    /**
+     * The schema version that wrote this save, or 0 when nothing has ever been written.  Compared
+     * against {@link #SCHEMA_VERSION} so a future format change can migrate instead of guessing.
+     */
+    int loadSchemaVersion();
+
+    /**
+     * Clears EVERY narrative key at once — the store half of a "new game".  Deepest region, one-shot
+     * flags, reprint count, stances, outcomes, codex unlocks and settings all go together, and the
+     * current schema version is stamped on the empty save.
+     */
+    void wipeNarrativeState();
 
     /** The persisted deepest-region ordinal, or 0 when nothing has been recorded yet. */
     int loadDeepestRegionOrdinal();

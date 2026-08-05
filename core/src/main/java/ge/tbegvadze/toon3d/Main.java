@@ -57,6 +57,25 @@ public class Main extends ApplicationAdapter {
         viewport.update(width, height, true); // true = keep (0,0) at bottom-left
     }
 
+    /**
+     * The OS took the screen — a call, a notification, the player switching apps (Story UI order-7
+     * Part E). On Android this also fires just before the process may be killed.
+     *
+     * <p>The game is turn-based, so the simulation is already frozen between actions and needs no
+     * pausing of its own; what the world does here is drop transient touch state, so a finger that
+     * never got to send its release cannot commit an action when the app comes back.
+     */
+    @Override
+    public void pause() {
+        if (world != null) world.onApplicationPause();
+    }
+
+    /** Back in the foreground: re-push the story renderers' cached text scales and drop stale touch. */
+    @Override
+    public void resume() {
+        if (world != null) world.onApplicationResume();
+    }
+
     @Override
     public void dispose() {
         world.dispose();

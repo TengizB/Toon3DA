@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.narrative.BarkSystem;
 import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
+import ge.tbegvadze.toon3d.render.StoryAudio;
 import ge.tbegvadze.toon3d.render.StoryBarkRenderer;
 import ge.tbegvadze.toon3d.render.StoryStringsLoader;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -78,6 +79,7 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
 
     private BarkSystem        barkSystem;
     private StoryBarkRenderer barkRenderer;
+    private StoryAudio        storyAudio;
     private StoryProgress     progress;
 
     private float  elapsedSeconds;
@@ -103,7 +105,9 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
         progress     = new StoryProgress();   // in-memory: the showcase always starts a clean story
         barkSystem   = new BarkSystem(BarkCatalog.defaultRegistry(), StoryStringsLoader.load(),
                                       progress, 20250801L);
+        storyAudio   = new StoryAudio();   // the showcase owns its own, as World does
         barkRenderer = new StoryBarkRenderer();
+        barkRenderer.setStoryAudio(storyAudio);
         barkRenderer.setBarkSystem(barkSystem);
 
         screenshotDirectory = System.getProperty("storyBark.screenshotDirectory");
@@ -250,5 +254,6 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
         captionBatch.dispose();
         captionFont.dispose();
         barkRenderer.dispose();
+        storyAudio.dispose();
     }
 }

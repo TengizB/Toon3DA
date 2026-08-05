@@ -43,7 +43,9 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  * <p>Nothing is allocated on the draw path: the lines arrive pre-resolved and pre-wrapped from the
  * system, the button label is measured once in {@link #setStrings}, and the scratch {@link Color} and
  * {@link GlyphLayout} are pre-allocated.  Owns a {@link StoryPanelRenderer}, a {@link ShapeRenderer},
- * a {@link SpriteBatch} and a {@link BitmapFont} — all disposed in {@link #dispose()}.
+ * a {@link SpriteBatch} and a {@link BitmapFont} — all disposed in {@link #dispose()}.  The
+ * {@link StoryAudio} it plays through is world-owned and shared with every other story channel
+ * (order-7 Part D), so it is injected rather than constructed, and disposed by the world.
  */
 public final class BootCardRenderer implements Renderable, Disposable {
 
@@ -55,6 +57,12 @@ public final class BootCardRenderer implements Renderable, Disposable {
     private final Color              scratchColor = new Color();
 
     private BootCardSystem bootCardSystem;
+    private StoryAudio     storyAudio;
+
+    // Audio bookkeeping (order-7 Part D): how much of the card has already been ANNOUNCED, so the
+    // reveal ticks fire once each as the machine prints, and ORA's sting fires once when she speaks.
+    private int     announcedSystemLineCount;
+    private boolean announcedWakeLine;
 
     /** Resolved SYSTEM chip name, so identity never rests on colour alone (order-1 accessibility). */
     private String systemSpeakerName = "";
@@ -107,6 +115,40 @@ public final class BootCardRenderer implements Renderable, Disposable {
         continueLabelTopY = StoryUiConstants.STORY_BOOT_CONTINUE_Y
                 + (StoryUiConstants.STORY_BOOT_CONTINUE_HEIGHT + layout.height) / 2f;
         font.getData().setScale(1f);
+    }
+
+    /**
+     * Binds the world's shared story audio (order-7 Part D).  Null means silence; the card reads
+     * exactly the same, because every sound it makes is redundant with something printed on it.
+     */
+    public void setStoryAudio(StoryAudio storyAudio) {
+        this.storyAudio = storyAudio;
+    }
+
+    /**
+     * Plays whatever the card has newly SAID since the last frame: the SYSTEM sting on the machine's
+     * first status line, a dry tick per line after it, and ORA's sting the moment her block appears.
+     * Call from the update path (never from render) so audio stays a simulation side effect.
+     */
+    public void playPendingStoryAudio() {
+        if (bootCardSystem == null || !bootCardSystem.hasActiveCard()) {
+            announcedSystemLineCount = 0;   // the next card starts its reveal from silence
+            announcedWakeLine        = false;
+            return;
+        }
+        int revealedLineCount = bootCardSystem.getRevealedSystemLineCount();
+        while (announcedSystemLineCount < revealedLineCount) {
+            if (storyAudio != null) {
+                if (announcedSystemLineCount == 0) storyAudio.playSpeakerSting(Speaker.SYSTEM);
+                else                               storyAudio.playCue(StoryCue.REVEAL_TICK);
+            }
+            announcedSystemLineCount++;
+        }
+        if (!announcedWakeLine && bootCardSystem.isRevealComplete()
+                && bootCardSystem.getWakeLineCount() > 0) {
+            if (storyAudio != null) storyAudio.playSpeakerSting(Speaker.AI);
+            announcedWakeLine = true;
+        }
     }
 
     @Override

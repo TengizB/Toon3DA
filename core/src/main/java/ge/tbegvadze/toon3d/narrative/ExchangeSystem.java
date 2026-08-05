@@ -226,6 +226,9 @@ public final class ExchangeSystem {
             ExchangeDefinition row = rows.get(rowIndex);
             if (!row.matchesRegion(region))                          continue;
             if (row.isOneShot() && progress.hasSeen(row.getId()))    continue;
+            // The exchange currently on screen is not yet marked seen (it is marked when answered),
+            // so exclude it explicitly — nothing may be queued behind itself.
+            if (activeDefinition != null && row.getId().equals(activeDefinition.getId())) continue;
             if (requiredAffinity != null && row.getStanceAffinity() != requiredAffinity) continue;
             if (neutralOnly && row.getStanceAffinity() != null)      continue;
             candidateScratch.add(row);
@@ -237,7 +240,16 @@ public final class ExchangeSystem {
         return candidateScratch.get(random.nextInt(candidateScratch.size()));
     }
 
-    /** Puts an exchange on screen: resolve and wrap the prompt, resolve every option, start the clock. */
+    /**
+     * Puts an exchange on screen: resolve and wrap the prompt, resolve every option, start the clock.
+     *
+     * <p>Note what does NOT happen here (order-7 Part E): a one-shot row is marked SEEN when it is
+     * ANSWERED, not when it opens.  The difference only shows up when something takes the screen away
+     * mid-prompt — the player backgrounds the app and Android kills the process, say.  Marking on
+     * open would spend the beat on a prompt nobody ever read, and a one-shot never comes back;
+     * marking on the answer means the moment is simply asked again on the next run.  While the
+     * prompt IS up, {@link #collectEligible} skips the active id, so it can never be selected twice.
+     */
     private boolean open(ExchangeDefinition definition) {
         if (definition == null) return false;
         // Resets the PANEL only, never the pending reward — an option may both reveal a cache and
@@ -256,9 +268,6 @@ public final class ExchangeSystem {
                     strings.get(definition.getOption(optionIndex).getPlayerLineStringId());
         }
 
-        if (definition.isOneShot()) {
-            progress.markSeen(definition.getId());
-        }
         justAppearedSpeaker = activeSpeaker;
         return true;
     }
@@ -296,6 +305,11 @@ public final class ExchangeSystem {
 
         chosenOptionId     = option.getId();
         pressedOptionIndex = -1;
+
+        // The beat is spent the moment it is ANSWERED (order-7 Part E) — see the note on open().
+        if (activeDefinition.isOneShot()) {
+            progress.markSeen(activeDefinition.getId());
+        }
 
         for (Stance stance : Stance.values()) {
             progress.nudgeStance(stance, option.getStanceNudge(stance));

@@ -17,18 +17,27 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  * screen.  Nothing is allocated on the draw path: the body lines arrive pre-resolved and pre-wrapped
  * from the system, and the panel primitive owns its own reusable batch/shapes/font.
  *
- * <p>Owns two {@link Disposable}s — the shared {@link StoryPanelRenderer} primitive and the
- * per-speaker {@link StorySpeakerStings} — and disposes both in {@link #dispose()}.
+ * <p>Owns one {@link Disposable} — the {@link StoryPanelRenderer} primitive — and disposes it in
+ * {@link #dispose()}.  The speaker stings are NOT owned here: {@link StoryAudio} is a single
+ * world-owned instance shared by every story channel (order-7 Part D), injected via
+ * {@link #setStoryAudio(StoryAudio)} and disposed by the world.
  */
 public final class StoryBarkRenderer implements Renderable, Disposable {
 
     private final StoryPanelRenderer panelRenderer;
-    private final StorySpeakerStings speakerStings;
     private BarkSystem               barkSystem;
+    private StoryAudio               storyAudio;
 
     public StoryBarkRenderer() {
         this.panelRenderer = new StoryPanelRenderer();
-        this.speakerStings = new StorySpeakerStings();
+    }
+
+    /**
+     * Binds the world's shared story audio.  Null (or never set) means silence — the panel says
+     * everything the sting says, so a missing sound loses nothing.
+     */
+    public void setStoryAudio(StoryAudio storyAudio) {
+        this.storyAudio = storyAudio;
     }
 
     /** Binds the headless bark brain this renderer reads from.  Null hides the layer entirely. */
@@ -51,8 +60,8 @@ public final class StoryBarkRenderer implements Renderable, Disposable {
     public void playPendingSpeakerSting() {
         if (barkSystem == null) return;
         Speaker appeared = barkSystem.consumeJustAppearedSpeaker();
-        if (appeared != null) {
-            speakerStings.play(appeared);
+        if (appeared != null && storyAudio != null) {
+            storyAudio.playSpeakerSting(appeared);
         }
     }
 
@@ -92,7 +101,6 @@ public final class StoryBarkRenderer implements Renderable, Disposable {
 
     @Override
     public void dispose() {
-        panelRenderer.dispose();
-        speakerStings.dispose();
+        panelRenderer.dispose();   // storyAudio is world-owned and disposed there
     }
 }

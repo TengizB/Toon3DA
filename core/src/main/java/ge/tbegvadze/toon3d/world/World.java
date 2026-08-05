@@ -362,6 +362,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private final BarkSystem         barkSystem;
     private final StoryBarkRenderer  storyBarkRenderer;
+    // Story UI — AUDIO (order-7 Part D): ONE shared owner of every story sound (the four speaker
+    // stings, the three interface cues), handed to each story renderer. Sound is Disposable and
+    // procedurally synthesised, so four channels must not each build their own copy. Silenced
+    // wholesale by the codex's SOUND setting; the game is fully understandable with it off.
+    private final StoryAudio         storyAudio;
     // Story UI — REPRINT / BOOT CARD (order-3): the modal card shown at the start of every run,
     // which is to say on every reprint. bootCardSystem is the headless brain (which variant, which
     // region-appropriate ORA line, what the instance counter reads, whether continuing is even
@@ -503,8 +508,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                                     new StoryProgress(new StoryStore()),
                                     runSeed ^ StoryUiConstants.STORY_BARK_SELECTION_SEED_SALT);
         storyMomentRandom = new java.util.Random(runSeed ^ StoryUiConstants.STORY_MOMENT_SEED_SALT);
+        // One audio owner for every story channel (order-7 Part D). Built before the renderers so
+        // each can be handed the same instance; disposed once, by this class.
+        storyAudio        = new StoryAudio();
         storyBarkRenderer = new StoryBarkRenderer();
         storyBarkRenderer.setBarkSystem(barkSystem);
+        storyBarkRenderer.setStoryAudio(storyAudio);
 
         // Story UI boot card (order-3) — shares the bark layer's StoryProgress, so the card's ORA
         // line is gated by the same persistent deepest-region-reached and its instance counter
@@ -516,6 +525,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         bootCardRenderer = new BootCardRenderer();
         bootCardRenderer.setBootCardSystem(bootCardSystem);
         bootCardRenderer.setStrings(storyStrings);
+        bootCardRenderer.setStoryAudio(storyAudio);
 
         // Story UI exchanges (order-4) — shares the same persistent StoryProgress as the bark layer
         // and the boot card, so a one-shot exchange answered on an earlier run never re-asks, and
@@ -526,6 +536,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         storyExchangeRenderer = new StoryExchangeRenderer();
         storyExchangeRenderer.setExchangeSystem(exchangeSystem);
         storyExchangeRenderer.setStrings(storyStrings);
+        storyExchangeRenderer.setStoryAudio(storyAudio);
 
         // Story UI codex + accessibility (order-6) — the archive shares the same persistent
         // StoryProgress as every other channel, so an entry unlocked two runs ago is still there,
@@ -1774,6 +1785,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // (return to title, credits) is order-8's, and it reads isTerminal() to take over.
         if (runPhase == RunPhase.BOOT_CARD) {
             bootCardSystem.update(deltaTime);
+            // Audio from the update path, never from render: the SYSTEM sting on the first status
+            // line, a dry tick per line after it, ORA's sting when she speaks (order-7 Part D).
+            bootCardRenderer.playPendingStoryAudio();
             if (gameViewport != null && Gdx.input.justTouched()) {
                 if (touchInputState != null) touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
@@ -2370,14 +2384,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         fadeOverlayRenderer.dispose();
         eventTextRenderer.dispose();
         // Story bark layer (order-2): the renderer owns the story panel primitive (batch, shapes,
-        // font) and the per-speaker stings. BarkSystem itself is headless — no GPU/audio handles.
+        // font). BarkSystem itself is headless — no GPU/audio handles, and the stings it plays
+        // through belong to the shared storyAudio disposed below.
         storyBarkRenderer.dispose();
         // Reprint / boot card (order-3): the renderer owns a story panel primitive, its own shapes,
         // batch and font. BootCardSystem itself is headless — no GPU handles.
         bootCardRenderer.dispose();
-        // Story exchanges (order-4): the renderer owns the story panel primitive, its own
-        // shapes/batch/font and the per-speaker stings. ExchangeSystem itself is headless.
+        // Story exchanges (order-4): the renderer owns the story panel primitive and its own
+        // shapes/batch/font. ExchangeSystem itself is headless.
         storyExchangeRenderer.dispose();
+        // Story audio (order-7 Part D): the ONE owner of every story Sound — the four speaker stings
+        // and the three interface cues. The renderers only borrow it, so it is disposed exactly here.
+        storyAudio.dispose();
         // Codex (order-6): the archive renderer owns its own shapes, batch and font. CodexSystem
         // itself is headless — no GPU handles.
         codexOverlayRenderer.dispose();
@@ -2854,6 +2872,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // The archive (order-6) files whatever this conversation is about, exactly as a delivered
         // bark does: the codex only ever holds the long version of something already on screen.
         codexSystem.noteLineSpoken(exchangeSystem.getActiveExchangeId());
+        // Two sounds, in the order the eye reads them: the panel arriving, then who is speaking.
+        storyAudio.playCue(StoryCue.PANEL_OPEN);
         storyExchangeRenderer.playPendingSpeakerSting();
         return true;
     }
@@ -2902,6 +2922,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         exchangeSystem.setPressedOptionIndex(-1);
         if (exchangeSystem.isAwaitingChoice()) {
             storyTelemetry.recordExchangeAnswered(exchangeSystem.getOptionKind(committedIndex));
+            // A committed answer gets its own firm cue (order-7 Part D) — the one tap in the story
+            // layer that changes something, so it should feel like a switch being thrown.
+            storyAudio.playCue(StoryCue.CHOICE_PICKED);
             exchangeSystem.selectOption(committedIndex);
             // A PROBE answer may have named a codex entry; re-check completion so the tab's mark and
             // ORA's completion beat land on the same tap that earned them.
@@ -3000,6 +3023,72 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void recordBarkDismissalForTuning() {
         if (!barkSystem.hasActiveBark() || barkSystem.isActiveBarkDismissed()) return;
         storyTelemetry.recordBarkDismissed(barkSystem.getActiveElapsedSeconds());
+    }
+
+    // -------------------------------------------------------------------------
+    // Story UI order-7 — the engine seams: app lifecycle, and the "new game" wipe
+    // -------------------------------------------------------------------------
+
+    /**
+     * The OS took the screen away (Story UI order-7 Part E) — a call, a notification, the player
+     * switching apps.  Android delivers this through {@code ApplicationListener.pause()}.
+     *
+     * <p>Nothing story-side has to be torn down, and that is by design: a modal owns
+     * {@link #runPhase}, so an exchange, a boot card or the codex is still exactly where it was when
+     * the app comes back — "re-open on resume" costs nothing because the layer never left.  What DOES
+     * have to go is transient TOUCH state: a finger that was pressing an answer plate, dragging the
+     * codex or mid-swipe on a bark never sends its release event, so without this the plate would
+     * stay lit and the next tap anywhere would commit an answer the player never made.
+     *
+     * <p>The turn-based sim needs no pausing of its own — it advances only on player action, so a
+     * backgrounded game is already frozen.
+     */
+    public void onApplicationPause() {
+        exchangePressedIndex = -1;
+        exchangeSystem.setPressedOptionIndex(-1);
+        barkSwipeTracking = false;
+        resetCodexDragTracking();
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+    }
+
+    /**
+     * The app came back to the foreground (Story UI order-7 Part E).  On Android this can follow a
+     * GL context loss, so the story renderers' cached glyph scales are re-pushed from the persisted
+     * settings, and any touch left over from the moment of interruption is dropped — a tap that
+     * merely restored the app must never also answer the exchange it restored into.
+     */
+    public void onApplicationResume() {
+        applyStoryAccessibilitySettings();
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+    }
+
+    /**
+     * NEW GAME (Story UI order-7 Part B): erases the single save — run records, first-encounter tips
+     * and every scrap of narrative progress — and re-reads what this world had cached from it.
+     *
+     * <p>All of it goes together.  Meta-progression and story progression are two halves of one
+     * save: clearing the records but leaving the story at the Core (or the reverse) would leave a
+     * player in a state no play can produce, with every one-shot beat already spent and no way to
+     * earn it back.
+     *
+     * <p>This is the ONLY thing in the game that moves the story backwards.  Death does not; it is
+     * the entire premise that it does not.  The seam exists for order-8's title/settings screen to
+     * call behind a confirmation — nothing in a run calls it.
+     */
+    public void wipeAllPersistentProgress() {
+        StatsStore.wipeAllPersistentProgress();   // the whole preferences file, story keys included
+        barkSystem.getProgress().reloadFromStore();   // shared by the bark, boot card and exchange systems
+        storySettings.reloadFromStore();
+        codexSystem.refresh();
+        codexOverlayRenderer.refreshLabels();
+        applyStoryAccessibilitySettings();
+        persistentStats.reset();   // in place: the HUD and death overlay hold this same instance
     }
 
     // -------------------------------------------------------------------------
@@ -3138,6 +3227,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         int   lineMaxChars = storySettings.getPanelLineMaxChars();
         float textScale    = storySettings.getStoryTextScale();
         boolean reduceMotion = storySettings.isReduceMotion();
+
+        // The story layer's sound is one switch for all seven tones (order-7 Part D).
+        storyAudio.setEnabled(storySettings.isStoryAudioEnabled());
 
         barkSystem.setLineMaxChars(lineMaxChars);
         exchangeSystem.setLineMaxChars(lineMaxChars);
