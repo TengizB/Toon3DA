@@ -1,5 +1,15 @@
 # The AI Assistant — The Voice You Live In
 
+> **SUPERSEDED IN PART.** ORA's voice — her personality rules, her arc, and the sample lines
+> that calibrate her — is now governed by the VOICE CHARTER in `docs/narrative-authority.txt`
+> (SECTION 6). Where that charter and this file disagree, the charter wins. Two corrections it
+> makes to what follows: her arc is **not** "cold assistant becomes friend" but the company
+> varnish coming off a friend who was always there, so she is warm on line one; and the "comic
+> relief" register is now floored by the JOKE POLICY (SECTION 4) — no joke about the player's
+> death before Region 3, none at all below the Reliquary, and never a joke as the whole line.
+> This file remains the source on what she IS diegetically, her role in the delivery model, and
+> her place beside the Organization and the planet.
+
 The AI assistant is the **primary storytelling channel** and the new third entity that
 talks to the player on its own (alongside the Organization and the planet). It is the
 guide, the narrator, the mood-setter, and the comic relief — and its slow change from

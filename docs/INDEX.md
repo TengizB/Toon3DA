@@ -48,7 +48,8 @@ Quick lookup: find the right doc before starting any feature or fix.
 | File | When to read |
 |---|---|
 | `procedural-vitals-hud.txt` | Modifying HudRenderer panels, bars, face box, or any HUD element. |
-| `story-ui-system.txt` | Touching anything narrative — a bark, an exchange, the boot card, the codex, a story string, a story sound, narrative persistence, or overlay precedence. **Single source of truth for the story UI; update it in the same commit as any story change.** |
+| `story-ui-system.txt` | Touching anything narrative — a bark, an exchange, the boot card, the codex, a story string, a story sound, narrative persistence, or overlay precedence. **Single source of truth for the story UI MACHINE; update it in the same commit as any story change.** |
+| `narrative-authority.txt` | Writing, rewriting or cutting any narrative LINE. The content contract: the three jobs a line must do, plain-before-proper, the joke policy, ORA's voice charter, the comprehension bar, and the add-a-line change protocol. **Read before story-ui-system.txt's recipes; a line that fails this doc does not ship.** |
 
 ## Design Context
 
