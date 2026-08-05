@@ -9,6 +9,12 @@ behaviour: where an order changed its design during implementation, this doc ref
 actually works today. The original intent lives in `.claude/agents/ideas/story-ui-order-N.txt`
 (orders 1-7), and the fiction itself lives in `story/00..08` and `story/dialog/*`.
 
+THIS DOC GOVERNS THE MACHINE, NOT THE WORDS. What a line is allowed to SAY — the three jobs a line
+must do, the plain-before-proper rule, the joke policy, ORA's voice charter, and what the player must
+be able to answer by when — is the CONTENT contract in **docs/narrative-authority.txt**. Read it
+before writing or cutting any narrative row; a row that satisfies the recipes below and fails that
+document does not ship.
+
 
 UPDATE CONTRACT (mandatory — mirrors docs/route-map-system.txt)
 ==============================================================
@@ -20,6 +26,8 @@ Any change to the story UI MUST update THIS document in the SAME commit:
    - new overlay that can own the screen -> PART E: PRECEDENCE;
    - new framing screen / menu row     -> THE FRAMING SCREENS + its recipe below;
    - new gameplay moment that fires a beat -> THE MOMENT SCHEDULE table.
+Any change to what the lines SAY additionally runs the change protocol in
+docs/narrative-authority.txt (SECTION 9) and updates that document where it says so.
 The governing invariant behind every recipe below: "if you had to edit a switch statement to add a
 line, the registries are being bypassed — fix that instead." Adding narrative content is always ONE
 `register()` call plus one string-table row.
@@ -381,6 +389,10 @@ PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
 
 RECIPES
 =======
+Every recipe below is the MECHANICAL half. Before writing the `register()` call, run the content
+checklist in docs/narrative-authority.txt SECTION 9 (which job? which channel? which words? is it
+funny? is it a repeat? could it be cut instead?).
+
 ADD A BARK               one `register()` in `BarkCatalog` (trigger, region band, speaker, tone,
                          priority, one-shot?) + one row in `story-strings.properties` and its
                          `BarkStrings` default. No switch, anywhere.

@@ -1,0 +1,339 @@
+NARRATIVE AUTHORITY — the CONTENT contract for the story layer
+==============================================================
+docs/story-ui-system.txt governs the MACHINE: the five channels, the registries, persistence,
+localisation, precedence. It says how a line is delivered and never what a line is allowed to say.
+This document is the other half: **what may be written, in what order, and what gets cut.**
+
+  | Doc                        | Governs                                                       |
+  |----------------------------|---------------------------------------------------------------|
+  | docs/story-ui-system.txt   | the MACHINERY — channels, catalogs, gating, persistence, tests |
+  | docs/narrative-authority.txt (this) | the CONTENT — what a line does, when a word is allowed, |
+  |                            | who ORA is, what a joke has to earn, what the player must be  |
+  |                            | able to answer and by when                                    |
+  | story/00..08 + story/dialog| the FICTION itself (events, factions, endings)                |
+
+Source: `.claude/agents/ideas/narrative-rework-order-1.txt` (the READ-FIRST file of the ten-order
+narrative rework). That file is the intent; THIS file is the shipped contract, and it is the one
+orders 2-10 are written against. Where an order changes a rule during implementation, it updates
+this document in the same commit.
+
+Nothing in this document is a suggestion. A line that fails any rule below does not ship.
+
+
+UPDATE CONTRACT (mandatory — mirrors docs/story-ui-system.txt)
+=============================================================
+Any change to narrative CONTENT must, in the SAME commit:
+  - satisfy D1 (the line does one of the three jobs) — if it does none, it is not added;
+  - satisfy D2 (no proper noun before its plain introduction) and, once order-3 ships, carry its
+    term on the vocabulary ladder;
+  - satisfy D4 if it is funny, including the joke policy checklist in SECTION 4;
+  - update the SERIES STATUS LEDGER (SECTION 8) if it completes or changes an order;
+  - update docs/story-ui-system.txt per that file's own contract (channels, schedule, recipes).
+A change that cannot satisfy the relevant bullet is a change that has not been designed yet.
+
+
+============================================================
+SECTION 1 — SCOPE: WHAT ALREADY WORKS, AND IS NOT REBUILT
+============================================================
+The story ARCHITECTURE is sound. This series changes almost none of it. Everything below stays
+exactly as documented in docs/story-ui-system.txt, and no order in this series may renegotiate it:
+
+  - the five channels (boot card / bark / exchange / codex / framing) and their precedence;
+  - "adding a line is ONE register() call" — never a switch statement, anywhere;
+  - story-gating by DEEPEST REGION EVER REACHED, persisted — death never rewinds the story;
+  - no timers, ever; one tap always advances; nothing auto-dismisses;
+  - strings externalised to assets/story/story-strings.properties by stable id;
+  - the headless brain / dumb renderer split.
+
+THE BUDGET FOR THE WHOLE SERIES: at most two new headless classes per order and **no new
+renderer**. If an order finds itself designing a screen, it has gone wrong — every failure in
+SECTION 2 is a CONTENT failure, and the fix for a content failure is a line, not UI.
+
+
+============================================================
+SECTION 2 — THE SEVEN FAILURES (the diagnosis, with evidence)
+============================================================
+Evidence is quoted from the shipped table, assets/story/story-strings.properties, at the time of
+diagnosis. These are the problems the series exists to fix; each names the order that owns it.
+
+F1 — THE STRANGER PROBLEM                                                      (owner: order 2)
+   story.bark.coldopen.1 = "You're up. I'm ORA. I do the talking down here."
+   She gives a name and nothing else: not what she is, not why she is in the player's ear, not why
+   she is on their side. A name is not an introduction. For the rest of the game the most important
+   character in it is a stranger who keeps talking.
+
+F2 — THE JARGON WALL                                                           (owner: order 3)
+   Inside the first five minutes the game says, undefined: instance, reprint, soul reserve,
+   checkpoint, operator, contaminant, cradle, pattern, yield. Nine proper nouns, no definitions, on
+   channels that cannot be re-read. The codex defines them, and the codex is opt-in BY DESIGN — so
+   the words that carry the whole plot are explained only to the players who already care.
+
+F3 — A DEATH THE PLAYER DID NOT SEE AND NOBODY EXPLAINS                        (owner: order 2)
+   The launch screen opens on "PREVIOUS INSTANCE - TERMINATED / SOUL RESERVE .......... SUFFICIENT".
+   docs/story-ui-system.txt claimed a first-timer "reads it as flavour". They do not. They read two
+   unexplained words and a status readout for a thing they have never heard of, about an event that
+   happened off screen to somebody they have not met. The single best hook in the game — you are
+   already dead and the game opens on the receipt — is being spent on a player with no context to
+   spend it on. Worse: "SOUL RESERVE" is the Region-3 reveal, printed in full on screen one, years
+   of story ahead of the beat that makes it horrifying.
+
+F4 — ORA DOES NOT TEACH THE GAME                                               (owner: order 4)
+   `ControlHint` covers six things: MOVE, FIRE, RELOAD, HEAL, SWITCH_WEAPON, INVENTORY. The game
+   also contains, all unexplained: the GUARD stance (directional defense), enemy intent telegraphs
+   (WIND_UP / DEFEND / ATTACK_RANGED, drawn over the enemy), the cardinal-line rule that makes
+   stepping out of a lane a dodge, SKIP_TURN, USE_MACHINE, INSPECT_WEAPON, doors and keycards,
+   explosive barrels, level-up rewards, and the '>' portal that opens the FACILITY NAV console —
+   the branching route map, which is the entire shape of a run. A player reaches the end of floor
+   one and is handed a node graph nobody mentioned. These are exactly the systems players fail at,
+   and the game's only teacher is silent on all of them.
+
+F5 — JOKES WITH NOTHING UNDER THEM                                             (owner: order 6)
+   story.bark.log.rings.3     = "A lunch order, dated the last day. Soup. Bold."
+                                 — the joke is the whole line.
+   story.bark.floor.galleries.1 = "Okay, the smell in here is a war crime. Touch nothing."
+                                 — she is software in a suit; she cannot smell, and "war crime" is
+                                   a modern idiom sitting badly in a cosmic-horror register.
+   story.boot.wake.rings.1    = "Morning, sunshine. Reprint {instance}. New record."
+                                 — the friend of the character is scoring their deaths on the screen
+                                   that exists to tell them they died.
+   The RATE is not the problem (the LORE/LEVITY weighting handles rate). The problem is jokes that
+   reference nothing, and jokes aimed at the player's own death before the story has earned that
+   tone.
+
+F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD                      (owner: orders 2, 6)
+   story.bark.floor.rings.3    = "Crew bunks. Serial tags on them, same format as yours."
+                                 — the player has never been told they have a serial.
+   story.bark.region.rings     = "New body, same job. Down we go. I'll keep count."
+                                 — fires on region entry as the FIRST region beat, throwing away
+                                   the cloning reveal in a subordinate clause.
+   story.bark.lowhealth.rings.2= "You're leaking. The Cradle bill for this is mine."
+                                 — uses Cradle in Region 1, two regions before the Reliquary.
+
+F7 — NO RECOVERY PATH                                                          (owner: orders 4, 9)
+   Every teaching line is one-shot for the life of the save. A player who taps the X while the panel
+   is still fading in has permanently lost the only explanation of the heal button, and nothing in
+   the game measures whether anybody understood anything. `StoryTelemetry` already counts fast
+   dismissals; nothing acts on the number.
+
+
+============================================================
+SECTION 3 — THE DOCTRINE (D1-D8): the rules every order obeys
+============================================================
+D1  A LINE DOES ONE OF THREE JOBS.
+    It TEACHES (how to play), it REVEALS (what this place is), or it LANDS A CHARACTER BEAT (who ORA
+    is becoming). A line that does none of the three is CUT. A line that does two is worth four that
+    do one.
+    ENFORCED BY: review at registration; order-6 applies it retroactively to every shipped row;
+    order-10's LineQualityTest guards the mechanical parts of it.
+
+D2  PLAIN BEFORE PROPER.
+    No proper noun of this fiction may appear in ANY channel before its plain-language introduction
+    has been delivered. "They keep a copy of you and print a new body" comes first; the word
+    "reprint" comes after. The introduction must land at a moment the player can SEE the thing being
+    named.
+    ENFORCED BY: order-3 makes it a mechanical property of the catalog (the vocabulary ladder) plus
+    order-10's VocabularyLadderTest, which reads the SHIPPED properties file.
+
+D3  THE GAP IS THE LICENSE.
+    This print came back with holes in its memory. That single fact makes everything ORA explains —
+    controls, enemies, the facility, the job — DIEGETIC instead of a tutorial voice, and it is later
+    revealed to be no printing defect at all.
+    ENFORCED BY: order-2, which owns the gap and records the one permitted deviation from
+    story/02-player-and-cloning.md (see SECTION 7).
+
+D4  USEFUL BEFORE FUNNY BEFORE SAD.
+    Kept from story/dialog/ai-assistant.md, now with a floor under the funny: the JOKE POLICY, in
+    full, in SECTION 4. ORA stays dry and quick. She stops being glib.
+    ENFORCED BY: order-6's rewrite pass; order-10's banned-idiom list and the rule that a LEVITY row
+    is never one-shot STORY_CRITICAL.
+
+D5  SAY IT ONCE.
+    Repetition is earned by EVIDENCE, never by a timer. A beat may be said a second time only when
+    the player demonstrably MISSED it (dismissed inside the fast-dismiss window) or demonstrably
+    does not UNDERSTAND it (they keep dying to the thing it explains) — and the second telling uses
+    DIFFERENT, SHORTER, MORE CONCRETE words. Verbatim repetition is the thing players call nagging.
+    ENFORCED BY: order-4's competence model; order-10's NoRepeatVerbatimTest (no two shipped rows
+    share text; a re-teach row is never identical to, nor a prefix of, its original).
+
+D6  ORA IS A FRIEND WHO IS ALSO STAFF.
+    She is on the player's side from the FIRST line — warm, competent, useful, and honest about what
+    she is allowed to say. Her arc is NOT "cold assistant becomes friend"; it is the company varnish
+    coming off a friend who was always there. She never mocks the player, never withholds a mechanic
+    to be mysterious, and never says something she believes is false without the player being able
+    to feel it.
+    ENFORCED BY: the VOICE CHARTER (SECTION 6), which supersedes the samples in
+    story/dialog/ai-assistant.md.
+
+D7  THE ORGANIZATION IS UNDERSTOOD BEFORE IT IS HATED.
+    A voice that only threatens is scenery. It gets a mission, a rationale a reasonable person could
+    accept, and claims the world later disproves — so the player CATCHES the lie themselves rather
+    than being told about it.
+    ENFORCED BY: order-7's lie ledger; order-10's LieLedgerTest (every claim's counter-artefact
+    exists and is registered at or before the region where the claim is made).
+
+D8  IF IN DOUBT, CUT.
+    The catalog comes out of this series SMALLER and clearer. Deleting a weak row is always cheaper
+    than a knob, a toggle or a setting. "Too much story" is never fixed by a skip button.
+    ENFORCED BY: order-6 (which cuts outright), order-8's per-floor budget, and the telemetry that
+    turns "in doubt" into a measured fast-dismiss number instead of an argument.
+
+
+============================================================
+SECTION 4 — THE JOKE POLICY (the floor under D4)
+============================================================
+A joke ships only if every line of this checklist is true:
+
+  [ ] it rides a TRUE OBSERVATION about the room, the paperwork or the job — the observation is the
+      line, the joke is only the delivery;
+  [ ] it is not about the player's death, unless the story has reached Region 3; and it is not a
+      joke at all below the Reliquary;
+  [ ] it needs no idiom, no pun and no outside-world knowledge to parse (the player may be reading
+      in their second language, on a phone, mid-fight);
+  [ ] it is not the ONLY content in the line (a joke alone fails D1);
+  [ ] it is not one-shot STORY_CRITICAL — the spine never rides a punchline;
+  [ ] it is funny the FIRST time it is read. If it is only funny the second time, it is not funny
+      on a phone.
+
+ORA is dry, not zany. She is never ironic about the player's death, never punny, and never fills
+silence because a trigger fired.
+
+
+============================================================
+SECTION 5 — THE COMPREHENSION BAR (acceptance criteria, whole series)
+============================================================
+A player who has never read a word of the codex must be able to answer these, unprompted, at these
+moments. Every "answered by" line must live on an UNSKIPPABLE channel — the boot card, a one-shot
+STORY_CRITICAL bark, or a blocking exchange. A codex entry NEVER discharges a row of this table.
+
+  | By when                    | They can answer                                     |
+  |----------------------------|-----------------------------------------------------|
+  | 60 seconds in              | Who is the voice? What do I press? Which way is on? |
+  | 5 minutes in               | What am I fighting? What happens when I die?        |
+  |                            | What is this place? Who is giving me orders?        |
+  | End of floor 1 (portal)    | What is the map? Why do I get to choose a path?     |
+  | First real death           | Why am I back? Does anything carry over?            |
+  | Run 2                      | Why do I keep coming back? What is ORA, exactly?    |
+  | Region 2                   | What was being harvested here, and by whom?         |
+  | Region 3                   | What does bringing me back cost, and who pays it?   |
+  | Region 4                   | What is the thing at the bottom? What did I do?     |
+  | The ending                 | What do my three options actually do?               |
+
+Anything a player cannot answer at its row is a HOLE, and the fix is a line on a channel they cannot
+skip — never a codex entry, never a tooltip, never a longer version of the line that already failed.
+
+Order-10 automates this as `FirstTenMinutesTranscriptTest` (the machine half) plus the COLD-READ
+PROTOCOL (the human half: a person who has never played, ten minutes, five questions, answers
+recorded verbatim in the order's idea file before it may be marked IMPLEMENTED).
+
+
+============================================================
+SECTION 6 — ORA: THE VOICE CHARTER
+============================================================
+**This charter supersedes the personality samples in story/dialog/ai-assistant.md.** Where the two
+disagree, this wins; that file stays as background on her role, her arc and her diegetic origin.
+
+WHAT SHE IS, in her own first words: the assistant running in the player's suit. Not a person, not a
+ghost, not a mystery. Company software that has been in this suit through every one of their bodies,
+which is why she is the only one who remembers.
+
+  DO                                        DON'T
+  one line, plain words, tied to a moment    a paragraph, or two beats in one panel
+  tell them the useful thing first           bury the instruction under the mood
+  admit what she is not allowed to say       lie flatly to the player
+  name a thing before commenting on it       comment on a thing they cannot see yet
+  go quiet when it is bad                    fill silence because a trigger fired
+  count the deaths, and mean it later        celebrate them, ever
+  be dry                                     be zany, punny, or ironic about their death
+
+SIX LINES THAT SET THE RANGE (Region 1 -> Core). These are the calibration, not shipped rows:
+  "That's you awake. I'm ORA - the assistant in your suit."
+  "It's slow. Back up a step and let it walk into your shot."
+  "Shift roster. Forty-one people signed out. Nobody signed back in."
+  "Print eleven. I know what that costs now. I'd rather you didn't make it twelve."
+  "I'm not calling it a contaminant. I can't."
+  "Whatever you pick down here, I'm still here."
+
+Her arc, restated so nobody writes it backwards: she does not warm up. She is warm on line one. What
+changes is how much of the company is still in her mouth.
+
+
+============================================================
+SECTION 7 — WHAT THIS SERIES WILL NOT DO
+============================================================
+- NO tutorial screen, no help menu, no tooltip layer. The teacher is a character. F4 is fixed by
+  giving her more to say, not by building UI.
+- NO timers, no auto-advance, no "skip story" toggle. The anti-skip rule of the original series
+  (docs/story-ui-system.txt, PACING/ANTI-SKIP) still governs: we earn attention, never trap it.
+- NO quest markers, no objective tracker, no minimap ping. Order-9's recap is prose in her voice,
+  not a HUD element.
+- NO making the codex mandatory. It stays the archive. **If a fact exists only there, that is a bug
+  this series must fix by moving the fact onto a channel**, not by nudging players into the codex.
+- NO rewrite of the fiction in story/*.md, with ONE recorded exception: order-2 changes how the
+  memory block is EXPERIENCED at the start (story/02-player-and-cloning.md) and must update that
+  file in the same commit. Any other fiction change is out of scope for this series.
+
+
+============================================================
+SECTION 8 — THE SERIES MAP & STATUS LEDGER
+============================================================
+Orders 2-5 are the player-facing fix and are worth shipping in that exact order — each one is
+playable on its own. Order 6 is the cleanup pass and depends on 1-5's rules. Orders 7-9 are depth.
+Order 10 makes all of it stick.
+
+  | # | Order                                  | Fixes      | Ships                    | Status |
+  |---|----------------------------------------|------------|--------------------------|--------|
+  | 1 | Diagnosis, doctrine & series map       | —          | this document            | DONE   |
+  | 2 | The first ten minutes                  | F1, F3, F6 | launch + cold open + gap | TODO   |
+  | 3 | The vocabulary ladder                  | F2         | plain-before-proper data | TODO   |
+  | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | TODO   |
+  | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | TODO   |
+  |   |                                        |            | survive it               |        |
+  | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites          | TODO   |
+  | 7 | The Organization, reworked             | D7         | mission, rationale, lies | TODO   |
+  | 8 | The lore drip & region beat maps       | D8         | budget + beat maps       | TODO   |
+  | 9 | Re-entry, recap & missed-beat recovery | F7         | coming back after 3 days | TODO   |
+  |10 | The gates                              | all        | tests, telemetry, cold   | TODO   |
+  |   |                                        |            | reads                    |        |
+
+Each order updates its own row when it lands. Intent for each lives in
+`.claude/agents/ideas/narrative-rework-order-N.txt`; shipped behaviour lands in
+docs/story-ui-system.txt.
+
+
+============================================================
+SECTION 9 — THE CHANGE PROTOCOL (how to add a line, forever)
+============================================================
+This outlives the series. Every narrative row added from here on runs this checklist BEFORE the
+register() call is written:
+
+  1. WHICH JOB? Name it: teaches / reveals / lands a beat. If you cannot name one, stop — the line
+     does not exist (D1).
+  2. WHICH CHANNEL? Spine beats ride unskippable channels only (boot card, one-shot STORY_CRITICAL
+     bark, blocking exchange). Everything else is a bark or the codex. If a comprehension-bar row
+     depends on it, it may NOT be a codex entry (SECTION 5).
+  3. WHICH WORDS? Every proper noun in the row must already be free at that region band (D2 / the
+     ladder). At most one new term per row.
+  4. IS IT FUNNY? Then run the SECTION 4 checklist, all six boxes (D4).
+  5. IS IT A REPEAT? A second telling needs evidence and different, shorter, more concrete words —
+     never the same string on a second trigger (D5).
+  6. IS IT AN ORGANIZATION CLAIM? Then it needs its counter-artefact registered at or before the
+     region where the claim lands (D7).
+  7. COULD IT BE CUT INSTEAD? If the answer is "maybe", cut it (D8).
+  8. THE COMMIT: one register() call, one string row (properties + Java default), the relevant
+     ledger/map/topic row, and docs/story-ui-system.txt updated per its own contract.
+
+The governing invariant is unchanged from the machine side: if you had to edit a switch statement to
+add a line, the registries are being bypassed — fix that instead.
+
+
+============================================================
+SECTION 10 — DEFINITION OF DONE (the whole series)
+============================================================
+- Every row of the comprehension bar (SECTION 5) is answered on an unskippable channel, proven by
+  test, not by reading.
+- No proper noun ships before its plain introduction (order-3's gate green).
+- Every teachable system in the game has an ORA line and a re-teach line (order-4's gate green).
+- The FLAVOUR pools are SMALLER than they are today, the teaching and reveal rows are far more
+  numerous, and 100% of shipped rows do one of D1's three jobs. Every surviving joke passes D4.
+- docs/story-ui-system.txt and this document are updated in the same commits as the code, per both
+  files' update contracts.

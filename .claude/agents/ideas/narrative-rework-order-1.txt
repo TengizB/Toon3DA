@@ -1,7 +1,15 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Meta
 TITLE: Narrative rework 1 — Diagnosis, doctrine & series map
 ---
+
+IMPLEMENTED AS: docs/narrative-authority.txt — the CONTENT contract, sitting beside
+docs/story-ui-system.txt (which governs the machine). It carries the seven failures with their
+evidence, the doctrine D1-D8, the joke policy, the comprehension bar, ORA's voice charter, the
+prohibitions, the series map + status ledger, the add-a-line CHANGE PROTOCOL (the part that
+outlives the series) and the series definition of done. No code shipped, as this order requires.
+Wired into docs/INDEX.md, .claude/CLAUDE.md, story-ui-system.txt's header/UPDATE CONTRACT/RECIPES,
+and story/dialog/ai-assistant.md (which the voice charter supersedes in part).
 
 PURPOSE
 The READ-FIRST file of the narrative rework series. It states exactly what is wrong with the
