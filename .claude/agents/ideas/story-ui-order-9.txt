@@ -1,6 +1,6 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Story UI 9 — Atmosphere & mood direction (audiovisual)
+TITLE: Story UI 9 — Atmosphere & mood: audio + hue, zero gameplay impact
 ---
 
 PURPOSE
@@ -9,84 +9,252 @@ story as much as the words do. This is cross-cutting: it informs order-1 (visual
 order-8 (framing screens), the environment art, and audio. Read it before making any
 audiovisual mood decision. It is direction, not a single screen.
 
+It is also, deliberately, the most CONSTRAINED order in the series. Everything below is a
+coat of paint and a soundtrack. It does not touch the game.
+
+============================================================
+THE FOUR HARD CONSTRAINTS (read before anything else)
+============================================================
+These are not preferences. Any proposal in this file that conflicts with one of them is
+wrong and gets cut, not negotiated. They exist because mood work has exactly one failure
+mode: it starts as a filter and ends as a balance change nobody signed off on.
+
+C1 — ENEMY PLACEMENT IS UNTOUCHABLE.
+     No change to where enemies spawn, how many spawn, which archetypes spawn, spawn
+     density per room/floor/region, wake radius, aggression, or AI. `EnemyManager`,
+     `EnemyConstants`, `GameBalance`, `LevelGenConstants` enemy-count params and every
+     enemy spawn symbol in every level file are OUT OF SCOPE for this order. Full stop.
+
+C2 — LONELINESS IS NEVER BOUGHT WITH EMPTY ROOMS.
+     "Emptier level, fewer things in it" is the lazy version of this pillar and it is
+     BANNED. A room stripped of enemies is not atmospheric, it is a worse room: it removes
+     decisions, drains tension and quietly nerfs the floor. Loneliness in this game is a
+     SOUND and a VOICE problem, not a population problem — see PILLAR 1 for the six
+     techniques that are actually allowed.
+
+C3 — THE GAME NEVER GETS DARKER.
+     The player must be able to see, at all times and at least as clearly as today: walls,
+     doors, floor markings, props, hazards, items on the ground, and above all ENEMIES —
+     including the ranged ones on the player's cardinal line, which is life-or-death
+     information. Mood is expressed through HUE and SATURATION at constant perceived
+     brightness. Never through luminance. The specific numbers this order may not lower
+     are listed in the LEGIBILITY CONTRACT below.
+
+C4 — ZERO GAMEPLAY AND ZERO DIFFICULTY IMPACT.
+     Nothing here may change damage, health, ammo, drop rates, XP, sight lines, field of
+     view, ray reach, turn costs, or any decision the player makes. The proof obligation
+     is mechanical, not a promise: see VERIFICATION at the bottom. If a mood idea can only
+     land by changing a number that affects play, the idea is deleted.
+
 THE INTENDED FEELING (one line)
 Lonely, wrong, and quietly grieving — cosmic horror by RESTRAINT, not gore. The dread comes
 from realizing the "monster" is a victim and you are its betrayer, not from jump scares.
 
-THE FIVE PILLARS OF MOOD
-1. LONELINESS — you are one small thing, deep, alone but for a voice in your ear and a voice
-   in your head. Wide empty spaces, distant sounds, no crowds.
+============================================================
+THE FIVE PILLARS OF MOOD (each rewritten to obey C1–C4)
+============================================================
+1. LONELINESS — you are one small thing, deep, alone but for a voice in your ear and a
+   voice in your head. Delivered ONLY by these means:
+     a) The drone and the silence around it (see SOUND). Loneliness is 80% audio.
+     b) ORA is the only companion, and she is not there. The story channels already
+        establish that every other voice reaches you through a speaker, a terminal, or
+        your own skull — nobody is standing next to you and nobody ever will be.
+     c) There are no allies, no rescued NPCs, no friendly faces, no chatter channel, and
+        there must never be. The absence of a companion mechanic IS the pillar.
+     d) The crew is present only as PAPERWORK — terminal logs, ORA's take on them, codex
+        entries. You are always reading the words of people who are already gone.
+     e) Room ACOUSTICS, not room contents: reverb tail and footstep spacing sell "this
+        space is big and you are the only thing in it" without removing one enemy.
+     f) The reprint counter. The number climbing is the loneliest object in the game.
+   NOT delivered by: fewer enemies, emptier rooms, longer corridors, bigger levels,
+   removed props, or reduced loot. (C1, C2)
+
 2. WRONGNESS — something is subtly off before you can name it: a held note under the
-   machinery, a corridor that feels watched, light that flickers when the planet is near.
-3. RESTRAINT — silence and space do the work. Long quiet lulls; the game is not a constant
-   assault. Horror lands because it is rare and earned.
-4. GRIEF — deep down the mood turns from fear to sorrow. The Wound and Core should feel less
-   like a monster's lair and more like standing inside something in pain.
+   machinery, a corridor that feels watched, a light that shifts hue when the planet is
+   near. Carried by sound and colour temperature, never by hiding things from the player.
+
+3. RESTRAINT — silence and space do the work. The game is not a constant audio assault;
+   horror lands because it is rare and earned. Restraint here means the MIX gets quiet,
+   never that the FLOOR gets empty. (C2)
+
+4. GRIEF — deep down the mood turns from fear to sorrow. The Wound and Core should feel
+   less like a monster's lair and more like standing inside something in pain. Expressed
+   in warm organic hues, the heartbeat under the drone, and ORA's already-written tone
+   shift — not in dimming the lights.
+
 5. THE TURN (mood tracks the story's grey) — it STARTS almost mundane and corporate (false
    safety, fluorescent normalcy) and CURDLES as the truth surfaces. Atmosphere is part of
    "the grey is staged, not stated": the world stops feeling like a job and starts feeling
-   like a crime.
+   like a crime. The curdle is a colour and audio journey from COLD-CLEAN to WARM-ORGANIC
+   at flat brightness — the palette changes character, not exposure.
 
-MOOD PROGRESSION BY REGION (lighting, palette, sound — track the reveal)
-  Region 1 Habitation Rings — cold, clean fluorescent; desaturated corporate greys/blues;
-     hum of failing machinery; almost ordinary. False safety.
+============================================================
+MOOD PROGRESSION BY REGION (hue, sound — brightness stays flat)
+============================================================
+Read every row as: same amount of light, different colour of light, different sound.
+  Region 1 Habitation Rings — cold clean fluorescent; desaturated corporate greys and
+     blues; hum of failing machinery; almost ordinary. False safety.
   Region 2 Harvesting Galleries — wet, organic, industrial-abattoir; sickly reds and meat
      tones creeping into the grey; dripping, the same low note the specimens scream on.
-  Region 3 The Reliquary — sterile but humming with power; sharp lights over Cradle banks;
-     the drone gains a pulse; unsettlingly clinical for what it does.
-  Region 4 The Wound — no longer facility; raw living tissue, drills in flesh; deep reds,
-     bioluminescence, a slow heartbeat felt more than heard; warmth that reads as a body.
-  Region 5 The Core — overwhelming, intimate, vast; you are INSIDE the mind. Sound and light
-     resolve into something almost tender. Awe over terror.
+  Region 3 The Reliquary — sterile but humming with power; sharp clean whites over the
+     Cradle banks (this region is the BRIGHTEST, and that is the horror — a well-lit
+     abattoir reads worse than a dark one); the drone gains a pulse.
+  Region 4 The Wound — no longer facility; raw living tissue, drills in flesh; deep reds
+     and bioluminescent teals, a slow heartbeat felt more than heard; the light now reads
+     as coming from a body rather than from a fixture, at the same intensity as Region 1.
+  Region 5 The Core — overwhelming, intimate, vast; you are INSIDE the mind. Sound and
+     light resolve into something almost tender. Awe over terror. Bright, not dark.
 
-COLOR & LIGHT DIRECTION
-- Global drift: desaturated/cold at the top → saturated organic reds and living light at the
-  bottom. The player should feel they've left "facility" and entered "body."
-- Reuse and extend existing systems, do not reinvent: EffectConstants (ambient light,
-  vignette, transitions), RenderConstants red-alert pulse, WallRenderer distance shading,
-  FloorCeilingRenderer backdrop, HitVignetteRenderer. Add region ambient-light/tint params
-  to EffectConstants/RenderConstants (never hardcode).
-- Darkness is a tool: limited sight lines, shadow, the deep feeling of not-far-enough light.
+============================================================
+COLOUR & LIGHT DIRECTION
+============================================================
+- Global drift: cold/desaturated at the top → warm/saturated organic at the bottom. The
+  player should feel they have left "facility" and entered "body". This is a CHROMA
+  journey. Total luminance across the five regions stays within a narrow band (see the
+  LEGIBILITY CONTRACT); measure it, do not eyeball it.
+- Reuse and extend existing systems, do not reinvent: `EffectConstants` (ambient light,
+  vignette, transitions), `RenderConstants` red-alert pulse, `WallRenderer` distance
+  shading, `FloorCeilingRenderer` backdrop, `HitVignetteRenderer`.
+- Add per-region ambient TINT parameters (hue/saturation multipliers) to
+  `RenderConstants`/`EffectConstants` — never hardcoded, and never a brightness multiplier
+  below 1.0. If a region wants to feel heavier, it shifts hue and gains saturation; it
+  does not lose light.
+- Region tint applies to the WORLD BACKDROP layer only — walls, floor, ceiling. It is NOT
+  applied to enemy sprites, enemy health bars, item pickups, hazard props, the HUD, or any
+  story panel. Those keep their existing colour so contrast against the tinted world goes
+  UP, not down. A red enemy in a red region must be MORE readable after this order than
+  before it, never less.
+- The old draft of this file contained the line "darkness is a tool". It has been deleted
+  and is not coming back. Limited sight lines, shadow and "not-far-enough light" are not
+  available techniques here: every one of them is a stealth difficulty change. (C3, C4)
 
-SOUND & MUSIC (supports "make them feel it" without voice acting)
-- A LOW PLANETARY DRONE is the spine of the audio. It is faint at the top and deepens with
-  descent; deep down it carries a slow heartbeat/pulse. When the planet is "near" (before it
-  speaks), the drone swells and the world quiets around it.
-- SILENCE is used deliberately — cut sound to near-nothing in key moments; let footsteps and
-  the drone breathe. Never wall-to-wall music.
-- Per-voice audio motifs (ties to order-7 Part D speaker stings): ORA warm/human, planet
-  low/organic, Organization cold/electronic. A brief motif can underscore each entity's beats.
+============================================================
+SOUND & MUSIC (this is where most of the mood actually lives)
+============================================================
+Audio does the work that darkness is not allowed to do. Budget accordingly: if this order
+ships with only the audio half built, it has still delivered most of its value.
+- A LOW PLANETARY DRONE is the spine. Faint at the top, deepening with descent; deep down
+  it carries a slow heartbeat/pulse. When the planet is "near" (before it speaks), the
+  drone swells and the world quiets around it.
+- SILENCE is used deliberately — cut the mix to near-nothing in key moments; let footsteps
+  and the drone breathe. Never wall-to-wall music.
+- Per-voice audio motifs (ties to order-7 Part D speaker stings, reusing `StoryAudio` —
+  never a second audio owner): ORA warm/human, planet low/organic, Organization
+  cold/electronic.
 - Enemy-family sound identity: undead (human, wrong), insect (that shared scream-note),
   machine (cold servo/alarm), demon/golem (deep, planetary, pained — NOT generic monster
-  roars; they should sound like the planet, because they are).
-- Music is minimal and ambient; it SWELLS only at story beats and the core. No action-movie
-  score; this is dread and grief, not spectacle.
+  roars; they should sound like the planet, because they are). Audio identity ONLY: no
+  change to enemy stats, AI, or where they stand. (C1)
+- An enemy's sound may only ADD information, never replace it. A sound cue is a bonus for
+  players with audio on; the same enemy stays exactly as visible as it is today for a
+  player with the phone muted. Nothing in this game may be audio-only.
+- Music is minimal and ambient; it SWELLS only at story beats and the Core. No
+  action-movie score; this is dread and grief, not spectacle.
 
-SCREEN EFFECTS IN SERVICE OF DREAD (subtle, never cheap)
-- Subtle film grain / low-light noise for unease (togglable).
-- "Wrongness" cues when the planet reaches for you: a brief desaturation flicker, a frame of
-  a sign reading wrong, the drone catching. Rare, never a flash-bang.
-- Deep down, a heartbeat-synced vignette pulse (reuse HitVignetteRenderer / red-alert pulse
-  machinery). Gentle.
-- Combat screen-shake/impact (ImpactEffectSystem) stays, but must NOT disturb story panels
-  (order-1) or become the dominant mood — restraint holds even in fights.
+============================================================
+SCREEN EFFECTS IN SERVICE OF DREAD (subtle, never cheap, never in the way)
+============================================================
+- Subtle film grain / low-light noise for unease. Off by default is acceptable; togglable
+  is mandatory. Grain amplitude is capped so a 1×1 tile feature never becomes ambiguous.
+- "Wrongness" cues when the planet reaches for you: a brief hue/desaturation shift, a sign
+  reading wrong for a moment, the drone catching. Hard rules: rare; never a flash-bang;
+  never a full-screen luminance drop; never applied to enemy sprites or the HUD; never
+  fired while any enemy is awake (reuse the `BarkSystem.setCombatSpike()` signal that
+  already exists rather than inventing a second combat detector); always suppressed by the
+  existing "reduced motion" setting.
+- Deep down, a heartbeat-synced vignette pulse (reuse `HitVignetteRenderer` / red-alert
+  pulse machinery). Gentle, edge-only, and its peak alpha must sit BELOW the existing
+  low-HP vignette floor so it can never be mistaken for a damage cue or mask one.
+- Combat screen-shake/impact (`ImpactEffectSystem`) is unchanged by this order. It must
+  not disturb story panels (order-1) or become the dominant mood — restraint holds even in
+  fights.
 
-PACING OF DREAD
-- Alternate tension and lull. After an intense fight or a heavy reveal, give a quiet space.
-- Do not stack scares. The scariest tool is a quiet room that feels occupied.
+============================================================
+PACING OF DREAD (a MIX and STORY-CHANNEL rhythm, not an encounter rhythm)
+============================================================
+- Alternate tension and lull IN THE AUDIO AND THE STORY CHANNELS. After an intense fight
+  or a heavy reveal, the mix opens up and the drone comes forward. The lull is a quiet
+  soundtrack over the same fight the game was always going to give you.
+- This order NEVER inserts a lull by removing, delaying, or thinning an encounter, and
+  never changes floor length or room count to make room for a quiet stretch. (C1, C2, C4)
+- The encounter rhythm is already owned elsewhere — the route map and the balance
+  simulator. This file rides that rhythm; it does not author it.
+- Do not stack scares. The scariest tool available to us is a quiet room that is fully lit
+  and still feels occupied.
 - Let the boot card / reprint moments be small pockets of calm-dread, not punishment.
 
-MOOD MUST NEVER FIGHT READABILITY OR FAIRNESS
-- Story-UI panels always stay legible over any atmosphere (dark panel behind text, order-1).
-- Darkness/effects never hide gameplay-critical information (enemies on the same cardinal
-  line, hazards). Atmosphere is a coat of paint over a readable game, never a fog over it.
+============================================================
+THE LEGIBILITY CONTRACT (the concrete floor under C3)
+============================================================
+Mood is a coat of paint over a readable game, never a fog over it. Concretely, this order
+may NOT lower any of the following, in any region, under any effect, at any moment:
+  - `RenderConstants.WALL_SHADE_MIN_BRIGHTNESS`
+  - `RenderConstants.ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS` (may only go UP)
+  - `RenderConstants.MAX_LIGHTING_SHADE`
+  - `RenderConstants.COLUMN_SHADE_MIN`
+  - the floor/ceiling ambient colours' luminance
+  - `Constants.RAY_MAX_LENGTH_CELLS` or `PLAYER_FIELD_OF_VIEW_DEGREES` — these are
+    gameplay reach, not mood (C4)
+and may NOT raise any always-on vignette alpha during `RunPhase.PLAYING`.
+  - Story-UI panels always stay legible over any atmosphere (dark panel behind text,
+    order-1) — atmosphere never bleeds under a panel.
+  - Enemy health bars, the HUD, ground items and the mini-map are never tinted, dimmed,
+    grained, or vignetted by this order.
+  - Nothing critical is ever conveyed by colour alone; a hue shift is always redundant
+    with something already drawn or written.
 
+============================================================
 ACCESSIBILITY
-- Settings: reduce grain/noise, reduce screen-shake, reduce flashing-adjacent effects,
-  master/music/ambient volume, and a "reduced motion" option. Mood degrades gracefully — the
-  game is fully playable and legible with all effects minimized.
+============================================================
+- Settings, alongside order-6's existing narrative knobs: reduce grain/noise, reduce
+  screen-shake, reduce flashing-adjacent effects, reduce colour intensity (drops region
+  tint toward neutral for colour-vision comfort), master/music/ambient volume, and
+  "reduced motion".
+- Mood degrades gracefully: with every effect minimized and audio off, the game is fully
+  playable, fully legible and exactly as difficult. That is the acceptance bar for the
+  whole order — if turning the atmosphere off changes how hard the game is, the
+  atmosphere was doing gameplay work it was never allowed to do.
+- No photosensitivity hazards: no rapid full-screen luminance oscillation, ever.
 
+============================================================
+WHAT THIS ORDER ACTUALLY TOUCHES (scope fence)
+============================================================
+MAY touch:  `RenderConstants` / `EffectConstants` (new region tint + grain + pulse params),
+            `FloorCeilingRenderer` and `WallRenderer` colour application, a new region-mood
+            renderer/overlay if one is needed, `render/StoryAudio` (extended, not replaced),
+            `docs/story-ui-system.txt`, the accessibility settings surface.
+MUST NOT touch: `enemy/**`, `EnemyConstants`, `GameBalance`, `BalanceConfig`, `sim/**`,
+            `level/LevelGenerator` + `LevelGenConstants`, `route/**` economics, any
+            `assets/levels/*.txt`, weapon stats, item drop tables, `PlayerController`,
+            `Constants` FOV/ray reach.
+
+============================================================
+VERIFICATION (how "no gameplay impact" is proven, not promised)
+============================================================
+1. `./gradlew test` passes, and the balance audit's numbers are byte-identical to the
+   pre-change run.
+2. `./gradlew balanceSim` produces an IDENTICAL report to the pre-change run for the same
+   seed matrix — same TTK, same deaths, same band results. A single differing number means
+   this order leaked into gameplay and must be reverted to the point where it does not.
+3. The diff touches no file in the MUST NOT TOUCH list above. This is checkable by reading
+   the diff's file list alone and should be checked that way.
+4. Side-by-side screenshots per region, before/after, with mean-luminance sampled: the
+   after-image is never darker than the before-image, and enemy-against-wall contrast is
+   equal or higher in every region.
+5. A run played with all atmosphere settings minimized is indistinguishable, in every
+   gameplay-relevant respect, from the game as it exists today.
+
+============================================================
 DEFINITION OF DONE
-- Each region reads with its intended palette/light/sound; the drone deepens with descent and
-  swells when the planet nears; silence and lulls are used; mood curdles from corporate-normal
-  to grieving-body across the descent; all effects are togglable and never harm readability.
+============================================================
+- Each region reads with its intended palette and sound; the drone deepens with descent and
+  swells when the planet nears; silence and lulls are used; mood curdles from
+  corporate-normal to grieving-body across the descent.
+- Brightness is flat across the descent and no region is darker than the game is today;
+  enemies, hazards and items are at least as readable in every region as they are now.
+- Enemy placement, counts, AI and every balance number are provably untouched (VERIFICATION
+  1–3), and the loneliness pillar is carried entirely by audio, voice and absence-of-allies
+  (PILLAR 1 a–f) — never by a thinner floor.
+- All effects are togglable, degrade gracefully to a fully legible game, and never harm
+  readability or fairness.
+- `docs/story-ui-system.txt` updated in the same commit.
