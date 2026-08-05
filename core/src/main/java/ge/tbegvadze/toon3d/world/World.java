@@ -56,7 +56,11 @@ import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
+import ge.tbegvadze.toon3d.narrative.FramingMenu;
+import ge.tbegvadze.toon3d.narrative.PauseMenuItem;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
+import ge.tbegvadze.toon3d.narrative.TitleMenuItem;
+import ge.tbegvadze.toon3d.narrative.TitleScreenSystem;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
 import ge.tbegvadze.toon3d.narrative.StorySettings;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
@@ -124,7 +128,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE, CODEX_OPEN }
+    private enum RunPhase { TITLE, BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE, CODEX_OPEN, PAUSE_MENU, SETTINGS_MENU, ENDING_HOLD }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -348,10 +352,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private final RunStats             runStats;
     private final PersistentStats      persistentStats;
-    private final DeathOverlayRenderer deathOverlayRenderer;
     private       float                deathBeatTimerSeconds  = 0f;
-    private       float                deathBlinkTimerSeconds = 0f;
     private       boolean              resetRequested         = false;
+    /** Guards the records against being filed twice when a run ends through two seams at once. */
+    private       boolean              runRecordsSaved        = false;
 
     // -------------------------------------------------------------------------
     // Story UI — BARK LAYER (order-2): the non-blocking one-liner channel.
@@ -427,6 +431,31 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private float                      codexScrollAtTouchDown;
 
     // -------------------------------------------------------------------------
+    // Story UI — FRAMING SCREENS (order-8): the screens that BOOK-END play.
+    // The launch/title screen (which opens on the game telling the player they are already dead),
+    // the in-suit pause menu, the settings screen, the reprint report folded into the death beat,
+    // and the way off an ending that authorises no reprint.  titleScreenSystem is the headless
+    // brain; framingScreenRenderer draws whatever it and the two menu models report.
+    // -------------------------------------------------------------------------
+    private final TitleScreenSystem      titleScreenSystem;
+    private final FramingScreenRenderer  framingScreenRenderer;
+    private final InstanceReportRenderer instanceReportRenderer;
+    private final FramingMenu            pauseMenu    = new FramingMenu();
+    private final FramingMenu            settingsMenu = new FramingMenu();
+    /** Which row the thumb went down on in whichever framing menu is up, so a slide-off cancels. */
+    private int      framingPressedRow    = -1;
+    /** The phase the settings screen was opened from — it is a page of a menu, not a detour. */
+    private RunPhase settingsReturnPhase  = RunPhase.TITLE;
+    /** True while the reprint card is showing its REPORT page instead of the card. */
+    private boolean  showingInstanceReport;
+    /** True when tapping CONTINUE on the card on screen ends this world rather than resuming it. */
+    private boolean  bootCardEndsWorld;
+    /** How the world Main builds next should open — the death/abandon/ending handshake. */
+    private StartMode nextStartMode       = StartMode.TITLE;
+    /** MERGE presents no card: the frozen view holds, fading, for this long before standing down. */
+    private float    endingHoldSeconds;
+
+    // -------------------------------------------------------------------------
     // Timing accumulators
     // -------------------------------------------------------------------------
     private float alertTimeSeconds    = 0f;
@@ -436,25 +465,36 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Constructors
     // -------------------------------------------------------------------------
 
-    /** Creates a new run from a seed; starts in the weapon-selection staging room. */
+    /** Creates a new game from a seed, opening on the launch / title screen (Story UI order-8). */
     public World(long runSeed) {
-        this(new StartGameLevelGenerator(runSeed), runSeed);
+        this(runSeed, StartMode.TITLE);
+    }
+
+    /**
+     * Creates a new world from a seed, opening the way {@code startMode} asks: on the title screen
+     * (app launch, an abandoned run, a finished story) or straight into a run, fading up from black
+     * (a reprint, whose card the world that just died already showed).
+     */
+    public World(long runSeed, StartMode startMode) {
+        this(new StartGameLevelGenerator(runSeed), runSeed, startMode);
     }
 
     /** Creates a World from a pre-built level (file-loaded or test). Uses a random run seed. */
     public World(Level level) {
-        this(level, System.currentTimeMillis(), false, null);
+        this(level, System.currentTimeMillis(), false, null, StartMode.RESPAWN);
     }
 
     public World(String levelFile) {
-        this(new LevelLoader().load(levelFile), System.currentTimeMillis(), false, null);
+        this(new LevelLoader().load(levelFile), System.currentTimeMillis(), false, null,
+             StartMode.RESPAWN);
     }
 
-    private World(StartGameLevelGenerator startGen, long runSeed) {
-        this(startGen.generate(), runSeed, true, startGen);
+    private World(StartGameLevelGenerator startGen, long runSeed, StartMode startMode) {
+        this(startGen.generate(), runSeed, true, startGen, startMode);
     }
 
-    private World(Level initialLevel, long runSeed, boolean startRoom, StartGameLevelGenerator startRoomGen) {
+    private World(Level initialLevel, long runSeed, boolean startRoom,
+                  StartGameLevelGenerator startRoomGen, StartMode startMode) {
         this.runSeed        = runSeed;
         this.weaponRoller   = new WeaponRoller(runSeed);
         this.isStartingRoom = startRoom;
@@ -549,11 +589,30 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         codexOverlayRenderer.setCodexSystem(codexSystem);
         codexOverlayRenderer.setStrings(storyStrings);
         applyStoryAccessibilitySettings();
-        // EVERY run opens on the reprint card, the very first one included: in-fiction the original
-        // self has just died, so the player's first boot shows the same death notice as their
-        // hundredth (story/01-timeline.md). A file-loaded or test world skips it — it is not a run.
-        if (startRoom && bootCardSystem.present(BootCardVariant.REPRINT)) {
-            runPhase = RunPhase.BOOT_CARD;
+
+        // Story UI FRAMING SCREENS (order-8) — the launch screen, the two menus, and the report the
+        // death beat folds in. The title screen shares the same persistent StoryProgress as every
+        // other channel, so it knows whether there is anything to CONTINUE into and which ending
+        // (if any) this save has already reached.
+        titleScreenSystem      = new TitleScreenSystem(BootCardCatalog.defaultRegistry(), storyStrings,
+                                                       barkSystem.getProgress());
+        framingScreenRenderer  = new FramingScreenRenderer();
+        framingScreenRenderer.setStrings(storyStrings);
+        framingScreenRenderer.setTitleScreenSystem(titleScreenSystem);
+        instanceReportRenderer = new InstanceReportRenderer();
+        instanceReportRenderer.setStrings(storyStrings);
+
+        // HOW THIS WORLD OPENS (order-8). A run is one World, so ending one means building the next;
+        // what the player sees at that seam is the whole of StartMode:
+        //   TITLE   — the app just launched, or a run was abandoned or finished. The descent waits.
+        //   RESPAWN — a reprint. The card was already printed by the world that DIED, which is what
+        //             makes death -> reprint ONE presentation; here the screen simply fades up.
+        // A file-loaded or test world is neither: it is not a run, so it starts playing at once.
+        if (startRoom && startMode == StartMode.TITLE) {
+            runPhase = RunPhase.TITLE;
+        } else if (startRoom) {
+            fadeTimerSeconds = 0f;
+            runPhase         = RunPhase.FADING_IN;
         }
 
         // Event text and hit vignette — run-persistent feedback systems
@@ -592,10 +651,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         weaponInspectOverlayRenderer.setOnEvictSlot(this::resolveWeaponEvict);
         weaponInspectOverlayRenderer.setOnClose(this::closeWeaponInspect);
 
-        // Permadeath — run stats and death overlay
+        // Permadeath — run stats. The report that used to be its own death screen is now a page of
+        // the reprint card's screen (order-8 Part B); its renderer is built with the framing screens.
         runStats             = new RunStats();
         persistentStats      = StatsStore.load();
-        deathOverlayRenderer = new DeathOverlayRenderer();
 
         // Wire damage listener: player damage triggers vignette flash, screen text, and stats.
         player.setPlayerDamageListener(netDamage -> {
@@ -1263,6 +1322,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setWeaponSwitchCallback(
             () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
         playerController.setInventoryToggleCallback(this::openInventory);
+        // The in-suit pause menu (Story UI order-8 Part C) — a menu, so it costs no turn.
+        playerController.setPauseMenuCallback(this::openPauseMenu);
         playerController.setInspectWeaponCallback(this::openWeaponInspectOverlay);
         playerController.setShopOpenCallback(this::openShop);
         if (touchInputState != null) {
@@ -1772,6 +1833,37 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // a modal.
         barkSystem.setSuppressed(runPhase != RunPhase.PLAYING);
 
+        // TITLE phase (order-8 Part A) — the launch screen. Nothing is running: the world behind it
+        // is built but frozen and not even drawn, and the descent begins only when the player picks
+        // it. The screen opens on the game telling them they are already dead.
+        if (runPhase == RunPhase.TITLE) {
+            updateTitleScreen(deltaTime);
+            return;
+        }
+
+        // PAUSE_MENU / SETTINGS_MENU (order-8 Parts C and D) — the in-suit menus. Hard-pause
+        // overlays like every other: the world takes no turn, the bark queue is suppressed above and
+        // resumes intact, and nothing in either screen is on a timer.
+        if (runPhase == RunPhase.PAUSE_MENU) {
+            updatePauseMenu();
+            return;
+        }
+        if (runPhase == RunPhase.SETTINGS_MENU) {
+            updateSettingsMenu();
+            return;
+        }
+
+        // ENDING_HOLD (order-8 Part D) — MERGE. There is no card and there is no input: the last
+        // frames are the frozen world the player was standing in, fading out, because the interface
+        // has simply stopped being theirs (story/06-endings.md).
+        if (runPhase == RunPhase.ENDING_HOLD) {
+            endingHoldSeconds += deltaTime;
+            if (endingHoldSeconds >= StoryUiConstants.STORY_ENDING_MERGE_HOLD_SECONDS) {
+                standDownToTitle();
+            }
+            return;
+        }
+
         // BOOT_CARD phase (order-3) — the reprint card owns the screen before control is handed
         // back at the checkpoint. The world is frozen behind it: no sim, no ticks, no barks.
         //
@@ -1779,10 +1871,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // the beat can. One tap on CONTINUE always proceeds — even mid-reveal — and a tap anywhere
         // else just finishes the staggered print-in, so the card can never trap anyone.
         //
-        // A TERMINAL card (the FREE / KILL endings) refuses continue by design: it prints "NO
-        // CHECKPOINT AUTHORIZED FOR REPRINT" and then nothing reloads. That absence IS the ending,
-        // so this phase deliberately has no exit for it — the framing flow around that screen
-        // (return to title, credits) is order-8's, and it reads isTerminal() to take over.
+        // Order-8 hangs two things off this screen. The REPORT page — the run that just ended, in
+        // machine voice — so a death is ONE presentation rather than a stats screen competing with
+        // the card. And the way off a TERMINAL card (the FREE / KILL endings): those print "NO
+        // CHECKPOINT AUTHORIZED FOR REPRINT" and draw no CONTINUE, because that absence IS the
+        // ending, so the only thing offered once the card has finished printing is standing down to
+        // a title screen the ending has changed.
         if (runPhase == RunPhase.BOOT_CARD) {
             bootCardSystem.update(deltaTime);
             // Audio from the update path, never from render: the SYSTEM sting on the first status
@@ -1792,22 +1886,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 if (touchInputState != null) touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
-                if (BootCardRenderer.isInsideContinueButton(cardTouchPosition.x, cardTouchPosition.y)) {
-                    bootCardSystem.requestContinue();
-                } else {
-                    bootCardSystem.skipReveal();
-                }
+                handleBootCardTap(cardTouchPosition.x, cardTouchPosition.y);
+                if (resetRequested) return;   // the ending just stood the world down
             }
             if (bootCardSystem.isContinueRequested()) {
                 bootCardSystem.clear();
-                // OBEY (order-5) is the one ending whose card still continues, because the reward it
-                // hands the player is more of the same, forever. Continuing from it therefore means
-                // exactly that: the reset path, a fresh print, the same descent, with the counter one
-                // higher and the player now knowing what it costs. Nothing else in the game ends this
-                // way, which is the horror.
-                if (runEnded) {
-                    StatsStore.updateAndSave(runStats, persistentStats);
-                    resetRequested = true;
+                // Two cards end this world rather than resuming it: the reprint the player was just
+                // printed from (the run is over — the next World is the new instance), and OBEY,
+                // whose reward is more of the same forever, so continuing from it means exactly
+                // that: a fresh print, the same descent, the counter one higher. Nothing else in the
+                // game ends this way, which is the horror.
+                if (runEnded || bootCardEndsWorld) {
+                    saveRunRecordsOnce();
+                    requestReset(StartMode.RESPAWN);
                     return;
                 }
                 runPhase = RunPhase.PLAYING;
@@ -1849,15 +1940,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // DEAD phase — death beat then death screen; no game simulation
+        // DEAD phase (order-8 Part B) — the death BEAT: a slow, quiet fade to black. No gory splash
+        // and no verdict; the player has just died and may already be frustrated.
+        //
+        // When the fade finishes the run is filed and the machine simply prints them again: the
+        // reprint card takes the screen HERE, in the world that died, and the next World starts
+        // faded-up in a fresh run. That is what makes death -> reprint one calm tap-through instead
+        // of a stats screen and a card competing for the same moment.
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
             if (deathBeatTimerSeconds >= ProgressionConstants.DEATH_BEAT_DURATION_SECONDS) {
-                deathBlinkTimerSeconds += deltaTime;
-                if (touchInputState != null && Gdx.input.justTouched()) {
-                    StatsStore.updateAndSave(runStats, persistentStats);
-                    resetRequested = true;
-                }
+                saveRunRecordsOnce();
+                presentReprintCard();
             }
             return;
         }
@@ -2064,10 +2158,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (player.isDead()) {
             runStats.recordFloor(currentDepth);
             sealRunAutopsy();
-            deathOverlayRenderer.show(runStats, persistentStats);
+            // Snapshot the run BEFORE the records are saved, so "RECORD" still means "this instance
+            // beat what the save held" rather than "this instance equals what it just wrote".
+            instanceReportRenderer.show(runStats, persistentStats);
             runPhase              = RunPhase.DEAD;
             deathBeatTimerSeconds = 0f;
-            deathBlinkTimerSeconds = 0f;
             return;
         }
 
@@ -2159,6 +2254,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     @Override
     public void render(OrthographicCamera camera) {
+        // FRAMING SCREENS (order-8): while the launch screen owns the app there is no run to look
+        // at, so the 3D view, the HUD and every in-run overlay are skipped entirely — the screen is
+        // black, a machine prints a death notice on it, and that is all. The archive and the
+        // settings screen may sit on top of it, because both are reachable before a run exists.
+        if (isTitleFramed()) {
+            framingScreenRenderer.renderTitle(camera);
+            if (runPhase == RunPhase.SETTINGS_MENU) {
+                framingScreenRenderer.renderMenu(camera, StoryUiConstants.STORY_SETTINGS_TITLE_ID,
+                                                 settingsMenu);
+            }
+            if (runPhase == RunPhase.CODEX_OPEN) codexOverlayRenderer.render(camera);
+            return;
+        }
+
         facilityTimeSeconds += Gdx.graphics.getDeltaTime();
         floorCeilingRenderer.setLightingTime(facilityTimeSeconds);
         wallRenderer.setLightingTime(facilityTimeSeconds);
@@ -2274,7 +2383,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && runPhase != RunPhase.EVENT_CHOICE
                 && runPhase != RunPhase.BOOT_CARD
                 && runPhase != RunPhase.STORY_EXCHANGE
-                && runPhase != RunPhase.CODEX_OPEN) {
+                && runPhase != RunPhase.CODEX_OPEN
+                && runPhase != RunPhase.PAUSE_MENU
+                && runPhase != RunPhase.SETTINGS_MENU
+                && runPhase != RunPhase.ENDING_HOLD) {
             touchControllerRenderer.setActionLocked(!playerController.isIdle());
             touchControllerRenderer.render(camera);
         }
@@ -2333,11 +2445,34 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             codexOverlayRenderer.render(camera);
         }
 
+        // Pause / settings menus (order-8 Parts C and D) — drawn over the frozen floor with their
+        // own scrim, above every in-run overlay and below only the boot card and the fade. The thumb
+        // clusters are not drawn in either phase (see the touch-controller condition above).
+        if (runPhase == RunPhase.PAUSE_MENU) {
+            framingScreenRenderer.renderMenu(camera, StoryUiConstants.STORY_PAUSE_TITLE_ID, pauseMenu);
+        } else if (runPhase == RunPhase.SETTINGS_MENU) {
+            framingScreenRenderer.renderMenu(camera, StoryUiConstants.STORY_SETTINGS_TITLE_ID,
+                                             settingsMenu);
+        }
+
         // Reprint / boot card (order-3) — the modal that opens every run. Its own dark full-bleed
         // background covers the frozen world behind it, so it is drawn above every other overlay
         // and below only the fade, exactly like the other hard-pause modals.
+        //
+        // Order-8 adds two things to this screen and nothing else: the REPORT page (which replaces
+        // the card entirely while it is open — one screen at a time, always), and, on a terminal
+        // ending card, the dim RETURN plate that stands where the CONTINUE deliberately is not.
         if (runPhase == RunPhase.BOOT_CARD) {
-            bootCardRenderer.render(camera);
+            if (showingInstanceReport) {
+                instanceReportRenderer.render(camera);
+            } else {
+                bootCardRenderer.render(camera);
+                float cardFade = bootCardSystem.getVisibleFraction();
+                instanceReportRenderer.renderOpenButton(camera, cardFade);
+                if (bootCardSystem.isTerminal() && bootCardSystem.isRevealComplete()) {
+                    framingScreenRenderer.renderTerminalReturn(camera, cardFade);
+                }
+            }
         }
 
         // Fade overlay drawn last — covers every other layer including the HUD.
@@ -2351,15 +2486,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             fadeOverlayRenderer.render(camera, fadeAlpha, currentDepth);
         }
 
-        // Death beat: fade to black over DEATH_BEAT_DURATION; then show the death report.
+        // Death beat (order-8 Part B): a slow fade to black, and nothing else. The moment it
+        // finishes, the reprint card takes the screen — there is no separate death splash to draw.
         if (runPhase == RunPhase.DEAD) {
-            if (deathBeatTimerSeconds < ProgressionConstants.DEATH_BEAT_DURATION_SECONDS) {
-                float deathFadeAlpha = deathBeatTimerSeconds / ProgressionConstants.DEATH_BEAT_DURATION_SECONDS;
-                fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
-            } else {
-                boolean showPrompt = deathBlinkTimerSeconds % 1.0f < 0.5f;
-                deathOverlayRenderer.render(camera, showPrompt);
-            }
+            float deathFadeAlpha = Math.min(1f,
+                    deathBeatTimerSeconds / ProgressionConstants.DEATH_BEAT_DURATION_SECONDS);
+            fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
+        }
+
+        // MERGE (order-8 Part D): the frozen world the player was standing in, going quietly out.
+        // No card, no button, no prompt — the interface has stopped being theirs.
+        if (runPhase == RunPhase.ENDING_HOLD) {
+            float holdFraction = Math.min(1f,
+                    endingHoldSeconds / StoryUiConstants.STORY_ENDING_MERGE_HOLD_SECONDS);
+            fadeOverlayRenderer.render(camera, holdFraction, currentDepth);
         }
     }
 
@@ -2409,13 +2549,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         routeMapOverlayRenderer.dispose();
         statusEffectVignetteRenderer.dispose();
         if (touchControllerRenderer != null) touchControllerRenderer.dispose();
-        deathOverlayRenderer.dispose();
+        // Framing screens (order-8): the launch/menu renderer and the reprint report each own their
+        // own shapes, batch and font. TitleScreenSystem and the two FramingMenus are headless.
+        framingScreenRenderer.dispose();
+        instanceReportRenderer.dispose();
         if (bossHudRenderer != null) { bossHudRenderer.dispose(); bossHudRenderer = null; }
         player.dispose();
     }
 
-    /** Returns true once after the player acknowledges the death screen; Main recreates the World. */
+    /**
+     * True once this world is finished — the player tapped through a reprint card, abandoned the
+     * run, or an ending stood the game down.  {@code Main} then disposes it and builds the next one.
+     */
     public boolean isResetRequested() { return resetRequested; }
+
+    /**
+     * How the world {@code Main} builds next should open (Story UI order-8): straight into a fresh
+     * run after a reprint, or on the launch screen after an abandoned run or a finished story.
+     */
+    public StartMode getNextStartMode() { return nextStartMode; }
 
     // -------------------------------------------------------------------------
     // Inventory overlay — open/close
@@ -2844,8 +2996,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (ending == null) return;
         Gdx.app.log("StoryEnding", "ending chosen: " + ending.name());
         runEnded = true;
+        // Filed permanently (order-8 Part D): from here on the LAUNCH screen prints this ending's
+        // status lines instead of the ordinary death notice. The framing the player has read on
+        // every single launch is the instrument, and this is where it is spent.
+        barkSystem.getProgress().recordEndingReached(ending.name());
         if (touchInputState != null) touchInputState.resetAllButtonStates();
-        presentEndingCard(ending);   // false for MERGE: no card, and none is wanted
+        if (!presentEndingCard(ending)) {
+            // MERGE presents no card, and none is wanted. The interface simply stops being the
+            // player's: the frozen view they were standing in holds, fading, and then the game
+            // stands down to a title screen the ending has changed (order-8 Part D).
+            endingHoldSeconds = 0f;
+            runPhase          = RunPhase.ENDING_HOLD;
+        }
     }
 
     /**
@@ -3047,6 +3209,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         exchangePressedIndex = -1;
         exchangeSystem.setPressedOptionIndex(-1);
         barkSwipeTracking = false;
+        // A framing menu row the finger was holding when the OS took the screen (order-8): the
+        // release never arrives, so the row must not stay lit and must not commit on the way back.
+        framingPressedRow = -1;
+        pauseMenu.setPressedIndex(-1);
+        settingsMenu.setPressedIndex(-1);
+        titleScreenSystem.getMenu().setPressedIndex(-1);
         resetCodexDragTracking();
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
@@ -3105,8 +3273,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     public void openCodex() {
         if (runPhase == RunPhase.CODEX_OPEN) return;
-        codexReturnPhase = runPhase == RunPhase.INVENTORY_OPEN ? RunPhase.INVENTORY_OPEN
-                                                               : RunPhase.PLAYING;
+        // The menus the archive can be opened FROM (order-8 added the last two): the inventory
+        // header, the pause menu, and the launch screen — where it is readable before a run exists.
+        codexReturnPhase = (runPhase == RunPhase.INVENTORY_OPEN || runPhase == RunPhase.PAUSE_MENU
+                            || runPhase == RunPhase.TITLE)
+                ? runPhase : RunPhase.PLAYING;
         if (touchInputState != null) touchInputState.resetAllButtonStates();
         codexSystem.open();
         codexOverlayRenderer.refreshLabels();
@@ -3338,6 +3509,323 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     /** True while a card that ends the run is on screen — the "no reprint" state (order-8 reads it). */
     public boolean isBootCardTerminal() {
         return runPhase == RunPhase.BOOT_CARD && bootCardSystem.isTerminal();
+    }
+
+    // -------------------------------------------------------------------------
+    // Story UI order-8 — THE FRAMING SCREENS: launch/title, pause, settings, the
+    // death -> reprint transition, and the way off an ending.
+    // -------------------------------------------------------------------------
+
+    /**
+     * THE LAUNCH SCREEN (order-8 Part A).  There is no cheerful title screen: the app opens on black
+     * with the machine printing a death notice, the title resolves quietly under it, and a cold menu
+     * fades in beneath that.  A tap anywhere before the menu arrives prints the whole screen at once
+     * — the paced reveal is mood, and mood is never a gate.
+     */
+    private void updateTitleScreen(float deltaTime) {
+        titleScreenSystem.update(deltaTime);
+        // The launch screen sits over a world that is built but not running, and the touch buttons
+        // are not drawn — so drop any tap they collected before it can leak into the run.
+        if (touchInputState != null) touchInputState.consumeTapAction();
+        if (gameViewport == null) return;
+
+        FramingMenu menu = titleScreenSystem.getMenu();
+        if (menu.isConfirmOpen()) {
+            updateFramingConfirmTouch(menu, true);
+            TitleMenuItem confirmed = titleScreenSystem.consumeConfirmedItem();
+            if (confirmed != null) applyTitleMenuItem(confirmed);
+            return;
+        }
+        if (!titleScreenSystem.isMenuVisible()) {
+            if (Gdx.input.justTouched()) titleScreenSystem.skipReveal();
+            return;
+        }
+        int releasedRow = updateFramingMenuTouch(menu, StoryUiConstants.STORY_TITLE_MENU_TOP_Y);
+        if (releasedRow < 0) return;
+        TitleMenuItem item = titleScreenSystem.activateRow(releasedRow);
+        if (item != null) applyTitleMenuItem(item);
+    }
+
+    /** Acts on a title row the player committed to (directly, or through its confirmation). */
+    private void applyTitleMenuItem(TitleMenuItem item) {
+        switch (item) {
+            case CONTINUE_DESCENT:
+                startRunFromTitle();
+                break;
+            case NEW_OPERATOR:
+                // The ONE thing in the game that moves the story backwards (order-7 Part B), behind
+                // a confirmation, and only ever from here. Records, tips and narrative state clear
+                // TOGETHER, then the descent starts over from a save that remembers nothing.
+                wipeAllPersistentProgress();
+                titleScreenSystem.present();
+                startRunFromTitle();
+                break;
+            case CODEX:
+                openCodex();
+                break;
+            case SETTINGS:
+                openSettingsMenu();
+                break;
+            case QUIT:
+            default:
+                Gdx.app.exit();
+                break;
+        }
+    }
+
+    /**
+     * FIRST-LAUNCH → COLD OPEN HANDOFF (order-8 Part A).  Picking a descent hands straight to the
+     * in-run cold open: the reprint boot card first (order-3), which is where ORA's wake line and the
+     * instance counter live, and then the floor.  The launch screen's death lines and that card share
+     * the same ids and the same styling, so they read as one machine talking without a seam.
+     */
+    private void startRunFromTitle() {
+        framingPressedRow     = -1;
+        showingInstanceReport = false;
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+        // EVERY run opens on the reprint card, the very first one included: in-fiction the original
+        // self has just died, so a first-timer's boot shows the same notice as their hundredth
+        // (story/01-timeline.md).
+        if (bootCardSystem.present(BootCardVariant.REPRINT)) {
+            bootCardEndsWorld = false;
+            runPhase          = RunPhase.BOOT_CARD;
+        } else {
+            runPhase = RunPhase.PLAYING;
+        }
+    }
+
+    /**
+     * The death beat has finished fading (order-8 Part B): print the player again.  The card takes
+     * the screen in the world that DIED, and its CONTINUE hands over to a fresh world that opens
+     * already faded up — which is what makes the whole of death → reprint one calm tap-through.
+     */
+    private void presentReprintCard() {
+        showingInstanceReport = false;
+        if (touchInputState != null) touchInputState.resetAllButtonStates();
+        if (bootCardSystem.present(BootCardVariant.REPRINT)) {
+            bootCardEndsWorld = true;
+            runPhase          = RunPhase.BOOT_CARD;
+        } else {
+            // Defensive: a catalog with no reprint card must never strand the player on black.
+            requestReset(StartMode.RESPAWN);
+        }
+    }
+
+    /**
+     * Routes one tap on the reprint / ending card (order-8 Part B and D).  Everything here obeys the
+     * same rule the card itself does: one tap always advances, and nothing is ever refused silently.
+     */
+    private void handleBootCardTap(float worldX, float worldY) {
+        if (showingInstanceReport) {
+            showingInstanceReport = false;   // any tap closes the page; BACK is the labelled way
+            return;
+        }
+        if (instanceReportRenderer.hasReport()
+                && InstanceReportRenderer.isInsideOpenButton(worldX, worldY)) {
+            showingInstanceReport = true;
+            return;
+        }
+        if (bootCardSystem.isTerminal()) {
+            // FREE / KILL: there is no CONTINUE, because nothing reloads. Once the card has finished
+            // printing, the only thing on offer is standing down to a title the ending has changed.
+            if (bootCardSystem.isRevealComplete()
+                    && FramingScreenRenderer.isInsideReturnButton(worldX, worldY)) {
+                standDownToTitle();
+            } else {
+                bootCardSystem.skipReveal();
+            }
+            return;
+        }
+        if (BootCardRenderer.isInsideContinueButton(worldX, worldY)) {
+            bootCardSystem.requestContinue();
+        } else {
+            bootCardSystem.skipReveal();
+        }
+    }
+
+    /**
+     * THE PAUSE MENU (order-8 Part C) — the "suit paused" panel: resume, archive, settings, abandon.
+     * Opening it suppresses the bark layer and can never open an exchange (order-7 Part E precedence),
+     * and it deliberately spoils nothing: no plot summary, no objective recap. The archive holds the
+     * lore, one row down, for whoever wants it.
+     */
+    private void openPauseMenu() {
+        if (runPhase != RunPhase.PLAYING) return;
+        pauseMenu.clear();
+        for (PauseMenuItem item : PauseMenuItem.values()) {
+            pauseMenu.addRow(item.getLabelStringId(), null, true);
+        }
+        framingPressedRow = -1;
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+        runPhase = RunPhase.PAUSE_MENU;
+    }
+
+    /** Back to the floor, exactly where it was — the game is turn-based, so nothing moved. */
+    private void closePauseMenu() {
+        framingPressedRow = -1;
+        pauseMenu.setPressedIndex(-1);
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+        runPhase = RunPhase.PLAYING;
+    }
+
+    private void updatePauseMenu() {
+        if (touchInputState != null) touchInputState.consumeTapAction();
+        if (gameViewport == null) return;
+
+        if (pauseMenu.isConfirmOpen()) {
+            updateFramingConfirmTouch(pauseMenu, false);
+            if (pauseMenu.consumeConfirmedRow() >= 0) abandonRun();
+            return;
+        }
+        int releasedRow = updateFramingMenuTouch(pauseMenu, StoryUiConstants.STORY_FRAME_MENU_TOP_Y);
+        if (releasedRow < 0 || releasedRow >= PauseMenuItem.values().length) return;
+        PauseMenuItem item = PauseMenuItem.values()[releasedRow];
+        // ABANDON_RUN carries a confirmation, so activateRow opens it and commits nothing.
+        if (!pauseMenu.activateRow(releasedRow, item.getConfirmStringId())) return;
+        switch (item) {
+            case RESUME:   closePauseMenu();    break;
+            case CODEX:    openCodex();         break;
+            case SETTINGS: openSettingsMenu();  break;
+            default:                            break;
+        }
+    }
+
+    /**
+     * Ends this run at the player's request.  The records are filed exactly as a death files them —
+     * an abandoned run still happened — and the game stands down to the title screen.
+     */
+    private void abandonRun() {
+        runStats.recordFloor(currentDepth);
+        sealRunAutopsy();
+        standDownToTitle();
+    }
+
+    /**
+     * THE SETTINGS SCREEN (order-8 Part A / order-6 Part D) — the same four accessibility knobs the
+     * codex's footer strip carries, on a screen of their own, reachable from the title and from the
+     * pause menu.  One model, two ways in, no second copy of the truth.
+     */
+    private void openSettingsMenu() {
+        settingsReturnPhase = (runPhase == RunPhase.TITLE || runPhase == RunPhase.PAUSE_MENU)
+                ? runPhase : RunPhase.PLAYING;
+        settingsMenu.rebuildAsSettings(storySettings);
+        framingPressedRow = -1;
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+        runPhase = RunPhase.SETTINGS_MENU;
+    }
+
+    private void updateSettingsMenu() {
+        if (touchInputState != null) touchInputState.consumeTapAction();
+        if (gameViewport == null) return;
+
+        int releasedRow = updateFramingMenuTouch(settingsMenu, StoryUiConstants.STORY_FRAME_MENU_TOP_Y);
+        if (releasedRow < 0 || !settingsMenu.activateRow(releasedRow, null)) return;
+        if (settingsMenu.isSettingsBackRow(releasedRow)) {
+            framingPressedRow = -1;
+            runPhase          = settingsReturnPhase;
+            return;
+        }
+        // A knob is a tap-to-cycle button, exactly as it is on the codex strip. Pushing the change
+        // through here (rather than per frame) is what makes it take effect on the next line drawn.
+        storySettings.cycleSetting(releasedRow);
+        applyStoryAccessibilitySettings();
+        codexOverlayRenderer.refreshLabels();
+        settingsMenu.rebuildAsSettings(storySettings);
+    }
+
+    /**
+     * Press-and-release routing for whichever framing menu is on screen.  Standard phone button
+     * behaviour: sliding off a row before releasing CANCELS the tap, which matters most here, where
+     * a row can wipe a save.
+     *
+     * @return the row the finger lifted on, or -1 when nothing was committed this frame
+     */
+    private int updateFramingMenuTouch(FramingMenu menu, float menuTopY) {
+        if (Gdx.input.isTouched()) {
+            cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+            gameViewport.unproject(cardTouchPosition);
+            int rowUnderFinger = FramingScreenRenderer.menuRowIndexAt(
+                    cardTouchPosition.x, cardTouchPosition.y, menu.getRowCount(), menuTopY);
+            if (Gdx.input.justTouched()) {
+                framingPressedRow = rowUnderFinger;
+            } else if (framingPressedRow >= 0 && rowUnderFinger != framingPressedRow) {
+                framingPressedRow = -1;   // the finger slid off: the tap is cancelled
+            }
+            menu.setPressedIndex(framingPressedRow);
+            return -1;
+        }
+        int releasedRow   = framingPressedRow;
+        framingPressedRow = -1;
+        menu.setPressedIndex(-1);
+        return releasedRow;
+    }
+
+    /**
+     * Routing for an open confirmation.  Only PROCEED commits, and CANCEL is always on screen beside
+     * it — every confirmation in the game carries a way back.
+     *
+     * @param titleOwned true when the title screen owns this menu, so the confirmed row is latched
+     *                   as a {@link TitleMenuItem} rather than read back as a raw row index
+     */
+    private void updateFramingConfirmTouch(FramingMenu menu, boolean titleOwned) {
+        if (!Gdx.input.justTouched()) return;
+        cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+        gameViewport.unproject(cardTouchPosition);
+        if (FramingScreenRenderer.isInsideConfirmYes(cardTouchPosition.x, cardTouchPosition.y)) {
+            if (titleOwned) titleScreenSystem.acceptConfirm();
+            else            menu.acceptConfirm();
+        } else if (FramingScreenRenderer.isInsideConfirmNo(cardTouchPosition.x, cardTouchPosition.y)) {
+            menu.cancelConfirm();
+        }
+    }
+
+    /** True while the launch screen is the backdrop — including the menus that open on top of it. */
+    private boolean isTitleFramed() {
+        if (runPhase == RunPhase.TITLE) return true;
+        if (runPhase == RunPhase.SETTINGS_MENU) return settingsReturnPhase == RunPhase.TITLE;
+        if (runPhase == RunPhase.CODEX_OPEN)    return codexReturnPhase   == RunPhase.TITLE;
+        return false;
+    }
+
+    /**
+     * Ends this world and hands {@code Main} a fresh one.  The mode is the whole handshake: a
+     * reprint drops straight into a new run (its card has already been read), while an abandoned or
+     * finished story returns to a launch screen that now reflects what happened.
+     */
+    private void requestReset(StartMode startMode) {
+        nextStartMode  = startMode;
+        resetRequested = true;
+    }
+
+    /** Files the run, clears the screen, and stands the game down to the title. */
+    private void standDownToTitle() {
+        saveRunRecordsOnce();
+        bootCardSystem.clear();
+        showingInstanceReport = false;
+        requestReset(StartMode.TITLE);
+    }
+
+    /**
+     * Files this run's records exactly once, however the run ended — death, an ending, or the player
+     * abandoning it.  Two seams can fire in the same frame (an ending card that also ends the world),
+     * and a run counted twice would quietly corrupt every lifetime record in the save.
+     */
+    private void saveRunRecordsOnce() {
+        if (runRecordsSaved) return;
+        runRecordsSaved = true;
+        StatsStore.updateAndSave(runStats, persistentStats);
     }
 
     private void applyInventoryConsumableEffect() {

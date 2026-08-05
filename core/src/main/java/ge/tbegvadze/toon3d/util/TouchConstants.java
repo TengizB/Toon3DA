@@ -41,4 +41,15 @@ public final class TouchConstants {
     public static final float USE_BUTTON_CENTER_X       = Constants.WORLD_WIDTH  / 2f;
     public static final float USE_BUTTON_CENTER_Y       = Constants.WORLD_HEIGHT / 2f;
     public static final float USE_BUTTON_SIZE           = 96f;
+
+    // PAUSE button (Story UI order-8) — the way into the in-suit menu.  Left edge, in the clear band
+    // between the bottom HUD chrome (y 0..HUD_HEIGHT) and the mini-map (which starts at
+    // MINI_MAP_ORIGIN_Y), and a comfortable gap left of the secondary thumb cluster at
+    // TOUCH_GRID_LEFT_CENTER_X.  The top-right corner — the obvious home for a pause button — is
+    // already the credits and debuff readout (HudConstants.HUD_CREDITS_*), and the top centre is the
+    // story bark panel.  Deliberately away from both thumbs: pausing is never something to do by
+    // accident mid-fight.
+    public static final float PAUSE_BUTTON_SIZE         = 80f;
+    public static final float PAUSE_BUTTON_CENTER_X     = 48f;
+    public static final float PAUSE_BUTTON_CENTER_Y     = 336f;
 }

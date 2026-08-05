@@ -18,6 +18,7 @@ Any change to the story UI MUST update THIS document in the SAME commit:
    - new string id family / new locale -> PART C: LOCALISATION;
    - new sound                         -> PART D: AUDIO (cue table);
    - new overlay that can own the screen -> PART E: PRECEDENCE;
+   - new framing screen / menu row     -> THE FRAMING SCREENS + its recipe below;
    - new gameplay moment that fires a beat -> THE MOMENT SCHEDULE table.
 The governing invariant behind every recipe below: "if you had to edit a switch statement to add a
 line, the registries are being bypassed — fix that instead." Adding narrative content is always ONE
@@ -38,6 +39,9 @@ how hard they are to avoid, and the plot spine rides only the ones a skimmer can
   CODEX        the opt-in archive. The only screen where long text is allowed. Never required.
   CONTROL HINTS  the entire tutorial, delivered as barks by ORA, one line per control at the moment
                that control first matters. There is no tutorial screen and there must never be one.
+  FRAMING      the screens that BOOK-END play: the launch screen (which opens on the game telling
+               the player they are already dead), the death -> reprint transition, the pause and
+               settings menus, and the way off an ending. See THE FRAMING SCREENS below.
 
 Four SPEAKERS carry all of it — ORA (the AI), the Planet, the Organization, SYSTEM — each with a
 name chip, an icon, a type style, an accent colour and an audio sting, so identity never rests on
@@ -60,13 +64,18 @@ Per channel:
   | Boot card | BootCardSystem    | BootCardCatalog    | BootCardRenderer        |
   | Exchange  | ExchangeSystem    | ExchangeCatalog    | StoryExchangeRenderer   |
   | Codex     | CodexSystem       | CodexCatalog       | CodexOverlayRenderer    |
+  | Framing   | TitleScreenSystem | FramingStrings     | FramingScreenRenderer   |
+  |           | + FramingMenu     | (chrome only)      | + InstanceReportRenderer|
 
 Shared render pieces: `StoryPanelRenderer` (the one panel primitive every channel draws with),
 `StoryAudio` (all seven sounds, ONE world-owned instance), `StoryStringsLoader` (the one place the
 string asset is read).
 
-Render order (World.render, after the HUD): bark -> exchange -> codex -> boot card -> fade.
-Each modal brings its own dim/scrim, so nothing behind it needs to know it is there.
+Render order (World.render, after the HUD): bark -> exchange -> codex -> pause/settings menu ->
+boot card (or its REPORT page, or an ending's RETURN plate) -> fade.
+Each modal brings its own dim/scrim, so nothing behind it needs to know it is there. The LAUNCH
+screen is the exception: it replaces the frame entirely (World.render returns before the 3D view),
+because while it owns the app there is no run to look at.
 
 
 PART A — ROGUELIKE STORY-GATING (the critical reconciliation)
@@ -121,7 +130,14 @@ All narrative keys share the `StatsStore` preferences file under a `story.` pref
   | codex unlocks           | story.codex.<id>          | a line is delivered / a PROBE pays  |
   | codex read-flags        | story.codexRead.<id>      | an entry is opened                  |
   | accessibility settings  | story.setting.<key>       | the player changes a setting        |
+  | the ending committed to | story.outcome.ending      | an ending choice commits (order-8)  |
   | schema version          | story.schemaVersion       | stamped on every write              |
+
+The ENDING (order-8) rides the order-4 consequential-outcome mechanism rather than a key of its own —
+an ending IS the ultimate consequential outcome — so it needed no schema bump, and a "new game"
+clears it with everything else. `StoryProgress.recordEndingReached/getEndingReached` are the typed
+accessors; the value is a `BootCardVariant` name, and the launch screen reads it back to decide which
+card's status lines it prints.
 
 RULES
   - Write on meaningful change only — never per frame. A whole run is a handful of writes.
@@ -164,8 +180,11 @@ stable STRING ID and resolved through `StoryStrings`.
   - Ids are stable once shipped (translations key off them): lower case, dotted, `story.`-namespaced,
     no whitespace.
   - An id family per channel: `story.bark.*`, `story.boot.*`, `story.exchange.*`, `story.codex.*`,
-    plus `story.speaker.*` for the name chips. ORA's one-line TAKE on a log and the log's full codex
-    text are deliberately separate ids (bark vs archive).
+    plus `story.speaker.*` for the name chips, and order-8's framing chrome: `story.title.*`,
+    `story.pause.*`, `story.settings.*`, `story.frame.*`, `story.report.*`. ORA's one-line TAKE on a
+    log and the log's full codex text are deliberately separate ids (bark vs archive).
+  - The launch screen has NO status-line ids of its own: it prints `story.boot.system.*`, the reprint
+    card's own strings. That sharing is the point, not an optimisation (see THE FRAMING SCREENS).
 
 TESTS: `StoryLocalizationTest` sweeps EVERY id from every catalog and every piece of chrome against
 the shipped asset, checks the Java fallback agrees with it, and rejects duplicate keys.
@@ -207,6 +226,10 @@ PART E — OVERLAY PRECEDENCE & INTERRUPTS
 The story UI shares the screen with the inventory, level-up card, shop, weapon inspect, event choice,
 nav console, death screen and boot card. Three promises:
 
+Order-8 adds four phases to that list — TITLE, PAUSE_MENU, SETTINGS_MENU and ENDING_HOLD — and they
+obey the same three promises: each is a hard-pause overlay, none draws the thumb clusters, and none
+lets a story panel open behind it.
+
 1. A HARD-PAUSE OVERLAY WINS. `World.update` runs `barkSystem.setSuppressed(runPhase != PLAYING)`
    every frame: while any modal is open, bark requests still QUEUE, nothing is delivered, and queue
    ageing is FROZEN so a long menu visit cannot silently eat a line. An EXCHANGE never opens outside
@@ -232,6 +255,81 @@ the OS kills the process mid-prompt, the beat is asked again on the next run ins
 on a conversation nobody read.
 
 TESTS: `StoryOverlayPrecedenceTest`.
+
+
+THE FRAMING SCREENS (order-8) — what surrounds play
+==================================================
+Orders 2-7 built what happens DURING a run. Order-8 owns the screens on either side of it: the app
+launch, the death -> reprint transition, the pause and settings menus, and the resolution of an
+ending. They all speak the boot card's visual language (the same near-black backdrop, the same amber
+plates), because the launch screen and the reprint card are the SAME machine talking.
+
+A. THE LAUNCH SCREEN (`narrative/TitleScreenSystem`, `render/FramingScreenRenderer`)
+   **There is no cheerful title screen.** The app opens on black and the first line anybody reads is
+   the game telling them they are already dead:
+        PREVIOUS INSTANCE - TERMINATED
+        SOUL RESERVE .......... SUFFICIENT
+   ...then a beat, then the title resolves quietly beneath it, then a cold menu fades in under that.
+   The two lines are the REPRINT CARD's own string ids, borrowed from `BootCardRegistry` — one
+   machine, one voice, one string. A first-timer reads it as flavour; hours later they learn it was
+   literally announcing the original self's death (story/dialog/system-cards.md).
+   The reveal is MOOD, never a gate: a tap prints the whole screen at once, and nothing on it ever
+   advances itself.
+
+   THE MENU — CONTINUE DESCENT (offered only once the player has been printed at least once, because
+   "continue" with nothing to continue is a lie), NEW OPERATOR (the wipe, behind a confirmation
+   whenever there is anything to lose), ARCHIVE (order-6, readable before a run exists), SETTINGS,
+   QUIT. Big plates, high contrast, no feature list.
+
+   FIRST-LAUNCH -> COLD OPEN HANDOFF: picking a descent hands straight to the in-run cold open —
+   the reprint boot card first (order-3, where ORA's wake line and the instance counter live), then
+   the floor. The counter now climbs when a RUN STARTS rather than when a World is constructed, so a
+   player who opens the app and quits from the title is not charged an instance.
+
+B. DEATH -> REPRINT (one presentation, not two)
+   The most repeated framing in the game, and it is deliberately calm: the player just died and may
+   already be frustrated.
+     1. a slow fade to black (`FadeOverlayRenderer`, the existing death beat). No gory splash.
+     2. the reprint card (order-3) — status lines, the quiet instance counter, ORA's wake line.
+        It is printed by the world that DIED; the next World opens already faded up.
+     3. one tap on CONTINUE, and the descent starts again.
+   The old full-screen death report is FOLDED into that card's screen as a PAGE
+   (`render/InstanceReportRenderer`, opened by a small REPORT plate, closed by any tap), so the run's
+   numbers — including the six-line RUN AUTOPSY that new-game-balancr order 9 put there for
+   playtesters — are one tap away without a second screen competing for the same moment.
+   `render/DeathOverlayRenderer` and the `HudConstants.DEATH_OVERLAY_*` block are GONE; the report's
+   geometry lives with the other framing screens as `STORY_REPORT_*`.
+
+C. THE PAUSE MENU (`PauseMenuItem`, drawn over the frozen floor)
+   RESUME, ARCHIVE, SETTINGS, ABANDON RUN (confirmed). Reached from the PAUSE touch button in the
+   top-right corner — far from both thumb clusters, because pausing is never something to do by
+   accident mid-fight. It is a hard-pause overlay like every other, so barks queue and no exchange
+   can open behind it (Part E). It SPOILS NOTHING: no plot summary, no objective recap — the archive
+   is one row down for whoever wants it. Abandoning files the run's records exactly as a death does.
+
+D. THE ENDINGS RESOLVE ON THE FRAMING THEY SUBVERT (story/06-endings.md)
+   `World.commitPendingStoryEnding` records the ending permanently, and from then on the LAUNCH
+   screen prints that ending's card instead of the ordinary death notice. The framing the player has
+   read on every single launch is the payload.
+     FREE / KILL — a terminal card: a depleted reserve, no authorized checkpoint, and NO CONTINUE.
+                   Once it has finished printing, order-8 draws a dim RETURN plate where the button
+                   the player has tapped a hundred times deliberately is not; it stands the game down
+                   to a title screen the ending has changed.
+     OBEY        — the card continues, into a fresh print of the same descent. That is the horror.
+     MERGE       — no card at all. The frozen view the player was standing in holds, fading, for
+                   `STORY_ENDING_MERGE_HOLD_SECONDS`, and then stands down. There is no input,
+                   because the interface has stopped being theirs.
+   Nothing is scored, ranked or labelled, and NEW OPERATOR / CONTINUE DESCENT both stay available:
+   the descent is endless, and an ending is a thing the save remembers, not a door it closes.
+
+E. THE WORLD LIFECYCLE SEAM (`world/StartMode`)
+   A run is one `World`, so ending one means building the next. `World.isResetRequested()` +
+   `getNextStartMode()` tell `Main` which: RESPAWN (drop straight into a fresh run, fading up from
+   black — the card was already read) or TITLE (an abandoned run or a finished story). That handshake
+   is the whole of what makes the death transition read as one continuous screen.
+
+TESTS: `StoryFramingTest` (launch lines, the ending subversion, the menus, the confirmations, the
+anti-skip promise, and the geometry: on screen and thumb-sized).
 
 
 PART F — FIRST BOOT / COLD OPEN
@@ -298,7 +396,14 @@ ADD A PERSISTED FACT     a port method on `StoryProgressStore`, both implementat
 ADD A SOUND              one `StoryCue` value + its four numbers in `StoryUiConstants` (same order)
                          + the play site in the update path. Never make it load-bearing.
 ADD A SETTING            a `story.setting.*` key, a knob on `StorySettings`, a bump of
-                         `STORY_CODEX_SETTING_COUNT`, and its name/value string ids.
+                         `STORY_CODEX_SETTING_COUNT`, and its name/value string ids. It appears on
+                         BOTH the codex strip and order-8's settings screen automatically.
+ADD A FRAMING MENU ROW   one value on `TitleMenuItem` / `PauseMenuItem` (label id + optional confirm
+                         id) + its string rows + one case in `World.applyTitleMenuItem` /
+                         `updatePauseMenu`. A row that carries consequences MUST carry a confirm id.
+ADD AN ENDING SCREEN     order-3's recipe still applies (one `registerCard` in `BootCardCatalog`);
+                         order-8 needs nothing, because the launch screen prints whatever card the
+                         recorded ending names and the terminal RETURN plate is variant-agnostic.
 
 
 TEST GATES (`./gradlew test`)
@@ -312,3 +417,4 @@ TEST GATES (`./gradlew test`)
   StoryPersistenceTest       death does not rewind; round-trip, schema version, new-game wipe (7 A/B)
   StoryLocalizationTest      every id in every channel resolves in the shipped table (7 C)
   StoryOverlayPrecedenceTest suppression, no stacked panels, interrupted beats survive (7 E)
+  StoryFramingTest           launch lines, ending subversion, menus, confirms, geometry (order-8)

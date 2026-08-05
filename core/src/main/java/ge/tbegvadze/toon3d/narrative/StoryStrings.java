@@ -96,6 +96,9 @@ public final class StoryStrings {
         ExchangeStrings.registerDefaults(strings);
         // Order-6 codex: the archive's entries (the only long-form text in the game) and its chrome.
         CodexStrings.registerDefaults(strings);
+        // Order-8 framing screens: the title/launch menu, the pause and settings screens, the
+        // reprint report, and the way out of an ending.
+        FramingStrings.registerDefaults(strings);
 
         return strings;
     }

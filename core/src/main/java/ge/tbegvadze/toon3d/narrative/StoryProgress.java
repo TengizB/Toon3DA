@@ -3,6 +3,8 @@ package ge.tbegvadze.toon3d.narrative;
 import java.util.HashSet;
 import java.util.Set;
 
+import ge.tbegvadze.toon3d.util.StoryUiConstants;
+
 /**
  * The player's PERSISTENT narrative state — the reconciliation between a linear story and a
  * permadeath roguelike (Story UI order-2; model owned by order-7 Part A).
@@ -178,6 +180,38 @@ public final class StoryProgress {
     public void recordOutcome(String exchangeId, String optionId) {
         if (exchangeId == null || optionId == null) return;
         store.saveOutcome(exchangeId, optionId);
+    }
+
+    // -------------------------------------------------------------------------
+    // The ENDING the player committed to (Story UI order-8)
+    // -------------------------------------------------------------------------
+
+    /**
+     * The {@code BootCardVariant} name of the ending this save reached, or null while the story is
+     * unfinished.  The launch screen reads it back to print that ending's status lines instead of the
+     * ordinary death notice — the framing every run has worn, subverted for good.
+     *
+     * <p>Filed through the consequential-outcome mechanism above, because an ending IS the ultimate
+     * consequential outcome: no new persisted key, no schema bump, and a "new game" clears it with
+     * everything else, which is exactly right — a wiped save has no ending to remember.
+     */
+    public String getEndingReached() {
+        return getOutcome(StoryUiConstants.STORY_ENDING_OUTCOME_ID);
+    }
+
+    /** True once any ending has been committed to.  Never gates anything — the descent stays open. */
+    public boolean hasReachedEnding() {
+        return getEndingReached() != null;
+    }
+
+    /**
+     * Records the ending the player just chose, permanently.  Written once, at the moment the choice
+     * commits; a later run may overwrite it with a different ending, which is the honest record — the
+     * save remembers how the story ended LAST, not every way it ever could have.
+     */
+    public void recordEndingReached(String endingVariantName) {
+        if (endingVariantName == null) return;
+        recordOutcome(StoryUiConstants.STORY_ENDING_OUTCOME_ID, endingVariantName);
     }
 
     /** True when a codex entry is already unlocked (order-6 reads this to list its entries). */

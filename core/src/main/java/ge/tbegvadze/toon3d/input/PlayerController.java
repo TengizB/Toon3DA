@@ -46,6 +46,7 @@ public class PlayerController {
     private MoveBlockedListener     moveBlockedListener               = null;
     private Runnable                weaponSwitchCallback              = null;
     private Runnable                inventoryToggleCallback           = null;
+    private Runnable                pauseMenuCallback                 = null;
     private Runnable                inspectWeaponCallback             = null;
     private Runnable                shopOpenCallback                  = null;
     /** Fired when a heal is actually spent (order 3 resource-economy telemetry). Nullable. */
@@ -123,6 +124,14 @@ public class PlayerController {
 
     public void setInventoryToggleCallback(Runnable callback) {
         this.inventoryToggleCallback = callback;
+    }
+
+    /**
+     * Called by World when the player taps PAUSE (Story UI order-8 Part C).  Routed exactly like the
+     * inventory toggle: it opens a menu, so it costs no turn and fires no tick.
+     */
+    public void setPauseMenuCallback(Runnable callback) {
+        this.pauseMenuCallback = callback;
     }
 
     /** Called by World when the player taps INSPECT while standing on a weapon GroundItem. */
@@ -494,6 +503,14 @@ public class PlayerController {
         TouchAction heldAction = actionSource.getHeldAction();
         TouchAction tapAction  = actionSource.consumeTapAction();
 
+        // PAUSE opens the in-suit menu (Story UI order-8 Part C). Read BEFORE the stun check and
+        // before every action: it is a menu, not an action, so it costs no turn, fires no tick, and
+        // must work even while the player is stunned — a menu the game can refuse is a trap.
+        if (tapAction == TouchAction.PAUSE) {
+            if (pauseMenuCallback != null) pauseMenuCallback.run();
+            return;
+        }
+
         // If the player is stunned, any input attempt wastes the turn.
         if (player.hasActiveStun()) {
             if (heldAction != TouchAction.NONE || tapAction != TouchAction.NONE) {
@@ -508,6 +525,7 @@ public class PlayerController {
             if (inventoryToggleCallback != null) inventoryToggleCallback.run();
             return;
         }
+
 
         if (tapAction == TouchAction.INSPECT_WEAPON) {
             // groundItems.contains() guards against a stale standingOnWeapon reference

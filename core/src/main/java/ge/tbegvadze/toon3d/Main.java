@@ -5,6 +5,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import ge.tbegvadze.toon3d.world.StartMode;
 import ge.tbegvadze.toon3d.world.World;
 
 import static ge.tbegvadze.toon3d.util.Constants.WORLD_HEIGHT;
@@ -44,8 +45,13 @@ public class Main extends ApplicationAdapter {
         viewport.apply();
         world.update(Gdx.graphics.getDeltaTime());
         if (world.isResetRequested()) {
+            // A run is one World, so ending one means building the next. HOW the next one opens is
+            // the world's own handshake (Story UI order-8): straight into a fresh run after a
+            // reprint — whose card the dying world already showed, which is what makes death →
+            // reprint one presentation — or on the launch screen after an abandoned or finished run.
+            StartMode nextStartMode = world.getNextStartMode();
             world.dispose();
-            world = new World(System.currentTimeMillis());
+            world = new World(System.currentTimeMillis(), nextStartMode);
             world.initTouchControls(viewport);
             return;  // New world renders on the next frame
         }

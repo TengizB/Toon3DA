@@ -108,6 +108,34 @@ class StoryLocalizationTest {
         ids.add(StoryUiConstants.STORY_CODEX_COMPLETE_LABEL_ID);
         ids.add(StoryUiConstants.STORY_CODEX_TAKE_LABEL_ID);
 
+        // Order-8: the framing screens — the launch/title menu, the pause and settings screens, the
+        // reprint report, and the way off an ending.  Every label the player can read on a screen
+        // that book-ends play, including the questions a consequence asks before it acts.
+        ids.add(StoryUiConstants.STORY_TITLE_GAME_ID);
+        ids.add(StoryUiConstants.STORY_TITLE_TAGLINE_ID);
+        ids.add(StoryUiConstants.STORY_PAUSE_TITLE_ID);
+        ids.add(StoryUiConstants.STORY_SETTINGS_TITLE_ID);
+        ids.add(StoryUiConstants.STORY_SETTINGS_BACK_ID);
+        ids.add(StoryUiConstants.STORY_FRAME_CONFIRM_YES_ID);
+        ids.add(StoryUiConstants.STORY_FRAME_CONFIRM_NO_ID);
+        ids.add(StoryUiConstants.STORY_FRAME_RETURN_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_TITLE_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_OPEN_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_BACK_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_FLOOR_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_KILLS_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_DAMAGE_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_TIME_ID);
+        ids.add(StoryUiConstants.STORY_REPORT_BEST_ID);
+        for (TitleMenuItem item : TitleMenuItem.values()) {
+            ids.add(item.getLabelStringId());
+            if (item.getConfirmStringId() != null) ids.add(item.getConfirmStringId());
+        }
+        for (PauseMenuItem item : PauseMenuItem.values()) {
+            ids.add(item.getLabelStringId());
+            if (item.getConfirmStringId() != null) ids.add(item.getConfirmStringId());
+        }
+
         // The accessibility strip: every button's NAME and every VALUE it can cycle to, so a knob
         // added without its labels fails here rather than drawing a !id! marker in the footer.
         StorySettings settings = new StorySettings();

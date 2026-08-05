@@ -177,6 +177,7 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
             case OPEN_INVENTORY:  drawInventoryIcon(cx, cy, extent);           break;
             case INSPECT_WEAPON:  drawInspectIcon(cx, cy, extent);             break;
             case USE_MACHINE:     drawUseMachineIcon(cx, cy, extent);          break;
+            case PAUSE:           drawPauseIcon(cx, cy, extent);               break;
             default: break;
         }
     }
@@ -414,6 +415,17 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         // Lower sides taper to the point
         shapeRenderer.rectLine(leftX,  shoulder, cx, tipY, lineWidth);
         shapeRenderer.rectLine(rightX, shoulder, cx, tipY, lineWidth);
+    }
+
+    /** Pause icon: the two upright bars every phone has taught every thumb to read. */
+    private void drawPauseIcon(float cx, float cy, float extent) {
+        float barHalfHeight = extent * 0.58f;
+        float barWidth      = Math.max(3f, extent * 0.22f);
+        float barOffsetX    = extent * 0.28f;
+        shapeRenderer.rectLine(cx - barOffsetX, cy - barHalfHeight,
+                               cx - barOffsetX, cy + barHalfHeight, barWidth);
+        shapeRenderer.rectLine(cx + barOffsetX, cy - barHalfHeight,
+                               cx + barOffsetX, cy + barHalfHeight, barWidth);
     }
 
     /** Medical cross (+): two overlapping thick bars forming a plus sign. */
