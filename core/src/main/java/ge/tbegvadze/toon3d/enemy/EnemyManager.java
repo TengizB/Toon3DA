@@ -913,6 +913,21 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * Live enemies that are no longer DORMANT — that is, how many things are currently coming for
+     * the player.  Read by the story UI's pacing budget (Story UI order-6 Part B): while this is
+     * high the player is in a fight, and a non-critical story line is held back for the lull rather
+     * than delivered over the top of it.
+     */
+    public int countAwakeEnemies() {
+        int count = 0;
+        for (int index = 0; index < enemies.size(); index++) {
+            Enemy enemy = enemies.get(index);
+            if (enemy.isAlive() && enemy.state != EnemyState.DORMANT) count++;
+        }
+        return count;
+    }
+
+    /**
      * Registers an already-constructed Boss into the live enemy list.
      * Stats (maxHealth, attackDamageMultiplier, nameTag) must be set on the Boss before calling.
      * Called by World.buildLevelDependentResources() for boss floors; the Boss is then

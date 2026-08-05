@@ -110,6 +110,13 @@ public final class ItemConstants {
     public static final float INV_HEADER_FONT_SCALE       = 1.4f;
     public static final float INV_HEADER_EXIT_BUTTON_SIZE = 50f;
     public static final float INV_HEADER_EXIT_MARGIN      = 10f;
+    // CODEX button (Story UI order-6): the archive opens from the inventory header, which is the
+    // game's menu overlay today.  It is a MENU entry point on purpose — the codex must never
+    // interrupt play, so there is no world button for it and no key for it.  When order-8 builds the
+    // pause menu, its CODEX entry calls the same World.openCodex() and this button stays as-is.
+    public static final float INV_HEADER_CODEX_BUTTON_WIDTH  = 130f;
+    public static final float INV_HEADER_CODEX_BUTTON_HEIGHT = 50f;
+    public static final float INV_HEADER_CODEX_GAP           = 12f;
     public static final float INV_BASE_DIM_FACTOR         = 0.40f;
     public static final float INV_ITEM_WIN_DIM_FACTOR     = 0.50f;
 

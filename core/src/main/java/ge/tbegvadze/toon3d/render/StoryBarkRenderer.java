@@ -32,6 +32,14 @@ public final class StoryBarkRenderer implements Renderable, Disposable {
     }
 
     /** Binds the headless bark brain this renderer reads from.  Null hides the layer entirely. */
+    /**
+     * Applies the order-6 accessibility settings (text size, reduced motion) to the shared story
+     * panel this renderer draws with.  Call from the update path when a setting changes.
+     */
+    public void applyAccessibilitySettings(float bodyTextScale, boolean reduceMotion) {
+        panelRenderer.applyAccessibilitySettings(bodyTextScale, reduceMotion);
+    }
+
     public void setBarkSystem(BarkSystem barkSystem) {
         this.barkSystem = barkSystem;
     }

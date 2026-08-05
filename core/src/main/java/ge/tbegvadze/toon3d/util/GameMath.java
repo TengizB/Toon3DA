@@ -5143,4 +5143,31 @@ public final class GameMath {
         int safeIndex = Math.max(0, buttonIndex);
         return stackTopY - safeIndex * (buttonHeight + buttonGap) - buttonHeight;
     }
+
+    /*
+     * Formula: clamped scroll offset (the Story UI order-6 codex body)
+     * Derivation:
+     *   A scrollable view shows a window of height V onto content of height C.  The offset is how
+     *   far the content has been pushed UP past the window's top edge, so the first visible unit of
+     *   content is at offset and the last is at offset + V:
+     *       0 <= offset <= C - V
+     *   When the content is shorter than the window there is nothing to scroll and the only legal
+     *   offset is 0, which is exactly what max(0, C - V) yields — so one expression covers both
+     *   cases and the "content shorter than the view" branch needs no special handling.
+     *   Sign convention: increasing offset reveals content FURTHER DOWN the document.  That is
+     *   independent of the world's Y-up axis; the renderer converts an offset into a Y by
+     *   subtracting it from the body's top edge.
+     * Edge cases:
+     *   Negative content or viewport heights clamp to 0 rather than producing a negative range.
+     *   A NaN request would propagate, so it is mapped to 0 — a scroll position must always be a
+     *   real number the renderer can draw from.
+     */
+    public static float clampScrollOffset(float requestedOffset, float contentHeight,
+                                          float viewportHeight) {
+        if (Float.isNaN(requestedOffset)) return 0f;
+        float maximumOffset = Math.max(0f, contentHeight - viewportHeight);
+        if (requestedOffset <= 0f)            return 0f;
+        if (requestedOffset >= maximumOffset) return maximumOffset;
+        return requestedOffset;
+    }
 }

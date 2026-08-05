@@ -76,6 +76,17 @@ public final class BarkSystem {
     private float         secondsSinceScreenFreed  = Float.MAX_VALUE;
     private final float[] triggerCooldownRemaining = new float[BarkTrigger.values().length];
     private boolean       suppressed;
+    /** True while a combat spike owns the player's attention (order-6 Part B).  Holds, never drops. */
+    private boolean       combatSpike;
+
+    /**
+     * Wrap width for a delivered line.  Settable so the order-6 accessibility text-size setting can
+     * narrow it as the glyphs grow — wrap, never shrink.
+     */
+    private int lineMaxChars = StoryUiConstants.STORY_LINE_MAX_CHARS;
+
+    /** The id of the line that reached the screen since the last call, for the archive / telemetry. */
+    private String justDeliveredBarkId;
 
     /**
      * Ring of the last {@code STORY_BARK_RECENT_MEMORY} lines said.  A candidate still in here is
@@ -122,6 +133,35 @@ public final class BarkSystem {
 
     public boolean isSuppressed() {
         return suppressed;
+    }
+
+    /**
+     * PACING BUDGET (order-6 Part B): while a combat spike is on, nothing non-critical is delivered.
+     * The line is HELD, not dropped — its queue entry stops ageing too, so it arrives in the lull
+     * right after the fight, which is the only moment the player could have read it anyway.
+     *
+     * <p>A {@code STORY_CRITICAL} line still lands during a spike: a control hint the player needs
+     * mid-fight is exactly the line that must not wait.
+     */
+    public void setCombatSpike(boolean value) {
+        this.combatSpike = value;
+    }
+
+    public boolean isCombatSpike() {
+        return combatSpike;
+    }
+
+    /**
+     * Narrows the wrap width for lines delivered from now on (order-6 Part D's text-size setting).
+     * Values below 1 are ignored — a cap of zero would hard-break every character onto its own line.
+     */
+    public void setLineMaxChars(int value) {
+        if (value < 1) return;
+        this.lineMaxChars = value;
+    }
+
+    public int getLineMaxChars() {
+        return lineMaxChars;
     }
 
     // -------------------------------------------------------------------------
@@ -289,17 +329,26 @@ public final class BarkSystem {
             secondsSinceScreenFreed += deltaTime;
         }
 
-        for (int queueIndex = queuedCount - 1; queueIndex >= 0; queueIndex--) {
-            queuedAgeSeconds[queueIndex] += deltaTime;
-            boolean stale = queuedAgeSeconds[queueIndex] >= StoryUiConstants.STORY_BARK_QUEUE_STALE_SECONDS;
-            if (stale && queuedDefinitions[queueIndex].getPriority() != BarkPriority.STORY_CRITICAL) {
-                removeQueuedAt(queueIndex);   // the moment has passed — say nothing rather than say it late
+        // PACING BUDGET (order-6 Part B): a queued line does not AGE during a combat spike. Its
+        // moment has not passed — the player is simply busy — so it must arrive in the lull rather
+        // than quietly expire while they are fighting.
+        if (!combatSpike) {
+            for (int queueIndex = queuedCount - 1; queueIndex >= 0; queueIndex--) {
+                queuedAgeSeconds[queueIndex] += deltaTime;
+                boolean stale = queuedAgeSeconds[queueIndex] >= StoryUiConstants.STORY_BARK_QUEUE_STALE_SECONDS;
+                if (stale && queuedDefinitions[queueIndex].getPriority() != BarkPriority.STORY_CRITICAL) {
+                    removeQueuedAt(queueIndex);   // the moment has passed — say nothing rather than say it late
+                }
             }
         }
 
         if (activeDefinition == null && queuedCount > 0
                 && secondsSinceScreenFreed >= StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS) {
-            deliver(takeNextQueued());
+            BarkDefinition next = peekNextQueued();
+            // Only a mandatory beat may land mid-fight; everything else waits for the lull.
+            if (!combatSpike || next.getPriority() == BarkPriority.STORY_CRITICAL) {
+                deliver(takeNextQueued());
+            }
         }
     }
 
@@ -334,6 +383,19 @@ public final class BarkSystem {
      * earlier one — same-priority barks stay first-in, first-out.
      */
     private BarkDefinition takeNextQueued() {
+        int bestIndex = nextQueuedIndex();
+        BarkDefinition next = queuedDefinitions[bestIndex];
+        removeQueuedAt(bestIndex);
+        return next;
+    }
+
+    /** The line {@link #takeNextQueued()} would return, without removing it.  Never called empty. */
+    private BarkDefinition peekNextQueued() {
+        return queuedDefinitions[nextQueuedIndex()];
+    }
+
+    /** Index of the highest-priority queued entry, oldest among equals.  See {@link #takeNextQueued}. */
+    private int nextQueuedIndex() {
         int bestIndex = 0;
         for (int queueIndex = 1; queueIndex < queuedCount; queueIndex++) {
             if (queuedDefinitions[queueIndex].getPriority()
@@ -341,9 +403,7 @@ public final class BarkSystem {
                 bestIndex = queueIndex;
             }
         }
-        BarkDefinition next = queuedDefinitions[bestIndex];
-        removeQueuedAt(bestIndex);
-        return next;
+        return bestIndex;
     }
 
     /** Puts a line on screen: resolve its text, pre-wrap it, start its clock, stamp its cooldowns. */
@@ -352,7 +412,7 @@ public final class BarkSystem {
         if (definition.getSpeaker().getTypeStyle().isUpperCase()) {
             text = text.toUpperCase(Locale.ROOT);   // the Organization is drawn ALL-CAPS
         }
-        List<String> wrapped = StoryText.wrapToMaxChars(text, StoryUiConstants.STORY_LINE_MAX_CHARS);
+        List<String> wrapped = StoryText.wrapToMaxChars(text, lineMaxChars);
         activeLineCount = Math.min(wrapped.size(), activeLines.length);
         for (int lineIndex = 0; lineIndex < activeLineCount; lineIndex++) {
             activeLines[lineIndex] = wrapped.get(lineIndex);
@@ -363,6 +423,9 @@ public final class BarkSystem {
         activeDismissed             = false;
         activeDismissElapsedSeconds = 0f;
         justAppearedSpeaker         = definition.getSpeaker();
+        // The archive (order-6) and the tuning counters (Part E) both key off DELIVERY, not off the
+        // request: only a line that actually reached the screen was ever told to the player.
+        justDeliveredBarkId         = definition.getId();
 
         triggerCooldownRemaining[definition.getTrigger().ordinal()] =
                 StoryUiConstants.STORY_BARK_TRIGGER_COOLDOWN_SECONDS[definition.getTrigger().ordinal()];
@@ -444,6 +507,21 @@ public final class BarkSystem {
     /** The id of the line on screen (tests / telemetry), or null. */
     public String getActiveBarkId() {
         return activeDefinition != null ? activeDefinition.getId() : null;
+    }
+
+    /**
+     * Returns the id of a line DELIVERED since the last call, then clears it.  Null when nothing new
+     * reached the screen.  The engine feeds it to the codex, which archives the full text of what
+     * ORA just summarised in one line (order-6), and to the tuning counters (Part E).
+     *
+     * <p>Delivery is deliberately the trigger, not the request: a line that was queued and then went
+     * stale was never told to the player, and archiving it would put a document in the codex that
+     * nothing on screen ever pointed at.
+     */
+    public String consumeJustDeliveredBarkId() {
+        String barkId = justDeliveredBarkId;
+        justDeliveredBarkId = null;
+        return barkId;
     }
 
     public int getQueuedCount() {

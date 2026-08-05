@@ -192,4 +192,21 @@ public final class StoryProgress {
         if (store.isCodexUnlocked(codexId)) return;   // already known — no redundant write
         store.markCodexUnlocked(codexId);
     }
+
+    /**
+     * True once the player has actually OPENED a codex entry (order-6).  Unlocked-but-unopened is
+     * what wears the archive's NEW dot, so this is deliberately a second flag rather than the unlock
+     * itself: an entry earned by a bark the player barely glanced at should still invite a look.
+     */
+    public boolean isCodexEntryRead(String codexId) {
+        if (codexId == null) return false;
+        return store.isCodexEntryRead(codexId);
+    }
+
+    /** Marks a codex entry as read, permanently — clearing its NEW dot for good. */
+    public void markCodexEntryRead(String codexId) {
+        if (codexId == null) return;
+        if (store.isCodexEntryRead(codexId)) return;  // already read — no redundant write
+        store.markCodexEntryRead(codexId);
+    }
 }

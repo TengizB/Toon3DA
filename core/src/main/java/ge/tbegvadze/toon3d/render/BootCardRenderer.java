@@ -74,6 +74,14 @@ public final class BootCardRenderer implements Renderable, Disposable {
     }
 
     /** Binds the headless brain this renderer reads from.  Null hides the card entirely. */
+    /**
+     * Applies the order-6 accessibility settings (text size, reduced motion) to the shared story
+     * panel this renderer draws with.  Call from the update path when a setting changes.
+     */
+    public void applyAccessibilitySettings(float bodyTextScale, boolean reduceMotion) {
+        panelRenderer.applyAccessibilitySettings(bodyTextScale, reduceMotion);
+    }
+
     public void setBootCardSystem(BootCardSystem bootCardSystem) {
         this.bootCardSystem = bootCardSystem;
     }

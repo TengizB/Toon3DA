@@ -48,5 +48,14 @@ public enum BarkTrigger {
      * The player walked up to a facility terminal and read what was left on it (order-5's LOG
      * channel).  ORA's one-line "take" on the log; the full text is order-6's codex.
      */
-    LOG_FOUND
+    LOG_FOUND,
+    /**
+     * The player just filled a whole {@link CodexCategory} of the archive (order-6 Part A's
+     * "completion perk").  Subject key = {@code CodexCategory.getCatalogKey()}.
+     *
+     * <p>The perk is deliberately COSMETIC: ORA notices, and the tab wears a completion mark.  It is
+     * never gameplay-critical and never required, because the codex is opt-in and paying it in power
+     * would turn an archive nobody has to read into a chore everybody does.
+     */
+    CODEX_COMPLETE
 }

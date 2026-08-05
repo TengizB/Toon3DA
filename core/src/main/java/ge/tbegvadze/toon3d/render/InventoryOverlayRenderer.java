@@ -56,7 +56,13 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         /** Close the entire inventory overlay without spending a player turn. */
         CLOSE_FREE,
         /** Close the entire inventory overlay and spend one world tick. */
-        CLOSE_WITH_TURN
+        CLOSE_WITH_TURN,
+        /**
+         * Close the inventory and open the CODEX (Story UI order-6).  The archive hangs off this
+         * screen because this is the game's menu overlay today; World returns here when the codex
+         * is closed, so the archive reads as a page of the menu rather than a detour out of it.
+         */
+        OPEN_CODEX
     }
 
     // -------------------------------------------------------------------------
@@ -71,6 +77,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private static final Color EXIT_BTN_BG   = new Color(0.70f,  0.20f,  0.15f,  1f);
     private static final Color EXIT_BTN_TEXT = new Color(1.00f,  0.85f,  0.85f,  1f);
     private static final Color TEXT_DIM      = new Color(0.50f,  0.50f,  0.55f,  1f);
+    private static final Color CODEX_BTN_BG   = new Color(0.16f,  0.14f,  0.09f,  1f);
 
     // -------------------------------------------------------------------------
     // Header EXIT button position — derived from ItemConstants, computed once
@@ -79,6 +86,14 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             - ItemConstants.INV_HEADER_EXIT_MARGIN - ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE;
     private static final float HEADER_EXIT_Y = ItemConstants.INV_HEADER_Y
             + (ItemConstants.INV_HEADER_HEIGHT - ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE) / 2f;
+
+    // -------------------------------------------------------------------------
+    // Header CODEX button — sits immediately left of EXIT, same vertical band
+    // -------------------------------------------------------------------------
+    private static final float HEADER_CODEX_X = HEADER_EXIT_X
+            - ItemConstants.INV_HEADER_CODEX_GAP - ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH;
+    private static final float HEADER_CODEX_Y = ItemConstants.INV_HEADER_Y
+            + (ItemConstants.INV_HEADER_HEIGHT - ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT) / 2f;
 
     // -------------------------------------------------------------------------
     // Owned resources — disposed in dispose()
@@ -223,6 +238,14 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             return CloseAction.NONE;
         }
 
+        // Layer 1 — Header CODEX button (the archive; order-6)
+        if (worldX >= HEADER_CODEX_X
+                && worldX <= HEADER_CODEX_X + ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH
+                && worldY >= HEADER_CODEX_Y
+                && worldY <= HEADER_CODEX_Y + ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT) {
+            return CloseAction.OPEN_CODEX;
+        }
+
         // Layer 1 — Header EXIT button
         if (worldX >= HEADER_EXIT_X
                 && worldX <= HEADER_EXIT_X + ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE
@@ -309,6 +332,13 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.rect(0, ItemConstants.INV_HEADER_Y,
                            Constants.WORLD_WIDTH, ItemConstants.INV_HEADER_HEIGHT);
 
+        // Header CODEX button background (order-6) — amber-tinted, so it reads as story chrome
+        // rather than as another inventory control.
+        shapeRenderer.setColor(CODEX_BTN_BG);
+        shapeRenderer.rect(HEADER_CODEX_X, HEADER_CODEX_Y,
+                           ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH,
+                           ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT);
+
         // Header EXIT button background
         shapeRenderer.setColor(EXIT_BTN_BG);
         shapeRenderer.rect(HEADER_EXIT_X, HEADER_EXIT_Y,
@@ -360,14 +390,21 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                       ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
         }
 
-        // "SUBLEVEL N" label — just left of the EXIT button
+        // "SUBLEVEL N" label — just left of the CODEX button
         textBuilder.setLength(0);
         textBuilder.append("SUBLEVEL ").append(currentDepth);
         glyphLayout.setText(font, textBuilder);
         font.setColor(TEXT_DIM);
         font.draw(spriteBatch, textBuilder,
-                  HEADER_EXIT_X - glyphLayout.width - 16f,
+                  HEADER_CODEX_X - glyphLayout.width - 16f,
                   ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
+
+        // CODEX button label — centered in its rect
+        font.setColor(AMBER);
+        glyphLayout.setText(font, "CODEX");
+        font.draw(spriteBatch, "CODEX",
+                  HEADER_CODEX_X + (ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH - glyphLayout.width) / 2f,
+                  HEADER_CODEX_Y + (ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT + glyphLayout.height) / 2f);
 
         // EXIT button label — centered in the button rect
         font.setColor(EXIT_BTN_TEXT);
