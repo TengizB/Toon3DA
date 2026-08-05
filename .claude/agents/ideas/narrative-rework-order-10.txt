@@ -1,0 +1,150 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Narrative rework 10 — The gates: tests, telemetry, cold reads
+---
+
+PURPOSE
+Makes orders 1-9 stick. Every rule the series introduces becomes either a build gate, a
+measured number, or a written playtest protocol — otherwise the catalog drifts back within
+three features. This order adds no player-facing content at all.
+
+READ FIRST
+- orders 1-9 (each one's DEFINITION OF DONE is a test in this file)
+- docs/story-ui-system.txt — TEST GATES section (this order extends it)
+- existing suites: StoryBarkTest, StoryLocalizationTest, StorySkimmerPathTest, StoryFramingTest
+
+============================================================
+A. NEW TEST GATES (./gradlew test)
+============================================================
+1. FirstTenMinutesTranscriptTest                                       (orders 1, 2, 3, 4)
+   Scripts a cold save through: launch screen -> menu -> boot card -> cold open -> first
+   corner -> first enemy -> first empty magazine -> first portal -> the NAV console. Collects
+   every line actually DELIVERED (not merely registered) into an ordered transcript, then
+   asserts against order-1's comprehension bar:
+     - the transcript contains ORA naming herself AND saying what she is, before any other
+       ORA line;
+     - it contains a plain-language statement that the player died and was reprinted, before
+       the word "reprint" appears anywhere;
+     - it contains the memory-gap line;
+     - it contains the mission (what to do and why) before the player leaves floor one;
+     - it contains a movement instruction, a fire instruction, and a portal instruction, each
+       exactly once.
+   This is the single most valuable test in the series: it is the acceptance criterion for
+   "a new player understands what is happening", executed on every commit.
+
+2. VocabularyLadderTest                                                (order 3)
+   Reads the SHIPPED properties file. For each StoryTerm token found in each row, asserts the
+   row's region band is not earlier than that term's "free from" region. Allow-lists the intro
+   rows and the codex. Failure message names the term, the id, and the region.
+
+3. TeachingCoverageTest                                                (order 4)
+   Every TeachingTopic has: a line, a registered trigger site, a tier, and — where an evidence
+   rule is declared — a re-teach line. Every CRITICAL topic is STORY_CRITICAL. No teaching row
+   exceeds one instruction (checked by a simple imperative-clause count).
+
+4. NoRepeatVerbatimTest                                                (orders 4, 6)
+   No two rows in the entire shipped table have identical text. A re-teach row is never
+   identical to, nor a prefix of, its original. (Today several rows near-duplicate each other
+   across triggers; this test surfaces them.)
+
+5. BestiaryCoverageTest                                                (order 5)
+   Every EnemyType with a tacticalVerb has a bestiary row; every SpecialAbility has a row;
+   every EnemyFamily has an early tactical row and a late reframe row. Guards the tacticalVerb
+   data from going dead a second time.
+
+6. LineQualityTest                                                     (orders 1, 3, 6)
+   Per row: fits its channel's wrap budget (bark 2x40, boot status 1x40, exchange option 34,
+   exchange prompt 3x40); carries at most ONE new term token; contains no numeral that
+   duplicates a HUD readout; a row tagged LEVITY is never one-shot STORY_CRITICAL; no row
+   matches the banned-idiom list (a short, explicit list: "war crime", "no offence", etc. —
+   grown by hand as playtests find them).
+
+7. LieLedgerTest                                                       (order 7)
+   For each row of the lie ledger, the counter-artefact's string id exists and is registered
+   in a band at or before the region in which the claim is made.
+
+8. BeatMapTest                                                         (order 8)
+   For each region, its three spine beats resolve to rows that are one-shot, STORY_CRITICAL,
+   and hang off an unavoidable trigger (region entry, boot card, the ending). Extends
+   StorySkimmerPathTest rather than duplicating it.
+
+9. PacingCeilingTest                                                   (order 8)
+   Simulates a floor with every trigger firing continuously and asserts no more than
+   STORY_BARK_FLOOR_BUDGET non-critical lines are delivered, that criticals still land, and
+   that the planet never exceeds one line per floor.
+
+10. RecapCompositionTest                                               (order 9)
+    StoryRecap produces a complete, non-empty page for every reachable combination of deepest
+    region x outcomes-recorded x codex-unlock count, including the zero state, and never emits
+    a raw string id.
+
+============================================================
+B. TELEMETRY — the numbers that decide what gets cut
+============================================================
+StoryTelemetry stays in-memory, no I/O, no identifiers (unchanged constraint). It gains four
+counters, all of which answer "did this land?":
+
+  fastDismissByBeatId       which specific lines get tapped away unread. The top of this list
+                            is the cut list for the next pass. (Today only the total exists.)
+  reTeachFiredByTopic       how often the competence model had to speak twice. A topic that
+                            re-teaches for most players has a bad FIRST line, not a bad player.
+  beatsDeliveredPerFloor    the actual delivery rate against order-8's budget of 3.
+  comprehensionProxies      four gameplay facts that stand in for "did they understand":
+                              - deaths before the player's first GUARD use
+                              - medkits still in the bag at death
+                              - ranged hits taken while sharing a row/column
+                              - seconds spent on the NAV console before the first node pick
+                            Each one is the failure mode of a specific teaching line, so a bad
+                            number points at a specific row to rewrite.
+
+None of these gate the build. They exist so that "if in doubt, cut" is a decision with
+evidence behind it. Surface them in the desktop dev build only (a debug dump on run end).
+
+============================================================
+C. THE COLD-READ PROTOCOL (the human gate, run once per order)
+============================================================
+No test can tell you a line is confusing. Before an order in this series is marked
+IMPLEMENTED, run this:
+  1. A person who has never played opens the game on a phone and plays for ten minutes.
+     No explanation from anybody, no questions answered during.
+  2. Immediately after, they answer, unprompted, in their own words:
+        Who was talking to you?
+        What happened to your character before the game started?
+        What are you supposed to be doing?
+        What happens when you die?
+        What was the map for?
+  3. Any answer that is wrong or absent is a hole, and the fix is a line on an unskippable
+     channel — never a codex entry, never a tooltip, never a longer version of the line that
+     failed.
+  4. Record the five answers verbatim in the order's file under a COLD READ section. That
+     record is what makes the next order's writer stop guessing.
+
+============================================================
+D. THE UPDATE CONTRACT (extends the one in docs/story-ui-system.txt)
+============================================================
+Any narrative change must, in the SAME commit:
+  - add or update its row in the region beat map (order-8) if it is a spine beat;
+  - add its term to the ladder (order-3) if it introduces a proper noun;
+  - add its counter-artefact to the lie ledger (order-7) if it is an Organization claim;
+  - add its topic row (order-4) if it teaches a mechanic;
+  - update docs/story-ui-system.txt, per that file's own contract.
+A change that cannot satisfy the relevant bullet is a change that has not been designed yet.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           ten test classes in core/src/test/java/.../narrative/
+CHANGED       StoryTelemetry (four counters, still in-memory); a dev-build telemetry dump;
+              docs/story-ui-system.txt TEST GATES table
+RUNTIME       zero. Nothing in this order ships to the player
+RISK          FirstTenMinutesTranscriptTest needs a headless driver for the opening sequence.
+              The sim package (…toon3d.sim/SimWorld) already plays whole runs headlessly
+              through the real systems — reuse that seam rather than building a second one
+
+DEFINITION OF DONE
+- All ten gates green, wired into ./gradlew test.
+- The comprehension bar from order-1 is machine-checked, not aspirational.
+- Every rule introduced anywhere in orders 1-9 is enforced by exactly one gate, and each gate
+  names the order it enforces so a failure tells you which document to read.
+- The cold-read protocol is in docs/story-ui-system.txt, and every order in this series
+  carries a COLD READ section with real answers in it before it is marked IMPLEMENTED.

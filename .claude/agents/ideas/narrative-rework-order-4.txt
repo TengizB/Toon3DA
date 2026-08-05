@@ -1,0 +1,189 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Narrative rework 4 — ORA the guide & the competence model
+---
+
+PURPOSE
+Fixes failures F4 and F7. ORA currently teaches six controls; the game contains roughly twenty
+things a player must understand, including every system players actually fail at — guarding,
+reading an enemy's intent, stepping out of a ranged enemy's line, and the route map that
+opens the first time they touch a portal. This order gives her all of them, and adds the rule
+that keeps her from becoming a nag: SAY IT ONCE, and say it again only when the player has
+demonstrably missed it — in different, shorter words.
+
+READ FIRST
+- order-1 (D1, D4, D5), order-3 (one idea per panel)
+- narrative/ControlHint, BarkCatalog.registerControlHints, world/StoryBarkTickSubscriber
+- input/touch/TouchAction (FORWARD..GUARD, USE_MACHINE, INSPECT_WEAPON, SKIP_TURN)
+- enemy/IntentVerb + docs/enemy-system.txt (WIND_UP / DEFEND / ATTACK_RANGED telegraphs)
+- docs/route-map-system.txt (the FACILITY NAV console the '>' portal opens)
+- .claude/CLAUDE.md — the cardinal-line rule for ranged enemies
+
+============================================================
+A. FROM ControlHint TO TeachingTopic
+============================================================
+Rename and widen the enum to narrative/TeachingTopic (ControlHint's six values are kept as
+values, so no content is lost). Each topic carries:
+    tier      CRITICAL (cannot play without it) | TACTICAL (plays much better with it)
+    trigger   the exact world condition that makes it useful FOR THE FIRST TIME
+    line      the teaching row (one instruction, plain words)
+    again     the re-teach row (different words, shorter, more concrete)
+    evidence  what counts as "they missed it" (see part C)
+
+CRITICAL topics fire the first time the thing is possible, and are STORY_CRITICAL so they
+land even mid-fight (a dropped critical hint is a stuck player). TACTICAL topics fire at the
+first moment the thing would have HELPED — the turn after a telegraphed hit landed, not the
+turn a telegraph first appeared. That timing is the whole design: a hint that arrives while
+the player is still feeling the problem is advice; the same hint five minutes early is noise.
+
+============================================================
+B. THE TOPIC TABLE — every teachable thing in the game
+============================================================
+Existing six (kept, some rewritten by order-6):
+  MOVE          CRITICAL  control handed over        Tap forward to step. Everything good
+                                                     is further down.
+  FIRE          CRITICAL  first enemy wakes          It's awake and it's coming. Fire button,
+                                                     bottom right.
+  RELOAD        CRITICAL  magazine empties           You're dry. Reload - it takes a turn, so
+                                                     make some room first.
+  HEAL          CRITICAL  hurt + medkit in bag       You're carrying a medkit. Use it before
+                                                     the next one lands.
+  SWITCH_WEAPON TACTICAL  second gun acquired        Two guns now. Switch cycles them - the
+                                                     other one's better up close.
+  INVENTORY     TACTICAL  something worth stashing   Open the bag when you get a second.
+                                                     It fills up faster than you think.
+
+NEW — the ones the game never mentions:
+  TURN          CRITICAL  first corner reached       Turn buttons swing you ninety degrees.
+                                                     Strafe steps sideways without turning.
+  READ_INTENT   CRITICAL  first telegraphed wind-up  See the mark over it? That's what it does
+                                                     next turn. It's committed - use the turn.
+  GUARD         TACTICAL  first heavy hit taken from Guard braces you and ends your turn. Costs
+                          a telegraphed attack       a turn, saves most of the hit.
+  BREAK_LANE    TACTICAL  second ranged hit taken    It can only shoot straight down a row or
+                          while sharing a row/column a column. Step off its line and it can't.
+  SKIP_TURN     TACTICAL  a telegraphed enemy is two Skip a turn and let it come to you. Time
+                          tiles away and closing     moves when you do - not otherwise.
+  DOOR          CRITICAL  first closed door          Doors open by walking into them. Coloured
+                                                     ones want a keycard.
+  BARREL        TACTICAL  first barrel in line of    That barrel goes up if you shoot it. So do
+                          fire with an enemy near it  you, if you're next to it.
+  MACHINE       CRITICAL  first usable machine       Stand next to it and hit use. It's the
+                                                     only working one I've seen.
+  PORTAL        CRITICAL  first '>' portal in sight  That's the way down. Step on it and I'll
+                                                     bring the map up.
+  NAV_MAP       CRITICAL  the NAV console opens      This is the facility. Pick a room to drop
+                          for the first time         into - each one's marked with what's in it.
+  ROUTE_RISK    TACTICAL  the second time the map    You can take the quiet road or the loud
+                          offers a branch            one. Loud pays better. Your call.
+  LEVEL_UP      CRITICAL  first level-up card        You've got a point to spend. It sticks for
+                                                     this run only.
+  WEAPON_SWAP   TACTICAL  first ground weapon over   There's a better gun on the floor. Look at
+                          a carried one              it before you take it - stats are on there.
+
+Twenty topics, twenty lines, one per moment, delivered across the first hour. Fourteen of
+them are things a player currently discovers by dying. Note what every TACTICAL line has in
+common: it names the COST as well as the action ("costs a turn", "takes a turn", "it sticks
+for this run only"), because a tactic without its cost is a trap.
+
+REGION-1 DENSITY GUARD: no more than one teaching bark per THREE player turns, and never two
+in the same room, CRITICAL included — a critical that would break the rule is queued, not
+dropped (the bark queue already does exactly this and freezes ageing while suppressed).
+
+============================================================
+C. THE COMPETENCE MODEL — the rule that stops her nagging
+============================================================
+A topic is taught ONCE. It may be re-taught AT MOST ONCE MORE, ever, and only on evidence:
+
+  EVIDENCE A — THEY DIDN'T READ IT.
+    The teaching bark was closed inside STORY_TELEMETRY_FAST_DISMISS_SECONDS. StoryTelemetry
+    already measures this and currently only counts it. Now it names the topic.
+  EVIDENCE B — THEY DON'T UNDERSTAND IT.
+    Per topic, a concrete failure counted N times in one run:
+      HEAL         died with an unused medkit in the bag                        (1x)
+      GUARD        took 3 telegraphed heavy hits without ever guarding          (3x)
+      BREAK_LANE   took 3 ranged hits while sharing a row/column, never stepped off (3x)
+      RELOAD       fired an empty weapon 4 times in a row                       (4x)
+      READ_INTENT  took 3 hits from an enemy that had shown its intent          (3x)
+      SWITCH_WEAPON  fought 2 whole floors without ever switching, holding two guns
+      NAV_MAP      sat on the NAV console over 30 s without picking a node
+      LEVEL_UP     an unspent point at the end of a floor
+  A topic with no listed evidence rule is never re-taught. Silence is the default.
+
+THE RE-TEACH LINE IS NEVER THE SAME WORDS. Verbatim repetition is precisely what players
+report as nagging; a shorter, blunter, differently-angled second telling reads as a person
+noticing. Examples:
+    GUARD      first:  Guard braces you and ends your turn. Costs a turn, saves most of the hit.
+               again:  That one was telegraphed. Guard would have eaten most of it.
+    BREAK_LANE first:  It can only shoot straight down a row or a column. Step off its line.
+               again:  You're standing in its lane again. One step sideways. Any sideways.
+    HEAL       first:  You're carrying a medkit. Use it before the next one lands.
+               again:  You died with a medkit in the bag. I'm not going to say anything else.
+    READ_INTENT first: See the mark over it? That's what it does next turn.
+               again:  The mark means it's already committed. You get a free move. Take it.
+
+RATE LIMITS ON RE-TEACHING
+  - at most ONE re-teach per floor, across all topics;
+  - never during a combat spike unless the topic is CRITICAL;
+  - never within 60 s of the original teaching (someone still processing it is not failing it);
+  - a re-teach is one-shot: after it, that topic is silent forever, right or wrong. The game
+    does not get a third go at teaching anybody anything.
+
+NEW HEADLESS TYPE: narrative/TeachingSystem — owns the topic registry, the evidence counters
+(per run, in memory) and the two persisted flags per topic (taught, retaught) which are just
+one-shot beat ids in the existing seen-set. No schema bump. World feeds it the same events it
+already feeds the bark layer plus four new facts (guard used, ranged hit taken in-lane,
+telegraphed hit taken, medkit unused at death) — all available in EnemyManager / World today.
+
+============================================================
+D. THE PORTAL AND THE MAP — the biggest single hole
+============================================================
+A first-time player finishes floor one, steps on a '>' tile and a node graph takes the screen
+with no explanation of what a node is, what the icons mean, why there is a choice, or that
+the choice is permanent. Three lines fix it, all CRITICAL, all one-shot:
+
+  seeing the portal   That's the way down. Step on it and I'll bring the map up.
+  the map opens       This is the facility. Pick a room to drop into - each one's marked
+                      with what's in it.
+  second branch       You can take the quiet road or the loud one. Loud pays better.
+                      Your call.
+
+Plus ONE piece of lore, delivered the second time the map opens, because this is also the
+moment the endless descent needs explaining (order-8 owns the rest):
+    story.bark.nav.lore=Nobody built one way down. They built dozens, and then kept digging.
+
+The NAV lines fire from World at the ROUTE_SELECT phase transition. Barks are suppressed
+during a hard-pause overlay, so these must be delivered as the console OPENS (the frame the
+phase changes) or held until it closes — implement as: queue on open, deliver on the first
+PLAYING frame after the node is chosen, EXCEPT the "the map opens" line, which is the one
+case worth a dedicated draw inside the console (RouteMapOverlayRenderer already owns a header
+band; put it there as a one-shot hint strip, not a bark panel).
+
+============================================================
+E. WHAT ORA NEVER DOES
+============================================================
+- She never repeats an instruction the player is currently executing correctly.
+- She never comments on a system the player cannot yet use.
+- She never says "remember, you can…" — the phrase that makes every helper voice hated.
+- She never gates a mechanic behind a line: the game must remain playable with the story
+  layer silenced. Teaching lines are the FIRST place a player looks for information, never
+  the only place.
+
+============================================================
+IMPLEMENTATION NOTES
+============================================================
+NEW           narrative/TeachingTopic (widened ControlHint), narrative/TeachingSystem,
+              narrative/TeachingCatalog (one register() per topic + its re-teach row)
+CHANGED       BarkCatalog control-hint section -> TeachingCatalog; StoryTelemetry records the
+              fast-dismissed TOPIC, not just the count; World/StoryBarkTickSubscriber gain the
+              four evidence hooks; RouteMapOverlayRenderer gains a one-shot hint strip
+STRINGS       ~34 ids (20 topics + 14 re-teach rows). Every one under 2x40 chars
+PERSISTENCE   none — taught/retaught are one-shot beat ids in the existing seen-set
+BALANCE       none. No mechanic changes; this order only explains mechanics that exist
+
+DEFINITION OF DONE
+- Every TeachingTopic has a line, a trigger site, and (where listed) a re-teach line + evidence
+  rule; TeachingCoverageTest enforces all three.
+- No teaching line is ever delivered twice verbatim; NoRepeatVerbatimTest enforces it.
+- A player who steps on their first portal is told what the map is before they must use it.
+- A player who dies with a medkit in the bag hears about it exactly once, ever.
