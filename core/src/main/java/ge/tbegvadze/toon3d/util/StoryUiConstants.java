@@ -430,7 +430,7 @@ public final class StoryUiConstants {
     // =====================================================================
     // SPEAKER STINGS (audio) — one short non-verbal sting per speaker, pre-attentively
     // signalling WHO is talking.  Fully understandable with audio OFF.  Arrays index by
-    // Speaker.ordinal().  Generated procedurally on the render side (render/StorySpeakerStings).
+    // Speaker.ordinal().  Generated procedurally on the render side (render/StoryAudio).
     // =====================================================================
     public static final int   STORY_STING_SAMPLE_RATE_HZ = 44100;
     public static final float[] STORY_STING_FREQUENCY_HZ = { 660f, 110f, 440f, 900f };
@@ -440,6 +440,24 @@ public final class StoryUiConstants {
     public static final boolean[] STORY_STING_IS_SQUARE  = { false, false, true, false };
     // Short attack/release envelope (fraction of duration) to avoid clicks — soft edges.
     public static final float STORY_STING_ENVELOPE_FRACTION = 0.15f;
+
+    // =====================================================================
+    // INTERFACE CUES (audio, order-7 Part D) — the non-speaker half of the story layer's sound.
+    // A sting says WHO is talking; a cue says WHAT the interface just did: a panel took the screen,
+    // an answer was committed, another status line printed.  Same procedural WAV pipeline as the
+    // stings (render/StoryAudio), same rule: every one of them is redundant polish.  The game is
+    // fully understandable with audio off, and the whole layer can be switched off in the codex's
+    // accessibility strip.  Arrays index by StoryCue.ordinal().
+    // =====================================================================
+    /** How many interface cues exist — PANEL_OPEN, CHOICE_PICKED, REVEAL_TICK (see StoryCue). */
+    public static final int   STORY_CUE_COUNT        = 3;
+    /** A gentle rise for the panel, a firm low thunk for a committed answer, a dry tick for a line. */
+    public static final float[] STORY_CUE_FREQUENCY_HZ = { 520f, 196f, 1400f };
+    public static final float[] STORY_CUE_DURATION_SEC = { 0.09f, 0.13f, 0.02f };
+    /** The reveal tick fires once per printed line, so it is the quietest thing in the game. */
+    public static final float[] STORY_CUE_VOLUME       = { 0.35f, 0.45f, 0.14f };
+    /** Only the committed-answer cue is a square wave — it should feel like a switch being thrown. */
+    public static final boolean[] STORY_CUE_IS_SQUARE  = { false, true, false };
 
     // =====================================================================
     // CODEX (order-6 Part A) — the ARCHIVE, and the ONE place in the whole game where long text is
@@ -505,8 +523,8 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_FOOTER_GAP        = 14f;
     public static final float STORY_CODEX_FOOTER_Y          = STORY_CODEX_Y + STORY_CODEX_PADDING;
     public static final float STORY_CODEX_FOOTER_TEXT_SIZE  = 1.0f;
-    /** How many settings buttons the strip holds — text size, reveal pacing, motion. */
-    public static final int   STORY_CODEX_SETTING_COUNT     = 3;
+    /** How many settings buttons the strip holds — text size, reveal pacing, motion, story audio. */
+    public static final int   STORY_CODEX_SETTING_COUNT     = 4;
     public static final float STORY_CODEX_SETTING_GAP       = 12f;
     public static final float STORY_CODEX_SETTING_WIDTH     =
             (STORY_CODEX_BODY_WIDTH - (STORY_CODEX_SETTING_COUNT - 1) * STORY_CODEX_SETTING_GAP)
@@ -561,6 +579,7 @@ public final class StoryUiConstants {
     public static final String STORY_CODEX_SETTING_TEXT_ID     = "story.codex.setting.text";
     public static final String STORY_CODEX_SETTING_REVEAL_ID   = "story.codex.setting.reveal";
     public static final String STORY_CODEX_SETTING_MOTION_ID   = "story.codex.setting.motion";
+    public static final String STORY_CODEX_SETTING_AUDIO_ID    = "story.codex.setting.audio";
 
     // =====================================================================
     // ACCESSIBILITY SETTINGS (order-6 Part D) — the player-facing knobs, and their persisted keys.
@@ -573,6 +592,12 @@ public final class StoryUiConstants {
     public static final String STORY_SETTING_TEXT_SIZE      = "textSize";
     public static final String STORY_SETTING_REDUCE_HOLD    = "reduceTextHold";
     public static final String STORY_SETTING_REDUCE_MOTION  = "reduceMotion";
+    /**
+     * Story audio on/off (order-7 Part D).  Defaults to ON, because the cues only ever reinforce
+     * what the panel already says in text — but every one of them is optional, so the whole layer
+     * has a single switch rather than a per-cue submenu.
+     */
+    public static final String STORY_SETTING_STORY_AUDIO    = "storyAudio";
 
     // =====================================================================
     // PACING BUDGET (order-6 Part B) — the anti-overwhelm rules that are NOT already a cooldown.

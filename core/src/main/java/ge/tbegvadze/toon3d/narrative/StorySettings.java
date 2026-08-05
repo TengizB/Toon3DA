@@ -3,7 +3,8 @@ package ge.tbegvadze.toon3d.narrative;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
- * The story-UI ACCESSIBILITY SETTINGS (Story UI order-6 Part D) — three knobs, persisted, applied
+ * The story-UI ACCESSIBILITY SETTINGS (Story UI order-6 Part D, extended by order-7 Part D) —
+ * four knobs, persisted, applied
  * everywhere story text is drawn.
  *
  * <p>The design rule behind all of them: <b>a setting may only make the game easier to read, never
@@ -21,6 +22,10 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *       have a disable toggle; the layer's answer is that it has no timed moments.</li>
  *   <li>{@link #isReduceMotion()} — stills the Planet's jitter and any other decorative movement
  *       behind story text, for players who find motion under text hard to read.</li>
+ *   <li>{@link #isStoryAudioEnabled()} — the story layer's sound (order-7 Part D): the speaker
+ *       stings that say who is talking and the interface cues that say what just happened.  One
+ *       switch for the whole layer, because every cue in it is redundant polish over text that is
+ *       already on screen.</li>
  * </ul>
  *
  * <p>State is cached in memory and written through to a {@link StoryProgressStore} the instant a
@@ -34,6 +39,7 @@ public final class StorySettings {
     private StoryTextSize            textSize;
     private boolean                  reduceTextHold;
     private boolean                  reduceMotion;
+    private boolean                  storyAudioEnabled;
 
     /** In-memory settings at their defaults — tests and showcases. */
     public StorySettings() {
@@ -43,12 +49,23 @@ public final class StorySettings {
     /** Loads the persisted settings from {@code store}, falling back to the comfortable defaults. */
     public StorySettings(StoryProgressStore store) {
         if (store == null) throw new IllegalArgumentException("store must not be null");
-        this.store          = store;
-        this.textSize       = StoryTextSize.fromOrdinal(
+        this.store = store;
+        reloadFromStore();
+    }
+
+    /**
+     * Re-reads every knob from the store.  Called on construction, and again after a "new game"
+     * wipe clears the save behind this object's back (order-7 Part B) — otherwise the strip would
+     * keep showing settings the save no longer holds.
+     */
+    public void reloadFromStore() {
+        this.textSize          = StoryTextSize.fromOrdinal(
                 store.loadSettingInt(StoryUiConstants.STORY_SETTING_TEXT_SIZE,
                                      StoryTextSize.NORMAL.ordinal()));
-        this.reduceTextHold = store.loadSettingInt(StoryUiConstants.STORY_SETTING_REDUCE_HOLD, 0) != 0;
-        this.reduceMotion   = store.loadSettingInt(StoryUiConstants.STORY_SETTING_REDUCE_MOTION, 0) != 0;
+        this.reduceTextHold    = store.loadSettingInt(StoryUiConstants.STORY_SETTING_REDUCE_HOLD, 0) != 0;
+        this.reduceMotion      = store.loadSettingInt(StoryUiConstants.STORY_SETTING_REDUCE_MOTION, 0) != 0;
+        // Audio defaults ON: the cues only ever reinforce what the panel already says in text.
+        this.storyAudioEnabled = store.loadSettingInt(StoryUiConstants.STORY_SETTING_STORY_AUDIO, 1) != 0;
     }
 
     public StoryTextSize getTextSize() {
@@ -97,6 +114,25 @@ public final class StorySettings {
         setReduceMotion(!reduceMotion);
     }
 
+    /**
+     * True when the story layer's sound is on (order-7 Part D) — the four speaker stings and the
+     * three interface cues.  Off is a first-class way to play: every cue is redundant with something
+     * already drawn on the panel, so nothing is ever conveyed by sound alone.
+     */
+    public boolean isStoryAudioEnabled() {
+        return storyAudioEnabled;
+    }
+
+    public void setStoryAudioEnabled(boolean value) {
+        if (value == storyAudioEnabled) return;
+        storyAudioEnabled = value;
+        store.saveSettingInt(StoryUiConstants.STORY_SETTING_STORY_AUDIO, value ? 1 : 0);
+    }
+
+    public void toggleStoryAudio() {
+        setStoryAudioEnabled(!storyAudioEnabled);
+    }
+
     // -------------------------------------------------------------------------
     // Derived values the systems and renderers actually consume
     // -------------------------------------------------------------------------
@@ -126,7 +162,10 @@ public final class StorySettings {
         switch (settingIndex) {
             case 0:  return textSize.getLabelStringId();
             case 1:  return StoryUiConstants.STORY_CODEX_SETTING_REVEAL_ID + "." + (reduceTextHold ? 1 : 0);
-            default: return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID + "." + (reduceMotion ? 1 : 0);
+            case 2:  return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID + "." + (reduceMotion ? 1 : 0);
+            // The audio button reads ON/OFF rather than the others' "reduced" phrasing, because it
+            // is the one knob that removes something instead of calming it.
+            default: return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID + "." + (storyAudioEnabled ? 1 : 0);
         }
     }
 
@@ -135,16 +174,18 @@ public final class StorySettings {
         switch (settingIndex) {
             case 0:  return StoryUiConstants.STORY_CODEX_SETTING_TEXT_ID;
             case 1:  return StoryUiConstants.STORY_CODEX_SETTING_REVEAL_ID;
-            default: return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID;
+            case 2:  return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID;
+            default: return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID;
         }
     }
 
     /** Cycles the setting in slot {@code settingIndex} of the codex's accessibility strip. */
     public void cycleSetting(int settingIndex) {
         switch (settingIndex) {
-            case 0:  cycleTextSize();       break;
+            case 0:  cycleTextSize();        break;
             case 1:  toggleReduceTextHold(); break;
-            default: toggleReduceMotion();   break;
+            case 2:  toggleReduceMotion();   break;
+            default: toggleStoryAudio();     break;
         }
     }
 }

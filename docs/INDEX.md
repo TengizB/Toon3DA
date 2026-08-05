@@ -48,6 +48,7 @@ Quick lookup: find the right doc before starting any feature or fix.
 | File | When to read |
 |---|---|
 | `procedural-vitals-hud.txt` | Modifying HudRenderer panels, bars, face box, or any HUD element. |
+| `story-ui-system.txt` | Touching anything narrative — a bark, an exchange, the boot card, the codex, a story string, a story sound, narrative persistence, or overlay precedence. **Single source of truth for the story UI; update it in the same commit as any story change.** |
 
 ## Design Context
 

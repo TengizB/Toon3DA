@@ -20,7 +20,7 @@ import ge.tbegvadze.toon3d.narrative.StorySampleLines;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.narrative.StoryText;
 import ge.tbegvadze.toon3d.render.StoryPanelRenderer;
-import ge.tbegvadze.toon3d.render.StorySpeakerStings;
+import ge.tbegvadze.toon3d.render.StoryAudio;
 import ge.tbegvadze.toon3d.render.StoryStringsLoader;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.HudConstants;
@@ -55,7 +55,7 @@ public final class StoryUiShowcase extends ApplicationAdapter {
     private BitmapFont         captionFont;
 
     private StoryPanelRenderer panelRenderer;
-    private StorySpeakerStings stings;
+    private StoryAudio stings;
     private StoryStrings       strings;
 
     // Pre-resolved / pre-wrapped panel content (no per-frame allocation).
@@ -80,7 +80,7 @@ public final class StoryUiShowcase extends ApplicationAdapter {
         captionBatch  = new SpriteBatch();
         captionFont   = new BitmapFont();
         panelRenderer = new StoryPanelRenderer();
-        stings        = new StorySpeakerStings();
+        stings        = new StoryAudio();
         // Order-2 added StoryStringsLoader as the ONE place the string asset is read (with the
         // built-in defaults as its fallback); the showcase shares it with the game.
         strings       = StoryStringsLoader.load();
@@ -148,7 +148,7 @@ public final class StoryUiShowcase extends ApplicationAdapter {
     private void playStaggeredStings() {
         while (stingsPlayed < speakers.length
                 && elapsedSeconds >= (stingsPlayed + 1) * STING_STAGGER_SECONDS) {
-            stings.play(speakers[stingsPlayed]);
+            stings.playSpeakerSting(speakers[stingsPlayed]);
             stingsPlayed++;
         }
     }

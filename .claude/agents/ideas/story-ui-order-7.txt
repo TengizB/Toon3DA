@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Story UI 7 — Engine integration, persistence & roguelike story-gating
 ---
@@ -140,3 +140,37 @@ DEFINITION OF DONE
 - Narrative state persists across deaths and app restarts; story never rewinds on death;
   all strings are externalized ids; speaker audio cues play and are disposable; story UI
   correctly yields to every other overlay; first boot teaches controls through ORA.
+
+============================================================
+AS SHIPPED (implementation notes)
+============================================================
+Full shipped behaviour: docs/story-ui-system.txt (the single source of truth for the whole
+story UI; keep it current with any narrative change).
+
+Parts A, C, F and most of E were already honoured by orders 1-6, which were written against
+this file. What order-7 added:
+
+PART B  StoryProgressStore.SCHEMA_VERSION (v4) + loadSchemaVersion() + wipeNarrativeState(),
+        implemented by util/StoryStore (constructor-time migrateIfNeeded(); a save from a NEWER
+        build is left untouched rather than pruned) and InMemoryStoryProgressStore.
+        StoryProgress.wipeAllNarrativeState()/reloadFromStore(), StorySettings.reloadFromStore(),
+        StatsStore.wipeAllPersistentProgress() and World.wipeAllPersistentProgress() — the "new
+        game" seam that clears records and narrative state TOGETHER. Nothing in a run calls it;
+        it exists for order-8's title/settings screen.
+PART D  render/StoryAudio replaces StorySpeakerStings: ONE world-owned Disposable holding all
+        seven tones — the four speaker stings plus three interface cues (StoryCue: PANEL_OPEN,
+        CHOICE_PICKED, REVEAL_TICK) — injected into the bark, exchange and boot-card renderers
+        instead of each building its own copies. The boot card now sounds its own reveal (SYSTEM
+        sting on the first status line, a tick per line after it, ORA's sting when she speaks).
+        A fourth accessibility knob (SOUND, default ON) silences the whole layer; the typewriter
+        tick is per printed LINE rather than per character, because no channel reveals per glyph.
+PART E  Main.pause()/resume() -> World.onApplicationPause()/onApplicationResume(): transient
+        touch state is dropped (a finger that never released must not answer the prompt it
+        returns into) and the text scales are re-pushed after a possible GL-context loss. No
+        modal needs re-opening — a modal owns runPhase, so it is still exactly where it was.
+        ExchangeSystem now marks a one-shot SEEN when it is ANSWERED, not when it opens, so an
+        OS kill mid-prompt asks the beat again next run instead of spending it on a conversation
+        nobody read; the active row is excluded from its own candidate pool while on screen.
+PART G  StoryPersistenceTest (Parts A+B: death does not rewind, round-trip, versioning, wipe),
+        StoryLocalizationTest (Part C: the cross-channel id sweep, duplicate keys, id shape),
+        StoryOverlayPrecedenceTest (Part E: suppression, no stacked panels, interrupted beats).

@@ -23,6 +23,7 @@ import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.render.BootCardRenderer;
+import ge.tbegvadze.toon3d.render.StoryAudio;
 import ge.tbegvadze.toon3d.render.StoryStringsLoader;
 import ge.tbegvadze.toon3d.util.Constants;
 
@@ -78,6 +79,7 @@ public final class BootCardShowcase extends ApplicationAdapter {
 
     private BootCardSystem   bootCardSystem;
     private BootCardRenderer bootCardRenderer;
+    private StoryAudio       storyAudio;
     private StoryProgress    progress;
 
     private float  cardElapsedSeconds;
@@ -104,7 +106,9 @@ public final class BootCardShowcase extends ApplicationAdapter {
         StoryStrings strings = StoryStringsLoader.load();
         bootCardSystem = new BootCardSystem(BootCardCatalog.defaultRegistry(), strings, progress,
                                             20250801L);
+        storyAudio       = new StoryAudio();   // the showcase owns its own, as World does
         bootCardRenderer = new BootCardRenderer();
+        bootCardRenderer.setStoryAudio(storyAudio);
         bootCardRenderer.setBootCardSystem(bootCardSystem);
         bootCardRenderer.setStrings(strings);
 
@@ -118,6 +122,7 @@ public final class BootCardShowcase extends ApplicationAdapter {
         cardElapsedSeconds += deltaTime;
 
         bootCardSystem.update(deltaTime);
+        bootCardRenderer.playPendingStoryAudio();   // reveal ticks + the two stings, as World does
         handleInput();
         autoAdvance();
 
@@ -223,6 +228,7 @@ public final class BootCardShowcase extends ApplicationAdapter {
     @Override
     public void dispose() {
         bootCardRenderer.dispose();
+        storyAudio.dispose();
         backdrop.dispose();
         captionBatch.dispose();
         captionFont.dispose();

@@ -51,6 +51,7 @@ public final class CodexStrings {
         strings.put("story.codex.setting.text",     "TEXT");
         strings.put("story.codex.setting.reveal",   "REVEAL");
         strings.put("story.codex.setting.motion",   "MOTION");
+        strings.put("story.codex.setting.audio",    "SOUND");
         // Setting VALUES, indexed by the settings model's own enums / booleans.
         strings.put("story.codex.setting.text.0",   "NORMAL");
         strings.put("story.codex.setting.text.1",   "LARGE");
@@ -59,6 +60,8 @@ public final class CodexStrings {
         strings.put("story.codex.setting.reveal.1", "INSTANT");
         strings.put("story.codex.setting.motion.0", "FULL");
         strings.put("story.codex.setting.motion.1", "REDUCED");
+        strings.put("story.codex.setting.audio.0",  "OFF");
+        strings.put("story.codex.setting.audio.1",  "ON");
     }
 
     private static void registerCategories(StoryStrings strings) {

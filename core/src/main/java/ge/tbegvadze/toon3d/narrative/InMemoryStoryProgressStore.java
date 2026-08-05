@@ -22,6 +22,24 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     private final Map<String, Integer>     settings         = new HashMap<>();
     private int deepestRegionOrdinal;
     private int reprintCount;
+    /** Stamped on the first write, exactly like the real store, so a fresh store reads version 0. */
+    private int schemaVersion;
+
+    @Override
+    public int loadSchemaVersion() {
+        return schemaVersion;
+    }
+
+    @Override
+    public void wipeNarrativeState() {
+        clear();
+        schemaVersion = SCHEMA_VERSION;
+    }
+
+    /** Every write stamps the schema version, so a save always says which format wrote it. */
+    private void stampSchemaVersion() {
+        schemaVersion = SCHEMA_VERSION;
+    }
 
     @Override
     public int loadDeepestRegionOrdinal() {
@@ -31,6 +49,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void saveDeepestRegionOrdinal(int regionOrdinal) {
         this.deepestRegionOrdinal = regionOrdinal;
+        stampSchemaVersion();
     }
 
     @Override
@@ -41,6 +60,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void markBeatSeen(String beatId) {
         seenBeatIds.add(beatId);
+        stampSchemaVersion();
     }
 
     @Override
@@ -51,6 +71,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void saveReprintCount(int reprintCount) {
         this.reprintCount = reprintCount;
+        stampSchemaVersion();
     }
 
     @Override
@@ -62,6 +83,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void saveStance(String stanceName, int value) {
         stanceValues.put(stanceName, Integer.valueOf(value));
+        stampSchemaVersion();
     }
 
     @Override
@@ -72,6 +94,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void saveOutcome(String exchangeId, String optionId) {
         outcomes.put(exchangeId, optionId);
+        stampSchemaVersion();
     }
 
     @Override
@@ -82,6 +105,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void markCodexUnlocked(String codexId) {
         unlockedCodexIds.add(codexId);
+        stampSchemaVersion();
     }
 
     @Override
@@ -92,6 +116,7 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void markCodexEntryRead(String codexId) {
         readCodexIds.add(codexId);
+        stampSchemaVersion();
     }
 
     @Override
@@ -103,9 +128,14 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     @Override
     public void saveSettingInt(String settingKey, int value) {
         settings.put(settingKey, Integer.valueOf(value));
+        stampSchemaVersion();
     }
 
-    /** Wipes everything — the headless half of a "new game" reset. */
+    /**
+     * Wipes everything — the headless half of a "new game" reset.  Kept as its own method (rather
+     * than folded into {@link #wipeNarrativeState()}) because tests reset a store without pretending
+     * a save format ever wrote to it.
+     */
     public void clear() {
         seenBeatIds.clear();
         stanceValues.clear();
@@ -115,5 +145,6 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
         settings.clear();
         deepestRegionOrdinal = 0;
         reprintCount         = 0;
+        schemaVersion        = 0;
     }
 }

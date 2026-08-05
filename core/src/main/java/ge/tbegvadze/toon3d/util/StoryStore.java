@@ -26,12 +26,15 @@ import ge.tbegvadze.toon3d.narrative.StoryProgressStore;
 public final class StoryStore implements StoryProgressStore {
 
     /**
-     * Bumped by order-7 when the persisted narrative schema changes.  Version 2 added the order-4
-     * keys (the three hidden stance leanings, consequential outcomes, codex unlocks); version 3 the
-     * order-6 keys (which codex entries have been READ, and the accessibility settings).  Every one
-     * of them reads a default when absent, so an older save loads cleanly with no migration.
+     * The persisted narrative schema version — the single constant lives on the port
+     * ({@link StoryProgressStore#SCHEMA_VERSION}) so the headless half and the engine half can never
+     * disagree about what a save contains.  Version 2 added the order-4 keys (the three hidden
+     * stance leanings, consequential outcomes, codex unlocks); version 3 the order-6 keys (which
+     * codex entries have been READ, and the accessibility settings); version 4 the order-7
+     * story-audio setting.  Every one of them reads a default when absent, which is why no version
+     * so far has needed a data migration — an older save loads cleanly.
      */
-    public static final int STORY_SCHEMA_VERSION = 3;
+    public static final int STORY_SCHEMA_VERSION = StoryProgressStore.SCHEMA_VERSION;
 
     private static final String KEY_SCHEMA_VERSION = "story.schemaVersion";
     private static final String KEY_DEEPEST_REGION = "story.deepestRegion";
@@ -46,9 +49,75 @@ public final class StoryStore implements StoryProgressStore {
     /** Prefix shared by every narrative key — used by a "new game" wipe. */
     public static final String STORY_KEY_PREFIX = "story.";
 
+    /** Constructing a store migrates the save it is about to read.  Idempotent and cheap. */
+    public StoryStore() {
+        migrateIfNeeded();
+    }
+
     private Preferences preferences() {
         if (Gdx.app == null) return null;
         return Gdx.app.getPreferences(ProgressionConstants.STATS_PREFS_NAME);
+    }
+
+    // -------------------------------------------------------------------------
+    // Order-7 Part B: the schema version, its migration, and the "new game" wipe.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public int loadSchemaVersion() {
+        Preferences prefs = preferences();
+        if (prefs == null) return 0;
+        return prefs.getInteger(KEY_SCHEMA_VERSION, 0);
+    }
+
+    /**
+     * Brings a save written by an older build up to {@link #STORY_SCHEMA_VERSION}.
+     *
+     * <p>Every version so far has only ADDED keys, and every key reads a default when absent, so v1,
+     * v2 and v3 saves are already valid v4 saves — the migration is a re-stamp.  A save written by a
+     * NEWER build than this one is left completely untouched: dropping keys we do not understand
+     * would silently delete a player's story, and an unknown key costs nothing to carry.  When a
+     * version does need real work, add it here next to the {@code SCHEMA_VERSION} bump.
+     *
+     * <p>A save that has never been written (version 0) is not stamped: an empty preferences file is
+     * a player who has not started, and the first real write stamps the version anyway.
+     */
+    private void migrateIfNeeded() {
+        Preferences prefs = preferences();
+        if (prefs == null) return;
+        int storedVersion = prefs.getInteger(KEY_SCHEMA_VERSION, 0);
+        if (storedVersion == 0 || storedVersion == STORY_SCHEMA_VERSION) return;
+        if (storedVersion > STORY_SCHEMA_VERSION) {
+            Gdx.app.log("StoryStore", "narrative save is from a newer build (schema v"
+                    + storedVersion + " > v" + STORY_SCHEMA_VERSION + "); leaving it untouched");
+            return;
+        }
+        // v1 -> v4: additive only. Nothing to rewrite; record that this build now owns the save.
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.flush();
+    }
+
+    /**
+     * The "new game" reset: removes EVERY {@code story.} key in one flush, then stamps the current
+     * schema version on the empty save.  Deepest region, one-shot beat flags, reprint count,
+     * stances, outcomes, codex unlocks and settings clear together — a half-wiped save would leave
+     * the player in a story whose one-shot beats have all already been spent.
+     *
+     * <p>Run records ({@link StatsStore}) live in the same preferences file but under their own
+     * keys, and are deliberately NOT touched here: wiping both together is
+     * {@link StatsStore#wipeAllPersistentProgress()}, which is what a "new game" button calls.
+     */
+    @Override
+    public void wipeNarrativeState() {
+        Preferences prefs = preferences();
+        if (prefs == null) return;
+        // Copy the key set first: removing while iterating the live map is undefined.
+        String[] storyKeys = prefs.get().keySet().toArray(new String[0]);
+        for (String key : storyKeys) {
+            if (key != null && key.startsWith(STORY_KEY_PREFIX)) prefs.remove(key);
+        }
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.flush();
     }
 
     @Override
