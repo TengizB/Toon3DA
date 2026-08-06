@@ -85,6 +85,10 @@ public final class CodexCatalog {
                 .region(region)
                 .aiTakeStringId("story." + barkId)
                 .unlockedByLine(barkId)
+                // Offered to every log, resolved per entry: a log whose subject is a word the order-3
+                // ladder names is also archived by that naming line (today only the cradle service
+                // log).  For a log no StoryTerm names, this adds nothing.
+                .unlockedByTermIntro()
                 .build());
     }
 
@@ -114,6 +118,7 @@ public final class CodexCatalog {
         registry.register(CodexEntry.builder("codex.contaminant", CodexCategory.PLANET)
                 .region(StoryRegion.HABITATION_RINGS)
                 .unlockedByLine("bark.gate.rings")
+                .unlockedByTermIntro()
                 .build());
         registry.register(CodexEntry.builder("codex.planet.voice", CodexCategory.PLANET)
                 .region(StoryRegion.HARVESTING_GALLERIES)
@@ -125,6 +130,7 @@ public final class CodexCatalog {
         registry.register(CodexEntry.builder("codex.planet.wound", CodexCategory.PLANET)
                 .region(StoryRegion.WOUND)
                 .unlockedByLine("bark.region.wound")
+                .unlockedByTermIntro()
                 .build());
     }
 
@@ -139,13 +145,16 @@ public final class CodexCatalog {
         registry.register(CodexEntry.builder("codex.yield.ledger", CodexCategory.ORGANIZATION)
                 .region(StoryRegion.HARVESTING_GALLERIES)
                 .unlockedByLine("bark.log.galleries.yield")
+                .unlockedByTermIntro()
                 .build());
         registry.register(CodexEntry.builder("codex.soul.reserve", CodexCategory.ORGANIZATION)
                 .region(StoryRegion.RELIQUARY)
                 .unlockedByLine("bark.log.reliquary.cradle")
+                .unlockedByTermIntro()
                 .build());
         registry.register(CodexEntry.builder("codex.overseer", CodexCategory.ORGANIZATION)
                 .region(StoryRegion.RELIQUARY)
+                .unlockedByTermIntro()
                 .build());
         registry.register(CodexEntry.builder("codex.revocation", CodexCategory.ORGANIZATION)
                 .region(StoryRegion.WOUND)
@@ -160,7 +169,11 @@ public final class CodexCatalog {
     private static void registerOra(CodexRegistry registry) {
         registry.register(CodexEntry.builder("codex.ora.count", CodexCategory.ORA)
                 .region(StoryRegion.HABITATION_RINGS)
-                .unlockedByLine("bark.coldopen.1")
+                // The cold open that used to archive this became narrative-rework order-2's
+                // IntroBeat; the beat that is actually ABOUT the count is the one that explains the
+                // number on the wake card, and order-3's naming line for "instance" follows it.
+                .unlockedByLine("bark.intro." + IntroBeat.REPRINT_COUNTER.getCatalogKey())
+                .unlockedByTermIntro()
                 .build());
         registry.register(CodexEntry.builder("codex.ora.build", CodexCategory.ORA)
                 .region(StoryRegion.RELIQUARY)

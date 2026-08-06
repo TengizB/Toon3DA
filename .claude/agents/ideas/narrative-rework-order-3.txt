@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Narrative rework 3 — The vocabulary ladder
 ---
@@ -132,3 +132,89 @@ DEFINITION OF DONE
 - No panel in the game introduces two new ideas at once.
 - The codex entries for the six "big" terms unlock from their intro lines, so a player who
   wants the long version has it the moment they hear the short one.
+
+
+============================================================
+AS BUILT (implementation record)
+============================================================
+SHIPPED
+  NEW      narrative/StoryTerm          — 15 rows: match tokens, naming-line string id, freeFrom
+                                          region, the existing trigger the naming hangs off, the
+                                          moment subject it needs, its earliest reprint count, and
+                                          the codex entry it archives.
+  NEW      narrative/StoryTermCatalog   — registerIntroLines() (one one-shot STORY_CRITICAL bark per
+                                          term, in a loop, from BarkCatalog.bootstrap),
+                                          requestNextIntro() (the schedule), and the audit:
+                                          firstDisallowedTerm() / isExempt() / termForWord().
+  CHANGED  BarkCatalog                  — one call into the term catalog; no per-term rows.
+  CHANGED  BarkStrings + story-strings.properties — 13 new story.term.* ids.
+  CHANGED  CodexEntry.Builder           — unlockedByTermIntro(), which reads the term -> entry
+                                          pairing back off StoryTerm so it is declared once.
+  CHANGED  CodexCatalog                 — seven entries archived by their naming line; and
+                                          codex.ora.count repointed off the dead "bark.coldopen.1"
+                                          id order-2 left behind (that was a RED test: StoryCodexTest
+                                          .everyUnlockLineIsARealCatalogRow failed before this order).
+  CHANGED  World, StoryBarkTickSubscriber — five firing sites, one line each.
+  CHANGED  StoryUiConstants             — STORY_BARK_QUEUE_CAPACITY 5 -> 12 (see COST below).
+  CHANGED  4 shipped rows rewritten to drop early jargon (below).
+  CHANGED  StoryBarkTest.theOrganizationSpeaksAtEveryGateAndEscalates — it asserted that ONLY the
+           Organization may speak on REGION_GATE_ORDER; ORA's naming aside now rides that moment on
+           purpose, so it asserts its actual intent (every region still gets its one-shot
+           Organization order; the only other row allowed there is a naming line).
+
+DEVIATIONS FROM THE SPEC ABOVE, and why
+  1. FIFTEEN TERMS, NOT SIXTEEN. "soul reserve" and "the reserve" are one row (RESERVE): the short
+     form is a substring of the long one, so one token set covers both and two rows would have had
+     to be kept in step by hand.
+  2. RESERVE IS FREE FROM REGION 2, NOT REGION 3. The table above bands it to the Reliquary, but
+     order-2 had ALREADY shipped "SOUL RESERVE ......... SUFFICIENT" on the reprint card's
+     Harvesting-Galleries status block and given ORA two Galleries wake lines asking what the
+     printers run on. Banding it to R3 would have meant undoing order-2's best mechanism (the
+     wallpaper that becomes horrifying). So the WORD arrives in the Galleries — with a naming line
+     that says only what it does mechanically (fuel, metered, finite) — and the Reliquary's cradle
+     beat stays the reveal of what it is MADE OF. The ladder still holds; the rung just moved.
+  3. THE OVERSEER LINE IS ORA, NOT SYSTEM. The spec annotated it (SYSTEM), but the line editorialises
+     ("It's a desk, not a person") and docs/story-ui-system.txt states that SYSTEM lines never
+     editorialize. Explaining what she is allowed to say IS ORA's charter (D6), so she says it.
+  4. "operator" AND "the Organization" GOT NO NAMING LINE, as the spec's 13-line list implies. Both
+     are introduced by USE, on the Region-1 briefing exchange — which is the Organization talking and
+     addressing the player as the thing their file says they are. They borrow that line's string id.
+  5. ONE NAMING PER MOMENT, which the spec did not specify. Without it, "the Deepworks" and "Erebus"
+     would have arrived in the same breath on floor one, breaking the order's own second-half rule.
+     requestNextIntro() therefore stops at the first UNNAMED term for the trigger, which spreads the
+     namings across floors and regions with no counter and no conditional.
+
+ROWS REWRITTEN (all used a word two regions before its rung)
+  story.bark.floor.rings.4       "...Purge it, restore the yield."   -> "...That's the whole order."
+  story.bark.kill.rings.2        "...The yield thanks you."          -> "...Somebody upstairs is pleased."
+  story.bark.region.galleries    "...The yield is measured by weight."-> "...This is where the cutting happened."
+  story.bark.lowhealth.rings.2   "...The Cradle bill for this is mine."-> "...Patch that before I have to log it."
+  story.exchange.rings.briefing.prompt  "...restore the yield."      -> "...restore the site."
+  (The last is the CONTAMINANT naming moment itself, so it could not go on using a Region-2 word.)
+
+THE COST, recorded so order-8's per-floor budget can revisit it
+  Floor one of run one now asks for NINE mandatory panels in two frames: the region-entry beat, the
+  Organization's gate order, the two namings behind them (contaminant, Overseer), the facility's
+  naming, ORA's three introduction lines and the MOVE hint. They arrive one at a time on the player's
+  own taps, spaced by the ordinary rate limit — but it IS a lot, and STORY_BARK_QUEUE_CAPACITY had to
+  go from 5 to 12 to stop the tail of that burst being silently dropped. (At 5 it already was: the
+  MOVE hint lost its slot on floor one before this order, because order-2's comment counted the cold
+  open's four panels and not the region entry and gate order landing in the same frame.)
+
+DEFINITION OF DONE — STATUS
+  [x] Every term has exactly one introduction, on an unskippable channel, at its moment. Verified by
+      driving StoryTermCatalog.requestNextIntro through a whole save: floor1 deepworks, floor2
+      erebus, rings entry contaminant, rings gate overseer, quiet instance, first undead serial,
+      print 2 reprint, print 3 checkpoint, galleries floor reserve, galleries entry yield, reliquary
+      entry cradle, reliquary gate pattern, wound entry wound.
+  [x] The ladder holds against the SHIPPED properties file: 0 violations across every bark, exchange,
+      boot-card status block, wake line and framing-chrome id, with the scanner's positive controls
+      confirming it catches "Cradle" and "yield" in Region 1 and ignores substrings ("Wounded",
+      "cradling") and handles possessives ("cradle's").
+  [x] No panel introduces two new ideas at once (one naming per moment; one new word per line).
+  [x] The codex entries for the big terms unlock from their naming lines.
+  [ ] VocabularyLadderTest is not shipped. The spec assigns the FILE to order-10 ("order-10 owns the
+      file, this order owns the rule"), and the project testing policy in .claude/CLAUDE.md forbids
+      new test files outside game balance. The rule and its API ship here and are green; order-10's
+      test is three lines against firstDisallowedTerm()/isExempt().
+  [ ] COLD READ (order-10 SECTION C) not run — needs a human who has never played.

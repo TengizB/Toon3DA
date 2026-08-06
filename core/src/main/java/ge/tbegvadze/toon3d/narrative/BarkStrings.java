@@ -28,6 +28,7 @@ public final class BarkStrings {
     /** Adds every order-2 bark line to {@code strings}.  Returns the same table for chaining. */
     public static StoryStrings registerDefaults(StoryStrings strings) {
         registerIntroBeats(strings);
+        registerTermIntros(strings);
         registerControlHints(strings);
         registerLogTakes(strings);
         registerFloorArrival(strings);
@@ -96,6 +97,48 @@ public final class BarkStrings {
     }
 
     /**
+     * THE VOCABULARY LADDER (narrative-rework order-3) — one line per {@link StoryTerm}, and the only
+     * place in the game a proper noun of this fiction is allowed to arrive for the first time.
+     *
+     * <p>Each one performs the NAMED step: the word, attached to the plain description the player
+     * already has, at a moment they can see the thing being named.  Two rules shape every line here
+     * and both are load-bearing — <b>one new word per line</b> (so a panel never introduces two
+     * unfamiliar things at once), and <b>no line explains a thing the player cannot see yet</b>.  A
+     * naming line is not lore: it is the price of every jargon line that follows it.
+     */
+    private static void registerTermIntros(StoryStrings strings) {
+        // Region 1 — the eight words the first hour runs on, in the order they are named.
+        strings.put("story.term.reprint",
+                                                     "The paperwork calls that a reprint. You're on your second.");
+        strings.put("story.term.deepworks",
+                                                     "This is the Deepworks. Forty years of digging, straight down.");
+        strings.put("story.term.erebus",
+                                                     "The rock it's dug into is Erebus. Survey named it in an afternoon.");
+        strings.put("story.term.contaminant",
+                                                     "They call it the contaminant. That's the word on the form, not a description.");
+        strings.put("story.term.overseer",
+                                                     "The voice on that channel is the Overseer. It's a desk, not a person.");
+        strings.put("story.term.instance",
+                                                     "They file each of you as an instance. That's what the number is.");
+        strings.put("story.term.serial",
+                                                     "Crew wear serials. So do you - check your cuff sometime.");
+        strings.put("story.term.checkpoint",
+                                                     "A checkpoint is the last stored read of you. They build from that.");
+
+        // Below Region 1 — each word arrives with the region that makes it mean something.
+        strings.put("story.term.yield",
+                                                     "Yield is whatever these floors were cutting out and sending up.");
+        strings.put("story.term.reserve",
+                                                     "The reserve is the fuel. Metered, finite, and nobody says of what.");
+        strings.put("story.term.cradle",
+                                                     "The machines in the racks are Cradles. A body comes out of one.");
+        strings.put("story.term.pattern",
+                                                     "Your pattern is the stored you. The data. Not this body.");
+        strings.put("story.term.wound",
+                                                     "Nobody calls this part anything. The old notes say the Wound.");
+    }
+
+    /**
      * The whole tutorial (order-5), one line per control, said the first time it is needed.  Each
      * must NAME the control plainly enough to act on and still sound like her — a line that reads as
      * a manual entry has spent the character to say something a diagram could have said.
@@ -153,7 +196,9 @@ public final class BarkStrings {
         strings.put("story.bark.floor.rings.1",      "Objective's down. Everything good is always down.");
         strings.put("story.bark.floor.rings.2",      "Evacuation notices, still fresh. They left mid-shift.");
         strings.put("story.bark.floor.rings.3",      "Crew bunks. Serial tags on them, same format as yours.");
-        strings.put("story.bark.floor.rings.4",      "Clean sweep, then home. Purge it, restore the yield.");
+        // "yield" is banded to the Harvesting Galleries by the order-3 ladder; up here the order is
+        // still just an order.
+        strings.put("story.bark.floor.rings.4",      "Clean sweep, then home. That's the whole order.");
         strings.put("story.bark.floor.rings.5",      "Air's breathable down here. You're welcome, I suppose.");
 
         strings.put("story.bark.floor.galleries.1",  "Okay, the smell in here is a war crime. Touch nothing.");
@@ -180,7 +225,9 @@ public final class BarkStrings {
     /** Region entry (ORA) and the Organization's cold order at each gate.  All one-shot beats. */
     private static void registerRegionAndGate(StoryStrings strings) {
         strings.put("story.bark.region.rings",       "New body, same job. Down we go. I'll keep count.");
-        strings.put("story.bark.region.galleries",   "Harvesting galleries. The yield is measured by weight.");
+        // Plain first: this row states what happened here, and the ladder's naming line (order-3)
+        // supplies the word "yield" one panel later.
+        strings.put("story.bark.region.galleries",   "Harvesting galleries. This is where the cutting happened.");
         strings.put("story.bark.region.reliquary",   "The Reliquary. This is where they print you. And me.");
         strings.put("story.bark.region.wound",       "The drills are still in it. It's still bleeding.");
         strings.put("story.bark.region.core",        "We're at the core. Whatever's next, I'm with you.");
@@ -205,7 +252,7 @@ public final class BarkStrings {
     /** Kills — ORA's confidence rotting across the descent.  Rare, and rarely a joke. */
     private static void registerKills(StoryStrings strings) {
         strings.put("story.bark.kill.rings.1",       "See? Contaminant. Nothing violence can't purge.");
-        strings.put("story.bark.kill.rings.2",       "Textbook. Efficient. The yield thanks you.");
+        strings.put("story.bark.kill.rings.2",       "Textbook. Efficient. Somebody upstairs is pleased.");
         strings.put("story.bark.kill.rings.3",       "Logged as hostile stock. That's the word they use.");
         strings.put("story.bark.kill.rings.4",       "One down. I'd cheer, but I'm a professional.");
 
@@ -228,7 +275,8 @@ public final class BarkStrings {
     /** Low health — the one moment ORA is allowed to sound frightened. */
     private static void registerLowHealth(StoryStrings strings) {
         strings.put("story.bark.lowhealth.rings.1",  "Ten percent and still walking at it. Bold. Dumb.");
-        strings.put("story.bark.lowhealth.rings.2",  "You're leaking. The Cradle bill for this is mine.");
+        // Was "the Cradle bill for this is mine" — a Region-3 word, two regions early (failure F6).
+        strings.put("story.bark.lowhealth.rings.2",  "You're leaking. Patch that before I have to log it.");
         strings.put("story.bark.lowhealth.mid.1",    "Careful. Please. I don't want to count you again.");
         strings.put("story.bark.lowhealth.mid.2",    "Every reprint costs something. I know what now.");
         strings.put("story.bark.lowhealth.deep.1",   "Stop. Please stop. I can't watch them print you again.");

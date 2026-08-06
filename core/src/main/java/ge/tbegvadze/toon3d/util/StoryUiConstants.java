@@ -269,12 +269,16 @@ public final class StoryUiConstants {
     // HARD rate limit: at most one bark per this many seconds of gameplay, whatever asks.  Measured
     // from the moment the previous bark was DISMISSED, so reading slowly never causes a pile-up.
     public static final float STORY_BARK_MIN_INTERVAL_SECONDS = 12f;
-    // Pending barks waiting for the screen.  Small on purpose — a long queue IS chatter.  The floor
-    // under it is the COLD OPEN (narrative-rework order-2 D): run 1 asks for ORA's three
-    // introduction lines and the MOVE hint in the same frame, all four mandatory, and a mandatory
-    // beat that finds the queue full of other mandatory beats is simply dropped.  Four is the
-    // largest burst the game ever asks for; the fifth slot is the margin.
-    public static final int   STORY_BARK_QUEUE_CAPACITY       = 5;
+    // Pending barks waiting for the screen.  This is NOT a pacing knob — the rate limit and the
+    // per-trigger cooldowns own pacing, and a queued line is only ever delivered one at a time, on
+    // the player's own taps.  It is a FLOOR under the mandatory burst: a STORY_CRITICAL beat that
+    // finds the queue full of other criticals is dropped outright, and a dropped control hint is a
+    // stuck player.  Floor one of run one is the worst case the game ever asks for, and it asks for
+    // nine in two frames — the region-entry beat, the Organization's gate order, the two vocabulary
+    // namings behind them (narrative-rework order-3), the facility's own naming, ORA's three
+    // introduction lines and the MOVE hint — plus the reactive floor-arrival line.  Twelve is that
+    // burst with margin.
+    public static final int   STORY_BARK_QUEUE_CAPACITY       = 12;
     // A queued non-critical bark this old is stale: its moment has passed, so it is dropped
     // rather than shown late.  Generous, because the player now controls when the screen frees up.
     public static final float STORY_BARK_QUEUE_STALE_SECONDS  = 25f;

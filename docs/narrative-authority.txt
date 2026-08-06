@@ -65,15 +65,21 @@ F1 — THE STRANGER PROBLEM                                          (owner: ord
    happened to the player, the memory gap), two on run 2 (she is not printed, so she is the only one
    who remembers the last body), and four more distributed across floor one's own moments.
 
-F2 — THE JARGON WALL                                                           (owner: order 3)
-   Inside the first five minutes the game says, undefined: instance, reprint, soul reserve,
+F2 — THE JARGON WALL                                               (owner: order 3 — FIXED)
+   Inside the first five minutes the game said, undefined: instance, reprint, soul reserve,
    checkpoint, operator, contaminant, cradle, pattern, yield. Nine proper nouns, no definitions, on
    channels that cannot be re-read. The codex defines them, and the codex is opt-in BY DESIGN — so
-   the words that carry the whole plot are explained only to the players who already care.
+   the words that carry the whole plot were explained only to the players who already cared.
    PARTLY ADDRESSED by order-2: the first-print and reprint cards now open in plain words (deceased /
    backup copy / printing a new body), and "soul reserve" is banded to the Harvesting Galleries as
-   DATA (a second status block on the card) rather than printed on screen one. The ladder itself —
-   and the remaining seven words — is still order-3's.
+   DATA (a second status block on the card) rather than printed on screen one.
+   FIXED by order-3: `narrative/StoryTerm` + `narrative/StoryTermCatalog` — fifteen terms, each with
+   a plain naming line on an existing unskippable moment, an earliest region its word may appear in,
+   and the codex entry the naming archives. `requestNextIntro()` allows AT MOST ONE naming per
+   moment, so a panel never introduces two unfamiliar things. Four shipped rows that used a word two
+   regions early were rewritten (the Region-1 "yield" lines and the Region-1 "Cradle" line, which was
+   also an F6 offender). The rule is auditable against the SHIPPED table by
+   `StoryTermCatalog.firstDisallowedTerm`; order-10 wires it to a build gate.
 
 F3 — A DEATH THE PLAYER DID NOT SEE AND NOBODY EXPLAINS            (owner: order 2 — FIXED)
    The launch screen opens on "PREVIOUS INSTANCE - TERMINATED / SOUL RESERVE .......... SUFFICIENT".
@@ -127,6 +133,8 @@ F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD          (owner: ord
                                    the cloning reveal in a subordinate clause.
    story.bark.lowhealth.rings.2= "You're leaking. The Cradle bill for this is mine."
                                  — uses Cradle in Region 1, two regions before the Reliquary.
+                                 REWRITTEN by order-3, which caught it with the ladder: "You're
+                                 leaking. Patch that before I have to log it".
 
 F7 — NO RECOVERY PATH                                                          (owner: orders 4, 9)
    Every teaching line is one-shot for the life of the save. A player who taps the X while the panel
@@ -149,9 +157,13 @@ D2  PLAIN BEFORE PROPER.
     No proper noun of this fiction may appear in ANY channel before its plain-language introduction
     has been delivered. "They keep a copy of you and print a new body" comes first; the word
     "reprint" comes after. The introduction must land at a moment the player can SEE the thing being
-    named.
-    ENFORCED BY: order-3 makes it a mechanical property of the catalog (the vocabulary ladder) plus
-    order-10's VocabularyLadderTest, which reads the SHIPPED properties file.
+    named, and it introduces exactly ONE new word.
+    ENFORCED BY: order-3, which SHIPPED the ladder as data — `narrative/StoryTerm` is the term table
+    and `narrative/StoryTermCatalog` is the registration, the schedule and the audit
+    (`firstDisallowedTerm` / `isExempt`). A word with no row on the ladder may not appear on any
+    channel at all: it lives in the codex or it does not exist. Order-10's VocabularyLadderTest wires
+    that audit to the build, reading the SHIPPED properties file.
+    THE RECIPE: docs/story-ui-system.txt, ADD A PROPER NOUN.
 
 D3  THE GAP IS THE LICENSE.
     This print came back with holes in its memory. That single fact makes everything ORA explains —
@@ -303,7 +315,7 @@ Order 10 makes all of it stick.
   |---|----------------------------------------|------------|--------------------------|--------|
   | 1 | Diagnosis, doctrine & series map       | —          | this document            | DONE   |
   | 2 | The first ten minutes                  | F1, F3, F6 | launch + cold open + gap | DONE   |
-  | 3 | The vocabulary ladder                  | F2         | plain-before-proper data | TODO   |
+  | 3 | The vocabulary ladder                  | F2         | plain-before-proper data | DONE   |
   | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | TODO   |
   | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | TODO   |
   |   |                                        |            | survive it               |        |

@@ -54,7 +54,7 @@ public final class ExchangeStrings {
     /** Region 1 — the briefing. The first time the player gets to have an opinion about the word. */
     private static void registerRingsBriefing(StoryStrings strings) {
         strings.put("story.exchange.rings.briefing.prompt",
-                "Operator. The contaminant is below. Purge it and restore the yield.");
+                "Operator. The contaminant is below. Purge it and restore the site.");
         strings.put("story.exchange.rings.briefing.obey",   "Understood. Going down.");
         strings.put("story.exchange.rings.briefing.obey.reply",
                 "That's the spirit. I'll log it as enthusiasm.");
