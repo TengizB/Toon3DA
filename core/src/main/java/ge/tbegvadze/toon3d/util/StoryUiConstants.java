@@ -311,15 +311,19 @@ public final class StoryUiConstants {
 
     // PER-TRIGGER COOLDOWNS (seconds) — indexed by narrative/BarkTrigger.ordinal(), in that enum's
     // declaration order: 0 FLOOR_ARRIVAL, 1 REGION_ENTERED, 2 REGION_GATE_ORDER,
-    // 3 ENEMY_FAMILY_FIRST_SEEN, 4 KILL, 5 LOW_HEALTH, 6 DEEP_STRATA, 7 IDLE, 8 BACKTRACK,
-    // 9 RUN_START, 10 CONTROL_HINT, 11 LOG_FOUND, 12 CODEX_COMPLETE.
+    // 3 ENEMY_FAMILY_FIRST_SEEN, 4 ENEMY_ABILITY_RESOLVED, 5 BOSS_ARENA_ENTERED, 6 BOSS_DEFEATED,
+    // 7 KILL, 8 LOW_HEALTH, 9 DEEP_STRATA, 10 IDLE, 11 BACKTRACK,
+    // 12 RUN_START, 13 CONTROL_HINT, 14 LOG_FOUND, 15 CODEX_COMPLETE.
     // A test guards this array against the enum drifting.  Zero = the moment is naturally rare
     // (a floor arrival, a one-shot beat) and needs no cooldown beyond the global rate limit.
     public static final float[] STORY_BARK_TRIGGER_COOLDOWN_SECONDS = {
             75f,    // FLOOR_ARRIVAL            — a short floor must not always earn a line
             0f,     // REGION_ENTERED           — one-shot mandatory beat
             0f,     // REGION_GATE_ORDER        — one-shot mandatory beat
-            0f,     // ENEMY_FAMILY_FIRST_SEEN  — one-shot per family
+            0f,     // ENEMY_FAMILY_FIRST_SEEN  — one-shot per family AND per archetype
+            0f,     // ENEMY_ABILITY_RESOLVED   — one-shot per ability; a dropped rule kills a player
+            0f,     // BOSS_ARENA_ENTERED       — one-shot, once in a lifetime
+            0f,     // BOSS_DEFEATED            — one-shot, the reveal riding the first boss's death
             180f,   // KILL                     — reactive flavour; stays fresh only if RARE
             120f,   // LOW_HEALTH
             90f,    // DEEP_STRATA

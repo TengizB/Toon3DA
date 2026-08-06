@@ -6,6 +6,7 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyFamily;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.narrative.BarkSystem;
 import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.ControlHint;
@@ -54,6 +55,8 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
     private final int         visitedRowCount;
     /** Families already asked about on this floor — the narrative layer owns the permanent flag. */
     private final boolean[]   familyAlreadyAsked = new boolean[EnemyFamily.values().length];
+    /** Archetypes already asked about on this floor (narrative-rework order-5 B), same idiom. */
+    private final boolean[]   typeAlreadyAsked   = new boolean[EnemyType.values().length];
 
     private int     consecutiveRevisitedSteps;
     private float   secondsSinceLastAction;
@@ -123,10 +126,16 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
     }
 
     /**
-     * Asks for a first-appearance line for any family that has woken up on this floor — and, the
-     * very first time anything anywhere wakes up, for the FIRE tutorial line, because that is the
-     * exact moment the button starts mattering (order-5).  The hint is one-shot in the narrative
-     * layer, so asking on every floor's first wake-up costs nothing after the first run.
+     * Asks for a first-appearance line for anything that has woken up on this floor — and, the very
+     * first time anything anywhere wakes up, for the FIRE tutorial line, because that is the exact
+     * moment the button starts mattering (order-5).  The hint is one-shot in the narrative layer, so
+     * asking on every floor's first wake-up costs nothing after the first run.
+     *
+     * <p>THE BESTIARY VOICE (narrative-rework order-5) asks at TWO grains on this one moment, in
+     * this order: what the thing IS (its family, and from the Wound down what it actually was), then
+     * how this particular archetype kills you.  Coarse before fine, so the panel a player reads
+     * first is the one that means something even if they never see that archetype again.  Both are
+     * one-shot in the narrative layer; the per-floor filters here only keep the repeat asks cheap.
      */
     private void detectNewEnemyFamily() {
         if (enemyManager == null) return;
@@ -136,15 +145,20 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
             if (enemy.health <= 0 || enemy.state == EnemyState.DORMANT) continue;
             barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.FIRE.getSubjectKey());
             EnemyFamily family = enemy.type.family();
-            if (family == null || familyAlreadyAsked[family.ordinal()]) continue;
-            familyAlreadyAsked[family.ordinal()] = true;
-            // The naming line first, then the reaction: the vocabulary ladder (narrative-rework
-            // order-3) tells the player what a serial is one panel before ORA reads one off a dead
-            // crew member. Which family (if any) earns a naming is data on StoryTerm, so nothing
-            // here knows that it is the undead who wear them.
-            StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.ENEMY_FAMILY_FIRST_SEEN,
-                                              family.name());
-            barkSystem.request(BarkTrigger.ENEMY_FAMILY_FIRST_SEEN, family.name());
+            if (family != null && !familyAlreadyAsked[family.ordinal()]) {
+                familyAlreadyAsked[family.ordinal()] = true;
+                // The naming line first, then the reaction: the vocabulary ladder (narrative-rework
+                // order-3) tells the player what a serial is one panel before ORA reads one off a
+                // dead crew member. Which family (if any) earns a naming is data on StoryTerm, so
+                // nothing here knows that it is the undead who wear them.
+                StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.ENEMY_FAMILY_FIRST_SEEN,
+                                                  family.name());
+                barkSystem.request(BarkTrigger.ENEMY_FAMILY_FIRST_SEEN, family.name());
+            }
+            EnemyType type = enemy.type;
+            if (typeAlreadyAsked[type.ordinal()]) continue;
+            typeAlreadyAsked[type.ordinal()] = true;
+            barkSystem.request(BarkTrigger.ENEMY_FAMILY_FIRST_SEEN, type.name());
         }
     }
 

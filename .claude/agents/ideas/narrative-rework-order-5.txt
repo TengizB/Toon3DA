@@ -1,7 +1,40 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Narrative rework 5 — The bestiary voice
 ---
+
+AS SHIPPED — the four deviations from this document, and why
+============================================================
+Shipped behaviour lives in docs/story-ui-system.txt (THE BESTIARY VOICE). All of it is
+narrative/BestiaryCatalog, registered into the one bark registry by BarkCatalog.bootstrap.
+
+1. THE UNDEAD "SECOND ROW" WAS FOLDED INTO THE FIRST. Part A gave the undead a second line at
+   the moment one closes ("They're slow. Back up and let it walk into your shot."). Every other
+   family says both halves in ONE line, and the tactical half was also about to be said by the
+   GHOUL archetype row — D5 (say it once). Shipped as one line: "Crew serials on those. They're
+   slow - back up and let it walk into your shot."
+
+2. THE "TACTICAL TIER" IS THE EXISTING REACTIVE TIER. Part B asks for order-4's TACTICAL priority,
+   and order-4 has not shipped. REACTIVE already has exactly the behaviour the line asks for (held
+   during a combat spike, delivered in the lull); boss archetypes are STORY_CRITICAL, because a
+   boss fight is the whole floor and no lull is coming. When order-4 lands its tier, these rows
+   move to it with no other change.
+
+3. NO BestiaryCoverageTest — COVERAGE IS STRUCTURAL INSTEAD. The project's testing policy
+   (.claude/CLAUDE.md) spends new tests on balance only. Every row is registered by LOOPING
+   EnemyFamily / EnemyType / SpecialAbility, so a new family, archetype or ability cannot ship
+   without a voice: it arrives with an unresolved string id, which the existing
+   StoryLocalizationTest fails on, and the mandatory rows are swept by the existing
+   StorySkimmerPathTest (extended, not added). That is a stronger guarantee than the proposed
+   test, and it costs no test surface. tacticalVerb() is additionally READ at bootstrap, so an
+   archetype that loses its verb fails the build.
+
+4. THE BOSS PAIR GOT ITS OWN TRIGGERS. BOSS_ARENA_ENTERED and BOSS_DEFEATED, plus
+   ENEMY_ABILITY_RESOLVED for part C — three new BarkTriggers, all zero-cooldown one-shots.
+   Archetype rows ride the EXISTING ENEMY_FAMILY_FIRST_SEEN trigger as specified.
+
+Enum-name corrections against the shipped roster: the bosses are OVERSEER / CORRUPTOR /
+HELL_BARON (not THE_*), and VERDANT_SPIRESOWER is a GOLEM, which the doc's list already assumed.
 
 PURPOSE
 ORA introduces the things trying to kill you, and every introduction does two jobs at once:

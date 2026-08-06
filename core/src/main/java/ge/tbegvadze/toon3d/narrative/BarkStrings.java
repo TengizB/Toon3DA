@@ -239,14 +239,130 @@ public final class BarkStrings {
         strings.put("story.bark.gate.core",          "You're not an operator now. You're a loss.");
     }
 
-    /** First sight of an enemy family — one-shot, and each one tells you what the thing IS. */
+    /**
+     * THE BESTIARY VOICE (narrative-rework order-5) — the four kinds of row {@link BestiaryCatalog}
+     * registers.  Every one of them does two jobs at once: it says what the thing IS, which is the
+     * story ({@code story/00-premise.md} — the moral geometry of the bestiary is the whole premise),
+     * and how to survive it, which is why the player reads it.
+     *
+     * <p>No line here states a NUMBER.  She says slow, thick, fast, armoured; the HUD owns numbers,
+     * and a line that quotes one goes stale the next time the balance moves.
+     */
     private static void registerFamilies(StoryStrings strings) {
-        strings.put("story.bark.family.undead",      "Those are crew serials. Old ones. Filing error, surely.");
-        strings.put("story.bark.family.insect",      "Specimens. They scream on the same note as the room.");
-        strings.put("story.bark.family.machine",     "Salvage drones. They still think they're working.");
-        strings.put("story.bark.family.aberration",  "Nothing on file matches that. Nothing at all.");
-        strings.put("story.bark.family.demon",       "That's not crew and it isn't machinery. Keep back.");
-        strings.put("story.bark.family.golem",       "Mineral, and moving. The walls are standing up now.");
+        // The EARLY family line: name it, then say how it kills you. Both halves, one line.
+        strings.put("story.bark.family.undead",
+                                                     "Crew serials on those. They're slow - back up and let it walk into your shot.");
+        strings.put("story.bark.family.insect",
+                                                     "Grown here, out of the walls. They come in numbers - don't get surrounded.");
+        strings.put("story.bark.family.machine",
+                                                     "Site security, still on shift. Armoured from the front - make it turn.");
+        strings.put("story.bark.family.aberration",
+                                                     "Nothing on file matches that. It's slow and it hits hard - stay at range.");
+        strings.put("story.bark.family.demon",
+                                                     "Not crew, not machinery. It's fast - don't let it reach you first.");
+        strings.put("story.bark.family.golem",
+                                                     "Mineral, and moving. The walls are standing up - and they turn slowly.");
+
+        // The REFRAME, from the Wound down. By Region 4 the player knows how to fight; what changes
+        // is what they are told they have been fighting. Each row carries its family's column of the
+        // premise's system-as-story table.
+        strings.put("story.bark.family.undead.deep",
+                                                     "That was crew. The conditions here killed them, not the thing below us.");
+        strings.put("story.bark.family.insect.deep",
+                                                     "Those were grown out of this place, to be cut up. We made them.");
+        strings.put("story.bark.family.machine.deep",
+                                                     "That one is ours. Company security, still guarding a job nobody finished.");
+        strings.put("story.bark.family.aberration.deep",
+                                                     "Still nothing on file. I've stopped assuming that means it isn't ours.");
+        strings.put("story.bark.family.demon.deep",
+                                                     "That wasn't an enemy. That was a body defending itself.");
+        strings.put("story.bark.family.golem.deep",
+                                                     "The rock is standing up to stop us. I'd call that fair.");
+
+        registerArchetypes(strings);
+        registerAbilities(strings);
+        registerBossBeats(strings);
+    }
+
+    /**
+     * One line per enemy archetype, said the first time the player sees that TYPE — ORA's
+     * translation of its {@code EnemyType.tacticalVerb()}, which is the designer sentence and stays
+     * the source of truth for what each of these must convey.
+     *
+     * <p>The rule that shapes all twenty: a line names ONE behaviour.  Where an archetype does two
+     * things she says the one that kills players, and the rest is the archive's problem.
+     */
+    private static void registerArchetypes(StoryStrings strings) {
+        strings.put("story.bark.enemy.plague_hulk",
+                                                     "Big one. Don't trade punches - shoot it while it's walking.");
+        strings.put("story.bark.enemy.eye_tyrant",
+                                                     "It only fires straight down a row or a column. Step off its line.");
+        strings.put("story.bark.enemy.gore_biter",
+                                                     "They come as a pack. Find a doorway and make them queue.");
+        strings.put("story.bark.enemy.shell_brute",
+                                                     "It charges in a straight line. Step aside, then hit it while it recovers.");
+        strings.put("story.bark.enemy.mire_wraith",
+                                                     "The acid stacks. Kill it first, argue later.");
+        strings.put("story.bark.enemy.iron_stalker",
+                                                     "That's a step up. Spend something on it or walk around it.");
+        strings.put("story.bark.enemy.acid_drone",
+                                                     "It keeps backing off. Corner it - it can't kite through a wall.");
+        strings.put("story.bark.enemy.void_shroud",
+                                                     "It goes for your back. Turn and face it before it gets there.");
+        strings.put("story.bark.enemy.ghoul",
+                                                     "Slow, and it never stops. Keep walking and never let it corner you.");
+        strings.put("story.bark.enemy.crawler",
+                                                     "Fast, thin. Drop it now, before the rest arrive.");
+        strings.put("story.bark.enemy.revenant",
+                                                     "Fast and heavy. Do not let that one reach you.");
+        strings.put("story.bark.enemy.vortex_eye",
+                                                     "Short range only. Break its line or get right on top of it.");
+        strings.put("story.bark.enemy.blight_corruptor",
+                                                     "Thick. Wear it down from range; don't stand in front of it.");
+        strings.put("story.bark.enemy.auric_sentinel",
+                                                     "Those shards are its armour and its ammo. Strip them fast.");
+        strings.put("story.bark.enemy.cinderforge_colossus",
+                                                     "It re-hardens the second you stop shooting. Don't stop shooting.");
+        strings.put("story.bark.enemy.rimeshell_lancer",
+                                                     "Armoured until it fires. Bait the lance, step off the lane, then hit it.");
+        strings.put("story.bark.enemy.verdant_spiresower",
+                                                     "The spires heal it. Break those first or it never dies.");
+        strings.put("story.bark.enemy.overseer",
+                                                     "It telegraphs everything. Watch one full cycle before you commit.");
+        strings.put("story.bark.enemy.corruptor",
+                                                     "It tells you what's coming before it does it. Learn that, then punish it.");
+        strings.put("story.bark.enemy.hell_baron",
+                                                     "Patterns, not reflexes. Read the mark, then move.");
+    }
+
+    /**
+     * One line per special ability, said the first time the player watches one RESOLVE.  Five
+     * abilities ship and the game has never explained any of them; each of these is a rule players
+     * otherwise learn by dying, which is why all five are mandatory beats.
+     */
+    private static void registerAbilities(StoryStrings strings) {
+        strings.put("story.bark.ability.self_destruct",
+                                                     "It's counting down to blow. Get two tiles clear or kill it now.");
+        strings.put("story.bark.ability.summon",
+                                                     "It's calling more in. Kill the caller or you'll be here all day.");
+        strings.put("story.bark.ability.area_strike",
+                                                     "That hits the whole cross, not just your tile. Get off the line.");
+        strings.put("story.bark.ability.buff_self",
+                                                     "It just made itself harder. Whatever you were doing, do it faster.");
+        strings.put("story.bark.ability.debuff_player",
+                                                     "That did something to you, not to your health. Check the bar.");
+    }
+
+    /**
+     * The first boss: one line on the way in, and one on the way out.  The second is the REVEAL —
+     * the room is on the plans, which means somebody drew it, approved it, and kept the shifts
+     * walking past it.
+     */
+    private static void registerBossBeats(StoryStrings strings) {
+        strings.put("story.bark.boss.first",
+                                                     "This one's on the plans. They built the room around it.");
+        strings.put("story.bark.boss.first.dead",
+                                                     "They knew it was here. They built a door for it and sent shifts past anyway.");
     }
 
     /** Kills — ORA's confidence rotting across the descent.  Rare, and rarely a joke. */

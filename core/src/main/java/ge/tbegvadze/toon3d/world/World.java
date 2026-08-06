@@ -333,6 +333,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private java.util.List<int[]> unreadLogTerminals  = new java.util.ArrayList<>();
     private int                   logTakesThisFloor   = 0;
 
+    /**
+     * True once this floor's boss has been reported down to the bark layer (narrative-rework
+     * order-5 D). Per-floor, because the beat it fires is one-shot in the narrative layer anyway —
+     * this only stops the world asking again on every frame after the kill.
+     */
+    private boolean bossDefeatBarkRequested = false;
+
     // -------------------------------------------------------------------------
     // Ground items — weapon pickups placed by LevelGenerator; rebuilt per floor
     // -------------------------------------------------------------------------
@@ -1200,6 +1207,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 barkSystem.request(BarkTrigger.KILL);
             }
         });
+        // THE BESTIARY VOICE (narrative-rework order-5 C): the first time the player watches a
+        // special ability RESOLVE, ORA says the rule it plays by. Every row is one-shot and
+        // mandatory in the narrative layer, so this fires on every resolution and is answered five
+        // times in the life of a save — the five rules a player otherwise learns by dying.
+        enemyManager.setSpecialResolvedListener(ability ->
+                barkSystem.request(BarkTrigger.ENEMY_ABILITY_RESOLVED, ability.name()));
         enemyManager.setKillCreditListener((baseReward, dungeonDepth) -> {
             int scaled = Math.round(baseReward * (1f + (dungeonDepth - 1) * GameBalance.CREDIT_DEPTH_SCALE));
             playerStats.addCredits(scaled);
@@ -1282,7 +1295,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                         enemyManager, hazardManager, bossHudRenderer, eventTextSystem);
             }
         }
-        gameState.isBossFloor = bossFloorController != null;
+        gameState.isBossFloor        = bossFloorController != null;
+        bossDefeatBarkRequested      = false;
         // RUN AUTOPSY (order 9): a fresh floor resets the per-floor drain and boss-turn counters.
         runStats.beginFloor(gameState.isBossFloor);
 
@@ -2241,6 +2255,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // player gets nothing from the first two and reaches the third exactly once.
         requestColdOpenBarks();
         requestControlHintBarks();
+        requestBossDefeatedBark();
         requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
         hitVignetteRenderer.update(deltaTime);
@@ -2892,6 +2907,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // due, so the facility is named on floor one, the world it is dug into on floor two, and the
         // reserve waits for the Harvesting Galleries.
         StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.FLOOR_ARRIVAL);
+        // THE FIRST BOSS (narrative-rework order-5 D): the one enemy that earns a stop, and a BARK
+        // rather than an exchange — the player is walking into the fight, and a modal there is
+        // cruel. One-shot for the life of the save, so only the first arena anybody ever enters
+        // gets it; every later boss floor asks and is answered with silence.
+        if (gameState.isBossFloor) {
+            barkSystem.request(BarkTrigger.BOSS_ARENA_ENTERED);
+        }
         if (currentDepth > 0 && currentDepth % StoryUiConstants.STORY_BARK_DEEP_STRATA_INTERVAL == 0) {
             barkSystem.request(BarkTrigger.DEEP_STRATA);
             // The quiet deep-strata check-in (order-4). Every row is one-shot, so this asks often
@@ -3032,6 +3054,23 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             exchangeSystem.request(ExchangeTrigger.LOG_FOUND);
             return;
         }
+    }
+
+    /**
+     * THE FIRST BOSS'S DEATH (narrative-rework order-5 D) — the REVEAL that rides the one moment
+     * every player who gets that far is guaranteed to reach: the facility knew what was down here,
+     * drew the room, built a door for it, and kept sending shifts past it.
+     *
+     * <p>Polled rather than pushed, for the same reason the ending exchange below is: the boss's own
+     * defeat path belongs to {@code BossFloorController} and must not learn about the story layer.
+     * {@code bossDefeatBarkRequested} keeps it to one ask per floor, and the row's one-shot flag
+     * keeps it to one delivery per SAVE — a veteran's tenth boss says nothing.
+     */
+    private void requestBossDefeatedBark() {
+        if (bossDefeatBarkRequested)                                             return;
+        if (bossFloorController == null || !bossFloorController.isBossDefeated()) return;
+        bossDefeatBarkRequested = true;
+        barkSystem.request(BarkTrigger.BOSS_DEFEATED);
     }
 
     /**

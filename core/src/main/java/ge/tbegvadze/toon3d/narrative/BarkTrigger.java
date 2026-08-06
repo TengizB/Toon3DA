@@ -20,10 +20,30 @@ public enum BarkTrigger {
     /** The cold order the Organization transmits at a region gate — rare, so each line lands. */
     REGION_GATE_ORDER,
     /**
-     * An enemy of a FAMILY the player has never faced woke up and came for them.
-     * Subject key = {@code EnemyFamily.name()}.
+     * An enemy the player has never faced woke up and came for them.  Carries BOTH halves of the
+     * bestiary voice (narrative-rework order-5): subject key = {@code EnemyFamily.name()} for the
+     * first sight of a whole family, or {@code EnemyType.name()} for the first sight of one
+     * archetype.  Same moment, two grains — what the thing IS, then how this particular one kills
+     * you.  See {@link BestiaryCatalog}.
      */
     ENEMY_FAMILY_FIRST_SEEN,
+    /**
+     * The player just watched a {@code SpecialAbility} RESOLVE for the first time — not the turn it
+     * was telegraphed, the turn it happened.  Subject key = {@code SpecialAbility.name()}.  These
+     * are the rules that kill a player who does not know them, so every row is one-shot and
+     * mandatory (narrative-rework order-5 C).
+     */
+    ENEMY_ABILITY_RESOLVED,
+    /**
+     * The player walked into a boss arena for the first time ever.  A bark, deliberately never an
+     * exchange: they are about to fight, and a modal there is cruel (narrative-rework order-5 D).
+     */
+    BOSS_ARENA_ENTERED,
+    /**
+     * The first boss the player has ever put down is down.  The region's own REVEAL rides it —
+     * a spine beat on a moment everybody who gets that far reaches.
+     */
+    BOSS_DEFEATED,
     /** An enemy died.  Occasional (rate-limited + rolled), never every kill. */
     KILL,
     /** The player's health fraction crossed below the low-health threshold. */

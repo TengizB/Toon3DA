@@ -56,7 +56,10 @@ public final class BarkCatalog {
         registerFloorArrival(registry);
         registerRegionEntry(registry);
         registerGateOrders(registry);
-        registerEnemyFamilies(registry);
+        // THE BESTIARY VOICE (narrative-rework order-5): the family lines, one line per archetype,
+        // one per special ability and the first boss's pair — all registered by looping the enemy
+        // layer's own enums, so a new family or archetype cannot ship without a voice.
+        BestiaryCatalog.bootstrap(registry);
         registerLogTakes(registry);
         registerKills(registry);
         registerLowHealth(registry);
@@ -244,27 +247,6 @@ public final class BarkCatalog {
                     .oneShot(true)
                     .build());
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // First sight of an enemy FAMILY.  Subject key = enemy/EnemyFamily.name().
-    // One-shot per family, valid in every region (a family can debut at any depth).
-    // -------------------------------------------------------------------------
-    private static void registerEnemyFamilies(BarkRegistry registry) {
-        registerFamily(registry, "UNDEAD",     "bark.family.undead");
-        registerFamily(registry, "INSECT",     "bark.family.insect");
-        registerFamily(registry, "MACHINE",    "bark.family.machine");
-        registerFamily(registry, "ABERRATION", "bark.family.aberration");
-        registerFamily(registry, "DEMON",      "bark.family.demon");
-        registerFamily(registry, "GOLEM",      "bark.family.golem");
-    }
-
-    private static void registerFamily(BarkRegistry registry, String familyName, String id) {
-        registry.register(row(id, storyIdFor(id))
-                .trigger(BarkTrigger.ENEMY_FAMILY_FIRST_SEEN)
-                .subjectKey(familyName)
-                .oneShot(true)
-                .build());
     }
 
     // -------------------------------------------------------------------------
