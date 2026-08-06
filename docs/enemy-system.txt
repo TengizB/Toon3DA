@@ -272,6 +272,16 @@ until you can state its verb in one sentence and that verb is DISTINCT from ever
 "It has more HP" is not a verb. Any ranged behaviour must respect the cardinal-line constraint
 (see isSameCardinalLine in EnemyManager).
 
+THE VERB REACHES THE PLAYER (narrative-rework order-5). It used to be pure design documentation
+with no caller in the build. It is now the SOURCE OF TRUTH behind the bestiary voice: ORA says a
+plain-words translation of each archetype's verb the first time the player sees that archetype, and
+narrative/BestiaryCatalog reads tacticalVerb() at bootstrap, so an archetype that ships without one
+fails the build instead of shipping a line about nothing. The verbs below are written in DESIGNER
+voice (caps prefix, em dashes, too long for a two-line panel); the shipped line is the translation,
+in assets/story/story-strings.properties under story.bark.enemy.<type>. Changing a verb here means
+rewriting that line in the same commit — one behaviour per line, and never a number.
+A NEW ARCHETYPE OR FAMILY THEREFORE NEEDS ITS ORA LINES: see docs/story-ui-system.txt, ADD AN ENEMY.
+
   archetype     spawn  role        verb (the reason to fight it differently)
   ----------------------------------------------------------------------------------------
   Gore Biter     '3'   CHAFF       SWARMER: don't get surrounded — funnel the pack into a chokepoint.

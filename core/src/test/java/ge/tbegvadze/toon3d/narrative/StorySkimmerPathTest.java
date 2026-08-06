@@ -10,6 +10,10 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import ge.tbegvadze.toon3d.enemy.EnemyFamily;
+import ge.tbegvadze.toon3d.enemy.EnemyRole;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
@@ -61,6 +65,25 @@ class StorySkimmerPathTest {
         for (ControlHint hint : ControlHint.values()) {
             spineIds.add("bark.control." + hint.getCatalogKey());    // how to play at all
         }
+        // THE BESTIARY VOICE (narrative-rework order-5). "What am I fighting?" is a comprehension-bar
+        // question, so the answer may not ride a channel a skimmer can lose. Looping the game's own
+        // enums is also the COVERAGE gate the order asks for: a family, boss or special ability added
+        // without a line fails here (missing row) or in the localisation sweep (unresolved id),
+        // which is what keeps the shipped rows and EnemyType.tacticalVerb() from drifting apart.
+        for (EnemyFamily family : EnemyFamily.values()) {
+            spineIds.add(BestiaryCatalog.familyBarkId(family));      // what it is, and how it kills you
+            spineIds.add(BestiaryCatalog.deepFamilyBarkId(family));  // and what it actually was
+        }
+        for (SpecialAbility ability : SpecialAbility.values()) {
+            spineIds.add(BestiaryCatalog.abilityBarkId(ability));    // the rules you learn by dying
+        }
+        for (EnemyType type : EnemyType.values()) {
+            // A boss fight is the whole floor and has no lull to wait for, so its line is mandatory;
+            // ordinary archetypes are REACTIVE by design and are deliberately NOT on the spine.
+            if (type.role() == EnemyRole.BOSS) spineIds.add(BestiaryCatalog.archetypeBarkId(type));
+        }
+        spineIds.add(BestiaryCatalog.BOSS_ARENA_BARK_ID);            // the room was built for it
+        spineIds.add(BestiaryCatalog.BOSS_DEFEATED_BARK_ID);         // and they kept sending shifts past
 
         for (int idIndex = 0; idIndex < spineIds.size(); idIndex++) {
             BarkDefinition row = registry.getById(spineIds.get(idIndex));

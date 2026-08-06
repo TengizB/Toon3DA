@@ -480,6 +480,9 @@ FIRING SITES (all existing moments, all one line each):
   `World.requestColdOpenBarks`       RUN_START (gated by the reprint counter).
   `StoryBarkTickSubscriber`          CONTROL_HINT at the quiet moment; ENEMY_FAMILY_FIRST_SEEN, whose
                                      subject the term itself declares (only the undead wear serials).
+                                     The naming is asked BEFORE the family line and before the
+                                     archetype line, so "what a serial is" always precedes ORA
+                                     reading one off a dead crew member.
 
 THE GATE IS A BUILD CHECK, NOT A RUNTIME ONE. Gating text at delivery would mean lines silently
 vanishing in play — a comprehension bug traded for an invisible-content bug. Nothing filters anything
@@ -519,11 +522,65 @@ THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
   | one floor AFTER a region gate                     | exchange       | ORGANIZATION_ORDER       |
   | stepping beside a 'T' terminal                    | bark + exchange| LOG_FOUND                |
   | 14 fresh tiles walked with nothing awake          | exchange       | QUIET_MOMENT             |
-  | a kill / low health / first sight of a family     | bark           | KILL, LOW_HEALTH, …      |
+  | a kill / low health                               | bark           | KILL, LOW_HEALTH         |
+  | first sight of a FAMILY, then of an ARCHETYPE     | bark           | ENEMY_FAMILY_FIRST_SEEN  |
+  |                                                   |                | (family key, then type)  |
+  | a SPECIAL ability resolves for the first time     | bark           | ENEMY_ABILITY_RESOLVED   |
+  | the first boss arena entered / that boss down     | bark           | BOSS_ARENA_ENTERED,      |
+  |                                                   |                | BOSS_DEFEATED            |
   | a codex category filled                           | bark           | CODEX_COMPLETE           |
   | deepest region CORE and the Core boss is down     | exchange       | THE ENDING               |
-Firing sites: `World` (arrival, region entry, kills, health, logs, the ending) and
-`world/StoryBarkTickSubscriber` (first sight of a family, backtracking, idle).
+Firing sites: `World` (arrival, region entry, kills, health, logs, the boss pair, the ability hook,
+the ending) and `world/StoryBarkTickSubscriber` (first sight of a family and of an archetype,
+backtracking, idle).
+
+
+THE BESTIARY VOICE (narrative-rework order-5)
+=============================================
+ORA introduces the things trying to kill the player, and every introduction does TWO jobs at once:
+what it IS (the story — the moral geometry of the bestiary is the whole premise,
+`story/00-premise.md`) and how to survive it (the reason the player reads it). All of it is data in
+`narrative/BestiaryCatalog`, registered into the one bark registry by `BarkCatalog.bootstrap`.
+
+FOUR KINDS OF ROW, all one-shot for the life of the save:
+  FAMILY, early    one per `EnemyFamily`, Habitation Rings -> Reliquary. Names the thing AND says how
+                   it kills you, in one line. One-shot STORY_CRITICAL: "what am I fighting" is a
+                   comprehension-bar row (docs/narrative-authority.txt SECTION 5).
+  FAMILY, reframe  one per `EnemyFamily`, from the Wound down; id suffix `.deep`. Drops the tactical
+                   half — by Region 4 the player knows how to fight — and carries that family's
+                   column of the premise's system-as-story table: undead + insect are the human cost,
+                   machine is the Organization's own immune system, demon + golem are the planet
+                   defending itself. Which of the two a player gets is the REGION GATE, not a
+                   conditional; the ids differ, so meeting a family early and again at the bottom
+                   yields both, in that order.
+  ARCHETYPE        one per `EnemyType`, same trigger, subject key = `EnemyType.name()`. ORA's
+                   translation of that archetype's `tacticalVerb()` — the designer sentence stays the
+                   SOURCE OF TRUTH for what the line must convey and is read at bootstrap, so a type
+                   that lost its verb fails the build rather than shipping a line about nothing. A row
+                   names ONE behaviour: where an archetype does two things she says the one that kills
+                   players, and the rest is the archive's problem. REACTIVE, so a combat spike HOLDS
+                   it until the lull — except a BOSS, whose fight IS the floor and has no lull coming.
+  ABILITY          one per `SpecialAbility`, on `ENEMY_ABILITY_RESOLVED` — fired when the ability
+                   RESOLVES, never when it is telegraphed. All five are STORY_CRITICAL: these are the
+                   rules that kill a player who does not know them, and mid-fight is the only moment
+                   they are any use.
+  BOSS PAIR        `bark.boss.first` walking into the first arena (a BARK, deliberately never an
+                   exchange — a modal in front of a fight is cruel) and `bark.boss.first.dead` on the
+                   kill, which is a REVEAL riding a moment every player who gets that far reaches.
+
+COVERAGE IS STRUCTURAL. Every row is registered by looping the game's own enums, so a new family,
+archetype or ability cannot ship without a voice: it arrives with an unresolved string id, which
+`StoryLocalizationTest` fails on, and the mandatory rows are additionally swept by
+`StorySkimmerPathTest`. There is no separate bestiary coverage test and none is needed.
+
+NO LINE MAY STATE A NUMBER. She says slow, thick, fast, armoured; the HUD owns numbers, and a line
+that quotes one goes stale the next time the balance moves. Equally out of scope, permanently: a
+bestiary screen, an enemy-inspect panel and a "scan" verb — the delivery channel here is ORA.
+
+ENGINE HOOKS: `EnemyManager.setSpecialResolvedListener` (fired from `executeSpecial`, before
+dispatch, so a `SELF_DESTRUCT` is explained while its countdown still has turns left);
+`World.requestBossDefeatedBark` (polled, so `BossFloorController` never learns about the story
+layer); the arena line rides `World.requestFloorArrivalBarks` on a boss floor.
 
 
 PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
@@ -551,6 +608,12 @@ funny? is it a repeat? could it be cut instead?).
 ADD A BARK               one `register()` in `BarkCatalog` (trigger, region band, speaker, tone,
                          priority, one-shot?) + one row in `story-strings.properties` and its
                          `BarkStrings` default. No switch, anywhere.
+ADD AN ENEMY             nothing to write by hand: `BestiaryCatalog` loops the enemy enums, so a new
+                         `EnemyFamily` / `EnemyType` / `SpecialAbility` already HAS its row. Supply
+                         its lines — `story.bark.family.<family>` (+ `.deep`),
+                         `story.bark.enemy.<type>`, `story.bark.ability.<ability>` — in
+                         `story-strings.properties` AND `BarkStrings`. A new archetype's line is the
+                         plain-words translation of its `tacticalVerb()`; one behaviour, no numbers.
 ADD AN EXCHANGE          one `register()` in `ExchangeCatalog` (trigger, region, 2-3 options, each
                          STANCE / PROBE / CONSEQUENTIAL) + its string rows. Remember: exchanges BLOCK,
                          so if they start to feel frequent, delete rows.

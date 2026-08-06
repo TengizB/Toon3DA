@@ -65,6 +65,17 @@ public final class EnemyManager implements EnemyHitTarget {
         void onEnemyDied(EnemyType type, int tileColumn, int tileRow, boolean selfDestructMassive);
     }
 
+    /**
+     * Notified the moment a committed SPECIAL ability actually RESOLVES in front of the player —
+     * not when it is telegraphed (narrative-rework order-5 C). The bestiary voice hangs off this:
+     * five abilities ship and the game never explained any of them, so the first time each one
+     * happens ORA says the rule out loud. Fires on EVERY resolution; the narrative layer's one-shot
+     * flag decides that only the first is ever spoken, which keeps this hook free of story state.
+     */
+    public interface SpecialResolvedListener {
+        void onSpecialResolved(SpecialAbility ability);
+    }
+
     private final List<Enemy> enemies;
     private final Level       level;
     private final DoorManager doorManager;
@@ -75,6 +86,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private DropPlacedListener  dropPlacedListener;
     private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
+    private SpecialResolvedListener specialResolvedListener;
 
     /** Flat damage bonus from player level-up damage cards (Hollow Points / Glass Cannon); added to every hit. */
     private int playerFlatDamageBonus = 0;
@@ -466,6 +478,15 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Wires the credit system so every kill awards scaled credits to the player. */
     public void setKillCreditListener(KillCreditListener listener) {
         this.killCreditListener = listener;
+    }
+
+    /**
+     * Wires the bestiary voice (narrative-rework order-5): every SPECIAL ability resolution is
+     * reported so ORA can explain each ability the first time the player watches one happen.
+     * Optional — a null listener leaves every special path byte-identical (sim/SimWorld sets none).
+     */
+    public void setSpecialResolvedListener(SpecialResolvedListener listener) {
+        this.specialResolvedListener = listener;
     }
 
     /** Notified when a drop tile is stamped on the grid so renderers can display it immediately. */
@@ -1237,6 +1258,13 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeSpecial(Enemy enemy, PlannedAction plan,
                                 int playerColumn, int playerRow, Player player) {
         if (plan.specialAbility == null) return;
+        // THE BESTIARY VOICE (narrative-rework order-5 C): reported at RESOLUTION, never at the
+        // telegraph — the rule is only teachable at the moment the player watches it happen. Fired
+        // before dispatch so a SELF_DESTRUCT is explained while its countdown is still running,
+        // which is the only turn the advice ("get two tiles clear or kill it now") is any use.
+        if (specialResolvedListener != null) {
+            specialResolvedListener.onSpecialResolved(plan.specialAbility);
+        }
         switch (plan.specialAbility) {
             case BUFF_SELF:     executeBuffSelf(enemy);                                      break;
             case DEBUFF_PLAYER: executeDebuffPlayer(enemy, playerColumn, playerRow, player); break;

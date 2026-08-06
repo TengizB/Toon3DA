@@ -105,6 +105,13 @@ F4 — ORA DOES NOT TEACH THE GAME                                              
    the branching route map, which is the entire shape of a run. A player reaches the end of floor
    one and is handed a node graph nobody mentioned. These are exactly the systems players fail at,
    and the game's only teacher is silent on all of them.
+   PARTLY ADDRESSED by order-5, which took the BESTIARY half: every enemy family, archetype and
+   special ability now introduces itself once, in her voice, with one survivable fact
+   (`narrative/BestiaryCatalog`, and see docs/story-ui-system.txt, THE BESTIARY VOICE). Twenty
+   `EnemyType.tacticalVerb()` sentences existed in the build with no caller anywhere; they are now
+   the source of truth behind the shipped rows and are read at bootstrap. The CONTROL half of F4 —
+   guarding, intent telegraphs, lanes, doors, barrels, the portal and the NAV console — is still
+   order-4's, and so is the competence model that keeps her from repeating herself (F7).
 
 F5 — JOKES WITH NOTHING UNDER THEM                                             (owner: order 6)
    story.bark.log.rings.3     = "A lunch order, dated the last day. Soup. Bold."
@@ -317,7 +324,7 @@ Order 10 makes all of it stick.
   | 2 | The first ten minutes                  | F1, F3, F6 | launch + cold open + gap | DONE   |
   | 3 | The vocabulary ladder                  | F2         | plain-before-proper data | DONE   |
   | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | TODO   |
-  | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | TODO   |
+  | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | DONE   |
   |   |                                        |            | survive it               |        |
   | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites          | TODO   |
   | 7 | The Organization, reworked             | D7         | mission, rationale, lies | TODO   |
