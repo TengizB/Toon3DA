@@ -214,6 +214,51 @@ New class: pick the most specific matching package. If none fits, add a subpacka
 
 A `PostToolUse` hook runs `code-reviewer` automatically after every Write/Edit to a `.java` file. No manual trigger needed.
 
+`code-reviewer` reviews correctness, LibGDX practice, dispose safety and math. It must **not** recommend adding tests outside the balance scope defined below — "this needs a unit test" is not a valid review finding for ordinary feature work.
+
+## Testing Policy — MANDATORY
+
+**This project has a small testing budget. The default is: DO NOT write new tests.**
+
+Test code is code — it has to be read, maintained and migrated on every refactor, and this project cannot afford that surface. Tests are spent only where a silent, easily-made edit can wreck the game without anyone noticing.
+
+### The ONLY thing that gets new tests: GAME BALANCE
+
+Balance numbers are one-character edits that break the whole game quietly — no crash, no compile error, no visual difference, just an unplayable run three floors in. That is the entire justification for the test budget, and it does not extend to anything else.
+
+Write or extend a test **only** when the change touches:
+- `util/BalanceConfig.java` — any gameplay-affecting number
+- `util/BalanceSchema.java` — any rule, band, subject or waiver
+- `util/GameBalance.java` — any tunable difficulty/loot number
+- `util/GameMath.java` — a balance-bearing formula (eHP / DPT / TTK / TP)
+- `sim/` — the balance simulator, its policies or the behavioural bands
+
+For those, **extend the existing test** (`util/BalanceAuditTest`, `sim/BalanceSimTest`) rather than adding a new test file. A new test file in this area needs a reason you can state in one line.
+
+Gates for a balance change (both, every time — see `docs/game-balance-authority.txt` SECTION 7):
+```bash
+./gradlew test          # fast gate: the whole balance audit
+./gradlew balanceSim    # slow gate: the seed matrix + behavioural bands
+```
+
+### Everything else ships with NO new tests
+
+Renderers, HUD, story/narrative content, route map, tileset, level generation, weapons, enemies, items, input, doors, hazards, progression, refactors, bug fixes — **no new test files, no new test methods.** Verify the change by building and running the game:
+```bash
+./gradlew build
+./gradlew lwjgl3:run
+```
+
+Adding a bark line, a codex entry, a room blueprint, a sprite, a weapon or an enemy is a `register()` call plus its data. It does not come with a test.
+
+### Rules that hold regardless
+
+- **Never delete, disable, `@Ignore` or weaken an existing test to make a change pass.** The existing suite (story, route, tileset, level, enemy) stays green and stays the gate — it is already paid for.
+- **Updating an existing test because behaviour legitimately changed is expected and is not "writing a new test."** Do it in the same commit.
+- **Never add a test dependency, framework, harness, fixture directory or CI job.** No mocking libraries, no new Gradle test source sets.
+- If you genuinely believe something outside the balance scope needs a test, **say so in one sentence and ask** — do not write it unprompted. The answer is usually no.
+- A user asking for a test is always sufficient authorisation. This policy governs your own initiative, not their requests.
+
 ## Agent Roster
 
 | Agent | When to use |
@@ -718,6 +763,10 @@ batch.draw(wallTexture,
                         # behavioural bands (run on any BalanceConfig change; see
                         # docs/game-balance-authority.txt SECTION 7 — THE CHANGE PROTOCOL)
 ```
+
+Both gates RUN on every commit; new tests are only ever WRITTEN for balance — see
+**Testing Policy — MANDATORY** above. Non-balance work is verified with `./gradlew build`
+plus `./gradlew lwjgl3:run`, not with a new test.
 
 ## Dependencies
 
