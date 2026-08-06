@@ -123,6 +123,7 @@ class StoryLocalizationTest {
         ids.add(StoryUiConstants.STORY_FRAME_CONFIRM_YES_ID);
         ids.add(StoryUiConstants.STORY_FRAME_CONFIRM_NO_ID);
         ids.add(StoryUiConstants.STORY_FRAME_RETURN_ID);
+        ids.add(StoryUiConstants.STORY_DEATH_STROKE_ID);
         ids.add(StoryUiConstants.STORY_REPORT_TITLE_ID);
         ids.add(StoryUiConstants.STORY_REPORT_OPEN_ID);
         ids.add(StoryUiConstants.STORY_REPORT_BACK_ID);

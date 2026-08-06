@@ -188,6 +188,47 @@ class StoryFramingTest {
     }
 
     // -------------------------------------------------------------------------
+    // 1b. The death stroke — the moment of death is three words and nothing else
+    // -------------------------------------------------------------------------
+
+    /**
+     * The whole of what the game says at the moment of death.  It is a beat of its OWN, ahead of the
+     * reprint card, because the two screens do two different jobs — this one reports a death, the
+     * card reports a birth — and printed together neither lands.
+     */
+    @Test
+    void theDeathStrokeIsThreeWordsAndNothingElse() {
+        String stroke = StoryStrings.defaults().get(StoryUiConstants.STORY_DEATH_STROKE_ID);
+        assertFalse(stroke.trim().isEmpty(), "the death screen says nothing at all");
+        assertTrue(stroke.split("\\s+").length <= 3,
+                "the moment of death is not the place for a sentence: " + stroke);
+        assertTrue(stroke.toUpperCase(java.util.Locale.ROOT).contains("DIED"),
+                "the death screen does not say that anybody died: " + stroke);
+        // Whatever it says, it must not need a word the player has not been given.
+        assertFalse(stroke.contains("INSTANCE"), "the death screen leans on undefined jargon");
+        assertFalse(stroke.contains("SOUL"),     "the death screen spends a later reveal");
+    }
+
+    /**
+     * It holds long enough to read and then hands over by itself, and it can be skipped.  Neither
+     * end of that is optional: a player who just died is never held, and never rushed.
+     */
+    @Test
+    void theDeathStrokeHoldsAndThenHandsOverWithoutTrappingAnyone() {
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS >= 1.2f,
+                "the death stroke is gone before three words can be read");
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS <= 4f,
+                "the death stroke holds a dead screen longer than anyone will sit through");
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_FADE_SECONDS
+                        < StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS,
+                "the words are still arriving when the screen is taken away");
+        // It is drawn over a screen that is already black, never over the frozen corridor.
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_TOP_Y > 0f
+                        && StoryUiConstants.STORY_DEATH_STROKE_TOP_Y <= Constants.WORLD_HEIGHT,
+                "the death stroke is drawn off the screen");
+    }
+
+    // -------------------------------------------------------------------------
     // 2. The reveal is mood, never a gate
     // -------------------------------------------------------------------------
 

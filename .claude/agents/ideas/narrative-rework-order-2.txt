@@ -32,6 +32,31 @@ Deviations, all recorded deliberately:
   5. story.bark.log.rings.1 was rewritten (not just added to): its roster line moved to the one-shot
      PAPERWORK intro beat, and D5 forbids saying it twice.
 
+ADDED AFTER REVIEW — THE DEATH STROKE (not in the spec below; requested during implementation)
+
+The spec restaged the START of a run and left the moment of DEATH as it was: a 1.0s fade, then the
+reprint card. Read back, that screen was ~30 words across seven elements (status block, counter,
+ORA, CONTINUE, REPORT) at the moment Dark Souls uses two — and it was doing two jobs at once,
+reporting a death AND starting a birth, so neither landed.
+
+Split into two beats:
+  1. THE STROKE — fade to black, then three words on it and nothing else: "THIS BODY DIED"
+     (story.death.stroke, FramingScreenRenderer.renderDeathStroke). No counter, no status block, no
+     button, and NO ORA — she does not get printed, she reloads, so for one second the only voice in
+     the game is missing. Holds STORY_DEATH_STROKE_HOLD_SECONDS, hands over by itself (the fade at
+     this seam always has), and a tap skips it after a one-second lockout so a player mashing fire
+     as they die cannot blow through their own death.
+  2. THE CARD, unchanged — which now reads as what it always was: a machine somewhere else printing
+     another body. ORA is the first warm thing on it.
+
+Two authorship calls made by the project owner: the words are "THIS BODY DIED" (not "YOU DIED"), and
+the stroke is those words FOREVER — no region-banded machine receipt under them. The escalation
+therefore lives entirely in ORA's wake lines on the card (deaths 1-3 reserved, then the region
+pools), which is where this order already put it.
+
+The machine files a BODY, as an asset it owns; ORA's first-death line calls it "you". That gap is
+free characterisation and is the reason the two screens should never be merged again.
+
 Not verified by a run of ./gradlew test: this environment cannot resolve the Gradle dependencies
 (the network policy blocks Maven). The headless narrative package was compiled and exercised by a
 standalone harness covering every assertion the updated tests make; the JUnit tests themselves are

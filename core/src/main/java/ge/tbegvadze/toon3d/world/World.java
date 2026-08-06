@@ -1941,16 +1941,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // DEAD phase (order-8 Part B) — the death BEAT: a slow, quiet fade to black. No gory splash
-        // and no verdict; the player has just died and may already be frustrated.
+        // DEAD phase (order-8 Part B, restaged by narrative-rework order-2) — the death BEAT: a
+        // slow, quiet fade to black, and then THREE WORDS on it. No gory splash and no verdict; the
+        // player has just died and may already be frustrated.
         //
-        // When the fade finishes the run is filed and the machine simply prints them again: the
-        // reprint card takes the screen HERE, in the world that died, and the next World starts
-        // faded-up in a fresh run. That is what makes death -> reprint one calm tap-through instead
-        // of a stats screen and a card competing for the same moment.
+        // The stroke is a beat of its OWN, ahead of the reprint card, because the two screens do two
+        // different jobs: this one reports a death, the card reports a birth. Printed together —
+        // which is what the game used to do — neither lands, and the death arrives buried under a
+        // status block, a counter and two buttons. Here there is nothing but the words, and no ORA:
+        // she does not get printed, she reloads, so the one second the player has no voice at all is
+        // the loneliest the run ever gets. She is the first warm thing on the card that follows.
+        //
+        // It holds and then hands over by itself — the fade at this seam always has — and a tap
+        // skips straight to the card, so an impatient player is never held and a slow one is never
+        // rushed. Nothing is lost either way: the card behind it says all of it again, at length.
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
-            if (deathBeatTimerSeconds >= ProgressionConstants.DEATH_BEAT_DURATION_SECONDS) {
+            boolean strokeSkipped = gameViewport != null && Gdx.input.justTouched()
+                    && deathBeatTimerSeconds >= ProgressionConstants.DEATH_BEAT_DURATION_SECONDS;
+            if (strokeSkipped || deathBeatTimerSeconds >= deathStrokeEndSeconds()) {
                 saveRunRecordsOnce();
                 presentReprintCard();
             }
@@ -2487,12 +2496,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             fadeOverlayRenderer.render(camera, fadeAlpha, currentDepth);
         }
 
-        // Death beat (order-8 Part B): a slow fade to black, and nothing else. The moment it
-        // finishes, the reprint card takes the screen — there is no separate death splash to draw.
+        // Death beat (order-8 Part B, restaged by narrative-rework order-2): a slow fade to black,
+        // and then three words on it. Nothing else is drawn at all — no counter, no status block,
+        // no button, no ORA — until the reprint card takes the screen.
         if (runPhase == RunPhase.DEAD) {
             float deathFadeAlpha = Math.min(1f,
                     deathBeatTimerSeconds / ProgressionConstants.DEATH_BEAT_DURATION_SECONDS);
             fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
+            framingScreenRenderer.renderDeathStroke(camera, deathStrokeWordsFade());
         }
 
         // MERGE (order-8 Part D): the frozen world the player was standing in, going quietly out.
@@ -3633,8 +3644,29 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * The death beat has finished fading (order-8 Part B): print the player again.  The card takes
-     * the screen in the world that DIED, and its CONTINUE hands over to a fresh world that opens
+     * When the whole death beat is over and the reprint card takes the screen: the fade to black,
+     * plus the hold on the three words that land on it (narrative-rework order-2).
+     */
+    private float deathStrokeEndSeconds() {
+        return ProgressionConstants.DEATH_BEAT_DURATION_SECONDS
+                + StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS;
+    }
+
+    /**
+     * 0..1 resolve of the death stroke's words.  They arrive only once the screen is fully black —
+     * three words hanging over a frozen corridor would read as a HUD element rather than as the end
+     * of something — and then hold at full until the card takes over.
+     */
+    private float deathStrokeWordsFade() {
+        float sinceBlack = deathBeatTimerSeconds - ProgressionConstants.DEATH_BEAT_DURATION_SECONDS;
+        if (sinceBlack <= 0f) return 0f;
+        float fraction = sinceBlack / StoryUiConstants.STORY_DEATH_STROKE_FADE_SECONDS;
+        return fraction >= 1f ? 1f : fraction;
+    }
+
+    /**
+     * The death beat has finished (order-8 Part B): print the player again.  The card takes the
+     * screen in the world that DIED, and its CONTINUE hands over to a fresh world that opens
      * already faded up — which is what makes the whole of death → reprint one calm tap-through.
      */
     private void presentReprintCard() {

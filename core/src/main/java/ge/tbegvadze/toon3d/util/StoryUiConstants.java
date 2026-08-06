@@ -745,6 +745,29 @@ public final class StoryUiConstants {
     public static final float STORY_FRAME_CONFIRM_NO_X  =
             Constants.WORLD_WIDTH / 2f + STORY_FRAME_CONFIRM_BUTTON_GAP / 2f;
 
+    // --- THE DEATH STROKE (narrative-rework order-2) --------------------------------------------
+    // The moment of death is THREE WORDS on black and nothing else — no counter, no status block,
+    // no button, and no ORA.  It is a separate beat from the reprint card on purpose: the card
+    // reports a BIRTH (a machine somewhere else is making another body), and merging the two meant
+    // neither landed.  ORA's absence here is the point and costs nothing: she does not get printed,
+    // she reloads, so for one second the only voice in the game is missing.
+    //
+    // The words never change, at any depth, in any region — that constancy IS the design.  What
+    // changes across a save is her line on the card that follows, which is where the escalation
+    // lives (BootCardCatalog's reserved rows, then the region pools).
+    /** Seconds the words hold once the screen is fully black.  A tap skips straight to the card. */
+    public static final float STORY_DEATH_STROKE_HOLD_SECONDS = 1.9f;
+    /** Seconds the words take to resolve out of the black.  They arrive; they never flash. */
+    public static final float STORY_DEATH_STROKE_FADE_SECONDS = 0.55f;
+    /** Centred, high on the screen's middle band — the only thing drawn. */
+    public static final float STORY_DEATH_STROKE_TOP_Y        = 404f;
+    public static final float STORY_DEATH_STROKE_TEXT_SIZE    = 2.6f;
+    /** Bone white, slightly cold.  Not red: this game does not shout at a player who just died. */
+    public static final float STORY_DEATH_STROKE_R = 0.86f, STORY_DEATH_STROKE_G = 0.87f,
+                              STORY_DEATH_STROKE_B = 0.90f;
+    /** Localisation id of the words (localisation rule: never a literal in the renderer). */
+    public static final String STORY_DEATH_STROKE_ID = "story.death.stroke";
+
     // --- THE ENDING'S WAY OUT ------------------------------------------------------------------
     // A terminal card (FREE / KILL) draws no CONTINUE — that absence IS the ending (order-3).  What
     // order-8 adds is the way OFF that final screen, once the card has finished printing: a dim

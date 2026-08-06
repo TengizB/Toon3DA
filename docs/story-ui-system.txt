@@ -80,7 +80,8 @@ Shared render pieces: `StoryPanelRenderer` (the one panel primitive every channe
 string asset is read).
 
 Render order (World.render, after the HUD): bark -> exchange -> codex -> pause/settings menu ->
-boot card (or its REPORT page, or an ending's RETURN plate) -> fade.
+boot card (or its REPORT page, or an ending's RETURN plate) -> fade -> the death stroke (which is
+drawn ON the finished fade, and is the only thing on the screen while it is up).
 Each modal brings its own dim/scrim, so nothing behind it needs to know it is there. The LAUNCH
 screen is the exception: it replaces the frame entirely (World.render returns before the 3D view),
 because while it owns the app there is no run to look at.
@@ -308,13 +309,35 @@ A. THE LAUNCH SCREEN (`narrative/TitleScreenSystem`, `render/FramingScreenRender
    the floor. The counter now climbs when a RUN STARTS rather than when a World is constructed, so a
    player who opens the app and quits from the title is not charged an instance.
 
-B. DEATH -> REPRINT (one presentation, not two)
+B. DEATH -> REPRINT (restaged by narrative-rework order-2)
    The most repeated framing in the game, and it is deliberately calm: the player just died and may
    already be frustrated.
+
+   THE STROKE AND THE CARD ARE TWO DIFFERENT MOMENTS, and merging them was the bug. One reports a
+   DEATH; the other reports a BIRTH. Printed together — which is what the game used to do — the
+   death arrived buried under a status block, a counter, two buttons and a line of dialogue: thirty
+   words at the moment Dark Souls uses two, and neither beat landed.
      1. a slow fade to black (`FadeOverlayRenderer`, the existing death beat). No gory splash.
-     2. the reprint card (order-3) — status lines, the quiet instance counter, ORA's wake line.
-        It is printed by the world that DIED; the next World opens already faded up.
-     3. one tap on CONTINUE, and the descent starts again.
+     2. THE STROKE: three words on the black and NOTHING else — no counter, no status block, no
+        button, and no ORA (`story.death.stroke` = "THIS BODY DIED",
+        `FramingScreenRenderer.renderDeathStroke`). Her absence is the point and costs nothing: she
+        does not get printed, she reloads, so for one second the only voice in the game is missing.
+        The words NEVER change, at any depth, in any region — that constancy is the design, and the
+        escalation lives on the card instead. Note that the machine files a BODY, as an asset it
+        owns, and ORA's first-death line calls it "you": the gap between those two sentences is the
+        whole relationship (doctrine D6).
+        It holds `STORY_DEATH_STROKE_HOLD_SECONDS` and hands over by itself (the fade at this seam
+        always has), and a tap after the screen is black skips straight to the card — nobody is
+        held, nobody is rushed, and nothing is lost either way because the card says all of it
+        again, at length. The one-second lockout before a tap counts is deliberate: a player mashing
+        fire as they die must not blow through their own death.
+     3. the reprint card (order-3) — status lines, the quiet instance counter, ORA's wake line, and
+        she is the first warm thing on it. It is printed by the world that DIED; the next World
+        opens already faded up.
+     4. one tap on CONTINUE, and the descent starts again.
+   ORA'S DEATH ARC rides step 3 and nothing else: deaths 1-3 have RESERVED wake lines (what the copy
+   is for / what did and did not come back / where the REPORT plate is), and then the region pools
+   take over, so death 40 sounds nothing like death 2 without a single extra screen.
    The old full-screen death report is FOLDED into that card's screen as a PAGE
    (`render/InstanceReportRenderer`, opened by a small REPORT plate, closed by any tap), so the run's
    numbers — including the six-line RUN AUTOPSY that new-game-balancr order 9 put there for
