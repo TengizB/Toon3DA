@@ -34,6 +34,11 @@ public class DoorManager {
     private final boolean[] blocksSightSnapshot;
     private final int       snapshotWidth;
 
+    // How many doors have STARTED opening on this floor. Read by the story layer, which owes the
+    // player one line about who opens the doors around here the first time one does
+    // (narrative-rework order-2 D). Doors auto-close and re-open, so only "> 0" is meaningful.
+    private int openedDoorCount;
+
     public DoorManager(Level level) {
         doorsByPackedKey = new HashMap<>();
         lockedDoorColors = new HashMap<>();
@@ -237,6 +242,7 @@ public class DoorManager {
             case CLOSED:
                 door.state             = DoorState.OPENING;
                 door.animationProgress = 0f;
+                openedDoorCount++;
                 break;
             case CLOSING:
                 door.animationProgress = 1f - door.animationProgress;
@@ -246,6 +252,15 @@ public class DoorManager {
             case OPEN:
                 break;
         }
+    }
+
+    /**
+     * How many doors have begun opening on this floor. The story layer reads it to notice the first
+     * door the player ever walks into, which is when ORA is owed one line about what she handles
+     * and what she does not (narrative-rework order-2 D). Reset with the floor, like the manager.
+     */
+    public int getOpenedDoorCount() {
+        return openedDoorCount;
     }
 
     /**

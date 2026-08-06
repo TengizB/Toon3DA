@@ -158,24 +158,69 @@ class StoryBarkTest {
         }
     }
 
-    /** ORA introduces herself to a new player, and never again once they know her. */
+    /**
+     * ORA introduces herself PROPERLY to a new player — who is talking, what happened to them, and
+     * why their memory came back short — and then never again once they know her (narrative-rework
+     * order-2 D).  A name alone is not an introduction, which is what this used to assert.
+     */
     @Test
-    void theColdOpenGreetsAPlayerOnceAndThenStops() {
+    void theColdOpenIntroducesOraAndThenStops() {
         InMemoryStoryProgressStore store = new InMemoryStoryProgressStore();
         BarkSystem firstRun = newSystem(new StoryProgress(store));
-        assertTrue(firstRun.request(BarkTrigger.RUN_START), "ORA never introduced herself");
-        assertTrue(firstRun.request(BarkTrigger.RUN_START), "the pool held only one greeting");
 
-        // Read both of them: a one-shot is spent on DELIVERY, not on being asked for.
-        advance(firstRun, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.05f);
-        dismissAndSettle(firstRun);
-        advance(firstRun, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.05f);
-        dismissAndSettle(firstRun);
+        // Run 1: the three beats a stranger needs, each asked for by name so they cannot arrive out
+        // of order (the pool must not hand back "you died an hour ago" before "I'm ORA").
+        for (IntroBeat beat : IntroBeat.values()) {
+            if (!beat.isColdOpen() || !beat.isAvailableAt(1)) continue;
+            assertTrue(firstRun.request(beat.getTrigger(), beat.getSubjectKey()),
+                    "the cold open never asked for " + beat);
+            // A one-shot is spent on DELIVERY, not on being asked for, so each must be read.
+            advance(firstRun, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.05f);
+            assertEquals("bark.intro." + beat.getCatalogKey(), firstRun.getActiveBarkId(),
+                    "the cold open delivered the wrong beat for " + beat);
+            dismissAndSettle(firstRun);
+        }
 
-        // Both rows spent — a later run gets nothing, whatever else has happened.
+        // A later run gets none of them back — she is not a stranger any more.
         BarkSystem laterRun = newSystem(new StoryProgress(store));
-        assertFalse(laterRun.request(BarkTrigger.RUN_START),
-                "ORA introduced herself to someone who already knows her");
+        for (IntroBeat beat : IntroBeat.values()) {
+            if (!beat.isColdOpen() || !beat.isAvailableAt(1)) continue;
+            assertFalse(laterRun.request(beat.getTrigger(), beat.getSubjectKey()),
+                    "ORA re-introduced herself to someone who already knows her: " + beat);
+        }
+    }
+
+    /**
+     * The two beats that make her matter — she is not printed, so she is the only one who remembers
+     * the last body — wait for the SECOND run, because they only mean anything to a player who has
+     * now died and come back themselves.
+     */
+    @Test
+    void theRunTwoBeatsWaitForARunTwo() {
+        for (IntroBeat beat : IntroBeat.values()) {
+            if (!beat.isColdOpen()) continue;
+            boolean isRunTwoBeat = beat == IntroBeat.CONTINUITY || beat == IntroBeat.MEMORY;
+            assertEquals(!isRunTwoBeat, beat.isAvailableAt(1),
+                    beat + " is offered on the wrong run");
+            assertTrue(beat.isAvailableAt(2), beat + " never becomes available at all");
+        }
+    }
+
+    /**
+     * The rest of her introduction is DISTRIBUTED: every non-cold-open beat hangs off a moment that
+     * already happens on floor one, and none of them invents a new trigger to do it.
+     */
+    @Test
+    void theDistributedIntroBeatsRideExistingMoments() {
+        BarkRegistry registry = BarkCatalog.defaultRegistry();
+        for (IntroBeat beat : IntroBeat.values()) {
+            BarkDefinition row = registry.getById("bark.intro." + beat.getCatalogKey());
+            assertNotNull(row, "no line registered for intro beat " + beat);
+            assertEquals(beat.getTrigger(), row.getTrigger(), beat + " hangs off the wrong moment");
+            assertTrue(row.isOneShot(), beat + " would introduce her twice");
+            assertEquals(BarkPriority.STORY_CRITICAL, row.getPriority(),
+                    beat + " can be dropped as chatter — an introduction that loses a race");
+        }
     }
 
     /** A control hint waits for its own control: asking about one never spends another's line. */

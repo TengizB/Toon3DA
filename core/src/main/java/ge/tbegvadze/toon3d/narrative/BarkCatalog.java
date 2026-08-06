@@ -47,7 +47,7 @@ public final class BarkCatalog {
     public static void bootstrap(BarkRegistry registry) {
         if (registry == null || !registry.isEmpty()) return;
 
-        registerColdOpen(registry);
+        registerIntroBeats(registry);
         registerControlHints(registry);
         registerFloorArrival(registry);
         registerRegionEntry(registry);
@@ -69,24 +69,28 @@ public final class BarkCatalog {
     }
 
     // -------------------------------------------------------------------------
-    // COLD OPEN (order-5) — the first voice the player ever hears.  In fiction the original self has
-    // just died and this print is opening its eyes, so ORA introduces herself while control is being
-    // handed over.  Both rows are one-shot and Region 1 only, and the world asks for ONE per run
-    // start: a brand-new player meets her on run 1, hears the second line on run 2, and after that
-    // she never introduces herself again — because by then she is not a stranger.
+    // ORA'S INTRODUCTION (narrative-rework order-2 D) — the cold open plus the four beats that
+    // finish the job later, one row per {@link IntroBeat}.  Three lines on run 1 answer who is
+    // talking, what happened to the player and why their memory came back short; two on run 2 say
+    // the thing that makes her matter (she is not printed, so she is the only one who remembers the
+    // last body); the rest hang off a door, a terminal, a pickup and the first quiet stretch, so she
+    // is met being useful rather than delivering a biography.
+    //
+    // Every row is one-shot ever and STORY_CRITICAL: an introduction that loses a race with a
+    // flavour quip is an introduction that never happened.  Region 1 only for the run-start rows —
+    // a veteran on their fortieth reprint gets none of this.
     // -------------------------------------------------------------------------
-    private static void registerColdOpen(BarkRegistry registry) {
-        coldOpenLine(registry, "bark.coldopen.1");
-        coldOpenLine(registry, "bark.coldopen.2");
-    }
-
-    private static void coldOpenLine(BarkRegistry registry, String id) {
-        registry.register(row(id, storyIdFor(id))
-                .trigger(BarkTrigger.RUN_START)
-                .region(StoryRegion.HABITATION_RINGS)
-                .priority(BarkPriority.STORY_CRITICAL)
-                .oneShot(true)
-                .build());
+    private static void registerIntroBeats(BarkRegistry registry) {
+        for (IntroBeat beat : IntroBeat.values()) {
+            String id = "bark.intro." + beat.getCatalogKey();
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(beat.getTrigger())
+                    .subjectKey(beat.getSubjectKey())
+                    .region(StoryRegion.HABITATION_RINGS)
+                    .priority(BarkPriority.STORY_CRITICAL)
+                    .oneShot(true)
+                    .build());
+        }
     }
 
     // -------------------------------------------------------------------------

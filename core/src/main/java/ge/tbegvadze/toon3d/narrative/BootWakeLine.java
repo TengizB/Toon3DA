@@ -18,19 +18,39 @@ package ge.tbegvadze.toon3d.narrative;
  * <p>Localisation rule: a row carries a stable {@code textStringId} only.  The resolved text may
  * contain the {@link BootCardSystem#INSTANCE_TOKEN} placeholder, which the system substitutes with
  * the formatted reprint number so a line can say "Reprint 0048" without the catalog knowing it.
+ *
+ * <h3>RESERVED LINES (narrative-rework order-2 B/C)</h3>
+ * A row may additionally be reserved for ONE card, by variant or by an exact reprint number, and a
+ * reserved row that matches beats the whole region pool.  That is how the two cards a player only
+ * ever sees once get the line they need instead of a random greeting:
+ * <ul>
+ *   <li>the FIRST PRINT — thirty seconds after a stranger's death notice, where ORA has not
+ *       introduced herself yet and the card is no place for a CV;</li>
+ *   <li>the player's own FIRST REAL DEATH (and the two prints after it) — the moment the loop is
+ *       explained, which the catalog used to spend on a joke about a new record.</li>
+ * </ul>
+ * Reserving by an exact count is what orders those: the number climbs and never repeats, so each
+ * line lands on exactly one card, once, without a one-shot flag of its own.
  */
 public final class BootWakeLine {
 
-    private final String      id;
-    private final String      textStringId;
-    private final StoryRegion firstRegion;
-    private final StoryRegion lastRegion;
+    /** {@link #getOnlyAtReprintCount()} when a row is not reserved for one particular print. */
+    public static final int ANY_REPRINT_COUNT = -1;
+
+    private final String          id;
+    private final String          textStringId;
+    private final StoryRegion     firstRegion;
+    private final StoryRegion     lastRegion;
+    private final BootCardVariant onlyOnVariant;
+    private final int             onlyAtReprintCount;
 
     private BootWakeLine(Builder builder) {
-        this.id           = builder.id;
-        this.textStringId = builder.textStringId;
-        this.firstRegion  = builder.firstRegion;
-        this.lastRegion   = builder.lastRegion;
+        this.id                 = builder.id;
+        this.textStringId       = builder.textStringId;
+        this.firstRegion        = builder.firstRegion;
+        this.lastRegion         = builder.lastRegion;
+        this.onlyOnVariant      = builder.onlyOnVariant;
+        this.onlyAtReprintCount = builder.onlyAtReprintCount;
     }
 
     /** Stable catalog id.  Also the no-repeat memory key — never change a shipped id. */
@@ -43,9 +63,36 @@ public final class BootWakeLine {
 
     public StoryRegion getLastRegion() { return lastRegion; }
 
+    /** The card variant this line is reserved for, or null when it belongs to the general pool. */
+    public BootCardVariant getOnlyOnVariant() { return onlyOnVariant; }
+
+    /**
+     * The one reprint number this line is reserved for, or {@link #ANY_REPRINT_COUNT} when it
+     * belongs to the general pool.
+     */
+    public int getOnlyAtReprintCount() { return onlyAtReprintCount; }
+
+    /** True when this row is held back for one particular card rather than pooled by region. */
+    public boolean isReserved() {
+        return onlyOnVariant != null || onlyAtReprintCount != ANY_REPRINT_COUNT;
+    }
+
     /** True when this line may be spoken with the given deepest-region-reached. */
     public boolean matchesRegion(StoryRegion region) {
         return region != null && region.isWithin(firstRegion, lastRegion);
+    }
+
+    /**
+     * True when this row's reservation (if it has one) is satisfied by the card being printed.  An
+     * unreserved row matches every card, which is what makes the general pool the fallback.
+     *
+     * @param variant      the card being printed
+     * @param reprintCount the instance number this card is printing (after it has climbed)
+     */
+    public boolean matchesCard(BootCardVariant variant, int reprintCount) {
+        if (onlyOnVariant != null && onlyOnVariant != variant)             return false;
+        return onlyAtReprintCount == ANY_REPRINT_COUNT
+                || onlyAtReprintCount == reprintCount;
     }
 
     public static Builder builder(String id) {
@@ -55,10 +102,12 @@ public final class BootWakeLine {
     /** Fluent builder — every row is built once at bootstrap, never per frame. */
     public static final class Builder {
 
-        private final String id;
-        private String       textStringId;
-        private StoryRegion  firstRegion = StoryRegion.HABITATION_RINGS;
-        private StoryRegion  lastRegion  = StoryRegion.CORE;
+        private final String    id;
+        private String          textStringId;
+        private StoryRegion     firstRegion = StoryRegion.HABITATION_RINGS;
+        private StoryRegion     lastRegion  = StoryRegion.CORE;
+        private BootCardVariant onlyOnVariant;
+        private int             onlyAtReprintCount = ANY_REPRINT_COUNT;
 
         private Builder(String id) {
             if (id == null || id.isEmpty()) {
@@ -90,12 +139,34 @@ public final class BootWakeLine {
             return this;
         }
 
+        /**
+         * Reserves this line for ONE card variant — the FIRST PRINT's own greeting.  A reserved row
+         * beats the region pool on the card it names and is never drawn on any other.
+         */
+        public Builder onlyOnVariant(BootCardVariant value) {
+            this.onlyOnVariant = value;
+            return this;
+        }
+
+        /**
+         * Reserves this line for the card printing exactly this instance number — the way the first
+         * few deaths get the lines that explain what a death IS, in order, once each.
+         */
+        public Builder onlyAtReprintCount(int value) {
+            this.onlyAtReprintCount = value;
+            return this;
+        }
+
         public BootWakeLine build() {
             if (textStringId == null || textStringId.isEmpty()) {
                 throw new IllegalArgumentException("wake line " + id + " has no text string id");
             }
             if (firstRegion.ordinal() > lastRegion.ordinal()) {
                 throw new IllegalArgumentException("wake line " + id + " has an inverted region band");
+            }
+            if (onlyAtReprintCount != ANY_REPRINT_COUNT && onlyAtReprintCount < 1) {
+                throw new IllegalArgumentException("wake line " + id
+                        + " is reserved for an instance number that can never be printed");
             }
             return new BootWakeLine(this);
         }

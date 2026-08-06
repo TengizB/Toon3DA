@@ -65,7 +65,11 @@ class StoryLocalizationTest {
         // Order-3: boot cards — the machine's status lines and ORA's wake lines.
         BootCardRegistry bootCards = BootCardCatalog.defaultRegistry();
         for (BootCardDefinition card : bootCards.getCards()) {
-            for (String stringId : card.getSystemLineStringIds()) ids.add(stringId);
+            // Every BAND of every card: a card may print a different block once the story has gone
+            // deep enough (order-2 C), and a band nobody swept is a band that ships a !id! marker.
+            for (int blockIndex = 0; blockIndex < card.getStatusBlockCount(); blockIndex++) {
+                for (String stringId : card.getStatusBlockLineStringIds(blockIndex)) ids.add(stringId);
+            }
         }
         for (BootWakeLine wakeLine : bootCards.getWakeLines()) {
             ids.add(wakeLine.getTextStringId());
@@ -119,6 +123,7 @@ class StoryLocalizationTest {
         ids.add(StoryUiConstants.STORY_FRAME_CONFIRM_YES_ID);
         ids.add(StoryUiConstants.STORY_FRAME_CONFIRM_NO_ID);
         ids.add(StoryUiConstants.STORY_FRAME_RETURN_ID);
+        ids.add(StoryUiConstants.STORY_DEATH_STROKE_ID);
         ids.add(StoryUiConstants.STORY_REPORT_TITLE_ID);
         ids.add(StoryUiConstants.STORY_REPORT_OPEN_ID);
         ids.add(StoryUiConstants.STORY_REPORT_BACK_ID);
@@ -129,6 +134,8 @@ class StoryLocalizationTest {
         ids.add(StoryUiConstants.STORY_REPORT_BEST_ID);
         for (TitleMenuItem item : TitleMenuItem.values()) {
             ids.add(item.getLabelStringId());
+            // The wording a row wears before the player has ever been printed (order-2 A).
+            if (item.getFirstRunLabelStringId() != null) ids.add(item.getFirstRunLabelStringId());
             if (item.getConfirmStringId() != null) ids.add(item.getConfirmStringId());
         }
         for (PauseMenuItem item : PauseMenuItem.values()) {

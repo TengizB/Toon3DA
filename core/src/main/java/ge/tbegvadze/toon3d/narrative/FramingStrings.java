@@ -32,6 +32,8 @@ public final class FramingStrings {
 
         // --- Title menu: cold, terminal-styled, no feature list ---
         strings.put(TitleMenuItem.CONTINUE_DESCENT.getLabelStringId(), "CONTINUE DESCENT");
+        // What that row reads before the player has ever been printed (narrative-rework order-2 A).
+        strings.put(TitleMenuItem.CONTINUE_DESCENT.getFirstRunLabelStringId(), "BEGIN DESCENT");
         strings.put(TitleMenuItem.NEW_OPERATOR.getLabelStringId(),     "NEW OPERATOR");
         strings.put(TitleMenuItem.CODEX.getLabelStringId(),            "ARCHIVE");
         strings.put(TitleMenuItem.SETTINGS.getLabelStringId(),         "SETTINGS");
@@ -51,6 +53,12 @@ public final class FramingStrings {
         // --- Settings screen (the codex strip's four knobs, on a screen of their own) ---
         strings.put(StoryUiConstants.STORY_SETTINGS_TITLE_ID, "SETTINGS");
         strings.put(StoryUiConstants.STORY_SETTINGS_BACK_ID,  "BACK");
+
+        // --- The death stroke: the whole of what the game says at the moment of death ---
+        // The machine's framing, and deliberately not the true one: it files a BODY, as an asset it
+        // owns. ORA is the one who says "you died" on the card that follows, and the gap between
+        // those two sentences is the entire relationship (doctrine D6).
+        strings.put(StoryUiConstants.STORY_DEATH_STROKE_ID, "THIS BODY DIED");
 
         // --- Shared framing chrome ---
         strings.put(StoryUiConstants.STORY_FRAME_CONFIRM_YES_ID, "PROCEED");

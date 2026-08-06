@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
+import ge.tbegvadze.toon3d.narrative.IntroBeat;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
@@ -151,11 +152,18 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
      * player's first run there never is one again.
      */
     private void detectQuietMoment() {
-        if (exchangeSystem == null || quietMomentOffered)                     return;
+        if (quietMomentOffered)                                              return;
         if (freshTilesWalked < StoryUiConstants.STORY_QUIET_MOMENT_MIN_STEPS) return;
         if (isAnythingAwake())                                               return;
         quietMomentOffered = true;
-        exchangeSystem.request(ExchangeTrigger.QUIET_MOMENT);
+        // The same stretch of quiet carries ORA's one line about the number on the wake card
+        // (narrative-rework order-2 D). It is deliberately not said ON that card: a counter
+        // explains itself badly on the screen it appears on, and this is the first moment the
+        // player has nothing else to do. One-shot in the narrative layer, so it is asked once
+        // per floor and answered once ever.
+        barkSystem.request(IntroBeat.REPRINT_COUNTER.getTrigger(),
+                           IntroBeat.REPRINT_COUNTER.getSubjectKey());
+        if (exchangeSystem != null) exchangeSystem.request(ExchangeTrigger.QUIET_MOMENT);
     }
 
     /** True while any living enemy on this floor has noticed the player. */

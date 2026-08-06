@@ -53,7 +53,11 @@ class StorySkimmerPathTest {
         }
         spineIds.add("bark.log.galleries.yield");     // they are mining something that heals
         spineIds.add("bark.log.reliquary.cradle");    // the reserve is the planet, and you are made of it
-        spineIds.add("bark.coldopen.1");              // who is talking to you
+        for (IntroBeat beat : IntroBeat.values()) {
+            // who is talking to you, what happened to you, why your memory came back short, and
+            // what she is for — the whole of ORA's introduction (narrative-rework order-2 D)
+            spineIds.add("bark.intro." + beat.getCatalogKey());
+        }
         for (ControlHint hint : ControlHint.values()) {
             spineIds.add("bark.control." + hint.getCatalogKey());    // how to play at all
         }

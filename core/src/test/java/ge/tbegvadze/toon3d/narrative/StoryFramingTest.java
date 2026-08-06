@@ -61,28 +61,89 @@ class StoryFramingTest {
     // 1. The launch screen opens on the death phrase — and shares it with the card
     // -------------------------------------------------------------------------
 
+    /**
+     * The very first launch prints the FIRST-PRINT block — the four plain lines written for somebody
+     * who has never heard of any of this (narrative-rework order-2 A) — and they are the BOOT CARD's
+     * own ids, because the launch screen and the card are one machine talking.
+     */
     @Test
-    void theLaunchScreenPrintsTheReprintCardsOwnStatusLines() {
+    void theFirstLaunchEverPrintsTheFirstPrintBlock() {
         TitleScreenSystem title = newTitleScreen(new StoryProgress());
-        BootCardDefinition reprintCard =
-                BootCardCatalog.defaultRegistry().getCard(BootCardVariant.REPRINT);
+        BootCardDefinition firstPrintCard =
+                BootCardCatalog.defaultRegistry().getCard(BootCardVariant.FIRST_PRINT);
         StoryStrings strings = StoryStrings.defaults();
 
-        assertEquals(StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT, title.getStatusLineCount(),
-                "the launch screen prints exactly the death notice and the reserve readout");
+        assertEquals(firstPrintCard.getLaunchStatusLineCount(), title.getStatusLineCount(),
+                "the first launch does not print the whole first-print notice");
         for (int lineIndex = 0; lineIndex < title.getStatusLineCount(); lineIndex++) {
-            assertEquals(strings.get(reprintCard.getSystemLineStringIds()[lineIndex]),
+            assertEquals(strings.get(firstPrintCard.getSystemLineStringIds()[lineIndex]),
                          title.getStatusLines()[lineIndex],
                          "launch line " + lineIndex + " is not the boot card's own string");
         }
     }
 
+    /** Once the player has been printed, the launch screen prints the ORDINARY reprint notice. */
     @Test
-    void theVeryFirstThingPrintedIsATerminationNotice() {
+    void aSaveWithPrintsBehindItGetsTheReprintBlock() {
+        StoryProgress progress = new StoryProgress();
+        progress.recordReprint();
+        TitleScreenSystem title = newTitleScreen(progress);
+        BootCardDefinition reprintCard =
+                BootCardCatalog.defaultRegistry().getCard(BootCardVariant.REPRINT);
+        StoryStrings strings = StoryStrings.defaults();
+
+        assertEquals(reprintCard.getLaunchStatusLineCount(), title.getStatusLineCount(),
+                "the launch screen borrows the wrong number of the card's lines");
+        for (int lineIndex = 0; lineIndex < title.getStatusLineCount(); lineIndex++) {
+            assertEquals(strings.get(reprintCard.getSystemLineStringIds()[lineIndex]),
+                         title.getStatusLines()[lineIndex],
+                         "launch line " + lineIndex + " is not the boot card's own string");
+        }
+        // The title screen stops before the card's closing line: that is a promise about a run that
+        // has not started, and this screen makes no promises.
+        assertTrue(title.getStatusLineCount() < reprintCard.getSystemLineCount(),
+                "the launch screen promised a reprint it has not started");
+    }
+
+    /**
+     * The first line anybody ever reads says, in a word a stranger can parse cold, that somebody
+     * died.  It used to say "PREVIOUS INSTANCE - TERMINATED": two undefined nouns about an event
+     * that happened off screen to somebody they had not met.
+     */
+    @Test
+    void theVeryFirstThingPrintedIsADeathNotice() {
         TitleScreenSystem title = newTitleScreen(new StoryProgress());
-        String firstLine = title.getStatusLines()[0];
-        assertTrue(firstLine.toUpperCase(java.util.Locale.ROOT).contains("TERMINATED"),
+        String firstLine = title.getStatusLines()[0].toUpperCase(java.util.Locale.ROOT);
+        assertTrue(firstLine.contains("DECEASED"),
                 "the first line the player ever reads must be a death notice, was: " + firstLine);
+        assertFalse(firstLine.contains("INSTANCE"),
+                "the first line the player ever reads leans on a word nothing has defined yet");
+    }
+
+    /**
+     * "SOUL RESERVE" is a Region-3 reveal, and the launch screen is bound by the same ladder the
+     * card is: a save that has not been to the Harvesting Galleries never sees the phrase.
+     */
+    @Test
+    void theLaunchScreenNeverSpendsTheReserveRevealEarly() {
+        StoryProgress shallow = new StoryProgress();
+        shallow.recordReprint();
+        TitleScreenSystem shallowTitle = newTitleScreen(shallow);
+        for (int lineIndex = 0; lineIndex < shallowTitle.getStatusLineCount(); lineIndex++) {
+            assertFalse(shallowTitle.getStatusLines()[lineIndex].contains("SOUL"),
+                    "the launch screen spent the Region-3 reveal on a player who cannot read it");
+        }
+
+        StoryProgress deep = new StoryProgress();
+        deep.recordReprint();
+        deep.reachRegion(StoryRegion.HARVESTING_GALLERIES);
+        TitleScreenSystem deepTitle = newTitleScreen(deep);
+        boolean printsTheReserve = false;
+        for (int lineIndex = 0; lineIndex < deepTitle.getStatusLineCount(); lineIndex++) {
+            if (deepTitle.getStatusLines()[lineIndex].contains("SOUL RESERVE")) printsTheReserve = true;
+        }
+        assertTrue(printsTheReserve,
+                "a player who has earned the reserve line is not being shown it");
     }
 
     @Test
@@ -110,7 +171,8 @@ class StoryFramingTest {
         StoryProgress progress = new StoryProgress();
         progress.recordEndingReached(BootCardVariant.ENDING_MERGE.name());
         TitleScreenSystem title = newTitleScreen(progress);
-        assertEquals(StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT, title.getStatusLineCount());
+        assertTrue(title.getStatusLineCount() > 0, "the launch screen blanked out");
+        assertTrue(title.getStatusLineCount() <= StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT);
         for (int lineIndex = 0; lineIndex < title.getStatusLineCount(); lineIndex++) {
             assertNotNull(title.getStatusLines()[lineIndex], "a launch line resolved to nothing");
         }
@@ -121,7 +183,49 @@ class StoryFramingTest {
         StoryProgress progress = new StoryProgress();
         progress.recordEndingReached("A_VARIANT_FROM_A_NEWER_BUILD");
         TitleScreenSystem title = newTitleScreen(progress);
-        assertEquals(StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT, title.getStatusLineCount());
+        assertTrue(title.getStatusLineCount() > 0, "the launch screen blanked out");
+        assertTrue(title.getStatusLineCount() <= StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT);
+    }
+
+    // -------------------------------------------------------------------------
+    // 1b. The death stroke — the moment of death is three words and nothing else
+    // -------------------------------------------------------------------------
+
+    /**
+     * The whole of what the game says at the moment of death.  It is a beat of its OWN, ahead of the
+     * reprint card, because the two screens do two different jobs — this one reports a death, the
+     * card reports a birth — and printed together neither lands.
+     */
+    @Test
+    void theDeathStrokeIsThreeWordsAndNothingElse() {
+        String stroke = StoryStrings.defaults().get(StoryUiConstants.STORY_DEATH_STROKE_ID);
+        assertFalse(stroke.trim().isEmpty(), "the death screen says nothing at all");
+        assertTrue(stroke.split("\\s+").length <= 3,
+                "the moment of death is not the place for a sentence: " + stroke);
+        assertTrue(stroke.toUpperCase(java.util.Locale.ROOT).contains("DIED"),
+                "the death screen does not say that anybody died: " + stroke);
+        // Whatever it says, it must not need a word the player has not been given.
+        assertFalse(stroke.contains("INSTANCE"), "the death screen leans on undefined jargon");
+        assertFalse(stroke.contains("SOUL"),     "the death screen spends a later reveal");
+    }
+
+    /**
+     * It holds long enough to read and then hands over by itself, and it can be skipped.  Neither
+     * end of that is optional: a player who just died is never held, and never rushed.
+     */
+    @Test
+    void theDeathStrokeHoldsAndThenHandsOverWithoutTrappingAnyone() {
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS >= 1.2f,
+                "the death stroke is gone before three words can be read");
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS <= 4f,
+                "the death stroke holds a dead screen longer than anyone will sit through");
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_FADE_SECONDS
+                        < StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS,
+                "the words are still arriving when the screen is taken away");
+        // It is drawn over a screen that is already black, never over the frozen corridor.
+        assertTrue(StoryUiConstants.STORY_DEATH_STROKE_TOP_Y > 0f
+                        && StoryUiConstants.STORY_DEATH_STROKE_TOP_Y <= Constants.WORLD_HEIGHT,
+                "the death stroke is drawn off the screen");
     }
 
     // -------------------------------------------------------------------------
@@ -159,16 +263,29 @@ class StoryFramingTest {
     // 3. The menu: what is offered, and what has to be confirmed
     // -------------------------------------------------------------------------
 
+    /**
+     * The way down is always the first row; what changes is what it is CALLED (narrative-rework
+     * order-2 A).  With nothing behind them, "CONTINUE DESCENT" is a lie about a thing that never
+     * happened — and hiding the row entirely used to leave NEW OPERATOR, the save wipe, as the way a
+     * first-timer started the game.
+     */
     @Test
-    void continueIsOfferedOnlyWhenThereIsSomethingToContinue() {
+    void theWayDownIsAlwaysTheFirstRowAndReadsBeginBeforeAnyoneHasBeenPrinted() {
         StoryProgress freshSave = new StoryProgress();
-        assertEquals(-1, rowOf(newTitleScreen(freshSave), TitleMenuItem.CONTINUE_DESCENT),
-                "a save with no instance printed must not offer to CONTINUE one");
+        TitleScreenSystem beforeAPrint = newTitleScreen(freshSave);
+        assertEquals(0, rowOf(beforeAPrint, TitleMenuItem.CONTINUE_DESCENT),
+                "the way down must be the first row a first-timer sees");
+        assertEquals(TitleMenuItem.CONTINUE_DESCENT.getFirstRunLabelStringId(),
+                     beforeAPrint.getMenu().getLabelStringId(0),
+                     "the first row offers to CONTINUE something that never happened");
 
         freshSave.recordReprint();
         TitleScreenSystem afterAPrint = newTitleScreen(freshSave);
         assertEquals(0, rowOf(afterAPrint, TitleMenuItem.CONTINUE_DESCENT),
                 "once the player has been printed, continuing is the first row");
+        assertEquals(TitleMenuItem.CONTINUE_DESCENT.getLabelStringId(),
+                     afterAPrint.getMenu().getLabelStringId(0),
+                     "a player with a descent behind them is still being told to BEGIN one");
     }
 
     @Test
@@ -229,7 +346,7 @@ class StoryFramingTest {
         TitleScreenSystem title = newTitleScreen(new StoryProgress());
         int newOperatorRow = rowOf(title, TitleMenuItem.NEW_OPERATOR);
         assertEquals(TitleMenuItem.NEW_OPERATOR, title.activateRow(newOperatorRow),
-                "with nothing to wipe, NEW OPERATOR must simply start the descent");
+                "with nothing to wipe, NEW OPERATOR must act at once rather than ask");
         assertFalse(title.getMenu().isConfirmOpen(),
                 "a scary question about no consequence at all was asked anyway");
     }

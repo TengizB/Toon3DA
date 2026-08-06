@@ -1,7 +1,66 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Narrative rework 2 — The first ten minutes
 ---
+
+IMPLEMENTATION NOTES (what shipped, and where it deviates from the spec below)
+
+Shipped as specified: the FIRST-PRINT status block on both the launch screen and a new
+BootCardVariant.FIRST_PRINT card; the region-banded reprint block (SOUL RESERVE waits for the
+Galleries); the BEGIN DESCENT first-run label; the three-line run-1 cold open, the two run-2 lines,
+and the distributed introduction; the reserved first-death wake lines; the story/02 deviation.
+
+Deviations, all recorded deliberately:
+  1. THE INSTANCE COUNTER STILL READS 0001 ON RUN 1, not 002. Section B describes it as reading
+     "INSTANCE 002 — the player is the second body". Changing it would have re-defined the counter
+     that {instance} substitutes into every wake line ("Reprint 0002" on the first print is wrong),
+     contradicted the shipped doc and an existing test, and moved a number the whole story leans on.
+     ORA's line was written to fit what is actually on screen instead: "That number on the wake card
+     is which print you are. I keep the count." Same job (the number gets explained), no lie.
+  2. THE REPORT LINE IS THE THIRD DEATH, not the second. Section C says row 2 fires on the second
+     death AND that the report line is "delivered as the wake line on the SECOND death only" — two
+     lines on one card, which the channel cannot do. Resolved in the order the section's own rule
+     implies (one new thing per screen): death 1 = firstdeath.1, death 2 = firstdeath.2,
+     death 3 = firstdeath.report.
+  3. THE FIRST-PORTAL LINE ("I keep the map. You pick the road.") IS DEFERRED TO ORDER-4, which owns
+     the portal / FACILITY NAV teaching (order-1 F4) and the ControlHint expansion it needs. The
+     spec's own IMPLEMENTATION NOTES list every firing site except that one.
+  4. THE DISTRIBUTED BEATS RIDE BarkTrigger.CONTROL_HINT with new subject keys (narrative/IntroBeat),
+     honouring "new one-shot subjects, no new trigger enum values". The door and pickup hooks poll in
+     World beside the other control hints (where doorManager and runStats live) rather than in
+     StoryBarkTickSubscriber; the reprint-counter beat fires from the subscriber's quiet moment.
+  5. story.bark.log.rings.1 was rewritten (not just added to): its roster line moved to the one-shot
+     PAPERWORK intro beat, and D5 forbids saying it twice.
+
+ADDED AFTER REVIEW — THE DEATH STROKE (not in the spec below; requested during implementation)
+
+The spec restaged the START of a run and left the moment of DEATH as it was: a 1.0s fade, then the
+reprint card. Read back, that screen was ~30 words across seven elements (status block, counter,
+ORA, CONTINUE, REPORT) at the moment Dark Souls uses two — and it was doing two jobs at once,
+reporting a death AND starting a birth, so neither landed.
+
+Split into two beats:
+  1. THE STROKE — fade to black, then three words on it and nothing else: "THIS BODY DIED"
+     (story.death.stroke, FramingScreenRenderer.renderDeathStroke). No counter, no status block, no
+     button, and NO ORA — she does not get printed, she reloads, so for one second the only voice in
+     the game is missing. Holds STORY_DEATH_STROKE_HOLD_SECONDS, hands over by itself (the fade at
+     this seam always has), and a tap skips it after a one-second lockout so a player mashing fire
+     as they die cannot blow through their own death.
+  2. THE CARD, unchanged — which now reads as what it always was: a machine somewhere else printing
+     another body. ORA is the first warm thing on it.
+
+Two authorship calls made by the project owner: the words are "THIS BODY DIED" (not "YOU DIED"), and
+the stroke is those words FOREVER — no region-banded machine receipt under them. The escalation
+therefore lives entirely in ORA's wake lines on the card (deaths 1-3 reserved, then the region
+pools), which is where this order already put it.
+
+The machine files a BODY, as an asset it owns; ORA's first-death line calls it "you". That gap is
+free characterisation and is the reason the two screens should never be merged again.
+
+Not verified by a run of ./gradlew test: this environment cannot resolve the Gradle dependencies
+(the network policy blocks Maven). The headless narrative package was compiled and exercised by a
+standalone harness covering every assertion the updated tests make; the JUnit tests themselves are
+updated but unrun.
 
 PURPOSE
 Fixes failures F1, F3 and F6 of order-1: the launch screen that announces a death nobody can

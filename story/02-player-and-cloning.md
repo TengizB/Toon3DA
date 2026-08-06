@@ -30,9 +30,29 @@ The Organization has **blocked** exactly one region of your pattern:
 - The Catastrophe you caused.
 - Your original self's death by the immune response.
 
-That block is not a hole you can feel at the start. It reads as *settled fact* — you
-simply "know" the official version (a containment accident, a contaminant to purge).
-The descent is the process of the block failing.
+**How the block is EXPERIENCED** (revised by narrative-rework order-2; the fiction of the
+block is unchanged, only what the player is told about it):
+
+This print came back with obvious, ordinary-looking gaps, and ORA says so in her third
+sentence — *"Your memory came back short. Normal. I'll fill in the gaps as we go."* Both
+of them put it down to printing noise, because that is exactly what it looks like. So ORA
+re-explains the job, the place, the equipment and the enemies, diegetically, as the
+assistant helping a print that came up short. That is the tutorial, and it costs the
+fiction nothing.
+
+The earlier version of this section said the block "is not a hole you can feel at the
+start — it reads as settled fact". That is elegant on paper and unplayable: if the
+character already knows everything, nobody can ever explain anything to the player, and
+the game's only teacher has to go silent. The block is still a *clean excision in one
+subject area* — what it hides has not changed:
+
+- you still "know" the official version (a containment accident, a contaminant to purge);
+- what is missing is the discovery, the liberation attempt, the Catastrophe and the death.
+
+**The reveal (Region 3-4) is that the gaps are not noise.** They are surgical, in one
+subject area, and deliberate. Everything ORA cheerfully re-explained on floor one was a
+thing somebody paid to remove — which turns the tutorial into a plant. The descent is
+still the process of the block failing.
 
 ## The Cradle — how respawn works in the fiction
 

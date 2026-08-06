@@ -61,6 +61,7 @@ public final class FramingScreenRenderer implements Disposable {
     private String confirmYesLabel   = "";
     private String confirmNoLabel    = "";
     private String returnLabel       = "";
+    private String deathStrokeLabel  = "";
 
     // The confirmation's question, wrapped once per DIFFERENT question rather than per frame.
     private final String[] confirmLines = new String[StoryUiConstants.STORY_FRAME_CONFIRM_MAX_LINES];
@@ -84,6 +85,40 @@ public final class FramingScreenRenderer implements Disposable {
         confirmYesLabel  = strings.get(StoryUiConstants.STORY_FRAME_CONFIRM_YES_ID);
         confirmNoLabel   = strings.get(StoryUiConstants.STORY_FRAME_CONFIRM_NO_ID);
         returnLabel      = strings.get(StoryUiConstants.STORY_FRAME_RETURN_ID);
+        deathStrokeLabel = strings.get(StoryUiConstants.STORY_DEATH_STROKE_ID);
+    }
+
+    // -------------------------------------------------------------------------
+    // 0. The death stroke — the first thing drawn after a death, and the whole of it
+    // -------------------------------------------------------------------------
+
+    /**
+     * Three words on black, and nothing else (narrative-rework order-2).
+     *
+     * <p>This is the moment of death, and it is deliberately NOT the reprint card: the card reports
+     * a birth — a machine somewhere else making another body — and printing both at once meant
+     * neither landed.  So there is no counter here, no status block, no button, and no ORA.  Her
+     * absence is the point: she does not get printed, she reloads, so for one second the only voice
+     * in the game is missing.  She comes back on the card, and the first thing she says is that the
+     * player is alright.
+     *
+     * <p>The caller has already faded the world to black; this draws over it.
+     *
+     * @param wordsFade 0..1 resolve of the words themselves, which arrive after the black does
+     */
+    public void renderDeathStroke(OrthographicCamera camera, float wordsFade) {
+        if (strings == null || wordsFade <= 0f) return;
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        font.getData().setScale(StoryUiConstants.STORY_DEATH_STROKE_TEXT_SIZE);
+        layout.setText(font, deathStrokeLabel);
+        drawWithShadow(deathStrokeLabel,
+                       Constants.WORLD_WIDTH / 2f - layout.width / 2f,
+                       StoryUiConstants.STORY_DEATH_STROKE_TOP_Y,
+                       StoryUiConstants.STORY_DEATH_STROKE_R, StoryUiConstants.STORY_DEATH_STROKE_G,
+                       StoryUiConstants.STORY_DEATH_STROKE_B,
+                       MathUtils.clamp(wordsFade, 0f, 1f));
+        endBatch();
     }
 
     /** Binds the headless brain behind the launch screen.  Null draws no title screen at all. */
@@ -136,12 +171,21 @@ public final class FramingScreenRenderer implements Disposable {
         if (menu.isConfirmOpen()) drawConfirmation(camera, menu, fade);
     }
 
-    /** The two status lines the launch screen borrows from the reprint card, printing one by one. */
+    /**
+     * The status lines the launch screen borrows from the boot card, printing one by one.
+     *
+     * <p>The block is anchored from its BOTTOM: the FIRST-PRINT notice is four lines and every other
+     * card's is two, and both must end just above the title rather than leaving a hole under the
+     * short one.  The offset uses the card's TOTAL line count, not the revealed count, so the lines
+     * print downwards into a fixed block instead of sliding as they arrive.
+     */
     private void drawLaunchStatusLines(float fade) {
         String[] lines      = titleScreenSystem.getStatusLines();
-        int      printCount = Math.min(titleScreenSystem.getRevealedStatusLineCount(),
-                                       titleScreenSystem.getStatusLineCount());
-        float lineTopY = StoryUiConstants.STORY_TITLE_STATUS_TOP_Y;
+        int      lineCount  = titleScreenSystem.getStatusLineCount();
+        int      printCount = Math.min(titleScreenSystem.getRevealedStatusLineCount(), lineCount);
+        float lineTopY = StoryUiConstants.STORY_TITLE_STATUS_TOP_Y
+                - (StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT - lineCount)
+                        * StoryUiConstants.STORY_TITLE_STATUS_LINE_PITCH;
         for (int lineIndex = 0; lineIndex < printCount; lineIndex++) {
             drawCentered(lines[lineIndex], lineTopY,
                          StoryUiConstants.STORY_TITLE_STATUS_TEXT_SIZE,

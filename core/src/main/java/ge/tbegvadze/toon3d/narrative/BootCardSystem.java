@@ -152,8 +152,11 @@ public final class BootCardSystem {
      * @return true when a card is now on screen; false when this variant shows none (MERGE), in
      *         which case the caller must not enter a card phase at all
      */
-    public boolean present(BootCardVariant variant) {
+    public boolean present(BootCardVariant requestedVariant) {
         clear();
+        // Resolved BEFORE the counter climbs: "has anybody been printed yet" is a question about the
+        // save as it stands, not about the card being printed onto it.
+        BootCardVariant variant = resolveVariant(requestedVariant);
         if (variant == null || !variant.showsCard()) return false;
         BootCardDefinition definition = registry.getCard(variant);
         if (definition == null) return false;   // an unregistered variant shows nothing, never crashes
@@ -179,12 +182,27 @@ public final class BootCardSystem {
     }
 
     /**
+     * Which ordinary card this save has earned (narrative-rework order-2 B).  A caller asking for the
+     * REPRINT card on a save that has never printed anybody gets the FIRST-PRINT card instead — the
+     * two are the same screen saying the same thing to two different people, and every call site in
+     * the engine simply asks for "the reprint card" without knowing which.  An ENDING names its own
+     * variant and passes through untouched.
+     */
+    private BootCardVariant resolveVariant(BootCardVariant requestedVariant) {
+        if (requestedVariant != BootCardVariant.REPRINT) return requestedVariant;
+        return BootCardVariant.forReprintCount(progress.getReprintCount());
+    }
+
+    /**
      * The machine voice, resolved verbatim — status lines are NOT wrapped.  A wrapped readout looks
      * like a layout bug rather than like a cold terminal, so the catalog keeps every line inside
      * {@code STORY_LINE_MAX_CHARS} (a test enforces it) and each one occupies exactly one row.
      */
     private void resolveSystemLines(BootCardDefinition definition) {
-        String[] stringIds = definition.getSystemLineStringIds();
+        // Region-banded (narrative-rework order-2 C): the machine says more to a player who has been
+        // deep enough to understand it.  Gated by the same persistent deepest-region the wake lines
+        // use, so death never rewinds what the card is willing to name.
+        String[] stringIds = definition.getSystemLineStringIds(progress.getDeepestRegion());
         // The builder guarantees a non-empty array of non-empty ids; the guard keeps a card that
         // was somehow built another way from taking the screen down with it.
         if (stringIds == null) return;
@@ -198,7 +216,7 @@ public final class BootCardSystem {
 
     /** Picks ORA's line for this reprint, substitutes the instance number, and pre-wraps it. */
     private void resolveWakeLine(int reprintCount) {
-        BootWakeLine chosen = selectWakeLine();
+        BootWakeLine chosen = selectWakeLine(reprintCount);
         if (chosen == null) return;   // no pool for this region: the machine card stands alone
 
         String text = strings.get(chosen.getTextStringId());
@@ -218,27 +236,45 @@ public final class BootCardSystem {
     }
 
     /**
-     * Picks one wake line for the deepest region reached, preferring lines not said in the last few
+     * Picks one wake line for the card being printed, preferring lines not said in the last few
      * reprints.  Unlike a bark, this beat is GUARANTEED: if the no-repeat memory would leave nothing
      * eligible, the memory is ignored and the region's pool is used anyway — a boot card with no ORA
      * line reads as a bug, not as deliberate silence.
+     *
+     * <p>A RESERVED row wins outright (narrative-rework order-2 B/C).  The first print and the first
+     * couple of real deaths are the cards that have to explain something, and each has a line held
+     * for it by variant or by instance number; only when no reservation matches does the ordinary
+     * region-gated pool answer, which is every other card in the game.
      */
-    private BootWakeLine selectWakeLine() {
+    private BootWakeLine selectWakeLine(int reprintCount) {
         StoryRegion region = progress.getDeepestRegion();
         List<BootWakeLine> rows = registry.getWakeLines();
 
+        // Pass 1 — a line held for exactly this card.  No-repeat memory does not apply: a reserved
+        // row can only match one card in the life of a save, so it can never be a repeat.
         candidateScratch.clear();
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
             BootWakeLine row = rows.get(rowIndex);
-            if (!row.matchesRegion(region))          continue;
-            if (wasRecentlySaid(row.getId()))        continue;
+            if (!row.isReserved())                              continue;
+            if (!row.matchesCard(activeVariant, reprintCount))  continue;
+            if (!row.matchesRegion(region))                     continue;
             candidateScratch.add(row);
+        }
+        // Pass 2 — the ordinary pool for the deepest region reached.
+        if (candidateScratch.isEmpty()) {
+            for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+                BootWakeLine row = rows.get(rowIndex);
+                if (row.isReserved())                continue;
+                if (!row.matchesRegion(region))      continue;
+                if (wasRecentlySaid(row.getId()))    continue;
+                candidateScratch.add(row);
+            }
         }
         if (candidateScratch.isEmpty()) {
             // Fall back to the whole region pool, repeats included, so the beat always lands.
             for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
                 BootWakeLine row = rows.get(rowIndex);
-                if (row.matchesRegion(region)) candidateScratch.add(row);
+                if (!row.isReserved() && row.matchesRegion(region)) candidateScratch.add(row);
             }
         }
         if (candidateScratch.isEmpty()) return null;

@@ -57,6 +57,7 @@ import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
 import ge.tbegvadze.toon3d.narrative.FramingMenu;
+import ge.tbegvadze.toon3d.narrative.IntroBeat;
 import ge.tbegvadze.toon3d.narrative.PauseMenuItem;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.TitleMenuItem;
@@ -1940,16 +1941,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // DEAD phase (order-8 Part B) — the death BEAT: a slow, quiet fade to black. No gory splash
-        // and no verdict; the player has just died and may already be frustrated.
+        // DEAD phase (order-8 Part B, restaged by narrative-rework order-2) — the death BEAT: a
+        // slow, quiet fade to black, and then THREE WORDS on it. No gory splash and no verdict; the
+        // player has just died and may already be frustrated.
         //
-        // When the fade finishes the run is filed and the machine simply prints them again: the
-        // reprint card takes the screen HERE, in the world that died, and the next World starts
-        // faded-up in a fresh run. That is what makes death -> reprint one calm tap-through instead
-        // of a stats screen and a card competing for the same moment.
+        // The stroke is a beat of its OWN, ahead of the reprint card, because the two screens do two
+        // different jobs: this one reports a death, the card reports a birth. Printed together —
+        // which is what the game used to do — neither lands, and the death arrives buried under a
+        // status block, a counter and two buttons. Here there is nothing but the words, and no ORA:
+        // she does not get printed, she reloads, so the one second the player has no voice at all is
+        // the loneliest the run ever gets. She is the first warm thing on the card that follows.
+        //
+        // It holds and then hands over by itself — the fade at this seam always has — and a tap
+        // skips straight to the card, so an impatient player is never held and a slow one is never
+        // rushed. Nothing is lost either way: the card behind it says all of it again, at length.
         if (runPhase == RunPhase.DEAD) {
             deathBeatTimerSeconds += deltaTime;
-            if (deathBeatTimerSeconds >= ProgressionConstants.DEATH_BEAT_DURATION_SECONDS) {
+            boolean strokeSkipped = gameViewport != null && Gdx.input.justTouched()
+                    && deathBeatTimerSeconds >= ProgressionConstants.DEATH_BEAT_DURATION_SECONDS;
+            if (strokeSkipped || deathBeatTimerSeconds >= deathStrokeEndSeconds()) {
                 saveRunRecordsOnce();
                 presentReprintCard();
             }
@@ -2486,12 +2496,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             fadeOverlayRenderer.render(camera, fadeAlpha, currentDepth);
         }
 
-        // Death beat (order-8 Part B): a slow fade to black, and nothing else. The moment it
-        // finishes, the reprint card takes the screen — there is no separate death splash to draw.
+        // Death beat (order-8 Part B, restaged by narrative-rework order-2): a slow fade to black,
+        // and then three words on it. Nothing else is drawn at all — no counter, no status block,
+        // no button, no ORA — until the reprint card takes the screen.
         if (runPhase == RunPhase.DEAD) {
             float deathFadeAlpha = Math.min(1f,
                     deathBeatTimerSeconds / ProgressionConstants.DEATH_BEAT_DURATION_SECONDS);
             fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
+            framingScreenRenderer.renderDeathStroke(camera, deathStrokeWordsFade());
         }
 
         // MERGE (order-8 Part D): the frozen world the player was standing in, going quietly out.
@@ -2882,9 +2894,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     /**
-     * The COLD OPEN (order-5): the first thing that happens once control is actually the player's.
-     * ORA introduces herself and the one control they need to know about — and because both rows are
-     * one-shot and persistent, a veteran on their fortieth reprint gets neither.
+     * The COLD OPEN (order-5, rewritten by narrative-rework order-2 D): the first thing that happens
+     * once control is actually the player's.  ORA introduces herself properly — who is talking, what
+     * happened to this body, and why its memory came back short — and then teaches the one control
+     * they need.  Every row is one-shot and persistent, so a veteran on their fortieth reprint gets
+     * none of it.
+     *
+     * <p>The beats are asked for IN ORDER, which is what a subject key per {@link IntroBeat} buys:
+     * the pool cannot hand back "you died about an hour ago" before "I'm ORA".  A beat whose
+     * instance number has not come round yet ({@code isAvailableAt}) is simply not asked for — that
+     * is how the second run gets the two lines that only mean anything to somebody who has now died
+     * themselves.
      *
      * <p>Fires from the first PLAYING frame of a run rather than from the boot card, so the lines
      * land on the world instead of on a modal the player is still reading.
@@ -2892,7 +2912,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void requestColdOpenBarks() {
         if (coldOpenRequested || isStartingRoom) return;
         coldOpenRequested = true;
-        barkSystem.request(BarkTrigger.RUN_START);
+        int reprintCount = barkSystem.getProgress().getReprintCount();
+        for (IntroBeat beat : IntroBeat.values()) {
+            if (!beat.isColdOpen() || !beat.isAvailableAt(reprintCount)) continue;
+            barkSystem.request(beat.getTrigger(), beat.getSubjectKey());
+        }
         barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.MOVE.getSubjectKey());
     }
 
@@ -2920,6 +2944,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (countEquippedRangedWeapons() >= 2) {
             barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.SWITCH_WEAPON.getSubjectKey());
+        }
+        requestDistributedIntroBarks();
+    }
+
+    /**
+     * The distributed half of ORA's introduction (narrative-rework order-2 D): the beats that wait
+     * for a thing to happen in front of the player rather than arriving on a schedule.  A door
+     * opening is when "I do doors, guns are your department" is worth saying; picking something up
+     * is when what carrying anything is WORTH in a permadeath run is worth saying.
+     *
+     * <p>Polled here beside the control hints for the same reason they are: every row is one-shot for
+     * the life of the save, so asking costs nothing and after a player's first hour this produces
+     * nothing at all.  The remaining two beats fire from their own moments — the first quiet stretch
+     * ({@code StoryBarkTickSubscriber}) and the first terminal read ({@code updateLogTerminals}).
+     */
+    private void requestDistributedIntroBarks() {
+        if (doorManager != null && doorManager.getOpenedDoorCount() > 0) {
+            barkSystem.request(IntroBeat.DOORS.getTrigger(), IntroBeat.DOORS.getSubjectKey());
+        }
+        if (runStats != null && runStats.itemsCollected > 0) {
+            barkSystem.request(IntroBeat.CARRIED_ITEMS.getTrigger(),
+                               IntroBeat.CARRIED_ITEMS.getSubjectKey());
         }
     }
 
@@ -3598,8 +3644,29 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * The death beat has finished fading (order-8 Part B): print the player again.  The card takes
-     * the screen in the world that DIED, and its CONTINUE hands over to a fresh world that opens
+     * When the whole death beat is over and the reprint card takes the screen: the fade to black,
+     * plus the hold on the three words that land on it (narrative-rework order-2).
+     */
+    private float deathStrokeEndSeconds() {
+        return ProgressionConstants.DEATH_BEAT_DURATION_SECONDS
+                + StoryUiConstants.STORY_DEATH_STROKE_HOLD_SECONDS;
+    }
+
+    /**
+     * 0..1 resolve of the death stroke's words.  They arrive only once the screen is fully black —
+     * three words hanging over a frozen corridor would read as a HUD element rather than as the end
+     * of something — and then hold at full until the card takes over.
+     */
+    private float deathStrokeWordsFade() {
+        float sinceBlack = deathBeatTimerSeconds - ProgressionConstants.DEATH_BEAT_DURATION_SECONDS;
+        if (sinceBlack <= 0f) return 0f;
+        float fraction = sinceBlack / StoryUiConstants.STORY_DEATH_STROKE_FADE_SECONDS;
+        return fraction >= 1f ? 1f : fraction;
+    }
+
+    /**
+     * The death beat has finished (order-8 Part B): print the player again.  The card takes the
+     * screen in the world that DIED, and its CONTINUE hands over to a fresh world that opens
      * already faded up — which is what makes the whole of death → reprint one calm tap-through.
      */
     private void presentReprintCard() {
