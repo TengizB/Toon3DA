@@ -41,10 +41,29 @@ public final class BootCardStrings {
      * subvert it, which only works because they are printed in the same flat, unaware register.
      */
     private static void registerSystemCards(StoryStrings strings) {
-        // Default reprint — the card the player sees on every single run, first one included.
-        strings.put("story.boot.system.reprint.1", "PREVIOUS INSTANCE - TERMINATED");
-        strings.put("story.boot.system.reprint.2", "SOUL RESERVE .......... SUFFICIENT");
-        strings.put("story.boot.system.reprint.3", "REPRINTING FROM LAST CHECKPOINT");
+        // THE FIRST PRINT (narrative-rework order-2 A/B) — the first four lines of this fiction that
+        // anybody ever reads, on the launch screen and then on the card itself.  Not one proper noun
+        // of the setting between them: a person died, that person is you, there is a copy, the copy
+        // is being made.  Everything the game says afterwards is built on somebody having parsed
+        // these, so they are plainer than the machine will ever be again.
+        strings.put("story.boot.system.firstprint.1", "OPERATOR ............. DECEASED");
+        strings.put("story.boot.system.firstprint.2", "BODY RECOVERY ........ NOT POSSIBLE");
+        strings.put("story.boot.system.firstprint.3", "BACKUP COPY .......... ON FILE");
+        strings.put("story.boot.system.firstprint.4", "PRINTING NEW BODY .... STAND BY");
+
+        // Default reprint — the card the player sees on every run after their first print.  Plain
+        // words only: the reserve line moved out of here and into the band below, because on the
+        // surface it was a Region-3 reveal spent on somebody with no idea what it meant.
+        strings.put("story.boot.system.reprint.1", "PREVIOUS BODY ........ DECEASED");
+        strings.put("story.boot.system.reprint.2", "BACKUP COPY .......... ON FILE");
+        strings.put("story.boot.system.reprint.3", "PRINTING NEW BODY .... STAND BY");
+
+        // The same card from the Harvesting Galleries down, where ORA has started asking what the
+        // printers run on.  The player now reads SOUL RESERVE on every card for the rest of the
+        // game, understanding it — which is the beat the old card was throwing away on screen one.
+        strings.put("story.boot.system.reprint.deep.1", "PREVIOUS BODY ........ DECEASED");
+        strings.put("story.boot.system.reprint.deep.2", "SOUL RESERVE ......... SUFFICIENT");
+        strings.put("story.boot.system.reprint.deep.3", "PRINTING NEW BODY .... STAND BY");
 
         // FREE IT — the reserve went to buying the being's freedom. Then nothing reloads.
         strings.put("story.boot.system.free.1",    "PREVIOUS INSTANCE - TERMINATED");
@@ -67,6 +86,20 @@ public final class BootCardStrings {
      * tone arc lives entirely in which region these are registered under (see BootCardCatalog).
      */
     private static void registerWakeLines(StoryStrings strings) {
+        // RESERVED — the first print.  Thirty seconds after a stranger's death notice, so she does
+        // not lead with a name: she tells them they are alright and that somebody is with them, and
+        // introduces herself properly the moment they have control (BarkStrings' cold open).
+        strings.put("story.boot.wake.first.1",     "Easy. Give the eyes a second. I'm right here.");
+
+        // RESERVED — the player's own first deaths.  This is where the loop is explained, in the
+        // plainest words the game owns, and it is not a joke about a new record.
+        strings.put("story.boot.wake.firstdeath.1",
+                                                   "You died. It's alright. That's what the copy is for.");
+        strings.put("story.boot.wake.firstdeath.2",
+                                                   "Nothing you were carrying came back. You did. Again.");
+        strings.put("story.boot.wake.firstdeath.report",
+                                                   "There's a REPORT plate if you want to see what got you.");
+
         // Region 1 — cheerful; your deaths are a scoreboard and she is proud of the numbers.
         strings.put("story.boot.wake.rings.1",     "Morning, sunshine. Reprint {instance}. New record.");
         strings.put("story.boot.wake.rings.2",     "You're up. Print {instance}, all limbs accounted for.");

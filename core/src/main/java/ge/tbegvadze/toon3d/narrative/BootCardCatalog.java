@@ -57,12 +57,38 @@ public final class BootCardCatalog {
     // The cards — one per variant that prints anything.  MERGE deliberately has none.
     // -------------------------------------------------------------------------
     private static void registerCards(BootCardRegistry registry) {
-        // The default card, shown on every reprint including the very first run.  The only variant
-        // reachable in play today; the endings that replace it are order-5 / order-8's schedule.
+        // THE FIRST PRINT (narrative-rework order-2 B) — the card for a save that has never printed
+        // anybody, and the first screen of this fiction a stranger ever reads.  Four plain lines,
+        // no proper noun of the setting in any of them: a person died, that person is you, there is
+        // a copy, the copy is being made.  The launch screen borrows all four (see
+        // BootCardDefinition.getLaunchStatusLineCount), because on an empty save they are the only
+        // explanation the player has of what they are about to be.
+        registry.registerCard(BootCardDefinition.builder(BootCardVariant.FIRST_PRINT)
+                .systemLines("story.boot.system.firstprint.1",
+                             "story.boot.system.firstprint.2",
+                             "story.boot.system.firstprint.3",
+                             "story.boot.system.firstprint.4")
+                .launchStatusLines(4)
+                .showsInstanceCounter(true)   // never hidden: the number is the premise
+                .showsWakeLine(true)
+                .build());
+
+        // The default card, shown on every reprint after that one.  The only other variant reachable
+        // in play today; the endings that replace it are order-5 / order-8's schedule.
+        //
+        // TWO BANDS (narrative-rework order-2 C).  Up top it says only what the player can already
+        // read: the last body died, a copy is on file, a new one is printing.  "SOUL RESERVE" — the
+        // Region-3 reveal, and the whole horror of this card — waits for the Harvesting Galleries,
+        // which is exactly where ORA starts asking what the printers run on.  Before that beat the
+        // word was wallpaper; after it, it is on every card the player will ever read again.
         registry.registerCard(BootCardDefinition.builder(BootCardVariant.REPRINT)
                 .systemLines("story.boot.system.reprint.1",
                              "story.boot.system.reprint.2",
                              "story.boot.system.reprint.3")
+                .systemLinesFrom(StoryRegion.HARVESTING_GALLERIES,
+                             "story.boot.system.reprint.deep.1",
+                             "story.boot.system.reprint.deep.2",
+                             "story.boot.system.reprint.deep.3")
                 .showsInstanceCounter(true)
                 .showsWakeLine(true)          // ORA is the beat; the machine is the frame
                 .build());
@@ -103,6 +129,38 @@ public final class BootCardCatalog {
     // so the no-repeat memory always has somewhere to go and a long session never loops a line.
     // -------------------------------------------------------------------------
     private static void registerWakeLines(BootCardRegistry registry) {
+        // ---- RESERVED LINES: the three cards a player only ever reads once -----------------------
+        // (narrative-rework order-2 B/C).  Each is held for exactly one card, so the moments that
+        // have to explain something are never spent on a random greeting from the pool.
+
+        // The FIRST PRINT.  Thirty seconds after a stranger's death notice: no name, no job, no
+        // explanation — she introduces herself the moment the player has control and can look
+        // around, which is where a line like that can actually be answered.  Deliberately region
+        // -unrestricted: it is pinned to the one card that can only ever happen once anyway.
+        registry.registerWakeLine(BootWakeLine.builder("boot.wake.first.1")
+                .textStringId("story.boot.wake.first.1")
+                .onlyOnVariant(BootCardVariant.FIRST_PRINT)
+                .build());
+
+        // The player's OWN first deaths.  Instance 2 is the first body they actually lost, and this
+        // is the screen where the loop gets explained rather than joked about: what came back, what
+        // did not, and — a print later, one new thing per screen — that the REPORT plate is there
+        // for whoever wants to know what killed them.  Reserved by instance number, so they land in
+        // order, once each, whatever region the story has reached by then.
+        registry.registerWakeLine(BootWakeLine.builder("boot.wake.firstdeath.1")
+                .textStringId("story.boot.wake.firstdeath.1")
+                .onlyAtReprintCount(2)
+                .build());
+        registry.registerWakeLine(BootWakeLine.builder("boot.wake.firstdeath.2")
+                .textStringId("story.boot.wake.firstdeath.2")
+                .onlyAtReprintCount(3)
+                .build());
+        registry.registerWakeLine(BootWakeLine.builder("boot.wake.firstdeath.report")
+                .textStringId("story.boot.wake.firstdeath.report")
+                .onlyAtReprintCount(4)
+                .build());
+
+        // ---- The general pool, gated by the deepest region ever reached --------------------------
         // Region 1 — onboarding cheer.  She counts your deaths like a scoreboard, and it is funny.
         wakeLine(registry, "boot.wake.rings.1", StoryRegion.HABITATION_RINGS);
         wakeLine(registry, "boot.wake.rings.2", StoryRegion.HABITATION_RINGS);

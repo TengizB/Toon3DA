@@ -274,20 +274,34 @@ plates), because the launch screen and the reprint card are the SAME machine tal
 
 A. THE LAUNCH SCREEN (`narrative/TitleScreenSystem`, `render/FramingScreenRenderer`)
    **There is no cheerful title screen.** The app opens on black and the first line anybody reads is
-   the game telling them they are already dead:
-        PREVIOUS INSTANCE - TERMINATED
-        SOUL RESERVE .......... SUFFICIENT
+   the game telling them they are already dead — in words a stranger can parse cold
+   (narrative-rework order-2 A, which replaced "PREVIOUS INSTANCE - TERMINATED / SOUL RESERVE
+   .......... SUFFICIENT": two undefined nouns and a status readout for a system nobody has heard of,
+   spending the Region-3 reveal on screen one):
+        OPERATOR ............. DECEASED
+        BODY RECOVERY ........ NOT POSSIBLE
+        BACKUP COPY .......... ON FILE
+        PRINTING NEW BODY .... STAND BY
    ...then a beat, then the title resolves quietly beneath it, then a cold menu fades in under that.
-   The two lines are the REPRINT CARD's own string ids, borrowed from `BootCardRegistry` — one
-   machine, one voice, one string. A first-timer reads it as flavour; hours later they learn it was
-   literally announcing the original self's death (story/dialog/system-cards.md).
+   The lines are the BOOT CARD's own string ids, borrowed from `BootCardRegistry` — one machine, one
+   voice, one string (story/dialog/system-cards.md). WHICH card it borrows from is the save's own
+   state, and nothing else: FIRST_PRINT while the reprint count is zero, REPRINT after that (deeper
+   band once the story has earned it), and an ending's card once one has been recorded.
+   How many lines it borrows is per card (`BootCardDefinition.getLaunchStatusLineCount`): the
+   first-print block prints whole, because on an empty save those four lines are the only explanation
+   the player has; every other card stops before its closing "PRINTING NEW BODY", which is a promise
+   about a run that has not started. The block is bottom-anchored, so short and long notices both end
+   just above the title.
    The reveal is MOOD, never a gate: a tap prints the whole screen at once, and nothing on it ever
    advances itself.
 
-   THE MENU — CONTINUE DESCENT (offered only once the player has been printed at least once, because
-   "continue" with nothing to continue is a lie), NEW OPERATOR (the wipe, behind a confirmation
-   whenever there is anything to lose), ARCHIVE (order-6, readable before a run exists), SETTINGS,
-   QUIT. Big plates, high contrast, no feature list.
+   THE MENU — the way down is ALWAYS the first row; what changes is what it is called. It reads
+   BEGIN DESCENT (`story.title.begin`) until the player has actually been printed, and CONTINUE
+   DESCENT after, because "continue" with nothing to continue is a lie the first launch must not
+   tell. Then NEW OPERATOR (the wipe, behind a confirmation whenever there is anything to lose),
+   ARCHIVE (order-6, readable before a run exists), SETTINGS, QUIT. Big plates, high contrast, no
+   feature list. One extra string id, no extra row, no extra confirmation — and NEW OPERATOR stops
+   being the row a first-timer has to press to start the game.
 
    FIRST-LAUNCH -> COLD OPEN HANDOFF: picking a descent hands straight to the in-run cold open —
    the reprint boot card first (order-3, where ORA's wake line and the instance counter live), then
@@ -340,25 +354,62 @@ TESTS: `StoryFramingTest` (launch lines, the ending subversion, the menus, the c
 anti-skip promise, and the geometry: on screen and thumb-sized).
 
 
-PART F — FIRST BOOT / COLD OPEN
-===============================
-The first launch introduces ORA and the world in the same small doses as everything else:
-  - the boot card fires before the player has done anything — even run 1 is a reprint, because
-    in-fiction the original self has just died;
-  - `BarkTrigger.RUN_START` carries two one-shot COLD OPEN rows, one per run start, so a new player
-    meets ORA on run 1 and hears the second line on run 2, and never again;
+PART F — FIRST BOOT / COLD OPEN (rebuilt by narrative-rework order-2)
+====================================================================
+THE FIRST TEN MINUTES ARE ONE CONTINUOUS SEQUENCE: launch screen -> boot card -> ORA's
+introduction -> the memory gap -> the first orders. The bar it is written against is
+docs/narrative-authority.txt SECTION 5: sixty seconds in, a cold player can say WHO IS TALKING TO
+THEM and WHAT HAPPENED TO THEM.
+
+  - THE FIRST-PRINT CARD (`BootCardVariant.FIRST_PRINT`). A save that has never printed anybody
+    gets its own card, resolved from the reprint counter by `BootCardVariant.forReprintCount()` —
+    never a special case in the system, and every call site still just asks for the REPRINT card.
+    It prints four plain lines with no proper noun of this fiction in any of them (OPERATOR
+    DECEASED / BODY RECOVERY NOT POSSIBLE / BACKUP COPY ON FILE / PRINTING NEW BODY STAND BY):
+    a person died, that person is you, there is a copy, the copy is being made. The counter is NOT
+    hidden on run 1 — ORA explains the number herself, later, on the floor.
+  - THE COLD OPEN is `IntroBeat`: three one-shot STORY_CRITICAL barks at `RUN_START` on run 1 — who
+    is talking (and WHAT she is), what happened to this body, and THE GAP — then the MOVE hint as
+    the fourth panel. Two more land on run 2 (she is not printed, so she is the only one who
+    remembers the last body), and then she never introduces herself again. Each beat is keyed by its
+    own subject, which is what makes the order guaranteed: the pool cannot hand back "you died about
+    an hour ago" before "I'm ORA".
+  - THE GAP IS THE LICENSE (doctrine D3). "Your memory came back short. Normal. I'll fill in the
+    gaps as we go." — one sentence, on run 1, that turns every later explanation from a tutorial
+    voice into something the CHARACTER needs. See the deviation recorded in
+    story/02-player-and-cloning.md.
+  - THE REST OF THE INTRODUCTION IS DISTRIBUTED, not front-loaded: the remaining `IntroBeat` rows
+    hang off the first door opened, the first pickup, the first quiet stretch and the first terminal
+    read, so the player meets her by watching her be useful.
+  - THE FIRST REAL DEATH is where the loop gets EXPLAINED rather than joked about. Three wake lines
+    are RESERVED by instance number (2, 3, 4) — what the copy is for, what did and did not come
+    back, and where the REPORT plate is — so the most repeated screen in the game teaches the
+    permadeath contract once, in order, in plain words.
   - `ControlHint` teaches each control as a single bark the first time it matters (MOVE, FIRE,
     RELOAD, HEAL, SWITCH_WEAPON, INVENTORY) — one-shot for the life of the save and STORY_CRITICAL;
   - the Region-1 `QUIET_MOMENT` teaching exchange is the first choice ever offered and deliberately
     decides nothing, so the blocking layer is learned with no enemy in the room.
+
+THE VOCABULARY LADDER, so far (order-3 makes it mechanical). "SOUL RESERVE" is a Region-3 reveal and
+is not on screen anywhere — card or launch screen — until the player has reached the Harvesting
+Galleries, which is where ORA starts asking what the printers run on. It is expressed as DATA: the
+reprint card registers a second, deeper status block (`BootCardDefinition.systemLinesFrom`), gated by
+the same persistent deepest-region the wake lines use. There is no `if` for it in game code.
 
 
 THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
 ===========================================
   | Moment                                            | Channel        | Fires                    |
   |---------------------------------------------------|----------------|--------------------------|
-  | control handed to the player                      | bark           | RUN_START (cold open)    |
+  | control handed to the player                      | bark           | RUN_START (cold open:    |
+  |                                                   |                | 3 IntroBeats on run 1,   |
+  |                                                   |                | 2 on run 2)              |
   | a control first becomes useful                    | bark           | CONTROL_HINT (tutorial)  |
+  | first door opened / first pickup                  | bark           | IntroBeat DOORS,         |
+  |                                                   |                | CARRIED_ITEMS            |
+  | the floor's first quiet stretch                   | bark           | IntroBeat REPRINT_COUNTER|
+  | the first terminal ever read                      | bark           | IntroBeat PAPERWORK      |
+  | the player's own 1st/2nd/3rd death                | boot card      | the RESERVED wake lines  |
   | floor arrival / deep-strata milestone             | bark (+exch)   | FLOOR_ARRIVAL, DEEP_STRATA|
   | region gate crossed                               | bark + exchange| REGION_ENTERED, gate order|
   | one floor AFTER a region gate                     | exchange       | ORGANIZATION_ORDER       |
@@ -399,7 +450,18 @@ ADD A BARK               one `register()` in `BarkCatalog` (trigger, region band
 ADD AN EXCHANGE          one `register()` in `ExchangeCatalog` (trigger, region, 2-3 options, each
                          STANCE / PROBE / CONSEQUENTIAL) + its string rows. Remember: exchanges BLOCK,
                          so if they start to feel frequent, delete rows.
-ADD AN ORA REPRINT LINE  one `registerWakeLine()` in `BootCardCatalog` (+ string rows).
+ADD AN ORA REPRINT LINE  one `registerWakeLine()` in `BootCardCatalog` (+ string rows).  A line for
+                         ONE particular card — the first print, a specific death — adds
+                         `.onlyOnVariant(...)` or `.onlyAtReprintCount(...)`; reserved rows beat the
+                         region pool and are excluded from its depth.
+ADD A BANDED STATUS LINE one extra `.systemLinesFrom(StoryRegion, …)` on the card in
+                         `BootCardCatalog` (+ string rows).  This is how a word waits for the beat
+                         that earns it — the whole band prints, so give it the same line count.
+ADD AN INTRO BEAT        one value on `IntroBeat` (its trigger, its earliest reprint count) + its
+                         string row.  `BarkCatalog` registers every value in a loop, so the row
+                         appears with no catalog edit; a cold-open beat needs nothing in `World` (the
+                         loop asks for all of them, in order), a distributed one needs its firing
+                         site to ask for its trigger + subject key.
 ADD A CODEX ENTRY        one `register()` in `CodexCatalog` (category, unlockedByLine or a PROBE that
                          names it) + its string rows. Locked entries are never listed.
 ADD A CONTROL HINT       one `ControlHint` value + its bark row + the firing condition in `World`.

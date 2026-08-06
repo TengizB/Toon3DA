@@ -27,7 +27,7 @@ public final class BarkStrings {
 
     /** Adds every order-2 bark line to {@code strings}.  Returns the same table for chaining. */
     public static StoryStrings registerDefaults(StoryStrings strings) {
-        registerColdOpen(strings);
+        registerIntroBeats(strings);
         registerControlHints(strings);
         registerLogTakes(strings);
         registerFloorArrival(strings);
@@ -60,10 +60,39 @@ public final class BarkStrings {
                                                      "That's all of you I could get back. It's enough.");
     }
 
-    /** The cold open (order-5) — the first voice the player ever hears, twice in a lifetime. */
-    private static void registerColdOpen(StoryStrings strings) {
-        strings.put("story.bark.coldopen.1",         "You're up. I'm ORA. I do the talking down here.");
-        strings.put("story.bark.coldopen.2",         "Hi again. Still ORA. Still the only voice left.");
+    /**
+     * ORA'S INTRODUCTION (narrative-rework order-2 D) — one line per {@link IntroBeat}, and between
+     * them the whole answer to "who is this person talking to me".  A name is not an introduction:
+     * these say what she IS, what happened to the player, why their head is empty, and what she does
+     * — spread across the first two runs and the moments of floor one, never front-loaded.
+     */
+    private static void registerIntroBeats(StoryStrings strings) {
+        // Run 1, in this order: who is talking (and WHAT she is), what happened to the player, and
+        // the gap in their head — the sentence that makes every explanation she gives afterwards
+        // something the character needs rather than something the game is telling the player.
+        strings.put("story.bark.intro.greeting",
+                                                     "That's you awake. I'm ORA - the assistant in your suit.");
+        strings.put("story.bark.intro.what_happened",
+                                                     "You died about an hour ago. They keep a copy. This is the new you.");
+        strings.put("story.bark.intro.the_gap",
+                                                     "Your memory came back short. Normal. I'll fill in the gaps as we go.");
+
+        // Run 2 — the pair that makes her matter, and the last time she introduces herself at all.
+        strings.put("story.bark.intro.continuity",
+                                                     "Back already. I don't get printed, by the way - I just reload.");
+        strings.put("story.bark.intro.memory",
+                                                     "Which makes me the only one here who remembers your last one.");
+
+        // The distributed half: each one hangs off a thing that just happened in front of the
+        // player, so it reads as her noticing rather than as a lecture arriving on a schedule.
+        strings.put("story.bark.intro.doors",
+                                                     "I can do doors and locks. Guns are your department.");
+        strings.put("story.bark.intro.carried_items",
+                                                     "Anything you carry is yours until you die. Then it stays here and you don't.");
+        strings.put("story.bark.intro.reprint_counter",
+                                                     "That number on the wake card is which print you are. I keep the count.");
+        strings.put("story.bark.intro.paperwork",
+                                                     "I read the paperwork so you don't have to. Roster: forty-one out, nobody back.");
     }
 
     /**
@@ -87,7 +116,9 @@ public final class BarkStrings {
      * every line is a fact about what was DONE here, not a mood.
      */
     private static void registerLogTakes(StoryStrings strings) {
-        strings.put("story.bark.log.rings.1",        "Shift roster. Everyone signed out. Nobody left.");
+        // The roster itself moved to the one-shot intro beat above (order-2 D), which is the first
+        // log the player ever reads.  Say it once (doctrine D5): this row is now a different note.
+        strings.put("story.bark.log.rings.1",        "Shift notes. Someone's handwriting stops mid-word.");
         strings.put("story.bark.log.rings.2",        "Maintenance log. Complaints about noise below.");
         strings.put("story.bark.log.rings.3",        "A lunch order, dated the last day. Soup. Bold.");
         strings.put("story.bark.log.rings.4",        "Safety notice, sixty pages. None about the deep.");

@@ -8,18 +8,24 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  * the player ever sees, and the screen every abandoned or finished run returns to.
  *
  * <p><b>There is no cheerful title screen.</b>  The app opens on black, and the first line anyone
- * reads is the game telling them they are already dead:
+ * reads is the game telling them they are already dead — on a save that has never printed anybody,
+ * in words a stranger can actually parse (narrative-rework order-2 A):
  *
  * <pre>
- *     PREVIOUS INSTANCE - TERMINATED
- *     SOUL RESERVE .......... SUFFICIENT
+ *     OPERATOR ............. DECEASED
+ *     BODY RECOVERY ........ NOT POSSIBLE
+ *     BACKUP COPY .......... ON FILE
+ *     PRINTING NEW BODY .... STAND BY
  * </pre>
  *
  * ...then, after a beat, the title resolves quietly beneath it, and the menu fades in under that.
- * Those two lines are not written here: they are the SAME localisation ids the reprint card prints
+ * Those lines are not written here: they are the SAME localisation ids the boot card prints
  * ({@link BootCardRegistry}), so the launch screen and the boot card are provably one machine
- * speaking, and a first-timer's "flavour text" turns out — hours later — to have been a literal
- * death notice all along (story/dialog/system-cards.md).
+ * speaking (story/dialog/system-cards.md).  Which card it borrows from is the save's own state — the
+ * FIRST-PRINT notice above, the shorter reprint notice once the player has been printed, and an
+ * ending's card once a story has ended.  The horror version of the block, the one that mentions what
+ * the printers run on, arrives only from the Harvesting Galleries down, which is where that word is
+ * finally worth something.
  *
  * <h3>The endings subvert it for free</h3>
  * Once a run has ENDED, {@link StoryProgress#getEndingReached()} names the variant, and this screen
@@ -29,10 +35,11 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *
  * <h3>What it decides</h3>
  * <ul>
- *   <li>which two status lines print, and how much of them has printed so far (a paced reveal, and
- *       a tap always skips it — the reveal is mood, never a gate);</li>
- *   <li>which menu rows exist: CONTINUE DESCENT is offered only once the player has actually been
- *       printed at least once, because "continue" with nothing to continue is a lie;</li>
+ *   <li>which status lines print, and how much of them has printed so far (a paced reveal, and a tap
+ *       always skips it — the reveal is mood, never a gate);</li>
+ *   <li>what the menu rows are CALLED: the way down is always the first row, but it reads BEGIN
+ *       DESCENT until the player has been printed, because "continue" with nothing to continue is a
+ *       lie;</li>
  *   <li>when a row acts and when it must ask first — wiping the save is the one thing in the game
  *       that moves the story backwards, so it is never one tap away (order-7 Part B).</li>
  * </ul>
@@ -105,17 +112,29 @@ public final class TitleScreenSystem {
     private void resolveStatusLines() {
         statusLineCount = 0;
         BootCardDefinition definition = cards.getCard(endingVariantOrNull());
-        if (definition == null) definition = cards.getCard(BootCardVariant.REPRINT);
+        if (definition == null) definition = cards.getCard(ordinaryVariant());
         if (definition == null) return;   // an empty catalog prints nothing rather than crashing
 
-        String[] stringIds = definition.getSystemLineStringIds();
+        // Banded exactly as the card is (narrative-rework order-2 C): a save that has been to the
+        // Harvesting Galleries reads the deeper block here too, because the launch screen and the
+        // card are one machine and must never disagree about what it is willing to name.
+        String[] stringIds = definition.getSystemLineStringIds(progress.getDeepestRegion());
         if (stringIds == null) return;
-        int printedCount = Math.min(stringIds.length, statusLines.length);
+        int printedCount = Math.min(definition.getLaunchStatusLineCount(), stringIds.length);
+        printedCount = Math.min(printedCount, statusLines.length);
         for (int lineIndex = 0; lineIndex < printedCount; lineIndex++) {
             // StoryStrings.get() never returns null — a missing id shows as a visible !id! marker.
             statusLines[lineIndex] = strings.get(stringIds[lineIndex]);
         }
         statusLineCount = printedCount;
+    }
+
+    /**
+     * The ordinary card this save has earned when no ending overrides it: the FIRST-PRINT notice
+     * while nobody has been printed, the reprint notice afterwards (narrative-rework order-2 A).
+     */
+    private BootCardVariant ordinaryVariant() {
+        return BootCardVariant.forReprintCount(progress.getReprintCount());
     }
 
     /**
@@ -133,17 +152,19 @@ public final class TitleScreenSystem {
     }
 
     /**
-     * Rebuilds the menu rows.  CONTINUE DESCENT appears only when the player has meta-progress to
-     * continue INTO; on a brand-new save the first row is NEW OPERATOR, which needs no confirmation
-     * because there is nothing yet to wipe.
+     * Rebuilds the menu rows.  Every row is always offered; what changes on an empty save is what the
+     * first one is CALLED (narrative-rework order-2 A).  It used to be hidden until the player had
+     * been printed, which left NEW OPERATOR — the save wipe — as the way a first-timer started the
+     * game.  Now the top row is always the way down, reading BEGIN DESCENT until there is something
+     * to continue, and NEW OPERATOR goes back to meaning only what it says.
      */
     private void rebuildMenu() {
         menu.clear();
+        boolean hasBeenPrinted = hasMetaProgress();
         int rowIndex = 0;
         for (TitleMenuItem item : TitleMenuItem.values()) {
-            if (item == TitleMenuItem.CONTINUE_DESCENT && !hasMetaProgress()) continue;
             rowItems[rowIndex++] = item;
-            menu.addRow(item.getLabelStringId(), null, true);
+            menu.addRow(item.getLabelStringId(hasBeenPrinted), null, true);
         }
         while (rowIndex < rowItems.length) rowItems[rowIndex++] = null;
     }

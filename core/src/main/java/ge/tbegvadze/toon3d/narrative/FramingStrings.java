@@ -32,6 +32,8 @@ public final class FramingStrings {
 
         // --- Title menu: cold, terminal-styled, no feature list ---
         strings.put(TitleMenuItem.CONTINUE_DESCENT.getLabelStringId(), "CONTINUE DESCENT");
+        // What that row reads before the player has ever been printed (narrative-rework order-2 A).
+        strings.put(TitleMenuItem.CONTINUE_DESCENT.getFirstRunLabelStringId(), "BEGIN DESCENT");
         strings.put(TitleMenuItem.NEW_OPERATOR.getLabelStringId(),     "NEW OPERATOR");
         strings.put(TitleMenuItem.CODEX.getLabelStringId(),            "ARCHIVE");
         strings.put(TitleMenuItem.SETTINGS.getLabelStringId(),         "SETTINGS");

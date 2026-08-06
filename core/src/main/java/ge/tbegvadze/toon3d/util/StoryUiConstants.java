@@ -269,8 +269,12 @@ public final class StoryUiConstants {
     // HARD rate limit: at most one bark per this many seconds of gameplay, whatever asks.  Measured
     // from the moment the previous bark was DISMISSED, so reading slowly never causes a pile-up.
     public static final float STORY_BARK_MIN_INTERVAL_SECONDS = 12f;
-    // Pending barks waiting for the screen.  Small on purpose — a long queue IS chatter.
-    public static final int   STORY_BARK_QUEUE_CAPACITY       = 3;
+    // Pending barks waiting for the screen.  Small on purpose — a long queue IS chatter.  The floor
+    // under it is the COLD OPEN (narrative-rework order-2 D): run 1 asks for ORA's three
+    // introduction lines and the MOVE hint in the same frame, all four mandatory, and a mandatory
+    // beat that finds the queue full of other mandatory beats is simply dropped.  Four is the
+    // largest burst the game ever asks for; the fifth slot is the margin.
+    public static final int   STORY_BARK_QUEUE_CAPACITY       = 5;
     // A queued non-critical bark this old is stale: its moment has passed, so it is dropped
     // rather than shown late.  Generous, because the player now controls when the screen frees up.
     public static final float STORY_BARK_QUEUE_STALE_SECONDS  = 25f;
@@ -361,14 +365,17 @@ public final class StoryUiConstants {
     public static final float STORY_BOOT_BACKDROP_R = 0.02f, STORY_BOOT_BACKDROP_G = 0.02f,
                               STORY_BOOT_BACKDROP_B = 0.03f;
 
-    // Body-line caps per block.  System cards are exactly three status lines; ORA gets a bark's
-    // two, because the boot line is a bark in every way except that it stops the world.
-    public static final int   STORY_BOOT_SYSTEM_MAX_LINES = 3;
+    // Body-line caps per block.  The ordinary reprint card is three status lines; the FIRST-PRINT
+    // card (narrative-rework order-2) needs a fourth, because a stranger has to be told four things
+    // before any of it means anything: a person died, that person is you, there is a copy, and the
+    // copy is being made.  ORA gets a bark's two, because the boot line is a bark in every way
+    // except that it stops the world.
+    public static final int   STORY_BOOT_SYSTEM_MAX_LINES = 4;
     public static final int   STORY_BOOT_WAKE_MAX_LINES   = 2;
     // Panel height for N body lines, from the geometry StoryPanelRenderer actually draws with:
     //   padding(18) + chip(34) + chip-to-body(8) + (N-1) * line pitch(30) + a glyph box(~24)
     //   + bottom room(16)  =  30N + 70.   N = 2 reproduces the bark's 130 exactly.
-    public static final float STORY_BOOT_SYSTEM_PANEL_HEIGHT = 160f;   // N = 3
+    public static final float STORY_BOOT_SYSTEM_PANEL_HEIGHT = 190f;   // N = 4
     public static final float STORY_BOOT_WAKE_PANEL_HEIGHT   = 130f;   // N = 2
     // Both blocks share the boot card's horizontal footprint, so the stack reads as one card.
     public static final float STORY_BOOT_PANEL_X     = STORY_BOOT_CARD_X;
@@ -677,11 +684,23 @@ public final class StoryUiConstants {
     // 1. the death notice types out, unhurried;  2. the title resolves quietly beneath it;
     // 3. the menu fades in under that.  A tap prints all of it at once — the reveal is mood, and
     // mood is never allowed to be a gate (order-6 Part C).
-    /** How many of the reprint card's status lines the launch screen borrows.  The first two. */
-    public static final int   STORY_TITLE_STATUS_LINE_COUNT   = 2;
-    public static final float STORY_TITLE_STATUS_TOP_Y        = 668f;
+    /**
+     * HARD CAP on how many of the boot card's status lines the launch screen borrows.  HOW MANY it
+     * actually prints is per card ({@code BootCardDefinition.getLaunchStatusLineCount()}): the
+     * FIRST-PRINT card prints its whole four-line block, because on a save with nothing in it those
+     * four lines are the only explanation of anything the player is about to read; every other card
+     * stops before its closing "PRINTING NEW BODY" line, because that is a promise about a run that
+     * has not started yet and the title screen makes no promises (narrative-rework order-2 A).
+     */
+    public static final int   STORY_TITLE_STATUS_LINE_COUNT   = 4;
+    /**
+     * Top edge of the FIRST status line when the whole four-line block prints.  A card that prints
+     * fewer lines is anchored from the BOTTOM of the block instead, so the notice always ends just
+     * above the title rather than leaving a hole under a short one.
+     */
+    public static final float STORY_TITLE_STATUS_TOP_Y        = 704f;
     public static final float STORY_TITLE_STATUS_TEXT_SIZE    = 1.35f;
-    public static final float STORY_TITLE_STATUS_LINE_PITCH   = 46f;
+    public static final float STORY_TITLE_STATUS_LINE_PITCH   = 40f;
     /** Seconds between status lines printing.  Slower than the boot card's: nothing is happening yet. */
     public static final float STORY_TITLE_LINE_REVEAL_SECONDS = 0.90f;
     /** The beat between the machine finishing and the title resolving. */

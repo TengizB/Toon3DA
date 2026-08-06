@@ -56,19 +56,26 @@ SECTION 2 — THE SEVEN FAILURES (the diagnosis, with evidence)
 Evidence is quoted from the shipped table, assets/story/story-strings.properties, at the time of
 diagnosis. These are the problems the series exists to fix; each names the order that owns it.
 
-F1 — THE STRANGER PROBLEM                                                      (owner: order 2)
+F1 — THE STRANGER PROBLEM                                          (owner: order 2 — FIXED)
    story.bark.coldopen.1 = "You're up. I'm ORA. I do the talking down here."
    She gives a name and nothing else: not what she is, not why she is in the player's ear, not why
    she is on their side. A name is not an introduction. For the rest of the game the most important
    character in it is a stranger who keeps talking.
+   FIXED by order-2 D: `narrative/IntroBeat` — three one-shot rows on run 1 (what she IS, what
+   happened to the player, the memory gap), two on run 2 (she is not printed, so she is the only one
+   who remembers the last body), and four more distributed across floor one's own moments.
 
 F2 — THE JARGON WALL                                                           (owner: order 3)
    Inside the first five minutes the game says, undefined: instance, reprint, soul reserve,
    checkpoint, operator, contaminant, cradle, pattern, yield. Nine proper nouns, no definitions, on
    channels that cannot be re-read. The codex defines them, and the codex is opt-in BY DESIGN — so
    the words that carry the whole plot are explained only to the players who already care.
+   PARTLY ADDRESSED by order-2: the first-print and reprint cards now open in plain words (deceased /
+   backup copy / printing a new body), and "soul reserve" is banded to the Harvesting Galleries as
+   DATA (a second status block on the card) rather than printed on screen one. The ladder itself —
+   and the remaining seven words — is still order-3's.
 
-F3 — A DEATH THE PLAYER DID NOT SEE AND NOBODY EXPLAINS                        (owner: order 2)
+F3 — A DEATH THE PLAYER DID NOT SEE AND NOBODY EXPLAINS            (owner: order 2 — FIXED)
    The launch screen opens on "PREVIOUS INSTANCE - TERMINATED / SOUL RESERVE .......... SUFFICIENT".
    docs/story-ui-system.txt claimed a first-timer "reads it as flavour". They do not. They read two
    unexplained words and a status readout for a thing they have never heard of, about an event that
@@ -76,6 +83,12 @@ F3 — A DEATH THE PLAYER DID NOT SEE AND NOBODY EXPLAINS                       
    already dead and the game opens on the receipt — is being spent on a player with no context to
    spend it on. Worse: "SOUL RESERVE" is the Region-3 reveal, printed in full on screen one, years
    of story ahead of the beat that makes it horrifying.
+   FIXED by order-2 A/B/C: a save that has never printed anybody opens on the FIRST-PRINT block —
+   OPERATOR DECEASED / BODY RECOVERY NOT POSSIBLE / BACKUP COPY ON FILE / PRINTING NEW BODY STAND BY
+   — on the launch screen AND on the card, which are one machine sharing one set of ids. The reserve
+   line moved into a region-banded status block that only prints from the Harvesting Galleries down,
+   so the reveal now lands on somebody who can read it. The player's own first deaths get reserved
+   wake lines that explain the loop instead of joking about a new record.
 
 F4 — ORA DOES NOT TEACH THE GAME                                               (owner: order 4)
    `ControlHint` covers six things: MOVE, FIRE, RELOAD, HEAL, SWITCH_WEAPON, INVENTORY. The game
@@ -100,7 +113,13 @@ F5 — JOKES WITH NOTHING UNDER THEM                                            
    reference nothing, and jokes aimed at the player's own death before the story has earned that
    tone.
 
-F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD                      (owner: orders 2, 6)
+F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD          (owner: orders 2, 6 — order-2 half done)
+   Order-2's half is the FOUNDATION the other rows assumed and never got: the cloning premise is now
+   stated outright on run 1 ("You died about an hour ago. They keep a copy. This is the new you."),
+   the memory gap is named in her third sentence, and the instance counter is explained on the floor
+   rather than left as a number nobody defines. The individual offending rows below are order-6's
+   rewrite pass — except story.bark.log.rings.1, which order-2 rewrote because its roster line moved
+   to the one-shot intro beat and D5 forbids saying it twice.
    story.bark.floor.rings.3    = "Crew bunks. Serial tags on them, same format as yours."
                                  — the player has never been told they have a serial.
    story.bark.region.rings     = "New body, same job. Down we go. I'll keep count."
@@ -283,7 +302,7 @@ Order 10 makes all of it stick.
   | # | Order                                  | Fixes      | Ships                    | Status |
   |---|----------------------------------------|------------|--------------------------|--------|
   | 1 | Diagnosis, doctrine & series map       | —          | this document            | DONE   |
-  | 2 | The first ten minutes                  | F1, F3, F6 | launch + cold open + gap | TODO   |
+  | 2 | The first ten minutes                  | F1, F3, F6 | launch + cold open + gap | DONE   |
   | 3 | The vocabulary ladder                  | F2         | plain-before-proper data | TODO   |
   | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | TODO   |
   | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | TODO   |

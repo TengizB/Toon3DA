@@ -136,12 +136,21 @@ public final class FramingScreenRenderer implements Disposable {
         if (menu.isConfirmOpen()) drawConfirmation(camera, menu, fade);
     }
 
-    /** The two status lines the launch screen borrows from the reprint card, printing one by one. */
+    /**
+     * The status lines the launch screen borrows from the boot card, printing one by one.
+     *
+     * <p>The block is anchored from its BOTTOM: the FIRST-PRINT notice is four lines and every other
+     * card's is two, and both must end just above the title rather than leaving a hole under the
+     * short one.  The offset uses the card's TOTAL line count, not the revealed count, so the lines
+     * print downwards into a fixed block instead of sliding as they arrive.
+     */
     private void drawLaunchStatusLines(float fade) {
         String[] lines      = titleScreenSystem.getStatusLines();
-        int      printCount = Math.min(titleScreenSystem.getRevealedStatusLineCount(),
-                                       titleScreenSystem.getStatusLineCount());
-        float lineTopY = StoryUiConstants.STORY_TITLE_STATUS_TOP_Y;
+        int      lineCount  = titleScreenSystem.getStatusLineCount();
+        int      printCount = Math.min(titleScreenSystem.getRevealedStatusLineCount(), lineCount);
+        float lineTopY = StoryUiConstants.STORY_TITLE_STATUS_TOP_Y
+                - (StoryUiConstants.STORY_TITLE_STATUS_LINE_COUNT - lineCount)
+                        * StoryUiConstants.STORY_TITLE_STATUS_LINE_PITCH;
         for (int lineIndex = 0; lineIndex < printCount; lineIndex++) {
             drawCentered(lines[lineIndex], lineTopY,
                          StoryUiConstants.STORY_TITLE_STATUS_TEXT_SIZE,

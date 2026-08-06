@@ -289,7 +289,9 @@ class StoryExchangeTest {
             }
         }
         for (BootCardVariant variant : BootCardVariant.values()) {
-            if (variant == BootCardVariant.REPRINT) continue;   // not an ending, the frame around one
+            // The two ORDINARY cards are not endings — they are the frame an ending subverts.
+            if (variant == BootCardVariant.REPRINT)     continue;
+            if (variant == BootCardVariant.FIRST_PRINT) continue;
             assertTrue(reachable.contains(variant),
                     variant + " cannot be chosen; every ending must be on offer at the Core");
         }

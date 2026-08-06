@@ -17,28 +17,53 @@ package ge.tbegvadze.toon3d.narrative;
  */
 public enum TitleMenuItem {
 
-    /** Resume the descent: a fresh run, with every scrap of meta-progress and story intact. */
-    CONTINUE_DESCENT("story.title.continue", null),
+    /**
+     * Go down: a fresh run, with every scrap of meta-progress and story intact.  It reads BEGIN
+     * DESCENT until the player has actually been printed once (narrative-rework order-2 A) — with
+     * nothing behind them, "continue" is a lie about a thing that never happened, and the first
+     * thing this game says to anybody must not be one.
+     */
+    CONTINUE_DESCENT("story.title.continue", "story.title.begin", null),
     /** Start the operator line over — wipes records, tips and narrative state TOGETHER. */
-    NEW_OPERATOR("story.title.new", "story.title.confirm.new"),
+    NEW_OPERATOR("story.title.new", null, "story.title.confirm.new"),
     /** The archive (order-6).  Readable from the menu, before a run exists. */
-    CODEX("story.title.codex", null),
+    CODEX("story.title.codex", null, null),
     /** The accessibility knobs (order-6 Part D), on a screen of their own. */
-    SETTINGS("story.title.settings", null),
+    SETTINGS("story.title.settings", null, null),
     /** Leave. */
-    QUIT("story.title.quit", null);
+    QUIT("story.title.quit", null, null);
 
     private final String labelStringId;
+    private final String firstRunLabelStringId;
     private final String confirmStringId;
 
-    TitleMenuItem(String labelStringId, String confirmStringId) {
-        this.labelStringId   = labelStringId;
-        this.confirmStringId = confirmStringId;
+    TitleMenuItem(String labelStringId, String firstRunLabelStringId, String confirmStringId) {
+        this.labelStringId         = labelStringId;
+        this.firstRunLabelStringId = firstRunLabelStringId;
+        this.confirmStringId       = confirmStringId;
     }
 
-    /** Localisation id of the row's label. */
+    /** Localisation id of the row's label, for a save that has printed at least one body. */
     public String getLabelStringId() {
         return labelStringId;
+    }
+
+    /**
+     * Localisation id this row wears on a save that has never printed anybody, or null when the row
+     * reads the same either way.  One extra string, no extra row, no extra confirmation.
+     */
+    public String getFirstRunLabelStringId() {
+        return firstRunLabelStringId;
+    }
+
+    /**
+     * The label to draw for this row: its first-run wording on an empty save, its ordinary wording
+     * once the player has something to come back to.
+     */
+    public String getLabelStringId(boolean hasBeenPrinted) {
+        return !hasBeenPrinted && firstRunLabelStringId != null
+                ? firstRunLabelStringId
+                : labelStringId;
     }
 
     /** Localisation id of the question asked before this row acts, or null when it acts at once. */
