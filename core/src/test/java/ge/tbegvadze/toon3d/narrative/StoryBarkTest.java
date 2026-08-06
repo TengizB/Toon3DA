@@ -286,17 +286,27 @@ class StoryBarkTest {
                 "deep kills should use the doubting pool, got " + deep.getActiveBarkId());
     }
 
+    /**
+     * Every region gets its cold order, in the Organization's own voice, once.  The only other thing
+     * allowed on this moment is ORA's aside naming the word they just used (the narrative-rework
+     * order-3 vocabulary ladder) — which is the entire point of hanging a naming line here: the
+     * player hears "Overseer" from them and is told what an Overseer is one panel later.
+     */
     @Test
     void theOrganizationSpeaksAtEveryGateAndEscalates() {
         BarkRegistry registry = BarkCatalog.defaultRegistry();
         for (StoryRegion region : StoryRegion.values()) {
             boolean found = false;
             for (BarkDefinition row : registry.getForTrigger(BarkTrigger.REGION_GATE_ORDER)) {
-                if (row.matchesRegion(region)) {
-                    assertEquals(Speaker.ORGANIZATION, row.getSpeaker());
-                    assertTrue(row.isOneShot(), "gate order " + row.getId() + " must be one-shot");
-                    found = true;
+                if (!row.matchesRegion(region)) continue;
+                assertTrue(row.isOneShot(), "gate order " + row.getId() + " must be one-shot");
+                if (row.getSpeaker() != Speaker.ORGANIZATION) {
+                    assertTrue(StoryTermCatalog.isIntroLine(row.getTextStringId()),
+                            "only the Organization and the vocabulary ladder may speak at a gate: "
+                                    + row.getId());
+                    continue;
                 }
+                found = true;
             }
             assertTrue(found, "no Organization gate order for " + region);
         }

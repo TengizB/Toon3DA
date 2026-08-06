@@ -148,6 +148,19 @@ public final class CodexEntry {
             return this;
         }
 
+        /**
+         * Adds the VOCABULARY LADDER's naming line for this entry's term (narrative-rework order-3),
+         * if a {@link StoryTerm} names it.  So the moment a player is told what a word means, the long
+         * version is waiting for them — which is the deal the codex makes: it is where the SHORT thing
+         * they already heard gets its full text, never where a fact lives for the first time.
+         *
+         * <p>The entry -&gt; term pairing is declared exactly once, on {@link StoryTerm}; this reads it
+         * back, so there is no second table to keep in step.  A no-op for an entry no term names.
+         */
+        public Builder unlockedByTermIntro() {
+            return unlockedByLine(StoryTermCatalog.introLineForCodexEntry(id));
+        }
+
         public CodexEntry build() {
             if (region == null) throw new IllegalStateException("region must not be null: " + id);
             return new CodexEntry(this);

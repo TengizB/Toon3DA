@@ -63,6 +63,7 @@ import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.TitleMenuItem;
 import ge.tbegvadze.toon3d.narrative.TitleScreenSystem;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
+import ge.tbegvadze.toon3d.narrative.StoryTermCatalog;
 import ge.tbegvadze.toon3d.narrative.StorySettings;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.narrative.StoryTelemetry;
@@ -2836,6 +2837,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // beats: a later run re-entering a cleared region says nothing here.
         barkSystem.request(BarkTrigger.REGION_ENTERED);
         barkSystem.request(BarkTrigger.REGION_GATE_ORDER);
+        // ...and, behind each of them, the ONE word this gate is allowed to teach (narrative-rework
+        // order-3's vocabulary ladder). Asked for after the beat that describes the thing, so the
+        // player always meets the description before the name: "this is where the cutting happened"
+        // and then "yield is what these floors were sending up". Which term (if any) is due is data
+        // — the catalog picks the shallowest word still unnamed, so there is no region conditional
+        // here and adding a term needs no edit at this call site.
+        StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.REGION_ENTERED);
+        StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.REGION_GATE_ORDER);
         // ...and the region's one deliberate EXCHANGE (order-4), if it has not been answered on an
         // earlier run. Only HELD here: the region change happens mid-transition, and the exchange
         // opens once the player is actually standing on the floor (openPendingStoryExchange).
@@ -2867,11 +2876,22 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private void requestFloorArrivalBarks() {
         if (isStartingRoom) return;   // the staging room is not a story floor
+        // ORA introduces herself BEFORE she starts naming the place (narrative-rework order-2 D then
+        // order-3). Both the cold open and this method fire on the first real floor, so asking here
+        // first is what keeps "I'm ORA" ahead of "this is the Deepworks" in the queue. Guarded by
+        // coldOpenRequested, so the per-frame PLAYING call below is unaffected — that one stays as
+        // the catch-all for any path that reaches play without a floor arrival.
+        requestColdOpenBarks();
         // Most floors ORA says nothing at all. Commenting on every single arrival is what made her
         // feel like a chatterbox; silence is part of the character (story/dialog/ai-assistant.md).
         if (storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_FLOOR_ARRIVAL_CHANCE) {
             barkSystem.request(BarkTrigger.FLOOR_ARRIVAL);
         }
+        // One vocabulary naming per floor, never a probability roll: a word the player is about to
+        // start reading everywhere is not flavour. The catalog's own region band decides which is
+        // due, so the facility is named on floor one, the world it is dug into on floor two, and the
+        // reserve waits for the Harvesting Galleries.
+        StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.FLOOR_ARRIVAL);
         if (currentDepth > 0 && currentDepth % StoryUiConstants.STORY_BARK_DEEP_STRATA_INTERVAL == 0) {
             barkSystem.request(BarkTrigger.DEEP_STRATA);
             // The quiet deep-strata check-in (order-4). Every row is one-shot, so this asks often
@@ -2918,6 +2938,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             barkSystem.request(beat.getTrigger(), beat.getSubjectKey());
         }
         barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.MOVE.getSubjectKey());
+        // The run-start half of the vocabulary ladder (order-3): the words that only mean something
+        // to somebody who has now died themselves. "Reprint" waits for the run after their first
+        // death and "checkpoint" for the one after that, so a new player is never handed the
+        // machinery of the loop before they have felt it.
+        StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.RUN_START);
     }
 
     /**

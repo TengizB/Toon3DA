@@ -12,6 +12,7 @@ import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
 import ge.tbegvadze.toon3d.narrative.IntroBeat;
+import ge.tbegvadze.toon3d.narrative.StoryTermCatalog;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
@@ -137,6 +138,12 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
             EnemyFamily family = enemy.type.family();
             if (family == null || familyAlreadyAsked[family.ordinal()]) continue;
             familyAlreadyAsked[family.ordinal()] = true;
+            // The naming line first, then the reaction: the vocabulary ladder (narrative-rework
+            // order-3) tells the player what a serial is one panel before ORA reads one off a dead
+            // crew member. Which family (if any) earns a naming is data on StoryTerm, so nothing
+            // here knows that it is the undead who wear them.
+            StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.ENEMY_FAMILY_FIRST_SEEN,
+                                              family.name());
             barkSystem.request(BarkTrigger.ENEMY_FAMILY_FIRST_SEEN, family.name());
         }
     }
@@ -163,6 +170,10 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
         // per floor and answered once ever.
         barkSystem.request(IntroBeat.REPRINT_COUNTER.getTrigger(),
                            IntroBeat.REPRINT_COUNTER.getSubjectKey());
+        // ...and one panel behind it, the word the paperwork files that number under
+        // (narrative-rework order-3). Plain first, proper second: the beat above says what the
+        // number IS, this one says what they call it, and neither line carries both ideas.
+        StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.CONTROL_HINT);
         if (exchangeSystem != null) exchangeSystem.request(ExchangeTrigger.QUIET_MOMENT);
     }
 

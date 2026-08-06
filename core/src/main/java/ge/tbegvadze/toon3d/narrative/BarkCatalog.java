@@ -48,6 +48,10 @@ public final class BarkCatalog {
         if (registry == null || !registry.isEmpty()) return;
 
         registerIntroBeats(registry);
+        // THE VOCABULARY LADDER (narrative-rework order-3): one naming line per StoryTerm, each on
+        // an existing trigger.  Registered from the term table itself, so adding a proper noun to
+        // this fiction is one enum row plus its string and never an edit in here.
+        StoryTermCatalog.registerIntroLines(registry);
         registerControlHints(registry);
         registerFloorArrival(registry);
         registerRegionEntry(registry);

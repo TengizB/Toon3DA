@@ -413,11 +413,92 @@ THEM and WHAT HAPPENED TO THEM.
   - the Region-1 `QUIET_MOMENT` teaching exchange is the first choice ever offered and deliberately
     decides nothing, so the blocking layer is learned with no enemy in the room.
 
-THE VOCABULARY LADDER, so far (order-3 makes it mechanical). "SOUL RESERVE" is a Region-3 reveal and
-is not on screen anywhere — card or launch screen — until the player has reached the Harvesting
-Galleries, which is where ORA starts asking what the printers run on. It is expressed as DATA: the
-reprint card registers a second, deeper status block (`BootCardDefinition.systemLinesFrom`), gated by
-the same persistent deepest-region the wake lines use. There is no `if` for it in game code.
+"SOUL RESERVE" is a deep reveal and is not on screen anywhere — card or launch screen — until the
+player has reached the Harvesting Galleries, which is where ORA starts asking what the printers run
+on. It is expressed as DATA: the reprint card registers a second, deeper status block
+(`BootCardDefinition.systemLinesFrom`), gated by the same persistent deepest-region the wake lines
+use. There is no `if` for it in game code.
+
+
+PART G — THE VOCABULARY LADDER (narrative-rework order-3)
+========================================================
+Doctrine D2 (docs/narrative-authority.txt) is PLAIN BEFORE PROPER: no proper noun of this fiction
+appears on any channel before its plain-language introduction has been delivered, at a moment the
+player can SEE the thing being named. Order-3 makes that a mechanical property of the catalog rather
+than a thing a writer has to remember. It fixes failure F2 — the game used to say "instance",
+"reprint", "soul reserve", "checkpoint", "operator", "contaminant", "cradle", "pattern" and "yield"
+inside the first five minutes, all undefined, on channels that cannot be re-read.
+
+THREE STEPS, always in this order, never more than one term per step:
+  1. PLAIN   the thing is described in ordinary words, when it first matters (mostly order-2's work:
+             the cold open states the cloning premise outright, the first-print card opens on
+             "BACKUP COPY ON FILE / PRINTING NEW BODY").
+  2. NAMED   the word arrives attached to that description, ONCE — one line, one new word.
+  3. USED    from then on the word is free on every channel, including as jargon.
+
+THE DATA. `narrative/StoryTerm` is one row per proper noun this fiction owns, carrying: the tokens
+that count as "the word appeared", the naming line's string id, the earliest `StoryRegion` a catalog
+row may CONTAIN the word (`freeFrom`), the existing trigger the naming hangs off, and the codex entry
+the naming also archives. `narrative/StoryTermCatalog` registers one one-shot STORY_CRITICAL bark per
+term into `BarkCatalog`'s registry, in a loop — so adding a proper noun is ONE enum row plus its
+string, and never a catalog edit, a switch, or a new trigger.
+
+  | Term                | Named at                        | Free from |
+  |---------------------|---------------------------------|-----------|
+  | reprint / print     | run start, print 2              | R1        |
+  | operator            | the Organization's briefing     | R1        |
+  | the Deepworks       | floor arrival (floor 1)         | R1        |
+  | Erebus              | floor arrival (floor 2)         | R1        |
+  | contaminant         | region entry, the Rings         | R1        |
+  | the Organization    | the Organization's briefing     | R1        |
+  | Overseer            | the first gate order            | R1        |
+  | instance            | the first quiet stretch         | R1        |
+  | serial              | the first undead sighted        | R1        |
+  | checkpoint          | run start, print 3              | R1        |
+  | yield               | region entry, the Galleries     | R2        |
+  | reserve             | floor arrival, the Galleries    | R2        |
+  | Cradle              | region entry, the Reliquary     | R3        |
+  | pattern             | the Reliquary's gate order      | R3        |
+  | the Wound           | region entry, the Wound         | R4        |
+
+Two rows have no naming line of their own: `OPERATOR` and `ORGANIZATION` are introduced by USE, on
+the Region-1 briefing exchange, which is the Organization talking and addressing the player as the
+thing their file says they are. They borrow that line's string id and register no bark.
+
+ONE NEW IDEA PER PANEL. `StoryTermCatalog.requestNextIntro()` asks for AT MOST ONE naming per
+gameplay moment — the shallowest term still unnamed whose word is already free at the depth the story
+has reached. That is a property of the SCHEDULE, not of the writing: it is why "the Deepworks" lands
+on floor one and "Erebus" waits for floor two, with no counter, no timer and no conditional. It stops
+at the first UNNAMED term rather than the first accepted request, so a naming the bark layer declines
+for a pacing reason is offered again next time instead of being skipped.
+
+FIRING SITES (all existing moments, all one line each):
+  `World.requestFloorArrivalBarks`   FLOOR_ARRIVAL — and it now calls `requestColdOpenBarks()` first,
+                                     so ORA introduces herself before she starts naming the place.
+  `World.detectRegionEntry`          REGION_ENTERED and REGION_GATE_ORDER, each after its own beat,
+                                     so the description always precedes the name.
+  `World.requestColdOpenBarks`       RUN_START (gated by the reprint counter).
+  `StoryBarkTickSubscriber`          CONTROL_HINT at the quiet moment; ENEMY_FAMILY_FIRST_SEEN, whose
+                                     subject the term itself declares (only the undead wear serials).
+
+THE GATE IS A BUILD CHECK, NOT A RUNTIME ONE. Gating text at delivery would mean lines silently
+vanishing in play — a comprehension bug traded for an invisible-content bug. Nothing filters anything
+at runtime; the term's region band on its own naming row is the only live behaviour.
+`StoryTermCatalog.firstDisallowedTerm(text, earliestRegion)` scans RESOLVED TEXT (case-insensitive,
+word-boundary anchored, possessives handled) and names the offending term, so the rule can be run
+against the SHIPPED `story-strings.properties` — which is what catches a writer, or a translator,
+putting "Cradle" back into a Region-1 bark. `StoryTermCatalog.isExempt(id)` holds the allow list: the
+naming lines themselves, the whole codex (long text is exactly where terms get explained, and it is
+opt-in and re-readable), the game's own title and tagline (a title cannot wait for a region gate),
+and the endgame status cards (only ever reached from the Core). Order-10 owns the test file
+(`VocabularyLadderTest`); order-3 owns the rule and the API it calls.
+
+THE COST. Floor one of run one now asks for nine mandatory panels in two frames — the region-entry
+beat, the gate order, the two namings behind them, the facility's naming, ORA's three introduction
+lines and the MOVE hint. They arrive one at a time, on the player's own taps, spaced by the ordinary
+rate limit. `STORY_BARK_QUEUE_CAPACITY` is sized for that burst (12) and is NOT a pacing knob: a
+STORY_CRITICAL beat that finds the queue full of other criticals is dropped outright, and a dropped
+control hint is a stuck player.
 
 
 THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
@@ -480,6 +561,14 @@ ADD AN ORA REPRINT LINE  one `registerWakeLine()` in `BootCardCatalog` (+ string
 ADD A BANDED STATUS LINE one extra `.systemLinesFrom(StoryRegion, …)` on the card in
                          `BootCardCatalog` (+ string rows).  This is how a word waits for the beat
                          that earns it — the whole band prints, so give it the same line count.
+ADD A PROPER NOUN        one value on `StoryTerm` (its match tokens, its `freeFrom` region, the
+                         existing trigger its naming hangs off, optionally the codex entry it
+                         archives) + its `story.term.*` row and `BarkStrings` default.
+                         `StoryTermCatalog` registers the bark in a loop and the firing sites already
+                         ask for "the next naming due", so nothing else changes. The naming line says
+                         ONE new word and describes nothing the player cannot see yet. A word with no
+                         row here may not appear on ANY channel — it lives in the codex or it does
+                         not exist.
 ADD AN INTRO BEAT        one value on `IntroBeat` (its trigger, its earliest reprint count) + its
                          string row.  `BarkCatalog` registers every value in a loop, so the row
                          appears with no catalog edit; a cold-open beat needs nothing in `World` (the
