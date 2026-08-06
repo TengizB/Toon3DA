@@ -70,25 +70,37 @@ public final class ExchangeStrings {
      * Region 1 — the teaching exchange (order-5).  The first choice the player is ever offered, and
      * it decides nothing on purpose: the point is to learn, with no enemy awake and nothing at
      * stake, that the world stops and waits and that any of these is a safe thing to tap.
+     *
+     * <p>It decides nothing MECHANICALLY, but order-6 E gave it something to be ABOUT.  It used to
+     * ask how the player was doing, which is a mood check — a question with no content, answered by
+     * three shades of "fine".  It now asks about the memory gap ORA named sixty seconds earlier
+     * (order-2's cold open), so the first answer the player ever gives is a thought about their own
+     * situation rather than a tone of voice.
      */
     private static void registerRingsTeaching(StoryStrings strings) {
         strings.put("story.exchange.rings.teaching.prompt",
-                "Quick thing while it's quiet. How are you doing with all this?");
-        strings.put("story.exchange.rings.teaching.ready", "Ready to work.");
-        strings.put("story.exchange.rings.teaching.ready.reply",
-                "Good. I'll stop asking, then.");
-        strings.put("story.exchange.rings.teaching.off",   "Something feels off.");
-        strings.put("story.exchange.rings.teaching.off.reply",
-                "Noted. Probably the pressure. It does that.");
-        strings.put("story.exchange.rings.teaching.down",  "Just point me down.");
-        strings.put("story.exchange.rings.teaching.down.reply",
-                "Down. Always down. That part I can do.");
+                "While it's quiet - do you actually remember doing this before? "
+                        + "Because your file says you have.");
+        strings.put("story.exchange.rings.teaching.some",   "Some of it.");
+        strings.put("story.exchange.rings.teaching.some.reply",
+                "That's more than the last one gave me. Hold onto it.");
+        strings.put("story.exchange.rings.teaching.none",   "None of it.");
+        strings.put("story.exchange.rings.teaching.none.reply",
+                "That's the usual answer. I keep asking anyway.");
+        strings.put("story.exchange.rings.teaching.matter", "Does it matter?");
+        strings.put("story.exchange.rings.teaching.matter.reply",
+                "Not to the job, no. It matters to me.");
     }
 
-    /** Region 2 — the mandatory first-doubt beat, said out loud before the first floor. */
+    /**
+     * Region 2 — the mandatory first-doubt beat, said out loud before the first floor.  Order-6 E
+     * dropped "defence works": a term nobody in this game has ever met, carrying the whole weight of
+     * the observation.  Said plainly, the observation is stronger anyway.
+     */
     private static void registerGalleriesArrival(StoryStrings strings) {
         strings.put("story.exchange.galleries.arrival.prompt",
-                "Before we go in. These are cutting floors, not defence works. Does that land wrong for you too?");
+                "These floors were built for cutting things up, not for keeping anyone out. "
+                        + "Does that land wrong for you too?");
         strings.put("story.exchange.galleries.arrival.work",  "It's a job site.");
         strings.put("story.exchange.galleries.arrival.work.reply",
                 "A job site with drainage. Sure.");
@@ -260,15 +272,10 @@ public final class ExchangeStrings {
         strings.put("story.exchange.deep.warm.work.reply",
                 "Right. Work. Copy that.");
 
-        strings.put("story.exchange.deep.duty.prompt",
-                "Status check. Four floors deep and ahead of schedule.");
-        strings.put("story.exchange.deep.duty.efficient", "Keep it that way.");
-        strings.put("story.exchange.deep.duty.efficient.reply",
-                "Noted. Efficiency logged.");
-        strings.put("story.exchange.deep.duty.whose",     "Ahead of whose schedule?");
-        strings.put("story.exchange.deep.duty.whose.reply",
-                "Good question. Nobody ever set one.");
-
+        // The third row here — the Organization-leaning "four floors deep and ahead of schedule"
+        // status check — was CUT by order-6 B.  It floated free of any region beat, it stopped the
+        // world to say nothing, and "ahead of schedule" contradicts a descent with no end.  Cutting a
+        // blocking beat is cheap; a player leaning that way now gets the neutral row below.
         strings.put("story.exchange.deep.quiet.prompt",
                 "Two floors since anything moved. Not normal at this depth.");
         strings.put("story.exchange.deep.quiet.good",    "Good.");

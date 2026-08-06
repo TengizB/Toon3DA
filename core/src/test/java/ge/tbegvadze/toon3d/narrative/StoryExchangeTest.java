@@ -645,7 +645,9 @@ class StoryExchangeTest {
     @Test
     void stanceFlavoursWhichDeepCheckInOpens() {
         assertEquals("exchange.deep.warm", deepCheckInFor(Stance.ORA));
-        assertEquals("exchange.deep.duty", deepCheckInFor(Stance.ORGANIZATION));
+        // The Organization-leaning row ("ahead of schedule") was cut by narrative-rework order-6 B, so
+        // that leaning now falls through to the neutral row — flavoured, never silenced.
+        assertEquals("exchange.deep.quiet", deepCheckInFor(Stance.ORGANIZATION));
     }
 
     private static String deepCheckInFor(Stance leaning) {

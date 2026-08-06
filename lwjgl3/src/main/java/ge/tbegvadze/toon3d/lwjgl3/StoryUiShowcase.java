@@ -84,6 +84,9 @@ public final class StoryUiShowcase extends ApplicationAdapter {
         // Order-2 added StoryStringsLoader as the ONE place the string asset is read (with the
         // built-in defaults as its fallback); the showcase shares it with the game.
         strings       = StoryStringsLoader.load();
+        // The four sample lines are a DEV FIXTURE and are no longer in the shipped table
+        // (narrative-rework order-6 B), so the showcase supplies their text itself.
+        StorySampleLines.registerShowcaseText(strings);
 
         prepareSamplePanels();
     }

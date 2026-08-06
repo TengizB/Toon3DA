@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Narrative rework 6 — The line rewrite: cut, fix, keep
 ---
@@ -186,3 +186,57 @@ DEFINITION OF DONE
 - Every id in section C reads as the new text, and no rewritten line breaks 2x40 chars.
 - No repeatable trigger has fewer than four rows in any region band it serves.
 - The standing rules in section F are copied into docs/story-ui-system.txt as writing rules.
+
+============================================================
+AS IMPLEMENTED — what shipped, and where it deviates
+============================================================
+SHIPPED  8 of the 9 cuts (15 string ids), 6 replacement rows, 14 rewrites, and section F as the
+         WRITING RULES block in docs/story-ui-system.txt. Every gate green: the whole core suite
+         (451 tests) plus the vocabulary-ladder + duplicate-text audit run over the SHIPPED
+         properties file. No renderer touched, no new class, no new test file.
+
+DEVIATION 1 — story.bark.lowhealth.rings.2 was NOT cut (section B).
+  Its two stated faults ("Cradle" in Region 1; "the bill is mine" is not true of her) were both
+  already fixed by order-3, which caught the word with the ladder and rewrote the row to "You're
+  leaking. Patch that before I have to log it." The row that section B describes no longer exists, and
+  cutting the row that replaced it would have left the Region-1 low-health band with ONE line —
+  exactly what section F forbids, with no replacement named. KEPT, and the fault is recorded as fixed
+  under F6 in docs/narrative-authority.txt.
+
+DEVIATION 2 — three replacement rows beyond the three section C names.
+  Section F says a cut below depth must be replaced or the moment demoted; section C's replacement
+  list covers the two kill pools and idle.mid but not three other bands the cuts touch. Added, in the
+  same shape as the named three:
+    story.bark.log.galleries.5   Floor plan. Every gallery slopes to a drain. Every one.
+    story.bark.backtrack.deep.3  Circling. If you're looking for a way up, there isn't one.
+    story.bark.lowhealth.mid.3   Back off and patch yourself up. I'll watch the corridor.
+  The last one is owed to section C's re-banding of lowhealth.mid.2 to Region 3+, which empties the
+  Galleries half of that band. (Depth floors as they actually ship: FOUR rows per region for
+  FLOOR_ARRIVAL / KILL / LOG_FOUND, which StoryBarkTest asserts; TWO for the banded flavour pools
+  LOW_HEALTH / IDLE / BACKTRACK, which have always been two-deep and sit on the longest cooldowns.)
+
+DEVIATION 3 — two rows rewritten that the pass did not list, both to keep D5.
+  story.boot.wake.rings.2 ("all limbs accounted for") became "Feed lines are clear": section C's new
+  text for wake.rings.1 ends on "All limbs where they should be", and two rows of one pool must not
+  be one line. story.bark.kill.galleries.3 ("There's a harvest tag on it. It was inventory once")
+  became "It stopped screaming before it stopped moving", because section C's replacement
+  kill.galleries.5 is the better version of the same harvest-tag beat.
+
+FOUND WHILE AUDITING — two order-5 faults section A had put out of scope, fixed here because both are
+one-word fixes and both are failures of THIS order's standing rules:
+  story.bark.kill.wound.1 shipped WORD FOR WORD as story.bark.family.demon.deep (D5). The one-shot
+    reveal keeps the sentence; the repeatable kill row now reads "I logged that as a kill. It wasn't a
+    hostile." — the deliberate echo of kill.rings.3, the word she used up top and refuses down here.
+  story.bark.enemy.hell_baron said "Patterns" on a region-unrestricted row, and "pattern" is banded to
+    the Reliquary by the order-3 ladder. Different sense of the word, same audit failure, and the
+    audit should not have to tell two senses apart: it now reads "Timing, not reflexes."
+
+NOT RE-LITIGATED (section A), because the orders that replace them have not shipped:
+  story.bark.control.* (order-4) and story.bark.gate.* / the Organization exchanges (order-7) are
+  untouched, exactly as section A instructs.
+
+VERIFICATION NOTE  `./gradlew test` cannot run in the authoring sandbox: the network policy denies
+  dl.google.com, so the Android Gradle plugin on the root buildscript classpath will not resolve.
+  The suite was run by compiling core/src/{main,test} with javac and executing it under the JUnit
+  console launcher (451/451 green, nothing skipped — including StoryLocalizationTest, which reads the
+  shipped asset). Re-run `./gradlew test` on a machine with normal network access.

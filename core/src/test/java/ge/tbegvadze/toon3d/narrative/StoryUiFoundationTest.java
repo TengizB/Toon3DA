@@ -23,7 +23,7 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
 class StoryUiFoundationTest {
 
     @Test
-    void defaultsResolveEverySpeakerNameAndSampleLine() {
+    void defaultsResolveEverySpeakerName() {
         StoryStrings strings = StoryStrings.defaults();
         for (Speaker speaker : Speaker.values()) {
             String name = strings.get(speaker.getNameStringId());
@@ -31,9 +31,25 @@ class StoryUiFoundationTest {
                     "missing speaker name id: " + speaker.getNameStringId());
             assertFalse(name.isEmpty(), "empty speaker name for " + speaker);
         }
+    }
+
+    /**
+     * The showcase fixture supplies its OWN text (narrative-rework order-6 B): the four sample ids are
+     * not shipped content, so they are absent from the asset and from {@code defaults()}, and the two
+     * dev callers fold them in by hand.  This asserts both halves of that — the fixture covers every
+     * one of its ids, and the shipped table does not carry them.
+     */
+    @Test
+    void theShowcaseFixtureSuppliesItsOwnTextAndShipsNone() {
+        StoryStrings shipped = StoryStrings.defaults();
+        StoryStrings withFixture = StorySampleLines.registerShowcaseText(StoryStrings.defaults());
         for (StoryLine line : StorySampleLines.ALL) {
-            assertTrue(strings.has(line.getTextStringId()),
-                    "missing sample line id: " + line.getTextStringId());
+            assertFalse(shipped.has(line.getTextStringId()),
+                    "dev fixture id is shipping in the player-facing table: " + line.getTextStringId());
+            assertTrue(withFixture.has(line.getTextStringId()),
+                    "the showcase fixture is missing text for " + line.getTextStringId());
+            assertFalse(withFixture.get(line.getTextStringId()).trim().isEmpty(),
+                    "blank showcase text for " + line.getTextStringId());
         }
     }
 

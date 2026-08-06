@@ -113,7 +113,7 @@ F4 — ORA DOES NOT TEACH THE GAME                                              
    guarding, intent telegraphs, lanes, doors, barrels, the portal and the NAV console — is still
    order-4's, and so is the competence model that keeps her from repeating herself (F7).
 
-F5 — JOKES WITH NOTHING UNDER THEM                                             (owner: order 6)
+F5 — JOKES WITH NOTHING UNDER THEM                                       (owner: order 6 — FIXED)
    story.bark.log.rings.3     = "A lunch order, dated the last day. Soup. Bold."
                                  — the joke is the whole line.
    story.bark.floor.galleries.1 = "Okay, the smell in here is a war crime. Touch nothing."
@@ -125,8 +125,15 @@ F5 — JOKES WITH NOTHING UNDER THEM                                            
    The RATE is not the problem (the LORE/LEVITY weighting handles rate). The problem is jokes that
    reference nothing, and jokes aimed at the player's own death before the story has earned that
    tone.
+   FIXED by order-6: all three rows above are rewritten so the OBSERVATION is the line and the
+   dryness is only the delivery ("Nobody came to collect it" / "the air reads wrong in here" /
+   "Morning. Print {instance}. All limbs where they should be."). Four LEVITY rows whose only content
+   was the joke were CUT outright, and the surviving jokes were checked against SECTION 4 one at a
+   time — including the two the pass explicitly KEEPS as the model ("I'll log it as a patrol route",
+   "I'm contractually excellent at waiting"), which ride true observations about her being staff.
+   The rules the pass derived are shipped as WRITING RULES in docs/story-ui-system.txt.
 
-F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD          (owner: orders 2, 6 — order-2 half done)
+F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD               (owner: orders 2, 6 — FIXED)
    Order-2's half is the FOUNDATION the other rows assumed and never got: the cloning premise is now
    stated outright on run 1 ("You died about an hour ago. They keep a copy. This is the new you."),
    the memory gap is named in her third sentence, and the instance counter is explained on the floor
@@ -142,6 +149,16 @@ F6 — LINES THAT ASSUME FACTS THE PLAYER HAS NOT BEEN TOLD          (owner: ord
                                  — uses Cradle in Region 1, two regions before the Reliquary.
                                  REWRITTEN by order-3, which caught it with the ladder: "You're
                                  leaking. Patch that before I have to log it".
+   FIXED by order-6 for the two rows still outstanding: the bunks row shows the player the tag on
+   their own cuff without saying "serial" (the word stays with the ladder's naming line), and the
+   Region-1 region beat stops throwing the cloning reveal away in a subordinate clause — it now says
+   what that band of the facility WAS, like every other region beat. The pass also caught one the
+   diagnosis missed and the ladder cannot see, because it is a FACT rather than a word:
+   story.bark.lowhealth.mid.2 ("Every reprint costs something. I know what now.") was banded to the
+   Galleries, where ORA has not yet read the cradle log and so cannot know it. It is re-banded to the
+   Reliquary and below, with a replacement row holding the Galleries band's depth. Standing rule 6 of
+   docs/story-ui-system.txt's WRITING RULES is that fault generalised: a line may not assume a fact
+   the player OR ORA has not been given.
 
 F7 — NO RECOVERY PATH                                                          (owner: orders 4, 9)
    Every teaching line is one-shot for the life of the save. A player who taps the X while the panel
@@ -210,10 +227,17 @@ D7  THE ORGANIZATION IS UNDERSTOOD BEFORE IT IS HATED.
     exists and is registered at or before the region where the claim is made).
 
 D8  IF IN DOUBT, CUT.
-    The catalog comes out of this series SMALLER and clearer. Deleting a weak row is always cheaper
-    than a knob, a toggle or a setting. "Too much story" is never fixed by a skip button.
-    ENFORCED BY: order-6 (which cuts outright), order-8's per-floor budget, and the telemetry that
-    turns "in doubt" into a measured fast-dismiss number instead of an argument.
+    The FLAVOUR pools come out of this series SMALLER and clearer. Deleting a weak row is always
+    cheaper than a knob, a toggle or a setting. "Too much story" is never fixed by a skip button.
+    ENFORCED BY: order-6 (which cut outright — nine rows, including one whole blocking exchange and
+    the four dev-only sample rows that were shipping in the player-facing table), order-8's per-floor
+    budget, and the telemetry that turns "in doubt" into a measured fast-dismiss number instead of an
+    argument.
+    THE ONE CONSTRAINT ON CUTTING, learned in order-6 and now standing rule 8 of
+    docs/story-ui-system.txt: a cut that drops a repeatable pool below its band's depth must arrive
+    with a replacement row or demote the moment. `BarkSystem`'s no-repeat memory silences a moment
+    ENTIRELY once its pool empties, so "cut the weak row" and "leave the moment able to speak" are
+    the same commit. Order-6 cut nine and wrote six replacements for exactly that reason.
 
 
 ============================================================
@@ -326,7 +350,8 @@ Order 10 makes all of it stick.
   | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | TODO   |
   | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | DONE   |
   |   |                                        |            | survive it               |        |
-  | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites          | TODO   |
+  | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites + the    | DONE   |
+  |   |                                        |            | standing writing rules   |        |
   | 7 | The Organization, reworked             | D7         | mission, rationale, lies | TODO   |
   | 8 | The lore drip & region beat maps       | D8         | budget + beat maps       | TODO   |
   | 9 | Re-entry, recap & missed-beat recovery | F7         | coming back after 3 days | TODO   |

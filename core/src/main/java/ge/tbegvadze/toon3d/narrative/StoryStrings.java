@@ -66,12 +66,12 @@ public final class StoryStrings {
     }
 
     /**
-     * The built-in fallback table.  Holds the four speaker names, the four order-1 sample lines
-     * (one per speaker) used by the showcase / definition-of-done, and — folded in from
+     * The built-in fallback table.  Holds the four speaker names and — folded in from
      * {@link BarkStrings}, {@link BootCardStrings} and {@link ExchangeStrings} — every order-2 bark
      * line, every order-3 boot-card line and every order-4 exchange line.  It is the safety net when
-     * the properties asset is unavailable.  Keep in sync with
-     * {@code assets/story/story-strings.properties}.
+     * the properties asset is unavailable, so it holds exactly what the asset holds and nothing else:
+     * keep it in sync with {@code assets/story/story-strings.properties}, which
+     * {@code StoryLocalizationTest} enforces in both directions.
      */
     public static StoryStrings defaults() {
         StoryStrings strings = new StoryStrings();
@@ -82,11 +82,9 @@ public final class StoryStrings {
         strings.put("story.speaker.org.name",    "OVERSEER");
         strings.put("story.speaker.system.name", "SYSTEM");
 
-        // One sample line per speaker (from story/dialog/*.md), showcasing each voice.
-        strings.put("story.sample.ai",     "Hey, you're up. Death number two. We'll keep it a secret.");
-        strings.put("story.sample.planet", "...you smell the same...");
-        strings.put("story.sample.org",    "Operator. Go down. Purge the contaminant.");
-        strings.put("story.sample.system", "PREVIOUS INSTANCE - TERMINATED. REPRINTING.");
+        // The four order-1 SAMPLE lines are deliberately NOT here (narrative-rework order-6 B): no
+        // channel can deliver them, so they are a dev fixture rather than content, and they live with
+        // the data that uses them — StorySampleLines.registerShowcaseText().
 
         // Order-2 bark layer: every one-liner the bark catalog can deliver.
         BarkStrings.registerDefaults(strings);
