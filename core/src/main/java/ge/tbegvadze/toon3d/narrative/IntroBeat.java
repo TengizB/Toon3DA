@@ -11,8 +11,8 @@ package ge.tbegvadze.toon3d.narrative;
  * what she is for</em>.
  *
  * <h3>Three doses at the start, the rest distributed</h3>
- * The COLD OPEN beats fire at {@link BarkTrigger#RUN_START}, three on the player's first run and two
- * more on their second, in the order declared here.  Everything after that hangs off a moment that
+ * The COLD OPEN beats fire at {@link BarkTrigger#RUN_START}, three on the player's first run and
+ * four more on their second, in the order declared here.  Everything after that hangs off a moment that
  * already happens on floor one — a door, a terminal, a pickup, the first quiet stretch — so the
  * player meets her by watching her be useful rather than by reading a biography.  A line about doors
  * arrives when a door does.
@@ -45,6 +45,24 @@ public enum IntroBeat {
     CONTINUITY(BarkTrigger.RUN_START, 2),
     /** Run 2, straight after: which makes her the only one who remembers the last body. */
     MEMORY(BarkTrigger.RUN_START, 2),
+    /**
+     * Run 2: WHY THE DESCENT REPEATS (narrative-rework order-8, HOLE 1).  A roguelike player accepts
+     * a reset without a reason; a story player asks, and until this line the game had no answer
+     * anywhere on any channel.  They come back from a stored copy rather than from where they fell,
+     * and that copy starts at the top — which is the premise as well as the loop.
+     *
+     * <p>Deliberately says WHERE they restart rather than naming the mechanism: the word for the
+     * stored copy is {@link StoryTerm#CHECKPOINT} and it is not free until run 3, so this line has
+     * to do its job in plain language (doctrine D2).  Run 2 is the earliest it can land at all,
+     * because it only answers a question a player has actually asked once they have died.
+     */
+    LOOP_RESTART(BarkTrigger.RUN_START, 2),
+    /**
+     * Run 2, straight after: and neither does the facility stay cleared.  The other half of the
+     * reset — the one that explains why the floors the player already fought through are full
+     * again — which is otherwise the most visible unexplained thing in the game.
+     */
+    LOOP_REFILL(BarkTrigger.RUN_START, 2),
 
     /** The first door the player opens: what she does, and what she does not do. */
     DOORS(BarkTrigger.CONTROL_HINT, 1),

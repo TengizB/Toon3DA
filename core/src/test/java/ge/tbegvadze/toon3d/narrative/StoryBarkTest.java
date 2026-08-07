@@ -38,9 +38,14 @@ class StoryBarkTest {
     }
 
     private static BarkSystem newSystemInRegion(StoryRegion region) {
+        return newSystem(progressInRegion(region));
+    }
+
+    /** Fresh persistent state with the descent already recorded as deep as {@code region}. */
+    private static StoryProgress progressInRegion(StoryRegion region) {
         StoryProgress progress = new StoryProgress();
         progress.reachRegion(region);
-        return newSystem(progress);
+        return progress;
     }
 
     /** Runs the system forward, one frame at a time, for the given number of seconds. */
@@ -191,16 +196,19 @@ class StoryBarkTest {
     }
 
     /**
-     * The two beats that make her matter — she is not printed, so she is the only one who remembers
-     * the last body — wait for the SECOND run, because they only mean anything to a player who has
-     * now died and come back themselves.
+     * The four beats that only mean anything to a player who has now died and come back themselves
+     * wait for the SECOND run: the pair that makes ORA matter (she is not printed, so she is the only
+     * one who remembers the last body) and the pair that explains WHY THE DESCENT REPEATS
+     * (narrative-rework order-8, HOLE 1) — where they restart from, and why the works fill back in.
      */
     @Test
     void theRunTwoBeatsWaitForARunTwo() {
+        java.util.EnumSet<IntroBeat> runTwoBeats = java.util.EnumSet.of(
+                IntroBeat.CONTINUITY, IntroBeat.MEMORY,
+                IntroBeat.LOOP_RESTART, IntroBeat.LOOP_REFILL);
         for (IntroBeat beat : IntroBeat.values()) {
             if (!beat.isColdOpen()) continue;
-            boolean isRunTwoBeat = beat == IntroBeat.CONTINUITY || beat == IntroBeat.MEMORY;
-            assertEquals(!isRunTwoBeat, beat.isAvailableAt(1),
+            assertEquals(!runTwoBeats.contains(beat), beat.isAvailableAt(1),
                     beat + " is offered on the wrong run");
             assertTrue(beat.isAvailableAt(2), beat + " never becomes available at all");
         }
@@ -554,8 +562,11 @@ class StoryBarkTest {
         BarkSystem system = newSystemInRegion(StoryRegion.RELIQUARY);
         java.util.Set<String> spoken = new java.util.HashSet<>();
 
-        // Drain one whole pool: every delivery must be a line we have not heard yet.
+        // Drain one whole pool: every delivery must be a line we have not heard yet.  One round is
+        // one FLOOR, so the per-floor budget (order-8 B) is reset per round exactly as the engine
+        // does it — four floor-arrival lines is four floors, never four lines on one floor.
         for (int barkIndex = 0; barkIndex < 4; barkIndex++) {
+            system.beginFloor();
             if (!system.request(BarkTrigger.FLOOR_ARRIVAL)) break;
             advance(system, FRAME_SECONDS);
             String barkId = system.getActiveBarkId();
@@ -568,6 +579,110 @@ class StoryBarkTest {
                     .STORY_BARK_TRIGGER_COOLDOWN_SECONDS[BarkTrigger.FLOOR_ARRIVAL.ordinal()] + 1f);
         }
         assertTrue(spoken.size() >= 3, "the floor-arrival pool is too shallow to avoid repeats");
+    }
+
+    // -------------------------------------------------------------------------
+    // THE PER-FLOOR BUDGET (narrative-rework order-8 B) — the ceiling on how much a floor may say
+    // -------------------------------------------------------------------------
+
+    /**
+     * An ordinary floor delivers at most {@code STORY_BARK_FLOOR_BUDGET} non-critical lines, and
+     * then it is quiet until the next arrival.  This is the strongest anti-annoyance lever in the
+     * layer: without it the cooldowns can still let a long, terminal-rich floor chatter.
+     */
+    @Test
+    void anOrdinaryFloorSpendsItsBudgetAndThenGoesQuiet() {
+        // The Core, whose KILL / LOG_FOUND / LOW_HEALTH pools are entirely ordinary rows — no
+        // mandatory beat can wander in and confuse what is being counted.  Three different moments,
+        // because a single trigger would hit its own cooldown before the budget.
+        BarkSystem system = newSystemInRegion(StoryRegion.CORE);
+        system.beginFloor();
+
+        assertTrue(system.request(BarkTrigger.KILL));
+        advance(system, FRAME_SECONDS);
+        assertTrue(system.hasActiveBark());
+        dismissAndSettle(system);
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+
+        assertTrue(system.request(BarkTrigger.LOG_FOUND));
+        advance(system, FRAME_SECONDS);
+        assertTrue(system.hasActiveBark());
+        dismissAndSettle(system);
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+
+        assertEquals(StoryUiConstants.STORY_BARK_FLOOR_BUDGET,
+                system.getNonCriticalDeliveredThisFloor(), "the floor's allowance is two lines");
+
+        // The floor is now spent.  A third ordinary line still QUEUES — the budget is a delivery
+        // gate, not a request filter — but it must not reach the screen.
+        assertTrue(system.request(BarkTrigger.LOW_HEALTH));
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+        assertFalse(system.hasActiveBark(), "a spent floor kept talking");
+
+        // ...and the next floor arrival opens it straight back up, with the held line still there.
+        system.beginFloor();
+        assertEquals(0, system.getNonCriticalDeliveredThisFloor());
+        advance(system, FRAME_SECONDS);
+        assertTrue(system.hasActiveBark(), "the budget never reset on the next floor");
+    }
+
+    /** A spent budget never silences a mandatory beat — a stuck player costs more than a talky one. */
+    @Test
+    void theFloorBudgetNeverHoldsBackACriticalBeat() {
+        BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
+        system.beginFloor();
+        for (int spendIndex = 0; spendIndex < StoryUiConstants.STORY_BARK_FLOOR_BUDGET; spendIndex++) {
+            system.request(BarkTrigger.FLOOR_ARRIVAL);
+            system.request(BarkTrigger.KILL);
+            advance(system, FRAME_SECONDS);
+            dismissAndSettle(system);
+            advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+        }
+        assertTrue(system.request(BarkTrigger.REGION_ENTERED));
+        advance(system, FRAME_SECONDS);
+        assertEquals("bark.region.rings", system.getActiveBarkId(),
+                "the per-floor budget swallowed a mandatory beat");
+    }
+
+    /**
+     * THE PLANET'S HARD CAP (order-8 E): one line per floor, in any region, on any trigger.  Its
+     * power is entirely in scarcity, and it is the one voice with no rate limit of its own.
+     */
+    @Test
+    void thePlanetSpeaksAtMostOncePerFloor() {
+        BarkSystem system = newSystemInRegion(StoryRegion.RELIQUARY);
+        system.beginFloor();
+
+        system.request(BarkTrigger.DEEP_STRATA);
+        advance(system, FRAME_SECONDS);
+        assertEquals(Speaker.PLANET, system.getActiveSpeaker());
+        dismissAndSettle(system);
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+
+        // A second milestone on the SAME floor: the request is fine, the delivery is not.
+        system.request(BarkTrigger.DEEP_STRATA);
+        advance(system, StoryUiConstants.STORY_BARK_QUEUE_STALE_SECONDS + 1f);
+        assertFalse(system.hasActiveBark(), "the planet spoke twice on one floor");
+        assertEquals(1, system.getPlanetLinesDeliveredThisFloor());
+    }
+
+    /**
+     * ...and a planet line that has used its floor must not block the ORA line queued behind it.
+     * The delivery scan steps PAST a held row rather than stopping at it.
+     */
+    @Test
+    void aHeldPlanetLineDoesNotBlockTheQueueBehindIt() {
+        BarkSystem system = newSystemInRegion(StoryRegion.RELIQUARY);
+        system.beginFloor();
+        system.request(BarkTrigger.DEEP_STRATA);
+        advance(system, FRAME_SECONDS);
+        dismissAndSettle(system);
+
+        system.request(BarkTrigger.DEEP_STRATA);        // held: the planet has spoken this floor
+        system.request(BarkTrigger.REGION_ENTERED);     // mandatory, queued behind it
+        advance(system, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 0.2f);
+        assertEquals("bark.region.reliquary", system.getActiveBarkId(),
+                "a held planet line blocked everything queued behind it");
     }
 
     /** Every repeatable moment needs a pool deep enough that the no-repeat filter has room. */

@@ -36,6 +36,11 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *   <li><b>Rate limit.</b> At most one delivery per {@code STORY_BARK_MIN_INTERVAL_SECONDS} of
  *       FREE screen (the clock runs only while no bark is up, so reading slowly never causes a
  *       pile-up), plus a per-trigger cooldown, so kills and low health never chatter.</li>
+ *   <li><b>The per-floor budget</b> (narrative-rework order-8 B). At most
+ *       {@code STORY_BARK_FLOOR_BUDGET} NON-critical lines reach the screen between one
+ *       {@link #beginFloor()} and the next, and at most {@code STORY_PLANET_LINES_PER_FLOOR} of them
+ *       are the planet's. Past that the floor is simply quiet — silence is a legitimate result, and
+ *       the strongest anti-annoyance lever in the layer.</li>
  *   <li><b>Tone balance.</b> Rows carry a {@link BarkTone}; lore outweighs levity by weight, so ORA
  *       is dry occasionally rather than constantly.</li>
  *   <li><b>Priority.</b> STORY_CRITICAL is never dropped; REACTIVE is dropped when the queue is
@@ -78,6 +83,12 @@ public final class BarkSystem {
     private boolean       suppressed;
     /** True while a combat spike owns the player's attention (order-6 Part B).  Holds, never drops. */
     private boolean       combatSpike;
+
+    // ---- the per-floor budget (narrative-rework order-8 B) --------------------------------------
+    /** Non-critical lines that have reached the screen since {@link #beginFloor()}. */
+    private int nonCriticalDeliveredThisFloor;
+    /** Planet lines that have reached the screen since {@link #beginFloor()}, any trigger. */
+    private int planetLinesDeliveredThisFloor;
 
     /**
      * Wrap width for a delivered line.  Settable so the order-6 accessibility text-size setting can
@@ -149,6 +160,31 @@ public final class BarkSystem {
 
     public boolean isCombatSpike() {
         return combatSpike;
+    }
+
+    /**
+     * THE PER-FLOOR CEILING (narrative-rework order-8 B).  Resets the floor budget: the count of
+     * non-critical lines already delivered, and the planet's own one-line-per-floor cap.  The engine
+     * calls it once per floor arrival, which is what makes "an ordinary floor may deliver two
+     * flavour lines" a property of the system rather than a hope about the cooldown table.
+     *
+     * <p>Nothing is flushed and nothing is dropped here — a line queued on the way down (the map's
+     * meaning, asked for while the nav console was open) is still waiting, and now has a budget to
+     * arrive on.
+     */
+    public void beginFloor() {
+        nonCriticalDeliveredThisFloor = 0;
+        planetLinesDeliveredThisFloor = 0;
+    }
+
+    /** Non-critical lines delivered since the last {@link #beginFloor()}. */
+    public int getNonCriticalDeliveredThisFloor() {
+        return nonCriticalDeliveredThisFloor;
+    }
+
+    /** Planet lines delivered since the last {@link #beginFloor()}, on any trigger. */
+    public int getPlanetLinesDeliveredThisFloor() {
+        return planetLinesDeliveredThisFloor;
     }
 
     /**
@@ -344,12 +380,61 @@ public final class BarkSystem {
 
         if (activeDefinition == null && queuedCount > 0
                 && secondsSinceScreenFreed >= StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS) {
-            BarkDefinition next = peekNextQueued();
-            // Only a mandatory beat may land mid-fight; everything else waits for the lull.
-            if (!combatSpike || next.getPriority() == BarkPriority.STORY_CRITICAL) {
-                deliver(takeNextQueued());
+            int deliverableIndex = nextDeliverableQueuedIndex();
+            if (deliverableIndex >= 0) {
+                BarkDefinition next = queuedDefinitions[deliverableIndex];
+                removeQueuedAt(deliverableIndex);
+                deliver(next);
             }
         }
+    }
+
+    /**
+     * Whether this row may reach the screen RIGHT NOW.  Three gates, all of which a
+     * {@link BarkPriority#STORY_CRITICAL} row clears except the planet's:
+     * <ul>
+     *   <li><b>Combat spike</b> (order-6 Part B) — only a mandatory beat lands mid-fight.</li>
+     *   <li><b>The per-floor budget</b> (order-8 B) — two non-critical lines a floor, then silence
+     *       until the next arrival.</li>
+     *   <li><b>The planet's cap</b> (order-8 E) — one line per floor, in any region, on any trigger.
+     *       Applied whatever the priority, because that voice's whole power is scarcity.  Nothing on
+     *       the story spine rides the planet's channel, so this can never hold a mandatory beat.</li>
+     * </ul>
+     * A blocked non-critical row stays queued and goes stale on its own, which is the intended
+     * result: a line whose moment has passed is worse than no line at all (order-8 F).
+     */
+    private boolean isDeliverableNow(BarkDefinition definition) {
+        boolean critical = definition.getPriority() == BarkPriority.STORY_CRITICAL;
+        if (definition.getSpeaker() == Speaker.PLANET
+                && planetLinesDeliveredThisFloor >= StoryUiConstants.STORY_PLANET_LINES_PER_FLOOR) {
+            return false;
+        }
+        if (critical) return true;
+        if (combatSpike) return false;
+        return nonCriticalDeliveredThisFloor < StoryUiConstants.STORY_BARK_FLOOR_BUDGET;
+    }
+
+    /**
+     * Index of the highest-priority queued entry that {@link #isDeliverableNow} allows, or -1 when
+     * nothing may be delivered.  The queue is kept in arrival order (index 0 = oldest) and the scan
+     * advances only on a STRICTLY higher priority ({@link BarkPriority#isHigherThan}), so an
+     * equal-priority later arrival never displaces an earlier one — same-priority barks stay
+     * first-in, first-out.
+     *
+     * <p>Scanning PAST a blocked entry (rather than stopping at it) is what stops one held line — a
+     * planet whisper that has already used its floor, say — from silently blocking everything queued
+     * behind it.
+     */
+    private int nextDeliverableQueuedIndex() {
+        int bestIndex = -1;
+        for (int queueIndex = 0; queueIndex < queuedCount; queueIndex++) {
+            if (!isDeliverableNow(queuedDefinitions[queueIndex])) continue;
+            if (bestIndex < 0 || queuedDefinitions[queueIndex].getPriority()
+                    .isHigherThan(queuedDefinitions[bestIndex].getPriority())) {
+                bestIndex = queueIndex;
+            }
+        }
+        return bestIndex;
     }
 
     /**
@@ -376,36 +461,6 @@ public final class BarkSystem {
         secondsSinceScreenFreed     = 0f;
     }
 
-    /**
-     * Pops the highest-priority queued entry, OLDEST among equals.  The queue is kept in arrival
-     * order (index 0 = oldest), and the scan below advances only on a STRICTLY higher priority
-     * ({@link BarkPriority#isHigherThan}), so an equal-priority later arrival never displaces an
-     * earlier one — same-priority barks stay first-in, first-out.
-     */
-    private BarkDefinition takeNextQueued() {
-        int bestIndex = nextQueuedIndex();
-        BarkDefinition next = queuedDefinitions[bestIndex];
-        removeQueuedAt(bestIndex);
-        return next;
-    }
-
-    /** The line {@link #takeNextQueued()} would return, without removing it.  Never called empty. */
-    private BarkDefinition peekNextQueued() {
-        return queuedDefinitions[nextQueuedIndex()];
-    }
-
-    /** Index of the highest-priority queued entry, oldest among equals.  See {@link #takeNextQueued}. */
-    private int nextQueuedIndex() {
-        int bestIndex = 0;
-        for (int queueIndex = 1; queueIndex < queuedCount; queueIndex++) {
-            if (queuedDefinitions[queueIndex].getPriority()
-                    .isHigherThan(queuedDefinitions[bestIndex].getPriority())) {
-                bestIndex = queueIndex;
-            }
-        }
-        return bestIndex;
-    }
-
     /** Puts a line on screen: resolve its text, pre-wrap it, start its clock, stamp its cooldowns. */
     private void deliver(BarkDefinition definition) {
         String text = strings.get(definition.getTextStringId());
@@ -429,6 +484,11 @@ public final class BarkSystem {
 
         triggerCooldownRemaining[definition.getTrigger().ordinal()] =
                 StoryUiConstants.STORY_BARK_TRIGGER_COOLDOWN_SECONDS[definition.getTrigger().ordinal()];
+        // THE PER-FLOOR BUDGET (order-8 B) counts what actually REACHED the player, for the same
+        // reason the archive and the tuning counters do: a line that was queued and went stale was
+        // never said, and must not spend the floor's allowance.
+        if (definition.getPriority() != BarkPriority.STORY_CRITICAL) nonCriticalDeliveredThisFloor++;
+        if (definition.getSpeaker() == Speaker.PLANET)               planetLinesDeliveredThisFloor++;
         if (definition.isOneShot()) {
             progress.markSeen(definition.getId());
         }

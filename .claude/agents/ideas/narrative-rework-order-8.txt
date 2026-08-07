@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Narrative rework 8 — The lore drip & the region beat maps
 ---
@@ -157,3 +157,31 @@ DEFINITION OF DONE
 - Every region's three spine beats are placed on unavoidable channels and proven by test.
 - The player is told, once, why the run resets and what the map is.
 - The planet cannot exceed one line per floor, and deep floors are sometimes silent on purpose.
+
+============================================================
+AS BUILT — deviations from the spec above
+============================================================
+1. THE LOOP LINES do not say "checkpoint". `StoryTerm.CHECKPOINT` is not free until run 3 and these
+   land on run 2, so the mechanism is described in plain words instead (doctrine D2). They are two
+   new `IntroBeat` rows (LOOP_RESTART / LOOP_REFILL) rather than free-standing catalog rows, which
+   reuses the existing run-gated cold-open machinery instead of adding a second one; the ids are
+   therefore `story.bark.intro.loop_restart` / `.loop_refill`, not `story.bark.loop.1/2`.
+2. DELIBERATE SILENCE is a SECOND, independent roll on top of the existing
+   STORY_BARK_FLOOR_ARRIVAL_CHANCE (0.40), not a replacement for it — so a deep floor speaks on
+   arrival about a quarter of the time. The deep pools were NOT shrunk: order-6's standing rule is
+   that a band below its depth goes silent for the rest of the save, which is a different (and
+   worse) kind of silence than the one this section wants.
+3. THE PLANET RE-BAND moved the two Galleries rows that ADDRESSED the player
+   ("...you smell the same...", "...I know this weight...") into the Reliquary as
+   `bark.strata.reliquary.5/.6`, where address is the point, and gave the Galleries two more single
+   words. R2's rule as written ("single words, never a sentence, never a response") is what those two
+   rows were breaking.
+4. ONE EXTRA PROMOTION the beat maps forced: R4's beat 2 (the sedation schedule) was a repeatable
+   pool row a player could finish the Wound without ever drawing. `bark.log.wound.4` is now a
+   one-shot mandatory reveal, alongside the yield report and the cradle note, with
+   `bark.log.wound.5` added to hold the repeatable band at four. That is one string id beyond the
+   "~7" estimated above (nine in total).
+5. THE BEAT-MAP TEST extends `StorySkimmerPathTest` (which already owns "the spine rides unskippable
+   channels") rather than adding a test file, per the project testing policy. It also asserts the
+   two carriers that are EXCHANGES rather than barks — a blocking prompt is the least avoidable
+   channel there is, so R2.3, R3.3 and R5.1/5.3 qualify by construction.
