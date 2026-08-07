@@ -1,7 +1,74 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Narrative rework 7 — The Organization, reworked
 ---
+
+IMPLEMENTATION NOTES (what shipped, and where it deviates from the spec below)
+
+Shipped as specified: five rewritten gate transmissions with a job and a falsifiable claim in each;
+the R1 briefing exchange completed with the mission and its three planted claims (order-2 section E,
+which had never landed); two ORA asides; the R2 demand's middle answer turned into a PROBE that
+checks a claim; the Overseer-is-a-desk reveal moved onto a channel; the LIE LEDGER in
+docs/story-ui-system.txt. No new class, no renderer, no persistence, no new BarkTrigger.
+
+Deviations, all recorded deliberately:
+
+  1. THE LINES ARE SHORTER THAN THE SPEC'S. A bark wraps to at most two 40-character lines
+     (STORY_BARK_MAX_LINES x STORY_LINE_MAX_CHARS) and an exchange prompt to three, and section B's
+     transmissions are 90-110 characters. Each was cut to the claim that MATTERS rather than split
+     across panels:
+       R2  "Gallery works are routine extraction. Auditory artifacts in your feed originate in you."
+           -> "Operator. Gallery extraction is routine and within tolerance."
+           The artifacts claim already IS the R2 demand exchange, a floor later, so keeping it here
+           too would have been a D5 (say it once) violation. "Within tolerance" also points straight
+           at the artefact that disproves it — the tolerance sheet that specifies live weight.
+       R3  drops "your compliance record is under review" to "compliance is under review".
+       R5  "your pattern is under review for write-off" -> "pattern under write-off review".
+     R1 and R4 ship the spec's sentences intact.
+
+  2. THE BRIEF SPLITS ACROSS THE TWO R1 CHANNELS. Section B puts the order on the gate bark and
+     section E puts the mission in the exchange, but barks always precede the exchange they share a
+     moment with (an exchange is held PENDING until no bark is on screen), so ORA's aside "that's the
+     whole brief. Ten weeks and one paragraph" would have commented on a brief the player had not yet
+     been given. The gate bark therefore carries the ten weeks and the dead crew — it IS the one
+     paragraph her aside is about — and the exchange carries the attribution and the "why me".
+     All three planted claims still ship, and all three are still in Region 1.
+
+  3. THE SECOND ORA ASIDE IS AT R4, NOT NAMED IN THE SPEC (which says "2 new ORA asides" and writes
+     only R1's). It hangs off the supersedes transmission — "New order, same reference number. I kept
+     the old one." It is EVIDENCE, not explanation: it does not tell the player the mission was never
+     a purge, which section B is explicit must be something they realise themselves.
+
+  4. THE DESK PROBE STAYS AT R5 AND THE EVIDENCE MOVES TO R3. Section C asks for the probe "in the R3
+     exchange"; there is no Organization exchange in R3 and section D forbids a fifth ("four exist,
+     keep four"). Resolved by splitting the reveal in the order a player meets it: ORA volunteers the
+     EVIDENCE unprompted from the Reliquary down (story.bark.org.desk, one-shot, on floor arrival),
+     and the MECHANISM is the reply to the Core order's probe, rewritten from the thin
+     "Nobody. That channel's automated." to section C's routing-headers answer. Both halves ship;
+     only their order is swapped, and the idea enters play two regions earlier than it used to.
+
+  5. THE R5 REWRITE WAS ALREADY IN PLACE. Section D says the last order "currently asks the player to
+     confirm the purge"; the shipped prompt already read "Restraints are to be restored. Confirm."
+     Left as it is, with the reason it matters written into the catalog comment.
+
+  6. THE R1 PROBE'S CODEX UNLOCK WAS DROPPED, not moved. It used to unlock codex.contaminant, which
+     is already archived twice over (by the gate order and by the vocabulary ladder's naming), so the
+     new "Why me?" probe pays curiosity with the answer itself — the first hint that the hole in this
+     print's memory has a shape.
+
+VERIFICATION. ./gradlew could not run: this environment's network policy returns 403 for
+dl.google.com and central.sonatype.com, so the Android Gradle plugin cannot be resolved (the same
+limitation order-2 recorded). Instead the whole narrative package was compiled with javac against a
+compile-only MathUtils stub, and the story suite's assertions that this order can affect were
+re-implemented and run headlessly: every catalog id resolves in BOTH the shipped properties file and
+the Java defaults and the two agree; every bark wraps within two lines and every prompt/reply within
+three; every answer is inside the one-line cap and distinct within its exchange; the ORDER-3
+VOCABULARY LADDER audit passes over the shipped table for every bark and exchange row; no two shipped
+bark rows share text; the exchange budget and option counts hold; every repeatable pool is still four
+deep in every region and no joke survives into the deep-only band; the no-repeat drain still yields
+distinct lines at the Reliquary; a subject-less gate request is answered by the ORGANIZATION in all
+five regions while the aside is reachable behind its subject key; and story.bark.org.desk cannot
+appear above the Reliquary and wins its first floor arrival at it. All green.
 
 PURPOSE
 Fixes failure F7 of the fiction rather than of the UI: the Organization is currently a voice

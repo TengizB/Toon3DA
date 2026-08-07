@@ -223,8 +223,16 @@ D7  THE ORGANIZATION IS UNDERSTOOD BEFORE IT IS HATED.
     A voice that only threatens is scenery. It gets a mission, a rationale a reasonable person could
     accept, and claims the world later disproves — so the player CATCHES the lie themselves rather
     than being told about it.
+    SHIPPED by order-7: five rewritten transmissions (a briefing, a correction of the record, an
+    ownership reminder delivered as HR, the instruction nobody will sign, and the write-off), the
+    briefing exchange that carries the rationale, two ORA asides that REPORT and never explain, and
+    the Overseer-is-a-desk reveal moved out of the codex and onto a channel. The rules that keep it
+    cold and the LIE LEDGER itself are in docs/story-ui-system.txt, THE ORGANIZATION.
     ENFORCED BY: order-7's lie ledger; order-10's LieLedgerTest (every claim's counter-artefact
     exists and is registered at or before the region where the claim is made).
+    THE STANDING RULE, which outlives the order: **a claim with no counter-evidence in the build does
+    not ship.** Find the room first. If the only way a player can learn that something was a lie is
+    ORA telling them, it is not a lie the player catches — it is exposition with a villain attached.
 
 D8  IF IN DOUBT, CUT.
     The FLAVOUR pools come out of this series SMALLER and clearer. Deleting a weak row is always
@@ -352,7 +360,7 @@ Order 10 makes all of it stick.
   |   |                                        |            | survive it               |        |
   | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites + the    | DONE   |
   |   |                                        |            | standing writing rules   |        |
-  | 7 | The Organization, reworked             | D7         | mission, rationale, lies | TODO   |
+  | 7 | The Organization, reworked             | D7         | mission, rationale, lies | DONE   |
   | 8 | The lore drip & region beat maps       | D8         | budget + beat maps       | TODO   |
   | 9 | Re-entry, recap & missed-beat recovery | F7         | coming back after 3 days | TODO   |
   |10 | The gates                              | all        | tests, telemetry, cold   | TODO   |

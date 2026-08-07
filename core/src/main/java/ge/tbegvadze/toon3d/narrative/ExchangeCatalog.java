@@ -93,8 +93,12 @@ public final class ExchangeCatalog {
     // -------------------------------------------------------------------------
     private static void registerRegionEntries(ExchangeRegistry registry) {
 
-        // Region 1 — the briefing, in the Organization's own words. Answering it is the player's
-        // first chance to notice that "contaminant" is a word somebody chose.
+        // Region 1 — THE BRIEFING, in the Organization's own words (narrative-rework order-7 B).
+        // A job with a reason a reasonable person accepts, and three claims about the WORLD that the
+        // descent later disproves in a room, with an object: the contaminant killed the crew, it came
+        // up from the lower works, and the player is the operator on file. Answering is the player's
+        // first chance to notice that "contaminant" is a word somebody chose — and the probe is the
+        // first hint that the hole in this print's memory has a shape.
         registry.register(ExchangeDefinition.builder("exchange.rings.briefing")
                 .speaker(Speaker.ORGANIZATION)
                 .promptStringId("story.exchange.rings.briefing.prompt")
@@ -114,12 +118,14 @@ public final class ExchangeCatalog {
                         .replySpeaker(Speaker.AI)
                         .replyStringId("story.exchange.rings.briefing.doubt.reply")
                         .build())
+                // "Why me?" — the Organization answers this one, flatly and in its own voice, because
+                // the answer is a personnel fact rather than a question about itself. No stance nudge:
+                // asking to read your own file expresses no leaning, and the model must not invent
+                // one. The codex entry it used to unlock ("contaminant") is archived twice over by
+                // the gate order and by the vocabulary ladder's naming, so nothing is lost.
                 .option(ExchangeOption.builder("probe")
                         .playerLineStringId("story.exchange.rings.briefing.probe")
                         .kind(ExchangeOptionKind.PROBE)
-                        .stanceNudge(Stance.PLANET, 1)
-                        .unlocksCodexId("codex.contaminant")
-                        .replySpeaker(Speaker.AI)
                         .replyStringId("story.exchange.rings.briefing.probe.reply")
                         .build())
                 .build());
@@ -211,9 +217,12 @@ public final class ExchangeCatalog {
                         .build())
                 .build());
 
-        // Region 5 — the last order, asked in advance of the endings. Answering it does not decide
-        // the ending (that is the ending exchange below, and every ending stays open whatever was
-        // said here); it records where the player stood when the Organization asked.
+        // Region 5 — the last order, asked in advance of the endings. It asks the player to confirm
+        // the RESTRAINTS, which is the same thing the Wound's gate order superseded the purge with
+        // and the same thing the ending is about (order-7 D): the Organization's final demand and the
+        // choice at the bottom must be the same subject, or the ending answers a question nobody
+        // asked. Answering it does not decide the ending (that is the ending exchange below, and every
+        // ending stays open whatever was said here); it records where the player stood when asked.
         registry.register(ExchangeDefinition.builder("exchange.core.order")
                 .speaker(Speaker.ORGANIZATION)
                 .promptStringId("story.exchange.core.order.prompt")
@@ -392,9 +401,13 @@ public final class ExchangeCatalog {
                         .stanceNudge(Stance.ORGANIZATION, 1)
                         .replyStringId("story.exchange.galleries.demand.acknowledge.reply")
                         .build())
+                // The one answer that CHECKS a claim rather than taking a stance on it (order-7 D) —
+                // a demand with three stances is a demand nobody can interrogate. It is a PROBE, and
+                // what it pays is a procedural non-answer plus ORA's quiet confirmation that her own
+                // log carries the same thing the player's ears do.
                 .option(ExchangeOption.builder("push")
                         .playerLineStringId("story.exchange.galleries.demand.push")
-                        .kind(ExchangeOptionKind.STANCE)
+                        .kind(ExchangeOptionKind.PROBE)
                         .stanceNudge(Stance.PLANET, 1)
                         .replySpeaker(Speaker.AI)
                         .replyStringId("story.exchange.galleries.demand.push.reply")

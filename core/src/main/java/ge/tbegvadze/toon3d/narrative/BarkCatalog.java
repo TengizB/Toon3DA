@@ -239,7 +239,26 @@ public final class BarkCatalog {
 
     // -------------------------------------------------------------------------
     // Region gate — the Organization, once per region, escalating.  One-shot, critical.
+    //
+    // THE ORGANIZATION, REWORKED (narrative-rework order-7, doctrine D7): each of these five is a
+    // transmission with a JOB in it and at least one claim about the WORLD that an object somewhere
+    // in the build disproves — the LIE LEDGER in docs/story-ui-system.txt is that pairing, written
+    // down.  The rules the pool obeys are content rules, not code ones, and they live in that doc:
+    // it never speaks twice on a floor, never answers a question about itself, never addresses ORA,
+    // and is never cruel.  Nothing it says is corrected on screen by narration.
+    //
+    // ORA'S ASIDES ride the SAME moment behind a subject key, which is the established idiom for a
+    // second line on one gameplay beat (the vocabulary ladder's namings do it too).  A gate order
+    // asked for with no subject can therefore still only ever select the Organization's own row.
     // -------------------------------------------------------------------------
+
+    /**
+     * The subject key ORA's gate asides are registered and requested under.  {@code World} asks for
+     * it immediately after the order itself, so her comment lands behind the words she is commenting
+     * on rather than in front of them.
+     */
+    public static final String GATE_ASIDE_SUBJECT_KEY = "ORA_GATE_ASIDE";
+
     private static void registerGateOrders(BarkRegistry registry) {
         for (StoryRegion region : StoryRegion.values()) {
             String id = "bark.gate." + region.getCatalogKey();
@@ -251,6 +270,32 @@ public final class BarkCatalog {
                     .oneShot(true)
                     .build());
         }
+        // Two asides, not five: she comments when there is something in the paperwork to point at,
+        // and stays quiet the rest of the time.  Both are STORY_CRITICAL because the moment they
+        // hang off happens exactly once — a dropped aside is an aside nobody ever hears.
+        gateAside(registry, "bark.gate.rings.ora", StoryRegion.HABITATION_RINGS);
+        gateAside(registry, "bark.gate.wound.ora", StoryRegion.WOUND);
+
+        // THE OVERSEER IS A DESK (order-7 C).  ORA volunteers the EVIDENCE — she has been reading the
+        // routing headers — from the Reliquary down, on an ordinary floor arrival.  The MECHANISM
+        // (what a routing header is and why it means nobody is speaking) is the reply to the Core
+        // order's probe, so a player who wants it asks for it and everybody else still gets the fact.
+        registry.register(row("bark.org.desk", storyIdFor("bark.org.desk"))
+                .trigger(BarkTrigger.FLOOR_ARRIVAL)
+                .regionFrom(StoryRegion.RELIQUARY)
+                .priority(BarkPriority.STORY_CRITICAL)
+                .oneShot(true)
+                .build());
+    }
+
+    private static void gateAside(BarkRegistry registry, String id, StoryRegion region) {
+        registry.register(row(id, storyIdFor(id))
+                .trigger(BarkTrigger.REGION_GATE_ORDER)
+                .subjectKey(GATE_ASIDE_SUBJECT_KEY)
+                .region(region)
+                .priority(BarkPriority.STORY_CRITICAL)
+                .oneShot(true)
+                .build());
     }
 
     // -------------------------------------------------------------------------

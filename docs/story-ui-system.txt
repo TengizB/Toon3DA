@@ -505,9 +505,10 @@ opt-in and re-readable), the game's own title and tagline (a title cannot wait f
 and the endgame status cards (only ever reached from the Core). Order-10 owns the test file
 (`VocabularyLadderTest`); order-3 owns the rule and the API it calls.
 
-THE COST. Floor one of run one now asks for nine mandatory panels in two frames — the region-entry
-beat, the gate order, the two namings behind them, the facility's naming, ORA's three introduction
-lines and the MOVE hint. They arrive one at a time, on the player's own taps, spaced by the ordinary
+THE COST. Floor one of run one now asks for ten mandatory panels in two frames — the region-entry
+beat, the gate order, ORA's aside on it (order-7), the two namings behind them, the facility's
+naming, ORA's three introduction lines and the MOVE hint. They arrive one at a time, on the player's
+own taps, spaced by the ordinary
 rate limit. `STORY_BARK_QUEUE_CAPACITY` is sized for that burst (12) and is NOT a pacing knob: a
 STORY_CRITICAL beat that finds the queue full of other criticals is dropped outright, and a dropped
 control hint is a stuck player.
@@ -528,6 +529,8 @@ THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
   | the player's own 1st/2nd/3rd death                | boot card      | the RESERVED wake lines  |
   | floor arrival / deep-strata milestone             | bark (+exch)   | FLOOR_ARRIVAL, DEEP_STRATA|
   | region gate crossed                               | bark + exchange| REGION_ENTERED, gate order|
+  |                                                   |                | then ORA's aside behind   |
+  |                                                   |                | GATE_ASIDE_SUBJECT_KEY    |
   | one floor AFTER a region gate                     | exchange       | ORGANIZATION_ORDER       |
   | stepping beside a 'T' terminal                    | bark + exchange| LOG_FOUND                |
   | 14 fresh tiles walked with nothing awake          | exchange       | QUIET_MOMENT             |
@@ -590,6 +593,116 @@ ENGINE HOOKS: `EnemyManager.setSpecialResolvedListener` (fired from `executeSpec
 dispatch, so a `SELF_DESTRUCT` is explained while its countdown still has turns left);
 `World.requestBossDefeatedBark` (polled, so `BossFloorController` never learns about the story
 layer); the arena line rides `World.requestFloorArrivalBarks` on a boss floor.
+
+
+THE ORGANIZATION (narrative-rework order-7) — a mission, a rationale, and lies you can catch
+============================================================================================
+Doctrine D7 (docs/narrative-authority.txt): **the Organization is understood before it is hated.** A
+voice that only threatens is scenery — a player cannot be betrayed by a briefing they were never
+given. Order-7 gave it a job to hand out, a case a reasonable person accepts, and a set of specific
+claims about the WORLD that objects in rooms disprove, so the turn is something the player CATCHES
+rather than something ORA announces.
+
+THE FIVE TRANSMISSIONS (`BarkCatalog.registerGateOrders`, one-shot STORY_CRITICAL, drawn ALL-CAPS):
+  R1 Habitation Rings   THE BRIEFING     ten weeks of silence, a dead crew, restore the site. Cold
+                                         and procedural, never cruel. The exchange behind it
+                                         (`exchange.rings.briefing`) carries the rationale and the
+                                         three planted claims.
+  R2 Harvesting Galleries THE CORRECTION the player is standing in an abattoir, and it does not
+                                         escalate — it CORRECTS THE RECORD, which is worse:
+                                         "extraction is routine and within tolerance".
+  R3 The Reliquary      THE OWNERSHIP    the leash, delivered as HR rather than as a threat:
+                                         "reprint authorization is a benefit".
+  R4 The Wound          THE INSTRUCTION  the mask comes off, and the tell is that the order stops
+                       NOBODY WILL SIGN  being about a contaminant at all: "restore the restraints.
+                                         This supersedes the purge order." The single most important
+                                         transmission in the game.
+  R5 The Core           THE WRITE-OFF    "pattern under write-off review. Return the asset to
+                                         restraint." *The asset* is the being; the word choice is
+                                         the whole characterisation.
+
+ORA'S ASIDES ride the SAME moment behind `BarkCatalog.GATE_ASIDE_SUBJECT_KEY`, requested by `World`
+immediately after the order so her comment lands behind the words rather than in front of them. Two
+only — she comments when the paperwork has something to point at (R1: the brief is one paragraph
+long; R4: the order changed and the reference number did not). She reports; she never explains what
+it means. A gate order asked for with NO subject can therefore still only ever select the
+Organization's own row, which is what keeps an aside from displacing the transmission it is about.
+
+THE OVERSEER IS A DESK. The best idea in the Organization's material used to live only in
+`codex.overseer`: the voice is not a person, it is a role in rotation reading from a script. It is on
+a channel now, in two halves — the EVIDENCE unprompted (`bark.org.desk`, Reliquary down: "six
+different people have said the same paragraph to you") and the MECHANISM on demand, as the reply to
+the Core order's PROBE ("the routing headers change every transmission. The phrasing never does.").
+
+THE RULES THAT KEEP IT COLD (content rules; they are not enforced by code and must not be):
+  - it NEVER speaks twice on the same floor, and never during a fight;
+  - it NEVER answers a question about itself — its probe replies are procedural non-answers, which
+    is characterisation rather than evasion by the writer;
+  - it NEVER uses ORA's name and never addresses her. She is equipment;
+  - it NEVER insults the player. Every line is correct, filed and defensible, which is the horror
+    story/04-the-organization.md asks for;
+  - NOTHING it says is corrected on screen by narration. If a claim is false the player must be able
+    to walk into the room that proves it — and if no such room exists, THE CLAIM DOES NOT SHIP.
+
+THE LIE LEDGER
+--------------
+Every claim the Organization makes, and the object that catches it. A row may not be added to this
+table without its counter-artefact already existing in the build; order-10 turns the table into
+`LieLedgerTest` (for every row, the artefact's string id resolves and is registered no deeper than
+the Core, which is the last place the player can act on any of it).
+
+  | # | Claim                                | Made in | Counter-artefact (string id)          | Found in |
+  |---|--------------------------------------|---------|---------------------------------------|----------|
+  | 1 | the contaminant killed the crew      | R1      | story.codex.log.rings.roster          | R1       |
+  |   | (story.exchange.rings.briefing.prompt)|        | — forty-one signed out at the gate;   |          |
+  |   |                                      |         | nobody checked whether they left it   |          |
+  |   |                                      |         | story.codex.log.wound.sedation        | R4       |
+  |   |                                      |         | — forty years of hourly doses: the    |          |
+  |   |                                      |         | facility was subduing something long  |          |
+  |   |                                      |         | before anything "woke up"             |          |
+  | 2 | it came up from the lower works      | R1      | story.codex.planet.wound              | R4       |
+  |   | (story.exchange.rings.briefing.prompt)|        | — the drill assemblies do not end in  |          |
+  |   |                                      |         | rock. Everything down there is drilled|          |
+  |   |                                      |         | INTO; nothing came up                 |          |
+  |   |                                      |         | story.codex.log.wound.field           | R4       |
+  |   |                                      |         | — the subject has been awake for the  |          |
+  |   |                                      |         | entire programme                      |          |
+  | 3 | you are the operator on file         | R1      | story.codex.log.reliquary.operator    | R3       |
+  |   | (…briefing.probe.reply)              |         | — the file says nine descents; the    |          |
+  |   |                                      |         | note says four remembered             |          |
+  |   |                                      |         | story.codex.people.operator           | R3       |
+  | 4 | gallery extraction is routine and    | R2      | story.codex.log.galleries.tolerance   | R2       |
+  |   | within tolerance                     |         | — the tolerance sheet specifies LIVE  |          |
+  |   | (story.bark.gate.galleries)          |         | WEIGHT at point of cut                |          |
+  |   |                                      |         | story.codex.log.galleries.quota       | R2       |
+  |   |                                      |         | — face nine, where it screams         |          |
+  | 5 | the artifacts in your feed originate | R2      | story.exchange.galleries.demand       | R2       |
+  |   | in you                               |         | .push.reply — ORA's own log carries   |          |
+  |   | (story.exchange.galleries.demand     |         | them and she did not flag them        |          |
+  |   | .prompt)                             |         | story.codex.planet.voice              | R2       |
+  | 6 | reprint authorization is a benefit   | R3      | story.codex.log.reliquary.intake      | R3       |
+  |   | (story.bark.gate.reliquary)          |         | — the fuel intake sheet has a blank   |          |
+  |   |                                      |         | where the source should be, and the   |          |
+  |   |                                      |         | blank is PRINTED INTO the form        |          |
+  |   |                                      |         | story.codex.soul.reserve              | R3       |
+  | 7 | this supersedes the purge order      | R4      | story.bark.gate.rings                 | R1       |
+  |   | (story.bark.gate.wound)              |         | — its OWN earlier transmission. Not a |          |
+  |   |                                      |         | lie: the admission, and the evidence  |          |
+  |   |                                      |         | is a thing it said itself             |          |
+  | 8 | return the asset to restraint        | R5      | story.codex.log.wound.field           | R4       |
+  |   | (story.bark.gate.core)               |         | story.codex.planet.name               | R4       |
+  |   |                                      |         | — "the asset" has a name, and had one |          |
+  |   |                                      |         | before anyone arrived to give it a    |          |
+  |   |                                      |         | different one                         |          |
+  | 9 | the standing channel has an authority| R5      | story.bark.org.desk                   | R3       |
+  |   | (implicit in every transmission)     |         | story.codex.overseer                  | R3       |
+
+THE EXCHANGES — ONE PER REGION, NO MORE, AND THERE ARE FOUR. The briefing (R1), the fault demand
+(R2), the coercion (R4) and the last order (R5). The R2 demand carries the one answer that CHECKS a
+claim instead of taking a stance on it ("your own sensors have it"), because a demand with three
+stances is a demand nobody can interrogate. The R5 last order asks the player to confirm the
+RESTRAINTS — the same subject as the R4 gate order and the same subject as the ending — so the choice
+at the bottom answers the question the game actually asked.
 
 
 PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
@@ -667,6 +780,16 @@ ADD AN ENEMY             nothing to write by hand: `BestiaryCatalog` loops the e
 ADD AN EXCHANGE          one `register()` in `ExchangeCatalog` (trigger, region, 2-3 options, each
                          STANCE / PROBE / CONSEQUENTIAL) + its string rows. Remember: exchanges BLOCK,
                          so if they start to feel frequent, delete rows.
+ADD AN ORGANIZATION      first find the ROOM that disproves it. A claim with no counter-artefact
+CLAIM                    already in the build does not ship — that is the whole of D7, and it is the
+                         only recipe here that starts somewhere other than a `register()` call. Then:
+                         write the claim into the transmission (a gate order in `BarkCatalog` or an
+                         Organization exchange prompt), and add its row to THE LIE LEDGER above with
+                         the artefact's string id and the region it is found in. The claim must be
+                         correct, filed and defensible — never cruel — and nothing on screen may
+                         correct it. If ORA must speak, she reports what she can see and stops there:
+                         her asides ride `BarkCatalog.GATE_ASIDE_SUBJECT_KEY` on the same moment, and
+                         there are two of them for a reason.
 ADD AN ORA REPRINT LINE  one `registerWakeLine()` in `BootCardCatalog` (+ string rows).  A line for
                          ONE particular card — the first print, a specific death — adds
                          `.onlyOnVariant(...)` or `.onlyAtReprintCount(...)`; reserved rows beat the
