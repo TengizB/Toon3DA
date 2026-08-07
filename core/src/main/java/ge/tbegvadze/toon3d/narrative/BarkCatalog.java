@@ -66,6 +66,7 @@ public final class BarkCatalog {
         registerDeepStrata(registry);
         registerIdleAndBacktrack(registry);
         registerCodexCompletion(registry);
+        registerMapMeaning(registry);
     }
 
     /** A fresh registry with the v1 catalog already in it (tests, showcases). */
@@ -149,21 +150,31 @@ public final class BarkCatalog {
         logLine(registry, "bark.log.reliquary.3", StoryRegion.RELIQUARY, BarkTone.LORE);
         logLine(registry, "bark.log.reliquary.4", StoryRegion.RELIQUARY, BarkTone.LORE);
 
-        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+        // .4 is the Wound's own REVEAL and is promoted below, so the repeatable band runs 1-3 + 5.
+        for (int lineNumber = 1; lineNumber <= 3; lineNumber++) {
             String id = "bark.log.wound." + lineNumber;
             registry.register(row(id, storyIdFor(id))
                     .trigger(BarkTrigger.LOG_FOUND).region(StoryRegion.WOUND).build());
         }
+        // ...and .5 holds the band at four repeatable rows once .4 has been spent (order-6's rule: a
+        // row that leaves a repeatable pool arrives with its replacement, or the moment goes silent).
+        registry.register(row("bark.log.wound.5", storyIdFor("bark.log.wound.5"))
+                .trigger(BarkTrigger.LOG_FOUND).region(StoryRegion.WOUND).build());
         for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
             String id = "bark.log.core." + lineNumber;
             registry.register(row(id, storyIdFor(id))
                     .trigger(BarkTrigger.LOG_FOUND).region(StoryRegion.CORE).build());
         }
 
-        // The two mandatory log beats: the yield report ("they're mining something that heals") and
-        // the cradle engineer's note (the soul-fuel reveal).
+        // The mandatory log beats: the yield report ("they're mining something that heals"), the
+        // cradle engineer's note (the soul-fuel reveal), and — added by narrative-rework order-8 C —
+        // the sedation schedule, which is the Wound's own spine beat ("it has been awake and sedated
+        // for forty years").  That line already shipped; it was sitting in the repeatable pool, where
+        // a player could finish the region without ever drawing it.  A beat the region's beat map
+        // names must ride a channel the player cannot route around, so it is one-shot and mandatory.
         mandatoryLogBeat(registry, "bark.log.galleries.yield", StoryRegion.HARVESTING_GALLERIES);
         mandatoryLogBeat(registry, "bark.log.reliquary.cradle", StoryRegion.RELIQUARY);
+        mandatoryLogBeat(registry, "bark.log.wound.4", StoryRegion.WOUND);
     }
 
     private static void logLine(BarkRegistry registry, String id, StoryRegion region, BarkTone tone) {
@@ -367,6 +378,18 @@ public final class BarkCatalog {
     // -------------------------------------------------------------------------
     // Deep-strata milestones — THE PLANET.  No rows in Region 1: that silence is the design.
     // Every planet line is LORE; it has never made a joke in its life.
+    //
+    // THE PLANET'S SCHEDULE (narrative-rework order-8 E) is a ladder, and each rung is a rule about
+    // what it may DO, not just about tone:
+    //   R1  silent.  No rows at all.
+    //   R2  single words only.  Never a sentence, and never a response — it has not noticed the
+    //       player yet, and anything addressed to them belongs one region deeper.
+    //   R3  it addresses you.  First full sentences, present tense.
+    //   R4+ it speaks plainly, and it grieves.
+    // Two rows that used to whisper AT the player in the Galleries were re-banded into the Reliquary
+    // by that rule (they are .5 and .6 below); the Galleries keeps four rows, all single words.
+    // The cap that protects all of it — one planet line per floor, whatever asks — is enforced by
+    // BarkSystem, because scarcity is this voice's only source of power.
     // -------------------------------------------------------------------------
     private static void registerDeepStrata(BarkRegistry registry) {
         // Region 2 — whispers: single wrong-language words, easy to blame on the deep.
@@ -375,7 +398,7 @@ public final class BarkCatalog {
                        StoryRegion.HARVESTING_GALLERIES, StoryRegion.HARVESTING_GALLERIES);
         }
         // Region 3 — address: it knows you, by deed, not by serial.
-        for (int lineNumber = 1; lineNumber <= 4; lineNumber++) {
+        for (int lineNumber = 1; lineNumber <= 6; lineNumber++) {
             planetLine(registry, "bark.strata.reliquary." + lineNumber,
                        StoryRegion.RELIQUARY, StoryRegion.RELIQUARY);
         }
@@ -455,6 +478,32 @@ public final class BarkCatalog {
             registry.register(row(id, storyIdFor(id))
                     .trigger(BarkTrigger.CODEX_COMPLETE)
                     .subjectKey(category.getCatalogKey())
+                    .oneShot(true)
+                    .build());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // WHAT THE MAP IS (narrative-rework order-8, HOLE 2) — one line per region band, delivered the
+    // first time the FACILITY NAV console opens at that depth.  The route map used to be the one
+    // system in the game the story never mentioned: a branching descent with no in-fiction reason to
+    // branch, which reads as a menu bolted onto a story.  Five lines fix it, and they also track the
+    // descent's own shape — dozens of ways down at the top, the routes following the cutting faces
+    // in the Galleries, every road ending at the same racks in the Reliquary, and no corridors left
+    // at all by the Wound.
+    //
+    // REACTIVE rather than critical: nothing in the plot depends on them, and a one-shot row is only
+    // spent when it is DELIVERED, so a line the pacing budget declines is simply offered again the
+    // next time the console opens.  The console is a hard-pause overlay, so each one is queued while
+    // the map is up and arrives in the lull on the floor the player chose — which is the right
+    // moment for it, not a compromise: they have just used the thing she is explaining.
+    // -------------------------------------------------------------------------
+    private static void registerMapMeaning(BarkRegistry registry) {
+        for (StoryRegion region : StoryRegion.values()) {
+            String id = "bark.map." + region.getCatalogKey();
+            registry.register(row(id, storyIdFor(id))
+                    .trigger(BarkTrigger.MAP_OPENED)
+                    .region(region)
                     .oneShot(true)
                     .build());
         }

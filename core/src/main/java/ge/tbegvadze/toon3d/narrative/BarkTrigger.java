@@ -77,5 +77,15 @@ public enum BarkTrigger {
      * never gameplay-critical and never required, because the codex is opt-in and paying it in power
      * would turn an archive nobody has to read into a chore everybody does.
      */
-    CODEX_COMPLETE
+    CODEX_COMPLETE,
+    /**
+     * The FACILITY NAV console just opened (narrative-rework order-8, HOLE 2).  One one-shot LORE
+     * line per region band says what the map IS and why there is a choice on it at all — without
+     * which the branching descent is a menu bolted onto a story.
+     *
+     * <p>The console is a hard-pause overlay, so the request is made at the moment the map opens and
+     * the line is DELIVERED in the lull on the floor the player picked.  That is the correct
+     * ordering, not a compromise: they have just used the thing she is explaining.
+     */
+    MAP_OPENED
 }

@@ -95,6 +95,81 @@ class StorySkimmerPathTest {
     }
 
     /**
+     * THE REGION BEAT MAPS (narrative-rework order-8 C) — the short list of things that MUST land in
+     * each region for the story to be followable, and the proof that each of them rides a channel a
+     * player cannot route around.
+     *
+     * <p>The rule the table below encodes: <em>if a beat cannot be placed on region entry, a reveal
+     * log, a gate order, a control-flow moment or a blocking exchange, it is not a spine beat and
+     * must be demoted.</em>  A bark carrier has to be one-shot and {@code STORY_CRITICAL}; an
+     * exchange carrier qualifies by construction, because the exchange layer stops the world and has
+     * no blank "next".  Fifteen beats, three per region, every one of them named.
+     */
+    @Test
+    void everyRegionsThreeSpineBeatsRideAnUnavoidableChannel() {
+        BarkRegistry     barks     = BarkCatalog.defaultRegistry();
+        ExchangeRegistry exchanges = ExchangeCatalog.defaultRegistry();
+
+        // R1 HABITATION RINGS — belief.
+        assertSpineBark(barks, "bark.region.rings");           // a workplace, and everyone is gone
+        assertSpineBark(barks, "bark.gate.rings");             // you have a job, a file and orders
+        assertSpineBark(barks, "bark.intro.carried_items");    // dying is normal, and it is not free
+        assertSpineBark(barks, "bark.intro.loop_restart");     // ...and this is WHY it happens again
+        assertSpineBark(barks, "bark.intro.loop_refill");
+
+        // R2 HARVESTING GALLERIES — first doubt.
+        assertSpineBark(barks, "bark.log.galleries.yield");    // it was cutting something living
+        assertSpineBark(barks, "bark.gate.galleries");         // the paperwork knew, and had a form
+        assertSpineExchange(exchanges, "exchange.galleries.demand"); // it corrects your SENSES
+
+        // R3 THE RELIQUARY — the inversion.
+        assertSpineBark(barks, "bark.region.reliquary");       // this is where bodies are printed
+        assertSpineBark(barks, "bark.log.reliquary.cradle");   // ...out of the thing being cut
+        assertSpineExchange(exchanges, "exchange.reliquary.log");    // ORA cannot un-know it
+
+        // R4 THE WOUND — grief.
+        assertSpineBark(barks, "bark.region.wound");           // the facility stops; this is a body
+        assertSpineBark(barks, "bark.log.wound.4");            // awake and sedated for forty years
+        assertSpineBark(barks, "bark.gate.wound");             // "restore the restraints"
+
+        // R5 THE CORE — recognition.
+        assertSpineExchange(exchanges, ExchangeCatalog.CORE_ENDING_EXCHANGE_ID);  // you opened it,
+                                                                                  // and the choice
+        for (EnemyFamily family : EnemyFamily.values()) {
+            // ...and the reframe that makes the choice mean anything: the "contaminant" is what was
+            // done to it, not what it is. One row per family, from the Wound down.
+            assertSpineBark(barks, BestiaryCatalog.deepFamilyBarkId(family));
+        }
+    }
+
+    /** A bark may carry a spine beat only if it is one-shot, mandatory, and on an unavoidable moment. */
+    private static void assertSpineBark(BarkRegistry registry, String barkId) {
+        BarkDefinition row = registry.getById(barkId);
+        assertNotNull(row, "spine beat missing from the catalog: " + barkId);
+        assertTrue(row.isOneShot(), barkId + " must fire exactly once, ever");
+        assertEquals(BarkPriority.STORY_CRITICAL, row.getPriority(),
+                barkId + " carries a spine beat and must never be dropped as chatter");
+        assertTrue(UNAVOIDABLE_BARK_MOMENTS.contains(row.getTrigger()),
+                barkId + " hangs off " + row.getTrigger() + ", which a player can route around");
+    }
+
+    /** An exchange carries a spine beat by construction: it stops the world and has no "skip". */
+    private static void assertSpineExchange(ExchangeRegistry registry, String exchangeId) {
+        assertNotNull(registry.getById(exchangeId),
+                "spine beat missing from the exchange catalog: " + exchangeId);
+    }
+
+    /**
+     * The moments a player cannot route around: entering a region, the order waiting for them when
+     * they do, reading the region's one mandatory terminal, the run starting, and a control becoming
+     * necessary.  Anything else — a kill, an idle stretch, a backtrack, a map screen — is optional by
+     * definition and may not carry a beat the plot depends on.
+     */
+    private static final List<BarkTrigger> UNAVOIDABLE_BARK_MOMENTS = java.util.Arrays.asList(
+            BarkTrigger.RUN_START, BarkTrigger.REGION_ENTERED, BarkTrigger.REGION_GATE_ORDER,
+            BarkTrigger.CONTROL_HINT, BarkTrigger.LOG_FOUND, BarkTrigger.ENEMY_FAMILY_FIRST_SEEN);
+
+    /**
      * A critical beat survives everything the pacing budget throws at it: a full queue of flavour, a
      * combat spike, and the rate limit.  That is what "unskippable" means in practice — not that the
      * player cannot dismiss it, but that the game never decides not to say it.

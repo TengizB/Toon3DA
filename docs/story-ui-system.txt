@@ -25,7 +25,9 @@ Any change to the story UI MUST update THIS document in the SAME commit:
    - new sound                         -> PART D: AUDIO (cue table);
    - new overlay that can own the screen -> PART E: PRECEDENCE;
    - new framing screen / menu row     -> THE FRAMING SCREENS + its recipe below;
-   - new gameplay moment that fires a beat -> THE MOMENT SCHEDULE table.
+   - new gameplay moment that fires a beat -> THE MOMENT SCHEDULE table;
+   - new spine beat / new pacing ceiling -> THE LORE DRIP (the region beat maps + the per-floor
+     budget). A beat that a region's map names must ride a channel a player cannot route around.
 Any change to what the lines SAY additionally runs the change protocol in
 docs/narrative-authority.txt (SECTION 9) and updates that document where it says so.
 The governing invariant behind every recipe below: "if you had to edit a switch statement to add a
@@ -541,10 +543,127 @@ THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
   | the first boss arena entered / that boss down     | bark           | BOSS_ARENA_ENTERED,      |
   |                                                   |                | BOSS_DEFEATED            |
   | a codex category filled                           | bark           | CODEX_COMPLETE           |
+  | the FACILITY NAV console opens                    | bark           | MAP_OPENED (what the map |
+  |                                                   |                | IS, one line per region) |
   | deepest region CORE and the Core boss is down     | exchange       | THE ENDING               |
 Firing sites: `World` (arrival, region entry, kills, health, logs, the boss pair, the ability hook,
-the ending) and `world/StoryBarkTickSubscriber` (first sight of a family and of an archetype,
-backtracking, idle).
+the map opening, the ending) and `world/StoryBarkTickSubscriber` (first sight of a family and of an
+archetype, backtracking, idle).
+
+
+THE LORE DRIP (narrative-rework order-8) — how much, from where, and what must land
+==================================================================================
+The schedule above says WHEN a beat may fire. This section says HOW MUCH may fire, which CHANNEL
+each kind of fact is allowed to come from, and — the part the schedule could not express — the short
+list of things that MUST land in each region for the story to be followable at all.
+
+A. FOUR CHANNELS, FOUR KINDS OF FACT
+   Each source gives a DIFFERENT KIND of information. Overlap is the main cause of "the game keeps
+   telling me things and none of them stick", so a fact arriving from the wrong channel is a FAULT,
+   not a harmless duplicate: if ORA reads a whole document aloud the terminals stop mattering, and if
+   the planet explains something it stops being the planet.
+     TERMINALS (SYSTEM)  what the facility DID, in its own words. Dates, quotas, tickets, sign-offs.
+                         Never interpretation.
+     ORA (AI)            what the paperwork MEANS, one sentence, and what to do about the room you
+                         are standing in. Never a document read aloud.
+     THE PLANET          what it FEELS like from underneath. Never facts, never instructions, never
+                         more than a fragment.
+     THE ORGANIZATION    what you are SUPPOSED to believe. Never true detail, never twice on a floor.
+
+B. THE PER-FLOOR BUDGET
+   An ordinary floor may deliver ONE terminal take (`STORY_LOG_TAKES_PER_FLOOR`), TWO flavour barks
+   (`STORY_BARK_FLOOR_BUDGET`) and ZERO exchanges — an ordinary floor never blocks. A REGION-GATE
+   floor may add the region-entry bark, the gate order and ONE exchange; a floor never carries two
+   exchanges, and never an exchange within one floor of another.
+   On top of all of it, any number of STORY_CRITICAL beats (teaching, region entry, gate orders,
+   reveal logs), which do NOT count against the budget: a stuck or lost player costs more than a
+   talkative one.
+   `BarkSystem.beginFloor()` (called once per arrival, from `World.requestFloorArrivalBarks`) resets
+   the count; `isDeliverableNow` enforces it at DELIVERY, so a line the budget declines is held,
+   goes stale and is dropped rather than arriving late. The counter counts what REACHED the screen,
+   for the same reason the archive and the telemetry do.
+   THE PLANET HAS A CAP OF ITS OWN: `STORY_PLANET_LINES_PER_FLOOR` = 1, in any region, on any
+   trigger, whatever the priority. Its power is entirely scarcity and it is the one voice with no
+   rate limit of its own. Nothing on the spine rides its channel, so the cap can never hold a
+   mandatory beat.
+
+C. THE FIVE REGION BEAT MAPS
+   Three things per region must land, on channels the player cannot route around. If a beat cannot
+   be placed on a region entry, a gate order, a reveal log, a control-flow moment or a BLOCKING
+   exchange, it is not a spine beat and must be demoted. `StorySkimmerPathTest
+   .everyRegionsThreeSpineBeatsRideAnUnavoidableChannel` is that table, asserted.
+
+   R1 HABITATION RINGS — belief.       texture: fluorescent, ordinary, nothing visibly wrong.
+      1. a workplace, and everyone in it is gone      `bark.region.rings`, `bark.gate.rings`
+      2. you have a job, a file, and a history you
+         do not remember                             `bark.gate.rings`, `bark.intro.the_gap`
+      3. dying is normal here, and it is not free    `bark.intro.carried_items`, and the RESERVED
+                                                     wake lines on the reprint card (order-2)
+      + WHY THE DESCENT REPEATS                      `bark.intro.loop_restart` / `.loop_refill`
+
+   R2 HARVESTING GALLERIES — first doubt.  texture: wet, warm, the same note under everything.
+      1. this place was cutting something living,
+         by weight, on a quota                       `bark.log.galleries.yield` (one-shot reveal)
+      2. the paperwork knew, and had a form for it   `bark.gate.galleries`
+      3. the Organization corrects your SENSES
+         rather than the record                      `exchange.galleries.demand` (blocking)
+
+   R3 THE RELIQUARY — the inversion.       texture: clinical, bright, humming.
+      1. this is where bodies are printed —
+         yours and ORA's                             `bark.region.reliquary`
+      2. what they are printed FROM is the thing
+         being cut                                   `bark.log.reliquary.cradle` (one-shot reveal)
+      3. ORA cannot un-know it, and starts hiding
+         things for you                              `exchange.reliquary.log` (blocking)
+
+   R4 THE WOUND — grief.                   texture: warm, red, a slow beat felt more than heard.
+      1. the facility stops; the walls are a body    `bark.region.wound`
+      2. it has been awake and sedated for forty
+         years                                       `bark.log.wound.4` (one-shot reveal — order-8
+                                                     PROMOTED it out of the repeatable pool, where a
+                                                     player could finish the region never drawing it;
+                                                     `bark.log.wound.5` replaces it in that pool)
+      3. the order changes from "purge" to "restore
+         the restraints"                             `bark.gate.wound`
+
+   R5 THE CORE — recognition.              texture: vast, intimate, almost tender.
+      1. you were here before, you opened it, and
+         you died doing it                           the ending exchange's own prompt
+      2. the "contaminant" is what was DONE to it,
+         not what it is                              `BestiaryCatalog.deepFamilyBarkId(...)`, the
+                                                     family reframes from the Wound down
+      3. the choice, and what each option costs      `exchange.core.ending` (blocking)
+
+D. THE TWO STRUCTURAL HOLES ORDER-8 CLOSED
+   WHY DOES THE DESCENT REPEAT? A roguelike player accepts a reset; a story player asks, and nothing
+   in the build answered. Two one-shot rows on run 2 (`IntroBeat.LOOP_RESTART` / `LOOP_REFILL`): they
+   rebuild the stored you rather than the one that fell, and the works do not stay cleared. Run 2 is
+   the earliest either can land — the question is only asked once the player has died — and neither
+   line may say "checkpoint", because that word is not free until run 3 (order-3's ladder).
+   WHAT IS THE MAP, AND WHY IS THERE A CHOICE? Five one-shot LORE rows on `BarkTrigger.MAP_OPENED`,
+   one per region band, and the route map stops being a menu bolted onto a story. The console is a
+   hard-pause overlay, so the line is queued at the map and delivered in the lull on the floor the
+   player picked — which is the right moment for it: they have just used the thing being explained.
+
+E. THE PLANET'S SCHEDULE (the easiest voice to overuse)
+   R1  silent. No rows at all, and the absence is PROTECTED — the first time anything speaks that is
+       not ORA or the company, it should be alarming.
+   R2  single words. Never a sentence. Never a response: up there it has not noticed the player, and
+       a line addressed to them belongs a region deeper. (Order-8 re-banded the two Galleries rows
+       that broke this into the Reliquary as `bark.strata.reliquary.5/.6`.)
+   R3  it addresses you. First full sentences, present tense.
+   R4  it speaks plainly, and it grieves. This is where it gets its exchanges.
+   R5  it and ORA are the only voices left.
+
+F. STALENESS AND SILENCE
+   A queued non-critical line older than `STORY_BARK_QUEUE_STALE_SECONDS` is DROPPED, never delivered
+   late: a line that arrives after its moment teaches the player that the voice is not about the
+   room they are in, which is worse than saying nothing.
+   SILENCE IS A LEGITIMATE RESULT. Every repeatable moment must be able to produce nothing at all,
+   and roughly a third of them should. From the Wound down, floor arrival additionally rolls
+   `STORY_BARK_DEEP_FLOOR_SILENCE_CHANCE` (0.40) to say nothing on purpose — ORA going quiet in a bad
+   room is the cheapest horror effect in the game, and it is unavailable while something always
+   fires.
 
 
 THE BESTIARY VOICE (narrative-rework order-5)
@@ -766,7 +885,9 @@ funny? is it a repeat? could it be cut instead?) and the WRITING RULES above.
 
 ADD A BARK               one `register()` in `BarkCatalog` (trigger, region band, speaker, tone,
                          priority, one-shot?) + one row in `story-strings.properties` and its
-                         `BarkStrings` default. No switch, anywhere.
+                         `BarkStrings` default. No switch, anywhere. Then ask which side of THE LORE
+                         DRIP it lands on: an ordinary row spends part of a floor's two-line budget,
+                         so if the floor already says enough, cut something instead.
 CUT A BARK               delete the `register()` line and BOTH string rows, then check the pool it
                          came out of against WRITING RULE 8 above: a band left below its depth needs a
                          replacement row in the same commit. Leave a comment where the row was saying

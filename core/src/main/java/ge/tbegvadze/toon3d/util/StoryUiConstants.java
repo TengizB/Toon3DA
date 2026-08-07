@@ -298,6 +298,29 @@ public final class StoryUiConstants {
     // Every Nth floor is a deep-strata milestone (the planet's growing whispers).
     public static final int   STORY_BARK_DEEP_STRATA_INTERVAL = 3;
 
+    // THE PER-FLOOR CEILING (narrative-rework order-8 B) — the strongest anti-annoyance lever in the
+    // layer, and the one thing the cooldowns, the probability rolls and the combat-spike hold could
+    // not express between them: how much the game may say on ONE floor, whatever asks.
+    //
+    // An ordinary floor delivers at most one terminal take and two flavour lines. This number is the
+    // second half of that sentence: after this many NON-CRITICAL barks have reached the screen,
+    // BarkSystem stays quiet until the next floor arrival resets the count (BarkSystem.beginFloor).
+    // A held line simply goes stale and is dropped — silence is the correct result, not a backlog.
+    //
+    // STORY_CRITICAL beats are exempt and always will be: a teaching line, a region entry, a gate
+    // order or a reveal log costs less than a stuck or lost player. Raising this number is how "the
+    // game keeps talking" comes back; lowering it is always safe.
+    public static final int   STORY_BARK_FLOOR_BUDGET         = 2;
+    // THE PLANET'S HARD CAP (order-8 E). It is the easiest voice in the game to overuse and the only
+    // one whose entire power is scarcity, so it gets a ceiling of its own on top of the budget above:
+    // at most this many PLANET lines reach the screen per floor, in any region, on any trigger.
+    public static final int   STORY_PLANET_LINES_PER_FLOOR    = 1;
+    // DELIBERATE SILENCE (order-8 F). From the Wound down, a floor arrival has this chance of not
+    // even asking — ORA saying nothing when the room is bad is the cheapest horror effect in the
+    // game, and it is unavailable while something always fires. Rolled on top of the arrival chance
+    // above, so deep floors speak on arrival about a quarter of the time.
+    public static final float STORY_BARK_DEEP_FLOOR_SILENCE_CHANCE = 0.40f;
+
     // TONE BALANCE — every ORA pool mixes lines that MOVE THE STORY with lines that are just her
     // being dry.  Lore outweighs levity by these selection weights, so she is funny sometimes, not
     // constantly (narrative/BarkTone).  Tune the mix here; never by editing selection code.
@@ -313,7 +336,7 @@ public final class StoryUiConstants {
     // declaration order: 0 FLOOR_ARRIVAL, 1 REGION_ENTERED, 2 REGION_GATE_ORDER,
     // 3 ENEMY_FAMILY_FIRST_SEEN, 4 ENEMY_ABILITY_RESOLVED, 5 BOSS_ARENA_ENTERED, 6 BOSS_DEFEATED,
     // 7 KILL, 8 LOW_HEALTH, 9 DEEP_STRATA, 10 IDLE, 11 BACKTRACK,
-    // 12 RUN_START, 13 CONTROL_HINT, 14 LOG_FOUND, 15 CODEX_COMPLETE.
+    // 12 RUN_START, 13 CONTROL_HINT, 14 LOG_FOUND, 15 CODEX_COMPLETE, 16 MAP_OPENED.
     // A test guards this array against the enum drifting.  Zero = the moment is naturally rare
     // (a floor arrival, a one-shot beat) and needs no cooldown beyond the global rate limit.
     public static final float[] STORY_BARK_TRIGGER_COOLDOWN_SECONDS = {
@@ -333,6 +356,7 @@ public final class StoryUiConstants {
             0f,     // CONTROL_HINT             — one-shot tutorial; a dropped hint is a stuck player
             120f,   // LOG_FOUND                — a room full of terminals must yield ONE take
             0f,     // CODEX_COMPLETE           — one-shot per category, six times in a lifetime
+            0f,     // MAP_OPENED               — one-shot per region, five times in a lifetime
     };
 
     // =====================================================================

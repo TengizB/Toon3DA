@@ -39,7 +39,29 @@ public final class BarkStrings {
         registerPlanet(strings);
         registerIdleAndBacktrack(strings);
         registerCodexCompletion(strings);
+        registerMapMeaning(strings);
         return strings;
+    }
+
+    /**
+     * WHAT THE MAP IS (narrative-rework order-8, HOLE 2) — one line per region, said the first time
+     * the FACILITY NAV console opens at that depth.  The branching descent was the one system the
+     * story never accounted for: five lines turn it from a menu into a fact about the place, and
+     * they track the descent's own shape while they do it.
+     *
+     * <p>None of them explains a control (that is the console's own job) and none states a number.
+     */
+    private static void registerMapMeaning(StoryStrings strings) {
+        strings.put("story.bark.map.rings",
+                                                     "Nobody built one way down. They built dozens, and kept digging.");
+        strings.put("story.bark.map.galleries",
+                                                     "The routes follow the cutting faces. That's why they branch.");
+        strings.put("story.bark.map.reliquary",
+                                                     "Every road down here ends at the same racks.");
+        strings.put("story.bark.map.wound",
+                                                     "These aren't corridors now. We're picking which part to walk through.");
+        strings.put("story.bark.map.core",
+                                                     "It's all one room down here. The map is being polite.");
     }
 
     /**
@@ -83,6 +105,14 @@ public final class BarkStrings {
                                                      "Back already. I don't get printed, by the way - I just reload.");
         strings.put("story.bark.intro.memory",
                                                      "Which makes me the only one here who remembers your last one.");
+        // ...and, on the same run, WHY THIS IS HAPPENING AGAIN (narrative-rework order-8, HOLE 1).
+        // Two lines, once, in plain words: where they restart from and why the floors are full
+        // again. Neither says "checkpoint" - that word is not free until run 3, and the loop has to
+        // be comprehensible one run before its machinery is named.
+        strings.put("story.bark.intro.loop_restart",
+                                                     "They rebuild the stored you, not the one that fell. It starts at the top.");
+        strings.put("story.bark.intro.loop_refill",
+                                                     "The works don't stay cleared either. Whatever's down there refills them.");
 
         // The distributed half: each one hangs off a thing that just happened in front of the
         // player, so it reads as her noticing rather than as a lecture arriving on a schedule.
@@ -187,7 +217,12 @@ public final class BarkStrings {
         strings.put("story.bark.log.wound.1",        "Drill maintenance. Depth in metres. Into what.");
         strings.put("story.bark.log.wound.2",        "A field note. It says 'the subject is awake'.");
         strings.put("story.bark.log.wound.3",        "Someone stopped writing halfway through a word.");
+        // .4 is the Wound's REVEAL beat (narrative-rework order-8 C): promoted out of the repeatable
+        // pool to one-shot and mandatory, because "it has been awake and sedated for forty years" is
+        // the region's whole point and used to be a line a player could simply never draw.
         strings.put("story.bark.log.wound.4",        "Sedation schedule. Hourly. For forty years.");
+        // ...and .5 replaces it in the repeatable pool, so the band still has four rows to rotate.
+        strings.put("story.bark.log.wound.5",        "Reorder form. Same compound, eleven times stronger.");
 
         strings.put("story.bark.log.core.1",         "Nothing is filed down here. Only its memory.");
         strings.put("story.bark.log.core.2",         "The last log is a resignation. Never submitted.");
@@ -450,16 +485,26 @@ public final class BarkStrings {
         strings.put("story.bark.lowhealth.deep.2",   "If you fall here, it pays for you. Don't make it.");
     }
 
-    /** Deep strata: the planet.  Silent in Region 1 — that absence is the design. */
+    /**
+     * Deep strata: the planet.  Silent in Region 1 — that absence is the design.
+     *
+     * <p>THE PLANET'S SCHEDULE (narrative-rework order-8 E): the Galleries band is SINGLE WORDS.  Not
+     * a sentence and not a response — up there it has not noticed the player, and anything addressed
+     * to them belongs a region deeper.  The two rows that used to break that rule
+     * ("...you smell the same...", "...I know this weight...") were re-banded into the Reliquary as
+     * .5 and .6, where address is the whole point, and the Galleries got two more words instead.
+     */
     private static void registerPlanet(StoryStrings strings) {
         strings.put("story.bark.strata.galleries.1", "...down...");
         strings.put("story.bark.strata.galleries.2", "...again...");
-        strings.put("story.bark.strata.galleries.3", "...you smell the same...");
-        strings.put("story.bark.strata.galleries.4", "...I know this weight...");
+        strings.put("story.bark.strata.galleries.3", "...warm...");
+        strings.put("story.bark.strata.galleries.4", "...still...");
         strings.put("story.bark.strata.reliquary.1", "There you are. New face. Same weight.");
         strings.put("story.bark.strata.reliquary.2", "You know what they burn to wake you? Me.");
         strings.put("story.bark.strata.reliquary.3", "A piece of me. Every time you die.");
         strings.put("story.bark.strata.reliquary.4", "You are not from the surface. You worked here.");
+        strings.put("story.bark.strata.reliquary.5", "You smell the same. The suit is new.");
+        strings.put("story.bark.strata.reliquary.6", "I know this weight. I have carried it before.");
         strings.put("story.bark.strata.wound.1",     "You heard me screaming. No one else did.");
         strings.put("story.bark.strata.wound.2",     "I could not tell your hands from theirs.");
         strings.put("story.bark.strata.wound.3",     "They don't want me dead. Dead, I bleed nothing.");

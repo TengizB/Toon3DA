@@ -798,6 +798,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
             routeMapOverlay.present(firstPicks);
             routeMapOverlayRenderer.present(routeMap);
+            requestRouteMapBarks();
             routePointerDown = false;
             routePointerDragging = false;
             runPhase = RunPhase.ROUTE_SELECT;
@@ -830,6 +831,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         routeMapOverlay.present(nextPicks);
         routeMapOverlayRenderer.present(routeMap);
+        requestRouteMapBarks();
         routePointerDown = false;
         routePointerDragging = false;
         runPhase = RunPhase.ROUTE_SELECT;
@@ -2895,6 +2897,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * decide what (if anything) is actually spoken.
      */
     private void requestFloorArrivalBarks() {
+        // THE PER-FLOOR BUDGET (narrative-rework order-8 B) resets HERE, before anything asks: this
+        // is the single funnel every floor arrival passes through, and the budget is what makes "an
+        // ordinary floor delivers two flavour lines" true rather than hoped for.  The staging room
+        // resets it too — a fresh run starts with a clean allowance.
+        barkSystem.beginFloor();
         if (isStartingRoom) return;   // the staging room is not a story floor
         // ORA introduces herself BEFORE she starts naming the place (narrative-rework order-2 D then
         // order-3). Both the cold open and this method fire on the first real floor, so asking here
@@ -2904,7 +2911,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         requestColdOpenBarks();
         // Most floors ORA says nothing at all. Commenting on every single arrival is what made her
         // feel like a chatterbox; silence is part of the character (story/dialog/ai-assistant.md).
-        if (storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_FLOOR_ARRIVAL_CHANCE) {
+        // ...and from the Wound down she goes quiet MORE often, on purpose (narrative-rework
+        // order-8 F): her saying nothing when the room is bad is the cheapest horror effect the game
+        // has, and it is unavailable while something always fires. Rolled as a second, independent
+        // chance rather than by re-tuning the arrival chance per region, so the deliberate silence
+        // stays legible as its own decision.
+        if (storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_FLOOR_ARRIVAL_CHANCE
+                && !rollsDeliberateDeepSilence()) {
             barkSystem.request(BarkTrigger.FLOOR_ARRIVAL);
         }
         // One vocabulary naming per floor, never a probability roll: a word the player is about to
@@ -2933,6 +2946,33 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && currentDepth - regionEntryDepth >= StoryUiConstants.STORY_ORGANIZATION_ORDER_FLOOR_DELAY) {
             exchangeSystem.request(ExchangeTrigger.ORGANIZATION_ORDER);
         }
+    }
+
+    /**
+     * DELIBERATE SILENCE (narrative-rework order-8 F): true when this deep floor arrival is one ORA
+     * says nothing on, on purpose.  Only from the Wound down, and gated on the DEEPEST region ever
+     * reached (like every other pool in the layer), so a fresh run at the surface is unaffected while
+     * a player who has been to the bottom carries her quiet with them.
+     *
+     * <p>Silence has to be a legitimate RESULT of a moment, not just an accident of the rate limit —
+     * "every repeatable moment must be able to produce nothing at all" is the rule this implements.
+     */
+    private boolean rollsDeliberateDeepSilence() {
+        if (!barkSystem.getProgress().getDeepestRegion().isAtLeast(StoryRegion.WOUND)) return false;
+        return storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_DEEP_FLOOR_SILENCE_CHANCE;
+    }
+
+    /**
+     * WHAT THE MAP IS (narrative-rework order-8, HOLE 2): asked for every time the FACILITY NAV
+     * console opens, answered at most five times in a save — one one-shot line per region band.
+     * Without it the branching descent is the one system the story never accounts for.
+     *
+     * <p>The console is a hard-pause overlay, so the line is queued here and delivered in the lull on
+     * the floor the player then picks.  That ordering is correct rather than merely tolerable: they
+     * have just used the thing she is explaining.
+     */
+    private void requestRouteMapBarks() {
+        barkSystem.request(BarkTrigger.MAP_OPENED);
     }
 
     // -------------------------------------------------------------------------
