@@ -51,19 +51,28 @@ public final class ExchangeStrings {
         return strings;
     }
 
-    /** Region 1 — the briefing. The first time the player gets to have an opinion about the word. */
+    /**
+     * Region 1 — THE BRIEFING (narrative-rework order-7 B, completing order-2 section E).  The gate
+     * order gave the job; this gives the REASON, and plants the three claims the descent disproves:
+     * the contaminant killed the crew, it came up from the lower works, and the player is the
+     * operator on file.  Every one of them is answered by an object in a room — see the LIE LEDGER in
+     * docs/story-ui-system.txt — and never by narration.
+     *
+     * <p>"You have made this descent before" is also the first hint that the hole in this print's
+     * memory has a shape: the file says nine, and the note left at the Reliquary says four.
+     */
     private static void registerRingsBriefing(StoryStrings strings) {
         strings.put("story.exchange.rings.briefing.prompt",
-                "Operator. The contaminant is below. Purge it and restore the site.");
+                "Operator. The contaminant killed them and came up from the lower works. Locate it.");
         strings.put("story.exchange.rings.briefing.obey",   "Understood. Going down.");
         strings.put("story.exchange.rings.briefing.obey.reply",
                 "That's the spirit. I'll log it as enthusiasm.");
         strings.put("story.exchange.rings.briefing.doubt",  "Contaminant. Odd word for it.");
         strings.put("story.exchange.rings.briefing.doubt.reply",
                 "It's the word on the form. I didn't write the form.");
-        strings.put("story.exchange.rings.briefing.probe",  "What am I actually killing?");
+        strings.put("story.exchange.rings.briefing.probe",  "Why me?");
         strings.put("story.exchange.rings.briefing.probe.reply",
-                "Unclear. Biological. Big. That's the entire brief.");
+                "You are the operator on file. You have made this descent before.");
     }
 
     /**
@@ -119,9 +128,12 @@ public final class ExchangeStrings {
         strings.put("story.exchange.galleries.demand.acknowledge", "Acknowledged.");
         strings.put("story.exchange.galleries.demand.acknowledge.reply",
                 "Corrected. Continue the descent.");
-        strings.put("story.exchange.galleries.demand.push",        "It doesn't sound like a fault.");
+        // The answer that CHECKS the claim instead of taking a stance on it (order-7 D).  The
+        // Organization does not answer, because it never answers a question about itself; ORA reports
+        // the silence and the fact that her own log says the same thing the player's ears do.
+        strings.put("story.exchange.galleries.demand.push",        "Your own sensors have it.");
         strings.put("story.exchange.galleries.demand.push.reply",
-                "It's on my sensors too. I didn't flag it. I won't.");
+                "No reply. It's on my log too. I didn't flag it either.");
         strings.put("story.exchange.galleries.demand.silence",     "(say nothing)");
         strings.put("story.exchange.galleries.demand.silence.reply",
                 "Non-response recorded. The fault is noted as ongoing.");
@@ -256,9 +268,12 @@ public final class ExchangeStrings {
         strings.put("story.exchange.core.order.refuse",  "No.");
         strings.put("story.exchange.core.order.refuse.reply",
                 "Repeat your last, operator.");
-        strings.put("story.exchange.core.order.probe",   "Who is asking?");
+        // THE OVERSEER IS A DESK (order-7 C), the mechanism half.  ORA already handed the player the
+        // evidence unprompted at the Reliquary (story.bark.org.desk); this is what it means, for the
+        // player who asks, and it is what archives codex.overseer.
+        strings.put("story.exchange.core.order.probe",   "Who is actually speaking?");
         strings.put("story.exchange.core.order.probe.reply",
-                "Nobody. That channel's automated. For years.");
+                "Nobody. The routing headers change every transmission. The phrasing never does. It's a desk.");
     }
 
     /** The deep-strata check-ins — one per leaning, plus the neutral one everybody can get. */

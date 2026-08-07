@@ -9,6 +9,14 @@ drifts," it escalates: procedural → corrective → coercive → denial (see
 
 ---
 
+> **What shipped (narrative-rework order-7).** The five transmissions the game actually sends, and
+> the rule that governs them, are in `docs/story-ui-system.txt` → THE ORGANIZATION. Two things
+> changed from the samples below and both are load-bearing: every transmission now carries a JOB
+> (there is a mission, with a reason a reasonable person accepts), and every claim it makes about the
+> world has a counter-artefact in a room — the LIE LEDGER. **A claim with no counter-evidence in the
+> build does not ship**, because a betrayal the player is told about is not a betrayal they caught.
+> The stages below are unchanged; the lines are the register, not the script.
+
 ## Stage 1 — Procedural *(Region 1: Habitation Rings)*
 Flat orders. You are being operated.
 
@@ -52,6 +60,11 @@ It writes you off.
 - **Never explains its true motive out loud.** The re-chaining truth and the
   soul-harvest truth are learned from the *world* (logs, the planet), never confessed by
   the Organization. The Organization only ever tightens the leash.
+- **Never answers a question about itself.** Its replies to a probe are procedural
+  non-answers. That is characterisation, not the writer dodging.
+- **Never corrected on screen by narration.** If a line of its is false, the player must be
+  able to walk into the room that proves it. ORA may report what she can see — she never
+  explains what it means.
 - **Its cruelty is administrative, not sadistic.** It does not enjoy hurting you. It
   is annoyed that a tool has developed a fault. That indifference is worse than malice.
 - **Contrast with the planet.** The Organization calls you a serial and a loss. The

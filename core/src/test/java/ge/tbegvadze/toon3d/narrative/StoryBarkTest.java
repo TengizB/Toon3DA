@@ -287,10 +287,12 @@ class StoryBarkTest {
     }
 
     /**
-     * Every region gets its cold order, in the Organization's own voice, once.  The only other thing
-     * allowed on this moment is ORA's aside naming the word they just used (the narrative-rework
-     * order-3 vocabulary ladder) — which is the entire point of hanging a naming line here: the
-     * player hears "Overseer" from them and is told what an Overseer is one panel later.
+     * Every region gets its cold order, in the Organization's own voice, once.  Two other things are
+     * allowed on this moment, and both are ORA speaking BEHIND a subject key so the order itself is
+     * never displaced: her aside on the words that just arrived (narrative-rework order-7) and her
+     * naming of the word they just used (the order-3 vocabulary ladder) — which is the entire point
+     * of hanging a naming line here: the player hears "Overseer" from them and is told what an
+     * Overseer is one panel later.
      */
     @Test
     void theOrganizationSpeaksAtEveryGateAndEscalates() {
@@ -301,14 +303,24 @@ class StoryBarkTest {
                 if (!row.matchesRegion(region)) continue;
                 assertTrue(row.isOneShot(), "gate order " + row.getId() + " must be one-shot");
                 if (row.getSpeaker() != Speaker.ORGANIZATION) {
-                    assertTrue(StoryTermCatalog.isIntroLine(row.getTextStringId()),
-                            "only the Organization and the vocabulary ladder may speak at a gate: "
-                                    + row.getId());
+                    assertTrue(StoryTermCatalog.isIntroLine(row.getTextStringId())
+                                    || BarkCatalog.GATE_ASIDE_SUBJECT_KEY.equals(row.getSubjectKey()),
+                            "only the Organization, ORA's aside and the vocabulary ladder may speak "
+                                    + "at a gate: " + row.getId());
                     continue;
                 }
                 found = true;
             }
             assertTrue(found, "no Organization gate order for " + region);
+
+            // ...and the subject key is what makes that true in PLAY as well as in the registry: a
+            // plain "what does the Organization say here" request must never be answered by ORA's
+            // aside, which hangs off the very same moment.
+            BarkSystem system = newSystemInRegion(region);
+            assertTrue(system.request(BarkTrigger.REGION_GATE_ORDER));
+            advance(system, FRAME_SECONDS);
+            assertEquals(Speaker.ORGANIZATION, system.getActiveSpeaker(),
+                    "ORA's aside answered the gate order's own request in " + region);
         }
     }
 

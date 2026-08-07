@@ -243,11 +243,34 @@ public final class BarkStrings {
         strings.put("story.bark.region.wound",       "The drills are still in it. It's still bleeding.");
         strings.put("story.bark.region.core",        "We're at the core. Whatever's next, I'm with you.");
 
-        strings.put("story.bark.gate.rings",         "Operator. Go down. Purge the contaminant.");
-        strings.put("story.bark.gate.galleries",     "There's noise in your head. It's a fault. Ignore it.");
-        strings.put("story.bark.gate.reliquary",     "You've stopped answering. We own your next body.");
-        strings.put("story.bark.gate.wound",         "Pattern flagged. Reprint authorization: pending.");
-        strings.put("story.bark.gate.core",          "You're not an operator now. You're a loss.");
+        // THE ORGANIZATION, REWORKED (narrative-rework order-7 B).  Five transmissions, each with a
+        // JOB in it and each making a claim about the WORLD that a room somewhere disproves — the
+        // LIE LEDGER in docs/story-ui-system.txt pairs every one of them with the object that
+        // catches it.  Nothing here is cruel and nothing here is corrected on screen by narration:
+        // a player who never opens a terminal simply never catches it, which is the point.
+        strings.put("story.bark.gate.rings",
+                                                     "Operator. Ten weeks of silence. The crew are dead. Descend and restore the site.");
+        strings.put("story.bark.gate.galleries",
+                                                     "Operator. Gallery extraction is routine and within tolerance.");
+        strings.put("story.bark.gate.reliquary",
+                                                     "Operator. Reprint authorization is a benefit. Compliance is under review.");
+        // The most important transmission in the game: the order stops being about a contaminant.
+        strings.put("story.bark.gate.wound",
+                                                     "Operator. Restore the restraints. This supersedes the purge order.");
+        strings.put("story.bark.gate.core",
+                                                     "Operator. Pattern under write-off review. Return the asset to restraint.");
+
+        // ORA'S ASIDES (order-7 B) — how she handles their words.  She never contradicts a claim and
+        // never explains what it means; she reports what is in front of her and lets the player do
+        // the arithmetic.  One after the first order (the brief is one paragraph long) and one after
+        // the fourth (the order changed and the reference number did not).
+        strings.put("story.bark.gate.rings.ora",     "That's the whole brief. Ten weeks and one paragraph.");
+        strings.put("story.bark.gate.wound.ora",     "New order, same reference number. I kept the old one.");
+
+        // THE OVERSEER IS A DESK (order-7 C) — the best idea in the Organization's material, moved
+        // out of the codex and onto a channel.  Evidence first, unprompted; the mechanism is the
+        // answer to the Core order's probe, for a player who asks.
+        strings.put("story.bark.org.desk",           "I checked. Six different people have said the same paragraph to you.");
     }
 
     /**

@@ -2852,6 +2852,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // beats: a later run re-entering a cleared region says nothing here.
         barkSystem.request(BarkTrigger.REGION_ENTERED);
         barkSystem.request(BarkTrigger.REGION_GATE_ORDER);
+        // ...then ORA's aside on the words that just arrived (narrative-rework order-7 B). Asked for
+        // on the SAME moment behind a subject key, immediately after the order, so her comment lands
+        // behind the transmission rather than in front of it. Only two regions carry a row, so this
+        // almost always asks for nothing — she comments when the paperwork has something to point at.
+        barkSystem.request(BarkTrigger.REGION_GATE_ORDER, BarkCatalog.GATE_ASIDE_SUBJECT_KEY);
         // ...and, behind each of them, the ONE word this gate is allowed to teach (narrative-rework
         // order-3's vocabulary ladder). Asked for after the beat that describes the thing, so the
         // player always meets the description before the name: "this is where the cutting happened"
