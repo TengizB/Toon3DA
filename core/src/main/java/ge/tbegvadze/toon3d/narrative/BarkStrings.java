@@ -163,13 +163,17 @@ public final class BarkStrings {
         // log the player ever reads.  Say it once (doctrine D5): this row is now a different note.
         strings.put("story.bark.log.rings.1",        "Shift notes. Someone's handwriting stops mid-word.");
         strings.put("story.bark.log.rings.2",        "Maintenance log. Complaints about noise below.");
-        strings.put("story.bark.log.rings.3",        "A lunch order, dated the last day. Soup. Bold.");
-        strings.put("story.bark.log.rings.4",        "Safety notice, sixty pages. None about the deep.");
+        // The observation is the line and the dryness is only the delivery (order-6 C, doctrine D4):
+        // the lunch order used to end on "Soup. Bold.", which was the whole content.
+        strings.put("story.bark.log.rings.3",        "A lunch order, dated the last day. Nobody came to collect it.");
+        strings.put("story.bark.log.rings.4",        "Sixty pages of safety notices. Four on ladders. None on the deep levels.");
 
         strings.put("story.bark.log.galleries.1",    "Extraction quotas. Someone missed theirs. Twice.");
         strings.put("story.bark.log.galleries.2",    "Tolerance sheet. It lists 'live weight'. Live.");
-        strings.put("story.bark.log.galleries.3",    "A form for reporting screaming. Box was ticked.");
         strings.put("story.bark.log.galleries.4",    "Transport manifest. Down empty, up full. Daily.");
+        // Replaces the cut "form for reporting screaming" row (order-6 B): the two rows above already
+        // carried the "the paperwork knew" beat, and the codex entry says it better.
+        strings.put("story.bark.log.galleries.5",    "Floor plan. Every gallery slopes to a drain. Every one.");
         strings.put("story.bark.log.galleries.yield",
                                                      "Yield report. They're mining something that heals.");
 
@@ -195,13 +199,17 @@ public final class BarkStrings {
     private static void registerFloorArrival(StoryStrings strings) {
         strings.put("story.bark.floor.rings.1",      "Objective's down. Everything good is always down.");
         strings.put("story.bark.floor.rings.2",      "Evacuation notices, still fresh. They left mid-shift.");
-        strings.put("story.bark.floor.rings.3",      "Crew bunks. Serial tags on them, same format as yours.");
+        // PLAIN before proper (order-6 C): this row shows the player the tag on their own cuff and
+        // never says "serial" — the word itself belongs to the ladder's naming line, which fires the
+        // first time something that used to be crew walks at them.
+        strings.put("story.bark.floor.rings.3",      "Crew bunks. Tags still in the racks - same kind of tag you're wearing.");
         // "yield" is banded to the Harvesting Galleries by the order-3 ladder; up here the order is
-        // still just an order.
-        strings.put("story.bark.floor.rings.4",      "Clean sweep, then home. That's the whole order.");
-        strings.put("story.bark.floor.rings.5",      "Air's breathable down here. You're welcome, I suppose.");
+        // still just an order — stated in full, because the brief is the one thing she can explain.
+        strings.put("story.bark.floor.rings.4",      "Clear it, restart the works, go home. That's the whole brief.");
 
-        strings.put("story.bark.floor.galleries.1",  "Okay, the smell in here is a war crime. Touch nothing.");
+        // She has sensors, not a nose (order-6 C): the old row smelled the room and reached for a
+        // modern idiom to do it, which is two rules broken in one line.
+        strings.put("story.bark.floor.galleries.1",  "The air reads wrong in here. Organic, and a lot of it. Touch nothing.");
         strings.put("story.bark.floor.galleries.2",  "They were cutting something out of these walls. By weight.");
         strings.put("story.bark.floor.galleries.3",  "Extraction tolerances on the door. This was a factory.");
         strings.put("story.bark.floor.galleries.4",  "The specimens never got in here. They were grown in here.");
@@ -224,7 +232,10 @@ public final class BarkStrings {
 
     /** Region entry (ORA) and the Organization's cold order at each gate.  All one-shot beats. */
     private static void registerRegionAndGate(StoryStrings strings) {
-        strings.put("story.bark.region.rings",       "New body, same job. Down we go. I'll keep count.");
+        // The cloning reveal used to live in this row's subordinate clause; order-2's cold open now
+        // spends three lines on it, so the first region beat is free to do what every other region
+        // beat does — say what this band of the facility WAS (order-6 C).
+        strings.put("story.bark.region.rings",       "Habitation rings. People lived up here. The job's below them.");
         // Plain first: this row states what happened here, and the ladder's naming line (order-3)
         // supplies the word "yield" one panel later.
         strings.put("story.bark.region.galleries",   "Harvesting galleries. This is where the cutting happened.");
@@ -331,8 +342,11 @@ public final class BarkStrings {
                                                      "It telegraphs everything. Watch one full cycle before you commit.");
         strings.put("story.bark.enemy.corruptor",
                                                      "It tells you what's coming before it does it. Learn that, then punish it.");
+        // "Patterns" was the behaviour kind, but "pattern" is also the stored-you, which the ladder
+        // bands to the Reliquary — and this row is region-unrestricted, so it said a Region-3 word on
+        // floor one.  The audit cannot tell two senses of a word apart, and it should not have to.
         strings.put("story.bark.enemy.hell_baron",
-                                                     "Patterns, not reflexes. Read the mark, then move.");
+                                                     "Timing, not reflexes. Read the mark, then move.");
     }
 
     /**
@@ -368,21 +382,30 @@ public final class BarkStrings {
     /** Kills — ORA's confidence rotting across the descent.  Rare, and rarely a joke. */
     private static void registerKills(StoryStrings strings) {
         strings.put("story.bark.kill.rings.1",       "See? Contaminant. Nothing violence can't purge.");
-        strings.put("story.bark.kill.rings.2",       "Textbook. Efficient. Somebody upstairs is pleased.");
+        // This row EARNS its jargon: the line is ABOUT the vocabulary somebody chose, which is the
+        // one way a word is allowed to be used before the player is comfortable with it.
         strings.put("story.bark.kill.rings.3",       "Logged as hostile stock. That's the word they use.");
         strings.put("story.bark.kill.rings.4",       "One down. I'd cheer, but I'm a professional.");
+        // Replaces the cut "Textbook. Efficient." row (order-6 B), which said nothing under its joke.
+        strings.put("story.bark.kill.rings.5",       "Down. I'd feel better if I knew what it used to be.");
 
-        strings.put("story.bark.kill.galleries.1",   "It screamed on the room's note. ...Just me? Great.");
+        strings.put("story.bark.kill.galleries.1",   "It screamed on the same note as the room. That's twice now.");
         strings.put("story.bark.kill.galleries.2",   "Specimen neutralised. That word is working hard.");
-        strings.put("story.bark.kill.galleries.3",   "There's a harvest tag on it. It was inventory once.");
-        strings.put("story.bark.kill.galleries.4",   "That was loud. Let's pretend nothing else heard it.");
+        strings.put("story.bark.kill.galleries.3",   "It stopped screaming before it stopped moving.");
+        // Replaces the cut "let's pretend nothing else heard it" row (order-6 B), which described a
+        // noise-aggro rule the game does not have.  A line that states a rule that is not real is
+        // worse than no line: the player plays around it and is punished for listening.
+        strings.put("story.bark.kill.galleries.5",   "Harvest tag on its leg. It was inventory before it was a threat.");
 
         strings.put("story.bark.kill.reliquary.1",   "It stopped moving. I keep waiting to feel better.");
         strings.put("story.bark.kill.reliquary.2",   "That one had a serial. I won't read it out.");
         strings.put("story.bark.kill.reliquary.3",   "A failed print. They made it, then left it in here.");
         strings.put("story.bark.kill.reliquary.4",   "It came out of a Cradle. The same way you do.");
 
-        strings.put("story.bark.kill.wound.1",       "That wasn't an enemy. That was a body defending itself.");
+        // This row used to be word-for-word story.bark.family.demon.deep (D5: no two shipped rows say
+        // the same thing).  The one-shot REVEAL keeps that sentence; this repeatable row now carries the
+        // deliberate echo of kill.rings.3 instead — the word she used up top, refused down here.
+        strings.put("story.bark.kill.wound.1",       "I logged that as a kill. It wasn't a hostile.");
         strings.put("story.bark.kill.wound.2",       "I'm not calling that a purge. Not anymore.");
         strings.put("story.bark.kill.wound.3",       "It only came at you because we are the wound.");
         strings.put("story.bark.kill.wound.4",       "Immune response. That's all any of them ever were.");
@@ -394,7 +417,12 @@ public final class BarkStrings {
         // Was "the Cradle bill for this is mine" — a Region-3 word, two regions early (failure F6).
         strings.put("story.bark.lowhealth.rings.2",  "You're leaking. Patch that before I have to log it.");
         strings.put("story.bark.lowhealth.mid.1",    "Careful. Please. I don't want to count you again.");
+        // Banded to the Reliquary and below by order-6 C: "I know what now" is only true AFTER the
+        // cradle log, so in the Galleries it claimed knowledge she has not been given yet.
         strings.put("story.bark.lowhealth.mid.2",    "Every reprint costs something. I know what now.");
+        // ...which leaves the Galleries a row short, so this one holds the band's depth.  A low-health
+        // line that tells the player what to DO is the best kind of low-health line.
+        strings.put("story.bark.lowhealth.mid.3",    "Back off and patch yourself up. I'll watch the corridor.");
         strings.put("story.bark.lowhealth.deep.1",   "Stop. Please stop. I can't watch them print you again.");
         strings.put("story.bark.lowhealth.deep.2",   "If you fall here, it pays for you. Don't make it.");
     }
@@ -417,10 +445,13 @@ public final class BarkStrings {
 
     /** Idle and backtracking — the only pools that are mostly levity, and the rarest of all. */
     private static void registerIdleAndBacktrack(StoryStrings strings) {
-        strings.put("story.bark.idle.rings.1",       "Take your time. The contaminant isn't going anywhere.");
+        strings.put("story.bark.idle.rings.1",       "Take your time. Whatever's down there has waited longer than us.");
         strings.put("story.bark.idle.rings.2",       "I can wait. I'm contractually excellent at waiting.");
         strings.put("story.bark.idle.mid.1",         "Standing still doesn't make it quieter. I checked.");
-        strings.put("story.bark.idle.mid.2",         "The resonance stops when you stop. Did you notice?");
+        // Replaces the cut "the resonance stops when you stop" row (order-6 B), which described a
+        // phenomenon the player has no way to observe.  This one rides a rule that IS real: the world
+        // is turn-based, so nothing moves while the player does not.
+        strings.put("story.bark.idle.mid.3",         "You've stopped. Fine by me. It's quieter when you're still.");
         strings.put("story.bark.idle.deep.1",        "I don't like it when you stop moving down here.");
         strings.put("story.bark.idle.deep.2",        "It's waiting too. That's the part I don't like.");
 
@@ -429,6 +460,8 @@ public final class BarkStrings {
         strings.put("story.bark.backtrack.mid.1",    "Same corridor. Feels more occupied than last time.");
         strings.put("story.bark.backtrack.mid.2",    "You cleared this. It doesn't feel cleared, does it.");
         strings.put("story.bark.backtrack.deep.1",   "You keep circling. So does it.");
-        strings.put("story.bark.backtrack.deep.2",   "It moves the rooms. I'm fairly sure it moves the rooms.");
+        // Replaces the cut "it moves the rooms" row (order-6 B) — the rooms do not move.  What IS
+        // true of a backtracking player this deep is that the route only ever runs one way.
+        strings.put("story.bark.backtrack.deep.3",   "Circling. If you're looking for a way up, there isn't one.");
     }
 }

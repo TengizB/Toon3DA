@@ -100,11 +100,18 @@ public final class BootCardStrings {
         strings.put("story.boot.wake.firstdeath.report",
                                                    "There's a REPORT plate if you want to see what got you.");
 
-        // Region 1 — cheerful; your deaths are a scoreboard and she is proud of the numbers.
-        strings.put("story.boot.wake.rings.1",     "Morning, sunshine. Reprint {instance}. New record.");
-        strings.put("story.boot.wake.rings.2",     "You're up. Print {instance}, all limbs accounted for.");
+        // Region 1 — warm and matter-of-fact.  She reads the number out and checks the body over.
+        //
+        // She does NOT score the death (order-6 C, doctrine D6).  "New record" and "I keep the good
+        // copies" were the friend of the character celebrating their death on the screen that exists
+        // to tell them they died — and the second one also claimed she stores patterns, which she does
+        // not; the Cradles do.  The counter still climbs.  It just stopped cheering.
+        strings.put("story.boot.wake.rings.1",     "Morning. Print {instance}. All limbs where they should be.");
+        // Rewritten with .1 rather than because of a fault of its own: .1's new tail says the same
+        // thing "all limbs accounted for" said, and two rows of one pool must never be one line (D5).
+        strings.put("story.boot.wake.rings.2",     "You're up. Print {instance}. Feed lines are clear.");
         strings.put("story.boot.wake.rings.3",     "Back on your feet. I logged that one as a stumble.");
-        strings.put("story.boot.wake.rings.4",     "Reprint {instance}. Don't worry, I keep the good copies.");
+        strings.put("story.boot.wake.rings.4",     "Print {instance}. Same as the last one, near enough.");
 
         // Region 2 — distracted; she has started asking what the printers run on.
         strings.put("story.boot.wake.galleries.1", "Reprint {instance}. Hey - what do the printers run on?");

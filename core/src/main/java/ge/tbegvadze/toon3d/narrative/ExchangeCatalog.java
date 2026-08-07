@@ -23,7 +23,8 @@ package ge.tbegvadze.toon3d.narrative;
  *   <tr><td>5 The Core</td><td>the last order</td><td>—</td><td>—</td></tr>
  * </table>
  * Region 1 also carries the QUIET-MOMENT teaching exchange — the first choice the player is ever
- * offered, deliberately about nothing, so that discovering the layer costs them no risk at all.  The
+ * offered, deliberately DECIDING nothing, so that discovering the layer costs them no risk at all
+ * (it is still ABOUT something: order-6 E pointed it at the memory gap ORA named a minute ago).  The
  * Core additionally carries THE ENDING, presented by hand ({@link #CORE_ENDING_EXCHANGE_ID}).
  *
  * <h3>The budget — why this file must stay SHORT</h3>
@@ -254,24 +255,27 @@ public final class ExchangeCatalog {
                 .promptStringId("story.exchange.rings.teaching.prompt")
                 .trigger(ExchangeTrigger.QUIET_MOMENT)
                 .region(StoryRegion.HABITATION_RINGS)
-                .option(ExchangeOption.builder("ready")
-                        .playerLineStringId("story.exchange.rings.teaching.ready")
-                        .kind(ExchangeOptionKind.STANCE)
-                        .stanceNudge(Stance.ORGANIZATION, 1)
-                        .replyStringId("story.exchange.rings.teaching.ready.reply")
-                        .build())
-                .option(ExchangeOption.builder("off")
-                        .playerLineStringId("story.exchange.rings.teaching.off")
+                .option(ExchangeOption.builder("some")
+                        .playerLineStringId("story.exchange.rings.teaching.some")
                         .kind(ExchangeOptionKind.STANCE)
                         .stanceNudge(Stance.ORA, 1)
-                        .replyStringId("story.exchange.rings.teaching.off.reply")
+                        .replyStringId("story.exchange.rings.teaching.some.reply")
                         .build())
-                // No nudge at all: a player who wants to get on with it must be able to say so
-                // without the game quietly filing it as an opinion.
-                .option(ExchangeOption.builder("down")
-                        .playerLineStringId("story.exchange.rings.teaching.down")
+                // No nudge at all: this is the factual answer, and it is the true one for a fresh
+                // print.  A player who states a fact has expressed no leaning, and the model must not
+                // invent one for them.
+                .option(ExchangeOption.builder("none")
+                        .playerLineStringId("story.exchange.rings.teaching.none")
                         .kind(ExchangeOptionKind.STANCE)
-                        .replyStringId("story.exchange.rings.teaching.down.reply")
+                        .replyStringId("story.exchange.rings.teaching.none.reply")
+                        .build())
+                // Turning her personal question back towards the job is the one answer here that says
+                // something about the player, so it is the only one that leans.
+                .option(ExchangeOption.builder("matter")
+                        .playerLineStringId("story.exchange.rings.teaching.matter")
+                        .kind(ExchangeOptionKind.STANCE)
+                        .stanceNudge(Stance.ORGANIZATION, 1)
+                        .replyStringId("story.exchange.rings.teaching.matter.reply")
                         .build())
                 .build());
     }
@@ -435,9 +439,14 @@ public final class ExchangeCatalog {
     }
 
     // -------------------------------------------------------------------------
-    // Deep-strata check-ins — the quiet ones. Three rows, one per leaning plus a neutral fallback,
-    // so the SAME moment reads differently for a player who has been warm to ORA and one who has
-    // been all business.  The neutral row is what guarantees the moment is never stance-gated.
+    // Deep-strata check-ins — the quiet ones. TWO rows: ORA's warm one and the neutral fallback that
+    // anybody can get, which is what guarantees the moment is never stance-gated.
+    //
+    // There used to be a third, for a player leaning towards the Organization ("four floors deep and
+    // ahead of schedule"). narrative-rework order-6 B CUT it: of the three it was the one that
+    // floated free of any region beat, it stopped the world to say nothing, and "ahead of schedule"
+    // contradicts a descent that has no end. A leaning may flavour which row opens; it may never
+    // silence the moment, so an Organization-leaning player simply gets the neutral row now.
     // -------------------------------------------------------------------------
     private static void registerDeepStrata(ExchangeRegistry registry) {
 
@@ -458,26 +467,6 @@ public final class ExchangeCatalog {
                         .kind(ExchangeOptionKind.STANCE)
                         .stanceNudge(Stance.ORGANIZATION, 1)
                         .replyStringId("story.exchange.deep.warm.work.reply")
-                        .build())
-                .build());
-
-        registry.register(ExchangeDefinition.builder("exchange.deep.duty")
-                .speaker(Speaker.AI)
-                .promptStringId("story.exchange.deep.duty.prompt")
-                .trigger(ExchangeTrigger.DEEP_STRATA)
-                .regionFrom(StoryRegion.HARVESTING_GALLERIES)
-                .stanceAffinity(Stance.ORGANIZATION)
-                .option(ExchangeOption.builder("efficient")
-                        .playerLineStringId("story.exchange.deep.duty.efficient")
-                        .kind(ExchangeOptionKind.STANCE)
-                        .stanceNudge(Stance.ORGANIZATION, 1)
-                        .replyStringId("story.exchange.deep.duty.efficient.reply")
-                        .build())
-                .option(ExchangeOption.builder("whose")
-                        .playerLineStringId("story.exchange.deep.duty.whose")
-                        .kind(ExchangeOptionKind.PROBE)
-                        .stanceNudge(Stance.ORA, 1)
-                        .replyStringId("story.exchange.deep.duty.whose.reply")
                         .build())
                 .build());
 

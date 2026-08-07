@@ -194,6 +194,12 @@ stable STRING ID and resolved through `StoryStrings`.
     log and the log's full codex text are deliberately separate ids (bark vs archive).
   - The launch screen has NO status-line ids of its own: it prints `story.boot.system.*`, the reprint
     card's own strings. That sharing is the point, not an optimisation (see THE FRAMING SCREENS).
+  - THE TABLE HOLDS ONLY DELIVERABLE CONTENT. If no channel can ever deliver an id, it does not
+    belong in the file a translator receives, and it does not belong in `StoryStrings.defaults()`
+    either. `story.sample.*` — the four order-1 one-line-per-speaker showcase rows — is the one such
+    family and it lives in `narrative/StorySampleLines.registerShowcaseText()`, folded in by hand by
+    the two dev callers (`lwjgl3/StoryUiShowcase`, `StoryUiFoundationTest`) and by nothing in the
+    game (narrative-rework order-6 B).
 
 TESTS: `StoryLocalizationTest` sweeps EVERY id from every catalog and every piece of chrome against
 the shipped asset, checks the Java fallback agrees with it, and rejects duplicate keys.
@@ -411,7 +417,10 @@ THEM and WHAT HAPPENED TO THEM.
   - `ControlHint` teaches each control as a single bark the first time it matters (MOVE, FIRE,
     RELOAD, HEAL, SWITCH_WEAPON, INVENTORY) — one-shot for the life of the save and STORY_CRITICAL;
   - the Region-1 `QUIET_MOMENT` teaching exchange is the first choice ever offered and deliberately
-    decides nothing, so the blocking layer is learned with no enemy in the room.
+    decides nothing, so the blocking layer is learned with no enemy in the room. It is still ABOUT
+    something: order-6 pointed it at the memory gap ORA named a minute earlier ("do you actually
+    remember doing this before? Because your file says you have"), so the player's first answer is a
+    thought about their own situation rather than a mood check with three shades of "fine".
 
 "SOUL RESERVE" is a deep reveal and is not on screen anywhere — card or launch screen — until the
 player has reached the Harvesting Galleries, which is where ORA starts asking what the printers run
@@ -599,15 +608,56 @@ PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
     `STORY_TELEMETRY_FAST_DISMISS_SECONDS` was skipped, not read.
 
 
+WRITING RULES (narrative-rework order-6) — what a shipped ROW may not do
+========================================================================
+Order-6 was the cleanup pass over every string that already shipped: nine cuts, six replacement rows
+and fourteen rewrites. These are the rules it derived from the faults it found, and every one of them
+is a rule about a row rather than about the machine. They apply to every channel, forever.
+
+  1. NO LINE DESCRIBES A MECHANIC THE GAME DOES NOT HAVE. A cut kill line said "let's pretend nothing
+     else heard it", implying noise aggro; a cut backtrack line said "it moves the rooms". A player
+     who believes a line plays around a rule that is not there and is punished for listening, which
+     is strictly worse than silence. The inverse is the best kind of flavour row: `idle.mid.3` rides
+     a rule the game really has (the world is turn-based, so nothing moves while you do not).
+  2. NO LINE USES A SENSE ORA DOES NOT HAVE. She has the suit's sensors — no smell, no taste, no
+     pain. "The smell in here is a war crime" became "the air reads wrong in here."
+  3. NO LINE CELEBRATES OR SCORES THE PLAYER'S DEATH, in any region, ever (doctrine D6). The reprint
+     counter still climbs; "New record" is gone from the screen whose job is to tell them they died.
+  4. NO LINE STATES A NUMBER THE HUD ALREADY STATES (this is also the bestiary rule above).
+  5. A JOKE IS THE DELIVERY OF AN OBSERVATION, NEVER THE PAYLOAD. "Soup. Bold." was the whole line;
+     "Nobody came to collect it" is the observation, and it is drier for it. Full checklist:
+     docs/narrative-authority.txt SECTION 4.
+  6. A LINE MAY NOT ASSUME A FACT THE PLAYER — OR ORA — HAS NOT BEEN TOLD. This is why
+     `lowhealth.mid.2` ("I know what a print costs now") is banded to the Reliquary and below: in the
+     Galleries she has not read the cradle log yet. The audit for the WORD half of this is order-3's
+     ladder (`StoryTermCatalog.firstDisallowedTerm`); the FACT half is still review.
+  7. NO TWO SHIPPED ROWS SAY THE SAME THING (D5). When a rewrite makes two rows of one pool collide,
+     the pool's repeatable row moves and the one-shot REVEAL keeps the sentence.
+  8. WHEN A CUT DROPS A POOL BELOW ITS BAND'S DEPTH, REPLACE THE ROW OR DEMOTE THE MOMENT — never
+     leave a moment able to go silent. `BarkSystem`'s no-repeat memory (`STORY_BARK_RECENT_MEMORY`)
+     silences a moment ENTIRELY once its pool is empty, so a one-row band is a moment that fires
+     once per save and then never again. The floor is four rows per region for the deep pools
+     (FLOOR_ARRIVAL / KILL / LOG_FOUND, asserted by `StoryBarkTest`) and two for the banded flavour
+     pools (LOW_HEALTH / IDLE / BACKTRACK, whose triggers are on the longest cooldowns in the table).
+
+Two of these are mechanically audited today and the rest are review: rule 7 and the word half of
+rule 6 can be run over the SHIPPED table with `StoryTermCatalog.firstDisallowedTerm`, which is what
+order-10 wires to the build as `VocabularyLadderTest` / `NoRepeatVerbatimTest`.
+
+
 RECIPES
 =======
 Every recipe below is the MECHANICAL half. Before writing the `register()` call, run the content
 checklist in docs/narrative-authority.txt SECTION 9 (which job? which channel? which words? is it
-funny? is it a repeat? could it be cut instead?).
+funny? is it a repeat? could it be cut instead?) and the WRITING RULES above.
 
 ADD A BARK               one `register()` in `BarkCatalog` (trigger, region band, speaker, tone,
                          priority, one-shot?) + one row in `story-strings.properties` and its
                          `BarkStrings` default. No switch, anywhere.
+CUT A BARK               delete the `register()` line and BOTH string rows, then check the pool it
+                         came out of against WRITING RULE 8 above: a band left below its depth needs a
+                         replacement row in the same commit. Leave a comment where the row was saying
+                         what was cut and why — the next writer must not re-add it.
 ADD AN ENEMY             nothing to write by hand: `BestiaryCatalog` loops the enemy enums, so a new
                          `EnemyFamily` / `EnemyType` / `SpecialAbility` already HAS its row. Supply
                          its lines — `story.bark.family.<family>` (+ `.deep`),

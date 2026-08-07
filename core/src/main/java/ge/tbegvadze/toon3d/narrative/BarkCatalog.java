@@ -139,8 +139,10 @@ public final class BarkCatalog {
 
         logLine(registry, "bark.log.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
         logLine(registry, "bark.log.galleries.2", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
-        logLine(registry, "bark.log.galleries.3", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
         logLine(registry, "bark.log.galleries.4", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
+        // .3 (the screaming-report form) was CUT by narrative-rework order-6 B as a duplicate of the
+        // two rows above; .5 holds the band at four repeatable rows.
+        logLine(registry, "bark.log.galleries.5", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
 
         logLine(registry, "bark.log.reliquary.1", StoryRegion.RELIQUARY, BarkTone.LORE);
         logLine(registry, "bark.log.reliquary.2", StoryRegion.RELIQUARY, BarkTone.LORE);
@@ -186,9 +188,11 @@ public final class BarkCatalog {
         floorLine(registry, "bark.floor.rings.2", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
         floorLine(registry, "bark.floor.rings.3", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
         floorLine(registry, "bark.floor.rings.4", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
-        floorLine(registry, "bark.floor.rings.5", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        // .5 ("air's breathable down here, you're welcome") was CUT by narrative-rework order-6 B: a
+        // joke with no observation under it, about a thing she did not do and nothing in the fiction
+        // suggests would be otherwise.  The band keeps four rows, and .1 keeps the levity.
 
-        floorLine(registry, "bark.floor.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
+        floorLine(registry, "bark.floor.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
         floorLine(registry, "bark.floor.galleries.2", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
         floorLine(registry, "bark.floor.galleries.3", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
         floorLine(registry, "bark.floor.galleries.4", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
@@ -254,14 +258,17 @@ public final class BarkCatalog {
     // -------------------------------------------------------------------------
     private static void registerKills(BarkRegistry registry) {
         killLine(registry, "bark.kill.rings.1", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
-        killLine(registry, "bark.kill.rings.2", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
         killLine(registry, "bark.kill.rings.3", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
         killLine(registry, "bark.kill.rings.4", StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
+        // .2 ("Textbook. Efficient.") was CUT by narrative-rework order-6 B — it said nothing under
+        // its joke; .5 is its replacement and restores the band to four rows.
+        killLine(registry, "bark.kill.rings.5", StoryRegion.HABITATION_RINGS, BarkTone.LORE);
 
         killLine(registry, "bark.kill.galleries.1", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
         killLine(registry, "bark.kill.galleries.2", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
         killLine(registry, "bark.kill.galleries.3", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
-        killLine(registry, "bark.kill.galleries.4", StoryRegion.HARVESTING_GALLERIES, BarkTone.LEVITY);
+        // .4 (the noise-aggro joke) was CUT by narrative-rework order-6 B; .5 replaces it.
+        killLine(registry, "bark.kill.galleries.5", StoryRegion.HARVESTING_GALLERIES, BarkTone.LORE);
 
         killLine(registry, "bark.kill.reliquary.1", StoryRegion.RELIQUARY, BarkTone.LORE);
         killLine(registry, "bark.kill.reliquary.2", StoryRegion.RELIQUARY, BarkTone.LORE);
@@ -282,6 +289,12 @@ public final class BarkCatalog {
 
     // -------------------------------------------------------------------------
     // Low health — two lines per tone stage.  Never a joke below the Galleries.
+    //
+    // narrative-rework order-6 C re-banded mid.2 to the Reliquary and below: "every reprint costs
+    // something, I know what now" is only true once she has read the cradle log, so in the Galleries
+    // it had her knowing a thing the story has not told her (or the player) yet.  mid.3 is what keeps
+    // the Galleries two rows deep after that move — a band with one row is a band that goes silent
+    // for the rest of the save the first time it fires.
     // -------------------------------------------------------------------------
     private static void registerLowHealth(BarkRegistry registry) {
         lowHealthLine(registry, "bark.lowhealth.rings.1",
@@ -290,8 +303,10 @@ public final class BarkCatalog {
                       StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
         lowHealthLine(registry, "bark.lowhealth.mid.1",
                       StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
-        lowHealthLine(registry, "bark.lowhealth.mid.2",
+        lowHealthLine(registry, "bark.lowhealth.mid.3",
                       StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
+        lowHealthLine(registry, "bark.lowhealth.mid.2",
+                      StoryRegion.RELIQUARY, StoryRegion.CORE, BarkTone.LORE);
         lowHealthLine(registry, "bark.lowhealth.deep.1",
                       StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
         lowHealthLine(registry, "bark.lowhealth.deep.2",
@@ -346,7 +361,9 @@ public final class BarkCatalog {
                     StoryRegion.HABITATION_RINGS, StoryRegion.HABITATION_RINGS, BarkTone.LEVITY);
         flavourLine(registry, BarkTrigger.IDLE, "bark.idle.mid.1",
                     StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LEVITY);
-        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.mid.2",
+        // idle.mid.2 (the unobservable "resonance") was CUT by narrative-rework order-6 B; .3 replaces
+        // it and keeps the band two rows deep.
+        flavourLine(registry, BarkTrigger.IDLE, "bark.idle.mid.3",
                     StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
         flavourLine(registry, BarkTrigger.IDLE, "bark.idle.deep.1",
                     StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
@@ -363,7 +380,10 @@ public final class BarkCatalog {
                     StoryRegion.HARVESTING_GALLERIES, StoryRegion.RELIQUARY, BarkTone.LORE);
         flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.deep.1",
                     StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
-        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.deep.2",
+        // backtrack.deep.2 ("it moves the rooms") was CUT by narrative-rework order-6 B — the rooms do
+        // not move, and a line that tells the player the world does something it does not do is worse
+        // than silence.  .3 replaces it and keeps the band two rows deep.
+        flavourLine(registry, BarkTrigger.BACKTRACK, "bark.backtrack.deep.3",
                     StoryRegion.WOUND, StoryRegion.CORE, BarkTone.LORE);
     }
 
