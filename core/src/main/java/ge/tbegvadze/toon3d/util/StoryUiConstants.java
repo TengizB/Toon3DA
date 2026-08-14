@@ -336,7 +336,8 @@ public final class StoryUiConstants {
     // declaration order: 0 FLOOR_ARRIVAL, 1 REGION_ENTERED, 2 REGION_GATE_ORDER,
     // 3 ENEMY_FAMILY_FIRST_SEEN, 4 ENEMY_ABILITY_RESOLVED, 5 BOSS_ARENA_ENTERED, 6 BOSS_DEFEATED,
     // 7 KILL, 8 LOW_HEALTH, 9 DEEP_STRATA, 10 IDLE, 11 BACKTRACK,
-    // 12 RUN_START, 13 CONTROL_HINT, 14 LOG_FOUND, 15 CODEX_COMPLETE, 16 MAP_OPENED.
+    // 12 RUN_START, 13 CONTROL_HINT, 14 LOG_FOUND, 15 CODEX_COMPLETE, 16 MAP_OPENED,
+    // 17 DEPTH_REACTION.
     // A test guards this array against the enum drifting.  Zero = the moment is naturally rare
     // (a floor arrival, a one-shot beat) and needs no cooldown beyond the global rate limit.
     public static final float[] STORY_BARK_TRIGGER_COOLDOWN_SECONDS = {
@@ -357,6 +358,7 @@ public final class StoryUiConstants {
             120f,   // LOG_FOUND                — a room full of terminals must yield ONE take
             0f,     // CODEX_COMPLETE           — one-shot per category, six times in a lifetime
             0f,     // MAP_OPENED               — one-shot per region, five times in a lifetime
+            75f,    // DEPTH_REACTION           — the grind-floor pool; paced exactly like an arrival
     };
 
     // =====================================================================
@@ -863,4 +865,70 @@ public final class StoryUiConstants {
     public static final String STORY_REPORT_DAMAGE_ID     = "story.report.damage";
     public static final String STORY_REPORT_TIME_ID       = "story.report.time";
     public static final String STORY_REPORT_BEST_ID       = "story.report.best";
+
+    // =====================================================================
+    // RE-ENTRY, RECAP & MISSED-BEAT RECOVERY (narrative-rework order-9)
+    //
+    // This game is played in phone-sized pieces across weeks. Everything above assumes a player who
+    // remembers where they were and read the line they were shown; this block is what the layer owes
+    // the two people that assumption fails for — the one who has been away, and the one who tapped a
+    // one-shot line away before reading it.  No new screen and no new renderer: every number here
+    // hangs off a channel the player was already going to look at.
+    // =====================================================================
+
+    /**
+     * THE THREE-DAY PROBLEM (order-9 A).  A gap at least this many hours wide means the player has
+     * genuinely been away, and the reprint card's one ORA slot is spent on a RE-ENTRY line — where
+     * they are and what they were last told — instead of an ordinary greeting.
+     *
+     * <p>A day is deliberately generous.  Below it, somebody who put the phone down after lunch gets
+     * told what they already know, which is the exact tone of the helper voices this layer exists
+     * not to be.
+     */
+    public static final int   STORY_REENTRY_GAP_HOURS = 24;
+
+    /**
+     * How many archive entries the recap's WHAT WE KNOW block lists (order-9 B).  Three: enough to
+     * place the player in the story, few enough that the page stays a summary rather than becoming a
+     * second index of a screen that is already an index.
+     */
+    public static final int   STORY_RECAP_RECENT_ENTRY_COUNT = 3;
+
+    /**
+     * How many missed critical lines the "you may have missed this" shelf keeps (order-9 C).  A
+     * small ring, newest first: this is a safety net for the line somebody skipped last week, not a
+     * transcript of the run, and an unbounded list would grow into exactly the wall of text the
+     * archive is written to avoid.
+     */
+    public static final int   STORY_MISSED_SHELF_CAPACITY = 6;
+
+    /**
+     * Where the two order-9 rings are filed, and the separator that packs each into one value.
+     *
+     * <p>Both ride the order-4 consequential-outcome mechanism, exactly as {@link
+     * #STORY_ENDING_OUTCOME_ID} does: it is already the schema's general "remember this string,
+     * permanently" store, so a ring needs no new persisted key, no new port method, and a "new game"
+     * wipe clears both with everything else — which is right, because a wiped save has neither an
+     * archive to summarise nor a beat it could have missed.
+     */
+    public static final String STORY_RECENT_UNLOCK_RECORD_ID = "recap.recent";
+    public static final String STORY_MISSED_BEAT_RECORD_ID   = "recap.missed";
+    public static final String STORY_RECORD_LIST_SEPARATOR   = "|";
+
+    /**
+     * The two composed archive pages, by entry id.  Named here rather than only in the catalog
+     * because the engine has to unlock the missed-beat shelf at a moment no catalog row can
+     * describe — the first time a mandatory line is closed unread — and a shelf whose id was
+     * spelled out twice would eventually be spelled differently in one of the two places.
+     */
+    public static final String STORY_RECAP_CODEX_ID        = "codex.recap";
+    public static final String STORY_MISSED_SHELF_CODEX_ID = "codex.missed";
+
+    // --- The recap page's own chrome: the four things ORA summarises, in order ------------------
+    public static final String STORY_RECAP_WHERE_HEADING_ID   = "story.recap.heading.where";
+    public static final String STORY_RECAP_JOB_HEADING_ID     = "story.recap.heading.job";
+    public static final String STORY_RECAP_KNOW_HEADING_ID    = "story.recap.heading.know";
+    public static final String STORY_RECAP_DECIDED_HEADING_ID = "story.recap.heading.decided";
+    /** Stands in for a block with nothing in it yet — never a blank space where a heading promised text. */
+    public static final String STORY_RECAP_NOTHING_YET_ID     = "story.recap.nothing";
 }

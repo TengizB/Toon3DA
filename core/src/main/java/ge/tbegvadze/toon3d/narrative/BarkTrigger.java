@@ -87,5 +87,17 @@ public enum BarkTrigger {
      * the line is DELIVERED in the lull on the floor the player picked.  That is the correct
      * ordering, not a compromise: they have just used the thing she is explaining.
      */
-    MAP_OPENED
+    MAP_OPENED,
+    /**
+     * A GRIND FLOOR (narrative-rework order-9 D): the player arrived on a floor that is new to this
+     * run but not new to this save — ground the story has already covered.  By run twenty every
+     * one-shot beat is spent and the layer goes quiet exactly when a player is most invested, so
+     * this is the moment that gets a repeatable pool of its own.
+     *
+     * <p>The rows here are the ONE place small talk belongs.  She talks about the RUN — how it is
+     * going, what she has noticed — and never about the plot, because the plot has nothing left to
+     * say on ground the player has already taken.  Asked for INSTEAD of {@link #FLOOR_ARRIVAL} on
+     * those floors, never as well, so a grind floor is exactly as chatty as any other.
+     */
+    DEPTH_REACTION
 }

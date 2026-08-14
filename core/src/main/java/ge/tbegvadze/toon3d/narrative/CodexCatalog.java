@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.narrative;
 
+import ge.tbegvadze.toon3d.util.StoryUiConstants;
+
 /**
  * The CODEX catalog (Story UI order-6 Part A) — every archived entry, as data.
  *
@@ -37,6 +39,7 @@ public final class CodexCatalog {
     /** Registers the v1 catalog.  Idempotent: a registry that already has rows is left alone. */
     public static void bootstrap(CodexRegistry registry) {
         if (registry == null || !registry.isEmpty()) return;
+        registerComposedPages(registry);
         registerLogs(registry);
         registerPeople(registry);
         registerPlanet(registry);
@@ -50,6 +53,40 @@ public final class CodexCatalog {
         CodexRegistry registry = new CodexRegistry();
         bootstrap(registry);
         return registry;
+    }
+
+    // -------------------------------------------------------------------------
+    // THE COMPOSED PAGES (narrative-rework order-9) — the two entries the GAME writes.
+    //
+    // Everything else in this catalog is authored once and archives a line that already landed.
+    // These two are assembled from live state when they are opened, and they exist for the two
+    // players the rest of the layer quietly assumes away: the one who has been gone a week, and the
+    // one who tapped a one-shot line off the screen before reading it.
+    //
+    // Both live on an OPT-IN screen, which is the whole reason they are allowed to exist at all: the
+    // recap never appears in play, and a missed STORY beat is recovered here rather than re-shown
+    // out in the world.  Neither counts towards a shelf's completion — they were not recovered by
+    // anybody — and neither may ever say what to do next.
+    // -------------------------------------------------------------------------
+    private static void registerComposedPages(CodexRegistry registry) {
+        // WHERE AM I — pinned to the top of every tab and never locked.  A player who has forgotten
+        // where they were must not have to earn the page that tells them.
+        registry.register(CodexEntry.builder(StoryUiConstants.STORY_RECAP_CODEX_ID,
+                                             CodexCategory.LOGS)
+                .region(StoryRegion.HABITATION_RINGS)
+                .composed(CodexEntry.ComposedPage.RECAP)
+                .pinned(true)
+                .alwaysUnlocked(true)
+                .build());
+
+        // YOU MAY HAVE MISSED THIS — filed under LOGS, where the facility's paperwork lives, and
+        // unlocked the first time a critical line is closed unread.  A player who reads everything
+        // never sees this row exists, which is exactly right: it is a safety net, not a feature.
+        registry.register(CodexEntry.builder(StoryUiConstants.STORY_MISSED_SHELF_CODEX_ID,
+                                             CodexCategory.LOGS)
+                .region(StoryRegion.HABITATION_RINGS)
+                .composed(CodexEntry.ComposedPage.MISSED)
+                .build());
     }
 
     // -------------------------------------------------------------------------

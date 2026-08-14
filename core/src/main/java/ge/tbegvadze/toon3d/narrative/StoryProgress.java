@@ -1,8 +1,12 @@
 package ge.tbegvadze.toon3d.narrative;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
@@ -32,6 +36,14 @@ public final class StoryProgress {
     /** The three hidden leanings (order-4), indexed by {@link Stance#ordinal()}.  Cached on load. */
     private final int[]              stanceValues = new int[Stance.values().length];
 
+    // ---- narrative-rework order-9: what a returning player is owed --------------------------------
+    /** Whole hours since the last recorded session, computed ONCE at load (order-9 A). */
+    private long                     hoursSinceLastSession;
+    /** Codex ids most recently unlocked, newest first — the recap's "WHAT WE KNOW" (order-9 B). */
+    private final List<String>       recentCodexUnlocks = new ArrayList<>();
+    /** Critical beats closed before they could be read — the archive's shelf (order-9 C). */
+    private final List<String>       missedBeatIds      = new ArrayList<>();
+
     /** Uses an in-memory store — nothing survives the process (tests, showcases). */
     public StoryProgress() {
         this(new InMemoryStoryProgressStore());
@@ -40,12 +52,29 @@ public final class StoryProgress {
     /** Loads the persisted deepest region from {@code store}; seen-flags are read lazily. */
     public StoryProgress(StoryProgressStore store) {
         if (store == null) throw new IllegalArgumentException("store must not be null");
-        this.store         = store;
-        this.deepestRegion = StoryRegion.fromOrdinal(store.loadDeepestRegionOrdinal());
-        this.reprintCount  = Math.max(0, store.loadReprintCount());
+        this.store = store;
+        loadCachesFromStore();
+    }
+
+    /**
+     * Reads every cached fact out of the store.  Shared by construction and {@link #reloadFromStore()}
+     * so the two can never drift — a field added to one and forgotten in the other is a save that
+     * reports one story on launch and a different one after a wipe.
+     */
+    private void loadCachesFromStore() {
+        seenBeatIds.clear();
+        deepestRegion = StoryRegion.fromOrdinal(store.loadDeepestRegionOrdinal());
+        reprintCount  = Math.max(0, store.loadReprintCount());
         for (Stance stance : Stance.values()) {
             stanceValues[stance.ordinal()] = store.loadStance(stance.name());
         }
+        // THE THREE-DAY PROBLEM (order-9 A). Measured once, HERE, and never again for the life of
+        // this object: the gap is a property of the moment the save was opened, and re-measuring it
+        // later (after the timestamp has been refreshed) would always report zero.
+        hoursSinceLastSession = GameMath.hoursBetweenEpochMillis(store.loadLastSessionEpochMillis(),
+                                                                 System.currentTimeMillis());
+        readIdList(StoryUiConstants.STORY_RECENT_UNLOCK_RECORD_ID, recentCodexUnlocks);
+        readIdList(StoryUiConstants.STORY_MISSED_BEAT_RECORD_ID,   missedBeatIds);
     }
 
     /** The deepest story region ever reached.  Never null; never moves backwards. */
@@ -225,6 +254,10 @@ public final class StoryProgress {
         if (codexId == null) return;
         if (store.isCodexUnlocked(codexId)) return;   // already known — no redundant write
         store.markCodexUnlocked(codexId);
+        // Both unlock paths funnel through here, which is why the recap's "what we know" is recorded
+        // here too: the alternative is a second table that a probe reward could quietly skip.
+        pushOntoRing(recentCodexUnlocks, codexId, StoryUiConstants.STORY_RECAP_RECENT_ENTRY_COUNT,
+                     StoryUiConstants.STORY_RECENT_UNLOCK_RECORD_ID);
     }
 
     /**
@@ -245,6 +278,112 @@ public final class StoryProgress {
     }
 
     // -------------------------------------------------------------------------
+    // Re-entry, the recap's inputs, and the missed-beat shelf (narrative-rework order-9)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Whole hours since the player was last here, measured when this object loaded (order-9 A).
+     * Zero on a save that has never recorded a session, so a first-ever launch can never be read as
+     * an absence.
+     *
+     * <p>It is a snapshot on purpose.  A run refreshes the stored timestamp as it goes, so asking
+     * the store again later would always answer "no time at all" — the gap has to be captured at the
+     * moment the save is opened or it is not captured at all.
+     */
+    public long getHoursSinceLastSession() {
+        return hoursSinceLastSession;
+    }
+
+    /** True when the player has been away long enough to have genuinely lost the thread. */
+    public boolean isReturningAfterALongGap() {
+        return hoursSinceLastSession >= StoryUiConstants.STORY_REENTRY_GAP_HOURS;
+    }
+
+    /**
+     * Records that the player is here NOW.  Called once per reprint card — often enough that a long
+     * session cannot later be mistaken for an absence, rare enough to stay off any hot path.
+     *
+     * <p>Deliberately does NOT touch {@link #getHoursSinceLastSession()}: the gap this object
+     * reports is the one it was loaded with, for its whole life.
+     */
+    public void noteSessionActivity() {
+        store.saveLastSessionEpochMillis(System.currentTimeMillis());
+    }
+
+    /**
+     * The archive entries unlocked most recently, newest first — the recap's WHAT WE KNOW block
+     * (order-9 B).  Read-only, and never longer than
+     * {@code STORY_RECAP_RECENT_ENTRY_COUNT}.
+     */
+    public List<String> getRecentCodexUnlocks() {
+        return Collections.unmodifiableList(recentCodexUnlocks);
+    }
+
+    /**
+     * The critical lines the player closed before they could have read them, newest first
+     * (order-9 C).  Read-only, capped at {@code STORY_MISSED_SHELF_CAPACITY}.
+     */
+    public List<String> getMissedBeatIds() {
+        return Collections.unmodifiableList(missedBeatIds);
+    }
+
+    /**
+     * Files a critical beat the player dismissed unread, so the archive can offer it back.  This is
+     * the ONLY concession the layer makes to a line that was already spent: it is recovered on an
+     * OPT-IN screen, never re-delivered in play, because a story beat that comes back is a story
+     * layer the player starts trying to escape.
+     *
+     * @return true when this beat was newly filed (it was not already on the shelf)
+     */
+    public boolean recordMissedBeat(String beatId) {
+        if (beatId == null || beatId.isEmpty()) return false;
+        if (missedBeatIds.contains(beatId))     return false;
+        pushOntoRing(missedBeatIds, beatId, StoryUiConstants.STORY_MISSED_SHELF_CAPACITY,
+                     StoryUiConstants.STORY_MISSED_BEAT_RECORD_ID);
+        return true;
+    }
+
+    /**
+     * Pushes an id onto the front of a capped, newest-first ring and writes the whole ring back.
+     * A re-added id MOVES to the front rather than appearing twice, which is what keeps the recap
+     * showing three distinct entries rather than the same one three times.
+     */
+    private void pushOntoRing(List<String> ring, String id, int capacity, String recordId) {
+        ring.remove(id);
+        ring.add(0, id);
+        while (ring.size() > Math.max(1, capacity)) ring.remove(ring.size() - 1);
+        writeIdList(recordId, ring);
+    }
+
+    /** Reads one packed ring out of the permanent string record into {@code target}. */
+    private void readIdList(String recordId, List<String> target) {
+        target.clear();
+        String packed = store.loadOutcome(recordId);
+        if (packed == null || packed.isEmpty()) return;
+        int fieldStart = 0;
+        while (fieldStart <= packed.length()) {
+            int separatorIndex = packed.indexOf(StoryUiConstants.STORY_RECORD_LIST_SEPARATOR,
+                                                fieldStart);
+            int fieldEnd = separatorIndex < 0 ? packed.length() : separatorIndex;
+            String id = packed.substring(fieldStart, fieldEnd);
+            if (!id.isEmpty()) target.add(id);
+            if (separatorIndex < 0) break;
+            fieldStart = separatorIndex
+                    + StoryUiConstants.STORY_RECORD_LIST_SEPARATOR.length();
+        }
+    }
+
+    /** Packs one ring into a single permanent record.  Called on a change only, never per frame. */
+    private void writeIdList(String recordId, List<String> ring) {
+        StringBuilder packed = new StringBuilder();
+        for (int idIndex = 0; idIndex < ring.size(); idIndex++) {
+            if (idIndex > 0) packed.append(StoryUiConstants.STORY_RECORD_LIST_SEPARATOR);
+            packed.append(ring.get(idIndex));
+        }
+        store.saveOutcome(recordId, packed.toString());
+    }
+
+    // -------------------------------------------------------------------------
     // "New game" (Story UI order-7 Part B)
     // -------------------------------------------------------------------------
 
@@ -261,12 +400,10 @@ public final class StoryProgress {
      */
     public void wipeAllNarrativeState() {
         store.wipeNarrativeState();
-        seenBeatIds.clear();
-        deepestRegion = StoryRegion.fromOrdinal(0);
-        reprintCount  = 0;
-        for (int stanceIndex = 0; stanceIndex < stanceValues.length; stanceIndex++) {
-            stanceValues[stanceIndex] = 0;
-        }
+        // Re-read rather than zero field by field: the store is now empty, so this loads exactly the
+        // state a brand-new save has — including the order-9 rings and the (absent) session stamp —
+        // and cannot forget a field the way a hand-written reset eventually does.
+        loadCachesFromStore();
     }
 
     /**
@@ -275,11 +412,6 @@ public final class StoryProgress {
      * exactly that — so the in-memory copy cannot go on reporting a story the save no longer holds.
      */
     public void reloadFromStore() {
-        seenBeatIds.clear();
-        deepestRegion = StoryRegion.fromOrdinal(store.loadDeepestRegionOrdinal());
-        reprintCount  = Math.max(0, store.loadReprintCount());
-        for (Stance stance : Stance.values()) {
-            stanceValues[stance.ordinal()] = store.loadStance(stance.name());
-        }
+        loadCachesFromStore();
     }
 }

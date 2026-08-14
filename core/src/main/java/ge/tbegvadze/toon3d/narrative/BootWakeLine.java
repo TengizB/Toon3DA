@@ -43,6 +43,7 @@ public final class BootWakeLine {
     private final StoryRegion     lastRegion;
     private final BootCardVariant onlyOnVariant;
     private final int             onlyAtReprintCount;
+    private final boolean         reEntry;
 
     private BootWakeLine(Builder builder) {
         this.id                 = builder.id;
@@ -51,6 +52,7 @@ public final class BootWakeLine {
         this.lastRegion         = builder.lastRegion;
         this.onlyOnVariant      = builder.onlyOnVariant;
         this.onlyAtReprintCount = builder.onlyAtReprintCount;
+        this.reEntry            = builder.reEntry;
     }
 
     /** Stable catalog id.  Also the no-repeat memory key — never change a shipped id. */
@@ -72,9 +74,27 @@ public final class BootWakeLine {
      */
     public int getOnlyAtReprintCount() { return onlyAtReprintCount; }
 
-    /** True when this row is held back for one particular card rather than pooled by region. */
+    /**
+     * True when this row is the RE-ENTRY line for its region (narrative-rework order-9 A) — the one
+     * sentence a player who has been away for a day gets instead of a greeting: where they are, and
+     * what they were last told.
+     *
+     * <p>It REPLACES the ordinary wake line rather than stacking with it, so the card never grows a
+     * fourth block, and it is one-shot per RE-ENTRY EVENT rather than per save.  That is the single
+     * deliberate exception to "say it once" in the whole layer, and it is a legitimate one: the
+     * evidence for saying it again is a real absence, not a guess about what the player forgot.
+     */
+    public boolean isReEntry() {
+        return reEntry;
+    }
+
+    /**
+     * True when this row is held back for one particular card rather than pooled by region.  A
+     * re-entry row counts: it can only ever be drawn on a card that follows an absence, so it is a
+     * single beat rather than pool depth (which is what the pool-depth test measures).
+     */
     public boolean isReserved() {
-        return onlyOnVariant != null || onlyAtReprintCount != ANY_REPRINT_COUNT;
+        return onlyOnVariant != null || onlyAtReprintCount != ANY_REPRINT_COUNT || reEntry;
     }
 
     /** True when this line may be spoken with the given deepest-region-reached. */
@@ -108,6 +128,7 @@ public final class BootWakeLine {
         private StoryRegion     lastRegion  = StoryRegion.CORE;
         private BootCardVariant onlyOnVariant;
         private int             onlyAtReprintCount = ANY_REPRINT_COUNT;
+        private boolean         reEntry;
 
         private Builder(String id) {
             if (id == null || id.isEmpty()) {
@@ -154,6 +175,16 @@ public final class BootWakeLine {
          */
         public Builder onlyAtReprintCount(int value) {
             this.onlyAtReprintCount = value;
+            return this;
+        }
+
+        /**
+         * Marks this row as the RE-ENTRY line for its region (narrative-rework order-9 A).  It is
+         * drawn only on a card that follows a real absence, and only one region's row can ever match,
+         * so it needs no reprint number and no variant of its own.
+         */
+        public Builder reEntry(boolean value) {
+            this.reEntry = value;
             return this;
         }
 

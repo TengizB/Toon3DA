@@ -5170,4 +5170,30 @@ public final class GameMath {
         if (requestedOffset >= maximumOffset) return maximumOffset;
         return requestedOffset;
     }
+
+    /*
+     * Formula: whole hours between two epoch timestamps (narrative-rework order-9's re-entry gap)
+     * Derivation:
+     *   Both instants are milliseconds since the epoch on the same clock, so the elapsed span is a
+     *   plain difference and the conversion is one division by the number of milliseconds in an
+     *   hour:
+     *       hours = floor((now - earlier) / (1000 * 60 * 60))
+     *   Integer division truncates towards zero and the numerator here is non-negative (see the
+     *   edge cases), so truncation IS the floor.  Whole hours are the right grain: the threshold
+     *   this feeds is measured in hours, and a re-entry line that turned on a minute earlier or
+     *   later would read identically to the player.
+     * Edge cases:
+     *   earlierEpochMillis <= 0 means "never recorded" — a brand-new or freshly wiped save — and
+     *   returns 0 rather than the ~57 million hours since 1970, so a first-ever launch can never be
+     *   mistaken for a long absence.
+     *   A clock that moved BACKWARDS (a manual change, a timezone-less device correcting itself)
+     *   would give a negative span; it clamps to 0, because "the future" is not an absence and the
+     *   only safe reading of a broken clock is that the player is here now.
+     */
+    public static long hoursBetweenEpochMillis(long earlierEpochMillis, long laterEpochMillis) {
+        if (earlierEpochMillis <= 0L) return 0L;
+        long elapsedMillis = laterEpochMillis - earlierEpochMillis;
+        if (elapsedMillis <= 0L) return 0L;
+        return elapsedMillis / (1000L * 60L * 60L);
+    }
 }

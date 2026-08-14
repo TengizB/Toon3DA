@@ -96,6 +96,11 @@ class StoryLocalizationTest {
             ids.add(category.getTitleStringId());
         }
 
+        // narrative-rework order-9 B: the recap page is assembled at runtime, so its region rows and
+        // its four block headings belong to no catalog.  Without this they would be the only text in
+        // the game nobody could check until a player with the right save opened the right screen.
+        ids.addAll(StoryRecap.everyStaticStringId());
+
         ids.addAll(everyChromeStringId());
         return ids;
     }

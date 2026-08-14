@@ -66,6 +66,13 @@ public final class CodexSystem {
     private final StoryProgress progress;
     private final StorySettings settings;
 
+    /**
+     * Assembles the two COMPOSED pages (narrative-rework order-9).  Optional: with no composer the
+     * archive behaves exactly as it did before order-9 and a composed entry falls back to its own
+     * body string, so nothing in here depends on the engine having wired one in.
+     */
+    private StoryRecap recap;
+
     // ---- what is on screen ---------------------------------------------------------------------
     private boolean       open;
     private CodexCategory selectedCategory = CodexCategory.values()[0];
@@ -112,6 +119,19 @@ public final class CodexSystem {
         return settings;
     }
 
+    /**
+     * Injects the composer behind the WHERE AM I page and the missed-beat shelf (order-9).  Set once,
+     * at construction time in the engine; the archive works without it, so no test or showcase has to
+     * know it exists.
+     */
+    public void setRecap(StoryRecap value) {
+        this.recap = value;
+    }
+
+    public StoryRecap getRecap() {
+        return recap;
+    }
+
     // -------------------------------------------------------------------------
     // Unlocking
     // -------------------------------------------------------------------------
@@ -151,24 +171,41 @@ public final class CodexSystem {
         rebuildVisibleEntries();
     }
 
-    /** True when this entry is in the persistent unlock set. */
+    /** True when this entry is in the persistent unlock set, or is one that is never locked. */
     public boolean isUnlocked(CodexEntry entry) {
-        return entry != null && progress.isCodexUnlocked(entry.getId());
+        if (entry == null) return false;
+        return entry.isAlwaysUnlocked() || progress.isCodexUnlocked(entry.getId());
     }
 
-    /** How many of a category's entries the player has recovered. */
+    /**
+     * How many of a category's entries the player has RECOVERED.  Composed pages (order-9) do not
+     * count: they are not things anybody found, and letting the recap inflate a shelf's tally would
+     * make a category read as one entry closer to full than the player has actually earned.
+     */
     public int getUnlockedCount(CodexCategory category) {
         List<CodexEntry> categoryEntries = registry.getForCategory(category);
         int unlockedCount = 0;
         for (int entryIndex = 0; entryIndex < categoryEntries.size(); entryIndex++) {
-            if (progress.isCodexUnlocked(categoryEntries.get(entryIndex).getId())) unlockedCount++;
+            CodexEntry entry = categoryEntries.get(entryIndex);
+            if (entry.isComposed()) continue;
+            if (progress.isCodexUnlocked(entry.getId())) unlockedCount++;
         }
         return unlockedCount;
     }
 
-    /** How many entries a category holds in total. */
+    /**
+     * How many COLLECTIBLE entries a category holds.  Composed pages are excluded for the same
+     * reason they are excluded from the count above — and for one more: the missed-beat shelf may
+     * never unlock at all for a player who reads everything, and a shelf nobody can complete would
+     * silently cost that player the LOGS completion beat they had otherwise earned.
+     */
     public int getEntryCount(CodexCategory category) {
-        return registry.getForCategory(category).size();
+        List<CodexEntry> categoryEntries = registry.getForCategory(category);
+        int collectibleCount = 0;
+        for (int entryIndex = 0; entryIndex < categoryEntries.size(); entryIndex++) {
+            if (!categoryEntries.get(entryIndex).isComposed()) collectibleCount++;
+        }
+        return collectibleCount;
     }
 
     /** True when every entry in a category has been recovered.  An empty category is never complete. */
@@ -357,6 +394,11 @@ public final class CodexSystem {
             addWrapped(strings.get(entry.getAiTakeStringId()), maxChars, DetailLineStyle.TAKE);
         }
 
+        // A COMPOSED page (order-9) is written by the game from live state, so its body comes from
+        // the recap composer rather than from the table. If no composer is wired in it falls through
+        // to the authored body below, which is why a composed entry still ships real text.
+        if (entry.isComposed() && appendComposedBody(entry, maxChars)) return;
+
         String body = strings.get(entry.getBodyStringId());
         int paragraphStart = 0;
         while (paragraphStart <= body.length()) {
@@ -368,6 +410,35 @@ public final class CodexSystem {
             if (separatorIndex < 0) break;
             paragraphStart = separatorIndex + PARAGRAPH_SEPARATOR.length();
         }
+    }
+
+    /**
+     * Appends a COMPOSED page's body — the recap, or the missed-beat shelf (narrative-rework
+     * order-9).  Composed once, when the entry opens, exactly like an authored body.
+     *
+     * <p>Headings reuse {@link DetailLineStyle#TAKE_LABEL} rather than introducing a style of their
+     * own: it is already "a dim label above a block", which is precisely what WHERE WE ARE is, and
+     * order-9 ships no renderer change.
+     *
+     * @return true when the composer produced a page; false to fall back to the authored body
+     */
+    private boolean appendComposedBody(CodexEntry entry, int maxChars) {
+        if (recap == null) return false;
+        if (entry.getComposedPage() == CodexEntry.ComposedPage.RECAP) {
+            recap.composeRecap(progress);
+        } else {
+            recap.composeMissedShelf(progress);
+        }
+        if (recap.getLineCount() <= 0) return false;
+        for (int lineIndex = 0; lineIndex < recap.getLineCount(); lineIndex++) {
+            boolean heading = recap.getLineKind(lineIndex) == StoryRecap.RecapLineKind.HEADING;
+            // A break before each BLOCK, never between the rows inside one: three archive titles
+            // double-spaced read as three separate thoughts rather than as one list.
+            if (heading) addLine("", DetailLineStyle.BLANK);
+            addWrapped(strings.get(recap.getLineStringId(lineIndex)), maxChars,
+                       heading ? DetailLineStyle.TAKE_LABEL : DetailLineStyle.BODY);
+        }
+        return true;
     }
 
     private void addWrapped(String text, int maxChars, DetailLineStyle style) {
@@ -422,19 +493,39 @@ public final class CodexSystem {
     // Internals
     // -------------------------------------------------------------------------
 
-    /** Re-resolves the open tab's unlocked entries.  Runs on a selection change or an unlock only. */
+    /**
+     * Re-resolves what the open tab lists.  Runs on a selection change or an unlock only.
+     *
+     * <p>PINNED entries come first, whichever tab is open (narrative-rework order-9 B).  There is
+     * exactly one — the page that answers "what is going on" — and it is at the top of the archive
+     * rather than filed under a shelf because a returning player should not have to know which shelf
+     * it would have been filed under.  Everything after it is the open tab's own unlocked rows, in
+     * the shallowest-region-first order the registry keeps them in.
+     */
     private void rebuildVisibleEntries() {
         visibleEntries.clear();
         visibleTitles.clear();
         visibleSources.clear();
+        for (CodexCategory category : CodexCategory.values()) {
+            List<CodexEntry> categoryEntries = registry.getForCategory(category);
+            for (int entryIndex = 0; entryIndex < categoryEntries.size(); entryIndex++) {
+                CodexEntry entry = categoryEntries.get(entryIndex);
+                if (entry.isPinned() && isUnlocked(entry)) addVisibleEntry(entry);
+            }
+        }
         List<CodexEntry> categoryEntries = registry.getForCategory(selectedCategory);
         for (int entryIndex = 0; entryIndex < categoryEntries.size(); entryIndex++) {
             CodexEntry entry = categoryEntries.get(entryIndex);
-            if (!progress.isCodexUnlocked(entry.getId())) continue;
-            visibleEntries.add(entry);
-            visibleTitles.add(strings.get(entry.getTitleStringId()));
-            visibleSources.add(strings.get(entry.getSourceStringId()));
+            if (entry.isPinned())   continue;   // already listed above, on every tab
+            if (!isUnlocked(entry)) continue;
+            addVisibleEntry(entry);
         }
         setScrollOffset(scrollOffset);   // the list may have shrunk under the current offset
+    }
+
+    private void addVisibleEntry(CodexEntry entry) {
+        visibleEntries.add(entry);
+        visibleTitles.add(strings.get(entry.getTitleStringId()));
+        visibleSources.add(strings.get(entry.getSourceStringId()));
     }
 }

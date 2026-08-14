@@ -40,7 +40,58 @@ public final class BarkStrings {
         registerIdleAndBacktrack(strings);
         registerCodexCompletion(strings);
         registerMapMeaning(strings);
+        registerDepthReactions(strings);
         return strings;
+    }
+
+    /**
+     * THE GRIND FLOORS (narrative-rework order-9 D) — the only small talk in the game, and the only
+     * pool that exists because of how a player actually plays rather than because of where they are
+     * in the plot.  These fire on ground the save has already covered, where every one-shot beat is
+     * spent and the layer would otherwise be silent for whole sessions.
+     *
+     * <p>Three rules, all of which the plot pools get for free and these do not:
+     * <ul>
+     *   <li><b>No claim about the run's STATE.</b> She is software in a suit, not a spectator with a
+     *       view of the bag: "you've still got both guns" is a coin flip, and a companion who is
+     *       wrong about the player half the time is worse than one who says nothing.</li>
+     *   <li><b>No plot.</b> There is nothing left to reveal on a floor the story has finished with,
+     *       and reaching for one here is how a layer starts repeating itself.</li>
+     *   <li><b>The region band still carries the arc.</b> She is chipper up top and down to one
+     *       sentence at the bottom, on the same moment, with no conditional anywhere.</li>
+     * </ul>
+     */
+    private static void registerDepthReactions(StoryStrings strings) {
+        // Region 1 — nothing has gone wrong yet, and she is company software with a clipboard.
+        strings.put("story.bark.depth.rings.1",      "Another one of these. I'll say if it stops being one.");
+        strings.put("story.bark.depth.rings.2",      "We've done this stretch. I'll try to look surprised.");
+        strings.put("story.bark.depth.rings.3",      "Keep going. It's the only direction the building offers.");
+        strings.put("story.bark.depth.rings.4",      "Nothing to report. I'm reporting that.");
+
+        // Region 2 — distracted.  She is somewhere else, and says so instead of pretending.
+        strings.put("story.bark.depth.galleries.1",  "I've been back through the manifests. Don't wait for me.");
+        strings.put("story.bark.depth.galleries.2",  "Go on ahead. I'm counting something and keep losing it.");
+        strings.put("story.bark.depth.galleries.3",  "Nothing new on this floor. Just the same question.");
+        strings.put("story.bark.depth.galleries.4",  "I start sentences down here and don't finish them. Sorry.");
+
+        // Region 3 — cracked.  She remembers these floors better than the player does, and that is
+        // the horror of her: she was not printed, so nothing of hers was ever lost.
+        strings.put("story.bark.depth.reliquary.1",  "You've walked this one. I remember it better than you do.");
+        strings.put("story.bark.depth.reliquary.2",  "Talk to me on this stretch. I'd rather you did.");
+        strings.put("story.bark.depth.reliquary.3",  "I know this floor. Knowing it hasn't helped yet.");
+        strings.put("story.bark.depth.reliquary.4",  "I'd make a joke here. I've run out of the good ones.");
+
+        // Region 4 — quiet and protective.  Short lines, and one of them is only a joke by shape.
+        strings.put("story.bark.depth.wound.1",      "Old ground. I'm watching it anyway.");
+        strings.put("story.bark.depth.wound.2",      "I'd say be careful. You'd ignore me. Be careful.");
+        strings.put("story.bark.depth.wound.3",      "You've been here. It hasn't forgotten that either.");
+        strings.put("story.bark.depth.wound.4",      "No news. I'll take no news.");
+
+        // Region 5 — nothing left to hedge.  She is not managing the player any more, just present.
+        strings.put("story.bark.depth.core.1",       "You know this floor. Take it slowly anyway.");
+        strings.put("story.bark.depth.core.2",       "We could stop. We won't. I know.");
+        strings.put("story.bark.depth.core.3",       "Nothing down here is new to us now. Keep moving.");
+        strings.put("story.bark.depth.core.4",       "Still with you. In case that was in question.");
     }
 
     /**

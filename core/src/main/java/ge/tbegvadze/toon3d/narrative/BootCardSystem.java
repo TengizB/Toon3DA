@@ -82,6 +82,13 @@ public final class BootCardSystem {
     /** Accessibility: the "reduce text hold" setting shortens the staggered line reveal. */
     private boolean reducedTextHold;
 
+    /**
+     * THE THREE-DAY PROBLEM (narrative-rework order-9 A): true while a RE-ENTRY line is still owed.
+     * Set once per session from the persisted gap, and cleared the moment such a line is actually
+     * drawn — which is what makes the beat one-shot per ABSENCE rather than one-shot per save.
+     */
+    private boolean reEntryDue;
+
     /** Accessibility: wrap width of ORA's wake line, narrowed as the text-size setting grows. */
     private int lineMaxChars = StoryUiConstants.STORY_LINE_MAX_CHARS;
 
@@ -140,6 +147,31 @@ public final class BootCardSystem {
     }
 
     // -------------------------------------------------------------------------
+    // RE-ENTRY (narrative-rework order-9 A) — the player who has been away for a day
+    // -------------------------------------------------------------------------
+
+    /**
+     * Arms the RE-ENTRY line if this save was opened after a real absence.  Called ONCE, when the
+     * app's first card system is built: a player who has been away for a day gets one sentence
+     * saying where they are and what they were last told, on a screen they were going to tap anyway.
+     *
+     * <p>The evidence is the persisted session stamp, so this asks {@link StoryProgress} rather than
+     * deciding anything itself — and a save with no stamp (a brand-new player, or one just wiped) is
+     * never treated as a return, because there is nothing to return to.
+     *
+     * @return true when a re-entry line is now owed
+     */
+    public boolean armReEntryIfReturning() {
+        reEntryDue = progress.getReprintCount() > 0 && progress.isReturningAfterALongGap();
+        return reEntryDue;
+    }
+
+    /** True while a re-entry line is still owed — cleared as soon as one is drawn. */
+    public boolean isReEntryDue() {
+        return reEntryDue;
+    }
+
+    // -------------------------------------------------------------------------
     // Presenting a card
     // -------------------------------------------------------------------------
 
@@ -178,6 +210,11 @@ public final class BootCardSystem {
         if (definition.showsWakeLine()) {
             resolveWakeLine(reprintCount);
         }
+        // THE SESSION STAMP (narrative-rework order-9 A). Written here because this is the one screen
+        // every run passes through: it is frequent enough that a long evening of play can never later
+        // read as an absence, and rare enough to stay off any hot path. Written AFTER the wake line
+        // is chosen, so the gap this very card is reacting to is still the one on file when it asks.
+        progress.noteSessionActivity();
         return true;
     }
 
@@ -219,6 +256,10 @@ public final class BootCardSystem {
         BootWakeLine chosen = selectWakeLine(reprintCount);
         if (chosen == null) return;   // no pool for this region: the machine card stands alone
 
+        // One re-entry line per ABSENCE (narrative-rework order-9 A): the moment one is drawn, the
+        // debt is paid, so a second card later in the same session gets an ordinary greeting.
+        if (chosen.isReEntry()) reEntryDue = false;
+
         String text = strings.get(chosen.getTextStringId());
         if (text != null && text.contains(INSTANCE_TOKEN)) {
             text = text.replace(INSTANCE_TOKEN,
@@ -245,6 +286,12 @@ public final class BootCardSystem {
      * couple of real deaths are the cards that have to explain something, and each has a line held
      * for it by variant or by instance number; only when no reservation matches does the ordinary
      * region-gated pool answer, which is every other card in the game.
+     *
+     * <p>Between the two sits the RE-ENTRY line (narrative-rework order-9 A), taking the same single
+     * slot when the player has been away for a day.  It is ordered BELOW the numbered reservations
+     * on purpose: a card that explains what a death costs, or a milestone the counter reaches once
+     * in a save, is a rarer thing than coming back after a week, and the rarer beat should never
+     * lose its one chance to the commoner one.
      */
     private BootWakeLine selectWakeLine(int reprintCount) {
         StoryRegion region = progress.getDeepestRegion();
@@ -255,12 +302,21 @@ public final class BootCardSystem {
         candidateScratch.clear();
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
             BootWakeLine row = rows.get(rowIndex);
-            if (!row.isReserved())                              continue;
+            if (!row.isReserved() || row.isReEntry())           continue;
             if (!row.matchesCard(activeVariant, reprintCount))  continue;
             if (!row.matchesRegion(region))                     continue;
             candidateScratch.add(row);
         }
-        // Pass 2 — the ordinary pool for the deepest region reached.
+        // Pass 2 — the re-entry line, if the player has been away and this card can carry one.
+        if (candidateScratch.isEmpty() && reEntryDue) {
+            for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+                BootWakeLine row = rows.get(rowIndex);
+                if (!row.isReEntry())           continue;
+                if (!row.matchesRegion(region)) continue;
+                candidateScratch.add(row);
+            }
+        }
+        // Pass 3 — the ordinary pool for the deepest region reached.
         if (candidateScratch.isEmpty()) {
             for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
                 BootWakeLine row = rows.get(rowIndex);
@@ -271,7 +327,9 @@ public final class BootCardSystem {
             }
         }
         if (candidateScratch.isEmpty()) {
-            // Fall back to the whole region pool, repeats included, so the beat always lands.
+            // Fall back to the whole region pool, repeats included, so the beat always lands.  Still
+            // only the ORDINARY pool: a reserved row (a re-entry line included) is a beat held for
+            // one moment, and reaching it by way of a fallback would spend it on the wrong card.
             for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
                 BootWakeLine row = rows.get(rowIndex);
                 if (!row.isReserved() && row.matchesRegion(region)) candidateScratch.add(row);

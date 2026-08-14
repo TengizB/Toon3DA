@@ -48,12 +48,13 @@ public interface StoryProgressStore {
      *
      * <p>History: v1 was order-2/3 (deepest region, one-shot flags, reprint count); v2 added the
      * order-4 keys (stances, consequential outcomes, codex unlocks); v3 the order-6 keys (codex
-     * read-flags, accessibility settings); v4 the order-7 story-audio setting.  Every key added so
-     * far reads a default when absent, which is why no version has ever needed a data migration —
-     * an older save loads cleanly.  Bump this whenever the persisted shape changes, and add the
-     * migration next to the bump.
+     * read-flags, accessibility settings); v4 the order-7 story-audio setting; v5 the
+     * narrative-rework order-9 LAST-SESSION TIMESTAMP.  Every key added so far reads a default when
+     * absent, which is why no version has ever needed a data migration — an older save loads
+     * cleanly.  Bump this whenever the persisted shape changes, and add the migration next to the
+     * bump.
      */
-    int SCHEMA_VERSION = 4;
+    int SCHEMA_VERSION = 5;
 
     /**
      * The schema version that wrote this save, or 0 when nothing has ever been written.  Compared
@@ -126,4 +127,31 @@ public interface StoryProgressStore {
 
     /** Persists one accessibility setting.  Written when the player changes it, never per frame. */
     void saveSettingInt(String settingKey, int value);
+
+    // -------------------------------------------------------------------------
+    // narrative-rework order-9 A: the one piece of state the save never held
+    // -------------------------------------------------------------------------
+
+    /**
+     * When the player was last here, in epoch milliseconds, or 0 when this save has never recorded
+     * a session (a brand-new player, or one whose save was just wiped).
+     *
+     * <p>This is the ONE fact a story told across dozens of phone sessions needs and nothing else in
+     * the schema supplies: how long the player has been away.  Everything else about the story is
+     * gated on {@link StoryProgress#getDeepestRegion()}, which is exactly right for the fiction and
+     * says nothing at all about the person holding the phone.  A gap wider than
+     * {@code STORY_REENTRY_GAP_HOURS} is real evidence that they have forgotten where they were, and
+     * it is the only evidence the game can honestly collect.
+     *
+     * <p>A LONG rather than an int: seconds-since-epoch as an int stops working in 2038, and a save
+     * format that expires is not a save format.
+     */
+    long loadLastSessionEpochMillis();
+
+    /**
+     * Records that the player is here NOW.  Written once per reprint card — a handful of times a
+     * session, never per frame — which is frequent enough that a long play session cannot be
+     * mistaken for an absence, and rare enough to stay off any hot path.
+     */
+    void saveLastSessionEpochMillis(long epochMillis);
 }

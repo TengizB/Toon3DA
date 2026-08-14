@@ -31,6 +31,7 @@ public final class CodexStrings {
     public static StoryStrings registerDefaults(StoryStrings strings) {
         registerChrome(strings);
         registerCategories(strings);
+        registerComposedPages(strings);
         registerLogs(strings);
         registerPeople(strings);
         registerPlanet(strings);
@@ -38,6 +39,66 @@ public final class CodexStrings {
         registerOra(strings);
         registerMemories(strings);
         return strings;
+    }
+
+    /**
+     * THE COMPOSED PAGES (narrative-rework order-9) - the two entries the game writes for itself.
+     *
+     * <p>Their BODIES are assembled at open time, so what lives here is the frame around them: the
+     * titles, the four block headings, the region rows the recap picks between, and the sentence
+     * that stands in for a block with nothing in it yet.  The registered body strings are the
+     * fallback shown if no composer is wired in - a composed entry is still a fully translatable row.
+     *
+     * <p>The JOB rows are the Organization's five gate transmissions, rendered as ORA would repeat
+     * them back rather than as they were transmitted: she is summarising an order, not re-issuing
+     * one.  That they CHANGE across the descent is the whole reason this block is worth a page - the
+     * escalation from "restore the site" to "return the asset" is legible on one screen, which is
+     * the only place in the game it ever is.
+     *
+     * <p>Nothing here says what to do next.  Where the player IS and what they were TOLD; never an
+     * objective, a marker or a next step (docs/narrative-authority.txt SECTION 7).
+     */
+    private static void registerComposedPages(StoryStrings strings) {
+        strings.put("story.codex.recap.title",  "WHERE WE'D GOT TO");
+        strings.put("story.codex.recap.source", "ORA, continuous");
+        strings.put("story.codex.recap.body",   "Nothing to summarise yet. We've only just started.");
+
+        strings.put("story.codex.missed.title",  "THINGS I SAID QUICKLY");
+        strings.put("story.codex.missed.source", "ORA, repeated on request");
+        strings.put("story.codex.missed.body",   "Nothing here. You've been reading them.");
+
+        // The four blocks, in the order she says them.
+        strings.put("story.recap.heading.where",   "WHERE WE ARE");
+        strings.put("story.recap.heading.job",     "THE JOB");
+        strings.put("story.recap.heading.know",    "WHAT WE KNOW");
+        strings.put("story.recap.heading.decided", "WHAT YOU DECIDED");
+        strings.put("story.recap.nothing",         "Nothing yet.");
+
+        // WHERE WE ARE - the deepest region reached, in plain words.  No floor number and no depth
+        // reading: this is her placing the player, not a readout.
+        strings.put("story.recap.where.rings",
+                                                "The habitation rings. The part of this place people lived in.");
+        strings.put("story.recap.where.galleries",
+                                                "The cutting floors, under the rings. This is where the work happened.");
+        strings.put("story.recap.where.reliquary",
+                                                "The Reliquary. Racks of stored patterns, and the machines that print them.");
+        strings.put("story.recap.where.wound",
+                                                "Below the racks, where the facility stops behaving like one.");
+        strings.put("story.recap.where.core",
+                                                "The core. The thing the whole site was built on top of.");
+
+        // THE JOB - the standing order as most recently transmitted.  Four escalations and a
+        // write-off, in her mouth.
+        strings.put("story.recap.job.rings",
+                                                "Descend and restore the site. That's the entire brief they sent.");
+        strings.put("story.recap.job.galleries",
+                                                "Same order, plus a correction: extraction here is routine and within tolerance.");
+        strings.put("story.recap.job.reliquary",
+                                                "They've reminded us your reprints are a benefit, and that you're under review.");
+        strings.put("story.recap.job.wound",
+                                                "The order changed. Restore the restraints. It supersedes the purge order.");
+        strings.put("story.recap.job.core",
+                                                "The pattern is under write-off review. They want the asset back in restraint.");
     }
 
     /** The codex screen's own labels - chrome, but still localised, like every other label. */
