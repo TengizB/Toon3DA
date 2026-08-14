@@ -67,6 +67,7 @@ public final class BarkCatalog {
         registerIdleAndBacktrack(registry);
         registerCodexCompletion(registry);
         registerMapMeaning(registry);
+        registerDepthReactions(registry);
     }
 
     /** A fresh registry with the v1 catalog already in it (tests, showcases). */
@@ -506,6 +507,37 @@ public final class BarkCatalog {
                     .region(region)
                     .oneShot(true)
                     .build());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // THE GRIND FLOORS (narrative-rework order-9 D) — the pool that keeps her present on run twenty.
+    //
+    // Everything else in this catalog is either one-shot or tied to a beat the plot has already
+    // delivered, so by the time a player is genuinely invested the layer has spent itself and goes
+    // quiet.  These fire only on ground the save has already covered, and they are the ONE place in
+    // the game small talk is correct: there is no plot left to advance on a floor the story finished
+    // with, and a companion who says nothing for three sessions is not a companion.
+    //
+    // What they must never do is claim a FACT (doctrine D-no-line-assumes-what-it-was-not-given).
+    // She cannot see the bag, so "you've still got both guns" would be a lie roughly half the time —
+    // these are observations about the descent and about her, which are true whatever the player is
+    // carrying.  FLAVOR priority, so they are the first thing dropped under any pressure at all, and
+    // four rows per region so the no-repeat memory always has somewhere to go.
+    // -------------------------------------------------------------------------
+    private static void registerDepthReactions(BarkRegistry registry) {
+        for (StoryRegion region : StoryRegion.values()) {
+            for (int rowNumber = 1; rowNumber <= 4; rowNumber++) {
+                String id = "bark.depth." + region.getCatalogKey() + "." + rowNumber;
+                registry.register(row(id, storyIdFor(id))
+                        .trigger(BarkTrigger.DEPTH_REACTION)
+                        .region(region)
+                        // Two of the four are her being dry; the tone weights keep the mix honest
+                        // without this method knowing anything about the balance.
+                        .tone(rowNumber % 2 == 0 ? BarkTone.LEVITY : BarkTone.LORE)
+                        .priority(BarkPriority.FLAVOR)
+                        .build());
+            }
         }
     }
 

@@ -30,6 +30,18 @@ import java.util.List;
  */
 public final class CodexEntry {
 
+    /**
+     * Which page a COMPOSED entry's body is assembled from (narrative-rework order-9).  An ordinary
+     * entry is authored once and never changes; these two are written by the game out of live state,
+     * which is why they name a composer instead of trusting their body string.
+     */
+    public enum ComposedPage {
+        /** WHERE WE ARE / THE JOB / WHAT WE KNOW / WHAT YOU DECIDED (order-9 B). */
+        RECAP,
+        /** The critical lines the player closed before reading them (order-9 C). */
+        MISSED
+    }
+
     private final String        id;
     private final CodexCategory category;
     private final StoryRegion   region;
@@ -38,6 +50,9 @@ public final class CodexEntry {
     private final String        bodyStringId;
     private final String        aiTakeStringId;
     private final List<String>  unlockLineIds;
+    private final ComposedPage  composedPage;
+    private final boolean       pinned;
+    private final boolean       alwaysUnlocked;
 
     private CodexEntry(Builder builder) {
         this.id             = builder.id;
@@ -47,6 +62,9 @@ public final class CodexEntry {
         this.sourceStringId = builder.sourceStringId;
         this.bodyStringId   = builder.bodyStringId;
         this.aiTakeStringId = builder.aiTakeStringId;
+        this.composedPage   = builder.composedPage;
+        this.pinned         = builder.pinned;
+        this.alwaysUnlocked = builder.alwaysUnlocked;
         this.unlockLineIds  = builder.unlockLineIds.isEmpty()
                 ? Collections.<String>emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(builder.unlockLineIds));
@@ -99,6 +117,41 @@ public final class CodexEntry {
         return unlockLineIds;
     }
 
+    /**
+     * Which live page assembles this entry's body, or null for the ordinary case — an entry written
+     * once by an author (narrative-rework order-9).
+     *
+     * <p>A composed entry is deliberately outside the archive's collection bookkeeping: it is not
+     * something the player RECOVERED, so it counts towards no category's completion and appears in
+     * no recap of "what we know".  Two of them exist and there is no reason for a third — the codex
+     * is an archive of what was said, and everything else on this axis is a HUD element in disguise.
+     */
+    public ComposedPage getComposedPage() {
+        return composedPage;
+    }
+
+    /** True when this entry's body is assembled from live state rather than read from the table. */
+    public boolean isComposed() {
+        return composedPage != null;
+    }
+
+    /**
+     * True when this entry sits at the TOP OF THE ARCHIVE, above the open tab's own rows, whichever
+     * tab that is.  Exactly one entry is pinned: the page that answers "what is going on", which is
+     * useless if a returning player has to find it first.
+     */
+    public boolean isPinned() {
+        return pinned;
+    }
+
+    /**
+     * True when this entry is never locked.  A player who has been away for a week must not have to
+     * have EARNED the page that reminds them where they were.
+     */
+    public boolean isAlwaysUnlocked() {
+        return alwaysUnlocked;
+    }
+
     /** True when {@code lineId} is one of the lines that archives this entry. */
     public boolean isUnlockedByLine(String lineId) {
         if (lineId == null) return false;
@@ -122,6 +175,9 @@ public final class CodexEntry {
         private String              sourceStringId;
         private String              bodyStringId;
         private String              aiTakeStringId;
+        private ComposedPage        composedPage;
+        private boolean             pinned;
+        private boolean             alwaysUnlocked;
         private final List<String>  unlockLineIds = new ArrayList<>();
 
         private Builder(String id, CodexCategory category) {
@@ -141,6 +197,29 @@ public final class CodexEntry {
         public Builder sourceStringId(String value)   { this.sourceStringId = value; return this; }
         public Builder bodyStringId(String value)     { this.bodyStringId   = value; return this; }
         public Builder aiTakeStringId(String value)   { this.aiTakeStringId = value; return this; }
+
+        /**
+         * Marks this entry's body as ASSEMBLED from live state (narrative-rework order-9) rather than
+         * read from the string table.  The registered body id is kept as the fallback the page shows
+         * when the composer has nothing to say, so a composed entry is still a fully translatable row
+         * and still fails the localisation sweep if its text is missing.
+         */
+        public Builder composed(ComposedPage value) {
+            this.composedPage = value;
+            return this;
+        }
+
+        /** Pins this entry above the open tab's rows, on every tab (order-9 B). */
+        public Builder pinned(boolean value) {
+            this.pinned = value;
+            return this;
+        }
+
+        /** Makes this entry permanently readable — never locked, never earned (order-9 B). */
+        public Builder alwaysUnlocked(boolean value) {
+            this.alwaysUnlocked = value;
+            return this;
+        }
 
         /** Adds one bark / exchange id whose delivery archives this entry. */
         public Builder unlockedByLine(String lineId) {

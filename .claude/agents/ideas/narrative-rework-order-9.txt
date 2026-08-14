@@ -1,7 +1,18 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Narrative rework 9 — Re-entry, recap & missed-beat recovery
 ---
+
+IMPLEMENTATION NOTE (what shipped, and the one thing that did not)
+Parts A, B, D and E shipped in full. Part C shipped its ARCHIVE half in full (a missed story beat
+lands on the codex.missed shelf and is never re-shown in play) plus the EVIDENCE half of C.2:
+StoryTelemetry now records which line was closed unread, and narrative/StoryRecovery routes a missed
+TEACHING beat onto a re-teach lane (consumeRecoverableTopic()). The re-teach DELIVERY is deliberately
+NOT here: this order's own text hands it to "order-4's re-teach path", and order-4 (the competence
+model) is still NOT IMPLEMENTED. Order-4 owns the second telling — the shorter, blunter, differently
+-angled words, the one-re-teach-ever cap and the per-floor rate limit — and building half of it here
+would have shipped the verbatim repetition order-4 exists to forbid. Until it lands the lane fills
+and nothing consumes it, which is the correct failure mode: silence.
 
 PURPOSE
 This is a phone game with a story told across dozens of sessions. Two things break it that no

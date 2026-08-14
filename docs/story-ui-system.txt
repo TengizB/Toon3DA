@@ -840,6 +840,96 @@ PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
     `STORY_TELEMETRY_FAST_DISMISS_SECONDS` was skipped, not read.
 
 
+RE-ENTRY, RECAP & MISSED-BEAT RECOVERY (narrative-rework order-9)
+================================================================
+Everything above assumes a player who remembers where they were and read the line they were shown.
+This section is what the layer owes the two people that assumption fails for: the one who put the
+phone down for a week, and the one who tapped a one-shot line away before reading it. No new screen,
+no quest log, no markers — every part of it hangs off a channel the player was already going to look
+at, and the recap NEVER appears in play.
+
+A. THE THREE-DAY PROBLEM — one line, on the card, only when it is needed
+  The save persists every fact about the story except the player's MEMORY of it. Schema v5 adds the
+  one piece of state that fixes that: a LAST-SESSION TIMESTAMP (`StoryProgressStore
+  .loadLastSessionEpochMillis`, stamped by `BootCardSystem.present`). When the gap exceeds
+  `STORY_REENTRY_GAP_HOURS` (24), the card's single ORA slot is filled by a RE-ENTRY line instead of
+  an ordinary greeting — one sentence naming where they are and what they were last told, one row
+  per region, `BootWakeLine.reEntry(true)`.
+
+  It REPLACES the wake line rather than stacking with it, so the card never grows a fourth block, and
+  it is one-shot per RE-ENTRY EVENT rather than per save. That is the ONE deliberate exception to
+  "say it once" in the whole layer, and it is legitimate because the evidence is a real absence.
+
+  How the absence detects itself: a World is rebuilt on every death, so no session flag could
+  survive one. `armReEntryIfReturning()` is asked once per World and can only answer yes for the
+  FIRST world of a sitting, because presenting a card stamps the save with the current time and
+  every world built afterwards reads a gap of nothing.
+
+  PRECEDENCE on the wake slot: reserved-by-variant/count (the first print, the first-death cards,
+  the counter milestones) > re-entry > the ordinary region pool. The rarer beat never loses its one
+  chance to the commoner one.
+
+B. THE WHERE AM I PAGE — always unlocked, always current
+  One codex entry (`codex.recap`), PINNED to the top of every tab, never locked, and written by the
+  GAME rather than by an author: `narrative/StoryRecap` composes it from state already persisted.
+  Four blocks, in ORA's voice — WHERE WE ARE (deepest region), THE JOB (the standing order as most
+  recently transmitted, which CHANGES four times across the descent and is the only screen in the
+  game where that escalation is legible at once), WHAT WE KNOW (the last three archive entries
+  unlocked, by title), WHAT YOU DECIDED (every consequential answer on file, in the player's OWN
+  words — the option's line, re-resolved).
+
+  IT MUST NOT BECOME A CHECKLIST. No percentages, no completion counts, no "next objective", no
+  markers on the map. It says where the player IS and what they were TOLD, never what to do next.
+
+  `CodexEntry.composed(ComposedPage)` is the mechanism, and it is deliberately narrow: a composed
+  entry counts towards NO category's completion (it was not recovered by anybody, and the missed
+  shelf may never unlock at all — a shelf nobody can complete would silently cost that player the
+  LOGS completion beat) and never appears in its own WHAT WE KNOW block. Two exist and there is no
+  reason for a third; everything else on this axis is a HUD element in disguise.
+
+C. MISSED-BEAT RECOVERY — the rule is the whole feature
+  **MECHANICS may be repeated once, on evidence. STORY is never repeated, only archived.**
+  `StoryTelemetry.recordBarkDismissed` now records WHICH line was closed unread, and
+  `narrative/StoryRecovery` routes it:
+    - a missed STORY beat (region entry, reveal log, gate order) → the archive and nowhere else. It
+      lands on `codex.missed` ("THINGS I SAID QUICKLY"), which unlocks the first time there is
+      anything on it and stays invisible to a player who reads what they are shown. Re-showing a
+      story beat out in the world is how a narrative layer becomes something to escape from.
+    - a missed TEACHING beat (a control hint) → the re-teach lane,
+      `StoryRecovery.consumeRecoverableTopic()`. Somebody who did not read it is not bored, they are
+      about to be stuck.
+    - anything NON-CRITICAL → ignored. That was a player declining a line, which is the layer
+      working.
+  Order-9 records the evidence; **order-4 (the competence model) owns the re-teach LINE and the
+  delivery** — the shorter, blunter, differently-angled second telling, the one-re-teach-ever cap and
+  the per-floor rate limit. Until it ships the lane fills and nothing consumes it, which is the
+  correct failure mode: silence. Recovery NEVER re-opens an exchange; a blocking beat is spent when
+  answered (order-7 Part E) and stays spent.
+
+D. THE RUN-ONE-OF-MANY PROBLEM — what she says on run twenty
+  By run twenty every one-shot beat is spent and the layer goes quiet exactly when a player is most
+  invested. Two answers, both content:
+    - DEPTH REACTIONS (`BarkTrigger.DEPTH_REACTION`, four rows per region). Fires on a GRIND FLOOR —
+      ground the SAVE has already covered (`World.isGrindFloor`: deepest region ever reached is
+      strictly deeper than this floor's). Asked INSTEAD of `FLOOR_ARRIVAL` on the same roll and the
+      same slot, never as well, so a grind floor is exactly as chatty as any other. She talks about
+      the RUN, not the plot; it is the one place small talk belongs. **No row may claim a fact about
+      the run's state** — she is software in a suit, not a spectator with a view of the bag, and a
+      companion who is wrong about the player half the time is worse than one who says nothing.
+    - COUNTER MILESTONES (six reserved wake lines: prints 10, 20, 30, 40, 50, 100). The game's
+      oldest running joke and its slowest turn — round numbers up top, "I'd rather not say it" by the
+      Wound. Banded from thirty down, so the turn only reaches somebody who has read what the
+      Cradles are fed; a player still on the surface at print thirty gets an ordinary greeting, which
+      is right, because the joke has not turned for them yet.
+
+E. GUARDS (all four are properties of the code above, not review notes)
+  - The recap never appears in play. It is on the card and in the archive — both places the player
+    has already stopped.
+  - No objective marker, no waypoint, no "next: descend to region 3".
+  - The re-entry line replaces the wake line; the card never grows a fourth block.
+  - Missed-beat recovery never re-opens an exchange.
+
+
 WRITING RULES (narrative-rework order-6) — what a shipped ROW may not do
 ========================================================================
 Order-6 was the cleanup pass over every string that already shipped: nine cuts, six replacement rows

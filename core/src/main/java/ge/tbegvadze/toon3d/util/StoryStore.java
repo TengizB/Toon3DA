@@ -31,8 +31,9 @@ public final class StoryStore implements StoryProgressStore {
      * disagree about what a save contains.  Version 2 added the order-4 keys (the three hidden
      * stance leanings, consequential outcomes, codex unlocks); version 3 the order-6 keys (which
      * codex entries have been READ, and the accessibility settings); version 4 the order-7
-     * story-audio setting.  Every one of them reads a default when absent, which is why no version
-     * so far has needed a data migration — an older save loads cleanly.
+     * story-audio setting; version 5 the narrative-rework order-9 last-session timestamp behind the
+     * re-entry line.  Every one of them reads a default when absent, which is why no version so far
+     * has needed a data migration — an older save loads cleanly.
      */
     public static final int STORY_SCHEMA_VERSION = StoryProgressStore.SCHEMA_VERSION;
 
@@ -45,6 +46,7 @@ public final class StoryStore implements StoryProgressStore {
     private static final String KEY_CODEX_PREFIX   = "story.codex.";
     private static final String KEY_CODEX_READ_PREFIX = "story.codexRead.";
     private static final String KEY_SETTING_PREFIX = "story.setting.";
+    private static final String KEY_LAST_SESSION   = "story.lastSession";
 
     /** Prefix shared by every narrative key — used by a "new game" wipe. */
     public static final String STORY_KEY_PREFIX = "story.";
@@ -260,6 +262,28 @@ public final class StoryStore implements StoryProgressStore {
         if (prefs == null || settingKey == null) return;
         prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
         prefs.putInteger(KEY_SETTING_PREFIX + settingKey, value);
+        prefs.flush();
+    }
+
+    // -------------------------------------------------------------------------
+    // narrative-rework order-9 A: when the player was last here.
+    // The only fact in this file that is about the PERSON rather than about the story, and the
+    // only one a re-entry line could ever be built on.  Written once per reprint card.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public long loadLastSessionEpochMillis() {
+        Preferences prefs = preferences();
+        if (prefs == null) return 0L;
+        return prefs.getLong(KEY_LAST_SESSION, 0L);
+    }
+
+    @Override
+    public void saveLastSessionEpochMillis(long epochMillis) {
+        Preferences prefs = preferences();
+        if (prefs == null) return;
+        prefs.putInteger(KEY_SCHEMA_VERSION, STORY_SCHEMA_VERSION);
+        prefs.putLong(KEY_LAST_SESSION, epochMillis);
         prefs.flush();
     }
 }

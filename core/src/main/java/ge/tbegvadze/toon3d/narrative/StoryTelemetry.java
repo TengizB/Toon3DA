@@ -28,6 +28,8 @@ public final class StoryTelemetry {
     private final int[] answersByKind = new int[ExchangeOptionKind.values().length];
     private int codexOpens;
     private int codexEntriesOpened;
+    /** The last line closed unread (order-9 C) — a one-frame hand-off, never a history. */
+    private String lastFastDismissedBarkId;
 
     /** A bark reached the screen. */
     public void recordBarkShown() {
@@ -37,13 +39,30 @@ public final class StoryTelemetry {
     /**
      * A bark was dismissed by the player after {@code visibleSeconds} on screen.  Anything under the
      * fast-dismiss threshold counts as skipped rather than read.
+     *
+     * @param barkId which line it was.  Recorded (narrative-rework order-9 C) so recovery can act on
+     *               the skip rather than merely count it: until order-9 this method knew a line had
+     *               been thrown away and not WHICH line, which is the difference between a tuning
+     *               statistic and something a player can be handed back.
+     * @return true when the line was closed too fast to have been read
      */
-    public void recordBarkDismissed(float visibleSeconds) {
-        if (visibleSeconds < StoryUiConstants.STORY_TELEMETRY_FAST_DISMISS_SECONDS) {
-            barksClosedFast++;
-        } else {
+    public boolean recordBarkDismissed(float visibleSeconds, String barkId) {
+        if (visibleSeconds >= StoryUiConstants.STORY_TELEMETRY_FAST_DISMISS_SECONDS) {
             barksRead++;
+            return false;
         }
+        barksClosedFast++;
+        lastFastDismissedBarkId = barkId;
+        return true;
+    }
+
+    /**
+     * The id of the last line closed inside the fast-dismiss window, or null.  Read once, by the
+     * engine, on the frame the dismissal happened — this is a hand-off, not a history, and the
+     * counters above remain the only thing this class accumulates.
+     */
+    public String getLastFastDismissedBarkId() {
+        return lastFastDismissedBarkId;
     }
 
     /** The player answered an exchange with an option of this kind. */
@@ -102,6 +121,7 @@ public final class StoryTelemetry {
         exchangesAnswered  = 0;
         codexOpens         = 0;
         codexEntriesOpened = 0;
+        lastFastDismissedBarkId = null;
         for (int kindIndex = 0; kindIndex < answersByKind.length; kindIndex++) {
             answersByKind[kindIndex] = 0;
         }

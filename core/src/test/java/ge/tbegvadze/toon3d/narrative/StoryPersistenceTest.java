@@ -183,8 +183,16 @@ class StoryPersistenceTest {
         writtenSettings.setReduceTextHold(true);
         writtenSettings.setStoryAudioEnabled(false);
 
+        // narrative-rework order-9: the session stamp and the two rings the archive's pages read.
+        written.noteSessionActivity();
+        written.recordMissedBeat("bark.region.galleries");
+
         StoryProgress read = reprint(store);
         assertEquals(StoryRegion.HARVESTING_GALLERIES, read.getDeepestRegion());
+        assertEquals(1, read.getMissedBeatIds().size(), "the missed-beat shelf did not survive");
+        assertEquals("bark.region.galleries", read.getMissedBeatIds().get(0));
+        assertTrue(read.getRecentCodexUnlocks().contains("codex.yield"),
+                "an unlock must be remembered in the order it happened");
         assertTrue(read.hasSeen("beat.one"));
         assertTrue(read.hasSeen("beat.two"));
         assertFalse(read.hasSeen("beat.never"));
@@ -240,6 +248,12 @@ class StoryPersistenceTest {
         assertNull(progress.getOutcome("exchange.core"));
         assertFalse(progress.isCodexUnlocked("codex.core"));
         assertFalse(progress.isCodexEntryRead("codex.core"));
+        // narrative-rework order-9: the recap's inputs go with everything else. A wiped save has no
+        // archive to summarise, nothing it could have missed, and no absence to have returned from.
+        assertTrue(progress.getRecentCodexUnlocks().isEmpty());
+        assertTrue(progress.getMissedBeatIds().isEmpty());
+        assertEquals(0L, progress.getHoursSinceLastSession());
+        assertFalse(progress.isReturningAfterALongGap());
 
         // And a fresh load of the same store agrees — including the settings, which live beside it.
         StoryProgress afterWipe = reprint(store);

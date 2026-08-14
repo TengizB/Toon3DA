@@ -44,6 +44,7 @@ import ge.tbegvadze.toon3d.level.RoomBlueprints;
 import ge.tbegvadze.toon3d.level.StartGameLevelGenerator;
 import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.narrative.BarkCatalog;
+import ge.tbegvadze.toon3d.narrative.BarkRegistry;
 import ge.tbegvadze.toon3d.narrative.BarkSystem;
 import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.BootCardCatalog;
@@ -51,9 +52,11 @@ import ge.tbegvadze.toon3d.narrative.BootCardSystem;
 import ge.tbegvadze.toon3d.narrative.BootCardVariant;
 import ge.tbegvadze.toon3d.narrative.CodexCatalog;
 import ge.tbegvadze.toon3d.narrative.CodexCategory;
+import ge.tbegvadze.toon3d.narrative.CodexRegistry;
 import ge.tbegvadze.toon3d.narrative.CodexSystem;
 import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
+import ge.tbegvadze.toon3d.narrative.ExchangeRegistry;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
 import ge.tbegvadze.toon3d.narrative.FramingMenu;
@@ -62,6 +65,8 @@ import ge.tbegvadze.toon3d.narrative.PauseMenuItem;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.TitleMenuItem;
 import ge.tbegvadze.toon3d.narrative.TitleScreenSystem;
+import ge.tbegvadze.toon3d.narrative.StoryRecap;
+import ge.tbegvadze.toon3d.narrative.StoryRecovery;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
 import ge.tbegvadze.toon3d.narrative.StoryTermCatalog;
 import ge.tbegvadze.toon3d.narrative.StorySettings;
@@ -429,6 +434,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final CodexSystem          codexSystem;
     private final CodexOverlayRenderer codexOverlayRenderer;
     private final StoryTelemetry       storyTelemetry = new StoryTelemetry();
+    /**
+     * MISSED-BEAT RECOVERY (narrative-rework order-9 C): what happens to a mandatory line the player
+     * closed before they could have read it.  Story goes to the archive's shelf; a control hint goes
+     * to the re-teach lane order-4's competence model consumes.
+     */
+    private final StoryRecovery        storyRecovery;
     /** The phase to restore when the archive closes — it is a page of a menu, not a detour. */
     private RunPhase                   codexReturnPhase = RunPhase.PLAYING;
     /** Drag-to-scroll tracking for the codex body: where the finger went down, and how far it went. */
@@ -553,9 +564,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // StoryProgress reads/writes the deepest story region reached and the one-shot beat flags
         // through StoryStore (Preferences), so a reprint never replays a beat or rewinds ORA's tone.
         // The string table comes from the externalised asset, falling back to the built-in defaults.
-        barkSystem = new BarkSystem(BarkCatalog.defaultRegistry(), StoryStringsLoader.load(),
+        BarkRegistry barkRegistry = BarkCatalog.defaultRegistry();
+        barkSystem = new BarkSystem(barkRegistry, StoryStringsLoader.load(),
                                     new StoryProgress(new StoryStore()),
                                     runSeed ^ StoryUiConstants.STORY_BARK_SELECTION_SEED_SALT);
+        // MISSED-BEAT RECOVERY (narrative-rework order-9 C). Shares the bark catalog, so it can tell
+        // a mandatory beat from a flavour quip and a teaching line from a story one — which is the
+        // whole of its job: story goes to the archive, mechanics go to the re-teach lane.
+        storyRecovery = new StoryRecovery(barkRegistry, barkSystem.getProgress());
         storyMomentRandom = new java.util.Random(runSeed ^ StoryUiConstants.STORY_MOMENT_SEED_SALT);
         // One audio owner for every story channel (order-7 Part D). Built before the renderers so
         // each can be handed the same instance; disposed once, by this class.
@@ -575,11 +591,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         bootCardRenderer.setBootCardSystem(bootCardSystem);
         bootCardRenderer.setStrings(storyStrings);
         bootCardRenderer.setStoryAudio(storyAudio);
+        // THE THREE-DAY PROBLEM (narrative-rework order-9 A). Asked once per World, and answered
+        // "yes" only by the FIRST world of an app session: presenting a card stamps the save with
+        // the current time, so every world built after it — every reprint of this sitting — reads a
+        // gap of nothing and gets an ordinary greeting. The absence detects itself; no session flag
+        // has to be threaded through a process that dies and is rebuilt on every death.
+        bootCardSystem.armReEntryIfReturning();
 
         // Story UI exchanges (order-4) — shares the same persistent StoryProgress as the bark layer
         // and the boot card, so a one-shot exchange answered on an earlier run never re-asks, and
         // the hidden stance those answers build survives every death.
-        exchangeSystem = new ExchangeSystem(ExchangeCatalog.defaultRegistry(), storyStrings,
+        ExchangeRegistry exchangeRegistry = ExchangeCatalog.defaultRegistry();
+        exchangeSystem = new ExchangeSystem(exchangeRegistry, storyStrings,
                                             barkSystem.getProgress(),
                                             runSeed ^ StoryUiConstants.STORY_EXCHANGE_SELECTION_SEED_SALT);
         storyExchangeRenderer = new StoryExchangeRenderer();
@@ -592,8 +615,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // and the settings persist beside it. Applying them here (rather than per frame) is what
         // makes a size change take effect on the next line rather than on the next launch.
         storySettings        = new StorySettings(new StoryStore());
-        codexSystem          = new CodexSystem(CodexCatalog.defaultRegistry(), storyStrings,
+        CodexRegistry codexRegistry = CodexCatalog.defaultRegistry();
+        codexSystem          = new CodexSystem(codexRegistry, storyStrings,
                                                barkSystem.getProgress(), storySettings);
+        // THE WHERE AM I PAGE (narrative-rework order-9 B) — the one piece of writing the GAME
+        // writes. It reads the same three catalogs the channels do, so a page composed for a player
+        // who has been away a week says what those channels actually told them, and it lives in the
+        // archive because that is a screen somebody chose to open: a recap must never appear in play.
+        codexSystem.setRecap(new StoryRecap(codexRegistry, exchangeRegistry, barkRegistry));
         codexOverlayRenderer = new CodexOverlayRenderer();
         codexOverlayRenderer.setCodexSystem(codexSystem);
         codexOverlayRenderer.setStrings(storyStrings);
@@ -2918,7 +2947,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // stays legible as its own decision.
         if (storyMomentRandom.nextFloat() < StoryUiConstants.STORY_BARK_FLOOR_ARRIVAL_CHANCE
                 && !rollsDeliberateDeepSilence()) {
-            barkSystem.request(BarkTrigger.FLOOR_ARRIVAL);
+            // THE GRIND FLOORS (narrative-rework order-9 D). Same roll, same slot, different pool:
+            // on ground the save has already covered there is no plot left to advance, and every
+            // one-shot beat down here was spent runs ago — which is why the layer goes quiet exactly
+            // when a player is most invested. Asked INSTEAD of the arrival line, never as well, so a
+            // grind floor is precisely as chatty as any other floor has ever been.
+            barkSystem.request(isGrindFloor() ? BarkTrigger.DEPTH_REACTION
+                                              : BarkTrigger.FLOOR_ARRIVAL);
         }
         // One vocabulary naming per floor, never a probability roll: a word the player is about to
         // start reading everywhere is not flavour. The catalog's own region band decides which is
@@ -2946,6 +2981,29 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && currentDepth - regionEntryDepth >= StoryUiConstants.STORY_ORGANIZATION_ORDER_FLOOR_DELAY) {
             exchangeSystem.request(ExchangeTrigger.ORGANIZATION_ORDER);
         }
+    }
+
+    /**
+     * A GRIND FLOOR (narrative-rework order-9 D): true when this floor is new to the RUN but not new
+     * to the SAVE — the story has already been deeper than the ground the player is standing on.
+     *
+     * <p>Region depth is the test because region depth is what the layer persists.  A run is a
+     * monotone descent, so "deeper than they have been on this run" is true of every floor and says
+     * nothing at all; the fact that actually distinguishes run twenty from run one is that the
+     * descent is re-treading ground the story finished with.  Every one-shot beat down here was
+     * spent long ago, and that is precisely when a companion who says nothing stops reading as
+     * restraint and starts reading as an empty channel.
+     */
+    private boolean isGrindFloor() {
+        if (routePlan == null) return false;
+        RegionSpec region;
+        try {
+            region = routePlan.regionForDepth(currentDepth);
+        } catch (IllegalArgumentException outOfPlan) {
+            return false;   // a depth the plan does not cover is not evidence of anything
+        }
+        StoryRegion here = StoryRegion.fromRouteRegionIndex(region.regionIndex());
+        return barkSystem.getProgress().getDeepestRegion().ordinal() > here.ordinal();
     }
 
     /**
@@ -3339,7 +3397,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private void recordBarkDismissalForTuning() {
         if (!barkSystem.hasActiveBark() || barkSystem.isActiveBarkDismissed()) return;
-        storyTelemetry.recordBarkDismissed(barkSystem.getActiveElapsedSeconds());
+        boolean closedUnread = storyTelemetry.recordBarkDismissed(
+                barkSystem.getActiveElapsedSeconds(), barkSystem.getActiveBarkId());
+        // MISSED-BEAT RECOVERY (narrative-rework order-9 C). The same measurement, now acted on: a
+        // MANDATORY line thrown away unread is the one case where a beat gets a second existence.
+        // Story goes to the archive's shelf and is never re-shown in play; a control hint joins the
+        // re-teach lane, because somebody who did not read it is not bored, they are about to be
+        // stuck. Everything non-critical is left alone — that was a player declining a line, which
+        // is the layer working.
+        if (closedUnread) {
+            storyRecovery.recordFastDismiss(storyTelemetry.getLastFastDismissedBarkId());
+        }
     }
 
     // -------------------------------------------------------------------------

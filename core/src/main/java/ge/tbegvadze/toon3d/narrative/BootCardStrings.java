@@ -100,6 +100,32 @@ public final class BootCardStrings {
         strings.put("story.boot.wake.firstdeath.report",
                                                    "There's a REPORT plate if you want to see what got you.");
 
+        // RESERVED — the counter milestones (narrative-rework order-9 D).  Every tenth print, one
+        // line about the number itself.  It starts as a joke about round numbers and ends as the
+        // thing she will not say out loud, which is the slowest turn in the game: the same gag,
+        // told six times across a hundred deaths, arriving somewhere else each time.
+        strings.put("story.boot.wake.milestone.10",  "Print ten. Round numbers. I'd get you a cake.");
+        strings.put("story.boot.wake.milestone.20",  "Print twenty. You've been at this a while now.");
+        strings.put("story.boot.wake.milestone.30",  "Print thirty. I've stopped rounding it off in my head.");
+        strings.put("story.boot.wake.milestone.40",  "Print forty. I know what that is now. I'd rather not say it.");
+        strings.put("story.boot.wake.milestone.50",  "Fifty. I keep the number because somebody should.");
+        strings.put("story.boot.wake.milestone.100", "A hundred. I'm not going to pretend that's nothing.");
+
+        // RESERVED — the RE-ENTRY lines (narrative-rework order-9 A).  One sentence to somebody who
+        // has been away for a day or a week: where they are, and what they were last told.  Never
+        // what to do next — the moment one of these acquires an objective it is a quest log wearing
+        // her voice.  Written as picking a conversation back up, because that is what it is.
+        strings.put("story.boot.wake.reentry.rings",
+                                                   "You're back at the rings. Same job: down, find it, restart the works.");
+        strings.put("story.boot.wake.reentry.galleries",
+                                                   "We were in the cutting floors. Working out what they were cutting.");
+        strings.put("story.boot.wake.reentry.reliquary",
+                                                   "The Reliquary. We'd just found out what the printers run on.");
+        strings.put("story.boot.wake.reentry.wound",
+                                                   "We were in the warm part. Where it stops being a facility.");
+        strings.put("story.boot.wake.reentry.core",
+                                                   "The Core. You know what's down there now. Whenever you're ready.");
+
         // Region 1 — warm and matter-of-fact.  She reads the number out and checks the body over.
         //
         // She does NOT score the death (order-6 C, doctrine D6).  "New record" and "I keep the good

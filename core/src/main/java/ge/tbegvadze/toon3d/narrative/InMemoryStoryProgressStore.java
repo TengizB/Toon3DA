@@ -22,6 +22,8 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
     private final Map<String, Integer>     settings         = new HashMap<>();
     private int deepestRegionOrdinal;
     private int reprintCount;
+    /** Epoch millis of the last recorded session (order-9 A); 0 = this save has never had one. */
+    private long lastSessionEpochMillis;
     /** Stamped on the first write, exactly like the real store, so a fresh store reads version 0. */
     private int schemaVersion;
 
@@ -131,6 +133,17 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
         stampSchemaVersion();
     }
 
+    @Override
+    public long loadLastSessionEpochMillis() {
+        return lastSessionEpochMillis;
+    }
+
+    @Override
+    public void saveLastSessionEpochMillis(long epochMillis) {
+        this.lastSessionEpochMillis = epochMillis;
+        stampSchemaVersion();
+    }
+
     /**
      * Wipes everything — the headless half of a "new game" reset.  Kept as its own method (rather
      * than folded into {@link #wipeNarrativeState()}) because tests reset a store without pretending
@@ -143,8 +156,9 @@ public final class InMemoryStoryProgressStore implements StoryProgressStore {
         unlockedCodexIds.clear();
         readCodexIds.clear();
         settings.clear();
-        deepestRegionOrdinal = 0;
-        reprintCount         = 0;
-        schemaVersion        = 0;
+        deepestRegionOrdinal   = 0;
+        reprintCount           = 0;
+        lastSessionEpochMillis = 0L;   // a wiped save has never had a session, so it has no gap
+        schemaVersion          = 0;
     }
 }

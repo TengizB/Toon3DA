@@ -160,6 +160,34 @@ public final class BootCardCatalog {
                 .onlyAtReprintCount(4)
                 .build());
 
+        // THE COUNTER EARNS ITS KEEP (narrative-rework order-9 D).  By print forty the opening beats
+        // are long spent and this card is the only story a player sees for whole sessions, so the
+        // number on it — the game's oldest running joke and its slowest turn — is given a line of its
+        // own every tenth print.  Reserved by instance number, which is what makes each one land
+        // exactly once in the life of a save without a one-shot flag; banded by region from thirty
+        // down, because "I've stopped rounding it off in my head" only means anything to somebody who
+        // has read what the Cradles are fed.  A player still up top at print thirty simply gets an
+        // ordinary greeting, which is the right answer: the joke has not turned for them yet.
+        counterMilestone(registry, 10,  StoryRegion.HABITATION_RINGS);
+        counterMilestone(registry, 20,  StoryRegion.HABITATION_RINGS);
+        counterMilestone(registry, 30,  StoryRegion.RELIQUARY);
+        counterMilestone(registry, 40,  StoryRegion.WOUND);
+        counterMilestone(registry, 50,  StoryRegion.WOUND);
+        counterMilestone(registry, 100, StoryRegion.CORE);
+
+        // THE RE-ENTRY LINE (narrative-rework order-9 A).  One row per region, taking this card's
+        // single ORA slot when the player has been away longer than STORY_REENTRY_GAP_HOURS.  It
+        // says where they are and what they were last told — never what to do next, because the
+        // moment a recap acquires an objective it stops being ORA talking and becomes a quest log.
+        for (StoryRegion region : StoryRegion.values()) {
+            String id = "boot.wake.reentry." + region.getCatalogKey();
+            registry.registerWakeLine(BootWakeLine.builder(id)
+                    .textStringId("story." + id)
+                    .region(region)
+                    .reEntry(true)
+                    .build());
+        }
+
         // ---- The general pool, gated by the deepest region ever reached --------------------------
         // Region 1 — onboarding cheer.  She counts your deaths like a scoreboard, and it is funny.
         wakeLine(registry, "boot.wake.rings.1", StoryRegion.HABITATION_RINGS);
@@ -189,6 +217,22 @@ public final class BootCardCatalog {
         wakeLine(registry, "boot.wake.core.1", StoryRegion.CORE);
         wakeLine(registry, "boot.wake.core.2", StoryRegion.CORE);
         wakeLine(registry, "boot.wake.core.3", StoryRegion.CORE);
+    }
+
+    /**
+     * One line about the instance NUMBER, held for the card that prints it (order-9 D).  Banded from
+     * {@code firstRegion} down rather than pinned to one region, so a player who is deeper than the
+     * milestone expects still gets it — the row is lost only to somebody who is SHALLOWER, where its
+     * meaning has not arrived yet.
+     */
+    private static void counterMilestone(BootCardRegistry registry, int reprintCount,
+                                         StoryRegion firstRegion) {
+        String id = "boot.wake.milestone." + reprintCount;
+        registry.registerWakeLine(BootWakeLine.builder(id)
+                .textStringId("story." + id)
+                .regionFrom(firstRegion)
+                .onlyAtReprintCount(reprintCount)
+                .build());
     }
 
     /** One ORA line, gated to a single story region.  Its string id mirrors its catalog id. */

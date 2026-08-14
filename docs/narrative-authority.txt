@@ -361,8 +361,10 @@ Order 10 makes all of it stick.
   | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites + the    | DONE   |
   |   |                                        |            | standing writing rules   |        |
   | 7 | The Organization, reworked             | D7         | mission, rationale, lies | DONE   |
-  | 8 | The lore drip & region beat maps       | D8         | budget + beat maps       | TODO   |
-  | 9 | Re-entry, recap & missed-beat recovery | F7         | coming back after 3 days | TODO   |
+  | 8 | The lore drip & region beat maps       | D8         | budget + beat maps       | DONE   |
+  | 9 | Re-entry, recap & missed-beat recovery | F7         | coming back after 3 days | DONE   |
+  |   |   ...except the RE-TEACH DELIVERY, which is order-4's: order-9 records the      |        |
+  |   |   evidence (StoryRecovery's teaching lane) and order-4 owns the second telling. |        |
   |10 | The gates                              | all        | tests, telemetry, cold   | TODO   |
   |   |                                        |            | reads                    |        |
 

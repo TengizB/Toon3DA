@@ -36,6 +36,12 @@ class StoryCodexTest {
 
     private static final float FRAME_SECONDS = 1f / 60f;
 
+    /**
+     * The recap page (narrative-rework order-9 B), which sits at index 0 of EVERY tab and is never
+     * locked.  Every count of "what the player has recovered" below is offset past it.
+     */
+    private static final int PINNED_ROWS = 1;
+
     private static CodexSystem newCodex(StoryProgress progress) {
         return new CodexSystem(CodexCatalog.defaultRegistry(), StoryStrings.defaults(),
                                progress, new StorySettings());
@@ -84,6 +90,12 @@ class StoryCodexTest {
     /**
      * Every entry must be REACHABLE: either a line archives it, or a probe pays for it.  An entry
      * with neither is content nobody can ever read.
+     *
+     * <p>The COMPOSED pages (narrative-rework order-9) are the exception, and they are exempt for the
+     * reason the rule exists rather than in spite of it: they are not archived by anything because
+     * they are not archives of anything.  The recap is always unlocked, and the missed-beat shelf is
+     * unlocked by the engine the first time a mandatory line is closed unread — a moment no catalog
+     * row could ever name.
      */
     @Test
     void everyEntryIsReachableBySomething() {
@@ -95,10 +107,29 @@ class StoryCodexTest {
             }
         }
         for (CodexEntry entry : CodexCatalog.defaultRegistry().getAll()) {
+            if (entry.isComposed()) continue;
             boolean reachable = !entry.getUnlockLineIds().isEmpty()
                     || probeUnlockedIds.contains(entry.getId());
             assertTrue(reachable, "codex entry " + entry.getId() + " can never be unlocked");
         }
+    }
+
+    /**
+     * THE PINNED PAGE (narrative-rework order-9 B): exactly one entry sits above the open tab's own
+     * rows, it is never locked, and it is composed from live state.  All three properties together —
+     * a pinned entry that had to be earned would be useless to the player it exists for, and a
+     * pinned entry with an authored body would be a page that stops being true.
+     */
+    @Test
+    void exactlyOnePageIsPinnedAndItIsNeverLocked() {
+        int pinnedCount = 0;
+        for (CodexEntry entry : CodexCatalog.defaultRegistry().getAll()) {
+            if (!entry.isPinned()) continue;
+            pinnedCount++;
+            assertTrue(entry.isAlwaysUnlocked(), entry.getId() + " is pinned but can be locked");
+            assertTrue(entry.isComposed(), entry.getId() + " is pinned but is not composed");
+        }
+        assertEquals(1, pinnedCount, "the archive pins exactly one page");
     }
 
     /** Every line an entry hangs off must be a real catalog row, or the archive waits on nothing. */
@@ -187,7 +218,16 @@ class StoryCodexTest {
         assertFalse(codex.noteLineSpoken("bark.does.not.exist"));
         assertFalse(codex.noteLineSpoken(null));
         codex.selectCategory(CodexCategory.LOGS);
-        assertEquals(0, codex.getVisibleEntryCount(), "an unheard line must list no entry");
+        assertEquals(0, recoveredEntryCount(codex), "an unheard line must list no entry");
+    }
+
+    /**
+     * How many RECOVERED entries a tab lists, ignoring the page pinned above them (narrative-rework
+     * order-9 B).  The pinned recap is on every tab and is never locked, so it is present in every
+     * count below; what these tests are about is what the player actually earned.
+     */
+    private static int recoveredEntryCount(CodexSystem codex) {
+        return codex.getVisibleEntryCount() - PINNED_ROWS;
     }
 
     /** Death never takes an entry back — the same rule that keeps the deepest region from rewinding. */
@@ -199,7 +239,7 @@ class StoryCodexTest {
 
         CodexSystem afterReprint = newCodex(new StoryProgress(store));
         afterReprint.selectCategory(CodexCategory.LOGS);
-        assertEquals(1, afterReprint.getVisibleEntryCount(),
+        assertEquals(1, recoveredEntryCount(afterReprint),
                 "a reprint must not empty the archive");
     }
 
@@ -211,9 +251,9 @@ class StoryCodexTest {
         progress.unlockCodexEntry("codex.planet.name");
         codex.refresh();
         codex.selectCategory(CodexCategory.PLANET);
-        assertEquals(1, codex.getVisibleEntryCount());
+        assertEquals(1, recoveredEntryCount(codex));
         assertEquals(StoryStrings.defaults().get("story.codex.planet.name.title"),
-                     codex.getVisibleEntryTitle(0));
+                     codex.getVisibleEntryTitle(PINNED_ROWS));
     }
 
     /** Locked entries are never listed: a tab shows what the player HAS, not a checklist. */
@@ -221,7 +261,7 @@ class StoryCodexTest {
     void lockedEntriesAreNotListed() {
         CodexSystem codex = newCodex(new StoryProgress());
         codex.selectCategory(CodexCategory.MEMORIES);
-        assertEquals(0, codex.getVisibleEntryCount());
+        assertEquals(0, recoveredEntryCount(codex));
         assertTrue(CodexCatalog.defaultRegistry().getForCategory(CodexCategory.MEMORIES).size() > 0,
                 "the catalog is not empty — the LIST is");
     }
@@ -237,13 +277,13 @@ class StoryCodexTest {
         codex.noteLineSpoken("bark.log.rings.1");
         codex.selectCategory(CodexCategory.LOGS);
 
-        assertTrue(codex.isVisibleEntryNew(0), "a fresh entry invites a look");
-        assertTrue(codex.openEntry(0));
-        assertFalse(codex.isVisibleEntryNew(0), "opening it clears the dot");
+        assertTrue(codex.isVisibleEntryNew(PINNED_ROWS), "a fresh entry invites a look");
+        assertTrue(codex.openEntry(PINNED_ROWS));
+        assertFalse(codex.isVisibleEntryNew(PINNED_ROWS), "opening it clears the dot");
 
         CodexSystem afterRestart = newCodex(new StoryProgress(store));
         afterRestart.selectCategory(CodexCategory.LOGS);
-        assertFalse(afterRestart.isVisibleEntryNew(0), "the archive must never re-nag");
+        assertFalse(afterRestart.isVisibleEntryNew(PINNED_ROWS), "the archive must never re-nag");
     }
 
     @Test
@@ -305,7 +345,7 @@ class StoryCodexTest {
         CodexSystem codex = newCodex(new StoryProgress());
         codex.noteLineSpoken("bark.log.rings.1");
         codex.selectCategory(CodexCategory.LOGS);
-        assertTrue(codex.openEntry(0));
+        assertTrue(codex.openEntry(PINNED_ROWS));
         assertTrue(codex.isShowingEntry());
 
         boolean sawTitle = false, sawSource = false, sawTake = false, sawBody = false;
@@ -356,7 +396,7 @@ class StoryCodexTest {
         CodexSystem codex = newCodex(new StoryProgress());
         codex.noteLineSpoken("bark.log.rings.1");
         codex.selectCategory(CodexCategory.LOGS);
-        codex.openEntry(0);
+        codex.openEntry(PINNED_ROWS);
         int blankCount = 0;
         for (int lineIndex = 0; lineIndex < codex.getDetailLineCount(); lineIndex++) {
             if (codex.getDetailLineStyle(lineIndex) == CodexSystem.DetailLineStyle.BLANK) blankCount++;
@@ -378,7 +418,7 @@ class StoryCodexTest {
         assertEquals(0f, codex.getScrollOffset(), 0.001f, "a short list cannot scroll at all");
         assertFalse(codex.isScrollable());
 
-        codex.openEntry(0);
+        codex.openEntry(PINNED_ROWS);
         codex.scrollBy(100000f);
         float maximum = Math.max(0f, codex.getContentHeight()
                 - StoryUiConstants.STORY_CODEX_BODY_HEIGHT);
@@ -633,14 +673,18 @@ class StoryCodexTest {
     void telemetrySplitsSkimmedLinesFromReadOnes() {
         StoryTelemetry telemetry = new StoryTelemetry();
         telemetry.recordBarkShown();
-        telemetry.recordBarkDismissed(0.2f);
+        assertTrue(telemetry.recordBarkDismissed(0.2f, "bark.skimmed"));
         telemetry.recordBarkShown();
-        telemetry.recordBarkDismissed(StoryUiConstants.STORY_TELEMETRY_FAST_DISMISS_SECONDS + 4f);
+        assertFalse(telemetry.recordBarkDismissed(
+                StoryUiConstants.STORY_TELEMETRY_FAST_DISMISS_SECONDS + 4f, "bark.read"));
 
         assertEquals(2, telemetry.getBarksShown());
         assertEquals(1, telemetry.getBarksClosedFast());
         assertEquals(1, telemetry.getBarksRead());
         assertEquals(0.5f, telemetry.getFastDismissFraction(), 0.001f);
+        // narrative-rework order-9 C: WHICH line was thrown away, not just how many were. A line
+        // that was actually read must never overwrite the hand-off, or recovery would chase it.
+        assertEquals("bark.skimmed", telemetry.getLastFastDismissedBarkId());
 
         telemetry.recordExchangeAnswered(ExchangeOptionKind.PROBE);
         assertEquals(1, telemetry.getAnswersOfKind(ExchangeOptionKind.PROBE));
