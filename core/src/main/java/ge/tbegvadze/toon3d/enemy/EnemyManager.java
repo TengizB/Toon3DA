@@ -87,6 +87,10 @@ public final class EnemyManager implements EnemyHitTarget {
     private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
     private SpecialResolvedListener specialResolvedListener;
+    /** Fired when a hit lands from an attack committed and shown a full turn ahead (narrative-rework order-4 READ_INTENT/GUARD evidence). Param = was the player guarding. Nullable. */
+    private java.util.function.Consumer<Boolean> telegraphedHitLandedListener;
+    /** Fired when a ranged shot lands — by the cardinal-line rule, always in-lane (narrative-rework order-4 BREAK_LANE evidence). Nullable. */
+    private Runnable rangedHitLandedListener;
 
     /** Flat damage bonus from player level-up damage cards (Hollow Points / Glass Cannon); added to every hit. */
     private int playerFlatDamageBonus = 0;
@@ -502,6 +506,16 @@ public final class EnemyManager implements EnemyHitTarget {
     /** Injects the attack effect listener so enemy attacks spawn projectile/lunge visuals. */
     public void setEnemyAttackListener(EnemyAttackListener listener) {
         this.enemyAttackListener = listener;
+    }
+
+    /** Injects the telegraphed-hit-landed listener (narrative-rework order-4 READ_INTENT/GUARD evidence). */
+    public void setTelegraphedHitLandedListener(java.util.function.Consumer<Boolean> listener) {
+        this.telegraphedHitLandedListener = listener;
+    }
+
+    /** Injects the ranged-hit-landed listener (narrative-rework order-4 BREAK_LANE evidence). */
+    public void setRangedHitLandedListener(Runnable listener) {
+        this.rangedHitLandedListener = listener;
     }
 
     /**
@@ -1047,6 +1061,9 @@ public final class EnemyManager implements EnemyHitTarget {
             player.applyDirectionalDamage(enemy.scaledAttackDamage(),
                     enemy.worldCenterX(), enemy.worldCenterY());
             applyRangedAttackStatusEffect(enemy, player);
+            // EVIDENCE (narrative-rework order-4, BREAK_LANE): by the cardinal-line rule above, this
+            // hit landed IN-LANE by construction.
+            if (rangedHitLandedListener != null) rangedHitLandedListener.run();
         }
     }
 
@@ -1113,7 +1130,13 @@ public final class EnemyManager implements EnemyHitTarget {
             if (column == playerColumn && row == playerRow) {
                 // Player still on the committed lane — the shot connects. Use the Lancer's tile as the lane
                 // origin so a guarding player's facing arc is judged against where the beam comes from.
+                boolean wasGuarding = player.isGuarding();
                 player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(), enemy.worldCenterY());
+                // EVIDENCE (narrative-rework order-4): a WIND_UP-committed beam down a locked lane is
+                // both a telegraphed hit (READ_INTENT/GUARD) and, by construction, an in-lane one
+                // (BREAK_LANE).
+                if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
+                if (rangedHitLandedListener != null) rangedHitLandedListener.run();
             }
             Object occupant = enemyAt(column, row);
             if (occupant != null && occupant != enemy) {
@@ -1403,8 +1426,11 @@ public final class EnemyManager implements EnemyHitTarget {
         boolean inBlast = GameMath.chebyshevDistanceTiles(
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= EnemyConstants.AREA_STRIKE_RADIUS_TILES;
         if (inBlast) {
+            boolean wasGuarding = player.isGuarding();
             player.applyDirectionalDamage(areaStrikeDamage(enemy),
                     enemy.worldCenterX(), enemy.worldCenterY());
+            // EVIDENCE (narrative-rework order-4): AREA_STRIKE is telegraphed a full turn ahead.
+            if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
     }
 
@@ -1567,8 +1593,11 @@ public final class EnemyManager implements EnemyHitTarget {
         } else {
             int chargeDamage = Math.max(1, Math.round(
                     enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
+            boolean wasGuarding = player.isGuarding();
             player.applyDirectionalDamage(chargeDamage, enemy.worldCenterX(), enemy.worldCenterY());
             if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+            // EVIDENCE (narrative-rework order-4): the WIND_UP rush was telegraphed a full turn ahead.
+            if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
         return true; // reached the player — adjacent now, will commit a normal melee next turn
     }
@@ -1672,7 +1701,10 @@ public final class EnemyManager implements EnemyHitTarget {
             }
         }
         if (playerHit) {
+            boolean wasGuarding = player.isGuarding();
             player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY());
+            // EVIDENCE (narrative-rework order-4): the detonation counted down in full view for turns.
+            if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
     }
 

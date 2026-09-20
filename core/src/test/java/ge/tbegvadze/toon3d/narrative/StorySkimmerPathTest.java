@@ -62,7 +62,7 @@ class StorySkimmerPathTest {
             // what she is for — the whole of ORA's introduction (narrative-rework order-2 D)
             spineIds.add("bark.intro." + beat.getCatalogKey());
         }
-        for (ControlHint hint : ControlHint.values()) {
+        for (TeachingTopic hint : TeachingTopic.values()) {
             spineIds.add("bark.control." + hint.getCatalogKey());    // how to play at all
         }
         // THE BESTIARY VOICE (narrative-rework order-5). "What am I fighting?" is a comprehension-bar

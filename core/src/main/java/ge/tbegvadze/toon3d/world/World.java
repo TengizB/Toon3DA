@@ -10,6 +10,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
@@ -54,7 +55,6 @@ import ge.tbegvadze.toon3d.narrative.CodexCatalog;
 import ge.tbegvadze.toon3d.narrative.CodexCategory;
 import ge.tbegvadze.toon3d.narrative.CodexRegistry;
 import ge.tbegvadze.toon3d.narrative.CodexSystem;
-import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeCatalog;
 import ge.tbegvadze.toon3d.narrative.ExchangeRegistry;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
@@ -72,6 +72,8 @@ import ge.tbegvadze.toon3d.narrative.StoryTermCatalog;
 import ge.tbegvadze.toon3d.narrative.StorySettings;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.narrative.StoryTelemetry;
+import ge.tbegvadze.toon3d.narrative.TeachingSystem;
+import ge.tbegvadze.toon3d.narrative.TeachingTopic;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
@@ -440,6 +442,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * to the re-teach lane order-4's competence model consumes.
      */
     private final StoryRecovery        storyRecovery;
+    /**
+     * THE COMPETENCE MODEL (narrative-rework order-4): owns which of ORA's ~20 teaching lines has
+     * run once, which is eligible for its ONE re-teach, and the rate limits that keep her from
+     * nagging.  Shares the bark layer's registry/progress for the same reason storyRecovery does,
+     * and drains storyRecovery's fast-dismiss evidence directly.
+     */
+    private final TeachingSystem       teachingSystem;
     /** The phase to restore when the archive closes — it is a page of a menu, not a detour. */
     private RunPhase                   codexReturnPhase = RunPhase.PLAYING;
     /** Drag-to-scroll tracking for the codex body: where the finger went down, and how far it went. */
@@ -572,6 +581,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // a mandatory beat from a flavour quip and a teaching line from a story one — which is the
         // whole of its job: story goes to the archive, mechanics go to the re-teach lane.
         storyRecovery = new StoryRecovery(barkRegistry, barkSystem.getProgress());
+        teachingSystem = new TeachingSystem(barkSystem, storyRecovery);
         storyMomentRandom = new java.util.Random(runSeed ^ StoryUiConstants.STORY_MOMENT_SEED_SALT);
         // One audio owner for every story channel (order-7 Part D). Built before the renderers so
         // each can be handed the same instance; disposed once, by this class.
@@ -1262,6 +1272,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         enemyAttackEffectSystem = new EnemyAttackEffectSystem(wallRenderer);
         enemyManager.setEnemyAttackListener(enemyAttackEffectSystem);
+        // EVIDENCE (narrative-rework order-4, READ_INTENT / GUARD / BREAK_LANE): fed straight to the
+        // competence model from the hit resolution sites that are actually telegraphed / in-lane.
+        enemyManager.setTelegraphedHitLandedListener(teachingSystem::onTelegraphedHitLanded);
+        enemyManager.setRangedHitLandedListener(teachingSystem::onRangedHitLanded);
 
         enemyManager.setStatusEffectController(statusEffectController);
         enemyManager.setEventTextSystem(eventTextSystem); // "BLOCKED N" floater on Block absorption (order-3)
@@ -1366,8 +1380,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setPlayerStats(playerStats);
         playerController.setHealUsedListener(runStats::recordHealUsed); // resource-economy telemetry (order 3)
         playerController.setAmmoPickedUpListener(runStats::recordAmmoPickedUp); // resource-economy telemetry (order 3)
-        playerController.setWeaponSwitchCallback(
-            () -> weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon()));
+        // EVIDENCE (narrative-rework order-4, RELOAD): fired empty 4x in a row re-teaches; an actual
+        // reload resets the count, since the player just did the right thing.
+        playerController.setEmptyFireAttemptListener(teachingSystem::onEmptyFireAttempt);
+        playerController.setWeaponReloadStartedListener(teachingSystem::onWeaponReloaded);
+        playerController.setWeaponSwitchCallback(() -> {
+            weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
+            // EVIDENCE (narrative-rework order-4, SWITCH_WEAPON): the player just did the thing the
+            // topic teaches, so the "whole floors without switching" count resets.
+            teachingSystem.onWeaponSwitched();
+        });
         playerController.setInventoryToggleCallback(this::openInventory);
         // The in-suit pause menu (Story UI order-8 Part C) — a menu, so it costs no turn.
         playerController.setPauseMenuCallback(this::openPauseMenu);
@@ -2212,6 +2234,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Death check: resolved after the tick fully completes, never mid-tick
         if (player.isDead()) {
+            // EVIDENCE (narrative-rework order-4, HEAL): the run just ended with a usable medkit
+            // never spent.
+            teachingSystem.onPlayerDied(hudState.medicalCharges > 0);
             runStats.recordFloor(currentDepth);
             sealRunAutopsy();
             // Snapshot the run BEFORE the records are saved, so "RECORD" still means "this instance
@@ -2274,6 +2299,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // BEFORE it decides what to deliver, so a line queued mid-spike waits for the lull.
         barkSystem.setCombatSpike(isCombatSpike());
         barkSystem.update(deltaTime);
+        // THE COMPETENCE MODEL (narrative-rework order-4): its own clock and re-teach requests,
+        // gated by the same combat-spike signal for its TACTICAL topics.
+        teachingSystem.setCombatSpike(isCombatSpike());
+        teachingSystem.update(deltaTime);
         archiveDeliveredStoryLine();
         requestCodexCompletionBarks();
         storyBarkRenderer.playPendingSpeakerSting();
@@ -2931,7 +2960,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // ordinary floor delivers two flavour lines" true rather than hoped for.  The staging room
         // resets it too — a fresh run starts with a clean allowance.
         barkSystem.beginFloor();
+        // THE COMPETENCE MODEL's own per-floor cap (narrative-rework order-4): at most one re-teach
+        // line reaches the screen between one floor arrival and the next.
+        teachingSystem.beginFloor();
         if (isStartingRoom) return;   // the staging room is not a story floor
+        // EVIDENCE: the floor just left ended with two ranged weapons in the loadout and neither
+        // ever switched to (narrative-rework order-4, SWITCH_WEAPON). Checked here, before anything
+        // about the loadout changes on the new floor, so this reads the state the departed floor
+        // actually ended in.
+        teachingSystem.onFloorArrived(countEquippedRangedWeapons() >= 2);
         // ORA introduces herself BEFORE she starts naming the place (narrative-rework order-2 D then
         // order-3). Both the cold open and this method fire on the first real floor, so asking here
         // first is what keeps "I'm ORA" ahead of "this is the Deepworks" in the queue. Guarded by
@@ -3062,7 +3099,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (!beat.isColdOpen() || !beat.isAvailableAt(reprintCount)) continue;
             barkSystem.request(beat.getTrigger(), beat.getSubjectKey());
         }
-        barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.MOVE.getSubjectKey());
+        barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.MOVE.getSubjectKey());
         // The run-start half of the vocabulary ladder (order-3): the words that only mean something
         // to somebody who has now died themselves. "Reprint" waits for the run after their first
         // death and "checkpoint" for the one after that, so a new player is never handed the
@@ -3084,18 +3121,123 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // nothing to reload) and 0 when the reserve is dry (nothing to reload WITH). Telling a player
         // holding a knife to reload would be the exact failure this channel exists to avoid.
         if (hudState.currentAmmo == 0 && hudState.reserveAmmo > 0) {
-            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.RELOAD.getSubjectKey());
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.RELOAD.getSubjectKey());
         }
         if (hudState.medicalCharges > 0) {
-            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.INVENTORY.getSubjectKey());
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.INVENTORY.getSubjectKey());
             if (player.getHealthFraction() <= StoryUiConstants.STORY_BARK_LOW_HEALTH_FRACTION) {
-                barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.HEAL.getSubjectKey());
+                barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.HEAL.getSubjectKey());
             }
         }
         if (countEquippedRangedWeapons() >= 2) {
-            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.SWITCH_WEAPON.getSubjectKey());
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.SWITCH_WEAPON.getSubjectKey());
         }
         requestDistributedIntroBarks();
+        requestEnvironmentTeachingBarks();
+    }
+
+    /**
+     * NEW TEACHING TOPICS (narrative-rework order-4) that fire off world geometry rather than HUD
+     * state: the first corner reached, a barrel in the line of fire with an enemy near it, a closing
+     * (but not yet adjacent) enemy, the first portal in sight, the first facing machine and the
+     * first ground weapon worth swapping to. Cheap to poll every frame — every row is one-shot for
+     * the life of the save, so after a player's first hour this produces nothing at all.
+     */
+    private void requestEnvironmentTeachingBarks() {
+        int playerTileColumn = getPlayerTileColumn();
+        int playerTileRow    = getPlayerTileRow();
+        int facingStepColumn = Math.round(player.directionX);
+        int facingStepRow    = Math.round(player.directionY);
+
+        boolean forwardBlocked = level.isBlockedAt(playerTileColumn + facingStepColumn,
+                playerTileRow + facingStepRow, doorManager);
+        boolean strafeLeftOpen = !level.isBlockedAt(playerTileColumn - facingStepRow,
+                playerTileRow + facingStepColumn, doorManager);
+        boolean strafeRightOpen = !level.isBlockedAt(playerTileColumn + facingStepRow,
+                playerTileRow - facingStepColumn, doorManager);
+        if (forwardBlocked && (strafeLeftOpen || strafeRightOpen)) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.TURN.getSubjectKey());
+        }
+
+        if (isStairsDownAdjacentOrUnderfoot(playerTileColumn, playerTileRow)) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.PORTAL.getSubjectKey());
+        }
+
+        if (machineInFront != null) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.MACHINE.getSubjectKey());
+        }
+
+        GroundItem standingOnWeapon = playerController.getStandingOnWeapon();
+        if (standingOnWeapon != null && groundItems.contains(standingOnWeapon)) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.WEAPON_SWAP.getSubjectKey());
+        }
+
+        if (hasBarrelInSightWithAwakeEnemyNear(playerTileColumn, playerTileRow,
+                facingStepColumn, facingStepRow)) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.BARREL.getSubjectKey());
+        }
+
+        if (hasAwakeEnemyClosingButNotAdjacent(playerTileColumn, playerTileRow)) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.SKIP_TURN.getSubjectKey());
+        }
+    }
+
+    /** True when the exit tile is underfoot or one cardinal step away — the first sight of the way down. */
+    private boolean isStairsDownAdjacentOrUnderfoot(int tileColumn, int tileRow) {
+        return Level.isStairsDown(level.getCell(tileColumn, tileRow))
+                || Level.isStairsDown(level.getCell(tileColumn + 1, tileRow))
+                || Level.isStairsDown(level.getCell(tileColumn - 1, tileRow))
+                || Level.isStairsDown(level.getCell(tileColumn, tileRow + 1))
+                || Level.isStairsDown(level.getCell(tileColumn, tileRow - 1));
+    }
+
+    /** Scans the player's facing line for an explosive barrel with an awake enemy near it. */
+    private boolean hasBarrelInSightWithAwakeEnemyNear(int tileColumn, int tileRow,
+                                                       int stepColumn, int stepRow) {
+        if (explosiveBarrelManager == null || (stepColumn == 0 && stepRow == 0)) return false;
+        int scanColumn = tileColumn;
+        int scanRow    = tileRow;
+        for (int distance = 0; distance < StoryUiConstants.STORY_TEACHING_BARREL_SCAN_TILES; distance++) {
+            scanColumn += stepColumn;
+            scanRow    += stepRow;
+            if (Level.isWall(level.getCell(scanColumn, scanRow))) return false;
+            if (explosiveBarrelManager.isExplosiveBarrel(scanColumn, scanRow)) {
+                return hasAwakeEnemyWithin(scanColumn, scanRow,
+                        StoryUiConstants.STORY_TEACHING_BARREL_ENEMY_PROXIMITY_TILES);
+            }
+        }
+        return false;
+    }
+
+    /** True when an awake enemy sits within {@code radiusTiles} (Chebyshev) of the given tile. */
+    private boolean hasAwakeEnemyWithin(int tileColumn, int tileRow, int radiusTiles) {
+        if (enemyManager == null) return false;
+        java.util.List<Enemy> enemies = enemyManager.getEnemies();
+        for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
+            Enemy enemy = enemies.get(enemyIndex);
+            if (enemy.health <= 0 || enemy.state == EnemyState.DORMANT) continue;
+            if (GameMath.chebyshevDistanceTiles(enemy.tileColumn, enemy.tileRow, tileColumn, tileRow)
+                    <= radiusTiles) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** True when an awake enemy is exactly the "closing" distance away — not yet adjacent. */
+    private boolean hasAwakeEnemyClosingButNotAdjacent(int playerTileColumn, int playerTileRow) {
+        if (enemyManager == null) return false;
+        java.util.List<Enemy> enemies = enemyManager.getEnemies();
+        for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
+            Enemy enemy = enemies.get(enemyIndex);
+            if (enemy.health <= 0 || enemy.state == EnemyState.DORMANT) continue;
+            if (GameMath.chebyshevDistanceTiles(enemy.tileColumn, enemy.tileRow,
+                    playerTileColumn, playerTileRow)
+                    == StoryUiConstants.STORY_TEACHING_CLOSING_ENEMY_DISTANCE_TILES) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -3659,6 +3801,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (deliveredBarkId == null) return;
         storyTelemetry.recordBarkShown();
         codexSystem.noteLineSpoken(deliveredBarkId);
+        // THE COMPETENCE MODEL (narrative-rework order-4): starts a topic's 60-second re-teach clock
+        // the moment its first telling actually reached the screen, and counts a delivered re-teach
+        // against the per-floor cap.
+        teachingSystem.onBarkDelivered(deliveredBarkId);
     }
 
     /**

@@ -61,7 +61,7 @@ public enum BarkTrigger {
     RUN_START,
     /**
      * A control has become useful for the first time and ORA teaches it in one line — the game's
-     * entire tutorial.  Subject key = {@code ControlHint.name()}.
+     * entire tutorial.  Subject key = {@code TeachingTopic.getSubjectKey()}.
      */
     CONTROL_HINT,
     /**

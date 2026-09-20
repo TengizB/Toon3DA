@@ -1,7 +1,49 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Narrative rework 4 — ORA the guide & the competence model
 ---
+
+IMPLEMENTATION NOTE (what shipped, and three things that shipped differently)
+
+`ControlHint` was widened into `narrative/TeachingTopic` (17 values, not 20 — see below), each
+carrying its `TeachingTier` and a `getReteachEvidenceThreshold()` instead of a separate evidence
+table. `narrative/TeachingCatalog` registers the first-teach + (where a topic has one) the re-teach
+bark row, looping the enum — no switch statement. `narrative/TeachingSystem` is the competence-model
+brain: evidence counters, the 60-second/one-per-floor/combat-spike rate limits, and draining order-9's
+`StoryRecovery.consumeRecoverableTopic()` lane every frame. Evidence is fed from
+`PlayerController` (empty-fire attempts, reload starts, weapon switches), `EnemyManager` (telegraphed
+hits and ranged/in-lane hits, wired at the specific commit-then-resolve sites — WIND_UP charges, the
+Rimeshell beam, AREA_STRIKE, the self-destruct blast — never ordinary melee/ranged), and `World`
+(death-with-unused-medkit, floor-arrival-holding-two-guns, and six new per-frame geometry checks for
+TURN/PORTAL/MACHINE/WEAPON_SWAP/BARREL/SKIP_TURN). Full writeup: `docs/story-ui-system.txt`, "THE
+COMPETENCE MODEL (narrative-rework order-4)".
+
+Three deliberate deviations from this spec, made because orders 5-9 had already shipped on top of
+what order-4 was assumed to look like:
+
+1. NAV_MAP and ROUTE_RISK were DROPPED. Narrative-rework order-8 (shipped before this order was
+   implemented) already added `BarkTrigger.MAP_OPENED` with one one-shot row per region explaining
+   what the FACILITY NAV console IS and why it branches — almost exactly this spec's "the map opens"
+   line. Adding a second, differently-worded CONTROL_HINT line to the same console-open moment would
+   have doubled up on one panel, which order-3's "one new idea per panel" rule forbids. PORTAL
+   survives (nothing else says "that's the way down, step on it").
+2. LEVEL_UP has no re-teach. Its evidence was "an unspent point at the end of a floor," but
+   `PlayerProgress.hasPendingLevelUp()` forces the level-up overlay open the instant XP crosses the
+   threshold — a point can never sit unspent to a floor's end in this build's actual flow. The
+   first-teach line still ships.
+3. Priority stayed uniformly STORY_CRITICAL for every `CONTROL_HINT` row, first-teach and re-teach
+   alike, TACTICAL topics included — matching the existing invariant
+   `StoryBarkTest.theColdOpenAndTheTutorialAreOneShotAndNeverDropped` already enforced for the six
+   original hints. `TeachingTier` instead gates the RE-TEACH ask itself: `TeachingSystem` simply never
+   asks for a TACTICAL topic's re-teach during a combat spike, so its STORY_CRITICAL row never gets
+   the chance to bypass one.
+
+The idea's own "Definition of Done" called for `TeachingCoverageTest` and `NoRepeatVerbatimTest`.
+Per `docs/narrative-authority.txt` SECTION 8, both belong to order-10 ("The gates: tests, telemetry,
+cold reads"), not this order, and per this project's testing policy no new test files are written
+outside the balance scope. Verified by reading + `./gradlew build` (Android Gradle Plugin resolution
+was blocked by this sandbox's network egress policy — dl.google.com returned 403 — so the author was
+unable to run the full build in-session; a maintainer should run `./gradlew build` once to confirm).
 
 PURPOSE
 Fixes failures F4 and F7. ORA currently teaches six controls; the game contains roughly twenty

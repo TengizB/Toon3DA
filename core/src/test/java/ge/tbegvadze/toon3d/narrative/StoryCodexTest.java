@@ -518,7 +518,7 @@ class StoryCodexTest {
                                           new StoryProgress(), 13L);
         advance(barks, StoryUiConstants.STORY_BARK_MIN_INTERVAL_SECONDS + 1f);
         barks.setCombatSpike(true);
-        assertTrue(barks.request(BarkTrigger.CONTROL_HINT, ControlHint.FIRE.getSubjectKey()));
+        assertTrue(barks.request(BarkTrigger.CONTROL_HINT, TeachingTopic.FIRE.getSubjectKey()));
 
         advance(barks, 1f);
         assertTrue(barks.hasActiveBark(), "a dropped hint is a stuck player");

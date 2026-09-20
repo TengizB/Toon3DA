@@ -52,7 +52,9 @@ public final class BarkCatalog {
         // an existing trigger.  Registered from the term table itself, so adding a proper noun to
         // this fiction is one enum row plus its string and never an edit in here.
         StoryTermCatalog.registerIntroLines(registry);
-        registerControlHints(registry);
+        // THE ENTIRE TUTORIAL (narrative-rework order-4): one first-teach row per TeachingTopic, plus
+        // the re-teach row for any topic the competence model may repeat once, on evidence.
+        TeachingCatalog.bootstrap(registry);
         registerFloorArrival(registry);
         registerRegionEntry(registry);
         registerGateOrders(registry);
@@ -96,27 +98,6 @@ public final class BarkCatalog {
                     .trigger(beat.getTrigger())
                     .subjectKey(beat.getSubjectKey())
                     .region(StoryRegion.HABITATION_RINGS)
-                    .priority(BarkPriority.STORY_CRITICAL)
-                    .oneShot(true)
-                    .build());
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // TUTORIAL THROUGH ORA (order-5) — the game's entire tutorial, one line per control, taught the
-    // first time that control is actually needed.  There is no tutorial screen and there will not be
-    // one: a diagram of twelve buttons is something a player skips, and a voice that explains one
-    // thing at the moment it matters is something they read.  Every row is one-shot ever (the flag
-    // is persistent, so a reprint never re-teaches) and STORY_CRITICAL, because a line that teaches
-    // a control must never be dropped as chatter.  Region-unrestricted on purpose: a player may not
-    // hold a second gun until the Reliquary, and the hint must still be there when they do.
-    // -------------------------------------------------------------------------
-    private static void registerControlHints(BarkRegistry registry) {
-        for (ControlHint hint : ControlHint.values()) {
-            String id = "bark.control." + hint.getCatalogKey();
-            registry.register(row(id, storyIdFor(id))
-                    .trigger(BarkTrigger.CONTROL_HINT)
-                    .subjectKey(hint.getSubjectKey())
                     .priority(BarkPriority.STORY_CRITICAL)
                     .oneShot(true)
                     .build());

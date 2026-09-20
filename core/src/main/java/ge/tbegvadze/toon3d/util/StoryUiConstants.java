@@ -931,4 +931,36 @@ public final class StoryUiConstants {
     public static final String STORY_RECAP_DECIDED_HEADING_ID = "story.recap.heading.decided";
     /** Stands in for a block with nothing in it yet — never a blank space where a heading promised text. */
     public static final String STORY_RECAP_NOTHING_YET_ID     = "story.recap.nothing";
+
+    // =====================================================================
+    // THE COMPETENCE MODEL (narrative-rework order-4) — ORA teaches roughly twenty things instead of
+    // six, and the rule that keeps a widened tutorial from becoming a nag: a topic is re-taught AT
+    // MOST ONCE, ever, and only once TeachingSystem has concrete evidence the first telling did not
+    // take. See narrative/TeachingTopic (the topic table + its evidence threshold),
+    // narrative/TeachingCatalog (the first-teach + re-teach bark rows) and narrative/TeachingSystem
+    // (the evidence counters and the rate limits below).
+    // =====================================================================
+
+    /**
+     * A re-teach never lands inside this many seconds of the topic's FIRST telling being delivered —
+     * someone still processing a line they just read is not failing it. Measured from delivery, not
+     * from request, for the same reason every other one-shot flag in this layer is.
+     */
+    public static final float STORY_TEACHING_RETEACH_MIN_SECONDS_SINCE_TAUGHT = 60f;
+
+    /**
+     * At most one re-teach reaches the screen per floor, across every topic — the same "one thing at
+     * a time" discipline the per-floor bark budget enforces, applied to the one channel that budget
+     * does not otherwise gate (a re-teach row is STORY_CRITICAL, so it would otherwise ignore it).
+     */
+    public static final int STORY_TEACHING_MAX_RETEACHES_PER_FLOOR = 1;
+
+    /** How far {@code World} scans down the player's facing line for the {@code BARREL} teaching topic. */
+    public static final int STORY_TEACHING_BARREL_SCAN_TILES = 6;
+
+    /** How close an awake enemy must be to a sighted barrel for the {@code BARREL} topic to fire. */
+    public static final int STORY_TEACHING_BARREL_ENEMY_PROXIMITY_TILES = 2;
+
+    /** The exact Chebyshev distance that reads as "closing but not yet adjacent" for {@code SKIP_TURN}. */
+    public static final int STORY_TEACHING_CLOSING_ENEMY_DISTANCE_TILES = 2;
 }

@@ -29,7 +29,7 @@ public final class BarkStrings {
     public static StoryStrings registerDefaults(StoryStrings strings) {
         registerIntroBeats(strings);
         registerTermIntros(strings);
-        registerControlHints(strings);
+        registerTeachingTopics(strings);
         registerLogTakes(strings);
         registerFloorArrival(strings);
         registerRegionAndGate(strings);
@@ -220,18 +220,49 @@ public final class BarkStrings {
     }
 
     /**
-     * The whole tutorial (order-5), one line per control, said the first time it is needed.  Each
-     * must NAME the control plainly enough to act on and still sound like her — a line that reads as
-     * a manual entry has spent the character to say something a diagram could have said.
+     * THE ENTIRE TUTORIAL (order-5, widened by narrative-rework order-4), one line per
+     * {@link TeachingTopic}, said the first time it is needed. Each must NAME the thing plainly
+     * enough to act on and still sound like her — a line that reads as a manual entry has spent the
+     * character to say something a diagram could have said.
+     *
+     * <p>Six of these ({@code move}/{@code fire}/{@code reload}/{@code heal}/{@code switch_weapon}/
+     * {@code inventory}) are the order-5 control hints verbatim — same id, same text, so no
+     * persisted seen-flag moves. The rest are new. Every {@code .retaught} row is the SAME topic
+     * told again in different, shorter, blunter words — never the first line repeated, which is
+     * precisely what players report as nagging.
      */
-    private static void registerControlHints(StoryStrings strings) {
+    private static void registerTeachingTopics(StoryStrings strings) {
         strings.put("story.bark.control.move",       "Tap forward to step. Everything good is down.");
         strings.put("story.bark.control.fire",       "It's awake. Fire button, bottom right. Go on.");
         strings.put("story.bark.control.reload",     "You're dry. Reload before it notices, ideally.");
+        strings.put("story.bark.control.retaught.reload",
+                                                     "Still dry. Reload actually does something, try it.");
         strings.put("story.bark.control.heal",       "You're carrying a medkit. Heal. Now would be good.");
+        strings.put("story.bark.control.retaught.heal",
+                                                     "You died with a medkit in the bag. Noted.");
         strings.put("story.bark.control.switch_weapon",
                                                      "Two guns now. Switch weapon cycles them.");
+        strings.put("story.bark.control.retaught.switch_weapon",
+                                                     "Still carrying two. Try the other one sometime.");
         strings.put("story.bark.control.inventory",  "Open the bag when you get a second. It fills up.");
+
+        strings.put("story.bark.control.turn",       "Turn buttons swing you ninety degrees. Strafe doesn't.");
+        strings.put("story.bark.control.read_intent","See the mark over it? That's what it does next turn.");
+        strings.put("story.bark.control.retaught.read_intent",
+                                                     "The mark means it's committed. You get a free move.");
+        strings.put("story.bark.control.guard",      "Guard braces you and ends your turn. Saves most of it.");
+        strings.put("story.bark.control.retaught.guard",
+                                                     "That one was telegraphed. Guard would've helped.");
+        strings.put("story.bark.control.break_lane", "It only hits straight down a row or column. Step off.");
+        strings.put("story.bark.control.retaught.break_lane",
+                                                     "You're in its lane again. One step sideways. Any way.");
+        strings.put("story.bark.control.skip_turn",  "Skip a turn and let it come to you. Time moves with you.");
+        strings.put("story.bark.control.door",       "Doors open by walking into them. Coloured ones want a key.");
+        strings.put("story.bark.control.barrel",     "That barrel goes up if you shoot it. So do you, nearby.");
+        strings.put("story.bark.control.machine",    "Stand next to it and hit use. Only one I've seen working.");
+        strings.put("story.bark.control.portal",     "That's the way down. Step on it, I'll bring up the map.");
+        strings.put("story.bark.control.level_up",   "You've got a point to spend. It sticks for this run only.");
+        strings.put("story.bark.control.weapon_swap","Better gun on the floor. Check the stats before you take it.");
     }
 
     /**

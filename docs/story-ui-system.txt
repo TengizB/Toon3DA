@@ -416,8 +416,8 @@ THEM and WHAT HAPPENED TO THEM.
     are RESERVED by instance number (2, 3, 4) — what the copy is for, what did and did not come
     back, and where the REPORT plate is — so the most repeated screen in the game teaches the
     permadeath contract once, in order, in plain words.
-  - `ControlHint` teaches each control as a single bark the first time it matters (MOVE, FIRE,
-    RELOAD, HEAL, SWITCH_WEAPON, INVENTORY) — one-shot for the life of the save and STORY_CRITICAL;
+  - `TeachingTopic` (order-4 widened this from six values to ~20) teaches each thing as a single
+    bark the first time it matters — one-shot for the life of the save and STORY_CRITICAL;
   - the Region-1 `QUIET_MOMENT` teaching exchange is the first choice ever offered and deliberately
     decides nothing, so the blocking layer is learned with no enemy in the room. It is still ABOUT
     something: order-6 pointed it at the memory gap ORA named a minute earlier ("do you actually
@@ -549,6 +549,80 @@ THE MOMENT SCHEDULE — WHICH BEAT FIRES WHEN
 Firing sites: `World` (arrival, region entry, kills, health, logs, the boss pair, the ability hook,
 the map opening, the ending) and `world/StoryBarkTickSubscriber` (first sight of a family and of an
 archetype, backtracking, idle).
+
+
+THE COMPETENCE MODEL (narrative-rework order-4) — ORA the guide, and the rule that stops her nagging
+======================================================================================================
+`ControlHint` (order-5) taught six things. The game contains roughly twenty things a player must
+understand, including every system players actually fail at — guarding, reading an enemy's intent,
+stepping out of a ranged enemy's line, and the FACILITY NAV console the first '>' portal opens.
+Order-4 widens the enum into `narrative/TeachingTopic` (the six old values are kept verbatim, same
+row ids, so no persisted seen-flag or telemetry id moved) and adds fourteen more: TURN, READ_INTENT,
+GUARD, BREAK_LANE, SKIP_TURN, DOOR, BARREL, MACHINE, PORTAL, LEVEL_UP and WEAPON_SWAP. (Two of the
+original design's fourteen — NAV_MAP and ROUTE_RISK — were dropped: order-8's `MAP_OPENED` rows
+already teach what the console IS and why it branches, and a second, differently-worded line on the
+same console-open moment would have violated order-3's "one new idea per panel" rule. PORTAL survives
+because nothing else says "that is the way down.")
+
+Every topic is still ONE `bark.control.<key>` row under `BarkTrigger.CONTROL_HINT`, one-shot and
+STORY_CRITICAL exactly like the six it replaces — `StoryBarkTest.theColdOpenAndTheTutorialAreOneShot
+AndNeverDropped` holds every row under this trigger to that standard, so a topic's `TeachingTier`
+(`CRITICAL` / `TACTICAL`) never weakens its FIRST telling. `narrative/TeachingCatalog` registers both
+halves of a topic: the first-teach row (subject = `TeachingTopic.getSubjectKey()`, asked for by the
+ordinary per-frame firing sites in `World`) and, for a topic with a re-teach evidence threshold, a
+SECOND row under the SAME trigger but a DIFFERENT subject (`getRetaughtSubjectKey()`, `<TOPIC>_RETAUGHT`)
+— asked for ONLY by `TeachingSystem`, never by the per-frame sites. Two different subjects on one row
+id would let an ordinary per-frame ask spend the re-teach for free, which is the whole reason they
+never share one.
+
+THE COMPETENCE MODEL is the rule: a topic is taught once. It may be re-taught AT MOST ONCE MORE,
+ever, and only on concrete evidence that the first telling did not take — never a schedule, never a
+timer:
+  EVIDENCE A  the first-teach bark was DISMISSED UNREAD (order-9's `StoryRecovery.consumeRecoverable
+              Topic()` — a control hint closed inside `STORY_TELEMETRY_FAST_DISMISS_SECONDS` joins
+              this lane rather than the archive's "you may have missed this" shelf, because somebody
+              who did not read it is not bored, they are about to be stuck).
+  EVIDENCE B  a per-topic count of a concrete, observable failure: HEAL (died with an unused medkit,
+              1x), GUARD (3 telegraphed heavy hits taken unguarded), BREAK_LANE (3 ranged hits taken —
+              by the cardinal-line rule they are always in-lane), RELOAD (4 empty-fire attempts in a
+              row, reset by an actual reload), READ_INTENT (3 hits from a WIND_UP-class telegraph:
+              a locked charge, a locked beam, a telegraphed area strike or blast — never an ordinary
+              melee/ranged swing, which resolves the same "turn" it is committed), SWITCH_WEAPON
+              (2 floor arrivals holding two ranged weapons with no switch between them, reset by an
+              actual switch). A topic with no evidence rule (`getReteachEvidenceThreshold() == 0`,
+              e.g. MOVE, FIRE, TURN, DOOR, MACHINE, PORTAL) is never re-taught — silence is the
+              default, exactly as the design calls for. (LEVEL_UP has no re-teach either: the level-up
+              overlay force-spends the point the instant XP crosses the threshold, so "an unspent
+              point at the end of a floor" cannot occur in this build's actual flow.)
+
+`narrative/TeachingSystem` is the headless brain: it owns the evidence counters, drains order-9's
+fast-dismiss lane every `update()`, and gates the actual re-teach ask on four rate limits that all
+hold at once — the topic's first-teach row must have actually been DELIVERED (started by
+`onBarkDelivered`, fed from the same `BarkSystem.consumeJustDeliveredBarkId()` the codex archive
+already consumes); at least `STORY_TEACHING_RETEACH_MIN_SECONDS_SINCE_TAUGHT` (60s) must have passed
+since that delivery, so someone still reading is never mistaken for someone who failed to; at most
+`STORY_TEACHING_MAX_RETEACHES_PER_FLOOR` (1) re-teach line reaches the screen per floor, across every
+topic (`beginFloor()`, called alongside `BarkSystem.beginFloor()`); and a `TACTICAL` topic's re-teach
+never lands during a combat spike (`setCombatSpike`), while a `CRITICAL` one still can — a dropped
+critical hint is a stuck player. THE RE-TEACH LINE IS NEVER THE SAME WORDS: verbatim repetition is
+precisely what players report as nagging, so every `.retaught` row in `BarkStrings` / the shipped
+properties file is shorter and more concrete than its first telling ("Guard braces you and ends your
+turn. Saves most of it." -> "That one was telegraphed. Guard would've helped.").
+
+Evidence is fed from the gameplay sites that actually observe it: `PlayerController` (an empty-fire
+attempt and a started reload, via `setEmptyFireAttemptListener`/`setWeaponReloadStartedListener`, and
+a completed weapon switch through the existing `weaponSwitchCallback`), `EnemyManager` (a telegraphed
+hit landing and a ranged hit landing, via `setTelegraphedHitLandedListener`/`setRangedHitLandedListener`,
+wired at the specific commit-then-resolve call sites — `executeRangedAttack`, `executeLanceBeam`,
+`performCharge`, `executeAreaStrike`, `applySelfDestructBlast` — never at the ordinary melee/ranged
+swing), and `World` itself (a death with an unused medkit, a floor arrival still holding two guns, and
+the new geometry-only topics TURN/PORTAL/MACHINE/WEAPON_SWAP/BARREL/SKIP_TURN, each a cheap per-frame
+scan of world state that costs nothing after a topic's one-shot flag is spent).
+
+ADD A TEACHING TOPIC one value on `TeachingTopic` (tier + re-teach evidence threshold), its bark text
+              (+ `.retaught` text if it has a threshold) in `BarkStrings` and the shipped properties
+              file, and the firing condition + (if it has one) the evidence hook in `World` /
+              `EnemyManager` / `PlayerController`. `TeachingCatalog` needs no edit — it loops the enum.
 
 
 THE LORE DRIP (narrative-rework order-8) — how much, from where, and what must land
@@ -1023,7 +1097,8 @@ ADD AN INTRO BEAT        one value on `IntroBeat` (its trigger, its earliest rep
                          site to ask for its trigger + subject key.
 ADD A CODEX ENTRY        one `register()` in `CodexCatalog` (category, unlockedByLine or a PROBE that
                          names it) + its string rows. Locked entries are never listed.
-ADD A CONTROL HINT       one `ControlHint` value + its bark row + the firing condition in `World`.
+ADD A TEACHING TOPIC     see the order-4 section above — one `TeachingTopic` value + its bark row(s)
+                         + the firing condition (and, if it re-teaches, the evidence hook) in `World`.
 ADD A PERSISTED FACT     a port method on `StoryProgressStore`, both implementations, a `story.` key,
                          a bump of `SCHEMA_VERSION` + migration note, and the schema table above.
 ADD A SOUND              one `StoryCue` value + its four numbers in `StoryUiConstants` (same order)

@@ -19,7 +19,7 @@ package ge.tbegvadze.toon3d.narrative;
  *
  * <h3>Why these are subjects rather than a new trigger</h3>
  * Each beat is one row in {@link BarkCatalog}, keyed by {@link #getSubjectKey()} on an EXISTING
- * trigger — the same idiom the control hints ({@link ControlHint}) and the first-sight-of-a-family
+ * trigger — the same idiom the teaching topics ({@link TeachingTopic}) and the first-sight-of-a-family
  * lines use.  Every row is one-shot for the life of the save and {@link BarkPriority#STORY_CRITICAL},
  * because an introduction that loses a race with a flavour quip is an introduction that never
  * happened.  Adding one is still one {@code register()} call; nothing switches on this enum.
