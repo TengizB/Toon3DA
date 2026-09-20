@@ -132,10 +132,10 @@ class StoryBarkTest {
      * nobody told them about — the failure mode the tutorial-through-ORA design exists to prevent.
      */
     @Test
-    void everyControlHintHasALine() {
+    void everyTeachingTopicHasALine() {
         BarkRegistry registry = BarkCatalog.defaultRegistry();
         StoryStrings strings  = StoryStrings.defaults();
-        for (ControlHint hint : ControlHint.values()) {
+        for (TeachingTopic hint : TeachingTopic.values()) {
             BarkDefinition found = null;
             for (BarkDefinition row : registry.getForTrigger(BarkTrigger.CONTROL_HINT)) {
                 if (row.matchesSubject(hint.getSubjectKey())) found = row;
@@ -233,12 +233,12 @@ class StoryBarkTest {
 
     /** A control hint waits for its own control: asking about one never spends another's line. */
     @Test
-    void aControlHintOnlyAnswersItsOwnControl() {
+    void aTeachingTopicOnlyAnswersItsOwnControl() {
         BarkSystem system = newSystemInRegion(StoryRegion.HABITATION_RINGS);
-        assertTrue(system.request(BarkTrigger.CONTROL_HINT, ControlHint.RELOAD.getSubjectKey()));
-        assertFalse(system.request(BarkTrigger.CONTROL_HINT, ControlHint.RELOAD.getSubjectKey()),
+        assertTrue(system.request(BarkTrigger.CONTROL_HINT, TeachingTopic.RELOAD.getSubjectKey()));
+        assertFalse(system.request(BarkTrigger.CONTROL_HINT, TeachingTopic.RELOAD.getSubjectKey()),
                 "the same control was taught twice");
-        assertTrue(system.request(BarkTrigger.CONTROL_HINT, ControlHint.HEAL.getSubjectKey()),
+        assertTrue(system.request(BarkTrigger.CONTROL_HINT, TeachingTopic.HEAL.getSubjectKey()),
                 "teaching one control consumed another's line");
     }
 

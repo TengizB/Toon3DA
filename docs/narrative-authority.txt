@@ -96,9 +96,10 @@ F3 — A DEATH THE PLAYER DID NOT SEE AND NOBODY EXPLAINS            (owner: ord
    so the reveal now lands on somebody who can read it. The player's own first deaths get reserved
    wake lines that explain the loop instead of joking about a new record.
 
-F4 — ORA DOES NOT TEACH THE GAME                                               (owner: order 4)
-   `ControlHint` covers six things: MOVE, FIRE, RELOAD, HEAL, SWITCH_WEAPON, INVENTORY. The game
-   also contains, all unexplained: the GUARD stance (directional defense), enemy intent telegraphs
+F4 — ORA DOES NOT TEACH THE GAME                                     (owner: order 4 — FIXED, DONE)
+   `ControlHint` covered six things: MOVE, FIRE, RELOAD, HEAL, SWITCH_WEAPON, INVENTORY. Widened by
+   order-4 into `TeachingTopic` (~20 values). Before the fix, the game also contained, all
+   unexplained: the GUARD stance (directional defense), enemy intent telegraphs
    (WIND_UP / DEFEND / ATTACK_RANGED, drawn over the enemy), the cardinal-line rule that makes
    stepping out of a lane a dodge, SKIP_TURN, USE_MACHINE, INSPECT_WEAPON, doors and keycards,
    explosive barrels, level-up rewards, and the '>' portal that opens the FACILITY NAV console —
@@ -355,7 +356,7 @@ Order 10 makes all of it stick.
   | 1 | Diagnosis, doctrine & series map       | —          | this document            | DONE   |
   | 2 | The first ten minutes                  | F1, F3, F6 | launch + cold open + gap | DONE   |
   | 3 | The vocabulary ladder                  | F2         | plain-before-proper data | DONE   |
-  | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | TODO   |
+  | 4 | ORA the guide & the competence model   | F4, F7     | the real tutorial        | DONE   |
   | 5 | The bestiary voice                     | F1, F4     | what you fight, how to   | DONE   |
   |   |                                        |            | survive it               |        |
   | 6 | The line rewrite: cut, fix, keep       | F5, F6     | cuts + rewrites + the    | DONE   |

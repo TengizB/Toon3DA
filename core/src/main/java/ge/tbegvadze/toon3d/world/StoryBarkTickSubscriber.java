@@ -9,11 +9,11 @@ import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.narrative.BarkSystem;
 import ge.tbegvadze.toon3d.narrative.BarkTrigger;
-import ge.tbegvadze.toon3d.narrative.ControlHint;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.ExchangeTrigger;
 import ge.tbegvadze.toon3d.narrative.IntroBeat;
 import ge.tbegvadze.toon3d.narrative.StoryTermCatalog;
+import ge.tbegvadze.toon3d.narrative.TeachingTopic;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
@@ -27,7 +27,7 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *       DORMANT, i.e. it noticed the player and is coming.  One-shot per family (the persistent
  *       seen-flag lives in the narrative layer); a local per-floor filter keeps the repeat asks
  *       cheap.  The same instant is when the FIRE button first matters, so it also carries the
- *       {@link ControlHint#FIRE} tutorial line (order-5).</li>
+ *       {@link TeachingTopic#FIRE} tutorial line (order-5).</li>
  *   <li><b>Backtracking</b> — re-stepping tiles already walked on this floor,
  *       {@code STORY_BARK_BACKTRACK_STEPS} in a row.  Pure flavour, dropped under any pressure.</li>
  *   <li><b>Idle</b> — no player action for {@code STORY_BARK_IDLE_SECONDS}.  The timer is advanced
@@ -143,7 +143,7 @@ public final class StoryBarkTickSubscriber implements TickSubscriber {
         for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
             Enemy enemy = enemies.get(enemyIndex);
             if (enemy.health <= 0 || enemy.state == EnemyState.DORMANT) continue;
-            barkSystem.request(BarkTrigger.CONTROL_HINT, ControlHint.FIRE.getSubjectKey());
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.FIRE.getSubjectKey());
             EnemyFamily family = enemy.type.family();
             if (family != null && !familyAlreadyAsked[family.ordinal()]) {
                 familyAlreadyAsked[family.ordinal()] = true;

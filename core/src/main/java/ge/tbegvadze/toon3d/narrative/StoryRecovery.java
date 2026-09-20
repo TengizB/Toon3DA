@@ -99,7 +99,7 @@ public final class StoryRecovery {
     }
 
     /**
-     * Takes the next teaching subject eligible for a re-teach ({@code ControlHint.name()}), or null.
+     * Takes the next teaching subject eligible for a re-teach ({@code TeachingTopic.name()}), or null.
      *
      * <p>THE SEAM.  Order-9 supplies the evidence; order-4's competence model owns what happens next
      * — which words come back, the one-re-teach-ever cap, the per-floor rate limit and the rule that

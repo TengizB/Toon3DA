@@ -51,6 +51,10 @@ public class PlayerController {
     private Runnable                shopOpenCallback                  = null;
     /** Fired when a heal is actually spent (order 3 resource-economy telemetry). Nullable. */
     private Runnable                healUsedListener                  = null;
+    /** Fired when FIRE is pressed but the weapon can neither fire nor reload right now (narrative-rework order-4 RELOAD evidence). Nullable. */
+    private Runnable                emptyFireAttemptListener          = null;
+    /** Fired when a manual reload actually starts (narrative-rework order-4 RELOAD evidence reset). Nullable. */
+    private Runnable                weaponReloadStartedListener       = null;
     /** Fired with the ammo UNITS actually collected on a pickup (order 3 telemetry). Nullable. */
     private java.util.function.IntConsumer ammoPickedUpListener       = null;
     private Inventory               itemInventory                     = null;
@@ -152,6 +156,16 @@ public class PlayerController {
     /** Injects the ammo-picked-up telemetry listener (order 3 resource economy). Nullable. */
     public void setAmmoPickedUpListener(java.util.function.IntConsumer listener) {
         this.ammoPickedUpListener = listener;
+    }
+
+    /** Injects the empty-fire-attempt listener (narrative-rework order-4 RELOAD evidence). Nullable. */
+    public void setEmptyFireAttemptListener(Runnable listener) {
+        this.emptyFireAttemptListener = listener;
+    }
+
+    /** Injects the reload-started listener (narrative-rework order-4 RELOAD evidence reset). Nullable. */
+    public void setWeaponReloadStartedListener(Runnable listener) {
+        this.weaponReloadStartedListener = listener;
     }
 
     /** Returns the weapon GroundItem the player is currently standing on, or null. */
@@ -577,7 +591,11 @@ public class PlayerController {
         Weapon weapon = inventory.getEquippedWeapon();
         if (weapon == null) return;
         if (!weapon.canFire()) {
-            if (weapon.isReloading()) trySkipTurn();
+            if (weapon.isReloading()) {
+                trySkipTurn();
+            } else if (emptyFireAttemptListener != null) {
+                emptyFireAttemptListener.run();
+            }
             return;
         }
 
@@ -749,6 +767,7 @@ public class PlayerController {
             return;
         }
         if (!weapon.requestManualReload()) return;  // already reloading or firing — silent
+        if (weaponReloadStartedListener != null) weaponReloadStartedListener.run();
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }
