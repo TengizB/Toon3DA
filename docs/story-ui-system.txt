@@ -1114,6 +1114,86 @@ ADD AN ENDING SCREEN     order-3's recipe still applies (one `registerCard` in `
                          recorded ending names and the terminal RETURN plate is variant-agnostic.
 
 
+THE GATES: TESTS, TELEMETRY, COLD READS (narrative-rework order-10)
+====================================================================
+Order-10's job is making orders 1-9 stick — every rule the series introduces was meant to become
+either a build gate, a measured number, or a written playtest protocol, so the catalog does not
+drift back within three features. It shipped in two pieces rather than three.
+
+A. THE TEN PROPOSED TEST GATES — NOT IMPLEMENTED
+  The idea file (`.claude/agents/ideas/narrative-rework-order-10.txt`) specified ten new JUnit
+  classes (`FirstTenMinutesTranscriptTest`, `VocabularyLadderTest`, `TeachingCoverageTest`,
+  `NoRepeatVerbatimTest`, `BestiaryCoverageTest`, `LineQualityTest`, `LieLedgerTest`,
+  `BeatMapTest`, `PacingCeilingTest`, `RecapCompositionTest`) wired into `./gradlew test`. This
+  collides directly with the project's MANDATORY Testing Policy (`.claude/CLAUDE.md`), which
+  restricts new tests to game-balance code (`BalanceConfig`/`BalanceSchema`/`GameBalance`/
+  `GameMath`/`sim/`) and explicitly instructs asking before writing a test outside that scope
+  rather than writing it unprompted. Asked, the project owner chose NOT to add the ten gates.
+  They remain undone; this doc and the TEST GATES table below record that as a decision, not an
+  oversight, so a later order does not silently re-propose the same ten classes. If the policy is
+  ever relaxed for narrative content, the idea file's Section A is still the spec to build from —
+  in particular its note that `FirstTenMinutesTranscriptTest` should drive the opening through
+  `…toon3d.sim`'s existing headless `SimWorld` seam rather than a second driver.
+
+B. TELEMETRY — the numbers that decide what gets cut (IMPLEMENTED)
+  `StoryTelemetry` (order-6 Part E) gained four counters, all in-memory, no I/O, no identifiers —
+  the same constraint as everything else in the class:
+    - `fastDismissByBeatId` — a bark id -> times-tapped-away-unread map. The top of this map is the
+      next cut list, sharper than the order-6 fraction because it names the LINE, not just the
+      rate. Filled inside `recordBarkDismissed()`, so no new call site was needed.
+    - `reteachFiredByTopic` — how often a `TeachingTopic` re-teach line actually reached the screen
+      (delivery, not request). A topic that re-teaches for most players has a bad FIRST line, not a
+      bad player. Resolved in `World.archiveDeliveredStoryLine()` via the new
+      `TeachingTopic.forRetaughtBarkId()`, which keeps `TeachingSystem` itself free of a telemetry
+      dependency.
+    - the running average of non-critical barks delivered per floor, against order-8's
+      `STORY_BARK_FLOOR_BUDGET` — read from `BarkSystem.getNonCriticalDeliveredThisFloor()` (the
+      authoritative count already kept for the budget check) once per floor arrival, in
+      `World.requestFloorArrivalBarks()`, immediately before `BarkSystem.beginFloor()` resets it.
+    - the four COMPREHENSION PROXIES — gameplay facts standing in for "did they understand?", each
+      the failure mode of one specific teaching line: deaths recorded before the player's first-ever
+      GUARD use (`PlayerController.setGuardUsedListener`, fired from `tryGuard()`); the average
+      medkits still held at the moment of death (`hudState.medicalCharges` at the existing death
+      block); ranged hits taken while sharing the attacker's lane (chained onto the existing
+      `EnemyManager` ranged-hit-landed listener); and the average seconds spent on the FACILITY NAV
+      console before the pick that closes it (timed between the two `RunPhase.ROUTE_SELECT` entry
+      points and `commitRouteNode()`, skipped for the forced-convergence path that never opens the
+      console at all).
+  None of these gate the build. `Main.dispose()` prints both `StoryTelemetry.describe()` (order-6)
+  and `describeComprehensionProxies()` (order-10) to the log, gated on
+  `Gdx.app.getType() == Application.ApplicationType.Desktop` so the dump exists for a developer
+  reading a desktop dev-build log and never runs on a shipped phone build.
+
+C. THE COLD-READ PROTOCOL — the human gate, run once per order
+  No test can tell you a line is confusing. Before any order in this series is marked IMPLEMENTED,
+  run this:
+    1. A person who has never played opens the game on a phone and plays for ten minutes. No
+       explanation from anybody, no questions answered during.
+    2. Immediately after, they answer, unprompted, in their own words:
+         Who was talking to you?
+         What happened to your character before the game started?
+         What are you supposed to be doing?
+         What happens when you die?
+         What was the map for?
+    3. Any answer that is wrong or absent is a hole, and the fix is a line on an unskippable
+       channel — never a codex entry, never a tooltip, never a longer version of the line that
+       failed.
+    4. Record the five answers verbatim in the order's idea file under a COLD READ section. That
+       record is what makes the next order's writer stop guessing.
+  This protocol is process, not code — it has no test class and needs none. It is the acceptance
+  criterion the (declined) `FirstTenMinutesTranscriptTest` would have partially automated; running
+  it by hand is the fallback the policy decision in Part A leaves in place.
+
+D. THE UPDATE CONTRACT (extends the RECIPES section above)
+  Any narrative change must, in the SAME commit:
+    - add or update its row in the region beat map (order-8) if it is a spine beat;
+    - add its term to the ladder (order-3) if it introduces a proper noun;
+    - add its counter-artefact to THE LIE LEDGER (order-7) if it is an Organization claim;
+    - add its topic row (order-4) if it teaches a mechanic;
+    - update this file, per its own standing contract.
+  A change that cannot satisfy the relevant bullet is a change that has not been designed yet.
+
+
 TEST GATES (`./gradlew test`)
 =============================
   StoryUiFoundationTest      speakers, panel geometry, wrapping, safe zones (order-1)
@@ -1126,3 +1206,8 @@ TEST GATES (`./gradlew test`)
   StoryLocalizationTest      every id in every channel resolves in the shipped table (7 C)
   StoryOverlayPrecedenceTest suppression, no stacked panels, interrupted beats survive (7 E)
   StoryFramingTest           launch lines, ending subversion, menus, confirms, geometry (order-8)
+
+  narrative-rework order-10 proposed ten further gates over this table (transcript, vocabulary
+  ladder, teaching coverage, no-repeat, bestiary coverage, line quality, lie ledger, beat map,
+  pacing ceiling, recap composition). They were NOT added — see "THE GATES" section above, Part A,
+  for why and for what stands in for them (telemetry + the cold-read protocol).

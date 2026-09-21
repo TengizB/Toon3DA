@@ -119,4 +119,22 @@ public enum TeachingTopic {
         }
         return null;
     }
+
+    /**
+     * The topic whose RE-TEACH row was just delivered under {@code barkId}, or null when the id is not
+     * a re-teach delivery at all (the ordinary first-teach id, or an unrelated bark). Mirrors the
+     * literal {@link TeachingSystem} builds internally ({@code "bark.control.retaught." + catalogKey})
+     * so order-10's {@code reTeachFiredByTopic} telemetry can resolve a delivered id without
+     * {@code TeachingSystem} needing a telemetry dependency of its own.
+     */
+    public static TeachingTopic forRetaughtBarkId(String barkId) {
+        if (barkId == null) return null;
+        final String prefix = "bark.control.retaught.";
+        if (!barkId.startsWith(prefix)) return null;
+        String catalogKey = barkId.substring(prefix.length());
+        for (TeachingTopic topic : values()) {
+            if (topic.getCatalogKey().equals(catalogKey)) return topic;
+        }
+        return null;
+    }
 }

@@ -55,6 +55,8 @@ public class PlayerController {
     private Runnable                emptyFireAttemptListener          = null;
     /** Fired when a manual reload actually starts (narrative-rework order-4 RELOAD evidence reset). Nullable. */
     private Runnable                weaponReloadStartedListener       = null;
+    /** Fired every time GUARD is used (narrative-rework order-10 B comprehension-proxy telemetry). Nullable. */
+    private Runnable                guardUsedListener                 = null;
     /** Fired with the ammo UNITS actually collected on a pickup (order 3 telemetry). Nullable. */
     private java.util.function.IntConsumer ammoPickedUpListener       = null;
     private Inventory               itemInventory                     = null;
@@ -166,6 +168,11 @@ public class PlayerController {
     /** Injects the reload-started listener (narrative-rework order-4 RELOAD evidence reset). Nullable. */
     public void setWeaponReloadStartedListener(Runnable listener) {
         this.weaponReloadStartedListener = listener;
+    }
+
+    /** Injects the GUARD-used listener (narrative-rework order-10 B comprehension-proxy telemetry). Nullable. */
+    public void setGuardUsedListener(Runnable listener) {
+        this.guardUsedListener = listener;
     }
 
     /** Returns the weapon GroundItem the player is currently standing on, or null. */
@@ -755,6 +762,7 @@ public class PlayerController {
     private void tryGuard() {
         player.setGuarding(true);
         if (eventTextSystem != null) eventTextSystem.spawnWithColor("GUARD", EventTextSystem.COLOR_BLUE);
+        if (guardUsedListener != null) guardUsedListener.run();
         actionState    = ActionState.GUARDING;
         actionProgress = 0f;
     }

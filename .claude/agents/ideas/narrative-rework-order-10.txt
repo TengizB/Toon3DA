@@ -1,7 +1,27 @@
-STATUS: NOT IMPLEMENTED
+STATUS: PARTIALLY IMPLEMENTED — Section A (the ten JUnit gates) declined, Sections B/C/D shipped
 CATEGORY: Systems
 TITLE: Narrative rework 10 — The gates: tests, telemetry, cold reads
 ---
+
+IMPLEMENTATION NOTE (added when this order was picked up)
+Section A asked for ten new JUnit test classes covering narrative content. That collides directly
+with `.claude/CLAUDE.md`'s MANDATORY Testing Policy, which restricts new tests to game-balance code
+and explicitly says to ask before writing a test outside that scope rather than writing it
+unprompted. Asked, the project owner chose to SKIP the ten gates rather than grant the exception.
+They remain unimplemented; nothing below in Section A was built, and the TEST GATES table in
+docs/story-ui-system.txt records the decision so a later pass does not silently re-propose it.
+
+Sections B (the four StoryTelemetry counters), C (the cold-read protocol, written into
+docs/story-ui-system.txt as process, not code) and D (the update contract, likewise written into
+docs/story-ui-system.txt) were implemented as specified. See docs/story-ui-system.txt -> "THE
+GATES: TESTS, TELEMETRY, COLD READS" for the full record, and the `…toon3d.narrative` row of
+CLAUDE.md's Project Structure table for the one-paragraph summary.
+
+No COLD READ section is recorded below: order-10 itself ships no player-facing content (per its
+own PURPOSE line, "adds no player-facing content at all"), so the protocol in Part C has nothing of
+this order's own to test. Running it is unchanged for orders 1-9, whose own idea files still owe
+their COLD READ sections whenever a human playtester is available to actually run the five-question
+script — a claim this session cannot manufacture without a real player.
 
 PURPOSE
 Makes orders 1-9 stick. Every rule the series introduces becomes either a build gate, a

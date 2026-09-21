@@ -215,6 +215,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private RunPhase runPhase         = RunPhase.PLAYING;
     private float    fadeTimerSeconds = 0f;
     private int      currentDepth     = RenderConstants.STARTING_DEPTH;
+    /** order-10 B comprehension proxy: seconds on the FACILITY NAV console, reset whenever it opens. */
+    private float    routeSelectElapsedSeconds = 0f;
 
     // -------------------------------------------------------------------------
     // Branching route map (route-map order-3) — the node->floor pipeline. The map is generated once
@@ -840,6 +842,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             requestRouteMapBarks();
             routePointerDown = false;
             routePointerDragging = false;
+            routeSelectElapsedSeconds = 0f; // order-10 B comprehension proxy
             runPhase = RunPhase.ROUTE_SELECT;
             return;
         }
@@ -873,6 +876,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         requestRouteMapBarks();
         routePointerDown = false;
         routePointerDragging = false;
+        routeSelectElapsedSeconds = 0f; // order-10 B comprehension proxy
         runPhase = RunPhase.ROUTE_SELECT;
     }
 
@@ -958,6 +962,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * touch). The next floor is built from {@link #pendingNode} in the FADING_OUT completion branch.
      */
     private void commitRouteNode(RouteNode next) {
+        // order-10 B comprehension proxy: only meaningful when the console was actually shown — the
+        // forced-convergence skip (SHOW_FORCED_NODE_CARD == false) calls this while still PLAYING,
+        // never having opened ROUTE_SELECT, so there was nothing to time.
+        if (runPhase == RunPhase.ROUTE_SELECT) {
+            storyTelemetry.recordNavConsoleSecondsBeforePick(routeSelectElapsedSeconds);
+        }
         // TEMPORARY TESTING (RouteMapConstants.BOSS_TEST_ALWAYS_CLICKABLE): a BOSS node tapped out of
         // turn is not a legal AVAILABLE next pick, so routeMap.commitTo() would reject it. Drop straight
         // into the boss arena from pendingNode without advancing the route cursor, so the tester lands
@@ -1275,7 +1285,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // EVIDENCE (narrative-rework order-4, READ_INTENT / GUARD / BREAK_LANE): fed straight to the
         // competence model from the hit resolution sites that are actually telegraphed / in-lane.
         enemyManager.setTelegraphedHitLandedListener(teachingSystem::onTelegraphedHitLanded);
-        enemyManager.setRangedHitLandedListener(teachingSystem::onRangedHitLanded);
+        enemyManager.setRangedHitLandedListener(() -> {
+            teachingSystem.onRangedHitLanded();
+            storyTelemetry.recordRangedHitInLane(); // order-10 B comprehension proxy
+        });
 
         enemyManager.setStatusEffectController(statusEffectController);
         enemyManager.setEventTextSystem(eventTextSystem); // "BLOCKED N" floater on Block absorption (order-3)
@@ -1384,6 +1397,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // reload resets the count, since the player just did the right thing.
         playerController.setEmptyFireAttemptListener(teachingSystem::onEmptyFireAttempt);
         playerController.setWeaponReloadStartedListener(teachingSystem::onWeaponReloaded);
+        // order-10 B comprehension proxy: how many deaths it took to reach the first GUARD use.
+        playerController.setGuardUsedListener(() -> storyTelemetry.recordGuardFirstUsed(persistentStats.totalDeaths));
         playerController.setWeaponSwitchCallback(() -> {
             weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
             // EVIDENCE (narrative-rework order-4, SWITCH_WEAPON): the player just did the thing the
@@ -2157,6 +2172,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // forwards unprojected touches and fires out-of-renderer feedback (console-thunk shake). When
         // the COMMIT flare finishes, commit() fires onNodeCommitted -> commitRouteNode -> FADING_OUT.
         if (runPhase == RunPhase.ROUTE_SELECT) {
+            routeSelectElapsedSeconds += deltaTime; // order-10 B comprehension proxy
             if (routeMapOverlay.isActive()) {
                 java.util.List<RouteNode> candidates = routeMapOverlay.getCandidates();
                 if (candidates.isEmpty()) {
@@ -2237,6 +2253,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // EVIDENCE (narrative-rework order-4, HEAL): the run just ended with a usable medkit
             // never spent.
             teachingSystem.onPlayerDied(hudState.medicalCharges > 0);
+            storyTelemetry.recordDeathWithMedkits(hudState.medicalCharges); // order-10 B comprehension proxy
             runStats.recordFloor(currentDepth);
             sealRunAutopsy();
             // Snapshot the run BEFORE the records are saved, so "RECORD" still means "this instance
@@ -2955,6 +2972,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * decide what (if anything) is actually spoken.
      */
     private void requestFloorArrivalBarks() {
+        // order-10 B: file the floor just finished into the running average BEFORE barkSystem resets
+        // its own counter below — this reads the authoritative per-floor count, never re-derives it.
+        storyTelemetry.recordFloorBarkDelivery(barkSystem.getNonCriticalDeliveredThisFloor());
         // THE PER-FLOOR BUDGET (narrative-rework order-8 B) resets HERE, before anything asks: this
         // is the single funnel every floor arrival passes through, and the budget is what makes "an
         // ordinary floor delivers two flavour lines" true rather than hoped for.  The staging room
@@ -3805,6 +3825,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // the moment its first telling actually reached the screen, and counts a delivered re-teach
         // against the per-floor cap.
         teachingSystem.onBarkDelivered(deliveredBarkId);
+        // order-10 B: a re-teach ACTUALLY reaching the screen means the first telling had a bad line,
+        // not a bad player — resolved here rather than inside TeachingSystem, which stays free of a
+        // telemetry dependency.
+        TeachingTopic retaughtTopic = TeachingTopic.forRetaughtBarkId(deliveredBarkId);
+        if (retaughtTopic != null) {
+            storyTelemetry.recordReteachFired(retaughtTopic);
+        }
     }
 
     /**
