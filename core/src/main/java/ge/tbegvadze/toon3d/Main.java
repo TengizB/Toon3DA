@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d;
 
+import com.badlogic.gdx.Application;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -84,6 +85,13 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void dispose() {
+        // narrative-rework order-10 Part B: the tuning counters are for a designer skimming a desktop
+        // dev-build log, never anything shipped to a phone — gated on ApplicationType so the same code
+        // path runs unchanged on Android with the dump simply never printing.
+        if (Gdx.app.getType() == Application.ApplicationType.Desktop && world != null) {
+            Gdx.app.log("StoryTelemetry", world.getStoryTelemetry().describe());
+            Gdx.app.log("StoryTelemetry", world.getStoryTelemetry().describeComprehensionProxies());
+        }
         world.dispose();
     }
 }
