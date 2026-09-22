@@ -362,7 +362,7 @@ public final class SimWorld implements LevelTransitionListener {
         tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, spireManager,
                                                   statusEffectController,
                                                   player, enemyManager, playerStats,
-                                                  bossFloorController, gameState);
+                                                  bossFloorController, gameState, null);
 
         playerController = new PlayerController(player, level, doorManager, inventory);
         playerController.setEnemyManager(enemyManager);

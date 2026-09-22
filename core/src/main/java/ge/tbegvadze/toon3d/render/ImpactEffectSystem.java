@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.render;
 
+import ge.tbegvadze.toon3d.audio.GameAudio;
+import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -155,6 +157,16 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     private final Random random;
 
+    /**
+     * Gameplay audio, injected by World; null in headless runs, where every call is skipped.
+     *
+     * <p>The sound of a hit rides this class rather than its own listener because
+     * {@code ImpactEventListener} is a wide interface with a dozen default methods: a separate
+     * fan-out would have to forward every one of them, and would silently stop forwarding the next
+     * one somebody adds.
+     */
+    private GameAudio gameAudio = null;
+
     public ImpactEffectSystem() {
         this.random = new Random();
     }
@@ -179,6 +191,10 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     // ImpactEventListener — called from EnemyManager
     // -------------------------------------------------------------------------
 
+    public void setGameAudio(GameAudio audio) {
+        this.gameAudio = audio;
+    }
+
     @Override
     public void onEnemyHit(float worldX, float worldY, float heightMultiplier, int damageDealt) {
         triggerShake(EffectConstants.HIT_SHAKE_MAGNITUDE, EffectConstants.HIT_SHAKE_DURATION_SECONDS);
@@ -188,12 +204,16 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
         spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT, false);
         spawnDamageNumber(worldX, worldY, damageDealt, false);
+        if (gameAudio != null) gameAudio.playWeaponImpactAt(worldX, worldY, heightMultiplier);
     }
 
     @Override
     public void onEnemyKilled(float worldX, float worldY, float heightMultiplier, int killingBlowDamage) {
         triggerShake(EffectConstants.KILL_SHAKE_MAGNITUDE, EffectConstants.KILL_SHAKE_DURATION_SECONDS);
         killFlashTimeRemaining = EffectConstants.KILL_FLASH_DURATION_SECONDS;
+        if (gameAudio != null) {
+            gameAudio.playAtWorld(GameSoundId.ENEMY_DEATH, worldX, worldY, heightMultiplier);
+        }
 
         float screenX = projectToScreenX(worldX, worldY);
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);

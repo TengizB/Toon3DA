@@ -2,8 +2,8 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Sound;
-import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.audio.PcmWavWriter;
 import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
@@ -40,10 +40,6 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  */
 public final class StoryAudio implements Disposable {
 
-    private static final int    WAV_HEADER_BYTES = 44;
-    private static final short  PCM_FORMAT       = 1;   // linear PCM
-    private static final short  MONO_CHANNELS    = 1;
-    private static final short  BITS_PER_SAMPLE  = 16;
     /** Where the generated WAVs are written once, so {@code Gdx.audio.newSound} has a file to read. */
     private static final String GENERATED_DIRECTORY = "story-audio/";
 
@@ -104,81 +100,29 @@ public final class StoryAudio implements Disposable {
     /** Builds one tone's WAV, writes it to a local file and loads it as a Sound; null on failure. */
     private Sound synthesize(String fileName, float frequencyHz, float durationSeconds,
                              boolean square) {
-        try {
-            // The tone's own parameters are part of the file name, so a retuned constant writes a
-            // NEW file rather than silently re-loading the old sound.
-            String cacheName = fileName + "-" + Math.round(frequencyHz)
-                    + "-" + Math.round(durationSeconds * 1000f) + (square ? "-square" : "-sine");
-            FileHandle handle = Gdx.files.local(GENERATED_DIRECTORY + cacheName + ".wav");
-            // Synthesis is deterministic, so a file written by an earlier run is already correct:
-            // a new run after a death re-loads it instead of rebuilding the same bytes.
-            if (!handle.exists()) {
-                handle.writeBytes(buildWav(frequencyHz, durationSeconds, square), false);
-            }
-            return Gdx.audio.newSound(handle);
-        } catch (Exception synthesisFailure) {
-            // Never let a missing/locked audio device break construction — degrade to silence.
-            return null;
-        }
+        // The tone's own parameters are part of the file name, so a retuned constant writes a
+        // NEW file rather than silently re-loading the old sound.
+        String cacheName = fileName + "-" + Math.round(frequencyHz)
+                + "-" + Math.round(durationSeconds * 1000f) + (square ? "-square" : "-sine");
+        return PcmWavWriter.toCachedSound(
+                GENERATED_DIRECTORY,
+                cacheName,
+                buildTone(frequencyHz, durationSeconds, square),
+                StoryUiConstants.STORY_STING_SAMPLE_RATE_HZ);
     }
 
-    /** Assembles a minimal 16-bit mono WAV for one procedural tone. */
-    private byte[] buildWav(float frequencyHz, float durationSeconds, boolean square) {
+    /** Renders one procedural tone's PCM; the WAV wrapping and caching belong to PcmWavWriter. */
+    private short[] buildTone(float frequencyHz, float durationSeconds, boolean square) {
         int sampleRate   = StoryUiConstants.STORY_STING_SAMPLE_RATE_HZ;
         int totalSamples = Math.max(1, Math.round(durationSeconds * sampleRate));
-        int dataBytes    = totalSamples * (BITS_PER_SAMPLE / 8);
-        byte[] wav       = new byte[WAV_HEADER_BYTES + dataBytes];
-
-        writeWavHeader(wav, sampleRate, dataBytes);
-
-        int writeIndex = WAV_HEADER_BYTES;
+        short[] samples  = new short[totalSamples];
         // Volume is applied at play() time; synthesise at unit volume so the WAV keeps full range.
         for (int sampleIndex = 0; sampleIndex < totalSamples; sampleIndex++) {
-            short sample = GameMath.storyStingSample(
+            samples[sampleIndex] = GameMath.storyStingSample(
                     frequencyHz, square, 1f, sampleIndex, totalSamples, sampleRate,
                     StoryUiConstants.STORY_STING_ENVELOPE_FRACTION);
-            wav[writeIndex++] = (byte) (sample & 0xFF);
-            wav[writeIndex++] = (byte) ((sample >> 8) & 0xFF);
         }
-        return wav;
-    }
-
-    /** Writes the 44-byte RIFF/WAVE header (little-endian) for a mono 16-bit PCM stream. */
-    private void writeWavHeader(byte[] wav, int sampleRate, int dataBytes) {
-        int byteRate   = sampleRate * MONO_CHANNELS * (BITS_PER_SAMPLE / 8);
-        int blockAlign = MONO_CHANNELS * (BITS_PER_SAMPLE / 8);
-
-        writeAscii(wav, 0, "RIFF");
-        writeIntLittleEndian(wav, 4, 36 + dataBytes);   // chunk size = file size - 8
-        writeAscii(wav, 8, "WAVE");
-        writeAscii(wav, 12, "fmt ");
-        writeIntLittleEndian(wav, 16, 16);              // fmt chunk size
-        writeShortLittleEndian(wav, 20, PCM_FORMAT);
-        writeShortLittleEndian(wav, 22, MONO_CHANNELS);
-        writeIntLittleEndian(wav, 24, sampleRate);
-        writeIntLittleEndian(wav, 28, byteRate);
-        writeShortLittleEndian(wav, 32, (short) blockAlign);
-        writeShortLittleEndian(wav, 34, BITS_PER_SAMPLE);
-        writeAscii(wav, 36, "data");
-        writeIntLittleEndian(wav, 40, dataBytes);
-    }
-
-    private static void writeAscii(byte[] buffer, int offset, String text) {
-        for (int characterIndex = 0; characterIndex < text.length(); characterIndex++) {
-            buffer[offset + characterIndex] = (byte) text.charAt(characterIndex);
-        }
-    }
-
-    private static void writeIntLittleEndian(byte[] buffer, int offset, int value) {
-        buffer[offset]     = (byte) (value & 0xFF);
-        buffer[offset + 1] = (byte) ((value >> 8) & 0xFF);
-        buffer[offset + 2] = (byte) ((value >> 16) & 0xFF);
-        buffer[offset + 3] = (byte) ((value >> 24) & 0xFF);
-    }
-
-    private static void writeShortLittleEndian(byte[] buffer, int offset, short value) {
-        buffer[offset]     = (byte) (value & 0xFF);
-        buffer[offset + 1] = (byte) ((value >> 8) & 0xFF);
+        return samples;
     }
 
     @Override

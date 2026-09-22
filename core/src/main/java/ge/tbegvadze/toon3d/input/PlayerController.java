@@ -4,6 +4,8 @@ import java.util.Collections;
 import java.util.List;
 
 import com.badlogic.gdx.math.MathUtils;
+import ge.tbegvadze.toon3d.audio.GameAudio;
+import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
@@ -59,6 +61,8 @@ public class PlayerController {
     private Runnable                guardUsedListener                 = null;
     /** Fired with the ammo UNITS actually collected on a pickup (order 3 telemetry). Nullable. */
     private java.util.function.IntConsumer ammoPickedUpListener       = null;
+    /** Gameplay sound. Injected by World; null in headless runs, where every call is a no-op. */
+    private GameAudio               gameAudio                         = null;
     private Inventory               itemInventory                     = null;
     private Loadout                 loadout                           = null;
     private PlayerStats             playerStats                       = null;
@@ -104,6 +108,10 @@ public class PlayerController {
 
     public void setEventTextSystem(EventTextSystem system) {
         this.eventTextSystem = system;
+    }
+
+    public void setGameAudio(GameAudio audio) {
+        this.gameAudio = audio;
     }
 
     /** Wires the cosmetic "wall bump" feedback fired when a step is rejected by a solid/occupied tile. */
@@ -600,8 +608,9 @@ public class PlayerController {
         if (!weapon.canFire()) {
             if (weapon.isReloading()) {
                 trySkipTurn();
-            } else if (emptyFireAttemptListener != null) {
-                emptyFireAttemptListener.run();
+            } else {
+                if (gameAudio != null) gameAudio.playUi(GameSoundId.WEAPON_DRY_FIRE);
+                if (emptyFireAttemptListener != null) emptyFireAttemptListener.run();
             }
             return;
         }
@@ -613,6 +622,7 @@ public class PlayerController {
                 // First press: spin up the capacitor — consume a turn but do not fire.
                 railgun.advanceCharge();
                 if (eventTextSystem != null) eventTextSystem.spawn("CHARGING...");
+                if (gameAudio != null) gameAudio.playUi(GameSoundId.RAILGUN_CHARGE);
                 actionState    = ActionState.FIRING;
                 actionProgress = 0f;
                 return;
@@ -628,6 +638,7 @@ public class PlayerController {
         EnemyHitTarget hitTarget = (enemyManager != null) ? enemyManager : null;
         weapon.fire(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                     level, hitTarget, barrelHitTarget, doorManager::blocksSight);
+        if (gameAudio != null) gameAudio.playPlayerWeapon(weapon.getItemType());
         actionState    = ActionState.FIRING;
         actionProgress = 0f;
     }
@@ -690,6 +701,7 @@ public class PlayerController {
 
     /** Fires the cosmetic wall-bump feedback for a rejected step. No turn is consumed. */
     private void notifyMoveBlocked(float moveDirectionX, float moveDirectionY) {
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.MOVE_BLOCKED);
         if (moveBlockedListener != null) {
             moveBlockedListener.onMoveBlocked(moveDirectionX, moveDirectionY);
         }
@@ -702,6 +714,7 @@ public class PlayerController {
         }
         Weapon nextWeapon = inventory.switchToNextWeapon();
         if (nextWeapon == null || nextWeapon == currentWeapon) return;
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.WEAPON_SWITCH);
         if (weaponSwitchCallback != null) weaponSwitchCallback.run();
         if (eventTextSystem != null) eventTextSystem.spawn(nextWeapon.getDisplayName());
     }
@@ -775,6 +788,7 @@ public class PlayerController {
             return;
         }
         if (!weapon.requestManualReload()) return;  // already reloading or firing — silent
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.WEAPON_RELOAD_START);
         if (weaponReloadStartedListener != null) weaponReloadStartedListener.run();
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
