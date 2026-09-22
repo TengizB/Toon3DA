@@ -565,7 +565,7 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_FOOTER_Y          = STORY_CODEX_Y + STORY_CODEX_PADDING;
     public static final float STORY_CODEX_FOOTER_TEXT_SIZE  = 1.0f;
     /** How many settings buttons the strip holds — text size, reveal pacing, motion, story audio. */
-    public static final int   STORY_CODEX_SETTING_COUNT     = 4;
+    public static final int   STORY_CODEX_SETTING_COUNT     = 5;
     public static final float STORY_CODEX_SETTING_GAP       = 12f;
     public static final float STORY_CODEX_SETTING_WIDTH     =
             (STORY_CODEX_BODY_WIDTH - (STORY_CODEX_SETTING_COUNT - 1) * STORY_CODEX_SETTING_GAP)
@@ -621,6 +621,12 @@ public final class StoryUiConstants {
     public static final String STORY_CODEX_SETTING_REVEAL_ID   = "story.codex.setting.reveal";
     public static final String STORY_CODEX_SETTING_MOTION_ID   = "story.codex.setting.motion";
     public static final String STORY_CODEX_SETTING_AUDIO_ID    = "story.codex.setting.audio";
+    /**
+     * The GAMEPLAY sound-effects knob (procedural-sound-effects order 1), sitting beside the story
+     * layer's SOUND knob and independent of it: somebody may well want ORA's voice stings without
+     * gunfire, or gunfire without them.
+     */
+    public static final String STORY_CODEX_SETTING_SFX_ID      = "story.codex.setting.sfx";
 
     // =====================================================================
     // ACCESSIBILITY SETTINGS (order-6 Part D) — the player-facing knobs, and their persisted keys.

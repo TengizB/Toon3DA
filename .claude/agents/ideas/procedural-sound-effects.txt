@@ -1,0 +1,1004 @@
+STATUS: IMPLEMENTED (orders 1-2; orders 3-5 remain — see docs/sound-system.txt section 11)
+CATEGORY: Systems
+TITLE: Procedural Sound Effects (gameplay audio, synthesised)
+CREATED: 2026-09-22
+---
+
+IMPLEMENTATION NOTES (what shipped, and where it departs from this document)
+===========================================================================
+Orders 1 and 2 shipped together. 34 sounds, verified to synthesise with healthy peaks, zero
+clipping, negligible DC offset and no end-of-buffer clicks. Four deliberate departures:
+
+1. THE TURN BOUNDARY IS DETECTED BY TIME, not by `GameAudio.beginTurn()` called from `World`.
+   Every dispatch site lives inside `TickPipeline`, and a single missed call would not be a small
+   bug: the per-turn counters would climb forever and every enemy sound after the third would be
+   dropped for the rest of the run. A short elapsed window (`GAME_SFX_TURN_WINDOW_SECONDS`)
+   identifies a turn exactly as well, because every sound a turn makes is fired in the same frame.
+   `SoundMixer.beginTurn()` survives as an explicit hard reset; correctness no longer depends on it.
+
+2. NO `ImpactEventFanout`. `ImpactEventListener` is a wide interface with a dozen default methods,
+   so a fan-out would have to forward every one and would silently stop forwarding the next one
+   somebody adds. The hit and death sounds ride `ImpactEffectSystem` instead, which already
+   receives those events — one injected field, two call sites, no new interface.
+   `EnemyAttackFanout` DID ship, because `EnemyAttackListener` is two methods with no defaults.
+
+3. IMPACT SOUNDS ARE RESOLVED FROM THE LAST WEAPON FIRED, remembered inside `GameAudio`. An impact
+   always follows a shot, so this is exact, and it saves plumbing the equipped weapon into every
+   effect system.
+
+4. `TickPipeline.standardFloor` gained a `GameAudio` parameter (null in `SimWorld`) so the reload
+   subscriber can watch the `isReloading()` true->false edge. Still zero edits to `Weapon`.
+
+The four melee weapons and the pistol got recipes this document did not spec (it named 14 weapons
+but detailed 13). The per-family enemy voices (order 3) are NOT built: three generic enemy sounds
+stand in and remain the documented fallback for an unbound family.
+
+Living documentation is `docs/sound-system.txt`, not this file.
+
+
+OVERVIEW
+========
+The game has no gameplay audio at all. Every gun fires in silence, every hit lands in silence,
+every death is silent. This document specifies the GAMEPLAY SFX LAYER: a data-driven catalog of
+~60 short sounds, every one of them SYNTHESISED FROM CODE at first launch — no .wav or .ogg asset
+files are ever shipped — played from the turn/event path on discrete gameplay moments.
+
+It is the same machine `render/StoryAudio` already proved (build 16-bit mono PCM -> hand-written
+44-byte RIFF/WAVE header -> write once to `Gdx.files.local()` -> `Gdx.audio.newSound()` -> degrade
+silently when `Gdx.audio == null`), scaled up from seven sine/square blips to a real percussive
+synthesis toolkit: filtered noise bursts, pitch sweeps, ring/amplitude modulation, layered
+recipes, soft clipping. No music, ever.
+
+Why it belongs here: this is a Doom-descended game whose whole combat read is "I pressed fire,
+something happened". On a phone, at arm's length, with a 0.12 s action lock, a shotgun blast that
+makes no noise reads as a dropped input. Audio is the cheapest legibility this project has left.
+
+The standing rule, inherited verbatim from `StoryAudio`: **the game must be fully playable and
+fully understandable with audio OFF.** Every sound in this catalog is redundant with something
+already drawn (muzzle flash, hit vignette, event text, HUD digits, health bar, screen shake). Not
+one line of information arrives by ear alone.
+
+
+GAMEPLAY LOOP
+=============
+There is no new player-facing verb. The loop is the EXISTING loop, with a sound hung on each
+already-existing event:
+
+1. Player taps FIRE -> `PlayerController.tryFire()` resolves the shot as it does today ->
+   immediately after `weapon.fire(...)` returns, `gameAudio.playPlayerWeapon(weapon.getItemType())`.
+   -> if the weapon's clip was empty instead, the empty branch plays `WEAPON_DRY_FIRE`.
+   -> if the weapon is a `Railgun` on its charge turn, `RAILGUN_CHARGE` plays instead of a shot.
+2. The shot resolves into an enemy -> `ImpactEventListener.onEnemyHit(worldX, worldY,
+   heightMultiplier, damageDealt)` already fires -> the audio system plays the IMPACT sound of the
+   weapon class that just fired (buckshot patter / plasma sizzle / rail crack), pitched DOWN for a
+   physically larger target (`heightMultiplier`), panned and attenuated by the enemy's tile.
+3. The shot kills -> `onEnemyKilled(...)` -> the enemy family's DEATH voice, then a very quiet
+   `KILL_CONFIRM` tick (the XP receipt) that is mixed far below everything else.
+4. The player's turn ends; enemies act. Each enemy that attacks fires
+   `EnemyAttackListener.onMeleeAttack/onRangedAttack` -> that family's ATTACK voice at that
+   enemy's tile. If five enemies swing at once, the mixer plays the nearest three, each quieter
+   than the last, and DROPS the rest (a late growl is a lie in a turn-based game).
+5. The player takes damage -> the existing `PlayerDamageListener` lambda in `World` already flashes
+   the vignette and spawns the damage text -> it also plays `PLAYER_HURT_LIGHT` or
+   `PLAYER_HURT_HEAVY`, chosen on the damage as a fraction of max HP.
+   -> if GUARD absorbed it, `PLAYER_GUARDED` (bright metal, front arc) or `PLAYER_FLANKED` (dull
+      metal + the hurt thud, side/back arc) — the same split the GUARDED/FLANKED event text makes.
+6. HP hits zero -> `PLAYER_DEATH` (the one long sound in the game, 0.9 s) plays under the fade, and
+   the DEATH STROKE screen that follows stays silent, as designed.
+7. Everything else in the facility answers the same way: a door hisses open, a barrel detonates, a
+   keycard chirps, a medkit hisses and chimes, a level-up plays a major triad, a blocked step
+   thuds so the player knows the tap registered and the wall refused.
+
+The player never configures any of this beyond one settings row: SOUND EFFECTS — ON / QUIET / OFF.
+
+
+PLAYER EXPERIENCE
+=================
+The intended feeling is WEIGHT and CONFIRMATION, not spectacle.
+
+- "I know which gun I am holding without looking at the HUD." The double barrel is a two-stage
+  ba-DOOM; the chaingun is a dry tick with a different pitch every shot; the plasma rifle descends;
+  the railgun cracks and leaves a tail. Seven guns, seven silhouettes in the ear.
+- "I know that hurt." A light hit is a slap; a heavy hit is a slap with a sub-bass punch under it.
+  The difference is felt before the number is read.
+- "I know something woke up behind me." An alert growl panned hard left tells the player to turn —
+  and the mini-map and the enemy's visible state change tell them the same thing, so a player with
+  the phone muted on a bus loses atmosphere, never information.
+- "My tap did something." The single most valuable sound in the list is the cheapest one:
+  `MOVE_BLOCKED`, a 70 ms thud when a step is refused. On mobile, silence after a tap reads as a
+  bug.
+
+The decision this creates: almost none, deliberately. This system is not a tactical resource — the
+one that IS is `noise-propagation-and-3d-sound-cues.txt` (see INTERACTIONS). This layer buys
+readability and dread, and it must not start making claims the player is expected to act on.
+
+
+THE SYNTHESIS TOOLKIT
+=====================
+`GameMath.storyStingSample()` is a sine/square oscillator times a symmetric linear fade. That is
+correct for a UI blip and completely wrong for gunfire: a gunshot is BROADBAND NOISE with a hard
+transient and an exponential decay, and it has no pitch at all.
+
+Five primitives, four envelope shapes and two filters cover the whole catalog.
+
+--- PRIMITIVE 1: white noise ---------------------------------------------------------------
+Deterministic hash noise, not `Random` — the same recipe must produce byte-identical PCM on every
+device and every launch, because the WAV cache is keyed by filename.
+
+    GameMath.whiteNoiseSample(long noiseSeed, int sampleIndex) -> float in [-1, 1]
+
+    mixed = (noiseSeed * 0x9E3779B97F4A7C15L) + (sampleIndex * 0xBF58476D1CE4E5B9L)
+    mixed ^= (mixed >>> 33); mixed *= 0xFF51AFD7ED558CCDL
+    mixed ^= (mixed >>> 33)
+    value  = ((int)(mixed >>> 40)) / 8388608f - 1f        // top 24 bits -> [-1, 1)
+
+Edge cases: no division by zero possible; the constant `0x9E3779B97F4A7C15L` is already used by
+`GameMath.floorSeed`, so the style is house-consistent. Overflow wraps, intentionally.
+
+--- PRIMITIVE 2: one-pole filters ----------------------------------------------------------
+Unfiltered white noise on a phone speaker is a hiss with no body. Every noise layer in this
+catalog is filtered. A one-pole IIR is stateful, so the STATE lives in the synthesiser's local
+loop and the STEP stays a pure `GameMath` function:
+
+    GameMath.onePoleCoefficient(cutoffHz, sampleRateHz) -> float
+        coefficient = exp(-2 * PI * cutoffHz / sampleRateHz), clamped to [0, 0.9999]
+
+    GameMath.onePoleLowPassStep(previousOutput, input, coefficient) -> float
+        output = (1 - coefficient) * input + coefficient * previousOutput
+
+    GameMath.onePoleHighPassStep(previousOutput, previousInput, input, coefficient) -> float
+        output = coefficient * (previousOutput + input - previousInput)
+
+Edge cases: cutoffHz <= 0 -> coefficient clamps to 0.9999 (nearly all-pass-blocking); cutoffHz
+above Nyquist -> coefficient 0 (pass-through). sampleRateHz <= 0 -> return 0.
+
+BAND-PASS = low-pass a high-passed signal, two states, two steps. A SWEPT filter is free: the
+caller recomputes `coefficient` from a cutoff that is a function of `sampleIndex` (used by the
+Incinerator whoosh and the explosion wash).
+
+--- PRIMITIVE 3: percussive envelope -------------------------------------------------------
+The story layer's symmetric fade must never be used for a weapon. Gunfire is: near-instant attack,
+exponential decay, exactly zero at the end (a non-zero tail is an audible click).
+
+    GameMath.percussiveEnvelope(sampleIndex, totalSamples, attackSamples, decayRate) -> float
+
+    if sampleIndex < attackSamples:  envelope = sampleIndex / attackSamples
+    else:
+        u        = (sampleIndex - attackSamples) / (totalSamples - attackSamples)   // 0..1
+        envelope = (exp(-decayRate * u) - exp(-decayRate)) / (1 - exp(-decayRate))
+
+Derivation: the normalisation makes envelope(0) = 1 and envelope(1) = 0 exactly, so the sample
+stream ends at silence with no discontinuity, for any decayRate > 0. decayRate is the SHAPE knob:
+2 = a soft swell, 6 = a gunshot, 12 = a click.
+Edge cases: totalSamples <= attackSamples -> pure linear attack; decayRate <= 0 -> fall back to
+linear decay (1 - u) rather than dividing by zero.
+
+The attack is never zero. `GAME_SFX_MINIMUM_ATTACK_SECONDS = 0.0008f` (about 18 samples at
+22050 Hz) protects cheap phone speakers from a full-scale step, which is what makes loud sounds
+read as "broken plastic" instead of "loud".
+
+Four envelope shapes are expressible with this one function plus a layer delay:
+  PERCUSSIVE   attack 0.001 s, decayRate 6-10   (every gun, every impact)
+  SWELL        attack 0.08 s,  decayRate 2      (incinerator, door hiss, railgun charge)
+  TICK         attack 0.0008 s, decayRate 14    (clicks, keycards, UI confirms)
+  DOUBLE       two layers, the second with `delaySeconds` > 0 (double barrel, dry fire, reload)
+
+--- PRIMITIVE 4: pitch sweep (chirp) -------------------------------------------------------
+The single most common beginner bug in synthesis is `phase = 2*PI*f(t)*t`, which sweeps at DOUBLE
+the intended rate. The phase must be the INTEGRAL of frequency:
+
+    GameMath.linearChirpPhase(startHz, endHz, timeSeconds, durationSeconds) -> radians
+
+    f(t)     = startHz + (endHz - startHz) * t / T
+    phase(t) = 2*PI * integral(0..t) f(s) ds
+             = 2*PI * (startHz * t + (endHz - startHz) * t^2 / (2 * T))
+
+    GameMath.exponentialChirpPhase(startHz, endHz, timeSeconds, durationSeconds) -> radians
+    ratio    = endHz / startHz
+    phase(t) = 2*PI * startHz * T * (ratio^(t/T) - 1) / ln(ratio)
+
+Edge cases: durationSeconds <= 0 -> return 0. Exponential form: startHz <= 0 or ratio == 1 ->
+degrade to the linear form (ln(1) = 0 would divide by zero). Use LINEAR for weapons (it is
+blunter and reads as mechanical); use EXPONENTIAL for the railgun charge and the level-up, where
+the ear expects a musical rise.
+
+--- PRIMITIVE 5: amplitude / ring modulation -----------------------------------------------
+One field on a layer buys the chainsaw, the arc cannon's electrical buzz, the insect chitter and
+the explosion's debris patter:
+
+    GameMath.amplitudeModulation(modulatorHz, timeSeconds, depth) -> float in [1-depth, 1]
+        = 1 - depth + depth * (0.5f + 0.5f * sin(2*PI*modulatorHz*t))
+
+depth 0 = off, depth 1 = full ring-mod (the signal goes to zero between chops, which is exactly
+what "chainsaw" sounds like at 35 Hz and "electricity" at 60 Hz).
+
+--- OUTPUT STAGE ---------------------------------------------------------------------------
+Layers are summed, then soft-clipped, then quantised. HARD clipping is what makes phone audio
+painful, so the sum goes through a Pade approximation of tanh (no `Math.tanh` per sample):
+
+    GameMath.softClipUnit(value) -> float
+        if |value| >= 3 -> return sign(value)           // the approximation's valid range
+        return value * (27 + value*value) / (27 + 9*value*value)
+
+    GameMath.toPcm16(value) -> short
+        scaled = round(value * 32767)
+        clamp to [-32768, 32767]
+
+Edge cases: NaN input (impossible from the primitives, but cheap to guard) -> 0.
+
+--- SAMPLE RATE ----------------------------------------------------------------------------
+`GAME_SFX_SAMPLE_RATE_HZ = 22050`, NOT the story layer's 44100. A phone speaker reproduces almost
+nothing usable above ~10 kHz, every noise layer here is low-passed below 6 kHz anyway, and 22050
+halves both the synthesis cost and the resident memory. The story layer keeps 44100 because its
+tones are already built and cached; the two rates never meet (each WAV declares its own).
+
+
+THE SOUND CATALOG
+=================
+Notation per entry: NAME | duration | layers | base volume | why.
+Volumes are pre-mix, 0..1, passed to `Sound.play(volume, pitch, pan)`. All values are PLACEHOLDERS
+for a playtest pass except where marked ANCHOR.
+
+--- PLAYER WEAPON FIRE (one per `ItemType` weapon row; the game has 14) --------------------
+
+SHOTGUN | 0.24 s | 0.85 | the ANCHOR every other gun is mixed against
+  L1 noise, low-pass 1800 Hz, decayRate 7, amplitude 0.90        <- the blast body
+  L2 noise, high-pass 2500 Hz, 0.05 s, decayRate 14, amp 0.55    <- the crack/transient
+  L3 linear chirp sine 150 -> 60 Hz, 0.18 s, decayRate 5, amp 0.50  <- the chest punch
+  Why: broadband + a low body is the universal "shotgun" signature and survives a tinny speaker.
+
+DOUBLE_BARREL | 0.34 s | 1.00 (loudest gun)
+  L1 noise, low-pass 1400 Hz (fatter than the pump), decayRate 5, amp 1.00
+  L2 the same body again, delaySeconds 0.035, amp 0.85           <- the second barrel
+  L3 chirp sine 130 -> 45 Hz, 0.28 s, amp 0.60
+  Why: the two-stage onset IS the weapon's identity. Pitch jitter is deliberately the smallest in
+  the catalog (+/-2%) — a big gun should sound the same every time.
+
+CHAINGUN | 0.08 s | 0.55
+  L1 noise, band-pass 400-3500 Hz, decayRate 11, amp 0.75
+  L2 chirp sine 220 -> 120 Hz, 0.06 s, decayRate 10, amp 0.35
+  Why: tiny and dry. The chaingun's character comes from the RHYTHM of repeats, not from the
+  single shot — which is why it carries the catalog's widest pitch cycle (see VARIATION).
+
+ASSAULT_RIFLE | 0.10 s | 0.62
+  L1 noise, low-pass 4000 Hz, decayRate 9, amp 0.80
+  L2 chirp sine 300 -> 150 Hz, 0.08 s, amp 0.40
+  Why: sits deliberately between the chaingun's tick and the shotgun's blast.
+
+PLASMA_RIFLE | 0.20 s | 0.70
+  L1 linear chirp SINE 1400 -> 380 Hz, decayRate 6, amp 0.80     <- the descending "pew"
+  L2 linear chirp SQUARE 700 -> 190 Hz (half frequency), amp 0.22   <- grit / harmonic body
+  L3 noise, high-pass 4000 Hz, 0.03 s, decayRate 14, amp 0.30    <- the ignition tick
+  Why: energy weapons read as PITCHED. Tone where the ballistics are noise is the whole contrast.
+
+RAILGUN_CHARGE | 0.45 s | 0.50   (fires on the CHARGE turn, not the shot)
+  L1 exponential chirp sine 180 -> 900 Hz, SWELL envelope (attack 0.30 s, decayRate 2), amp 0.75
+  L2 the same chirp at 2x frequency, amp 0.20
+  Why: this turn consumed an action and produced no shot. The rising pitch says "again, and it
+  goes off" — redundant with the existing "CHARGING..." event text.
+
+RAILGUN_FIRE | 0.40 s | 0.95
+  L1 linear chirp sine 2200 -> 300 Hz, 0.10 s, decayRate 10, amp 0.85   <- the crack
+  L2 noise, high-pass 1800 Hz, 0.12 s, decayRate 8, amp 0.60
+  L3 chirp sine 90 -> 50 Hz, 0.35 s, decayRate 3, amp 0.45              <- the tail
+  Why: the only weapon with a long tail. It should sound like it went through the wall.
+
+INCINERATOR | 0.45 s | 0.65
+  L1 noise, SWEPT low-pass 900 Hz rising to 3000 Hz across the sound, SWELL envelope
+     (attack 0.08 s, decayRate 2), amp 0.85
+  L2 sine 70 Hz steady, SWELL, amp 0.30                          <- the burner rumble
+  Why: NO transient at all. The absence of a click is precisely what makes noise read as flame
+  rather than as a gunshot.
+
+GRENADE_LAUNCHER | 0.16 s | 0.70
+  L1 linear chirp sine 320 -> 90 Hz, 0.12 s, decayRate 8, amp 0.85   <- the hollow thump
+  L2 noise, low-pass 900 Hz, 0.04 s, decayRate 12, amp 0.45
+  Why: launch and detonation are two events; the launch must be small so the EXPLOSION (below,
+  reused) is the payoff.
+
+ARC_CANNON | 0.24 s | 0.70
+  L1 square 600 Hz, amplitudeModulation 60 Hz depth 1.0, decayRate 6, amp 0.70
+  L2 noise, high-pass 4000 Hz, amplitudeModulation 90 Hz depth 0.7, 0.15 s, amp 0.30
+  Why: full-depth ring modulation zeroes the signal between chops — the ear hears "electricity".
+
+MELEE_FIST | 0.09 s | 0.45
+  L1 chirp sine 160 -> 90 Hz, decayRate 10, amp 0.70; L2 noise low-pass 700 Hz, 0.04 s, amp 0.35
+MELEE_KNIFE | 0.08 s | 0.45
+  L1 noise band-pass 3000-6000 Hz, decayRate 12, amp 0.60        <- the swish
+  L2 sine 2400 Hz, 0.02 s, TICK, amp 0.30                        <- the metal tick
+MELEE_HAMMER | 0.26 s | 0.75
+  L1 chirp sine 110 -> 55 Hz, decayRate 5, amp 0.95; L2 noise low-pass 500 Hz, 0.10 s, amp 0.45
+MELEE_CHAINSAW | 0.30 s | 0.70
+  L1 noise low-pass 2500 Hz, amplitudeModulation 35 Hz depth 0.9, SWELL, amp 0.85
+  L2 square 90 Hz, amplitudeModulation 35 Hz depth 0.6, amp 0.35
+  Why: the four melee weapons must be separable by mass — fist dull, knife bright, hammer heavy,
+  chainsaw continuous.
+
+WEAPON_FIRE_DEFAULT | 0.14 s | 0.60
+  L1 noise low-pass 3000 Hz, decayRate 9, amp 0.75; L2 chirp sine 250 -> 120 Hz, amp 0.35
+  Why: a weapon added later with no binding registered is never silent. The fallback is the whole
+  reason the binding registry carries a default.
+
+--- WEAPON STATE ---------------------------------------------------------------------------
+WEAPON_DRY_FIRE | 0.05 s | 0.45
+  L1 noise high-pass 2000 Hz, 0.008 s, TICK, amp 0.6; L2 the same, delaySeconds 0.012
+  Why: two dry clicks is the universal "empty" idiom; pairs with the empty-fire teaching bark.
+WEAPON_RELOAD_START | 0.18 s | 0.45
+  L1 noise low-pass 2500 Hz, 0.05 s, TICK, amp 0.7               <- the clack
+  L2 noise band-pass 800-4000 Hz, amplitudeModulation 25 Hz depth 0.5, delay 0.05 s, amp 0.35
+WEAPON_RELOAD_COMPLETE | 0.10 s | 0.50
+  L1 noise low-pass 3500 Hz, 0.03 s, TICK, amp 0.7; L2 sine 900 Hz, 0.06 s, TICK, amp 0.35
+  Why: the player must know the gun is hot again without reading the ammo digits — which still say
+  so, which is why this is legal.
+WEAPON_SWITCH | 0.12 s | 0.40
+  L1 sine 1100 Hz, 0.03 s, TICK; L2 sine 780 Hz, delay 0.05 s, 0.03 s, TICK. Descending = "swapped".
+
+--- PLAYER STATE ---------------------------------------------------------------------------
+PLAYER_HURT_LIGHT | 0.16 s | 0.65
+  L1 chirp sine 120 -> 70 Hz, decayRate 8, amp 0.8; L2 noise low-pass 1200 Hz, 0.06 s, amp 0.45
+PLAYER_HURT_HEAVY | 0.30 s | 0.90
+  L1 chirp sine 100 -> 45 Hz, decayRate 4, amp 1.0
+  L2 noise low-pass 900 Hz, 0.12 s, decayRate 6, amp 0.6
+  L3 sine 40 Hz, 0.25 s, SWELL, amp 0.5                          <- the sub-bass punch
+  Split at `GAME_SFX_HEAVY_HIT_HP_FRACTION = 0.15f` of max HP. Not a voice — there is no VO in
+  this game and there must not be one.
+PLAYER_GUARDED | 0.20 s | 0.60
+  L1 square 900 Hz + L2 square 1350 Hz (ratio 1.5, a perfect fifth -> reads as struck metal),
+  decayRate 7; L3 noise high-pass 3000 Hz, 0.02 s, TICK, amp 0.3
+PLAYER_FLANKED | 0.24 s | 0.70
+  The same clang, low-passed to 1200 Hz and detuned to ratio 1.41 (inharmonic -> reads as "wrong"),
+  plus PLAYER_HURT_LIGHT's L1 layered under it.
+  Why: GUARDED and FLANKED already print different coloured text. The ear learns the arc faster
+  than the eye does, and that is the whole teaching value of the GUARD stance.
+PLAYER_DEATH | 0.90 s | 1.00  (the longest sound in the game; nothing else may exceed 0.6 s)
+  L1 exponential chirp sine 300 -> 40 Hz, decayRate 2.5, amp 0.9
+  L2 noise with SWEPT low-pass 3000 Hz falling to 200 Hz, SWELL (attack 0.05 s), amp 0.55
+  L3 sine 55 Hz, 0.8 s, decayRate 1.5, amp 0.4
+  Plays on the transition to `RunPhase.DEAD`, under the fade. The DEATH STROKE screen that follows
+  is SILENT — that silence is the design (`docs/story-ui-system.txt`), and this system must not
+  put anything into it.
+PLAYER_HEAL | 0.35 s | 0.55
+  L1 sine 440 Hz, 0.15 s, SWELL; L2 sine 660 Hz (a fifth up), delay 0.12 s, 0.20 s, SWELL
+  L3 noise low-pass 3000 Hz, 0.20 s, SWELL, amp 0.20             <- the injector hiss
+  Why: one of only two harmonically pleasant sounds in the catalog. In a game this grim, "you are
+  less hurt now" should be the moment the ear relaxes.
+MOVE_BLOCKED | 0.07 s | 0.35
+  L1 sine 90 Hz, decayRate 12; L2 noise low-pass 400 Hz, 0.03 s, amp 0.3
+  Why: cheapest, highest-value sound in the document. A refused tap must not be indistinguishable
+  from a dropped tap.
+FOOTSTEP | 0.05 s | 0.12 (the quietest thing in the mix)
+  L1 noise low-pass 350 Hz, TICK, amp 0.5. Pitch cycles +/-10% per step.
+  FLAGGED: first candidate for deletion if playtest finds it grating. Ships quiet.
+
+--- IMPACT (keyed by the weapon class that fired, not by the target) ------------------------
+IMPACT_BALLISTIC | 0.10 s | 0.55   (shotgun / double barrel / chaingun / assault rifle / railgun)
+  L1 noise low-pass 1500 Hz, decayRate 10, amp 0.7; L2 sine 180 Hz, 0.05 s, amp 0.35
+IMPACT_ENERGY | 0.14 s | 0.55      (plasma / arc cannon / incinerator)
+  L1 noise high-pass 2500 Hz, amplitudeModulation 120 Hz depth 0.6, decayRate 9, amp 0.6
+  L2 chirp sine 900 -> 400 Hz, 0.08 s, amp 0.35
+IMPACT_MELEE | 0.10 s | 0.55
+  L1 noise low-pass 900 Hz, decayRate 9, amp 0.75; L2 chirp sine 200 -> 110 Hz, amp 0.4
+IMPACT_BLOCKED | 0.12 s | 0.55     (the Block/shard "clink" — `onBlockAbsorbed`/`onShardShattered`)
+  L1 square 1400 Hz + L2 square 2100 Hz, TICK, decayRate 12; bright, thin, obviously NOT flesh.
+  Why: the impact's character belongs to the WEAPON, not the victim — buckshot patters, plasma
+  sizzles, a hammer thuds. Four impact sounds cover every weapon, and every enemy, forever.
+  Pitch is scaled DOWN for a physically larger target from the `heightMultiplier` the listener
+  already carries (see `GameMath.pitchFromSizeMultiplier`).
+
+--- ENEMY VOICES (one set per `EnemyFamily` — SIX, never per `EnemyType`) -------------------
+Twenty-one enemy types share six family voices. That is a budget decision AND a design one: the
+player must learn six sound-shapes, not twenty-one, and a new archetype in an existing family
+inherits its voice for free.
+
+Each family registers three: ALERT (something woke up), ATTACK (it swung / it shot), DEATH.
+HURT is deliberately absent — the IMPACT sound above already covers being hit, and a hurt grunt on
+every pellet of a shotgun blast is the fastest way to turn combat into mush.
+
+  ABERRATION  wet and organic — noise low-pass 700 Hz + chirp sine 90 -> 130 Hz (a rising gurgle)
+  UNDEAD      dry rasp — band-pass noise 400-1800 Hz, amplitudeModulation 18 Hz depth 0.8, no tone
+  INSECT      high chitter — band-pass noise 2500-6000 Hz, amplitudeModulation 55 Hz depth 0.9
+  MACHINE     servo — square 220 Hz with a fast chirp + a relay tick; NO noise wash at all
+  DEMON       the loudest — sine 70 -> 110 Hz + broadband noise, 0.35 s, downward sweep on DEATH
+  GOLEM       mineral — sine 180 Hz plus a partial at 2.76x (an INHARMONIC ratio: the classic bell
+              /struck-stone trick) + grit noise low-passed at 1500 Hz
+
+  Per moment, from the family's base recipe: ALERT is short and rising (0.20 s, chirp upward);
+  ATTACK is the shortest and hardest (0.15 s, decayRate 10); DEATH is the longest and falls
+  (0.40 s, chirp downward, decayRate 3).
+ENEMY_RANGED_LAUNCH | 0.12 s | 0.50 — shared across families, pitched by family index; a short
+  chirp 700 -> 300 Hz plus a noise tick. The projectile visual already exists
+  (`EnemyAttackEffectSystem`); this is its sound.
+
+--- WORLD ----------------------------------------------------------------------------------
+BARREL_EXPLOSION | 0.60 s | 1.00  (ANCHOR: the loudest event in the game)
+  L1 noise, SWEPT low-pass 4000 Hz falling to 300 Hz, attack 0.004 s, decayRate 4, amp 1.0
+  L2 exponential chirp sine 110 -> 38 Hz, 0.50 s, decayRate 3, amp 0.7   <- the sub
+  L3 noise high-pass 3000 Hz, 0.04 s, TICK, amp 0.5                      <- the initial crack
+  L4 noise band-pass 1500-5000 Hz, amplitudeModulation 30 Hz depth 0.9, delaySeconds 0.18,
+     0.25 s, amp 0.25                                                    <- the debris patter
+  Reused verbatim for the grenade launcher's detonation. One recipe, two events.
+DOOR_OPEN | 0.40 s | 0.45
+  L1 noise SWEPT low-pass 600 -> 2200 Hz, SWELL, amp 0.6; L2 sine 55 Hz, SWELL, amp 0.35
+DOOR_CLOSE | 0.35 s | 0.45
+  L1 noise SWEPT low-pass 2200 -> 600 Hz, amp 0.6; L2 noise low-pass 500 Hz, delaySeconds 0.28,
+  0.06 s, TICK, amp 0.7                                          <- the terminal clunk
+DOOR_LOCKED | 0.16 s | 0.50
+  L1 square 160 Hz, 0.06 s; L2 the same, delaySeconds 0.09. Flat, unfriendly, no pitch change.
+DOOR_UNLOCK | 0.16 s | 0.50 — an ascending pair (520 Hz then 780 Hz). The inverse of LOCKED.
+STAIRS_DESCEND | 0.50 s | 0.55 — three descending tones (660/520/390 Hz) over a 60 Hz rumble.
+PICKUP_AMMO | 0.06 s | 0.40 — ticks at 1600 Hz and 2100 Hz, 25 ms apart.
+PICKUP_MEDICAL | 0.12 s | 0.45 — a single soft 880 Hz chime, SWELL.
+PICKUP_ARMOUR | 0.14 s | 0.50 — square 300 Hz clunk + low-passed noise. Plated, not musical.
+PICKUP_KEYCARD | 0.14 s | 0.55 — three ascending ticks (660 / 880 / 1100 Hz, 30 ms each).
+PICKUP_WEAPON | 0.30 s | 0.60 — a low clunk plus a 1200 Hz ring with a long tail. Heavy and good.
+PICKUP_CREDIT | 0.08 s | 0.35 — one bright tick with a second harmonic at 2x.
+LEVEL_UP | 0.45 s | 0.60 — 523 / 659 / 784 Hz (a major triad), 0.12 s each, 0.06 s overlap,
+  sine + a quiet square. The second pleasant sound in the catalog, and the rarer one.
+KILL_CONFIRM | 0.03 s | 0.18 (deliberately near the floor of the mix)
+  One 1800 Hz tick. A chaingun spree must not become a xylophone; hard re-trigger interval 0.12 s.
+
+TALLY: 14 weapon fire + 4 weapon state + 8 player state + 4 impact + 19 enemy + 12 world +
+1 default = 62 sounds. At 22050 Hz / 16-bit mono, average 0.22 s, that is ~9.7 KB each, about
+600 KB of PCM resident and on disk. `GAME_SFX_MAX_DISTINCT_SOUNDS = 64` is the cap; exceeding it
+is a design failure, not a reason to raise the constant.
+
+
+VARIATION WITHOUT REPETITION FATIGUE
+====================================
+Rule: **zero pre-baked variants.** Every sound is exactly one WAV. All variation comes from
+`Sound.play(volume, pitch, pan)`, which is free, allocation-free and available on both backends.
+
+The mechanism is a CYCLE plus a JITTER, never pure randomness (pure randomness repeats, and a
+chaingun that fires the same pitch twice in a row sounds broken):
+
+    GameMath.sfxPitchFromCycle(playCount, cycleSpread, jitterSeed) -> float
+
+    cyclePosition = playCount % GAME_SFX_PITCH_CYCLE_LENGTH          // 5
+    base          = GAME_SFX_PITCH_CYCLE[cyclePosition]              // {1.00, 0.97, 1.04, 0.99, 1.02}
+    jitter        = (hash(jitterSeed + playCount) -> [-1, 1]) * GAME_SFX_PITCH_JITTER   // 0.015
+    pitch         = 1 + (base - 1) * cycleSpread + jitter
+    clamp to [GAME_SFX_PITCH_MINIMUM, GAME_SFX_PITCH_MAXIMUM] = [0.5, 2.0]
+
+`cycleSpread` is per-definition: 0.15 for the double barrel (near-identical every shot), 1.0 for
+the chaingun and footsteps (obviously varied), 0.6 for enemy voices. `playCount` is an int per
+`GameSoundId` in a pre-allocated array indexed by ordinal — no map, no allocation.
+
+Amplitude varies too, on the same cycle at half the spread, so consecutive shots differ in loudness
+as well as pitch. Between them, a ten-shot chaingun burst never repeats an identical pair.
+
+LibGDX note: on Android `Sound.play` is SoundPool, whose pitch (rate) range is 0.5-2.0; on desktop
+it is OpenAL, same practical range. The clamp constants exist so a mis-tuned `cycleSpread` can
+never silently pass an out-of-range rate to the backend.
+
+
+DISTANCE AND DIRECTION
+======================
+The player is at `player.positionX/Y` with a unit `directionX/Y`; every source is a TILE. Keep it
+simple — this is a 16-unit grid with cardinal facing, not a 3D audio engine.
+
+--- VOLUME BY DISTANCE ---------------------------------------------------------------------
+    GameMath.sfxDistanceVolume(distanceTiles, referenceTiles, maxAudibleTiles) -> float
+
+    if distanceTiles >= maxAudibleTiles: return 0
+    near   = 1 / (1 + (distanceTiles / referenceTiles)^2)               // inverse-square-ish
+    taper  = clamp((maxAudibleTiles - distanceTiles) / GAME_SFX_TAPER_TILES, 0, 1)
+    return near * taper
+
+Derivation: the inverse-square term gives the natural falloff the ear expects; the linear taper
+over the last `GAME_SFX_TAPER_TILES = 2` tiles prevents a sound POPPING to zero at the cutoff,
+which is far more noticeable than the falloff itself.
+distanceTiles is EUCLIDEAN in tile space (`sqrt(differenceColumn^2 + differenceRow^2)`), not the
+Chebyshev metric `GameMath.chebyshevDistanceTiles` uses for gameplay range — gameplay range is a
+rule, audio distance is a perception, and they must not be conflated.
+Defaults: `GAME_SFX_REFERENCE_TILES = 4f`, `GAME_SFX_MAX_AUDIBLE_TILES = 16f`.
+Edge cases: distanceTiles == 0 -> 1.0; referenceTiles <= 0 -> return 1 (treat as at the ear).
+
+--- STEREO PAN BY BEARING ------------------------------------------------------------------
+    GameMath.sfxStereoPan(differenceX, differenceY, facingDirectionX, facingDirectionY) -> float
+
+    rightComponent = differenceX * facingDirectionY - differenceY * facingDirectionX
+    length         = sqrt(differenceX^2 + differenceY^2)
+    pan            = clamp(rightComponent / length, -1, 1) * GAME_SFX_PAN_STRENGTH
+
+Derivation: this project's "right of facing" is `(directionY, -directionX)` (CLAUDE.md, strafe
+table). The dot product of the offset with that right vector is
+`differenceX*directionY + differenceY*(-directionX)`, i.e. the expression above. Dividing by the
+offset length normalises it to [-1, 1], which is exactly LibGDX's pan convention (-1 left,
++1 right). `GAME_SFX_PAN_STRENGTH = 0.8f` keeps a hard-panned sound from vanishing on one earbud.
+Edge cases: length == 0 (source on the player's tile) -> pan 0.
+
+--- THE FRONT/BACK PROBLEM -----------------------------------------------------------------
+With cardinal facing, a source directly behind pans to 0 — indistinguishable from directly in
+front. Real HRTF is out of scope. Two cheap play-parameter tricks, both free:
+
+    GameMath.sfxRearFactor(differenceX, differenceY, facingDirectionX, facingDirectionY) -> float
+    forwardComponent = (differenceX*facingDirectionX + differenceY*facingDirectionY) / length
+    return forwardComponent >= 0 ? 1f
+                                 : GAME_SFX_REAR_VOLUME_FACTOR + (1 - GAME_SFX_REAR_VOLUME_FACTOR)
+                                   * (1 + forwardComponent)
+
+A source behind is played at `GAME_SFX_REAR_VOLUME_FACTOR = 0.78f` volume and
+`GAME_SFX_REAR_PITCH_FACTOR = 0.94f` pitch — quieter and duller, the way a sound behind a head
+actually is. It is a hint, not a claim, and the mini-map already carries the truth.
+
+--- THE PLAYER'S OWN WEAPON ----------------------------------------------------------------
+Always pan 0, always full volume, never attenuated, never pitched by distance. It is in your hands.
+`GameAudio.playPlayerWeapon(...)` is a separate entry point from `playAt(...)` for exactly this
+reason — no caller should have to remember to pass the player's own tile.
+
+
+MIXING DISCIPLINE
+=================
+Turn-based combat has a specific failure mode real-time games do not: EVERY enemy resolves in the
+same instant. Five enemies swinging is five identical sounds at the same millisecond, which is not
+five attacks, it is one loud smear. Five rules.
+
+1. PER-CATEGORY VOICE CAP PER TURN. `SoundCategory` = { PLAYER_WEAPON, PLAYER_STATE, ENEMY,
+   ENVIRONMENT, INTERFACE }. The ENEMY category caps at `GAME_SFX_MAX_ENEMY_VOICES_PER_TURN = 3`.
+   The mixer keeps the NEAREST three (highest computed volume) and DROPS the rest — never queues
+   them, because a growl that arrives a second after its turn is a lie about where things are.
+
+2. STACK FALLOFF. Within one turn, the Nth voice of a category plays at
+   `baseVolume * GAME_SFX_STACK_VOLUME_FALLOFF^(N-1)` with falloff 0.7.
+       GameMath.sfxStackedVolume(baseVolume, voicesAlreadyStartedThisTurn, falloff)
+   Three enemy swings become one loud, one medium, one faint — which reads as three attacks. Three
+   equally loud ones read as noise. This single rule does most of the anti-mush work.
+
+3. MINIMUM RE-TRIGGER INTERVAL, per `GameSoundId`, from the definition:
+   chaingun 0.04 s, KILL_CONFIRM 0.12 s, enemy family voices 0.25 s, footsteps 0.10 s. A second
+   play inside the window is dropped silently. Pre-allocated `float[]` of last-play timestamps
+   indexed by ordinal; the clock is fed from `World.update(deltaTime)`, never from `render()`.
+
+4. GLOBAL VOICE PRESSURE. `GAME_SFX_MAX_CONCURRENT_VOICES = 8`. We cannot query the backend's live
+   voice count, so the mixer approximates: it keeps a decaying counter of voices started within
+   `GAME_SFX_VOICE_WINDOW_SECONDS = 0.35f`, and when that exceeds the cap it drops the
+   LOWEST-`priority` request. Priorities (int on the definition): PLAYER_WEAPON 100, PLAYER_STATE
+   90, ENVIRONMENT explosion 90, ENEMY 60, ENVIRONMENT other 40, INTERFACE 20. This is an
+   approximation and the doc says so; it exists to stop a barrel chain from starving the player's
+   own gunshot. It sits well under LibGDX Android's default `maxSimultaneousSounds` of 16.
+
+5. STORY DUCK, one-way. When `StoryAudio` plays a speaker sting or an interface cue, it stamps a
+   timestamp. Gameplay sounds starting within `GAME_SFX_STORY_DUCK_SECONDS = 0.35f` of that stamp
+   play at `GAME_SFX_STORY_DUCK_FACTOR = 0.55f` volume. The reverse duck is not needed (story cues
+   are quiet, sparse and never carry information alone). While a hard-pause overlay owns the
+   screen, gameplay sounds do not start at all — the world is not ticking, so nothing should be
+   asking, and the guard is a cheap assertion of that.
+
+Not in scope, deliberately: reverb, occlusion, per-sound stopping, a sound "bus" abstraction. If
+the mix is wrong, the fix is to change a volume in the catalog.
+
+
+ARCHITECTURE
+============
+--- PACKAGE: a new `ge.tbegvadze.toon3d.audio` -------------------------------------------
+`render/StoryAudio` lives in `render` for one historical reason: it was built alongside the story
+renderers and is injected into them. Gameplay audio has the opposite shape. It is fired from the
+SIMULATION — `PlayerController`, `EnemyManager`, `DoorManager`, `World.update` — and putting the
+engine in `render` would force the enemy and input packages to import a render class. That is
+precisely the coupling `entity/ImpactEventListener` and `enemy/EnemyAttackListener` exist to
+prevent (both carry a comment saying so).
+
+`Sound` and `Gdx.audio` are not render state: nothing in this system runs inside `render()`, owns a
+GL resource, or touches a camera. So:
+
+    ge.tbegvadze.toon3d.audio        (new package — add a row to CLAUDE.md's package table)
+
+HEADLESS half (no LibGDX imports; usable from `sim/`):
+  audio/GameSoundId.java          enum — the stable id of every sound. The call-site vocabulary.
+  audio/SoundCategory.java        enum — the five mix buses (cap + priority grouping).
+  audio/WaveformKind.java         enum — NOISE / SINE / SQUARE / CHIRP_SINE / CHIRP_SQUARE.
+                                  Each constant implements an abstract
+                                  `float sampleAt(SoundLayer layer, int sampleIndex, int sampleRate,
+                                  float filterState[])` — per-constant bodies, exactly like
+                                  `EnemyType`, so there is NO switch anywhere in the synthesiser.
+  audio/SoundLayer.java           immutable: waveform, startHz, endHz, durationSeconds,
+                                  delaySeconds, amplitude, attackSeconds, decayRate,
+                                  lowPassStartHz, lowPassEndHz, highPassHz,
+                                  amplitudeModulationHz, amplitudeModulationDepth, noiseSeed.
+  audio/SoundDefinition.java      id + category + layers + baseVolume + priority + cycleSpread +
+                                  minimumRetriggerSeconds + loudness (see INTERACTIONS) + a
+                                  fluent `Builder`, house-style (cf. `CodexEntry.Builder`).
+  audio/SoundRegistry.java        `register(SoundDefinition)`, `get(GameSoundId)`,
+                                  `forWeapon(ItemType)`, `forEnemyFamily(EnemyFamily, Moment)`.
+                                  Array-backed by enum ordinal; no HashMap on a hot path.
+  audio/GameSoundCatalog.java     `bootstrap()` — ONE `register(...)` call per sound, plus
+                                  `bindWeapon(ItemType, GameSoundId)` and
+                                  `bindEnemyFamily(EnemyFamily, alert, attack, death)`.
+                                  This is the content file. Adding a sound is one line here.
+  audio/SoundMixer.java           the five mixing rules: per-turn category counters, last-play
+                                  timestamps, the decaying voice-pressure counter, the duck stamp.
+                                  Pure state + a clock; returns a decision (play / drop) and the
+                                  final volume and pitch. No LibGDX.
+  audio/EnemyVoiceMoment.java     enum ALERT / ATTACK / DEATH.
+
+LibGDX half (same package; these three are the only classes that import `com.badlogic.gdx`):
+  audio/PcmWavWriter.java         the 44-byte RIFF/WAVE header, the local-file cache keyed by a
+                                  parameter-derived filename, and `Gdx.audio.newSound`. EXTRACTED
+                                  from `StoryAudio` (see the refactor note below).
+  audio/SoundSynthesizer.java     recipe -> float accumulator -> soft clip -> PCM16 -> byte[].
+                                  Owns the per-layer filter state locally; allocates only at
+                                  construction.
+  audio/GameAudio.java            the facade. `implements Disposable`. Holds `Sound[]` indexed by
+                                  `GameSoundId.ordinal()`, the `SoundMixer`, the player state
+                                  (position + facing, pushed once per update), and the enabled /
+                                  volume setting. Degrades to complete silence when
+                                  `Gdx.audio == null`, exactly as `StoryAudio` does — which is what
+                                  keeps `sim/SimWorld` and the headless test suite working.
+
+Public API of `GameAudio` (the whole surface every call site sees):
+    void setPlayerState(float playerWorldX, float playerWorldY,
+                        float facingDirectionX, float facingDirectionY)
+    void update(float deltaTime)                 // advances the mixer clock; called from World
+    void beginTurn()                             // resets per-turn category counters
+    void playPlayerWeapon(ItemType weaponItemType)
+    void playUi(GameSoundId soundId)             // pan 0, no attenuation (pickups, level-up, HUD)
+    void playAt(GameSoundId soundId, int originTileColumn, int originTileRow)
+    void playAtWorld(GameSoundId soundId, float originWorldX, float originWorldY,
+                     float sizeMultiplier)
+    void playEnemyVoice(EnemyFamily family, EnemyVoiceMoment moment,
+                        int originTileColumn, int originTileRow, float sizeMultiplier)
+    void setVolumeSetting(SfxVolumeSetting setting)   // ON / QUIET / OFF
+    void noteStoryCuePlayed()                          // the duck stamp
+    void dispose()
+
+--- REFACTOR (small, in Order 1) -----------------------------------------------------------
+`StoryAudio.buildWav / writeWavHeader / writeAscii / writeIntLittleEndian /
+writeShortLittleEndian / synthesize`'s caching logic move to `audio/PcmWavWriter`; `StoryAudio`
+keeps its tone table and its seven `Sound`s and calls the writer. One WAV writer in the codebase,
+not two. `StoryAudio` does NOT otherwise move, and its behaviour does not change.
+
+--- OWNERSHIP AND THE DISPOSE CHAIN --------------------------------------------------------
+`World` owns exactly ONE `GameAudio`, constructed beside `storyAudio` (today `World.java:590`) and
+disposed beside it (today `World.java:2643`). It is handed to the systems that fire sounds by
+setter injection; nothing else ever constructs one. This is the same "one owner, one dispose" rule
+`StoryAudio`'s class comment states, and for the same reason: four systems each synthesising their
+own copy of 62 sounds is four times the device voices and four times the file writes.
+
+--- FIRING SITES (exact, in the code as it stands today) -----------------------------------
+`input/PlayerController`  (setter `setGameAudio`)
+    tryFire()                      after `weapon.fire(...)` -> playPlayerWeapon(weapon.getItemType())
+    tryFire()                      the `!canFire()` non-reloading branch (where
+                                   `emptyFireAttemptListener` runs) -> WEAPON_DRY_FIRE
+    tryFire()                      the `Railgun` first-press branch -> RAILGUN_CHARGE
+    tryReload()                    after `requestManualReload()` returns true -> WEAPON_RELOAD_START
+    trySwitchWeapon()              -> WEAPON_SWITCH
+    tryHeal()                      -> PLAYER_HEAL
+    notifyMoveBlocked(...)         -> MOVE_BLOCKED
+    finishAction(...)              on a completed MOVING action -> FOOTSTEP
+    pickUpMedicalIfPresent()       -> PICKUP_MEDICAL      (after `level.consumePickupAt`)
+    pickUpArmourIfPresent()        -> PICKUP_ARMOUR
+    pickUpKeycardIfPresent()       -> PICKUP_KEYCARD
+    pickUpAmmoIfPresent()          -> PICKUP_AMMO
+    pickUpCreditGroundItemIfPresent() -> PICKUP_CREDIT
+    pickUpWeaponGroundItemIfPresent() -> PICKUP_WEAPON
+    tryMove(): locked-door denial  -> DOOR_LOCKED ; `doorManager.unlock(...)` -> DOOR_UNLOCK
+    checkStairsDescentIfPresent()  -> STAIRS_DESCEND
+`world/WeaponReloadSubscriber.onTick`
+    compare `equippedWeapon.isReloading()` before and after `equippedWeapon.onTick()`; a
+    true -> false edge is the reload completing -> WEAPON_RELOAD_COMPLETE.
+    (Zero edits to `Weapon`; the whole state change is observable from outside.)
+`world/World`
+    the `player.setPlayerDamageListener(...)` lambda  -> PLAYER_HURT_LIGHT / _HEAVY
+    the `player.setGuardHitListener(...)` lambda      -> PLAYER_GUARDED / PLAYER_FLANKED
+    the `runPhase = RunPhase.DEAD` transition         -> PLAYER_DEATH
+    the pending-level-up branch that opens the overlay -> LEVEL_UP
+    the existing `enemyManager.setKillEventListener((nameTag, xpAwarded) -> ...)` -> KILL_CONFIRM
+    `explosiveBarrelManager.setDetonationListener(...)`  -> BARREL_EXPLOSION at the barrel tile
+    (zero edits to `ExplosiveBarrelManager` — the listener already exists)
+    `World.update`: `gameAudio.setPlayerState(...)`, `gameAudio.update(deltaTime)`, and
+    `gameAudio.beginTurn()` on each tick dispatch.
+`door/DoorManager`  (setter `setGameAudio`, or — preferred — a `DoorStateListener` added in the
+    door package so the manager stays free of an audio import, matching the
+    `EnemyAttackListener` precedent)
+    the CLOSED -> OPENING transition in `requestOpen(...)`     -> DOOR_OPEN at the door tile
+    the OPEN -> CLOSING transition in `notifyPlayerSettled(...)` -> DOOR_CLOSE at the door tile
+`enemy/EnemyManager` — NO EDITS in orders 1-2. It already publishes everything needed:
+    `setEnemyAttackListener` -> onMeleeAttack(Enemy) / onRangedAttack(Enemy, column, row)
+    `setImpactEventListener` -> onEnemyHit / onEnemyKilled / onBlockAbsorbed / onShardShattered
+  Both setters currently take a SINGLE listener (wired to `EnemyAttackEffectSystem` and
+  `ImpactEffectSystem`). Add two tiny fan-outs in `world` — `world/ImpactEventFanout implements
+  ImpactEventListener` and `world/EnemyAttackFanout implements EnemyAttackListener`, each holding
+  a fixed-size delegate array — and wire the fanout where the single listener is wired today
+  (`World.java:1250`, `:1284`, and the barrel/spire managers at `:1280`, `:1319`). Zero edits to
+  `EnemyManager`, `ImpactEffectSystem` or `EnemyAttackEffectSystem`.
+`enemy/EnemyVoiceListener` — the ONE new interface, added in Order 3, in the enemy package for the
+  same stated reason `EnemyAttackListener` is there (no enemy -> audio/render dependency):
+        void onEnemyVoice(Enemy enemy, EnemyVoiceMoment moment);
+  Fired from `EnemyManager` at three existing points: the UNAWARE -> ALERTED transition (ALERT),
+  `executeMeleeAttack`/`executeRangedAttack` (ATTACK — or reuse `EnemyAttackListener` and keep
+  this interface to ALERT + DEATH only), and `killEnemy(...)` (DEATH). Three one-line calls.
+
+--- STARTUP COST ---------------------------------------------------------------------------
+62 sounds x ~0.22 s x 22050 Hz is about 300 000 samples of synthesis, a few million float ops —
+tens of milliseconds, once per install (the WAVs are cached by filename, exactly as
+`StoryAudio.synthesize` does, and a retuned recipe writes a NEW file rather than reloading a stale
+one, so the filename must encode the recipe's hash). `GameAudio` is constructed with `World`,
+before the TITLE screen resolves, so even a slow device hides it behind the launch reveal. If
+measurement shows more than `GAME_SFX_SYNTHESIS_BUDGET_MILLIS = 150`, split synthesis across the
+title screen's frames by category — never lazily during play, which would hitch mid-fight.
+
+
+TECHNICAL NOTES
+===============
+NEW PACKAGE: `ge.tbegvadze.toon3d.audio` (add the row to CLAUDE.md's package table in the same
+commit, alongside a new `docs/sound-system.txt` as the single source of truth for the layer).
+
+NEW CONSTANTS FILE: `util/SoundConstants.java` (add it to CLAUDE.md's constants table too):
+    GAME_SFX_SAMPLE_RATE_HZ              = 22050
+    GAME_SFX_BITS_PER_SAMPLE             = 16
+    GAME_SFX_GENERATED_DIRECTORY         = "game-audio/"
+    GAME_SFX_MAX_DISTINCT_SOUNDS         = 64
+    GAME_SFX_MAX_DURATION_SECONDS        = 1.2f
+    GAME_SFX_MINIMUM_ATTACK_SECONDS      = 0.0008f
+    GAME_SFX_SYNTHESIS_BUDGET_MILLIS     = 150
+    GAME_SFX_MASTER_VOLUME               = 0.85f
+    GAME_SFX_QUIET_VOLUME_FACTOR         = 0.5f
+    GAME_SFX_PITCH_CYCLE                 = { 1.00f, 0.97f, 1.04f, 0.99f, 1.02f }
+    GAME_SFX_PITCH_CYCLE_LENGTH          = 5
+    GAME_SFX_PITCH_JITTER                = 0.015f
+    GAME_SFX_PITCH_MINIMUM / _MAXIMUM    = 0.5f / 2.0f
+    GAME_SFX_REFERENCE_TILES             = 4f
+    GAME_SFX_MAX_AUDIBLE_TILES           = 16f
+    GAME_SFX_TAPER_TILES                 = 2f
+    GAME_SFX_PAN_STRENGTH                = 0.8f
+    GAME_SFX_REAR_VOLUME_FACTOR          = 0.78f
+    GAME_SFX_REAR_PITCH_FACTOR           = 0.94f
+    GAME_SFX_SIZE_PITCH_STRENGTH         = 0.5f
+    GAME_SFX_SIZE_PITCH_MINIMUM/_MAXIMUM = 0.80f / 1.25f
+    GAME_SFX_MAX_ENEMY_VOICES_PER_TURN   = 3
+    GAME_SFX_STACK_VOLUME_FALLOFF        = 0.7f
+    GAME_SFX_MAX_CONCURRENT_VOICES       = 8
+    GAME_SFX_VOICE_WINDOW_SECONDS        = 0.35f
+    GAME_SFX_STORY_DUCK_SECONDS          = 0.35f
+    GAME_SFX_STORY_DUCK_FACTOR           = 0.55f
+    GAME_SFX_HEAVY_HIT_HP_FRACTION       = 0.15f
+    GAME_SFX_SETTING_KEY                 = "sfx.volume"   (stored via the existing StoryStore
+                                            Preferences file — see the SETTINGS note below)
+The per-sound RECIPE numbers are NOT constants: they are DATA in `GameSoundCatalog`, exactly as a
+bark's text is data in `BarkCatalog` and a sprite's parameters are data in
+`EnvironmentSpriteRegistry`. The constants file holds only system-wide tunables.
+
+NEW GameMath METHODS (each with the mandatory `Formula / Derivation / Edge cases` comment block,
+each a pure static function, none touching LibGDX render state):
+    whiteNoiseSample, onePoleCoefficient, onePoleLowPassStep, onePoleHighPassStep,
+    percussiveEnvelope, linearChirpPhase, exponentialChirpPhase, amplitudeModulation,
+    softClipUnit, toPcm16, sfxDistanceVolume, sfxStereoPan, sfxRearFactor, sfxPitchFromCycle,
+    sfxStackedVolume, pitchFromSizeMultiplier.
+NONE of these is balance-bearing (no eHP / DPT / TTK / TP term), so per CLAUDE.md's Testing Policy
+this whole feature ships with NO new tests and NO extension of `BalanceAuditTest`.
+
+ALLOCATION DISCIPLINE: `GameAudio` pre-allocates `Sound[GameSoundId.values().length]`,
+`int[] playCounts`, `float[] lastPlaySeconds`, and the mixer's per-turn counters in its
+constructor. The play path does arithmetic and one `sound.play(volume, pitch, pan)` call — zero
+allocation. Nothing in this system is called from `render()`; `World.render` must not gain a
+single audio line.
+
+SETTINGS: one new row, ON / QUIET / OFF (three states, not a boolean — "too loud" is the commonest
+complaint and a mute-only toggle is a blunt answer). It belongs beside the existing STORY AUDIO
+knob on the order-8 settings screen: extend `StoryUiConstants.STORY_CODEX_SETTING_COUNT` from 4 to
+5 and add the fifth case to `StorySettings.getSettingNameStringId` /
+`getSettingValueStringId` / `cycleSetting`, persisted through the same `StoryProgressStore`
+(`saveSettingInt`) the other four use — additive, so NO `SCHEMA_VERSION` bump is required. The two
+knobs stay INDEPENDENT: STORY AUDIO silences ORA's stings, SOUND EFFECTS silences the guns. A
+player who wants the story quiet and the combat loud must be able to have that.
+New string ids: `story.codex.setting.sfx`, `.sfx.0` (OFF), `.sfx.1` (QUIET), `.sfx.2` (ON), added
+to `assets/story/story-strings.properties` and to the relevant `defaults()` table — otherwise
+`StoryLocalizationTest` (an EXISTING test, which must stay green) fails on the unresolved id.
+
+APPLICATION LIFECYCLE: `World.onApplicationPause()` must not be required to stop anything (every
+sound is under 1.2 s and the OS pauses the audio device anyway), but `onApplicationResume()` must
+clear the mixer's per-turn counters and timestamps — a clock that jumped forward while backgrounded
+would otherwise suppress the first sounds after resume.
+
+WHAT THIS SYSTEM MUST NOT DO: no music, no ambient loops, no `Music` instances, no streaming, no
+looping `Sound` ids held across frames, no stopping or fading of a playing sound, no sound that
+carries information not already on screen, and no second-based cooldown that a player could
+perceive as a gameplay timer (the re-trigger intervals are mix hygiene measured in tens of
+milliseconds, not game rules).
+
+
+VISUAL DESIGN
+=============
+An audio feature's "visual design" is (a) its settings surface and (b) the proof that every sound
+has a visible twin. Both are load-bearing.
+
+SETTINGS ROW — the fifth plate on the order-8 settings strip, identical geometry to the other four
+(`STORY_CODEX_SETTING_WIDTH` recomputes automatically from `STORY_CODEX_SETTING_COUNT`), label
+"SOUND EFFECTS", value "ON" / "QUIET" / "OFF". Same accent colour, same press alpha, same tap
+target. Nothing new is drawn anywhere else in the game: no speaker icon on the HUD, no visualiser,
+no waveform.
+
+THE REDUNDANCY TABLE — every sound and the thing already on screen that carries the same fact:
+    weapon fire        -> the muzzle flash + `WeaponVisualState.FIRING` sprite + the ammo digits
+    dry fire           -> the empty ammo counter + ORA's RELOAD teaching line
+    reload start/end   -> the reloading weapon sprite + "Ready!" event text
+    weapon switch      -> the weapon name in the right HUD panel changes
+    player hurt        -> `HitVignetteRenderer` flash + the damage event text + the HP bar
+    guarded / flanked  -> the blue "GUARDED n" / red "FLANKED n" event text + the guard arc overlay
+    player death       -> the fade + the DEATH STROKE screen
+    heal               -> the HP bar climbing + the heal event text
+    enemy alert        -> the enemy's state change + its billboard animation
+    enemy attack       -> `EnemyAttackEffectSystem`'s lunge / projectile visual
+    impact             -> `ImpactEffectSystem`'s particles + the enemy health bar dropping
+    enemy death        -> the kill flash + the XP event text
+    barrel explosion   -> the screen shake + the blast particles
+    door open/close    -> the door's open fraction animating in the 3D view
+    door locked        -> the step is visibly refused; the HUD shows which keycards are held
+    pickups            -> the pickup event text + the inventory/ammo counter
+    level up           -> the level-up overlay takes the whole screen
+    kill confirm       -> the XP number already spawned
+    move blocked       -> the player visibly does not move
+There is no row in that table without a right-hand column. If a future sound cannot fill one, it
+does not ship.
+
+
+BALANCE NOTES
+=============
+Every number in this document is a PLACEHOLDER pending one playtest pass on a real phone speaker
+AND one on cheap earbuds. The two anchors that everything else is tuned against:
+  - SHOTGUN fire at volume 0.85 is the reference for "a normal loud thing".
+  - BARREL_EXPLOSION at 1.00 is the ceiling. Nothing may be louder, ever.
+  - KILL_CONFIRM at 0.18 and FOOTSTEP at 0.12 define the floor of the mix.
+
+Tuning guidance, in the order a tuner should work:
+1. Set the master (`GAME_SFX_MASTER_VOLUME`) so a shotgun at full volume on a phone speaker at
+   arm's length is comfortable, then never touch it again.
+2. Tune each weapon's base volume RELATIVE to the shotgun. If a gun cannot be identified with eyes
+   closed after three shots, the problem is its recipe's LAYERS, not its volume.
+3. Tune `GAME_SFX_STACK_VOLUME_FALLOFF` against the worst case: six awake enemies in one room. If
+   it smears, lower the falloff before lowering `GAME_SFX_MAX_ENEMY_VOICES_PER_TURN` — three
+   voices at decreasing volume reads as a crowd; two voices reads as an empty room.
+4. Tune `GAME_SFX_REFERENCE_TILES` last. Too low and enemies two rooms away vanish; too high and
+   the whole floor is in your ear. 4 tiles at a 16-tile cutoff is the starting guess.
+5. Pitch cycle spread is per-weapon and is the difference between "chaingun" and "stuck key". Start
+   the chaingun at 1.0 and reduce only if it sounds unstable.
+
+Known risks, flagged honestly:
+- FOOTSTEP on every one of thousands of steps is the highest-risk entry in the catalog. It ships at
+  0.12 volume and is the first thing to delete if playtest dislikes it. Deleting it is one line.
+- KILL_CONFIRM on a chaingun spree is the second risk; its 0.12 s re-trigger interval is the guard.
+- PLAYER_DEATH at 0.9 s is the only sound long enough to overlap a phase transition. Verify it is
+  not cut off by the fade and does not bleed into the reprint card.
+- The `QUIET` volume setting exists because phone speakers vary by a factor of five between
+  devices. Do not tune the catalog to one handset.
+
+There is no balance-simulator interaction: nothing here touches eHP, DPT, TTK or TP, and
+`sim/SimWorld` runs with `Gdx.audio == null`, so `GameAudio` is a silent no-op there by
+construction. `./gradlew test` and `./gradlew balanceSim` results must be IDENTICAL before and
+after this feature lands — if they are not, something in this layer has leaked into gameplay state,
+which is a bug.
+
+
+INTERACTIONS
+============
+1. NOISE PROPAGATION (`noise-propagation-and-3d-sound-cues.txt`, NOT IMPLEMENTED) — the adjacent
+   feature, and the relationship must be stated precisely because the two are easy to confuse:
+       THIS system decides what the PLAYER hears. It is PRESENTATION. It may be switched off with
+       no gameplay consequence whatsoever.
+       THAT system decides what ENEMIES hear. It is GAMEPLAY: a BFS flood through the tile grid
+       that wakes sleeping enemies, must be deterministic, must run in the headless balance
+       simulator, and must work identically with audio muted.
+   They must NEVER merge. But they should share one thing: the EVENT. Every `SoundDefinition`
+   carries a `loudness` (0..100) and a `NoiseSource`-compatible tag from day one, unused by this
+   system. When `NoiseSystem` lands, it registers via `GameAudio.setNoiseListener(...)` and every
+   `playAt(...)` / `playPlayerWeapon(...)` call additionally emits
+   `NoiseEvent(originColumn, originRow, definition.getLoudness())`. The noise feature then inherits
+   ~60 correctly-placed firing sites for free and needs to add none of its own.
+   The loudness values in the noise idea's constants block (SHOTGUN 85, PLASMA 70, FOOTSTEP 12,
+   EXPLOSION 100) map directly onto this catalog's entries and should be carried on the
+   definitions rather than duplicated in `Constants.java`.
+2. STORY AUDIO (`render/StoryAudio`, order-7 Part D) — shares the WAV writer after the Order 1
+   refactor, shares nothing else. Two independent settings knobs; a one-way duck so a gunshot never
+   buries ORA's sting. The rule both layers obey is the same one: understandable with audio off.
+3. IMPACT EFFECTS (`render/ImpactEffectSystem`) — audio hangs off the SAME listener calls the
+   visuals already use, through the new `world/ImpactEventFanout`. The consequence is a guarantee:
+   a visual effect and its sound can never desynchronise, because they are driven by one call. Any
+   future effect (the golem shard clink, the crust shatter, the lance beam) gets a sound by adding
+   one `register()` line and one delegate call — no new plumbing.
+4. WEAPON CREATION (`docs/weapon-creation-guide.txt`, the `weapon-creator` agent) — the guide gains
+   one step: "register the weapon's fire recipe and bind it to its `ItemType`". Until that step is
+   done the weapon uses `WEAPON_FIRE_DEFAULT` and is audible but generic, which is the correct
+   failure mode. The guide must be updated in the same commit as Order 1.
+5. ENEMY CREATION (`docs/enemy-system.txt`) — a new `EnemyType` in an EXISTING `EnemyFamily` needs
+   no audio work at all; it inherits the family voice. A new FAMILY needs three `register()` calls.
+   This mirrors the narrative layer's structural-coverage rule for `BestiaryCatalog`.
+6. GUARD / TELEGRAPH COMBAT (`strategy-combat-order-3/4`) — GUARDED vs FLANKED are the clearest
+   audio teaching opportunity in the game: the front arc rings, the flank thuds. This costs two
+   catalog entries and teaches a mechanic players currently learn only by reading coloured text
+   mid-fight.
+7. HAZARD CHAINS (`hazard-chain-reactions-*`, `ExplosiveBarrelManager`) — a chain of four barrels
+   would fire BARREL_EXPLOSION four times in one frame. The per-category cap and the stack falloff
+   are what turn that into one big detonation with echoes instead of a clipped mess. This is the
+   specific case rule 2 of MIXING DISCIPLINE exists for.
+8. THE BOSS FIGHT (`boss-fight-mobile-overseer-*`) — out of scope here. The boss's own voice, if it
+   gets one, is a later `register()` call in the same catalog; nothing in this design needs to
+   change to accommodate it.
+
+
+BUILD ORDER
+===========
+Five orders. Order 1 is a genuinely shippable vertical slice: guns audible, damage audible,
+setting works, nothing else touched.
+
+ORDER 1 — THE TOOLKIT, THE GUNS, AND GETTING HIT
+  - `audio/PcmWavWriter` extracted from `StoryAudio`; `StoryAudio` delegates. No behaviour change.
+  - All 16 `GameMath` primitives with their comment blocks (the distance/pan four may land here or
+    in Order 2; landing them here is cheaper).
+  - `util/SoundConstants`.
+  - The headless model: `GameSoundId`, `SoundCategory`, `WaveformKind`, `SoundLayer`,
+    `SoundDefinition` + Builder, `SoundRegistry`, `GameSoundCatalog.bootstrap()`, `SoundMixer`
+    (rules 3 and 4 only — re-trigger interval and voice pressure).
+  - `audio/SoundSynthesizer`, `audio/GameAudio`.
+  - Catalog content: the 14 weapon fire recipes + WEAPON_FIRE_DEFAULT, WEAPON_DRY_FIRE,
+    WEAPON_RELOAD_START, WEAPON_RELOAD_COMPLETE, WEAPON_SWITCH, RAILGUN_CHARGE,
+    PLAYER_HURT_LIGHT/_HEAVY, PLAYER_GUARDED, PLAYER_FLANKED, PLAYER_DEATH, MOVE_BLOCKED. (24)
+  - Wiring: `World` constructs/disposes/updates it; `PlayerController` setter + 5 call sites;
+    `WeaponReloadSubscriber` edge detection; the two `World` damage lambdas; the DEAD transition.
+  - The SOUND EFFECTS setting (ON/QUIET/OFF) + its four string ids.
+  - Docs: `docs/sound-system.txt` created; CLAUDE.md package + constants tables updated;
+    `docs/weapon-creation-guide.txt` gains the register-a-fire-sound step.
+  VERIFY: `./gradlew build` then `./gradlew lwjgl3:run` — fire each weapon, take a hit, die, toggle
+  the setting. `./gradlew test` and `./gradlew balanceSim` unchanged.
+
+ORDER 2 — THE WORLD HITS BACK (distance, direction, enemies, explosions)
+  - `world/ImpactEventFanout` + `world/EnemyAttackFanout`, wired where the single listeners are
+    wired today.
+  - `GameAudio.playAt / playAtWorld` + the distance/pan/rear/size-pitch math.
+  - `SoundMixer` rules 1 and 2 (per-turn category cap, stack falloff) + `beginTurn()` from `World`.
+  - Catalog: IMPACT_BALLISTIC / _ENERGY / _MELEE / _BLOCKED, a generic enemy ATTACK and DEATH (the
+    family split waits for Order 3), ENEMY_RANGED_LAUNCH, BARREL_EXPLOSION. (8)
+  - Wiring: the barrel detonation listener; `World.update` pushing player state each frame.
+  VERIFY: walk away from a fight and hear it fall off; stand between two enemies and hear the pan.
+
+ORDER 3 — THE BESTIARY VOICE
+  - `enemy/EnemyVoiceListener` + `audio/EnemyVoiceMoment`; three one-line fire sites in
+    `EnemyManager` (alert transition, attack, `killEnemy`).
+  - Catalog: six families x three moments = 18 recipes, registered in one loop over
+    `EnemyFamily.values()` from a per-family base recipe, so a new family is ONE base recipe.
+  - The generic enemy attack/death from Order 2 stay as the fallback for an unbound family.
+
+ORDER 4 — THE FACILITY (doors, pickups, progression)
+  - A `DoorStateListener` in the door package; wire the two transitions.
+  - Catalog: DOOR_OPEN / _CLOSE / _LOCKED / _UNLOCK, STAIRS_DESCEND, the six PICKUP_* entries,
+    PLAYER_HEAL, LEVEL_UP, KILL_CONFIRM, FOOTSTEP. (14)
+  - Wiring: the six pickup methods in `PlayerController`, `tryHeal`, the level-up branch, the
+    existing kill-event listener.
+
+ORDER 5 — THE MIX (polish; no new sounds)
+  - `SoundMixer` rule 5: the one-way story duck; `StoryAudio` stamps, `GameAudio` reads.
+  - The application pause/resume clock reset.
+  - A full tuning pass against the BALANCE NOTES order, on a real device and on earbuds.
+  - The `NoiseEvent` seam: `loudness` values filled in on every definition and
+    `GameAudio.setNoiseListener(...)` added (no consumer yet — the hook is the deliverable).
+  - Delete whatever the playtest hated. The fix for "too much sound" is to delete rows, never to
+    add another toggle — the same rule the story layer's pacing budget states.
+
+
+OPEN QUESTIONS
+==============
+1. FOOTSTEPS: ship them at all? They are the highest-risk entry and the easiest to cut. Proposal:
+   ship in Order 4 at volume 0.12 and decide after one real play session. (Do NOT give them their
+   own setting — a knob per sound is how a settings screen dies.)
+2. Does the QUIET setting need to be three states, or would a 0-100 slider be better? Three states
+   are one tap and fit the existing settings-strip geometry exactly; a slider needs new widget
+   code on a screen that currently has none. Recommendation: three states, revisit only if
+   playtesters ask.
+3. Should the RAILGUN_CHARGE sound also play a second, higher tone on the charge turn when the shot
+   is READY to fire (a "capacitor full" tell)? It would be genuinely useful and is redundant with
+   the existing event text. Deferred to Order 5 tuning.
+4. Should a sound fire for an enemy the player cannot see? Currently yes, attenuated and panned
+   (that is most of the atmosphere). But it verges on giving information the mini-map withholds.
+   Recommendation: keep it — the information is deliberately imprecise, and the noise-propagation
+   idea is where precise off-screen audio intel belongs, as an unlockable.
+5. Enemy ALERT voices could be region-flavoured (a Core aberration sounding worse than a Rings one)
+   by scaling pitch with `StoryProgress.getDeepestRegion()`. Cheap (one pitch multiplier) and
+   atmospheric, but it makes an audio parameter depend on persistent narrative state. Deferred; if
+   it happens it belongs in the catalog as a per-region pitch table, never as an `if` in the mixer.
+6. Should `StoryAudio` eventually MOVE into `…toon3d.audio` alongside `GameAudio`? Architecturally
+   yes; it is not a renderer. But it is injected into four renderers and referenced throughout
+   `docs/story-ui-system.txt`, so the move is a separate, purely mechanical commit that this
+   feature does not need. Left to the developer's judgement.
+7. Is 22050 Hz audibly worse than 44100 on a good pair of earbuds for the bright sounds (knife
+   swish, insect chitter, keycard ticks)? If a listening test says yes, the sample rate is
+   per-definition data and a handful of bright sounds can be promoted to 44100 individually —
+   the WAV header already carries its own rate.

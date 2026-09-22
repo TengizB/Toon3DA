@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.world;
 
+import ge.tbegvadze.toon3d.audio.GameAudio;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
@@ -46,9 +47,14 @@ public final class TickPipeline {
                                              EnemyManager enemyManager,
                                              PlayerStats playerStats,
                                              TickSubscriber bossController,
-                                             GameState gameState) {
+                                             GameState gameState,
+                                             GameAudio gameAudio) {
         TickEventBus bus = new TickEventBus();
-        bus.subscribe(new WeaponReloadSubscriber(inventory));
+        // The reload subscriber watches isReloading() go true -> false and plays the "gun is hot
+        // again" cue on that edge. gameAudio is null in the headless simulator, where it no-ops.
+        WeaponReloadSubscriber reloadSubscriber = new WeaponReloadSubscriber(inventory);
+        reloadSubscriber.setGameAudio(gameAudio);
+        bus.subscribe(reloadSubscriber);
         bus.subscribe(new HazardTickSubscriber(hazardManager));
         // Crystal-spire decay (elemental-golem-verdant-spiresower) — ticks with hazards, before the enemy
         // turn, so a spire sown this turn is not immediately aged. Null on floors/callers without spires.

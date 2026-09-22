@@ -5196,4 +5196,438 @@ public final class GameMath {
         if (elapsedMillis <= 0L) return 0L;
         return elapsedMillis / (1000L * 60L * 60L);
     }
+
+    // =========================================================================================
+    // GAMEPLAY SOUND SYNTHESIS (procedural-sound-effects order 1)
+    //
+    // The story layer's storyStingSample() above is a sine/square oscillator times a SYMMETRIC
+    // linear fade — correct for a UI blip and completely wrong for gunfire, which is broadband
+    // noise with a hard transient and an exponential decay.  The primitives below are the toolkit
+    // audio/SoundSynthesizer composes into every weapon, impact and damage sound.
+    //
+    // All of them are pure and allocation-free: they run once per sample during synthesis (tens of
+    // thousands of calls per sound, at startup only) and never during render or a game turn.
+    // =========================================================================================
+
+    /*
+     * Formula: deterministic white-noise sample
+     * Derivation:
+     *   A gunshot is broadband noise, so the synthesiser needs a uniform random value per sample.
+     *   java.util.Random is NOT usable here: the WAV cache is keyed by a filename derived from the
+     *   recipe, so the same recipe must produce byte-identical PCM on every device and every
+     *   launch, forever.  A stateless integer hash of (seed, sampleIndex) gives that determinism
+     *   while still being spectrally flat enough to read as noise.
+     *   This is the SplitMix64 finaliser, seeded by the golden-ratio odd constant already used by
+     *   floorSeed() above:
+     *       mixed = seed * PHI64 + sampleIndex * GAMMA64
+     *       mixed ^= mixed >>> 33 ; mixed *= MIX_A
+     *       mixed ^= mixed >>> 33
+     *   The top 24 bits are then mapped onto [-1, 1):
+     *       value = (mixed >>> 40) / 2^23 - 1
+     *   Taking the HIGH bits matters — the low bits of a multiplicative hash are far less uniform.
+     * Edge cases:
+     *   No division by zero is possible; the divisor is a compile-time constant.
+     *   long overflow wraps, which is intended (the arithmetic is modulo 2^64).
+     *   Every sampleIndex, including 0 and negatives, yields a valid value.
+     */
+    public static float whiteNoiseSample(long noiseSeed, int sampleIndex) {
+        long mixed = noiseSeed * 0x9E3779B97F4A7C15L + sampleIndex * 0xBF58476D1CE4E5B9L;
+        mixed ^= (mixed >>> 33);
+        mixed *= 0xFF51AFD7ED558CCDL;
+        mixed ^= (mixed >>> 33);
+        return ((int) (mixed >>> 40)) / 8388608f - 1f;
+    }
+
+    /*
+     * Formula: one-pole IIR filter coefficient from a cutoff frequency
+     * Derivation:
+     *   Unfiltered white noise is a thin hiss with no body, so every noise layer in the catalog is
+     *   filtered.  The one-pole (single sample of memory) filter's pole position for a given -3 dB
+     *   cutoff is the standard impulse-invariant mapping:
+     *       coefficient = exp(-2 * PI * cutoffHz / sampleRateHz)
+     *   coefficient -> 1 means "almost all memory" (very low cutoff, heavy smoothing);
+     *   coefficient -> 0 means "no memory" (cutoff at or above Nyquist, signal passes through).
+     * Edge cases:
+     *   sampleRateHz <= 0 is a degenerate recipe -> return 0 (pass-through) rather than dividing
+     *   by zero.
+     *   cutoffHz <= 0 would give coefficient 1 exactly, an integrator that never decays and can
+     *   drift unboundedly, so it clamps to 0.9999.
+     *   cutoffHz above Nyquist yields a coefficient near 0, which is the correct pass-through.
+     */
+    public static float onePoleCoefficient(float cutoffHz, int sampleRateHz) {
+        if (sampleRateHz <= 0) return 0f;
+        if (cutoffHz <= 0f) return 0.9999f;
+        double coefficient = Math.exp(-2.0 * Math.PI * cutoffHz / sampleRateHz);
+        if (coefficient > 0.9999) return 0.9999f;
+        if (coefficient < 0.0)    return 0f;
+        return (float) coefficient;
+    }
+
+    /*
+     * Formula: one-pole low-pass step
+     * Derivation:
+     *   The difference equation of a one-pole low-pass, written so the coefficient is the pole:
+     *       y[n] = (1 - coefficient) * x[n] + coefficient * y[n-1]
+     *   The two weights sum to 1, so the filter has unity gain at DC and cannot amplify — which is
+     *   what makes it safe to chain several of them before the soft clipper.
+     *   The filter is STATEFUL, but the state belongs to the caller's loop (one float per layer),
+     *   which is what keeps this method pure and the synthesiser free of hidden state.
+     * Edge cases:
+     *   coefficient outside [0, 1) would make the filter unstable; onePoleCoefficient() is the
+     *   only intended source of the value and clamps to that range.
+     */
+    public static float onePoleLowPassStep(float previousOutput, float input, float coefficient) {
+        return (1f - coefficient) * input + coefficient * previousOutput;
+    }
+
+    /*
+     * Formula: one-pole high-pass step
+     * Derivation:
+     *   The matching high-pass for the same pole, the standard DC-blocker form:
+     *       y[n] = coefficient * (y[n-1] + x[n] - x[n-1])
+     *   It passes the CHANGE between consecutive samples and rejects the steady component, which is
+     *   how the bright "crack" layer of a gunshot is separated from its low blast body.
+     *   Two states are needed (previous output AND previous input), which is why this step takes
+     *   one more argument than the low-pass.
+     *   A BAND-PASS is simply this followed by onePoleLowPassStep with a higher cutoff.
+     * Edge cases:
+     *   As for the low-pass, coefficient is assumed to come from onePoleCoefficient().
+     *   On the first sample the caller passes 0 for both previous values, which correctly yields
+     *   coefficient * input and introduces no startup click.
+     */
+    public static float onePoleHighPassStep(float previousOutput, float previousInput, float input,
+                                            float coefficient) {
+        return coefficient * (previousOutput + input - previousInput);
+    }
+
+    /*
+     * Formula: percussive attack/decay envelope, normalised to end at exactly zero
+     * Derivation:
+     *   Gunfire is a near-instant attack followed by an exponential decay.  A raw exp(-k*u) never
+     *   reaches zero, and any non-zero value at the final sample is a step discontinuity, which is
+     *   an audible click.  So the exponential is shifted and rescaled to hit zero exactly:
+     *       attack phase (sampleIndex < attackSamples):
+     *           envelope = sampleIndex / attackSamples                    (linear ramp 0 -> 1)
+     *       decay phase:
+     *           u        = (sampleIndex - attackSamples)
+     *                      / (totalSamples - attackSamples)              (0 -> 1)
+     *           envelope = (exp(-k*u) - exp(-k)) / (1 - exp(-k))
+     *   At u = 0 that is (1 - exp(-k)) / (1 - exp(-k)) = 1, and at u = 1 it is exactly 0, for any
+     *   decayRate k > 0.  decayRate is the SHAPE knob: 2 is a soft swell, 6 a gunshot, 12 a click.
+     * Edge cases:
+     *   attackSamples <= 0 -> the attack phase is skipped entirely and the envelope starts at 1.
+     *   totalSamples <= attackSamples -> there is no decay phase; the result is the linear attack
+     *   ramp alone, clamped to 1.
+     *   decayRate <= 0 -> exp(0) = 1 would make the denominator zero, so it degrades to a plain
+     *   linear decay (1 - u), which is well-defined and still ends at zero.
+     *   sampleIndex beyond totalSamples clamps to 0 rather than going negative.
+     */
+    public static float percussiveEnvelope(int sampleIndex, int totalSamples, int attackSamples,
+                                           float decayRate) {
+        if (totalSamples <= 0)      return 0f;
+        if (sampleIndex <= 0)       return attackSamples > 0 ? 0f : 1f;
+        if (sampleIndex >= totalSamples) return 0f;
+
+        if (attackSamples > 0 && sampleIndex < attackSamples) {
+            return sampleIndex / (float) attackSamples;
+        }
+
+        int   decaySamples = totalSamples - Math.max(0, attackSamples);
+        if (decaySamples <= 0) return 1f;
+        float decayProgress = (sampleIndex - Math.max(0, attackSamples)) / (float) decaySamples;
+
+        if (decayRate <= 0f) return 1f - decayProgress;
+
+        double floorValue = Math.exp(-decayRate);
+        double envelope   = (Math.exp(-decayRate * decayProgress) - floorValue) / (1.0 - floorValue);
+        if (envelope < 0.0) return 0f;
+        return (float) envelope;
+    }
+
+    /*
+     * Formula: linear chirp phase (frequency sweep)
+     * Derivation:
+     *   The single most common synthesis bug is writing phase = 2*PI*f(t)*t for a swept frequency,
+     *   which sweeps at DOUBLE the intended rate.  Instantaneous frequency is the DERIVATIVE of
+     *   phase, so phase must be the INTEGRAL of frequency:
+     *       f(t)     = startHz + (endHz - startHz) * t / T
+     *       phase(t) = 2*PI * integral from 0 to t of f(s) ds
+     *                = 2*PI * (startHz * t + (endHz - startHz) * t^2 / (2*T))
+     *   Linear sweeps read as MECHANICAL, which is why the catalog uses this form for every
+     *   ballistic weapon and reserves the exponential form for musical rises.
+     * Edge cases:
+     *   durationSeconds <= 0 -> return 0; there is no sweep to integrate over.
+     *   startHz == endHz reduces to 2*PI*startHz*t, the correct constant-frequency phase.
+     *   timeSeconds beyond durationSeconds still evaluates (the caller never asks, but the
+     *   polynomial stays finite and continuous).
+     */
+    public static float linearChirpPhase(float startHz, float endHz, float timeSeconds,
+                                         float durationSeconds) {
+        if (durationSeconds <= 0f) return 0f;
+        double sweptTerm = (endHz - startHz) * timeSeconds * timeSeconds / (2.0 * durationSeconds);
+        return (float) (MathUtils.PI2 * (startHz * timeSeconds + sweptTerm));
+    }
+
+    /*
+     * Formula: exponential chirp phase (geometric frequency sweep)
+     * Derivation:
+     *   A sweep the ear hears as EVENLY rising must be geometric, because pitch perception is
+     *   logarithmic.  With ratio r = endHz / startHz:
+     *       f(t)     = startHz * r^(t/T)
+     *       phase(t) = 2*PI * integral from 0 to t of f(s) ds
+     *                = 2*PI * startHz * T * (r^(t/T) - 1) / ln(r)
+     *   Used for the railgun charge and the level-up, where the listener expects a musical rise.
+     * Edge cases:
+     *   durationSeconds <= 0 -> return 0.
+     *   startHz <= 0 makes the ratio undefined or infinite, and ratio == 1 makes ln(r) == 0 (a
+     *   division by zero).  Both degrade to linearChirpPhase(), which is the correct limit: as
+     *   r -> 1 the geometric sweep IS the linear one.
+     *   endHz <= 0 is likewise degenerate and takes the same fallback.
+     */
+    public static float exponentialChirpPhase(float startHz, float endHz, float timeSeconds,
+                                              float durationSeconds) {
+        if (durationSeconds <= 0f) return 0f;
+        if (startHz <= 0f || endHz <= 0f) {
+            return linearChirpPhase(startHz, endHz, timeSeconds, durationSeconds);
+        }
+        double ratio = endHz / (double) startHz;
+        if (Math.abs(ratio - 1.0) < 1e-6) {
+            return linearChirpPhase(startHz, endHz, timeSeconds, durationSeconds);
+        }
+        double logarithmOfRatio = Math.log(ratio);
+        double sweep = (Math.pow(ratio, timeSeconds / durationSeconds) - 1.0) / logarithmOfRatio;
+        return (float) (MathUtils.PI2 * startHz * durationSeconds * sweep);
+    }
+
+    /*
+     * Formula: amplitude (ring) modulation factor
+     * Derivation:
+     *   Chopping a layer's amplitude at an audio-rate or near-audio-rate frequency is what turns a
+     *   noise bed into a chainsaw and a square wave into electricity.  A unipolar modulator keeps
+     *   the factor non-negative so the carrier is never phase-inverted:
+     *       unipolar = 0.5 + 0.5 * sin(2*PI*modulatorHz*t)        in [0, 1]
+     *       factor   = (1 - depth) + depth * unipolar             in [1 - depth, 1]
+     *   depth 0 disables the effect (factor is exactly 1); depth 1 is full ring modulation, where
+     *   the signal reaches zero between chops — which is precisely what "chainsaw" sounds like at
+     *   35 Hz and "arc discharge" at 60 Hz.
+     * Edge cases:
+     *   depth is clamped to [0, 1]; outside that range the factor could go negative (inverting the
+     *   carrier) or exceed 1 (amplifying into the clipper).
+     *   modulatorHz <= 0 leaves sin(0) = 0, giving the constant factor 1 - depth/2, which is
+     *   harmless but pointless; callers disable the effect with depth 0 instead.
+     */
+    public static float amplitudeModulation(float modulatorHz, float timeSeconds, float depth) {
+        if (depth <= 0f) return 1f;
+        float clampedDepth = depth > 1f ? 1f : depth;
+        float unipolar = 0.5f + 0.5f * MathUtils.sin(MathUtils.PI2 * modulatorHz * timeSeconds);
+        return (1f - clampedDepth) + clampedDepth * unipolar;
+    }
+
+    /*
+     * Formula: soft clip to [-1, 1] (Pade approximation of tanh)
+     * Derivation:
+     *   Summed layers routinely exceed unit amplitude.  HARD clipping (a plain clamp) introduces
+     *   infinite-order harmonics and is exactly what makes phone audio sound "broken".  tanh is the
+     *   standard soft saturator, but Math.tanh per sample is needlessly expensive, so this is its
+     *   well-known Pade [3/2] approximation:
+     *       f(value) = value * (27 + value^2) / (27 + 9 * value^2)
+     *   It matches tanh closely on [-3, 3] and, at |value| = 3, evaluates to exactly
+     *   3 * 36 / 108 = 1 — so clamping to the sign outside that range joins the two pieces
+     *   continuously, with no discontinuity to click on.
+     * Edge cases:
+     *   |value| >= 3 -> return the sign (the approximation diverges beyond its valid range).
+     *   NaN cannot arise from the primitives above, but a degenerate recipe could produce one, and
+     *   a NaN written into PCM would be an audible burst of noise, so it maps to 0.
+     *   The denominator is never zero: 27 + 9*value^2 >= 27.
+     */
+    public static float softClipUnit(float value) {
+        if (Float.isNaN(value)) return 0f;
+        if (value >=  3f) return  1f;
+        if (value <= -3f) return -1f;
+        float squared = value * value;
+        return value * (27f + squared) / (27f + 9f * squared);
+    }
+
+    /*
+     * Formula: unit float to signed 16-bit PCM
+     * Derivation:
+     *   A 16-bit sample is a signed integer in [-32768, 32767].  The positive full scale is 32767,
+     *   so a unit-amplitude signal scales by that:
+     *       sample = round(value * 32767)
+     *   Rounding (rather than truncating) halves the quantisation error and costs nothing here,
+     *   since this runs at synthesis time only.
+     * Edge cases:
+     *   Float rounding can push the product one past the representable maximum, so the result is
+     *   clamped to the signed 16-bit range in both directions.
+     *   NaN maps to 0 (silence) rather than to an arbitrary bit pattern.
+     */
+    public static short toPcm16(float value) {
+        if (Float.isNaN(value)) return 0;
+        int scaled = Math.round(value * 32767f);
+        if (scaled >  32767) scaled =  32767;
+        if (scaled < -32768) scaled = -32768;
+        return (short) scaled;
+    }
+
+    /*
+     * Formula: sound volume by distance, with a taper to the audible edge
+     * Derivation:
+     *   Two factors multiplied:
+     *       near  = 1 / (1 + (distanceTiles / referenceTiles)^2)
+     *   which is the inverse-square falloff the ear expects, normalised so that a source AT the
+     *   listener is exactly 1 and one referenceTiles away is exactly 0.5; and
+     *       taper = clamp((maxAudibleTiles - distanceTiles) / taperTiles, 0, 1)
+     *   a linear ramp over the last taperTiles before the cutoff.  Without the taper a sound
+     *   POPS from a small but audible level to silence as the player steps across the cutoff,
+     *   which is far more noticeable than the falloff itself.
+     *   Distance here is EUCLIDEAN in tile space, deliberately NOT the Chebyshev metric that
+     *   chebyshevDistanceTiles() uses for gameplay range: gameplay range is a RULE, audio distance
+     *   is a PERCEPTION, and conflating them would make diagonal sources sound wrong.
+     * Edge cases:
+     *   distanceTiles <= 0 -> 1 (the source is at the ear).
+     *   distanceTiles >= maxAudibleTiles -> 0, checked first so nothing downstream divides.
+     *   referenceTiles <= 0 -> 1, treating a degenerate recipe as "at the ear" rather than
+     *   dividing by zero.
+     *   taperTiles <= 0 -> the taper is skipped (no ramp), leaving the plain inverse-square term.
+     */
+    public static float sfxDistanceVolume(float distanceTiles, float referenceTiles,
+                                          float maxAudibleTiles, float taperTiles) {
+        if (distanceTiles >= maxAudibleTiles) return 0f;
+        if (distanceTiles <= 0f)   return 1f;
+        if (referenceTiles <= 0f)  return 1f;
+
+        float normalised = distanceTiles / referenceTiles;
+        float near       = 1f / (1f + normalised * normalised);
+
+        if (taperTiles <= 0f) return near;
+        float taper = (maxAudibleTiles - distanceTiles) / taperTiles;
+        if (taper > 1f) taper = 1f;
+        if (taper < 0f) taper = 0f;
+        return near * taper;
+    }
+
+    /*
+     * Formula: stereo pan from a source offset and the player's facing
+     * Derivation:
+     *   This project's "right of facing" vector is (directionY, -directionX) — the same rotation
+     *   the strafe-right table in CLAUDE.md uses.  The component of the source offset along that
+     *   right vector is the dot product:
+     *       rightComponent = differenceX * facingDirectionY
+     *                      + differenceY * (-facingDirectionX)
+     *   Dividing by the offset's length normalises it to [-1, 1], which is exactly LibGDX's pan
+     *   convention (-1 hard left, 0 centre, +1 hard right).  The result is then scaled by
+     *   panStrength, because a fully hard-panned sound VANISHES on one earbud, and a source the
+     *   player cannot hear at all is worse than one that is merely mislocated.
+     * Edge cases:
+     *   length == 0 (the source is on the player's own tile) -> pan 0; there is no bearing.
+     *   A non-unit facing vector would scale the result, so the quotient is clamped to [-1, 1]
+     *   before the strength multiply.
+     */
+    public static float sfxStereoPan(float differenceX, float differenceY,
+                                     float facingDirectionX, float facingDirectionY,
+                                     float panStrength) {
+        float length = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+        if (length <= 0f) return 0f;
+        float rightComponent = differenceX * facingDirectionY - differenceY * facingDirectionX;
+        float normalised = rightComponent / length;
+        if (normalised >  1f) normalised =  1f;
+        if (normalised < -1f) normalised = -1f;
+        return normalised * panStrength;
+    }
+
+    /*
+     * Formula: rear-source volume factor
+     * Derivation:
+     *   With cardinal-only facing, a source directly BEHIND the player pans to 0 — indistinguishable
+     *   from one directly in front.  Real head-related transfer functions are out of scope, so the
+     *   cue is carried by volume (and, at the call site, by a slightly lower pitch): a sound behind
+     *   a head really is quieter and duller.
+     *       forwardComponent = (differenceX*facingDirectionX + differenceY*facingDirectionY)
+     *                          / length                                    in [-1, 1]
+     *       in front (>= 0) -> 1
+     *       behind          -> rearFactor + (1 - rearFactor) * (1 + forwardComponent)
+     *   The behind branch interpolates smoothly: at forwardComponent -1 (directly behind) it is
+     *   exactly rearFactor, and at 0 (directly beside) it is exactly 1, so a source sweeping around
+     *   the player never jumps in level.
+     * Edge cases:
+     *   length == 0 -> 1 (a source on the player's tile is not "behind" anything).
+     *   rearFactor outside [0, 1] would brighten rather than dull a rear source; the constant that
+     *   feeds it is fixed in SoundConstants, and the result is clamped to [0, 1] regardless.
+     */
+    public static float sfxRearFactor(float differenceX, float differenceY,
+                                      float facingDirectionX, float facingDirectionY,
+                                      float rearFactor) {
+        float length = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+        if (length <= 0f) return 1f;
+        float forwardComponent =
+                (differenceX * facingDirectionX + differenceY * facingDirectionY) / length;
+        if (forwardComponent >= 0f) return 1f;
+        if (forwardComponent < -1f) forwardComponent = -1f;
+        float factor = rearFactor + (1f - rearFactor) * (1f + forwardComponent);
+        if (factor > 1f) return 1f;
+        if (factor < 0f) return 0f;
+        return factor;
+    }
+
+    /*
+     * Formula: stacked-voice volume within a single turn
+     * Derivation:
+     *   Turn-based combat has a failure mode real-time games do not: every enemy resolves in the
+     *   SAME instant, so five swings are five identical sounds at the same millisecond — not five
+     *   attacks but one loud smear.  Damping each successive voice geometrically separates them:
+     *       volume = baseVolume * falloff^voicesAlreadyStartedThisTurn
+     *   With falloff 0.7, three swings become one loud, one medium and one faint, which the ear
+     *   resolves as three events.  Three equally loud ones read as noise.
+     * Edge cases:
+     *   voicesAlreadyStartedThisTurn <= 0 -> the base volume, unchanged (pow(x, 0) == 1).
+     *   falloff <= 0 -> every stacked voice would be silenced outright, so it is treated as 0 for
+     *   voices after the first, which is the intended degenerate reading.
+     *   falloff >= 1 disables the rule (no damping), which is a legal way to turn it off.
+     *   The exponent is small (bounded by the per-turn voice cap), so Math.pow is never hot.
+     */
+    public static float sfxStackedVolume(float baseVolume, int voicesAlreadyStartedThisTurn,
+                                         float falloff) {
+        if (voicesAlreadyStartedThisTurn <= 0) return baseVolume;
+        if (falloff >= 1f) return baseVolume;
+        if (falloff <= 0f) return 0f;
+        return baseVolume * (float) Math.pow(falloff, voicesAlreadyStartedThisTurn);
+    }
+
+    /*
+     * Formula: playback pitch from a repeating cycle plus deterministic jitter
+     * Derivation:
+     *   Every sound in the catalog is exactly ONE cached WAV, so all variation has to come from the
+     *   playback rate.  Pure randomness is wrong here: a random sequence repeats values, and a
+     *   chaingun that fires the same pitch twice in a row sounds broken.  So the base is a fixed
+     *   CYCLE that is guaranteed never to repeat adjacent entries, and jitter only decorates it:
+     *       base   = pitchCycle[playCount mod cycleLength]
+     *       spread = 1 + (base - 1) * cycleSpread
+     *       jitter = whiteNoiseSample(jitterSeed, playCount) * jitterAmount
+     *       pitch  = spread + jitter
+     *   cycleSpread scales the cycle's excursion per sound: 0.15 for a big gun that should sound
+     *   identical every time, 1.0 for a chaingun that should obviously vary.  Reusing
+     *   whiteNoiseSample() for the jitter keeps the whole system deterministic — the same play
+     *   count always yields the same pitch, which is what makes an audio bug reproducible.
+     * Edge cases:
+     *   A null or empty pitchCycle -> return 1 (unmodified playback rate).
+     *   Negative playCount is folded to a non-negative index, so a wrapped counter cannot throw.
+     *   The result is clamped to [minimumPitch, maximumPitch]; both backends (Android SoundPool and
+     *   desktop OpenAL) reject rates outside roughly [0.5, 2.0], and a mis-tuned cycleSpread must
+     *   never be able to pass one through.
+     */
+    public static float sfxPitchFromCycle(int playCount, float cycleSpread, long jitterSeed,
+                                          float[] pitchCycle, float jitterAmount,
+                                          float minimumPitch, float maximumPitch) {
+        if (pitchCycle == null || pitchCycle.length == 0) return 1f;
+        int cyclePosition = playCount % pitchCycle.length;
+        if (cyclePosition < 0) cyclePosition += pitchCycle.length;
+
+        float base  = pitchCycle[cyclePosition];
+        float pitch = 1f + (base - 1f) * cycleSpread
+                    + whiteNoiseSample(jitterSeed, playCount) * jitterAmount;
+
+        if (pitch < minimumPitch) return minimumPitch;
+        if (pitch > maximumPitch) return maximumPitch;
+        return pitch;
+    }
 }

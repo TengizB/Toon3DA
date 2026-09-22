@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.narrative;
 
+import ge.tbegvadze.toon3d.audio.SfxVolumeSetting;
+import ge.tbegvadze.toon3d.util.SoundConstants;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
@@ -40,6 +42,8 @@ public final class StorySettings {
     private boolean                  reduceTextHold;
     private boolean                  reduceMotion;
     private boolean                  storyAudioEnabled;
+    /** Gameplay sound effects (procedural-sound-effects order 1) — three states, not a toggle. */
+    private SfxVolumeSetting         sfxVolume;
 
     /** In-memory settings at their defaults — tests and showcases. */
     public StorySettings() {
@@ -66,6 +70,29 @@ public final class StorySettings {
         this.reduceMotion      = store.loadSettingInt(StoryUiConstants.STORY_SETTING_REDUCE_MOTION, 0) != 0;
         // Audio defaults ON: the cues only ever reinforce what the panel already says in text.
         this.storyAudioEnabled = store.loadSettingInt(StoryUiConstants.STORY_SETTING_STORY_AUDIO, 1) != 0;
+        // Gameplay sound effects, defaulting to full. Stored by ORDINAL, so the persisted value is
+        // the enum's own index: OFF 0, QUIET 1, ON 2.
+        this.sfxVolume = SfxVolumeSetting.values()[clampSettingOrdinal(
+                store.loadSettingInt(SoundConstants.GAME_SFX_SETTING_KEY,
+                                     SfxVolumeSetting.ON.ordinal()))];
+    }
+
+    /** A persisted ordinal that no longer exists (a downgrade, a corrupt save) falls back to ON. */
+    private static int clampSettingOrdinal(int storedOrdinal) {
+        if (storedOrdinal < 0 || storedOrdinal >= SfxVolumeSetting.values().length) {
+            return SfxVolumeSetting.ON.ordinal();
+        }
+        return storedOrdinal;
+    }
+
+    public SfxVolumeSetting getSfxVolume() {
+        return sfxVolume;
+    }
+
+    /** Cycles ON -> QUIET -> OFF and persists immediately. */
+    public void cycleSfxVolume() {
+        sfxVolume = sfxVolume.next();
+        store.saveSettingInt(SoundConstants.GAME_SFX_SETTING_KEY, sfxVolume.ordinal());
     }
 
     public StoryTextSize getTextSize() {
@@ -165,7 +192,8 @@ public final class StorySettings {
             case 2:  return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID + "." + (reduceMotion ? 1 : 0);
             // The audio button reads ON/OFF rather than the others' "reduced" phrasing, because it
             // is the one knob that removes something instead of calming it.
-            default: return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID + "." + (storyAudioEnabled ? 1 : 0);
+            case 3:  return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID + "." + (storyAudioEnabled ? 1 : 0);
+            default: return StoryUiConstants.STORY_CODEX_SETTING_SFX_ID + "." + sfxVolume.ordinal();
         }
     }
 
@@ -175,7 +203,8 @@ public final class StorySettings {
             case 0:  return StoryUiConstants.STORY_CODEX_SETTING_TEXT_ID;
             case 1:  return StoryUiConstants.STORY_CODEX_SETTING_REVEAL_ID;
             case 2:  return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID;
-            default: return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID;
+            case 3:  return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID;
+            default: return StoryUiConstants.STORY_CODEX_SETTING_SFX_ID;
         }
     }
 
@@ -185,7 +214,8 @@ public final class StorySettings {
             case 0:  cycleTextSize();        break;
             case 1:  toggleReduceTextHold(); break;
             case 2:  toggleReduceMotion();   break;
-            default: toggleStoryAudio();     break;
+            case 3:  toggleStoryAudio();     break;
+            default: cycleSfxVolume();       break;
         }
     }
 }

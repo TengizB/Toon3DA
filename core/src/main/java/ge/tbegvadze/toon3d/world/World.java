@@ -22,6 +22,8 @@ import ge.tbegvadze.toon3d.input.touch.TouchControllerRenderer;
 import ge.tbegvadze.toon3d.input.touch.TouchInputState;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.audio.GameAudio;
+import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
@@ -122,6 +124,7 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.SoundConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
@@ -389,6 +392,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // procedurally synthesised, so four channels must not each build their own copy. Silenced
     // wholesale by the codex's SOUND setting; the game is fully understandable with it off.
     private final StoryAudio         storyAudio;
+    // GAMEPLAY AUDIO (procedural-sound-effects order 1): the ONE owner of every gameplay Sound —
+    // weapon fire, damage, impacts, enemies, explosions — all synthesised procedurally, no assets.
+    // Deliberately separate from storyAudio above: that layer is ORA's voice and has its own
+    // setting, this one is the world making noise. Both are Disposable and both are disposed here.
+    private final GameAudio          gameAudio;
     // Story UI — REPRINT / BOOT CARD (order-3): the modal card shown at the start of every run,
     // which is to say on every reprint. bootCardSystem is the headless brain (which variant, which
     // region-appropriate ORA line, what the instance counter reads, whether continuing is even
@@ -588,6 +596,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // One audio owner for every story channel (order-7 Part D). Built before the renderers so
         // each can be handed the same instance; disposed once, by this class.
         storyAudio        = new StoryAudio();
+        // Gameplay audio (procedural-sound-effects order 1). Synthesises every weapon, damage,
+        // impact and explosion sound on first launch and caches the WAVs by a hash of their recipe,
+        // so later runs only load them. Silent by itself when the device has no audio backend.
+        gameAudio         = new GameAudio();
         storyBarkRenderer = new StoryBarkRenderer();
         storyBarkRenderer.setBarkSystem(barkSystem);
         storyBarkRenderer.setStoryAudio(storyAudio);
@@ -712,6 +724,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             eventTextSystem.spawnDamage(netDamage);
             runStats.recordDamageTaken(netDamage);
             runStats.recordFloorDamageTaken(netDamage);   // RUN AUTOPSY (order 9): per-floor drain
+            // A big hit sounds different from a scratch, so the ear learns how much trouble the
+            // run is in without reading the HP bar — which still carries the number.
+            if (gameAudio != null) {
+                boolean heavy = netDamage >= player.getMaxHealth()
+                        * SoundConstants.GAME_SFX_HEAVY_HIT_HP_FRACTION;
+                gameAudio.playUi(heavy ? GameSoundId.PLAYER_HURT_HEAVY
+                                       : GameSoundId.PLAYER_HURT_LIGHT);
+            }
         });
 
         // GUARD stance (strategy-combat-order-4): the shield-arc overlay + the directional
@@ -723,6 +743,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             } else {
                 eventTextSystem.spawnWithColor("FLANKED " + guardedDamage, EventTextSystem.COLOR_RED);
                 hitVignetteRenderer.setIntensity(1f);
+            }
+            // The two outcomes already print in different colours; a clean fifth versus a detuned,
+            // dulled clang teaches the GUARD arc faster than the text does.
+            if (gameAudio != null) {
+                gameAudio.playUi(frontArc ? GameSoundId.PLAYER_GUARDED
+                                          : GameSoundId.PLAYER_FLANKED);
             }
         });
 
@@ -1247,6 +1273,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
+        impactEffectSystem.setGameAudio(gameAudio);
         enemyManager.setImpactEventListener(impactEffectSystem);
         enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
         enemyManager.setKillEventListener((nameTag, xpAwarded) -> {
@@ -1281,7 +1308,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyRenderer.setPropRenderer(propRenderer);
 
         enemyAttackEffectSystem = new EnemyAttackEffectSystem(wallRenderer);
-        enemyManager.setEnemyAttackListener(enemyAttackEffectSystem);
+        // The attack drives the existing visuals AND its sound, placed at the attacker so the
+        // player can hear which direction it came from. EnemyManager keeps its single-listener API.
+        enemyManager.setEnemyAttackListener(
+                new EnemyAttackFanout(enemyAttackEffectSystem, gameAudio));
         // EVIDENCE (narrative-rework order-4, READ_INTENT / GUARD / BREAK_LANE): fed straight to the
         // competence model from the hit resolution sites that are actually telegraphed / in-lane.
         enemyManager.setTelegraphedHitLandedListener(teachingSystem::onTelegraphedHitLanded);
@@ -1299,7 +1329,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                                           GameMath.floorSeed(runSeed, currentDepth) ^ 0x4A2A5D9BL);
         hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
         hazardManager.setHazardVisualListener(propRenderer::addDynamicProp);
-        explosiveBarrelManager.setDetonationListener(hazardManager::igniteFireFromExplosion);
+        // The loudest event in the game, placed at the barrel so a chain reaction sweeps across the
+        // stereo field the way it sweeps across the room.
+        explosiveBarrelManager.setDetonationListener((tileColumn, tileRow) -> {
+            hazardManager.igniteFireFromExplosion(tileColumn, tileRow);
+            gameAudio.playAt(GameSoundId.BARREL_EXPLOSION, tileColumn, tileRow);
+        });
         // Re-wire the incinerator's tile-ignition sink to THIS floor's HazardManager (rebuilt
         // per floor). Done alongside the other per-floor hazard wiring so it survives transitions.
         if (incinerator != null) {
@@ -1363,7 +1398,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         tickEventBus = TickPipeline.standardFloor(inventory, hazardManager, spireManager,
                                                   statusEffectController,
                                                   player, enemyManager, playerStats,
-                                                  bossFloorController, gameState);
+                                                  bossFloorController, gameState, gameAudio);
         // RUN AUTOPSY (order 9): count the turns a boss fight actually takes, so the reported number
         // can be compared with the modelled fight length (R-BOSS-FAIR).
         tickEventBus.subscribe(context -> {
@@ -1387,6 +1422,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setTickEventBus(tickEventBus);
         playerController.setTransitionListener(this);
         playerController.setEventTextSystem(eventTextSystem);
+        playerController.setGameAudio(gameAudio);
         playerController.setMoveBlockedListener(impactEffectSystem::triggerBump);
         playerController.setItemInventory(itemInventory);
         playerController.setLoadout(inventory.getLoadout());
@@ -1917,6 +1953,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // a modal.
         barkSystem.setSuppressed(runPhase != RunPhase.PLAYING);
 
+        // Gameplay audio follows the same precedence rule, but harder: a bark QUEUES behind a modal
+        // whereas a gameplay sound is simply not made, because the world is not ticking and nothing
+        // in a frozen world should be audible. The clock still advances so re-trigger windows and
+        // the voice-pressure estimate stay honest across a pause.
+        gameAudio.setSuppressed(runPhase != RunPhase.PLAYING);
+        gameAudio.setPlayerState(player.positionX, player.positionY,
+                                 player.directionX, player.directionY);
+        gameAudio.update(deltaTime);
+
         // TITLE phase (order-8 Part A) — the launch screen. Nothing is running: the world behind it
         // is built but frozen and not even drawn, and the descent begins only when the player picks
         // it. The screen opens on the game telling them they are already dead.
@@ -2259,6 +2304,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // Snapshot the run BEFORE the records are saved, so "RECORD" still means "this instance
             // beat what the save held" rather than "this instance equals what it just wrote".
             instanceReportRenderer.show(runStats, persistentStats);
+            // Plays UNDER the fade. The DEATH STROKE screen that follows is silent by design, and
+            // this is the last sound of the run — nothing may be added into that silence.
+            gameAudio.playUi(GameSoundId.PLAYER_DEATH);
             runPhase              = RunPhase.DEAD;
             deathBeatTimerSeconds = 0f;
             return;
@@ -2641,6 +2689,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Story audio (order-7 Part D): the ONE owner of every story Sound — the four speaker stings
         // and the three interface cues. The renderers only borrow it, so it is disposed exactly here.
         storyAudio.dispose();
+        // Gameplay audio (procedural-sound-effects order 1): the ONE owner of every gameplay Sound.
+        // Injected into PlayerController and fired from this class, so it is disposed exactly here.
+        gameAudio.dispose();
         // Codex (order-6): the archive renderer owns its own shapes, batch and font. CodexSystem
         // itself is headless — no GPU handles.
         codexOverlayRenderer.dispose();
@@ -3786,6 +3837,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // The story layer's sound is one switch for all seven tones (order-7 Part D).
         storyAudio.setEnabled(storySettings.isStoryAudioEnabled());
+        // Gameplay sound effects are a SEPARATE knob from ORA's voice above: somebody may well want
+        // her stings without gunfire, or gunfire without them.
+        gameAudio.setVolumeSetting(storySettings.getSfxVolume());
 
         barkSystem.setLineMaxChars(lineMaxChars);
         exchangeSystem.setLineMaxChars(lineMaxChars);

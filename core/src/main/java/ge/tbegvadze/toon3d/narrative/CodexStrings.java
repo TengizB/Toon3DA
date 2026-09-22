@@ -113,6 +113,7 @@ public final class CodexStrings {
         strings.put("story.codex.setting.reveal",   "REVEAL");
         strings.put("story.codex.setting.motion",   "MOTION");
         strings.put("story.codex.setting.audio",    "SOUND");
+        strings.put("story.codex.setting.sfx",      "EFFECTS");
         // Setting VALUES, indexed by the settings model's own enums / booleans.
         strings.put("story.codex.setting.text.0",   "NORMAL");
         strings.put("story.codex.setting.text.1",   "LARGE");
@@ -123,6 +124,11 @@ public final class CodexStrings {
         strings.put("story.codex.setting.motion.1", "REDUCED");
         strings.put("story.codex.setting.audio.0",  "OFF");
         strings.put("story.codex.setting.audio.1",  "ON");
+        // Gameplay sound effects — three states rather than a toggle, because the commonest real
+        // request for phone game audio is neither "loud" nor "off" but "in the background".
+        strings.put("story.codex.setting.sfx.0",    "OFF");
+        strings.put("story.codex.setting.sfx.1",    "QUIET");
+        strings.put("story.codex.setting.sfx.2",    "ON");
     }
 
     private static void registerCategories(StoryStrings strings) {
