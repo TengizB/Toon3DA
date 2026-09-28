@@ -215,9 +215,11 @@ New class: pick the most specific matching package. If none fits, add a subpacka
 
 A `PostToolUse` hook runs `code-reviewer` automatically after every Write/Edit to a `.java` file. No manual trigger needed.
 
-`code-reviewer` reviews correctness, LibGDX practice, dispose safety and math. It must **not** recommend adding tests outside the balance scope defined below — "this needs a unit test" is not a valid review finding for ordinary feature work.
+`code-reviewer` reviews correctness, LibGDX practice, dispose safety and math. Under the testing HARD RULE below it must **never** recommend adding tests outside the balance scope — "this needs a unit test" is not a valid review finding.
 
 ## Testing Policy — MANDATORY
+
+> **HARD RULE — AGENTS NEVER GENERATE NEW TESTS. The ONLY exception is GAME BALANCE** (the files listed below). Outside balance, no agent — main thread, orchestrator, any spoke, any command — writes a new test file, adds a new test method, plans one in an idea file, recommends one in a review, or asks whether one should be written. There is no "this one is different": renderers, story, levels, weapons, enemies, items, input, refactors and bug fixes all ship with zero new tests, verified by `./gradlew build` + `./gradlew lwjgl3:run`. Only the owner can lift this, and only by explicitly asking for a specific test.
 
 **This project has a small testing budget. The default is: DO NOT write new tests.**
 
@@ -257,40 +259,109 @@ Adding a bark line, a codex entry, a room blueprint, a sprite, a weapon or an en
 - **Never delete, disable, `@Ignore` or weaken an existing test to make a change pass.** The existing suite (story, route, tileset, level, enemy) stays green and stays the gate — it is already paid for.
 - **Updating an existing test because behaviour legitimately changed is expected and is not "writing a new test."** Do it in the same commit.
 - **Never add a test dependency, framework, harness, fixture directory or CI job.** No mocking libraries, no new Gradle test source sets.
-- If you genuinely believe something outside the balance scope needs a test, **say so in one sentence and ask** — do not write it unprompted. The answer is usually no.
-- A user asking for a test is always sufficient authorisation. This policy governs your own initiative, not their requests.
+- **Do not propose or ask for a non-balance test.** Not in a report, not in a review, not in an idea file. The answer is fixed: no.
+- The owner explicitly asking for a specific test is the only thing that authorises one outside balance. An agent never infers that request, and never treats "add tests" in a spec it wrote itself as that request.
 
-## Agent Roster
+## Two Lanes
 
-| Agent | When to use |
-|---|---|
-| `creative-game-designer` | New mechanics, enemies, items, progression, level concepts, creative direction. **Consult before implementing any new gameplay feature.** |
-| `game-level-designer` | Creating or modifying level `.txt` files. **Always use when a new level file is needed.** |
-| `weapon-creator` | Implementing any weapon end-to-end: constants, Weapon subclass, marchShot logic, FrameBuffer procedural sprite in WeaponHudRenderer, World wiring. Also use to add/improve a procedural sprite for an existing weapon. See `docs/weapon-creation-guide.txt`. |
-| `weapon-creator-fable` | Identical to `weapon-creator`, but runs on the Fable model. **Never invoke on your own judgement** — use it only when the user explicitly asks for Fable (or names this agent) by name. Default to `weapon-creator` for all other weapon work. |
-| `math-expert` | Any equation, geometry, physics, interpolation, Bezier, collision math |
-| `libgdx-specialist` | Rendering, cameras, SpriteBatch, shaders, AssetManager, Screen lifecycle |
-| `java-architect` | Class design, patterns (ECS/State/Observer), Gradle, major refactors |
-| `code-reviewer` | After writing or significantly changing any Java class |
+Work runs in one of two lanes. **Which lane is a factual question, not a judgement call** — when a change fails any test below it is full-lane, however small it feels.
 
-### Creative Game Designer — Workflow
+### The short lane — one spoke, no paperwork
 
-Ideas stored as txt files in `.claude/agents/ideas/`. Each file = one complete design document.
+Qualifies only when **all** hold:
+- **one subsystem** — one package area (e.g. `render`, or `narrative` + its strings file, or one level `.txt`);
+- **three files or fewer**;
+- **the behaviour is already decided** — a bug fix, a tuning of an existing non-balance constant, a copy change, a rename, a refactor behind an unchanged interface, or one `register()` row plus its data/string (a bark line, a codex entry, a room blueprint, a sprite);
+- **no idea file covers it**, and it is not part of an ordered part.
 
-1. Ask `creative-game-designer` to generate a feature.
-2. Agent creates `.txt` in `.claude/agents/ideas/` with full spec.
-3. Developer decides whether to build it.
-4. If yes: pass idea file path to implementing agents (java-architect, libgdx-specialist, etc.).
+**Any one** of these puts it in the full lane:
+- a **new mechanic, enemy, weapon, item or control** (CLAUDE.md already routes these through `creative-game-designer`);
+- a **new FIXED tile symbol** (the STRICT RULE);
+- a **balance rule, band or policy** — `BalanceSchema`, `sim/` policies or bands (a single existing number in `BalanceConfig`/`GameBalance` may stay short-lane, but still owes both balance gates);
+- a **persistence schema change** — a new `StoryStore`/`StatsStore` key, a `SCHEMA_VERSION` bump, anything the "new game" wipe must know about;
+- **more than one subsystem**;
+- a **new dependency** or Gradle change;
+- a **game rule that is not already written down** — deciding one is design work;
+- the owner called it a feature.
 
-**Idea file mandatory header:**
+**How it runs:** the main thread makes the change or dispatches **one** spoke. No designer, no orchestrator, no `reviewer` — the main thread reads the diff itself. It still owes: `./gradlew build` green (plus both balance gates if balance moved), the `docs/` updates CLAUDE.md requires, and **a commit, pushed**. No checkpoint file — it is one commit end to end.
+
+**If it grows, stop.** A fourth file, a second subsystem, or a rule you find yourself deciding means it was never short-lane. Hand it to `orchestrator` (writing the checkpoint file first) and say why.
+
+### The full lane
+
 ```
-STATUS: NOT IMPLEMENTED   ← change to: IN PROGRESS / IMPLEMENTED / REJECTED: <reason>
+owner's request
+   ↓
+creative-game-designer   refines · fills gaps · decides by default · asks critical questions ONCE
+   ↓                     consults spokes via orchestrator · writes the plan + CHECKPOINTS
+.claude/agents/ideas/<name>.txt      STATUS: NOT IMPLEMENTED
+   ↓
+owner reads it  →  requests changes (back to designer)  →  or approves
+   ↓
+orchestrator             commits the checkpoint file FIRST, then drives the spokes,
+   ↓                     committing and pushing at every checkpoint
+reviewer PASS  →  STATUS: IMPLEMENTED + date
+```
+
+- `creative-game-designer` **never implements**. Its only output is `.txt` files in `.claude/agents/ideas/`.
+- An approved idea file **is the specification**: acceptance criteria define done, the SCOPE OUT list is binding.
+- Only `orchestrator` moves `STATUS:` past NOT IMPLEMENTED, and only to `IMPLEMENTED` after `reviewer` passes.
+- **Decide by default; ask only what is critical** — no obvious answer, expensive to reverse, and only the owner knows. Questions are raised once, in one batch; answers are written back into the idea file under `DECISIONS`, never left in chat.
+- **An idea with a non-empty `OPEN QUESTIONS` section is not implementable.**
+- Work too large for one session is split into `<part>-order-<n>.txt`, built strictly in ascending order, each with its own STATUS. See `.claude/agents/ideas/00-index-and-how-to-use-ideas.txt`.
+
+Commands: `/idea <request>` (design) → read it → `/implement <idea-name>` (build). `/feature <request>` does both in one pass for small full-lane work.
+
+## Session Resilience — work survives being interrupted
+
+A session can end at any moment: a usage limit, a lost container, a closed window. That is normal, and **the work is arranged so an interruption costs one checkpoint — never a session.** Full protocol: **`.claude/checkpoints/README.md`**; file shape: `.claude/checkpoints/_TEMPLATE.md`.
+
+The rule everything follows from: **at every moment, the work must be resumable from disk by a reader with no memory of the conversation.**
+
+- **Every full-lane idea file has a checkpoint file** at `.claude/checkpoints/<idea-file-basename>.md` — a *derived* path, so a session told only "continue grenade-launcher" can find it. The idea file is the plan (its `CHECKPOINTS` section); the checkpoint file is the live state.
+- **It is committed first**, before anything else changes (CP0). Then **one commit per checkpoint, pushed immediately**, with **the tick in the same commit as the work**, prefixed `<idea>/CPn:`. Never `git add -A`; never more than one checkpoint's work uncommitted.
+- **A checkpoint's "done" is a state, not an action** — "`EnemyType.LURKER` exists and `./gradlew build` is green", never "add the lurker".
+- **Each checkpoint closes with a handover note** — the signature the next step must call, a decision the spec did not settle, a dead end ruled out, a deliberate temporary state and what finishes it.
+- **Resuming comes before editing.** Read the file, reconcile it against `git log` and `git status`; **where they disagree, the history wins**. A dirty tree is unverified work: finish it to the boundary and verify, or restore and redo.
+- **Any resumption opens with the four-line resume report**: the interruption was expected and prepared for, the last checkpoint and its sha, what was lost (honestly), the step being resumed.
+
+Checkpoints lower no other bar: the build, the Testing Policy, the `docs/` updates CLAUDE.md requires and the `reviewer` gate are owed exactly as before.
+
+## Agent Model: Hub and Spoke
+
+`orchestrator` is the hub for full-lane work: it plans, writes the contracts between spokes, delegates, verifies, **owns every commit**, and gates on `reviewer`. Spokes report to the hub and never call each other; they do not commit.
+
+| Agent | Model | Role / when to use |
+|---|---|---|
+| `creative-game-designer` | opus | **Front door.** New mechanics, enemies, items, progression, level concepts, creative direction; refines any full-lane request into an idea file. **Consult before implementing any new gameplay feature.** Never implements. |
+| `orchestrator` | opus | **Hub.** Implements an approved idea file through the spokes, commits + pushes per checkpoint, sets STATUS. |
+| `java-architect` | sonnet | Class design, patterns, Gradle, refactors — and the builder for non-render gameplay/simulation Java (`world`, `enemy`, `item`, `narrative`, `route`, `tileset`, `audio`, `sim`, …). |
+| `libgdx-specialist` | sonnet | Rendering, cameras, SpriteBatch, FrameBuffer, shaders, HUD/touch UI, Screen lifecycle. |
+| `math-expert` | sonnet | Any equation, geometry, physics, interpolation, Bezier, collision, synthesis or balance formula → `GameMath`. |
+| `weapon-creator` | opus | Any weapon end-to-end: constants, Weapon subclass, marchShot, FrameBuffer sprite, World wiring. See `docs/weapon-creation-guide.txt`. |
+| `weapon-creator-fable` | fable | Identical to `weapon-creator`. **Never invoke on your own judgement** — only when the user explicitly asks for Fable (or names this agent). |
+| `game-level-designer` | opus | Creating or modifying level `.txt` files. **Always use when a new level file is needed.** |
+| `code-reviewer` | haiku | Per-file lint after any `.java` write/edit — runs automatically via the PostToolUse hook. |
+| `reviewer` | opus | **The full-lane acceptance gate**: acceptance criteria, scope, game rules, Testing Policy, checkpoint discipline → PASS / PASS WITH FIXES / FAIL. |
+
+**Model tiering.** Judgement and adversarial work (designer, hub, gate) runs on Opus; builders run on Sonnet against an exact contract. The hub escalates a spoke to Opus when the spec proves ambiguous or `reviewer` fails the same file twice.
+
+**Nested dispatch.** When `orchestrator` runs as a subagent it usually cannot spawn spokes. Then the main thread drives the pipeline itself, following `.claude/agents/orchestrator.md`, and a self-review is never reported as a `reviewer` verdict.
+
+### Idea files
+
+Stored as `.txt` in `.claude/agents/ideas/`, one per piece of full-lane work, following **`.claude/agents/ideas/_TEMPLATE.txt`**. Mandatory header:
+```
+STATUS: NOT IMPLEMENTED   ← IN PROGRESS / IMPLEMENTED / REJECTED: <reason>
 CATEGORY: [Combat / Enemies / Items / Progression / Level Design / Visual / UI / Systems / Meta]
 TITLE: [short title, max 60 chars]
+CREATED: YYYY-MM-DD
+IMPLEMENTED: -
 ---
 ```
 
-**When implementing:** read the idea file, follow TECHNICAL NOTES and GAMEPLAY LOOP as spec, update STATUS to `IMPLEMENTED` when done, update file if design changed.
+**When implementing:** read the idea file; ACCEPTANCE CRITERIA (or, in older files, GAMEPLAY LOOP + TECHNICAL NOTES) are the spec; build it against its checkpoint file; set `IMPLEMENTED` only after `reviewer` passes; add an IMPLEMENTATION NOTE under the header if the design changed.
 
 **Before starting any gameplay feature:** check `.claude/agents/ideas/` for an existing design doc. If none exists, invoke `creative-game-designer` first.
 
@@ -568,7 +639,8 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Level design philosophy | `docs/level-design-context.txt` |
 | Doom RPG design inspiration | `docs/doom-rpg-reference.txt` |
 | Roguelike design pillars | `docs/roguelike-design-pillars.txt` |
-| Feature ideas backlog (64 docs) | `.claude/agents/ideas/` directory |
+| Feature ideas backlog + how to write one | `.claude/agents/ideas/` (start at `00-index-and-how-to-use-ideas.txt`) |
+| Resuming interrupted work (checkpoints) | `.claude/checkpoints/README.md` |
 
 ## Docs Directory (`docs/`)
 
@@ -775,7 +847,7 @@ batch.draw(wallTexture,
                         # docs/game-balance-authority.txt SECTION 7 — THE CHANGE PROTOCOL)
 ```
 
-Both gates RUN on every commit; new tests are only ever WRITTEN for balance — see
+Both gates RUN on every commit; new tests are only ever WRITTEN for balance (HARD RULE) — see
 **Testing Policy — MANDATORY** above. Non-balance work is verified with `./gradlew build`
 plus `./gradlew lwjgl3:run`, not with a new test.
 

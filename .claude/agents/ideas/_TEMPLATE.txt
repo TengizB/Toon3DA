@@ -1,0 +1,177 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: [Combat / Enemies / Items / Progression / Level Design / Visual / UI / Systems / Meta]
+TITLE: [short title, max 60 chars]
+CREATED: YYYY-MM-DD
+IMPLEMENTED: -
+---
+
+(The four header lines above are machine-read. Keep them exactly. STATUS values:
+NOT IMPLEMENTED / IN PROGRESS / IMPLEMENTED / REJECTED: <one-line reason>.
+Only the orchestrator moves STATUS past NOT IMPLEMENTED.)
+
+
+OVERVIEW
+--------
+2-3 sentences. What is this, and why does it belong in this game?
+
+If the raw request named a solution ("add a dodge button"), also record the
+underlying need ("I die to charges I saw coming and could do nothing about").
+The need often has a better, more on-pillar answer than the first ask.
+
+
+SCOPE
+-----
+IN
+  - concrete, checkable items
+
+OUT (deliberately not doing now)
+  - what a reasonable person would assume is included, but is not - with a
+    word on why. Binding on the implementer. Often the most valuable part.
+
+
+GAMEPLAY LOOP
+-------------
+Step by step: "Player taps X -> Y happens this turn -> if Z then W". Every
+player action is one turn; say which turn things resolve on. The
+implementing agent follows this literally.
+
+
+RULES
+-----
+The game rules, numbered so review can reference them.
+
+  R1  ...
+  R2  ...
+
+State machines: list every state and every legal transition.
+
+
+PLAYER EXPERIENCE
+-----------------
+What the player feels, and what DECISION this creates. How does a player on
+a phone, thumb only, learn it (which ORA teaching topic / bark, if any)?
+
+
+TECHNICAL NOTES
+---------------
+A plan, not code. Affected classes, new classes (with package, per the
+CLAUDE.md package rules), registry rows (register() - never a switch),
+constants (which Constants*.java file), GameMath formulas, tile symbols
+(existing ones only - a new symbol follows the CLAUDE.md STRICT RULE),
+story string ids, persistence keys, tick subscribers.
+
+
+VISUAL DESIGN
+-------------
+Procedural textures/sprites, colours, animation, HUD elements. Specific.
+Touch targets thumb-sized; nothing inside the HUD / touch safe zones.
+
+
+BALANCE NOTES
+-------------
+Numbers, probabilities, tuning guidance. Flag placeholders. Say whether any
+of it lands in BalanceConfig / BalanceSchema / GameBalance / a balance-bearing
+GameMath formula / sim/ - that decides the TESTS step below.
+
+
+INTERACTIONS
+------------
+How this meets existing systems (at least 2-3): tick bus, enemies, doors,
+hazards, inventory, route map, narrative channels, audio, level generator.
+
+
+EDGE CASES
+----------
+The ones that apply: blocked tile, action lock mid-animation, player dies
+this turn, enemy dies this turn, inventory full, empty ammo, route map /
+floor transition mid-effect, save wiped, app paused (onApplicationPause),
+hard-pause overlay open, generated vs hand-made level.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+Checkable statements - someone can verify each by running the game
+(./gradlew lwjgl3:run) or reading the code. Numbered.
+
+  A1  Tapping FIRE with the Railgun facing an enemy two tiles away in the
+      same column deals damage this turn; facing a wall, it does not.
+  A2  A new ORA line for the Railgun resolves through story-strings.properties
+      (no !id! marker on screen).
+
+Not: "the weapon feels good", "it works correctly".
+
+
+IMPLEMENTATION PLAN
+-------------------
+Order, subsystems, and which spoke builds each step. Name real classes.
+
+  1. DATA / CONSTANTS  (java-architect)       enums, registry rows, constants
+  2. LOGIC             (java-architect / math-expert)
+  3. RENDER            (libgdx-specialist)    renderers, procedural sprites
+  4. CONTENT           (game-level-designer / weapon-creator / ...)
+  5. TESTS             per the CLAUDE.md Testing Policy - ONE of:
+                         - "None. Not balance-bearing; verified by build + run."
+                         - "Balance-bearing: extend BalanceAuditTest/BalanceSimTest
+                            for <what>; both gates (test + balanceSim)."
+  6. DOCS              the docs/ file(s) CLAUDE.md says must change in the same
+                       commit (e.g. docs/story-ui-system.txt, docs/tile-symbols.txt)
+
+RISKS AND UNKNOWNS
+  What could make this harder than it looks; what to confirm early.
+
+
+CHECKPOINTS
+-----------
+The plan above, cut into resumable steps. A session can be ended by a
+usage limit at any moment; this section makes that cost ONE checkpoint.
+Not optional. The implementer copies it into
+.claude/checkpoints/<this-file's-basename>.md, commits that FIRST, then
+commits and pushes once per checkpoint with the tick in the same commit.
+See .claude/checkpoints/README.md.
+
+  CP   DONE WHEN - a state that can be CHECKED, never an action
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  <e.g. "EnemyType.LURKER exists with stats in EnemyConstants and
+       ./gradlew build is green">
+  CP2  ...
+
+Write each as a STATE. One coherent artifact each, usually one spoke
+dispatch, each leaving the build green. 4-10 is normal; twenty means split
+into <part>-order-<n>.txt files. If a checkpoint deliberately leaves
+something unwired, say so and name the checkpoint that finishes it.
+
+
+ASSUMPTIONS
+-----------
+Everything decided without asking. The owner scans this and objects cheaply.
+This list should be long.
+
+  AS1  ...
+
+
+DECISIONS
+---------
+Questions put to the owner and settled, with reasoning and date. The answer
+is ALSO written into the sections it affects.
+
+  D1  <question>  ->  <decision>  (YYYY-MM-DD)
+
+
+OPEN QUESTIONS
+--------------
+TEMPORARY - exists only between writing the file and the owner answering.
+Raised ONCE, in one batch. Each with a proposed default.
+
+  AN IDEA WITH A NON-EMPTY OPEN QUESTIONS SECTION IS NOT IMPLEMENTABLE.
+
+When answered: move each into DECISIONS, write it into the spec, and leave
+this section reading "None."
+
+  Q1  ...
+
+
+RELATED
+-------
+  Ideas:  ...
+  Docs:   docs/...
