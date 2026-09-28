@@ -242,6 +242,8 @@ public class PlayerController {
             pickUpCreditGroundItemIfPresent(settledTileColumn, settledTileRow);
             pickUpWeaponGroundItemIfPresent(settledTileColumn, settledTileRow);
             checkStairsDescentIfPresent(settledTileColumn, settledTileRow);
+            // Only a step that actually LANDED makes a footstep; a refused one has MOVE_BLOCKED.
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.FOOTSTEP);
             finishAction(true, TickCause.MOVE);
         }
     }
@@ -253,6 +255,7 @@ public class PlayerController {
             int         amount = spendHeal(tier);
             player.applyHealing(amount);
             if (amount > 0) {
+                if (gameAudio != null) gameAudio.playUi(GameSoundId.PLAYER_HEAL);
                 if (healUsedListener != null) healUsedListener.run();
                 if (eventTextSystem != null) {
                     eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
@@ -299,6 +302,7 @@ public class PlayerController {
         // slotted inventory item (one stack occupies one cell), never applied instantly.
         if (itemInventory.tryAdd(type, 1)) {
             level.consumePickupAt(tileColumn, tileRow);
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_MEDICAL);
             if (eventTextSystem != null)
                 eventTextSystem.spawnWithColor(type.getDisplayName().toUpperCase() + " +1", EventTextSystem.COLOR_GREEN);
         } else if (eventTextSystem != null) {
@@ -347,6 +351,7 @@ public class PlayerController {
                 int restore = Level.armourRestoreOfPickup(cell);
                 player.applyArmor(restore);
                 level.consumePickupAt(tileColumn, tileRow);
+                if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_ARMOUR);
                 if (eventTextSystem != null) eventTextSystem.spawnWithColor("+AR", EventTextSystem.COLOR_GREEN);
             }
         }
@@ -358,6 +363,7 @@ public class PlayerController {
             KeycardColor color = Level.keycardColorOfPickup(cell);
             inventory.addKeycard(color);
             level.consumeKeycardAt(tileColumn, tileRow);
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_KEYCARD);
         }
     }
 
@@ -370,6 +376,7 @@ public class PlayerController {
         int amount = type.getAmountPerBox();
         // Always consume the floor tile — anti-hoarding: overflow is silently discarded.
         level.consumePickupAt(tileColumn, tileRow);
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_AMMO);
         int amountBefore = itemInventory.countOf(type.getItemType());
         itemInventory.tryAdd(type.getItemType(), amount);
         int amountAdded  = itemInventory.countOf(type.getItemType()) - amountBefore;
@@ -382,6 +389,7 @@ public class PlayerController {
 
     private void checkStairsDescentIfPresent(int tileColumn, int tileRow) {
         if (transitionListener != null && Level.isStairsDown(level.getCell(tileColumn, tileRow))) {
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.STAIRS_DESCEND);
             transitionListener.onDescentRequested();
         }
     }
@@ -417,6 +425,7 @@ public class PlayerController {
             int amount = item.stack.getQuantity();
             groundItems.remove(index);
             if (playerStats != null) playerStats.addCredits(amount);
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_CREDIT);
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + amount + " CREDITS", EventTextSystem.COLOR_CREDIT_CYAN);
             }
@@ -653,7 +662,7 @@ public class PlayerController {
 
         if (Level.isDoor(targetCell)) {
             if (Level.isLockedDoor(targetCell) && !doorManager.isUnlocked(targetTileColumn, targetTileRow)) {
-                // Locked door: unlock with matching keycard, or deny silently (no turn consumed).
+                // Locked door: unlock with matching keycard, or deny (no turn consumed).
                 DoorState doorState = doorManager.getStateAt(targetTileColumn, targetTileRow);
                 if (doorState == DoorState.CLOSED) {
                     KeycardColor required = doorManager.getRequiredKeycard(targetTileColumn, targetTileRow);
@@ -662,8 +671,12 @@ public class PlayerController {
                         doorManager.requestOpen(targetTileColumn, targetTileRow);
                         actionState    = ActionState.INTERACTING;
                         actionProgress = 0f;
+                    } else if (gameAudio != null) {
+                        // No matching keycard: denied, no turn consumed — audibly, so a refused door
+                        // is never mistaken for a dropped tap. DOOR_LOCKED's re-trigger interval paces
+                        // a held button into a readable buzz rather than a drone.
+                        gameAudio.playAt(GameSoundId.DOOR_LOCKED, targetTileColumn, targetTileRow);
                     }
-                    // No matching keycard: silently denied, no turn consumed.
                 }
                 // OPENING/OPEN/CLOSING states: wait or fall through handled below.
                 return;

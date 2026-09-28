@@ -37,7 +37,7 @@ public final class EnemyAttackFanout implements EnemyAttackListener {
     public void onMeleeAttack(Enemy enemy) {
         if (delegate != null) delegate.onMeleeAttack(enemy);
         // A swing is the enemy's own body making noise, so it is heard in its FAMILY's voice
-        // (order 3); an unbound family falls back to the generic ENEMY_ATTACK_MELEE.
+        // (order 3); an unbound family borrows the catalog's fallback voice.
         if (gameAudio == null || enemy == null) return;
         gameAudio.playEnemyVoice(enemy.type.family(), EnemyVoiceMoment.ATTACK,
                 enemy.worldCenterX(), enemy.worldCenterY(), enemy.type.heightMultiplier());

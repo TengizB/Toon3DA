@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import ge.tbegvadze.toon3d.door.DoorManager;
+import ge.tbegvadze.toon3d.door.DoorStateListener;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
@@ -1239,6 +1240,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     private void buildLevelDependentResources(Level targetLevel, StartGameLevelGenerator startRoomGen) {
         doorManager            = new DoorManager(targetLevel);
+        // Doors are heard where they stand, so a door grinding shut behind the player is behind them.
+        doorManager.setDoorStateListener(new DoorStateListener() {
+            @Override public void onDoorOpening(int tileColumn, int tileRow) {
+                gameAudio.playAt(GameSoundId.DOOR_OPEN, tileColumn, tileRow);
+            }
+            @Override public void onDoorClosing(int tileColumn, int tileRow) {
+                gameAudio.playAt(GameSoundId.DOOR_CLOSE, tileColumn, tileRow);
+            }
+        });
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
@@ -1278,6 +1288,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
         enemyManager.setKillEventListener((nameTag, xpAwarded) -> {
             eventTextSystem.spawnWithColor(nameTag + " +" + xpAwarded + "XP", EventTextSystem.COLOR_GREEN);
+            gameAudio.playUi(GameSoundId.KILL_CONFIRM);   // the XP receipt, near the floor of the mix
             runStats.recordKill();
             // Story bark (order-2): kills are frequent, barks must not be. Only a fraction of kills
             // even ASK, and the bark layer's own cooldown decides whether that ask is answered.
@@ -2400,6 +2411,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // Draw a fresh set of budget-equal cards ONCE as the overlay opens.
             offeredCardCount = upgradeCardDeck.draw(offeredCards, GameBalance.LEVEL_UP_CARDS_OFFERED);
             levelUpOverlayRenderer.setOfferedCards(offeredCards, offeredCardCount);
+            // Played BEFORE the phase change: the next update suppresses gameplay sound for the
+            // overlay, and this is the one sound that belongs to it.
+            gameAudio.playUi(GameSoundId.LEVEL_UP);
             runPhase = RunPhase.LEVEL_UP_OVERLAY;
         }
     }
@@ -4448,8 +4462,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         loadout.tryEquip(weapon);
         inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_WEAPON);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("EQUIPPED: " + weapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
         }
@@ -4475,13 +4488,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         boolean sameVariant = (groundRoll == null && heldRoll == null)
                 || (groundRoll != null && groundRoll.matches(heldRoll));
         if (sameVariant) {
-            if (computeConvertAmount(standingOn) > 0) {
+            boolean converted = computeConvertAmount(standingOn) > 0;
+            if (converted) {
                 convertGroundWeaponToAmmo(standingOn);
             } else if (eventTextSystem != null) {
                 eventTextSystem.spawn("ALREADY EQUIPPED");
             }
-            groundItems.remove(standingOn);
-            playerController.clearStandingOnWeapon();
+            takeStandingGroundWeapon(standingOn,
+                    converted ? GameSoundId.PICKUP_AMMO : GameSoundId.PICKUP_WEAPON);
             fireTurnTick();
             return;
         }
@@ -4503,8 +4517,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventory.getLoadout().selectSlot(slotIndex);
         inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_WEAPON);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("SWAPPED: " + heldWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
         }
@@ -4524,8 +4537,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (otherIndex != rangedIndex) toRemove.add(startRoomGroundItems.get(otherIndex));
         }
         groundItems.removeAll(toRemove);
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_WEAPON);
         startRoomChoiceResolved = true;
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("EQUIPPED: " + chosenWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
@@ -4542,8 +4554,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (otherIndex != meleeIndex) toRemove.add(startRoomMeleeGroundItems.get(otherIndex));
         }
         groundItems.removeAll(toRemove);
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_WEAPON);
         startRoomMeleeChoiceResolved = true;
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("MELEE: " + chosenMelee.getDisplayName(), EventTextSystem.COLOR_GREEN);
@@ -4598,13 +4609,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventory.getLoadout().tryEquip(newWeapon);
         inventory.selectRangedActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_WEAPON);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("EQUIPPED: " + newWeapon.getDisplayName(), EventTextSystem.COLOR_GREEN);
         }
         fireTurnTick();
         closeWeaponInspect();
+    }
+
+
+    /**
+     * Lifts the weapon the player is standing on off the floor, whatever the overlay decided to do
+     * with it (equip, swap, take into a start-room slot, or break down for ammo), and makes the one
+     * sound that says it left the floor. Every take path funnels through here, so no path can be
+     * silent (procedural-sound-effects order 4).
+     */
+    private void takeStandingGroundWeapon(GroundItem standingOn, GameSoundId pickupSound) {
+        groundItems.remove(standingOn);
+        playerController.clearStandingOnWeapon();
+        gameAudio.playUi(pickupSound);
     }
 
     /**
@@ -4616,8 +4639,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         GroundItem standingOn = playerController.getStandingOnWeapon();
         if (standingOn == null || !groundItems.contains(standingOn)) { closeWeaponInspect(); return; }
         convertGroundWeaponToAmmo(standingOn);
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_AMMO);
         fireTurnTick();
         closeWeaponInspect();
     }
@@ -5033,8 +5055,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventory.setMeleeWeapon(newMelee);
         inventory.selectMeleeActive();
         weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
-        groundItems.remove(standingOn);
-        playerController.clearStandingOnWeapon();
+        takeStandingGroundWeapon(standingOn, GameSoundId.PICKUP_WEAPON);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("MELEE: " + newMelee.getDisplayName(), EventTextSystem.COLOR_GREEN);
         }

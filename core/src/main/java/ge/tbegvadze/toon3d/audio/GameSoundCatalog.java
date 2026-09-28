@@ -7,7 +7,7 @@ import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
  * Every gameplay sound recipe, and the bindings from game concepts onto them
- * (procedural-sound-effects orders 1-3).
+ * (procedural-sound-effects orders 1-4).
  *
  * <p><b>This is the content file.</b>  Adding a sound is ONE {@code register(...)} call here plus,
  * for a weapon, one {@code bindWeapon(...)} line — never an edit to the synthesiser, the mixer, the
@@ -43,6 +43,7 @@ public final class GameSoundCatalog {
         registerImpacts(registry);
         registerWorld(registry);
         registerEnemyVoices(registry);
+        registerFacility(registry);
         bindWeapons(registry);
     }
 
@@ -457,23 +458,11 @@ public final class GameSoundCatalog {
     // =====================================================================================
     // Enemies and the world
     //
-    // The generic attack and death below are the FALLBACK for an enemy family with no voice of its
-    // own (see registerEnemyVoices); the ranged launch is shared by every family.
+    // The ranged launch is shared by every family. (The order-2 generic melee attack and death were
+    // cut in order 4: once every family had a voice they could never play, and the catalog is capped
+    // at GAME_SFX_MAX_DISTINCT_SOUNDS.)
     // =====================================================================================
     private static void registerWorld(SoundRegistry registry) {
-
-        // Short and hard — an attack must cut through whatever else is happening.
-        registry.register(SoundDefinition
-                .builder(GameSoundId.ENEMY_ATTACK_MELEE, SoundCategory.ENEMY)
-                .volume(0.55f).cycleSpread(0.6f).minimumRetriggerSeconds(0.08f).loudness(35)
-                .layers(
-                    SoundLayer.builder(WaveformKind.NOISE, 0.15f)
-                              .bandPass(400f, 1800f).amplitudeModulation(18f, 0.8f)
-                              .envelope(0.001f, 10f).amplitude(0.70f)
-                              .noiseSeed(SEED_BODY).build(),
-                    SoundLayer.builder(WaveformKind.CHIRP_SINE, 0.15f)
-                              .sweep(90f, 130f).envelope(0.001f, 10f).amplitude(0.45f).build())
-                .build());
 
         registry.register(SoundDefinition
                 .builder(GameSoundId.ENEMY_ATTACK_RANGED, SoundCategory.ENEMY)
@@ -484,18 +473,6 @@ public final class GameSoundCatalog {
                     SoundLayer.builder(WaveformKind.NOISE, 0.04f)
                               .highPass(2500f).envelope(0.0008f, 13f).amplitude(0.35f)
                               .noiseSeed(SEED_CRACK).build())
-                .build());
-
-        // The longest of the three, and the only one that falls.
-        registry.register(SoundDefinition
-                .builder(GameSoundId.ENEMY_DEATH, SoundCategory.ENEMY)
-                .volume(0.60f).cycleSpread(0.6f).minimumRetriggerSeconds(0.10f).loudness(45)
-                .layers(
-                    SoundLayer.builder(WaveformKind.NOISE, 0.40f)
-                              .lowPass(700f).envelope(0.002f, 3f).amplitude(0.70f)
-                              .noiseSeed(SEED_BODY).build(),
-                    SoundLayer.builder(WaveformKind.CHIRP_SINE, 0.40f)
-                              .sweep(160f, 60f).envelope(0.002f, 3f).amplitude(0.55f).build())
                 .build());
 
         // ANCHOR: the loudest event in the game. Reused verbatim for a launched grenade's
@@ -661,10 +638,11 @@ public final class GameSoundCatalog {
                               .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.45f)
                               .noiseSeed(SEED_DEBRIS).build() });
 
-        // A family with no registerFamilyVoice call is heard through these, never silently.
-        // ALERT has no generic voice on purpose: a wake-up that does not say WHAT woke is noise.
-        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.ATTACK, GameSoundId.ENEMY_ATTACK_MELEE);
-        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.DEATH,  GameSoundId.ENEMY_DEATH);
+        // A family with no registerFamilyVoice call borrows the ABERRATION voice — the baseline
+        // bestiary — so it is heard, never silent, and costs no extra synthesised sound.
+        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.ALERT,  GameSoundId.ENEMY_ABERRATION_ALERT);
+        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.ATTACK, GameSoundId.ENEMY_ABERRATION_ATTACK);
+        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.DEATH,  GameSoundId.ENEMY_ABERRATION_DEATH);
     }
 
     /** Expands one family's base recipe into its three moment sounds, registers and binds them. */
@@ -689,6 +667,200 @@ public final class GameSoundCatalog {
                     .build());
         }
         registry.bindEnemyFamily(family, alert, attack, death);
+    }
+
+    // =====================================================================================
+    // The facility (order 4): doors, stairs, pickups, progression.
+    //
+    // Pickups are short and never loud — they are receipts, not events. HEAL and LEVEL_UP are the
+    // only two HARMONICALLY PLEASANT sounds in the catalog, on purpose: in a game this grim, "you
+    // are less hurt" and "you got stronger" are the moments the ear is allowed to relax.
+    // =====================================================================================
+    private static void registerFacility(SoundRegistry registry) {
+
+        // A slab grinding open: the wash brightens as the gap widens, over a floor hum.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.DOOR_OPEN, SoundCategory.ENVIRONMENT)
+                .volume(0.45f).cycleSpread(0.4f).minimumRetriggerSeconds(0.15f).loudness(30)
+                .layers(
+                    SoundLayer.builder(WaveformKind.NOISE, 0.40f)
+                              .sweptLowPass(600f, 2200f).envelope(0.05f, 3f).amplitude(0.60f)
+                              .noiseSeed(SEED_BODY).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.40f)
+                              .frequency(55f).envelope(0.05f, 3f).amplitude(0.35f).build())
+                .build());
+
+        // The inverse sweep, ending on a terminal clunk as the slab seats.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.DOOR_CLOSE, SoundCategory.ENVIRONMENT)
+                .volume(0.45f).cycleSpread(0.4f).minimumRetriggerSeconds(0.15f).loudness(30)
+                .layers(
+                    SoundLayer.builder(WaveformKind.NOISE, 0.30f)
+                              .sweptLowPass(2200f, 600f).envelope(0.01f, 4f).amplitude(0.60f)
+                              .noiseSeed(SEED_BODY).build(),
+                    SoundLayer.builder(WaveformKind.NOISE, 0.06f)
+                              .lowPass(500f).envelope(0.0008f, 12f).amplitude(0.70f)
+                              .delay(0.28f).noiseSeed(SEED_DEBRIS).build())
+                .build());
+
+        // Two identical flat buzzes. (There is deliberately no UNLOCK sound: a keycard unlock opens
+        // the door in the same instant on the same tile, and DOOR_OPEN already says so.) The retrigger interval matters: a held FORWARD against a
+        // locked door asks every frame, and must buzz at a readable rhythm, not a drone.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.DOOR_LOCKED, SoundCategory.ENVIRONMENT)
+                .volume(0.50f).cycleSpread(0f).minimumRetriggerSeconds(0.45f).loudness(20)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.06f)
+                              .frequency(160f).lowPass(1800f).envelope(0.002f, 6f)
+                              .amplitude(0.50f).build(),
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.06f)
+                              .frequency(160f).lowPass(1800f).envelope(0.002f, 6f)
+                              .amplitude(0.50f).delay(0.09f).build())
+                .build());
+
+        // Three descending tones over a rumble: going down.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.STAIRS_DESCEND, SoundCategory.ENVIRONMENT)
+                .volume(0.55f).cycleSpread(0f).loudness(25)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SINE, 0.14f)
+                              .frequency(660f).envelope(0.005f, 5f).amplitude(0.45f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.14f)
+                              .frequency(520f).envelope(0.005f, 5f).amplitude(0.45f)
+                              .delay(0.12f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.20f)
+                              .frequency(390f).envelope(0.005f, 4f).amplitude(0.45f)
+                              .delay(0.24f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.50f)
+                              .frequency(60f).envelope(0.05f, 2.5f).amplitude(0.40f).build())
+                .build());
+
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PICKUP_AMMO, SoundCategory.ENVIRONMENT)
+                .volume(0.40f).cycleSpread(0.5f).loudness(10)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.025f)
+                              .frequency(1600f).envelope(0.0008f, 12f).amplitude(0.45f).build(),
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.03f)
+                              .frequency(2100f).envelope(0.0008f, 12f).amplitude(0.40f)
+                              .delay(0.025f).build())
+                .build());
+
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PICKUP_MEDICAL, SoundCategory.ENVIRONMENT)
+                .volume(0.45f).cycleSpread(0.3f).loudness(10)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SINE, 0.12f)
+                              .frequency(880f).envelope(0.02f, 5f).amplitude(0.60f).build())
+                .build());
+
+        // Plated, not musical.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PICKUP_ARMOUR, SoundCategory.ENVIRONMENT)
+                .volume(0.50f).cycleSpread(0.4f).loudness(15)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.10f)
+                              .frequency(300f).lowPass(1500f).envelope(0.001f, 8f)
+                              .amplitude(0.45f).build(),
+                    SoundLayer.builder(WaveformKind.NOISE, 0.14f)
+                              .lowPass(1200f).envelope(0.001f, 7f).amplitude(0.45f)
+                              .noiseSeed(SEED_BODY).build())
+                .build());
+
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PICKUP_KEYCARD, SoundCategory.ENVIRONMENT)
+                .volume(0.55f).cycleSpread(0f).loudness(10)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.03f)
+                              .frequency(660f).lowPass(3000f).envelope(0.0008f, 10f)
+                              .amplitude(0.40f).build(),
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.03f)
+                              .frequency(880f).lowPass(3000f).envelope(0.0008f, 10f)
+                              .amplitude(0.40f).delay(0.045f).build(),
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.05f)
+                              .frequency(1100f).lowPass(3000f).envelope(0.0008f, 8f)
+                              .amplitude(0.40f).delay(0.09f).build())
+                .build());
+
+        // Heavy and good: a low clunk plus a long ring.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PICKUP_WEAPON, SoundCategory.ENVIRONMENT)
+                .volume(0.60f).cycleSpread(0.2f).loudness(20)
+                .layers(
+                    SoundLayer.builder(WaveformKind.NOISE, 0.08f)
+                              .lowPass(700f).envelope(0.001f, 9f).amplitude(0.70f)
+                              .noiseSeed(SEED_BODY).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.08f)
+                              .frequency(110f).envelope(0.001f, 8f).amplitude(0.50f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.30f)
+                              .frequency(1200f).envelope(0.002f, 3f).amplitude(0.25f).build())
+                .build());
+
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PICKUP_CREDIT, SoundCategory.ENVIRONMENT)
+                .volume(0.35f).cycleSpread(0.6f).loudness(10)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SINE, 0.08f)
+                              .frequency(1500f).envelope(0.001f, 8f).amplitude(0.55f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.06f)
+                              .frequency(3000f).envelope(0.001f, 10f).amplitude(0.25f).build())
+                .build());
+
+        // A fifth up, over the injector hiss. Pleasant sound #1.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.PLAYER_HEAL, SoundCategory.PLAYER_STATE)
+                .volume(0.55f).cycleSpread(0f).loudness(15)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SINE, 0.15f)
+                              .frequency(440f).envelope(0.05f, 3f).amplitude(0.55f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.20f)
+                              .frequency(660f).envelope(0.05f, 3f).amplitude(0.50f)
+                              .delay(0.12f).build(),
+                    SoundLayer.builder(WaveformKind.NOISE, 0.20f)
+                              .lowPass(3000f).envelope(0.05f, 4f).amplitude(0.20f)
+                              .noiseSeed(SEED_TAIL).build())
+                .build());
+
+        // A major triad, sine plus a quiet square. Pleasant sound #2, and the rarer one.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.LEVEL_UP, SoundCategory.INTERFACE)
+                .volume(0.60f).cycleSpread(0f).loudness(0)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SINE, 0.18f)
+                              .frequency(523f).envelope(0.01f, 4f).amplitude(0.45f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.18f)
+                              .frequency(659f).envelope(0.01f, 4f).amplitude(0.45f)
+                              .delay(0.12f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.21f)
+                              .frequency(784f).envelope(0.01f, 3f).amplitude(0.45f)
+                              .delay(0.24f).build(),
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.40f)
+                              .frequency(523f).lowPass(2000f).envelope(0.01f, 4f)
+                              .amplitude(0.10f).build())
+                .build());
+
+        // One tick. A chaingun spree must not become a xylophone: the hard re-trigger interval
+        // is what guards it.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.KILL_CONFIRM, SoundCategory.INTERFACE)
+                .volume(0.18f).cycleSpread(0f).minimumRetriggerSeconds(0.12f).loudness(0)
+                .layers(
+                    SoundLayer.builder(WaveformKind.SINE, 0.03f)
+                              .frequency(1800f).envelope(0.0008f, 12f).amplitude(0.60f).build())
+                .build());
+
+        // The quietest thing in the mix, and the lowest priority — the first voice dropped when the
+        // screen is busy. FLAGGED for deletion if a playtest finds it grating; deleting it is this
+        // one register() call.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.FOOTSTEP, SoundCategory.PLAYER_STATE)
+                .volume(0.12f).cycleSpread(1.0f).minimumRetriggerSeconds(0.10f).loudness(12)
+                .priority(SoundConstants.GAME_SFX_PRIORITY_INTERFACE)
+                .layers(
+                    SoundLayer.builder(WaveformKind.NOISE, 0.05f)
+                              .lowPass(350f).envelope(0.0008f, 12f).amplitude(0.50f)
+                              .noiseSeed(SEED_BODY).build())
+                .build());
     }
 
     // =====================================================================================

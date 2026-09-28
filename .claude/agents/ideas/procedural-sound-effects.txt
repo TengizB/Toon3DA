@@ -1,4 +1,4 @@
-STATUS: IMPLEMENTED (orders 1-3; orders 4-5 remain — see docs/sound-system.txt section 11)
+STATUS: IMPLEMENTED (orders 1-4; order 5 remains — see docs/sound-system.txt section 11)
 CATEGORY: Systems
 TITLE: Procedural Sound Effects (gameplay audio, synthesised)
 CREATED: 2026-09-22
@@ -971,6 +971,15 @@ ORDER 4 — THE FACILITY (doors, pickups, progression)
     PLAYER_HEAL, LEVEL_UP, KILL_CONFIRM, FOOTSTEP. (14)
   - Wiring: the six pickup methods in `PlayerController`, `tryHeal`, the level-up branch, the
     existing kill-event listener.
+  AS BUILT (IMPLEMENTED): `door/DoorStateListener` (onDoorOpening / onDoorClosing), fired from
+    `requestOpen`, the auto-close and `lockArenaDoor`. PLAYER_HEAL fires where HP is actually
+    restored (`advanceHealing`), not in `tryHeal`. The weapon pickup is not in PlayerController (that
+    method only opens the card): every take path in `World` now funnels through
+    `takeStandingGroundWeapon`, which plays PICKUP_WEAPON (or PICKUP_AMMO for a breakdown).
+    THE CAP: this tally omitted LEVEL_UP and KILL_CONFIRM, so order 4 came to 67 against the cap of
+    64. Three rows were CUT instead of raising it — the two order-2 generics ENEMY_ATTACK_MELEE /
+    ENEMY_DEATH (unreachable once every family was voiced; an unbound family now borrows the
+    ABERRATION voice) and DOOR_UNLOCK (same instant, same tile as DOOR_OPEN). 64 sounds, exactly.
 
 ORDER 5 — THE MIX (polish; no new sounds)
   - `SoundMixer` rule 5: the one-way story duck; `StoryAudio` stamps, `GameAudio` reads.

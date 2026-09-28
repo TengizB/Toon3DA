@@ -108,8 +108,8 @@ public final class SoundRegistry {
     }
 
     /**
-     * The voice a family makes at a moment, falling back to the generic enemy sound for that moment
-     * — so a family added later without a binding is heard generically, never silently wrong.
+     * The voice a family makes at a moment, falling back to the catalog's per-moment fallback — so
+     * a family added later without a binding is heard, never silent.
      * Null (silence) only when neither a binding nor a fallback exists.
      */
     public GameSoundId forEnemyFamily(EnemyFamily family, EnemyVoiceMoment moment) {
