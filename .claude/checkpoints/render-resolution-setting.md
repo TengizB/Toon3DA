@@ -106,7 +106,7 @@ file's tick in the same commit. Never `git add -A`.
       DONE WHEN: `RenderResolution` exists; `StorySettings` persists/cycles it in slot 5;
       `STORY_CODEX_SETTING_COUNT == 6`; RESOLUTION row shows HD/FULL HD on the settings screen and
       codex strip; `./gradlew build` (incl. tests) green. Renderers still ignore it (temporary).
-- [ ] **CP2** — renderers honour the setting (C3, C4, C5, C6).
+- [x] **CP2** — renderers honour the setting (C3, C4, C5, C6).
       DONE WHEN: no `WALL_PROJECTION_SCREEN_WIDTH`/`WALL_COLUMN_WIDTH`/`FLOOR_BACKDROP_WIDTH|HEIGHT`
       compile-time use remains in the scene renderers' runtime paths; toggling the knob switches
       WallRenderer to 1920 columns and the floor to 480×270 on the next frame; HD path unchanged;
@@ -136,3 +136,16 @@ file's tick in the same commit. Never `git add -A`.
   persisted/labelled but INERT — CP2 wires it through `World.applyStoryAccessibilitySettings()`.
   Open risk for CP3 review: codex strip buttons shrink 151 → 124 world units; "RESOLUTION" is the
   longest name label (check it doesn't clip; fix = smaller name scale, not geometry).
+- **CP2 handover:** `WallRenderer.setRenderResolution/getProjectionColumnCount/getColumnWidth` is the
+  runtime authority; Prop/Enemy/ShopMachine/EnemyAttackEffect read it per frame; Impact* project against
+  `Constants.WORLD_WIDTH`; `FloorCeilingRenderer.setRenderResolution` rebuilds the backdrop on change
+  only, row mapping via float `rowsPerBackdropRow` + two new float `GameMath.floorPixelOffsetBelowHorizon`
+  / `floorRowDistance` overloads. `WALL_PROJECTION_SCREEN_WIDTH`, `WALL_COLUMN_WIDTH`,
+  `FLOOR_BACKDROP_WIDTH/HEIGHT` are DELETED (docs/CLAUDE.md still name them → CP3). Real bugs found
+  and fixed: (a) EnemyRenderer's overlay passes (health bars, intents, afflictions, shards, beams,
+  telegraphs, afterimages) used a projected COLUMN as a WORLD X — only correct at HD; now converted
+  (× columnWidth) at the draw, raw column kept for z-buffer lookups; (b) `rebuildForLevel()` builds
+  fresh (default-HD) renderers every floor — `applyStoryAccessibilitySettings()` is now re-run after it
+  and after the constructor's build, so FULL_HD survives floor transitions. Resolved CP1's temporary
+  state: the knob is now live. Mirror build: 449 tests, only the baseline `StoryBarkTest` failure.
+  Not run on a display (no GPU here) — reviewer should re-check the EnemyRenderer column/world splits.

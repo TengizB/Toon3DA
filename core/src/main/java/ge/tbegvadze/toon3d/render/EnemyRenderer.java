@@ -27,6 +27,7 @@ import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RenderResolution;
 
 import java.util.HashMap;
 import java.util.List;
@@ -155,6 +156,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private float planeY       = 1f;
     private float alertPulse   = 0f;
 
+    // Runtime render-resolution authority (util/RenderResolution via WallRenderer, see CLAUDE.md
+    // WallRenderer blurb) — cached once per render() call (like the other player-state fields above) so
+    // every helper pass called from render() reads the SAME snapshot instead of re-querying WallRenderer.
+    // A width computed in WORLD units must be divided by projectionColumnWidth before it is used as a
+    // COLUMN span, since a column only equals one world unit at HD.
+    private int   projectionColumnCount = RenderResolution.HD.getProjectionColumnCount();
+    private float projectionColumnWidth = WORLD_WIDTH / (float) projectionColumnCount;
+
     public EnemyRenderer(EnemyManager enemyManager, WallRenderer wallRenderer) {
         this.enemyManager        = enemyManager;
         this.wallRenderer        = wallRenderer;
@@ -188,7 +197,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.intentClusterTops   = new float[scratchSize];
         this.drawIntentFlags     = new boolean[scratchSize];
         this.shapeRenderer       = new ShapeRenderer();
-        this.batch               = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
+        // Sized for the largest render-resolution tier so setRenderResolution() on WallRenderer never
+        // forces this batch to reallocate.
+        this.batch               = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
 
         // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
         this.blightSheetTexture   = loadSheetOrFallback(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
@@ -249,6 +260,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     @Override
     public void render(OrthographicCamera camera) {
+        // Snapshot this frame's render resolution once; every helper pass called below reads the
+        // cached fields rather than re-querying WallRenderer (see field javadoc above).
+        this.projectionColumnCount = wallRenderer.getProjectionColumnCount();
+        this.projectionColumnWidth = wallRenderer.getColumnWidth();
+
         List<Enemy> enemies = enemyManager.getEnemies();
         int enemyCount = enemies.size();
         if (enemyCount == 0) return;
@@ -324,7 +340,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, projectionColumnCount);
 
             float heightMultiplier   = enemy.type.heightMultiplier();
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
@@ -343,8 +359,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteScreenWidth  *= scaleBonus;
             }
 
-            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
-            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
+            // spriteScreenWidth is a WORLD-unit quantity (derived from spriteScreenHeight, itself against
+            // WORLD_HEIGHT); convert to a COLUMN span before using it as one, since a column only equals
+            // one world unit at HD (see WallRenderer.getColumnWidth()).
+            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / (2f * projectionColumnWidth));
+            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / (2f * projectionColumnWidth));
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
@@ -541,16 +560,23 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 }
             }
 
+            // Pass 3+ (beam, affliction, shard ring, crust) all draw with world-space batch/ShapeRenderer
+            // calls, not the per-column loop below — so every cached X here is WORLD-space, not column
+            // space. screenCenterColumn is a COLUMN (from spriteScreenColumnCenter); convert once here.
+            float worldCenterX = screenCenterColumn * projectionColumnWidth;
+
             // EYE_TYRANT instant beam: cache screen position for pass 3
             if (enemy.type == EnemyType.EYE_TYRANT && attackAnimStrength > 0f) {
-                beamScreenXs[sortedPosition]  = screenCenterColumn;
+                beamScreenXs[sortedPosition]  = worldCenterX;
                 beamScreenYs[sortedPosition]  = drawBottom + spriteScreenHeight / 2f;
                 beamStrengths[sortedPosition] = attackAnimStrength;
                 drawBeamFlags[sortedPosition] = true;
             }
 
-            // Cache billboard geometry for the affliction overlay pass (pass 1.5).
-            fxCenterColumns[sortedPosition] = screenCenterColumn;
+            // Cache billboard geometry for the affliction overlay pass (pass 1.5). WORLD-space X (see
+            // above) — isCrustBillboardOccluded() and the affliction/shard passes convert back to a
+            // column index only for the z-buffer occlusion test.
+            fxCenterColumns[sortedPosition] = worldCenterX;
             fxDrawBottoms[sortedPosition]   = drawBottom;
             fxSpriteHeights[sortedPosition] = spriteScreenHeight;
             fxSpriteWidths[sortedPosition]  = spriteScreenWidth;
@@ -583,7 +609,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float   columnHeightSpan = clampedTop - clampedBottom;
 
             int firstColumn = Math.max(0, leftScreenColumn);
-            int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
+            int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
 
@@ -606,8 +632,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                 (int)(texSrcHeight * (clampedTop - aboveSegBottom) / columnHeightSpan));
                         aboveSrcHeight = Math.min(aboveSrcHeight, texSrcHeight);
                         batch.draw(region.getTexture(),
-                                   screenColumn * WALL_COLUMN_WIDTH, aboveSegBottom,
-                                   WALL_COLUMN_WIDTH, clampedTop - aboveSegBottom,
+                                   screenColumn * projectionColumnWidth, aboveSegBottom,
+                                   projectionColumnWidth, clampedTop - aboveSegBottom,
                                    texSrcX, texSrcY, 1, aboveSrcHeight,
                                    false, false);
                     }
@@ -620,16 +646,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
                         int belowSrcHeight  = texSrcHeight - belowSrcYOffset;
                         if (belowSrcHeight > 0) {
                             batch.draw(region.getTexture(),
-                                       screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                                       WALL_COLUMN_WIDTH, belowSegTop - clampedBottom,
+                                       screenColumn * projectionColumnWidth, clampedBottom,
+                                       projectionColumnWidth, belowSegTop - clampedBottom,
                                        texSrcX, belowSrcY, 1, belowSrcHeight,
                                        false, false);
                         }
                     }
                 } else {
                     batch.draw(region.getTexture(),
-                               screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                               WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                               screenColumn * projectionColumnWidth, clampedBottom,
+                               projectionColumnWidth, clampedTop - clampedBottom,
                                texSrcX, texSrcY, 1, texSrcHeight,
                                false, false);
                 }
@@ -649,10 +675,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                                     spriteScreenHeight * ENEMY_HEALTH_BAR_HEIGHT_FRACTION));
 
                 // Horizontal clamp: keep the whole cluster (widest element is the bar) fully on screen.
+                // The bar/name-tag/intent-icon cluster is drawn with world-space batch/ShapeRenderer
+                // calls (not the per-column loop above), so the clamp must happen in WORLD units against
+                // the fixed WORLD_WIDTH — never against projectionColumnCount, which is a column count
+                // that only equals the world width at HD.
                 float halfBarWidth = barWidth / 2f;
-                float uiCenterX    = MathUtils.clamp(screenCenterColumn,
+                float uiCenterX    = MathUtils.clamp(worldCenterX,
                         ENEMY_UI_SCREEN_EDGE_MARGIN + halfBarWidth,
-                        WALL_PROJECTION_SCREEN_WIDTH - ENEMY_UI_SCREEN_EDGE_MARGIN - halfBarWidth);
+                        WORLD_WIDTH - ENEMY_UI_SCREEN_EDGE_MARGIN - halfBarWidth);
                 float barLeft      = uiCenterX - halfBarWidth;
 
                 // Vertical clamp: reserve headroom above the bar bottom for the tallest possible stack
@@ -719,9 +749,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (!fxDrawFlags[sortedPosition]) continue;
                 Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
 
+                // fxCenterColumns holds a WORLD X (see the pass-1 comment above); convert back to a
+                // column index only for the z-buffer occlusion test.
                 float centerColumn = fxCenterColumns[sortedPosition];
-                int   centerScreenColumn = (int) centerColumn;
-                if (centerScreenColumn < 0 || centerScreenColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                int   centerScreenColumn = (int) (centerColumn / projectionColumnWidth);
+                if (centerScreenColumn < 0 || centerScreenColumn >= projectionColumnCount) continue;
                 // Occlude behind walls using the same center-column depth test as the health bars.
                 if (sortedDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn)) continue;
 
@@ -786,9 +818,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (!drawShardFlags[sortedPosition]) continue;
                 Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
 
+                // fxCenterColumns holds a WORLD X; convert back to a column index only for the z-test.
                 float centerColumn       = fxCenterColumns[sortedPosition];
-                int   centerScreenColumn = (int) centerColumn;
-                if (centerScreenColumn < 0 || centerScreenColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                int   centerScreenColumn = (int) (centerColumn / projectionColumnWidth);
+                if (centerScreenColumn < 0 || centerScreenColumn >= projectionColumnCount) continue;
                 // Same centre-column wall occlusion test the bars and affliction overlays use.
                 if (shardDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn)) continue;
 
@@ -1009,8 +1042,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float barHeight    = barHeights[sortedPosition];
                 float fillFraction = barFillFractions[sortedPosition];
 
-                int barCenterColumn = (int)(barLeft + barWidth / 2f);
-                if (barCenterColumn < 0 || barCenterColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                // barLeft/barWidth are WORLD-space (the cluster is a world-space batch draw); convert the
+                // bar's centre to a column index only for the z-buffer occlusion test.
+                int barCenterColumn = (int)((barLeft + barWidth / 2f) / projectionColumnWidth);
+                if (barCenterColumn < 0 || barCenterColumn >= projectionColumnCount) continue;
                 if (depth >= wallRenderer.getZBufferUnchecked(barCenterColumn)) continue;
 
                 float borderPixels = ENEMY_HEALTH_BAR_BORDER_PIXELS;
@@ -1109,9 +1144,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (!drawIntentFlags[sortedPosition]) continue;
 
                 float depth   = sortedDepths[sortedPosition];
+                // intentCenterXs holds a WORLD X (it is uiCenterX, drawn via world-space batch/font
+                // calls below); convert back to a column index only for the z-buffer occlusion test.
                 float centerX = intentCenterXs[sortedPosition];
-                int   centerColumn = (int) centerX;
-                if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+                int   centerColumn = (int) (centerX / projectionColumnWidth);
+                if (centerColumn < 0 || centerColumn >= projectionColumnCount) continue;
                 if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) continue; // occluded by wall
 
                 Enemy         enemy = enemies.get(sortedIndices[sortedPosition]);
@@ -1198,7 +1235,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             shapeRenderer.setProjectionMatrix(camera.combined);
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-            float playerScreenX = WALL_PROJECTION_SCREEN_WIDTH  / 2f;
+            // Beams are drawn in WORLD space (ShapeRenderer against camera.combined), so the anchor is the
+            // fixed WORLD_WIDTH centre, not the column count (which only equals the world width at HD).
+            float playerScreenX = WORLD_WIDTH                   / 2f;
             float playerScreenY = WALL_PROJECTION_SCREEN_HEIGHT / 2f;
             for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
                 if (!drawBeamFlags[sortedPosition]) continue;
@@ -1256,10 +1295,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
         if (depth > SUMMON_MARKER_MAX_DISTANCE_TILES)  return;
 
         float screenCenterColumn = GameMath.spriteScreenColumnCenter(
-                tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY, projectionColumnCount);
         int centerColumn = (int) screenCenterColumn;
-        if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) return;
+        if (centerColumn < 0 || centerColumn >= projectionColumnCount) return;
         if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) return; // occluded by a nearer wall
+        // The marker is drawn with world-space batch.draw() calls below; screenCenterColumn (just used
+        // as a column index above) is COLUMN-space and must be converted before use as a draw position.
+        float markerWorldCenterX = screenCenterColumn * projectionColumnWidth;
 
         float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
         float floorY     = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
@@ -1274,13 +1316,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
         float alpha      = SUMMON_MARKER_MAX_ALPHA * (0.45f + 0.55f * pulse);
 
         batch.setColor(SUMMON_MARKER_R, SUMMON_MARKER_G, SUMMON_MARKER_B, alpha);
-        batch.draw(whitePixelTexture, screenCenterColumn - moteSize / 2f, centerY - moteSize / 2f,
+        batch.draw(whitePixelTexture, markerWorldCenterX - moteSize / 2f, centerY - moteSize / 2f,
                 moteSize, moteSize, 0, 0, 1, 1, false, false);
 
         for (int moteIndex = 0; moteIndex < SUMMON_MARKER_MOTE_COUNT; moteIndex++) {
             float angle = moteIndex / (float) SUMMON_MARKER_MOTE_COUNT * MathUtils.PI2
                     + statusAnimationClock * SUMMON_MARKER_PULSE_HZ;
-            float moteX = screenCenterColumn + (float) Math.cos(angle) * ringRadius;
+            float moteX = markerWorldCenterX + (float) Math.cos(angle) * ringRadius;
             float moteY = centerY + (float) Math.sin(angle) * ringRadius * 0.5f; // squash → floor plane
             batch.draw(whitePixelTexture, moteX - moteSize / 2f, moteY - moteSize / 2f,
                     moteSize, moteSize, 0, 0, 1, 1, false, false);
@@ -1309,10 +1351,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                 tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY,
-                WALL_PROJECTION_SCREEN_WIDTH);
+                projectionColumnCount);
         int centerColumn = (int) screenCenterColumn;
-        if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) return;
+        if (centerColumn < 0 || centerColumn >= projectionColumnCount) return;
         if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) return; // occluded by a nearer wall
+        // The telegraph quads are drawn with world-space batch.draw() calls below; screenCenterColumn
+        // (just used as a column index above) is COLUMN-space and must be converted before that use.
+        float markerWorldCenterX = screenCenterColumn * projectionColumnWidth;
 
         float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
         float floorY      = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
@@ -1336,7 +1381,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 // Slim horizontal bar lying on the floor — the "line" shape of the imminent lunge.
                 float barWidth  = markerSize * BOSS_TELEGRAPH_FILL_FRACTION;
                 float barHeight = markerSize * BOSS_TELEGRAPH_LINE_THICKNESS_FRACTION;
-                batch.draw(whitePixelTexture, screenCenterColumn - barWidth / 2f, centerY - barHeight / 2f,
+                batch.draw(whitePixelTexture, markerWorldCenterX - barWidth / 2f, centerY - barHeight / 2f,
                         barWidth, barHeight, 0, 0, 1, 1, false, false);
                 break;
             }
@@ -1348,7 +1393,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 for (int moteIndex = 0; moteIndex < BOSS_TELEGRAPH_MOTE_COUNT; moteIndex++) {
                     float angle = moteIndex / (float) BOSS_TELEGRAPH_MOTE_COUNT * MathUtils.PI2
                             + statusAnimationClock * BOSS_TELEGRAPH_PULSE_HZ;
-                    float moteX = screenCenterColumn + (float) Math.cos(angle) * ringRadius;
+                    float moteX = markerWorldCenterX + (float) Math.cos(angle) * ringRadius;
                     float moteY = centerY + (float) Math.sin(angle) * ringRadius * 0.5f; // squash → floor
                     batch.draw(whitePixelTexture, moteX - moteSize / 2f, moteY - moteSize / 2f,
                             moteSize, moteSize, 0, 0, 1, 1, false, false);
@@ -1362,7 +1407,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 // Filled patch squashed vertically so it reads as lying flat where the hazard lands.
                 float patchWidth  = markerSize * BOSS_TELEGRAPH_FILL_FRACTION;
                 float patchHeight = markerSize * BOSS_TELEGRAPH_FILL_FRACTION * 0.5f; // floor-plane squash
-                batch.draw(whitePixelTexture, screenCenterColumn - patchWidth / 2f, centerY - patchHeight / 2f,
+                batch.draw(whitePixelTexture, markerWorldCenterX - patchWidth / 2f, centerY - patchHeight / 2f,
                         patchWidth, patchHeight, 0, 0, 1, 1, false, false);
                 break;
             }
@@ -1423,10 +1468,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY,
-                    WALL_PROJECTION_SCREEN_WIDTH);
+                    projectionColumnCount);
             int centerColumn = (int) screenCenterColumn;
-            if (centerColumn < 0 || centerColumn >= WALL_PROJECTION_SCREEN_WIDTH) continue;
+            if (centerColumn < 0 || centerColumn >= projectionColumnCount) continue;
             if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) continue; // behind a nearer wall
+            // The ghost billboard is drawn with a world-space batch.draw() call below; screenCenterColumn
+            // (just used as a column index above) is COLUMN-space and must be converted before that use.
+            float ghostWorldCenterX = screenCenterColumn * projectionColumnWidth;
 
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
             float ghostHeight        = fullWallLineHeight * heightMultiplier;
@@ -1440,7 +1488,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (alpha <= 0.01f) continue;
 
             batch.setColor(baseRed, baseGreen, baseBlue, alpha);
-            batch.draw(region, screenCenterColumn - ghostWidth / 2f, drawBottom, ghostWidth, ghostHeight);
+            batch.draw(region, ghostWorldCenterX - ghostWidth / 2f, drawBottom, ghostWidth, ghostHeight);
         }
         batch.setColor(Color.WHITE);
     }
@@ -1776,8 +1824,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
      * centre column is off-screen or hidden behind a nearer wall, so the caller skips its overlay.
      */
     private boolean isCrustBillboardOccluded(int sortedPosition) {
-        int centerScreenColumn = (int) fxCenterColumns[sortedPosition];
-        if (centerScreenColumn < 0 || centerScreenColumn >= WALL_PROJECTION_SCREEN_WIDTH) return true;
+        // fxCenterColumns holds a WORLD X; convert back to a column index only for the z-test.
+        int centerScreenColumn = (int) (fxCenterColumns[sortedPosition] / projectionColumnWidth);
+        if (centerScreenColumn < 0 || centerScreenColumn >= projectionColumnCount) return true;
         return sortedDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn);
     }
 

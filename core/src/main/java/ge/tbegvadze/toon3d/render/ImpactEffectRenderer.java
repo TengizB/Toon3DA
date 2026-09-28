@@ -271,9 +271,12 @@ public final class ImpactEffectRenderer implements Disposable {
             float depth       = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
             if (depth <= RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
 
+            // Decoupled from the runtime render-resolution setting (checkpoint contract C4): this
+            // projects to a WORLD X for a world-space font.draw() below (never a per-column loop), so it
+            // must use the fixed Constants.WORLD_WIDTH, not WallRenderer's runtime ray-column count.
             float screenColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, RenderConstants.WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, Constants.WORLD_WIDTH);
 
             // Y anchor: top of the enemy sprite + rising offset
             float halfSpriteHeight = RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT / (2f * depth);

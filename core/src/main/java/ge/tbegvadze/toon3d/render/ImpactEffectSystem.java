@@ -871,9 +871,12 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         float tileOffsetY = (worldY - playerWorldY) / Constants.CELL_SIZE;
         float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
         if (depth <= RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES) return -1000f;
+        // Decoupled from the runtime render-resolution setting (checkpoint contract C4): this projects
+        // to a WORLD X (drawn via world-space batch/ShapeRenderer calls, never a per-column loop), so it
+        // must use the fixed Constants.WORLD_WIDTH, not WallRenderer's runtime ray-column count.
         return GameMath.spriteScreenColumnCenter(tileOffsetX, tileOffsetY,
                 directionX, directionY, planeX, planeY,
-                RenderConstants.WALL_PROJECTION_SCREEN_WIDTH);
+                Constants.WORLD_WIDTH);
     }
 
     /*

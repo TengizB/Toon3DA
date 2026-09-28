@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RenderResolution;
 
 import java.nio.IntBuffer;
 import java.util.concurrent.ExecutorService;
@@ -44,17 +45,35 @@ import static ge.tbegvadze.toon3d.util.RenderConstants.*;
  *     that image row 0 (visual top) maps to the visual top when LibGDX renders it.
  *
  * Resolution:
- *   Backdrop is FLOOR_BACKDROP_WIDTH × FLOOR_BACKDROP_HEIGHT
- *   (= WORLD_WIDTH/SCALE_DIVISOR × WORLD_HEIGHT/SCALE_DIVISOR). SpriteBatch upscales
- *   it to the full viewport for a retro pixel look and significant CPU savings.
+ *   Backdrop size is runtime-switchable via {@code util.RenderResolution} (see
+ *   {@link #setRenderResolution}) — HD reproduces the historic fixed 320×180 backdrop
+ *   (= WORLD_WIDTH/4 × WORLD_HEIGHT/4) byte-identically; FULL_HD raises it to 480×270.
+ *   SpriteBatch upscales it to the full viewport regardless of tier, for a retro pixel
+ *   look and significant CPU savings.
  */
 public class FloorCeilingRenderer implements Renderable, Disposable {
 
     private final Level level;
     private final SpriteBatch batch;
-    private final Pixmap backdropPixmap;
-    private final Texture backdropTexture;
-    private final int[] backbuffer;
+    // Backdrop resolution is runtime-switchable (util/RenderResolution, checkpoint contract C5), so
+    // these are rebuilt (old disposed, new allocated) by setRenderResolution() only on a CHANGE —
+    // never per frame. Default HD before any set call, so a renderer that never has the setting pushed
+    // into it (e.g. a headless caller) reproduces today's fixed 320x180 behaviour byte-identically.
+    private RenderResolution renderResolution = RenderResolution.HD;
+    private int   backdropWidth  = renderResolution.getFloorBackdropWidth();
+    private int   backdropHeight = renderResolution.getFloorBackdropHeight();
+    /*
+     * Formula: full-screen pixel rows per backdrop row
+     * Derivation: the backdrop row count no longer always divides WORLD_HEIGHT evenly (FULL_HD:
+     *   720 / 270 = 2.667), so the old integer FLOOR_BACKDROP_SCALE_DIVISOR (always 4) is replaced by
+     *   this runtime float ratio, recomputed whenever the backdrop is (re)allocated.
+     *   HD: 720 / 180 = 4.0 exactly (byte-identical to the old constant). FULL_HD: 720 / 270 ≈ 2.667.
+     * Edge cases: backdropHeight is always a positive RenderResolution-derived value, never zero.
+     */
+    private float rowsPerBackdropRow = WORLD_HEIGHT / (float) backdropHeight;
+    private Pixmap backdropPixmap;
+    private Texture backdropTexture;
+    private int[] backbuffer;
 
     private final int[] floorTexelsPacked;
     private final int   floorTextureWidth;
@@ -91,9 +110,9 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         this.level = level;
         batch = new SpriteBatch(1);
 
-        backdropPixmap   = new Pixmap(FLOOR_BACKDROP_WIDTH, FLOOR_BACKDROP_HEIGHT, Pixmap.Format.RGBA8888);
-        backdropTexture  = new Texture(backdropPixmap);
-        backbuffer       = new int[FLOOR_BACKDROP_WIDTH * FLOOR_BACKDROP_HEIGHT];
+        backdropPixmap  = new Pixmap(backdropWidth, backdropHeight, Pixmap.Format.RGBA8888);
+        backdropTexture = new Texture(backdropPixmap);
+        backbuffer      = new int[backdropWidth * backdropHeight];
 
         floorTextureWidth    = 64;
         floorTextureHeight   = 64;
@@ -159,6 +178,27 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         return pixels;
     }
 
+    /**
+     * Applies the runtime render-resolution setting (checkpoint contract C5). A no-op when the tier is
+     * unchanged; otherwise disposes the current backdrop Pixmap/Texture and reallocates them (plus the
+     * CPU backbuffer) at the new tier's dimensions, and recomputes {@link #rowsPerBackdropRow}. Must run
+     * on the render thread (Pixmap/Texture construction) — never call this from render() itself; World
+     * calls it from {@code applyStoryAccessibilitySettings()}, not per frame.
+     */
+    public void setRenderResolution(RenderResolution renderResolution) {
+        if (this.renderResolution == renderResolution) return;
+        this.renderResolution = renderResolution;
+        this.backdropWidth    = renderResolution.getFloorBackdropWidth();
+        this.backdropHeight   = renderResolution.getFloorBackdropHeight();
+        this.rowsPerBackdropRow = WORLD_HEIGHT / (float) backdropHeight;
+
+        backdropPixmap.dispose();
+        backdropTexture.dispose();
+        backdropPixmap  = new Pixmap(backdropWidth, backdropHeight, Pixmap.Format.RGBA8888);
+        backdropTexture = new Texture(backdropPixmap);
+        backbuffer      = new int[backdropWidth * backdropHeight];
+    }
+
     public void setPlayerState(float worldX, float worldY,
                                float playerDirectionX, float playerDirectionY,
                                float playerFieldOfViewRadians) {
@@ -194,7 +234,7 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         cachedRayDirRightX = directionX - planeX;
         cachedRayDirRightY = directionY - planeY;
 
-        int backdropHorizonRow = FLOOR_BACKDROP_HEIGHT / 2;
+        int backdropHorizonRow = backdropHeight / 2;
 
         if (workerCount > 1) {
             int rowsPerWorker = backdropHorizonRow / workerCount;
@@ -213,10 +253,10 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         }
 
         // Fill the exact horizon row (if any) with the floor ambient colour.
-        if (backdropHorizonRow * 2 < FLOOR_BACKDROP_HEIGHT) {
-            int horizonRow = FLOOR_BACKDROP_HEIGHT / 2;
-            for (int drawX = 0; drawX < FLOOR_BACKDROP_WIDTH; drawX++) {
-                backbuffer[horizonRow * FLOOR_BACKDROP_WIDTH + drawX] = FLOOR_AMBIENT_COLOUR_PACKED;
+        if (backdropHorizonRow * 2 < backdropHeight) {
+            int horizonRow = backdropHeight / 2;
+            for (int drawX = 0; drawX < backdropWidth; drawX++) {
+                backbuffer[horizonRow * backdropWidth + drawX] = FLOOR_AMBIENT_COLOUR_PACKED;
             }
         }
 
@@ -248,16 +288,19 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         final int ceilTexHeightMask  = ceilingTextureHeight - 1;
 
         for (int drawY = startRow; drawY < endRow; drawY++) {
-            int drawYFullScreen = drawY * FLOOR_BACKDROP_SCALE_DIVISOR;
-            int pixelOffset     = GameMath.floorPixelOffsetBelowHorizon(drawYFullScreen, WORLD_HEIGHT);
+            // Float-safe row->full-screen mapping (checkpoint contract C5): rowsPerBackdropRow =
+            // WORLD_HEIGHT / backdropHeight, which is no longer always an integer at a non-HD tier (the
+            // old FLOOR_BACKDROP_SCALE_DIVISOR constant assumed exactly 4). At HD this is 4.0f exactly.
+            float drawYFullScreen = drawY * rowsPerBackdropRow;
+            float pixelOffset     = GameMath.floorPixelOffsetBelowHorizon(drawYFullScreen, WORLD_HEIGHT);
 
             float rowDistance = GameMath.floorRowDistance(pixelOffset, WORLD_HEIGHT);
             rowDistance = Math.min(rowDistance, FLOOR_MAX_VISIBLE_DISTANCE_CELLS);
 
             float floorStepX = GameMath.floorStepTileComponent(
-                    rowDistance, cachedRayDirRightX, cachedRayDirLeftX, FLOOR_BACKDROP_WIDTH);
+                    rowDistance, cachedRayDirRightX, cachedRayDirLeftX, backdropWidth);
             float floorStepY = GameMath.floorStepTileComponent(
-                    rowDistance, cachedRayDirRightY, cachedRayDirLeftY, FLOOR_BACKDROP_WIDTH);
+                    rowDistance, cachedRayDirRightY, cachedRayDirLeftY, backdropWidth);
 
             float floorTileX = GameMath.floorOriginTileComponent(cachedPlayerTileX, rowDistance, cachedRayDirLeftX);
             float floorTileY = GameMath.floorOriginTileComponent(cachedPlayerTileY, rowDistance, cachedRayDirLeftY);
@@ -265,10 +308,10 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
             float shade = GameMath.floorShade(rowDistance, FLOOR_SHADING_FALLOFF);
 
             // Pre-compute base backbuffer offsets for this row pair to avoid repeated multiplications.
-            int floorRowOffset   = (FLOOR_BACKDROP_HEIGHT - 1 - drawY) * FLOOR_BACKDROP_WIDTH;
-            int ceilingRowOffset = drawY * FLOOR_BACKDROP_WIDTH;
+            int floorRowOffset   = (backdropHeight - 1 - drawY) * backdropWidth;
+            int ceilingRowOffset = drawY * backdropWidth;
 
-            for (int drawX = 0; drawX < FLOOR_BACKDROP_WIDTH; drawX++) {
+            for (int drawX = 0; drawX < backdropWidth; drawX++) {
                 // Compute integer tile and UV fractional part in one step, avoiding
                 // a second Math.floor() call for the texel index derivation.
                 int   tileColumn = MathUtils.floor(floorTileX);

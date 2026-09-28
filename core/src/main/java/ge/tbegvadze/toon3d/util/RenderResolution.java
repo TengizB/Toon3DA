@@ -15,7 +15,7 @@ package ge.tbegvadze.toon3d.util;
  * 1280×720 world/UI space it is composited into.
  *
  * <p>At {@link #HD} the numbers are today's fixed behaviour, byte-identical
- * ({@code RenderConstants.WALL_PROJECTION_SCREEN_WIDTH} = 1280, floor backdrop 320×180).
+ * (1280 ray columns, floor backdrop 320×180).
  * {@link #FULL_HD} raises the column count to 1920 (floor backdrop 480×270), keeping the floor's
  * existing 1:4 ratio of the projection column count.
  *
