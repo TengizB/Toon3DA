@@ -1312,6 +1312,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // player can hear which direction it came from. EnemyManager keeps its single-listener API.
         enemyManager.setEnemyAttackListener(
                 new EnemyAttackFanout(enemyAttackEffectSystem, gameAudio));
+        // Waking and dying are heard in the enemy FAMILY's voice (procedural-sound-effects order 3),
+        // placed at the enemy and pitched down for a bigger body.
+        enemyManager.setEnemyVoiceListener((enemy, moment) ->
+                gameAudio.playEnemyVoice(enemy.type.family(), moment,
+                        enemy.worldCenterX(), enemy.worldCenterY(), enemy.type.heightMultiplier()));
         // EVIDENCE (narrative-rework order-4, READ_INTENT / GUARD / BREAK_LANE): fed straight to the
         // competence model from the hit resolution sites that are actually telegraphed / in-lane.
         enemyManager.setTelegraphedHitLandedListener(teachingSystem::onTelegraphedHitLanded);

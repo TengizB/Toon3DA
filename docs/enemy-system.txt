@@ -203,9 +203,13 @@ of the bodies filling those roles.
   GOLEM        Rimeshell Lancer, Auric Sentinel, Cinderforge Colossus, Verdant Spiresower (Q3 of the
                shared elemental-golem sheet)
 
-STATUS: DESCRIPTIVE ONLY. Nothing reads family() yet — no spawn, budget, AI or render path branches
-on it, so adding the taxonomy changed zero behaviour and every archetype stays spawnable on every
-floor exactly as before.
+STATUS: DESCRIPTIVE for gameplay. No spawn, budget or AI path branches on family(), so every
+archetype stays spawnable on every floor exactly as before. PRESENTATION reads it: the bestiary voice
+(narrative) and, since procedural-sound-effects order 3, the enemy's SOUND — each family has one
+voice (ALERT / ATTACK / DEATH), fired via EnemyVoiceListener. A new archetype in an existing family
+inherits its voice for free; a NEW FAMILY needs one registerFamilyVoice(...) call in
+audio/GameSoundCatalog (until then it falls back to the generic enemy sounds). See
+docs/sound-system.txt.
 
 STAGED FOR: the FAMILY-COHERENT FLOOR rule — a generated floor picks ONE family and draws its whole
 roster from that family, so a level reads as a single infestation instead of a random bestiary dump.

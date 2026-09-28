@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.audio;
 
+import ge.tbegvadze.toon3d.enemy.EnemyFamily;
+import ge.tbegvadze.toon3d.enemy.EnemyVoiceMoment;
 import ge.tbegvadze.toon3d.item.ItemType;
 
 /**
@@ -23,6 +25,9 @@ public final class SoundRegistry {
     private final SoundDefinition[] definitionsById     = new SoundDefinition[GameSoundId.COUNT];
     private final GameSoundId[]     weaponFireBinding   = new GameSoundId[ItemType.values().length];
     private final GameSoundId[]     weaponImpactBinding = new GameSoundId[ItemType.values().length];
+    private final GameSoundId[][]   familyVoiceBinding  =
+            new GameSoundId[EnemyFamily.values().length][EnemyVoiceMoment.COUNT];
+    private final GameSoundId[]     voiceFallback       = new GameSoundId[EnemyVoiceMoment.COUNT];
 
     /** Replaces any previous registration for the same id, so a later bootstrap can override. */
     public void register(SoundDefinition definition) {
@@ -81,5 +86,38 @@ public final class SoundRegistry {
         if (weaponItemType == null) return GameSoundId.IMPACT_BALLISTIC;
         GameSoundId bound = weaponImpactBinding[weaponItemType.ordinal()];
         return bound != null ? bound : GameSoundId.IMPACT_BALLISTIC;
+    }
+
+    /**
+     * Binds an enemy family to its three voices (order 3).
+     *
+     * <p>Per FAMILY, never per {@code EnemyType}: the player learns six sound-shapes, not twenty,
+     * and a new archetype in an existing family inherits its family's voice for free.
+     */
+    public void bindEnemyFamily(EnemyFamily family, GameSoundId alert, GameSoundId attack,
+                                GameSoundId death) {
+        GameSoundId[] voices = familyVoiceBinding[family.ordinal()];
+        voices[EnemyVoiceMoment.ALERT.ordinal()]  = alert;
+        voices[EnemyVoiceMoment.ATTACK.ordinal()] = attack;
+        voices[EnemyVoiceMoment.DEATH.ordinal()]  = death;
+    }
+
+    /** The sound a family with no binding makes at this moment; null leaves that moment silent. */
+    public void bindEnemyVoiceFallback(EnemyVoiceMoment moment, GameSoundId soundId) {
+        voiceFallback[moment.ordinal()] = soundId;
+    }
+
+    /**
+     * The voice a family makes at a moment, falling back to the generic enemy sound for that moment
+     * — so a family added later without a binding is heard generically, never silently wrong.
+     * Null (silence) only when neither a binding nor a fallback exists.
+     */
+    public GameSoundId forEnemyFamily(EnemyFamily family, EnemyVoiceMoment moment) {
+        if (moment == null) return null;
+        if (family != null) {
+            GameSoundId bound = familyVoiceBinding[family.ordinal()][moment.ordinal()];
+            if (bound != null) return bound;
+        }
+        return voiceFallback[moment.ordinal()];
     }
 }

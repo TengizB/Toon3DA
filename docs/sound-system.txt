@@ -4,7 +4,7 @@ Single source of truth for the gameplay audio layer. Update this doc in the same
 change to `…toon3d.audio`, `util/SoundConstants` or the synthesis formulas in `util/GameMath`.
 
 Design document: `.claude/agents/ideas/procedural-sound-effects.txt` (orders 1-5).
-Implemented so far: orders 1 and 2. Orders 3-5 are listed under NOT YET BUILT at the end.
+Implemented so far: orders 1-3. Orders 4-5 are listed under NOT YET BUILT at the end.
 
 
 1. WHAT THIS IS
@@ -39,12 +39,19 @@ HEADLESS (usable from `sim/`; `WaveformKind` imports only `MathUtils`, which is 
   SoundLayer.java         immutable one-voice recipe + fluent Builder.
   SoundDefinition.java    id + category + layers + volume + priority + cycleSpread +
                           minimumRetriggerSeconds + loudness, + Builder.
-  SoundRegistry.java      register/get by ordinal; weapon -> fire sound and weapon -> impact sound
-                          bindings. Array-backed, no HashMap on a firing path.
+  SoundRegistry.java      register/get by ordinal; weapon -> fire sound, weapon -> impact sound and
+                          enemy family x moment -> voice bindings (plus a per-moment fallback).
+                          Array-backed, no HashMap on a firing path.
   GameSoundCatalog.java   `bootstrap()` — THE CONTENT FILE. One `register(...)` per sound.
   SoundMixer.java         the mixing rules: per-turn category counters, re-trigger windows, voice
                           pressure, the story duck, the variation cycle. Pure state + a clock.
   SfxVolumeSetting.java   ON / QUIET / OFF, with the volume multiplier for each.
+
+IN THE ENEMY PACKAGE (order 3), so `EnemyManager` never imports audio:
+  enemy/EnemyVoiceMoment.java    enum ALERT / ATTACK / DEATH. (The design placed this in `audio/`;
+                                 it moved to `enemy/` because the listener that names it is fired
+                                 from `EnemyManager`, and the enemy layer must not import audio.)
+  enemy/EnemyVoiceListener.java  `onEnemyVoice(Enemy, EnemyVoiceMoment)`, the ALERT + DEATH hook.
 
 LIBGDX (the only three classes here that import `com.badlogic.gdx` beyond MathUtils):
   PcmWavWriter.java       PCM -> 44-byte RIFF/WAVE -> local file cache -> `Gdx.audio.newSound`.
@@ -115,7 +122,7 @@ its attack transient, and the transient is what makes a gunshot read as a gunsho
 
 4. THE CATALOG
 ==============
-34 sounds today, against `GAME_SFX_MAX_DISTINCT_SOUNDS = 64`. Exceeding that cap is a design
+52 sounds today, against `GAME_SFX_MAX_DISTINCT_SOUNDS = 64`. Exceeding that cap is a design
 failure, not a reason to raise the constant.
 
   weapon fire      14, one per ItemType weapon row, + WEAPON_FIRE_DEFAULT
@@ -123,6 +130,25 @@ failure, not a reason to raise the constant.
   player state     HURT_LIGHT, HURT_HEAVY, GUARDED, FLANKED, DEATH, MOVE_BLOCKED
   impact           BALLISTIC, ENERGY, MELEE, BLOCKED
   enemy / world    ENEMY_ATTACK_MELEE, ENEMY_ATTACK_RANGED, ENEMY_DEATH, BARREL_EXPLOSION
+  enemy voices     18 = six EnemyFamily x { ALERT, ATTACK, DEATH }   (order 3)
+
+ENEMY VOICES ARE PER FAMILY, NEVER PER `EnemyType`. The player learns six sound-shapes, not twenty,
+and a new archetype in an existing family inherits its family's voice for free. Each family is ONE
+BASE RECIPE — a function from a moment's SHAPE to layers — expanded into three sounds by
+`registerFamilyVoice(...)`. The shape is what the moments share across every family (ALERT 0.20 s
+and rising, ATTACK 0.15 s and hardest, DEATH 0.40 s and falling); the recipe is the family's
+character:
+  ABERRATION  wet: low-passed noise under a rising sine gurgle (90 -> 130 Hz)
+  UNDEAD      dry rasp: band-limited noise chopped at 18 Hz; no tone at all
+  INSECT      chitter: 2.5-6 kHz noise chopped at 55 Hz
+  MACHINE     servo: a swept square + a relay tick; the only family with NO noise
+  DEMON       the loudest and longest: a 70 -> 110 Hz moan under broadband noise
+  GOLEM       struck stone: 180 Hz + an INHARMONIC 2.76x partial over low-passed grit
+Voices play at the enemy, pitched DOWN by its `heightMultiplier`, so two archetypes of one family
+still differ by size. A family with no binding falls back per moment: ATTACK -> ENEMY_ATTACK_MELEE,
+DEATH -> ENEMY_DEATH, ALERT -> silence (a wake-up that does not say WHAT woke is only noise).
+A RANGED attack keeps the shared ENEMY_ATTACK_RANGED launch whatever the family: "it shot at me"
+versus "it swung at me" is the lane rule made audible, and must not depend on the family.
 
 THE DESIGN RULE BEHIND THE NUMBERS: ballistic weapons are NOISE (broadband body + bright crack +
 low punch); energy weapons are PITCHED (descending tones where the ballistics are noise). That
@@ -220,15 +246,26 @@ balance simulator and the whole existing test suite working untouched.
 `render/ImpactEffectSystem`  (setter `setGameAudio`)
     onEnemyHit                   -> the last-fired weapon's impact, at the enemy, pitched by its
                                     height multiplier
-    onEnemyKilled                -> ENEMY_DEATH at the enemy
+    onEnemyKilled                -> NOTHING since order 3: the death is the family voice, fired
+                                    from `EnemyManager.killEnemy`. This callback also draws a
+                                    barrel's blast, which has its own BARREL_EXPLOSION.
     The sound rides this class rather than its own listener because `ImpactEventListener` is a wide
     interface with a dozen default methods: a separate fan-out would have to forward every one of
     them and would silently stop forwarding the next one somebody adds.
 `world/EnemyAttackFanout`
-    wraps `EnemyAttackEffectSystem` in `EnemyManager`'s single attack-listener slot and adds
-    ENEMY_ATTACK_MELEE / _RANGED at the ATTACKER (not at the player — the whole value of hearing a
-    ranged attack is learning which direction it came from). Safe to wrap because
-    `EnemyAttackListener` is a two-method interface with no defaults. ZERO edits to `EnemyManager`.
+    wraps `EnemyAttackEffectSystem` in `EnemyManager`'s single attack-listener slot and adds, at
+    the ATTACKER (not at the player — the whole value of hearing an attack is learning which
+    direction it came from): a melee swing -> the family's ATTACK voice; a ranged shot ->
+    ENEMY_ATTACK_RANGED. Safe to wrap because `EnemyAttackListener` is a two-method interface with
+    no defaults.
+`enemy/EnemyManager`  (setter `setEnemyVoiceListener`, wired by a lambda in `World`)
+    phaseA, both the proximity/LOS wake and the chain-alert BFS -> the family's ALERT voice.
+      A chain alert can wake a whole room in one turn; the per-turn ENEMY cap (3) and the stack
+      falloff are what turn that into a crowd rather than a smear. Boss-summoned adds spawn already
+      alerted and are NOT announced — the summon has its own telegraph.
+    killEnemy(...)  — the single funnel every death passes through (weapon, damage-over-time,
+      splash, self-destruct) -> the family's DEATH voice.
+    Null-guarded, so `sim/SimWorld` (which wires no listener) is unaffected.
 
 PLAYER_DEATH plays under the fade. The DEATH STROKE screen that follows is SILENT — that silence is
 the design (`docs/story-ui-system.txt`), and this system must never put anything into it.
@@ -252,6 +289,9 @@ like every other story string — `StoryLocalizationTest` fails if they drift ap
 1. Add a constant to `GameSoundId`.
 2. Add ONE `register(...)` call in `GameSoundCatalog`, describing its layers.
 3. For a weapon: one `bindWeapon(...)` and one `bindWeaponImpact(...)` line in the same file.
+   For a new ENEMY FAMILY: three `GameSoundId`s and one `registerFamilyVoice(...)` call (its base
+   recipe) — it registers the three sounds and binds them. A new `EnemyType` in an EXISTING family
+   needs no audio work at all.
 4. Fire it from the relevant system (inject `GameAudio` by setter if it does not already have it).
 5. Update this doc.
 
@@ -269,13 +309,13 @@ gameplay state, which is the one thing that would make this layer dangerous.
 11. NOT YET BUILT
 =================
 From the design document, deliberately deferred:
-  order 3  PER-FAMILY ENEMY VOICES. Six `EnemyFamily` voices x three moments (alert / attack /
-           death), replacing today's three generic enemy sounds, which stay as the fallback for an
-           unbound family. Needs one new `enemy/EnemyVoiceListener` and three one-line fire sites.
   order 4  THE FACILITY. Doors (open / close / locked / unlock), stairs, the six pickups,
            PLAYER_HEAL, LEVEL_UP, KILL_CONFIRM, FOOTSTEP.
   order 5  THE MIX. A tuning pass on a real device and on earbuds, the application pause/resume
-           clock reset, and the `NoiseEvent` seam.
+           clock reset, and the `NoiseEvent` seam. Deferred from order 3 into this pass: the
+           design's ENEMY_RANGED_LAUNCH "pitched by family index" (the shared launch currently
+           plays at one pitch for every family) and the region-flavoured ALERT pitch (open
+           question 5 — if it happens, a per-region pitch table in the catalog, never an `if`).
 
 FOOTSTEPS are flagged in the design as the highest-risk entry and the first candidate for deletion.
 The standing rule, inherited from the story layer's pacing budget: the fix for "too much sound" is

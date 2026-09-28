@@ -1,4 +1,4 @@
-STATUS: IMPLEMENTED (orders 1-2; orders 3-5 remain — see docs/sound-system.txt section 11)
+STATUS: IMPLEMENTED (orders 1-3; orders 4-5 remain — see docs/sound-system.txt section 11)
 CATEGORY: Systems
 TITLE: Procedural Sound Effects (gameplay audio, synthesised)
 CREATED: 2026-09-22
@@ -956,6 +956,14 @@ ORDER 3 — THE BESTIARY VOICE
   - Catalog: six families x three moments = 18 recipes, registered in one loop over
     `EnemyFamily.values()` from a per-family base recipe, so a new family is ONE base recipe.
   - The generic enemy attack/death from Order 2 stay as the fallback for an unbound family.
+  AS BUILT (IMPLEMENTED): `EnemyVoiceMoment` lives in `enemy/`, not `audio/`, so `EnemyManager`
+    keeps no audio import. The listener carries ALERT + DEATH only; ATTACK rides the existing
+    `EnemyAttackFanout` (melee -> family ATTACK voice; ranged keeps the shared launch, so shot vs
+    swing stays audible). Each family is one `registerFamilyVoice(...)` call (base recipe + its
+    three ids) expanded across the three moment SHAPES; the generic death left
+    `ImpactEffectSystem.onEnemyKilled` (it also draws barrel blasts) for `killEnemy`. Fallback per
+    moment: ATTACK -> ENEMY_ATTACK_MELEE, DEATH -> ENEMY_DEATH, ALERT -> silence. Family-pitched
+    ranged launch deferred to order 5. 52 sounds registered.
 
 ORDER 4 — THE FACILITY (doors, pickups, progression)
   - A `DoorStateListener` in the door package; wire the two transitions.

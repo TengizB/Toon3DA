@@ -3,6 +3,8 @@ package ge.tbegvadze.toon3d.audio;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.enemy.EnemyFamily;
+import ge.tbegvadze.toon3d.enemy.EnemyVoiceMoment;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -10,7 +12,7 @@ import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
  * The gameplay sound facade — the whole surface every call site sees
- * (procedural-sound-effects orders 1 and 2).
+ * (procedural-sound-effects orders 1-3).
  *
  * <p>Owns one {@link Sound} per {@link GameSoundId}, all synthesised at construction from the
  * recipes in {@link GameSoundCatalog}, cached on disk by a hash of the recipe so only the very
@@ -133,6 +135,18 @@ public final class GameAudio implements Disposable {
      */
     public void playWeaponImpactAt(float worldX, float worldY, float sizeMultiplier) {
         playAtWorld(lastWeaponImpact, worldX, worldY, sizeMultiplier);
+    }
+
+    /**
+     * An enemy making a noise in its FAMILY's voice (order 3): woke up, swung, died.
+     *
+     * @param sizeMultiplier the enemy's billboard height fraction — a bigger body is pitched down,
+     *                       so a Colossus and a Crawler of the same family still sound different
+     */
+    public void playEnemyVoice(EnemyFamily family, EnemyVoiceMoment moment,
+                               float originWorldX, float originWorldY, float sizeMultiplier) {
+        playAtWorld(registry.forEnemyFamily(family, moment), originWorldX, originWorldY,
+                sizeMultiplier);
     }
 
     /** Non-diegetic confirmations and anything else that is simply "at the ear". */

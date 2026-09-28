@@ -1,11 +1,13 @@
 package ge.tbegvadze.toon3d.audio;
 
+import ge.tbegvadze.toon3d.enemy.EnemyFamily;
+import ge.tbegvadze.toon3d.enemy.EnemyVoiceMoment;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
  * Every gameplay sound recipe, and the bindings from game concepts onto them
- * (procedural-sound-effects orders 1 and 2).
+ * (procedural-sound-effects orders 1-3).
  *
  * <p><b>This is the content file.</b>  Adding a sound is ONE {@code register(...)} call here plus,
  * for a weapon, one {@code bindWeapon(...)} line — never an edit to the synthesiser, the mixer, the
@@ -40,6 +42,7 @@ public final class GameSoundCatalog {
         registerPlayerState(registry);
         registerImpacts(registry);
         registerWorld(registry);
+        registerEnemyVoices(registry);
         bindWeapons(registry);
     }
 
@@ -454,8 +457,8 @@ public final class GameSoundCatalog {
     // =====================================================================================
     // Enemies and the world
     //
-    // The per-FAMILY voices are a later order; these generic three are the fallback every family
-    // uses until then, and remain the fallback for a family with no binding afterwards.
+    // The generic attack and death below are the FALLBACK for an enemy family with no voice of its
+    // own (see registerEnemyVoices); the ranged launch is shared by every family.
     // =====================================================================================
     private static void registerWorld(SoundRegistry registry) {
 
@@ -515,6 +518,177 @@ public final class GameSoundCatalog {
                               .envelope(0.01f, 6f).amplitude(0.25f)
                               .delay(0.18f).noiseSeed(SEED_DEBRIS).build())
                 .build());
+    }
+
+    // =====================================================================================
+    // Enemy family voices (order 3) — one set per EnemyFamily, never per EnemyType.
+    //
+    // Each family is ONE base recipe: a function from a moment's SHAPE to its layers. The shape is
+    // what the three moments share across every family — ALERT short and rising, ATTACK shortest
+    // and hardest, DEATH longest and falling — and the recipe is what makes an insect sound like an
+    // insect. A new family is one registerFamilyVoice(...) call plus its three GameSoundIds; a new
+    // archetype in an existing family needs nothing at all.
+    // =====================================================================================
+
+    /** What one moment does to any family's base recipe. */
+    private static final class VoiceShape {
+        final float durationSeconds;
+        final float attackSeconds;
+        final float decayRate;
+        /** Multipliers applied to the recipe's own sweep: rising for ALERT, falling for DEATH. */
+        final float sweepFromScale;
+        final float sweepToScale;
+        final float volumeScale;
+        final int   loudness;
+
+        VoiceShape(float durationSeconds, float attackSeconds, float decayRate,
+                   float sweepFromScale, float sweepToScale, float volumeScale, int loudness) {
+            this.durationSeconds = durationSeconds;
+            this.attackSeconds   = attackSeconds;
+            this.decayRate       = decayRate;
+            this.sweepFromScale  = sweepFromScale;
+            this.sweepToScale    = sweepToScale;
+            this.volumeScale     = volumeScale;
+            this.loudness        = loudness;
+        }
+
+        float from(float hertz) { return hertz * sweepFromScale; }
+        float to(float hertz)   { return hertz * sweepToScale; }
+    }
+
+    /** A family's whole voice: the layers it makes for a given moment shape. */
+    private interface FamilyVoiceRecipe {
+        SoundLayer[] layersFor(VoiceShape shape);
+    }
+
+    private static final VoiceShape[] VOICE_SHAPES = new VoiceShape[EnemyVoiceMoment.COUNT];
+    static {
+        VOICE_SHAPES[EnemyVoiceMoment.ALERT.ordinal()]  =
+                new VoiceShape(0.20f, 0.004f, 6f,  0.80f, 1.20f, 0.90f, 40);
+        VOICE_SHAPES[EnemyVoiceMoment.ATTACK.ordinal()] =
+                new VoiceShape(0.15f, 0.001f, 10f, 1.00f, 0.90f, 1.00f, 35);
+        VOICE_SHAPES[EnemyVoiceMoment.DEATH.ordinal()]  =
+                new VoiceShape(0.40f, 0.003f, 3f,  1.00f, 0.45f, 1.05f, 45);
+    }
+
+    /** Family voices are varied like any enemy sound, and a pile of them never machine-guns. */
+    private static final float VOICE_CYCLE_SPREAD      = 0.6f;
+    private static final float VOICE_RETRIGGER_SECONDS = 0.25f;
+
+    private static void registerEnemyVoices(SoundRegistry registry) {
+
+        // Wet and organic: a low-passed slop under a rising gurgle.
+        registerFamilyVoice(registry, EnemyFamily.ABERRATION, 0.55f,
+                GameSoundId.ENEMY_ABERRATION_ALERT, GameSoundId.ENEMY_ABERRATION_ATTACK,
+                GameSoundId.ENEMY_ABERRATION_DEATH,
+                shape -> new SoundLayer[] {
+                    SoundLayer.builder(WaveformKind.NOISE, shape.durationSeconds)
+                              .sweptLowPass(shape.from(700f), shape.to(700f))
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.65f)
+                              .noiseSeed(SEED_BODY).build(),
+                    SoundLayer.builder(WaveformKind.CHIRP_SINE, shape.durationSeconds)
+                              .sweep(shape.from(90f), shape.to(130f))
+                              .amplitudeModulation(11f, 0.4f)
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.50f)
+                              .build() });
+
+        // Dry rasp: band-limited breath chopped at a slow flutter. No tone — nothing alive in it.
+        registerFamilyVoice(registry, EnemyFamily.UNDEAD, 0.55f,
+                GameSoundId.ENEMY_UNDEAD_ALERT, GameSoundId.ENEMY_UNDEAD_ATTACK,
+                GameSoundId.ENEMY_UNDEAD_DEATH,
+                shape -> new SoundLayer[] {
+                    SoundLayer.builder(WaveformKind.NOISE, shape.durationSeconds)
+                              .highPass(400f).sweptLowPass(shape.from(1800f), shape.to(1800f))
+                              .amplitudeModulation(18f, 0.8f)
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.80f)
+                              .noiseSeed(SEED_TAIL).build() });
+
+        // High chitter: bright noise chopped fast enough to read as legs and mandibles.
+        registerFamilyVoice(registry, EnemyFamily.INSECT, 0.45f,
+                GameSoundId.ENEMY_INSECT_ALERT, GameSoundId.ENEMY_INSECT_ATTACK,
+                GameSoundId.ENEMY_INSECT_DEATH,
+                shape -> new SoundLayer[] {
+                    SoundLayer.builder(WaveformKind.NOISE, shape.durationSeconds)
+                              .highPass(2500f).sweptLowPass(shape.from(6000f), shape.to(6000f))
+                              .amplitudeModulation(55f, 0.9f)
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.75f)
+                              .noiseSeed(SEED_CRACK).build() });
+
+        // Servo: a swept square and a relay tick. NO noise wash at all — the only family that is
+        // entirely pitched, which is exactly what makes it read as not-biology.
+        registerFamilyVoice(registry, EnemyFamily.MACHINE, 0.45f,
+                GameSoundId.ENEMY_MACHINE_ALERT, GameSoundId.ENEMY_MACHINE_ATTACK,
+                GameSoundId.ENEMY_MACHINE_DEATH,
+                shape -> new SoundLayer[] {
+                    SoundLayer.builder(WaveformKind.CHIRP_SQUARE, shape.durationSeconds)
+                              .sweep(shape.from(220f), shape.to(260f)).lowPass(2400f)
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.45f)
+                              .build(),
+                    SoundLayer.builder(WaveformKind.SQUARE, 0.02f)
+                              .frequency(1600f).envelope(0.0008f, 14f).amplitude(0.35f)
+                              .build() });
+
+        // The loudest family: a sub-heavy moan under broadband noise, held longer than the rest.
+        registerFamilyVoice(registry, EnemyFamily.DEMON, 0.65f,
+                GameSoundId.ENEMY_DEMON_ALERT, GameSoundId.ENEMY_DEMON_ATTACK,
+                GameSoundId.ENEMY_DEMON_DEATH,
+                shape -> new SoundLayer[] {
+                    SoundLayer.builder(WaveformKind.CHIRP_SINE, shape.durationSeconds * 1.4f)
+                              .sweep(shape.from(70f), shape.to(110f))
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.70f)
+                              .build(),
+                    SoundLayer.builder(WaveformKind.NOISE, shape.durationSeconds * 1.4f)
+                              .sweptLowPass(shape.from(2500f), shape.to(2500f))
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.55f)
+                              .noiseSeed(SEED_BODY).build() });
+
+        // Mineral: a struck tone with an INHARMONIC partial at 2.76x (the struck-stone/bell trick)
+        // over low-passed grit.
+        registerFamilyVoice(registry, EnemyFamily.GOLEM, 0.55f,
+                GameSoundId.ENEMY_GOLEM_ALERT, GameSoundId.ENEMY_GOLEM_ATTACK,
+                GameSoundId.ENEMY_GOLEM_DEATH,
+                shape -> new SoundLayer[] {
+                    SoundLayer.builder(WaveformKind.CHIRP_SINE, shape.durationSeconds)
+                              .sweep(shape.from(180f), shape.to(180f))
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.50f)
+                              .build(),
+                    SoundLayer.builder(WaveformKind.CHIRP_SINE, shape.durationSeconds)
+                              .sweep(shape.from(180f * 2.76f), shape.to(180f * 2.76f))
+                              .envelope(shape.attackSeconds, shape.decayRate * 1.5f)
+                              .amplitude(0.30f).build(),
+                    SoundLayer.builder(WaveformKind.NOISE, shape.durationSeconds)
+                              .lowPass(1500f)
+                              .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.45f)
+                              .noiseSeed(SEED_DEBRIS).build() });
+
+        // A family with no registerFamilyVoice call is heard through these, never silently.
+        // ALERT has no generic voice on purpose: a wake-up that does not say WHAT woke is noise.
+        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.ATTACK, GameSoundId.ENEMY_ATTACK_MELEE);
+        registry.bindEnemyVoiceFallback(EnemyVoiceMoment.DEATH,  GameSoundId.ENEMY_DEATH);
+    }
+
+    /** Expands one family's base recipe into its three moment sounds, registers and binds them. */
+    private static void registerFamilyVoice(SoundRegistry registry, EnemyFamily family,
+                                            float baseVolume, GameSoundId alert,
+                                            GameSoundId attack, GameSoundId death,
+                                            FamilyVoiceRecipe recipe) {
+        GameSoundId[] idsByMoment = new GameSoundId[EnemyVoiceMoment.COUNT];
+        idsByMoment[EnemyVoiceMoment.ALERT.ordinal()]  = alert;
+        idsByMoment[EnemyVoiceMoment.ATTACK.ordinal()] = attack;
+        idsByMoment[EnemyVoiceMoment.DEATH.ordinal()]  = death;
+
+        for (EnemyVoiceMoment moment : EnemyVoiceMoment.values()) {
+            VoiceShape shape = VOICE_SHAPES[moment.ordinal()];
+            registry.register(SoundDefinition
+                    .builder(idsByMoment[moment.ordinal()], SoundCategory.ENEMY)
+                    .volume(Math.min(1f, baseVolume * shape.volumeScale))
+                    .cycleSpread(VOICE_CYCLE_SPREAD)
+                    .minimumRetriggerSeconds(VOICE_RETRIGGER_SECONDS)
+                    .loudness(shape.loudness)
+                    .layers(recipe.layersFor(shape))
+                    .build());
+        }
+        registry.bindEnemyFamily(family, alert, attack, death);
     }
 
     // =====================================================================================
