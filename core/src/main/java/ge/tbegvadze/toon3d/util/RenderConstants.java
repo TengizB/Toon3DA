@@ -91,7 +91,7 @@ public final class RenderConstants {
     // RENDER_RESOLUTION_MAX_COLUMNS sizes any array/SpriteBatch that must cover the largest tier.
     public static final int    RENDER_RESOLUTION_HD_COLUMNS      = Constants.WORLD_WIDTH;
     public static final int    RENDER_RESOLUTION_FULL_HD_COLUMNS = 1920;
-    public static final int    RENDER_RESOLUTION_MAX_COLUMNS     = 1920;
+    public static final int    RENDER_RESOLUTION_MAX_COLUMNS     = RENDER_RESOLUTION_FULL_HD_COLUMNS;
     // Persisted setting key. Stable once shipped — it is baked into saves (additive key, no
     // SCHEMA_VERSION bump needed; see the SFX-volume-setting precedent).
     public static final String RENDER_RESOLUTION_SETTING_KEY     = "render.resolution";

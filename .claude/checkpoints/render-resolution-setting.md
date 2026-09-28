@@ -111,7 +111,7 @@ file's tick in the same commit. Never `git add -A`.
       compile-time use remains in the scene renderers' runtime paths; toggling the knob switches
       WallRenderer to 1920 columns and the floor to 480×270 on the next frame; HD path unchanged;
       `./gradlew build` green.
-- [ ] **CP3** — docs + review.
+- [x] **CP3** — docs + review.
       DONE WHEN: `docs/wall-renderer-guide.txt` and `docs/story-ui-system.txt` (settings) describe
       the knob; CLAUDE.md WallRenderer blurb no longer claims a fixed 1280 columns; `reviewer` PASS.
 
@@ -153,3 +153,10 @@ file's tick in the same commit. Never `git add -A`.
   authority, COLUMN-vs-WORLD rule); `docs/story-ui-system.txt` accessibility bullet names the
   RESOLUTION knob + 6 slots / 7 rows; CLAUDE.md WallRenderer blurb + stripe snippet updated. CP3 box
   stays open until `reviewer` PASS.
+- **CP3 done — `reviewer` PASS** (no blocking / non-blocking findings). Nits taken: `fxCenterColumns`
+  → `fxCenterWorldXs` (EnemyRenderer), `RENDER_RESOLUTION_MAX_COLUMNS = RENDER_RESOLUTION_FULL_HD_COLUMNS`,
+  ShopMachineRenderer comment, story-ui doc "four story knobs of six". Nit left as is: column→world→column
+  `(int)` round-trip in EnemyRenderer overlay occlusion can sample a neighbouring column at FULL HD —
+  invisible, HD unaffected. OWED BY THE OWNER: nobody has SEEN FULL HD rendered (no display in this
+  container) — run `./gradlew lwjgl3:run`, flip RESOLUTION mid-run on a floor with enemies, props and a
+  shop, and check billboard widths, health-bar/intent positions and the floor; then on a phone for cost.

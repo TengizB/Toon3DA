@@ -74,7 +74,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
     // Runtime render-resolution authority (util/RenderResolution via WallRenderer) — cached once per
     // render() call, read by drawMachine()/drawLayer() below. Every layer is drawn per-column (mirrors
-    // PropRenderer/ShopMachineRenderer's own drawLayer loop), so a WORLD-unit width must be divided by
+    // PropRenderer's per-column loop, as drawLayer below does), so a WORLD-unit width must be divided by
     // columnWidth before it is used as a column span.
     private int   projectionColumnCount = RenderResolution.HD.getProjectionColumnCount();
     private float columnWidth           = WORLD_WIDTH / (float) projectionColumnCount;

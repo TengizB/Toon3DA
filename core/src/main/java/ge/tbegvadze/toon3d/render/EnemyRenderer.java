@@ -92,7 +92,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
     // Pre-allocated affliction-overlay geometry cache — parallel to sortedIndices, populated in
     // pass 1 and consumed by the animated fire/toxin/bleed overlay pass (pass 1.5).
-    private final float[]   fxCenterColumns;
+    private final float[]   fxCenterWorldXs;
     private final float[]   fxDrawBottoms;
     private final float[]   fxSpriteHeights;
     private final float[]   fxSpriteWidths;
@@ -185,7 +185,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.beamScreenYs        = new float[scratchSize];
         this.beamStrengths       = new float[scratchSize];
         this.drawBeamFlags       = new boolean[scratchSize];
-        this.fxCenterColumns     = new float[scratchSize];
+        this.fxCenterWorldXs     = new float[scratchSize];
         this.fxDrawBottoms       = new float[scratchSize];
         this.fxSpriteHeights     = new float[scratchSize];
         this.fxSpriteWidths      = new float[scratchSize];
@@ -576,7 +576,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // Cache billboard geometry for the affliction overlay pass (pass 1.5). WORLD-space X (see
             // above) — isCrustBillboardOccluded() and the affliction/shard passes convert back to a
             // column index only for the z-buffer occlusion test.
-            fxCenterColumns[sortedPosition] = worldCenterX;
+            fxCenterWorldXs[sortedPosition] = worldCenterX;
             fxDrawBottoms[sortedPosition]   = drawBottom;
             fxSpriteHeights[sortedPosition] = spriteScreenHeight;
             fxSpriteWidths[sortedPosition]  = spriteScreenWidth;
@@ -749,9 +749,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (!fxDrawFlags[sortedPosition]) continue;
                 Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
 
-                // fxCenterColumns holds a WORLD X (see the pass-1 comment above); convert back to a
+                // fxCenterWorldXs holds a WORLD X (see the pass-1 comment above); convert back to a
                 // column index only for the z-buffer occlusion test.
-                float centerColumn = fxCenterColumns[sortedPosition];
+                float centerColumn = fxCenterWorldXs[sortedPosition];
                 int   centerScreenColumn = (int) (centerColumn / projectionColumnWidth);
                 if (centerScreenColumn < 0 || centerScreenColumn >= projectionColumnCount) continue;
                 // Occlude behind walls using the same center-column depth test as the health bars.
@@ -818,8 +818,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (!drawShardFlags[sortedPosition]) continue;
                 Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
 
-                // fxCenterColumns holds a WORLD X; convert back to a column index only for the z-test.
-                float centerColumn       = fxCenterColumns[sortedPosition];
+                // fxCenterWorldXs holds a WORLD X; convert back to a column index only for the z-test.
+                float centerColumn       = fxCenterWorldXs[sortedPosition];
                 int   centerScreenColumn = (int) (centerColumn / projectionColumnWidth);
                 if (centerScreenColumn < 0 || centerScreenColumn >= projectionColumnCount) continue;
                 // Same centre-column wall occlusion test the bars and affliction overlays use.
@@ -882,7 +882,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (enemy.crustStacks <= 0) continue;   // a bare Colossus wears no plates
                 if (isCrustBillboardOccluded(sortedPosition)) continue;
 
-                float centerColumn = fxCenterColumns[sortedPosition];
+                float centerColumn = fxCenterWorldXs[sortedPosition];
                 float spriteHeight = fxSpriteHeights[sortedPosition];
                 float spriteWidth  = fxSpriteWidths[sortedPosition];
                 float drawBottom   = fxDrawBottoms[sortedPosition];
@@ -911,7 +911,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
                 if (isCrustBillboardOccluded(sortedPosition)) continue;
 
-                float centerColumn = fxCenterColumns[sortedPosition];
+                float centerColumn = fxCenterWorldXs[sortedPosition];
                 float spriteHeight = fxSpriteHeights[sortedPosition];
                 float spriteWidth  = fxSpriteWidths[sortedPosition];
                 float drawBottom   = fxDrawBottoms[sortedPosition];
@@ -1824,8 +1824,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
      * centre column is off-screen or hidden behind a nearer wall, so the caller skips its overlay.
      */
     private boolean isCrustBillboardOccluded(int sortedPosition) {
-        // fxCenterColumns holds a WORLD X; convert back to a column index only for the z-test.
-        int centerScreenColumn = (int) (fxCenterColumns[sortedPosition] / projectionColumnWidth);
+        // fxCenterWorldXs holds a WORLD X; convert back to a column index only for the z-test.
+        int centerScreenColumn = (int) (fxCenterWorldXs[sortedPosition] / projectionColumnWidth);
         if (centerScreenColumn < 0 || centerScreenColumn >= projectionColumnCount) return true;
         return sortedDepths[sortedPosition] >= wallRenderer.getZBufferUnchecked(centerScreenColumn);
     }
