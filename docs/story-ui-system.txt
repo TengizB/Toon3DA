@@ -237,6 +237,12 @@ alone.
   `World.applyStoryAccessibilitySettings()` pushes into `StoryAudio.setEnabled()`. One switch for the
   whole layer, not a per-cue submenu.
 
+  THE DUCK (procedural-sound-effects order 5): `StoryAudio.setCuePlayedListener(Runnable)` runs each
+  time a story sound ACTUALLY starts (never while the SOUND knob is off). `World` wires it to
+  `GameAudio.noteStoryCuePlayed`, so gameplay sound dips briefly under a sting and a gunshot never
+  buries the line ORA is starting to say. One-way: nothing ever ducks the story layer. See
+  `docs/sound-system.txt`.
+
 
 PART E — OVERLAY PRECEDENCE & INTERRUPTS
 ========================================

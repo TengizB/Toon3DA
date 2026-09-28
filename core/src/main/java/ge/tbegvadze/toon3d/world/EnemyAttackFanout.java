@@ -1,13 +1,13 @@
 package ge.tbegvadze.toon3d.world;
 
 import ge.tbegvadze.toon3d.audio.GameAudio;
-import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyAttackListener;
+import ge.tbegvadze.toon3d.enemy.EnemyVoiceMoment;
 
 /**
  * Lets an enemy's attack drive BOTH the existing visual effect system and gameplay audio
- * (procedural-sound-effects order 2).
+ * (procedural-sound-effects orders 2-5).
  *
  * <p>{@code EnemyManager.setEnemyAttackListener} takes a single listener, and that slot is already
  * held by {@code EnemyAttackEffectSystem}. Rather than edit {@code EnemyManager} to hold a list,
@@ -35,7 +35,11 @@ public final class EnemyAttackFanout implements EnemyAttackListener {
     @Override
     public void onMeleeAttack(Enemy enemy) {
         if (delegate != null) delegate.onMeleeAttack(enemy);
-        playAtEnemy(GameSoundId.ENEMY_ATTACK_MELEE, enemy);
+        // A swing is the enemy's own body making noise, so it is heard in its FAMILY's voice
+        // (order 3); an unbound family borrows the catalog's fallback voice.
+        if (gameAudio == null || enemy == null) return;
+        gameAudio.playEnemyVoice(enemy.type.family(), EnemyVoiceMoment.ATTACK,
+                enemy.worldCenterX(), enemy.worldCenterY(), enemy.type.heightMultiplier());
     }
 
     @Override
@@ -43,11 +47,11 @@ public final class EnemyAttackFanout implements EnemyAttackListener {
         if (delegate != null) delegate.onRangedAttack(enemy, playerColumn, playerRow);
         // Deliberately placed at the SHOOTER, not at the player: the whole value of hearing a
         // ranged attack is learning which direction it came from.
-        playAtEnemy(GameSoundId.ENEMY_ATTACK_RANGED, enemy);
-    }
-
-    private void playAtEnemy(GameSoundId soundId, Enemy enemy) {
+        // It keeps the SHARED launch sound rather than the family voice: "it shot at me" versus
+        // "it swung at me" is the lane rule made audible, and must not depend on the family.
+        // Only its PITCH carries the family (order 5), so who fired is still audible.
         if (gameAudio == null || enemy == null) return;
-        gameAudio.playAtWorld(soundId, enemy.worldCenterX(), enemy.worldCenterY(), 1f);
+        gameAudio.playEnemyRangedLaunch(enemy.type.family(),
+                enemy.worldCenterX(), enemy.worldCenterY(), enemy.type.heightMultiplier());
     }
 }

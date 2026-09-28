@@ -86,6 +86,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private DropPlacedListener  dropPlacedListener;
     private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
+    private EnemyVoiceListener  enemyVoiceListener;
     private SpecialResolvedListener specialResolvedListener;
     /** Fired when a hit lands from an attack committed and shown a full turn ahead (narrative-rework order-4 READ_INTENT/GUARD evidence). Param = was the player guarding. Nullable. */
     private java.util.function.Consumer<Boolean> telegraphedHitLandedListener;
@@ -508,6 +509,11 @@ public final class EnemyManager implements EnemyHitTarget {
         this.enemyAttackListener = listener;
     }
 
+    /** Injects the voice listener so an enemy waking up and dying are heard in its family's voice. */
+    public void setEnemyVoiceListener(EnemyVoiceListener listener) {
+        this.enemyVoiceListener = listener;
+    }
+
     /** Injects the telegraphed-hit-landed listener (narrative-rework order-4 READ_INTENT/GUARD evidence). */
     public void setTelegraphedHitLandedListener(java.util.function.Consumer<Boolean> listener) {
         this.telegraphedHitLandedListener = listener;
@@ -824,6 +830,9 @@ public final class EnemyManager implements EnemyHitTarget {
             if (shouldAlert) {
                 enemy.alert();
                 anyAlertedEver = true;
+                if (enemyVoiceListener != null) {
+                    enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.ALERT);
+                }
                 chainAlertQueue[chainQueueSize++] = index;
             }
         }
@@ -841,6 +850,9 @@ public final class EnemyManager implements EnemyHitTarget {
                 if (chainDist <= EnemyConstants.CHAIN_ALERT_RADIUS_TILES) {
                     candidate.alert();
                     anyAlertedEver = true;
+                    if (enemyVoiceListener != null) {
+                        enemyVoiceListener.onEnemyVoice(candidate, EnemyVoiceMoment.ALERT);
+                    }
                     chainAlertQueue[chainQueueSize++] = index;
                 }
             }
@@ -2627,6 +2639,9 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void killEnemy(Enemy enemy, boolean isMeleeKill) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
+        // Every death passes through here, whatever killed it, so the family's death voice is fired
+        // here rather than at each of the half-dozen sites that fire the visual death burst.
+        if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.DEATH);
         // COLLAPSE (elemental-golem-auric-sentinel): any shards still in orbit fall out of the ring and
         // shatter on the floor with the body. Fired before the tile is cleared so the burst plays where
         // the enemy actually stood. No-op for every archetype without shards, and for an empty ring.

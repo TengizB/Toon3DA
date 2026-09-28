@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
 import ge.tbegvadze.toon3d.audio.GameAudio;
-import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -211,9 +210,9 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     public void onEnemyKilled(float worldX, float worldY, float heightMultiplier, int killingBlowDamage) {
         triggerShake(EffectConstants.KILL_SHAKE_MAGNITUDE, EffectConstants.KILL_SHAKE_DURATION_SECONDS);
         killFlashTimeRemaining = EffectConstants.KILL_FLASH_DURATION_SECONDS;
-        if (gameAudio != null) {
-            gameAudio.playAtWorld(GameSoundId.ENEMY_DEATH, worldX, worldY, heightMultiplier);
-        }
+        // No death SOUND here: the enemy's family voice is fired from EnemyManager.killEnemy, the
+        // one funnel every death passes through (order 3). This method also draws a barrel's
+        // blast, which has its own BARREL_EXPLOSION and must not wear a corpse's voice as well.
 
         float screenX = projectToScreenX(worldX, worldY);
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);

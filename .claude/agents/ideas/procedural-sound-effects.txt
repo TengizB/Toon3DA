@@ -1,4 +1,4 @@
-STATUS: IMPLEMENTED (orders 1-2; orders 3-5 remain — see docs/sound-system.txt section 11)
+STATUS: IMPLEMENTED (orders 1-5; a real-device listening pass is still owed — see docs/sound-system.txt section 11)
 CATEGORY: Systems
 TITLE: Procedural Sound Effects (gameplay audio, synthesised)
 CREATED: 2026-09-22
@@ -956,6 +956,14 @@ ORDER 3 — THE BESTIARY VOICE
   - Catalog: six families x three moments = 18 recipes, registered in one loop over
     `EnemyFamily.values()` from a per-family base recipe, so a new family is ONE base recipe.
   - The generic enemy attack/death from Order 2 stay as the fallback for an unbound family.
+  AS BUILT (IMPLEMENTED): `EnemyVoiceMoment` lives in `enemy/`, not `audio/`, so `EnemyManager`
+    keeps no audio import. The listener carries ALERT + DEATH only; ATTACK rides the existing
+    `EnemyAttackFanout` (melee -> family ATTACK voice; ranged keeps the shared launch, so shot vs
+    swing stays audible). Each family is one `registerFamilyVoice(...)` call (base recipe + its
+    three ids) expanded across the three moment SHAPES; the generic death left
+    `ImpactEffectSystem.onEnemyKilled` (it also draws barrel blasts) for `killEnemy`. Fallback per
+    moment: ATTACK -> ENEMY_ATTACK_MELEE, DEATH -> ENEMY_DEATH, ALERT -> silence. Family-pitched
+    ranged launch deferred to order 5. 52 sounds registered.
 
 ORDER 4 — THE FACILITY (doors, pickups, progression)
   - A `DoorStateListener` in the door package; wire the two transitions.
@@ -963,6 +971,15 @@ ORDER 4 — THE FACILITY (doors, pickups, progression)
     PLAYER_HEAL, LEVEL_UP, KILL_CONFIRM, FOOTSTEP. (14)
   - Wiring: the six pickup methods in `PlayerController`, `tryHeal`, the level-up branch, the
     existing kill-event listener.
+  AS BUILT (IMPLEMENTED): `door/DoorStateListener` (onDoorOpening / onDoorClosing), fired from
+    `requestOpen`, the auto-close and `lockArenaDoor`. PLAYER_HEAL fires where HP is actually
+    restored (`advanceHealing`), not in `tryHeal`. The weapon pickup is not in PlayerController (that
+    method only opens the card): every take path in `World` now funnels through
+    `takeStandingGroundWeapon`, which plays PICKUP_WEAPON (or PICKUP_AMMO for a breakdown).
+    THE CAP: this tally omitted LEVEL_UP and KILL_CONFIRM, so order 4 came to 67 against the cap of
+    64. Three rows were CUT instead of raising it — the two order-2 generics ENEMY_ATTACK_MELEE /
+    ENEMY_DEATH (unreachable once every family was voiced; an unbound family now borrows the
+    ABERRATION voice) and DOOR_UNLOCK (same instant, same tile as DOOR_OPEN). 64 sounds, exactly.
 
 ORDER 5 — THE MIX (polish; no new sounds)
   - `SoundMixer` rule 5: the one-way story duck; `StoryAudio` stamps, `GameAudio` reads.
@@ -972,6 +989,15 @@ ORDER 5 — THE MIX (polish; no new sounds)
     `GameAudio.setNoiseListener(...)` added (no consumer yet — the hook is the deliverable).
   - Delete whatever the playtest hated. The fix for "too much sound" is to delete rows, never to
     add another toggle — the same rule the story layer's pacing budget states.
+  AS BUILT (IMPLEMENTED): the duck is wired by a cue-played listener on `StoryAudio` (runs only
+    when a story sound actually starts) -> `GameAudio.noteStoryCuePlayed`; `World.onApplicationResume`
+    resets the mixer. The seam is `audio/NoiseListener` (primitives, no NoiseEvent allocation),
+    reported BEFORE every presentation gate so muting never changes what enemies hear; all 64
+    definitions declare loudness. Also landed here: the ranged launch pitched per family (deferred
+    from order 3). The TUNING PASS was offline — a phone-speaker-curve loudness survey against the
+    shotgun/barrel anchors (docs/sound-system.txt section 11 lists every change); the on-device and
+    earbud listening pass, and any deletions it motivates, are still owed. Q3 (railgun ready tone)
+    and Q5 (region ALERT pitch) declined, reasons in the doc.
 
 
 OPEN QUESTIONS

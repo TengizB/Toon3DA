@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.audio;
 
 /**
  * The stable id of every gameplay sound — the vocabulary every call site speaks
- * (procedural-sound-effects orders 1 and 2).
+ * (procedural-sound-effects orders 1-4).
  *
  * <p>Ids are ordinal-indexed throughout the layer ({@code Sound[]}, last-play timestamps, play
  * counters), so every lookup is an array read and nothing on a firing path allocates or hashes.
@@ -55,10 +55,48 @@ public enum GameSoundId {
     IMPACT_BLOCKED,
 
     // --- Enemies and the world ----------------------------------------------------------------
-    ENEMY_ATTACK_MELEE,
     ENEMY_ATTACK_RANGED,
-    ENEMY_DEATH,
-    BARREL_EXPLOSION;
+    BARREL_EXPLOSION,
+
+    // --- Enemy family voices: one set per EnemyFamily, never per EnemyType (order 3) ----------
+    // Bound to their family in GameSoundCatalog; a family with no binding borrows ABERRATION's.
+    ENEMY_ABERRATION_ALERT,
+    ENEMY_ABERRATION_ATTACK,
+    ENEMY_ABERRATION_DEATH,
+    ENEMY_UNDEAD_ALERT,
+    ENEMY_UNDEAD_ATTACK,
+    ENEMY_UNDEAD_DEATH,
+    ENEMY_INSECT_ALERT,
+    ENEMY_INSECT_ATTACK,
+    ENEMY_INSECT_DEATH,
+    ENEMY_MACHINE_ALERT,
+    ENEMY_MACHINE_ATTACK,
+    ENEMY_MACHINE_DEATH,
+    ENEMY_DEMON_ALERT,
+    ENEMY_DEMON_ATTACK,
+    ENEMY_DEMON_DEATH,
+    ENEMY_GOLEM_ALERT,
+    ENEMY_GOLEM_ATTACK,
+    ENEMY_GOLEM_DEATH,
+
+    // --- The facility: doors, stairs, pickups, progression (order 4) --------------------------
+    DOOR_OPEN,
+    DOOR_CLOSE,
+    /** A refused door — flat and unfriendly, so it cannot be mistaken for a dropped tap. */
+    DOOR_LOCKED,
+    STAIRS_DESCEND,
+    PICKUP_AMMO,
+    PICKUP_MEDICAL,
+    PICKUP_ARMOUR,
+    PICKUP_KEYCARD,
+    PICKUP_WEAPON,
+    PICKUP_CREDIT,
+    PLAYER_HEAL,
+    LEVEL_UP,
+    /** The XP receipt, deliberately near the floor of the mix. */
+    KILL_CONFIRM,
+    /** The quietest thing in the mix, and the first candidate for deletion. */
+    FOOTSTEP;
 
     public static final int COUNT = values().length;
 }

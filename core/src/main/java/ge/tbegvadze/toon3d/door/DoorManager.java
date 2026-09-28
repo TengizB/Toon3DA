@@ -39,6 +39,10 @@ public class DoorManager {
     // (narrative-rework order-2 D). Doors auto-close and re-open, so only "> 0" is meaningful.
     private int openedDoorCount;
 
+    // Cosmetic door-movement hook (procedural-sound-effects order 4). Null in the headless
+    // simulator, where every notification is skipped.
+    private DoorStateListener doorStateListener;
+
     public DoorManager(Level level) {
         doorsByPackedKey = new HashMap<>();
         lockedDoorColors = new HashMap<>();
@@ -211,6 +215,10 @@ public class DoorManager {
         long key = packKey(tileColumn, tileRow);
         Door door = doorsByPackedKey.get(key);
         if (door == null) return;
+        // A door slammed shut behind the player is heard; one already shut makes no sound.
+        if (door.state != DoorState.CLOSED && doorStateListener != null) {
+            doorStateListener.onDoorClosing(tileColumn, tileRow);
+        }
         door.state             = DoorState.CLOSED;
         door.animationProgress = 0f;
         arenaLockedDoors.add(key);
@@ -243,15 +251,22 @@ public class DoorManager {
                 door.state             = DoorState.OPENING;
                 door.animationProgress = 0f;
                 openedDoorCount++;
+                if (doorStateListener != null) doorStateListener.onDoorOpening(tileColumn, tileRow);
                 break;
             case CLOSING:
                 door.animationProgress = 1f - door.animationProgress;
                 door.state             = DoorState.OPENING;
+                if (doorStateListener != null) doorStateListener.onDoorOpening(tileColumn, tileRow);
                 break;
             case OPENING:
             case OPEN:
                 break;
         }
+    }
+
+    /** Wires the cosmetic door-movement hook (sound). Null clears it. */
+    public void setDoorStateListener(DoorStateListener listener) {
+        this.doorStateListener = listener;
     }
 
     /**
@@ -273,6 +288,9 @@ public class DoorManager {
             if (door.tileColumn != playerTileColumn || door.tileRow != playerTileRow) {
                 door.state             = DoorState.CLOSING;
                 door.animationProgress = 0f;
+                if (doorStateListener != null) {
+                    doorStateListener.onDoorClosing(door.tileColumn, door.tileRow);
+                }
             }
         }
     }
