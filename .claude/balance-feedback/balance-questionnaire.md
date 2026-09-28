@@ -51,24 +51,24 @@ Answer: both.
 
 **B3.** Name up to three moments from recent runs where the balance felt clearly
 WRONG. For each: depth, floor type, what happened, what you expected instead.
-Answer:
+Answer: everything fells wrong now, sometimes there are too few enemies and to much resources and other times vice versa especially on starting levels. and also game feels wrong because I feel no progress with leveling up and gaining new weapons. I can play with level 1 weapon every confident even on higher levels and still feel ok. I want to feel that level 2 weapon is actually much stronger than level 2 weapon. and enemies health must scale with it. I want to feel like I can not play with level 1 weapon on level 3 map.
 
 **B4.** Name any moment where the balance felt RIGHT — tense, fair, satisfying.
 (We protect these while changing everything else.)
-Answer:
+Answer: I do not know.
 
 **B5.** When you die, does it feel like YOUR mistake, or like the game cheated / was
 random? If it feels unfair, what makes it feel that way?
-Answer:
+Answer: I feel like I had no resources to win. the game feels very easy untill there are resources and where there are no resources I die. but the game must feel like you died because of mistakes and not because you did not even have a chance.
 
 **B6.** Is there a point in a run where it stops being fun? (boring, grindy,
 hopeless, too long…) At what depth, roughly?
-Answer:
+Answer: starting levels feel boring because there are too few enemies, levels in general are big but empty and nothing is happening much.
 
 **B7.** Which reference games have the difficulty feel you want?
 (Doom RPG, Slay the Spire, Hades, Enter the Gungeon, Brogue, Darkest Dungeon, …)
 What exactly do you like about their difficulty?
-Answer:
+Answer: pixel dungeon, spay the spire, 
 
 ---
 
