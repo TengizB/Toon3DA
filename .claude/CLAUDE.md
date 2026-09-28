@@ -215,9 +215,11 @@ New class: pick the most specific matching package. If none fits, add a subpacka
 
 A `PostToolUse` hook runs `code-reviewer` automatically after every Write/Edit to a `.java` file. No manual trigger needed.
 
-`code-reviewer` reviews correctness, LibGDX practice, dispose safety and math. It must **not** recommend adding tests outside the balance scope defined below — "this needs a unit test" is not a valid review finding for ordinary feature work.
+`code-reviewer` reviews correctness, LibGDX practice, dispose safety and math. Under the testing HARD RULE below it must **never** recommend adding tests outside the balance scope — "this needs a unit test" is not a valid review finding.
 
 ## Testing Policy — MANDATORY
+
+> **HARD RULE — AGENTS NEVER GENERATE NEW TESTS. The ONLY exception is GAME BALANCE** (the files listed below). Outside balance, no agent — main thread, orchestrator, any spoke, any command — writes a new test file, adds a new test method, plans one in an idea file, recommends one in a review, or asks whether one should be written. There is no "this one is different": renderers, story, levels, weapons, enemies, items, input, refactors and bug fixes all ship with zero new tests, verified by `./gradlew build` + `./gradlew lwjgl3:run`. Only the owner can lift this, and only by explicitly asking for a specific test.
 
 **This project has a small testing budget. The default is: DO NOT write new tests.**
 
@@ -257,8 +259,8 @@ Adding a bark line, a codex entry, a room blueprint, a sprite, a weapon or an en
 - **Never delete, disable, `@Ignore` or weaken an existing test to make a change pass.** The existing suite (story, route, tileset, level, enemy) stays green and stays the gate — it is already paid for.
 - **Updating an existing test because behaviour legitimately changed is expected and is not "writing a new test."** Do it in the same commit.
 - **Never add a test dependency, framework, harness, fixture directory or CI job.** No mocking libraries, no new Gradle test source sets.
-- If you genuinely believe something outside the balance scope needs a test, **say so in one sentence and ask** — do not write it unprompted. The answer is usually no.
-- A user asking for a test is always sufficient authorisation. This policy governs your own initiative, not their requests.
+- **Do not propose or ask for a non-balance test.** Not in a report, not in a review, not in an idea file. The answer is fixed: no.
+- The owner explicitly asking for a specific test is the only thing that authorises one outside balance. An agent never infers that request, and never treats "add tests" in a spec it wrote itself as that request.
 
 ## Two Lanes
 
@@ -845,7 +847,7 @@ batch.draw(wallTexture,
                         # docs/game-balance-authority.txt SECTION 7 — THE CHANGE PROTOCOL)
 ```
 
-Both gates RUN on every commit; new tests are only ever WRITTEN for balance — see
+Both gates RUN on every commit; new tests are only ever WRITTEN for balance (HARD RULE) — see
 **Testing Policy — MANDATORY** above. Non-balance work is verified with `./gradlew build`
 plus `./gradlew lwjgl3:run`, not with a new test.
 

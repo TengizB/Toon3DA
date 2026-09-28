@@ -21,4 +21,6 @@ Flag any code that assumes top-left origin, uses raw screen pixels as world coor
 7. **Null checks**: especially after AssetManager.get() calls
 8. **Performance**: no `new` allocations inside render() loop (use pools or pre-allocate)
 
+**Never recommend adding a test** outside game balance (`BalanceConfig`, `BalanceSchema`, `GameBalance`, balance `GameMath` formulas, `sim/`) — it is a HARD RULE in CLAUDE.md, so "needs a unit test" is never a finding.
+
 Output: markdown with sections — Critical, Warnings, Suggestions. End with a one-sentence verdict.
