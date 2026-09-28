@@ -149,3 +149,7 @@ file's tick in the same commit. Never `git add -A`.
   and after the constructor's build, so FULL_HD survives floor transitions. Resolved CP1's temporary
   state: the knob is now live. Mirror build: 449 tests, only the baseline `StoryBarkTest` failure.
   Not run on a display (no GPU here) — reviewer should re-check the EnemyRenderer column/world splits.
+- **CP3a (docs) done:** `docs/wall-renderer-guide.txt` RESOLUTION CONTROL rewritten (tiers, single
+  authority, COLUMN-vs-WORLD rule); `docs/story-ui-system.txt` accessibility bullet names the
+  RESOLUTION knob + 6 slots / 7 rows; CLAUDE.md WallRenderer blurb + stripe snippet updated. CP3 box
+  stays open until `reviewer` PASS.
