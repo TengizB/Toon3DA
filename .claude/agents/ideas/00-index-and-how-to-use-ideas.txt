@@ -1,0 +1,77 @@
+HOW TO USE THE IDEAS FOLDER
+===========================
+PURPOSE: what an idea file is, how it moves from request to shipped, and how
+         big work is split. Read before writing or implementing one.
+
+WHAT AN IDEA FILE IS
+--------------------
+One .txt per piece of full-lane work, written by creative-game-designer
+BEFORE anything is built, and kept afterwards as the record of what was
+decided and why. An approved idea file IS the specification:
+  - ACCEPTANCE CRITERIA define "done";
+  - the SCOPE OUT list is binding - the implementer does not build it;
+  - the IMPLEMENTATION PLAN is the starting point, adjusted (and said so)
+    where reality disagrees;
+  - the CHECKPOINTS section is where it is safe to stop.
+
+New files follow _TEMPLATE.txt. Files written before the template exist
+in the older shape (OVERVIEW / GAMEPLAY LOOP / ... / OPEN QUESTIONS) and
+are still valid specs; the implementer derives checkpoints from their
+TECHNICAL NOTES instead of sending them back.
+
+THE LIFECYCLE
+-------------
+  owner's request
+     |
+  creative-game-designer   refines, fills gaps, decides by default, asks
+     |                     only the critical questions ONCE, writes the plan
+  <name>.txt               STATUS: NOT IMPLEMENTED
+     |
+  owner reads it  ->  asks for changes (back to the designer)  ->  approves
+     |
+  orchestrator             CP0 checkpoint file committed FIRST, then the
+     |                     hub-and-spoke pipeline, commit + push per checkpoint
+  reviewer PASS  ->  STATUS: IMPLEMENTED + date
+
+Rules:
+  - An idea with a non-empty OPEN QUESTIONS section is NOT implementable.
+    The orchestrator refuses it and routes it back to the designer.
+  - Only the orchestrator changes STATUS, and only to IMPLEMENTED after
+    reviewer returns PASS. A file marked IMPLEMENTED that is not built is
+    the worst failure this system can produce.
+  - If implementation diverged from the plan, the orchestrator appends an
+    IMPLEMENTATION NOTE / AS BUILT paragraph under the header saying what
+    changed and why.
+  - Short-lane work (see "Two Lanes" in .claude/CLAUDE.md) gets NO idea
+    file. The designer declines it in one sentence.
+
+NAMING
+------
+  <kebab-case-name>.txt                  a single idea
+  <part>-order-<n>.txt                   one step of a part too big for
+                                         one session, built strictly in
+                                         ascending order
+  <part>.txt  (optional)                 the part's master index, STATUS:
+                                         SPLIT INTO ORDER FILES
+
+SPLITTING
+---------
+Split when the work will not fit one session, or would need more than ~10
+checkpoints. Each ordered file carries its own STATUS and its own
+CHECKPOINTS, leaves the game building and playable, and may depend only
+on LOWER-numbered files - never on a later one. Do not split one coherent
+feature into artificial phases.
+
+FINDING THINGS
+--------------
+  grep -l "^STATUS: NOT IMPLEMENTED" .claude/agents/ideas/*.txt
+  grep -l "^STATUS: IN PROGRESS"     .claude/agents/ideas/*.txt
+The STATUS line in each header is the register; there is no separate list
+to keep in sync.
+
+CHECKPOINTS
+-----------
+Every full-lane idea file is built against
+  .claude/checkpoints/<idea-file-basename>.md
+The path is derived, so "continue <idea>" is enough for a fresh session
+to find it. Protocol: .claude/checkpoints/README.md.

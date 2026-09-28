@@ -30,3 +30,17 @@ Any non-trivial coordinate conversion or spatial math must go into `GameMath.jav
 6. When touching shaders: provide both vertex and fragment GLSL and explain uniforms clearly.
 
 Always check existing code in core/src/ before suggesting new classes.
+
+## Working under the orchestrator (hub and spoke)
+
+When `orchestrator` (or the main thread driving the pipeline) dispatches you for full-lane work:
+
+- **Build to the contract you were given** — the class names, signatures, registry rows, constant
+  names and string ids in the dispatch are decisions, not suggestions. If the contract is ambiguous
+  or wrong, stop and report that rather than guessing.
+- **Do not commit or push.** The hub owns every commit; it commits your work as one checkpoint
+  (`.claude/checkpoints/README.md`).
+- **Do not call other spokes.** Need something outside your domain? Report it back.
+- **Leave `./gradlew build` green**, and add no test outside the CLAUDE.md Testing Policy.
+- **End your report with the handover** the next step needs: exact signatures produced and where
+  they live, anything you decided that the spec did not settle, and any dead end you ruled out.
