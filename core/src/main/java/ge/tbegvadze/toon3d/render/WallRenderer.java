@@ -15,6 +15,7 @@ import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RenderResolution;
 import ge.tbegvadze.toon3d.util.TilesetConstants;
 
 import java.util.Arrays;
@@ -90,6 +91,21 @@ public class WallRenderer implements Renderable, Disposable {
     // they are not part of any level's EnvironmentTextureSet. Char-indexed table (ASCII index 0–127);
     // Arrays.fill initialises every slot to the plain-door default, named chars override it.
     private final Texture[] doorTextureTable;
+
+    // Runtime render-resolution authority (util/RenderResolution) — see setRenderResolution(). Defaults
+    // to HD so a WallRenderer never rendered through World.applyStoryAccessibilitySettings() still
+    // reproduces the historic fixed 1280-column behaviour byte-identically (design rule R5).
+    private RenderResolution renderResolution    = RenderResolution.HD;
+    private int              projectionColumnCount = renderResolution.getProjectionColumnCount();
+    /*
+     * Formula: projection column width in world units
+     * Derivation: the 3D view always projects onto the fixed Constants.WORLD_WIDTH (1280) world-unit
+     *   screen (FitViewport never changes); raising the column count only narrows how much of that
+     *   fixed world width a single column covers: columnWidth = WORLD_WIDTH / projectionColumnCount.
+     *   HD: 1280 / 1280 = 1.0 (the historic fixed column width, byte-identical). FULL_HD: 1280 / 1920 ≈ 0.667.
+     * Edge cases: projectionColumnCount is always a positive RenderResolution constant, never zero.
+     */
+    private float             columnWidth          = WORLD_WIDTH / (float) projectionColumnCount;
 
     private float playerWorldX        = 0f;
     private float playerWorldY        = 0f;
@@ -179,9 +195,11 @@ public class WallRenderer implements Renderable, Disposable {
     public WallRenderer(Level level, DoorManager doorManager) {
         this.level       = level;
         this.doorManager = doorManager;
-        // Each column can produce up to 2 draws (background surface + door panel overlay).
-        this.batch   = new SpriteBatch(2 * WALL_PROJECTION_SCREEN_WIDTH + 2);
-        this.zBuffer = new float[WALL_PROJECTION_SCREEN_WIDTH];
+        // Each column can produce up to 2 draws (background surface + door panel overlay). Sized for the
+        // largest render-resolution tier (RENDER_RESOLUTION_MAX_COLUMNS) so setRenderResolution() only
+        // ever swaps the runtime column count/width — never reallocates these arrays/batch.
+        this.batch   = new SpriteBatch(2 * RENDER_RESOLUTION_MAX_COLUMNS + 2);
+        this.zBuffer = new float[RENDER_RESOLUTION_MAX_COLUMNS];
 
         // Wall + column textures are no longer built or owned here (order-7). They are supplied per level
         // by the EnvironmentTextureSet and cached into levelWallTextures/levelColumn* by
@@ -207,8 +225,8 @@ public class WallRenderer implements Renderable, Disposable {
         doorTextureTable['B'] = doorTextureBlue;
 
         // --- Parallel compute infrastructure ---
-        columnResults = new WallColumnResult[WALL_PROJECTION_SCREEN_WIDTH];
-        for (int columnIndex = 0; columnIndex < WALL_PROJECTION_SCREEN_WIDTH; columnIndex++) {
+        columnResults = new WallColumnResult[RENDER_RESOLUTION_MAX_COLUMNS];
+        for (int columnIndex = 0; columnIndex < RENDER_RESOLUTION_MAX_COLUMNS; columnIndex++) {
             columnResults[columnIndex] = new WallColumnResult();
         }
 
@@ -2013,6 +2031,30 @@ public class WallRenderer implements Renderable, Disposable {
         this.cachedPlaneY = GameMath.cameraPlaneY(playerDirectionX, planeScale);
     }
 
+    /**
+     * The SINGLE runtime authority for the 3D view's internal projection resolution (checkpoint contract
+     * C3). Every other scene renderer that holds this WallRenderer (Prop, Enemy, ShopMachine,
+     * EnemyAttackEffectSystem) reads {@link #getProjectionColumnCount()} / {@link #getColumnWidth()} each
+     * render() call instead of keeping its own copy, so nothing can drift out of sync with this setting.
+     * Swaps two primitives only — zBuffer/columnResults/batch are already sized for
+     * {@code RENDER_RESOLUTION_MAX_COLUMNS}, so this never allocates or reallocates.
+     */
+    public void setRenderResolution(RenderResolution renderResolution) {
+        this.renderResolution      = renderResolution;
+        this.projectionColumnCount = renderResolution.getProjectionColumnCount();
+        this.columnWidth           = WORLD_WIDTH / (float) projectionColumnCount;
+    }
+
+    /** The current runtime ray-column count (HD 1280 / FULL_HD 1920) — see {@link #setRenderResolution}. */
+    public int getProjectionColumnCount() {
+        return projectionColumnCount;
+    }
+
+    /** The current runtime width, in world units, of one projection column — see {@link #setRenderResolution}. */
+    public float getColumnWidth() {
+        return columnWidth;
+    }
+
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
     }
@@ -2096,12 +2138,12 @@ public class WallRenderer implements Renderable, Disposable {
 
     /** Returns the perpendicular wall distance (in tile units) for a given screen column. */
     public float getZBufferAt(int screenColumn) {
-        return zBuffer[MathUtils.clamp(screenColumn, 0, WALL_PROJECTION_SCREEN_WIDTH - 1)];
+        return zBuffer[MathUtils.clamp(screenColumn, 0, projectionColumnCount - 1)];
     }
 
     /**
      * Returns the perpendicular wall distance for the given screen column without bounds checking.
-     * Callers must guarantee screenColumn is in [0, WALL_PROJECTION_SCREEN_WIDTH).
+     * Callers must guarantee screenColumn is in [0, projectionColumnCount).
      */
     public float getZBufferUnchecked(int screenColumn) {
         return zBuffer[screenColumn];
@@ -2121,7 +2163,7 @@ public class WallRenderer implements Renderable, Disposable {
         // columnResults[] and zBuffer[]; all other accesses (level, doorManager,
         // textures, player-state fields) are read-only during this phase.
         if (workerCount > 1) {
-            int columnsPerWorker = WALL_PROJECTION_SCREEN_WIDTH / workerCount;
+            int columnsPerWorker = projectionColumnCount / workerCount;
             for (int workerIndex = 0; workerIndex < workers.length; workerIndex++) {
                 int startColumn = workerIndex * columnsPerWorker;
                 int endColumn   = startColumn + columnsPerWorker;
@@ -2130,13 +2172,13 @@ public class WallRenderer implements Renderable, Disposable {
             }
             // Main thread handles the tail chunk (absorbs any remainder columns).
             int mainThreadStart = workers.length * columnsPerWorker;
-            for (int screenColumn = mainThreadStart; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
+            for (int screenColumn = mainThreadStart; screenColumn < projectionColumnCount; screenColumn++) {
                 computeWallColumn(screenColumn);
             }
             // Arrive and block until all background workers have finished their ranges.
             phaser.arriveAndAwaitAdvance();
         } else {
-            for (int screenColumn = 0; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
+            for (int screenColumn = 0; screenColumn < projectionColumnCount; screenColumn++) {
                 computeWallColumn(screenColumn);
             }
         }
@@ -2145,15 +2187,15 @@ public class WallRenderer implements Renderable, Disposable {
         // Reads the fully-populated columnResults[] and issues SpriteBatch draw calls.
         // All OpenGL state changes happen on the GL thread only.
         batch.begin();
-        for (int screenColumn = 0; screenColumn < WALL_PROJECTION_SCREEN_WIDTH; screenColumn++) {
+        for (int screenColumn = 0; screenColumn < projectionColumnCount; screenColumn++) {
             WallColumnResult result = columnResults[screenColumn];
             if (!result.drawSurface && !result.drawDoorPanel) continue;
 
             if (result.drawSurface) {
                 batch.setColor(result.surfaceRed, result.surfaceGreen, result.surfaceBlue, 1f);
                 batch.draw(result.surfaceTexture,
-                           screenColumn * WALL_COLUMN_WIDTH, result.surfaceDrawBottom,
-                           WALL_COLUMN_WIDTH, result.surfaceDrawTop - result.surfaceDrawBottom,
+                           screenColumn * columnWidth, result.surfaceDrawBottom,
+                           columnWidth, result.surfaceDrawTop - result.surfaceDrawBottom,
                            result.surfaceTexColumn, result.surfaceTexSrcY,
                            1, result.surfaceTexSrcHeight,
                            false, false);
@@ -2162,8 +2204,8 @@ public class WallRenderer implements Renderable, Disposable {
             if (result.drawDoorPanel) {
                 batch.setColor(result.doorPanelRed, result.doorPanelGreen, result.doorPanelBlue, 1f);
                 batch.draw(result.doorPanelTexture,
-                           screenColumn * WALL_COLUMN_WIDTH, result.doorPanelDrawBottom,
-                           WALL_COLUMN_WIDTH, result.doorPanelDrawTop - result.doorPanelDrawBottom,
+                           screenColumn * columnWidth, result.doorPanelDrawBottom,
+                           columnWidth, result.doorPanelDrawTop - result.doorPanelDrawBottom,
                            result.doorPanelTexColumn, result.doorPanelTexSrcY,
                            1, result.doorPanelTexSrcHeight,
                            false, false);
@@ -2187,7 +2229,7 @@ public class WallRenderer implements Renderable, Disposable {
         float playerTileX = cachedPlayerTileX;
         float playerTileY = cachedPlayerTileY;
 
-        float cameraParameter = GameMath.cameraPlaneParameter(screenColumn, WALL_PROJECTION_SCREEN_WIDTH);
+        float cameraParameter = GameMath.cameraPlaneParameter(screenColumn, projectionColumnCount);
         float rayDirectionX   = GameMath.cameraPlaneRayDirectionX(directionX, cachedPlaneX, cameraParameter);
         float rayDirectionY   = GameMath.cameraPlaneRayDirectionY(directionY, cachedPlaneY, cameraParameter);
 

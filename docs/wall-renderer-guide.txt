@@ -16,12 +16,12 @@
 2. Floor rect (bottom half, dark gray 0.12,0.12,0.12) — same approach.
 3. [Auto batch flush here: whitePixelTexture → wallTexture]
 4. For each screen column: cast DDA ray → perpWallDistance → texColumn → draw 1px-wide wall stripe.
-   All 1280 draws accumulated in one batch call.
+   All column draws (1280 at HD, 1920 at FULL HD) accumulated in one batch call.
 
 batch.draw per column:
   batch.draw(wallTexture,
-             screenColumn * WALL_COLUMN_WIDTH, drawBottom,
-             WALL_COLUMN_WIDTH, drawTop - drawBottom,
+             screenColumn * columnWidth, drawBottom,
+             columnWidth, drawTop - drawBottom,
              texColumn, 0, 1, textureHeight,   // srcX, srcY, srcW, srcH
              false, false);                     // no flip needed
   srcY=0 = top of image; LibGDX Y-up maps image row 0 to visual top without manual flip.
@@ -31,15 +31,40 @@ Shading: batch.setColor(shade, shade, shade, 1f) before each draw — embeds tin
 Performance:
   Ceiling + floor  → 0 GL calls (batched, same texture)
   Texture switch   → 1 GL call  (whitePixelTexture → wallTexture)
-  1280 wall cols   → 1 GL call  (at batch.end())
+  all wall cols    → 1 GL call  (at batch.end())
   Total: 2 GL draw calls regardless of resolution or texture size.
 
 === RESOLUTION CONTROL ===
 
-WALL_PROJECTION_SCREEN_WIDTH = WORLD_WIDTH (1280) → crisp output
-Set to 320 for retro pixelated Doom look (each stripe = 4 world units wide).
-WALL_COLUMN_WIDTH = WORLD_WIDTH / WALL_PROJECTION_SCREEN_WIDTH
-Only one constant to change.
+The ray-column count is RUNTIME state, set by the player's RESOLUTION setting (settings screen
+and codex strip; persisted as `story.setting.render.resolution`). `util/RenderResolution`:
+
+  HD       1280 columns, columnWidth 1.0 world unit,   floor backdrop 320x180  (default)
+  FULL_HD  1920 columns, columnWidth 0.667 world unit, floor backdrop 480x270
+
+World units stay 1280x720 — only the 3D view's internal resolution changes. HUD, text and menus
+are already drawn at the device's native pixels.
+
+WallRenderer is the SINGLE authority: setRenderResolution(RenderResolution),
+getProjectionColumnCount(), getColumnWidth(). World.applyStoryAccessibilitySettings() pushes the
+setting into it and into FloorCeilingRenderer.setRenderResolution() at startup, on every knob
+tap and after every floor rebuild (rebuildForLevel builds fresh default-HD renderers).
+Arrays and SpriteBatches are sized for RenderConstants.RENDER_RESOLUTION_MAX_COLUMNS, so a
+change never allocates on the render path; only the floor backdrop Pixmap/Texture is rebuilt,
+and only when the tier actually changes.
+
+COLUMN SPACE vs WORLD X — the rule every billboard renderer must follow:
+  - GameMath.spriteScreenColumnCenter(..., projectionColumnCount) returns a COLUMN.
+  - A width computed in world units (e.g. from spriteScreenHeight) must be divided by
+    columnWidth before it is used as a column span in a per-column z-tested loop.
+  - Anything drawn with a single world-space call (health bars, intent icons, particles,
+    ShapeRenderer rects, text) must convert: worldX = column * columnWidth. Z-buffer lookups
+    use the column index.
+  At HD columnWidth == 1, so mixing the two is invisible there and breaks only at FULL HD.
+  ImpactEffectRenderer/System project against Constants.WORLD_WIDTH, i.e. straight to world X.
+
+A new tier (e.g. a retro 320-column look) is one RenderResolution constant plus its
+RenderConstants number and label string ids.
 
 === Z-BUFFER ===
 

@@ -78,10 +78,23 @@ public final class RenderConstants {
     // CAMERA_PLANE_SCALE = tan(FOV/2); = 1.0 for 90° FOV
     public static final float CAMERA_PLANE_SCALE              = (float) Math.tan(
             Constants.PLAYER_FIELD_OF_VIEW_RADIANS / 2.0);
-    // Set WALL_PROJECTION_SCREEN_WIDTH to 320 for retro pixelated look; WORLD_WIDTH for crisp
-    public static final int   WALL_PROJECTION_SCREEN_WIDTH    = Constants.WORLD_WIDTH;
+    // The 3D view's internal ray-column count is now runtime-switchable — see util.RenderResolution and
+    // WallRenderer.setRenderResolution()/getProjectionColumnCount()/getColumnWidth(), the SINGLE runtime
+    // authority every scene renderer (Prop, Enemy, ShopMachine, EnemyAttackEffectSystem) reads each frame.
+    // Vertical extent stays fixed at WORLD_HEIGHT regardless of the setting (only column COUNT and the
+    // floor backdrop vary — see RenderResolution's derivation comments).
     public static final int   WALL_PROJECTION_SCREEN_HEIGHT   = Constants.WORLD_HEIGHT;
-    public static final float WALL_COLUMN_WIDTH               = (float) Constants.WORLD_WIDTH / WALL_PROJECTION_SCREEN_WIDTH;
+
+    // Render resolution setting (util.RenderResolution) — how many ray columns the 3D view casts,
+    // independent of the fixed 1280x720 world/UI space it is composited into. HD reproduces the
+    // historic fixed 1280-column behaviour byte-identically; FULL_HD raises the column count.
+    // RENDER_RESOLUTION_MAX_COLUMNS sizes any array/SpriteBatch that must cover the largest tier.
+    public static final int    RENDER_RESOLUTION_HD_COLUMNS      = Constants.WORLD_WIDTH;
+    public static final int    RENDER_RESOLUTION_FULL_HD_COLUMNS = 1920;
+    public static final int    RENDER_RESOLUTION_MAX_COLUMNS     = RENDER_RESOLUTION_FULL_HD_COLUMNS;
+    // Persisted setting key. Stable once shipped — it is baked into saves (additive key, no
+    // SCHEMA_VERSION bump needed; see the SFX-volume-setting precedent).
+    public static final String RENDER_RESOLUTION_SETTING_KEY     = "render.resolution";
     // shade = max(MIN, 1 / (1 + d² × FALLOFF)). Steeper falloff increases near/far contrast.
     // At d=5: shade≈0.29  At d=10: shade≈0.091  MIN_BRIGHTNESS prevents full-black silhouettes.
     public static final float WALL_SHADING_FALLOFF            = 0.10f;
@@ -92,10 +105,11 @@ public final class RenderConstants {
     public static final float HORIZONTAL_FACE_SHADE_MULTIPLIER = 0.7f;
 
     // Floor & Ceiling texture rendering — see docs/dda-raycasting-math.txt
-    // SCALE_DIVISOR=4 → 320×180 backdrop (~16× cheaper than full-res); stretched by SpriteBatch
+    // The backdrop's actual pixel size is runtime-switchable — see util.RenderResolution
+    // (getFloorBackdropWidth()/getFloorBackdropHeight()) and FloorCeilingRenderer.setRenderResolution().
+    // SCALE_DIVISOR=4 is the ratio both tiers keep of their own projection column count (HD: 320×180,
+    // ~16× cheaper than full-res; FULL_HD: 480×270), stretched to the full screen by SpriteBatch either way.
     public static final int    FLOOR_BACKDROP_SCALE_DIVISOR    = 4;
-    public static final int    FLOOR_BACKDROP_WIDTH             = Constants.WORLD_WIDTH  / FLOOR_BACKDROP_SCALE_DIVISOR;
-    public static final int    FLOOR_BACKDROP_HEIGHT            = Constants.WORLD_HEIGHT / FLOOR_BACKDROP_SCALE_DIVISOR;
     // FLOOR_CAMERA_Z = 0.5 → camera exactly centred (horizon at screen centre)
     public static final float  FLOOR_CAMERA_Z                   = 0.5f;
     public static final float  FLOOR_SHADING_FALLOFF            = 0.05f;

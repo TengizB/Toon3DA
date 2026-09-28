@@ -1,12 +1,14 @@
 package ge.tbegvadze.toon3d.narrative;
 
 import ge.tbegvadze.toon3d.audio.SfxVolumeSetting;
+import ge.tbegvadze.toon3d.util.RenderConstants;
+import ge.tbegvadze.toon3d.util.RenderResolution;
 import ge.tbegvadze.toon3d.util.SoundConstants;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
- * The story-UI ACCESSIBILITY SETTINGS (Story UI order-6 Part D, extended by order-7 Part D) —
- * four knobs, persisted, applied
+ * The story-UI ACCESSIBILITY SETTINGS (Story UI order-6 Part D, extended by order-7 Part D, and by
+ * the render-resolution setting) — six knobs, persisted, applied
  * everywhere story text is drawn.
  *
  * <p>The design rule behind all of them: <b>a setting may only make the game easier to read, never
@@ -28,6 +30,9 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *       stings that say who is talking and the interface cues that say what just happened.  One
  *       switch for the whole layer, because every cue in it is redundant polish over text that is
  *       already on screen.</li>
+ *   <li>{@link #getRenderResolution()} — the 3D view's internal raycast resolution (HD / FULL HD),
+ *       not a UI setting in the "easier to read" sense above but sharing the same tap-to-cycle knob
+ *       idiom and settings-strip slot as the rest of this class; see {@link RenderResolution}.</li>
  * </ul>
  *
  * <p>State is cached in memory and written through to a {@link StoryProgressStore} the instant a
@@ -44,6 +49,8 @@ public final class StorySettings {
     private boolean                  storyAudioEnabled;
     /** Gameplay sound effects (procedural-sound-effects order 1) — three states, not a toggle. */
     private SfxVolumeSetting         sfxVolume;
+    /** The 3D view's internal raycast resolution — HD / FULL HD. Not an accessibility knob. */
+    private RenderResolution         renderResolution;
 
     /** In-memory settings at their defaults — tests and showcases. */
     public StorySettings() {
@@ -75,6 +82,9 @@ public final class StorySettings {
         this.sfxVolume = SfxVolumeSetting.values()[clampSettingOrdinal(
                 store.loadSettingInt(SoundConstants.GAME_SFX_SETTING_KEY,
                                      SfxVolumeSetting.ON.ordinal()))];
+        this.renderResolution = RenderResolution.fromOrdinal(
+                store.loadSettingInt(RenderConstants.RENDER_RESOLUTION_SETTING_KEY,
+                                     RenderResolution.HD.ordinal()));
     }
 
     /** A persisted ordinal that no longer exists (a downgrade, a corrupt save) falls back to ON. */
@@ -160,6 +170,17 @@ public final class StorySettings {
         setStoryAudioEnabled(!storyAudioEnabled);
     }
 
+    /** The 3D view's current internal raycast resolution. */
+    public RenderResolution getRenderResolution() {
+        return renderResolution;
+    }
+
+    /** Cycles HD -&gt; FULL_HD -&gt; HD and persists immediately. */
+    public void cycleRenderResolution() {
+        renderResolution = renderResolution.next();
+        store.saveSettingInt(RenderConstants.RENDER_RESOLUTION_SETTING_KEY, renderResolution.ordinal());
+    }
+
     // -------------------------------------------------------------------------
     // Derived values the systems and renderers actually consume
     // -------------------------------------------------------------------------
@@ -193,7 +214,8 @@ public final class StorySettings {
             // The audio button reads ON/OFF rather than the others' "reduced" phrasing, because it
             // is the one knob that removes something instead of calming it.
             case 3:  return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID + "." + (storyAudioEnabled ? 1 : 0);
-            default: return StoryUiConstants.STORY_CODEX_SETTING_SFX_ID + "." + sfxVolume.ordinal();
+            case 4:  return StoryUiConstants.STORY_CODEX_SETTING_SFX_ID + "." + sfxVolume.ordinal();
+            default: return renderResolution.getLabelStringId();
         }
     }
 
@@ -204,7 +226,8 @@ public final class StorySettings {
             case 1:  return StoryUiConstants.STORY_CODEX_SETTING_REVEAL_ID;
             case 2:  return StoryUiConstants.STORY_CODEX_SETTING_MOTION_ID;
             case 3:  return StoryUiConstants.STORY_CODEX_SETTING_AUDIO_ID;
-            default: return StoryUiConstants.STORY_CODEX_SETTING_SFX_ID;
+            case 4:  return StoryUiConstants.STORY_CODEX_SETTING_SFX_ID;
+            default: return StoryUiConstants.STORY_CODEX_SETTING_RESOLUTION_ID;
         }
     }
 
@@ -215,7 +238,8 @@ public final class StorySettings {
             case 1:  toggleReduceTextHold(); break;
             case 2:  toggleReduceMotion();   break;
             case 3:  toggleStoryAudio();     break;
-            default: cycleSfxVolume();       break;
+            case 4:  cycleSfxVolume();       break;
+            default: cycleRenderResolution(); break;
         }
     }
 }

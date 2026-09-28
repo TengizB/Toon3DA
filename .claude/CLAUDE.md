@@ -127,7 +127,7 @@ toon3D/
 │   │   ├── PlayerInventory.java         # Bridges Player ↔ Inventory + Loadout
 │   │   └── Loadout.java                 # Active weapon slots
 │   ├── render/
-│   │   ├── WallRenderer.java            # DDA 3D wall projection (1280×720)
+│   │   ├── WallRenderer.java            # DDA 3D wall projection (runtime 1280/1920 columns)
 │   │   ├── FloorCeilingRenderer.java    # Textured floor & ceiling backdrop
 │   │   ├── PropRenderer.java            # Billboard prop sprites
 │   │   ├── EnemyRenderer.java           # Enemy billboard sprites + health bars
@@ -465,7 +465,7 @@ Fields: `positionX`, `positionY` (world units), `directionX`, `directionY` (unit
 State machine: `IDLE` → `MOVING` or `ROTATING` → `IDLE`. `actionProgress` (0→1) drives lerp. Only one action at a time.
 
 ### `render/WallRenderer.java`
-Doom-style 3D view, full 1280×720 screen. Call `setPlayerState(worldX, worldY, dirX, dirY, fovRadians)` before each `render()`. Uses single `SpriteBatch`. Z-buffer: `getZBufferAt(int screenColumn)`. Owns `SpriteBatch`, `wallTexture`, `whitePixelTexture` — all disposed in `dispose()`.
+Doom-style 3D view, full 1280×720 world-unit screen. Ray-column count is runtime: 1280 (HD) or 1920 (FULL HD) from the player's RESOLUTION setting (`util/RenderResolution`); WallRenderer is the single authority (`setRenderResolution`, `getProjectionColumnCount()`, `getColumnWidth()`) — billboard renderers read it and must keep COLUMN space and WORLD X apart. Call `setPlayerState(worldX, worldY, dirX, dirY, fovRadians)` before each `render()`. Uses single `SpriteBatch`. Z-buffer: `getZBufferAt(int screenColumn)`. Owns `SpriteBatch`, `wallTexture`, `whitePixelTexture` — all disposed in `dispose()`.
 See `docs/wall-renderer-guide.txt` for pipeline details, GameMath methods, and extension guide.
 
 ### `render/LevelRenderer.java`
@@ -829,8 +829,8 @@ This project uses **`cameraParameter = 1 − 2 × col / W`** (Y-up correction).
 **Wall stripe render call:**
 ```java
 batch.draw(wallTexture,
-           screenColumn * WALL_COLUMN_WIDTH, drawBottom,
-           WALL_COLUMN_WIDTH, drawTop - drawBottom,
+           screenColumn * columnWidth, drawBottom,
+           columnWidth, drawTop - drawBottom,
            texColumn, 0, 1, textureHeight,
            false, false);
 ```

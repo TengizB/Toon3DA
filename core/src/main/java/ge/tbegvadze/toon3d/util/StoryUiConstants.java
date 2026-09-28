@@ -564,8 +564,11 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_FOOTER_GAP        = 14f;
     public static final float STORY_CODEX_FOOTER_Y          = STORY_CODEX_Y + STORY_CODEX_PADDING;
     public static final float STORY_CODEX_FOOTER_TEXT_SIZE  = 1.0f;
-    /** How many settings buttons the strip holds — text size, reveal pacing, motion, story audio. */
-    public static final int   STORY_CODEX_SETTING_COUNT     = 5;
+    /**
+     * How many settings buttons the strip holds — text size, reveal pacing, motion, story audio,
+     * gameplay SFX volume, render resolution.
+     */
+    public static final int   STORY_CODEX_SETTING_COUNT     = 6;
     public static final float STORY_CODEX_SETTING_GAP       = 12f;
     public static final float STORY_CODEX_SETTING_WIDTH     =
             (STORY_CODEX_BODY_WIDTH - (STORY_CODEX_SETTING_COUNT - 1) * STORY_CODEX_SETTING_GAP)
@@ -627,6 +630,8 @@ public final class StoryUiConstants {
      * gunfire, or gunfire without them.
      */
     public static final String STORY_CODEX_SETTING_SFX_ID      = "story.codex.setting.sfx";
+    /** The 3D view's internal raycast resolution knob — HD / FULL HD (util.RenderResolution). */
+    public static final String STORY_CODEX_SETTING_RESOLUTION_ID = "story.codex.setting.resolution";
 
     // =====================================================================
     // ACCESSIBILITY SETTINGS (order-6 Part D) — the player-facing knobs, and their persisted keys.
@@ -696,12 +701,12 @@ public final class StoryUiConstants {
 
     // --- MENU PLATES (the title menu, the pause menu, the settings rows) ---------------------
     // Big, high-contrast, thumb-first: a menu row that needs aiming is a row nobody presses.
-    /** Hard cap on a framing menu's rows — five is the longest menu the game has (title, settings). */
-    public static final int   STORY_FRAME_MENU_MAX_ROWS   = 6;
+    /** Hard cap on a framing menu's rows — the settings screen (6 knobs + BACK) is the longest menu. */
+    public static final int   STORY_FRAME_MENU_MAX_ROWS   = 7;
     public static final float STORY_FRAME_MENU_WIDTH      = 460f;
     public static final float STORY_FRAME_MENU_X          = (Constants.WORLD_WIDTH - STORY_FRAME_MENU_WIDTH) / 2f;
     public static final float STORY_FRAME_MENU_ROW_HEIGHT = 68f;
-    public static final float STORY_FRAME_MENU_ROW_GAP    = 12f;
+    public static final float STORY_FRAME_MENU_ROW_GAP    = 8f;
     /** Vertical pitch from one row's top edge to the next — the geometry hit-testing inverts. */
     public static final float STORY_FRAME_MENU_ROW_PITCH  =
             STORY_FRAME_MENU_ROW_HEIGHT + STORY_FRAME_MENU_ROW_GAP;
@@ -715,7 +720,7 @@ public final class StoryUiConstants {
     /** A settings row shows its current value on the right, a shade smaller than its name. */
     public static final float STORY_FRAME_MENU_VALUE_TEXT_SIZE    = 1.1f;
     /** Top edge of the first row on the pause / settings screens (the title screen sits lower). */
-    public static final float STORY_FRAME_MENU_TOP_Y   = 540f;
+    public static final float STORY_FRAME_MENU_TOP_Y   = 560f;
     /** The screen's own heading ("SUIT PAUSED", "SETTINGS"), centred above the rows. */
     public static final float STORY_FRAME_HEADER_TOP_Y   = 624f;
     public static final float STORY_FRAME_HEADER_TEXT_SIZE = 1.7f;

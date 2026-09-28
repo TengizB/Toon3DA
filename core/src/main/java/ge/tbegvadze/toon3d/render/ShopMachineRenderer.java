@@ -12,6 +12,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RenderResolution;
 
 import java.util.Collections;
 import java.util.List;
@@ -71,6 +72,13 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     private float lightingTimeSeconds = 0f;
     private float alertPulse          = 0f;
 
+    // Runtime render-resolution authority (util/RenderResolution via WallRenderer) — cached once per
+    // render() call, read by drawMachine()/drawLayer() below. Every layer is drawn per-column (mirrors
+    // PropRenderer's per-column loop, as drawLayer below does), so a WORLD-unit width must be divided by
+    // columnWidth before it is used as a column span.
+    private int   projectionColumnCount = RenderResolution.HD.getProjectionColumnCount();
+    private float columnWidth           = WORLD_WIDTH / (float) projectionColumnCount;
+
     // Scratch for far→near sort — sized to the max machines a floor can hold (kept generous).
     private static final int MAX_MACHINES = 8;
     private final int[]   sortedIndices = new int[MAX_MACHINES];
@@ -79,7 +87,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     public ShopMachineRenderer(Level level, WallRenderer wallRenderer) {
         this.level        = level;
         this.wallRenderer = wallRenderer;
-        this.batch        = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
+        this.batch        = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
         this.bodyTexture     = bakeBodyTexture();
         this.glowTexture     = generateRadialGlowTexture();
         this.holoSignTexture = generateHoloSignTexture();
@@ -117,6 +125,9 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
     @Override
     public void render(OrthographicCamera camera) {
+        this.projectionColumnCount = wallRenderer.getProjectionColumnCount();
+        this.columnWidth           = wallRenderer.getColumnWidth();
+
         int machineCount = Math.min(machines.size(), MAX_MACHINES);
         if (machineCount == 0) return;
 
@@ -169,7 +180,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
         float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                 tileOffsetX, tileOffsetY, directionX, directionY,
-                planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                planeX, planeY, projectionColumnCount);
 
         float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
         float spriteHeight = fullWallLineHeight * SHOP_SPRITE_HEIGHT_FRACTION;
@@ -236,7 +247,10 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
         // ── 4. Status light halo (state-coloured; dim & steady when depleted, blinks on dispense) ──
         float statusCenterY = drawTop - SHOP_STATUS_CENTER_FRACTION_FROM_TOP * spriteHeight;
-        float statusCenterX = screenCenterColumn + (SHOP_STATUS_CENTER_FRACTION_FROM_LEFT - 0.5f) * spriteWidth;
+        // The offset is a WORLD-unit distance (derived from spriteWidth); divide by columnWidth before
+        // adding it to screenCenterColumn, which is COLUMN-space (drawLayer() draws per-column).
+        float statusCenterX = screenCenterColumn
+                + (SHOP_STATUS_CENTER_FRACTION_FROM_LEFT - 0.5f) * spriteWidth / columnWidth;
         float statusAlpha;
         if (depleted) {
             statusAlpha = SHOP_STATUS_BASE_ALPHA * 0.5f;    // dim red, no pulse
@@ -288,8 +302,10 @@ public class ShopMachineRenderer implements Renderable, Disposable {
      */
     private void drawLayer(Texture texture, float screenCenterColumn, float centerY,
                            float layerWidth, float layerHeight, float depth, boolean writeOccluder) {
-        int leftColumn  = (int) (screenCenterColumn - layerWidth / 2f);
-        int rightColumn = (int) (screenCenterColumn + layerWidth / 2f);
+        // layerWidth is a WORLD-unit quantity; convert to a COLUMN span before using it as one (a
+        // column only equals one world unit at HD — see WallRenderer.getColumnWidth()).
+        int leftColumn  = (int) (screenCenterColumn - layerWidth / (2f * columnWidth));
+        int rightColumn = (int) (screenCenterColumn + layerWidth / (2f * columnWidth));
         int columnSpan  = rightColumn - leftColumn;
         if (columnSpan <= 0) return;
 
@@ -307,7 +323,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         texSrcHeight = Math.max(1, texSrcHeight);
 
         int firstColumn = Math.max(0, leftColumn);
-        int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightColumn);
+        int lastColumn  = Math.min(projectionColumnCount - 1, rightColumn);
         for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
             if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
             if (propZBuffer != null && depth >= propZBuffer[screenColumn]) continue;
@@ -319,8 +335,8 @@ public class ShopMachineRenderer implements Renderable, Disposable {
             int texSrcX = (screenColumn - leftColumn) * textureWidth / columnSpan;
             texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
             batch.draw(texture,
-                       screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                       WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                       screenColumn * columnWidth, clampedBottom,
+                       columnWidth, clampedTop - clampedBottom,
                        texSrcX, texSrcY, 1, texSrcHeight,
                        false, false);
         }

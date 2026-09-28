@@ -912,8 +912,13 @@ PACING, ANTI-SKIP, ACCESSIBILITY, TELEMETRY
   - ANTI-SKIP: one tap always advances, and NO channel advances itself or runs on a timer. The spine
     therefore rides the boot card, one-shot STORY_CRITICAL barks and the blocking ending exchange;
     `StorySkimmerPathTest` asserts a skimmer still gets the whole plot.
-  - ACCESSIBILITY (`StorySettings`, four knobs): text size (wrap sooner, never overflow), boot-card
+  - ACCESSIBILITY (`StorySettings`, four story knobs of six): text size (wrap sooner, never overflow), boot-card
     reveal pacing, reduced motion, story audio. Every default is the comfortable end of its scale.
+    The same model carries two non-story knobs on the same strip/screen: EFFECTS (gameplay SFX,
+    `docs/sound-system.txt`) and RESOLUTION (HD / FULL HD — the 3D view's internal raycast
+    resolution, `util/RenderResolution`, key `render.resolution`, additive, no schema bump; see
+    `docs/wall-renderer-guide.txt`). Six slots in all (`STORY_CODEX_SETTING_COUNT`); the settings
+    screen is 7 rows with BACK, which is why `STORY_FRAME_MENU_MAX_ROWS` is 7.
     There is no "disable timers" toggle because there are no timers.
   - TELEMETRY (`StoryTelemetry`): in-memory counters only — no identifiers, no I/O, no PII. The
     number that matters is the fast-dismiss fraction: a line closed inside

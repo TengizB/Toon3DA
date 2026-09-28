@@ -114,6 +114,7 @@ public final class CodexStrings {
         strings.put("story.codex.setting.motion",   "MOTION");
         strings.put("story.codex.setting.audio",    "SOUND");
         strings.put("story.codex.setting.sfx",      "EFFECTS");
+        strings.put("story.codex.setting.resolution", "RESOLUTION");
         // Setting VALUES, indexed by the settings model's own enums / booleans.
         strings.put("story.codex.setting.text.0",   "NORMAL");
         strings.put("story.codex.setting.text.1",   "LARGE");
@@ -129,6 +130,9 @@ public final class CodexStrings {
         strings.put("story.codex.setting.sfx.0",    "OFF");
         strings.put("story.codex.setting.sfx.1",    "QUIET");
         strings.put("story.codex.setting.sfx.2",    "ON");
+        // The 3D view's internal raycast resolution — HD / FULL HD (util.RenderResolution).
+        strings.put("story.codex.setting.resolution.0", "HD");
+        strings.put("story.codex.setting.resolution.1", "FULL HD");
     }
 
     private static void registerCategories(StoryStrings strings) {

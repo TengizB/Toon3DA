@@ -156,11 +156,14 @@ public class PropRenderer implements Renderable, Disposable {
         int propCount       = propPlacements.size();
         this.sortedIndices          = new int[propCount];
         this.sortedDepths           = new float[propCount];
-        this.propSpriteZBuffer      = new float[WALL_PROJECTION_SCREEN_WIDTH];
-        this.propSpriteColumnBottom = new float[WALL_PROJECTION_SCREEN_WIDTH];
-        this.propSpriteColumnTop    = new float[WALL_PROJECTION_SCREEN_WIDTH];
+        // Sized for the largest render-resolution tier (RENDER_RESOLUTION_MAX_COLUMNS) so switching the
+        // knob at runtime never reallocates; only the columns below wallRenderer.getProjectionColumnCount()
+        // are read/written each frame.
+        this.propSpriteZBuffer      = new float[RENDER_RESOLUTION_MAX_COLUMNS];
+        this.propSpriteColumnBottom = new float[RENDER_RESOLUTION_MAX_COLUMNS];
+        this.propSpriteColumnTop    = new float[RENDER_RESOLUTION_MAX_COLUMNS];
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
-        this.batch                        = new SpriteBatch(WALL_PROJECTION_SCREEN_WIDTH);
+        this.batch                        = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
         this.textures                     = buildTextures();
         this.weaponPickupTextures         = buildWeaponPickupTextures();
         this.genericWeaponFallbackTexture = generateWeaponPickupTexture();
@@ -315,6 +318,12 @@ public class PropRenderer implements Renderable, Disposable {
 
     @Override
     public void render(OrthographicCamera camera) {
+        // Runtime render-resolution authority (util/RenderResolution via WallRenderer, see CLAUDE.md
+        // WallRenderer blurb). A width computed in WORLD units (e.g. spriteScreenWidth, derived from
+        // GameMath.spriteScreenHeight against WORLD_HEIGHT) must be divided by columnWidth before it is
+        // used as a COLUMN span, since a column only equals one world unit at HD.
+        int   projectionColumnCount = wallRenderer.getProjectionColumnCount();
+        float columnWidth           = wallRenderer.getColumnWidth();
         int propCount = propPlacements.size();
         // Reset z-buffer every frame so stale depths from the previous frame don't occlude.
         java.util.Arrays.fill(propSpriteZBuffer, Float.MAX_VALUE);
@@ -368,7 +377,7 @@ public class PropRenderer implements Renderable, Disposable {
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, projectionColumnCount);
 
             float heightMultiplier   = propHeightMultiplier(prop.propChar);
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
@@ -382,8 +391,8 @@ public class PropRenderer implements Renderable, Disposable {
                 spriteScreenWidth = spriteScreenHeight * aspectRatio;
             }
 
-            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
-            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
+            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / (2f * columnWidth));
+            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / (2f * columnWidth));
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
@@ -441,8 +450,8 @@ public class PropRenderer implements Renderable, Disposable {
                         + KEYCARD_AURA_PULSE_AMPLITUDE * MathUtils.sin(lightingTimeSeconds * KEYCARD_AURA_PULSE_SPEED + auraPhase));
                 float auraHeight  = spriteScreenHeight * KEYCARD_AURA_SIZE_MULTIPLIER;
                 float cardCenterY = drawBottom + spriteScreenHeight / 2f;
-                int   auraLeft    = (int)(screenCenterColumn - auraHeight / 2f);
-                int   auraRight   = (int)(screenCenterColumn + auraHeight / 2f);
+                int   auraLeft    = (int)(screenCenterColumn - auraHeight / (2f * columnWidth));
+                int   auraRight   = (int)(screenCenterColumn + auraHeight / (2f * columnWidth));
                 int   auraSpan    = auraRight - auraLeft;
                 float auraDrawBottom = cardCenterY - auraHeight / 2f;
                 float auraDrawTop    = auraDrawBottom + auraHeight;
@@ -460,15 +469,15 @@ public class PropRenderer implements Renderable, Disposable {
                     batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
                     batch.setColor(keycardAuraRed * shade, keycardAuraGreen * shade, keycardAuraBlue * shade, auraAlpha);
                     int auraFirstColumn = Math.max(0, auraLeft);
-                    int auraLastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, auraRight);
+                    int auraLastColumn  = Math.min(projectionColumnCount - 1, auraRight);
                     for (int screenColumn = auraFirstColumn; screenColumn <= auraLastColumn; screenColumn++) {
                         if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                         if (depth >= propSpriteZBuffer[screenColumn]) continue;
                         int auraTexSrcX = (screenColumn - auraLeft) * auraGlowWidth / auraSpan;
                         auraTexSrcX = MathUtils.clamp(auraTexSrcX, 0, auraGlowWidth - 1);
                         batch.draw(weaponPickupGlowTexture,
-                                   screenColumn * WALL_COLUMN_WIDTH, auraClampBottom,
-                                   WALL_COLUMN_WIDTH, auraClampTop - auraClampBottom,
+                                   screenColumn * columnWidth, auraClampBottom,
+                                   columnWidth, auraClampTop - auraClampBottom,
                                    auraTexSrcX, auraTexSrcY, 1, auraTexSrcHeight,
                                    false, false);
                     }
@@ -484,7 +493,7 @@ public class PropRenderer implements Renderable, Disposable {
             // Per-column draw loop with z-buffer occlusion test.
             ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);
             int firstColumn = Math.max(0, leftScreenColumn);
-            int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
+            int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 // Skip columns where a wall (or closer prop) is in front.
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
@@ -504,8 +513,8 @@ public class PropRenderer implements Renderable, Disposable {
                         texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
 
                 batch.draw(texture,
-                           screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                           WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                           screenColumn * columnWidth, clampedBottom,
+                           columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
             }
@@ -525,7 +534,7 @@ public class PropRenderer implements Renderable, Disposable {
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, projectionColumnCount);
 
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, renderDepth);
             ItemType itemType        = groundItem.stack.getType();
@@ -537,8 +546,8 @@ public class PropRenderer implements Renderable, Disposable {
             // ── Credit chip path ──────────────────────────────────────────────────
             if (isCreditChip(itemType)) {
                 float chipScreenHeight = fullWallLineHeight * CREDIT_PICKUP_HEIGHT_FRACTION;
-                int   chipLeft  = (int)(screenCenterColumn - chipScreenHeight / 2f);
-                int   chipRight = (int)(screenCenterColumn + chipScreenHeight / 2f);
+                int   chipLeft  = (int)(screenCenterColumn - chipScreenHeight / (2f * columnWidth));
+                int   chipRight = (int)(screenCenterColumn + chipScreenHeight / (2f * columnWidth));
                 int   chipSpan  = chipRight - chipLeft;
                 if (chipSpan <= 0) continue;
 
@@ -570,8 +579,8 @@ public class PropRenderer implements Renderable, Disposable {
                 }
                 float auraAlpha   = auraBaseAlpha + auraPulseAmp * MathUtils.sin(lightingTimeSeconds * auraPulseSpeed + chipBobPhase);
                 float auraHeight  = chipScreenHeight * auraRadius;
-                int   auraLeft    = (int)(screenCenterColumn - auraHeight / 2f);
-                int   auraRight   = (int)(screenCenterColumn + auraHeight / 2f);
+                int   auraLeft    = (int)(screenCenterColumn - auraHeight / (2f * columnWidth));
+                int   auraRight   = (int)(screenCenterColumn + auraHeight / (2f * columnWidth));
                 int   auraSpan    = auraRight - auraLeft;
                 float auraDrawBot = chipCenterY - auraHeight / 2f + chipBobOffset;
                 float auraDrawTop = auraDrawBot + auraHeight;
@@ -588,15 +597,15 @@ public class PropRenderer implements Renderable, Disposable {
                     batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
                     batch.setColor(auraR * shade, auraG * shade, auraB * shade, auraAlpha);
                     int auraFirstCol = Math.max(0, auraLeft);
-                    int auraLastCol  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, auraRight);
+                    int auraLastCol  = Math.min(projectionColumnCount - 1, auraRight);
                     for (int screenColumn = auraFirstCol; screenColumn <= auraLastCol; screenColumn++) {
                         if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                         if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
                         int auraTexSrcX = (screenColumn - auraLeft) * weaponPickupGlowTexture.getWidth() / auraSpan;
                         auraTexSrcX = MathUtils.clamp(auraTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
                         batch.draw(weaponPickupGlowTexture,
-                                   screenColumn * WALL_COLUMN_WIDTH, auraClampBot,
-                                   WALL_COLUMN_WIDTH, auraClampTop - auraClampBot,
+                                   screenColumn * columnWidth, auraClampBot,
+                                   columnWidth, auraClampTop - auraClampBot,
                                    auraTexSrcX, auraTexSrcY, 1, auraTexSrcH,
                                    false, false);
                     }
@@ -617,7 +626,7 @@ public class PropRenderer implements Renderable, Disposable {
                 float chipBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 batch.setColor(chipRed, chipGreen, chipBlue, 1f);
                 int chipFirstCol = Math.max(0, chipLeft);
-                int chipLastCol  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, chipRight);
+                int chipLastCol  = Math.min(projectionColumnCount - 1, chipRight);
                 for (int screenColumn = chipFirstCol; screenColumn <= chipLastCol; screenColumn++) {
                     if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                     if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
@@ -627,8 +636,8 @@ public class PropRenderer implements Renderable, Disposable {
                     int chipTexSrcX = (screenColumn - chipLeft) * chipTexW / chipSpan;
                     chipTexSrcX = MathUtils.clamp(chipTexSrcX, 0, chipTexW - 1);
                     batch.draw(chipTexture,
-                               screenColumn * WALL_COLUMN_WIDTH, chipClampBot,
-                               WALL_COLUMN_WIDTH, chipClampTop - chipClampBot,
+                               screenColumn * columnWidth, chipClampBot,
+                               columnWidth, chipClampTop - chipClampBot,
                                chipTexSrcX, chipTexSrcY, 1, chipTexSrcH,
                                false, false);
                 }
@@ -639,8 +648,8 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteScreenHeight = fullWallLineHeight * WEAPON_PICKUP_HEIGHT_FRACTION;
             float spriteScreenWidth  = spriteScreenHeight; // square procedural texture
 
-            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
-            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
+            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / (2f * columnWidth));
+            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / (2f * columnWidth));
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
@@ -677,8 +686,8 @@ public class PropRenderer implements Renderable, Disposable {
                     : weaponTierMap.get(itemType);
             if (weaponTier != null) {
                 float glowHeight      = spriteScreenHeight * WEAPON_PICKUP_GLOW_SIZE_MULTIPLIER;
-                int   glowLeft        = (int)(screenCenterColumn - glowHeight / 2f);
-                int   glowRight       = (int)(screenCenterColumn + glowHeight / 2f);
+                int   glowLeft        = (int)(screenCenterColumn - glowHeight / (2f * columnWidth));
+                int   glowRight       = (int)(screenCenterColumn + glowHeight / (2f * columnWidth));
                 int   glowColumnSpan  = glowRight - glowLeft;
                 float glowDrawBottom  = weaponCenterY - glowHeight / 2f + bobOffset;
                 float glowDrawTop     = glowDrawBottom + glowHeight;
@@ -697,15 +706,15 @@ public class PropRenderer implements Renderable, Disposable {
                     batch.setColor(weaponTier.colorRed * shade, weaponTier.colorGreen * shade,
                                    weaponTier.colorBlue * shade, WEAPON_PICKUP_GLOW_ALPHA);
                     int glowFirstColumn = Math.max(0, glowLeft);
-                    int glowLastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, glowRight);
+                    int glowLastColumn  = Math.min(projectionColumnCount - 1, glowRight);
                     for (int screenColumn = glowFirstColumn; screenColumn <= glowLastColumn; screenColumn++) {
                         if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                         if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
                         int glowTexSrcX = (screenColumn - glowLeft) * weaponPickupGlowTexture.getWidth() / glowColumnSpan;
                         glowTexSrcX = MathUtils.clamp(glowTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
                         batch.draw(weaponPickupGlowTexture,
-                                   screenColumn * WALL_COLUMN_WIDTH, glowClampBottom,
-                                   WALL_COLUMN_WIDTH, glowClampTop - glowClampBottom,
+                                   screenColumn * columnWidth, glowClampBottom,
+                                   columnWidth, glowClampTop - glowClampBottom,
                                    glowTexSrcX, glowTexSrcY, 1, glowTexSrcHeight,
                                    false, false);
                     }
@@ -719,7 +728,7 @@ public class PropRenderer implements Renderable, Disposable {
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             int firstColumn = Math.max(0, leftScreenColumn);
-            int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
+            int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
@@ -729,8 +738,8 @@ public class PropRenderer implements Renderable, Disposable {
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(pickupTexture,
-                           screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                           WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                           screenColumn * columnWidth, clampedBottom,
+                           columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
             }
@@ -754,7 +763,7 @@ public class PropRenderer implements Renderable, Disposable {
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, projectionColumnCount);
 
             float heightMultiplier   = propHeightMultiplier(prop.propChar);
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
@@ -768,8 +777,8 @@ public class PropRenderer implements Renderable, Disposable {
                 spriteScreenWidth = spriteScreenHeight * aspectRatio;
             }
 
-            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / 2f);
-            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / 2f);
+            int leftScreenColumn  = (int)(screenCenterColumn - spriteScreenWidth / (2f * columnWidth));
+            int rightScreenColumn = (int)(screenCenterColumn + spriteScreenWidth / (2f * columnWidth));
             int columnSpan        = rightScreenColumn - leftScreenColumn;
             if (columnSpan <= 0) continue;
 
@@ -816,7 +825,7 @@ public class PropRenderer implements Renderable, Disposable {
 
             ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);
             int firstColumn = Math.max(0, leftScreenColumn);
-            int lastColumn  = Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, rightScreenColumn);
+            int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 if (depth >= propSpriteZBuffer[screenColumn]) continue;
@@ -825,8 +834,8 @@ public class PropRenderer implements Renderable, Disposable {
                 recordPropOccluderColumn(screenColumn, depth, prop.propChar, opacityMask,
                         texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 batch.draw(texture,
-                           screenColumn * WALL_COLUMN_WIDTH, clampedBottom,
-                           WALL_COLUMN_WIDTH, clampedTop - clampedBottom,
+                           screenColumn * columnWidth, clampedBottom,
+                           columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
             }

@@ -16,7 +16,6 @@ import ge.tbegvadze.toon3d.util.GameMath;
 import static ge.tbegvadze.toon3d.util.Constants.CELL_SIZE;
 import static ge.tbegvadze.toon3d.util.RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES;
 import static ge.tbegvadze.toon3d.util.RenderConstants.WALL_PROJECTION_SCREEN_HEIGHT;
-import static ge.tbegvadze.toon3d.util.RenderConstants.WALL_PROJECTION_SCREEN_WIDTH;
 
 /**
  * Manages and renders traveling projectiles for ranged enemy attacks.
@@ -106,6 +105,13 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
     }
 
     public void render(OrthographicCamera camera) {
+        // Runtime render-resolution authority (util/RenderResolution via WallRenderer). The projectile
+        // quad is a WORLD-space ShapeRenderer draw (see shapeRenderer.rect below), so the column value
+        // spriteScreenColumnCenter returns must be converted to world X via columnWidth before use;
+        // only the z-buffer occlusion test needs the raw column index.
+        int   projectionColumnCount = wallRenderer.getProjectionColumnCount();
+        float columnWidth           = wallRenderer.getColumnWidth();
+
         boolean anyActive = false;
         for (int index = 0; index < projectiles.length; index++) {
             if (projectiles[index].active) { anyActive = true; break; }
@@ -132,10 +138,13 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
 
             float screenColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
-                    planeX, planeY, WALL_PROJECTION_SCREEN_WIDTH);
+                    planeX, planeY, projectionColumnCount);
 
-            int screenColumnInt = Math.max(0, Math.min(WALL_PROJECTION_SCREEN_WIDTH - 1, (int) screenColumn));
+            int screenColumnInt = Math.max(0, Math.min(projectionColumnCount - 1, (int) screenColumn));
             if (depth >= wallRenderer.getZBufferUnchecked(screenColumnInt)) continue;
+            // shapeRenderer.rect() below draws in WORLD space; screenColumn is COLUMN-space and must be
+            // converted before use as a draw position (the z-buffer test above needed the raw column).
+            float worldCenterX = screenColumn * columnWidth;
 
             float projectedSize = EffectConstants.ENEMY_PROJECTILE_BASE_SIZE / depth;
             // Fade out as the projectile approaches the player (t → 1)
@@ -165,7 +174,7 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
                     break;
             }
             float halfSize = projectedSize / 2f;
-            shapeRenderer.rect(screenColumn - halfSize, screenY - halfSize, projectedSize, projectedSize);
+            shapeRenderer.rect(worldCenterX - halfSize, screenY - halfSize, projectedSize, projectedSize);
         }
 
         shapeRenderer.end();

@@ -982,6 +982,20 @@ public final class GameMath {
     }
 
     /*
+     * Formula: floorPixelOffsetBelowHorizon (float overload — runtime floor-backdrop resolution)
+     * Derivation: identical to the int overload above, but drawY is a fractional full-screen pixel
+     *   row. This exists because the render-resolution setting (util.RenderResolution) lets the floor
+     *   backdrop's row count be a non-divisor of WORLD_HEIGHT (e.g. FULL_HD: 720 / 270 = 2.667), so the
+     *   backdrop-row -> full-screen-row mapping (WORLD_HEIGHT / backdropHeight) is no longer always an
+     *   integer; at HD (720 / 180 = 4.0 exactly) this returns the same value as the int overload.
+     * Edge cases: drawY = screenHeight/2 -> offset = 0 -> division by zero in floorRowDistance; caller
+     *   guarantees drawY stays strictly below the horizon.
+     */
+    public static float floorPixelOffsetBelowHorizon(float drawY, int screenHeight) {
+        return screenHeight / 2f - drawY;
+    }
+
+    /*
      * Formula: floorRowDistance
      * Derivation:
      *   Virtual camera sits at z = FLOOR_CAMERA_Z (= 0.5 screen-heights above floor).
@@ -995,6 +1009,17 @@ public final class GameMath {
      *   pixelOffset = 0 → returns +Infinity (guarded by caller; don't pass 0).
      */
     public static float floorRowDistance(int pixelOffset, int screenHeight) {
+        return screenHeight * RenderConstants.FLOOR_CAMERA_Z / pixelOffset;
+    }
+
+    /*
+     * Formula: floorRowDistance (float overload — runtime floor-backdrop resolution)
+     * Derivation: identical to the int overload above, taking the float pixelOffset produced by the
+     *   float floorPixelOffsetBelowHorizon() overload (see its comment for why pixelOffset is a float
+     *   at a non-HD render resolution).
+     * Edge cases: pixelOffset = 0 -> +Infinity (guarded by caller; don't pass 0).
+     */
+    public static float floorRowDistance(float pixelOffset, int screenHeight) {
         return screenHeight * RenderConstants.FLOOR_CAMERA_Z / pixelOffset;
     }
 

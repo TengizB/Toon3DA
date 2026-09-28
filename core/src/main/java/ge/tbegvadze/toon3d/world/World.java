@@ -833,6 +833,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         level = initialLevel;
         buildLevelDependentResources(initialLevel, startRoom ? startRoomGen : null);
 
+        // wallRenderer/floorCeilingRenderer did not exist yet the first time
+        // applyStoryAccessibilitySettings() ran above; now that buildLevelDependentResources() has built
+        // them, push the render-resolution setting (checkpoint C6) so the very first frame is correct.
+        applyStoryAccessibilitySettings();
+
         if (startRoom) {
             setupStartRoomWeaponOffers(startRoomGen, runSeed);
         }
@@ -1232,6 +1237,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         statusEffectController.clearPlayerEffects(player);
 
         buildLevelDependentResources(newLevel);
+
+        // buildLevelDependentResources() just replaced wallRenderer/floorCeilingRenderer with fresh
+        // instances (default HD); re-push every accessibility setting, including render resolution
+        // (checkpoint C6), so a FULL_HD choice survives a floor transition instead of silently
+        // reverting to HD.
+        applyStoryAccessibilitySettings();
 
         alertTimeSeconds   = 0f;
         gameState.redAlert = false;
@@ -3874,6 +3885,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         storyBarkRenderer.applyAccessibilitySettings(textScale, reduceMotion);
         storyExchangeRenderer.applyAccessibilitySettings(textScale, reduceMotion);
         bootCardRenderer.applyAccessibilitySettings(textScale, reduceMotion);
+
+        // RENDER RESOLUTION (checkpoint contract C6) — the 3D view's internal ray-column count / floor
+        // backdrop resolution, pushed into the two runtime authorities: WallRenderer (checkpoint C3) and
+        // FloorCeilingRenderer (checkpoint C5). Both renderers are level-dependent and are not yet built
+        // the first time this method runs (from the World constructor, before buildLevelDependentResources()
+        // has run) — null-guarded here, and the constructor calls this method again right after that build
+        // completes so the very first frame already renders at the player's chosen resolution.
+        if (wallRenderer != null) {
+            wallRenderer.setRenderResolution(storySettings.getRenderResolution());
+        }
+        if (floorCeilingRenderer != null) {
+            floorCeilingRenderer.setRenderResolution(storySettings.getRenderResolution());
+        }
     }
 
     /**
