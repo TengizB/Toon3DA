@@ -18,36 +18,36 @@ When done, ask Claude to write the balance-tuning idea file from these answers.
 ## Part A — How you play (so Claude can read your answers correctly)
 
 **A1.** Roughly how many runs have you played on the CURRENT build? And in total?
-Answer:
+Answer: about 20 runs
 
 **A2.** How deep do your runs usually end? What is your deepest ever?
-Answer:
+Answer: I've killed the boss a couple of times.
 
 **A3.** Where do you usually die — which region, which kind of floor, killed by what?
-Answer:
+Answer: The cave like levels, because they have no medkits.
 
 **A4.** Do you play mostly on the phone, or on the desktop build? How long is a
 typical session?
-Answer:
+Answer: only on phone, the game is for mobile devices.
 
 **A5.** How would you describe your own play style? (careful and slow / aggressive /
 clear every room / rush to the exit / hoard ammo and medkits / use everything freely)
-Answer:
+Answer: Exploratory I like to explore levels.
 
 **A6.** Who is the target player — you, experienced roguelike players, or casual
 mobile players who have never played Doom RPG? (This decides how hard "right" is.)
-Answer:
+Answer: rouglike players and casuals also.
 
 ---
 
 ## Part B — The overall feeling
 
 **B1.** In one or two sentences: what is wrong with the balance right now?
-Answer:
+Answer: sometimes there are too much resources and other times too little. sometimes I feel like the game is too easy because of plenty of resources and the other times game feels unfair. also the level are too empty with too few enemies and it feels boring to play.
 
 **B2.** Is the game overall too hard, too easy, or BOTH at different moments?
 If both — when is it too hard and when too easy?
-Answer:
+Answer: both.
 
 **B3.** Name up to three moments from recent runs where the balance felt clearly
 WRONG. For each: depth, floor type, what happened, what you expected instead.
