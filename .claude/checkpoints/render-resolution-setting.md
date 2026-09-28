@@ -102,7 +102,7 @@ file's tick in the same commit. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — settings model + UI slot (C1, C2, C7, strings).
+- [x] **CP1** — settings model + UI slot (C1, C2, C7, strings).
       DONE WHEN: `RenderResolution` exists; `StorySettings` persists/cycles it in slot 5;
       `STORY_CODEX_SETTING_COUNT == 6`; RESOLUTION row shows HD/FULL HD on the settings screen and
       codex strip; `./gradlew build` (incl. tests) green. Renderers still ignore it (temporary).
@@ -127,3 +127,12 @@ file's tick in the same commit. Never `git add -A`.
 - **BASELINE (99eb979, mirror build):** compiles; 449 tests, **1 pre-existing failure** —
   `StoryBarkTest` "a joke survived into the deepest strata: bark.depth.core.2" (narrative content,
   unrelated to this work; not ours to fix here). Any OTHER red test after CP0 is ours.
+- **CP1 handover:** `util/RenderResolution` (HD/FULL_HD; column count is a constructor field, no
+  switch) + `RenderConstants.RENDER_RESOLUTION_{HD,FULL_HD,MAX}_COLUMNS` / `_SETTING_KEY` exist;
+  `StorySettings.getRenderResolution()` / `cycleRenderResolution()`, slot 5 (SFX is now explicit
+  `case 4`). The Java fallback strings live in `narrative/CodexStrings.java` (NOT `StoryStrings.java`)
+  — any new chrome id must be added there AND in the properties file or `StoryLocalizationTest` fails.
+  Mirror build: 449 tests, only the baseline `StoryBarkTest` failure. **Temporary state:** the knob is
+  persisted/labelled but INERT — CP2 wires it through `World.applyStoryAccessibilitySettings()`.
+  Open risk for CP3 review: codex strip buttons shrink 151 → 124 world units; "RESOLUTION" is the
+  longest name label (check it doesn't clip; fix = smaller name scale, not geometry).

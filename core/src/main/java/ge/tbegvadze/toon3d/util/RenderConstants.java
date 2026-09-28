@@ -82,6 +82,17 @@ public final class RenderConstants {
     public static final int   WALL_PROJECTION_SCREEN_WIDTH    = Constants.WORLD_WIDTH;
     public static final int   WALL_PROJECTION_SCREEN_HEIGHT   = Constants.WORLD_HEIGHT;
     public static final float WALL_COLUMN_WIDTH               = (float) Constants.WORLD_WIDTH / WALL_PROJECTION_SCREEN_WIDTH;
+
+    // Render resolution setting (util.RenderResolution) — how many ray columns the 3D view casts,
+    // independent of the fixed 1280x720 world/UI space it is composited into. HD reproduces today's
+    // fixed WALL_PROJECTION_SCREEN_WIDTH behaviour byte-identically; FULL_HD raises the column count.
+    // RENDER_RESOLUTION_MAX_COLUMNS sizes any array/SpriteBatch that must cover the largest tier.
+    public static final int    RENDER_RESOLUTION_HD_COLUMNS      = Constants.WORLD_WIDTH;
+    public static final int    RENDER_RESOLUTION_FULL_HD_COLUMNS = 1920;
+    public static final int    RENDER_RESOLUTION_MAX_COLUMNS     = 1920;
+    // Persisted setting key. Stable once shipped — it is baked into saves (additive key, no
+    // SCHEMA_VERSION bump needed; see the SFX-volume-setting precedent).
+    public static final String RENDER_RESOLUTION_SETTING_KEY     = "render.resolution";
     // shade = max(MIN, 1 / (1 + d² × FALLOFF)). Steeper falloff increases near/far contrast.
     // At d=5: shade≈0.29  At d=10: shade≈0.091  MIN_BRIGHTNESS prevents full-black silhouettes.
     public static final float WALL_SHADING_FALLOFF            = 0.10f;
