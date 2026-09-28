@@ -7,7 +7,7 @@ import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
  * Every gameplay sound recipe, and the bindings from game concepts onto them
- * (procedural-sound-effects orders 1-4).
+ * (procedural-sound-effects orders 1-5).
  *
  * <p><b>This is the content file.</b>  Adding a sound is ONE {@code register(...)} call here plus,
  * for a weapon, one {@code bindWeapon(...)} line — never an edit to the synthesiser, the mixer, the
@@ -121,7 +121,7 @@ public final class GameSoundCatalog {
         // Energy weapons read as PITCHED. Tone where the ballistics are noise is the whole contrast.
         registry.register(SoundDefinition
                 .builder(GameSoundId.FIRE_PLASMA, SoundCategory.PLAYER_WEAPON)
-                .volume(0.70f).cycleSpread(0.6f).loudness(60)
+                .volume(0.42f).cycleSpread(0.6f).loudness(60)
                 .layers(
                     SoundLayer.builder(WaveformKind.CHIRP_SINE, 0.20f)
                               .sweep(1400f, 380f).envelope(0.001f, 6f).amplitude(0.80f).build(),
@@ -174,7 +174,7 @@ public final class GameSoundCatalog {
         // Full-depth ring modulation zeroes the signal between chops — the ear hears "electricity".
         registry.register(SoundDefinition
                 .builder(GameSoundId.FIRE_ARC_CANNON, SoundCategory.PLAYER_WEAPON)
-                .volume(0.70f).cycleSpread(0.6f).loudness(60)
+                .volume(0.50f).cycleSpread(0.6f).loudness(60)
                 .layers(
                     SoundLayer.builder(WaveformKind.SQUARE, 0.24f)
                               .frequency(600f).amplitudeModulation(60f, 1.0f)
@@ -254,7 +254,7 @@ public final class GameSoundCatalog {
         // goes off" — redundant with the CHARGING event text, which is what makes it legal.
         registry.register(SoundDefinition
                 .builder(GameSoundId.RAILGUN_CHARGE, SoundCategory.PLAYER_WEAPON)
-                .volume(0.50f).cycleSpread(0.2f).loudness(30)
+                .volume(0.28f).cycleSpread(0.2f).loudness(30)
                 .layers(
                     SoundLayer.builder(WaveformKind.EXPONENTIAL_CHIRP_SINE, 0.45f)
                               .sweep(180f, 900f).envelope(0.30f, 2f).amplitude(0.75f).build(),
@@ -321,7 +321,7 @@ public final class GameSoundCatalog {
 
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_HURT_LIGHT, SoundCategory.PLAYER_STATE)
-                .volume(0.65f).cycleSpread(0.7f)
+                .volume(0.65f).cycleSpread(0.7f).loudness(0)
                 .layers(
                     SoundLayer.builder(WaveformKind.CHIRP_SINE, 0.16f)
                               .sweep(120f, 70f).envelope(0.001f, 8f).amplitude(0.80f).build(),
@@ -333,7 +333,7 @@ public final class GameSoundCatalog {
         // Not a voice: there is no VO in this game and there must not be one.
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_HURT_HEAVY, SoundCategory.PLAYER_STATE)
-                .volume(0.90f).cycleSpread(0.4f)
+                .volume(0.90f).cycleSpread(0.4f).loudness(0)
                 .layers(
                     SoundLayer.builder(WaveformKind.CHIRP_SINE, 0.30f)
                               .sweep(100f, 45f).envelope(0.001f, 4f).amplitude(1.00f).build(),
@@ -348,7 +348,7 @@ public final class GameSoundCatalog {
         // coloured text; the ear learns the difference faster than the eye does.
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_GUARDED, SoundCategory.PLAYER_STATE)
-                .volume(0.60f).cycleSpread(0.3f)
+                .volume(0.40f).cycleSpread(0.3f).loudness(25)
                 .layers(
                     SoundLayer.builder(WaveformKind.SQUARE, 0.20f)
                               .frequency(900f).envelope(0.001f, 7f).amplitude(0.60f).build(),
@@ -362,7 +362,7 @@ public final class GameSoundCatalog {
         // The same clang, dulled and detuned to an INHARMONIC ratio, so it reads as "wrong".
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_FLANKED, SoundCategory.PLAYER_STATE)
-                .volume(0.70f).cycleSpread(0.3f)
+                .volume(0.48f).cycleSpread(0.3f).loudness(15)
                 .layers(
                     SoundLayer.builder(WaveformKind.SQUARE, 0.24f)
                               .frequency(900f).lowPass(1200f)
@@ -378,7 +378,7 @@ public final class GameSoundCatalog {
         // STROKE screen that follows is SILENT, and this must not put anything into that silence.
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_DEATH, SoundCategory.PLAYER_STATE)
-                .volume(1.00f).cycleSpread(0f)
+                .volume(0.80f).cycleSpread(0f).loudness(0)
                 .layers(
                     SoundLayer.builder(WaveformKind.EXPONENTIAL_CHIRP_SINE, 0.90f)
                               .sweep(300f, 40f).envelope(0.01f, 2.5f).amplitude(0.90f).build(),
@@ -393,12 +393,14 @@ public final class GameSoundCatalog {
         // indistinguishable from a dropped tap.
         registry.register(SoundDefinition
                 .builder(GameSoundId.MOVE_BLOCKED, SoundCategory.PLAYER_STATE)
-                .volume(0.35f).cycleSpread(0.5f).minimumRetriggerSeconds(0.10f)
+                .volume(0.55f).cycleSpread(0.5f).minimumRetriggerSeconds(0.10f).loudness(5)
                 .layers(
                     SoundLayer.builder(WaveformKind.SINE, 0.07f)
                               .frequency(90f).envelope(0.001f, 12f).amplitude(0.70f).build(),
+                    SoundLayer.builder(WaveformKind.SINE, 0.05f)
+                              .frequency(220f).envelope(0.001f, 12f).amplitude(0.45f).build(),
                     SoundLayer.builder(WaveformKind.NOISE, 0.03f)
-                              .lowPass(400f).envelope(0.001f, 12f).amplitude(0.30f)
+                              .lowPass(1100f).envelope(0.001f, 12f).amplitude(0.45f)
                               .noiseSeed(SEED_BODY).build())
                 .build());
     }
@@ -411,7 +413,7 @@ public final class GameSoundCatalog {
 
         registry.register(SoundDefinition
                 .builder(GameSoundId.IMPACT_BALLISTIC, SoundCategory.ENEMY)
-                .volume(0.55f).cycleSpread(0.8f)
+                .volume(0.55f).cycleSpread(0.8f).loudness(30)
                 .layers(
                     SoundLayer.builder(WaveformKind.NOISE, 0.10f)
                               .lowPass(1500f).envelope(0.001f, 10f).amplitude(0.70f)
@@ -422,7 +424,7 @@ public final class GameSoundCatalog {
 
         registry.register(SoundDefinition
                 .builder(GameSoundId.IMPACT_ENERGY, SoundCategory.ENEMY)
-                .volume(0.55f).cycleSpread(0.8f)
+                .volume(0.55f).cycleSpread(0.8f).loudness(25)
                 .layers(
                     SoundLayer.builder(WaveformKind.NOISE, 0.14f)
                               .highPass(2500f).amplitudeModulation(120f, 0.6f)
@@ -434,7 +436,7 @@ public final class GameSoundCatalog {
 
         registry.register(SoundDefinition
                 .builder(GameSoundId.IMPACT_MELEE, SoundCategory.ENEMY)
-                .volume(0.55f).cycleSpread(0.8f)
+                .volume(0.55f).cycleSpread(0.8f).loudness(20)
                 .layers(
                     SoundLayer.builder(WaveformKind.NOISE, 0.10f)
                               .lowPass(900f).envelope(0.001f, 9f).amplitude(0.75f)
@@ -446,7 +448,7 @@ public final class GameSoundCatalog {
         // Bright, thin, obviously NOT flesh — the block/shard "clink".
         registry.register(SoundDefinition
                 .builder(GameSoundId.IMPACT_BLOCKED, SoundCategory.ENEMY)
-                .volume(0.55f).cycleSpread(0.6f)
+                .volume(0.35f).cycleSpread(0.6f).loudness(25)
                 .layers(
                     SoundLayer.builder(WaveformKind.SQUARE, 0.12f)
                               .frequency(1400f).envelope(0.0008f, 12f).amplitude(0.55f).build(),
@@ -555,12 +557,12 @@ public final class GameSoundCatalog {
     private static void registerEnemyVoices(SoundRegistry registry) {
 
         // Wet and organic: a low-passed slop under a rising gurgle.
-        registerFamilyVoice(registry, EnemyFamily.ABERRATION, 0.55f,
+        registerFamilyVoice(registry, EnemyFamily.ABERRATION, 0.65f, 0.90f,
                 GameSoundId.ENEMY_ABERRATION_ALERT, GameSoundId.ENEMY_ABERRATION_ATTACK,
                 GameSoundId.ENEMY_ABERRATION_DEATH,
                 shape -> new SoundLayer[] {
                     SoundLayer.builder(WaveformKind.NOISE, shape.durationSeconds)
-                              .sweptLowPass(shape.from(700f), shape.to(700f))
+                              .sweptLowPass(shape.from(1300f), shape.to(1300f))
                               .envelope(shape.attackSeconds, shape.decayRate).amplitude(0.65f)
                               .noiseSeed(SEED_BODY).build(),
                     SoundLayer.builder(WaveformKind.CHIRP_SINE, shape.durationSeconds)
@@ -570,7 +572,7 @@ public final class GameSoundCatalog {
                               .build() });
 
         // Dry rasp: band-limited breath chopped at a slow flutter. No tone — nothing alive in it.
-        registerFamilyVoice(registry, EnemyFamily.UNDEAD, 0.55f,
+        registerFamilyVoice(registry, EnemyFamily.UNDEAD, 0.65f, 0.80f,
                 GameSoundId.ENEMY_UNDEAD_ALERT, GameSoundId.ENEMY_UNDEAD_ATTACK,
                 GameSoundId.ENEMY_UNDEAD_DEATH,
                 shape -> new SoundLayer[] {
@@ -581,7 +583,7 @@ public final class GameSoundCatalog {
                               .noiseSeed(SEED_TAIL).build() });
 
         // High chitter: bright noise chopped fast enough to read as legs and mandibles.
-        registerFamilyVoice(registry, EnemyFamily.INSECT, 0.45f,
+        registerFamilyVoice(registry, EnemyFamily.INSECT, 0.65f, 1.35f,
                 GameSoundId.ENEMY_INSECT_ALERT, GameSoundId.ENEMY_INSECT_ATTACK,
                 GameSoundId.ENEMY_INSECT_DEATH,
                 shape -> new SoundLayer[] {
@@ -593,7 +595,7 @@ public final class GameSoundCatalog {
 
         // Servo: a swept square and a relay tick. NO noise wash at all — the only family that is
         // entirely pitched, which is exactly what makes it read as not-biology.
-        registerFamilyVoice(registry, EnemyFamily.MACHINE, 0.45f,
+        registerFamilyVoice(registry, EnemyFamily.MACHINE, 0.45f, 1.15f,
                 GameSoundId.ENEMY_MACHINE_ALERT, GameSoundId.ENEMY_MACHINE_ATTACK,
                 GameSoundId.ENEMY_MACHINE_DEATH,
                 shape -> new SoundLayer[] {
@@ -606,7 +608,7 @@ public final class GameSoundCatalog {
                               .build() });
 
         // The loudest family: a sub-heavy moan under broadband noise, held longer than the rest.
-        registerFamilyVoice(registry, EnemyFamily.DEMON, 0.65f,
+        registerFamilyVoice(registry, EnemyFamily.DEMON, 0.80f, 0.70f,
                 GameSoundId.ENEMY_DEMON_ALERT, GameSoundId.ENEMY_DEMON_ATTACK,
                 GameSoundId.ENEMY_DEMON_DEATH,
                 shape -> new SoundLayer[] {
@@ -621,7 +623,7 @@ public final class GameSoundCatalog {
 
         // Mineral: a struck tone with an INHARMONIC partial at 2.76x (the struck-stone/bell trick)
         // over low-passed grit.
-        registerFamilyVoice(registry, EnemyFamily.GOLEM, 0.55f,
+        registerFamilyVoice(registry, EnemyFamily.GOLEM, 0.55f, 1.00f,
                 GameSoundId.ENEMY_GOLEM_ALERT, GameSoundId.ENEMY_GOLEM_ATTACK,
                 GameSoundId.ENEMY_GOLEM_DEATH,
                 shape -> new SoundLayer[] {
@@ -645,11 +647,17 @@ public final class GameSoundCatalog {
         registry.bindEnemyVoiceFallback(EnemyVoiceMoment.DEATH,  GameSoundId.ENEMY_ABERRATION_DEATH);
     }
 
-    /** Expands one family's base recipe into its three moment sounds, registers and binds them. */
+    /**
+     * Expands one family's base recipe into its three moment sounds, registers and binds them.
+     *
+     * @param launchPitch the pitch the SHARED ranged-launch sound plays at for this family (order 5)
+     *                    — heavier bodies lower, chitin and servos higher, so who fired is audible
+     *                    without a per-family launch recipe the 64-sound cap has no room for
+     */
     private static void registerFamilyVoice(SoundRegistry registry, EnemyFamily family,
-                                            float baseVolume, GameSoundId alert,
-                                            GameSoundId attack, GameSoundId death,
-                                            FamilyVoiceRecipe recipe) {
+                                            float baseVolume, float launchPitch,
+                                            GameSoundId alert, GameSoundId attack,
+                                            GameSoundId death, FamilyVoiceRecipe recipe) {
         GameSoundId[] idsByMoment = new GameSoundId[EnemyVoiceMoment.COUNT];
         idsByMoment[EnemyVoiceMoment.ALERT.ordinal()]  = alert;
         idsByMoment[EnemyVoiceMoment.ATTACK.ordinal()] = attack;
@@ -667,6 +675,7 @@ public final class GameSoundCatalog {
                     .build());
         }
         registry.bindEnemyFamily(family, alert, attack, death);
+        registry.bindEnemyFamilyLaunchPitch(family, launchPitch);
     }
 
     // =====================================================================================
@@ -748,7 +757,7 @@ public final class GameSoundCatalog {
 
         registry.register(SoundDefinition
                 .builder(GameSoundId.PICKUP_MEDICAL, SoundCategory.ENVIRONMENT)
-                .volume(0.45f).cycleSpread(0.3f).loudness(10)
+                .volume(0.25f).cycleSpread(0.3f).loudness(10)
                 .layers(
                     SoundLayer.builder(WaveformKind.SINE, 0.12f)
                               .frequency(880f).envelope(0.02f, 5f).amplitude(0.60f).build())
@@ -809,7 +818,7 @@ public final class GameSoundCatalog {
         // A fifth up, over the injector hiss. Pleasant sound #1.
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_HEAL, SoundCategory.PLAYER_STATE)
-                .volume(0.55f).cycleSpread(0f).loudness(15)
+                .volume(0.45f).cycleSpread(0f).loudness(15)
                 .layers(
                     SoundLayer.builder(WaveformKind.SINE, 0.15f)
                               .frequency(440f).envelope(0.05f, 3f).amplitude(0.55f).build(),
@@ -858,7 +867,7 @@ public final class GameSoundCatalog {
                 .priority(SoundConstants.GAME_SFX_PRIORITY_INTERFACE)
                 .layers(
                     SoundLayer.builder(WaveformKind.NOISE, 0.05f)
-                              .lowPass(350f).envelope(0.0008f, 12f).amplitude(0.50f)
+                              .lowPass(1400f).envelope(0.0008f, 12f).amplitude(1.00f)
                               .noiseSeed(SEED_BODY).build())
                 .build());
     }

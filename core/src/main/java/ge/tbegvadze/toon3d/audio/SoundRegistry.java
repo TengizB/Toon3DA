@@ -28,6 +28,13 @@ public final class SoundRegistry {
     private final GameSoundId[][]   familyVoiceBinding  =
             new GameSoundId[EnemyFamily.values().length][EnemyVoiceMoment.COUNT];
     private final GameSoundId[]     voiceFallback       = new GameSoundId[EnemyVoiceMoment.COUNT];
+    private final float[]           launchPitchByFamily = newUnitPitchTable();
+
+    private static float[] newUnitPitchTable() {
+        float[] table = new float[EnemyFamily.values().length];
+        java.util.Arrays.fill(table, 1f);
+        return table;
+    }
 
     /** Replaces any previous registration for the same id, so a later bootstrap can override. */
     public void register(SoundDefinition definition) {
@@ -100,6 +107,18 @@ public final class SoundRegistry {
         voices[EnemyVoiceMoment.ALERT.ordinal()]  = alert;
         voices[EnemyVoiceMoment.ATTACK.ordinal()] = attack;
         voices[EnemyVoiceMoment.DEATH.ordinal()]  = death;
+    }
+
+    /**
+     * The pitch a family's ranged shot is played at (order 5). The launch sound itself is shared by
+     * every family; only its pitch says who fired. Unbound families play at 1.
+     */
+    public void bindEnemyFamilyLaunchPitch(EnemyFamily family, float pitch) {
+        launchPitchByFamily[family.ordinal()] = pitch;
+    }
+
+    public float launchPitchForEnemyFamily(EnemyFamily family) {
+        return family != null ? launchPitchByFamily[family.ordinal()] : 1f;
     }
 
     /** The sound a family with no binding makes at this moment; null leaves that moment silent. */

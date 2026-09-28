@@ -601,6 +601,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // impact and explosion sound on first launch and caches the WAVs by a hash of their recipe,
         // so later runs only load them. Silent by itself when the device has no audio backend.
         gameAudio         = new GameAudio();
+        // Rule 5, the one-way duck (order 5): gameplay sound dips briefly under ORA's stings and
+        // the interface cues, so a gunshot never buries the line she is starting to say.
+        storyAudio.setCuePlayedListener(gameAudio::noteStoryCuePlayed);
         storyBarkRenderer = new StoryBarkRenderer();
         storyBarkRenderer.setBarkSystem(barkSystem);
         storyBarkRenderer.setStoryAudio(storyAudio);
@@ -3685,6 +3688,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     public void onApplicationResume() {
         applyStoryAccessibilitySettings();
+        // The mixer's clock may have jumped while backgrounded; drop its per-turn counters and
+        // timestamps so the first sounds after resume are not judged against stale ones.
+        gameAudio.onApplicationResume();
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
             touchInputState.consumeTapAction();

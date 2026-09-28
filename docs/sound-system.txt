@@ -4,7 +4,8 @@ Single source of truth for the gameplay audio layer. Update this doc in the same
 change to `…toon3d.audio`, `util/SoundConstants` or the synthesis formulas in `util/GameMath`.
 
 Design document: `.claude/agents/ideas/procedural-sound-effects.txt` (orders 1-5).
-Implemented so far: orders 1-4. Order 5 is listed under NOT YET BUILT at the end.
+Implemented: orders 1-5 — the whole design. What is still owed (a real-device listening pass) is
+listed under NOT YET DONE at the end.
 
 
 1. WHAT THIS IS
@@ -46,6 +47,8 @@ HEADLESS (usable from `sim/`; `WaveformKind` imports only `MathUtils`, which is 
   SoundMixer.java         the mixing rules: per-turn category counters, re-trigger windows, voice
                           pressure, the story duck, the variation cycle. Pure state + a clock.
   SfxVolumeSetting.java   ON / QUIET / OFF, with the volume multiplier for each.
+  NoiseListener.java      the noise-propagation seam (order 5): `onNoise(column, row, loudness,
+                          category)`. No consumer yet — see section 12.
 
 IN THE ENEMY PACKAGE (order 3), so `EnemyManager` never imports audio:
   enemy/EnemyVoiceMoment.java    enum ALERT / ATTACK / DEATH. (The design placed this in `audio/`;
@@ -157,7 +160,7 @@ BASE RECIPE — a function from a moment's SHAPE to layers — expanded into thr
 `registerFamilyVoice(...)`. The shape is what the moments share across every family (ALERT 0.20 s
 and rising, ATTACK 0.15 s and hardest, DEATH 0.40 s and falling); the recipe is the family's
 character:
-  ABERRATION  wet: low-passed noise under a rising sine gurgle (90 -> 130 Hz)
+  ABERRATION  wet: low-passed (1.3 kHz) noise under a rising sine gurgle (90 -> 130 Hz)
   UNDEAD      dry rasp: band-limited noise chopped at 18 Hz; no tone at all
   INSECT      chitter: 2.5-6 kHz noise chopped at 55 Hz
   MACHINE     servo: a swept square + a relay tick; the only family with NO noise
@@ -212,8 +215,22 @@ Mixing rules, all in `SoundMixer`:
      LOWEST-priority request loses. An approximation — the backend's live voice count cannot be
      queried — that exists to stop a barrel chain starving the player's own gunshot. Sits well under
      Android SoundPool's default of 16.
-  5. STORY DUCK, one-way. Gameplay sound plays quieter for a moment after a story cue. The reverse
-     is not needed: story cues are quiet, sparse, and never carry information alone.
+  5. STORY DUCK, one-way. Gameplay sound starting within GAME_SFX_STORY_DUCK_SECONDS of a story
+     sound plays at GAME_SFX_STORY_DUCK_FACTOR, so a gunshot never buries ORA's sting. `StoryAudio`
+     runs a cue-played listener each time one of its sounds ACTUALLY starts (never while its SOUND
+     knob is off), which `World` wires to `GameAudio.noteStoryCuePlayed`. The reverse is not
+     needed: story cues are quiet, sparse, and never carry information alone.
+
+APPLICATION RESUME: `World.onApplicationResume` calls `GameAudio.onApplicationResume`, which drops
+the mixer's re-trigger timestamps, voice-pressure window, duck stamp and per-turn counters, so the
+first sounds after the OS hands the app back are not judged against stale state. Nothing needs
+stopping on PAUSE: every sound is under a second and the OS pauses the audio device itself.
+
+RANGED LAUNCH PITCH: the shared ENEMY_ATTACK_RANGED plays at the shooter's FAMILY launch pitch
+(`registerFamilyVoice`'s `launchPitch`: DEMON 0.70, UNDEAD 0.80, ABERRATION 0.90, GOLEM 1.00,
+MACHINE 1.15, INSECT 1.35) divided by its size — one recipe, so "it shot at me" never depends on the
+family, but who shot is still audible. A per-family launch RECIPE would cost six sounds the cap has
+no room for.
 
 THE TURN BOUNDARY IS DETECTED BY TIME, not by a call from the tick bus
 (`GAME_SFX_TURN_WINDOW_SECONDS`). This is a deliberate departure from the design document, which
@@ -344,21 +361,63 @@ results before and after any change to this layer — a difference means audio h
 gameplay state, which is the one thing that would make this layer dangerous.
 
 
-11. NOT YET BUILT
-=================
-From the design document, deliberately deferred:
-  order 5  THE MIX. A tuning pass on a real device and on earbuds, the application pause/resume
-           clock reset, and the `NoiseEvent` seam. Deferred from order 3 into this pass: the
-           design's ENEMY_RANGED_LAUNCH "pitched by family index" (the shared launch currently
-           plays at one pitch for every family) and the region-flavoured ALERT pitch (open
-           question 5 — if it happens, a per-region pitch table in the catalog, never an `if`).
+11. THE MIX (order 5) AND WHAT IS STILL OWED
+=============================================
+THE TUNING PASS THAT WAS DONE is an OFFLINE one: every recipe synthesised, run through a rough
+phone-speaker curve (two one-pole high-passes at 250 Hz, a low-pass at 8 kHz — a phone reproduces
+almost nothing below ~200 Hz and is strongest where the ear is most sensitive), and its loudest
+50 ms RMS x base volume compared in dB against the SHOTGUN anchor. An unweighted RMS was tried
+first and is badly wrong for this: it rates the sub-heavy sounds (hurt, hammer, death) loud and the
+bright ones (insect, plasma, pickups) quiet — the opposite of a phone. What the curve found, and the
+fix for each:
+  PLAYER_DEATH louder than BARREL_EXPLOSION (the ceiling)   volume 1.00 -> 0.80
+  MOVE_BLOCKED inaudible (all 90 Hz)   + a 220 Hz layer, noise low-pass 400 -> 1100 Hz, vol 0.55
+  FOOTSTEP ~25 dB under KILL_CONFIRM (all < 350 Hz)   low-pass 1400 Hz, amp 1.0; volume stays 0.12
+  RAILGUN_CHARGE louder than the shotgun (a tell, not a shot)   0.50 -> 0.28
+  FIRE_PLASMA / FIRE_ARC_CANNON above the shotgun (pitched = phone sweet spot)  0.42 / 0.50
+  PLAYER_GUARDED / FLANKED ~+5 dB over the shotgun   0.40 / 0.48 (still at the shotgun's level)
+  PICKUP_MEDICAL level with the shotgun (a receipt!)   0.25;  PLAYER_HEAL 0.45;  IMPACT_BLOCKED 0.35
+  family voices spread ~10 dB, ABERRATION (the fallback) quietest, DEMON not loudest
+    -> ABERRATION low-pass 700 -> 1300 Hz, base 0.65; UNDEAD 0.65; INSECT 0.65; DEMON 0.80.
+       Now within ~4 dB of each other with DEMON loudest.
+Resulting anchors on the curve: shotgun 0, barrel +7.7 (still the ceiling), death +6.8, family
+ALERTs -9..-5, KILL_CONFIRM -16.6, MOVE_BLOCKED -14.3, FOOTSTEP -27.4.
+
+NOT YET DONE — and it cannot be done from code:
+  A LISTENING PASS on a real phone speaker AND on cheap earbuds (the design's BALANCE NOTES order:
+  master first, then weapons against the shotgun, then the enemy stack falloff with six awake
+  enemies, then GAME_SFX_REFERENCE_TILES). Every number above is a better-founded placeholder,
+  not a verdict. "Delete whatever the playtest hated" waits on that playtest.
+
+DECLINED from the open questions, deliberately:
+  RAILGUN "capacitor full" second tone (Q3) — redundant with the event text, and the catalog is at
+    its cap; a pitch-shifted replay of RAILGUN_CHARGE would read as a second charge, not "ready".
+  region-flavoured ALERT pitch (Q5) — makes an audio parameter depend on persistent narrative
+    state for atmosphere alone. If it ever happens: a per-region pitch table in the catalog, never
+    an `if` in the mixer.
 
 FOOTSTEPS are flagged in the design as the highest-risk entry and the first candidate for deletion.
 The standing rule, inherited from the story layer's pacing budget: the fix for "too much sound" is
 to DELETE ROWS, never to add another toggle.
 
+12. THE NOISE SEAM (order 5)
+============================
 RELATIONSHIP TO `.claude/agents/ideas/noise-propagation-and-3d-sound-cues.txt` (NOT IMPLEMENTED):
 that system decides what ENEMIES hear (gameplay, deterministic, must run headless in `sim/`); this
-one decides what the PLAYER hears (presentation, mutable, switchable off). They must not be merged.
-Every `SoundDefinition` already carries a `loudness` 0..100 that nothing reads yet, so that system
-can inherit this layer's firing sites rather than growing its own.
+one decides what the PLAYER hears (presentation, mutable, switchable off). They must not be merged
+— but they share the EVENT, so that system inherits every firing site here instead of growing its
+own.
+
+Every `SoundDefinition` declares a `loudness` 0..100 (all 64 do, explicitly; 0 = makes no noise:
+the player being hurt or dying, LEVEL_UP, KILL_CONFIRM). `GameAudio.setNoiseListener(...)` takes an
+`audio/NoiseListener`, and every play entry point reports
+    onNoise(originTileColumn, originTileRow, loudness, category)
+— at the source tile for positional sounds, at the player's tile for sounds at the ear (so a
+FOOTSTEP or a gunshot is reported where the player stands). Primitives, so nothing allocates.
+
+THE RULE THAT MAKES IT SAFE: the noise is reported BEFORE every presentation gate — the EFFECTS
+setting (even OFF), hard-pause suppression, the distance cutoff, the mixer's caps and re-trigger
+drops, and whether a WAV exists at all. Muting the game can never change what an enemy hears.
+`GameAudio` constructs fine headless (it bootstraps the registry and simply synthesises nothing),
+so `sim/SimWorld` can own one to receive noise when that system lands. The `category` lets a
+consumer ignore, e.g., the enemies' own voices. Nothing implements the listener yet.

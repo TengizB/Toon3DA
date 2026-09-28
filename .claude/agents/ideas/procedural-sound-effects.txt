@@ -1,4 +1,4 @@
-STATUS: IMPLEMENTED (orders 1-4; order 5 remains — see docs/sound-system.txt section 11)
+STATUS: IMPLEMENTED (orders 1-5; a real-device listening pass is still owed — see docs/sound-system.txt section 11)
 CATEGORY: Systems
 TITLE: Procedural Sound Effects (gameplay audio, synthesised)
 CREATED: 2026-09-22
@@ -989,6 +989,15 @@ ORDER 5 — THE MIX (polish; no new sounds)
     `GameAudio.setNoiseListener(...)` added (no consumer yet — the hook is the deliverable).
   - Delete whatever the playtest hated. The fix for "too much sound" is to delete rows, never to
     add another toggle — the same rule the story layer's pacing budget states.
+  AS BUILT (IMPLEMENTED): the duck is wired by a cue-played listener on `StoryAudio` (runs only
+    when a story sound actually starts) -> `GameAudio.noteStoryCuePlayed`; `World.onApplicationResume`
+    resets the mixer. The seam is `audio/NoiseListener` (primitives, no NoiseEvent allocation),
+    reported BEFORE every presentation gate so muting never changes what enemies hear; all 64
+    definitions declare loudness. Also landed here: the ranged launch pitched per family (deferred
+    from order 3). The TUNING PASS was offline — a phone-speaker-curve loudness survey against the
+    shotgun/barrel anchors (docs/sound-system.txt section 11 lists every change); the on-device and
+    earbud listening pass, and any deletions it motivates, are still owed. Q3 (railgun ready tone)
+    and Q5 (region ALERT pitch) declined, reasons in the doc.
 
 
 OPEN QUESTIONS

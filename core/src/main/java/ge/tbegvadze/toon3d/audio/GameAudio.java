@@ -12,7 +12,7 @@ import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
  * The gameplay sound facade — the whole surface every call site sees
- * (procedural-sound-effects orders 1-3).
+ * (procedural-sound-effects orders 1-5).
  *
  * <p>Owns one {@link Sound} per {@link GameSoundId}, all synthesised at construction from the
  * recipes in {@link GameSoundCatalog}, cached on disk by a hash of the recipe so only the very
@@ -47,6 +47,8 @@ public final class GameAudio implements Disposable {
     private SfxVolumeSetting volumeSetting = SfxVolumeSetting.ON;
     /** True while a hard-pause overlay owns the screen: the world is not ticking, so nothing plays. */
     private boolean suppressed = false;
+    /** The noise-propagation seam (order 5); null until a noise system registers. */
+    private NoiseListener noiseListener = null;
 
     public GameAudio() {
         GameSoundCatalog.bootstrap(registry);
@@ -99,6 +101,14 @@ public final class GameAudio implements Disposable {
         this.suppressed = value;
     }
 
+    /**
+     * Registers the consumer of every sound's NOISE (order 5). Reported before any presentation
+     * gate, so it is identical with audio muted — see {@link NoiseListener}.
+     */
+    public void setNoiseListener(NoiseListener listener) {
+        this.noiseListener = listener;
+    }
+
     /** Stamped by the story layer so gameplay sound ducks briefly under a spoken line. */
     public void noteStoryCuePlayed() {
         mixer.noteStoryCuePlayed();
@@ -149,12 +159,25 @@ public final class GameAudio implements Disposable {
                 sizeMultiplier);
     }
 
+    /**
+     * A ranged enemy's shot leaving the barrel (order 5). One SHARED recipe, so "it shot at me"
+     * never depends on the family, pitched by the family's launch pitch and the shooter's size, so
+     * WHO shot is still audible.
+     */
+    public void playEnemyRangedLaunch(EnemyFamily family, float originWorldX, float originWorldY,
+                                      float sizeMultiplier) {
+        float pitchScale = registry.launchPitchForEnemyFamily(family);
+        if (sizeMultiplier > 0f) pitchScale /= sizeMultiplier;
+        playPositional(GameSoundId.ENEMY_ATTACK_RANGED, originWorldX, originWorldY, pitchScale);
+    }
+
     /** Non-diegetic confirmations and anything else that is simply "at the ear". */
     public void playUi(GameSoundId soundId) {
         playCentred(soundId);
     }
 
     private void playCentred(GameSoundId soundId) {
+        reportNoise(soundId, playerWorldX, playerWorldY);
         SoundDefinition definition = resolvePlayable(soundId);
         if (definition == null) return;
         float volume = mixer.admit(definition,
@@ -179,6 +202,14 @@ public final class GameAudio implements Disposable {
      */
     public void playAtWorld(GameSoundId soundId, float originWorldX, float originWorldY,
                             float sizeMultiplier) {
+        playPositional(soundId, originWorldX, originWorldY,
+                sizeMultiplier > 0f ? 1f / sizeMultiplier : 1f);
+    }
+
+    /** @param pitchScale multiplies the varied pitch before the rear dulling and the clamp */
+    private void playPositional(GameSoundId soundId, float originWorldX, float originWorldY,
+                                float pitchScale) {
+        reportNoise(soundId, originWorldX, originWorldY);
         SoundDefinition definition = resolvePlayable(soundId);
         if (definition == null) return;
 
@@ -211,7 +242,7 @@ public final class GameAudio implements Disposable {
         float pitch = mixer.nextPitch(definition);
         // A source behind the head is duller as well as quieter; a larger source is lower still.
         if (rearFactor < 1f) pitch *= SoundConstants.GAME_SFX_REAR_PITCH_FACTOR;
-        if (sizeMultiplier > 0f && sizeMultiplier != 1f) pitch /= sizeMultiplier;
+        pitch *= pitchScale;
         if (pitch < SoundConstants.GAME_SFX_PITCH_MINIMUM) {
             pitch = SoundConstants.GAME_SFX_PITCH_MINIMUM;
         }
@@ -220,6 +251,21 @@ public final class GameAudio implements Disposable {
         }
 
         soundsById[soundId.ordinal()].play(volume, pitch, pan);
+    }
+
+    /**
+     * Reports the noise a sound makes, BEFORE any presentation gate (see {@link NoiseListener}):
+     * the setting, suppression, distance, the mixer and a missing WAV must all be invisible to it.
+     */
+    private void reportNoise(GameSoundId soundId, float originWorldX, float originWorldY) {
+        if (noiseListener == null || soundId == null) return;
+        SoundDefinition definition = registry.get(soundId);
+        if (definition == null || definition.getLoudness() <= 0) return;
+        noiseListener.onNoise(
+                (int) Math.floor(originWorldX / Constants.CELL_SIZE),
+                (int) Math.floor(originWorldY / Constants.CELL_SIZE),
+                definition.getLoudness(),
+                definition.getCategory());
     }
 
     /** Null when this sound cannot play at all, which collapses every guard into one check. */

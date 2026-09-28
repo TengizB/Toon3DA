@@ -47,6 +47,12 @@ public final class StoryAudio implements Disposable {
     private final Sound[] interfaceCues = new Sound[StoryUiConstants.STORY_CUE_COUNT];
     /** The codex's SOUND setting.  Defaults on; silences every play call when off. */
     private boolean enabled = true;
+    /**
+     * Told each time a story sound ACTUALLY starts, so gameplay sound can duck under it
+     * (procedural-sound-effects order 5, mixing rule 5). One-way on purpose: story cues are quiet
+     * and sparse, so nothing ever ducks them. Null until wired; never called when disabled.
+     */
+    private Runnable cuePlayedListener = null;
 
     public StoryAudio() {
         if (Gdx.audio == null || Gdx.files == null) return;   // headless / no audio → silence
@@ -75,13 +81,22 @@ public final class StoryAudio implements Disposable {
         return enabled;
     }
 
+    public void setCuePlayedListener(Runnable listener) {
+        this.cuePlayedListener = listener;
+    }
+
+    private void play(Sound sound, float volume) {
+        if (sound == null) return;
+        sound.play(volume);
+        if (cuePlayedListener != null) cuePlayedListener.run();
+    }
+
     /** Plays the sting for this speaker at its configured volume; no-ops when off or unavailable. */
     public void playSpeakerSting(Speaker speaker) {
         if (!enabled || speaker == null) return;
         int speakerIndex = speaker.ordinal();
         if (speakerIndex < 0 || speakerIndex >= speakerStings.length) return;
-        Sound sound = speakerStings[speakerIndex];
-        if (sound != null) sound.play(StoryUiConstants.STORY_STING_VOLUME[speakerIndex]);
+        play(speakerStings[speakerIndex], StoryUiConstants.STORY_STING_VOLUME[speakerIndex]);
     }
 
     /** Plays one interface cue at its configured volume; no-ops when off or unavailable. */
@@ -89,8 +104,7 @@ public final class StoryAudio implements Disposable {
         if (!enabled || cue == null) return;
         int cueIndex = cue.ordinal();
         if (cueIndex < 0 || cueIndex >= interfaceCues.length) return;
-        Sound sound = interfaceCues[cueIndex];
-        if (sound != null) sound.play(StoryUiConstants.STORY_CUE_VOLUME[cueIndex]);
+        play(interfaceCues[cueIndex], StoryUiConstants.STORY_CUE_VOLUME[cueIndex]);
     }
 
     // -------------------------------------------------------------------------
