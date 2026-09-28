@@ -68,7 +68,7 @@ Answer: starting levels feel boring because there are too few enemies, levels in
 **B7.** Which reference games have the difficulty feel you want?
 (Doom RPG, Slay the Spire, Hades, Enter the Gungeon, Brogue, Darkest Dungeon, …)
 What exactly do you like about their difficulty?
-Answer: pixel dungeon, spay the spire, 
+Answer: shattered pixel dungeon, spay the spire, soul knight.
 
 ---
 
@@ -76,23 +76,23 @@ Answer: pixel dungeon, spay the spire,
 
 **C1.** How long should a full run take for a good player who dies at a "normal" depth?
 And a single floor?
-Answer:
+Answer: I do not know 
 
 **C2.** How many runs should a new player need before beating the FIRST boss?
-Answer:
+Answer: I do not know but likely not many because otherwise player will lose interest. but is still must be challenging enough 
 
 **C3.** For a skilled player, where should a typical run end?
 (Region A boss / somewhere in Region B / Region C / deep in The Breach / never — only
 by mistake)
-Answer:
+Answer: in general the idea is that every 5 levels there is a boss, then for skilled player the level 10-15 should feel very much challenging but fair id player was prepared well enough from previous levels, same for every iteration.
 
 **C4.** Is The Breach (endless depth) meant to eventually kill everyone at some depth,
 or should a perfect player be able to go on forever?
-Answer:
+Answer: the goal is to have something like 20-25 levels, then the game ends.
 
 **C5.** Should a run be winnable by luck alone, by skill alone, or mostly skill with
 some luck? How much should a bad seed (few pickups, bad weapons) be able to ruin a run?
-Answer:
+Answer: luck must play a small role, mostly skill and resource management should do the thing. player must feel that he earned the win and did not get it by luck.
 
 ---
 
