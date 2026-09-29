@@ -47,7 +47,7 @@ with this file's tick in the same commit. Never `git add -A`.
 - [x] **CP2** — content.
       DONE WHEN: six new ids registered, EnemyVoiceMoment.WIND_UP + fallback binding, listed rows
       retuned, offline render shows all sounds <= 1.0 s ending on 0; build green.
-- [ ] **CP3** — firing sites.
+- [x] **CP3** — firing sites.
       DONE WHEN: A1-A6 wired; build + test green; balanceSim bands unchanged.
 - [ ] **CP4** — docs + gate.
       DONE WHEN: docs/sound-system.txt + CLAUDE.md updated; reviewer PASS; idea STATUS IMPLEMENTED.
@@ -72,3 +72,11 @@ with this file's tick in the same commit. Never `git add -A`.
   envelope reaches exactly 0 one sample past the buffer). A8 is read as "no audible end step".
   `EnemyVoiceMoment.WIND_UP` exists; the catalog loops FAMILY_MOMENTS (ALERT/ATTACK/DEATH) only and
   binds WIND_UP via `bindEnemyVoiceFallback` -> ENEMY_WIND_UP. Nothing fires the new ids yet (CP3).
+- **CP3 handover:** Wired: `EnemyManager.announceWindUp` at the 3 `setWindUp` commits + the first
+  self-destruct prime; `World.triggerAutoDocHeal` -> HEAL_STATION; `applyInventoryConsumableEffect`
+  -> PLAYER_HEAL; `updateLowHealthWarningSound` (own latch `healthAboveLowWarningSound`, called beside
+  the low-health bark) -> LOW_HEALTH_WARNING; `updateLogTerminals` + `updateEventStations` ->
+  TERMINAL_ACCESS; `openInventory` (before the phase change) / `closeInventory` (after
+  `setSuppressed(false)`) -> UI_MENU_OPEN / _CLOSE. Mirror `core:test`: 449 tests, only the
+  pre-existing `StoryBarkTest` bark.depth.core.2 failure. `balanceSim`: passes, and
+  `summary.txt` is BYTE-IDENTICAL to a baseline run of 41605e7 (R2 proven).

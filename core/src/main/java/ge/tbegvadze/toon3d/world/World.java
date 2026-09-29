@@ -418,6 +418,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private StoryBarkTickSubscriber  storyBarkTickSubscriber;
     /** Edge detector for the low-health bark: fires on the way DOWN through the threshold only. */
     private boolean                  healthAboveLowThreshold = true;
+    /**
+     * Edge detector for the suit's LOW_HEALTH_WARNING sound (procedural-sound-effects order 6), on
+     * its own threshold so the sound and the bark can be tuned apart.
+     */
+    private boolean                  healthAboveLowWarningSound = true;
     // Story UI — MOMENT SCHEDULE (order-5): the run-scoped latches behind the cold open and the
     // ending.  Everything else in the schedule is latched PERSISTENTLY by the narrative layer's
     // one-shot flags; these two are per-run because they answer "has this run started / finished
@@ -1338,7 +1343,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setEnemyAttackListener(
                 new EnemyAttackFanout(enemyAttackEffectSystem, gameAudio));
         // Waking and dying are heard in the enemy FAMILY's voice (procedural-sound-effects order 3),
-        // placed at the enemy and pitched down for a bigger body.
+        // placed at the enemy and pitched down for a bigger body. A committed WIND_UP (order 6)
+        // rides the same listener and resolves to the one shared telegraph sound.
         enemyManager.setEnemyVoiceListener((enemy, moment) ->
                 gameAudio.playEnemyVoice(enemy.type.family(), moment,
                         enemy.worldCenterX(), enemy.worldCenterY(), enemy.type.heightMultiplier()));
@@ -2404,6 +2410,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         updateStoryBarkTouch();
         if (storyBarkTickSubscriber != null) storyBarkTickSubscriber.update(deltaTime);
         updateLowHealthStoryBark();
+        updateLowHealthWarningSound();
         // Story MOMENT SCHEDULE (order-5): the cold open once per run, the tutorial lines as each
         // control becomes useful, and — at the bottom of the descent, with the Core's boss down —
         // the ending choice. All three only ASK; the narrative layer's one-shot flags mean a veteran
@@ -2767,6 +2774,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase != RunPhase.PLAYING) return;
         if (touchInputState != null) touchInputState.resetAllButtonStates();
         inventoryOverlayRenderer.onOpen();
+        // Played BEFORE the phase change: the overlay's own sound, like LEVEL_UP (order 6, R5).
+        gameAudio.playUi(GameSoundId.UI_MENU_OPEN);
         runPhase = RunPhase.INVENTORY_OPEN;
     }
 
@@ -2776,6 +2785,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private void closeInventory(boolean spendTurn) {
         runPhase = RunPhase.PLAYING;
+        // The world is live again THIS frame, not from the next update: sync suppression to the new
+        // phase so the close blip — and a medkit's heal below — are not swallowed (order 6, R5).
+        gameAudio.setSuppressed(false);
+        gameAudio.playUi(GameSoundId.UI_MENU_CLOSE);
         if (spendTurn) {
             applyInventoryConsumableEffect();
             if (tickEventBus != null) {
@@ -2811,6 +2824,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         int healAmount = Math.round(player.getMaxHealth() * RouteMapConstants.REST_HEAL_FRACTION);
         if (healAmount <= 0) return;
         player.applyHealing(healAmount);
+        gameAudio.playUi(GameSoundId.HEAL_STATION);   // the charger (order 6); was silent
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("AUTO-DOC +" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
         }
@@ -2844,6 +2858,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 return; // no event resolved — leave the room quiet rather than open an empty overlay
             }
             activeEvent = event;
+            // Played before the phase change below, so the overlay's own sound is not suppressed.
+            gameAudio.playUi(GameSoundId.TERMINAL_ACCESS);
             eventChoiceOverlayRenderer.present(event);
             if (touchInputState != null) {
                 touchInputState.resetAllButtonStates();
@@ -3399,6 +3415,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (manhattan > 1) continue;   // not adjacent yet (the terminal tile itself is solid)
             unreadLogTerminals.remove(index);
             logTakesThisFloor++;
+            gameAudio.playUi(GameSoundId.TERMINAL_ACCESS);   // the terminal waking (order 6)
             barkSystem.request(BarkTrigger.LOG_FOUND);
             exchangeSystem.request(ExchangeTrigger.LOG_FOUND);
             return;
@@ -3966,6 +3983,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * player heals back above it — so a fight spent hovering at low HP produces one line, not a
      * stream of them (the bark layer's cooldown is the second guard).
      */
+    /**
+     * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
+     * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
+     * at low HP through a fight is one warning, not an alarm.
+     */
+    private void updateLowHealthWarningSound() {
+        float healthFraction = player.getHealthFraction();
+        if (healthAboveLowWarningSound) {
+            // HP 0 is death, not "low": the killing blow never stacks a warning on PLAYER_DEATH.
+            if (healthFraction > 0f
+                    && healthFraction <= SoundConstants.GAME_SFX_LOW_HEALTH_FRACTION) {
+                healthAboveLowWarningSound = false;
+                gameAudio.playUi(GameSoundId.LOW_HEALTH_WARNING);
+            }
+        } else if (healthFraction > SoundConstants.GAME_SFX_LOW_HEALTH_FRACTION) {
+            healthAboveLowWarningSound = true;
+        }
+    }
+
     private void updateLowHealthStoryBark() {
         float healthFraction = player.getHealthFraction();
         if (healthAboveLowThreshold) {
@@ -4361,6 +4397,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (healAmount > 0) {
             player.applyHealing(healAmount);
             runStats.recordHealUsed(); // resource-economy telemetry (order 3)
+            // The same heal the HEAL button plays (procedural-sound-effects order 6): a medkit used
+            // from the inventory used to restore HP in silence.
+            gameAudio.playUi(GameSoundId.PLAYER_HEAL);
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
             }
