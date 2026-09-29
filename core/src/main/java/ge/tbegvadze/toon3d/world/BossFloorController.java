@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.world;
 
+import ge.tbegvadze.toon3d.audio.GameAudio;
+import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.Player;
@@ -16,6 +18,7 @@ import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.SoundConstants;
 
 import java.util.List;
 
@@ -112,6 +115,26 @@ public final class BossFloorController implements TickSubscriber {
         level.setCell(exitColumn, exitRow, 'x');
     }
 
+    /**
+     * The boss fight's sound (procedural-sound-effects order 7). Nullable and set by {@code World}
+     * only: the headless balance simulator never injects one, so the fight it plays is silent and
+     * byte-for-byte the same fight.
+     */
+    private GameAudio gameAudio;
+
+    public void setGameAudio(GameAudio audio) {
+        this.gameAudio = audio;
+    }
+
+    /** A boss sound at the boss; {@code sizeMultiplier} > 1 pitches it down (the phase-2 roar). */
+    private void playAtBoss(GameSoundId soundId, float sizeMultiplier) {
+        if (gameAudio == null) return;
+        gameAudio.playAtWorld(soundId,
+                boss.tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f,
+                boss.tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f,
+                sizeMultiplier);
+    }
+
     @Override
     public void onTick(TickContext context) {
         if (bossDefeated) return;
@@ -179,6 +202,7 @@ public final class BossFloorController implements TickSubscriber {
         doorManager.lockArenaDoor(arenaDoorColumn, arenaDoorRow);
         if (bossHudRenderer != null) bossHudRenderer.showIntro();
         boss.phase1Pattern.onPhaseStart();
+        playAtBoss(GameSoundId.BOSS_ROAR, 1f);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor(boss.bossName.toUpperCase(), EventTextSystem.COLOR_GREEN);
         }
@@ -192,6 +216,7 @@ public final class BossFloorController implements TickSubscriber {
         invulnerableTurnsLeft = Constants.BOSS_PHASE_TRANSITION_TURNS;
         boss.phase2Pattern.onPhaseStart();
         if (bossHudRenderer != null) bossHudRenderer.showBanner("PHASE 2");
+        playAtBoss(GameSoundId.BOSS_ROAR, SoundConstants.GAME_SFX_BOSS_ENRAGE_ROAR_SIZE);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("ENRAGED!", EventTextSystem.COLOR_GREEN);
         }
@@ -235,16 +260,19 @@ public final class BossFloorController implements TickSubscriber {
         switch (move.kind) {
             case TELEGRAPH:
                 // DangerTileSet already armed by the pattern; nothing more to do this tick
+                playAtBoss(GameSoundId.ENEMY_WIND_UP, 1f);
                 consecutiveMoveTurns = 0;   // a plant — resets the fairness counter (F1)
                 break;
 
             case RESOLVE:
+                playAtBoss(GameSoundId.BOSS_SLAM, 1f);
                 resolveDangerTiles(player, playerColumn, playerRow);
                 consecutiveMoveTurns = 0;
                 break;
 
             case REPOSITION:
                 if (repositionBoss(playerColumn, playerRow)) {
+                    playAtBoss(GameSoundId.HEAVY_FOOTFALL, 1f);
                     consecutiveMoveTurns++;
                 } else {
                     consecutiveMoveTurns = 0;   // blocked in → effectively a plant
@@ -253,6 +281,7 @@ public final class BossFloorController implements TickSubscriber {
 
             case DASH:
                 if (executeDash(move, playerColumn, playerRow)) {
+                    playAtBoss(GameSoundId.HEAVY_FOOTFALL, 1f);
                     consecutiveMoveTurns++;
                 } else {
                     consecutiveMoveTurns = 0;   // fully boxed in → degrades to HOLD (a plant)
@@ -261,6 +290,7 @@ public final class BossFloorController implements TickSubscriber {
 
             case CHARGE:
                 executeCharge(move, player, playerColumn, playerRow);
+                playAtBoss(GameSoundId.BOSS_SLAM, 1f);   // heard where the rush ENDED
                 // The charge itself relocates, but its FORCED recovery IS the punish window, so it
                 // resets the F1 counter — a charge is never the start of a kite chain (ORDER 3).
                 consecutiveMoveTurns = 0;
@@ -279,6 +309,7 @@ public final class BossFloorController implements TickSubscriber {
             case MELEE:
                 if (GameMath.manhattanDistanceTiles(
                         boss.tileColumn, boss.tileRow, playerColumn, playerRow) == 1) {
+                    playAtBoss(GameSoundId.BOSS_SLAM, 1f);
                     applyBossDamageToPlayer(player, move.tileDamage);
                 }
                 consecutiveMoveTurns = 0;
@@ -288,6 +319,7 @@ public final class BossFloorController implements TickSubscriber {
                 // ORDER 5 — one repair tick: restore HP (clamped to maxHealth), no offense. The full-screen
                 // HP bar reads boss.health directly, so it ticks up on its own. A repair tick is a plant.
                 boss.health = Math.min(boss.maxHealth, boss.health + move.healAmount);
+                playAtBoss(GameSoundId.BOSS_REPAIR, 1f);
                 consecutiveMoveTurns = 0;
                 break;
 
@@ -593,12 +625,14 @@ public final class BossFloorController implements TickSubscriber {
             // spawnBossMinion (not spawnEnemy) tags the add as boss-summoned so the enemy-death drop
             // path can grant the guaranteed ammo lifeline in this sealed arena (ORDER 6, Fairness F5).
             enemyManager.spawnBossMinion(move.summonType, targetColumn, targetRow, boss.dungeonLevel);
+            if (gameAudio != null) gameAudio.playAt(GameSoundId.ENEMY_SPAWN, targetColumn, targetRow);
             spawned++;
         }
     }
 
     private void defeatBoss(Player player) {
         bossDefeated = true;
+        playAtBoss(GameSoundId.BOSS_DEATH, 1f);
         boss.dangerTileSet.clear();
 
         // Restore the exit stairs

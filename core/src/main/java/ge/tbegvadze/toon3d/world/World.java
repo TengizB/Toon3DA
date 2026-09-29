@@ -418,6 +418,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private StoryBarkTickSubscriber  storyBarkTickSubscriber;
     /** Edge detector for the low-health bark: fires on the way DOWN through the threshold only. */
     private boolean                  healthAboveLowThreshold = true;
+    /**
+     * Edge detector for the suit's LOW_HEALTH_WARNING sound (procedural-sound-effects order 6), on
+     * its own threshold so the sound and the bark can be tuned apart.
+     */
+    private boolean                  healthAboveLowWarningSound = true;
+    /** The phase seen on the previous update — the menu open/close detector's memory (order 7). */
+    private RunPhase                 phaseSeenLastUpdate = null;
     // Story UI — MOMENT SCHEDULE (order-5): the run-scoped latches behind the cold open and the
     // ending.  Everything else in the schedule is latched PERSISTENTLY by the narrative layer's
     // one-shot flags; these two are per-run because they answer "has this run started / finished
@@ -712,9 +719,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         shopOverlayRenderer = new ShopOverlayRenderer();
 
         weaponInspectOverlayRenderer = new WeaponInspectOverlayRenderer();
-        weaponInspectOverlayRenderer.setOnTake(this::resolveWeaponTake);
-        weaponInspectOverlayRenderer.setOnConvertToAmmo(this::resolveWeaponConvert);
-        weaponInspectOverlayRenderer.setOnEvictSlot(this::resolveWeaponEvict);
+        // Each resolution runs INSIDE the WEAPON_INSPECT update, while gameplay sound is suppressed,
+        // yet it is a real action: the pickup is made and a world turn fires (enemies swing). Lift
+        // the suppression first, as closeInventory does, or all of it is silent (order 7).
+        weaponInspectOverlayRenderer.setOnTake(() -> {
+            gameAudio.setSuppressed(false);
+            resolveWeaponTake();
+        });
+        weaponInspectOverlayRenderer.setOnConvertToAmmo(() -> {
+            gameAudio.setSuppressed(false);
+            resolveWeaponConvert();
+        });
+        weaponInspectOverlayRenderer.setOnEvictSlot(slotIndex -> {
+            gameAudio.setSuppressed(false);
+            resolveWeaponEvict(slotIndex);
+        });
         weaponInspectOverlayRenderer.setOnClose(this::closeWeaponInspect);
 
         // Permadeath — run stats. The report that used to be its own death screen is now a page of
@@ -974,6 +993,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void reactToRouteTap(RouteMapOverlayRenderer.PointerResult result) {
         switch (result) {
             case ENGAGED:
+                gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                 impactEffectSystem.triggerUiThunk(RouteMapConstants.ENGAGE_THUNK_MAGNITUDE,
                                                   RouteMapConstants.ENGAGE_THUNK_SECONDS);
                 break;
@@ -984,8 +1004,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 routePointerDown = false;
                 runPhase = RunPhase.PLAYING;
                 break;
+            case FOCUS_CHANGED:
+                gameAudio.playMenu(GameSoundId.UI_FOCUS);   // order 7
+                break;
+            case INVALID:
+                gameAudio.playMenu(GameSoundId.ACTION_DENIED);   // order 7
+                break;
             default:
-                // FOCUS_CHANGED / INVALID / FRAMING_TOGGLED / NONE — the renderer already gave the
+                // FRAMING_TOGGLED / NONE — the renderer already gave the
                 // in-console feedback (ring, red flash, haptic). Nothing more to do here.
                 break;
         }
@@ -1338,7 +1364,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setEnemyAttackListener(
                 new EnemyAttackFanout(enemyAttackEffectSystem, gameAudio));
         // Waking and dying are heard in the enemy FAMILY's voice (procedural-sound-effects order 3),
-        // placed at the enemy and pitched down for a bigger body.
+        // placed at the enemy and pitched down for a bigger body. A committed WIND_UP (order 6)
+        // rides the same listener and resolves to the one shared telegraph sound.
         enemyManager.setEnemyVoiceListener((enemy, moment) ->
                 gameAudio.playEnemyVoice(enemy.type.family(), moment,
                         enemy.worldCenterX(), enemy.worldCenterY(), enemy.type.heightMultiplier()));
@@ -1358,7 +1385,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hazardManager = new HazardManager(targetLevel, enemyManager, statusEffectController,
                                           GameMath.floorSeed(runSeed, currentDepth) ^ 0x4A2A5D9BL);
         hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
-        hazardManager.setHazardVisualListener(propRenderer::addDynamicProp);
+        // A hazard tile appearing is SEEN (the decal) and, since order 7, HEARD at its tile. Fire that
+        // spreads asks every turn; FIRE_IGNITE's re-trigger window keeps a burning room from droning.
+        hazardManager.setHazardVisualListener((tileColumn, tileRow, hazardChar) -> {
+            propRenderer.addDynamicProp(tileColumn, tileRow, hazardChar);
+            if (Level.isHazardFire(hazardChar)) {
+                gameAudio.playAt(GameSoundId.FIRE_IGNITE, tileColumn, tileRow);
+            } else if (Level.isHazardToxic(hazardChar)) {
+                gameAudio.playAt(GameSoundId.TOXIC_SPILL, tileColumn, tileRow);
+            }
+        });
         // The loudest event in the game, placed at the barrel so a chain reaction sweeps across the
         // stereo field the way it sweeps across the room.
         explosiveBarrelManager.setDetonationListener((tileColumn, tileRow) -> {
@@ -1416,6 +1452,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 bossHudRenderer.setBoss(boss);
                 bossFloorController = new BossFloorController(boss, targetLevel, pendingBossArenaLayout, doorManager,
                         enemyManager, hazardManager, bossHudRenderer, eventTextSystem);
+                bossFloorController.setGameAudio(gameAudio);   // order 7: the boss fight is heard
             }
         }
         gameState.isBossFloor        = bossFloorController != null;
@@ -1921,6 +1958,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // status blink, product drop into the tray. Cosmetic only — no world tick.
             openMachine.triggerDispense(facilityTimeSeconds);
         }
+        // Heard as the goods landing, or as the one "refused" bleep (order 7).
+        gameAudio.playMenu(purchased ? GameSoundId.SHOP_DISPENSE : GameSoundId.ACTION_DENIED);
         // Push a short receipt line to the overlay so the player SEES what the purchase delivered
         // (or why it failed). This is rendered inside the shop overlay — event text would be hidden
         // behind the overlay's dim quad — so it is the only on-screen confirmation of receipt.
@@ -1991,6 +2030,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         gameAudio.setPlayerState(player.positionX, player.positionY,
                                  player.directionX, player.directionY);
         gameAudio.update(deltaTime);
+        playMenuTransitionSound();
 
         // TITLE phase (order-8 Part A) — the launch screen. Nothing is running: the world behind it
         // is built but frozen and not even drawn, and the descent begins only when the player picks
@@ -2196,8 +2236,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
+                boolean popupWasOpen = inventoryOverlayRenderer.isAnyWindowOpen();
                 InventoryOverlayRenderer.CloseAction touchAction =
                         inventoryOverlayRenderer.handleTouchAt(cardTouchPosition.x, cardTouchPosition.y);
+                playInventoryTouchSound(touchAction, popupWasOpen,
+                        inventoryOverlayRenderer.isAnyWindowOpen());
                 if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
                     closeInventory(false);
                 } else if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
@@ -2229,8 +2272,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
+                boolean wasConfirming = shopOverlayRenderer.isConfirming();
                 ShopOverlayRenderer.TouchOutcome outcome =
                         shopOverlayRenderer.handleTouch(cardTouchPosition.x, cardTouchPosition.y);
+                // The buy flow, voiced (order 7): a refused card, a card picked (confirm step opens),
+                // a confirm cancelled. A purchase is voiced in resolveShopPurchase; CLOSED by the
+                // menu detector.
+                if (shopOverlayRenderer.consumeDenied()) {
+                    gameAudio.playMenu(GameSoundId.ACTION_DENIED);
+                } else if (outcome == ShopOverlayRenderer.TouchOutcome.NONE) {
+                    if (!wasConfirming && shopOverlayRenderer.isConfirming()) {
+                        gameAudio.playMenu(GameSoundId.UI_FOCUS);
+                    } else if (wasConfirming && !shopOverlayRenderer.isConfirming()) {
+                        gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+                    }
+                }
                 if (outcome == ShopOverlayRenderer.TouchOutcome.CLOSED) {
                     closeShop();
                 } else if (outcome == ShopOverlayRenderer.TouchOutcome.PURCHASE_CONFIRMED) {
@@ -2276,6 +2332,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 int tappedIndex = levelUpOverlayRenderer.getTappedCardIndex(cardTouchPosition.x, cardTouchPosition.y);
                 UpgradeCard tappedCard = levelUpOverlayRenderer.getOfferedCard(tappedIndex);
                 if (tappedCard != null) {
+                    gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                     applyUpgradeCard(tappedCard);
                 }
             }
@@ -2293,6 +2350,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                         cardTouchPosition.x, cardTouchPosition.y);
                 EventChoice tappedChoice = eventChoiceOverlayRenderer.getChoice(tappedIndex);
                 if (tappedChoice != null) {
+                    gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                     applyEventChoice(tappedChoice);
                     activeEvent = null;
                     runPhase = RunPhase.PLAYING;
@@ -2404,6 +2462,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         updateStoryBarkTouch();
         if (storyBarkTickSubscriber != null) storyBarkTickSubscriber.update(deltaTime);
         updateLowHealthStoryBark();
+        updateLowHealthWarningSound();
         // Story MOMENT SCHEDULE (order-5): the cold open once per run, the tutorial lines as each
         // control becomes useful, and — at the bottom of the descent, with the Core's boss down —
         // the ending choice. All three only ASK; the narrative layer's one-shot flags mean a veteran
@@ -2776,6 +2835,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private void closeInventory(boolean spendTurn) {
         runPhase = RunPhase.PLAYING;
+        // The world is live again THIS frame, not from the next update: sync suppression to the new
+        // phase so a medkit's heal below is not swallowed (order 6, R5). The close blip itself comes
+        // from playMenuTransitionSound (order 7).
+        gameAudio.setSuppressed(false);
         if (spendTurn) {
             applyInventoryConsumableEffect();
             if (tickEventBus != null) {
@@ -2811,6 +2874,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         int healAmount = Math.round(player.getMaxHealth() * RouteMapConstants.REST_HEAL_FRACTION);
         if (healAmount <= 0) return;
         player.applyHealing(healAmount);
+        gameAudio.playUi(GameSoundId.HEAL_STATION);   // the charger (order 6); was silent
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("AUTO-DOC +" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
         }
@@ -2844,6 +2908,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 return; // no event resolved — leave the room quiet rather than open an empty overlay
             }
             activeEvent = event;
+            // Played before the phase change below, so the overlay's own sound is not suppressed.
+            gameAudio.playUi(GameSoundId.TERMINAL_ACCESS);
             eventChoiceOverlayRenderer.present(event);
             if (touchInputState != null) {
                 touchInputState.resetAllButtonStates();
@@ -3399,6 +3465,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (manhattan > 1) continue;   // not adjacent yet (the terminal tile itself is solid)
             unreadLogTerminals.remove(index);
             logTakesThisFloor++;
+            gameAudio.playUi(GameSoundId.TERMINAL_ACCESS);   // the terminal waking (order 6)
             barkSystem.request(BarkTrigger.LOG_FOUND);
             exchangeSystem.request(ExchangeTrigger.LOG_FOUND);
             return;
@@ -3829,24 +3896,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (codexSystem.isShowingEntry() && CodexOverlayRenderer.isInsideBackButton(tapX, tapY)) {
             codexSystem.closeEntry();
+            gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);   // order 7
             return;
         }
         int settingIndex = CodexOverlayRenderer.settingIndexAt(tapX, tapY);
         if (settingIndex >= 0) {
             codexSystem.getSettings().cycleSetting(settingIndex);
             applyStoryAccessibilitySettings();
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
             codexOverlayRenderer.refreshLabels();
             return;
         }
         int tabIndex = CodexOverlayRenderer.categoryTabIndexAt(tapX, tapY);
         if (tabIndex >= 0) {
             codexSystem.selectCategory(CodexCategory.values()[tabIndex]);
+            gameAudio.playMenu(GameSoundId.UI_FOCUS);   // order 7
             return;
         }
         if (codexSystem.isShowingEntry()) return;   // the body is text, not buttons
         int rowIndex = CodexOverlayRenderer.entryRowIndexAt(tapX, tapY,
                 codexSystem.getVisibleEntryCount(), codexScrollAtTouchDown);
         if (rowIndex >= 0 && codexSystem.openEntry(rowIndex)) {
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
             storyTelemetry.recordCodexEntryOpened();
             codexOverlayRenderer.refreshLabels();   // the NEW dot it just cleared
         }
@@ -3959,6 +4030,72 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     /** The persisted story accessibility settings (order-6 Part D) — order-8's settings menu reads this. */
     public StorySettings getStorySettings() {
         return storySettings;
+    }
+
+    /** The menu overlays whose opening and closing are heard (order 7). */
+    private static boolean isMenuPhase(RunPhase phase) {
+        return phase == RunPhase.INVENTORY_OPEN || phase == RunPhase.SHOP_OPEN
+                || phase == RunPhase.PAUSE_MENU || phase == RunPhase.SETTINGS_MENU
+                || phase == RunPhase.CODEX_OPEN || phase == RunPhase.WEAPON_INSPECT;
+    }
+
+    /**
+     * ONE detector for every menu's open/close blip (procedural-sound-effects order 7), rather than a
+     * call at each of the dozen open/close sites: entering a menu phase plays UI_MENU_OPEN (menu to
+     * menu included — the settings screen opening over the pause menu is still an opening), leaving
+     * the menus altogether plays UI_MENU_CLOSE. Heard one update after the change, which is a frame.
+     */
+    private void playMenuTransitionSound() {
+        RunPhase previous = phaseSeenLastUpdate;
+        phaseSeenLastUpdate = runPhase;
+        if (previous == null || previous == runPhase) return;
+        // Backing OUT of a sub-menu (settings, the archive) to the menu it hangs off is a close,
+        // even though the phase it lands on is itself a menu.
+        boolean leavingSubMenu = previous == RunPhase.SETTINGS_MENU || previous == RunPhase.CODEX_OPEN;
+        if (isMenuPhase(runPhase) && !leavingSubMenu) {
+            gameAudio.playMenu(GameSoundId.UI_MENU_OPEN);
+        } else if (isMenuPhase(previous)) {
+            gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+        }
+    }
+
+    /**
+     * The inventory's own taps, voiced (order 7): a popup opening on an item or ability, a tap inside
+     * one, a popup dismissed, and USE / DROP (which also spends the turn). Closing the whole overlay
+     * is left to the menu detector.
+     */
+    private void playInventoryTouchSound(InventoryOverlayRenderer.CloseAction touchAction,
+                                         boolean popupWasOpen, boolean popupIsOpen) {
+        if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);
+        } else if (touchAction == InventoryOverlayRenderer.CloseAction.NONE) {
+            if (!popupWasOpen && popupIsOpen) {
+                gameAudio.playMenu(GameSoundId.UI_MENU_OPEN);
+            } else if (popupWasOpen && !popupIsOpen) {
+                gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+            } else if (popupWasOpen) {
+                gameAudio.playMenu(GameSoundId.UI_FOCUS);
+            }
+        }
+    }
+
+    /**
+     * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
+     * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
+     * at low HP through a fight is one warning, not an alarm.
+     */
+    private void updateLowHealthWarningSound() {
+        float healthFraction = player.getHealthFraction();
+        if (healthAboveLowWarningSound) {
+            // HP 0 is death, not "low": the killing blow never stacks a warning on PLAYER_DEATH.
+            if (healthFraction > 0f
+                    && healthFraction <= SoundConstants.GAME_SFX_LOW_HEALTH_FRACTION) {
+                healthAboveLowWarningSound = false;
+                gameAudio.playUi(GameSoundId.LOW_HEALTH_WARNING);
+            }
+        } else if (healthFraction > SoundConstants.GAME_SFX_LOW_HEALTH_FRACTION) {
+            healthAboveLowWarningSound = true;
+        }
     }
 
     /**
@@ -4203,12 +4340,19 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         if (pauseMenu.isConfirmOpen()) {
             updateFramingConfirmTouch(pauseMenu, false);
-            if (pauseMenu.consumeConfirmedRow() >= 0) abandonRun();
+            if (pauseMenu.consumeConfirmedRow() >= 0) {
+                gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // PROCEED (order 7)
+                abandonRun();
+            } else if (!pauseMenu.isConfirmOpen()) {
+                gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);   // CANCEL (order 7)
+            }
             return;
         }
         int releasedRow = updateFramingMenuTouch(pauseMenu, StoryUiConstants.STORY_FRAME_MENU_TOP_Y);
         if (releasedRow < 0 || releasedRow >= PauseMenuItem.values().length) return;
         PauseMenuItem item = PauseMenuItem.values()[releasedRow];
+        // Heard on release even when the row only OPENS a confirmation (ABANDON_RUN) — order 7.
+        gameAudio.playMenu(GameSoundId.UI_CONFIRM);
         // ABANDON_RUN carries a confirmation, so activateRow opens it and commits nothing.
         if (!pauseMenu.activateRow(releasedRow, item.getConfirmStringId())) return;
         switch (item) {
@@ -4261,6 +4405,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // through here (rather than per frame) is what makes it take effect on the next line drawn.
         storySettings.cycleSetting(releasedRow);
         applyStoryAccessibilitySettings();
+        gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // after apply, so EFFECTS=OFF is itself silent
         codexOverlayRenderer.refreshLabels();
         settingsMenu.rebuildAsSettings(storySettings);
     }
@@ -4361,6 +4506,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (healAmount > 0) {
             player.applyHealing(healAmount);
             runStats.recordHealUsed(); // resource-economy telemetry (order 3)
+            // The same heal the HEAL button plays (procedural-sound-effects order 6): a medkit used
+            // from the inventory used to restore HP in silence.
+            gameAudio.playUi(GameSoundId.PLAYER_HEAL);
             if (eventTextSystem != null) {
                 eventTextSystem.spawnWithColor("+" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
             }

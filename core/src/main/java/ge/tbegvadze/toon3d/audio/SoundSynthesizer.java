@@ -45,11 +45,55 @@ public final class SoundSynthesizer {
             renderLayer(definition.getLayer(layerIndex), accumulator, totalSamples);
         }
 
+        if (definition.hasRoomEcho()) {
+            applyRoomEcho(definition, accumulator, totalSamples);
+        }
+
         short[] pcm = new short[totalSamples];
         for (int sampleIndex = 0; sampleIndex < totalSamples; sampleIndex++) {
             pcm[sampleIndex] = GameMath.toPcm16(GameMath.softClipUnit(accumulator[sampleIndex]));
         }
         return pcm;
+    }
+
+    /**
+     * The room (order 6): a feedback delay line with a one-pole low-pass in the loop, so every
+     * repeat is quieter AND duller than the last — which is what concrete does to a gunshot.
+     *
+     * <pre>
+     *   echo[n] = lowPass( dry[n - D] + feedback * echo[n - D] )
+     *   out[n]  = dry[n] + wetMix * echo[n]
+     * </pre>
+     *
+     * Then, because the tail is cut at the duration cap rather than decaying to exactly zero, the
+     * whole buffer takes a short linear end fade so the last sample is 0 (no click).
+     */
+    private void applyRoomEcho(SoundDefinition definition, float[] accumulator, int totalSamples) {
+        int delaySamples = Math.max(1, Math.round(definition.getEchoDelaySeconds() * sampleRateHz));
+        float feedback   = Math.min(0.95f, Math.max(0f, definition.getEchoFeedback()));
+        float wetMix     = definition.getEchoWetMix();
+        boolean damped   = definition.getEchoDampingHz() > 0f;
+        float dampingCoefficient = damped
+                ? GameMath.onePoleCoefficient(definition.getEchoDampingHz(), sampleRateHz) : 0f;
+
+        float[] echo = new float[totalSamples];
+        float lowPassPrevious = 0f;
+        for (int sampleIndex = delaySamples; sampleIndex < totalSamples; sampleIndex++) {
+            int sourceIndex = sampleIndex - delaySamples;
+            float fedBack = accumulator[sourceIndex] + feedback * echo[sourceIndex];
+            if (damped) {
+                lowPassPrevious = GameMath.onePoleLowPassStep(
+                        lowPassPrevious, fedBack, dampingCoefficient);
+                fedBack = lowPassPrevious;
+            }
+            echo[sampleIndex] = fedBack;
+        }
+        // The echo reads the DRY buffer above, so the wet mix is added in a second pass.
+        int fadeSamples = Math.round(SoundConstants.GAME_SFX_END_FADE_SECONDS * sampleRateHz);
+        for (int sampleIndex = 0; sampleIndex < totalSamples; sampleIndex++) {
+            accumulator[sampleIndex] = (accumulator[sampleIndex] + wetMix * echo[sampleIndex])
+                    * GameMath.endFadeGain(sampleIndex, totalSamples, fadeSamples);
+        }
     }
 
     private void renderLayer(SoundLayer layer, float[] accumulator, int totalSamples) {

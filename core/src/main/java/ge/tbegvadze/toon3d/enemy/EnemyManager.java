@@ -514,6 +514,14 @@ public final class EnemyManager implements EnemyHitTarget {
         this.enemyVoiceListener = listener;
     }
 
+    /**
+     * Reports a committed wind-up (procedural-sound-effects order 6) — the turn its telegraph
+     * appears. Cosmetic and null-guarded, so the balance simulator (no listener) is unaffected.
+     */
+    private void announceWindUp(Enemy enemy) {
+        if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.WIND_UP);
+    }
+
     /** Injects the telegraphed-hit-landed listener (narrative-rework order-4 READ_INTENT/GUARD evidence). */
     public void setTelegraphedHitLandedListener(java.util.function.Consumer<Boolean> listener) {
         this.telegraphedHitLandedListener = listener;
@@ -1523,6 +1531,7 @@ public final class EnemyManager implements EnemyHitTarget {
             plan.setWindUp(playerColumn, playerRow, chargeDamage, 1);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // rim flash telegraph, visible for the whole player turn
+            announceWindUp(enemy);
             return;
         }
         // No charge lane and not adjacent — a BRUISER guardian braces on cadence (or when low), which
@@ -1645,6 +1654,8 @@ public final class EnemyManager implements EnemyHitTarget {
         if (!enemy.selfDestructPrimed) {
             enemy.selfDestructPrimed         = true;
             enemy.selfDestructTurnsRemaining = EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS;
+            // Heard on the FIRST prime only: the countdown re-telegraphs every turn, the sound must not.
+            announceWindUp(enemy);
         }
         enemy.state = EnemyState.SELF_DESTRUCTING;
         enemy.triggerTelegraph();
@@ -1779,6 +1790,7 @@ public final class EnemyManager implements EnemyHitTarget {
             plan.setWindUp(enemy.tileColumn, enemy.tileRow, 0, 1);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // one full player turn of warning
+            announceWindUp(enemy);
             return;
         }
         enemy.sowTargetCount = 0; // not sowing this turn — clear any stale floor telegraph
@@ -2020,6 +2032,7 @@ public final class EnemyManager implements EnemyHitTarget {
             plan.setWindUp(playerColumn, playerRow, enemy.scaledAttackDamage(), 1);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // full player turn of warning, drawn in the WIND_UP intent frame
+            announceWindUp(enemy);
             return;
         }
         // Sealed and out of position (or on cooldown): a slow ranged unit that steps toward alignment.

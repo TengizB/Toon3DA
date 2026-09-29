@@ -525,10 +525,12 @@ public class PlayerController {
     private void tryHeal() {
         if (!hasAnyMedical()) {
             if (eventTextSystem != null) eventTextSystem.spawn("NO MEDKITS");
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.ACTION_DENIED);   // order 7
             return;
         }
         if (player.getHealth() >= player.getMaxHealth()) {
             if (eventTextSystem != null) eventTextSystem.spawn("ALREADY FULL");
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.ACTION_DENIED);   // order 7
             return;
         }
         actionState    = ActionState.HEALING;
@@ -554,7 +556,10 @@ public class PlayerController {
             if (heldAction != TouchAction.NONE || tapAction != TouchAction.NONE) {
                 player.clearStunFlag();
                 if (eventTextSystem != null) eventTextSystem.spawn("STUNNED!");
-                trySkipTurn();
+                // The stun swallowed this input: heard as the daze, not as a chosen wait (order 7).
+                if (gameAudio != null) gameAudio.playUi(GameSoundId.PLAYER_STUNNED);
+                if (eventTextSystem != null) eventTextSystem.spawn("Turn skipped");
+                beginSkip();
             }
             return;
         }
@@ -775,6 +780,15 @@ public class PlayerController {
 
     private void trySkipTurn() {
         if (eventTextSystem != null) eventTextSystem.spawn("Turn skipped");
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.PLAYER_WAIT);   // order 7
+        beginSkip();
+    }
+
+    /**
+     * Spends the turn doing nothing. The caller has already said (text) and sounded why — a chosen
+     * wait and a stun-swallowed input are different sounds (order 7).
+     */
+    private void beginSkip() {
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }
@@ -788,6 +802,7 @@ public class PlayerController {
     private void tryGuard() {
         player.setGuarding(true);
         if (eventTextSystem != null) eventTextSystem.spawnWithColor("GUARD", EventTextSystem.COLOR_BLUE);
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.PLAYER_GUARD_RAISE);   // order 7
         if (guardUsedListener != null) guardUsedListener.run();
         actionState    = ActionState.GUARDING;
         actionProgress = 0f;
@@ -798,6 +813,7 @@ public class PlayerController {
         if (weapon == null || weapon.getClipSize() == 0) return;  // null or melee — no reload
         if (weapon.getShotsInClip() >= weapon.getEffectiveClipSize()) {
             if (eventTextSystem != null) eventTextSystem.spawn("CLIP FULL");
+            if (gameAudio != null) gameAudio.playUi(GameSoundId.ACTION_DENIED);   // order 7
             return;
         }
         if (!weapon.requestManualReload()) return;  // already reloading or firing — silent
@@ -810,6 +826,7 @@ public class PlayerController {
     private void startRotation(float angleOffsetRadians) {
         sourceDirectionAngleRadians = MathUtils.atan2(player.directionY, player.directionX);
         targetDirectionAngleRadians = sourceDirectionAngleRadians + angleOffsetRadians;
+        if (gameAudio != null) gameAudio.playUi(GameSoundId.PLAYER_TURN);   // order 7
         actionState    = ActionState.ROTATING;
         actionProgress = 0f;
     }

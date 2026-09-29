@@ -1,0 +1,157 @@
+STATUS: IMPLEMENTED
+CATEGORY: Systems
+TITLE: Sound Pass 3 — no cap, and every action makes a sound
+CREATED: 2026-09-29
+IMPLEMENTED: 2026-09-29
+---
+
+IMPLEMENTATION NOTE (2026-09-29, reviewer PASS WITH FIXES, fixes applied)
+  - Reviewer blockers fixed: weapon-inspect EQUIP / CONVERT / SWAP ran inside the suppressed
+    WEAPON_INSPECT update, silencing the pickup AND the enemy turn it spends — each callback now
+    lifts suppression first; the pause menu's ABANDON RUN row now confirms on release, PROCEED
+    confirms, CANCEL closes.
+  - Widened past the A-list under the owner's "any action": inventory popups (open / tap / dismiss,
+    USE-DROP confirm), the shop buy flow (card picked, confirm cancelled, refused card), settings
+    knobs, codex tabs / entries / BACK. Two read-only queries were added to renderers for this:
+    InventoryOverlayRenderer.isAnyWindowOpen(), ShopOverlayRenderer.isConfirming()/consumeDenied().
+  - Backing out of SETTINGS / CODEX to their parent menu plays CLOSE, not OPEN.
+  - R4 honoured: FIRE_IGNITE at INTERFACE priority, volume 0.30; PLAYER_TURN re-trigger 0.13 s.
+  - SHOP_DISPENSE loudness 0 (it plays in a frozen world).
+  - Verified: mirror core:test = baseline, balanceSim summary byte-identical, 92 sounds render clean.
+
+OVERVIEW
+--------
+Order 7 of the procedural-sound-effects series (1-5 in procedural-sound-effects.txt,
+6 in procedural-sound-effects-order-6.txt). The owner's two asks:
+
+  1. "Remove the cap on sounds at all." The distinct-sound cap (64, raised to 72 by
+     order 6) was never the owner's rule — it came from the original design doc. It
+     is deleted outright: the constant, every doc sentence that says "a new sound must
+     replace a row", and the CLAUDE.md wording.
+  2. "Add more if any action has no sound." A sweep of every player action, menu,
+     world event and the boss fight found the gaps below; each gets a sound.
+
+The standing rule still holds: every sound is redundant with something drawn.
+
+
+SCOPE
+-----
+IN
+  - Delete `SoundConstants.GAME_SFX_MAX_DISTINCT_SOUNDS` and all "cap" language
+    (docs/sound-system.txt, CLAUDE.md, catalog comments). The resident-memory
+    guard it stood for is left to the per-sound 1.0 s duration limit (unchanged).
+  - PLAYER ACTIONS that were silent:
+      PLAYER_TURN        rotate left/right (quiet gear/cloth shuffle, lowest priority)
+      PLAYER_WAIT        skip turn (the suit's soft "hold" tick)
+      PLAYER_GUARD_RAISE guard stance (a braced metal clank)
+      PLAYER_STUNNED     the input a stun swallows (a dazed ringing)
+      ACTION_DENIED      heal with no medkit / at full HP, reload with a full clip,
+                         a shop purchase that fails, an invalid route-console tap
+  - MENUS that were silent:
+      UI_MENU_OPEN / UI_MENU_CLOSE (order 6) now play for EVERY menu overlay — shop,
+        pause, settings, codex, weapon inspect, inventory — from ONE phase-change
+        detector in World, not per site.
+      UI_CONFIRM   a pick: pause-menu row, level-up card, event choice, route ENGAGE
+      UI_FOCUS     a focus change on the route console
+      SHOP_DISPENSE a purchase landing in the vending tray
+  - WORLD events that were silent:
+      FIRE_IGNITE / TOXIC_SPILL  a hazard tile appears (fire also on ember collapse)
+      IMPACT_BLOCKED (existing)  an enemy's Block buffer absorbs a hit
+      CRYSTAL_SHATTER            shard / crust / frost shatter
+      CRYSTAL_GROW               shard regrown
+      FROST_CRUST                crust cooled onto an enemy
+      HEAVY_FOOTFALL             a golem's heavy footfall
+      LANCE_BEAM                 the Rimeshell lance beam
+      ENEMY_SPAWN                a summoned enemy materialising
+      SPIRE_GROW / STONE_CRUMBLE a spire born / shattered
+  - THE BOSS FIGHT (BossFloorController, audio injected by setter, null in sim):
+      BOSS_ROAR     awaken, and (pitched down) the phase-2 enrage
+      ENEMY_WIND_UP (existing) the TELEGRAPH turn
+      BOSS_SLAM     RESOLVE, MELEE, CHARGE
+      HEAVY_FOOTFALL DASH / REPOSITION
+      BOSS_REPAIR   HEAL
+      BOSS_DEATH    defeat
+      (CAST_HAZARD and SUMMON are heard through FIRE_IGNITE/TOXIC_SPILL/ENEMY_SPAWN.)
+  - `GameAudio.playMenu(id)` — a menu sound that ignores hard-pause suppression
+    (menus ARE the overlay) but still obeys the EFFECTS setting.
+
+OUT
+  - Story-channel taps (bark close, exchange answers, boot card, title menu) — the
+    story layer already has its own cues (render/StoryAudio), separately switchable.
+  - Music / ambient loops; voice.
+  - Per-boss unique voices (one boss sound set, pitched per boss by size later).
+  - Tests (non-balance).
+
+
+RULES
+-----
+  R1  Nothing changes gameplay state; test + balanceSim identical before/after.
+  R2  No package gains an audio import it did not have: golem/spire events ride
+      ImpactEffectSystem (already holds GameAudio); hazards ride World's existing
+      HazardVisualListener lambda; the boss controller lives in `world`.
+  R3  Menu open/close is detected from the RunPhase change, once per transition.
+  R4  PLAYER_TURN and FIRE_IGNITE are the quietest, lowest-priority and carry
+      re-trigger windows so a held rotate or a spreading fire never drones.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  `GAME_SFX_MAX_DISTINCT_SOUNDS` does not exist; no doc says a sound must replace
+      a row.
+  A2  Rotate, skip turn, guard, a stunned input and each refused action listed above
+      play their sound.
+  A3  Entering any of INVENTORY_OPEN, SHOP_OPEN, PAUSE_MENU, SETTINGS_MENU,
+      CODEX_OPEN, WEAPON_INSPECT plays UI_MENU_OPEN; leaving one plays UI_MENU_CLOSE.
+  A4  Pause row pick, level-up card, event choice and route ENGAGE play UI_CONFIRM;
+      route focus plays UI_FOCUS; route INVALID and failed purchase ACTION_DENIED; a
+      purchase SHOP_DISPENSE.
+  A5  Every ImpactEffectSystem golem/spire/spawn/block callback plays its sound.
+  A6  Fire and toxic hazard tiles appearing play FIRE_IGNITE / TOXIC_SPILL.
+  A7  Boss awaken, phase 2, telegraph, resolve/melee/charge, dash/reposition, heal
+      and defeat each play their sound.
+  A8  Every registered sound renders <= 1.0 s without clipping (offline harness).
+  A9  build green (mirror), test = baseline, balanceSim summary byte-identical.
+  A10 docs/sound-system.txt documents order 7 and every new firing site.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. Remove the cap (constant + docs).       2. New ids + recipes + playMenu.
+  3. Player / menu firing sites.             4. World / golem / hazard / boss sites.
+  5. Docs + reviewer.
+  TESTS: None. Not balance-bearing; verified by build + offline render + both gates.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed.
+  CP1  cap gone (A1); the 22 new ids registered, GameAudio.playMenu exists; offline
+       render passes; build green.
+  CP2  player + menu sites wired (A2-A4); build green.
+  CP3  world + golem + hazard + boss sites wired (A5-A7); build, test, balanceSim.
+  CP4  docs (A10); reviewer PASS; STATUS IMPLEMENTED.
+
+
+ASSUMPTIONS
+-----------
+  AS1  "Every action" includes menus and enemy/boss/world events, not only the
+       touch buttons — the owner said "any action".
+  AS2  Refused actions share one ACTION_DENIED bleep (one sound = one meaning).
+  AS3  Boss sounds are one shared set; the boss is loud, so its sounds sit near the
+       explosion ceiling.
+
+
+DECISIONS
+---------
+  D1  Remove the cap entirely (owner, 2026-09-29: "I never asked for a cap").
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas: procedural-sound-effects.txt, procedural-sound-effects-order-6.txt
+  Docs:  docs/sound-system.txt

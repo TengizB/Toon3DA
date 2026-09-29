@@ -121,7 +121,9 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
 
     // Interaction + feedback state.
     private int   confirmingIndex = -1;   // card whose CONFIRM step is open, or -1
-    private int   pendingBuyIndex = -1;   // set when a PURCHASE_CONFIRMED is returned
+    private int   pendingBuyIndex = -1;
+    /** Set by a refused card tap, cleared by {@link #consumeDenied()} (procedural-sound-effects order 7). */
+    private boolean deniedSinceLastQuery = false;   // set when a PURCHASE_CONFIRMED is returned
     private int   flashIndex      = -1;   // card flashing after a successful buy
     private float flashTimer      = 0f;
     private int   denyIndex       = -1;   // card blipping after a denied tap
@@ -256,6 +258,16 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
 
     public int getPendingBuyIndex() { return pendingBuyIndex; }
 
+    /** True while a card's CONFIRM / CANCEL step is open — read by World to voice the buy flow. */
+    public boolean isConfirming() { return confirmingIndex >= 0; }
+
+    /** True once after a tap on an unaffordable or sold-out card (World plays the refusal sound). */
+    public boolean consumeDenied() {
+        boolean denied = deniedSinceLastQuery;
+        deniedSinceLastQuery = false;
+        return denied;
+    }
+
     /**
      * Hit-tests a tap (already unprojected to world units) and advances the buy flow.
      *
@@ -295,6 +307,7 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
             if (entry.isSoldOut() || credits < entry.price) {
                 denyIndex = index;
                 denyTimer = HudConstants.SHOP_DENY_BLIP_SECONDS;
+                deniedSinceLastQuery = true;
                 return TouchOutcome.NONE;
             }
             confirmingIndex = index;

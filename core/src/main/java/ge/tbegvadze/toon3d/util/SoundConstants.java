@@ -34,8 +34,22 @@ public final class SoundConstants {
     public static final float GAME_SFX_MINIMUM_ATTACK_SECONDS = 0.0008f;
     /** Longest sound the catalog may hold (the player's death); everything else stays under 0.6 s. */
     public static final float GAME_SFX_MAX_DURATION_SECONDS   = 1.0f;
-    /** Hard ceiling on distinct synthesised sounds, guarding the resident-memory budget. */
-    public static final int   GAME_SFX_MAX_DISTINCT_SOUNDS    = 64;
+    /**
+     * Per-partial damping of {@code WaveformKind.METAL} (order 6), in 1/s per mode index: the
+     * bright partials of a struck bar die first, which is what separates a clang from a chord.
+     */
+    public static final float GAME_SFX_METAL_PARTIAL_DAMPING  = 9f;
+    /**
+     * A room echo's tail is synthesised until its repeats fall below this level (order 6).  About
+     * -40 dB: under a phone speaker's noise floor at game volume.
+     */
+    public static final float GAME_SFX_ECHO_SILENCE_LEVEL     = 0.01f;
+    /**
+     * Length of the linear fade that forces an ECHOED sound's last sample to zero (order 6).  An
+     * echo tail is cut at the duration cap rather than decaying to exactly zero, and a non-zero last
+     * sample is a click.  Sounds without an echo already end on zero and are not faded.
+     */
+    public static final float GAME_SFX_END_FADE_SECONDS       = 0.03f;
     /** Directory under the local storage root where generated WAVs are cached. */
     public static final String GAME_SFX_GENERATED_DIRECTORY   = "game-audio/";
 
@@ -107,6 +121,17 @@ public final class SoundConstants {
     // -------------------------------------------------------------------------------------
     /** Damage at or above this fraction of max HP plays the heavy hurt sound instead of the light one. */
     public static final float GAME_SFX_HEAVY_HIT_HP_FRACTION     = 0.15f;
+    /**
+     * HP fraction at or below which the suit's LOW_HEALTH_WARNING sounds once (order 6).  Its own
+     * number, independent of the story layer's low-health bark, so either can be tuned alone.  It
+     * re-arms only once HP has climbed back above it.
+     */
+    public static final float GAME_SFX_LOW_HEALTH_FRACTION       = 0.25f;
+    /**
+     * The boss's phase-2 enrage reuses BOSS_ROAR played as if from a body this much larger, i.e.
+     * pitched down by its reciprocal (order 7) — one recipe, two moments.
+     */
+    public static final float GAME_SFX_BOSS_ENRAGE_ROAR_SIZE     = 1.35f;
     /** Default minimum gap between two plays of the same sound; per-definition overrides exist. */
     public static final float GAME_SFX_DEFAULT_RETRIGGER_SECONDS = 0.05f;
 

@@ -1,7 +1,8 @@
 package ge.tbegvadze.toon3d.enemy;
 
 /**
- * The three moments an enemy makes a noise with its own voice (procedural-sound-effects order 3).
+ * The moments an enemy makes a noise (procedural-sound-effects orders 3 and 6).  ALERT, ATTACK and
+ * DEATH are in the enemy's FAMILY voice; WIND_UP (order 6) is one shared telegraph sound.
  *
  * <p>HURT is deliberately absent: the impact sound already covers being hit, and a hurt grunt on
  * every pellet of a shotgun blast is the fastest way to turn combat into mush.
@@ -17,7 +18,13 @@ public enum EnemyVoiceMoment {
     /** It swung. (A ranged shot keeps the shared launch sound — see {@code EnemyAttackFanout}.) */
     ATTACK,
     /** It died, by any route: weapon, damage-over-time, splash, self-destruct. */
-    DEATH;
+    DEATH,
+    /**
+     * It COMMITTED a wind-up (order 6): a charger's rush, a sower's spire, a generic heavy swing, a
+     * self-destruct's first prime — the turn the rim-flash telegraph appears.  Never a family voice:
+     * the catalog resolves it through the per-moment fallback to one shared sound.
+     */
+    WIND_UP;
 
     public static final int COUNT = values().length;
 }
