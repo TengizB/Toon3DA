@@ -1,0 +1,306 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Sound Pass 2 — missing moments + a Half-Life-style facility
+CREATED: 2026-09-29
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+Order 6 of the procedural-sound-effects series (orders 1-5 live in
+`procedural-sound-effects.txt`; this is the next in order). Two jobs:
+
+  1. MISSING MOMENTS. Several things the player does or suffers are still silent.
+     The worst of them is HEALING: a medkit used from the INVENTORY and the auto-doc
+     HEAL STATION both restore HP in total silence (only the HEAL button's path was
+     wired). Low health, an enemy's WIND_UP telegraph, reading a terminal and
+     opening/closing the inventory are also silent.
+  2. A HALF-LIFE-INSPIRED RETUNE of what already ships. Not a copy: no sampled or
+     recreated HL sound, no voice, no HEV speech. The INSPIRATION is the production
+     language — an industrial research facility heard through its own hard rooms:
+       - gunshots that REFLECT off concrete (a short damped room echo on every loud
+         ballistic shot and on explosions);
+       - STRUCK METAL everywhere (inharmonic bar partials): doors, reloads, ammo,
+         shell casings, footsteps on grating, the guarded clang;
+       - PNEUMATIC doors (hiss + slide + seated clank);
+       - the SUIT's voice as a UI language: clean square/sine bleeps for heal,
+         armour charge, level-up, low-health warning and a flatline under death;
+       - mechanical afterthoughts that make a gun feel handled: the shotgun's pump
+         after the shot, the pistol's casing tinkle, the melee WHOOSH before contact.
+
+Underlying need (the owner's words: "add more sounds, like healing and so on",
+"sound like a half life game"): the game should feel INHABITED and PHYSICAL by ear,
+and every restorative or dangerous moment should have its own recognisable sound.
+
+
+SCOPE
+-----
+IN
+  - Two synthesis-toolkit additions (content-agnostic, reused by many recipes):
+      a) `WaveformKind.METAL` — a struck-bar oscillator (partials 1, 2.756, 5.404,
+         8.933 at falling weights). One enum constant with its own body, no switch.
+      b) A per-DEFINITION ROOM ECHO: `SoundDefinition.Builder.roomEcho(delaySeconds,
+         feedback, dampingHz, wetMix)` — a feedback delay line with a one-pole
+         low-pass in the loop, applied once to the summed layers before soft clip.
+         The tail length is computed by a GameMath formula; the whole sound gets a
+         short end fade when an echo is present so it still ends on zero (no click).
+  - Six NEW sounds (`GameSoundId` + one `register()` each):
+      HEAL_STATION        the auto-doc charger: pneumatic hiss, a rising charge
+                          tone, two confirm bleeps
+      LOW_HEALTH_WARNING  the suit's warning: three urgent descending square bleeps,
+                          delayed so they follow (not mask) the hurt sound
+      ENEMY_WIND_UP       ONE shared sound for every committed WIND_UP (charger rush,
+                          spire sow, generic wind-up, self-destruct priming) — a
+                          rising servo/whine at the enemy. Shared for the same reason
+                          the ranged launch is shared: "it is about to do something
+                          big" must not depend on the family. Pitched by size.
+      TERMINAL_ACCESS     computer chatter: a quick run of data bleeps when the
+                          player steps up to a log terminal or an EVENT console
+      UI_MENU_OPEN        HUD blip up — the inventory opening
+      UI_MENU_CLOSE       HUD blip down — the inventory closing
+  - Wire the SILENT HEALS: inventory medkit use -> PLAYER_HEAL; auto-doc ->
+    HEAL_STATION.
+  - HL-style RETUNE of existing recipes (same ids, new layers):
+      FIRE_PISTOL, FIRE_SHOTGUN (+ pump), FIRE_DOUBLE_BARREL, FIRE_CHAINGUN,
+      FIRE_ASSAULT_RIFLE, FIRE_RAILGUN, FIRE_ROCKET (room echo; pistol casing tinkle),
+      FIRE_FIST / FIRE_KNIFE / FIRE_HAMMER (swing whoosh),
+      WEAPON_RELOAD_START / _COMPLETE (metal clacks), WEAPON_SWITCH (HUD tick),
+      PLAYER_GUARDED (struck metal), PLAYER_DEATH (+ flatline bleep),
+      DOOR_OPEN / DOOR_CLOSE (pneumatic), DOOR_LOCKED (deny buzz),
+      PICKUP_AMMO / _ARMOUR (battery charge) / _WEAPON / _MEDICAL,
+      PLAYER_HEAL (hiss + rising chime), LEVEL_UP (suit chime), FOOTSTEP (grating),
+      BARREL_EXPLOSION (room echo).
+  - Raise `GAME_SFX_MAX_DISTINCT_SOUNDS` 64 -> 72 (owner-requested growth; D1).
+  - `docs/sound-system.txt` updated in the same pass.
+
+OUT (deliberately not doing now)
+  - Any voice or speech ("HEV" lines). There is no VO in this game and must not be.
+  - Recreating or sampling any real Half-Life sound. Inspiration only.
+  - Music, ambient beds / room tone loops. Every sound stays a one-shot under 1 s.
+  - Fire ignition / hazard crackle, spire/shard/crust golem ability sounds, route-map
+    and pause-menu UI sounds, a bullet ricochet off walls (no wall-hit event exists
+    to hang it on) — each needs a new seam in another package; next order.
+  - Per-family wind-up recipes (six sounds for no gain in legibility).
+  - Any change to the mixer rules, distance model or the EFFECTS setting.
+  - Tests (non-balance; see TESTS).
+
+
+GAMEPLAY LOOP
+-------------
+Nothing changes in gameplay. Presentation only:
+  - Player uses a medkit from the inventory -> inventory closes, turn is spent,
+    HP rises -> PLAYER_HEAL plays (same frame as the green +HP text).
+  - Player steps next to a charged auto-doc -> HEAL_STATION plays with the heal.
+  - HP crosses DOWN through GAME_SFX_LOW_HEALTH_FRACTION -> LOW_HEALTH_WARNING
+    plays once; it re-arms only after HP climbs back above the threshold.
+  - An enemy COMMITS a wind-up (visible rim flash all next player turn) ->
+    ENEMY_WIND_UP plays at the enemy on that same commit.
+  - Player steps next to an unread log terminal (a take is actually spent) or an
+    EVENT console (the event actually opens) -> TERMINAL_ACCESS plays.
+  - Player opens / closes the inventory -> UI_MENU_OPEN / UI_MENU_CLOSE.
+
+
+RULES
+-----
+  R1  The standing rule holds: every new sound is redundant with something drawn
+      (green heal text + particles, the HP bar colour, the rim-flash telegraph, the
+      bark/exchange/event overlay, the inventory screen itself).
+  R2  Nothing here changes gameplay state. `./gradlew test` and `./gradlew
+      balanceSim` results are identical before and after.
+  R3  ENEMY_WIND_UP is fired through `enemy/EnemyVoiceListener` with a new
+      `EnemyVoiceMoment.WIND_UP`; `EnemyManager` still never imports audio. The
+      moment has NO per-family binding — it resolves through the per-moment
+      fallback to the one shared recipe.
+  R4  Self-destruct priming announces WIND_UP only on the FIRST prime (the
+      countdown re-telegraphs every turn; the sound must not).
+  R5  Menu sounds (UI_MENU_*) may play across the hard-pause boundary: they are the
+      overlay's OWN sound, exactly like LEVEL_UP. They still obey the EFFECTS
+      setting. Achieved by syncing suppression to the run phase at the open/close
+      site, not by a bypass flag.
+  R6  Every recipe (echo included) ends on exactly zero and stays within
+      GAME_SFX_MAX_DURATION_SECONDS (1.0 s).
+  R7  Room echo is used only where HL's rooms would ring: loud ballistic fire,
+      railgun, rocket, explosions. Never on UI, pickups, voices or the player's body.
+
+
+PLAYER EXPERIENCE
+-----------------
+Healing finally SOUNDS like relief on every path. Low health is felt as an alarm
+rather than only a red bar. The charger's wind-up becomes something you HEAR coming,
+which is exactly the read the telegraph system is trying to teach. The facility
+sounds like concrete and steel: shots ring off the walls, doors hiss, the shotgun
+pumps. No teaching topic needed — sound is a second channel.
+
+
+TECHNICAL NOTES
+---------------
+  audio/WaveformKind        + METAL constant (own sampleAt body).
+  audio/SoundDefinition     + roomEcho(...) builder, getters, cache key includes it,
+                            getTotalDurationSeconds() includes the echo tail.
+  audio/SoundSynthesizer    applies the echo after the layer sum, then the end fade.
+  util/GameMath             + metalBarSample(phaseRadians), + echoTailSeconds(delay,
+                            feedback, silenceLevel), + endFadeGain(index, total,
+                            fadeSamples). Comment blocks per CLAUDE.md.
+  util/SoundConstants       cap 72; GAME_SFX_ECHO_SILENCE_LEVEL, GAME_SFX_END_FADE_
+                            SECONDS, GAME_SFX_LOW_HEALTH_FRACTION.
+  audio/GameSoundId         + six ids.
+  audio/GameSoundCatalog    six register() rows, retuned rows, WIND_UP fallback bind,
+                            registerFamilyVoice loops over the three FAMILY moments
+                            only.
+  audio/SoundRegistry       bindEnemyFamily unchanged; the arrays are sized from
+                            EnemyVoiceMoment.COUNT so WIND_UP fits.
+  enemy/EnemyVoiceMoment    + WIND_UP.
+  enemy/EnemyManager        fire WIND_UP at the three setWindUp commit sites and the
+                            first self-destruct prime (null-guarded; SimWorld wires
+                            no listener).
+  world/World               PLAYER_HEAL in applyInventoryConsumableEffect;
+                            HEAL_STATION in triggerAutoDocHeal; low-health crossing;
+                            TERMINAL_ACCESS in updateLogTerminals + the EVENT console
+                            open; UI_MENU_OPEN/CLOSE in openInventory/closeInventory.
+  No new class. No new package. No tile symbol. No persistence key. No string id.
+
+
+VISUAL DESIGN
+-------------
+None.
+
+
+BALANCE NOTES
+-------------
+Not balance-bearing. Nothing lands in BalanceConfig / BalanceSchema / GameBalance /
+a balance GameMath formula / sim/. Volumes are placeholders for the still-owed
+real-device listening pass; relative anchors: shotgun 0 dB, explosion the ceiling,
+HEAL_STATION ~ PLAYER_HEAL, LOW_HEALTH_WARNING just under the heavy hurt,
+ENEMY_WIND_UP at a family ALERT's level, menu blips at KILL_CONFIRM's level.
+
+
+INTERACTIONS
+------------
+  - Mixer: ENEMY_WIND_UP is ENEMY-category, so the per-turn cap (3) and stack
+    falloff apply — a room of chargers committing at once is a crowd, not a smear.
+  - Story duck: unchanged; TERMINAL_ACCESS usually precedes a bark sting and ducks
+    under it naturally.
+  - Noise seam: every new definition declares loudness (menu/heal/warning = 0,
+    terminal 10, wind-up 35, heal station 20).
+  - sim/SimWorld: no listener wired, no GameAudio -> unaffected.
+
+
+EDGE CASES
+----------
+  - Medkit USE that heals 0 (full HP): no heal sound (the sound follows healAmount>0).
+  - Low-health crossing on the killing blow: HP 0 is not "low" (fraction > 0 guard),
+    so death is never stacked on a warning.
+  - Auto-doc heal with healAmount <= 0: silent (existing early return).
+  - Hard-pause overlay: all gameplay sounds suppressed as before; menu blips sync
+    suppression to the new phase at the call site (R5).
+  - App resume: mixer reset as before; nothing new to reset.
+  - Cached WAVs: every retuned recipe changes its cache key, so stale WAVs are
+    never reloaded; old files are simply orphaned (same as any retune).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Using a medkit from the inventory plays PLAYER_HEAL in the same frame as the
+      green "+N HP" text (World.applyInventoryConsumableEffect).
+  A2  Stepping next to a charged auto-doc plays HEAL_STATION with the heal.
+  A3  Falling to or below GAME_SFX_LOW_HEALTH_FRACTION of max HP (and above 0)
+      plays LOW_HEALTH_WARNING once; it does not replay until HP has risen above
+      the threshold and fallen again.
+  A4  Every setWindUp commit in EnemyManager, and the first self-destruct prime,
+      reports EnemyVoiceMoment.WIND_UP; World plays ENEMY_WIND_UP at the enemy,
+      pitched by its height multiplier. EnemyManager imports nothing from audio.
+  A5  Spending a log-terminal take and opening an EVENT console each play
+      TERMINAL_ACCESS.
+  A6  Opening / closing the inventory plays UI_MENU_OPEN / UI_MENU_CLOSE, even
+      though the inventory is a hard-pause overlay; with EFFECTS = OFF they are
+      silent.
+  A7  WaveformKind.METAL and SoundDefinition.roomEcho exist; the synthesiser holds
+      no switch on waveform; every new GameMath method has the Formula/Derivation/
+      Edge-cases block.
+  A8  All 70 registered sounds synthesise to <= 1.0 s, peak below full scale after
+      soft clip, and end on a sample of 0 (verified by a throwaway offline render,
+      not a committed test).
+  A9  GameSoundId.COUNT == 70 <= GAME_SFX_MAX_DISTINCT_SOUNDS (72).
+  A10 The retuned recipes listed under SCOPE carry the HL traits named there
+      (echo / metal / pump / whoosh / hiss / flatline), readable in the catalog.
+  A11 `./gradlew build` green; `./gradlew test` green and `./gradlew balanceSim`
+      bands unchanged.
+  A12 docs/sound-system.txt describes the METAL oscillator, the room echo, the six
+      new sounds, their firing sites, WIND_UP, the new cap and this order.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. TOOLKIT   (math-expert / java-architect)  GameMath formulas, METAL, roomEcho,
+               synthesiser echo + end fade, constants.
+  2. CONTENT   (java-architect)  six ids + recipes, HL retune of the listed rows,
+               WIND_UP moment + fallback binding.
+  3. WIRING    (java-architect)  EnemyManager WIND_UP sites; World heal / auto-doc /
+               low-health / terminal / event / inventory sites.
+  4. VERIFY    offline render of every recipe (scratch harness, not committed).
+  5. TESTS     None. Not balance-bearing; verified by build + run (+ the existing
+               test and balanceSim gates must stay identical).
+  6. DOCS      docs/sound-system.txt; CLAUDE.md audio package row (cap wording).
+
+RISKS AND UNKNOWNS
+  - Echo tails lengthen weapon sounds; with a 0.04 s chaingun re-trigger, stacked
+    tails could build up voice pressure. Mitigation: short, low-wet echo on
+    rapid-fire guns; the mixer's voice-pressure rule already bounds it.
+  - An echo tail that does not reach silence clicks — hence the end fade (R6).
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/procedural-sound-effects-order-6.md exists on the
+       branch, committed and pushed.
+  CP1  WaveformKind.METAL, SoundDefinition.roomEcho, the synthesiser echo + end
+       fade, the three GameMath formulas and the new SoundConstants exist and
+       ./gradlew build is green (no recipe uses them yet).
+  CP2  The six new GameSoundIds are registered, EnemyVoiceMoment.WIND_UP exists
+       with its fallback binding, the listed rows are retuned, and an offline
+       render shows every sound <= 1.0 s ending on 0; build green.
+  CP3  Every firing site in A1-A6 is wired; build + test green; balanceSim bands
+       unchanged.
+  CP4  docs/sound-system.txt + CLAUDE.md updated; reviewer PASS; STATUS
+       IMPLEMENTED.
+
+
+ASSUMPTIONS
+-----------
+  AS1  "Souls" in the request means "sounds".
+  AS2  "Next in order idea" = order 6 of procedural-sound-effects (orders 1-5 are
+       inside the original file), in its own file since the owner asked for a
+       single new idea.
+  AS3  "Implement right away" = the owner pre-approves this file; no separate
+       approval round.
+  AS4  Half-Life inspiration = production language (rooms, metal, pneumatics, suit
+       bleeps), never recreated assets or voice.
+  AS5  The healing sound the owner is missing is the inventory-medkit and auto-doc
+       paths; the HEAL-button path already had PLAYER_HEAL and is retuned, not
+       duplicated.
+  AS6  Low-health threshold for the warning = 0.25 of max HP, its own constant
+       (independent of the story bark threshold so either can be tuned alone).
+  AS7  One shared ENEMY_WIND_UP, not per family (mirrors the ranged-launch rule).
+  AS8  Menu sounds only for the inventory this order (the most-used overlay).
+
+
+DECISIONS
+---------
+  D1  The catalog cap (64) says "a new sound must replace a row". The owner asked
+      for MORE sounds -> the cap is raised to 72 (70 used, 2 headroom), by the
+      owner's request, recorded here. FOOTSTEP stays, retuned quieter-in-character
+      (metal grating) rather than cut.  (2026-09-29)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  procedural-sound-effects.txt (orders 1-5),
+          noise-propagation-and-3d-sound-cues.txt (consumer of the loudness seam)
+  Docs:   docs/sound-system.txt
