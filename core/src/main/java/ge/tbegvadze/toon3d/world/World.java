@@ -423,6 +423,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * its own threshold so the sound and the bark can be tuned apart.
      */
     private boolean                  healthAboveLowWarningSound = true;
+    /** The phase seen on the previous update — the menu open/close detector's memory (order 7). */
+    private RunPhase                 phaseSeenLastUpdate = null;
     // Story UI — MOMENT SCHEDULE (order-5): the run-scoped latches behind the cold open and the
     // ending.  Everything else in the schedule is latched PERSISTENTLY by the narrative layer's
     // one-shot flags; these two are per-run because they answer "has this run started / finished
@@ -979,6 +981,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void reactToRouteTap(RouteMapOverlayRenderer.PointerResult result) {
         switch (result) {
             case ENGAGED:
+                gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                 impactEffectSystem.triggerUiThunk(RouteMapConstants.ENGAGE_THUNK_MAGNITUDE,
                                                   RouteMapConstants.ENGAGE_THUNK_SECONDS);
                 break;
@@ -989,8 +992,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 routePointerDown = false;
                 runPhase = RunPhase.PLAYING;
                 break;
+            case FOCUS_CHANGED:
+                gameAudio.playMenu(GameSoundId.UI_FOCUS);   // order 7
+                break;
+            case INVALID:
+                gameAudio.playMenu(GameSoundId.ACTION_DENIED);   // order 7
+                break;
             default:
-                // FOCUS_CHANGED / INVALID / FRAMING_TOGGLED / NONE — the renderer already gave the
+                // FRAMING_TOGGLED / NONE — the renderer already gave the
                 // in-console feedback (ring, red flash, haptic). Nothing more to do here.
                 break;
         }
@@ -1927,6 +1936,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // status blink, product drop into the tray. Cosmetic only — no world tick.
             openMachine.triggerDispense(facilityTimeSeconds);
         }
+        // Heard as the goods landing, or as the one "refused" bleep (order 7).
+        gameAudio.playMenu(purchased ? GameSoundId.SHOP_DISPENSE : GameSoundId.ACTION_DENIED);
         // Push a short receipt line to the overlay so the player SEES what the purchase delivered
         // (or why it failed). This is rendered inside the shop overlay — event text would be hidden
         // behind the overlay's dim quad — so it is the only on-screen confirmation of receipt.
@@ -1997,6 +2008,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         gameAudio.setPlayerState(player.positionX, player.positionY,
                                  player.directionX, player.directionY);
         gameAudio.update(deltaTime);
+        playMenuTransitionSound();
 
         // TITLE phase (order-8 Part A) — the launch screen. Nothing is running: the world behind it
         // is built but frozen and not even drawn, and the descent begins only when the player picks
@@ -2282,6 +2294,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 int tappedIndex = levelUpOverlayRenderer.getTappedCardIndex(cardTouchPosition.x, cardTouchPosition.y);
                 UpgradeCard tappedCard = levelUpOverlayRenderer.getOfferedCard(tappedIndex);
                 if (tappedCard != null) {
+                    gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                     applyUpgradeCard(tappedCard);
                 }
             }
@@ -2299,6 +2312,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                         cardTouchPosition.x, cardTouchPosition.y);
                 EventChoice tappedChoice = eventChoiceOverlayRenderer.getChoice(tappedIndex);
                 if (tappedChoice != null) {
+                    gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                     applyEventChoice(tappedChoice);
                     activeEvent = null;
                     runPhase = RunPhase.PLAYING;
@@ -2774,8 +2788,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase != RunPhase.PLAYING) return;
         if (touchInputState != null) touchInputState.resetAllButtonStates();
         inventoryOverlayRenderer.onOpen();
-        // Played BEFORE the phase change: the overlay's own sound, like LEVEL_UP (order 6, R5).
-        gameAudio.playUi(GameSoundId.UI_MENU_OPEN);
         runPhase = RunPhase.INVENTORY_OPEN;
     }
 
@@ -2786,9 +2798,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void closeInventory(boolean spendTurn) {
         runPhase = RunPhase.PLAYING;
         // The world is live again THIS frame, not from the next update: sync suppression to the new
-        // phase so the close blip — and a medkit's heal below — are not swallowed (order 6, R5).
+        // phase so a medkit's heal below is not swallowed (order 6, R5). The close blip itself comes
+        // from playMenuTransitionSound (order 7).
         gameAudio.setSuppressed(false);
-        gameAudio.playUi(GameSoundId.UI_MENU_CLOSE);
         if (spendTurn) {
             applyInventoryConsumableEffect();
             if (tickEventBus != null) {
@@ -3978,6 +3990,30 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         return storySettings;
     }
 
+    /** The menu overlays whose opening and closing are heard (order 7). */
+    private static boolean isMenuPhase(RunPhase phase) {
+        return phase == RunPhase.INVENTORY_OPEN || phase == RunPhase.SHOP_OPEN
+                || phase == RunPhase.PAUSE_MENU || phase == RunPhase.SETTINGS_MENU
+                || phase == RunPhase.CODEX_OPEN || phase == RunPhase.WEAPON_INSPECT;
+    }
+
+    /**
+     * ONE detector for every menu's open/close blip (procedural-sound-effects order 7), rather than a
+     * call at each of the dozen open/close sites: entering a menu phase plays UI_MENU_OPEN (menu to
+     * menu included — the settings screen opening over the pause menu is still an opening), leaving
+     * the menus altogether plays UI_MENU_CLOSE. Heard one update after the change, which is a frame.
+     */
+    private void playMenuTransitionSound() {
+        RunPhase previous = phaseSeenLastUpdate;
+        phaseSeenLastUpdate = runPhase;
+        if (previous == null || previous == runPhase) return;
+        if (isMenuPhase(runPhase)) {
+            gameAudio.playMenu(GameSoundId.UI_MENU_OPEN);
+        } else if (isMenuPhase(previous)) {
+            gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+        }
+    }
+
     /**
      * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
      * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
@@ -4247,6 +4283,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         PauseMenuItem item = PauseMenuItem.values()[releasedRow];
         // ABANDON_RUN carries a confirmation, so activateRow opens it and commits nothing.
         if (!pauseMenu.activateRow(releasedRow, item.getConfirmStringId())) return;
+        gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
         switch (item) {
             case RESUME:   closePauseMenu();    break;
             case CODEX:    openCodex();         break;

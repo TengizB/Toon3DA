@@ -42,7 +42,7 @@ with this file's tick in the same commit. Never `git add -A`.
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — cap removed; 22 new ids registered; GameAudio.playMenu.
       DONE WHEN: no GAME_SFX_MAX_DISTINCT_SOUNDS; offline render passes; mirror build green.
-- [ ] **CP2** — player + menu sites (A2-A4). DONE WHEN: wired, build green.
+- [x] **CP2** — player + menu sites (A2-A4). DONE WHEN: wired, build green.
 - [ ] **CP3** — world, golem, hazard, boss sites (A5-A7). DONE WHEN: wired; test = baseline;
       balanceSim summary byte-identical to the order-6 head.
 - [ ] **CP4** — docs + reviewer PASS; STATUS IMPLEMENTED.
@@ -55,3 +55,10 @@ with this file's tick in the same commit. Never `git add -A`.
   `registerOrderSeven`; 92 sounds total, all <= 1.0 s, peak <= 90 %, last sample within +/-2 LSB
   (harness now checks that, per order 6's amended A8). `GameAudio.playMenu(id)` = playCentred with
   suppression lifted for the call only (still obeys EFFECTS). Nothing fires the new ids yet.
+- **CP2 handover:** PlayerController: PLAYER_TURN in startRotation, PLAYER_WAIT in trySkipTurn, the
+  stun branch plays PLAYER_STUNNED and calls the new silent `beginSkip()` (event text unchanged),
+  PLAYER_GUARD_RAISE in tryGuard, ACTION_DENIED on NO MEDKITS / ALREADY FULL / CLIP FULL. World:
+  `playMenuTransitionSound()` (called right after gameAudio.update) + `isMenuPhase` replace order 6's
+  explicit inventory blips; UI_CONFIRM on pause row / level-up card / event choice / route ENGAGE,
+  UI_FOCUS on route FOCUS_CHANGED, ACTION_DENIED on route INVALID and a failed buy, SHOP_DISPENSE on
+  a purchase — all via `playMenu` since those phases are suppressed.
