@@ -6,24 +6,29 @@ import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
- * Single-barrel break-action grenade launcher with indirect-fire and AoE splash.
+ * Six-round drum grenade launcher with contact detonation, one wall bank and a plus-shaped splash.
  *
  * Stats: center damage 42, falloff damage 22, clipSize 3, reloadTime 2 ticks,
  * dropCoeff 0.0 (no travel falloff — splash damage is constant), range 6 tiles.
  *
  * The grenade launcher does NOT use the standard linear pierce loop. It walks a path
- * one tile at a time, handles ONE 90-degree CW bounce off the first eligible wall
- * (requires traveledTiles >= GRENADE_ARM_TILES), then detonates in a plus-shaped
- * splash covering the impact tile and its 4 orthogonal neighbours.
+ * one tile at a time and detonates on the FIRST enemy it reaches — at any distance, the
+ * adjacent tile included, so the weapon is never useless up close. It banks ONE 90-degree
+ * CW bounce off the first eligible wall (requires traveledTiles >= GRENADE_BOUNCE_MIN_TILES),
+ * then detonates in a plus-shaped splash covering the impact tile and its 4 orthogonal
+ * neighbours.
  *
- * Bounce rule: on hitting a wall after arming, the direction turns 90 degrees CW:
+ * Bounce rule: on hitting a wall after the minimum travel, the direction turns 90 degrees CW:
  *   (directionColumn, directionRow) → (directionRow, -directionColumn)
  * If the bounced tile is also a wall, the grenade detonates at the current position.
  * A second wall contact after bouncing always detonates.
  *
- * Arming distance: GRENADE_ARM_TILES (2). An unarmed grenade passes through enemies
- * harmlessly and detonates against a wall without bouncing (the turn is consumed and
- * the grenade expended — it punishes the misplay but no self-damage applies).
+ * SELF-DAMAGE — the point-blank price. The player is hurt by their own grenade ONLY when it
+ * detonates on an enemy standing on the very next cell (distance 1): the player's own tile is
+ * then an orthogonal neighbour of the impact tile. Any other detonation — farther enemies, walls,
+ * air-bursts, barrels, the banked shot — never hurts the player. The amount
+ * (GRENADE_SELF_DAMAGE) is parked in {@link #consumePendingSelfDamage()} for PlayerController to
+ * apply through the normal Player damage pipeline, which keeps this class free of Player state.
  *
  * Plus splash: impact tile gets GRENADE_SPLASH_DAMAGE (42);
  * the 4 orthogonal neighbours each get GRENADE_FALLOFF_DAMAGE (22);
@@ -32,12 +37,16 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  * Damage table (coefficient 0.0 — travel distance has no effect):
  *   impact tile:              42 (GRENADE_SPLASH_DAMAGE)
  *   orthogonal neighbours:   22 each (GRENADE_FALLOFF_DAMAGE)
+ *   player (adjacent target): 24 (GRENADE_SELF_DAMAGE)
  *   per-shot AoE ceiling:    42 + 4 × 22 = 130 distributed across 5 enemies
  */
 public class GrenadeLauncher extends Weapon {
 
     /** Pre-allocated buffer for hudAmmoString() — avoids per-call allocation. */
     private final StringBuilder hudStringBuilder = new StringBuilder(20);
+
+    /** Self-damage owed by the last shot (0 when the player was not caught). Drained by PlayerController. */
+    private int pendingSelfDamage = 0;
 
     public GrenadeLauncher() {
         super("GRENADE LAUNCHER",
@@ -54,21 +63,22 @@ public class GrenadeLauncher extends Weapon {
     @Override public ItemType getItemType() { return ItemType.WEAPON_ROCKET; }
 
     /**
-     * Marches the grenade forward, handles a single 90-degree CW bounce at the
-     * first eligible wall (armed only), then applies a plus-shaped splash at the
-     * impact tile.
+     * Marches the grenade forward, detonates on the first enemy it reaches (any distance),
+     * handles a single 90-degree CW bounce at the first eligible wall, then applies a
+     * plus-shaped splash at the impact tile.
      *
      * Algorithm:
      *   Start at (playerTileColumn, playerTileRow); advance step-by-step.
      *   At each step, peek the next tile before moving:
      *     - If next tile is blocked (wall, closed door, column, or a non-barrel solid prop):
-     *         If armed (traveledTiles >= GRENADE_ARM_TILES) and not yet bounced:
+     *         If traveledTiles >= GRENADE_BOUNCE_MIN_TILES and not yet bounced:
      *           Try a 90-degree CW turn. If the turned next tile is open, redirect and continue.
      *           Otherwise detonate at current position.
-     *         Else detonate at current position (unarmed hit or second wall after bounce).
+     *         Else detonate at current position (point-blank wall or second wall after bounce).
      *     - If next tile is open: advance to it.
      *         If a barrel is there: detonate barrel and exit.
-     *         If an armed enemy is there: detonate and exit.
+     *         If an enemy is there: detonate and exit. At distance 1 (before any bounce) the
+     *         player is caught in the plus and owes GRENADE_SELF_DAMAGE.
      *   After the loop (air-burst at max range): apply splash at the last reached tile.
      */
     @Override
@@ -100,7 +110,7 @@ public class GrenadeLauncher extends Weapon {
                         && doorBlocksQuery.blocksShotAt(nextColumn, nextRow));
 
             if (nextBlocked) {
-                if (!hasBounced && traveledTiles >= WeaponConstants.GRENADE_ARM_TILES) {
+                if (!hasBounced && traveledTiles >= WeaponConstants.GRENADE_BOUNCE_MIN_TILES) {
                     // Attempt a 90-degree CW bounce: (dc, dr) → (dr, -dc)
                     int bouncedDirectionColumn = directionRow;
                     int bouncedDirectionRow    = -directionColumn;
@@ -123,7 +133,7 @@ public class GrenadeLauncher extends Weapon {
                         continue;
                     }
                 }
-                // Cannot bounce (unarmed, already bounced, or bounce also blocked): detonate here.
+                // Cannot bounce (point-blank wall, already bounced, or bounce also blocked): detonate here.
                 applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget, barrelHitTarget);
                 return new FireResult(true, traveledTiles);
             }
@@ -140,11 +150,18 @@ public class GrenadeLauncher extends Weapon {
                 return new FireResult(true, traveledTiles);
             }
 
-            // Check for an armed enemy at the new tile (only when grenade is armed).
-            if (traveledTiles >= WeaponConstants.GRENADE_ARM_TILES && enemyHitTarget != null) {
+            // Contact fuse: the first enemy the grenade reaches sets it off, at ANY distance —
+            // including the adjacent tile, so the launcher still works when something is in your face.
+            if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(currentColumn, currentRow);
                 if (hitEnemy != null) {
                     applyPlusSplash(currentColumn, currentRow, level, enemyHitTarget, barrelHitTarget);
+                    // The enemy is on the very next cell: the player's own tile is a neighbour of the
+                    // impact, so the shooter eats part of the blast. Only this case ever self-damages.
+                    if (!hasBounced && traveledTiles == 1) {
+                        // Accumulates so a BURST_FIRE extra round that also lands point-blank is counted too.
+                        pendingSelfDamage += WeaponConstants.GRENADE_SELF_DAMAGE;
+                    }
                     return new FireResult(true, traveledTiles);
                 }
             }
@@ -196,6 +213,16 @@ public class GrenadeLauncher extends Weapon {
                 }
             }
         }
+    }
+
+    /**
+     * Returns the self-damage the last shot owes the player and clears it, so it is applied
+     * exactly once. Non-zero only when the grenade detonated on an enemy on the adjacent cell.
+     */
+    public int consumePendingSelfDamage() {
+        int owed = pendingSelfDamage;
+        pendingSelfDamage = 0;
+        return owed;
     }
 
     /**

@@ -5025,36 +5025,103 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Grenade Launcher — single-shot tube launcher.
-     * FAT OLIVE tube barrel — widest bore of any weapon (identity). Large dark bore circle
-     * at muzzle. Grey receiver with loading port. Dark olive pistol grip.
+     * Grenade Launcher — six-round revolving-drum launcher, side profile (muzzle left, stock right).
+     *
+     * Identity (matches the first-person sprite): the big olive DRUM in the middle of the gun with
+     * brass case heads peeking from its rear face, a yellow/black hazard band round it, a short fat
+     * barrel under a perforated heat shield, a reflex sight with a red dot, a vertical fore-grip and
+     * a skeletal folding stock. Palette mirrors WeaponHudRenderer:
+     * olive 0.26,0.31,0.15 / gunmetal 0.22,0.24,0.28 / brass 0.70,0.52,0.20 / hazard 0.88,0.72,0.10.
+     *
+     * Horizontal bands (64-wide canvas, x grows left→right, y grows DOWN):
+     *   Barrel + heat shield  x= 2..27   muzzle ring at far left
+     *   Fore-grip             x=13..19   hangs under the barrel
+     *   Drum                  x=25..44   y=17..45, the widest element
+     *   Receiver + sight      x=36..54   sight box on top of the frame
+     *   Pistol grip + guard   x=42..54   drops below the receiver
+     *   Folding stock         x=53..63   skeletal frame + butt pad
      */
     private static Texture generateWeaponRocketGroundTexture() {
         int S = WEAPON_PICKUP_TEXTURE_SIZE;
         Pixmap p = new Pixmap(S, S, Pixmap.Format.RGBA8888);
         p.setColor(0f, 0f, 0f, 0f);
         p.fill();
-        // LAUNCH TUBE (FAT OLIVE — the defining wide barrel)
-        p.setColor(0.28f, 0.34f, 0.14f, 1f); p.fillRectangle(4, 14, 42, 32);
-        p.setColor(0.38f, 0.46f, 0.20f, 1f); p.fillRectangle(4, 14, 42, 1);  // top highlight
-        p.setColor(0.18f, 0.22f, 0.08f, 1f); p.fillRectangle(4, 45, 42, 1);  // bottom shadow
-        // BORE OPENING (large dark circles — shows the big calibre)
-        p.setColor(0.04f, 0.04f, 0.05f, 1f); p.fillCircle(14, 30, 10); // outer bore rim
-        p.setColor(0.01f, 0.01f, 0.02f, 1f); p.fillCircle(14, 30,  7); // inner bore
-        // RECEIVER BLOCK
-        p.setColor(0.28f, 0.30f, 0.34f, 1f); p.fillRectangle(42, 19, 18, 24);
-        p.setColor(0.38f, 0.40f, 0.46f, 1f); p.fillRectangle(42, 19, 18, 1); // top highlight
-        p.setColor(0.18f, 0.20f, 0.24f, 1f); p.fillRectangle(42, 42, 18, 1); // bottom shadow
-        p.setColor(0.14f, 0.15f, 0.17f, 1f); p.fillRectangle(44, 22, 10, 10);// loading port
-        // PISTOL GRIP (dark olive)
-        p.setColor(0.18f, 0.22f, 0.10f, 1f); p.fillRectangle(50, 43, 10, 18);
-        p.setColor(0.13f, 0.16f, 0.07f, 1f); // checkering
-        p.fillRectangle(51, 48, 8, 1); p.fillRectangle(51, 53, 8, 1); p.fillRectangle(51, 58, 8, 1);
-        // TRIGGER GUARD
+
+        // FOLDING STOCK — skeletal frame (top strut, bottom strut, butt pad), drawn first (rearmost).
+        p.setColor(0.20f, 0.22f, 0.26f, 1f);
+        p.fillRectangle(52, 25, 9, 3);                                        // top strut
+        p.fillRectangle(52, 37, 9, 3);                                        // bottom strut
+        p.setColor(0.13f, 0.14f, 0.16f, 1f); p.fillRectangle(59, 23, 4, 19); // rubber butt pad
+        p.setColor(0.24f, 0.25f, 0.28f, 1f); p.fillRectangle(59, 23, 1, 19); // pad edge
+        p.setColor(0.34f, 0.37f, 0.42f, 1f); p.fillRectangle(52, 25, 9, 1);  // strut highlight
+
+        // BARREL — short fat gunmetal tube.
+        p.setColor(0.22f, 0.24f, 0.28f, 1f); p.fillRectangle(3, 24, 25, 11);
+        p.setColor(0.12f, 0.13f, 0.16f, 1f); p.fillRectangle(3, 34, 25, 1);  // bottom shadow
+        // HEAT SHIELD — perforated lighter shroud over the barrel top.
+        p.setColor(0.36f, 0.39f, 0.45f, 1f); p.fillRectangle(7, 21, 19, 6);
+        p.setColor(0.50f, 0.54f, 0.60f, 1f); p.fillRectangle(7, 21, 19, 1);  // shroud crown highlight
+        p.setColor(0.07f, 0.08f, 0.10f, 1f);                                  // cooling holes
+        p.fillRectangle(9, 23, 2, 2); p.fillRectangle(13, 23, 2, 2);
+        p.fillRectangle(17, 23, 2, 2); p.fillRectangle(21, 23, 2, 2);
+        // MUZZLE — steel collar with yellow hazard ring, dark bore mouth.
+        p.setColor(0.42f, 0.46f, 0.54f, 1f); p.fillRectangle(1, 22, 5, 15);
+        p.setColor(0.88f, 0.72f, 0.10f, 1f); p.fillRectangle(5, 22, 1, 15);  // hazard ring
+        p.setColor(0.03f, 0.03f, 0.04f, 1f); p.fillRectangle(1, 26, 2, 7);   // bore mouth
+
+        // FORE-GRIP — vertical grip hanging under the barrel.
+        p.setColor(0.18f, 0.20f, 0.10f, 1f); p.fillRectangle(13, 35, 6, 11);
+        p.setColor(0.12f, 0.14f, 0.07f, 1f);
+        p.fillRectangle(13, 38, 6, 1); p.fillRectangle(13, 41, 6, 1);        // finger grooves
+        p.setColor(0.26f, 0.30f, 0.15f, 1f); p.fillRectangle(13, 35, 1, 11); // leading edge light
+
+        // RECEIVER — gunmetal frame behind the drum.
+        p.setColor(0.22f, 0.24f, 0.28f, 1f); p.fillRectangle(42, 24, 12, 13);
+        p.setColor(0.34f, 0.37f, 0.42f, 1f); p.fillRectangle(42, 24, 12, 1);
+        p.setColor(0.12f, 0.13f, 0.16f, 1f); p.fillRectangle(42, 36, 12, 1);
+
+        // DRUM — the identity: fat olive cylinder with cylindrical shading (light top, dark belly).
+        p.setColor(0.26f, 0.31f, 0.15f, 1f); p.fillRectangle(26, 17, 18, 29);
+        p.setColor(0.34f, 0.40f, 0.20f, 1f); p.fillRectangle(26, 19, 18, 7);  // lit upper band
+        p.setColor(0.44f, 0.52f, 0.26f, 1f); p.fillRectangle(26, 20, 18, 1);  // specular line
+        p.setColor(0.17f, 0.20f, 0.10f, 1f); p.fillRectangle(26, 39, 18, 7);  // shadowed belly
+        p.setColor(0.11f, 0.13f, 0.06f, 1f);
+        p.fillRectangle(26, 17, 18, 1); p.fillRectangle(26, 45, 18, 1);       // silhouette edges
+        // Flutes — dark horizontal grooves along the drum.
+        p.fillRectangle(28, 29, 12, 1); p.fillRectangle(28, 35, 12, 1);
+        // Front + rear steel face rings.
+        p.setColor(0.44f, 0.48f, 0.54f, 1f);
+        p.fillRectangle(25, 18, 2, 27); p.fillRectangle(43, 18, 2, 27);
+        // Hazard band round the drum — yellow with black ticks.
+        p.setColor(0.88f, 0.72f, 0.10f, 1f); p.fillRectangle(36, 17, 4, 29);
+        p.setColor(0.10f, 0.09f, 0.07f, 1f);
+        p.fillRectangle(36, 20, 4, 2); p.fillRectangle(36, 26, 4, 2);
+        p.fillRectangle(36, 32, 4, 2); p.fillRectangle(36, 38, 4, 2);
+        // Brass case heads peeking from the drum's rear face (loaded rounds).
+        p.setColor(0.70f, 0.52f, 0.20f, 1f);
+        p.fillRectangle(44, 19, 2, 5); p.fillRectangle(44, 28, 2, 5); p.fillRectangle(44, 37, 2, 5);
+        p.setColor(0.94f, 0.78f, 0.40f, 1f);
+        p.fillRectangle(44, 19, 1, 2); p.fillRectangle(44, 28, 1, 2); p.fillRectangle(44, 37, 1, 2);
+        // Axle pin in the drum's centre.
+        p.setColor(0.60f, 0.64f, 0.70f, 1f); p.fillCircle(31, 31, 2);
+
+        // REFLEX SIGHT — box on top of the frame, tinted glass, red dot.
+        p.setColor(0.13f, 0.14f, 0.17f, 1f); p.fillRectangle(38, 11, 11, 7);
+        p.setColor(0.36f, 0.39f, 0.45f, 1f); p.fillRectangle(38, 11, 11, 1);
+        p.setColor(0.30f, 0.55f, 0.52f, 1f); p.fillRectangle(39, 13, 2, 4);  // glass edge
+        p.setColor(1.00f, 0.22f, 0.14f, 1f); p.fillRectangle(40, 14, 1, 1);  // red emitter dot
+        p.setColor(0.20f, 0.22f, 0.26f, 1f); p.fillRectangle(41, 18, 5, 6);  // sight mount
+
+        // PISTOL GRIP (dark olive) + TRIGGER GUARD.
+        p.setColor(0.18f, 0.22f, 0.10f, 1f); p.fillRectangle(47, 37, 7, 17);
+        p.setColor(0.13f, 0.16f, 0.07f, 1f);
+        p.fillRectangle(48, 42, 5, 1); p.fillRectangle(48, 46, 5, 1); p.fillRectangle(48, 50, 5, 1);
         p.setColor(0.24f, 0.26f, 0.30f, 1f);
-        p.fillRectangle(42, 43, 2, 10); p.fillRectangle(42, 52, 14, 2); p.fillRectangle(54, 43, 2, 9);
-        // Cool-white shimmer
-        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(4, 14, 2, 2);
+        p.fillRectangle(40, 37, 2, 9); p.fillRectangle(40, 45, 8, 2);        // guard loop
+        p.setColor(0.10f, 0.10f, 0.12f, 1f); p.fillRectangle(44, 38, 1, 5);  // trigger
+
+        // Cool-white interactable shimmer at the muzzle.
+        p.setColor(0.92f, 0.96f, 1.00f, 1f); p.fillRectangle(1, 22, 2, 2);
         return finalize(p);
     }
 
