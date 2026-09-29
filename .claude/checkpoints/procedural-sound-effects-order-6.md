@@ -40,7 +40,7 @@ with this file's tick in the same commit. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — synthesis toolkit.
+- [x] **CP1** — synthesis toolkit.
       DONE WHEN: WaveformKind.METAL, SoundDefinition.roomEcho, synthesiser echo + end fade,
       GameMath metalBarSample/echoTailSeconds/endFadeGain and the new SoundConstants exist;
       `./gradlew build` green.
@@ -54,4 +54,14 @@ with this file's tick in the same commit. Never `git add -A`.
 
 ## NOTES CARRIED FORWARD
 
-- (none yet)
+- **ENV:** `./gradlew` cannot run in the repo (403 on dl.google.com for the Android Gradle plugin).
+  Gate via a desktop-only MIRROR build in the scratchpad: symlinks to core/lwjgl3/assets/gradle*,
+  `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle` without `buildscript{}` and with
+  `configure(subprojects)`. Android module is not compiled (this work touches no android/ code).
+- **CP1 handover:** `GameMath.metalBarSample(f0, t, damping)`, `echoTailSeconds(delay, feedback,
+  silence)`, `endFadeGain(i, total, fade)`; `WaveformKind.METAL` (uses `frequency(...)`);
+  `SoundDefinition.Builder.roomEcho(delay, feedback, dampingHz, wetMix)` — echo params join the cache
+  key ONLY when present, so untouched recipes keep their cached WAVs; total duration = dry + tail,
+  capped at 1.0 s, and echoed sounds get a 30 ms end fade. Constants: cap 72,
+  `GAME_SFX_METAL_PARTIAL_DAMPING`, `GAME_SFX_ECHO_SILENCE_LEVEL`, `GAME_SFX_END_FADE_SECONDS`,
+  `GAME_SFX_LOW_HEALTH_FRACTION` (0.25, used in CP3).

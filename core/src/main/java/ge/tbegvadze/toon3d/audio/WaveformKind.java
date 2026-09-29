@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.audio;
 
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
  * The oscillator behind a {@link SoundLayer} (procedural-sound-effects order 1).
@@ -78,6 +79,19 @@ public enum WaveformKind {
         public float sampleAt(SoundLayer layer, float timeSeconds, int sampleIndex) {
             return MathUtils.sin(GameMath.exponentialChirpPhase(
                     layer.getStartHz(), layer.getEndHz(), timeSeconds, layer.getDurationSeconds()));
+        }
+    },
+
+    /**
+     * Struck metal (order 6) — four INHARMONIC bar partials whose bright end dies first.  The
+     * facility's own material: doors seating, magazines, shell casings, grating underfoot, a blow
+     * glancing off a raised guard.  Uses the layer's {@code frequency(...)} as the fundamental.
+     */
+    METAL {
+        @Override
+        public float sampleAt(SoundLayer layer, float timeSeconds, int sampleIndex) {
+            return GameMath.metalBarSample(layer.getStartHz(), timeSeconds,
+                    SoundConstants.GAME_SFX_METAL_PARTIAL_DAMPING);
         }
     };
 

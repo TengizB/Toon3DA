@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.audio;
 
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.SoundConstants;
 
 /**
@@ -23,6 +24,10 @@ public final class SoundDefinition {
     private final float          cycleSpread;
     private final float          minimumRetriggerSeconds;
     private final int            loudness;
+    private final float          echoDelaySeconds;
+    private final float          echoFeedback;
+    private final float          echoDampingHz;
+    private final float          echoWetMix;
 
     private SoundDefinition(Builder builder) {
         this.id                      = builder.id;
@@ -33,6 +38,10 @@ public final class SoundDefinition {
         this.cycleSpread             = builder.cycleSpread;
         this.minimumRetriggerSeconds = builder.minimumRetriggerSeconds;
         this.loudness                = builder.loudness;
+        this.echoDelaySeconds        = builder.echoDelaySeconds;
+        this.echoFeedback            = builder.echoFeedback;
+        this.echoDampingHz           = builder.echoDampingHz;
+        this.echoWetMix              = builder.echoWetMix;
     }
 
     public GameSoundId   getId()                      { return id; }
@@ -52,6 +61,20 @@ public final class SoundDefinition {
      */
     public int getLoudness() { return loudness; }
 
+    /**
+     * True when this sound rings off the room (order 6): a feedback delay applied once to the
+     * summed layers.  The facility's concrete is the reason a Half-Life gunshot sounds like a
+     * place, and that is the whole reason this exists.
+     */
+    public boolean hasRoomEcho() {
+        return echoWetMix > 0f && echoDelaySeconds > 0f;
+    }
+
+    public float getEchoDelaySeconds() { return echoDelaySeconds; }
+    public float getEchoFeedback()     { return echoFeedback; }
+    public float getEchoDampingHz()    { return echoDampingHz; }
+    public float getEchoWetMix()       { return echoWetMix; }
+
     public int getLayerCount() {
         return layers.length;
     }
@@ -65,8 +88,22 @@ public final class SoundDefinition {
         return layers[layerIndex];
     }
 
-    /** Total sound length: the furthest point any layer reaches, including its delay. */
+    /**
+     * Total sound length: the furthest point any layer reaches, including its delay, plus the room
+     * echo's tail when there is one — capped so the whole sound never exceeds
+     * {@code GAME_SFX_MAX_DURATION_SECONDS} (the synthesiser fades the cut to zero).
+     */
     public float getTotalDurationSeconds() {
+        float longest = getDryDurationSeconds();
+        if (!hasRoomEcho()) return longest;
+        float tail = GameMath.echoTailSeconds(echoDelaySeconds, echoFeedback,
+                SoundConstants.GAME_SFX_ECHO_SILENCE_LEVEL);
+        float withTail = longest + tail;
+        return Math.max(longest, Math.min(withTail, SoundConstants.GAME_SFX_MAX_DURATION_SECONDS));
+    }
+
+    /** The furthest point any layer reaches, ignoring the echo. */
+    public float getDryDurationSeconds() {
         float longest = 0f;
         for (SoundLayer layer : layers) {
             float layerEnd = layer.getEndTimeSeconds();
@@ -86,6 +123,13 @@ public final class SoundDefinition {
         recipe.append('|').append(Math.round(baseVolume * 100f));
         for (SoundLayer layer : layers) {
             recipe.append('|').append(layer.describeForCacheKey());
+        }
+        // Appended only when present, so a recipe without an echo keeps its existing cache key.
+        if (hasRoomEcho()) {
+            recipe.append("|echo_").append(Math.round(echoDelaySeconds * 1000f))
+                  .append('_').append(Math.round(echoFeedback * 100f))
+                  .append('_').append(Math.round(echoDampingHz))
+                  .append('_').append(Math.round(echoWetMix * 100f));
         }
         // The full recipe string is far too long for a filename, so the name is the stable id plus
         // a digest of the recipe. The digest is an EXPLICIT 64-bit FNV-1a rather than
@@ -123,6 +167,10 @@ public final class SoundDefinition {
         private float cycleSpread       = 1f;
         private float minimumRetriggerSeconds = SoundConstants.GAME_SFX_DEFAULT_RETRIGGER_SECONDS;
         private int   loudness          = 0;
+        private float echoDelaySeconds  = 0f;
+        private float echoFeedback      = 0f;
+        private float echoDampingHz     = 0f;
+        private float echoWetMix        = 0f;
 
         private Builder(GameSoundId id, SoundCategory category) {
             this.id       = id;
@@ -158,6 +206,20 @@ public final class SoundDefinition {
 
         public Builder loudness(int value) {
             this.loudness = value;
+            return this;
+        }
+
+        /**
+         * The room this sound is heard in (order 6): repeats every {@code delaySeconds}, each
+         * {@code feedback} as loud as the last and duller by a one-pole low-pass at
+         * {@code dampingHz}, mixed in at {@code wetMix}.  Short delays (30-70 ms) read as a hard
+         * corridor; longer ones as a hall.  Loud events only (idea file R7).
+         */
+        public Builder roomEcho(float delaySeconds, float feedback, float dampingHz, float wetMix) {
+            this.echoDelaySeconds = delaySeconds;
+            this.echoFeedback     = feedback;
+            this.echoDampingHz    = dampingHz;
+            this.echoWetMix       = wetMix;
             return this;
         }
 

@@ -5495,6 +5495,92 @@ public final class GameMath {
     }
 
     /*
+     * Formula: struck-metal oscillator (free-free bar partials with frequency-dependent damping)
+     * Derivation:
+     *   A struck steel bar, pipe or plate does not ring at integer harmonics.  The transverse modes
+     *   of a free-free bar sit at the INHARMONIC ratios 1 : 2.756 : 5.404 : 8.933 (Euler-Bernoulli
+     *   beam theory, (beta_n L)^2 normalised to the first mode).  That inharmonicity is precisely what
+     *   the ear hears as "metal" rather than "musical note".  Higher modes also lose energy faster,
+     *   so each partial carries its own exponential decay proportional to its mode index:
+     *       sample(t) = SUM_k  w_k * exp(-damping * k * t) * sin(2*PI * f0 * r_k * t)
+     *                   / SUM_k w_k
+     *   with r = {1, 2.756, 5.404, 8.933}, w = {1, 0.5, 0.25, 0.125}, k = 0..3.
+     *   Dividing by SUM w (1.875) keeps the peak inside [-1, 1] at t = 0, when every partial is at
+     *   full weight; afterwards the sum only shrinks.  The layer's own envelope still shapes the
+     *   whole sound; this damping only makes the BRIGHT part of the clang die first, like a real
+     *   strike does.
+     * Edge cases:
+     *   fundamentalHz <= 0 -> silence (a bar with no pitch makes no tone).
+     *   damping <= 0 -> no per-partial decay; all four partials ring equally long (still bounded).
+     *   Negative time is treated as 0 (the layer never asks for it, but it must not blow up).
+     *   Partials above the Nyquist limit alias; the catalog keeps f0 * 8.933 under 11 kHz.
+     */
+    public static float metalBarSample(float fundamentalHz, float timeSeconds, float damping) {
+        if (fundamentalHz <= 0f) return 0f;
+        float time = Math.max(0f, timeSeconds);
+        float effectiveDamping = Math.max(0f, damping);
+        float twoPiTime = MathUtils.PI2 * fundamentalHz * time;
+        float sum =
+                  1.000f * MathUtils.sin(twoPiTime)
+                + 0.500f * (float) Math.exp(-effectiveDamping * 1f * time)
+                         * MathUtils.sin(twoPiTime * 2.756f)
+                + 0.250f * (float) Math.exp(-effectiveDamping * 2f * time)
+                         * MathUtils.sin(twoPiTime * 5.404f)
+                + 0.125f * (float) Math.exp(-effectiveDamping * 3f * time)
+                         * MathUtils.sin(twoPiTime * 8.933f);
+        return sum / 1.875f;
+    }
+
+    /*
+     * Formula: length of a feedback echo's audible tail
+     * Derivation:
+     *   A feedback delay line repeats the dry signal every delaySeconds, each repeat scaled by
+     *   feedback (0 < feedback < 1) relative to the last.  After n repeats the level is feedback^n.
+     *   The tail is audible until that falls below silenceLevel:
+     *       feedback^n < silenceLevel   <=>   n > ln(silenceLevel) / ln(feedback)
+     *   (both logarithms negative, so the quotient is positive).  So
+     *       repeats = ceil( ln(silenceLevel) / ln(feedback) )
+     *       tail    = repeats * delaySeconds
+     *   The in-loop low-pass only ever LOSES energy, so this is a conservative (long) bound.
+     * Edge cases:
+     *   delaySeconds <= 0 -> 0 (no echo).
+     *   feedback <= 0 -> a single repeat: tail = delaySeconds.
+     *   feedback >= 1 would never decay (infinite tail); it is clamped to 0.95.
+     *   silenceLevel outside (0, 1) is clamped into [0.0001, 0.5] so the log is finite and negative.
+     */
+    public static float echoTailSeconds(float delaySeconds, float feedback, float silenceLevel) {
+        if (delaySeconds <= 0f) return 0f;
+        if (feedback <= 0f)     return delaySeconds;
+        double clampedFeedback = Math.min(0.95, feedback);
+        double clampedSilence  = Math.min(0.5, Math.max(0.0001, silenceLevel));
+        double repeats = Math.ceil(Math.log(clampedSilence) / Math.log(clampedFeedback));
+        return (float) (repeats * delaySeconds);
+    }
+
+    /*
+     * Formula: linear end fade that forces a buffer's final sample to exactly zero
+     * Derivation:
+     *   A buffer that stops on a non-zero sample steps to silence, which is an audible click.  Over
+     *   the last fadeSamples samples the gain ramps linearly to zero:
+     *       remaining = (totalSamples - 1) - sampleIndex
+     *       gain      = clamp(remaining / fadeSamples, 0, 1)
+     *   so the last sample (remaining = 0) is multiplied by exactly 0 and everything before the fade
+     *   window by exactly 1.
+     * Edge cases:
+     *   fadeSamples <= 0 -> no fade (gain 1), except the very last sample, which is still zeroed.
+     *   sampleIndex past the end -> 0.
+     *   totalSamples <= 0 -> 0.
+     */
+    public static float endFadeGain(int sampleIndex, int totalSamples, int fadeSamples) {
+        if (totalSamples <= 0) return 0f;
+        int remaining = (totalSamples - 1) - sampleIndex;
+        if (remaining <= 0) return 0f;
+        if (fadeSamples <= 0) return 1f;
+        if (remaining >= fadeSamples) return 1f;
+        return remaining / (float) fadeSamples;
+    }
+
+    /*
      * Formula: sound volume by distance, with a taper to the audible edge
      * Derivation:
      *   Two factors multiplied:
