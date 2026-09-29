@@ -44,7 +44,7 @@ with this file's tick in the same commit. Never `git add -A`.
       DONE WHEN: WaveformKind.METAL, SoundDefinition.roomEcho, synthesiser echo + end fade,
       GameMath metalBarSample/echoTailSeconds/endFadeGain and the new SoundConstants exist;
       `./gradlew build` green.
-- [ ] **CP2** — content.
+- [x] **CP2** — content.
       DONE WHEN: six new ids registered, EnemyVoiceMoment.WIND_UP + fallback binding, listed rows
       retuned, offline render shows all sounds <= 1.0 s ending on 0; build green.
 - [ ] **CP3** — firing sites.
@@ -65,3 +65,10 @@ with this file's tick in the same commit. Never `git add -A`.
   capped at 1.0 s, and echoed sounds get a 30 ms end fade. Constants: cap 72,
   `GAME_SFX_METAL_PARTIAL_DAMPING`, `GAME_SFX_ECHO_SILENCE_LEVEL`, `GAME_SFX_END_FADE_SECONDS`,
   `GAME_SFX_LOW_HEALTH_FRACTION` (0.25, used in CP3).
+- **CP2 handover:** 70 sounds registered (cap 72). Offline render (scratch harness
+  `scratchpad/harness/Render.java`, NOT committed): every sound <= 1.0 s, peak <= 92 % after soft
+  clip. Last sample is 0 for all but three, which end at +/-2 LSB (~-84 dBFS, inaudible): FIRE_CHAINSAW
+  and RAILGUN_CHARGE (pre-existing, untouched) and ENEMY_WIND_UP (long 0.25 s attack; the percussive
+  envelope reaches exactly 0 one sample past the buffer). A8 is read as "no audible end step".
+  `EnemyVoiceMoment.WIND_UP` exists; the catalog loops FAMILY_MOMENTS (ALERT/ATTACK/DEATH) only and
+  binds WIND_UP via `bindEnemyVoiceFallback` -> ENEMY_WIND_UP. Nothing fires the new ids yet (CP3).

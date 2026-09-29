@@ -2,7 +2,7 @@ package ge.tbegvadze.toon3d.audio;
 
 /**
  * The stable id of every gameplay sound — the vocabulary every call site speaks
- * (procedural-sound-effects orders 1-4).
+ * (procedural-sound-effects orders 1-4 and 6).
  *
  * <p>Ids are ordinal-indexed throughout the layer ({@code Sound[]}, last-play timestamps, play
  * counters), so every lookup is an array read and nothing on a firing path allocates or hashes.
@@ -96,7 +96,23 @@ public enum GameSoundId {
     /** The XP receipt, deliberately near the floor of the mix. */
     KILL_CONFIRM,
     /** The quietest thing in the mix, and the first candidate for deletion. */
-    FOOTSTEP;
+    FOOTSTEP,
+
+    // --- Order 6: the moments that were still silent ----------------------------------------
+    /** The auto-doc heal station: charger hiss, rising charge, two confirm bleeps. */
+    HEAL_STATION,
+    /** The suit's warning bleeps, once, on the way DOWN through the low-health threshold. */
+    LOW_HEALTH_WARNING,
+    /**
+     * ONE shared sound for every committed WIND_UP telegraph, whatever the family — "it is about to
+     * do something big" must not depend on who, exactly as the shared ranged launch.
+     */
+    ENEMY_WIND_UP,
+    /** Data chatter when a log terminal or an EVENT console is read. */
+    TERMINAL_ACCESS,
+    /** HUD blips for the inventory overlay — the overlay's own sound, like LEVEL_UP. */
+    UI_MENU_OPEN,
+    UI_MENU_CLOSE;
 
     public static final int COUNT = values().length;
 }
