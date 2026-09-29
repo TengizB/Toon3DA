@@ -511,9 +511,9 @@ and ENEMY_WIND_UP, which end at +/-2 LSB (~-84 dBFS — below audibility; the pe
 exactly zero one sample past the buffer on a slow attack). `./gradlew balanceSim`'s summary was
 byte-identical before and after, which is the proof that no sound leaked into gameplay state.
 
-NOT DONE HERE (next order): fire ignition / hazard crackle, the golem-ability events (spire, shard,
-crust), route-map and pause-menu UI sounds, a bullet ricochet (no wall-hit event exists to hang it on).
-Each needs a new seam in another package. The real-device listening pass (section 11) now covers the
+NOT DONE HERE: fire ignition / hazard crackle, the golem-ability events (spire, shard, crust) and the
+route-map / pause-menu UI sounds were all DONE in order 7 (section 14). Still open: a bullet ricochet
+(no wall-hit event exists to hang it on). The real-device listening pass (section 11) now covers the
 order-6 recipes too.
 
 
@@ -537,10 +537,26 @@ THE SWEEP. Every touch action, menu, world event and the boss fight was checked 
     `playMenuTransitionSound()` — ONE detector, called right after `gameAudio.update`: entering any of
       INVENTORY_OPEN / SHOP_OPEN / PAUSE_MENU / SETTINGS_MENU / CODEX_OPEN / WEAPON_INSPECT plays
       UI_MENU_OPEN (menu-to-menu included), leaving them for a non-menu phase plays UI_MENU_CLOSE.
-      Replaces order 6's two explicit inventory calls.
+      Replaces order 6's two explicit inventory calls. Backing OUT of a sub-menu (SETTINGS_MENU or
+      CODEX_OPEN) to the menu it hangs off plays UI_MENU_CLOSE, not OPEN.
+    inside the menus: an inventory popup opening / tapped inside / dismissed -> UI_MENU_OPEN /
+      UI_FOCUS / UI_MENU_CLOSE, USE or DROP -> UI_CONFIRM (read from the new
+      `InventoryOverlayRenderer.isAnyWindowOpen()`); a shop card picked -> UI_FOCUS, its confirm
+      cancelled -> UI_MENU_CLOSE, an unaffordable / sold-out card -> ACTION_DENIED (the new
+      `ShopOverlayRenderer.isConfirming()` / `consumeDenied()`); a settings knob (settings screen or
+      codex strip) -> UI_CONFIRM, played AFTER the setting applies so turning EFFECTS off is silent;
+      a codex tab -> UI_FOCUS, an entry -> UI_CONFIRM, its BACK -> UI_MENU_CLOSE; the pause menu's
+      ABANDON RUN row -> UI_CONFIRM on release (before its confirmation opens), PROCEED -> UI_CONFIRM,
+      CANCEL -> UI_MENU_CLOSE.
+    WEAPON INSPECT: the EQUIP / CONVERT / SWAP callbacks run inside the suppressed WEAPON_INSPECT
+      update yet are real actions (a pickup, then a world turn). Each lifts suppression first, as
+      closeInventory does, so the pickup AND the enemy turn it spends are heard.
     pause row / level-up card / event choice / route ENGAGE -> UI_CONFIRM
     route FOCUS_CHANGED -> UI_FOCUS;  route INVALID and a failed purchase -> ACTION_DENIED
-    a purchase -> SHOP_DISPENSE (motor whir, then the goods thumping into the tray)
+    a purchase -> SHOP_DISPENSE (motor whir, then the goods thumping into the tray; loudness 0 — a
+      frozen world hears nothing)
+  FIRE_IGNITE sits at INTERFACE priority and volume 0.30 so a spreading fire is always the first
+  voice dropped; PLAYER_TURN's 0.13 s re-trigger is longer than one 0.12 s rotation.
   WORLD
     render/ImpactEffectSystem (already held GameAudio, already receives every one of these):
       onBlockAbsorbed -> IMPACT_BLOCKED; onShardShattered / onCrustShattered / onFrostShatter ->

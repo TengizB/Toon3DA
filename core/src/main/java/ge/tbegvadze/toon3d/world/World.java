@@ -719,9 +719,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         shopOverlayRenderer = new ShopOverlayRenderer();
 
         weaponInspectOverlayRenderer = new WeaponInspectOverlayRenderer();
-        weaponInspectOverlayRenderer.setOnTake(this::resolveWeaponTake);
-        weaponInspectOverlayRenderer.setOnConvertToAmmo(this::resolveWeaponConvert);
-        weaponInspectOverlayRenderer.setOnEvictSlot(this::resolveWeaponEvict);
+        // Each resolution runs INSIDE the WEAPON_INSPECT update, while gameplay sound is suppressed,
+        // yet it is a real action: the pickup is made and a world turn fires (enemies swing). Lift
+        // the suppression first, as closeInventory does, or all of it is silent (order 7).
+        weaponInspectOverlayRenderer.setOnTake(() -> {
+            gameAudio.setSuppressed(false);
+            resolveWeaponTake();
+        });
+        weaponInspectOverlayRenderer.setOnConvertToAmmo(() -> {
+            gameAudio.setSuppressed(false);
+            resolveWeaponConvert();
+        });
+        weaponInspectOverlayRenderer.setOnEvictSlot(slotIndex -> {
+            gameAudio.setSuppressed(false);
+            resolveWeaponEvict(slotIndex);
+        });
         weaponInspectOverlayRenderer.setOnClose(this::closeWeaponInspect);
 
         // Permadeath — run stats. The report that used to be its own death screen is now a page of
@@ -2224,8 +2236,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
+                boolean popupWasOpen = inventoryOverlayRenderer.isAnyWindowOpen();
                 InventoryOverlayRenderer.CloseAction touchAction =
                         inventoryOverlayRenderer.handleTouchAt(cardTouchPosition.x, cardTouchPosition.y);
+                playInventoryTouchSound(touchAction, popupWasOpen,
+                        inventoryOverlayRenderer.isAnyWindowOpen());
                 if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_FREE) {
                     closeInventory(false);
                 } else if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
@@ -2257,8 +2272,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 touchInputState.consumeTapAction();
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
+                boolean wasConfirming = shopOverlayRenderer.isConfirming();
                 ShopOverlayRenderer.TouchOutcome outcome =
                         shopOverlayRenderer.handleTouch(cardTouchPosition.x, cardTouchPosition.y);
+                // The buy flow, voiced (order 7): a refused card, a card picked (confirm step opens),
+                // a confirm cancelled. A purchase is voiced in resolveShopPurchase; CLOSED by the
+                // menu detector.
+                if (shopOverlayRenderer.consumeDenied()) {
+                    gameAudio.playMenu(GameSoundId.ACTION_DENIED);
+                } else if (outcome == ShopOverlayRenderer.TouchOutcome.NONE) {
+                    if (!wasConfirming && shopOverlayRenderer.isConfirming()) {
+                        gameAudio.playMenu(GameSoundId.UI_FOCUS);
+                    } else if (wasConfirming && !shopOverlayRenderer.isConfirming()) {
+                        gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+                    }
+                }
                 if (outcome == ShopOverlayRenderer.TouchOutcome.CLOSED) {
                     closeShop();
                 } else if (outcome == ShopOverlayRenderer.TouchOutcome.PURCHASE_CONFIRMED) {
@@ -3868,24 +3896,28 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (codexSystem.isShowingEntry() && CodexOverlayRenderer.isInsideBackButton(tapX, tapY)) {
             codexSystem.closeEntry();
+            gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);   // order 7
             return;
         }
         int settingIndex = CodexOverlayRenderer.settingIndexAt(tapX, tapY);
         if (settingIndex >= 0) {
             codexSystem.getSettings().cycleSetting(settingIndex);
             applyStoryAccessibilitySettings();
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
             codexOverlayRenderer.refreshLabels();
             return;
         }
         int tabIndex = CodexOverlayRenderer.categoryTabIndexAt(tapX, tapY);
         if (tabIndex >= 0) {
             codexSystem.selectCategory(CodexCategory.values()[tabIndex]);
+            gameAudio.playMenu(GameSoundId.UI_FOCUS);   // order 7
             return;
         }
         if (codexSystem.isShowingEntry()) return;   // the body is text, not buttons
         int rowIndex = CodexOverlayRenderer.entryRowIndexAt(tapX, tapY,
                 codexSystem.getVisibleEntryCount(), codexScrollAtTouchDown);
         if (rowIndex >= 0 && codexSystem.openEntry(rowIndex)) {
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
             storyTelemetry.recordCodexEntryOpened();
             codexOverlayRenderer.refreshLabels();   // the NEW dot it just cleared
         }
@@ -4017,10 +4049,33 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         RunPhase previous = phaseSeenLastUpdate;
         phaseSeenLastUpdate = runPhase;
         if (previous == null || previous == runPhase) return;
-        if (isMenuPhase(runPhase)) {
+        // Backing OUT of a sub-menu (settings, the archive) to the menu it hangs off is a close,
+        // even though the phase it lands on is itself a menu.
+        boolean leavingSubMenu = previous == RunPhase.SETTINGS_MENU || previous == RunPhase.CODEX_OPEN;
+        if (isMenuPhase(runPhase) && !leavingSubMenu) {
             gameAudio.playMenu(GameSoundId.UI_MENU_OPEN);
         } else if (isMenuPhase(previous)) {
             gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+        }
+    }
+
+    /**
+     * The inventory's own taps, voiced (order 7): a popup opening on an item or ability, a tap inside
+     * one, a popup dismissed, and USE / DROP (which also spends the turn). Closing the whole overlay
+     * is left to the menu detector.
+     */
+    private void playInventoryTouchSound(InventoryOverlayRenderer.CloseAction touchAction,
+                                         boolean popupWasOpen, boolean popupIsOpen) {
+        if (touchAction == InventoryOverlayRenderer.CloseAction.CLOSE_WITH_TURN) {
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);
+        } else if (touchAction == InventoryOverlayRenderer.CloseAction.NONE) {
+            if (!popupWasOpen && popupIsOpen) {
+                gameAudio.playMenu(GameSoundId.UI_MENU_OPEN);
+            } else if (popupWasOpen && !popupIsOpen) {
+                gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);
+            } else if (popupWasOpen) {
+                gameAudio.playMenu(GameSoundId.UI_FOCUS);
+            }
         }
     }
 
@@ -4285,15 +4340,21 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         if (pauseMenu.isConfirmOpen()) {
             updateFramingConfirmTouch(pauseMenu, false);
-            if (pauseMenu.consumeConfirmedRow() >= 0) abandonRun();
+            if (pauseMenu.consumeConfirmedRow() >= 0) {
+                gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // PROCEED (order 7)
+                abandonRun();
+            } else if (!pauseMenu.isConfirmOpen()) {
+                gameAudio.playMenu(GameSoundId.UI_MENU_CLOSE);   // CANCEL (order 7)
+            }
             return;
         }
         int releasedRow = updateFramingMenuTouch(pauseMenu, StoryUiConstants.STORY_FRAME_MENU_TOP_Y);
         if (releasedRow < 0 || releasedRow >= PauseMenuItem.values().length) return;
         PauseMenuItem item = PauseMenuItem.values()[releasedRow];
+        // Heard on release even when the row only OPENS a confirmation (ABANDON_RUN) — order 7.
+        gameAudio.playMenu(GameSoundId.UI_CONFIRM);
         // ABANDON_RUN carries a confirmation, so activateRow opens it and commits nothing.
         if (!pauseMenu.activateRow(releasedRow, item.getConfirmStringId())) return;
-        gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
         switch (item) {
             case RESUME:   closePauseMenu();    break;
             case CODEX:    openCodex();         break;
@@ -4344,6 +4405,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // through here (rather than per frame) is what makes it take effect on the next line drawn.
         storySettings.cycleSetting(releasedRow);
         applyStoryAccessibilitySettings();
+        gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // after apply, so EFFECTS=OFF is itself silent
         codexOverlayRenderer.refreshLabels();
         settingsMenu.rebuildAsSettings(storySettings);
     }

@@ -1,9 +1,23 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Sound Pass 3 — no cap, and every action makes a sound
 CREATED: 2026-09-29
-IMPLEMENTED: -
+IMPLEMENTED: 2026-09-29
 ---
+
+IMPLEMENTATION NOTE (2026-09-29, reviewer PASS WITH FIXES, fixes applied)
+  - Reviewer blockers fixed: weapon-inspect EQUIP / CONVERT / SWAP ran inside the suppressed
+    WEAPON_INSPECT update, silencing the pickup AND the enemy turn it spends — each callback now
+    lifts suppression first; the pause menu's ABANDON RUN row now confirms on release, PROCEED
+    confirms, CANCEL closes.
+  - Widened past the A-list under the owner's "any action": inventory popups (open / tap / dismiss,
+    USE-DROP confirm), the shop buy flow (card picked, confirm cancelled, refused card), settings
+    knobs, codex tabs / entries / BACK. Two read-only queries were added to renderers for this:
+    InventoryOverlayRenderer.isAnyWindowOpen(), ShopOverlayRenderer.isConfirming()/consumeDenied().
+  - Backing out of SETTINGS / CODEX to their parent menu plays CLOSE, not OPEN.
+  - R4 honoured: FIRE_IGNITE at INTERFACE priority, volume 0.30; PLAYER_TURN re-trigger 0.13 s.
+  - SHOP_DISPENSE loudness 0 (it plays in a frozen world).
+  - Verified: mirror core:test = baseline, balanceSim summary byte-identical, 92 sounds render clean.
 
 OVERVIEW
 --------

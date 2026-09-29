@@ -207,6 +207,14 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
      * Layer 3 (AbilityWindow) → Layer 2 (ItemWindow) → Layer 1 (header EXIT, sub-panels).
      * Tapping outside an open popup closes it without closing the inventory.
      */
+    /**
+     * True while an item or ability popup is open over the base inventory — read by World so that
+     * opening, using and dismissing a popup can each be heard (procedural-sound-effects order 7).
+     */
+    public boolean isAnyWindowOpen() {
+        return itemWindow.isOpen() || abilityWindow.isOpen();
+    }
+
     public CloseAction handleTouchAt(float worldX, float worldY) {
         // Layer 3 — AbilityWindow (topmost)
         if (abilityWindow.isOpen()) {

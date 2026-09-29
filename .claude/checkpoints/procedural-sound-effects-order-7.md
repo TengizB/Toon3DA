@@ -45,7 +45,7 @@ with this file's tick in the same commit. Never `git add -A`.
 - [x] **CP2** — player + menu sites (A2-A4). DONE WHEN: wired, build green.
 - [x] **CP3** — world, golem, hazard, boss sites (A5-A7). DONE WHEN: wired; test = baseline;
       balanceSim summary byte-identical to the order-6 head.
-- [ ] **CP4** — docs + reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP4** — docs + reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -71,3 +71,5 @@ with this file's tick in the same commit. Never `git add -A`.
   on phase 2, wind-up on TELEGRAPH, slam on RESOLVE/CHARGE/MELEE, footfall on DASH/REPOSITION,
   repair on HEAL, ENEMY_SPAWN per summoned minion, BOSS_DEATH on defeat. Mirror core:test = baseline
   (only StoryBarkTest); balanceSim summary byte-identical to baseline.
+- **CP4:** reviewer PASS WITH FIXES; both blockers, the non-blocking items and the doc nit fixed (see
+  the idea file's IMPLEMENTATION NOTE). STATUS IMPLEMENTED.

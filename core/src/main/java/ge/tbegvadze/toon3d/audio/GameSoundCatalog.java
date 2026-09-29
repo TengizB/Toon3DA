@@ -1124,7 +1124,7 @@ public final class GameSoundCatalog {
         // a held rotate must never drone (R4).
         registry.register(SoundDefinition
                 .builder(GameSoundId.PLAYER_TURN, SoundCategory.PLAYER_STATE)
-                .volume(0.10f).cycleSpread(1.0f).minimumRetriggerSeconds(0.10f).loudness(5)
+                .volume(0.10f).cycleSpread(1.0f).minimumRetriggerSeconds(0.13f).loudness(5)
                 .priority(SoundConstants.GAME_SFX_PRIORITY_INTERFACE)
                 .layers(
                     SoundLayer.builder(WaveformKind.NOISE, 0.10f)
@@ -1201,9 +1201,10 @@ public final class GameSoundCatalog {
                 .build());
 
         // A vending machine dispensing: a motor whir, then the product thumping into the tray.
+        // Loudness 0: it plays inside the shop menu, and a frozen world hears nothing.
         registry.register(SoundDefinition
                 .builder(GameSoundId.SHOP_DISPENSE, SoundCategory.ENVIRONMENT)
-                .volume(0.45f).cycleSpread(0.2f).minimumRetriggerSeconds(0.20f).loudness(15)
+                .volume(0.45f).cycleSpread(0.2f).minimumRetriggerSeconds(0.20f).loudness(0)
                 .layers(
                     SoundLayer.builder(WaveformKind.SQUARE, 0.20f)
                               .frequency(110f).lowPass(900f).amplitudeModulation(30f, 0.5f).envelope(0.02f, 3f).amplitude(0.30f).build(),
@@ -1217,7 +1218,8 @@ public final class GameSoundCatalog {
         // re-trigger window and low priority keep a burning room from droning (R4).
         registry.register(SoundDefinition
                 .builder(GameSoundId.FIRE_IGNITE, SoundCategory.ENVIRONMENT)
-                .volume(0.40f).cycleSpread(0.8f).minimumRetriggerSeconds(0.30f).loudness(20)
+                .volume(0.30f).cycleSpread(0.8f).minimumRetriggerSeconds(0.30f).loudness(20)
+                .priority(SoundConstants.GAME_SFX_PRIORITY_INTERFACE)
                 .layers(
                     SoundLayer.builder(WaveformKind.NOISE, 0.30f)
                               .sweptLowPass(500f, 2500f).envelope(0.03f, 4f).amplitude(0.70f).noiseSeed(SEED_BODY).build(),
