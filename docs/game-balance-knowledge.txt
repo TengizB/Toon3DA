@@ -262,6 +262,8 @@ RANGED (current stat blocks; per-shot damage / clip / range / reloadTicks):
   Railgun     {0,40,90} / 1 / 16 / 2    (charge-up infinite-pierce sniper)
   Incinerator   impact 8 + falloff 5, burn DoT / clip 30 / range 3 / reload 1
   Grenade Launcher  splash 42 / falloff 22 / self 24 / clip 3 / range 6 / reload 2
+                    (contact fuse at any range; self 24 ONLY when it detonates on an
+                     enemy on the adjacent cell)
   Arc Cannon         28 / 7  / 7  / 2   (chain-lightning: leaps to 3 more targets
                                          at 0.6^n; the lateral chain is uncredited)
 

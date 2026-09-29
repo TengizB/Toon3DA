@@ -653,6 +653,14 @@ public class PlayerController {
         weapon.fire(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                     level, hitTarget, barrelHitTarget, doorManager::blocksSight);
         if (gameAudio != null) gameAudio.playPlayerWeapon(weapon.getItemType());
+        // Point-blank grenade: detonating on an enemy on the adjacent cell catches the shooter too.
+        if (weapon instanceof GrenadeLauncher) {
+            int selfDamage = ((GrenadeLauncher) weapon).consumePendingSelfDamage();
+            if (selfDamage > 0) {
+                if (eventTextSystem != null) eventTextSystem.spawn("TOO CLOSE!");
+                player.applyDamage(selfDamage);
+            }
+        }
         actionState    = ActionState.FIRING;
         actionProgress = 0f;
     }

@@ -3,6 +3,22 @@ CATEGORY: Combat
 TITLE: Grenade Launcher — bouncing lobbed splash weapon (GRENADES)
 CREATED: 2026-06-05
 ---
+IMPLEMENTATION NOTE (2026-09-29 — owner-requested rework):
+  The minimum-range weakness described below (GRENADE_ARM_TILES, "an adjacent enemy is passed
+  through un-armed") is REMOVED. The grenade now has a CONTACT FUSE: it detonates on the first
+  enemy it reaches at ANY distance, the adjacent tile included. The price of point-blank use is
+  SELF-DAMAGE, and it applies in exactly one case: the grenade detonated on an enemy standing on
+  the very next cell (distance 1, before any bounce) — the player's tile is then a neighbour of
+  the impact, so the player takes GRENADE_SELF_DAMAGE (24, the existing BalanceConfig number,
+  previously declared but never applied). Walls, air-bursts, barrels, farther enemies and banked
+  shots never hurt the player. The constant is renamed GRENADE_BOUNCE_MIN_TILES (2) — it now
+  gates only the wall bank. Self-damage is parked on GrenadeLauncher.consumePendingSelfDamage()
+  and applied by PlayerController through Player.applyDamage (armour/toughness/dodge apply).
+  Visuals reworked at the same time: the first-person sprite is now a six-round revolving-drum
+  launcher (loaded rounds visible in the drum, perforated heat shield, reflex sight), the fire
+  effect shows the grenade lobbed away from the muzzle, and the ground pickup is a matching side
+  profile. Every section below that mentions arming is superseded by this note.
+
 
 OVERVIEW
 ========

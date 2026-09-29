@@ -247,6 +247,10 @@ public final class WeaponConstants {
     public static final float GRENADE_EFFECT_CORE_RADIUS     = 55f;
     public static final float GRENADE_EFFECT_WISP_HEIGHT     = 100f;
     public static final float GRENADE_EFFECT_WISP_BASE_WIDTH = 18f;
+    // The lobbed round drawn in the fire effect: start radius, rise over the flash, shrink fraction.
+    public static final float GRENADE_EFFECT_SHELL_RADIUS    = 14f;
+    public static final float GRENADE_EFFECT_SHELL_RISE      = 190f;
+    public static final float GRENADE_EFFECT_SHELL_SHRINK    = 0.70f;
 
     // Weapon HUD rendering — sprite anchored at screen bottom-centre
     // drawX = (WORLD_WIDTH - WEAPON_HUD_WIDTH) / 2f; drawY = WEAPON_HUD_BASE_Y
@@ -332,7 +336,8 @@ public final class WeaponConstants {
     // Damage table (coefficient 0.0 — no travel falloff; splash is splash):
     //   impact tile:           GRENADE_SPLASH_DAMAGE  = 42 (full blast)
     //   4 orthogonal neighbours: GRENADE_FALLOFF_DAMAGE = 22 (edge of plus)
-    //   player self-damage:    GRENADE_SELF_DAMAGE    = 24 (if caught in blast)
+    //   player self-damage:    GRENADE_SELF_DAMAGE    = 24 (ONLY when it detonates on an
+    //                                                        enemy on the adjacent cell)
     // Per-shot ceiling: 5 enemies in plus = 42 + 4×22 = 130 distributed damage.
     // Balance values (splash/falloff/self damage, range, clip, ammo) live in BalanceConfig.
     public static final int     GRENADE_SPLASH_DAMAGE      = BalanceConfig.GRENADE_SPLASH_DAMAGE;
@@ -340,9 +345,10 @@ public final class WeaponConstants {
     public static final int     GRENADE_SELF_DAMAGE        = BalanceConfig.GRENADE_SELF_DAMAGE;
     public static final float   GRENADE_DAMAGE_DROP_COEFF  = BalanceConfig.GRENADE_DAMAGE_DROP_COEFF;
     public static final int     GRENADE_RANGE_TILES        = BalanceConfig.GRENADE_RANGE_TILES;
-    // GRENADE_ARM_TILES: grenade must travel this many tiles before it can detonate.
-    // Prevents point-blank abuse; unarmed grenade passes through enemies harmlessly.
-    public static final int     GRENADE_ARM_TILES          = 2;
+    // GRENADE_BOUNCE_MIN_TILES: the grenade must travel this many tiles before it can bank off a
+    // wall. Enemy contact has NO minimum — the grenade detonates on the first enemy at any range,
+    // point-blank included (and then costs the player GRENADE_SELF_DAMAGE).
+    public static final int     GRENADE_BOUNCE_MIN_TILES   = 2;
     public static final int     GRENADE_CLIP_SIZE          = BalanceConfig.GRENADE_CLIP_SIZE;
     public static final int     GRENADE_RELOAD_TIME_TICKS  = BalanceConfig.GRENADE_RELOAD_TIME_TICKS;
     public static final int     GRENADE_PICKUP_AMMO        = BalanceConfig.GRENADE_PICKUP_AMMO;
