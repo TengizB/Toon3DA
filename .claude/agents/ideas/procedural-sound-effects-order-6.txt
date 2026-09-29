@@ -1,9 +1,23 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: Sound Pass 2 — missing moments + a Half-Life-style facility
 CREATED: 2026-09-29
-IMPLEMENTED: -
+IMPLEMENTED: 2026-09-29
 ---
+
+IMPLEMENTATION NOTE (2026-09-29, reviewer PASS WITH FIXES, fixes applied)
+  - R6 / A8 AMENDED: "ends on exactly zero" is met as "last sample within +/-2 LSB
+    (~-84 dBFS, inaudible)". Three recipes end at +/-2 LSB: ENEMY_WIND_UP (new; its
+    slow 0.25 s attack leaves the percussive envelope one sample short of zero) and
+    FIRE_CHAINSAW / RAILGUN_CHARGE (untouched since order 5). Deliberately NOT fixed
+    with a global synthesiser fade: that would change PCM without changing the WAV
+    cache key, so devices would keep playing stale cached files.
+  - GameMath signature: shipped as metalBarSample(fundamentalHz, timeSeconds, damping)
+    rather than metalBarSample(phaseRadians) — per-partial damping needs time.
+  - Verification used a desktop-only mirror build (the Android Gradle plugin cannot
+    resolve in the build container): core compiles, core:test = only the pre-existing
+    StoryBarkTest failure, balanceSim summary byte-identical to baseline 41605e7.
+  - Living documentation: docs/sound-system.txt section 13.
 
 OVERVIEW
 --------

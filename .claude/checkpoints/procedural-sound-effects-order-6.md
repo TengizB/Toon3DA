@@ -49,7 +49,7 @@ with this file's tick in the same commit. Never `git add -A`.
       retuned, offline render shows all sounds <= 1.0 s ending on 0; build green.
 - [x] **CP3** — firing sites.
       DONE WHEN: A1-A6 wired; build + test green; balanceSim bands unchanged.
-- [ ] **CP4** — docs + gate.
+- [x] **CP4** — docs + gate.
       DONE WHEN: docs/sound-system.txt + CLAUDE.md updated; reviewer PASS; idea STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -80,3 +80,6 @@ with this file's tick in the same commit. Never `git add -A`.
   `setSuppressed(false)`) -> UI_MENU_OPEN / _CLOSE. Mirror `core:test`: 449 tests, only the
   pre-existing `StoryBarkTest` bark.depth.core.2 failure. `balanceSim`: passes, and
   `summary.txt` is BYTE-IDENTICAL to a baseline run of 41605e7 (R2 proven).
+- **CP4:** reviewer PASS WITH FIXES. Applied: A8/R6 amendment + signature note as an IMPLEMENTATION
+  NOTE in the idea file; `updateLowHealthWarningSound` moved so `updateLowHealthStoryBark` keeps its
+  Javadoc; LOW_HEALTH_WARNING made three descending bleeps (1400/1225/1050 Hz). STATUS IMPLEMENTED.

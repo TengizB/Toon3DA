@@ -3979,11 +3979,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * Fires the low-health bark on the way DOWN through the threshold only, and re-arms once the
-     * player heals back above it — so a fight spent hovering at low HP produces one line, not a
-     * stream of them (the bark layer's cooldown is the second guard).
-     */
-    /**
      * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
      * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
      * at low HP through a fight is one warning, not an alarm.
@@ -4002,6 +3997,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
     }
 
+    /**
+     * Fires the low-health bark on the way DOWN through the threshold only, and re-arms once the
+     * player heals back above it — so a fight spent hovering at low HP produces one line, not a
+     * stream of them (the bark layer's cooldown is the second guard).
+     */
     private void updateLowHealthStoryBark() {
         float healthFraction = player.getHealthFraction();
         if (healthAboveLowThreshold) {

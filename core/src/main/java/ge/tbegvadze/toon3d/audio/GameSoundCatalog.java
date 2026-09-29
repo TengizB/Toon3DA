@@ -1032,9 +1032,9 @@ public final class GameSoundCatalog {
                               .amplitude(0.25f).delay(0.56f).build())
                 .build());
 
-        // The suit's warning: two urgent bleeps and a lower third. Delayed 0.22 s so it FOLLOWS the
-        // hurt sound that caused it instead of masking it. The long re-trigger is a second guard on
-        // top of the threshold's own re-arm rule.
+        // The suit's warning: three urgent bleeps, each a step lower. Delayed 0.22 s so it
+        // FOLLOWS the hurt sound that caused it instead of masking it. The long re-trigger is a
+        // second guard on top of the threshold's own re-arm rule.
         registry.register(SoundDefinition
                 .builder(GameSoundId.LOW_HEALTH_WARNING, SoundCategory.PLAYER_STATE)
                 .volume(0.45f).cycleSpread(0f).minimumRetriggerSeconds(1.0f).loudness(0)
@@ -1043,7 +1043,7 @@ public final class GameSoundCatalog {
                               .frequency(1400f).lowPass(3000f).envelope(0.002f, 5f)
                               .amplitude(0.35f).delay(0.22f).build(),
                     SoundLayer.builder(WaveformKind.SQUARE, 0.07f)
-                              .frequency(1400f).lowPass(3000f).envelope(0.002f, 5f)
+                              .frequency(1225f).lowPass(3000f).envelope(0.002f, 5f)
                               .amplitude(0.35f).delay(0.34f).build(),
                     SoundLayer.builder(WaveformKind.SQUARE, 0.12f)
                               .frequency(1050f).lowPass(3000f).envelope(0.002f, 4f)
