@@ -3,9 +3,11 @@ GAMEPLAY SOUND SYSTEM — procedural SFX
 Single source of truth for the gameplay audio layer. Update this doc in the same commit as any
 change to `…toon3d.audio`, `util/SoundConstants` or the synthesis formulas in `util/GameMath`.
 
-Design document: `.claude/agents/ideas/procedural-sound-effects.txt` (orders 1-5).
-Implemented: orders 1-5 — the whole design. What is still owed (a real-device listening pass) is
-listed under NOT YET DONE at the end.
+Design documents: `.claude/agents/ideas/procedural-sound-effects.txt` (orders 1-5) and
+`.claude/agents/ideas/procedural-sound-effects-order-6.txt` (order 6 — the still-silent moments and the
+Half-Life-inspired retune; see section 13).
+Implemented: orders 1-6. What is still owed (a real-device listening pass) is listed under NOT YET
+DONE in section 11.
 
 
 1. WHAT THIS IS
@@ -35,11 +37,13 @@ HEADLESS (usable from `sim/`; `WaveformKind` imports only `MathUtils`, which is 
   SoundCategory.java      enum — the five mix buses (PLAYER_WEAPON / PLAYER_STATE / ENEMY /
                           ENVIRONMENT / INTERFACE).
   WaveformKind.java       enum — NOISE / SINE / SQUARE / CHIRP_SINE / CHIRP_SQUARE /
-                          EXPONENTIAL_CHIRP_SINE. Each constant implements `sampleAt` with its OWN
-                          body (the `EnemyType` idiom), so the synthesiser holds no switch.
+                          EXPONENTIAL_CHIRP_SINE / METAL (order 6). Each constant implements
+                          `sampleAt` with its OWN body (the `EnemyType` idiom), so the synthesiser
+                          holds no switch.
   SoundLayer.java         immutable one-voice recipe + fluent Builder.
   SoundDefinition.java    id + category + layers + volume + priority + cycleSpread +
-                          minimumRetriggerSeconds + loudness, + Builder.
+                          minimumRetriggerSeconds + loudness + an optional room echo (order 6),
+                          + Builder.
   SoundRegistry.java      register/get by ordinal; weapon -> fire sound, weapon -> impact sound and
                           enemy family x moment -> voice bindings (plus a per-moment fallback).
                           Array-backed, no HashMap on a firing path.
@@ -51,7 +55,8 @@ HEADLESS (usable from `sim/`; `WaveformKind` imports only `MathUtils`, which is 
                           category)`. No consumer yet — see section 12.
 
 IN THE ENEMY PACKAGE (order 3), so `EnemyManager` never imports audio:
-  enemy/EnemyVoiceMoment.java    enum ALERT / ATTACK / DEATH. (The design placed this in `audio/`;
+  enemy/EnemyVoiceMoment.java    enum ALERT / ATTACK / DEATH, + WIND_UP (order 6 — never a family
+                                 voice; resolves through the fallback to ENEMY_WIND_UP). (The design placed this in `audio/`;
                                  it moved to `enemy/` because the listener that names it is fired
                                  from `EnemyManager`, and the enemy layer must not import audio.)
   enemy/EnemyVoiceListener.java  `onEnemyVoice(Enemy, EnemyVoiceMoment)`, the ALERT + DEATH hook.
@@ -114,6 +119,12 @@ all run at synthesis time only (startup), never per frame.
                                           — the only front/back cue available with cardinal facing.
   sfxStackedVolume(...)                   geometric damping of the Nth voice in a turn.
   sfxPitchFromCycle(...)                  the variation cycle (below).
+  metalBarSample(f0, t, damping)          (order 6) struck metal: free-free bar partials at the
+                                          INHARMONIC ratios 1 : 2.756 : 5.404 : 8.933, each decaying
+                                          faster than the last, so the bright end of a clang dies
+                                          first. Behind `WaveformKind.METAL`.
+  echoTailSeconds(delay, feedback, floor) (order 6) repeats until feedback^n < floor, times delay.
+  endFadeGain(i, total, fade)             (order 6) linear fade forcing the last sample to 0.
 
 Sample rate is `GAME_SFX_SAMPLE_RATE_HZ = 22050`, half the story layer's. A phone speaker
 reproduces almost nothing usable above ~10 kHz and every noise layer is low-passed below 6 kHz
@@ -121,15 +132,27 @@ anyway. Each WAV declares its own rate in its header, so the two layers never ha
 
 Per-layer pipeline in `SoundSynthesizer`: oscillator -> high-pass -> low-pass (cutoff may sweep)
 -> amplitude modulation -> envelope -> layer amplitude -> accumulate at the layer's delay offset.
-Then once for the whole sound: soft clip -> PCM16.
+Then once for the whole sound: [room echo + end fade, order 6, only if the recipe has one] -> soft
+clip -> PCM16.
+
+THE ROOM ECHO (order 6): `SoundDefinition.Builder.roomEcho(delaySeconds, feedback, dampingHz, wetMix)`
+is a feedback delay line with a one-pole low-pass in the loop, applied once to the summed layers:
+    echo[n] = lowPass( dry[n - D] + feedback * echo[n - D] ),   out[n] = dry[n] + wetMix * echo[n]
+so every repeat is quieter AND duller than the last — what concrete does to a gunshot. The tail is
+`echoTailSeconds` long (to GAME_SFX_ECHO_SILENCE_LEVEL, ~-40 dB), capped so the whole sound stays
+within GAME_SFX_MAX_DURATION_SECONDS; because the cap can cut the tail short, an echoed sound takes a
+GAME_SFX_END_FADE_SECONDS linear end fade so its last sample is 0. The echo parameters join the WAV
+cache key ONLY when present, so recipes without one keep their existing cached files. Loud events
+only: ballistic fire, railgun, rocket, explosions — never UI, pickups, voices or the player's body.
 FILTERING HAPPENS BEFORE THE ENVELOPE, deliberately — filtering an already-enveloped signal smears
 its attack transient, and the transient is what makes a gunshot read as a gunshot on a small speaker.
 
 
 4. THE CATALOG
 ==============
-64 sounds today — EXACTLY `GAME_SFX_MAX_DISTINCT_SOUNDS = 64`. Exceeding that cap is a design
-failure, not a reason to raise the constant.
+70 sounds today, under `GAME_SFX_MAX_DISTINCT_SOUNDS = 72`. The cap was 64 through order 5 and was
+raised to 72 by order 6 at the OWNER's explicit request for more sounds (idea file D1). Exceeding the
+cap is still a design failure, not a reason to raise the constant again on an agent's own judgement.
 
   weapon fire      14, one per ItemType weapon row, + WEAPON_FIRE_DEFAULT
   weapon state     RAILGUN_CHARGE, DRY_FIRE, RELOAD_START, RELOAD_COMPLETE, WEAPON_SWITCH
@@ -140,16 +163,19 @@ failure, not a reason to raise the constant.
   facility         DOOR_OPEN, DOOR_CLOSE, DOOR_LOCKED, STAIRS_DESCEND,
                    PICKUP_AMMO / _MEDICAL / _ARMOUR / _KEYCARD / _WEAPON / _CREDIT,
                    PLAYER_HEAL, LEVEL_UP, KILL_CONFIRM, FOOTSTEP       (order 4)
+  order 6          HEAL_STATION, LOW_HEALTH_WARNING, ENEMY_WIND_UP, TERMINAL_ACCESS,
+                   UI_MENU_OPEN, UI_MENU_CLOSE
 
-THE CATALOG IS FULL. The design's own tally (62) omitted LEVEL_UP and KILL_CONFIRM, so order 4 came
-in three over. Three rows were CUT rather than the cap raised:
+HISTORY: at order 4 the catalog was full. The design's own tally (62) omitted LEVEL_UP and
+KILL_CONFIRM, so order 4 came in three over. Three rows were CUT rather than the cap raised:
   ENEMY_ATTACK_MELEE, ENEMY_DEATH  the order-2 generics. With all six families voiced they could never
                                    play; an unbound family now borrows the ABERRATION voice instead.
   DOOR_UNLOCK                      a keycard unlock opens the door in the same instant on the same
                                    tile, so DOOR_OPEN already says it — two sounds there were mush.
-Anything added from here must REPLACE a row. The next cut candidate is FOOTSTEP (see below).
+Two slots remain after order 6; past that, anything added must REPLACE a row. The next cut candidate
+is still FOOTSTEP (see below).
 
-HEAL and LEVEL_UP are the only two HARMONICALLY PLEASANT sounds in the catalog, on purpose: in a
+HEAL, HEAL_STATION and LEVEL_UP are the only HARMONICALLY PLEASANT sounds in the catalog, on purpose: in a
 game this grim, "you are less hurt" and "you got stronger" are where the ear may relax. Pickups are
 short receipts, never events. KILL_CONFIRM (0.18) and FOOTSTEP (0.12) are the floor of the mix;
 FOOTSTEP also has the lowest priority, so it is the first voice dropped under pressure.
@@ -261,6 +287,7 @@ balance simulator and the whole existing test suite working untouched.
 
 8. FIRING SITES
 ===============
+(Order 6 sites are marked [6].)
 `input/PlayerController`  (setter `setGameAudio`)
     tryFire()            after `weapon.fire(...)`        -> playPlayerWeapon(weapon.getItemType())
     tryFire()            the cannot-fire, not-reloading branch -> WEAPON_DRY_FIRE
@@ -293,6 +320,19 @@ balance simulator and the whole existing test suite working untouched.
     takeStandingGroundWeapon()   -> PICKUP_WEAPON, or PICKUP_AMMO when the weapon was broken down.
                                     Every one of the eight weapon-take paths funnels through it.
     the DoorStateListener        -> DOOR_OPEN / DOOR_CLOSE at the door tile
+[6] applyInventoryConsumableEffect -> PLAYER_HEAL when a medkit used from the inventory restored HP
+                                    (this path was silent before order 6)
+[6] triggerAutoDocHeal()         -> HEAL_STATION (the auto-doc was silent)
+[6] updateLowHealthWarningSound() -> LOW_HEALTH_WARNING, once on the way DOWN through
+                                    GAME_SFX_LOW_HEALTH_FRACTION (0.25, its own constant, NOT the story
+                                    bark's), re-armed only above it; HP 0 never warns. The recipe's
+                                    bleeps are delayed 0.22 s so they follow the hurt sound.
+[6] updateLogTerminals() when a take is spent, updateEventStations() when the event opens
+                                 -> TERMINAL_ACCESS (the latter before the phase change)
+[6] openInventory() BEFORE the phase change -> UI_MENU_OPEN; closeInventory() -> UI_MENU_CLOSE after
+                                    `setSuppressed(false)`: the phase is PLAYING again this frame, and
+                                    waiting for the next update would swallow the blip AND a
+                                    medkit's heal. Menu sounds are the overlay's own, like LEVEL_UP.
 `door/DoorManager`  (setter `setDoorStateListener`, null in `SimWorld`)
     requestOpen: CLOSED -> OPENING, and a CLOSING door reversing -> onDoorOpening
     notifyPlayerSettled: the auto-close OPEN -> CLOSING           -> onDoorClosing
@@ -319,6 +359,11 @@ balance simulator and the whole existing test suite working untouched.
       alerted and are NOT announced — the summon has its own telegraph.
     killEnemy(...)  — the single funnel every death passes through (weapon, damage-over-time,
       splash, self-destruct) -> the family's DEATH voice.
+[6] announceWindUp(...) at every `plan.setWindUp(...)` commit (charger rush, spire sow, the generic
+      WIND_UP) and the FIRST self-destruct prime (the countdown re-telegraphs every turn; the sound
+      must not) -> EnemyVoiceMoment.WIND_UP -> ENEMY_WIND_UP at the enemy, pitched by size. ONE shared
+      recipe for every family, for the same reason the ranged launch is shared: "it is about to do
+      something big" must never depend on who.
     Null-guarded, so `sim/SimWorld` (which wires no listener) is unaffected.
 
 PLAYER_DEATH plays under the fade. The DEATH STROKE screen that follows is SILENT — that silence is
@@ -340,7 +385,7 @@ like every other story string — `StoryLocalizationTest` fails if they drift ap
 
 10. ADD A SOUND (the recipe)
 ============================
-0. The catalog is at its 64-sound cap: a new sound REPLACES a row, it is never simply added.
+0. Check the cap (70 of 72 used after order 6): past it, a new sound REPLACES a row.
 1. Add a constant to `GameSoundId`.
 2. Add ONE `register(...)` call in `GameSoundCatalog`, describing its layers.
 3. For a weapon: one `bindWeapon(...)` and one `bindWeaponImpact(...)` line in the same file.
@@ -421,3 +466,46 @@ drops, and whether a WAV exists at all. Muting the game can never change what an
 `GameAudio` constructs fine headless (it bootstraps the registry and simply synthesises nothing),
 so `sim/SimWorld` can own one to receive noise when that system lands. The `category` lets a
 consumer ignore, e.g., the enemies' own voices. Nothing implements the listener yet.
+
+
+13. ORDER 6 — THE SILENT MOMENTS AND A HALF-LIFE-INSPIRED FACILITY
+===================================================================
+Spec: `.claude/agents/ideas/procedural-sound-effects-order-6.txt`.
+
+THE SILENT MOMENTS. Healing was the worst gap: only the HEAL button's path played PLAYER_HEAL, so a
+medkit used from the INVENTORY and the auto-doc HEAL STATION restored HP in silence. Both are wired
+now (section 8), plus the suit's LOW_HEALTH_WARNING, the shared ENEMY_WIND_UP telegraph, terminal /
+event-console chatter and the inventory's open/close blips. Every one is still redundant with
+something drawn (green heal text + particles, the HP bar, the rim-flash telegraph, the overlay).
+
+THE RETUNE — inspiration, never imitation. No recreated or sampled Half-Life sound, and no voice
+(there is no VO in this game). What was taken is the production LANGUAGE of an industrial research
+facility heard through its own hard rooms:
+  ROOMS      room echo on pistol, shotgun, double barrel, chaingun, assault rifle (short and dry on
+             the rapid-fire pair), railgun, rocket and BARREL_EXPLOSION (the longest — the room
+             answers a blast, cut at 1.0 s and faded).
+  METAL      WaveformKind.METAL in the doors' seated clank, reload clacks (mag out; mag seated +
+             slide racked), PICKUP_AMMO / _WEAPON / _ARMOUR, the pistol's two-bounce casing, the
+             shotgun's pump, PLAYER_GUARDED (a blow glancing off the guard now RINGS), the
+             WEAPON_SWITCH tick and FOOTSTEP (a boot on grating). PLAYER_FLANKED keeps its dulled,
+             detuned clang — "wrong" must stay audibly different from "guarded".
+  PNEUMATICS DOOR_OPEN = seal hiss -> slide -> clank; DOOR_CLOSE = slide -> clank -> seal hiss;
+             DOOR_LOCKED = the DENY buzz (two squares a few hertz apart, so it beats).
+  THE SUIT   clean edged bleeps (SQUARE through a low-pass, never raw): PLAYER_HEAL (injector hiss +
+             a rising fifth-then-octave), HEAL_STATION (charger hiss, climbing charge, two confirm
+             bleeps), PICKUP_ARMOUR (a rising charge whine), LEVEL_UP (a bleep before the triad),
+             LOW_HEALTH_WARNING, and a FLATLINE tone at the end of PLAYER_DEATH — which still ends
+             inside the 1.0 s cap, so the DEATH STROKE's silence is untouched.
+  HANDLING   the shotgun PUMPS after the shot, the pistol drops a casing, and fist / knife / hammer
+             WHOOSH before contact (the contact layers start 60 ms behind the swing).
+
+VERIFIED OFFLINE (a scratch render, not a committed test): all 70 sounds <= 1.0 s, peak <= 92 % after
+soft clip; every sound ends on 0 except FIRE_CHAINSAW, RAILGUN_CHARGE (both untouched since order 5)
+and ENEMY_WIND_UP, which end at +/-2 LSB (~-84 dBFS — below audibility; the percussive envelope reaches
+exactly zero one sample past the buffer on a slow attack). `./gradlew balanceSim`'s summary was
+byte-identical before and after, which is the proof that no sound leaked into gameplay state.
+
+NOT DONE HERE (next order): fire ignition / hazard crackle, the golem-ability events (spire, shard,
+crust), route-map and pause-menu UI sounds, a bullet ricochet (no wall-hit event exists to hang it on).
+Each needs a new seam in another package. The real-device listening pass (section 11) now covers the
+order-6 recipes too.
