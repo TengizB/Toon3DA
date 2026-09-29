@@ -2,7 +2,8 @@ package ge.tbegvadze.toon3d.audio;
 
 /**
  * The stable id of every gameplay sound — the vocabulary every call site speaks
- * (procedural-sound-effects orders 1-4 and 6).
+ * (procedural-sound-effects orders 1-4, 6 and 7).  There is NO cap on how many ids exist
+ * (removed by order 7 at the owner's request): a new sound is simply a new constant.
  *
  * <p>Ids are ordinal-indexed throughout the layer ({@code Sound[]}, last-play timestamps, play
  * counters), so every lookup is an array read and nothing on a firing path allocates or hashes.
@@ -112,7 +113,36 @@ public enum GameSoundId {
     TERMINAL_ACCESS,
     /** HUD blips for the inventory overlay — the overlay's own sound, like LEVEL_UP. */
     UI_MENU_OPEN,
-    UI_MENU_CLOSE;
+    UI_MENU_CLOSE,
+
+    // --- Order 7: every action makes a sound ---------------------------------------------------
+    // Player actions
+    PLAYER_TURN,
+    PLAYER_WAIT,
+    PLAYER_GUARD_RAISE,
+    PLAYER_STUNNED,
+    /** ONE meaning: "the game heard you, and refused" — heal/reload/shop/route refusals share it. */
+    ACTION_DENIED,
+    // Menus
+    UI_CONFIRM,
+    UI_FOCUS,
+    SHOP_DISPENSE,
+    // The world
+    FIRE_IGNITE,
+    TOXIC_SPILL,
+    CRYSTAL_SHATTER,
+    CRYSTAL_GROW,
+    FROST_CRUST,
+    HEAVY_FOOTFALL,
+    LANCE_BEAM,
+    ENEMY_SPAWN,
+    SPIRE_GROW,
+    STONE_CRUMBLE,
+    // The boss fight
+    BOSS_ROAR,
+    BOSS_SLAM,
+    BOSS_REPAIR,
+    BOSS_DEATH;
 
     public static final int COUNT = values().length;
 }

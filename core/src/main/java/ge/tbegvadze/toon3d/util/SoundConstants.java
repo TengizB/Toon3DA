@@ -35,11 +35,6 @@ public final class SoundConstants {
     /** Longest sound the catalog may hold (the player's death); everything else stays under 0.6 s. */
     public static final float GAME_SFX_MAX_DURATION_SECONDS   = 1.0f;
     /**
-     * Hard ceiling on distinct synthesised sounds, guarding the resident-memory budget.  Raised from
-     * 64 to 72 by order 6 at the owner's request for more sounds (idea file D1); 70 are used.
-     */
-    public static final int   GAME_SFX_MAX_DISTINCT_SOUNDS    = 72;
-    /**
      * Per-partial damping of {@code WaveformKind.METAL} (order 6), in 1/s per mode index: the
      * bright partials of a struck bar die first, which is what separates a clang from a chord.
      */

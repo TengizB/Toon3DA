@@ -8,7 +8,7 @@ committed and pushed.
 **BRANCH:** `claude/game-sound-effects-t8p30e`
 **IDEA:** `.claude/agents/ideas/procedural-sound-effects-order-7.txt` — the spec. Its rules (R…)
 and acceptance criteria (A…) are referred to by number below and are NOT repeated here.
-**LANE:** full lane / `audio` + `enemy` (one listener moment) + `world` + `util` (GameMath, SoundConstants).
+**LANE:** full lane / `audio` + `render` (ImpactEffectSystem) + `input` + `world` (World, BossFloorController) + `util`.
 **TESTS:** none — not balance-bearing (CLAUDE.md Testing Policy). `./gradlew test` and
 `./gradlew balanceSim` must be identical before/after (R2).
 **STARTED:** 2026-09-29
@@ -40,7 +40,7 @@ with this file's tick in the same commit. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — cap removed; 22 new ids registered; GameAudio.playMenu.
+- [x] **CP1** — cap removed; 22 new ids registered; GameAudio.playMenu.
       DONE WHEN: no GAME_SFX_MAX_DISTINCT_SOUNDS; offline render passes; mirror build green.
 - [ ] **CP2** — player + menu sites (A2-A4). DONE WHEN: wired, build green.
 - [ ] **CP3** — world, golem, hazard, boss sites (A5-A7). DONE WHEN: wired; test = baseline;
@@ -51,3 +51,7 @@ with this file's tick in the same commit. Never `git add -A`.
 
 - **ENV:** same desktop-only mirror build as order 6 (scratchpad/mirror); offline render harness at
   scratchpad/harness/Render.java. Baseline for this order = f0b9ae2 (order 6 done).
+- **CP1 handover:** `GAME_SFX_MAX_DISTINCT_SOUNDS` deleted (it was never read by code). 22 new ids +
+  `registerOrderSeven`; 92 sounds total, all <= 1.0 s, peak <= 90 %, last sample within +/-2 LSB
+  (harness now checks that, per order 6's amended A8). `GameAudio.playMenu(id)` = playCentred with
+  suppression lifted for the call only (still obeys EFFECTS). Nothing fires the new ids yet.

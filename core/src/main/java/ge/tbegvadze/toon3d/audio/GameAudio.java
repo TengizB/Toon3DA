@@ -171,6 +171,18 @@ public final class GameAudio implements Disposable {
         playPositional(GameSoundId.ENEMY_ATTACK_RANGED, originWorldX, originWorldY, pitchScale);
     }
 
+    /**
+     * A MENU's own sound (order 7): open / close / focus / confirm / deny while an overlay owns the
+     * screen. Ignores the hard-pause suppression — the overlay IS what is on screen, exactly as
+     * LEVEL_UP plays for its own overlay — but still obeys the EFFECTS setting.
+     */
+    public void playMenu(GameSoundId soundId) {
+        boolean wasSuppressed = suppressed;
+        suppressed = false;
+        playCentred(soundId);
+        suppressed = wasSuppressed;
+    }
+
     /** Non-diegetic confirmations and anything else that is simply "at the ear". */
     public void playUi(GameSoundId soundId) {
         playCentred(soundId);
