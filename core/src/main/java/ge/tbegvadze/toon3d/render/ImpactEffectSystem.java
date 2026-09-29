@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.render;
 
 import ge.tbegvadze.toon3d.audio.GameAudio;
+import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -194,6 +195,29 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         this.gameAudio = audio;
     }
 
+    /**
+     * A golem / spire / summon event heard at its tile (procedural-sound-effects order 7), pitched
+     * down for a bigger body. These callbacks were visual-only; this class already receives every
+     * one of them, so no new listener or fan-out is needed.
+     */
+    private void playAtTile(GameSoundId soundId, int tileColumn, int tileRow, float heightMultiplier) {
+        if (gameAudio == null) return;
+        gameAudio.playAtWorld(soundId,
+                tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f,
+                tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE * 0.5f,
+                heightMultiplier);
+    }
+
+    @Override
+    public void onSpireBorn(int tileColumn, int tileRow) {
+        playAtTile(GameSoundId.SPIRE_GROW, tileColumn, tileRow, 1f);   // order 7 — sound only
+    }
+
+    @Override
+    public void onSpireShattered(int tileColumn, int tileRow) {
+        playAtTile(GameSoundId.STONE_CRUMBLE, tileColumn, tileRow, 1f);   // order 7 — sound only
+    }
+
     @Override
     public void onEnemyHit(float worldX, float worldY, float heightMultiplier, int damageDealt) {
         triggerShake(EffectConstants.HIT_SHAKE_MAGNITUDE, EffectConstants.HIT_SHAKE_DURATION_SECONDS);
@@ -226,6 +250,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     @Override
     public void onBlockAbsorbed(int tileColumn, int tileRow, float heightMultiplier,
                                 int absorbedAmount, boolean shattered) {
+        playAtTile(GameSoundId.IMPACT_BLOCKED, tileColumn, tileRow, heightMultiplier);   // order 7
         // Blue shield "clink": a small radial spark burst, distinct from the red flesh-hit particles.
         spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
                 EffectConstants.BLOCK_SPARK_R, EffectConstants.BLOCK_SPARK_G, EffectConstants.BLOCK_SPARK_B,
@@ -243,6 +268,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     @Override
     public void onShardShattered(int tileColumn, int tileRow, float heightMultiplier,
                                  int shardsShattered) {
+        playAtTile(GameSoundId.CRYSTAL_SHATTER, tileColumn, tileRow, heightMultiplier);   // order 7
         // Gold shard "clink": a spark burst plus a ring pulse, scaled by how many shards broke at once
         // (1 for an absorb or a launch, the whole remaining ring when the enemy dies and it collapses).
         int sparkCount = EffectConstants.SHARD_SPARK_COUNT * Math.max(1, shardsShattered);
@@ -258,6 +284,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onShardRegrown(int tileColumn, int tileRow, float heightMultiplier) {
+        playAtTile(GameSoundId.CRYSTAL_GROW, tileColumn, tileRow, heightMultiplier);   // order 7
         // Softer gold crystallise flash — a smaller ring and fewer sparks than a shatter, so the ring
         // coming back is legible without competing with the moment one breaks.
         spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,
@@ -272,6 +299,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onCrustCooled(int tileColumn, int tileRow, float heightMultiplier, int crustStacks) {
+        playAtTile(GameSoundId.FROST_CRUST, tileColumn, tileRow, heightMultiplier);   // order 7
         // Deliberately QUIET: a few slow embers settling, no ring, no shake. The loud beat belongs to the
         // shatter. A Colossus hardening is something the player LET happen, and the sprite's darkening
         // seams are already saying so — this is just enough motion to draw the eye there.
@@ -285,6 +313,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     @Override
     public void onCrustShattered(int tileColumn, int tileRow, float heightMultiplier,
                                  int stacksBroken, boolean wasFullCrust) {
+        playAtTile(GameSoundId.CRYSTAL_SHATTER, tileColumn, tileRow, heightMultiplier);   // order 7
         // The payoff beat. Sized by how much shell broke, so a full three-stack shatter is visibly and
         // physically bigger than chipping one stack — the player earned more, and should feel more.
         int sparkCount = EffectConstants.CRUST_SHATTER_SPARKS_PER_STACK * Math.max(1, stacksBroken);
@@ -310,6 +339,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onHeavyFootfall(int tileColumn, int tileRow, float heightMultiplier, int distanceTiles) {
+        playAtTile(GameSoundId.HEAVY_FOOTFALL, tileColumn, tileRow, heightMultiplier);   // order 7
         spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
                 EffectConstants.CRUST_EMBER_R, EffectConstants.CRUST_EMBER_G, EffectConstants.CRUST_EMBER_B,
                 EffectConstants.FOOTFALL_EMBER_COUNT,
@@ -328,6 +358,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onEmberCollapse(int tileColumn, int tileRow, float heightMultiplier) {
+        playAtTile(GameSoundId.FIRE_IGNITE, tileColumn, tileRow, heightMultiplier);   // order 7
         // A furnace going out: a wide, slow, hot burst layered over the generic death debris that
         // onEnemyKilled already threw, so the archetype's death reads as its own event.
         spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
@@ -343,6 +374,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
     @Override
     public void onLanceBeam(int originColumn, int originRow, int stepColumn, int stepRow,
                             int reachTiles, float heightMultiplier) {
+        playAtTile(GameSoundId.LANCE_BEAM, originColumn, originRow, heightMultiplier);   // order 7
         // Sear each tile the beam crossed with a short ember burst, so the lane reads as swept rather than
         // as a point flash. Walks the exact committed tiles the beam resolved (reachTiles of them).
         for (int step = 1; step <= reachTiles; step++) {
@@ -367,6 +399,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onFrostShatter(int tileColumn, int tileRow, float heightMultiplier) {
+        playAtTile(GameSoundId.CRYSTAL_SHATTER, tileColumn, tileRow, heightMultiplier);   // order 7
         // A furnace behind ice going out: a wide spray of cold blue-white shards plus one hot orange core
         // flash, layered over the generic death debris onEnemyKilled already threw.
         spawnColoredSparks(tileColumn, tileRow, heightMultiplier,
@@ -388,6 +421,7 @@ public final class ImpactEffectSystem implements ImpactEventListener {
 
     @Override
     public void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {
+        playAtTile(GameSoundId.ENEMY_SPAWN, tileColumn, tileRow, heightMultiplier);   // order 7
         // Sickly green portal: a ring pulse plus an outward spark burst on the tile a SUMMON
         // ability just materialized a new enemy on, so the pop-in reads as an event, not a glitch.
         spawnColoredRingPulse(tileColumn, tileRow, heightMultiplier,

@@ -127,6 +127,11 @@ public final class SoundConstants {
      * re-arms only once HP has climbed back above it.
      */
     public static final float GAME_SFX_LOW_HEALTH_FRACTION       = 0.25f;
+    /**
+     * The boss's phase-2 enrage reuses BOSS_ROAR played as if from a body this much larger, i.e.
+     * pitched down by its reciprocal (order 7) — one recipe, two moments.
+     */
+    public static final float GAME_SFX_BOSS_ENRAGE_ROAR_SIZE     = 1.35f;
     /** Default minimum gap between two plays of the same sound; per-definition overrides exist. */
     public static final float GAME_SFX_DEFAULT_RETRIGGER_SECONDS = 0.05f;
 

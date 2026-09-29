@@ -1373,7 +1373,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hazardManager = new HazardManager(targetLevel, enemyManager, statusEffectController,
                                           GameMath.floorSeed(runSeed, currentDepth) ^ 0x4A2A5D9BL);
         hazardManager.setExplosiveBarrelManager(explosiveBarrelManager);
-        hazardManager.setHazardVisualListener(propRenderer::addDynamicProp);
+        // A hazard tile appearing is SEEN (the decal) and, since order 7, HEARD at its tile. Fire that
+        // spreads asks every turn; FIRE_IGNITE's re-trigger window keeps a burning room from droning.
+        hazardManager.setHazardVisualListener((tileColumn, tileRow, hazardChar) -> {
+            propRenderer.addDynamicProp(tileColumn, tileRow, hazardChar);
+            if (Level.isHazardFire(hazardChar)) {
+                gameAudio.playAt(GameSoundId.FIRE_IGNITE, tileColumn, tileRow);
+            } else if (Level.isHazardToxic(hazardChar)) {
+                gameAudio.playAt(GameSoundId.TOXIC_SPILL, tileColumn, tileRow);
+            }
+        });
         // The loudest event in the game, placed at the barrel so a chain reaction sweeps across the
         // stereo field the way it sweeps across the room.
         explosiveBarrelManager.setDetonationListener((tileColumn, tileRow) -> {
@@ -1431,6 +1440,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 bossHudRenderer.setBoss(boss);
                 bossFloorController = new BossFloorController(boss, targetLevel, pendingBossArenaLayout, doorManager,
                         enemyManager, hazardManager, bossHudRenderer, eventTextSystem);
+                bossFloorController.setGameAudio(gameAudio);   // order 7: the boss fight is heard
             }
         }
         gameState.isBossFloor        = bossFloorController != null;

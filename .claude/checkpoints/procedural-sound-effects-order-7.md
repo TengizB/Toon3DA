@@ -43,7 +43,7 @@ with this file's tick in the same commit. Never `git add -A`.
 - [x] **CP1** — cap removed; 22 new ids registered; GameAudio.playMenu.
       DONE WHEN: no GAME_SFX_MAX_DISTINCT_SOUNDS; offline render passes; mirror build green.
 - [x] **CP2** — player + menu sites (A2-A4). DONE WHEN: wired, build green.
-- [ ] **CP3** — world, golem, hazard, boss sites (A5-A7). DONE WHEN: wired; test = baseline;
+- [x] **CP3** — world, golem, hazard, boss sites (A5-A7). DONE WHEN: wired; test = baseline;
       balanceSim summary byte-identical to the order-6 head.
 - [ ] **CP4** — docs + reviewer PASS; STATUS IMPLEMENTED.
 
@@ -62,3 +62,12 @@ with this file's tick in the same commit. Never `git add -A`.
   explicit inventory blips; UI_CONFIRM on pause row / level-up card / event choice / route ENGAGE,
   UI_FOCUS on route FOCUS_CHANGED, ACTION_DENIED on route INVALID and a failed buy, SHOP_DISPENSE on
   a purchase — all via `playMenu` since those phases are suppressed.
+- **CP3 handover:** ImpactEffectSystem: private `playAtTile(id, column, row, size)` + sound on
+  block-absorbed / shard shatter+regrow / crust cool+shatter / heavy footfall / ember collapse / lance
+  beam / frost shatter / enemy spawned, and NEW overrides `onSpireBorn` / `onSpireShattered`
+  (sound only). World's HazardVisualListener is now a lambda: decal + FIRE_IGNITE / TOXIC_SPILL via
+  `Level.isHazardFire/isHazardToxic`. BossFloorController: `setGameAudio` (World only; sim null) +
+  `playAtBoss`: roar on awaken, roar pitched down (`SoundConstants.GAME_SFX_BOSS_ENRAGE_ROAR_SIZE`)
+  on phase 2, wind-up on TELEGRAPH, slam on RESOLVE/CHARGE/MELEE, footfall on DASH/REPOSITION,
+  repair on HEAL, ENEMY_SPAWN per summoned minion, BOSS_DEATH on defeat. Mirror core:test = baseline
+  (only StoryBarkTest); balanceSim summary byte-identical to baseline.
