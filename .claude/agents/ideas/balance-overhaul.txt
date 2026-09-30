@@ -7,7 +7,8 @@ IMPLEMENTED: -
 
 This is the MASTER INDEX of the balance-overhaul series. It is not built on its
 own; each ordered file below carries its own STATUS, spec and CHECKPOINTS and is
-built strictly in ascending order. Read this file first for the diagnosis, the
+built strictly in ascending order (orders 1-7). Order 8 is OPTIONAL and may be
+built at any time or never. Read this file first for the diagnosis, the
 series-wide targets and the override clause every order repeats.
 
 Primary input: .claude/balance-feedback/balance-questionnaire.md (the owner's
@@ -62,54 +63,74 @@ WHAT THE OWNER WANTS (targets the series is measured against)
       very challenging but fair for a prepared player; first boss reachable
       without many attempts; mostly skill + resource management (C3-C5, D3).
   T9  Shops are affordable (D6). Elite / combat / cache feel different (D9).
-  T10 Tools the owner can use ON THE PHONE: a per-floor/per-run stats screen he
-      can copy, dev start-at-depth, dev master tuning dials (K3, A4).
-  Blank answers (Part G ammo, J2 cards) are filled from playtest logs in order 8.
+  T10 (OPTIONAL) Tools the owner can use ON THE PHONE: a per-floor/per-run stats
+      screen he can copy, dev start-at-depth, dev master tuning dials (K3, A4).
+      Delivered by optional order 8; no other target depends on it.
+  Blank answers (Part G ammo, J2 cards) are filled in the order-7 feel pass from
+  the owner's play notes and the simulator.
 
 
-THE SERIES (build strictly in this order)
------------------------------------------
-  order-1  Phone dev tools: run log, dev start, tuning dials   (T10)
-           Everything after it can be verified on the phone.
-  order-2  The Power Ladder: levels and rarity that matter      (T1, T2)
+THE SERIES (orders 1-7 strictly in this order; order 8 optional)
+----------------------------------------------------------------
+  order-1  The Power Ladder: levels and rarity that matter      (T1, T2)
            Steep weapon level/rarity, enemy scaling tied to it, level-gap
            penalty, rebased TTK, % heals, 25-floor audit horizon, affordable
            weapon level-ups.
-  order-3  Full floors, fair supply: density + supply planner   (T3, T4, T9 part)
+  order-2  Full floors, fair supply: density + supply planner   (T3, T4, T9 part)
            Group templates, density by area, smaller early maps, ONE budgeted
            supply planner for every generator, guaranteed heal floor, COMBAT /
            ELITE / CACHE contents made distinct.
-  order-4  Weapon roles and matchups, told to the player        (T6)
+  order-3  Weapon roles and matchups, told to the player        (T6)
            Damage classes, enemy traits, matchup table, shotgun / incinerator
            identity, per-ammo economy, RESISTED/WEAK POINT feedback, switch hint.
-  order-5  Dodge or die: heavy attacks, guard, armour, status   (T5)
+  order-4  Dodge or die: heavy attacks, guard, armour, status   (T5)
            Lethal telegraphed HEAVY verbs, danger-tile telegraphs, guard riposte,
            armour as the status shield, status effects and hazards that scale.
-  order-6  Builds that differ: perks, keystones, real rarity    (T7, T1)
+  order-5  Builds that differ: perks, keystones, real rarity    (T7, T1)
            Tagged perks replace budget-equal cards; keystones at 5/10/15/20;
            abilities that are felt.
-  order-7  The 25-floor run: finite descent, bosses, economy    (T8, T9)
+  order-6  The 25-floor run: finite descent, bosses, economy    (T8, T9)
            Region E "The Core", final boss at 25 ends the run, boss table and
            consistency, region difficulty curve, shop prices, win-rate bands.
-  order-8  Feel pass from phone playtest logs                   (all; G, J2)
-           Owner plays with order-1 tools; Claude reads logs, tunes dials, bakes
-           them into BalanceConfig, re-bands the sim.
+  order-7  Feel pass from play notes and the simulator          (all; G, J2)
+           Owner plays normally and fills a two-minute PLAY NOTES form; Claude
+           reads the notes beside the sim reports and BalanceReport, moves the
+           master knobs in BalanceConfig, fixes sim navigation, re-bands the sim.
+  order-8  OPTIONAL — Phone dev tools: run log, dev start, dials  (T10)
+           The series is COMPLETE WITHOUT IT. Skipping it never blocks any other
+           order. Prerequisites: none beyond a green build; it may be built at
+           any time, including after the feel pass, and adapts to whichever
+           series systems exist (their master knobs become dials, their report
+           fields become log fields). If present, its copied logs are an
+           optional extra input to the feel pass.
 
-WHY THIS ORDER: tooling first so every later order can be checked on the phone.
-The power ladder is the owner's top priority and every later number (density
-TTK, supply demand, matchup multipliers, perk values, boss HP) is expressed
-against the on-curve player it defines. Density/supply comes next because it
-consumes the ladder's demand numbers and is the second-loudest complaint. Roles
-and matchups (4) need density (groups make AoE weapons and traits readable).
-Heavy attacks (5) need the matchup layer (shotgun cancels wind-ups). Builds (6)
-need weapon classes and traits to tag against. Run shape (7) re-derives bosses
-and the economy against the finished player model. The feel pass (8) is last by
-definition.
+WHY THIS ORDER: the power ladder is the owner's top priority and every later
+number (density TTK, supply demand, matchup multipliers, perk values, boss HP)
+is expressed against the on-curve player it defines. Density/supply comes next
+because it consumes the ladder's demand numbers and is the second-loudest
+complaint. Roles and matchups (3) need density (groups make AoE weapons and
+traits readable). Heavy attacks (4) need the matchup layer (shotgun cancels
+wind-ups). Builds (5) need weapon classes and traits to tag against. Run shape
+(6) re-derives bosses and the economy against the finished player model. The
+feel pass (7) is last of the required orders by definition. The dev tools (8)
+come last and are optional by the owner's decision: nothing in orders 1-7 may
+depend on them.
+
+HOW ORDERS 1-7 ARE VERIFIED WITHOUT DEV TOOLS: ./gradlew build / test /
+balanceSim; BalanceReport's living tables (each order adds the table it needs);
+the simulator's reports (LADDER, FLOOR, MATCHUP, HEAVY, BUILD, run-outcome,
+S-BOSS, S-SHOP — each added by the order that introduces the system, balance-
+scope); desktop play (./gradlew lwjgl3:run) for UI and visuals; and the owner's
+normal play on the phone, reported in the order-7 PLAY NOTES form. Every
+whole-system scale that the first draft called a "dial" is now an ordinary
+BalanceConfig constant owned by the order that introduces its mechanic
+(LEVEL_GAP_STEEPNESS, MATCHUP_STRENGTH, HEAVY_DAMAGE_SCALE, BODY_TARGET_*, ...);
+order 8 may later expose them as dials.
 
 Each order leaves the game building, playable and with both balance gates
 green against ITS rules. Between orders the game may be mid-rebalance (e.g.
-after order-2 the ladder is live but floors are still sparse); that is expected
-and is why order-1 ships the dev dials first.
+after order-1 the ladder is live but floors are still sparse); that is expected,
+and the order-7 feel pass is where the whole is tuned against real play.
 
 
 SERIES-WIDE CONVENTIONS
@@ -118,8 +139,8 @@ SERIES-WIDE CONVENTIONS
     every formula in util/GameMath.java with the Formula/Derivation/Edge-case
     block; content is register() rows, never a switch.
   - The audit horizon for every depth-swept rule becomes 1..RUN_FINAL_DEPTH (25),
-    introduced in order-2.
-  - The expected ("on-curve") player is ONE model, defined in order-2
+    introduced in order-1.
+  - The expected ("on-curve") player is ONE model, defined in order-1
     (GameMath.expectedPlayerAtDepth), and every later order prices against it.
   - Tests: only BalanceAuditTest / BalanceSimTest are extended; non-balance code
     (UI, renderers, narrative strings, dev tools) ships with NO new tests.
@@ -149,7 +170,7 @@ change pass: tests are UPDATED to assert the new rule (the Testing Policy allows
 updating an existing test when behaviour legitimately changes, and allows
 extending the balance-scope tests). Non-balance design rules (tile grid,
 turn-based, cardinal-only ranged attacks, touch-only, one difficulty — see
-order-1 on dev dials) are NOT overridable by this clause.
+order-8 on dev dials) are NOT overridable by this clause.
 
 
 UNIMPLEMENTED IDEA FILES THIS SERIES CONTRADICTS
@@ -158,21 +179,22 @@ These are STATUS: NOT IMPLEMENTED and would conflict with the series if built
 later. The designer cannot reject them on the owner's behalf; recommended
 "REJECTED: superseded by balance-overhaul" for each (owner's call):
   - roguelike_order_19_win_condition_and_final_floor.txt — floor-15 finale,
-    extraction, post-win endless mode (vs order 7: finite 25, victory at 25).
+    extraction, post-win endless mode (vs order 6: finite 25, victory at 25).
   - roguelike_order_16_difficulty_and_floor_scaling.txt — depth curves + three
-    modes (vs order 2's ladder and the locked one-difficulty rule).
-  - xp-level-progression-system.txt — older XP/enemy-scaling design (vs order 2).
-  - levelup-stim-boon-choice-progression.txt — boon-choice level-ups (vs order 6).
+    modes (vs order 1's ladder and the locked one-difficulty rule).
+  - xp-level-progression-system.txt — older XP/enemy-scaling design (vs order 1).
+  - levelup-stim-boon-choice-progression.txt — boon-choice level-ups (vs order 5).
   - execution-stagger-resource-combat-loop.txt — stagger/execution loop (vs
-    order 4's shotgun stagger and order 5's heavies; overlapping verbs).
+    order 3's shotgun stagger and order 4's heavies; overlapping verbs).
   - weapon-levels-tiers-abilities.txt — STATUS says NOT IMPLEMENTED although the
     level/tier/ability system exists in code; its numbers are re-decided by
-    orders 2 and 6. Its STATUS line should be corrected by the orchestrator.
+    orders 1 and 5. Its STATUS line should be corrected by the orchestrator.
 
 
 RELATED
 -------
-  Ideas:  balance-overhaul-order-1.txt .. balance-overhaul-order-8.txt
+  Ideas:  balance-overhaul-order-1.txt .. balance-overhaul-order-7.txt,
+          balance-overhaul-order-8.txt (OPTIONAL dev tools)
           new-game-balancr-order-1..9.txt, balance_order_1..6 (superseded rules)
   Docs:   docs/game-balance-authority.txt, docs/game-balance-knowledge.txt
   Input:  .claude/balance-feedback/balance-questionnaire.md

@@ -5,9 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 7 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-Depends on orders 1-6 (the finished player model: ladder, supply, matchups,
-heavies, builds).
+Order 6 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-5 (the finished player model: ladder, supply, matchups,
+heavies, builds). Does NOT depend on the optional dev tools (order 8).
 
 
 OVERVIEW
@@ -61,7 +61,7 @@ OUT (deliberately not doing now)
     (floor-15 finale, extraction point, post-win ENDLESS MODE) CONTRADICTS this
     order and is superseded by it: no extraction point, no endless mode, the
     finale is depth 25. Recommended: the owner marks that file
-    "REJECTED: superseded by balance-overhaul-order-7".
+    "REJECTED: superseded by balance-overhaul-order-6".
 
 
 GAMEPLAY LOOP
@@ -140,13 +140,13 @@ Bosses
 Economy
   F12 R-CREDITS v2: for every region, modelled on-curve credit income per floor
       / the price of the NEEDED BUNDLE per floor in [1.10, 1.40]. NEEDED BUNDLE =
-      one order-2 LEVEL UP rung + 1.5 consumables at the on-curve player's
+      one order-1 LEVEL UP rung + 1.5 consumables at the on-curve player's
       typical need + one tier upgrade per region amortised over its floors.
       SHOP_CREDITS_PER_POWER_POINT and SHOP_DEPTH_PRICE_SCALE are re-fitted to
       hold it.
   F13 Machines: exactly 1 Fabricator per non-boss floor; SHOP nodes have 2 with
       prices x SHOP_NODE_PRICE_MULTIPLIER (0.80). The guaranteed LEVEL UP rung
-      (order 2) stays.
+      (order 1) stays.
   F14 S-SHOP (sim): TACTICAL buys >= 1.5 offers per floor visited; its median
       unspent credits at death <= 1.5 floors of income.
 
@@ -209,8 +209,8 @@ BALANCE NOTES
 -------------
 Balance-bearing: region dial, elite weights, boss table, credit band, prices,
 event/mystery values, every sim band (SECTION 25, schema, sim). The F8 run-
-outcome bands are the series' headline targets; order 8 moves the dials to hit
-them in real play.
+outcome bands are the series' headline targets; the order-7 feel pass moves the
+numbers to hit them in real play.
 
 
 INTERACTIONS
@@ -219,8 +219,9 @@ INTERACTIONS
     at depth 25 (F5), vocabulary ladder for the region name (F2),
     docs/story-ui-system.txt and the endings framing.
   - Route economics: R-ROUTE-* horizon ends at 25; pre-boss guarantees kept.
-  - Order-1 DEV START max depth 25 is now the real end.
-  - Orders 2-6: every derivation reads ExpectedPlayer.
+  - Orders 1-5: every derivation reads ExpectedPlayer.
+  - Optional order 8 (if ever built) uses 25 as its DEV START maximum; nothing
+    here waits for it.
 
 
 EDGE CASES
@@ -234,8 +235,6 @@ EDGE CASES
     defeat, F4).
   - OBEY ending: continues into a fresh print — that is a new run starting at
     depth 1 (unchanged behaviour).
-  - DEV START at depth 25: a dev run's victory is logged but never recorded in
-    StatsStore or StoryStore (order-1 sandbox).
   - Route-map node types forced by guarantees on layer 24 (pre-boss) still hold.
 
 
@@ -246,10 +245,16 @@ ACCEPTANCE CRITERIA
       RouteMapGeneratorTest updated).
   A2  Killing the depth-25 boss ends the run: no floor 26; the report shows
       "DESCENT COMPLETE"; StatsStore runs-won increments; NEW OPERATOR resets it.
+      Verified by (a) reading the VICTORY path in World, (b) the sim: every
+      TACTICAL ledger that clears the depth-25 boss ends with outcome VICTORY and
+      no ledger contains a floor 26, and (c) the owner's normal play when a run
+      reaches the end (not required for sign-off).
   A3  On a save with no ending, the Core ending exchange opens after the kill as
       today; on a save with an ending already recorded, behaviour matches the
       decided Q1 option (default F5: it opens again and the launch screen shows
-      the latest ending).
+      the latest ending). Verified by reading requestCoreEndingExchange and the
+      exchange definition's repeatable flag; the existing (updated) story tests
+      stay green.
   A4  NAV header shows "FLOOR n / 25"; region E has its crest and ambience; its
       name obeys F2.
   A5  BalanceAuditTest: R-REGION (new bounds/shape), R-BOSS-* on the BossTable
@@ -325,7 +330,8 @@ ASSUMPTIONS
        follow-up idea.
   AS4  Win rate 20-40% for a skilled (TACTICAL) player and ~15% first-boss clears
        for a naive player match "roguelike and casual" and "first boss without
-       many attempts"; order 8 moves these with real logs.
+       many attempts"; the order-7 feel pass moves these with the owner's play
+       notes.
   AS5  One Fabricator per floor (not 1-2 random) makes the shop a reliable rung
        without making every floor a shopping trip.
   AS6  Win stats (runs won, best win) are welcome and cheap; the NEW OPERATOR
@@ -359,7 +365,7 @@ OPEN QUESTIONS
         C a new, short "descent complete" victory card with its own ORA line
           (new narrative content, a separate narrative idea file first).
       Default A. If the owner says "defaults are fine", move this to DECISIONS as
-      A and this file becomes implementable (orders 1-6 do not depend on it).
+      A and this file becomes implementable (orders 1-5 do not depend on it).
 
 
 OVERRIDE CLAUSE
@@ -396,7 +402,7 @@ Overridden by THIS order:
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt, balance-overhaul-order-2..6.txt,
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-1..5.txt,
           roguelike_order_19_win_condition_and_final_floor.txt,
           branching-facility-route-map-order-*.txt, story-ui-order-5/8.txt,
           new-game-balancr-order-6/7.txt (boss + route economics, superseded

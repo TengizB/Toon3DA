@@ -4,9 +4,16 @@ TITLE: Phone Dev Tools — run log, dev start, tuning dials
 CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
+OPTIONAL — the series is complete without it.
 
-Order 1 of 8 in the balance-overhaul series. Series index, diagnosis and targets:
-balance-overhaul.txt. Depends on nothing in the series.
+Order 8 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+OPTIONAL: skipping this order never blocks any other order and never leaves the
+balance-overhaul series incomplete. Orders 1-7 contain no acceptance criterion,
+checkpoint or verification step that needs these tools.
+PREREQUISITES: none beyond a green build. It may be implemented at any time —
+before, between or after orders 1-7, including after the order-7 feel pass. It
+adapts to what exists at build time (rules R8, R11, R14): dials and log fields
+whose game systems are not built yet are simply absent or print "-".
 
 
 OVERVIEW
@@ -57,8 +64,11 @@ OUT (deliberately not doing now)
     never appear in a release build.
   - New gameplay, any balance number change. Dial defaults are identity: this
     order changes nothing about how the shipped game plays.
-  - Dials for systems that do not exist yet (level gap, heavy damage, matchup
-    strength, supply variance). Later orders register their own dial rows.
+  - Dials for systems that do not exist in the build yet. R14 exposes the
+    series' master knobs only when their constants exist; no other order is
+    required to add dial rows (they MAY, optionally, if this order already
+    exists when they are built).
+  - Any change to orders 1-7. They never depend on this order.
   - Rewriting BalanceReport / balanceSim for the phone. They stay desktop tools
     for Claude; the phone tools feed them data.
   - A graphical chart of the log. Text is copyable; charts are not.
@@ -77,7 +87,9 @@ The owner's loop (debuggable build):
      that floor; route continues normally after it.
   4. Wants more enemies: PAUSE -> DEV -> TUNING -> ENEMY COUNT + + + (1.15) ->
      back. The next floor generated uses x1.15 budget; the log header records it.
-  5. Claude reads the logs, proposes BalanceConfig changes (order 8 formalises).
+  5. Claude reads the logs, proposes BalanceConfig changes. If the order-7 feel
+     pass is running, the logs are its optional extra input (its rule P10); if
+     it is finished, they serve any later balance pass.
 
 No dev action costs a game turn; every dev screen is a hard-pause overlay like
 the pause menu (world frozen, barks queue, thumb clusters not drawn).
@@ -102,7 +114,7 @@ RULES
       print "-" and are filled by the order that creates the source):
         index, depth, region index, node type, generator id, affix id,
         walkable tile count, turns taken, real seconds,
-        enemies spawned (total and per EnemyRole), groups spawned (order 3),
+        enemies spawned (total and per EnemyRole), groups spawned (order 2),
         enemies killed, XP gained, character level entry -> exit,
         HP entry -> exit (absolute and % of max), lowest HP % on the floor,
         armour entry -> exit,
@@ -149,8 +161,10 @@ RULES
       depth, ammo reserves at DEV_KIT_RESERVE_FRACTION (0.6) of caps, 2 'H' + 1
       '+', armour at 50%, credits = DEV_KIT_CREDIT_FRACTION (0.5) of modelled
       income to that depth. RICH = ON-CURVE with double consumables and full
-      reserves. Order 2 replaces the ON-CURVE formula with
-      GameMath.expectedPlayerAtDepth (one model for audit, sim and dev kit).
+      reserves. If order 1 (the power ladder) is built, ON-CURVE uses
+      GameMath.expectedPlayerAtDepth instead of the formula above (one model for
+      audit, sim and dev kit), and if order 5 is built the auto-picks go through
+      its PerkDeck; otherwise the formula above applies.
   R9  SANDBOX: a DEV_START run never writes persistent state — no StoryStore
       writes (deepest region, one-shot flags, reprint counter, codex unlocks,
       stance, recap rings), no StatsStore records, no teaching evidence persisted.
@@ -189,6 +203,21 @@ RULES
   R13 Every log header prints the dial set active at the START of each floor on
       that floor's line (token "dials=" listing only non-1.0 dials), so a floor
       played under changed dials is never mistaken for the baseline.
+  R14 SERIES DIALS (adaptive): for each balance-overhaul master knob whose
+      BalanceConfig constant EXISTS in the build when this order is implemented,
+      register one extra dial that multiplies it at its seam (identity 1.0):
+        LEVEL_GAP_STEEPNESS (order 1), BODY_TARGET_* scale and
+        SUPPLY_HEAL_FLOOR_FRACTION (order 2), MATCHUP_STRENGTH (order 3),
+        HEAVY_DAMAGE_SCALE (order 4).
+      A knob not yet built gets no dial. If this order is built FIRST, later
+      orders may add their dial row (one enum row) but are never required to.
+  R15 SERIES LOG FIELDS (adaptive): where the order-1..6 systems exist, the floor
+      record also carries the fields their sim reports measure — weapon LV vs
+      floor (1), groups and supply planned/placed (2), damage by DamageClass and
+      RESISTED/EFFECTIVE hits and hint-driven switches (3), heavies committed /
+      avoided / guarded / staggered / landed and statuses blocked by armour (4),
+      perks and keystones picked (5), run outcome VICTORY (6). Absent systems
+      print "-". The format token becomes LOGv2 when any of these are present.
 
 
 PLAYER EXPERIENCE
@@ -224,8 +253,8 @@ RunStats), persistence in `…toon3d.util`, drawing in `…toon3d.render`.
   world/RunOrigin            NORMAL / DEV_START.
   render/DevScreenRenderer   DEV HUB, DEV REPORT (word-wrapped, drag-scroll like
                              the codex body), PAST RUNS list, TUNING steppers,
-                             DEV START pickers, toast. Reuses the order-8
-                             STORY_FRAME_* plate style for consistency.
+                             DEV START pickers, toast. Reuses the story-ui
+                             order-8 STORY_FRAME_* plate style for consistency.
   util/DevConstants          every dev layout number, the dev UI label literals
                              (developer-facing English, deliberately NOT in
                              story-strings.properties — that table holds only
@@ -268,8 +297,10 @@ toast is a one-line amber strip for 1.5 s (cosmetic timer; it blocks nothing).
 BALANCE NOTES
 -------------
 No balance number changes. Dials default to identity, so the shipped game and
-the balance simulator are byte-identical. The dials are the tool order 8 uses to
-find values that then get baked into BalanceConfig.
+the balance simulator are byte-identical. A dial value the owner likes is a
+hint; it is baked into the BalanceConfig constants behind its seam (by the
+order-7 feel pass if it is running, or any later balance change) and the dial is
+then reset to 1.0.
 
 
 INTERACTIONS
@@ -290,7 +321,7 @@ EDGE CASES
   - Local storage write fails: log stays in memory; toast "LOG NOT SAVED" once.
   - DEV START at a boss depth: node type forced to BOSS regardless of selection.
   - DEV START depth beyond the current route horizon: the route map's lazy
-    extension builds it (today endless; after order 7 clamped to 25).
+    extension builds it (endless before order 6; clamped to 25 after it).
   - A dial changed mid-floor that applies "next floor": the TUNING screen shows
     "pending next floor" beside it.
   - NEW OPERATOR wipe: does not touch dev prefs or dev logs (they are not save
@@ -328,6 +359,10 @@ ACCEPTANCE CRITERIA
       them before and after on desktop. No bark or exchange fired during it.
   A10 ./gradlew test and ./gradlew balanceSim are green; the balance-sim ledger
       for a fixed seed is byte-identical to the pre-order ledger (dials identity).
+  A11 Every R14 master-knob constant present in the build has a dial (and none
+      that is absent); the R15 fields of every built series order appear in the
+      floor lines, absent ones print "-".
+  A12 No file of orders 1-7 needed editing to build this order (read the diff).
 
 
 IMPLEMENTATION PLAN
@@ -384,18 +419,19 @@ CHECKPOINTS
        only visible on disk — finished by CP4); build green
   CP4  DEV HUB, DEV REPORT (scroll, COPY THIS RUN, COPY LAST 5), PAST RUNS and
        the reprint card DEV LOG plate work on desktop; A1, A3, A4, A5 hold
-  CP5  TUNING screen steps, resets, persists and prints "dials=" in logs; A6, A7
-       hold
+  CP5  TUNING screen steps, resets, persists and prints "dials=" in logs; the
+       R14 series dials and R15 series log fields for whatever series orders are
+       built are present; A6, A7, A11 hold
   CP6  DEV START (depth/node/generator/kit) and the sandbox work; A8, A9 hold
   CP7  BalanceAuditTest/BalanceSimTest extensions in place; the three docs
-       updated; A2 and A10 hold; both gates green
+       updated; A2, A10 and A12 hold; both gates green
 
 
 ASSUMPTIONS
 -----------
   AS1  The owner installs a DEBUGGABLE build on the phone (Run from Android
        Studio, or assembleDebug). If he installs a release APK the tools are
-       invisible by design; order 1 then needs a signed "playtest" build variant
+       invisible by design; this order then needs a signed "playtest" build variant
        (a one-line follow-up), not a hidden gesture in release.
   AS2  COPY to clipboard is an acceptable way to hand logs over (paste into the
        Claude app / chat). No file export needed.
@@ -403,15 +439,15 @@ ASSUMPTIONS
        on/off" switch (the cost is a few KB per run).
   AS4  Dev runs mute the story rather than running it in-memory; the story layer
        has its own tests and is not what dev start is for.
-  AS5  Ten dials is the right first set; later orders add their own rows (the
-       series names them: LEVEL_GAP in order 2, SUPPLY_VARIANCE in order 3,
-       MATCHUP_STRENGTH in order 4, HEAVY_DAMAGE in order 5).
+  AS5  Ten generic dials plus the R14 series dials (when present) is the right
+       set; the series' master knobs are ordinary constants owned by their
+       orders, and this order only multiplies them.
   AS6  Dial range 0.25..3.00 in 0.05 steps is fine-grained enough; a dial value
-       is a hint for order 8, not the final number.
+       is a hint, not the final number.
   AS7  Headless dev classes go in `world` / `util` to avoid a new package and a
        CLAUDE.md package-table change.
-  AS8  The DEV START max depth is 25 (the series' run length) even while the
-       descent is still endless (order 7 makes 25 the real end).
+  AS8  The DEV START max depth is 25 (the series' run length) even if the
+       descent is still endless in the build (order 6 makes 25 the real end).
   AS9  Dev UI labels are English literals in util/DevConstants, not localised.
   AS10 SKIP FLOOR is useful enough to include; it is logged as "skipped" so it
        never pollutes the data.
@@ -424,6 +460,8 @@ DECISIONS
   D2  Dev-only guard -> runtime DevAccess from FLAG_DEBUGGABLE, not a static
       flag (keeps R-FLAGS meaningful and avoids a Gradle BuildConfig change).
       (2026-09-30)
+  D3  Owner revision: the dev tools are the LAST order of the series and
+      OPTIONAL; nothing else in the series may depend on them.  (2026-09-30)
 
 
 OPEN QUESTIONS
@@ -446,11 +484,14 @@ disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule
 
 In THIS order: no balance rule is overridden. R-FLAGS is EXTENDED (dial identity
 checks) and R-SINGLE-DIFFICULTY is CLARIFIED (developer dials in debuggable
-builds are not modes) — both recorded in docs/game-balance-authority.txt.
+builds are not modes) — both recorded in docs/game-balance-authority.txt. This
+R-FLAGS / dial-default audit work belongs ONLY to this order; orders 1-7 carry
+none of it.
 
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt (series index), new-game-balancr-order-9.txt
+  Ideas:  balance-overhaul.txt (series index), balance-overhaul-order-7.txt
+          (feel pass: logs are its optional input), new-game-balancr-order-9.txt
           (simulator + telemetry), story-ui-order-8.txt (framing menus)
   Docs:   docs/game-balance-authority.txt SECTION 7, docs/story-ui-system.txt

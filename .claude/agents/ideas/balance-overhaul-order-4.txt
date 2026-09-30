@@ -5,8 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 5 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-Depends on orders 1-4 (dials/logs, ladder, groups/supply, matchups + stagger).
+Order 4 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-3 (ladder, groups/supply, matchups + stagger). Does NOT
+depend on the optional dev tools (order 8).
 
 
 OVERVIEW
@@ -24,7 +25,7 @@ WIND_UP charges, AREA_STRIKE slams, the Rimeshell lance, SELF_DESTRUCT —
 genuinely HEAVY (roughly half an on-curve player's health), shows exactly which
 tiles they will hit, and gives three answers: step off the marked tiles, GUARD
 facing the attacker (which now also punishes it), or stagger it first with a
-close shotgun blast (order 4). Armour becomes the shield against status effects
+close shotgun blast (order 3). Armour becomes the shield against status effects
 and the buffer for heavies; status effects and hazards scale with max HP /
 enemy HP so they stay meaningful at every depth; barrels are placed where the
 groups are.
@@ -43,20 +44,21 @@ IN
     shield, heavy shred).
   - Status magnitudes as fractions of max HP; STIM cleanses; beam slows.
   - Hazard damage scaled to depth; barrels placed near groups.
-  - Sim policy behaviour for heavies; S-HEAVY band; HEAVY_DAMAGE dial; log
-    fields.
+  - Sim policy behaviour for heavies; S-HEAVY band; HEAVY_DAMAGE_SCALE as an
+    ordinary BalanceConfig constant (1.0); sim HEAVY REPORT.
 
 OUT (deliberately not doing now)
   - New enemy verbs, new SpecialAbility values, new enemies. Only existing verbs
     are promoted or assigned.
   - Boss choreography changes (boss verbs follow the new caps via BossBalance
-    derivation; the Hunter-Killer brain is untouched). Boss tuning: order 7.
+    derivation; the Hunter-Killer brain is untouched). Boss tuning: order 6.
   - A dodge/roll button or any real-time reaction. Avoidance is one ordinary
     turn (move, strafe or GUARD).
   - New tile symbols. Barrels use the existing explosive-barrel symbol per
     docs/tile-symbols.txt; fire/toxic hazard tiles are the existing runtime
     hazards.
-  - Perks that modify guard/armour/hazards — order 6.
+  - Perks that modify guard/armour/hazards — order 5.
+  - Any developer dial or dev log field — order 8 (optional).
 
 
 GAMEPLAY LOOP
@@ -69,7 +71,7 @@ GAMEPLAY LOOP
           its charge exposed (existing recovery).
        b. GUARD facing the Brute -> the charge lands at x0.2 and the Brute is
           STUNNED for its next turn and VULNERABLE (+50% damage taken) for 2.
-       c. It is within 2 tiles? A shotgun blast staggers it (order 4) and the
+       c. It is within 2 tiles? A shotgun blast staggers it (order 3) and the
           charge is cancelled.
        d. Do nothing -> the charge lands for ~50% of max HP (armour absorbs part
           and is shredded).
@@ -91,7 +93,8 @@ Heavies
   H2  Heavy damage vs an on-curve player (ExpectedPlayer at d): unguarded,
       unarmoured hit = HEAVY_DAMAGE_FRACTION in [0.40, 0.60] of expected max HP
       (default 0.50; SELF_DESTRUCT 0.55; AREA_STRIKE 0.45). Derived at spawn from
-      the fraction, never a literal, times the HEAVY_DAMAGE dial.
+      the fraction, never a literal, times BalanceConfig HEAVY_DAMAGE_SCALE (1.0;
+      the order-7 feel pass tunes it).
   H3  Every heavy is COMMITTED at least one full player turn before it resolves,
       with its exact DANGER TILES known at commit time (lane tiles for charges/
       lunges/lance, the strike cross/radius for AREA_STRIKE, the blast radius for
@@ -100,7 +103,7 @@ Heavies
       blunts the hit — a move/strafe to a non-danger walkable tile, or GUARD
       facing the source (H7). If the player's tile has no walkable non-danger
       neighbour (cornered), GUARD must still reduce the hit to <= 12% of max HP.
-  H5  A STAGGERED (order-4 STUNNED) heavy is CANCELLED, not delayed.
+  H5  A STAGGERED (order-3 STUNNED) heavy is CANCELLED, not delayed.
   H6  Un-telegraphed damage keeps the old cap: no single un-telegraphed hit above
       25% of on-curve eHP (R-TELEGRAPH unchanged for ordinary attacks).
 
@@ -138,13 +141,13 @@ Status (all magnitudes fractions of max HP so they never go stale with depth)
 Hazards
   H13 Barrel explosion: centre = HAZARD_BARREL_CENTRE_FRACTION 1.2 of the floor's
       reference SOLDIER max HP; orthogonal ring 0.6; to the player: 0.30 / 0.15
-      of max HP. Counts as EXPLOSIVE for matchups (order 4).
+      of max HP. Counts as EXPLOSIVE for matchups (order 3).
       Fire tiles: enemy burn x HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 2.5.
       Toxic tiles and the Plague Hulk death cloud poison enemies too (2 stacks
       per turn stood, enemy-HP fraction).
   H14 PLACEMENT: on COMBAT and ELITE floors, >= HAZARD_GROUP_ROOM_SHARE (0.40) of
       rooms holding a group of >= 3 get 1-2 explosive barrels within 2 tiles of
-      the group cluster (placed by the order-3 encounter placement step, existing
+      the group cluster (placed by the order-2 encounter placement step, existing
       barrel symbol).
 
 Communication
@@ -190,7 +193,7 @@ TECHNICAL NOTES
   entity/Player / PlayerInventory    guard multipliers, armour absorb/shred,
                                      STIM cleanse.
   hazard/HazardManager, ExplosiveBarrelManager   fraction-based damage.
-  level                              barrel placement near groups (order-3
+  level                              barrel placement near groups (order-2
                                      encounter placement step).
   util/BalanceConfig                 SECTION 23 — HEAVIES, GUARD, ARMOUR, STATUS,
                                      HAZARDS: every number above; removed/replaced
@@ -216,10 +219,12 @@ TECHNICAL NOTES
                                      the source; NAIVE ignores telegraphs
                                      (unchanged). SIM_TACTICAL_GUARD_DAMAGE_FRACTION
                                      trigger replaced by "heavy committed at me".
-  world/DevDial                      HEAVY_DAMAGE; DevRunLog adds heavies
-                                     committed-at-player / avoided / guarded /
-                                     staggered / landed, statuses blocked by
-                                     armour, hazard damage dealt to enemies.
+                                     SimReport gains the HEAVY REPORT: per
+                                     policy and depth band, heavies committed at
+                                     the player / avoided / guarded / staggered /
+                                     landed, statuses blocked by armour, hazard
+                                     damage dealt to enemies, deaths whose
+                                     killing blow was a heavy.
 
 
 VISUAL DESIGN
@@ -235,19 +240,21 @@ armour bar's blue.
 BALANCE NOTES
 -------------
 Balance-bearing throughout (SECTION 23, GameMath, schema, sim). Heavy fraction
-0.50 is a default; the HEAVY_DAMAGE dial lets order 8 tune feel. TP pricing of
-heavies uses an avoidance discount, so heavy-bearing archetypes do not flood the
-encounter budget; R-ENEMY TP bands re-checked.
+0.50 is a default; HEAVY_DAMAGE_SCALE lets the order-7 feel pass tune it. TP
+pricing of heavies uses an avoidance discount, so heavy-bearing archetypes do not
+flood the encounter budget; R-ENEMY TP bands re-checked. BalanceReport's existing
+HAZARDS and TELEGRAPH AUDIT tables are re-based to the fractions and gain a HEAVY
+column (damage fraction, guarded fraction per heavy verb).
 
 
 INTERACTIONS
 ------------
-  - Order 4: STAGGER cancels heavies (H5); barrels are EXPLOSIVE vs traits;
+  - Order 3: STAGGER cancels heavies (H5); barrels are EXPLOSIVE vs traits;
     shotgun knockback can push enemies into fire/toxic tiles.
-  - Order 3: barrel placement joins the encounter placement step; supply of heals
+  - Order 2: barrel placement joins the encounter placement step; supply of heals
     re-fits to the new incoming-damage shape (expected incoming uses the heavy
     avoidance discount).
-  - Order 2: fractions are of on-curve max HP (ExpectedPlayer).
+  - Order 1: fractions are of on-curve max HP (ExpectedPlayer).
   - Bosses: boss verbs derive through BossBalance under the new caps (R-BOSS-
     VERB-CAP updated); danger markers apply to boss heavies automatically if they
     use the same verbs.
@@ -286,7 +293,8 @@ ACCEPTANCE CRITERIA
   A5  Poison from a toxic tile at depth 1 and at depth 15 removes the same
       fraction of max HP per stack per turn.
   A6  A barrel shot beside a depth-10 chaff pack kills the chaff and leaves a
-      soldier at ~a fifth of its HP or less (order-1 log damage events).
+      soldier at ~a fifth of its HP or less (arithmetic in BalanceReport's HAZARD
+      table; confirmed on desktop by the soldier's health bar).
   A7  Revenant and Cinderforge Colossus use their new heavy verbs in play.
   A8  Sim: S-HEAVY — TACTICAL avoids, guards or staggers >= 80% of heavies
       committed at it, NAIVE <= 30%; S-FAIR readable-death share stays >= 0.90;
@@ -322,7 +330,7 @@ RISKS AND UNKNOWNS
     low billboard reads as "on the floor" at 1-5 tiles; fall back to a tinted
     column-height quad only if it does not (outcome is what is specified).
   - Heavies at 50% plus groups can spike deaths; S-FAIR's readable-death share
-    is the guard rail, the HEAVY_DAMAGE dial the knob.
+    is the guard rail, HEAVY_DAMAGE_SCALE the knob.
 
 
 CHECKPOINTS
@@ -343,7 +351,7 @@ CHECKPOINTS
        A7 holds; both gates green
   CP6  hazard fractions and barrel placement near groups live; A6 holds; both
        gates green
-  CP7  sim avoidance/guard behaviour + S-HEAVY; HEAVY_DAMAGE dial + log fields;
+  CP7  sim avoidance/guard behaviour + S-HEAVY + HEAVY REPORT;
        GUARD/READ_INTENT line review; all docs; A1, A8, A9 hold; both gates green
 
 
@@ -418,7 +426,7 @@ Overridden by THIS order:
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt, balance-overhaul-order-4.txt,
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-3.txt,
           strategy-combat-order-1..6 (intent, guard, movesets),
           hazard-chain-reactions-fire-toxic-explosive.txt,
           plague-hulk-self-destruct.txt, armour-kit-system.txt

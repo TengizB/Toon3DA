@@ -5,8 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 4 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-Depends on orders 1-3 (logs/dials, ladder, groups + supply planner).
+Order 3 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-2 (ladder, groups + supply planner). Does NOT depend on the
+optional dev tools (order 8).
 
 
 OVERVIEW
@@ -41,18 +42,21 @@ IN
   - Role retunes: Shotgun, Double-Barrel, Incinerator, Plasma Rifle, Arc Cannon,
     Railgun, Grenade Launcher (base numbers + one signature property each where
     listed); Assault Rifle / Chaingun stay the generalists.
-  - Per-ammo-type supply generosity in the order-3 SupplyPlanner.
+  - Per-ammo-type supply generosity in the order-2 SupplyPlanner.
   - Communication C1-C6 (RULES).
   - Sim: TacticalPolicy switches by matchup; new S-SWITCH band.
-  - MATCHUP_STRENGTH developer dial.
+  - MATCHUP_STRENGTH as an ordinary BalanceConfig constant (1.0).
+  - Sim MATCHUP REPORT: damage dealt by DamageClass, RESISTED/EFFECTIVE hit
+    counts and hint-driven switches per floor, as played by the policies.
 
 OUT (deliberately not doing now)
   - Heavy telegraphed enemy attacks and how the shotgun stagger interacts with
-    them beyond "stagger cancels the target's committed action" — order 5
+    them beyond "stagger cancels the target's committed action" — order 4
     owns the heavy verbs.
   - New weapons or new enemies. Every class and trait maps onto existing content.
   - Melee rework beyond assigning BLADE / BLUNT classes.
-  - Perks that boost classes — order 6.
+  - Perks that boost classes — order 5.
+  - Any developer dial or dev log field — order 8 (optional).
   - Enemy AI changes (who targets whom, kiting) — unchanged.
   - A bestiary / inspect screen or "scan" verb (forbidden by the bestiary voice
     rules; the glyph on the health bar is the inspect).
@@ -106,12 +110,13 @@ Classes, traits, matchups
         CHITIN       0.75     1.35   1.0   1.1  1.4   1.0      1.2   1.0
         INFERNAL     1.0      1.1    1.35  1.0  0.3   0.9      1.0   1.0
       Status damage the player applies (burn/bleed) uses the class of the weapon
-      that applied it. The MATCHUP_STRENGTH dial raises each multiplier to the
-      dial's power (1.0 shipped).
+      that applied it. BalanceConfig MATCHUP_STRENGTH raises each multiplier to
+      its power (1.0 shipped; 0 flattens every matchup to 1.0 — the order-7 feel
+      pass tunes it).
   M4  Classification thresholds: a multiplier >= 1.3 is EFFECTIVE; <= 0.8 is
       RESISTED; between is NEUTRAL. These drive all communication.
 
-Weapon roles (base numbers at LV1 COMMON; the order-2 ladder scales them)
+Weapon roles (base numbers at LV1 COMMON; the order-1 ladder scales them)
   W1  SHOTGUN — point-blank burst. Falloff by distance: 1 tile 100%, 2 tiles
       85%, 3 tiles 55%, 4 tiles 30%, 5 tiles 15%. Base damage set so that at 1-2
       tiles its per-turn damage is >= 2.0x the Assault Rifle's at 3 tiles
@@ -158,7 +163,7 @@ Role rules (replace the weaponPowerScore bands)
                       average floor's planned supply of its ammo type.
 
 Ammo
-  A-1 The order-3 SupplyPlanner's 70/30 carried/off-type split is weighted by a
+  A-1 The order-2 SupplyPlanner's 70/30 carried/off-type split is weighted by a
       per-AmmoType generosity factor (BalanceConfig): BULLETS 0.8, SHELLS 1.3,
       FUEL 1.3, CELLS 1.0, GRENADES 1.0, SLUGS 0.9 (normalised so total planned
       supply per floor is unchanged). Reserve caps re-fitted so SHELLS and FUEL
@@ -211,7 +216,7 @@ TECHNICAL NOTES
   entity/MatchupCatalog         + MatchupTable: register() rows (class, trait,
                                 multiplier), bootstrap once; lookup by ordinal.
   entity/Weapon                 damageClass() declared by each subclass (data).
-  util/GameMath                 matchupMultiplier(multiplier, dial),
+  util/GameMath                 matchupMultiplier(multiplier, strength),
                                 classifyMatchup(...), shotgun falloff-by-tile,
                                 incinerator stack tick, trait-adjusted enemy eHP
                                 for TP pricing, R-ROLE scenario evaluation
@@ -240,10 +245,10 @@ TECHNICAL NOTES
   narrative                     TeachingTopic.MATCHUP + first/re-teach strings;
                                 firing sites in World (evidence from the hint).
   sim                           TacticalPolicy uses MatchupAdvisor to switch;
-                                NAIVE never switches (unchanged).
-  world/DevDial                 MATCHUP_STRENGTH; DevRunLog adds per-floor damage
-                                dealt by DamageClass, RESISTED/EFFECTIVE hit
-                                counts, hint-driven switches.
+                                NAIVE never switches (unchanged). SimReport gains
+                                the MATCHUP REPORT: per policy and depth band,
+                                damage dealt by DamageClass, RESISTED/EFFECTIVE
+                                hit counts, hint-driven switches per floor.
 
 
 VISUAL DESIGN
@@ -262,16 +267,16 @@ BALANCE NOTES
 Balance-bearing: matchup multipliers, weapon base numbers, shotgun falloff,
 incinerator stacks, ammo generosity, reserve caps, R-ROLE scenarios and margins,
 trait-aware TP. Defaults above are starting points for math-expert to satisfy
-R-ROLE and the order-2 R-LADDER simultaneously (R-LADDER's reference weapon stays
+R-ROLE and the order-1 R-LADDER simultaneously (R-LADDER's reference weapon stays
 the Assault Rifle vs FLESH).
 
 
 INTERACTIONS
 ------------
-  - Order-2 ladder: matchup multiplies after the ladder; R-LADDER unaffected
+  - Order-1 ladder: matchup multiplies after the ladder; R-LADDER unaffected
     because its reference is FLESH.
-  - Order-3 supply: ammo generosity weights; groups make AoE classes matter.
-  - Order-5: stagger is the shotgun's answer to heavy wind-ups (order 5 wires
+  - Order-2 supply: ammo generosity weights; groups make AoE classes matter.
+  - Order-4: stagger is the shotgun's answer to heavy wind-ups (order 4 wires
     heavies to respect STAGGERED).
   - Hazards: barrels count as EXPLOSIVE vs traits; fire tiles as FIRE.
   - Bestiary voice lines stay as shipped (they already say how to fight each
@@ -312,8 +317,10 @@ ACCEPTANCE CRITERIA
   A5  A Shotgun hit at 1 tile knocks a Gore Biter back one tile (free tile
       behind) and its next action is skipped with the STUNNED glyph shown; at 3
       tiles no stagger.
-  A6  An Incinerator spray into a group of three depth-1 chaff, twice, kills all
-      three (order-1 DEV START depth 1, ON-CURVE kit + Incinerator).
+  A6  BalanceReport's SCENARIO table shows the Incinerator clearing scenario S2
+      (three on-curve chaff, 1-3 tiles) in <= 2 sprays at depths 5 and 15; on
+      desktop, two sprays into a floor-1 pack of three Gore Biters kill all three
+      (a found or shop Incinerator).
   A7  ORA's MATCHUP line fires once and resolves through the strings file; no
       number in it.
   A8  Sim: S-SWITCH (TACTICAL >= 1.0 matchup-driven switches per COMBAT floor)
@@ -360,7 +367,7 @@ CHECKPOINTS
        declarations and SECTION 22 exist; matchup not yet applied (CP2 wires it);
        build green
   CP2  matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY
-       updated; MATCHUP_STRENGTH dial; both gates green
+       updated; MATCHUP_STRENGTH constant; both gates green
   CP3  W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks);
        R-ROLE-1..5 replace R-WEAPON bands; Railgun waiver resolved; A2, A5, A6
        hold; both gates green
@@ -368,7 +375,8 @@ CHECKPOINTS
        R-ROLE-5 + R-SUPPLY green; both gates green
   CP5  C1, C2, C3, C5 visuals on desktop; A3 holds
   CP6  C4 switch hint + direct switch + MATCHUP teaching topic; A4, A7 hold
-  CP7  sim TacticalPolicy switching + S-SWITCH; log fields; all docs; A1, A8, A9
+  CP7  sim TacticalPolicy switching + S-SWITCH + MATCHUP REPORT; all docs; A1,
+       A8, A9
        hold; both gates green
 
 
@@ -385,7 +393,7 @@ ASSUMPTIONS
   AS5  Matchup multipliers are shown as words and colours, never as numbers on
        the HUD; the compare card lists traits by glyph.
   AS6  Barrels counting as EXPLOSIVE makes hazards part of the matchup language
-       (order 5 builds on it).
+       (order 4 builds on it).
   AS7  No new sound: the catalog is at its 64 cap and hit feedback is visual.
   AS8  The Railgun's old "scarcity-gated over-band" waiver is resolved by R-ROLE
        (it is now priced as the PLATED niche weapon with its own ammo feasibility
@@ -431,13 +439,13 @@ Overridden by THIS order:
     stacking burn priced by scenario (S2/S5).
   - FLAME_IMPACT_DAMAGE / FLAME_FALLOFF / FLAME_BURN_* and the shotgun /
     double-barrel damage/falloff numbers -> the W1-W3 role numbers.
-  - The order-3 70/30 carried split -> weighted by per-AmmoType generosity;
+  - The order-2 70/30 carried split -> weighted by per-AmmoType generosity;
     AMMO_RESERVE_CAP_* re-fitted.
 
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt, balance-overhaul-order-2/3.txt,
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-1/2.txt,
           incinerator-flamethrower.txt, shotgun-weapon-system.txt,
           weapon-compare-rework.txt, enemy-health-bars-hit-reactions.txt
   Docs:   docs/weapon-creation-guide.txt, docs/enemy-system.txt,

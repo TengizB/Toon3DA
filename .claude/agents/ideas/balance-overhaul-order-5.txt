@@ -5,9 +5,10 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 6 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-Depends on orders 1-5 (especially order 4's damage classes and scenarios and
-order 5's guard/armour/hazard rules, which perks modify).
+Order 5 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-4 (especially order 3's damage classes and scenarios and
+order 4's guard/armour/hazard rules, which perks modify). Does NOT depend on the
+optional dev tools (order 8).
 
 
 OVERVIEW
@@ -47,7 +48,7 @@ OUT (deliberately not doing now)
   - New weapons, new enemies, new mechanics beyond what perks modify.
   - Respec / reroll buttons (a pivot slot in every offer does that job).
   - Attribute system removal: STR/AGI/TGH/MRK stay; some perks raise them.
-  - Shop sale of perks beyond the existing "player ability" offer (order 7
+  - Shop sale of perks beyond the existing "player ability" offer (order 6
     prices it).
 
 
@@ -146,7 +147,7 @@ RULES
       Scavenger Rounds -> SCAVENGER) so they count for B3 synergy.
   B7  R-PERK (replaces R-CARD and R-CARD-BREAKPOINT):
         PK1 FELT     every perk rank improves its niche metric by >= 10% (niche =
-                     its tag's order-4 reference scenario TTK, TTD for BULWARK/
+                     its tag's order-3 reference scenario TTK, TTD for BULWARK/
                      VITALITY, supply value for SCAVENGER) — and crosses >= 1
                      integer TTK or TTD breakpoint there by rank 3.
         PK2 FOCUSED  no perk (outside VITALITY) improves ALL eight reference
@@ -195,7 +196,7 @@ TECHNICAL NOTES
                                  ABILITY_MIN_FELT_PP, R-CARRY tolerance.
                                  Removed: LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_
                                  TOLERANCE, the ten card magnitudes.
-  util/GameMath                  perk niche valuation (reuses order-4 scenario
+  util/GameMath                  perk niche valuation (reuses order-3 scenario
                                  math), keystone trade valuation, build carry
                                  evaluation.
   render                         LevelUpOverlayRenderer (tag chips, synergy,
@@ -205,15 +206,14 @@ TECHNICAL NOTES
                                  level-up overlay (not story lines).
   sim                            TacticalPolicy gains a build-bias parameter
                                  (CLOSE / MARKSMAN / PYRO-DEMOLITION / BULWARK /
-                                 NONE); SimReport prints per-bias outcomes.
-  world/DevRunLog                perks picked per floor, keystones, dominant tag
-                                 at death; DEV START ON-CURVE kit auto-picks perks
-                                 with the seeded deck.
+                                 NONE); SimReport prints per-bias outcomes and
+                                 a BUILD REPORT: perk pick rates per offer,
+                                 keystone pick rates, dominant tag at death.
 
 
 VISUAL DESIGN
 -------------
-Tag chips: small rounded plates in the tag's class colour (order-4 palette;
+Tag chips: small rounded plates in the tag's class colour (order-3 palette;
 BULWARK blue, VITALITY green, SCAVENGER brass). SYNERGY: amber corner ribbon.
 Keystone frame: gold double border, cost line in (0.95, 0.30, 0.25). All
 procedural (ShapeRenderer + BitmapFont). Touch: perk plates keep the existing
@@ -231,15 +231,16 @@ bounded spread, which is what makes choices real.
 
 INTERACTIONS
 ------------
-  - Order 2: the expected player's card-power term becomes "expected perk power
+  - Order 1: the expected player's card-power term becomes "expected perk power
     at expected rank count" (ExpectedPlayer updated), R-LADDER re-run.
-  - Order 4: scenarios are the niche metrics; DamageClass -> tag.
-  - Order 5: BULWARK and PYRO/DEMOLITION perks modify guard, riposte, fire and
+  - Order 3: scenarios are the niche metrics; DamageClass -> tag.
+  - Order 4: BULWARK and PYRO/DEMOLITION perks modify guard, riposte, fire and
     barrels.
-  - Order 3: SCAVENGER modifies supply pickups (never the plan itself).
-  - Shop: Haggler / QUARTERMASTER modify prices (order 7 re-derives the economy
+  - Order 2: SCAVENGER modifies supply pickups (never the plan itself).
+  - Shop: Haggler / QUARTERMASTER modify prices (order 6 re-derives the economy
     with them in the expected player).
-  - Order 1: log fields, dev kit.
+  - Optional order 8 (if ever built) may log perk picks and auto-pick perks for
+    its ON-CURVE kit through PerkDeck; nothing here waits for it.
 
 
 EDGE CASES
@@ -304,7 +305,7 @@ IMPLEMENTATION PLAN
 
 RISKS AND UNKNOWNS
   - Many modifier hooks: keep each a single typed query on PlayerBuild at the
-    owning entry point (same discipline as order-1 dials).
+    owning entry point (one multiplication at the owner of each seam).
   - R-CARRY across nine tags is a real fitting job; start with defaults, let
     math-expert move magnitudes, not the rule.
 
@@ -326,7 +327,7 @@ CHECKPOINTS
        updated; A4 holds; both gates green
   CP5  level-up overlay tag chips / synergy / rank pips, keystone frame and the
        inventory BUILD page on desktop; A5 holds
-  CP6  sim build-bias variants + S-BUILD; log fields; all docs; A3, A6, A7 hold;
+  CP6  sim build-bias variants + S-BUILD + BUILD REPORT; all docs; A3, A6, A7 hold;
        both gates green
 
 
@@ -343,7 +344,7 @@ ASSUMPTIONS
        decided by the valuation, recorded in docs.
   AS6  Attributes stay; perks may grant them.
   AS7  J2 (which card is always best) was left blank; R-CARRY and S-BUILD stand
-       in for it until order-8 logs show real pick rates.
+       in for it until the order-7 feel pass collects the owner's pick notes.
 
 
 DECISIONS
@@ -387,7 +388,7 @@ Overridden by THIS order:
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt, balance-overhaul-order-4/5.txt,
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-3/4.txt,
           balance_order_5_build_diversity_synergy.txt,
           new-game-balancr-order-4.txt, levelup-stim-boon-choice-progression.txt,
           weapon-levels-tiers-abilities.txt
