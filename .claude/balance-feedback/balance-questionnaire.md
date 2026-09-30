@@ -268,15 +268,15 @@ Answer: none, but I want them to be used strategically not they are useless.
 ## Part J — Progression (XP, levels, cards, stats)
 
 **J1.** Do you level up at a good pace? Too fast, too slow?
-Answer:
+Answer: I think it's ok but could be fine tuned depending on other changes
 
 **J2.** Do level-up choices feel meaningful, or is there always an obvious pick?
 Which card/stat is always best, which is never worth it?
-Answer:
+Answer: 
 
 **J3.** Can you build different styles of character in different runs, or does every
 run end up the same?
-Answer:
+Answer: It ends up the same, the intention is to build different charecter but now it's all the same
 
 ---
 
@@ -284,17 +284,17 @@ Answer:
 
 **K1.** Of the past balance iterations, did any change make things clearly BETTER or
 clearly WORSE? What?
-Answer:
+Answer: Can't tell
 
 **K2.** How much time per week can you spend playtesting?
-Answer:
+Answer: I test new versions playing until I see what I want to see
 
 **K3.** Would you use these tools if Claude built them (yes / no / maybe)?
 - a playtest log written to a file after every run (per floor: HP, ammo, damage by
   enemy, cause of death):
 - a dev option to start a run at any depth on any floor type:
 - a tuning file with ~10 master sliders you can edit and restart, without rebuilding:
-Answer:
+Answer: Yes, but no idea how I can provide it from mobile phone
 
 **K4.** Anything else about balance that these questions did not cover?
-Answer:
+Answer: The gameplay must feel like leveling up, choosing weapons, finding better weapons matter. The decisions must metter this is the goal, now there are gameplay mechanics but they are so poorly balances that they make no difference. 
