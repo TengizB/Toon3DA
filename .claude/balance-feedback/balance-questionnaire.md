@@ -257,11 +257,11 @@ Answer: yes, but should be communicated even better
 
 **I6.** Special abilities (summons, buffs, area strikes, self-destruct, beams) — any
 that feel cheap or impossible to counter?
-Answer:
+Answer: toxic, beams, weakening feel like they do nothing.
 
 **I7.** Hazards (fire, toxic tiles, exploding barrels) — too punishing, too weak,
 or ignored?
-Answer:
+Answer: none, but I want them to be used strategically not they are useless.
 
 ---
 
