@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Progression
 TITLE: The Power Ladder — levels and rarity that matter
 CREATED: 2026-09-30
