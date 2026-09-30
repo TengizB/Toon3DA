@@ -1,0 +1,434 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Dodge or Die — heavy attacks, guard, armour, status
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+
+Order 4 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-3 (ladder, groups/supply, matchups + stagger). Does NOT
+depend on the optional dev tools (order 9).
+
+
+OVERVIEW
+--------
+The owner: "it's a slow drain — I'd like some enemies to have stronger attacks
+that have to be avoided and not tanked"; "no single hit takes too much";
+telegraphs "work but should be communicated even better"; "toxic, beams,
+weakening feel like they do nothing"; hazards are ignored but "I want them used
+strategically"; "GUARD — never use it; armour doesn't matter; the intention is
+that it must be useful".
+
+All four symptoms have one root: nothing in combat is big enough to demand a
+response. This order makes the game's EXISTING commit-then-resolve attacks —
+WIND_UP charges, AREA_STRIKE slams, the Rimeshell lance, SELF_DESTRUCT —
+genuinely HEAVY (roughly half an on-curve player's health), shows exactly which
+tiles they will hit, and gives three answers: step off the marked tiles, GUARD
+facing the attacker (which now also punishes it), or stagger it first with a
+close shotgun blast (order 3). Armour becomes the shield against status effects
+and the buffer for heavies; status effects and hazards scale with max HP /
+enemy HP so they stay meaningful at every depth; barrels are placed where the
+groups are.
+
+
+SCOPE
+-----
+IN
+  - HEAVY classification of existing verbs; heavy damage band; telegraph and
+    avoidability rules (R-HEAVY).
+  - Two archetypes gain an existing heavy verb (Revenant WIND_UP lunge,
+    Cinderforge Colossus AREA_STRIKE) so heavies exist in every region.
+  - Danger-tile telegraph in the 3D view and on the mini-map; bigger heavy
+    intent icon; off-screen edge pulse.
+  - GUARD rework (ordinary vs heavy, riposte), armour rework (absorb, status
+    shield, heavy shred).
+  - Status magnitudes as fractions of max HP; STIM cleanses; beam slows.
+  - Hazard damage scaled to depth; barrels placed near groups.
+  - Sim policy behaviour for heavies; S-HEAVY band; HEAVY_DAMAGE_SCALE as an
+    ordinary BalanceConfig constant (1.0); sim HEAVY REPORT.
+
+OUT (deliberately not doing now)
+  - New enemy verbs, new SpecialAbility values, new enemies. Only existing verbs
+    are promoted or assigned.
+  - Boss choreography changes (boss verbs follow the new caps via BossBalance
+    derivation; the Hunter-Killer brain is untouched). Boss tuning: order 6.
+  - A dodge/roll button or any real-time reaction. Avoidance is one ordinary
+    turn (move, strafe or GUARD).
+  - New tile symbols. Barrels use the existing explosive-barrel symbol per
+    docs/tile-symbols.txt; fire/toxic hazard tiles are the existing runtime
+    hazards.
+  - Perks that modify guard/armour/hazards — order 5.
+  - Any developer dial or dev log field — order 9 (optional).
+
+
+GAMEPLAY LOOP
+-------------
+  1. A Shell Brute at 4 tiles in the player's column commits WIND_UP. Its intent
+     icon is large, red, with "!!". The five tiles of its charge lane glow with
+     red floor markers in the 3D view and fill red on the mini-map.
+  2. The player's turn. Options, each one ordinary action:
+       a. Strafe out of the lane -> the charge hits nothing and the Brute ends
+          its charge exposed (existing recovery).
+       b. GUARD facing the Brute -> the charge lands at x0.2 and the Brute is
+          STUNNED for its next turn and VULNERABLE (+50% damage taken) for 2.
+       c. It is within 2 tiles? A shotgun blast staggers it (order 3) and the
+          charge is cancelled.
+       d. Do nothing -> the charge lands for ~50% of max HP (armour absorbs part
+          and is shredded).
+  3. An Acid Drone's WEAK debuff hits the player while armour > 0: "ARMOUR HELD"
+     appears, armour drops, no WEAK. With 0 armour: WEAK (-35% damage, 3 turns),
+     shown on the status row with turns remaining; a STIM cures it.
+  4. A pack of five chaff sits beside two barrels. One shot turns the fight.
+
+
+RULES
+-----
+Heavies
+  H1  HEAVY verbs (data flag on the existing mechanics): WIND_UP charges and
+      lunges, AREA_STRIKE, the Rimeshell Lancer lance, SELF_DESTRUCT. Assigned
+      heavies (existing verbs, existing code paths): Shell Brute (charge, today),
+      Plague Hulk (slam + self-destruct, today), Iron Stalker (AREA_STRIKE,
+      today), Rimeshell Lancer (lance, today), Revenant (WIND_UP lunge, NEW
+      assignment), Cinderforge Colossus (AREA_STRIKE, NEW assignment).
+  H2  Heavy damage vs an on-curve player (ExpectedPlayer at d): unguarded,
+      unarmoured hit = HEAVY_DAMAGE_FRACTION in [0.40, 0.60] of expected max HP
+      (default 0.50; SELF_DESTRUCT 0.55; AREA_STRIKE 0.45). Derived at spawn from
+      the fraction, never a literal, times BalanceConfig HEAVY_DAMAGE_SCALE (1.0;
+      the order-7 feel pass tunes it).
+  H3  Every heavy is COMMITTED at least one full player turn before it resolves,
+      with its exact DANGER TILES known at commit time (lane tiles for charges/
+      lunges/lance, the strike cross/radius for AREA_STRIKE, the blast radius for
+      SELF_DESTRUCT).
+  H4  AVOIDABLE: from any danger tile, at least one single action avoids or
+      blunts the hit — a move/strafe to a non-danger walkable tile, or GUARD
+      facing the source (H7). If the player's tile has no walkable non-danger
+      neighbour (cornered), GUARD must still reduce the hit to <= 12% of max HP.
+  H5  A STAGGERED (order-3 STUNNED) heavy is CANCELLED, not delayed.
+  H6  Un-telegraphed damage keeps the old cap: no single un-telegraphed hit above
+      25% of on-curve eHP (R-TELEGRAPH unchanged for ordinary attacks).
+
+Guard
+  H7  GUARD (one turn, as today) facing the attacker (+/-60 degree front arc):
+      ordinary hits x GUARD_FRONT_ORDINARY 0.50; HEAVY hits x GUARD_FRONT_HEAVY
+      0.20 and RIPOSTE: the attacker is STUNNED for its next turn and VULNERABLE
+      for 2 turns (existing statuses). Side/back unchanged (x1.0). GUARD
+      remains usable every turn.
+
+Armour
+  H8  ARMOUR_ABSORB_FRACTION 0.50 -> 0.67 (share of each hit taken from armour
+      while armour > 0). HEAVY hits cost armour x1.5 (shred).
+  H9  STATUS SHIELD: while armour > 0, WEAK / SLOW / BLIND / POISON application
+      from ENEMIES is blocked and costs ARMOUR_STATUS_COST_FRACTION (0.10 of max
+      armour) per blocked application. Hazard tiles are NOT blocked (the floor
+      is the counter-play there). Event text "ARMOUR HELD" on each block.
+
+Status (all magnitudes fractions of max HP so they never go stale with depth)
+  H10 POISON: POISON_TICK_FRACTION 0.015 of max HP per stack per turn, max 6
+      stacks, stacks decay by 1 per turn; ranged acid hits apply 2 stacks; toxic
+      tiles apply 2 stacks per turn stood.
+      WEAK: player outgoing damage -35% for 3 turns.
+      SLOW: unchanged mechanic (enemies act twice per player action), 2 turns;
+      the Rimeshell lance applies it on hit.
+      BURN on the player: 0.03 of max HP per turn.
+      BLIND: unchanged mechanic, 3 turns.
+      The unified BURN base (R-DOT) becomes BURN_TICK_FRACTION (player) with the
+      enemy-side burn derived from the enemy's max HP; R-DOT's one-definition rule
+      is kept.
+  H11 STIM ('+') also cleanses POISON and WEAK when used.
+  H12 HUD status row shows each active status icon with its turns remaining
+      (and POISON stacks).
+
+Hazards
+  H13 Barrel explosion: centre = HAZARD_BARREL_CENTRE_FRACTION 1.2 of the floor's
+      reference SOLDIER max HP; orthogonal ring 0.6; to the player: 0.30 / 0.15
+      of max HP. Counts as EXPLOSIVE for matchups (order 3).
+      Fire tiles: enemy burn x HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 2.5.
+      Toxic tiles and the Plague Hulk death cloud poison enemies too (2 stacks
+      per turn stood, enemy-HP fraction).
+  H14 PLACEMENT: on COMBAT and ELITE floors, >= HAZARD_GROUP_ROOM_SHARE (0.40) of
+      rooms holding a group of >= 3 get 1-2 explosive barrels within 2 tiles of
+      the group cluster (placed by the order-2 encounter placement step, existing
+      barrel symbol).
+
+Communication
+  H15 DANGER MARKERS: every danger tile of a committed heavy shows a red,
+      pulsing, floor-height marker in the first-person view and a red fill on
+      the mini-map, from commit until resolution (or cancellation).
+  H16 HEAVY INTENT: the intent icon of a heavy is drawn 1.5x size, red, with a
+      "!!" sub-glyph. If the source is off-screen (outside the view) and the
+      player stands on a danger tile, the screen edge on the source's side
+      pulses red (HitVignetteRenderer).
+  H17 Sound: heavy commit reuses an existing telegraph/wind-up sound row if one
+      exists; otherwise replace one row per docs/sound-system.txt (catalog is at
+      its 64 cap). The game must be fully readable with sound off.
+  H18 Teaching: the existing GUARD teaching topic (first heavy hit taken, re-
+      taught after 3 unguarded heavies) and READ_INTENT cover this; their lines
+      are reviewed so they name "red floor" as the thing to read (rewrite per the
+      narrative add-a-line protocol, no numbers). No new topic.
+
+
+PLAYER EXPERIENCE
+-----------------
+Fights gain peaks: most turns are positioning and shooting, and then something
+winds up and the floor turns red. The player either reads it and wins the
+exchange (sidestep, guard-riposte, or a point-blank stagger) or takes half their
+health — and always knows exactly why. Armour becomes the thing that keeps
+casters' debuffs off you; losing it to a heavy is a real cost. Status effects
+now hurt enough to cure. Barrels next to packs make the player look at the room
+before charging in.
+
+
+TECHNICAL NOTES
+---------------
+  enemy/SpecialAbility, IntentVerb   HEAVY flag as data (per-constant field; no
+                                     switch); PlannedAction exposes its danger
+                                     tile set (pre-allocated tile buffer).
+  enemy/EnemyType                    Revenant gains WIND_UP lunge, Cinderforge
+                                     Colossus gains AREA_STRIKE in their move-sets
+                                     (existing code paths).
+  enemy/EnemyManager                 heavy damage from the fraction; stagger
+                                     cancels; riposte on guarded heavy; status
+                                     application through the armour shield;
+                                     barrel/fire/toxic damage from fractions.
+  entity/Player / PlayerInventory    guard multipliers, armour absorb/shred,
+                                     STIM cleanse.
+  hazard/HazardManager, ExplosiveBarrelManager   fraction-based damage.
+  level                              barrel placement near groups (order-2
+                                     encounter placement step).
+  util/BalanceConfig                 SECTION 23 — HEAVIES, GUARD, ARMOUR, STATUS,
+                                     HAZARDS: every number above; removed/replaced
+                                     AREA_STRIKE_DAMAGE_MULTIPLIER, charge x2.4,
+                                     self-destruct cap 68, BURN_DAMAGE_PER_TURN 4,
+                                     POISON_DAMAGE_PER_STACK 2, WEAK 25%,
+                                     GUARD_FRONT_MULTIPLIER 0.35, HAZARD knobs.
+  util/GameMath                      heavyDamageAtDepth, dangerTilesFor(...) is
+                                     geometry (math-expert, tile space, cardinal),
+                                     heavyExpectedDamageForPricing (x (1 -
+                                     HEAVY_EXPECTED_AVOIDANCE 0.6)) replacing the
+                                     AREA_STRIKE special-equivalent, status tick
+                                     fractions, hazard fractions.
+  render                             danger markers: a floor-height billboard
+                                     marker per tile through the existing billboard
+                                     pipeline (PropRenderer / ImpactEffectRenderer,
+                                     Z-buffer respected), mini-map fill in
+                                     LevelRenderer, enlarged heavy intent icon,
+                                     edge pulse, status row turns-remaining, event
+                                     text "ARMOUR HELD".
+  sim                                TacticalPolicy: on a danger tile, step to a
+                                     safe tile if one exists, else GUARD facing
+                                     the source; NAIVE ignores telegraphs
+                                     (unchanged). SIM_TACTICAL_GUARD_DAMAGE_FRACTION
+                                     trigger replaced by "heavy committed at me".
+                                     SimReport gains the HEAVY REPORT: per
+                                     policy and depth band, heavies committed at
+                                     the player / avoided / guarded / staggered /
+                                     landed, statuses blocked by armour, hazard
+                                     damage dealt to enemies, deaths whose
+                                     killing blow was a heavy.
+
+
+VISUAL DESIGN
+-------------
+Danger marker: a flat-looking red ring/chevron sprite (procedural, 32x32 px
+texture generated once) drawn as a low billboard at floor height at the tile
+centre, alpha pulsing 0.45..0.9 at 3 Hz, colour (0.95, 0.15, 0.10). Mini-map
+danger fill: same red at alpha 0.5. Heavy intent "!!": two vertical bars with
+dots under the existing intent icon, same red. "ARMOUR HELD": event text in the
+armour bar's blue.
+
+
+BALANCE NOTES
+-------------
+Balance-bearing throughout (SECTION 23, GameMath, schema, sim). Heavy fraction
+0.50 is a default; HEAVY_DAMAGE_SCALE lets the order-7 feel pass tune it. TP
+pricing of heavies uses an avoidance discount, so heavy-bearing archetypes do not
+flood the encounter budget; R-ENEMY TP bands re-checked. BalanceReport's existing
+HAZARDS and TELEGRAPH AUDIT tables are re-based to the fractions and gain a HEAVY
+column (damage fraction, guarded fraction per heavy verb).
+
+
+INTERACTIONS
+------------
+  - Order 3: STAGGER cancels heavies (H5); barrels are EXPLOSIVE vs traits;
+    shotgun knockback can push enemies into fire/toxic tiles.
+  - Order 2: barrel placement joins the encounter placement step; supply of heals
+    re-fits to the new incoming-damage shape (expected incoming uses the heavy
+    avoidance discount).
+  - Order 1: fractions are of on-curve max HP (ExpectedPlayer).
+  - Bosses: boss verbs derive through BossBalance under the new caps (R-BOSS-
+    VERB-CAP updated); danger markers apply to boss heavies automatically if they
+    use the same verbs.
+  - Story: GUARD/READ_INTENT line review only.
+
+
+EDGE CASES
+----------
+  - Danger tiles through walls: charge lanes stop at the first wall/door/prop
+    (GameMath geometry); markers never draw inside walls.
+  - Two heavies overlapping: tiles union; H4 checked against the union (if no
+    safe tile, GUARD must satisfy the cornered rule against each).
+  - The heavy's source dies before resolving: markers vanish, no hit.
+  - Player mid-animation when the heavy resolves: resolution happens on the
+    world turn as today; animation is cosmetic.
+  - Armour 0 exactly when a status arrives: applied (shield only while > 0).
+  - Stim cleanse with no poison/weak: heals only (as today).
+  - Barrel next to the start room: excluded (first-contact room only).
+  - Hard-pause overlay open: markers freeze with the world.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  BalanceAuditTest R-HEAVY green: every HEAVY verb's on-curve damage in
+      [0.40, 0.60] of expected max HP at depths 1..25; committed >= 1 turn ahead;
+      guarded <= 0.12 of max HP; H4 avoidability verified geometrically for every
+      heavy shape.
+  A2  On desktop, a Shell Brute's WIND_UP shows red floor markers on its whole
+      lane in the 3D view and on the mini-map, a 1.5x red "!!" intent; strafing
+      out makes the charge miss; staying unguarded costs ~50% max HP.
+  A3  GUARD facing a charging Brute: damage ~20% of the unguarded value; the
+      Brute shows STUNNED next turn and takes +50% for 2 turns.
+  A4  A WEAK debuff hitting the player with armour > 0 shows "ARMOUR HELD",
+      reduces armour by 10% of max and applies no WEAK; with 0 armour WEAK
+      applies and the status row shows 3 turns remaining; a STIM removes it.
+  A5  Poison from a toxic tile at depth 1 and at depth 15 removes the same
+      fraction of max HP per stack per turn.
+  A6  A barrel shot beside a depth-10 chaff pack kills the chaff and leaves a
+      soldier at ~a fifth of its HP or less (arithmetic in BalanceReport's HAZARD
+      table; confirmed on desktop by the soldier's health bar).
+  A7  Revenant and Cinderforge Colossus use their new heavy verbs in play.
+  A8  Sim: S-HEAVY — TACTICAL avoids, guards or staggers >= 80% of heavies
+      committed at it, NAIVE <= 30%; S-FAIR readable-death share stays >= 0.90;
+      both gates green.
+  A9  Docs record every override below; docs/enemy-system.txt documents HEAVY,
+      danger tiles, guard riposte, armour shield.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect + math-expert)  SECTION 23, HEAVY flags,
+     GameMath heavy/danger-tile/status/hazard formulas.
+  2. LOGIC  (java-architect)  EnemyManager heavies + danger tiles + stagger
+     cancel + riposte; Player/PlayerInventory guard, armour, cleanse; hazards;
+     barrel placement; sim policy.
+  3. RENDER  (libgdx-specialist)  danger markers (3D + mini-map), heavy intent,
+     edge pulse, status row turns, "ARMOUR HELD".
+  4. CONTENT  (java-architect)  Revenant/Cinderforge move-set rows; GUARD and
+     READ_INTENT line review per docs/narrative-authority.txt.
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-HEAVY and update
+     R-TELEGRAPH, R-DOT, R-BOSS-VERB-CAP, R-ENEMY and the hazard TP assertions to
+     the new rules; extend BalanceSimTest with S-HEAVY. Existing enemy tests
+     (CinderforgeColossusTest, RimeshellLancerTest, AuricSentinelShardTest,
+     SpiresowerTest) and story tests UPDATED where behaviour legitimately
+     changes. No new test files. Both gates.
+  6. DOCS  docs/enemy-system.txt, docs/game-balance-authority.txt + knowledge
+     (SECTIONS 3, 8, 13, 14, 15 rewritten; overrides; living tables),
+     docs/story-ui-system.txt (line review), docs/sound-system.txt if a row is
+     replaced.
+
+RISKS AND UNKNOWNS
+  - Floor-height markers through the billboard pipeline: confirm in CP2 that a
+    low billboard reads as "on the floor" at 1-5 tiles; fall back to a tinted
+    column-height quad only if it does not (outcome is what is specified).
+  - Heavies at 50% plus groups can spike deaths; S-FAIR's readable-death share
+    is the guard rail, HEAVY_DAMAGE_SCALE the knob.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  HEAVY flags, SECTION 23 heavy numbers, heavy damage from fractions and
+       heavy TP pricing live; R-HEAVY (damage band, commit, guard cap) and the
+       updated R-TELEGRAPH / R-BOSS-VERB-CAP green; both gates green
+  CP2  danger tiles computed for every heavy; 3D markers, mini-map fill, heavy
+       intent icon and edge pulse drawn; H4 avoidability asserted; A2 holds
+  CP3  GUARD rework with riposte, armour absorb/shred and status shield live;
+       A3, A4 (shield half) hold; both gates green
+  CP4  status fractions, STIM cleanse, lance SLOW and HUD status turns live;
+       R-DOT updated; A4, A5 hold; both gates green
+  CP5  Revenant / Cinderforge heavy assignments and stagger-cancels-heavy live;
+       A7 holds; both gates green
+  CP6  hazard fractions and barrel placement near groups live; A6 holds; both
+       gates green
+  CP7  sim avoidance/guard behaviour + S-HEAVY + HEAVY REPORT;
+       GUARD/READ_INTENT line review; all docs; A1, A8, A9 hold; both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  "Must be avoided, not tanked" means about half of max HP; 0.40-0.60 is the
+       enforced band, 0.50 the default.
+  AS2  Reusing existing verbs (and giving two more archetypes one) gives enough
+       heavies in every region without new mechanics.
+  AS3  Floor-height billboard markers are an acceptable way to show danger tiles
+       in the raycast view (no floor-casting change).
+  AS4  Guard riposte (stun + vulnerable) is the reason to guard rather than just
+       step aside when you are in a good firing position.
+  AS5  Armour as the enemy-status shield is the identity that makes armour
+       matter; hazards bypass it on purpose.
+  AS6  STIM cleansing poison/weak gives stims a job distinct from medkits.
+  AS7  40% of group rooms getting barrels is enough to make hazards a habit
+       without every fight being a barrel fight.
+  AS8  No new teaching topic: GUARD and READ_INTENT already exist and are
+       re-worded.
+
+
+DECISIONS
+---------
+  D1  Some attacks must be strong enough that they have to be avoided, telegraphed
+      and better communicated (owner, F1/I5) -> HEAVY band + danger markers.
+      (2026-09-30)
+  D2  GUARD and armour must be useful (owner, F5) -> riposte + status shield.
+      (2026-09-30)
+  D3  Toxic/beams/weaken and hazards must matter (owner, I6/I7) -> fraction-based
+      magnitudes, cleanse, barrels near groups.  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+Overridden by THIS order:
+  - R-TELEGRAPH: kept for ordinary attacks (25% un-telegraphed cap); EXTENDED by
+    R-HEAVY (telegraphed heavies MUST be 40-60% of on-curve max HP, avoidable,
+    guard-capped).
+  - R-BOSS-VERB-CAP (every verb <= 35% eHP, > 25% telegraphed) -> telegraphed
+    boss HEAVY verbs up to 50%; un-telegraphed boss verbs <= 25%.
+  - GUARD_FRONT_MULTIPLIER 0.35 for all hits -> 0.50 ordinary / 0.20 heavy +
+    riposte.
+  - ARMOUR_ABSORB_FRACTION 0.50 -> 0.67 + status shield + heavy shred.
+  - BalanceConfig SECTION 8 status magnitudes (BURN 4/turn, POISON 2/stack max 5,
+    WEAK 25%) -> fractions of max HP; R-DOT's single-definition rule kept, its
+    base values replaced.
+  - AREA_STRIKE_DAMAGE_MULTIPLIER, the Shell Brute charge x2.4, the self-
+    destruct x3.0 capped at 68 -> heavy fractions; GameMath.specialEquivalent
+    for AREA_STRIKE -> heavyExpectedDamageForPricing.
+  - SECTION 12 hazard knobs (HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 1.5, flat barrel
+    damage, HAZARD_THREAT_TURNS_STOOD pricing) -> fraction-based hazards.
+  - Sim TacticalPolicy guard trigger (SIM_TACTICAL_GUARD_DAMAGE_FRACTION) ->
+    heavy-aware avoidance.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-3.txt,
+          strategy-combat-order-1..6 (intent, guard, movesets),
+          hazard-chain-reactions-fire-toxic-explosive.txt,
+          plague-hulk-self-destruct.txt, armour-kit-system.txt
+  Docs:   docs/enemy-system.txt, docs/game-balance-authority.txt,
+          docs/sound-system.txt, docs/story-ui-system.txt

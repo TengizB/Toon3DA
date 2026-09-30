@@ -1,0 +1,498 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Meta
+TITLE: Phone Dev Tools — run log, dev start, tuning dials
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+OPTIONAL — the series is complete without it.
+
+Order 9 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
+OPTIONAL: skipping this order never blocks any other order and never leaves the
+balance-overhaul series incomplete. Orders 1-8 contain no acceptance criterion,
+checkpoint or verification step that needs these tools.
+PREREQUISITES: none beyond a green build. It may be implemented at any time —
+before, between or after orders 1-8, including after the order-7 feel pass and
+the order-8 content contract. It
+adapts to what exists at build time (rules R8, R11, R14): dials and log fields
+whose game systems are not built yet are simply absent or print "-".
+
+
+OVERVIEW
+--------
+The owner plays ONLY on the phone and wants to help tune the balance, but every
+existing tool (BalanceReport, balanceSim, a tuning FILE) needs a desktop. This
+order ships three DEVELOPER-ONLY tools that live inside the game and work with a
+thumb: (1) a per-floor / per-run PLAYTEST LOG shown on a screen with a COPY
+button, so a run can be pasted straight into a chat; (2) DEV START — begin a
+sandboxed run at any depth, on any node type and generator, with an on-curve kit;
+(3) TUNING DIALS — ~10 master multipliers adjustable in-game, persisted, printed
+into every log. The tools exist only in DEBUGGABLE builds (the APK the owner
+installs from Android Studio / a debug build) and are invisible and inert in a
+release build.
+
+Raw request: "a playtest log file, a start-at-any-depth option, a tuning file".
+Underlying need: "I can only play on the phone, and I need to show Claude what
+happened in my runs, reach the part of the game I want to test, and try a change
+without a rebuild." A file on the phone is the wrong shape for that need; a
+screen with COPY is the right one.
+
+
+SCOPE
+-----
+IN
+  - DevAccess: a runtime capability passed into Main by the launcher. Android:
+    true iff the installed app is debuggable (ApplicationInfo.FLAG_DEBUGGABLE).
+    Desktop lwjgl3: true. Sim, tests, and the no-argument Main(): false.
+  - DEV HUB reachable from the pause menu and the title menu (a DEV row that
+    exists only when DevAccess is true), and a DEV LOG plate on the reprint card.
+  - PLAYTEST LOG: per-floor records + a run summary + a death record, kept in
+    memory, written to local storage at every floor exit and at run end (rolling
+    last 20 runs), shown on a scrollable DEV REPORT screen with COPY THIS RUN and
+    COPY LAST 5 RUNS buttons (system clipboard). Normal runs are logged too — they
+    are the main playtest data.
+  - DEV START: depth 1..25, node type (every RouteNodeType), generator (AUTO or
+    any combat-capable GeneratorId), kit (ON-CURVE / BARE / RICH). Sandboxed.
+  - TUNING DIALS: 10 multipliers (table in RULES), -/+ steppers, RESET ALL,
+    persisted in a separate developer Preferences file, applied at named seams,
+    identity (1.0) by default, printed in every log header.
+  - Balance audit extension protecting the shipped game from the dials.
+
+OUT (deliberately not doing now)
+  - Any tuning FILE, share-sheet intent, email/upload, cloud sync or network —
+    COPY to clipboard is enough and needs no Android permissions or new
+    launcher interface beyond DevAccess.
+  - A player-facing difficulty setting. The dials are NOT a mode (see R10) and
+    never appear in a release build.
+  - New gameplay, any balance number change. Dial defaults are identity: this
+    order changes nothing about how the shipped game plays.
+  - Dials for systems that do not exist in the build yet. R14 exposes the
+    series' master knobs only when their constants exist; no other order is
+    required to add dial rows (they MAY, optionally, if this order already
+    exists when they are built).
+  - Any change to orders 1-8. They never depend on this order.
+  - Rewriting BalanceReport / balanceSim for the phone. They stay desktop tools
+    for Claude; the phone tools feed them data.
+  - A graphical chart of the log. Text is copyable; charts are not.
+
+
+GAMEPLAY LOOP
+-------------
+The owner's loop (debuggable build):
+  1. Plays a normal run. Every floor exit appends a floor record; death or quit
+     closes the run record. Nothing on screen changes during play.
+  2. Dies -> death stroke -> reprint card, which now also shows a DEV LOG plate.
+     Tap DEV LOG -> DEV REPORT for the run that just ended -> tap COPY THIS RUN ->
+     "COPIED 4,812 CHARACTERS" toast -> paste into a chat with Claude.
+  3. Wants to test floor 12 elites: TITLE -> DEV -> START AT DEPTH -> depth 12,
+     node ELITE, generator AUTO, kit ON-CURVE -> START. A sandboxed run begins on
+     that floor; route continues normally after it.
+  4. Wants more enemies: PAUSE -> DEV -> TUNING -> ENEMY COUNT + + + (1.15) ->
+     back. The next floor generated uses x1.15 budget; the log header records it.
+  5. Claude reads the logs, proposes BalanceConfig changes. If the order-7 feel
+     pass is running, the logs are its optional extra input (its rule P10); if
+     it is finished, they serve any later balance pass.
+
+No dev action costs a game turn; every dev screen is a hard-pause overlay like
+the pause menu (world frozen, barks queue, thumb clusters not drawn).
+
+
+RULES
+-----
+  R1  DevAccess is decided ONCE at launch by the launcher and passed into Main;
+      it is an instance value, never a static constant, so R-FLAGS (no live
+      TEST/DEBUG statics) is untouched. With DevAccess false, no DEV row, plate,
+      screen, log file or dial exists at runtime, and every dial reads 1.0.
+  R2  The DEV row sits LAST in the pause menu (after ABANDON RUN) and LAST in the
+      title menu (after QUIT). The DEV LOG plate sits beside the reprint card's
+      REPORT plate. None of them is a PauseMenuItem/TitleMenuItem enum row that a
+      release build could reach; they are appended by the dev layer when
+      DevAccess is true.
+  R3  DEV HUB (from pause): RUN LOG (this run so far), TUNING, SKIP FLOOR (ends
+      the floor as if the exit was taken; logged as "skipped"), BACK.
+      DEV HUB (from title): START AT DEPTH, TUNING, PAST RUNS, BACK.
+  R4  PLAYTEST LOG — one FLOOR RECORD per floor, written when the floor is left
+      (exit, skip, death, abandon). Fields (those whose source does not exist yet
+      print "-" and are filled by the order that creates the source):
+        index, depth, region index, node type, generator id, affix id,
+        walkable tile count, turns taken, real seconds,
+        enemies spawned (total and per EnemyRole), groups spawned (order 2),
+        enemies killed, XP gained, character level entry -> exit,
+        HP entry -> exit (absolute and % of max), lowest HP % on the floor,
+        armour entry -> exit,
+        damage taken total and by source category: MELEE, RANGED, SPECIAL
+        (telegraphed special verbs), STATUS (DoT ticks), HAZARD, SELF; top three
+        EnemyType by damage dealt to the player,
+        heals present on the floor (count + total HP value), heals picked up,
+        heals used, armour picked up,
+        ammo present / picked up / spent / reserve at exit, per AmmoType,
+        credits earned / spent, shop purchases (offer ids),
+        equipped weapon at exit (type, level, tier), weapon with most shots,
+        weapons picked up (type, level, tier), level-up picks (card ids),
+        GUARD uses, emergency ammo lifeline triggers.
+      RUN SUMMARY: seed, build version, dial values (every non-1.0 dial), run
+      origin (NORMAL / DEV_START + request), total floors, depth reached,
+      outcome (DEATH / ABANDON / ENDING / IN PROGRESS), cause of death.
+      DEATH RECORD: killer EnemyType (or hazard / status / self), killing blow
+      damage and category, HP before the blow, the last 5 damage events
+      (turn, source, amount, HP after), medkits and ammo held at death.
+  R5  Log text format: plain ASCII, one line per floor (key=value tokens, fixed
+      order), a header line, a summary line, a death block. Line width is NOT
+      limited (it is for pasting, not for reading on the phone); the DEV REPORT
+      screen word-wraps it for display only. Format version token "LOGv1" at the
+      start of the header so later orders can extend it (LOGv2 ...).
+  R6  Storage: Gdx.files.local("devlog/"), one file per run, rolling — at most
+      DEV_LOG_MAX_RUNS (20) files; the oldest is deleted when a 21st starts.
+      Written at every floor exit and at run end, so an OS kill mid-floor loses at
+      most the current floor. Never written when DevAccess is false.
+  R7  COPY: the system clipboard receives the exact log text; a toast reports the
+      character count. COPY LAST 5 RUNS concatenates the five newest runs with a
+      separator line. If the clipboard is unavailable (null), the toast says
+      "CLIPBOARD UNAVAILABLE" and nothing else happens.
+  R8  DEV START request = (depth 1..DEV_START_MAX_DEPTH (25), node type, generator,
+      kit). START builds a fresh seeded route map, places the cursor on a node of
+      the requested type at the requested depth (forced/synthesised if the layer
+      lacks one), resolves that node through its normal NodeLevelProfile (the
+      generator override replaces the profile's generator choice when not AUTO;
+      BOSS/REGION_GATE ignore the override), and grants the kit. Play continues
+      from there through the ordinary route map.
+      KITS: BARE = the normal run-start loadout. ON-CURVE = the expected player
+      at that depth: character level = expected level (current model:
+      1 + EXPECTED_LEVELS_PER_DEPTH * (depth - 1)), level-up cards auto-picked
+      from the seeded deck, the start weapon PLUS one WeaponRoller roll at that
+      depth, ammo reserves at DEV_KIT_RESERVE_FRACTION (0.6) of caps, 2 'H' + 1
+      '+', armour at 50%, credits = DEV_KIT_CREDIT_FRACTION (0.5) of modelled
+      income to that depth. RICH = ON-CURVE with double consumables and full
+      reserves. If order 1 (the power ladder) is built, ON-CURVE uses
+      GameMath.expectedPlayerAtDepth instead of the formula above (one model for
+      audit, sim and dev kit), and if order 5 is built the auto-picks go through
+      its PerkDeck; otherwise the formula above applies.
+  R9  SANDBOX: a DEV_START run never writes persistent state — no StoryStore
+      writes (deepest region, one-shot flags, reprint counter, codex unlocks,
+      stance, recap rings), no StatsStore records, no teaching evidence persisted.
+      Barks and exchanges are suppressed for the whole dev run; on death the
+      death stroke plays, then the DEV REPORT opens directly (no reprint card),
+      then BACK returns to the title. Its log IS written (origin DEV_START).
+  R10 TUNING DIALS are developer instruments, not a difficulty mode. They are
+      invisible and identity in release builds, never persist into StoryStore or
+      StatsStore, and carry no mode-family naming (R-SINGLE-DIFFICULTY's banned
+      tokens are avoided in every identifier and label). The one-difficulty rule
+      stands.
+  R11 Dials (multiplier, range DEV_DIAL_MIN 0.25 .. DEV_DIAL_MAX 3.00, step
+      DEV_DIAL_STEP 0.05, default 1.00) and their seams:
+        ENEMY_HEALTH     enemy max HP at spawn                    next floor
+        ENEMY_DAMAGE     every enemy/boss outgoing hit before
+                         the mitigation pipeline                 immediately
+        ENEMY_COUNT      floor Threat-Point budget handed to
+                         EncounterBudgetPlanner                  next floor
+        AMMO_SUPPLY      ammo units granted by every ammo pickup
+                         and ammo drop (rounded, min 1)          immediately
+        HEAL_SUPPLY      HP/armour restored by every heal/armour
+                         pickup and medkit use (rounded, min 1)  immediately
+        PLAYER_DAMAGE    every player outgoing hit (weapon,
+                         melee, DoT the player applies)          immediately
+        XP_GAIN          XP from every source                    immediately
+        CREDIT_GAIN      credits from every source               immediately
+        SHOP_PRICE       every shop offer price (rounded, min 1) immediately
+        DEPTH_CURVE      exponent multiplier on the depth-scaling
+                         term: scale^((depth-1) * dial)          next floor
+      A dial is ONE enum row with its label, range and "applies" text; the value
+      is passed as a parameter into the call site that owns the seam. GameMath
+      stays pure: no formula reads dial state.
+  R12 Dials persist across app restarts in the developer Preferences file
+      (DEV_PREFERENCES_NAME "toon3d-dev"), never in the StatsStore/StoryStore file.
+      NEW OPERATOR does not reset them; RESET ALL on the TUNING screen does.
+  R13 Every log header prints the dial set active at the START of each floor on
+      that floor's line (token "dials=" listing only non-1.0 dials), so a floor
+      played under changed dials is never mistaken for the baseline.
+  R14 SERIES DIALS (adaptive): for each balance-overhaul master knob whose
+      BalanceConfig constant EXISTS in the build when this order is implemented,
+      register one extra dial that multiplies it at its seam (identity 1.0):
+        LEVEL_GAP_STEEPNESS (order 1), BODY_TARGET_* scale and
+        SUPPLY_HEAL_FLOOR_FRACTION (order 2), MATCHUP_STRENGTH (order 3),
+        HEAVY_DAMAGE_SCALE (order 4).
+      A knob not yet built gets no dial. If this order is built FIRST, later
+      orders may add their dial row (one enum row) but are never required to.
+  R15 SERIES LOG FIELDS (adaptive): where the order-1..6 systems exist, the floor
+      record also carries the fields their sim reports measure — weapon LV vs
+      floor (1), groups and supply planned/placed (2), damage by DamageClass and
+      RESISTED/EFFECTIVE hits and hint-driven switches (3), heavies committed /
+      avoided / guarded / staggered / landed and statuses blocked by armour (4),
+      perks and keystones picked (5), run outcome VICTORY (6). Absent systems
+      print "-". The format token becomes LOGv2 when any of these are present.
+
+
+PLAYER EXPERIENCE
+-----------------
+Players never see any of this. The owner gets a loop that works on the couch:
+play, die, tap DEV LOG, COPY, paste. No ORA teaching topic, no bark — the dev
+layer is outside the fiction and says nothing in-world.
+
+
+TECHNICAL NOTES
+---------------
+No new package (avoids a CLAUDE.md package-table change): headless dev state
+goes in `…toon3d.world` (it is run-state tracking, the same kind of thing as
+RunStats), persistence in `…toon3d.util`, drawing in `…toon3d.render`.
+
+  world/DevAccess            immutable capability; DevAccess.disabled() constant
+                             instance for sim/tests/no-arg Main.
+  world/DevDial              enum: the 10 dials above, each with label, applies
+                             text, range; per-constant data, no switch.
+  world/DevTuning            current dial values; value(DevDial); identity()
+                             factory; loaded from / saved to a DevTuningStore port.
+  world/DevTuningStore       port interface (load/save one float per dial).
+  util/DevStore              Preferences implementation (file "toon3d-dev").
+  world/DevRunLog            the run record: header, List<DevFloorRecord>, death
+                             record; begins/ends floors; exposes recordX(...)
+                             hooks. Pre-sized collections; nothing allocated per
+                             frame (records are built at floor exit).
+  world/DevFloorRecord       the R4 fields.
+  world/DevRunLogFormatter   pure text formatter (LOGv1).
+  world/DevRunLogArchive     rolling local-file store (Gdx.files.local, guarded:
+                             no-op when Gdx.files is null — keeps sim/tests safe).
+  world/DevStartRequest      depth, RouteNodeType, GeneratorId-or-AUTO, kit.
+  world/RunOrigin            NORMAL / DEV_START.
+  render/DevScreenRenderer   DEV HUB, DEV REPORT (word-wrapped, drag-scroll like
+                             the codex body), PAST RUNS list, TUNING steppers,
+                             DEV START pickers, toast. Reuses the story-ui
+                             order-8 STORY_FRAME_* plate style for consistency.
+  util/DevConstants          every dev layout number, the dev UI label literals
+                             (developer-facing English, deliberately NOT in
+                             story-strings.properties — that table holds only
+                             player-facing lines), DEV_LOG_MAX_RUNS,
+                             DEV_START_MAX_DEPTH, DEV_KIT_*, DEV_DIAL_*.
+
+Wiring:
+  - Main: new constructor Main(DevAccess); no-arg constructor keeps
+    DevAccess.disabled(). AndroidLauncher computes FLAG_DEBUGGABLE from
+    getApplicationInfo(). Lwjgl3Launcher passes enabled. No Gradle change, no
+    BuildConfig dependency.
+  - World: owns DevAccess, DevTuning, DevRunLog; new RunPhase values for the dev
+    screens (hard-pause overlays, same precedence tier as PAUSE_MENU / SETTINGS).
+  - Dial seams: EncounterBudgetPlanner (ENEMY_COUNT, DEPTH_CURVE via the budget
+    depth term), enemy spawn in EnemyManager (ENEMY_HEALTH, DEPTH_CURVE on the
+    enemy scale terms), enemy damage resolution entry (ENEMY_DAMAGE), weapon/
+    melee/DoT damage entry for the player (PLAYER_DAMAGE), pickup + drop grants
+    (AMMO_SUPPLY, HEAL_SUPPLY), PlayerProgress.addXp (XP_GAIN), credit award
+    path (CREDIT_GAIN), shop pricing in DefaultShopOfferSource (SHOP_PRICE).
+    Each seam receives the value from World (or LevelGenConfig for generation);
+    sim/SimWorld passes DevTuning.identity().
+  - Log feeds: RunStats already records most totals; DevRunLog adds per-floor
+    deltas and the categorised damage (hook at the player damage entry, which
+    knows the source), pickups present at floor build (from the Level's pickup
+    list), and the death record.
+  - Touch: all dev buttons use the framing-menu plate size or larger; steppers
+    are separate "-" and "+" plates each at least TouchConstants' action-button
+    size; nothing inside the HUD safe zone (dev screens are full-screen overlays
+    with their own scrim).
+
+
+VISUAL DESIGN
+-------------
+Plain and functional, deliberately unlike the story UI so it is never mistaken
+for fiction: black scrim at 0.9, monospace-looking procedural BitmapFont text,
+a thin amber header bar reading "DEV" on every dev screen, amber plates. The
+toast is a one-line amber strip for 1.5 s (cosmetic timer; it blocks nothing).
+
+
+BALANCE NOTES
+-------------
+No balance number changes. Dials default to identity, so the shipped game and
+the balance simulator are byte-identical. A dial value the owner likes is a
+hint; it is baked into the BalanceConfig constants behind its seam (by the
+order-7 feel pass if it is running, or any later balance change) and the dial is
+then reset to 1.0.
+
+
+INTERACTIONS
+------------
+  - Pause/title menus (FramingMenu): dev rows appended after the enum rows.
+  - Reprint card: DEV LOG plate beside REPORT; the REPORT page is untouched.
+  - Story layer: dev runs suppress barks/exchanges and never touch StoryStore.
+  - Route map: DEV START synthesises/forces a node at the requested depth.
+  - Balance audit: new identity checks (TESTS below).
+  - Sound: none.
+
+
+EDGE CASES
+----------
+  - App paused/killed mid-floor: the floor record is lost, all earlier floors
+    are on disk (R6). onApplicationResume restores nothing extra.
+  - Clipboard null (some desktop setups): toast "CLIPBOARD UNAVAILABLE".
+  - Local storage write fails: log stays in memory; toast "LOG NOT SAVED" once.
+  - DEV START at a boss depth: node type forced to BOSS regardless of selection.
+  - DEV START depth beyond the current route horizon: the route map's lazy
+    extension builds it (endless before order 6; clamped to 25 after it).
+  - A dial changed mid-floor that applies "next floor": the TUNING screen shows
+    "pending next floor" beside it.
+  - NEW OPERATOR wipe: does not touch dev prefs or dev logs (they are not save
+    data).
+  - Release build: DevAccess false — verified by the absence of the DEV rows and
+    of the devlog directory.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  On desktop (./gradlew lwjgl3:run) the pause menu shows a DEV row after
+      ABANDON RUN and the title menu shows a DEV row after QUIT. Constructing
+      Main with the no-argument constructor shows neither.
+  A2  AndroidLauncher passes DevAccess derived from FLAG_DEBUGGABLE (read the
+      code); no static boolean named *DEV*, *TEST* or *DEBUG* is set true
+      anywhere (R-FLAGS green).
+  A3  After a run of 3 floors ending in death, DEV LOG on the reprint card opens
+      a report with a LOGv1 header, 3 floor lines with every R4 field present
+      (unavailable ones as "-"), a summary line and a death block naming the
+      killer and the last 5 damage events.
+  A4  COPY THIS RUN places the exact report text on the clipboard (paste it into
+      any text field on desktop to check) and shows the character-count toast.
+  A5  devlog/ holds at most 20 run files after 21 runs; a floor record appears
+      on disk after each floor exit, before the run ends.
+  A6  TUNING: each of the 10 dials steps by 0.05 within [0.25, 3.00], RESET ALL
+      restores 1.00, values survive an app restart, and a floor played with
+      ENEMY_COUNT 2.00 spawns visibly more enemies than at 1.00 on the same
+      DEV START request (same depth/node/generator/kit).
+  A7  Every floor line lists the non-1.0 dials active at floor start ("dials=").
+  A8  DEV START depth 12 / ELITE / AUTO / ON-CURVE begins on an elite floor at
+      depth 12 with character level, weapons, ammo, heals and credits matching
+      R8; the run then continues through the normal route map.
+  A9  After a DEV START run dies, the StoryStore and StatsStore contents are
+      unchanged (reprint counter, deepest region, one-shot flags, records): read
+      them before and after on desktop. No bark or exchange fired during it.
+  A10 ./gradlew test and ./gradlew balanceSim are green; the balance-sim ledger
+      for a fixed seed is byte-identical to the pre-order ledger (dials identity).
+  A11 Every R14 master-knob constant present in the build has a dial (and none
+      that is absent); the R15 fields of every built series order appear in the
+      floor lines, absent ones print "-".
+  A12 No file of orders 1-8 needed editing to build this order (read the diff).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect)  DevAccess, DevDial, DevTuning,
+     DevTuningStore, util/DevStore, util/DevConstants, RunOrigin,
+     DevStartRequest; Main(DevAccess); both launchers.
+  2. LOGIC  (java-architect)  dial seams threaded through World / LevelGenConfig
+     / EncounterBudgetPlanner / EnemyManager / pickup + damage + XP + credit +
+     shop paths (identity default; SimWorld passes identity). DevRunLog +
+     formatter + archive + feeds. DEV START resolution in World + route cursor
+     placement (RouteMap) + kit grant; sandbox suppression of story writes.
+  3. RENDER  (libgdx-specialist)  render/DevScreenRenderer (hub, report with
+     scroll, past runs, tuning, dev start, toast); dev rows in the framing menus;
+     DEV LOG plate on the reprint card; RunPhase precedence.
+  4. CONTENT  none.
+  5. TESTS  Balance-bearing seams only: extend BalanceAuditTest (R-FLAGS
+     section) with (a) every DevDial default is exactly 1.0, (b) DevTuning.
+     identity() returns 1.0 for every dial, (c) SimWorld is constructed with
+     identity dials. Extend BalanceSimTest's existing determinism assertion to
+     cover the dial-threaded code path (same seed => byte-identical ledger).
+     Both gates. No test for the UI, log format, archive or launcher —
+     verified by ./gradlew build + ./gradlew lwjgl3:run.
+  6. DOCS  docs/game-balance-authority.txt SECTION 7 (THE CHANGE PROTOCOL) gains
+     "THE PHONE PLAYTEST LOOP" (how logs + dials feed a change) and notes the
+     dials-are-not-modes ruling under R-SINGLE-DIFFICULTY;
+     docs/game-balance-knowledge.txt gains a TOOLS section (log fields, dial
+     seams, DEV START kits); docs/story-ui-system.txt notes the dev rows in the
+     framing menus and the dev-run sandbox (story suppressed, no writes).
+
+RISKS AND UNKNOWNS
+  - Threading ten dials to their seams touches many call sites; keep each seam a
+    single multiplication at the owning entry point, never scattered.
+  - Sandbox: StoryProgress is shared by several systems; confirm early (CP6)
+    that swapping in an InMemoryStoryProgressStore copy for a dev run is cleaner
+    than guarding every write.
+  - Forcing a node type at an arbitrary depth may violate route guarantees
+    (pre-boss provisioning); acceptable for a dev run — log origin DEV_START.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  Main(DevAccess) exists; AndroidLauncher passes FLAG_DEBUGGABLE,
+       Lwjgl3Launcher passes enabled, no-arg Main is disabled; nothing visible
+       yet; ./gradlew build green
+  CP2  DevDial (10 rows), DevTuning, DevTuningStore, util/DevStore exist and all
+       ten seams read their dial (identity); SimWorld uses identity;
+       ./gradlew test + ./gradlew balanceSim green with an unchanged ledger
+  CP3  DevRunLog + formatter + archive record every R4 field that has a source
+       and write devlog/ files (rolling 20) on desktop; still no UI (the log is
+       only visible on disk — finished by CP4); build green
+  CP4  DEV HUB, DEV REPORT (scroll, COPY THIS RUN, COPY LAST 5), PAST RUNS and
+       the reprint card DEV LOG plate work on desktop; A1, A3, A4, A5 hold
+  CP5  TUNING screen steps, resets, persists and prints "dials=" in logs; the
+       R14 series dials and R15 series log fields for whatever series orders are
+       built are present; A6, A7, A11 hold
+  CP6  DEV START (depth/node/generator/kit) and the sandbox work; A8, A9 hold
+  CP7  BalanceAuditTest/BalanceSimTest extensions in place; the three docs
+       updated; A2, A10 and A12 hold; both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  The owner installs a DEBUGGABLE build on the phone (Run from Android
+       Studio, or assembleDebug). If he installs a release APK the tools are
+       invisible by design; this order then needs a signed "playtest" build variant
+       (a one-line follow-up), not a hidden gesture in release.
+  AS2  COPY to clipboard is an acceptable way to hand logs over (paste into the
+       Claude app / chat). No file export needed.
+  AS3  Normal runs are logged in debuggable builds, always; there is no "logging
+       on/off" switch (the cost is a few KB per run).
+  AS4  Dev runs mute the story rather than running it in-memory; the story layer
+       has its own tests and is not what dev start is for.
+  AS5  Ten generic dials plus the R14 series dials (when present) is the right
+       set; the series' master knobs are ordinary constants owned by their
+       orders, and this order only multiplies them.
+  AS6  Dial range 0.25..3.00 in 0.05 steps is fine-grained enough; a dial value
+       is a hint, not the final number.
+  AS7  Headless dev classes go in `world` / `util` to avoid a new package and a
+       CLAUDE.md package-table change.
+  AS8  The DEV START max depth is 25 (the series' run length) even if the
+       descent is still endless in the build (order 6 makes 25 the real end).
+  AS9  Dev UI labels are English literals in util/DevConstants, not localised.
+  AS10 SKIP FLOOR is useful enough to include; it is logged as "skipped" so it
+       never pollutes the data.
+
+
+DECISIONS
+---------
+  D1  Tools must work on the phone (owner, questionnaire K3 + A4) -> screens with
+      COPY, in-game dials, in-game dev start; no files.  (2026-09-30)
+  D2  Dev-only guard -> runtime DevAccess from FLAG_DEBUGGABLE, not a static
+      flag (keeps R-FLAGS meaningful and avoids a Gradle BuildConfig change).
+      (2026-09-30)
+  D3  Owner revision: the dev tools are the LAST order of the series and
+      OPTIONAL; nothing else in the series may depend on them.  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+In THIS order: no balance rule is overridden. R-FLAGS is EXTENDED (dial identity
+checks) and R-SINGLE-DIFFICULTY is CLARIFIED (developer dials in debuggable
+builds are not modes) — both recorded in docs/game-balance-authority.txt. This
+R-FLAGS / dial-default audit work belongs ONLY to this order; orders 1-8 carry
+none of it.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt (series index), balance-overhaul-order-7.txt
+          (feel pass: logs are its optional input), new-game-balancr-order-9.txt
+          (simulator + telemetry), story-ui-order-8.txt (framing menus)
+  Docs:   docs/game-balance-authority.txt SECTION 7, docs/story-ui-system.txt

@@ -1,0 +1,355 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Meta
+TITLE: Feel Pass — tune from play notes and the simulator
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+
+Order 7 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-6 (everything; this order moves numbers, not systems).
+Does NOT depend on the optional dev tools (order 9). If order 9 happens to be
+built, its copied logs are an OPTIONAL extra input (rule P10) — never required.
+
+
+OVERVIEW
+--------
+Orders 1-6 set every number from arithmetic and the simulator. The owner's own
+words set the bar: "I test new versions playing until I see what I want to see",
+and the questionnaire's ammo (Part G) and card (J2) answers were left blank to be
+filled from play. This order is the loop that turns the owner's ordinary phone
+play into final numbers, using only what exists without any developer tooling:
+  - the owner's short, structured PLAY NOTES after each session (the form is in
+    this file — it takes two minutes, in the style of the questionnaire);
+  - the simulator's reports added by orders 1-6 (LADDER, FLOOR, MATCHUP, HEAVY,
+    BUILD, run-outcome, S-BOSS, S-SHOP) and BalanceReport's living tables;
+  - the MASTER KNOBS: the dozen BalanceConfig constants orders 1-6 introduced as
+    whole-system scales, which are what a round moves.
+Rounds repeat at most three times. The order also fixes the one thing that has
+kept most behavioural bands waived since new-game-balancr order 9: the
+simulator's navigation, so the gates finally measure the game.
+
+
+SCOPE
+-----
+IN
+  - SimNavigator improved until scripted policies reach the exit on > 90% of
+    floors; the navigation waiver deleted; every depth-derived S-band enforced.
+  - Playtest rounds (max 3): brief -> owner plays normally -> PLAY NOTES ->
+    analysis (notes + sim + BalanceReport) -> tuning.
+  - The PLAY NOTES form (RULES P4) and the MASTER KNOBS list (P6).
+  - Sim policies calibrated to what the owner reports; sim bands re-centred
+    where a target was the wrong proxy.
+  - Filling Part G (ammo) and J2 (perk picks) from the notes and the sim.
+
+OUT (deliberately not doing now)
+  - Building any developer tooling. That is order 9, optional, and nothing here
+    waits for it.
+  - New mechanics, systems, content or UI. A finding that needs one becomes a
+    new idea file (via creative-game-designer), not a change here.
+  - Tuning anything outside balance (renderer, story text, sound).
+  - More than three rounds. Remaining gaps after round 3 go to a follow-up idea
+    with the notes and reports attached.
+
+
+GAMEPLAY LOOP
+-------------
+  Round n:
+  1. The implementer writes the round's PLAYTEST BRIEF: what changed since the
+     last build, what to pay attention to (two or three focus points), and the
+     PLAY NOTES form.
+  2. The owner plays normally on the phone — at least ROUND_MIN_RUNS (5) runs —
+     and after each session sends one filled PLAY NOTES form (typed into the
+     chat).
+  3. The main thread saves the notes verbatim; the implementer runs balanceSim
+     and BalanceReport on the same build and writes the ANALYSIS: each target
+     metric from the sim, each owner answer beside it, where they agree, where
+     they disagree, and the TUNING PROPOSAL (which master knobs / constants
+     move, why, expected effect).
+  4. The owner approves the proposal (or edits it); the numbers move in
+     BalanceConfig; both gates green; the build goes to the owner for the next
+     round.
+
+
+RULES
+-----
+  P1  Artifacts (written by the implementer, outside the ideas folder):
+        .claude/balance-feedback/playtest-round-<n>-brief.md
+        .claude/balance-feedback/play-notes/round-<n>/<date>-<k>.md  (verbatim)
+        .claude/balance-feedback/playtest-round-<n>-analysis.md
+      The analysis is the evidence for every BalanceConfig change of the round;
+      each change's CHANGELOG line cites it.
+  P2  ROUND SIZE: >= ROUND_MIN_RUNS (5) normal runs by the owner, noted on the
+      form, plus one full balanceSim matrix and a BalanceReport regeneration on
+      the round's build. No dev scenarios are required.
+  P3  TARGET METRICS — each has a SIM source (always available) and an OWNER
+      source (the form); a metric is in band when the sim is in band AND the
+      owner's answers do not contradict it:
+        T2  lag punished     sim LADDER REPORT: HOARDER hits-to-kill >= 1.5x
+                             TACTICAL at depths 3-5 / owner Q8
+        T3  floors full      sim FLOOR REPORT: floors 1-3 >= 12 enemies, first
+                             damage exchange <= 15 turns, >= 2 groups of >= 3 /
+                             owner Q2, Q3
+        T4  fair supply      sim: zero floors below the heal floor, TACTICAL
+                             median COMBAT exit HP 55-80%, <= 30% of deaths with
+                             0 heals and < 20% ammo held / owner Q1, Q4, Q5
+        T5  heavies          sim HEAVY REPORT: TACTICAL >= 80% avoided/guarded/
+                             staggered, NAIVE <= 30% / owner Q7
+        T6  weapon roles     sim MATCHUP REPORT: no DamageClass > 50% of TACTICAL
+                             damage; >= 1 hint-driven switch per COMBAT floor /
+                             owner Q6
+        T7  builds           sim BUILD REPORT: no dominant tag on > 40% of seeds,
+                             no keystone > 50% / owner Q9
+        T8  run shape        sim run-outcome bands (order 6 F8) and S-BOSS /
+                             owner Q11 and the per-run lines (deepest floor, how
+                             it ended; first boss beaten in the first round?)
+        T9  shop             sim S-SHOP / owner Q10
+        G   ammo             sim FLOOR REPORT reserve at exit 10-60% of cap per
+                             carried type, lifeline < 5% of floors / owner Q5
+        J2  perk picks       sim BUILD REPORT pick rates (no perk > 60% of its
+                             offers) / owner Q9 ("always picked", "never picked")
+  P4  THE PLAY NOTES FORM (one per play session; short answers are fine; "don't
+      know" is valid). The brief reproduces it verbatim:
+
+        PLAY NOTES — build/date: ______   runs this session: ___
+        Per run, one line:  deepest floor __ | ended: death / quit / victory |
+          killed by ______ | main weapon ______ | did a level-up or a better
+          weapon change a fight?  y / n
+         1. Did your deaths feel like YOUR mistake?  yes / mostly / no — why?
+         2. Floors 1-3 felt:  boring / good / too hard
+         3. Any floor empty or overflowing? which floor number, which layout
+            (rooms / corridors / cave)?
+         4. Healing: ran out / about right / too much.  Arriving at a new floor
+            you were usually at:  full / three-quarters / half / low
+         5. Ammo: which type ran out? which piled up?
+         6. Did you switch weapon because of an enemy?  never / sometimes / often
+         7. Heavy attacks (red floor): you dodged or guarded  most / some / few.
+            Did getting hit by one feel fair?  y / n
+         8. When your weapon's LV turned red, was that:  too punishing / right /
+            not punishing enough / never happened
+         9. Builds: which keystone(s) did you take? which perk did you always
+            pick, which never? did runs feel different from each other?
+        10. Shop: bought per floor  0 / 1 / 2+ ;  prices  too high / OK / too low
+        11. Bosses you met: which, and  too easy / OK / too hard
+        12. Best moment, worst moment (one line each).
+
+  P5  TUNING DISCIPLINE: a round changes only numbers (BalanceConfig, sim policy
+      parameters, S-band values), each tied to a P3 metric or a P4 answer.
+      A number moves toward its band; a band itself moves only when the owner's
+      answers consistently contradict it across >= 3 runs (the band was a wrong
+      proxy) — recorded as an override with the evidence.
+  P6  MASTER KNOBS (preferred first moves, all ordinary BalanceConfig
+      constants owned by the order that introduced them):
+        LEVEL_GAP_STEEPNESS, LADDER_GROWTH, ENEMY_HEALTH_GROWTH,
+        ENEMY_DAMAGE_GROWTH, PLAYER_VITALITY_GROWTH           (order 1)
+        BODY_TARGET_MIN/MAX, NodeSupplySpec ammoRatio / drainTarget,
+        SUPPLY_HEAL_FLOOR_FRACTION                            (order 2)
+        MATCHUP_STRENGTH, per-AmmoType generosity             (order 3)
+        HEAVY_DAMAGE_SCALE, GUARD_FRONT_HEAVY                 (order 4)
+        perk / keystone magnitudes                            (order 5)
+        REGION_TP_BUDGET_MULTIPLIER, SHOP_CREDITS_PER_POWER_POINT,
+        BossTable target fight turns                          (order 6)
+      A round moves at most ~5 of them, so their effects stay attributable.
+  P7  SIM CALIBRATION: TacticalPolicy parameters (heal threshold, guard/avoid
+      rules, shopping, switching) are adjusted so the sim's TACTICAL outcomes
+      (depth reached, arrival HP band, death causes) resemble what the owner
+      reports at the same depths. The sim is a proxy for the owner, not the other
+      way round.
+  P8  NAVIGATION: SimNavigator reaches the exit on > 90% of floors for all
+      three policies over the full seed matrix; the [SIM_*] navigation waiver in
+      BalanceSchema and docs is DELETED and every depth-derived band is enforced.
+  P9  STOP: the order is done when every P3 metric is in band in one round and
+      the owner answers Q1 "yes"/"mostly" and marks "a level-up or better weapon
+      changed a fight" on most runs, OR after round 3 (then the remaining gaps
+      are written into a follow-up idea request for the designer).
+  P10 OPTIONAL EXTRA INPUT: if order 9 (dev tools) has been built, the owner may
+      also paste copied run logs; they are saved under
+      .claude/balance-feedback/logs/round-<n>/ and used to sharpen P3 (measured
+      values replace the owner's estimates where both exist). Their absence
+      never blocks a round, a checkpoint or the stop condition.
+
+
+PLAYER EXPERIENCE
+-----------------
+The owner plays as he likes and spends two minutes on a form after a session.
+Nothing new appears in the game for players.
+
+
+TECHNICAL NOTES
+---------------
+  sim/SimNavigator, TravelPlanner      navigation fixes (P8) — the main code
+                                       change of this order (balance-scope sim).
+  sim/TacticalPolicy (+ build biases)  calibration parameters surfaced as
+                                       BalanceConfig SECTION 18 constants.
+  sim/SimReport                        one ROUND SUMMARY page collecting the P3
+                                       sim metrics from the reports orders 1-6
+                                       added, with band markers — the table the
+                                       analysis starts from.
+  util/BalanceConfig                   every tuned number; CHANGELOG lines in
+                                       docs/game-balance-authority.txt SECTION 7.
+  util/BalanceSchema                   navigation waiver deleted; any band moved
+                                       under P5 recorded.
+  No new classes expected outside sim/.
+
+
+VISUAL DESIGN
+-------------
+None.
+
+
+BALANCE NOTES
+-------------
+This whole order is balance. Every change runs THE CHANGE PROTOCOL (authority
+doc SECTION 7): both gates, regenerated living tables, a CHANGELOG line citing
+the round's analysis.
+
+
+INTERACTIONS
+------------
+Every order of the series (numbers only). docs/game-balance-knowledge.txt gets
+its "NOT GOOD" warnings replaced by the measured state wherever a round verified
+a system against the owner's play. Order 8 (the content balance contract)
+follows this order and freezes the rules and bands as tuned here into the gate
+for all future content, so any band this order moves is moved BEFORE it is
+codified. Optional order 9 is an input if present
+(P10), never a prerequisite.
+
+
+EDGE CASES
+----------
+  - The owner sends fewer runs than P2: the analysis marks each owner-sourced
+    metric with its sample size and proposes only changes whose owner evidence
+    covers >= 3 runs (sim-only evidence may still move a number that is out of
+    its sim band).
+  - Notes from an older build: excluded from the analysis.
+  - Contradictory answers vs sim metrics: the answers win for bands (P5), the
+    sim wins for numbers inside a band.
+  - "Don't know" answers: the metric falls back to the sim alone for that round.
+  - A metric that needs a system change (not a number): logged as a follow-up
+    idea, never patched here.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  The SIM navigation waiver no longer exists in BalanceSchema or
+      docs/game-balance-authority.txt; balanceSim enforces every S-band
+      (including S-LAG, S-SUPPLY, S-HEAVY, S-SWITCH, S-BUILD, the run-outcome
+      bands, S-BOSS, S-SHOP) and is green; the stall column reads < 10% of
+      floors.
+  A2  For every completed round, the brief (with the P4 form), the verbatim play
+      notes and the analysis exist under .claude/balance-feedback/, and every
+      BalanceConfig change of the round has a CHANGELOG line citing the analysis.
+  A3  The final round's analysis shows every P3 metric in band, or the order
+      closed after round 3 with a follow-up idea request listing the gaps.
+  A4  balanceSim prints the ROUND SUMMARY page.
+  A5  docs/game-balance-knowledge.txt reflects the measured state (what was
+      verified against the owner's play, when, with which round's notes).
+  A6  Both gates green at every checkpoint.
+  A7  No checkpoint, criterion or stop condition refers to order-9 tooling; P10
+      is the only mention and it is optional.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. SIM  (java-architect)  navigation fixes; calibration parameters; ROUND
+     SUMMARY page.
+  2. ANALYSIS  (orchestrator / main thread, with math-expert for fitting)
+     briefs, analyses, tuning proposals.
+  3. TUNING  (java-architect / math-expert)  BalanceConfig moves, living tables.
+  4. CONTENT  none.
+  5. TESTS  Balance-bearing: extend BalanceSimTest for the de-waived bands
+     (assertions that were report-only become enforced) and the calibration
+     parameters; update BalanceAuditTest assertions for any moved band. No new
+     test files. Both gates.
+  6. DOCS  docs/game-balance-authority.txt (waiver deletion, CHANGELOG, moved
+     bands, SECTION 8 sim report), docs/game-balance-knowledge.txt (measured
+     state).
+
+RISKS AND UNKNOWNS
+  - Owner availability drives the pace; checkpoints that wait on notes say so in
+    their handover note, and the navigation work (CP1) proceeds meanwhile.
+  - Owner notes are estimates (arrival HP, how often he switched); the sim
+    carries the precise numbers and the notes carry the feel. Small samples:
+    the >= 3-runs evidence rule limits overfitting.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  SimNavigator reaches the exit on > 90% of floors; the navigation waiver is
+       deleted and every S-band enforced; the ROUND SUMMARY page prints; A1, A4
+       hold; both gates green
+  CP2  playtest-round-1-brief.md exists (focus points + the P4 form); the build
+       with the series is in the owner's hands (handover: waiting on notes)
+  CP3  round-1 play notes saved verbatim; playtest-round-1-analysis.md lists
+       every P3 metric (sim value, owner answers, sample sizes) and the tuning
+       proposal
+  CP4  the owner-approved round-1 tuning is in BalanceConfig and the sim is
+       calibrated per P7; CHANGELOG lines; both gates green
+  CP5  round 2 brief -> notes -> analysis -> tuning complete (same states as
+       CP2-CP4); if every metric is in band and P9 holds, CP6 is skipped
+  CP6  round 3 complete, OR the stop condition P9 was met earlier; A2, A3, A5,
+       A7 hold; both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  The owner will type the PLAY NOTES form into the chat after a session;
+       the main thread saves it verbatim.
+  AS2  Five normal runs per round with notes, plus the full sim matrix, is
+       enough evidence for number moves; the sim supplies precision, the notes
+       supply feel.
+  AS3  Three rounds is the right cap; beyond it the problem is design, not
+       numbers.
+  AS4  The sim is calibrated to the owner, never the owner's feel to the sim.
+  AS5  Navigation fixing belongs here because every depth-derived band of the
+       series is otherwise report-only.
+  AS6  Moving at most ~5 master knobs per round keeps cause and effect readable
+       from notes alone, without per-floor logs.
+
+
+DECISIONS
+---------
+  D1  The series must be complete without developer tools (owner revision,
+      2026-09-30) -> rounds run on PLAY NOTES + the simulator + BalanceReport;
+      order-9 logs are an optional extra (P10).  (2026-09-30)
+  D2  Part G (ammo) and J2 (card picks) were left blank -> filled from the notes
+      (Q5, Q9) and the sim's FLOOR / BUILD reports.  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+Overridden by THIS order:
+  - The six [SIM_*] navigation-limited waivers (S-FAIR, S-SKILL, S-ROUTE,
+    S-ECONOMY bands) -> DELETED; bands enforced.
+  - Any number or band of orders 1-6 that a round's evidence moves, each with
+    its CHANGELOG line and, for a band, the P5 evidence.
+  - TacticalPolicy / NaivePolicy parameters -> calibrated to the owner's
+    reported play (P7).
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-1..6.txt,
+          balance-overhaul-order-9.txt (optional extra input only),
+          new-game-balancr-order-9.txt (simulator, waiver origin)
+  Docs:   docs/game-balance-authority.txt SECTION 7-8,
+          docs/game-balance-knowledge.txt
+  Input:  .claude/balance-feedback/balance-questionnaire.md

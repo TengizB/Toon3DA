@@ -1,0 +1,396 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: Builds That Differ — perks, keystones, real rarity
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+
+Order 5 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-4 (especially order 3's damage classes and scenarios and
+order 4's guard/armour/hazard rules, which perks modify). Does NOT depend on the
+optional dev tools (order 9).
+
+
+OVERVIEW
+--------
+The owner: "every run ends up the same — the intention is to build different
+characters"; "weapon abilities do not provide meaningful bonuses"; "rare weapons
+can be found but there is no reason to"; "levelling up, choosing weapons,
+finding better weapons must matter". The current level-up system is built to
+make every choice EQUAL: ten cards, all priced at the same 12 power points
+(R-CARD), mostly generic stat sticks. Equal-value generic choices produce the
+same build every run. Weapon abilities are 33 small, priced-to-be-harmless
+effects.
+
+This order replaces budget-equal cards with TAGGED PERKS that pay off inside a
+style (close quarters, marksman, pyro, demolition, energy, bulwark, blade,
+scavenger, vitality), adds KEYSTONES at character levels 5 / 10 / 15 / 20 —
+rule-changers with a real cost that commit a run to a shape — and makes rarity
+exciting by guaranteeing more and bigger abilities per tier with a legendary
+signature that changes a rule. Offers are biased toward what the player carries
+so synergy appears, and always include a pivot so a run can change course.
+
+
+SCOPE
+-----
+IN
+  - BuildTag; Perk catalog (~26 perks, up to 3 ranks) replacing UpgradeCard;
+    Keystone catalog (9) offered at levels 5/10/15/20.
+  - Offer rules (synergy + pivot), level-up and keystone screens with tag chips.
+  - Weapon ability catalogue pruned to felt effects; per-tier ability count
+    guarantees and raised budgets; ability tags.
+  - New schema rules R-PERK / R-KEYSTONE / R-CARRY; sim build-bias variants and
+    S-BUILD.
+
+OUT (deliberately not doing now)
+  - Meta-progression between runs (unlocks, persistent perks). A run's build
+    dies with the run.
+  - New weapons, new enemies, new mechanics beyond what perks modify.
+  - Respec / reroll buttons (a pivot slot in every offer does that job).
+  - Attribute system removal: STR/AGI/TGH/MRK stay; some perks raise them.
+  - Shop sale of perks beyond the existing "player ability" offer (order 6
+    prices it).
+
+
+GAMEPLAY LOOP
+-------------
+  1. Level up. Three perks appear, each with its tag chip. The player carries a
+     Shotgun and an Incinerator: one CLOSE QUARTERS perk and one PYRO perk carry
+     an amber "SYNERGY" marker; the third is from a tag the player has none of
+     (the pivot).
+  2. Level 5: the KEYSTONE screen (distinct frame) offers three: e.g.
+     SCATTERGUN DOCTRINE, PYROMANIAC, IRON BULWARK. Each states its gain and its
+     cost in one line each. Picking one shapes the rest of the run.
+  3. A RARE Incinerator drops: two abilities, one of them PYRO-tagged, which
+     stacks with the keystone. Swapping to it is exciting, not a spreadsheet.
+  4. Next run, a Railgun and a Plasma Rifle early -> MARKSMAN/ENERGY perks and
+     DEADEYE: a visibly different run.
+
+
+RULES
+-----
+  B1  BuildTag: CLOSE_QUARTERS, MARKSMAN, PYRO, DEMOLITION, ENERGY, BULWARK,
+      BLADE, SCAVENGER, VITALITY. DamageClass -> tag: SPREAD -> CLOSE_QUARTERS;
+      BALLISTIC, RAIL -> MARKSMAN; FIRE -> PYRO; EXPLOSIVE -> DEMOLITION;
+      ENERGY -> ENERGY; BLADE, BLUNT -> BLADE.
+  B2  PERK CATALOG (register() rows; each rank's magnitude in BalanceConfig; the
+      effect is typed data interpreted by per-constant modifier behaviour, never
+      a switch). Defaults (per rank, max 3 ranks unless noted):
+        CLOSE_QUARTERS  Buckshot Discipline  SPREAD damage +15%
+                        Point Man            point-blank knockback +1 tile (r2),
+                                             stagger also at 3 tiles (r3)
+                        Breacher             SPREAD kills refund 1 shell, 33%
+        MARKSMAN        Steady Aim           BALLISTIC/RAIL falloff -30%
+                        First Blood          +25% damage to full-HP enemies
+                        Lane Discipline      +1 range, +10% damage beyond 4 tiles
+        PYRO            Accelerant           +1 max burn stack (FIRE)
+                        Wildfire             burning enemies that die ignite
+                                             their tile (1 rank)
+                        Fireproof            immune to fire tiles (1 rank)
+        DEMOLITION      Shaped Charges       EXPLOSIVE damage +20%
+                        Blast Shield         own explosion damage -50%
+                        Sapper               barrel damage +50%; barrels shown on
+                                             the mini-map (r1)
+        ENERGY          Capacitor            ENERGY damage +15%
+                        Arc Jump             Arc Cannon +1 chain jump
+                        Overcharge           Plasma pierce hits +15% per enemy
+                                             already pierced
+        BULWARK         Shield Wall          GUARD front arc +/-90 (r1), heavy
+                                             guard x0.10 (r2)
+                        Riposte Drill        riposte VULNERABLE +1 turn, +25%
+                        Plate Carrier        max armour +20%
+        BLADE           Butcher              melee damage +25%
+                        Bloodletting         melee kills heal 3% max HP
+        SCAVENGER       Pack Rat             ammo pickups +15%
+                        Haggler              shop prices -10%
+                        Salvager             carriers drop +1 item, 25%
+        VITALITY        Hardy                max HP +10%
+                        Field Medic          heals +15%
+                        Second Wind          once per floor, a lethal hit leaves
+                                             1 HP (1 rank)
+      A perk rank may also grant +1 to one attribute (data), keeping STR/AGI/TGH/
+      MRK meaningful.
+  B3  OFFER RULES: 3 perks per level-up. At least 1 whose tag matches a carried
+      weapon's tag (SYNERGY), at least 1 from a tag the player has no ranks in
+      (PIVOT); the rest weighted by the existing draw bias toward picked tags.
+      A maxed perk is never offered.
+  B4  KEYSTONES at character levels 5, 10, 15, 20 (replacing that level's perk
+      offer): 3 offered, at least one matching the player's highest-rank tag and
+      one not. Each is a rule-changer with a stated cost:
+        SCATTERGUN DOCTRINE  SPREAD reload costs no turn; point-blank kills
+                             refund a shell. Cost: non-SPREAD damage -15%.
+        DEADEYE              first hit on each enemy is a guaranteed critical.
+                             Cost: clip sizes -30%.
+        PYROMANIAC           immune to fire; burning enemies take +50% from all
+                             sources. Cost: max armour -25%.
+        DEMOLITIONIST        immune to your own explosions; barrels you detonate
+                             deal x2. Cost: max HP -20%.
+        STORM CONDUIT        ENERGY hits arc to one adjacent enemy at 50%. Cost:
+                             BALLISTIC damage -25%.
+        IRON BULWARK         a guarded hit reflects 50% of the blocked damage to
+                             the attacker. Cost: all weapon damage -15%.
+        BERSERKER            melee kills restore 8% max HP; below 30% HP melee
+                             +50%. Cost: heals -30%.
+        QUARTERMASTER        +1 weapon loadout slot; shop prices -25%. Cost: max
+                             HP -10%.
+        IRONHIDE             max HP +40%. Cost: heals -20% and STIMs no longer
+                             cleanse.
+      A keystone can be taken once; the four picks must differ.
+  B5  RARITY: ability counts per tier: COMMON 0, UNCOMMON 1, RARE 2, EPIC 3 (one
+      from the MAJOR list), LEGENDARY 3 + its signature. Ability budgets
+      (R-ABILITY): UNCOMMON 12, RARE 25, EPIC 40, LEGENDARY 60 PP (+/-20%). Order
+      2's rarity damage multiplier stays.
+  B6  ABILITY PRUNE: every ability whose priced PP at the expected weapon level
+      for its drop depth is below ABILITY_MIN_FELT_PP (8) is cut or merged into a
+      stronger one; the survivors are re-tuned to their tier budgets and carry a
+      BuildTag (e.g. Incendiary -> PYRO, Stagger Rounds -> CLOSE_QUARTERS,
+      Scavenger Rounds -> SCAVENGER) so they count for B3 synergy.
+  B7  R-PERK (replaces R-CARD and R-CARD-BREAKPOINT):
+        PK1 FELT     every perk rank improves its niche metric by >= 10% (niche =
+                     its tag's order-3 reference scenario TTK, TTD for BULWARK/
+                     VITALITY, supply value for SCAVENGER) — and crosses >= 1
+                     integer TTK or TTD breakpoint there by rank 3.
+        PK2 FOCUSED  no perk (outside VITALITY) improves ALL eight reference
+                     scenarios by > 10%; VITALITY perks are capped at 10% per
+                     rank.
+      R-KEYSTONE: every keystone improves its niche by >= 30% and worsens at
+      least one other scenario or metric by >= 10%.
+      R-CARRY: for every build tag, the expected player at depth 15 with that
+      tag's perks at the expected rank count plus its keystone has TTK/TTD vs the
+      depth-15 reference roster within +/-20% of every other tag's build (no trap
+      builds, no dominant build).
+  B8  COMMUNICATION: level-up screen shows each perk's tag chip, a SYNERGY
+      marker (amber) when it matches a carried weapon, rank pips (1-3), and a
+      one-line effect. Keystone screen: distinct gold frame, gain line + cost
+      line (cost in red). Inventory gains a BUILD page listing picked perks by
+      tag and the keystones.
+
+
+PLAYER EXPERIENCE
+-----------------
+Every level-up asks "lean in or pivot?", and every fifth level asks "what kind
+of marine is this run?". Weapons found stop being interchangeable: a rare gun
+whose ability matches your keystone is a run-maker. Two runs with different
+early finds end as different characters.
+
+
+TECHNICAL NOTES
+---------------
+  progression/BuildTag           enum.
+  progression/Perk               enum rows (id, tag, max rank, per-rank
+                                 modifiers as data, optional attribute grant,
+                                 string ids for name/effect).
+  progression/PerkModifier       enum of modifier kinds, each with its own apply
+                                 body (per-constant behaviour, EnemyType idiom).
+  progression/Keystone           enum rows (gain modifiers + cost modifiers).
+  progression/PerkDeck           replaces UpgradeCardDeck (seeded, offer rules
+                                 B3/B4); UpgradeCard / UpgradeCardPool retired.
+  progression/PlayerBuild        the run's picked perks + keystones; queried by
+                                 damage, guard, heal, shop, supply code through
+                                 small typed accessors (no string lookups in
+                                 hot paths).
+  entity/WeaponAbility, WeaponRoller   prune/merge (B6), counts per tier, tags,
+                                 budgets.
+  util/BalanceConfig             SECTION 24 — BUILDS: every perk/keystone
+                                 magnitude, ability counts and budgets,
+                                 ABILITY_MIN_FELT_PP, R-CARRY tolerance.
+                                 Removed: LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_
+                                 TOLERANCE, the ten card magnitudes.
+  util/GameMath                  perk niche valuation (reuses order-3 scenario
+                                 math), keystone trade valuation, build carry
+                                 evaluation.
+  render                         LevelUpOverlayRenderer (tag chips, synergy,
+                                 rank pips, keystone frame), inventory BUILD page.
+                                 Perk names/effects are UI text resolved through
+                                 the existing localisation mechanism used by the
+                                 level-up overlay (not story lines).
+  sim                            TacticalPolicy gains a build-bias parameter
+                                 (CLOSE / MARKSMAN / PYRO-DEMOLITION / BULWARK /
+                                 NONE); SimReport prints per-bias outcomes and
+                                 a BUILD REPORT: perk pick rates per offer,
+                                 keystone pick rates, dominant tag at death.
+
+
+VISUAL DESIGN
+-------------
+Tag chips: small rounded plates in the tag's class colour (order-3 palette;
+BULWARK blue, VITALITY green, SCAVENGER brass). SYNERGY: amber corner ribbon.
+Keystone frame: gold double border, cost line in (0.95, 0.30, 0.25). All
+procedural (ShapeRenderer + BitmapFont). Touch: perk plates keep the existing
+level-up card size (thumb-sized).
+
+
+BALANCE NOTES
+-------------
+Balance-bearing throughout (BalanceConfig SECTION 24, GameMath valuation,
+schema, sim). The magnitudes above are defaults to satisfy R-PERK / R-KEYSTONE /
+R-CARRY; math-expert tunes them together. Total player power is no longer
+invariant across builds by construction; R-CARRY replaces that invariant with a
+bounded spread, which is what makes choices real.
+
+
+INTERACTIONS
+------------
+  - Order 1: the expected player's card-power term becomes "expected perk power
+    at expected rank count" (ExpectedPlayer updated), R-LADDER re-run.
+  - Order 3: scenarios are the niche metrics; DamageClass -> tag.
+  - Order 4: BULWARK and PYRO/DEMOLITION perks modify guard, riposte, fire and
+    barrels.
+  - Order 2: SCAVENGER modifies supply pickups (never the plan itself).
+  - Shop: Haggler / QUARTERMASTER modify prices (order 6 re-derives the economy
+    with them in the expected player).
+  - Optional order 9 (if ever built) may log perk picks and auto-pick perks for
+    its ON-CURVE kit through PerkDeck; nothing here waits for it.
+
+
+EDGE CASES
+----------
+  - Keystone level reached mid-fight: the level-up overlay behaves as today (it
+    is already a hard-pause overlay); the keystone screen replaces the perk
+    offer.
+  - All perks of the synergy tags maxed: the synergy slot falls back to any
+    unmaxed perk; the pivot rule still holds.
+  - QUARTERMASTER extra slot then death: nothing persists.
+  - IRONHIDE + VITALITY Field Medic: multiplicative (documented order: perk
+    bonuses add, keystone costs multiply after).
+  - Second Wind with a status tick as the lethal damage: triggers (once per
+    floor).
+  - Weapon with a pruned ability in an existing save: runs are not saved
+    mid-run; no migration.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  UpgradeCard / UpgradeCardPool no longer exist; every level-up offers 3
+      perks meeting B3 (verify with a carried Shotgun + Incinerator: a SYNERGY
+      CLOSE_QUARTERS or PYRO perk and a PIVOT perk are present).
+  A2  Levels 5, 10, 15, 20 open the keystone screen with 3 keystones meeting B4;
+      a picked keystone's gain and cost are both observable (e.g. SCATTERGUN
+      DOCTRINE: shotgun reload takes no turn; the Assault Rifle hits for 15%
+      less).
+  A3  BalanceAuditTest R-PERK (PK1, PK2), R-KEYSTONE and R-CARRY green;
+      BalanceReport prints a PERKS table (niche gain per rank) and a BUILDS table
+      (depth-15 TTK/TTD per tag build).
+  A4  Weapon rolls meet B5 counts on 30 seeds x 5 tiers x 3 depths (R-ABILITY
+      updated); no surviving ability prices below ABILITY_MIN_FELT_PP at its
+      expected level.
+  A5  The inventory BUILD page lists picked perks by tag and keystones.
+  A6  Sim: S-BUILD — the four build-biased TACTICAL variants reach median depths
+      within 25% of each other (depth-derived: enforced when the navigation
+      waiver expires, reported until then) and plain TACTICAL's end-of-run
+      dominant tag is no single tag on more than 40% of seeds (enforced).
+  A7  Docs record R-CARD / R-CARD-BREAKPOINT / the total-PP invariant replaced;
+      docs/xp-level-progression.txt describes perks and keystones.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect + math-expert)  BuildTag, Perk,
+     PerkModifier, Keystone, SECTION 24, GameMath valuations, BalanceReport
+     tables.
+  2. LOGIC  (java-architect)  PerkDeck, PlayerBuild, modifier hooks in damage /
+     guard / heal / shop / supply / reload paths; ability prune + tier counts
+     (weapon-creator for any weapon-behaviour ability such as Arc Jump); sim
+     build-bias.
+  3. RENDER  (libgdx-specialist)  level-up overlay, keystone frame, BUILD page.
+  4. CONTENT  perk/keystone names and one-line effects in the level-up UI text
+     table.
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-PERK, R-KEYSTONE,
+     R-CARRY and the updated R-ABILITY; replace the R-CARD / R-CARD-BREAKPOINT
+     assertions with them; extend BalanceSimTest with S-BUILD. No new test
+     files. Both gates.
+  6. DOCS  docs/xp-level-progression.txt, docs/weapon-creation-guide.txt
+     (ability tags/tiers), docs/game-balance-authority.txt + knowledge
+     (SECTIONS 5, 6 rewritten; overrides; living tables).
+
+RISKS AND UNKNOWNS
+  - Many modifier hooks: keep each a single typed query on PlayerBuild at the
+    owning entry point (one multiplication at the owner of each seam).
+  - R-CARRY across nine tags is a real fitting job; start with defaults, let
+    math-expert move magnitudes, not the rule.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  BuildTag, Perk, PerkModifier, Keystone, SECTION 24 and the GameMath
+       valuations exist; R-PERK / R-KEYSTONE / R-CARRY asserted on the data and
+       green; UpgradeCard still live (switched in CP2); both gates green
+  CP2  PerkDeck + PlayerBuild drive level-ups with B3 offers; UpgradeCard /
+       UpgradeCardPool retired; R-CARD / R-CARD-BREAKPOINT replaced; ExpectedPlayer
+       updated and R-LADDER still green; A1 holds; both gates green
+  CP3  keystones at 5/10/15/20 live with gains and costs; A2 holds; both gates
+       green
+  CP4  ability prune/merge, tier counts, budgets and tags live; R-ABILITY
+       updated; A4 holds; both gates green
+  CP5  level-up overlay tag chips / synergy / rank pips, keystone frame and the
+       inventory BUILD page on desktop; A5 holds
+  CP6  sim build-bias variants + S-BUILD + BUILD REPORT; all docs; A3, A6, A7 hold;
+       both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  Tag-based perks + four keystones is the right depth of build system for a
+       25-floor run (Slay the Spire's "commit to an archetype" feel, which the
+       owner cites).
+  AS2  Keystones replace the perk offer at their level (no double reward).
+  AS3  The perk/keystone list above is a starting catalog; adding one later is a
+       register() row plus magnitudes that pass R-PERK/R-KEYSTONE.
+  AS4  Offering a guaranteed PIVOT each level-up is better than a reroll button.
+  AS5  Abilities below ~8 PP are not felt and should go; exact cut list is
+       decided by the valuation, recorded in docs.
+  AS6  Attributes stay; perks may grant them.
+  AS7  J2 (which card is always best) was left blank; R-CARRY and S-BUILD stand
+       in for it until the order-7 feel pass collects the owner's pick notes.
+
+
+DECISIONS
+---------
+  D1  Runs must end as different characters (owner, J3) -> tagged perks,
+      keystones, synergy/pivot offers.  (2026-09-30)
+  D2  Rarity and abilities must be meaningful (owner, H4) -> guaranteed ability
+      counts, raised budgets, pruned catalog, legendary signature.  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+Overridden by THIS order:
+  - R-CARD (every card priced at LEVEL_UP_BUDGET_PP 12 +/-15%) and the TOTAL-PP
+    INVARIANT ("total player power at level L = L*12 PP for every build") ->
+    REPLACED by R-PERK (felt, focused) + R-CARRY (bounded spread between builds).
+  - R-CARD-BREAKPOINT -> folded into PK1 (breakpoint by rank 3).
+  - The ten UpgradeCard magnitudes and LEVEL_UP_DRAW_BIAS usage -> Perk catalog
+    + B3 offer rules (draw bias kept as a weight).
+  - R-ABILITY tier budgets (UNCOMMON 6 / RARE 12 / EPIC 20 / LEGENDARY 30) and
+    WeaponTier ability slot counts -> B5 counts and budgets; ability magnitudes
+    re-tuned; pruned abilities removed from the catalogue.
+  - balance_order_5 "build diversity within budget" design -> this order.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-3/4.txt,
+          balance_order_5_build_diversity_synergy.txt,
+          new-game-balancr-order-4.txt, levelup-stim-boon-choice-progression.txt,
+          weapon-levels-tiers-abilities.txt
+  Docs:   docs/xp-level-progression.txt, docs/weapon-creation-guide.txt,
+          docs/game-balance-authority.txt
