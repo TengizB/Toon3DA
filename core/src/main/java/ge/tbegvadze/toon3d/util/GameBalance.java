@@ -120,8 +120,8 @@ public final class GameBalance {
     // Health formula:  baseHP * ENEMY_HEALTH_GROWTH ^ (depth − 1)   (power ladder, 1.139)
     //   depth 1: ×1.00   depth 5: ×1.68   depth 10: ×3.23   depth 25: ×22.7
     //
-    // Damage formula:  baseDmg * ENEMY_DAMAGE_GROWTH ^ (depth − 1)   (power ladder, 1.103)
-    //   depth 1: ×1.00   depth 5: ×1.48   depth 10: ×2.41   depth 25: ×10.5
+    // Damage formula:  baseDmg * ENEMY_DAMAGE_GROWTH ^ (depth − 1)   (power ladder, 1.097)
+    //   depth 1: ×1.00   depth 5: ×1.45   depth 10: ×2.30   depth 25: ×9.2
     // =========================================================================
 
     // Depth scaling factors are balance values — see BalanceConfig.

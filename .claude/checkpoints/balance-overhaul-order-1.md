@@ -67,7 +67,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A2, A6, A7 hold, build green.
 - [x] **CP7a** — all docs updated; living tables (authority SECTION 6 + SECTION 8) regenerated.
       DONE WHEN: authority/knowledge/weapon-creation/xp docs describe the ladder; both gates green.
-- [ ] **CP7b** — reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP7b** — reviewer PASS; STATUS IMPLEMENTED.
       DONE WHEN: A1, A3, A4, A8, A9 hold; reviewer PASS; idea STATUS IMPLEMENTED + date.
 
 ## NOTES CARRIED FORWARD
@@ -144,7 +144,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **DEAD END:** a probe WITHOUT the model's card lifts drifts ~2.2x by depth 25 (the model's on-curve DPT
   includes a 6%/level offence lift); and mid-probe level-ups re-apply the damage multipliers through the card
   path — both SimWorld multiplier sites must carry the probe lift.
-- **PENDING MERGES (worktrees, verified by their spokes, not yet in the tree):** CP5 shop rung
+- **RESOLVED (merged in 8c9882e / cce6900) — was: PENDING MERGES:** CP5 shop rung
   (`.claude/worktrees/agent-afb16947dbcb52412`), CP6 HUD (`agent-a91518d8f886d62d5`) and CP6 narrative
   (`agent-aec1c5d5d311d40a6`). Their diffs are against 36bc1d4 — apply each with `git diff 36bc1d4` there.
 - **CP5 handover:** `ShopContext.equippedWeapon` (+3-arg ctor); `ShopOfferSource.rollLadderRungOffer(ctx)`;
@@ -168,3 +168,9 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   em-dashes print as '?'); SECTION 8 = the latest balance-sim summary incl. the LADDER REPORT + an honest
   reading. Knowledge doc SECTIONS 3/4/6/7/10/12/18/20 rewritten for the ladder; weapon-creation-guide gains
   "THE LADDER DAMAGE PATH"; xp-level-progression gains VITALITY GROWTH. Reviewer owed next (CP7b).
+- **CP7b:** reviewer PASS WITH FIXES, no blocking findings. Applied: Fist excluded from random shop
+  level-ups; R15 rung bought only while behind (level < depth); stale R-DEPTH/1.103/level-10 comments fixed;
+  EmergencySupplyListener javadoc restored; SimWorld clears the pending attacker role each action. Not
+  applied (optional nits): SimWorld fully-qualified names, BossBalance depth-1 conversion into GameMath,
+  ladderLevelUpPrice living in BalanceSchema, the hard-coded THREAT_ARRIVAL_REGION_ACCENT table, the Fist
+  showing "LV 1". Owner-side: on-screen look at A2/A3/A4/A6.

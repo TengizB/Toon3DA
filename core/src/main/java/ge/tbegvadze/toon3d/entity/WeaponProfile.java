@@ -16,7 +16,7 @@ public interface WeaponProfile {
     // ── Identity / loot ────────────────────────────────────────────────────
     String     getDisplayName();
     WeaponTier getTier();
-    int        getWeaponLevel();   // 1..WeaponConstants.MAX_WEAPON_LEVEL (10)
+    int        getWeaponLevel();   // 1..WeaponConstants.MAX_WEAPON_LEVEL (27)
     boolean    isMelee();
     /** True for a weapon outside the level-gap power ladder (the Fist) — it never gets a shop LEVEL UP rung. */
     boolean    isLevelGapExempt();

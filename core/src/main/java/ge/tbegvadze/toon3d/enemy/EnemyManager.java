@@ -171,7 +171,6 @@ public final class EnemyManager implements EnemyHitTarget {
     private final int[] sowCandidateColumns = new int[SOW_CANDIDATE_CAPACITY];
     private final int[] sowCandidateRows    = new int[SOW_CANDIDATE_CAPACITY];
 
-    /** Notified when the never-softlock emergency ammo lifeline fires (order 3, part D) — for telemetry. */
     /**
      * Notified on every player hit that lands on an enemy, with the hit's final pre-mitigation damage — the
      * seam the balance simulator's LADDER REPORT (balance-overhaul order 1) reads played hits-to-kill from.
@@ -188,6 +187,7 @@ public final class EnemyManager implements EnemyHitTarget {
         this.playerHitListener = listener;
     }
 
+    /** Notified when the never-softlock emergency ammo lifeline fires (order 3, part D) — for telemetry. */
     public interface EmergencySupplyListener {
         void onEmergencySupplyGranted();
     }

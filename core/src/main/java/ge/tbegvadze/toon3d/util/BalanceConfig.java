@@ -1340,7 +1340,7 @@ public final class BalanceConfig {
     //    A CALM (0.28x) floor therefore spent 96 of 126 TP on ONE bruiser and discarded the rest —
     //    measured EXACTLY one enemy per floor across 100 seeds, on a full-size ~1,100-tile dungeon.
     //    Both fixes below are Threat-Point-NEUTRAL: they change what the budget buys, never its size,
-    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and R-DEPTH read unchanged.
+    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) reads unchanged.
     /**
      * Hard CEILING on the fraction of the floor budget the single anchor may consume. The anchor
      * reserve band ([_FRACTION_MIN, _FRACTION_MAX]) is a preference for WHICH anchor to pick; this is

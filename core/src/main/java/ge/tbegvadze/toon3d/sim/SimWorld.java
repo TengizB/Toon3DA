@@ -642,6 +642,8 @@ public final class SimWorld implements LevelTransitionListener {
      */
     private void stepOneAction(TouchAction action) {
         syncWeaponThreatLevels();
+        // A missed enemy attack must not credit a later hazard/DoT tick to its role (LADDER REPORT noise).
+        pendingAttackerRole = null;
         actionSource.present(action);
         for (int step = 0; step < BalanceConfig.SIM_MAX_STEPS_PER_ACTION; step++) {
             doorManager.update(BalanceConfig.SIM_TIME_STEP_SECONDS);

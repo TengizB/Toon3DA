@@ -1763,7 +1763,7 @@ public final class BalanceSchema {
     // The audited depth range matches every other order-3/4 depth rule: 1..15.
     // =====================================================================================
 
-    /** The audited depth range shared by the order-7 route rules (matches R-DEPTH / R-SCARCITY-DEPTH). */
+    /** The audited depth range shared by the order-7 route rules (the order-7 horizon; the ladder-era depth rules run to RUN_FINAL_DEPTH). */
     private static final int ROUTE_AUDIT_MAX_DEPTH = 15;
 
     /**

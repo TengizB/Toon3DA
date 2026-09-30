@@ -80,7 +80,8 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
         int ceiling = levelCeiling(context);
         List<WeaponProfile> levelable = new ArrayList<>();
         for (WeaponProfile weapon : context.ownedWeapons) {
-            if (weapon != null && weapon.getWeaponLevel() < ceiling) {
+            // The level-gap-exempt Fist always fights at the floor's level, so levelling it buys nothing.
+            if (weapon != null && !weapon.isLevelGapExempt() && weapon.getWeaponLevel() < ceiling) {
                 levelable.add(weapon);
             }
         }

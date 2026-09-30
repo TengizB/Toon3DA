@@ -514,7 +514,7 @@ public final class BalanceReport {
         System.out.println("  DIAL: monotonic non-decreasing (A<=B<=C<=D); C/D out-dial A by >= "
                 + BalanceConfig.REGION_TP_LETHAL_MARGIN + " (measurably lethal).");
         System.out.println("  FAIRNESS: the dial scales the BUDGET (body count), NOT per-enemy threat — "
-                + "per-fight depth-coupling holds in every region lane (R-DEPTH).");
+                + "the per-fight power ladder (R-LADDER L1) holds in every region lane.");
     }
 
     /** Route region letter A..D for a 0-based region index (clamped past D — endless "The Breach"). */

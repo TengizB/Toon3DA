@@ -926,7 +926,7 @@ B        RESEARCH WING        1.00        6       1523 OK
 C        REACTOR DEPTHS       1.15       11       5333 OK    
 D        THE BREACH           1.25       16      17654 OK    
   DIAL: monotonic non-decreasing (A<=B<=C<=D); C/D out-dial A by >= 0.1 (measurably lethal).
-  FAIRNESS: the dial scales the BUDGET (body count), NOT per-enemy threat — per-fight depth-coupling holds in every region lane (R-DEPTH).
+  FAIRNESS: the dial scales the BUDGET (body count), NOT per-enemy threat — the per-fight power ladder (R-LADDER L1) holds in every region lane.
 
 LADDER (balance-overhaul order 1, R-LADDER) — continuous hits to KILL (TTK) / to DIE (TTD)
   growth: weapon 1.08/level, enemy HP 1.139 + dmg 1.097 /floor, vitality 1.09/char level; gap penalty 0.82^levels (floor 0.25, steepness 1.0)
