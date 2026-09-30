@@ -560,7 +560,9 @@ final class ItemWindow implements Disposable {
     private void renderStatRowsForWeapon() {
         float rowY = STAT_Y;
         valueBuilder.setLength(0);
-        valueBuilder.append(currentWeapon.getEffectiveDamage());
+        // EFFECTIVE per-hit damage on this floor (ladder applied) beside the weapon's level (R14 c).
+        valueBuilder.append(currentWeapon.getEffectiveDamage())
+                    .append("   ").append(WeaponLevelTag.label(currentWeapon.getWeaponLevel()));
         rowY = drawStatRow(rowY, "Damage",    valueBuilder);
         rowY = drawStatRow(rowY, "Range",     weaponRange(currentWeapon.getItemType()));
         rowY = drawStatRow(rowY, "Ammo",      weaponAmmoType(currentWeapon.getItemType()));

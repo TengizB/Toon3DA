@@ -195,6 +195,9 @@ public final class ItemConstants {
     // Info zone text layout
     public static final float INV_WEAPON_INFO_TOP_MARGIN        = 12f;
     public static final float INV_WEAPON_INFO_LINE_STEP         = 16f;
+    // "LV n" tag after the weapon name: gap after the name text, and the arrow glyph baseline lift (R14 d)
+    public static final float INV_WEAPON_LEVEL_TAG_GAP          = 10f;
+    public static final float INV_WEAPON_LEVEL_GLYPH_LIFT       = 1f;
     // Dashed line dash/gap lengths
     public static final float INV_WEAPON_DIVIDER_DASH_LENGTH    = 12f;
     public static final float INV_WEAPON_DIVIDER_GAP_LENGTH     = 6f;

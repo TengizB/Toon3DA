@@ -289,6 +289,15 @@ public abstract class Weapon implements WeaponProfile {
                 getFloorThreatLevel(), isLevelGapExempt());
     }
 
+    /**
+     * Levels this weapon stands above (+) or below (-) the given floor threat level; 0 for the
+     * level-gap-exempt Fist, which always reads on-level. Threat below 1 is clamped to 1.
+     */
+    public int getLevelStanding(int threatLevel) {
+        if (isLevelGapExempt()) return 0;
+        return weaponLevel - Math.max(1, threatLevel);
+    }
+
     /** The level-gap factor alone (1.0 for the exempt Fist), for the HUD / compare card. */
     public float getLevelGapMultiplier() {
         if (isLevelGapExempt()) return 1f;

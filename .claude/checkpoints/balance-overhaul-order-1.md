@@ -63,7 +63,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green, report printed.
 - [x] **CP5** — shop guaranteed level-up rung, cap and price (R13).
       DONE WHEN: A5 holds, build green.
-- [ ] **CP6** — HUD LV tag, compare card, inventory rows, arrival "THREAT LV d", UNDERGEARED topic.
+- [x] **CP6** — HUD LV tag, compare card, inventory rows, arrival "THREAT LV d", UNDERGEARED topic.
       DONE WHEN: A2, A6, A7 hold, build green.
 - [ ] **CP7** — all docs updated; living tables regenerated; reviewer PASS.
       DONE WHEN: A1, A3, A4, A8, A9 hold; both gates green; STATUS IMPLEMENTED.
@@ -149,3 +149,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `WeaponProfile.isLevelGapExempt()` is now PUBLIC on the interface (Weapon/Fist overrides public) — the CP6
   narrative spoke's firing site used `getLevelGapMultiplier() < 1f` because it was protected; switch it to
   `!isLevelGapExempt()` when merging CP6. The random level-up roll may still target the Fist (pre-existing).
+- **CP6 handover:** HUD: the HUD has NO right-panel weapon name — the LV tag sits top-right in each LEFT-panel
+  slot of the slot strip (`hud/HudRenderer`, `render/WeaponLevelTag` label cache + standing/colour/chevron,
+  `HudState.threatLevel`, `Weapon.getLevelStanding(threat)`); inventory rows via `WeaponSlotsPanel.setThreatLevel`;
+  inspect card via `WeaponInspectOverlayRenderer.setCurrentThreatLevel` (ground gun priced at the CURRENT floor);
+  ItemWindow shows effective dmg + LV uncoloured (no depth input). Arrival: `World.postThreatArrivalText()` at the
+  top of `detectRegionEntry()` -> `EventTextSystem.spawnTimed(..., THREAT_ARRIVAL_SECONDS 2s)` in the region
+  accent (`HudConstants.THREAT_ARRIVAL_REGION_ACCENT`). ORA: `TeachingTopic.UNDERGEARED(TACTICAL, 3)`, ids
+  `story.bark.control.undergeared` / `story.bark.control.retaught.undergeared`, fired in
+  `World.requestFloorArrivalBarks()` when `!isLevelGapExempt() && level <= depth - 2`; evidence
+  `TeachingSystem.onFloorArrivedUndergeared()` counts only after the first telling is delivered.
+- **VERIFY (honest):** `./gradlew lwjgl3:run` under Xvfb runs 150 s with no exceptions (title screen only). The
+  LV tag / chevron / THREAT LV text / compare card were NOT seen on a screen — no screenshot tooling here. A2's
+  desktop half and A6 need an on-device or desktop look by the owner.

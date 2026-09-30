@@ -176,6 +176,14 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private float    cachedTierBlue     = AMBER_COLOR.b;
     private WeaponTier cachedTier       = WeaponTier.COMMON;
 
+    // R14 c: both guns' level tags + EFFECTIVE damage on THIS floor (threat level = current depth).
+    private int    currentThreatLevel   = 1;
+    private String cachedFoundHead      = "FOUND";
+    private String cachedActiveHead     = "ACTIVE";
+    private int    cachedFoundStanding  = WeaponLevelTag.STANDING_NORMAL;
+    private int    cachedActiveStanding = WeaponLevelTag.STANDING_NORMAL;
+    private final Color levelHeadColor  = new Color();
+
     private int cachedGroundDamage  = 0;
     private int cachedGroundClip    = 0;
     private int cachedGroundReload  = 0;
@@ -222,6 +230,9 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
 
     // Kept for backward compatibility — World wires these before fully migrating
     public void setOnTake(Runnable callback)            { this.onEquipFreeSlot = callback; }
+    /** The floor's threat level (= current depth); the found weapon's damage is measured against it. */
+    public void setCurrentThreatLevel(int threatLevel) { this.currentThreatLevel = Math.max(1, threatLevel); }
+
     public void setOnEvictSlot(IntConsumer callback)    { this.onSwapSlot = callback; }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -259,6 +270,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         cachedLevelTier  = "LV " + level + "  •  " + tier.displayName.toUpperCase();
 
         buildStatCache(groundRoll, arsenalWeapon, activeWeapon);
+        buildLevelHeads(level, arsenalWeapon, activeWeapon);
         buildAbilityStrip(groundRoll);
 
         hasConvert         = convertAmount > 0;
@@ -555,9 +567,11 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private void drawStatBlock() {
         // Column headers, vertically centred in their band.
         float colHeadCenter = STATS_TOP - COL_HEAD_BAND_H / 2f;
-        drawCentered("FOUND",  FOUND_COL_X,  colHeadCenter, FS_COL_HEAD, WHITE_COLOR);
+        WeaponLevelTag.colorFor(cachedFoundStanding, WHITE_COLOR, levelHeadColor);
+        drawCentered(cachedFoundHead, FOUND_COL_X, colHeadCenter, FS_COL_HEAD, levelHeadColor);
         drawCentered("STAT",   CENTER_X,     colHeadCenter, FS_COL_HEAD, DIM_COLOR);
-        drawCentered("ACTIVE", ACTIVE_COL_X, colHeadCenter, FS_COL_HEAD, WHITE_COLOR);
+        WeaponLevelTag.colorFor(cachedActiveStanding, WHITE_COLOR, levelHeadColor);
+        drawCentered(cachedActiveHead, ACTIVE_COL_X, colHeadCenter, FS_COL_HEAD, levelHeadColor);
 
         // Four stat rows, each vertically centred in its own band (bands never overlap).
         float rowsTop    = STATS_TOP - COL_HEAD_BAND_H;
@@ -579,10 +593,15 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         textBuilder.append(groundValue);
         drawCentered(textBuilder, FOUND_COL_X, bandCenter, FS_STAT, deltaColor(groundValue, activeValue, lowerIsBetter));
 
-        // ACTIVE value, always neutral white.
+        // ACTIVE value: white, except the DAMAGE row, where the stronger gun on THIS floor reads green
+        // (and the FOUND side already reads green/red), so the verdict shows on both columns.
         textBuilder.setLength(0);
         textBuilder.append(activeValue);
-        drawCentered(textBuilder, ACTIVE_COL_X, bandCenter, FS_STAT, WHITE_COLOR);
+        Color activeColor = WHITE_COLOR;
+        if (rowIndex == 0 && activeValue > 0 && groundValue > 0 && groundValue != activeValue) {
+            activeColor = activeValue > groundValue ? GREEN_COLOR : RED_COLOR;
+        }
+        drawCentered(textBuilder, ACTIVE_COL_X, bandCenter, FS_STAT, activeColor);
 
         // Numeric delta tag beside the FOUND value (font-safe, no arrow glyphs).
         if (activeValue > 0 && groundValue > 0 && groundValue != activeValue) {
@@ -726,17 +745,31 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
 
     // ── Helpers (called from show(), no LibGDX render state) ──────────────────
 
+    /** Column headings carrying each gun's "LV n" and its standing against this floor's threat level. */
+    private void buildLevelHeads(int foundLevel, Weapon arsenalWeapon, Weapon activeWeapon) {
+        boolean foundExempt = arsenalWeapon != null && arsenalWeapon.isLevelGapExempt();
+        cachedFoundStanding = WeaponLevelTag.standingForGap(foundExempt ? 0 : foundLevel - currentThreatLevel);
+        cachedFoundHead = "FOUND  " + WeaponLevelTag.label(foundLevel);
+        if (activeWeapon != null) {
+            cachedActiveStanding = WeaponLevelTag.standing(activeWeapon, currentThreatLevel);
+            cachedActiveHead = "ACTIVE  " + WeaponLevelTag.label(activeWeapon.getWeaponLevel());
+        } else {
+            cachedActiveStanding = WeaponLevelTag.STANDING_NORMAL;
+            cachedActiveHead = "ACTIVE";
+        }
+    }
+
     private void buildStatCache(WeaponRoll groundRoll, Weapon arsenalWeapon, Weapon activeWeapon) {
         if (arsenalWeapon != null && groundRoll != null) {
             int level = groundRoll.weaponLevel;
-            int threatLevel = activeWeapon != null ? activeWeapon.getFloorThreatLevel() : level;
             cachedGroundDamage = Math.round(GameMath.weaponLadderDamage(arsenalWeapon.getBaseDamage(), level,
-                    groundRoll.tier.ordinal(), threatLevel, false));
+                    groundRoll.tier.ordinal(), currentThreatLevel, arsenalWeapon.isLevelGapExempt()));
             cachedGroundClip   = GameMath.weaponScaledClipSize(arsenalWeapon.getBaseClipSize(), level);
             cachedGroundReload = GameMath.weaponScaledReloadTicks(arsenalWeapon.getBaseReloadTicks(), level);
             cachedGroundRange  = GameMath.weaponScaledRange(arsenalWeapon.getBaseRange(), level, arsenalWeapon.isMelee());
         } else if (arsenalWeapon != null) {
-            cachedGroundDamage = arsenalWeapon.getBaseDamage();
+            cachedGroundDamage = Math.round(GameMath.weaponLadderDamage(arsenalWeapon.getBaseDamage(), 1,
+                    WeaponTier.COMMON.ordinal(), currentThreatLevel, arsenalWeapon.isLevelGapExempt()));
             cachedGroundClip   = arsenalWeapon.getBaseClipSize();
             cachedGroundReload = arsenalWeapon.getBaseReloadTicks();
             cachedGroundRange  = arsenalWeapon.getBaseRange();
