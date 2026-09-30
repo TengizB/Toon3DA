@@ -272,8 +272,8 @@ public final class RouteEconomicsModel {
         // Credits are read at the price level of THIS depth: every shop offer's price rides
         // 1 + SHOP_DEPTH_PRICE_SCALE * (depth - 1) (GameMath.shopPrice), so a credit buys less power deep
         // and the depth-scaled kill bounty must not read as free extra power (balance-overhaul order 1).
-        float creditPowerPoints   = credits / (float) GameMath.shopPrice(1f,
-                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        float creditPowerPoints   = credits / (BalanceConfig.SHOP_CREDITS_PER_POWER_POINT
+                * GameMath.shopDepthPriceFactor(depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE));
         float experiencePowerPoints = experiencePoints / levelCost * BalanceConfig.LEVEL_UP_BUDGET_PP;
         float upgradePowerPoints    = row.upgradeOpportunity()
                 * BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_POWER_POINTS;

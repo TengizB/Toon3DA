@@ -3905,9 +3905,20 @@ public final class GameMath {
      */
     public static int shopPrice(float valuePowerPoints, float creditsPerPowerPoint,
                                 int depth, float depthPriceScale) {
-        int clampedDepth  = Math.max(1, depth);
-        float depthFactor = 1f + depthPriceScale * (clampedDepth - 1);
-        return (int) Math.round(valuePowerPoints * creditsPerPowerPoint * depthFactor);
+        return (int) Math.round(valuePowerPoints * creditsPerPowerPoint
+                * shopDepthPriceFactor(depth, depthPriceScale));
+    }
+
+    /*
+     * Formula: shopDepthPriceFactor — the shop's price level at a depth
+     * Derivation:
+     *   depthFactor = 1 + depthPriceScale * (depth - 1): every offer's price (shopPrice) rides it, so it is
+     *   also what one credit is worth at that depth. The route model and the boss reward read credits at
+     *   this price level (balance-overhaul order 1) so a depth-scaled bounty never reads as free power.
+     * Edge cases: depth < 1 is clamped to 1 (-> 1.0).
+     */
+    public static float shopDepthPriceFactor(int depth, float depthPriceScale) {
+        return 1f + depthPriceScale * (Math.max(1, depth) - 1);
     }
 
     /*

@@ -151,7 +151,9 @@ public final class BalanceSchema {
         /** S-ECONOMY (order 9): experienced S tracks the modelled S; the emergency lifeline stays rare. */
         SIM_ECONOMY,
         /** S-SOFTLOCK (order 9): zero seeds end in a "cannot damage anything" state. */
-        SIM_SOFTLOCK
+        SIM_SOFTLOCK,
+        /** S-LAG (balance-overhaul order 1): the start-weapon hoarder dies by SIM_LAG_MAX_MEDIAN_DEPTH (median). */
+        SIM_LAG
     }
 
     // =====================================================================================
@@ -261,6 +263,10 @@ public final class BalanceSchema {
         waive(RuleKind.SIM_ROUTE,   "played per-floor net drain",  reason, expiry);
         waive(RuleKind.SIM_ECONOMY, "experienced S vs modelled S", reason, expiry);
         waive(RuleKind.SIM_ECONOMY, "emergency lifeline floors",   reason, expiry);
+        // S-LAG (balance-overhaul order 1) inherits this waiver and its expiry: a hoarder that STALLS on
+        // floor 1 reads as "dies early" for navigation reasons, so the band is reported but not yet a
+        // statement about the ladder. R-LADDER L2 proves the same property on paper meanwhile.
+        waive(RuleKind.SIM_LAG,     "HOARDER-START-WEAPON median death depth", reason, expiry);
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
@@ -1614,7 +1620,8 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-BOSS-GATE: with the DEPTH-1 starting loadout (reference DPT), the turns to kill the boss must be at
+     * R-BOSS-GATE: with the STARTING weapon (L1 COMMON, on the ladder at the boss's threat level — balance-overhaul
+     * order 1; the character is otherwise on-curve), the turns to kill the boss must be at
      * least {@link BalanceConfig#BOSS_GATE_MIN_DAMAGE_MARGIN} times the turns the player survives even WITH
      * the maximum modelled heal supply — so the start weapon can never win. The margin is depth-independent
      * of the fight length and rises with the expected-DPT gate, so the shallowest boss is the tightest case.
@@ -1622,14 +1629,16 @@ public final class BalanceSchema {
     public static List<RuleResult> bossGateResults() {
         List<RuleResult> results = new ArrayList<>();
         float minMargin  = BalanceConfig.BOSS_GATE_MIN_DAMAGE_MARGIN;
-        float maxHeals   = BalanceConfig.REFERENCE_PLAYER_EHP
-                * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
         for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
             BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+            // Balance-overhaul order 1: the START weapon (L1 COMMON) on the boss floor, carried by an otherwise
+            // on-curve character — the generous reading; the ladder's lag penalty applies to the weapon.
+            ExpectedPlayer startWeapon = ladderStartWeaponPlayer(archetype.canonicalDepth);
+            float maxHeals = startWeapon.effectiveHitPoints * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
             float startTurnsToKill = GameMath.bossFightTurnsForPlayerDamagePerTurn(
-                    stats.effectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
+                    stats.effectiveHitPoints, startWeapon.damagePerTurn);
             float survivableTurns  = GameMath.bossFightTurnsForPlayerDamagePerTurn(
-                    BalanceConfig.REFERENCE_PLAYER_EHP + maxHeals, stats.damagePerTurn);
+                    startWeapon.effectiveHitPoints + maxHeals, stats.damagePerTurn);
             float margin = survivableTurns > 0f ? startTurnsToKill / survivableTurns : Float.POSITIVE_INFINITY;
             results.add(new RuleResult(RuleKind.BOSS_GATE, archetype.displayName + " depth " + archetype.canonicalDepth,
                     margin, minMargin, Float.POSITIVE_INFINITY, margin >= minMargin,
@@ -1658,7 +1667,7 @@ public final class BalanceSchema {
                     "expected-loadout fight turns must land in [target, 1.5*target]"));
 
             float survivalRatio = GameMath.bossSurvivalCheckRatio(
-                    BalanceConfig.REFERENCE_PLAYER_EHP, stats.damagePerTurn, fightTurns);
+                    BossBalance.expectedPlayerEffectiveHitPoints(archetype.canonicalDepth), stats.damagePerTurn, fightTurns);
             results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " survival ratio",
                     survivalRatio, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
                     BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
@@ -1671,7 +1680,8 @@ public final class BalanceSchema {
 
     /**
      * R-BOSS-VERB-CAP: every derived boss verb, evaluated at the boss's canonical depth, respects the
-     * single-hit fairness caps — no hit over 35% of reference eHP (hard cap, telegraphed or not), and any
+     * single-hit fairness caps — no hit over 35% of the EXPECTED player's eHP at that depth (balance-overhaul order 1;
+     * was the fixed depth-1 reference eHP) (hard cap, telegraphed or not), and any
      * hit over 25% must be telegraphed a turn ahead. The band max is 25% for an un-telegraphed verb, 35%
      * for a telegraphed one; the value is the verb's fraction of reference eHP.
      */
@@ -1681,7 +1691,7 @@ public final class BalanceSchema {
             BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
             int damage = stats.verbDamage(verb.dptFraction);
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
-                    damage, BalanceConfig.REFERENCE_PLAYER_EHP);
+                    damage, BossBalance.expectedPlayerEffectiveHitPoints(verb.archetype.canonicalDepth));
             float bandMax = verb.telegraphed
                     ? BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION
                     : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
@@ -1703,7 +1713,8 @@ public final class BalanceSchema {
         float premium = BalanceConfig.BOSS_REWARD_RISK_PREMIUM;
         for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
             BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
-            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints);
+            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints,
+                    archetype.canonicalDepth);
             float ratio = consumption > 0f ? stats.creditReward / consumption : Float.POSITIVE_INFINITY;
             results.add(new RuleResult(RuleKind.BOSS_REWARD, archetype.displayName + " reward/consumption",
                     ratio, premium - 0.02f, Float.POSITIVE_INFINITY, ratio >= premium - 0.02f,

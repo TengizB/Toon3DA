@@ -2030,6 +2030,15 @@ public final class BalanceConfig {
     /** Fraction of seeds allowed to end in a "cannot damage anything" state. Zero, by contract. */
     public static final float SIM_SOFTLOCK_MAX_FRACTION   = 0.0f;
 
+    // --- S-LAG + THE LADDER REPORT (balance-overhaul order 1) --------------------------------
+    /**
+     * S-LAG: the HOARDER-START-WEAPON policy (the weapon never climbs the ladder) must die by this median
+     * depth — falling behind the power ladder is punished in PLAY, not only on paper (R-LADDER L2).
+     */
+    public static final float SIM_LAG_MAX_MEDIAN_DEPTH       = 6f;
+    /** Seeds per start depth in the LADDER REPORT probe (one floor each, both kits). */
+    public static final int   SIM_LADDER_PROBE_SEEDS_PER_DEPTH = 8;
+
     // =====================================================================================
     // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract
     // Orders 1-6 balance FLOORS; the player plays a JOURNEY through the route map's branching

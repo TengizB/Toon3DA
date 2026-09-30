@@ -315,6 +315,16 @@ R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
   deliver); order 3 finished the pricing half.
 
 R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AMMO) — bosses as BUILD CHECKS (order 6)
+  RE-DERIVED (balance-overhaul order 1): BossBalance reads THE one expected-player model —
+  boss HP from GameMath.expectedPlayerAtDepth(d).damagePerTurn (rounded UP, so the fair
+  fight is never a fraction of a turn short), boss DPT and every verb cap from that
+  player's eHP (was the fixed 205), the GATE from the START weapon on the ladder (L1
+  COMMON at the boss's threat level) with max heals as a share of that player's eHP, and
+  the credit reward from the fight's consumption read in depth-1 ammo terms at the
+  depth's shop price level (GameMath.shopDepthPriceFactor) — so a deep boss pays a deep
+  shop's prices, not the ladder-inflated HP number. BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION
+  and BOSS_EXPECTED_LEVELS_PER_DEPTH no longer feed the derivation. The text below is the
+  order-6 original; its worked numbers pre-date the ladder (see the living table).
   A boss's HP, DPT, every verb's damage, XP and credit reward are DERIVED at spawn by
   BossBalance.statsForDepth from the SECTION 14 inputs (per-boss TARGET_FIGHT_TURNS +
   survival ratio) through the GameMath BOSS BALANCE RULESET — there are ZERO flat boss
@@ -511,6 +521,23 @@ NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor 
   never when supplied, honours the once-per-floor cap). RunStats records ammo picked
   up, credits earned/spent, heals used and emergency triggers as order-9 telemetry.
 
+S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
+  S-LAG: HOARDER-START-WEAPON's median death depth <= SIM_LAG_MAX_MEDIAN_DEPTH (6) — a weapon
+  that never climbs the ladder ends the run early. Reported every balanceSim run; WAIVED under
+  the navigation-limited waiver (SECTION 4), whose expiry it inherits.
+  THE LADDER REPORT (sim/LadderReport, printed under the bands, OUTPUT not an assertion): the
+  ordinary matrix stalls on the first floors, so the report plays one-floor PROBES started at
+  every depth 1..25 (SimSettings.ladderProbe, SIM_LADDER_PROBE_SEEDS_PER_DEPTH seeds per kit):
+  TACTICAL with the ON-CURVE kit (guns at the floor's level, the region's lowest drop tier) and
+  HOARDER-START-WEAPON with the START kit (L1 COMMON), both on the on-curve character (vitality
+  + the model's card lifts), so the ratio is the weapon ladder alone. Every hit dealt records
+  enemy max HP / hit (EnemyManager.PlayerHitListener, sim-only); every attributed hit taken
+  records full pool / hit. Per role and depth band it prints the median of each and lag/on.
+  First read-out: played on-curve hits-to-kill stay flat 1..25 (SOLDIER 3.3 -> 3.4, CHAFF 1.9 ->
+  2.1); the start kit's ratio climbs 1.7x (1-5) -> ~24x (21-25); A2's SOLDIER depths 3-5 read-
+  out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
+  HOARDER-START-WEAPON never does.
+
 S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SOFTLOCK (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
@@ -585,8 +612,11 @@ LIVE WAIVERS (one value waiver + the order-9 navigation-limited bands):
 
   [SIM_FAIR] TACTICAL median death depth, [SIM_FAIR] TACTICAL readable deaths,
   [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
-  [SIM_ECONOMY] experienced S vs modelled S, [SIM_ECONOMY] emergency lifeline floors
-    reason:  these six read the SCRIPTED PLAYER's floor-completion rate, not the
+  [SIM_ECONOMY] experienced S vs modelled S, [SIM_ECONOMY] emergency lifeline floors,
+  [SIM_LAG] HOARDER-START-WEAPON median death depth (balance-overhaul order 1 — inherits
+  this waiver and its expiry; it reads 1.0 today because hoarder runs STALL on floor 1,
+  which says nothing about the ladder — R-LADDER L2 and the LADDER REPORT carry the claim)
+    reason:  these read the SCRIPTED PLAYER's floor-completion rate, not the
              game's balance. The order-9 simulator plays the real systems, but its
              navigation heuristic still runs the turn cap out on a large share of
              generated floors instead of reaching the stairs (~88% of TACTICAL runs
@@ -1101,6 +1131,12 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 1 / CP4 — BossBalance re-derived from GameMath.expectedPlayerAtDepth
+    (HP from its DPT, DPT/verb caps from its eHP, the gate from the start weapon on the ladder,
+    reward in depth-1 ammo terms at the depth's price level); S-LAG band (waived with the
+    navigation bands); the LADDER REPORT probe matrix; TacticalPolicy buys the rung (R15);
+    PolicySummary's level gap reads the model's expected character level. All R-BOSS-* green.
+
   balance-overhaul order 1 / CP2+CP3 — the ladder is LIVE. Weapon hits compose through
     GameMath.weaponLadderDamage (the old Weapon.damageAtDistance used the RAW base damage, so a
     weapon level NEVER reached a hit — the root of the owner's complaint); MAX_WEAPON_LEVEL 27;

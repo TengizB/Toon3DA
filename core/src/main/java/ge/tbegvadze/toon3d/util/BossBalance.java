@@ -54,13 +54,18 @@ public final class BossBalance {
         return Archetype.values()[bossIndex];
     }
 
-    /** The EXPECTED player's sustained DPT at a boss depth (RULE 1/5) — the honest curve the boss HP is tied to. */
+    /**
+     * The EXPECTED player's sustained DPT at a boss depth (RULE 1/5) — the honest curve the boss HP is tied to.
+     * Balance-overhaul order 1: read from THE one expected-player model (GameMath.expectedPlayerAtDepth — the
+     * weapon on the ladder, the region's rarity, the on-curve character level), not a boss-only card curve.
+     */
     public static float expectedPlayerDamagePerTurn(int depth) {
-        float expectedOffencePowerPoints = BalanceConfig.BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION
-                * GameBalance.LEVEL_UP_BUDGET_PP
-                * (BalanceConfig.BOSS_EXPECTED_LEVELS_PER_DEPTH * depth);
-        return GameMath.expectedPlayerSustainedDamagePerTurn(
-                BalanceConfig.REFERENCE_PLAYER_DPT, expectedOffencePowerPoints);
+        return GameMath.expectedPlayerAtDepth(depth).damagePerTurn;
+    }
+
+    /** The EXPECTED player's eHP at a boss depth — the pool the survival check and the verb caps are read against. */
+    public static float expectedPlayerEffectiveHitPoints(int depth) {
+        return GameMath.expectedPlayerAtDepth(depth).effectiveHitPoints;
     }
 
     /** The derived stat block for the boss that fights at {@code depth}. */
@@ -78,16 +83,18 @@ public final class BossBalance {
         float targetTurns  = archetype.targetFightTurns;
         float expectedDpt  = expectedPlayerDamagePerTurn(depth);
 
-        int effectiveHitPoints = Math.round(GameMath.bossEffectiveHitPoints(
+        // Rounded UP, so the expected player's fight is never a fraction of a turn shorter than its target
+        // (R-BOSS-FAIR's lower bound is the target itself).
+        int effectiveHitPoints = (int) Math.ceil(GameMath.bossEffectiveHitPoints(
                 expectedDpt, targetTurns, BalanceConfig.BOSS_MULTI_PHASE_FACTOR_PER_PHASE));
 
         float damagePerTurn = GameMath.bossDamagePerTurnForSurvivalCheck(
-                BalanceConfig.REFERENCE_PLAYER_EHP, targetTurns, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_TARGET);
+                expectedPlayerEffectiveHitPoints(depth), targetTurns, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_TARGET);
 
         float upperFightTurnsCap = GameMath.bossUpperFightTurnsCap(
                 targetTurns, BalanceConfig.BOSS_UPPER_FIGHT_TURNS_MULTIPLIER);
 
-        int creditReward = Math.round(modelledConsumptionCredits(effectiveHitPoints)
+        int creditReward = Math.round(modelledConsumptionCredits(effectiveHitPoints, depth)
                 * BalanceConfig.BOSS_REWARD_RISK_PREMIUM);
 
         float bossThreatPoints = GameMath.threatPoints(damagePerTurn, 1, effectiveHitPoints,
@@ -114,19 +121,27 @@ public final class BossBalance {
     }
 
     /**
-     * The HP a player must heal back over a FAIR fight, in HP. From the survival-check identity: incoming
-     * over the fight ≈ bossDpt * fightTurns = eHP / survivalRatio (with survivalRatio 0.5 → 2 * eHP), the
-     * player's own eHP absorbs one eHP, so ≈ one eHP must be bought back with heals. Modelled at the
-     * reference eHP (the yardstick the whole survival check is priced against).
+     * The HP a player must heal back over a FAIR fight, in DEPTH-1 hit points. From the survival-check identity:
+     * incoming over the fight ≈ bossDpt * fightTurns = eHP / survivalRatio (with survivalRatio 0.5 → 2 * eHP), the
+     * player's own eHP absorbs one eHP, so ≈ one eHP must be bought back with heals — at depth-1 scale that is the
+     * reference eHP (every heal is a fraction of max, so the SHARE is depth-independent; balance-overhaul order 1).
      */
     public static float modelledHealHitPoints() {
         return BalanceConfig.REFERENCE_PLAYER_EHP;
     }
 
-    /** Modelled fight consumption in CREDIT units (ammo to deal eHP damage + heals to survive), premium 1. */
-    public static float modelledConsumptionCredits(int effectiveHitPoints) {
-        return GameMath.bossReward(effectiveHitPoints, creditsPerAmmoDamage(),
-                modelledHealHitPoints(), creditsPerHealHitPoint(), 1f);
+    /**
+     * Modelled fight consumption in CREDIT units at the boss's depth (ammo to deal eHP damage + heals to survive),
+     * premium 1. Balance-overhaul order 1: the ammo is read in DEPTH-1 damage terms (divided by the expected hit
+     * growth — every ammo unit hits that much harder deep) and the whole bill is priced at the depth's shop price
+     * level (GameMath.shopPrice's depth factor), so a deep boss refunds a deep fight in the credits a deep shop
+     * charges, instead of scaling with the raw (ladder-inflated) HP number.
+     */
+    public static float modelledConsumptionCredits(int effectiveHitPoints, int depth) {
+        float depthOneAmmoDamage = effectiveHitPoints / Math.max(1e-3f, GameMath.expectedHitGrowthAtDepth(depth));
+        float depthPriceLevel = GameMath.shopDepthPriceFactor(depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        return GameMath.bossReward(depthOneAmmoDamage, creditsPerAmmoDamage(),
+                modelledHealHitPoints(), creditsPerHealHitPoint(), 1f) * depthPriceLevel;
     }
 
     /** The DAMAGE a build must output to kill the boss — the ammo-check demand (RULE 5 / AMMO CHECK). */

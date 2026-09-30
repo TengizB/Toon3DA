@@ -59,6 +59,23 @@ public final class RunLedger {
     /** Player level when the run ended. */
     public int finalPlayerLevel = 1;
 
+    /**
+     * LADDER probe samples (balance-overhaul order 1), indexed by EnemyRole ordinal: every player hit that
+     * landed records the hits its size would need to kill that enemy (enemy max HP / hit damage), and every
+     * attributed enemy hit taken records the hits of that size the marine's full pool survives (pool / hit).
+     * Empty outside a probe run.
+     */
+    public final List<List<Float>> ladderHitsToKillByRole = newRoleSampleLists();
+    public final List<List<Float>> ladderHitsToDieByRole  = newRoleSampleLists();
+
+    private static List<List<Float>> newRoleSampleLists() {
+        List<List<Float>> lists = new ArrayList<>();
+        for (int roleIndex = 0; roleIndex < ge.tbegvadze.toon3d.enemy.EnemyRole.values().length; roleIndex++) {
+            lists.add(new ArrayList<>());
+        }
+        return lists;
+    }
+
     /** Total credits spent at vending machines across the run. */
     public int creditsSpent;
 

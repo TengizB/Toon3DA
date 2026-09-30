@@ -213,9 +213,18 @@ public final class TacticalPolicy implements PlayerPolicy {
         return score;
     }
 
-    /** Buys whatever the fabricator offers that the wallet can cover — the ammo/heal backstop. */
+    /**
+     * Buys whatever the fabricator offers that the wallet can cover — the ammo/heal backstop. R15
+     * (balance-overhaul order 1): the LEVEL UP rung for the equipped (main) weapon is the machine's first,
+     * guaranteed slot, so a TACTICAL player behind the ladder always buys it first when it can afford it;
+     * the level-up is only declined once the weapon already stands above the floor's threat level.
+     */
     @Override
     public boolean buyShopEntry(ShopEntry entry, SimView view) {
+        if (entry.category == ge.tbegvadze.toon3d.shop.OfferCategory.WEAPON_LEVEL_UP
+                && entry.payload == view.equippedWeapon()) {
+            return view.equippedWeapon().getWeaponLevel() <= view.depth();
+        }
         return true;
     }
 }

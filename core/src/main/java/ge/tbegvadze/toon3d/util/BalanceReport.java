@@ -874,24 +874,24 @@ public final class BalanceReport {
                 "boss", "depth", "expDPT", "derHP", "bossDPT", "target", "gate", "fairRatio", "reward", "ammoCov");
         System.out.println("------------------------------------------------------------------------------------------");
 
-        float maxHeals = BalanceConfig.REFERENCE_PLAYER_EHP
-                * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
         for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
             int depth = archetype.canonicalDepth;
             BossStats stats = BossBalance.statsForDepth(archetype, depth);
             float expectedDpt = BossBalance.expectedPlayerDamagePerTurn(depth);
 
-            // R-BOSS-GATE margin: start-weapon TTK vs survivable turns with max heals (>= 2.0 holds the gate).
+            // R-BOSS-GATE margin: start-weapon (L1 COMMON on the ladder) TTK vs survivable turns with max heals.
+            ExpectedPlayer startWeapon = BalanceSchema.ladderStartWeaponPlayer(depth);
+            float maxHeals = startWeapon.effectiveHitPoints * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
             float startTtk = GameMath.bossFightTurnsForPlayerDamagePerTurn(
-                    stats.effectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
+                    stats.effectiveHitPoints, startWeapon.damagePerTurn);
             float survivable = GameMath.bossFightTurnsForPlayerDamagePerTurn(
-                    BalanceConfig.REFERENCE_PLAYER_EHP + maxHeals, stats.damagePerTurn);
+                    startWeapon.effectiveHitPoints + maxHeals, stats.damagePerTurn);
             float gateMargin = survivable > 0f ? startTtk / survivable : Float.POSITIVE_INFINITY;
 
             // R-BOSS-FAIR survival ratio for the expected loadout.
             float fightTurns = GameMath.bossFightTurnsForPlayerDamagePerTurn(stats.effectiveHitPoints, expectedDpt);
             float fairRatio  = GameMath.bossSurvivalCheckRatio(
-                    BalanceConfig.REFERENCE_PLAYER_EHP, stats.damagePerTurn, fightTurns);
+                    BossBalance.expectedPlayerEffectiveHitPoints(depth), stats.damagePerTurn, fightTurns);
 
             // R-BOSS-AMMO coverage.
             float demand = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);

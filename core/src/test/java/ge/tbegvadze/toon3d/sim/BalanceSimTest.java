@@ -43,10 +43,11 @@ class BalanceSimTest {
     private static void writeReport(Map<String, PolicySummary> playedMatrix) {
         try {
             List<RuleResult> bandResults = BehavioralBands.evaluate(playedMatrix);
-            Path written = SimReport.write(Path.of("").toAbsolutePath(),
-                                           SimReport.render(playedMatrix, bandResults));
+            // Balance-overhaul order 1: the LADDER REPORT (played probes at every depth) rides along as OUTPUT.
+            String reportText = SimReport.render(playedMatrix, bandResults) + '\n' + LadderReport.run().render();
+            Path written = SimReport.write(Path.of("").toAbsolutePath(), reportText);
             System.out.println("balance-sim report: " + written);
-            System.out.println(SimReport.render(playedMatrix, bandResults));
+            System.out.println(reportText);
         } catch (java.io.IOException failure) {
             // A report is an aid, never a gate — the assertions below still run.
             System.out.println("balance-sim report could not be written: " + failure.getMessage());
@@ -100,6 +101,15 @@ class BalanceSimTest {
     @Test
     void playedEconomyMatchesTheModelledEconomy() {
         assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_ECONOMY));
+    }
+
+    /**
+     * S-LAG (balance-overhaul order 1) — a run whose weapon never climbs the power ladder ends early: the
+     * start-weapon hoarder's median death depth is at most SIM_LAG_MAX_MEDIAN_DEPTH (navigation waiver applies).
+     */
+    @Test
+    void aWeaponThatNeverClimbsTheLadderEndsTheRunEarly() {
+        assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_LAG));
     }
 
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */

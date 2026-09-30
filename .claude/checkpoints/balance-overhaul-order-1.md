@@ -58,7 +58,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP3** — player vitality growth R9 and fractional heals R10 live; R-HEAL / R-HEALDRAIN-DEPTH /
       R-SCARCITY-DEPTH / R-XP-PACE / R-CARD-BREAKPOINT re-fitted at 1..25.
       DONE WHEN: live, both gates green.
-- [ ] **CP4** — BossBalance and the sim read `expectedPlayerAtDepth`; R-BOSS-* green; TacticalPolicy
+- [x] **CP4** — BossBalance and the sim read `expectedPlayerAtDepth`; R-BOSS-* green; TacticalPolicy
       buys the rung; S-LAG + LADDER REPORT printed by balanceSim.
       DONE WHEN: both gates green, report printed.
 - [ ] **CP5** — shop guaranteed level-up rung, cap and price (R13).
@@ -133,3 +133,15 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   confirmed stable across two JVM runs). Count 451 -> 449 (two retired-rule methods).
 - **NEXT (CP4):** BossBalance still derives from its own `expectedPlayerDamagePerTurn` (flat card PP) and
   `REFERENCE_PLAYER_EHP` — switch to `GameMath.expectedPlayerAtDepth`. R-BOSS-* currently green.
+- **CP4 handover:** `BossBalance.expectedPlayerDamagePerTurn(d)` / `expectedPlayerEffectiveHitPoints(d)` read
+  `GameMath.expectedPlayerAtDepth`; `modelledConsumptionCredits(eHP, depth)` (depth-1 ammo terms x
+  `GameMath.shopDepthPriceFactor`). `EnemyManager.PlayerHitListener` (sim-only seam). `SimSettings.ladderProbe(d,
+  onCurveKit)`; `sim/LadderReport.run()/render()/soldierEarlyLagRatio()`, appended to the balance-sim summary by
+  BalanceSimTest. `RuleKind.SIM_LAG` + test `aWeaponThatNeverClimbsTheLadderEndsTheRunEarly` (extends
+  BalanceSimTest). First played read-out: A2 SOLDIER 3-5 lag ratio 2.35x.
+- **DEAD END:** a probe WITHOUT the model's card lifts drifts ~2.2x by depth 25 (the model's on-curve DPT
+  includes a 6%/level offence lift); and mid-probe level-ups re-apply the damage multipliers through the card
+  path — both SimWorld multiplier sites must carry the probe lift.
+- **PENDING MERGES (worktrees, verified by their spokes, not yet in the tree):** CP5 shop rung
+  (`.claude/worktrees/agent-afb16947dbcb52412`), CP6 HUD (`agent-a91518d8f886d62d5`) and CP6 narrative
+  (`agent-aec1c5d5d311d40a6`). Their diffs are against 36bc1d4 — apply each with `git diff 36bc1d4` there.

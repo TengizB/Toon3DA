@@ -172,6 +172,22 @@ public final class EnemyManager implements EnemyHitTarget {
     private final int[] sowCandidateRows    = new int[SOW_CANDIDATE_CAPACITY];
 
     /** Notified when the never-softlock emergency ammo lifeline fires (order 3, part D) — for telemetry. */
+    /**
+     * Notified on every player hit that lands on an enemy, with the hit's final pre-mitigation damage — the
+     * seam the balance simulator's LADDER REPORT (balance-overhaul order 1) reads played hits-to-kill from.
+     * Not used by the shipping game.
+     */
+    public interface PlayerHitListener {
+        void onPlayerHitEnemy(EnemyType enemyType, int enemyMaxHealth, int damage);
+    }
+
+    private PlayerHitListener playerHitListener;
+
+    /** Wires the simulator's played-hit probe (null to clear). */
+    public void setPlayerHitListener(PlayerHitListener listener) {
+        this.playerHitListener = listener;
+    }
+
     public interface EmergencySupplyListener {
         void onEmergencySupplyGranted();
     }
@@ -647,6 +663,9 @@ public final class EnemyManager implements EnemyHitTarget {
                 cachedPlayerColumn, cachedPlayerRow);
         float backstabMultiplier = GameMath.backstabDamageMultiplier(backstab, EffectConstants.BACKSTAB_DAMAGE_PERCENT);
         totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier);
+        if (playerHitListener != null && totalDamage > 0) {
+            playerHitListener.onPlayerHitEnemy(enemy.type, enemy.maxHealth, totalDamage);
+        }
         if (backstab) {
             showCombatTipOnce("backstab", "BACKSTAB! Hits from behind deal bonus damage");
         }
