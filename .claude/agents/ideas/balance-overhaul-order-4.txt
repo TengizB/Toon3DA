@@ -5,9 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 4 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Order 4 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on orders 1-3 (ladder, groups/supply, matchups + stagger). Does NOT
-depend on the optional dev tools (order 8).
+depend on the optional dev tools (order 9).
 
 
 OVERVIEW
@@ -58,7 +58,7 @@ OUT (deliberately not doing now)
     docs/tile-symbols.txt; fire/toxic hazard tiles are the existing runtime
     hazards.
   - Perks that modify guard/armour/hazards — order 5.
-  - Any developer dial or dev log field — order 8 (optional).
+  - Any developer dial or dev log field — order 9 (optional).
 
 
 GAMEPLAY LOOP

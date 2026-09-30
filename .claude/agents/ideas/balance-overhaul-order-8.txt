@@ -1,406 +1,467 @@
 STATUS: NOT IMPLEMENTED
-CATEGORY: Meta
-TITLE: Phone Dev Tools — run log, dev start, tuning dials
+CATEGORY: Systems
+TITLE: The Content Balance Contract — how new content enters
 CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
-OPTIONAL — the series is complete without it.
 
-Order 8 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-OPTIONAL: skipping this order never blocks any other order and never leaves the
-balance-overhaul series incomplete. Orders 1-7 contain no acceptance criterion,
-checkpoint or verification step that needs these tools.
-PREREQUISITES: none beyond a green build. It may be implemented at any time —
-before, between or after orders 1-7, including after the order-7 feel pass. It
-adapts to what exists at build time (rules R8, R11, R14): dials and log fields
-whose game systems are not built yet are simply absent or print "-".
+Order 8 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
+REQUIRED. Depends on orders 1-7 (it codifies their FINAL rules, as tuned by the
+order-7 feel pass). Does NOT depend on the optional dev tools (order 9).
 
 
 OVERVIEW
 --------
-The owner plays ONLY on the phone and wants to help tune the balance, but every
-existing tool (BalanceReport, balanceSim, a tuning FILE) needs a desktop. This
-order ships three DEVELOPER-ONLY tools that live inside the game and work with a
-thumb: (1) a per-floor / per-run PLAYTEST LOG shown on a screen with a COPY
-button, so a run can be pasted straight into a chat; (2) DEV START — begin a
-sandboxed run at any depth, on any node type and generator, with an on-curve kit;
-(3) TUNING DIALS — ~10 master multipliers adjustable in-game, persisted, printed
-into every log. The tools exist only in DEBUGGABLE builds (the APK the owner
-installs from Android Studio / a debug build) and are invisible and inert in a
-release build.
+The owner, replying to the series: "there must be some rules that when new
+content such as enemies, weapons or anything else will be added it must follow
+the rules to fit the balance."
 
-Raw request: "a playtest log file, a start-at-any-depth option, a tuning file".
-Underlying need: "I can only play on the phone, and I need to show Claude what
-happened in my runs, reach the part of the game I want to test, and try a change
-without a rebuild." A file on the phone is the wrong shape for that need; a
-screen with COPY is the right one.
+Orders 1-7 rebuild the balance around a handful of models — the power ladder
+(R-LADDER), the supply planner (R-SUPPLY / R-DENSITY), weapon roles and matchups
+(R-ROLE), heavy attacks (R-HEAVY), builds (R-PERK / R-KEYSTONE / R-CARRY) and the
+finite run (bosses, economy, events). Every one of them can be broken by one
+careless addition: an enemy with no trait, a weapon that wins every scenario, a
+room blueprint that drops its own medkits, a shop offer with a literal price.
+The project has been bitten by exactly this before (the necrotic faction shipped
+unpriced and corrupted every floor budget for weeks).
+
+This order turns the series into a permanent CONTRACT with three parts:
+  1. an ADMISSION CHECKLIST per content kind — what must be declared, which band
+     or role it must land in, how it is priced, which registry it goes through,
+     how the player is told, and what "done" means;
+  2. STRUCTURAL ENFORCEMENT — BalanceSchema's COVERAGE grows into a family of
+     ADMISSION rules (C-*) checked by the existing BalanceAuditTest, so an
+     undeclared, unpriced or out-of-band addition FAILS `./gradlew test` with a
+     message naming the rule and the missing item — plus a catch-all for any new
+     balance number;
+  3. PROCESS BINDING — one "ADD CONTENT" section in
+     docs/game-balance-authority.txt that every content-creating agent, doc and
+     idea file is pointed at and bound by.
 
 
 SCOPE
 -----
 IN
-  - DevAccess: a runtime capability passed into Main by the launcher. Android:
-    true iff the installed app is debuggable (ApplicationInfo.FLAG_DEBUGGABLE).
-    Desktop lwjgl3: true. Sim, tests, and the no-argument Main(): false.
-  - DEV HUB reachable from the pause menu and the title menu (a DEV row that
-    exists only when DevAccess is true), and a DEV LOG plate on the reprint card.
-  - PLAYTEST LOG: per-floor records + a run summary + a death record, kept in
-    memory, written to local storage at every floor exit and at run end (rolling
-    last 20 runs), shown on a scrollable DEV REPORT screen with COPY THIS RUN and
-    COPY LAST 5 RUNS buttons (system clipboard). Normal runs are logged too — they
-    are the main playtest data.
-  - DEV START: depth 1..25, node type (every RouteNodeType), generator (AUTO or
-    any combat-capable GeneratorId), kit (ON-CURVE / BARE / RICH). Sandboxed.
-  - TUNING DIALS: 10 multipliers (table in RULES), -/+ steppers, RESET ALL,
-    persisted in a separate developer Preferences file, applied at named seams,
-    identity (1.0) by default, printed in every log header.
-  - Balance audit extension protecting the shipped game from the dials.
+  - The ADMISSION CHECKLISTS for 18 content kinds (RULES, K1-K18).
+  - New RuleKind.ADMISSION with one C-rule per kind in BalanceSchema, asserted
+    by BalanceAuditTest; the C-CONSTANT catch-all for new BalanceConfig numbers.
+  - Declaration hardening: balance-bearing declarations become abstract methods
+    or required builder fields wherever the type allows, so forgetting one is a
+    compile error rather than a silent default.
+  - docs/game-balance-authority.txt "ADD CONTENT — THE CONTENT BALANCE CONTRACT"
+    (replaces SECTION 5 NEW-CONTENT CHECKLIST), with three worked examples.
+  - Binding updates to: .claude/agents/weapon-creator.md, weapon-creator-fable.md,
+    creative-game-designer.md, game-level-designer.md, reviewer.md,
+    code-reviewer.md, orchestrator.md; docs/weapon-creation-guide.txt;
+    docs/enemy-system.txt (ADD AN ENEMY); docs/route-map-system.txt,
+    docs/environment-tileset-system.txt, docs/story-ui-system.txt (cross-links);
+    .claude/CLAUDE.md (one rule + one "Where to Find Info" row);
+    .claude/agents/ideas/_TEMPLATE.txt (a BALANCE ADMISSION section).
+  - A "negative drill" proving each C-rule fires.
 
 OUT (deliberately not doing now)
-  - Any tuning FILE, share-sheet intent, email/upload, cloud sync or network —
-    COPY to clipboard is enough and needs no Android permissions or new
-    launcher interface beyond DevAccess.
-  - A player-facing difficulty setting. The dials are NOT a mode (see R10) and
-    never appear in a release build.
-  - New gameplay, any balance number change. Dial defaults are identity: this
-    order changes nothing about how the shipped game plays.
-  - Dials for systems that do not exist in the build yet. R14 exposes the
-    series' master knobs only when their constants exist; no other order is
-    required to add dial rows (they MAY, optionally, if this order already
-    exists when they are built).
-  - Any change to orders 1-7. They never depend on this order.
-  - Rewriting BalanceReport / balanceSim for the phone. They stay desktop tools
-    for Claude; the phone tools feed them data.
-  - A graphical chart of the log. Text is copyable; charts are not.
+  - Any new content. This order adds rules, not enemies or weapons.
+  - Retuning any number. The feel pass (order 7) settled them; if an existing
+    item fails a C-rule when the rule is switched on, the fix is a declaration
+    or a pricing row, and a genuine out-of-band value is recorded as a WAIVER
+    with an expiry (existing waiver policy) — not silently re-tuned here.
+  - Non-balance quality gates (art, sound, story tone). Story lines already have
+    their own contract (docs/narrative-authority.txt); this contract only
+    requires that the communication channel EXISTS and resolves.
+  - New test files. Everything extends BalanceAuditTest.
+  - The optional dev tools (order 9). If order 9 exists, its dials follow its own
+    identity rule; the contract only notes that a new master knob MAY get a dial.
 
 
 GAMEPLAY LOOP
 -------------
-The owner's loop (debuggable build):
-  1. Plays a normal run. Every floor exit appends a floor record; death or quit
-     closes the run record. Nothing on screen changes during play.
-  2. Dies -> death stroke -> reprint card, which now also shows a DEV LOG plate.
-     Tap DEV LOG -> DEV REPORT for the run that just ended -> tap COPY THIS RUN ->
-     "COPIED 4,812 CHARACTERS" toast -> paste into a chat with Claude.
-  3. Wants to test floor 12 elites: TITLE -> DEV -> START AT DEPTH -> depth 12,
-     node ELITE, generator AUTO, kit ON-CURVE -> START. A sandboxed run begins on
-     that floor; route continues normally after it.
-  4. Wants more enemies: PAUSE -> DEV -> TUNING -> ENEMY COUNT + + + (1.15) ->
-     back. The next floor generated uses x1.15 budget; the log header records it.
-  5. Claude reads the logs, proposes BalanceConfig changes. If the order-7 feel
-     pass is running, the logs are its optional extra input (its rule P10); if
-     it is finished, they serve any later balance pass.
-
-No dev action costs a game turn; every dev screen is a hard-pause overlay like
-the pause menu (world frozen, barks queue, thumb clusters not drawn).
+The contributor's loop (any agent, any future feature):
+  1. A designer writes an idea file that adds content. The template's BALANCE
+     ADMISSION section forces the checklist for each content kind it adds to be
+     filled in (numbers declared, band, price, registry, communication).
+  2. The implementer adds the content through its registry and declares every
+     field the kind requires. A forgotten abstract declaration will not compile;
+     a forgotten pricing row, band miss or unresolved id fails `./gradlew test`
+     with "ADMISSION C-<KIND>: <content id> — <what is missing>".
+  3. The implementer runs both gates and regenerates the living tables; the new
+     content appears in BalanceReport's tables and the sim reports.
+  4. reviewer checks the idea file's BALANCE ADMISSION block against the
+     checklist and fails the work if any "done" item is missing.
 
 
 RULES
 -----
-  R1  DevAccess is decided ONCE at launch by the launcher and passed into Main;
-      it is an instance value, never a static constant, so R-FLAGS (no live
-      TEST/DEBUG statics) is untouched. With DevAccess false, no DEV row, plate,
-      screen, log file or dial exists at runtime, and every dial reads 1.0.
-  R2  The DEV row sits LAST in the pause menu (after ABANDON RUN) and LAST in the
-      title menu (after QUIT). The DEV LOG plate sits beside the reprint card's
-      REPORT plate. None of them is a PauseMenuItem/TitleMenuItem enum row that a
-      release build could reach; they are appended by the dev layer when
-      DevAccess is true.
-  R3  DEV HUB (from pause): RUN LOG (this run so far), TUNING, SKIP FLOOR (ends
-      the floor as if the exit was taken; logged as "skipped"), BACK.
-      DEV HUB (from title): START AT DEPTH, TUNING, PAST RUNS, BACK.
-  R4  PLAYTEST LOG — one FLOOR RECORD per floor, written when the floor is left
-      (exit, skip, death, abandon). Fields (those whose source does not exist yet
-      print "-" and are filled by the order that creates the source):
-        index, depth, region index, node type, generator id, affix id,
-        walkable tile count, turns taken, real seconds,
-        enemies spawned (total and per EnemyRole), groups spawned (order 2),
-        enemies killed, XP gained, character level entry -> exit,
-        HP entry -> exit (absolute and % of max), lowest HP % on the floor,
-        armour entry -> exit,
-        damage taken total and by source category: MELEE, RANGED, SPECIAL
-        (telegraphed special verbs), STATUS (DoT ticks), HAZARD, SELF; top three
-        EnemyType by damage dealt to the player,
-        heals present on the floor (count + total HP value), heals picked up,
-        heals used, armour picked up,
-        ammo present / picked up / spent / reserve at exit, per AmmoType,
-        credits earned / spent, shop purchases (offer ids),
-        equipped weapon at exit (type, level, tier), weapon with most shots,
-        weapons picked up (type, level, tier), level-up picks (card ids),
-        GUARD uses, emergency ammo lifeline triggers.
-      RUN SUMMARY: seed, build version, dial values (every non-1.0 dial), run
-      origin (NORMAL / DEV_START + request), total floors, depth reached,
-      outcome (DEATH / ABANDON / ENDING / IN PROGRESS), cause of death.
-      DEATH RECORD: killer EnemyType (or hazard / status / self), killing blow
-      damage and category, HP before the blow, the last 5 damage events
-      (turn, source, amount, HP after), medkits and ammo held at death.
-  R5  Log text format: plain ASCII, one line per floor (key=value tokens, fixed
-      order), a header line, a summary line, a death block. Line width is NOT
-      limited (it is for pasting, not for reading on the phone); the DEV REPORT
-      screen word-wraps it for display only. Format version token "LOGv1" at the
-      start of the header so later orders can extend it (LOGv2 ...).
-  R6  Storage: Gdx.files.local("devlog/"), one file per run, rolling — at most
-      DEV_LOG_MAX_RUNS (20) files; the oldest is deleted when a 21st starts.
-      Written at every floor exit and at run end, so an OS kill mid-floor loses at
-      most the current floor. Never written when DevAccess is false.
-  R7  COPY: the system clipboard receives the exact log text; a toast reports the
-      character count. COPY LAST 5 RUNS concatenates the five newest runs with a
-      separator line. If the clipboard is unavailable (null), the toast says
-      "CLIPBOARD UNAVAILABLE" and nothing else happens.
-  R8  DEV START request = (depth 1..DEV_START_MAX_DEPTH (25), node type, generator,
-      kit). START builds a fresh seeded route map, places the cursor on a node of
-      the requested type at the requested depth (forced/synthesised if the layer
-      lacks one), resolves that node through its normal NodeLevelProfile (the
-      generator override replaces the profile's generator choice when not AUTO;
-      BOSS/REGION_GATE ignore the override), and grants the kit. Play continues
-      from there through the ordinary route map.
-      KITS: BARE = the normal run-start loadout. ON-CURVE = the expected player
-      at that depth: character level = expected level (current model:
-      1 + EXPECTED_LEVELS_PER_DEPTH * (depth - 1)), level-up cards auto-picked
-      from the seeded deck, the start weapon PLUS one WeaponRoller roll at that
-      depth, ammo reserves at DEV_KIT_RESERVE_FRACTION (0.6) of caps, 2 'H' + 1
-      '+', armour at 50%, credits = DEV_KIT_CREDIT_FRACTION (0.5) of modelled
-      income to that depth. RICH = ON-CURVE with double consumables and full
-      reserves. If order 1 (the power ladder) is built, ON-CURVE uses
-      GameMath.expectedPlayerAtDepth instead of the formula above (one model for
-      audit, sim and dev kit), and if order 5 is built the auto-picks go through
-      its PerkDeck; otherwise the formula above applies.
-  R9  SANDBOX: a DEV_START run never writes persistent state — no StoryStore
-      writes (deepest region, one-shot flags, reprint counter, codex unlocks,
-      stance, recap rings), no StatsStore records, no teaching evidence persisted.
-      Barks and exchanges are suppressed for the whole dev run; on death the
-      death stroke plays, then the DEV REPORT opens directly (no reprint card),
-      then BACK returns to the title. Its log IS written (origin DEV_START).
-  R10 TUNING DIALS are developer instruments, not a difficulty mode. They are
-      invisible and identity in release builds, never persist into StoryStore or
-      StatsStore, and carry no mode-family naming (R-SINGLE-DIFFICULTY's banned
-      tokens are avoided in every identifier and label). The one-difficulty rule
-      stands.
-  R11 Dials (multiplier, range DEV_DIAL_MIN 0.25 .. DEV_DIAL_MAX 3.00, step
-      DEV_DIAL_STEP 0.05, default 1.00) and their seams:
-        ENEMY_HEALTH     enemy max HP at spawn                    next floor
-        ENEMY_DAMAGE     every enemy/boss outgoing hit before
-                         the mitigation pipeline                 immediately
-        ENEMY_COUNT      floor Threat-Point budget handed to
-                         EncounterBudgetPlanner                  next floor
-        AMMO_SUPPLY      ammo units granted by every ammo pickup
-                         and ammo drop (rounded, min 1)          immediately
-        HEAL_SUPPLY      HP/armour restored by every heal/armour
-                         pickup and medkit use (rounded, min 1)  immediately
-        PLAYER_DAMAGE    every player outgoing hit (weapon,
-                         melee, DoT the player applies)          immediately
-        XP_GAIN          XP from every source                    immediately
-        CREDIT_GAIN      credits from every source               immediately
-        SHOP_PRICE       every shop offer price (rounded, min 1) immediately
-        DEPTH_CURVE      exponent multiplier on the depth-scaling
-                         term: scale^((depth-1) * dial)          next floor
-      A dial is ONE enum row with its label, range and "applies" text; the value
-      is passed as a parameter into the call site that owns the seam. GameMath
-      stays pure: no formula reads dial state.
-  R12 Dials persist across app restarts in the developer Preferences file
-      (DEV_PREFERENCES_NAME "toon3d-dev"), never in the StatsStore/StoryStore file.
-      NEW OPERATOR does not reset them; RESET ALL on the TUNING screen does.
-  R13 Every log header prints the dial set active at the START of each floor on
-      that floor's line (token "dials=" listing only non-1.0 dials), so a floor
-      played under changed dials is never mistaken for the baseline.
-  R14 SERIES DIALS (adaptive): for each balance-overhaul master knob whose
-      BalanceConfig constant EXISTS in the build when this order is implemented,
-      register one extra dial that multiplies it at its seam (identity 1.0):
-        LEVEL_GAP_STEEPNESS (order 1), BODY_TARGET_* scale and
-        SUPPLY_HEAL_FLOOR_FRACTION (order 2), MATCHUP_STRENGTH (order 3),
-        HEAVY_DAMAGE_SCALE (order 4).
-      A knob not yet built gets no dial. If this order is built FIRST, later
-      orders may add their dial row (one enum row) but are never required to.
-  R15 SERIES LOG FIELDS (adaptive): where the order-1..6 systems exist, the floor
-      record also carries the fields their sim reports measure — weapon LV vs
-      floor (1), groups and supply planned/placed (2), damage by DamageClass and
-      RESISTED/EFFECTIVE hits and hint-driven switches (3), heavies committed /
-      avoided / guarded / staggered / landed and statuses blocked by armour (4),
-      perks and keystones picked (5), run outcome VICTORY (6). Absent systems
-      print "-". The format token becomes LOGv2 when any of these are present.
+General
+  G1  "Balance-bearing content" = anything that changes damage, HP, supply,
+      threat, XP, credits, prices, run shape or player power. Every such addition
+      belongs to exactly one kind K1-K18 below; if none fits, it is K18 (a new
+      balance number) and the designer extends this contract in the same idea.
+  G2  Every kind's checklist has six parts: DECLARE (numbers and flags that must
+      exist), BAND (the rule/range it must land in), PRICE (how its cost/value is
+      computed — never hand-set where a formula exists), REGISTER (the only way
+      in), COMMUNICATE (how the player learns it), DONE (the checkable state).
+  G3  Every number lives in BalanceConfig; every formula in GameMath; every row is
+      a register() or enum row — never a switch (unchanged project rules; the
+      C-rules assume them).
+  G4  Adding balance-bearing content is FULL LANE (idea file + checkpoints). The
+      short lane stays open only for content that is supply-, spawn- and
+      power-neutral (a decorative room blueprint, a sprite, a bark line) — and
+      K12 checks the neutrality.
+  G5  An ADMISSION failure caused by a MISSING declaration or pricing row can
+      never be waived. A value outside its band may be waived only through the
+      existing waiver policy (reason + expiry, mirrored in the authority doc).
+
+Admission checklists
+  K1  ENEMY ARCHETYPE (EnemyType row)
+      DECLARE  role(), family() (trait inherited, override explicit), base HP,
+               base damage, cadence, range, positional multiplier, move-set with
+               every SpecialAbility, HEAVY flags, min spawn depth / region, the
+               EncounterGroupTemplate slots it may fill, tacticalVerb().
+      BAND     TP in its role band; the order-1 R8 TTK/TTD role targets at
+               depth 1 (R-LADDER L1 across 1..25); trait-aware eHP (order 3);
+               heavy verbs in the R-HEAVY band and avoidable.
+      PRICE    TP via EnemyType.baseThreatPoints (cycle-averaged, heavy
+               avoidance discount); XP derived from TP (never hand-set).
+      REGISTER EnemyType row; spawn symbol — a new FIXED spawn symbol follows the
+               CLAUDE.md STRICT RULE in one commit; at least one group template
+               slot; family voice (audio) and bestiary lines come structurally.
+      COMMUNICATE trait glyph (from family/trait), intent icons for its verbs,
+               danger markers for heavies, ORA archetype line (BestiaryCatalog
+               string id resolves).
+      DONE     C-ENEMY green; it appears in BalanceReport ENEMIES/LADDER tables
+               and spawns in the sim FLOOR REPORT at its depths.
+  K2  ENEMY FAMILY / TRAIT (EnemyFamily, EnemyTrait)
+      DECLARE  trait; trait glyph id; a MatchupCatalog row for EVERY DamageClass;
+               family voice binding (audio); family bestiary lines.
+      BAND     R-ROLE-1..3 still hold with the new trait's scenario added (a new
+               trait adds one reference scenario to R-ROLE).
+      DONE     C-FAMILY green; matchup table complete (no missing cell).
+  K3  ENEMY SPECIAL VERB (SpecialAbility)
+      DECLARE  pricing equivalence (special-verb pricing row), HEAVY flag stated
+               explicitly (true/false), danger-tile shape if HEAVY, telegraph
+               (commits >= 1 turn ahead if > 25% eHP), ORA ability line id.
+      BAND     R-TELEGRAPH; R-HEAVY if heavy; SUMMON verbs under the hard caps.
+      DONE     C-VERB green; TELEGRAPH AUDIT table lists it.
+  K4  BOSS (boss EnemyType + BossTable row)
+      DECLARE  BossTable row (depth, archetype, target fight turns, survival
+               ratio); phase count; verb fractions; heavy verbs flagged.
+      BAND     R-BOSS-* (gate, fair, verb cap incl. the 50% heavy cap, reward,
+               ammo); S-BOSS consistency.
+      PRICE    derived by BossBalance from ExpectedPlayer — never literal HP.
+      DONE     C-BOSS green; every BossTable depth resolves to a declared boss.
+  K5  WEAPON (Weapon subclass + ItemType)
+      DECLARE  DamageClass, role/niche scenario, ammo type, base damage / clip /
+               range / falloff / reload at LV1 COMMON, ladder participation
+               (only the Fist is exempt), special properties (pierce, splash,
+               knockback, stagger).
+      BAND     R-ROLE-1..5: it must be best in >= 1 reference scenario OR add a
+               new scenario (then every existing class is re-checked); it may not
+               take the ONLY niche of an existing class; no class best in > 2.
+               R-LADDER (it follows the ladder).
+      PRICE    scenario turns-to-clear; ammo feasibility; shop price via
+               GameMath.shopPrice from its PP.
+      REGISTER ItemType + weapon classification (COVERAGE), WeaponRoller tier
+               rules, ground sprite and HUD per docs/weapon-creation-guide.txt.
+      COMMUNICATE class glyph + colour, STRONG VS / WEAK VS on the compare card,
+               switch-hint eligibility (MatchupAdvisor sees it automatically).
+      DONE     C-WEAPON green; SCENARIO table row; sim MATCHUP REPORT shows it
+               when carried.
+  K6  WEAPON ABILITY (WeaponAbility)
+      DECLARE  magnitude per level, cap, BuildTag, melee/ranged eligibility,
+               MAJOR flag, signature flag.
+      BAND     priced PP >= ABILITY_MIN_FELT_PP at its expected level; fits the
+               tier budgets (R-ABILITY).
+      PRICE    GameMath.abilityPowerPoints.
+      DONE     C-ABILITY green; roll sweep never exceeds a tier ceiling.
+  K7  PERK / KEYSTONE (Perk, Keystone)
+      DECLARE  BuildTag, ranks, per-rank modifiers, attribute grant; keystone
+               gain AND cost modifiers.
+      BAND     R-PERK (felt, focused), R-KEYSTONE (>= 30% niche gain, >= 10%
+               cost elsewhere), R-CARRY re-checked for every tag.
+      DONE     C-PERK green; PERKS/BUILDS tables list it; name/effect ids resolve.
+  K8  ITEM / PICKUP / CONSUMABLE (ItemType; heal, armour, utility)
+      DECLARE  category; effect as a FRACTION of max (HP/armour) or an explicit
+               non-HP utility effect; stack cap; cleanse behaviour; supply
+               category (which SupplyPlan category it counts toward) or the
+               explicit declaration NOT_FLOOR_SUPPLIED; pickup symbol (existing,
+               or STRICT RULE).
+      BAND     R-HEAL (survival-turns bought) for HP/armour items; R-SUPPLY
+               (counted in the plan).
+      PRICE    supply value in PP; shop price via GameMath.shopPrice.
+      COMMUNICATE inventory icon + name/description ids; HUD feedback on use.
+      DONE     C-ITEM green; placed only by SupplyPlanner (or declared shop/
+               reward-only).
+  K9  AMMO TYPE (AmmoType)
+      DECLARE  generosity factor, reserve cap, box size, shop box price source.
+      BAND     R-ROLE-5 (feasible), reserve banking target, R-SUPPLY.
+      DONE     C-AMMO green.
+  K10 STATUS EFFECT
+      DECLARE  ONE definition (R-DOT); magnitude as a fraction of max HP (DoT) or
+               a multiplier; duration; stacking; armour-shield interaction
+               (blocked or not, cost); cleanse (which item); HUD icon id.
+      BAND     R-DOT; its appliers' TP includes it (special-verb pricing).
+      DONE     C-STATUS green; status row shows it with turns remaining.
+  K11 HAZARD / GAMEPLAY PROP (explosive barrel kinds, fire / toxic tiles, any
+      prop or tile that deals damage or applies a status)
+      DECLARE  damage as a FRACTION (of the floor's reference enemy HP for
+               enemies, of max HP for the player); two-sidedness (hits player,
+               enemies, or both); the status it applies (K10); DamageClass for
+               matchups (EXPLOSIVE / FIRE / ...); lifetime and spread; placement
+               rule (which planner places it, near which groups).
+      BAND     hazard TP via GameMath.hazardTileThreatPoints inside the floor
+               budget; un-telegraphed player damage <= 25% (R-TELEGRAPH).
+      REGISTER existing symbols only, or the STRICT RULE; placement only through
+               the encounter/supply planners (never hand-placed by a generator).
+      COMMUNICATE a readable sprite/tile and, if it can hit the player, a visible
+               warning before it does (fuse, glow, danger marker).
+      DONE     C-HAZARD green; BalanceReport HAZARDS table lists it.
+  K12 ROOM BLUEPRINT (RoomBlueprint)
+      DECLARE  its supply stance: SUPPLY_NEUTRAL (emits NO pickup and NO enemy
+               symbols — only slots) or SLOT_PROVIDER (tagged supply / group
+               slots the planners may use).
+      BAND     building it in isolation emits no pickup or enemy-spawn symbol.
+      DONE     C-ROOM green. (A neutral blueprint may stay short-lane, G4.)
+  K13 LEVEL GENERATOR (GeneratorId)
+      DECLARE  SupplySlotProvider implementation; footprint band per region;
+               the node types it serves.
+      BAND     R-SUPPLY and R-DENSITY sweeps pass for every node type it serves.
+      DONE     C-GENERATOR green; sim FLOOR REPORT row per node type.
+  K14 ROUTE NODE TYPE (RouteNodeType + profile)
+      DECLARE  NodeSupplySpec row; NodeLevelProfile; route-card threat/reward
+               lines (C1 of order 2); region weights.
+      PRICE    NodeEconomics derived from the spec (never hand-set); DangerTier
+               derived (R-PIPS-DERIVED).
+      DONE     C-NODE green; R-ROUTE-* green.
+  K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX
+      DECLARE  every reward and cost in ladder currencies (weapon LV, perk rank,
+               HP/armour fraction, credits in floors of income, weapon drop);
+               an affix that raises threat declares its matching reward.
+      BAND     R-MYSTERY-EV; event value rule (order 6 F15); R-RISK-PREMIUM.
+      DONE     C-EVENT green.
+  K16 SHOP OFFER TYPE
+      DECLARE  its value in PP; category weight; availability rules.
+      PRICE    GameMath.shopPrice only — a literal credit price fails.
+      BAND     R-CREDITS v2 still holds.
+      DONE     C-SHOP green.
+  K17 REGION (RegionSpec)
+      DECLARE  REGION_TP_BUDGET_MULTIPLIER entry, elite weight, BossTable row for
+               its last floor, ambience + crest rows, story-region mapping.
+      BAND     R-REGION; run-outcome bands.
+      DONE     C-REGION green.
+  K18 ANY NEW BALANCE NUMBER (the catch-all)
+      DECLARE  every new public numeric field in BalanceConfig is either the
+               SUBJECT of at least one schema rule, or listed in
+               BalanceSchema's UNBANDED table with a one-line reason.
+      DONE     C-CONSTANT green.
+
+Enforcement
+  E1  RuleKind.ADMISSION holds sub-rules C-ENEMY, C-FAMILY, C-VERB, C-BOSS,
+      C-WEAPON, C-ABILITY, C-PERK (incl. keystones), C-ITEM, C-AMMO, C-STATUS,
+      C-HAZARD, C-ROOM, C-GENERATOR, C-NODE, C-EVENT, C-SHOP, C-REGION,
+      C-CONSTANT. Each iterates the game's OWN content collections (enum values(), or the
+      registry after its headless bootstrap), so new content is found without
+      anyone listing it. The existing COVERAGE rule is folded in (C-WEAPON,
+      C-ITEM, C-AMMO, C-VERB absorb its four checks).
+  E2  Failure messages name the kind, the content id and the missing or
+      out-of-band item: "ADMISSION C-WEAPON: FLECHETTE_CARBINE — no reference
+      scenario where it is best (R-ROLE-1)".
+  E3  DECLARATION HARDENING: role, family, damage class, supply stance, BuildTag,
+      HEAVY flag and pricing hooks become abstract methods / required builder
+      fields where the type allows, so forgetting them fails compilation. Silent
+      defaults are allowed only for the documented inheritances (trait from
+      family; ladder participation for weapons).
+  E4  C-CONSTANT is FORWARD-ONLY: BalanceConfig fields that exist when this order
+      lands are recorded in a GRANDFATHERED list in BalanceSchema (with a comment
+      that it only ever shrinks). Any field not on it must be covered or
+      UNBANDED-with-reason.
+  E5  Communication checks are structural only: the glyph id / icon id / string
+      id exists and resolves (StoryLocalizationTest already covers story ids);
+      whether it reads well is reviewer's call.
+  E6  The negative drill: for each C-rule, the implementer adds a deliberately
+      unpriced/undeclared dummy LOCALLY, confirms `./gradlew test` fails with the
+      E2 message, and reverts it (never committed). The observed messages are
+      recorded in the checkpoint handover.
+
+Process binding
+  B1  docs/game-balance-authority.txt: SECTION 5 is replaced by "ADD CONTENT —
+      THE CONTENT BALANCE CONTRACT": G1-G5, K1-K18 as copy-pasteable recipes,
+      the three worked examples below, and how to read a C-rule failure.
+  B2  .claude/CLAUDE.md: under Testing Policy / Two Lanes, one rule — "Adding
+      balance-bearing content (enemy, weapon, ability, perk, item, ammo, status,
+      hazard, room that places supply or spawns, generator, node type, event,
+      shop offer, region, or a new BalanceConfig number) is full lane and must
+      pass the content contract (docs/game-balance-authority.txt → ADD
+      CONTENT)"; plus a "Where to Find Info" row.
+  B3  Agents: weapon-creator.md and weapon-creator-fable.md (K5/K6 checklist is
+      part of "done"); creative-game-designer.md (every idea that adds content
+      fills a BALANCE ADMISSION block; decide the band, never leave it to the
+      builder); game-level-designer.md (K12/K13: no hand-placed supply in
+      generated content; hand-made .txt levels are exempt but must use existing
+      symbols); reviewer.md (FAIL on a missing or unfilled BALANCE ADMISSION
+      block or any K "done" item unmet); code-reviewer.md (flag balance literals
+      outside BalanceConfig and pickup placement outside SupplyPlanner — still
+      never recommending a non-balance test); orchestrator.md (a content idea's
+      checkpoints include "C-<KIND> green").
+  B4  Docs: docs/weapon-creation-guide.txt (K5/K6 step at the top of the
+      pipeline), docs/enemy-system.txt ADD AN ENEMY (K1-K4), and cross-links from
+      docs/route-map-system.txt (K14-K17), docs/environment-tileset-system.txt
+      RECIPE B (K12), docs/story-ui-system.txt ADD AN ENEMY (communication half).
+  B5  .claude/agents/ideas/_TEMPLATE.txt gains a BALANCE ADMISSION section
+      (after BALANCE NOTES): one filled K-checklist per content item the idea
+      adds, or "None — adds no balance-bearing content."
+
+
+WORKED EXAMPLES (hypothetical; numbers illustrative, real ones must pass the gates)
+----------------
+  X1  ENEMY — "Scrap Hound" (K1)
+      DECLARE  role CHAFF; family MACHINE (trait SHIELDED, inherited); base HP 30,
+               damage 10, cadence 1, melee, positional 1.15 (fast melee);
+               move-set: none; HEAVY: none; min depth 6 (region B); template
+               slots: PACK (3-5), ESCORT chaff slot.
+      BAND     TP ~22 inside the CHAFF band; depth-1 targets met for CHAFF
+               (1-2 on-curve hits vs FLESH-equivalent; SHIELDED makes the
+               Assault Rifle take 2-3, an ENERGY weapon 1).
+      PRICE    TP from baseThreatPoints; XP derived.
+      REGISTER EnemyType row; needs a spawn symbol -> STRICT RULE commit (check
+               docs/tile-symbols.txt for a free one); PACK/ESCORT pools.
+      COMMUNICATE SHIELDED hexagon on its bar; MACHINE family voice; ORA line
+               story.bestiary.type.scrap_hound (no numbers).
+      DONE     C-ENEMY green; ENEMIES + LADDER tables list it; sim FLOOR REPORT
+               shows it in region B+ packs.
+  X2  WEAPON — "Flechette Carbine" (K5)
+      DECLARE  DamageClass SPREAD; niche: new scenario S9 "CHITIN group of 2 at
+               3-4 tiles"; ammo SHELLS; LV1 COMMON: 18 per flechette volley,
+               clip 6, range 5, falloff 0.10, reload 1; no knockback, stagger at
+               <= 2 tiles only.
+      BAND     best in S9 by >= 20% over the best BALLISTIC; does NOT beat the
+               Shotgun in S6 (the Shotgun keeps its niche); best in <= 2
+               scenarios; S1-S8 re-checked with S9 added.
+      PRICE    SCENARIO table row; shell feasibility; shop price from PP.
+      REGISTER ItemType + classification; WeaponRoller tiers; sprite/HUD per the
+               weapon guide.
+      COMMUNICATE SPREAD fan glyph; compare card "STRONG VS: chitin".
+      DONE     C-WEAPON green; R-ROLE green with S9; MATCHUP REPORT shows use.
+  X3  ITEM — "Trauma Kit" (K8)
+      DECLARE  category MEDICAL; restores 0.30 of max HP over 3 turns (0.10 per
+               turn, interrupted by nothing); cleanses BLEED; stack cap 2; supply
+               category NOT_FLOOR_SUPPLIED — sold in shops only, so it needs no
+               pickup symbol. (Had the designer wanted it on the floor, it would
+               declare supply category HEAL and either reuse an existing pickup
+               symbol or add one through the STRICT RULE.)
+      BAND     R-HEAL survival-turns within band for its fraction.
+      PRICE    supply value in PP -> GameMath.shopPrice.
+      COMMUNICATE inventory icon + ids; heal-over-time shown on the status row.
+      DONE     C-ITEM green; shop table lists its price; no generator places it
+               (the supply planner skips NOT_FLOOR_SUPPLIED items).
 
 
 PLAYER EXPERIENCE
 -----------------
-Players never see any of this. The owner gets a loop that works on the couch:
-play, die, tap DEV LOG, COPY, paste. No ORA teaching topic, no bark — the dev
-layer is outside the fiction and says nothing in-world.
+Invisible to players, by design: they only ever meet content that already fits.
+For every future contributor it replaces "remember to balance it" with a
+checklist and a build that refuses anything unpriced.
 
 
 TECHNICAL NOTES
 ---------------
-No new package (avoids a CLAUDE.md package-table change): headless dev state
-goes in `…toon3d.world` (it is run-state tracking, the same kind of thing as
-RunStats), persistence in `…toon3d.util`, drawing in `…toon3d.render`.
-
-  world/DevAccess            immutable capability; DevAccess.disabled() constant
-                             instance for sim/tests/no-arg Main.
-  world/DevDial              enum: the 10 dials above, each with label, applies
-                             text, range; per-constant data, no switch.
-  world/DevTuning            current dial values; value(DevDial); identity()
-                             factory; loaded from / saved to a DevTuningStore port.
-  world/DevTuningStore       port interface (load/save one float per dial).
-  util/DevStore              Preferences implementation (file "toon3d-dev").
-  world/DevRunLog            the run record: header, List<DevFloorRecord>, death
-                             record; begins/ends floors; exposes recordX(...)
-                             hooks. Pre-sized collections; nothing allocated per
-                             frame (records are built at floor exit).
-  world/DevFloorRecord       the R4 fields.
-  world/DevRunLogFormatter   pure text formatter (LOGv1).
-  world/DevRunLogArchive     rolling local-file store (Gdx.files.local, guarded:
-                             no-op when Gdx.files is null — keeps sim/tests safe).
-  world/DevStartRequest      depth, RouteNodeType, GeneratorId-or-AUTO, kit.
-  world/RunOrigin            NORMAL / DEV_START.
-  render/DevScreenRenderer   DEV HUB, DEV REPORT (word-wrapped, drag-scroll like
-                             the codex body), PAST RUNS list, TUNING steppers,
-                             DEV START pickers, toast. Reuses the story-ui
-                             order-8 STORY_FRAME_* plate style for consistency.
-  util/DevConstants          every dev layout number, the dev UI label literals
-                             (developer-facing English, deliberately NOT in
-                             story-strings.properties — that table holds only
-                             player-facing lines), DEV_LOG_MAX_RUNS,
-                             DEV_START_MAX_DEPTH, DEV_KIT_*, DEV_DIAL_*.
-
-Wiring:
-  - Main: new constructor Main(DevAccess); no-arg constructor keeps
-    DevAccess.disabled(). AndroidLauncher computes FLAG_DEBUGGABLE from
-    getApplicationInfo(). Lwjgl3Launcher passes enabled. No Gradle change, no
-    BuildConfig dependency.
-  - World: owns DevAccess, DevTuning, DevRunLog; new RunPhase values for the dev
-    screens (hard-pause overlays, same precedence tier as PAUSE_MENU / SETTINGS).
-  - Dial seams: EncounterBudgetPlanner (ENEMY_COUNT, DEPTH_CURVE via the budget
-    depth term), enemy spawn in EnemyManager (ENEMY_HEALTH, DEPTH_CURVE on the
-    enemy scale terms), enemy damage resolution entry (ENEMY_DAMAGE), weapon/
-    melee/DoT damage entry for the player (PLAYER_DAMAGE), pickup + drop grants
-    (AMMO_SUPPLY, HEAL_SUPPLY), PlayerProgress.addXp (XP_GAIN), credit award
-    path (CREDIT_GAIN), shop pricing in DefaultShopOfferSource (SHOP_PRICE).
-    Each seam receives the value from World (or LevelGenConfig for generation);
-    sim/SimWorld passes DevTuning.identity().
-  - Log feeds: RunStats already records most totals; DevRunLog adds per-floor
-    deltas and the categorised damage (hook at the player damage entry, which
-    knows the source), pickups present at floor build (from the Level's pickup
-    list), and the death record.
-  - Touch: all dev buttons use the framing-menu plate size or larger; steppers
-    are separate "-" and "+" plates each at least TouchConstants' action-button
-    size; nothing inside the HUD safe zone (dev screens are full-screen overlays
-    with their own scrim).
+  util/BalanceSchema     RuleKind.ADMISSION; one rule method per C-rule; the
+                         UNBANDED table and the GRANDFATHERED list (E4); COVERAGE
+                         folded in; failure message format (E2).
+  Content types          declaration hardening (E3): EnemyType, EnemyFamily /
+                         EnemyTrait, SpecialAbility, Weapon (damageClass), ItemType
+                         (supply category), WeaponAbility, Perk / Keystone,
+                         RoomBlueprint (supply stance), NodeSupplySpec builder,
+                         EventEffect builder, shop offer source.
+  Headless bootstraps    the audit reuses RouteRegistries.bootstrap(),
+                         RoomBlueprints.bootstrap(), TilesetRegistries and the
+                         matchup/perk catalogs — no LibGDX (all headless already).
+  util/BalanceReport     an ADMISSION table: every content item per kind with its
+                         band value and status (what C-* checks, readable).
+  Docs and agent files   per B1-B5.
 
 
 VISUAL DESIGN
 -------------
-Plain and functional, deliberately unlike the story UI so it is never mistaken
-for fiction: black scrim at 0.9, monospace-looking procedural BitmapFont text,
-a thin amber header bar reading "DEV" on every dev screen, amber plates. The
-toast is a one-line amber strip for 1.5 s (cosmetic timer; it blocks nothing).
+None.
 
 
 BALANCE NOTES
 -------------
-No balance number changes. Dials default to identity, so the shipped game and
-the balance simulator are byte-identical. A dial value the owner likes is a
-hint; it is baked into the BalanceConfig constants behind its seam (by the
-order-7 feel pass if it is running, or any later balance change) and the dial is
-then reset to 1.0.
+Balance-bearing (BalanceSchema rules, BalanceAuditTest). No gameplay number
+changes; if switching a C-rule on exposes an existing out-of-band value, the
+checkpoint records a waiver (reason + expiry) rather than retuning.
 
 
 INTERACTIONS
 ------------
-  - Pause/title menus (FramingMenu): dev rows appended after the enum rows.
-  - Reprint card: DEV LOG plate beside REPORT; the REPORT page is untouched.
-  - Story layer: dev runs suppress barks/exchanges and never touch StoryStore.
-  - Route map: DEV START synthesises/forces a node at the requested depth.
-  - Balance audit: new identity checks (TESTS below).
-  - Sound: none.
+Every order of the series (it codifies their rules); the narrative contract
+(docs/narrative-authority.txt) for any line new content needs; the tile-symbol
+STRICT RULE for any new spawn/pickup symbol; the optional order 9 (a new master
+knob MAY get a dial there; nothing here depends on it).
 
 
 EDGE CASES
 ----------
-  - App paused/killed mid-floor: the floor record is lost, all earlier floors
-    are on disk (R6). onApplicationResume restores nothing extra.
-  - Clipboard null (some desktop setups): toast "CLIPBOARD UNAVAILABLE".
-  - Local storage write fails: log stays in memory; toast "LOG NOT SAVED" once.
-  - DEV START at a boss depth: node type forced to BOSS regardless of selection.
-  - DEV START depth beyond the current route horizon: the route map's lazy
-    extension builds it (endless before order 6; clamped to 25 after it).
-  - A dial changed mid-floor that applies "next floor": the TUNING screen shows
-    "pending next floor" beside it.
-  - NEW OPERATOR wipe: does not touch dev prefs or dev logs (they are not save
-    data).
-  - Release build: DevAccess false — verified by the absence of the DEV rows and
-    of the devlog directory.
+  - Content that fits two kinds (a hazard that is also an enemy, e.g. a turret):
+    it satisfies BOTH checklists.
+  - Hand-made .txt levels: exempt from K12/K13 supply rules (authored), but every
+    symbol and every content item they use is still admitted.
+  - Removing content: removing an enemy/weapon must not leave a template slot,
+    BossTable row, niche scenario or shop offer pointing at it — the same C-rules
+    catch the dangling reference.
+  - A registry that can only be bootstrapped with LibGDX: not allowed for
+    balance-bearing content (the audit must see it headless); if one exists, it
+    is split (headless data / render half) as the tileset and audio packages do.
+  - An idea file written before this order: its implementer fills the BALANCE
+    ADMISSION block at CP0 before building.
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  On desktop (./gradlew lwjgl3:run) the pause menu shows a DEV row after
-      ABANDON RUN and the title menu shows a DEV row after QUIT. Constructing
-      Main with the no-argument constructor shows neither.
-  A2  AndroidLauncher passes DevAccess derived from FLAG_DEBUGGABLE (read the
-      code); no static boolean named *DEV*, *TEST* or *DEBUG* is set true
-      anywhere (R-FLAGS green).
-  A3  After a run of 3 floors ending in death, DEV LOG on the reprint card opens
-      a report with a LOGv1 header, 3 floor lines with every R4 field present
-      (unavailable ones as "-"), a summary line and a death block naming the
-      killer and the last 5 damage events.
-  A4  COPY THIS RUN places the exact report text on the clipboard (paste it into
-      any text field on desktop to check) and shows the character-count toast.
-  A5  devlog/ holds at most 20 run files after 21 runs; a floor record appears
-      on disk after each floor exit, before the run ends.
-  A6  TUNING: each of the 10 dials steps by 0.05 within [0.25, 3.00], RESET ALL
-      restores 1.00, values survive an app restart, and a floor played with
-      ENEMY_COUNT 2.00 spawns visibly more enemies than at 1.00 on the same
-      DEV START request (same depth/node/generator/kit).
-  A7  Every floor line lists the non-1.0 dials active at floor start ("dials=").
-  A8  DEV START depth 12 / ELITE / AUTO / ON-CURVE begins on an elite floor at
-      depth 12 with character level, weapons, ammo, heals and credits matching
-      R8; the run then continues through the normal route map.
-  A9  After a DEV START run dies, the StoryStore and StatsStore contents are
-      unchanged (reprint counter, deepest region, one-shot flags, records): read
-      them before and after on desktop. No bark or exchange fired during it.
-  A10 ./gradlew test and ./gradlew balanceSim are green; the balance-sim ledger
-      for a fixed seed is byte-identical to the pre-order ledger (dials identity).
-  A11 Every R14 master-knob constant present in the build has a dial (and none
-      that is absent); the R15 fields of every built series order appear in the
-      floor lines, absent ones print "-".
-  A12 No file of orders 1-7 needed editing to build this order (read the diff).
+  A1  BalanceSchema has RuleKind.ADMISSION with the 18 C-rules; BalanceAuditTest
+      runs them all; `./gradlew test` is green on the current content (any
+      exposed out-of-band value is a documented waiver).
+  A2  The negative drill (E6) was run for every C-rule and each produced a
+      failing `./gradlew test` with an E2-format message; the messages are in
+      the checkpoint handover notes; no dummy content is committed.
+  A3  Forgetting a hardened declaration (E3) is a compile error for EnemyType,
+      Weapon, WeaponAbility, Perk, Keystone and RoomBlueprint (read the code).
+  A4  Adding a BalanceConfig field that is neither a rule subject nor in UNBANDED
+      fails C-CONSTANT; the GRANDFATHERED list exists and is documented as
+      shrink-only.
+  A5  docs/game-balance-authority.txt contains "ADD CONTENT — THE CONTENT BALANCE
+      CONTRACT" with G1-G5, K1-K18 and X1-X3; the old SECTION 5 checklist is gone
+      (replaced, recorded).
+  A6  CLAUDE.md, the seven agent files, _TEMPLATE.txt and the four docs in B4
+      contain the binding text of B2-B5 (read them).
+  A7  BalanceReport prints the ADMISSION table.
+  A8  Both gates green.
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. DATA / CONSTANTS  (java-architect)  DevAccess, DevDial, DevTuning,
-     DevTuningStore, util/DevStore, util/DevConstants, RunOrigin,
-     DevStartRequest; Main(DevAccess); both launchers.
-  2. LOGIC  (java-architect)  dial seams threaded through World / LevelGenConfig
-     / EncounterBudgetPlanner / EnemyManager / pickup + damage + XP + credit +
-     shop paths (identity default; SimWorld passes identity). DevRunLog +
-     formatter + archive + feeds. DEV START resolution in World + route cursor
-     placement (RouteMap) + kit grant; sandbox suppression of story writes.
-  3. RENDER  (libgdx-specialist)  render/DevScreenRenderer (hub, report with
-     scroll, past runs, tuning, dev start, toast); dev rows in the framing menus;
-     DEV LOG plate on the reprint card; RunPhase precedence.
-  4. CONTENT  none.
-  5. TESTS  Balance-bearing seams only: extend BalanceAuditTest (R-FLAGS
-     section) with (a) every DevDial default is exactly 1.0, (b) DevTuning.
-     identity() returns 1.0 for every dial, (c) SimWorld is constructed with
-     identity dials. Extend BalanceSimTest's existing determinism assertion to
-     cover the dial-threaded code path (same seed => byte-identical ledger).
-     Both gates. No test for the UI, log format, archive or launcher —
-     verified by ./gradlew build + ./gradlew lwjgl3:run.
-  6. DOCS  docs/game-balance-authority.txt SECTION 7 (THE CHANGE PROTOCOL) gains
-     "THE PHONE PLAYTEST LOOP" (how logs + dials feed a change) and notes the
-     dials-are-not-modes ruling under R-SINGLE-DIFFICULTY;
-     docs/game-balance-knowledge.txt gains a TOOLS section (log fields, dial
-     seams, DEV START kits); docs/story-ui-system.txt notes the dev rows in the
-     framing menus and the dev-run sandbox (story suppressed, no writes).
+  1. SCHEMA  (java-architect + math-expert)  RuleKind.ADMISSION, the C-rules,
+     UNBANDED / GRANDFATHERED, BalanceReport ADMISSION table.
+  2. HARDENING  (java-architect)  abstract methods / required builder fields
+     (E3); fix any existing content that turns out undeclared.
+  3. DOCS  (java-architect or main thread)  authority doc ADD CONTENT section
+     with examples; weapon guide; enemy doc; route/tileset/story cross-links.
+  4. PROCESS  (main thread / orchestrator)  CLAUDE.md rule + row, the seven
+     agent files, _TEMPLATE.txt.
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with the ADMISSION rules
+     (one test method per C-rule) and fold the existing COVERAGE assertions into
+     them. No new test files. Both gates.
+  6. DOCS  as B1-B5, plus docs/game-balance-knowledge.txt pointing at the
+     contract.
 
 RISKS AND UNKNOWNS
-  - Threading ten dials to their seams touches many call sites; keep each seam a
-    single multiplication at the owning entry point, never scattered.
-  - Sandbox: StoryProgress is shared by several systems; confirm early (CP6)
-    that swapping in an InMemoryStoryProgressStore copy for a dev run is cleaner
-    than guarding every write.
-  - Forcing a node type at an arbitrary depth may violate route guarantees
-    (pre-boss provisioning); acceptable for a dev run — log origin DEV_START.
+  - Switching the rules on may expose existing gaps (an ability never priced, a
+    room that places a pickup). Budget CP1-CP4 for small declaration fixes;
+    genuine band misses become waivers.
+  - Some registries may need a small headless split to be audited; do it in the
+    checkpoint that needs it.
+  - Editing CLAUDE.md and agent files is a process change: keep each addition to
+    a few lines pointing at the authority doc, which stays the single source.
 
 
 CHECKPOINTS
@@ -408,60 +469,54 @@ CHECKPOINTS
   CP   DONE WHEN
   ---  ---------------------------------------------------------------
   CP0  the checkpoint file exists on the branch, committed and pushed
-  CP1  Main(DevAccess) exists; AndroidLauncher passes FLAG_DEBUGGABLE,
-       Lwjgl3Launcher passes enabled, no-arg Main is disabled; nothing visible
-       yet; ./gradlew build green
-  CP2  DevDial (10 rows), DevTuning, DevTuningStore, util/DevStore exist and all
-       ten seams read their dial (identity); SimWorld uses identity;
-       ./gradlew test + ./gradlew balanceSim green with an unchanged ledger
-  CP3  DevRunLog + formatter + archive record every R4 field that has a source
-       and write devlog/ files (rolling 20) on desktop; still no UI (the log is
-       only visible on disk — finished by CP4); build green
-  CP4  DEV HUB, DEV REPORT (scroll, COPY THIS RUN, COPY LAST 5), PAST RUNS and
-       the reprint card DEV LOG plate work on desktop; A1, A3, A4, A5 hold
-  CP5  TUNING screen steps, resets, persists and prints "dials=" in logs; the
-       R14 series dials and R15 series log fields for whatever series orders are
-       built are present; A6, A7, A11 hold
-  CP6  DEV START (depth/node/generator/kit) and the sandbox work; A8, A9 hold
-  CP7  BalanceAuditTest/BalanceSimTest extensions in place; the three docs
-       updated; A2, A10 and A12 hold; both gates green
+  CP1  RuleKind.ADMISSION exists with C-ENEMY, C-FAMILY, C-VERB, C-BOSS; the
+       COVERAGE enemy/verb checks folded in; both gates green on current content
+  CP2  C-WEAPON, C-ABILITY, C-PERK, C-AMMO live; COVERAGE weapon/ammo checks
+       folded in; both gates green
+  CP3  C-ITEM, C-STATUS, C-HAZARD, C-ROOM, C-GENERATOR live; both gates green
+  CP4  C-NODE, C-EVENT, C-SHOP, C-REGION live; BalanceReport ADMISSION table
+       prints; A1, A7 hold; both gates green
+  CP5  declaration hardening (E3) and C-CONSTANT with GRANDFATHERED / UNBANDED
+       live; A3, A4 hold; both gates green
+  CP6  the negative drill run for all 18 C-rules, messages recorded in this
+       checkpoint's handover; A2 holds
+  CP7  authority doc ADD CONTENT section (G, K, X), knowledge doc, weapon guide,
+       enemy doc, route/tileset/story cross-links written; A5 holds
+  CP8  CLAUDE.md rule + row, the seven agent files and _TEMPLATE.txt updated;
+       A6, A8 hold; both gates green
 
 
 ASSUMPTIONS
 -----------
-  AS1  The owner installs a DEBUGGABLE build on the phone (Run from Android
-       Studio, or assembleDebug). If he installs a release APK the tools are
-       invisible by design; this order then needs a signed "playtest" build variant
-       (a one-line follow-up), not a hidden gesture in release.
-  AS2  COPY to clipboard is an acceptable way to hand logs over (paste into the
-       Claude app / chat). No file export needed.
-  AS3  Normal runs are logged in debuggable builds, always; there is no "logging
-       on/off" switch (the cost is a few KB per run).
-  AS4  Dev runs mute the story rather than running it in-memory; the story layer
-       has its own tests and is not what dev start is for.
-  AS5  Ten generic dials plus the R14 series dials (when present) is the right
-       set; the series' master knobs are ordinary constants owned by their
-       orders, and this order only multiplies them.
-  AS6  Dial range 0.25..3.00 in 0.05 steps is fine-grained enough; a dial value
-       is a hint, not the final number.
-  AS7  Headless dev classes go in `world` / `util` to avoid a new package and a
-       CLAUDE.md package-table change.
-  AS8  The DEV START max depth is 25 (the series' run length) even if the
-       descent is still endless in the build (order 6 makes 25 the real end).
-  AS9  Dev UI labels are English literals in util/DevConstants, not localised.
-  AS10 SKIP FLOOR is useful enough to include; it is logged as "skipped" so it
-       never pollutes the data.
+  AS1  The contract codifies the rules AS TUNED by the feel pass, which is why it
+       follows order 7; rules that change later change here in the same commit
+       (the authority doc stays the single source).
+  AS2  Eighteen kinds cover "anything else balance-bearing"; K18 (any new
+       BalanceConfig number) is the catch-all that makes the list complete.
+  AS3  Forward-only C-CONSTANT (grandfathering existing fields) is the practical
+       way to catch new numbers without a retrofit of hundreds of constants.
+  AS4  Declaration hardening via abstract methods is worth the one-time edit: a
+       compile error is the cheapest possible enforcement.
+  AS5  A room blueprint that is supply- and spawn-neutral may stay short-lane;
+       everything else balance-bearing is full lane.
+  AS6  The negative drill is run once, by hand, and recorded — it is not a
+       committed test (dummy content would be a test fixture, which the Testing
+       Policy forbids).
+  AS7  Editing CLAUDE.md and the agent files is covered by the owner's request
+       ("there must be some rules ... it must follow the rules"); each edit is a
+       short pointer to the authority doc.
+  AS8  Hand-made .txt levels stay exempt from supply-planner rules (they are
+       authored), but not from content admission.
 
 
 DECISIONS
 ---------
-  D1  Tools must work on the phone (owner, questionnaire K3 + A4) -> screens with
-      COPY, in-game dials, in-game dev start; no files.  (2026-09-30)
-  D2  Dev-only guard -> runtime DevAccess from FLAG_DEBUGGABLE, not a static
-      flag (keeps R-FLAGS meaningful and avoids a Gradle BuildConfig change).
-      (2026-09-30)
-  D3  Owner revision: the dev tools are the LAST order of the series and
-      OPTIONAL; nothing else in the series may depend on them.  (2026-09-30)
+  D1  New content must follow rules that keep it balanced; "you can also add an
+      idea for it" (owner, reply to the series)  -> this order: per-kind
+      admission checklists + structural ADMISSION rules + process binding,
+      REQUIRED, placed after the feel pass.  (2026-09-30)
+  D2  The optional dev tools move to order 9 (owner's earlier revision keeps
+      them last and optional).  (2026-09-30)
 
 
 OPEN QUESTIONS
@@ -482,16 +537,25 @@ BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.t
 so both gates stay green against the NEW rule. It never permits deleting,
 disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
 
-In THIS order: no balance rule is overridden. R-FLAGS is EXTENDED (dial identity
-checks) and R-SINGLE-DIFFICULTY is CLARIFIED (developer dials in debuggable
-builds are not modes) — both recorded in docs/game-balance-authority.txt. This
-R-FLAGS / dial-default audit work belongs ONLY to this order; orders 1-7 carry
-none of it.
+Overridden by THIS order:
+  - docs/game-balance-authority.txt SECTION 5 NEW-CONTENT CHECKLIST (the
+    new-game-balancr order 1 list) -> REPLACED by "ADD CONTENT — THE CONTENT
+    BALANCE CONTRACT" (G1-G5, K1-K18).
+  - RuleKind.COVERAGE (four classification checks) -> FOLDED INTO
+    RuleKind.ADMISSION (C-WEAPON, C-ITEM, C-AMMO, C-VERB), strictly stronger.
+  - The waiver policy gains one limit (G5): missing declarations or pricing rows
+    are never waivable.
+  - The Two Lanes short-lane allowance "one register() row plus its data (... a
+    room blueprint ...)" -> narrowed to supply-, spawn- and power-neutral rows
+    (G4); recorded in CLAUDE.md at CP8.
 
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt (series index), balance-overhaul-order-7.txt
-          (feel pass: logs are its optional input), new-game-balancr-order-9.txt
-          (simulator + telemetry), story-ui-order-8.txt (framing menus)
-  Docs:   docs/game-balance-authority.txt SECTION 7, docs/story-ui-system.txt
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-1..7.txt (the rules it
+          codifies), balance-overhaul-order-9.txt (optional dev tools),
+          new-game-balancr-order-1.txt (the original COVERAGE rule)
+  Docs:   docs/game-balance-authority.txt, docs/weapon-creation-guide.txt,
+          docs/enemy-system.txt, docs/route-map-system.txt,
+          docs/environment-tileset-system.txt, docs/narrative-authority.txt,
+          docs/tile-symbols.txt

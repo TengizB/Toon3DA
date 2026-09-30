@@ -5,10 +5,10 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 5 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Order 5 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on orders 1-4 (especially order 3's damage classes and scenarios and
 order 4's guard/armour/hazard rules, which perks modify). Does NOT depend on the
-optional dev tools (order 8).
+optional dev tools (order 9).
 
 
 OVERVIEW
@@ -239,7 +239,7 @@ INTERACTIONS
   - Order 2: SCAVENGER modifies supply pickups (never the plan itself).
   - Shop: Haggler / QUARTERMASTER modify prices (order 6 re-derives the economy
     with them in the expected player).
-  - Optional order 8 (if ever built) may log perk picks and auto-pick perks for
+  - Optional order 9 (if ever built) may log perk picks and auto-pick perks for
     its ON-CURVE kit through PerkDeck; nothing here waits for it.
 
 

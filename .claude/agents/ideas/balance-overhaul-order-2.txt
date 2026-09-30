@@ -5,9 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 2 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Order 2 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on order 1 (ExpectedPlayer, ladder, fractional heals). Does NOT depend
-on the optional dev tools (order 8).
+on the optional dev tools (order 9).
 
 
 OVERVIEW
@@ -59,7 +59,7 @@ OUT (deliberately not doing now)
   - Weapon-specific ammo shares by role and the per-ammo-type economy tuning —
     order 3 (this order splits ammo by what the player carries, generically).
   - Hazard placement near groups — order 4.
-  - Any developer dial or per-floor dev log — order 8 (optional).
+  - Any developer dial or per-floor dev log — order 9 (optional).
   - EVENT / MYSTERY / REST contents and shop prices — order 6 (their specs are
     registered here with today's behaviour so every generator goes through the
     planner, but their numbers are order 6's).
@@ -246,7 +246,7 @@ TECHNICAL NOTES
                                band: enemies spawned/killed, groups, turns to
                                first damage exchange, heals and ammo present /
                                picked up / used, HP fraction at entry and exit,
-                               deaths with 0 heals held. (A future order 8 may
+                               deaths with 0 heals held. (A future order 9 may
                                log the same fields from real play.)
 
 

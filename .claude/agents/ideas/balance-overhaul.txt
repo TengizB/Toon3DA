@@ -7,7 +7,7 @@ IMPLEMENTED: -
 
 This is the MASTER INDEX of the balance-overhaul series. It is not built on its
 own; each ordered file below carries its own STATUS, spec and CHECKPOINTS and is
-built strictly in ascending order (orders 1-7). Order 8 is OPTIONAL and may be
+built strictly in ascending order (orders 1-8). Order 9 is OPTIONAL and may be
 built at any time or never. Read this file first for the diagnosis, the
 series-wide targets and the override clause every order repeats.
 
@@ -65,12 +65,17 @@ WHAT THE OWNER WANTS (targets the series is measured against)
   T9  Shops are affordable (D6). Elite / combat / cache feel different (D9).
   T10 (OPTIONAL) Tools the owner can use ON THE PHONE: a per-floor/per-run stats
       screen he can copy, dev start-at-depth, dev master tuning dials (K3, A4).
-      Delivered by optional order 8; no other target depends on it.
+      Delivered by optional order 9; no other target depends on it.
+  T11 New content (enemies, weapons, abilities, perks, items, hazards, rooms,
+      generators, node types, events, shop offers, statuses — anything balance-
+      bearing) must follow written rules that keep it balanced (owner, reply to
+      the series, 2026-09-30). Delivered by order 8, the CONTENT BALANCE
+      CONTRACT.
   Blank answers (Part G ammo, J2 cards) are filled in the order-7 feel pass from
   the owner's play notes and the simulator.
 
 
-THE SERIES (orders 1-7 strictly in this order; order 8 optional)
+THE SERIES (orders 1-8 strictly in this order; order 9 optional)
 ----------------------------------------------------------------
   order-1  The Power Ladder: levels and rarity that matter      (T1, T2)
            Steep weapon level/rarity, enemy scaling tied to it, level-gap
@@ -96,7 +101,14 @@ THE SERIES (orders 1-7 strictly in this order; order 8 optional)
            Owner plays normally and fills a two-minute PLAY NOTES form; Claude
            reads the notes beside the sim reports and BalanceReport, moves the
            master knobs in BalanceConfig, fixes sim navigation, re-bands the sim.
-  order-8  OPTIONAL — Phone dev tools: run log, dev start, dials  (T10)
+  order-8  The Content Balance Contract: how new content enters   (T11)
+           REQUIRED. Codifies the final rules of orders 1-7 as a per-kind
+           ADMISSION CHECKLIST (declare, band, price, register, communicate,
+           done), makes an unpriced or out-of-band addition fail ./gradlew test
+           structurally (BalanceSchema COVERAGE), writes the ADD CONTENT recipes
+           in docs/game-balance-authority.txt, and binds every content-creating
+           agent and doc to them.
+  order-9  OPTIONAL — Phone dev tools: run log, dev start, dials  (T10)
            The series is COMPLETE WITHOUT IT. Skipping it never blocks any other
            order. Prerequisites: none beyond a green build; it may be built at
            any time, including after the feel pass, and adapts to whichever
@@ -112,11 +124,13 @@ complaint. Roles and matchups (3) need density (groups make AoE weapons and
 traits readable). Heavy attacks (4) need the matchup layer (shotgun cancels
 wind-ups). Builds (5) need weapon classes and traits to tag against. Run shape
 (6) re-derives bosses and the economy against the finished player model. The
-feel pass (7) is last of the required orders by definition. The dev tools (8)
-come last and are optional by the owner's decision: nothing in orders 1-7 may
-depend on them.
+feel pass (7) settles the numbers. The content contract (8) comes after it
+because it freezes the FINAL rules into the gate every future addition must pass
+— codifying them earlier would mean rewriting the contract after every tuning
+round. The dev tools (9) come last and are optional by the owner's decision:
+nothing in orders 1-8 may depend on them.
 
-HOW ORDERS 1-7 ARE VERIFIED WITHOUT DEV TOOLS: ./gradlew build / test /
+HOW ORDERS 1-8 ARE VERIFIED WITHOUT DEV TOOLS: ./gradlew build / test /
 balanceSim; BalanceReport's living tables (each order adds the table it needs);
 the simulator's reports (LADDER, FLOOR, MATCHUP, HEAVY, BUILD, run-outcome,
 S-BOSS, S-SHOP — each added by the order that introduces the system, balance-
@@ -125,7 +139,7 @@ normal play on the phone, reported in the order-7 PLAY NOTES form. Every
 whole-system scale that the first draft called a "dial" is now an ordinary
 BalanceConfig constant owned by the order that introduces its mechanic
 (LEVEL_GAP_STEEPNESS, MATCHUP_STRENGTH, HEAVY_DAMAGE_SCALE, BODY_TARGET_*, ...);
-order 8 may later expose them as dials.
+order 9 may later expose them as dials.
 
 Each order leaves the game building, playable and with both balance gates
 green against ITS rules. Between orders the game may be mid-rebalance (e.g.
@@ -170,7 +184,7 @@ change pass: tests are UPDATED to assert the new rule (the Testing Policy allows
 updating an existing test when behaviour legitimately changes, and allows
 extending the balance-scope tests). Non-balance design rules (tile grid,
 turn-based, cardinal-only ranged attacks, touch-only, one difficulty — see
-order-8 on dev dials) are NOT overridable by this clause.
+order-9 on dev dials) are NOT overridable by this clause.
 
 
 UNIMPLEMENTED IDEA FILES THIS SERIES CONTRADICTS
@@ -193,8 +207,8 @@ later. The designer cannot reject them on the owner's behalf; recommended
 
 RELATED
 -------
-  Ideas:  balance-overhaul-order-1.txt .. balance-overhaul-order-7.txt,
-          balance-overhaul-order-8.txt (OPTIONAL dev tools)
+  Ideas:  balance-overhaul-order-1.txt .. balance-overhaul-order-8.txt,
+          balance-overhaul-order-9.txt (OPTIONAL dev tools)
           new-game-balancr-order-1..9.txt, balance_order_1..6 (superseded rules)
   Docs:   docs/game-balance-authority.txt, docs/game-balance-knowledge.txt
   Input:  .claude/balance-feedback/balance-questionnaire.md

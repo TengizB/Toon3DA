@@ -5,9 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 6 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Order 6 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on orders 1-5 (the finished player model: ladder, supply, matchups,
-heavies, builds). Does NOT depend on the optional dev tools (order 8).
+heavies, builds). Does NOT depend on the optional dev tools (order 9).
 
 
 OVERVIEW
@@ -53,8 +53,7 @@ OUT (deliberately not doing now)
     table; a new final boss is a follow-up idea (recommended, see ASSUMPTIONS).
   - New Game+ / endless mode after victory / meta-unlocks.
   - New story lines beyond UI chrome ("DESCENT COMPLETE") and the region name
-    handling below. If the owner answers Q1 with option C, that content is a
-    narrative follow-up idea, not this order.
+    handling below (D5 chose option A, so no new victory card is needed).
   - REST node changes (owner: REST is "ok").
   - Boss AI choreography (Hunter-Killer brain) changes.
   - The unimplemented roguelike_order_19_win_condition_and_final_floor.txt
@@ -75,7 +74,7 @@ GAMEPLAY LOOP
   4. Floors 16-25 (The Breach, The Core): hard, but a player who built well and
      managed resources stays on top.
   5. Depth 25: the final boss dies -> the run ends as a VICTORY. The instance
-     report is labelled "DESCENT COMPLETE". The story ending follows Q1's answer.
+     report is labelled "DESCENT COMPLETE". The story ending follows F5 (D5).
 
 
 RULES
@@ -101,7 +100,7 @@ Run shape
       page shows "DESCENT COMPLETE" (a framing-strings chrome id); StatsStore
       increments runs won and records the best win (fewest turns). NEW OPERATOR
       wipes both.
-  F5  STORY AT VICTORY — DEFAULT (pending Q1): if the save has not reached an
+  F5  STORY AT VICTORY (decided, D5 — option A): if the save has not reached an
       ending, the Core ending exchange opens exactly as today and its answer ends
       the run through commitPendingStoryEnding. If the save HAS reached an ending,
       the ending exchange opens again (the choice is the victory; the player may
@@ -220,7 +219,7 @@ INTERACTIONS
     docs/story-ui-system.txt and the endings framing.
   - Route economics: R-ROUTE-* horizon ends at 25; pre-boss guarantees kept.
   - Orders 1-5: every derivation reads ExpectedPlayer.
-  - Optional order 8 (if ever built) uses 25 as its DEV START maximum; nothing
+  - Optional order 9 (if ever built) uses 25 as its DEV START maximum; nothing
     here waits for it.
 
 
@@ -251,8 +250,8 @@ ACCEPTANCE CRITERIA
       reaches the end (not required for sign-off).
   A3  On a save with no ending, the Core ending exchange opens after the kill as
       today; on a save with an ending already recorded, behaviour matches the
-      decided Q1 option (default F5: it opens again and the launch screen shows
-      the latest ending). Verified by reading requestCoreEndingExchange and the
+      D5 decision (F5: it opens again and the launch screen shows the latest
+      ending). Verified by reading requestCoreEndingExchange and the
       exchange definition's repeatable flag; the existing (updated) story tests
       stay green.
   A4  NAV header shows "FLOOR n / 25"; region E has its crest and ambience; its
@@ -293,7 +292,8 @@ IMPLEMENTATION PLAN
 RISKS AND UNKNOWNS
   - Removing the endless append touches route determinism tests; update them in
     CP1.
-  - The narrative layer's "once" doctrine vs F5; only Q1 settles it.
+  - The narrative layer's "once" doctrine vs F5: settled by the owner (D5);
+    docs/story-ui-system.txt must record the one exception.
   - Sim runs to 25 are longer; watch balanceSim runtime (SIM_SEED_COUNT may need
     a per-band subset — a sim/ change, balance-scope).
 
@@ -307,7 +307,7 @@ CHECKPOINTS
        crest, no append path); NAV header F6; route tests updated; A1, A4 hold;
        both gates green
   CP2  depth-25 boss defeat ends the run as VICTORY with the report label and
-       win stats; ending behaviour per the Q1 decision; A2, A3 hold; build green
+       win stats; ending behaviour per F5 / D5; A2, A3 hold; build green
   CP3  BossTable rows drive bosses; derivation from ExpectedPlayer; R-BOSS-*
        green on all five rows; both gates green
   CP4  region dial + elite weights (F7) live; R-REGION updated; sim run-outcome
@@ -350,22 +350,19 @@ DECISIONS
       dial's peak (F7).  (2026-09-30)
   D4  Shops too expensive everywhere (owner, D6) -> R-CREDITS v2 with a surplus
       band [1.10, 1.40].  (2026-09-30)
+  D5  (was Q1) When a player clears depth 25 on a save that has ALREADY reached
+      a story ending, what happens at the moment of victory? -> OPTION A: the
+      Core ending exchange opens again; the player may choose a different
+      ending; the launch screen shows the latest one. This bends the narrative
+      "say it once" doctrine for this one beat, in exchange for every win having
+      its climax and all four endings being reachable. Rejected: B (replay the
+      previous ending automatically), C (a new victory card with its own ORA
+      line). Owner: "defaults are fine".  (2026-09-30)
 
 
 OPEN QUESTIONS
 --------------
-  Q1  When a player clears depth 25 on a save that has ALREADY reached a story
-      ending, what happens at the moment of victory?
-        A (DEFAULT) the Core ending exchange opens again; the player may choose a
-          different ending; the launch screen shows the latest one. Bends the
-          narrative "say it once" doctrine for this one beat, in exchange for
-          every win having its climax and all four endings being reachable.
-        B the previously chosen ending is replayed automatically (same card /
-          freeze), no choice.
-        C a new, short "descent complete" victory card with its own ORA line
-          (new narrative content, a separate narrative idea file first).
-      Default A. If the owner says "defaults are fine", move this to DECISIONS as
-      A and this file becomes implementable (orders 1-5 do not depend on it).
+None.
 
 
 OVERRIDE CLAUSE

@@ -5,9 +5,9 @@ CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 1 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Order 1 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on nothing in the series (a green build). Does NOT depend on the
-optional dev tools (order 8).
+optional dev tools (order 9).
 
 
 OVERVIEW
@@ -42,7 +42,7 @@ IN
   - Player max HP / max armour growth per character level; heals and armour
     pickups as fractions of max.
   - ONE expected-player model, GameMath.expectedPlayerAtDepth, used by the audit,
-    the simulator and boss derivation (and, if order 8 is ever built, its
+    the simulator and boss derivation (and, if order 9 is ever built, its
     ON-CURVE dev kit).
   - Shop weapon LEVEL-UP made a reliable, affordable ladder rung.
   - Communication: weapon level vs floor threat on the HUD, the weapon compare
@@ -63,7 +63,7 @@ OUT (deliberately not doing now)
   - Perks/keystones and ability rework — order 5 (abilities are only re-spanned
     to the longer level range here, not redesigned).
   - Ending the run at 25, bosses 20/25, full shop economy — order 6.
-  - Any developer dial, DEV START kit or log field — order 8 (optional).
+  - Any developer dial, DEV START kit or log field — order 9 (optional).
   - A weapon-XP / "weapon levels up by use" system. Levels come from finds and
     the shop only (see D-notes).
   - Showing numbers to the story layer. ORA never states a number.
@@ -265,7 +265,7 @@ INTERACTIONS
     the ladder; R-BOSS-GATE becomes easier to satisfy (the start weapon is now
     catastrophically behind at depth 5).
   - XP: R-XP-PACE horizon 1..25; character level cap raised to >= 30 if lower.
-  - Story teaching layer, HUD, shop, route rewards. (Optional order 8 will read
+  - Story teaching layer, HUD, shop, route rewards. (Optional order 9 will read
     ExpectedPlayer for its ON-CURVE kit and may expose LEVEL_GAP_STEEPNESS as a
     dial; nothing here waits for it.)
 
