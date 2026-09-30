@@ -166,21 +166,21 @@ Answer: too slow and too boring. not enough enemies for such large levels.
 
 **F1.** How fast do you lose HP in a typical fight? Do you die in a few hits, or is it
 a slow drain?
-Answer:
+Answer: it's a slow drain, still I'd like some enemies to have stronger attacks that have to be avoided and not tanked
 
 **F2.** Are there single hits that take too much HP at once? From which enemy?
-Answer:
+Answer: no
 
 **F3.** Medkits and armour: too many, too few, about right? Do you end runs holding
 unused medkits, or constantly starving for them?
-Answer:
+Answer: some levels have too many some levels have literally none, I mean the spawn of medkits is actually broken in some level generators or is absent at all. not the ones that have medkits being spawned spawn too many, it could be ok but the sale level have too few enemies so it becomes too easy.
 
 **F4.** Do you arrive at a new floor usually healthy, half-dead, or near death?
 Which SHOULD it be?
-Answer:
+Answer: usually with full hp
 
 **F5.** Is GUARD useful? Do you use it? Does armour feel like it matters?
-Answer:
+Answer: no, not at all, never use it actually. but the intention is that it must be useful 
 
 ---
 
