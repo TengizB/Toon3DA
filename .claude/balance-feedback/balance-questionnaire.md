@@ -102,42 +102,42 @@ For each type: does it feel right? Too hard / too easy / pointless / too rewardi
 How SHOULD you feel leaving that floor (HP left, ammo left, mood)?
 
 **D1. COMBAT** (normal floor)
-Answer:
+Answer:No
 
 **D2. ELITE**
-Answer:
+Answer: No
 
 **D3. BOSS** (each boss separately if you remember: which one, how it went)
-Answer:
+Answer: sometimes ok sometimes to hard sometimes to easy
 
 **D4. REGION_GATE** (the airlock floor between regions)
-Answer:
+Answer: ok
 
 **D5. CACHE**
-Answer:
+Answer: no
 
 **D6. SHOP** (Fabricator — do you use it? Are prices sensible? Do credits matter at all?)
-Answer:
+Answer: shops everywhere are to expensive
 
 **D7. REST** (med bay)
-Answer:
+Answer: ok 
 
 **D8. EVENT / MYSTERY**
-Answer:
+Answer: no
 
 **D9.** When you look at the route map, do you make real choices, or is one path type
 always obviously best (or always obviously avoided)? Which?
-Answer:
+Answer: I like the roadmap, but I feel no difference between elite and normal and others.
 
 **D10.** Do different level LAYOUTS (rooms, long corridors, caverns) change difficulty
 in a way you notice? Is any layout unfair (e.g. corridors with ranged enemies)?
-Answer:
+Answer: all feel wrong
 
 ---
 
 ## Part E — Difficulty across depth
 
-**E1.** Describe the difficulty of each region as you experience it now:
+**E1.** Describe the difficulty of each region as you experience it now: can not do it all individually, but all do not feel right.
 - Region A — OUTER FACILITY:
 - Region B — RESEARCH WING:
 - Region C — REACTOR DEPTHS:
@@ -151,14 +151,14 @@ Answer:
 
 **E3.** Where does difficulty jump suddenly (a "wall")? Where does it go flat or get
 EASIER as you go deeper?
-Answer:
+Answer: see my other answers
 
 **E4.** Does the player get stronger at the right speed? (levels, level-up cards,
 better weapons) Do you feel noticeably stronger at depth 10 than at depth 1?
-Answer:
+Answer: No, I do not have feeling of progression. the enemies my become stronger, but also player must become stronger, a s if player was too lazy to level up or to find new higher levels weapons, then player MUST feel that enemies are too strong for him. Now there is no point of getting better weapons, find weapons with specific abilities and so on, but it must be so.
 
 **E5.** Do the first 2–3 floors of a run feel right — too slow, too dangerous, boring?
-Answer:
+Answer: too slow and too boring. not enough enemies for such large levels.
 
 ---
 
