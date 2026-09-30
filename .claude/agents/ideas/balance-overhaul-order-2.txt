@@ -1,347 +1,366 @@
 STATUS: NOT IMPLEMENTED
-CATEGORY: Progression
-TITLE: The Power Ladder — levels and rarity that matter
+CATEGORY: Level Design
+TITLE: Full Floors, Fair Supply — density and supply planner
 CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
 Order 2 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-Depends on order 1 (dev kit + dials).
+Depends on order 1 (ExpectedPlayer, ladder, fractional heals). Does NOT depend
+on the optional dev tools (order 8).
 
 
 OVERVIEW
 --------
-The owner's top complaint: "I can play with a level-1 weapon very confidently even
-on higher levels. I want to feel that a level-2 weapon is actually much stronger
-than a level-1 weapon, and enemy health must scale with it. I want to feel like I
-cannot play with a level-1 weapon on a level-3 map." Today a weapon level is +10%
-damage (linear), enemy HP grows 4.2% a floor, rarity is contractually forbidden
-from raising power, and the player's HP never grows with character level — so the
-gap between a lazy and a prepared player is a rounding error.
+The owner: "Sometimes there are too many resources and other times too little",
+"levels are big but empty", "rarely there are groups, I wish there were groups",
+"I die on the cave levels because they have no medkits", "usually I arrive with
+full HP", "I feel no difference between elite and normal". The cause is
+structural: three generators place loot with three different codes built from
+independent per-room chances (CavernGenerator only places medkits inside a
+MEDICAL_BAY chamber that may not exist; LevelGenerator hard-codes a 0.70 stim
+chance), enemy drops are independent rolls, the encounter budget buys the SAME
+number of bodies at every depth by construction, and early maps are the full
+80x45 grid.
 
-This order builds ONE steep, readable power ladder shared by both sides: every
-floor has a THREAT LEVEL equal to its depth; weapon damage and enemy HP grow by
-the same compound step; a weapon BELOW the floor's threat level takes a sharp
-multiplicative penalty per level; rarity multiplies damage; character level
-multiplies max HP/armour while enemy damage grows to match; heals become a
-percentage of max. The result: an on-curve player's fights feel the same length
-at floor 1 and floor 20, a player two levels behind feels it immediately, and the
-game SAYS so on the HUD. Base enemy HP is rebased so fights are short (no more
-sponges) — floors will get more bodies in order 3.
+This order replaces all of it with two planners every generator shares:
+  - an ENCOUNTER planner that spends a growing body budget on GROUP TEMPLATES
+    placed as one unit in one room, with a first fight close to the start;
+  - a SUPPLY planner that derives ammo, heals, armour, credits and weapon drops
+    from the floor's ACTUAL roster (its demand) and the node type, places them
+    deterministically, guarantees a heal floor on every floor, and treats enemy
+    drops as planned carriers instead of dice.
+Maps shrink in the early regions so the same fights happen in less walking, and
+COMBAT / ELITE / CACHE floors get contents that feel and read different.
 
 
 SCOPE
 -----
 IN
-  - Floor THREAT LEVEL = depth; RUN_FINAL_DEPTH = 25 introduced as the audit
-    horizon for every depth-swept rule (the run itself ends at 25 in order 7).
-  - Compound weapon level growth, level-gap multiplier, rarity damage multiplier.
-  - Enemy HP / damage compound growth fitted to the ladder; rebased depth-1 enemy
-    HP to the TTK targets.
-  - Player max HP / max armour growth per character level; heals and armour
-    pickups as fractions of max.
-  - ONE expected-player model, GameMath.expectedPlayerAtDepth, used by the audit,
-    the simulator, boss derivation and the order-1 dev kit.
-  - Shop weapon LEVEL-UP made a reliable, affordable ladder rung.
-  - Communication: weapon level vs floor threat on the HUD, the weapon compare
-    card, floor arrival, and one ORA teaching topic.
-  - New schema rule R-LADDER replacing R-DEPTH and R-GEARGATE; every other
-    depth-swept rule re-fitted to the new curves at horizon 1..25.
-  - LEVEL_GAP developer dial (order-1 registry row).
+  - level/SupplyPlanner (headless) + NodeSupplySpec rows (one per RouteNodeType)
+    + SupplySlotProvider implemented by EVERY generator (ROOMS_MST,
+    LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK).
+  - Removal of every generator-local loot rule (per-room chances, depth
+    generosity bumps, the Cavern medical-bay-only medkit path, the hard-coded
+    0.70 stim chance) and of independent enemy drop rolls (replaced by planned
+    carriers; the never-softlock lifeline stays).
+  - Guaranteed heal floor per floor; supply tracks demand within a tight band.
+  - EncounterGroupTemplate registry + group placement; body count that grows
+    with depth; first-contact distance rule; lone-enemy cap.
+  - Per-region map footprint (target walkable tiles) for the combat generators.
+  - Distinct node contents for COMBAT / ELITE / CACHE / SHOP (+ weapon-drop
+    cadence that supplies the order-1 ladder, replacing the pity rule), shown on
+    the route node card.
+  - New audit and sim rules, a BalanceReport SUPPLY/DENSITY table and a sim
+    FLOOR REPORT (what each generator and node type actually produced and what
+    the simulated player got out of it) — the measurement tools for this order.
 
 OUT (deliberately not doing now)
-  - More enemies per floor, groups, supply planner — order 3 (floors will feel
-    faster but still sparse after this order; expected).
-  - Weapon roles, damage classes, matchups — order 4. This order keeps every
-    weapon's ROLE shape; it changes the ladder they sit on.
-  - Heavy attacks, guard, armour rework — order 5.
-  - Perks/keystones and ability rework — order 6 (abilities are only re-spanned
-    to the longer level range here, not redesigned).
-  - Ending the run at 25, bosses 20/25, full shop economy — order 7.
-  - A weapon-XP / "weapon levels up by use" system. Levels come from finds and
-    the shop only (see D-notes).
-  - Showing numbers to the story layer. ORA never states a number.
+  - Weapon-specific ammo shares by role and the per-ammo-type economy tuning —
+    order 3 (this order splits ammo by what the player carries, generically).
+  - Hazard placement near groups — order 4.
+  - Any developer dial or per-floor dev log — order 8 (optional).
+  - EVENT / MYSTERY / REST contents and shop prices — order 6 (their specs are
+    registered here with today's behaviour so every generator goes through the
+    planner, but their numbers are order 6's).
+  - New room blueprints or new tile symbols (none needed; existing pickup and
+    spawn symbols only).
+  - Rubber-banding supply to the player's CURRENT HP or ammo. Supply depends on
+    the floor's demand and the node, never on how the player is doing (the
+    owner: "luck small, earned wins"). The existing emergency ammo lifeline is
+    the only reactive rule and stays.
+  - Enemy AI changes.
 
 
 GAMEPLAY LOOP
 -------------
-  1. Floor 4 loads -> event text "THREAT LV 4" for 2 s beside the floor name.
-  2. HUD right panel shows "SHOTGUN  LV 2" with a red down-arrow: the weapon is
-     two levels under the floor. Shots visibly take ~1.7x as many hits as they
-     did on floor 2.
-  3. First time this happens in the save: ORA (teaching topic UNDERGEARED):
-     "That gun's falling behind what lives down here. Upgrade it or replace it."
-  4. Player finds an ASSAULT RIFLE LV 4 (UNCOMMON). The compare card shows
-     "LV 4 / FLOOR 4" and the effective damage of both weapons ON THIS FLOOR.
-     Picking it up is a decision the numbers make obvious.
-  5. At a Fabricator: "LEVEL UP: SHOTGUN LV 2 -> 3" is always one of the offers
-     for the equipped weapon, priced so one floor's credits buy it. The player
-     chooses: keep a favourite gun on the ladder with credits, or switch to finds
-     and spend credits on supplies.
+  1. Route map: the player taps an ELITE node; its card reads "ELITE — HEAVY
+     RESISTANCE / REWARD: WEAPON +2 LV, RARE OR BETTER". A CACHE reads "LIGHT
+     RESISTANCE / SUPPLIES". A COMBAT node reads "RESISTANCE / STANDARD".
+  2. Floor 1 COMBAT: within ~12 steps the player meets a group of three Gore
+     Biters in the first room off the start; the map is compact (~450 walkable
+     tiles); 12-16 enemies in 4-5 groups; one medkit is guaranteed in the first
+     half of the map, and enough ammo for the roster sits along the way.
+  3. The player leaves at roughly 55-80% HP — not full — having spent most of the
+     floor's ammo; the next floor's supply is sized to ITS roster, not to luck.
+  4. A cave floor at depth 12 has the same heal floor and the same supply-to-
+     demand ratio as a rooms floor at depth 12.
 
 
 RULES
 -----
-  R1  THREAT LEVEL of a floor = its depth d (1..RUN_FINAL_DEPTH). Boss floors,
-      gates and calm floors use the same value.
-  R2  Player outgoing weapon damage per hit:
-        base(weapon) * LADDER_GROWTH^(L-1) * rarityMultiplier(tier)
-                     * levelGapMultiplier(L - d)   [then the order-1 PLAYER_DAMAGE
-                                                    dial, then existing modifiers]
-      L = weapon level (1..MAX_WEAPON_LEVEL). One GameMath method composes it.
-  R3  levelGapMultiplier(gap):
-        gap < 0 : max(LEVEL_GAP_FLOOR, LEVEL_GAP_PENALTY_BASE ^ (-gap * dial))
-        gap = 0 : 1.0
-        gap > 0 : 1 + LEVEL_GAP_BONUS_PER_LEVEL * min(gap, LEVEL_GAP_BONUS_CAP_LEVELS)
-      Defaults: PENALTY_BASE 0.82, FLOOR 0.25, BONUS_PER_LEVEL 0.05, BONUS_CAP 2.
-      dial = the order-1 LEVEL_GAP developer dial (1.0 shipped).
-  R4  The FIST is exempt: its level always equals the floor's threat level and
-      it takes no gap penalty (it is the never-softlock backstop, S-SOFTLOCK).
-      Every other melee weapon follows R2/R3.
-  R5  rarityMultiplier: COMMON 1.00, UNCOMMON 1.10, RARE 1.20, EPIC 1.32,
-      LEGENDARY 1.45 (on top of the tier's ability budget, which stays).
-  R6  Weapon levels: MAX_WEAPON_LEVEL = RUN_FINAL_DEPTH + 2 (27). Found / dropped
-      weapons roll level d + offset, offset weights {-1: 30, 0: 50, +1: 20}
-      (order 3 sets per-node offsets for ELITE/CACHE rewards). Start weapon: L1.
-      Ability magnitudes, accuracy, reload and clip level-scaling are RE-SPANNED
-      so their old level-1..10 curve now spans 1..MAX (same start and end
-      values), keeping R-ABILITY's priced budgets meaningful.
-  R7  Enemy max HP at depth d = rebasedBaseHP(type) * ENEMY_HEALTH_GROWTH^(d-1);
-      enemy outgoing damage = baseDamage(type) * ENEMY_DAMAGE_GROWTH^(d-1).
-      Both growth values are FITTED (math-expert) so R-LADDER L1 holds; starting
-      points 1.09 / 1.07. The old 1.042 / 1.073 constants are replaced.
-  R8  Rebased depth-1 TTK targets (on-curve player, reference workhorse = the
-      Assault Rifle, COMMON L1, measured at 3 tiles including falloff):
-        CHAFF 1-2 hits | SOLDIER 3-4 | BRUISER 5-7 | MINI_ELITE 8-12.
-      Rebased depth-1 TTD targets (hits the player survives from full HP+armour,
-      ordinary attacks only): CHAFF >= 10 | SOLDIER 7-9 | BRUISER 4-6 |
-      MINI_ELITE 3-5. Base HP / damage of each EnemyType is set to land inside its
-      role's targets; the new values live in BalanceConfig SECTION 2.
-  R9  Player max HP = PLAYER_MAX_HEALTH * PLAYER_VITALITY_GROWTH^(level-1) + card/
-      stat bonuses; max armour likewise with the same growth. Starting value 1.07,
-      fitted with R7's damage growth so R-LADDER L1 (TTD half) holds.
-  R10 Heals are fractions of max: MEDKIT_FULL ('H') 0.45 of max HP, STIM ('+')
-      0.18, ARMOUR_SHARD ('a') 0.15 of max armour, ARMOUR_VEST ('A') 0.60.
-      (Replaces the flat 90 / 32 / 14 / 62 values.) Rounded, minimum 1.
-  R11 Expected player at depth d (GameMath.expectedPlayerAtDepth, pure): weapon
-      level d, expected rarity multiplier for d's region (from the per-region drop
-      tier bands WEAPON_DROP_TIER_*_BY_REGION), character level
-      1 + EXPECTED_LEVELS_PER_DEPTH * (d-1), max HP/armour per R9, expected card
-      offence/defence power at that level, reference weapon per R8. This is THE
-      on-curve player for audit, sim, boss derivation (R-BOSS-*) and the order-1
-      ON-CURVE dev kit.
-  R12 R-LADDER (new schema rule; replaces R-DEPTH and R-GEARGATE), for every depth
-      1..RUN_FINAL_DEPTH and every non-boss role's reference archetype:
-        L1 ON-CURVE FLAT  expected-player TTK and TTD stay within +/-15% of their
-                          depth-1 values.
-        L2 LAG PUNISHED   weapon level d-2 -> TTK >= 1.5x on-curve;
-                          d-4 -> >= 2.5x; the start weapon (L1 COMMON) at d >= 5
-                          -> >= 3.0x.
-        L3 AHEAD BOUNDED  weapon level d+2 -> TTK >= 0.75x on-curve.
-        L4 LEVEL FELT     on floor d, level d vs level d-1: DPT gain >= +25%.
-        L5 RARITY FELT    each tier step >= +8% DPT; LEGENDARY >= +40% vs COMMON
-                          at equal level (abilities excluded).
-        L6 VITALITY FELT  character level d-3 -> TTD <= 0.80x on-curve.
-      (Check with defaults: L4 = 1.08/0.82 = 1.32; L2 at d-2 = 1/(0.857*0.672)
-      = 1.74, at d-4 = 3.0.)
-  R13 SHOP LEVEL-UP RUNG: every Fabricator machine always offers LEVEL UP for the
-      equipped weapon (a guaranteed slot, outside the random category roll) while
-      its level < d + 1; a shop level-up can never raise a weapon above d + 1.
-      Price: R-LADDER-AFFORD — at every depth 1..25 the level-up price is <= 50% of
-      the modelled credit income of one COMBAT floor at that depth.
-  R14 COMMUNICATION (must all exist):
-        a. HUD right panel: "LV n" after the weapon name. Colour: normal when
-           L >= d, amber when L = d-1, red with a down-arrow glyph when L <= d-2,
-           green up-arrow when L > d. Glyphs are procedural (no textures).
-        b. Floor arrival: event text "THREAT LV d" under the existing floor/node
-           arrival text, 2 s (cosmetic).
-        c. Weapon compare / pickup card: both weapons show "LV n" and their
-           EFFECTIVE per-hit damage on THIS floor (gap and rarity applied).
-        d. Inventory weapon rows show "LV n" with the same colour rule.
-        e. ORA TeachingTopic UNDERGEARED (TACTICAL, re-teach threshold 3): first
-           taught when the equipped weapon is >= 2 levels under the floor for a
-           whole floor arrival; re-taught (different, shorter words) after 3
-           further floors started that far behind. Lines follow
-           docs/narrative-authority.txt: no numbers.
-  R15 The TacticalPolicy buys the level-up rung for its main weapon when behind
-      and it can afford it; HOARDER-START-WEAPON never does (unchanged). NAIVE
-      never shops (unchanged).
+Supply planner
+  S1  Every generator builds a floor through the SAME pipeline: layout -> slot
+      list (SupplySlotProvider) -> encounter plan -> supply plan (SupplyPlanner)
+      -> placement. No generator places a pickup by its own rule. Hand-made
+      levels (.txt) are unaffected.
+  S2  AMMO: demandUnits(type) derives from the planned roster's total eHP at
+      depth d divided by the expected player's per-unit damage (ExpectedPlayer,
+      order 1). Planned ammo = demand * spec.ammoRatio - expected carrier drops.
+      Split: SUPPLY_CARRIED_SHARE (0.70) across the ammo types of weapons the
+      player carries at floor build, SUPPLY_OFF_TYPE_SHARE (0.30) across the
+      rest (so a found weapon is usable). Rounded to whole boxes.
+  S3  HEALS: expectedIncoming = GameMath.floorExpectedIncomingDamage(roster, d,
+      expected player) (the existing heal-economy model, re-based on order 1).
+      Planned heal value = expectedIncoming * (1 - spec.drainTarget), expressed
+      in fractions of expected max HP and converted to 'H' (0.45) and '+' (0.18)
+      pickups; armour ('a'/'A') = spec.armourShare of that value.
+  S4  HEAL FLOOR: every floor that is not BOSS, REST or REGION_GATE carries heal
+      value >= SUPPLY_HEAL_FLOOR_FRACTION (0.45 of expected max HP — at least one
+      'H' or its equivalent), all of it REACHABLE WITHOUT any keycard, and at
+      least half of it within the first half of the floor by walk distance from
+      the start.
+  S5  TRACKING: the placed supply of every category is within +/- SUPPLY_TRACK_
+      TOLERANCE (0.10) of plan (only rounding to whole pickups may move it).
+      There are no independent per-room or per-kill chance rolls for ammo, heals
+      or armour anywhere.
+  S6  CARRIERS: the planner assigns a share of the ammo/heal plan
+      (SUPPLY_CARRIER_SHARE, 0.25) to specific spawned enemies as their drop
+      (deterministic from the floor seed). A carrier drops its item on death,
+      exactly once. Unkilled carriers keep their loot — skipping fights costs
+      supply by design.
+  S7  SPREAD: no single room/chamber holds more than SUPPLY_MAX_ROOM_SHARE (0.35)
+      of any category; pickups prefer slots on the way to the exit and in or
+      next to group rooms (rewarding the fight), with the S4 half-early rule.
+  S8  CREDITS: credit chips per floor = spec.creditScale * the depth credit
+      curve, placed by the planner (replacing the 3-7 chip roll).
+  S9  WEAPONS: weapon drops per floor = spec.weaponDrops at level offsets and a
+      tier floor from the spec. CADENCE: across any two consecutive non-boss
+      floors the player is offered at least one weapon at level >= d (replaces
+      GUARANTEED_UPGRADE_PER_REGION; tracked in RunStats).
+  S10 NODE SPECS (NodeSupplySpec, one register() row per RouteNodeType; defaults,
+      numbers live in BalanceConfig):
+        type    threat  ammoRatio drainTarget armourShare credits weapons
+        COMBAT  1.00    0.85      0.20        0.20        1.0     1 @ -1..0
+        ELITE   1.60    0.85(+vault) 0.30     0.30 (+'A') 1.6     1 @ +1..+2,
+                                                                  tier >= region
+                                                                  min + 1, gated
+                                                                  behind the
+                                                                  anchor group
+        CACHE   0.35    1.50      -0.25 (net  0.40        0.8     1 @ 0, 50%
+                                  gain)
+        SHOP    0.35    1.00      0.00        0.20        1.0     0 (2 machines)
+        REST / EVENT / MYSTERY / BOSS / REGION_GATE: today's contents expressed
+        as a spec (order 6 retunes REST/EVENT/MYSTERY; BOSS keeps R-BOSS-AMMO's
+        arena budget as its ammo plan; REGION_GATE threat 0).
+      REGION_TP_BUDGET_MULTIPLIER (the region danger dial) still multiplies
+      threat.
+
+Encounter planner
+  E1  BODIES: floor body target grows with depth, independent of per-enemy cost:
+      COMBAT d1 12-16 bodies rising linearly to 22-28 at d25 (BODY_TARGET_MIN/
+      MAX at d1 and d25), times spec.threat and the region dial. The TP budget
+      becomes a CAP on total threat, the body target the thing being filled.
+  E2  GROUPS: the roster is built from EncounterGroupTemplate rows (register()
+      rows, level package). Default templates:
+        PACK        3-5 chaff, one type
+        FIRETEAM    2 soldiers + 2 chaff
+        ESCORT      1 bruiser + 2-3 chaff
+        BATTERY     1-2 ranged soldiers + 2 melee chaff in front of them
+        WARBAND     1 mini-elite + 2 soldiers        (ELITE nodes; depth >= 3)
+        HUNTER      1 bruiser or flanker alone       (max 20% of groups)
+      Each template declares role slots, min depth and node eligibility; the
+      archetype for each slot is drawn from the depth/region roster pool.
+  E3  A group spawns as ONE unit in ONE room (or cavern chamber / corridor
+      pocket), clustered within LEVEL_GEN_PACK_CLUSTER_RADIUS. Per-group threat
+      cap GROUP_TP_FRACTION_CAP (0.35 of the floor cap); per-room cap follows the
+      group (a room holds at most one group unless it is LARGE).
+  E4  SHAPE: on COMBAT and ELITE floors >= 75% of enemies are in groups of >= 2,
+      at least 2 groups have >= 3 members, and at most 3 enemies are alone.
+  E5  FIRST CONTACT: on COMBAT and ELITE floors a group of >= 2 is placed in a
+      room 1-3 room-hops from the start (caverns / corridors: <= 18 walk tiles),
+      never in the start room. On the run's FIRST floor: <= 12 walk tiles.
+  E6  FOOTPRINT: the combat generators accept LevelGenConfig.targetWalkableTiles
+      and build to it (+/- 15%): region A 350-550, B 450-650, C/D/E 500-750.
+      ROOMS_MST reduces room count, CAVERN its fill area, LINEAR_CORRIDOR its
+      spine length. ELITE floors use the lower half of their region's range.
+  E7  DENSITY: enemies per 100 walkable tiles — COMBAT [2.2, 4.0], ELITE
+      [3.0, 5.0], CACHE / SHOP [0.6, 1.5].
+
+Communication
+  C1  Route node card shows a one-line threat word and a one-line reward
+      promise per node type (strings are UI chrome in the route overlay's
+      existing string table, not story lines): COMBAT "RESISTANCE" / "STANDARD
+      SUPPLY"; ELITE "HEAVY RESISTANCE" / "WEAPON +2 LV, RARE+"; CACHE "LIGHT
+      RESISTANCE" / "SUPPLIES"; SHOP "LIGHT RESISTANCE" / "FABRICATORS".
+  C2  The ELITE reward weapon sits behind the anchor group (in or past its room)
+      and shows its rarity glow on the ground (existing ground sprite tint).
 
 
 PLAYER EXPERIENCE
 -----------------
-Every find and every Fabricator visit now asks "does this keep me on the ladder?"
-Falling behind is not a silent drift but a red arrow and fights that visibly
-drag — and the fix is always in reach (a find, one floor of credits, or the
-rarity of what you already carry). Taught by ORA once (UNDERGEARED) and by the
-HUD colour forever after. The floor's threat level is announced on arrival so
-the player always knows the number they are measured against.
+Floors are shorter and busier; the first fight comes quickly; fights come in
+groups that ask for positioning. Supply stops being a lottery: a floor gives
+what its fights cost, minus a bite the player must absorb with skill, and a
+player who skips fights also skips the carriers' loot. Elite is visibly the
+risk-for-a-weapon floor, cache the breather. Nothing new to teach: the route
+card says it.
 
 
 TECHNICAL NOTES
 ---------------
-  util/BalanceConfig  new SECTION 20 — POWER LADDER: RUN_FINAL_DEPTH,
-                      LADDER_GROWTH, LEVEL_GAP_* (4), RARITY_DAMAGE_MULTIPLIER[5],
-                      ENEMY_HEALTH_GROWTH, ENEMY_DAMAGE_GROWTH,
-                      PLAYER_VITALITY_GROWTH, heal/armour FRACTIONS, WEAPON level
-                      roll offset weights, the R8 TTK/TTD target bands,
-                      LADDER_AFFORD_FRACTION (0.5). Removed/replaced:
-                      WEAPON_LEVEL_DAMAGE_PER_LEVEL, ENEMY_HEALTH_SCALE_PER_DEPTH,
-                      ENEMY_DAMAGE_SCALE_PER_DEPTH, MEDKIT_*_HEAL, ARMOUR_*_VALUE
-                      (shims in ItemConstants/EnemyConstants/WeaponConstants follow;
-                      the R-DOT shim-integrity reflection stays green).
-                      MAX_WEAPON_LEVEL moves to BalanceConfig (WeaponConstants
-                      re-exports).
-  util/GameMath       ladderScale(level), levelGapMultiplier(gap, dial),
-                      rarityDamageMultiplier(tier ordinal), weaponLadderDamage(...),
-                      enemyHealthAtDepth / enemyDamageAtDepth (replace the
-                      compound helpers), playerVitalityScale(level),
-                      expectedPlayerAtDepth(d) -> a small immutable value type
-                      (util/ExpectedPlayer: weaponLevel, rarityMultiplier,
-                      characterLevel, damagePerTurn, effectiveHitPoints),
-                      ladderTurnsToKill(...) for the audit. Each with the
-                      Formula/Derivation/Edge-case block.
-  entity/Weapon       reads the current floor threat level (set by World at floor
-                      build, like other per-floor state) and composes damage via
-                      GameMath.weaponLadderDamage; Fist exemption per R4.
-  entity/WeaponRoller level roll per R6; re-spanned level scaling helpers.
-  enemy/EnemyManager  spawn HP/damage via the new GameMath methods (+ order-1
-                      dials).
-  progression/        max HP/armour growth on level-up (PlayerStats /
-                      PlayerProgress); heals resolve fractions in PlayerInventory.
-  shop                DefaultShopOfferSource: guaranteed level-up slot + cap +
-                      price from the ladder rung.
-  render              HudRenderer (LV tag + glyph), weapon compare / inventory
-                      rows (InventoryOverlayRenderer and the compare card),
-                      EventTextSystem arrival line.
-  narrative           TeachingTopic.UNDERGEARED row + first/re-teach strings in
-                      TeachingCatalog / story-strings.properties; firing site in
-                      World at floor arrival.
-  sim                 TacticalPolicy buys the rung (R15); SimWorld uses
-                      expectedPlayerAtDepth where it models the player.
-  world/DevDial       new row LEVEL_GAP (applies next floor); order-1 ON-CURVE
-                      kit switched to expectedPlayerAtDepth.
-  util/BalanceSchema  R-LADDER (six sub-checks), R-LADDER-AFFORD; removal of
-                      R-DEPTH and R-GEARGATE rule bodies (their RuleKinds retired);
-                      re-fits listed under OVERRIDE CLAUSE.
-  util/BalanceReport  new LADDER table (TTK/TTD per role at d = 1,5,10,15,20,25 for
-                      on-curve, d-2, d-4, start weapon, d+2) replacing the DEPTH
-                      COUPLING table.
+  level/SupplyPlanner          headless; plan(SupplyRequest) -> SupplyPlan;
+                               place(SupplyPlan, slots, seed) -> placements.
+  level/SupplyRequest          depth, NodeSupplySpec, planned roster,
+                               ExpectedPlayer, carried ammo types, seed.
+  level/SupplyPlan             per-category planned values + carriers.
+  level/SupplySlotProvider     interface every generator implements: candidate
+                               tiles with room/chamber id, walk distance from
+                               start, reachable-without-keycard flag, group-room
+                               flag, exit-path flag.
+  route/NodeSupplySpec         + NodeSupplySpecRegistry, rows registered in
+                               RouteRegistries.bootstrap() beside the profiles
+                               (one row per RouteNodeType; never a switch).
+  level/EncounterGroupTemplate + EncounterGroupTemplateRegistry (bootstrap rows).
+  level/EncounterBudgetPlanner rewritten around body targets + templates; keeps
+                               the region dial; emits groups (room assignment by
+                               the generator via the slot provider).
+  enemy/EnemyManager / Enemy   carrier flag + planned drop; independent drop
+                               rolls removed (lifeline kept).
+  Generators                   LevelGenerator, LinearCorridorGenerator,
+                               CavernGenerator (placePickups hard-coded path and
+                               MEDICAL_BAY-only 'H' removed — medical bay rooms
+                               may still be DECORATED, but supply comes from the
+                               planner), BossArenaGenerator, MedBayGenerator,
+                               EventRoomGenerator, GateAirlockGenerator.
+  util/BalanceConfig           new SECTION 21 — SUPPLY & DENSITY: SUPPLY_*,
+                               BODY_TARGET_*, GROUP_TP_FRACTION_CAP, footprint
+                               ranges, density bands, node spec numbers.
+                               Deleted: LEVEL_GEN_*_CHANCE per-room chances,
+                               LEVEL_GEN_DEPTH_*_BONUS generosity bumps,
+                               ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_
+                               CHANCE and other per-kill supply chances, CHAFF_
+                               PACK_MIN/MAX (subsumed by templates), credit chip
+                               roll constants, GUARANTEED_UPGRADE_PER_REGION.
+  util/GameMath                floorAmmoDemandUnits, floorExpectedIncomingDamage
+                               (re-based), plannedHealValue, bodyTargetAtDepth,
+                               densityPerHundredTiles.
+  render                       RouteMapOverlayRenderer node card lines (C1).
+  util/BalanceReport           SUPPLY/DENSITY table from the audit sweep:
+                               per generator x node type x depth — bodies,
+                               groups, first-contact distance, walkable tiles,
+                               density, planned vs placed supply per category.
+  sim                          SimWorld unchanged in shape (it plays the real
+                               generators); policies unchanged. SimReport gains a
+                               FLOOR REPORT per generator x node type x depth
+                               band: enemies spawned/killed, groups, turns to
+                               first damage exchange, heals and ammo present /
+                               picked up / used, HP fraction at entry and exit,
+                               deaths with 0 heals held. (A future order 8 may
+                               log the same fields from real play.)
 
 
 VISUAL DESIGN
 -------------
-LV tag: same HUD font as the weapon name, one step smaller. Amber
-(1.0, 0.70, 0.15) and red (0.95, 0.22, 0.18) reuse existing HUD warning colours
-if present. The arrow glyph is a 3-line procedural chevron 10x8 world units drawn
-with ShapeRenderer immediately right of the tag. "THREAT LV d" uses the existing
-event-text style in the region accent colour.
+Route node card: the two new lines in the card's existing body font, threat
+word in the node's accent colour, reward line in neutral grey. No new art.
 
 
 BALANCE NOTES
 -------------
-All of it is balance-bearing (BalanceConfig, GameMath, BalanceSchema, sim).
-Starting values above are DEFAULTS for math-expert to fit, not final: the fit
-target is R-LADDER. Expected enemy HP at depth 25 is roughly 7-10x depth 1 —
-health bars will show bigger numbers deep; acceptable (health bar geometry is
-fraction-based). Credits and ammo supply are re-fitted only enough to keep the
-old scarcity/credit rules green at the new horizon; order 3 replaces the supply
-model and order 7 the economy.
+Balance-bearing: SupplyPlanner numbers, node specs, body targets, group caps,
+density and footprint bands (BalanceConfig SECTION 21), GameMath formulas, and
+new schema rules. Starting values are defaults for the sim + the order-7 feel
+pass to refine. Order 3 will re-weight ammo by weapon role (it replaces the 70/30
+split with per-type ratios); order 6 retunes REST/EVENT/MYSTERY/SHOP specs and
+prices.
 
 
 INTERACTIONS
 ------------
-  - Scarcity: ammo DEMAND now rides ENEMY_HEALTH_GROWTH and SUPPLY rides the
-    expected player's per-hit damage growth; R-SCARCITY-DEPTH is re-fitted at
-    1..25 (region multipliers) until order 3 replaces it.
-  - Bosses: BossBalance derives from expectedPlayerAtDepth, so boss HP moves with
-    the ladder; R-BOSS-GATE becomes easier to satisfy (the start weapon is now
-    catastrophically behind at depth 5).
-  - XP: R-XP-PACE horizon 1..25; character level cap raised to >= 30 if lower.
-  - Order-1 dev kit and dials, story teaching layer, HUD, shop, route rewards.
+  - Route economics (order-7 of new-game-balancr): NodeEconomics ledger rows are
+    re-derived FROM the node specs (one source); R-CALM-COST / R-RISK-PREMIUM /
+    R-PIPS-DERIVED re-run.
+  - Keycard gating: S4 keeps heals out of gated regions; the gated-region bonus
+    reward stays but is counted inside the plan.
+  - Boss arenas: ammo plan = R-BOSS-AMMO arena budget; heal floor exempt.
+  - Tileset / room blueprints: unaffected (supply uses existing pickup symbols
+    'H' '+' 'a' 'A' and ammo pickups; no new symbols).
+  - Order-1 ExpectedPlayer.
 
 
 EDGE CASES
 ----------
-  - Weapon picked up mid-floor above/below the floor: effective immediately; the
-    HUD recolours on pickup.
-  - Floor threat level changes only at floor build; a weapon levelled at a shop
-    recolours immediately.
-  - Level 27 cap reached: the rung offer disappears (not shown greyed).
-  - Fist equipped with no ammo anywhere: exempt, never penalised (R4).
-  - Heal fraction when max HP changes mid-effect (level-up this turn): heal
-    resolves against max HP at the moment of use.
-  - Existing saves: runs are not saved mid-run, so no migration; nothing
-    persistent changes.
-  - Enemies that summon: summoned units spawn at the floor's d like any other.
-  - DEV START with LEVEL_GAP dial 0: no penalty, used to A/B the feel.
+  - Too few slots (tiny cave chamber set): planner merges pickups into larger
+    ones (two '+' -> one 'H') before dropping any; if still short, it places in
+    any reachable floor tile; heal floor S4 is never dropped.
+  - Carrier killed by a hazard or another enemy: still drops (on death, any
+    cause). Carrier summoned? Summons are never carriers.
+  - Carrier inside a wall-adjacent tile when it dies: drop uses the existing
+    ground-item placement fallback.
+  - A player carrying no ranged weapon: the 70% carried share goes to the
+    types of the expected player's weapons.
+  - Keycard never found: nothing essential lies behind it (S4).
+  - Floor with fewer rooms than groups: groups merge into LARGE rooms or the
+    body target is reduced to fit; E4 shape rules are checked after.
+  - Generated vs hand-made levels: hand levels keep their authored pickups.
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  BalanceReport's LADDER table shows, for every role, on-curve TTK/TTD at
-      depths 1..25 within +/-15% of depth 1, and every R-LADDER L2-L6 bound met;
-      BalanceAuditTest fails if any is broken (R-LADDER).
-  A2  DEV START depth 3 / COMBAT / BARE (start weapon L1): the HUD shows the
-      weapon "LV 1" in red with a down-arrow and "THREAT LV 3" on arrival; a
-      soldier-role enemy takes >= 1.5x the hits it takes with an on-curve
-      (ON-CURVE kit) weapon on the same request.
-  A3  At depth 1 with the start kit, a Gore Biter dies in 1-2 Assault-Rifle hits
-      at 3 tiles, a soldier in 3-4, a Shell Brute in 5-7 (R8), read from the
-      order-1 log damage events or by counting shots.
-  A4  A MEDKIT_FULL restores 45% of current max HP at character level 1 and at
-      character level 10 (check two values on desktop).
-  A5  Every Fabricator shows a LEVEL UP offer for the equipped weapon when its
-      level <= d; none when level = d + 1; the price is <= half of one COMBAT
-      floor's modelled income (R-LADDER-AFFORD green).
-  A6  The compare card and inventory rows show LV and effective per-hit damage on
-      this floor for both weapons.
-  A7  ORA's UNDERGEARED line fires once on the first qualifying floor arrival and
-      resolves through story-strings.properties (no !id! marker); it contains no
-      number.
-  A8  R-DEPTH and R-GEARGATE no longer exist as enforced rules; their removal and
-      R-LADDER's text are in docs/game-balance-authority.txt with the override
-      record; docs/game-balance-knowledge.txt SECTIONS 4, 6, 10 describe the
-      ladder.
-  A9  ./gradlew test and ./gradlew balanceSim are green; S-GATE still 0%; the new
-      S-LAG band (HOARDER-START-WEAPON median death depth <= 6) is reported and
-      enforced unless covered by the existing navigation waiver, whose expiry
-      condition it inherits.
+  A1  No generator class contains a pickup-placement probability constant or an
+      independent random loot roll (read the code: LevelGenerator,
+      LinearCorridorGenerator, CavernGenerator and the rest call SupplyPlanner).
+  A2  BalanceAuditTest R-SUPPLY sweep (SUPPLY_AUDIT_SEED_COUNT = 30 seeds x every
+      generator x node types it serves x depths {1,5,10,15,20,25}): heal floor
+      met, reachable without keycard, half-early rule met, every category within
+      +/-10% of plan, no room above 35% of a category.
+  A3  The same sweep: bodies within E1's band, shape rules E4, first contact E5,
+      footprint E6, density E7 (R-DENSITY).
+  A4  The sim FLOOR REPORT shows, for CAVERN floors at every depth band, zero
+      simulated floors without reachable heal value >= the heal floor, and heal
+      value present per floor within +/-10% of the ROOMS_MST value at the same
+      depth and node type.
+  A5  BalanceReport's SUPPLY/DENSITY table at depth 1 COMBAT: 12-16 enemies,
+      first group within 12 walk tiles, walkable tiles 350-550 on every audited
+      seed; on desktop, a new run's first floor has a group in the first room
+      off the start.
+  A6  BalanceReport shows ELITE threat ~1.6x COMBAT at the same depth and every
+      ELITE floor's reward weapon at level >= d+1 placed behind the anchor
+      group; on desktop the route node card shows the C1 lines for all four node
+      types.
+  A7  Sim: TACTICAL mean HP fraction at COMBAT floor exit in [0.55, 0.80]
+      (S-SUPPLY, new) and zero simulated floors below the heal floor; S-ECONOMY
+      re-based to planned-vs-experienced supply. Both gates green (navigation
+      waiver applies as before to depth-derived bands).
+  A8  docs/procedural-level-generation.txt, docs/route-map-system.txt and both
+      balance docs describe the planner pipeline, the node specs and the new
+      rules; the replaced rules are recorded.
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. DATA / CONSTANTS  (math-expert + java-architect)  SECTION 20 constants,
-     GameMath ladder methods, util/ExpectedPlayer, BalanceReport LADDER table.
-  2. LOGIC  (java-architect)  Weapon / WeaponRoller / EnemyManager / progression
-     / PlayerInventory / shop wiring; rebased EnemyType numbers; sim policy R15;
-     LEVEL_GAP dial; dev kit on expectedPlayerAtDepth.
-  3. RENDER  (libgdx-specialist)  HUD LV tag + glyph, compare card, inventory
-     rows, arrival event text.
-  4. CONTENT  (java-architect)  TeachingTopic.UNDERGEARED + two strings, per
-     docs/narrative-authority.txt (the add-a-line protocol).
-  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-LADDER (L1-L6) and
-     R-LADDER-AFFORD, update its R-WEAPON / R-ENEMY / R-HEAL / R-SCARCITY-DEPTH /
-     R-HEALDRAIN-DEPTH / R-XP-PACE / R-BOSS-* / R-CARD-BREAKPOINT assertions to the
-     re-fitted rules, retire the R-DEPTH / R-GEARGATE assertions (replaced, not
-     deleted-to-pass: R-LADDER asserts the stronger property); extend
-     BalanceSimTest with S-LAG. Both gates. Existing enemy tests
-     (AuricSentinelShardTest etc.) and StoryLocalizationTest are UPDATED where
-     numbers/ids legitimately change. No new test files.
-  6. DOCS  docs/game-balance-authority.txt (R-LADDER, R-LADDER-AFFORD, S-LAG,
-     override records, regenerated living tables, CHANGELOG line);
-     docs/game-balance-knowledge.txt (sections 3, 4, 6, 7, 10, 12);
-     docs/weapon-creation-guide.txt (ladder damage path, rarity multiplier);
-     docs/xp-level-progression.txt (vitality growth); docs/story-ui-system.txt
-     (UNDERGEARED topic).
+  1. DATA / CONSTANTS  (java-architect + math-expert)  SECTION 21, NodeSupplySpec
+     rows, EncounterGroupTemplate rows, GameMath supply/density formulas.
+  2. LOGIC  (java-architect)  SupplyPlanner, SupplySlotProvider in every
+     generator, EncounterBudgetPlanner rewrite, carriers in EnemyManager, removal
+     of old loot paths, weapon cadence, footprint targets.
+  3. RENDER  (libgdx-specialist)  route node card lines (C1).
+  4. CONTENT  none (no rooms, no symbols, no story lines).
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-SUPPLY and R-DENSITY
+     (generator sweeps above) and replace the R-SCARCITY / R-SCARCITY-DEPTH /
+     R-HEALDRAIN-DEPTH assertions with them; update route-economics assertions
+     (R-CALM-COST, R-RISK-PREMIUM, R-PIPS-DERIVED) to the spec-derived ledger;
+     extend BalanceSimTest with S-SUPPLY and the re-based S-ECONOMY. Existing
+     LevelGeneratorSnapshotTest, GeneratorReachabilityTest, RouteEconomicsTest
+     and the pack-coherence generator assertion are UPDATED to the new
+     behaviour. No new test files. Both gates.
+  6. DOCS  docs/procedural-level-generation.txt (pipeline, templates,
+     footprint), docs/route-map-system.txt (node specs, card lines, economics
+     re-derivation), docs/game-balance-authority.txt + knowledge (SECTIONS 11,
+     12 rewritten; override records; living tables), docs/enemy-system.txt
+     (carriers).
 
 RISKS AND UNKNOWNS
-  - Fitting ENEMY_HEALTH_GROWTH with card + rarity growth may need a per-region
-    correction term; allowed if expressed as data in SECTION 20.
-  - Boss derivation re-fit may shift fight lengths; order 7 owns boss
-    consistency, this order only keeps R-BOSS-* green.
-  - Many existing assertions move at once: do the constants+formulas+R-LADDER
-    first (CP1), then wire, so each checkpoint is green.
+  - Each generator needs a slot provider; CavernGenerator's chamber model and
+    LinearCorridorGenerator's spine need care. Do ROOMS_MST first (CP2) as the
+    reference, then the rest.
+  - Snapshot tests will change wholesale; update them in the checkpoint that
+    changes the generator, never skip them.
+  - Smaller footprints can make some room blueprints unplaceable; the registry
+    already rejects rooms that do not fit — watch blueprint variety in the sim
+    FLOOR REPORT / BalanceReport.
+  - Audit sweep runtime: keep the seed count a constant (30) and depths sparse.
 
 
 CHECKPOINTS
@@ -349,59 +368,60 @@ CHECKPOINTS
   CP   DONE WHEN
   ---  ---------------------------------------------------------------
   CP0  the checkpoint file exists on the branch, committed and pushed
-  CP1  SECTION 20 constants, the GameMath ladder methods, util/ExpectedPlayer
-       and BalanceReport's LADDER table exist; R-LADDER + R-LADDER-AFFORD are
-       asserted on the formulas and green; nothing wired into gameplay yet
-       (finished by CP2-CP4); both gates green
-  CP2  weapon damage (R2-R6, Fist exemption) and enemy HP/damage growth (R7) are
-       live with rebased EnemyType numbers (R8); R-DEPTH and R-GEARGATE retired;
-       R-WEAPON / R-ENEMY re-banded; both gates green
-  CP3  player vitality growth (R9) and fractional heals (R10) live; R-HEAL /
-       R-HEALDRAIN-DEPTH / R-SCARCITY-DEPTH / R-XP-PACE / R-CARD-BREAKPOINT
-       re-fitted at 1..25; both gates green
-  CP4  BossBalance and the sim read expectedPlayerAtDepth; R-BOSS-* green;
-       TacticalPolicy buys the rung; S-LAG reported; both gates green
-  CP5  shop guaranteed level-up rung, cap and price live (R13); A5 holds
-  CP6  HUD LV tag, compare card, inventory rows, arrival "THREAT LV d" and the
-       UNDERGEARED teaching topic work on desktop; A2, A6, A7 hold
-  CP7  LEVEL_GAP dial + ON-CURVE dev kit on the new model; all docs updated;
-       living tables regenerated; A1, A3, A4, A8, A9 hold; both gates green
+  CP1  SupplyPlanner, SupplyRequest/Plan, SupplySlotProvider, NodeSupplySpec
+       registry (all node rows) and SECTION 21 exist, headless and unwired
+       (wired by CP2-CP3); planner-level R-SUPPLY checks green; both gates green
+  CP2  ROOMS_MST (LevelGenerator) builds through slots + SupplyPlanner; its
+       per-room chances and the 0.70 stim path are gone; snapshot test updated;
+       both gates green
+  CP3  CAVERN, LINEAR_CORRIDOR, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK
+       all build through SupplyPlanner; Cavern's MEDICAL_BAY-only medkit path is
+       gone; carriers replace drop rolls; full R-SUPPLY sweep green and the
+       BalanceReport SUPPLY/DENSITY table printed; A1, A2 hold
+  CP4  group templates, body targets, group placement, shape and first-contact
+       rules live in every combat generator; R-DENSITY (bodies/shape/contact)
+       green; A5 partly (contact, count)
+  CP5  footprint targets live in the three combat generators; R-DENSITY
+       footprint + density green; A3, A5 hold
+  CP6  node specs drive COMBAT/ELITE/CACHE/SHOP contents; weapon cadence
+       replaces the pity rule; route economics re-derived and green; node card
+       lines drawn; A6 holds
+  CP7  sim FLOOR REPORT, S-SUPPLY + re-based S-ECONOMY in the sim; all docs
+       updated; A4, A7, A8 hold; both gates green
 
 
 ASSUMPTIONS
 -----------
-  AS1  "Level" in the owner's answers means the weapon's LV and the floor depth
-       ("level-3 map" = floor 3). The ladder makes weapon LV comparable to depth
-       one-for-one.
-  AS2  Weapon levels come only from finds and the shop; no weapon XP.
-  AS3  A 0.82-per-level penalty with a 0.25 floor is steep enough ("cannot play
-       with LV1 on floor 3" reads as ~1.7x longer fights on floor 3 and ~3x by
-       floor 5 — lethal once enemy damage growth compounds). Tunable via the
-       LEVEL_GAP dial in order 8.
-  AS4  The Fist is the only exemption; the Combat Knife and other melee follow
-       the ladder like guns.
-  AS5  Heals as percentages keep a medkit meaningful at every depth; the absolute
-       numbers the player sees still grow.
-  AS6  Rarity gives a flat damage multiplier AND keeps its ability budget
-       (abilities are redesigned in order 6).
-  AS7  A small "ahead" bonus (+5%/level, cap 2) is enough reward for an elite
-       find without trivialising a floor.
-  AS8  The floor threat level is a whole number equal to depth (no region jumps),
-       so every floor steps the same amount.
-  AS9  Keeping one favourite weapon on the ladder should cost about half of a
-       floor's credits — a real trade against supplies, never out of reach.
-  AS10 Bigger enemy HP numbers deep in the run are acceptable.
+  AS1  Supply depends on the floor's demand and node, never on the player's
+       current state (fairness = consistency; the owner wants earned wins).
+  AS2  Leaving a normal floor at ~55-80% HP is the right target ("usually full
+       HP" is the complaint); REST and CACHE are where HP comes back.
+  AS3  Enemy drops as planned carriers (deterministic) are acceptable; players
+       will not notice the difference except that drops stop being streaky.
+  AS4  12-16 enemies on floor 1 in a ~450-tile map is "not boring"; the body
+       target grows to 22-28 by depth 25. Tunable through BODY_TARGET_* in the
+       order-7 feel pass.
+  AS5  Smaller early maps are wanted (owner: "large but empty"); exploration
+       stays rewarding because supply is placed near fights and on the exit path.
+  AS6  Group templates use existing archetypes and AI; mixed-type groups are
+       fine for the existing pack-coherence assumption (chaff still never spawns
+       alone: every template with chaff has >= 2).
+  AS7  The ELITE reward (weapon +1..+2 LV, rare or better for the region) is the
+       differentiator the owner is missing; the route card must promise it.
+  AS8  REST/EVENT/MYSTERY keep today's contents until order 6.
+  AS9  No new symbols: every placement uses existing pickup and spawn symbols.
 
 
 DECISIONS
 ---------
-  D1  Falling behind must be punished; higher-level weapons MUCH stronger; enemy
-      HP scales with it (owner, B3/E4) -> compound ladder + level-gap penalty +
-      R-LADDER.  (2026-09-30)
-  D2  Rarity must be meaningful (owner, H4) -> rarity damage multiplier,
-      overriding "rarity never raises the band".  (2026-09-30)
-  D3  Run length target 25 floors (owner, C4) -> RUN_FINAL_DEPTH = 25 as the
-      audit horizon now; the ending itself is order 7.  (2026-09-30)
+  D1  Supply must be consistent across floors and generators; cave floors must
+      have heals (owner, B1/F3/A3) -> one shared planner + heal floor.
+      (2026-09-30)
+  D2  More enemies and real groups; early floors not boring (owner, B6/I3/I4/E5)
+      -> growing body targets, group templates, first-contact rule, smaller
+      early maps.  (2026-09-30)
+  D3  Elite vs normal must feel different (owner, D9) -> node supply specs +
+      route card promise.  (2026-09-30)
 
 
 OPEN QUESTIONS
@@ -422,34 +442,34 @@ BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.t
 so both gates stay green against the NEW rule. It never permits deleting,
 disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
 
-Overridden by THIS order (each recorded in the authority doc when it lands):
-  - R-DEPTH (depth-coupling ratio [0.9,1.2] vs playerPowerAtDepthV2, 1..15)
-      -> REPLACED by R-LADDER L1 (on-curve TTK/TTD flat +/-15%, 1..25).
-  - R-GEARGATE (1.35-per-region gear step, golden-ratio gate at region 2 entry)
-      -> REPLACED by R-LADDER L2/L4 (per-floor ladder, lag multipliers).
-  - R-WEAPON's clause "higher rarity never raises a band"
-      -> rarity multiplies damage (R5); role bands are evaluated at L1 COMMON.
-  - WEAPON_LEVEL_DAMAGE_PER_LEVEL (+10% linear), MAX_WEAPON_LEVEL 10
-      -> LADDER_GROWTH compound, MAX_WEAPON_LEVEL 27.
-  - ENEMY_HEALTH_SCALE_PER_DEPTH 1.042 ("held to protect order-3 scarcity") and
-    ENEMY_DAMAGE_SCALE_PER_DEPTH 1.073 -> fitted ENEMY_HEALTH/DAMAGE_GROWTH.
-  - REFERENCE_PLAYER_DPT 25 / REFERENCE_PLAYER_EHP 205 as FIXED anchors
-      -> expectedPlayerAtDepth(d); the depth-1 values remain the depth-1 anchor.
-  - R-ENEMY TP bands and golden-ratio bands -> re-derived from the R8 TTK/TTD
-    targets.
-  - Flat heal values and R-HEAL's flat survival-turns pricing -> fractional heals.
-  - Horizon 1..15 of R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH / R-XP-PACE / R-CREDITS
-    -> 1..25, re-fitted (to be replaced wholesale by orders 3 and 7).
-  - R-BOSS-* inputs (expectedPlayerSustainedDamagePerTurn) -> expectedPlayerAtDepth.
-  - GUARANTEED_UPGRADE_PER_REGION pity rule stays until order 3 re-homes it.
+Overridden by THIS order:
+  - R-SCARCITY (model floor S in [0.75,0.95], per-weapon < 0.60, net drain
+    5-15%), R-SCARCITY-DEPTH and R-HEALDRAIN-DEPTH -> REPLACED by R-SUPPLY
+    (planner tracks the actual roster's demand per node spec, heal floor,
+    tracking tolerance, spread) and the sim band S-SUPPLY.
+  - The SECTION 10 MODEL FLOOR as the tuning reference -> the planner's per-floor
+    demand (the model floor survives only as a printed example).
+  - Four scarcity levers' drop-frequency lever (ENEMY_AMMO_DROP_CHANCE,
+    MELEE_KILL_AMMO_DROP_CHANCE, LEVEL_GEN_*_CHANCE per room, depth generosity
+    bumps) -> planned supply + carriers.
+  - Encounter budget: "enemy COUNT is depth-invariant (known non-goal)" ->
+    body targets grow with depth (E1); CHAFF_PACK_MIN/MAX + consecutive-same-type
+    pack coherence -> group templates (chaff never alone is kept);
+    ENCOUNTER_PER_ROOM_TP_FRACTION_CAP 0.25 -> GROUP_TP_FRACTION_CAP 0.35;
+    ENCOUNTER_ANCHOR_* fractions -> template-driven anchors.
+  - ELITE_BUDGET_SCALE 1.5, ROUTE_CALM_BUDGET_SCALE 0.28, CACHE_* / ELITE_*
+    content constants -> NodeSupplySpec rows (ELITE threat 1.6, CACHE 0.35).
+  - GUARANTEED_UPGRADE_PER_REGION pity rule -> the two-floor weapon cadence (S9).
+  - R-ROUTE-* NodeEconomics values -> derived from NodeSupplySpec.
+  - S-ECONOMY (experienced S vs the old modelled S) -> planned vs experienced.
 
 
 RELATED
 -------
   Ideas:  balance-overhaul.txt, balance-overhaul-order-1.txt,
-          new-game-balancr-order-2.txt (gear gate, superseded),
-          new-game-balancr-order-4.txt (coupling v2, superseded),
-          weapon-levels-tiers-abilities.txt, weapon-compare-rework.txt
-  Docs:   docs/game-balance-authority.txt, docs/game-balance-knowledge.txt,
-          docs/weapon-creation-guide.txt, docs/xp-level-progression.txt,
-          docs/narrative-authority.txt
+          encounter-density-and-corpse-semantics.txt,
+          new-game-balancr-order-3.txt / -5.txt / -7.txt (superseded rules),
+          third-level-generator-cellular-cave.txt,
+          second-level-generator-linear-corridor.txt
+  Docs:   docs/procedural-level-generation.txt, docs/route-map-system.txt,
+          docs/game-balance-authority.txt, docs/game-balance-knowledge.txt

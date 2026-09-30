@@ -1,351 +1,354 @@
 STATUS: NOT IMPLEMENTED
-CATEGORY: Level Design
-TITLE: Full Floors, Fair Supply — density and supply planner
+CATEGORY: Combat
+TITLE: Weapon Roles and Matchups — told to the player
 CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
 
-Order 3 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
-Depends on order 1 (logs, dials) and order 2 (ExpectedPlayer, ladder, fractional
-heals).
+Order 4 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-3 (logs/dials, ladder, groups + supply planner).
 
 
 OVERVIEW
 --------
-The owner: "Sometimes there are too many resources and other times too little",
-"levels are big but empty", "rarely there are groups, I wish there were groups",
-"I die on the cave levels because they have no medkits", "usually I arrive with
-full HP", "I feel no difference between elite and normal". The cause is
-structural: three generators place loot with three different codes built from
-independent per-room chances (CavernGenerator only places medkits inside a
-MEDICAL_BAY chamber that may not exist; LevelGenerator hard-codes a 0.70 stim
-chance), enemy drops are independent rolls, the encounter budget buys the SAME
-number of bodies at every depth by construction, and early maps are the full
-80x45 grid.
+The owner uses the Chaingun, Assault Rifle and Plasma Rifle for everything
+"because they hit from range and there is plenty of ammo", finds shotguns
+"useless — not worth the risk of being hit up close, ammo limited", the
+Incinerator "useless — very low damage", never switches weapon per enemy "but I
+wish I would — this is a great thing to implement, and it must be communicated
+to the player". Enemies "all feel the same".
 
-This order replaces all of it with two planners every generator shares:
-  - an ENCOUNTER planner that spends a growing body budget on GROUP TEMPLATES
-    placed as one unit in one room, with a first fight close to the start;
-  - a SUPPLY planner that derives ammo, heals, armour, credits and weapon drops
-    from the floor's ACTUAL roster (its demand) and the node type, places them
-    deterministically, guarantees a heal floor on every floor, and treats enemy
-    drops as planned carriers instead of dice.
-Maps shrink in the early regions so the same fights happen in less walking, and
-COMBAT / ELITE / CACHE floors get contents that feel and read different.
+This order gives every weapon a DAMAGE CLASS and every enemy family a TRAIT, and
+joins them with a small, readable MATCHUP TABLE (a multiplier per class x trait).
+It retunes each weapon toward a ROLE that is the best answer somewhere and never
+everywhere — shotguns win up close and stagger what they hit, the Incinerator
+clears groups and burns the dead, energy cracks machine shields, the Railgun and
+explosives crack golem plate, and the automatic rifles stay the reliable
+generalist that is RESISTED by armour. Ammo supply is re-weighted so the
+generalist's bullets are the scarce ones. Then it TELLS the player, five ways:
+hit words, trait glyphs on health bars, weapon class glyphs, the compare card,
+and a pulsing SWITCH button that jumps straight to the right gun — plus one ORA
+teaching line.
 
 
 SCOPE
 -----
 IN
-  - level/SupplyPlanner (headless) + NodeSupplySpec rows (one per RouteNodeType)
-    + SupplySlotProvider implemented by EVERY generator (ROOMS_MST,
-    LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK).
-  - Removal of every generator-local loot rule (per-room chances, depth
-    generosity bumps, the Cavern medical-bay-only medkit path, the hard-coded
-    0.70 stim chance) and of independent enemy drop rolls (replaced by planned
-    carriers; the never-softlock lifeline stays).
-  - Guaranteed heal floor per floor; supply tracks demand within a tight band.
-  - EncounterGroupTemplate registry + group placement; body count that grows
-    with depth; first-contact distance rule; lone-enemy cap.
-  - Per-region map footprint (target walkable tiles) for the combat generators.
-  - Distinct node contents for COMBAT / ELITE / CACHE / SHOP (+ weapon-drop
-    cadence that supplies the order-2 ladder, replacing the pity rule), shown on
-    the route node card.
-  - SUPPLY_VARIANCE dev dial; new log fields; new audit and sim rules.
+  - DamageClass per weapon; EnemyTrait per family (overridable per archetype);
+    MatchupCatalog rows (class x trait -> multiplier).
+  - Matchup applied in player->enemy damage resolution; Threat-Point pricing made
+    trait-aware.
+  - Role retunes: Shotgun, Double-Barrel, Incinerator, Plasma Rifle, Arc Cannon,
+    Railgun, Grenade Launcher (base numbers + one signature property each where
+    listed); Assault Rifle / Chaingun stay the generalists.
+  - Per-ammo-type supply generosity in the order-3 SupplyPlanner.
+  - Communication C1-C6 (RULES).
+  - Sim: TacticalPolicy switches by matchup; new S-SWITCH band.
+  - MATCHUP_STRENGTH developer dial.
 
 OUT (deliberately not doing now)
-  - Weapon-specific ammo shares by role and the per-ammo-type economy tuning —
-    order 4 (this order splits ammo by what the player carries, generically).
-  - Hazard placement near groups — order 5.
-  - EVENT / MYSTERY / REST contents and shop prices — order 7 (their specs are
-    registered here with today's behaviour so every generator goes through the
-    planner, but their numbers are order 7's).
-  - New room blueprints or new tile symbols (none needed; existing pickup and
-    spawn symbols only).
-  - Rubber-banding supply to the player's CURRENT HP or ammo. Supply depends on
-    the floor's demand and the node, never on how the player is doing (the
-    owner: "luck small, earned wins"). The existing emergency ammo lifeline is
-    the only reactive rule and stays.
-  - Enemy AI changes.
+  - Heavy telegraphed enemy attacks and how the shotgun stagger interacts with
+    them beyond "stagger cancels the target's committed action" — order 5
+    owns the heavy verbs.
+  - New weapons or new enemies. Every class and trait maps onto existing content.
+  - Melee rework beyond assigning BLADE / BLUNT classes.
+  - Perks that boost classes — order 6.
+  - Enemy AI changes (who targets whom, kiting) — unchanged.
+  - A bestiary / inspect screen or "scan" verb (forbidden by the bestiary voice
+    rules; the glyph on the health bar is the inspect).
 
 
 GAMEPLAY LOOP
 -------------
-  1. Route map: the player taps an ELITE node; its card reads "ELITE — HEAVY
-     RESISTANCE / REWARD: WEAPON +2 LV, RARE OR BETTER". A CACHE reads "LIGHT
-     RESISTANCE / SUPPLIES". A COMBAT node reads "RESISTANCE / STANDARD".
-  2. Floor 1 COMBAT: within ~12 steps the player meets a group of three Gore
-     Biters in the first room off the start; the map is compact (~450 walkable
-     tiles); 12-16 enemies in 4-5 groups; one medkit is guaranteed in the first
-     half of the map, and enough ammo for the roster sits along the way.
-  3. The player leaves at roughly 55-80% HP — not full — having spent most of the
-     floor's ammo; the next floor's supply is sized to ITS roster, not to luck.
-  4. A cave floor at depth 12 has the same heal floor and the same supply-to-
-     demand ratio as a rooms floor at depth 12.
+  1. A Rimeshell Lancer (GOLEM -> PLATED) steps into the lane. Its health bar
+     shows a small plate glyph. The player fires the Assault Rifle: the hit
+     number flashes grey and "RESISTED" appears above the bar.
+  2. The SWITCH WEAPON button pulses amber (the Railgun in the bag is effective
+     vs PLATED and has ammo). One tap switches DIRECTLY to the Railgun (not the
+     next weapon in the cycle). Switching costs its normal turn.
+  3. First time in the save: ORA (teaching topic MATCHUP) — "Those rounds are
+     glancing off. Something in your bag will bite."
+  4. The Railgun hit flashes amber: "WEAK POINT". The Lancer dies in a third of
+     the turns.
+  5. A pack of four Crawlers (UNDEAD -> BURNABLE) rushes in: the Incinerator's
+     cone lights all four and the burn finishes them while the player backs off.
+  6. A Shell Brute (INSECT -> CHITIN) closes: at 1 tile the Shotgun blast knocks
+     it back a tile and staggers it — it loses its next action.
 
 
 RULES
 -----
-Supply planner
-  S1  Every generator builds a floor through the SAME pipeline: layout -> slot
-      list (SupplySlotProvider) -> encounter plan -> supply plan (SupplyPlanner)
-      -> placement. No generator places a pickup by its own rule. Hand-made
-      levels (.txt) are unaffected.
-  S2  AMMO: demandUnits(type) derives from the planned roster's total eHP at
-      depth d divided by the expected player's per-unit damage (ExpectedPlayer,
-      order 2). Planned ammo = demand * spec.ammoRatio - expected carrier drops.
-      Split: SUPPLY_CARRIED_SHARE (0.70) across the ammo types of weapons the
-      player carries at floor build, SUPPLY_OFF_TYPE_SHARE (0.30) across the
-      rest (so a found weapon is usable). Rounded to whole boxes.
-  S3  HEALS: expectedIncoming = GameMath.floorExpectedIncomingDamage(roster, d,
-      expected player) (the existing heal-economy model, re-based on order 2).
-      Planned heal value = expectedIncoming * (1 - spec.drainTarget), expressed
-      in fractions of expected max HP and converted to 'H' (0.45) and '+' (0.18)
-      pickups; armour ('a'/'A') = spec.armourShare of that value.
-  S4  HEAL FLOOR: every floor that is not BOSS, REST or REGION_GATE carries heal
-      value >= SUPPLY_HEAL_FLOOR_FRACTION (0.45 of expected max HP — at least one
-      'H' or its equivalent), all of it REACHABLE WITHOUT any keycard, and at
-      least half of it within the first half of the floor by walk distance from
-      the start.
-  S5  TRACKING: the placed supply of every category is within +/- SUPPLY_TRACK_
-      TOLERANCE (0.10) of plan (only rounding to whole pickups may move it).
-      There are no independent per-room or per-kill chance rolls for ammo, heals
-      or armour anywhere.
-  S6  CARRIERS: the planner assigns a share of the ammo/heal plan
-      (SUPPLY_CARRIER_SHARE, 0.25) to specific spawned enemies as their drop
-      (deterministic from the floor seed). A carrier drops its item on death,
-      exactly once. Unkilled carriers keep their loot — skipping fights costs
-      supply by design.
-  S7  SPREAD: no single room/chamber holds more than SUPPLY_MAX_ROOM_SHARE (0.35)
-      of any category; pickups prefer slots on the way to the exit and in or
-      next to group rooms (rewarding the fight), with the S4 half-early rule.
-  S8  CREDITS: credit chips per floor = spec.creditScale * the depth credit
-      curve, placed by the planner (replacing the 3-7 chip roll).
-  S9  WEAPONS: weapon drops per floor = spec.weaponDrops at level offsets and a
-      tier floor from the spec. CADENCE: across any two consecutive non-boss
-      floors the player is offered at least one weapon at level >= d (replaces
-      GUARANTEED_UPGRADE_PER_REGION; tracked in RunStats).
-  S10 NODE SPECS (NodeSupplySpec, one register() row per RouteNodeType; defaults,
-      numbers live in BalanceConfig):
-        type    threat  ammoRatio drainTarget armourShare credits weapons
-        COMBAT  1.00    0.85      0.20        0.20        1.0     1 @ -1..0
-        ELITE   1.60    0.85(+vault) 0.30     0.30 (+'A') 1.6     1 @ +1..+2,
-                                                                  tier >= region
-                                                                  min + 1, gated
-                                                                  behind the
-                                                                  anchor group
-        CACHE   0.35    1.50      -0.25 (net  0.40        0.8     1 @ 0, 50%
-                                  gain)
-        SHOP    0.35    1.00      0.00        0.20        1.0     0 (2 machines)
-        REST / EVENT / MYSTERY / BOSS / REGION_GATE: today's contents expressed
-        as a spec (order 7 retunes REST/EVENT/MYSTERY; BOSS keeps R-BOSS-AMMO's
-        arena budget as its ammo plan; REGION_GATE threat 0).
-      REGION_TP_BUDGET_MULTIPLIER (the region danger dial) still multiplies
-      threat.
+Classes, traits, matchups
+  M1  DamageClass (data on each weapon, declared by the weapon, never a switch):
+        BALLISTIC  Assault Rifle, Chaingun (and the pistol ammo fallback)
+        SPREAD     Shotgun, Double-Barrel Shotgun
+        ENERGY     Plasma Rifle, Arc Cannon
+        RAIL       Railgun
+        FIRE       Incinerator
+        EXPLOSIVE  Grenade Launcher (and barrels, for matchup purposes)
+        BLADE      Combat Knife, Chainsaw
+        BLUNT      Fist, Hammer
+  M2  EnemyTrait per EnemyFamily (an archetype may override):
+        ABERRATION -> FLESH     (the neutral baseline)
+        MACHINE    -> SHIELDED
+        GOLEM      -> PLATED
+        UNDEAD     -> BURNABLE
+        INSECT     -> CHITIN
+        DEMON      -> INFERNAL
+      Bosses carry their family's trait.
+  M3  MatchupCatalog defaults (multiplier applied to the player's hit after the
+      ladder, before enemy Block/armour; 1.0 unless listed):
+                   BALLISTIC SPREAD ENERGY RAIL FIRE EXPLOSIVE BLADE BLUNT
+        FLESH        1.0      1.0    1.0   1.0  1.0   1.0      1.0   1.0
+        SHIELDED     0.65     0.8    1.5   1.0  0.8   1.0      0.8   1.2
+        PLATED       0.55     0.8    0.9   1.4  0.6   1.3      0.6   1.4
+        BURNABLE     1.0      1.0    1.0   1.0  1.8   1.1      1.1   1.0
+        CHITIN       0.75     1.35   1.0   1.1  1.4   1.0      1.2   1.0
+        INFERNAL     1.0      1.1    1.35  1.0  0.3   0.9      1.0   1.0
+      Status damage the player applies (burn/bleed) uses the class of the weapon
+      that applied it. The MATCHUP_STRENGTH dial raises each multiplier to the
+      dial's power (1.0 shipped).
+  M4  Classification thresholds: a multiplier >= 1.3 is EFFECTIVE; <= 0.8 is
+      RESISTED; between is NEUTRAL. These drive all communication.
 
-Encounter planner
-  E1  BODIES: floor body target grows with depth, independent of per-enemy cost:
-      COMBAT d1 12-16 bodies rising linearly to 22-28 at d25 (BODY_TARGET_MIN/
-      MAX at d1 and d25), times spec.threat and the region dial. The TP budget
-      becomes a CAP on total threat, the body target the thing being filled.
-  E2  GROUPS: the roster is built from EncounterGroupTemplate rows (register()
-      rows, level package). Default templates:
-        PACK        3-5 chaff, one type
-        FIRETEAM    2 soldiers + 2 chaff
-        ESCORT      1 bruiser + 2-3 chaff
-        BATTERY     1-2 ranged soldiers + 2 melee chaff in front of them
-        WARBAND     1 mini-elite + 2 soldiers        (ELITE nodes; depth >= 3)
-        HUNTER      1 bruiser or flanker alone       (max 20% of groups)
-      Each template declares role slots, min depth and node eligibility; the
-      archetype for each slot is drawn from the depth/region roster pool.
-  E3  A group spawns as ONE unit in ONE room (or cavern chamber / corridor
-      pocket), clustered within LEVEL_GEN_PACK_CLUSTER_RADIUS. Per-group threat
-      cap GROUP_TP_FRACTION_CAP (0.35 of the floor cap); per-room cap follows the
-      group (a room holds at most one group unless it is LARGE).
-  E4  SHAPE: on COMBAT and ELITE floors >= 75% of enemies are in groups of >= 2,
-      at least 2 groups have >= 3 members, and at most 3 enemies are alone.
-  E5  FIRST CONTACT: on COMBAT and ELITE floors a group of >= 2 is placed in a
-      room 1-3 room-hops from the start (caverns / corridors: <= 18 walk tiles),
-      never in the start room. On the run's FIRST floor: <= 12 walk tiles.
-  E6  FOOTPRINT: the combat generators accept LevelGenConfig.targetWalkableTiles
-      and build to it (+/- 15%): region A 350-550, B 450-650, C/D/E 500-750.
-      ROOMS_MST reduces room count, CAVERN its fill area, LINEAR_CORRIDOR its
-      spine length. ELITE floors use the lower half of their region's range.
-  E7  DENSITY: enemies per 100 walkable tiles — COMBAT [2.2, 4.0], ELITE
-      [3.0, 5.0], CACHE / SHOP [0.6, 1.5].
+Weapon roles (base numbers at LV1 COMMON; the order-2 ladder scales them)
+  W1  SHOTGUN — point-blank burst. Falloff by distance: 1 tile 100%, 2 tiles
+      85%, 3 tiles 55%, 4 tiles 30%, 5 tiles 15%. Base damage set so that at 1-2
+      tiles its per-turn damage is >= 2.0x the Assault Rifle's at 3 tiles
+      (R-ROLE-4). A hit at 1 tile KNOCKS BACK a non-BOSS, non-MINI_ELITE target
+      one tile if that tile is walkable and free. A hit at <= 2 tiles STAGGERS the
+      target: it loses its next committed action (the intent icon shows the
+      existing STUNNED glyph for that turn). Stagger cannot chain on the same
+      enemy two turns running.
+  W2  DOUBLE-BARREL — both barrels in one action: ~1.8x the Shotgun's hit, same
+      falloff shape but one tile shorter, same knockback/stagger; clip 2.
+  W3  INCINERATOR — group clearer and burner. Cone unchanged (7 tiles). Impact
+      per target set to ~0.6x the Assault Rifle's hit; BURN from the Incinerator
+      stacks up to 3 on one target, each stack ticking FLAME_BURN_FRACTION of the
+      weapon's (ladder-scaled) hit per turn for FLAME_BURN_TURNS (4); burn keeps
+      ticking on a target that walks out of the cone. Target (R-ROLE): clears a
+      group of 3 on-curve chaff in the cone in <= 2 sprays; vs a BURNABLE soldier
+      its TTK is <= 0.8x the Assault Rifle's.
+  W4  PLASMA RIFLE — pierces every enemy in the lane (existing); ENERGY.
+  W5  ARC CANNON — chain unchanged; ENERGY; the chain ignores RESISTED
+      multipliers below 1.0 (it always does at least neutral) so it stays a
+      group tool.
+  W6  RAILGUN — RAIL, full-pierce, charge unchanged; base damage re-fitted under
+      R-ROLE (its old out-of-band waiver is re-decided, see OVERRIDE CLAUSE).
+  W7  GRENADE LAUNCHER — EXPLOSIVE splash; self-damage kept.
+  W8  ASSAULT RIFLE / CHAINGUN — unchanged shape; the reference generalist.
+
+Role rules (replace the weaponPowerScore bands)
+  R-ROLE uses REFERENCE SCENARIOS (all at the expected player's level, depth 5
+  and depth 15), each = target trait x group size x engagement range:
+    S1 FLESH single, 3-5 tiles            S5 BURNABLE group of 3, 1-3 tiles
+    S2 FLESH group of 3, 1-3 tiles        S6 CHITIN single, 1-2 tiles
+    S3 SHIELDED single, 3-5 tiles         S7 INFERNAL single, 3-5 tiles
+    S4 PLATED single, 3-6 tiles           S8 BRUISER charging from 3 tiles
+                                             (turns of damage taken before dead)
+  R-ROLE-1 NICHE      every class except BALLISTIC is the best (fewest turns to
+                      clear, ammo-feasible) in >= 1 scenario by >= 20% over the
+                      best BALLISTIC weapon.
+  R-ROLE-2 GENERALIST BALLISTIC is within 1.3x of the best in S1 and is never
+                      best in S3 or S4.
+  R-ROLE-3 NO DOMINANCE no class is best in more than 2 scenarios.
+  R-ROLE-4 RISK PAYS  SPREAD per-turn damage at 1-2 tiles >= 2.0x BALLISTIC at
+                      3 tiles, equal level and rarity.
+  R-ROLE-5 AMMO FEASIBLE every class can clear its niche scenario with <= one
+                      average floor's planned supply of its ammo type.
+
+Ammo
+  A-1 The order-3 SupplyPlanner's 70/30 carried/off-type split is weighted by a
+      per-AmmoType generosity factor (BalanceConfig): BULLETS 0.8, SHELLS 1.3,
+      FUEL 1.3, CELLS 1.0, GRENADES 1.0, SLUGS 0.9 (normalised so total planned
+      supply per floor is unchanged). Reserve caps re-fitted so SHELLS and FUEL
+      bank ~1.5 floors and BULLETS ~1.0.
 
 Communication
-  C1  Route node card shows a one-line threat word and a one-line reward
-      promise per node type (strings are UI chrome in the route overlay's
-      existing string table, not story lines): COMBAT "RESISTANCE" / "STANDARD
-      SUPPLY"; ELITE "HEAVY RESISTANCE" / "WEAPON +2 LV, RARE+"; CACHE "LIGHT
-      RESISTANCE" / "SUPPLIES"; SHOP "LIGHT RESISTANCE" / "FABRICATORS".
-  C2  The ELITE reward weapon sits behind the anchor group (in or past its room)
-      and shows its rarity glow on the ground (existing ground sprite tint).
+  C1  HIT WORDS: every player hit on an enemy colours that enemy's health-bar HP
+      text for 0.4 s — amber if EFFECTIVE, grey if RESISTED, white otherwise —
+      and the first EFFECTIVE / RESISTED hit on each enemy shows the word
+      "WEAK POINT" / "RESISTED" above its bar for 0.8 s (cosmetic timers).
+  C2  TRAIT GLYPH: every enemy health bar draws its trait glyph (procedural, no
+      textures) at the bar's left end: SHIELDED hexagon, PLATED square plate,
+      BURNABLE flame, CHITIN segmented arc, INFERNAL horned ember. FLESH draws
+      none. Glyph colour = the effective weapon class's colour.
+  C3  CLASS GLYPH: the HUD right panel draws the equipped weapon's class glyph
+      before its name (bullet, spread fan, bolt, rail line, flame, blast star,
+      blade, hammer), in the class colour.
+  C4  SWITCH HINT: when the enemy the player is facing (nearest awake enemy in the
+      facing lane within the equipped weapon's range) is RESISTED by the
+      equipped weapon AND a carried weapon with ammo is EFFECTIVE against it,
+      the SWITCH WEAPON touch button pulses amber (cosmetic) and its next tap
+      switches DIRECTLY to that weapon (still one turn). When no hint is active,
+      SWITCH cycles as today. The hint clears when the target dies, leaves the
+      lane, or the player switches.
+  C5  COMPARE CARD / INVENTORY: each weapon shows "STRONG VS" and "WEAK VS" with
+      the trait glyphs from its class's row (>= 1.3 / <= 0.8).
+  C6  ORA TeachingTopic MATCHUP (TACTICAL, re-teach threshold 3): first taught on
+      the first RESISTED hit while a C4 hint is available; re-taught after three
+      more hint episodes in which the player kept firing the resisted weapon for
+      >= 3 turns. No numbers (docs/narrative-authority.txt).
 
 
 PLAYER EXPERIENCE
 -----------------
-Floors are shorter and busier; the first fight comes quickly; fights come in
-groups that ask for positioning. Supply stops being a lottery: a floor gives
-what its fights cost, minus a bite the player must absorb with skill, and a
-player who skips fights also skips the carriers' loot. Elite is visibly the
-risk-for-a-weapon floor, cache the breather. Nothing new to teach: the route
-card says it.
+Weapon choice becomes a per-fight decision with a readable reason: the glyph on
+the enemy says what it is, the hit word says whether your gun is working, the
+SWITCH button tells you there is a better answer in your bag and takes you to
+it. Shotguns become a deliberate close-range gamble that pays (stagger,
+knockback, huge hit, generous shells). The Incinerator becomes the group and
+undead answer. The automatic rifles are still the safe choice — until armour
+shows up. Learned by ORA once (MATCHUP) and by the colour of every hit after.
 
 
 TECHNICAL NOTES
 ---------------
-  level/SupplyPlanner          headless; plan(SupplyRequest) -> SupplyPlan;
-                               place(SupplyPlan, slots, seed) -> placements.
-  level/SupplyRequest          depth, NodeSupplySpec, planned roster,
-                               ExpectedPlayer, carried ammo types, seed.
-  level/SupplyPlan             per-category planned values + carriers.
-  level/SupplySlotProvider     interface every generator implements: candidate
-                               tiles with room/chamber id, walk distance from
-                               start, reachable-without-keycard flag, group-room
-                               flag, exit-path flag.
-  route/NodeSupplySpec         + NodeSupplySpecRegistry, rows registered in
-                               RouteRegistries.bootstrap() beside the profiles
-                               (one row per RouteNodeType; never a switch).
-  level/EncounterGroupTemplate + EncounterGroupTemplateRegistry (bootstrap rows).
-  level/EncounterBudgetPlanner rewritten around body targets + templates; keeps
-                               the region dial; emits groups (room assignment by
-                               the generator via the slot provider).
-  enemy/EnemyManager / Enemy   carrier flag + planned drop; independent drop
-                               rolls removed (lifeline kept).
-  Generators                   LevelGenerator, LinearCorridorGenerator,
-                               CavernGenerator (placePickups hard-coded path and
-                               MEDICAL_BAY-only 'H' removed — medical bay rooms
-                               may still be DECORATED, but supply comes from the
-                               planner), BossArenaGenerator, MedBayGenerator,
-                               EventRoomGenerator, GateAirlockGenerator.
-  util/BalanceConfig           new SECTION 21 — SUPPLY & DENSITY: SUPPLY_*,
-                               BODY_TARGET_*, GROUP_TP_FRACTION_CAP, footprint
-                               ranges, density bands, node spec numbers.
-                               Deleted: LEVEL_GEN_*_CHANCE per-room chances,
-                               LEVEL_GEN_DEPTH_*_BONUS generosity bumps,
-                               ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_
-                               CHANCE and other per-kill supply chances, CHAFF_
-                               PACK_MIN/MAX (subsumed by templates), credit chip
-                               roll constants, GUARANTEED_UPGRADE_PER_REGION.
-  util/GameMath                floorAmmoDemandUnits, floorExpectedIncomingDamage
-                               (re-based), plannedHealValue, bodyTargetAtDepth,
-                               densityPerHundredTiles.
-  render                       RouteMapOverlayRenderer node card lines (C1).
-  world/DevDial                SUPPLY_VARIANCE (scales +/- tolerance to test
-                               swingy vs flat supply; 1.0 shipped); DevRunLog
-                               fills groups spawned, supply present on floor
-                               (planned vs placed) and walkable tiles.
-  sim                          SimWorld unchanged in shape (it plays the real
-                               generators); policies unchanged.
+  entity/DamageClass            enum with glyph id + colour data.
+  enemy/EnemyTrait              enum with glyph id.
+  enemy/EnemyFamily             trait() per family (data); EnemyType.trait()
+                                defaults to family().trait(), overridable.
+  entity/MatchupCatalog         + MatchupTable: register() rows (class, trait,
+                                multiplier), bootstrap once; lookup by ordinal.
+  entity/Weapon                 damageClass() declared by each subclass (data).
+  util/GameMath                 matchupMultiplier(multiplier, dial),
+                                classifyMatchup(...), shotgun falloff-by-tile,
+                                incinerator stack tick, trait-adjusted enemy eHP
+                                for TP pricing, R-ROLE scenario evaluation
+                                (turns-to-clear per scenario).
+  Damage resolution             the player->enemy hit path (EnemyHitTarget /
+                                EnemyManager damage entry) applies the matchup
+                                once, after the ladder and before Block/armour.
+  Knockback / stagger           reuse the Hammer's existing knockback path;
+                                stagger = the enemy's next committed action is
+                                replaced by the EXISTING IntentVerb.STUNNED (and
+                                its existing intent glyph) for one turn — no new
+                                verb.
+  level/SupplyPlanner           per-AmmoType generosity (A-1).
+  util/BalanceConfig            SECTION 22 — MATCHUPS & ROLES: the table defaults
+                                (also registered as rows, the rows READ these
+                                constants), thresholds, shotgun falloff table,
+                                knockback/stagger rules, incinerator stack
+                                numbers, ammo generosity, reserve caps, scenario
+                                definitions, R-ROLE margins.
+  render                        EnemyRenderer / health bars (C1, C2), HudRenderer
+                                (C3), compare card + InventoryOverlayRenderer
+                                (C5), TouchControllerRenderer pulse (C4 visual).
+  input                         PlayerController switch semantics (C4) — the hint
+                                target is computed by a small headless helper
+                                (entity/MatchupAdvisor) shared with the sim.
+  narrative                     TeachingTopic.MATCHUP + first/re-teach strings;
+                                firing sites in World (evidence from the hint).
+  sim                           TacticalPolicy uses MatchupAdvisor to switch;
+                                NAIVE never switches (unchanged).
+  world/DevDial                 MATCHUP_STRENGTH; DevRunLog adds per-floor damage
+                                dealt by DamageClass, RESISTED/EFFECTIVE hit
+                                counts, hint-driven switches.
 
 
 VISUAL DESIGN
 -------------
-Route node card: the two new lines in the card's existing body font, threat
-word in the node's accent colour, reward line in neutral grey. No new art.
+Class colours: BALLISTIC pale brass (0.85,0.75,0.45), SPREAD orange
+(1.0,0.55,0.15), ENERGY cyan (0.30,0.85,1.0), RAIL white-violet (0.85,0.75,1.0),
+FIRE red-orange (1.0,0.35,0.10), EXPLOSIVE yellow (1.0,0.85,0.20), BLADE silver,
+BLUNT steel grey. Glyphs are 12x12 world-unit ShapeRenderer figures, pre-built
+vertex lists (no allocation in render). The SWITCH pulse is an amber outline
+alpha 0.4..1.0 at 2 Hz on the existing button, drawn only while the hint is
+active.
 
 
 BALANCE NOTES
 -------------
-Balance-bearing: SupplyPlanner numbers, node specs, body targets, group caps,
-density and footprint bands (BalanceConfig SECTION 21), GameMath formulas, and
-new schema rules. Starting values are defaults for the sim + order 8 to refine.
-Order 4 will re-weight ammo by weapon role (it replaces the 70/30 split with
-per-type ratios); order 7 retunes REST/EVENT/MYSTERY/SHOP specs and prices.
+Balance-bearing: matchup multipliers, weapon base numbers, shotgun falloff,
+incinerator stacks, ammo generosity, reserve caps, R-ROLE scenarios and margins,
+trait-aware TP. Defaults above are starting points for math-expert to satisfy
+R-ROLE and the order-2 R-LADDER simultaneously (R-LADDER's reference weapon stays
+the Assault Rifle vs FLESH).
 
 
 INTERACTIONS
 ------------
-  - Route economics (order-7 of new-game-balancr): NodeEconomics ledger rows are
-    re-derived FROM the node specs (one source); R-CALM-COST / R-RISK-PREMIUM /
-    R-PIPS-DERIVED re-run.
-  - Keycard gating: S4 keeps heals out of gated regions; the gated-region bonus
-    reward stays but is counted inside the plan.
-  - Boss arenas: ammo plan = R-BOSS-AMMO arena budget; heal floor exempt.
-  - Tileset / room blueprints: unaffected (supply uses existing pickup symbols
-    'H' '+' 'a' 'A' and ammo pickups; no new symbols).
-  - Order-1 log and dials; order-2 ExpectedPlayer.
+  - Order-2 ladder: matchup multiplies after the ladder; R-LADDER unaffected
+    because its reference is FLESH.
+  - Order-3 supply: ammo generosity weights; groups make AoE classes matter.
+  - Order-5: stagger is the shotgun's answer to heavy wind-ups (order 5 wires
+    heavies to respect STAGGERED).
+  - Hazards: barrels count as EXPLOSIVE vs traits; fire tiles as FIRE.
+  - Bestiary voice lines stay as shipped (they already say how to fight each
+    type; no numbers). Sound: no new sound (catalog at cap); RESISTED reuses the
+    existing ricochet/impact sound if one exists, otherwise silent.
 
 
 EDGE CASES
 ----------
-  - Too few slots (tiny cave chamber set): planner merges pickups into larger
-    ones (two '+' -> one 'H') before dropping any; if still short, it places in
-    any reachable floor tile; heal floor S4 is never dropped.
-  - Carrier killed by a hazard or another enemy: still drops (on death, any
-    cause). Carrier summoned? Summons are never carriers.
-  - Carrier inside a wall-adjacent tile when it dies: drop uses the existing
-    ground-item placement fallback.
-  - A player carrying no ranged weapon: the 70% carried share goes to the
-    types of the expected player's weapons.
-  - Keycard never found: nothing essential lies behind it (S4).
-  - Floor with fewer rooms than groups: groups merge into LARGE rooms or the
-    body target is reduced to fit; E4 shape rules are checked after.
-  - Generated vs hand-made levels: hand levels keep their authored pickups.
+  - Stagger on an enemy mid-WIND_UP: the committed charge is cancelled (the
+    wind-up is lost, not delayed).
+  - Knockback into a hazard tile: allowed (that is the tactic); into a wall,
+    door, prop or another enemy: no knockback, stagger still applies.
+  - Switch hint with an empty effective weapon: not offered (needs ammo).
+  - Two effective weapons: hint picks the higher multiplier, ties -> the one with
+    more ammo.
+  - Boss traits: bosses take matchups like their family; knockback never applies
+    to bosses; stagger on a boss is capped by the boss AI (no stagger during a
+    phase transition) — boss choreography otherwise untouched.
+  - Incinerator burn on an enemy that dies: stacks vanish; burn can kill.
+  - Action lock mid-animation: the hint only changes the NEXT tap's meaning.
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  No generator class contains a pickup-placement probability constant or an
-      independent random loot roll (read the code: LevelGenerator,
-      LinearCorridorGenerator, CavernGenerator and the rest call SupplyPlanner).
-  A2  BalanceAuditTest R-SUPPLY sweep (SUPPLY_AUDIT_SEED_COUNT = 30 seeds x every
-      generator x node types it serves x depths {1,5,10,15,20,25}): heal floor
-      met, reachable without keycard, half-early rule met, every category within
-      +/-10% of plan, no room above 35% of a category.
-  A3  The same sweep: bodies within E1's band, shape rules E4, first contact E5,
-      footprint E6, density E7 (R-DENSITY).
-  A4  DEV START depth 12 / COMBAT / generator CAVERN, three different seeds: each
-      floor has at least one 'H' (or equivalent) reachable without a keycard —
-      verified in the order-1 log ("heals present").
-  A5  DEV START depth 1 / COMBAT: first group met within 12 walk tiles; 12-16
-      enemies; walkable tiles 350-550 (log fields).
-  A6  An ELITE floor's log shows threat ~1.6x a COMBAT floor at the same depth
-      and a weapon at level >= d+1 placed behind the anchor group; the route node
-      card shows the C1 lines for all four node types.
-  A7  Sim: TACTICAL mean HP fraction at COMBAT floor exit in [0.55, 0.80]
-      (S-SUPPLY, new) and zero simulated floors below the heal floor; S-ECONOMY
-      re-based to planned-vs-experienced supply. Both gates green (navigation
-      waiver applies as before to depth-derived bands).
-  A8  docs/procedural-level-generation.txt, docs/route-map-system.txt and both
-      balance docs describe the planner pipeline, the node specs and the new
-      rules; the replaced rules are recorded.
+  A1  Every weapon class and every enemy family declares its class/trait as data
+      (read the code); MatchupCatalog holds the M3 rows; no switch on class or
+      trait in damage code.
+  A2  BalanceAuditTest R-ROLE-1..5 green; BalanceReport prints a MATCHUP table
+      (class x trait) and a SCENARIO table (turns-to-clear per class per
+      scenario at depths 5 and 15).
+  A3  On desktop, shooting a golem with the Assault Rifle shows grey HP text and
+      "RESISTED"; with the Railgun, amber and "WEAK POINT"; health bars of all
+      five non-FLESH families show their glyph.
+  A4  With a resisted target in the lane and an effective carried weapon with
+      ammo, SWITCH pulses and one tap equips that weapon (not the next in
+      cycle); with no hint, SWITCH cycles as before.
+  A5  A Shotgun hit at 1 tile knocks a Gore Biter back one tile (free tile
+      behind) and its next action is skipped with the STUNNED glyph shown; at 3
+      tiles no stagger.
+  A6  An Incinerator spray into a group of three depth-1 chaff, twice, kills all
+      three (order-1 DEV START depth 1, ON-CURVE kit + Incinerator).
+  A7  ORA's MATCHUP line fires once and resolves through the strings file; no
+      number in it.
+  A8  Sim: S-SWITCH (TACTICAL >= 1.0 matchup-driven switches per COMBAT floor)
+      reported and enforced (not depth-derived, so not covered by the navigation
+      waiver); both gates green.
+  A9  Docs record the R-WEAPON -> R-ROLE replacement and the Railgun waiver
+      decision; docs/weapon-creation-guide.txt tells a new weapon to declare a
+      DamageClass and meet R-ROLE; docs/enemy-system.txt lists traits.
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. DATA / CONSTANTS  (java-architect + math-expert)  SECTION 21, NodeSupplySpec
-     rows, EncounterGroupTemplate rows, GameMath supply/density formulas.
-  2. LOGIC  (java-architect)  SupplyPlanner, SupplySlotProvider in every
-     generator, EncounterBudgetPlanner rewrite, carriers in EnemyManager, removal
-     of old loot paths, weapon cadence, footprint targets.
-  3. RENDER  (libgdx-specialist)  route node card lines (C1).
-  4. CONTENT  none (no rooms, no symbols, no story lines).
-  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-SUPPLY and R-DENSITY
-     (generator sweeps above) and replace the R-SCARCITY / R-SCARCITY-DEPTH /
-     R-HEALDRAIN-DEPTH assertions with them; update route-economics assertions
-     (R-CALM-COST, R-RISK-PREMIUM, R-PIPS-DERIVED) to the spec-derived ledger;
-     extend BalanceSimTest with S-SUPPLY and the re-based S-ECONOMY. Existing
-     LevelGeneratorSnapshotTest, GeneratorReachabilityTest, RouteEconomicsTest
-     and the pack-coherence generator assertion are UPDATED to the new
-     behaviour. No new test files. Both gates.
-  6. DOCS  docs/procedural-level-generation.txt (pipeline, templates,
-     footprint), docs/route-map-system.txt (node specs, card lines, economics
-     re-derivation), docs/game-balance-authority.txt + knowledge (SECTIONS 11,
-     12 rewritten; override records; living tables), docs/enemy-system.txt
-     (carriers).
+  1. DATA / CONSTANTS  (java-architect + math-expert)  DamageClass, EnemyTrait,
+     MatchupCatalog, SECTION 22, GameMath scenario math, BalanceReport tables.
+  2. LOGIC  (weapon-creator for W1-W7 weapon behaviour; java-architect for
+     damage resolution, TP pricing, stagger, supply weights, MatchupAdvisor,
+     switch semantics, sim policy).
+  3. RENDER  (libgdx-specialist)  C1-C5 visuals.
+  4. CONTENT  (java-architect)  TeachingTopic.MATCHUP + strings per the
+     narrative add-a-line protocol.
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-ROLE-1..5 and
+     trait-aware R-ENEMY TP; replace the R-WEAPON power-band assertions and the
+     Railgun waiver assertion with them; extend BalanceSimTest with S-SWITCH.
+     Existing weapon/enemy tests (e.g. RimeshellLancerTest) and
+     StoryLocalizationTest UPDATED where numbers/ids legitimately change. No new
+     test files. Both gates.
+  6. DOCS  docs/game-balance-authority.txt + knowledge (R-ROLE, matchup table,
+     overrides, living tables), docs/weapon-creation-guide.txt,
+     docs/enemy-system.txt, docs/story-ui-system.txt (MATCHUP topic).
 
 RISKS AND UNKNOWNS
-  - Each generator needs a slot provider; CavernGenerator's chamber model and
-    LinearCorridorGenerator's spine need care. Do ROOMS_MST first (CP2) as the
-    reference, then the rest.
-  - Snapshot tests will change wholesale; update them in the checkpoint that
-    changes the generator, never skip them.
-  - Smaller footprints can make some room blueprints unplaceable; the registry
-    already rejects rooms that do not fit — watch blueprint variety in the log.
-  - Audit sweep runtime: keep the seed count a constant (30) and depths sparse.
+  - The 3D health bars are small on a phone; confirm the glyph reads at 12 units
+    early (CP5) — enlarge if needed, it is cosmetic.
+  - Knockback reuses the Hammer path — confirm it handles enemies mid-charge.
+  - R-ROLE and R-LADDER both constrain base damage; fit together (math-expert).
 
 
 CHECKPOINTS
@@ -353,59 +356,48 @@ CHECKPOINTS
   CP   DONE WHEN
   ---  ---------------------------------------------------------------
   CP0  the checkpoint file exists on the branch, committed and pushed
-  CP1  SupplyPlanner, SupplyRequest/Plan, SupplySlotProvider, NodeSupplySpec
-       registry (all node rows) and SECTION 21 exist, headless and unwired
-       (wired by CP2-CP3); planner-level R-SUPPLY checks green; both gates green
-  CP2  ROOMS_MST (LevelGenerator) builds through slots + SupplyPlanner; its
-       per-room chances and the 0.70 stim path are gone; snapshot test updated;
-       both gates green
-  CP3  CAVERN, LINEAR_CORRIDOR, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK
-       all build through SupplyPlanner; Cavern's MEDICAL_BAY-only medkit path is
-       gone; carriers replace drop rolls; full R-SUPPLY sweep green; A1, A2, A4
-       hold
-  CP4  group templates, body targets, group placement, shape and first-contact
-       rules live in every combat generator; R-DENSITY (bodies/shape/contact)
-       green; A5 partly (contact, count)
-  CP5  footprint targets live in the three combat generators; R-DENSITY
-       footprint + density green; A3, A5 hold
-  CP6  node specs drive COMBAT/ELITE/CACHE/SHOP contents; weapon cadence
-       replaces the pity rule; route economics re-derived and green; node card
-       lines drawn; A6 holds
-  CP7  SUPPLY_VARIANCE dial and log fields; S-SUPPLY + re-based S-ECONOMY in the
-       sim; all docs updated; A7, A8 hold; both gates green
+  CP1  DamageClass, EnemyTrait, family traits, MatchupCatalog rows, weapon class
+       declarations and SECTION 22 exist; matchup not yet applied (CP2 wires it);
+       build green
+  CP2  matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY
+       updated; MATCHUP_STRENGTH dial; both gates green
+  CP3  W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks);
+       R-ROLE-1..5 replace R-WEAPON bands; Railgun waiver resolved; A2, A5, A6
+       hold; both gates green
+  CP4  per-type ammo generosity in SupplyPlanner and re-fitted reserve caps;
+       R-ROLE-5 + R-SUPPLY green; both gates green
+  CP5  C1, C2, C3, C5 visuals on desktop; A3 holds
+  CP6  C4 switch hint + direct switch + MATCHUP teaching topic; A4, A7 hold
+  CP7  sim TacticalPolicy switching + S-SWITCH; log fields; all docs; A1, A8, A9
+       hold; both gates green
 
 
 ASSUMPTIONS
 -----------
-  AS1  Supply depends on the floor's demand and node, never on the player's
-       current state (fairness = consistency; the owner wants earned wins).
-  AS2  Leaving a normal floor at ~55-80% HP is the right target ("usually full
-       HP" is the complaint); REST and CACHE are where HP comes back.
-  AS3  Enemy drops as planned carriers (deterministic) are acceptable; players
-       will not notice the difference except that drops stop being streaky.
-  AS4  12-16 enemies on floor 1 in a ~450-tile map is "not boring"; the body
-       target grows to 22-28 by depth 25. Tunable with ENEMY_COUNT (order 1).
-  AS5  Smaller early maps are wanted (owner: "large but empty"); exploration
-       stays rewarding because supply is placed near fights and on the exit path.
-  AS6  Group templates use existing archetypes and AI; mixed-type groups are
-       fine for the existing pack-coherence assumption (chaff still never spawns
-       alone: every template with chaff has >= 2).
-  AS7  The ELITE reward (weapon +1..+2 LV, rare or better for the region) is the
-       differentiator the owner is missing; the route card must promise it.
-  AS8  REST/EVENT/MYSTERY keep today's contents until order 7.
-  AS9  No new symbols: every placement uses existing pickup and spawn symbols.
+  AS1  One trait per family is enough identity; per-archetype overrides exist but
+       none are used by default.
+  AS2  FLESH (Aberrations) is the neutral family where the generalist rifles
+       are fine — the "rifle floors" still exist.
+  AS3  Shotgun stagger + knockback is the "reward for the risk" the owner is
+       missing; generous shells (A-1) remove the "ammo limited" complaint.
+  AS4  The SWITCH button jumping directly to the suggested weapon is an
+       improvement, not a surprise (it only happens while it pulses).
+  AS5  Matchup multipliers are shown as words and colours, never as numbers on
+       the HUD; the compare card lists traits by glyph.
+  AS6  Barrels counting as EXPLOSIVE makes hazards part of the matchup language
+       (order 5 builds on it).
+  AS7  No new sound: the catalog is at its 64 cap and hit feedback is visual.
+  AS8  The Railgun's old "scarcity-gated over-band" waiver is resolved by R-ROLE
+       (it is now priced as the PLATED niche weapon with its own ammo feasibility
+       check) — the waiver is deleted, not extended.
 
 
 DECISIONS
 ---------
-  D1  Supply must be consistent across floors and generators; cave floors must
-      have heals (owner, B1/F3/A3) -> one shared planner + heal floor.
-      (2026-09-30)
-  D2  More enemies and real groups; early floors not boring (owner, B6/I3/I4/E5)
-      -> growing body targets, group templates, first-contact rule, smaller
-      early maps.  (2026-09-30)
-  D3  Elite vs normal must feel different (owner, D9) -> node supply specs +
-      route card promise.  (2026-09-30)
+  D1  Weapon switching per enemy is wanted and must be communicated (owner, H3)
+      -> matchup table + five communication channels + ORA topic.  (2026-09-30)
+  D2  Shotguns and the Incinerator must be worth using (owner, H1/H2) -> SPREAD
+      and FIRE roles with R-ROLE niche guarantees.  (2026-09-30)
 
 
 OPEN QUESTIONS
@@ -427,33 +419,26 @@ so both gates stay green against the NEW rule. It never permits deleting,
 disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
 
 Overridden by THIS order:
-  - R-SCARCITY (model floor S in [0.75,0.95], per-weapon < 0.60, net drain
-    5-15%), R-SCARCITY-DEPTH and R-HEALDRAIN-DEPTH -> REPLACED by R-SUPPLY
-    (planner tracks the actual roster's demand per node spec, heal floor,
-    tracking tolerance, spread) and the sim band S-SUPPLY.
-  - The SECTION 10 MODEL FLOOR as the tuning reference -> the planner's per-floor
-    demand (the model floor survives only as a printed example).
-  - Four scarcity levers' drop-frequency lever (ENEMY_AMMO_DROP_CHANCE,
-    MELEE_KILL_AMMO_DROP_CHANCE, LEVEL_GEN_*_CHANCE per room, depth generosity
-    bumps) -> planned supply + carriers.
-  - Encounter budget: "enemy COUNT is depth-invariant (known non-goal)" ->
-    body targets grow with depth (E1); CHAFF_PACK_MIN/MAX + consecutive-same-type
-    pack coherence -> group templates (chaff never alone is kept);
-    ENCOUNTER_PER_ROOM_TP_FRACTION_CAP 0.25 -> GROUP_TP_FRACTION_CAP 0.35;
-    ENCOUNTER_ANCHOR_* fractions -> template-driven anchors.
-  - ELITE_BUDGET_SCALE 1.5, ROUTE_CALM_BUDGET_SCALE 0.28, CACHE_* / ELITE_*
-    content constants -> NodeSupplySpec rows (ELITE threat 1.6, CACHE 0.35).
-  - GUARANTEED_UPGRADE_PER_REGION pity rule -> the two-floor weapon cadence (S9).
-  - R-ROUTE-* NodeEconomics values -> derived from NodeSupplySpec.
-  - S-ECONOMY (experienced S vs the old modelled S) -> planned vs experienced.
+  - R-WEAPON (weaponPowerScore role bands sidearm 8-14 / workhorse 12-18 /
+    burst 18-26 / heavy 24-32, REFERENCE_AMMO_EFFICIENCY normaliser) ->
+    REPLACED by R-ROLE-1..5 (scenario niches, generalist bound, no dominance,
+    risk pays, ammo feasible).
+  - WAIVER [WEAPON_POWER] Railgun 45.0 vs heavy band -> DELETED; the Railgun is
+    governed by R-ROLE (PLATED niche + ammo feasibility).
+  - "Enemy eHP == raw HP / no mitigation" pricing assumption -> trait-aware eHP
+    in TP (R-ENEMY re-priced).
+  - Incinerator crediting "impact + one full burn application per shot" ->
+    stacking burn priced by scenario (S2/S5).
+  - FLAME_IMPACT_DAMAGE / FLAME_FALLOFF / FLAME_BURN_* and the shotgun /
+    double-barrel damage/falloff numbers -> the W1-W3 role numbers.
+  - The order-3 70/30 carried split -> weighted by per-AmmoType generosity;
+    AMMO_RESERVE_CAP_* re-fitted.
 
 
 RELATED
 -------
-  Ideas:  balance-overhaul.txt, balance-overhaul-order-2.txt,
-          encounter-density-and-corpse-semantics.txt,
-          new-game-balancr-order-3.txt / -5.txt / -7.txt (superseded rules),
-          third-level-generator-cellular-cave.txt,
-          second-level-generator-linear-corridor.txt
-  Docs:   docs/procedural-level-generation.txt, docs/route-map-system.txt,
-          docs/game-balance-authority.txt, docs/game-balance-knowledge.txt
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-2/3.txt,
+          incinerator-flamethrower.txt, shotgun-weapon-system.txt,
+          weapon-compare-rework.txt, enemy-health-bars-hit-reactions.txt
+  Docs:   docs/weapon-creation-guide.txt, docs/enemy-system.txt,
+          docs/enemy-health-bars.txt, docs/game-balance-authority.txt
