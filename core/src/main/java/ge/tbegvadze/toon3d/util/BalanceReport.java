@@ -767,7 +767,7 @@ public final class BalanceReport {
                 BalanceSchema.modelStimHeal() / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
         printShopPriceRow("Field medkit (" + BalanceSchema.modelFullMedkitHeal() + " HP)",
                 BalanceSchema.modelFullMedkitHeal() / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
-        printShopPriceRow("Weapon level-up", BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS, depths);
+        printShopPriceRow("Weapon level-up", BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS, depths);
         printShopPriceRow("Tier up (RARE, 12 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
         printShopPriceRow("Tier up (EPIC, 20 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
         printShopPriceRow("Player ability boon (~12 PP)", BalanceConfig.LEVEL_UP_BUDGET_PP, depths);

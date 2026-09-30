@@ -767,7 +767,7 @@ public final class SimWorld implements LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(currentDepth, ownedWeapons);
+        return new ShopContext(currentDepth, ownedWeapons, inventory.getEquippedWeapon());
     }
 
     // =====================================================================================

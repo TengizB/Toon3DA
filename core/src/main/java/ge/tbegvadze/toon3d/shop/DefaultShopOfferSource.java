@@ -7,6 +7,7 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.progression.UpgradeCard;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.BalanceSchema;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -59,24 +60,42 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
                 "TIER:" + target.getDisplayName());
     }
 
+    /** Highest weapon level a shop may sell at a depth: one above the floor's threat level, capped. */
+    private static int levelCeiling(ShopContext context) {
+        return Math.min(WeaponConstants.MAX_WEAPON_LEVEL, context.depth + 1);
+    }
+
+    /** One level-up offer for {@code target}; every weapon level-up costs the same ladder price. */
+    private static ShopEntry buildLevelUpOffer(WeaponProfile target, ShopContext context) {
+        int price = BalanceSchema.ladderLevelUpPrice(context.depth);
+        String name = "Level Up: " + target.getDisplayName()
+                + " (Lv" + target.getWeaponLevel() + " -> Lv" + (target.getWeaponLevel() + 1) + ")";
+        return new ShopEntry(OfferCategory.WEAPON_LEVEL_UP, OfferRarity.COMMON, name,
+                "Raise weapon stats by one level.", price, 0, target,
+                "LEVELUP:" + target.getDisplayName());
+    }
+
     @Override
     public ShopEntry rollLevelUpOffer(ShopContext context, Random random) {
+        int ceiling = levelCeiling(context);
         List<WeaponProfile> levelable = new ArrayList<>();
         for (WeaponProfile weapon : context.ownedWeapons) {
-            if (weapon != null && weapon.getWeaponLevel() < WeaponConstants.MAX_WEAPON_LEVEL) {
+            if (weapon != null && weapon.getWeaponLevel() < ceiling) {
                 levelable.add(weapon);
             }
         }
         if (levelable.isEmpty()) return null;
 
         WeaponProfile target = levelable.get(random.nextInt(levelable.size()));
-        // A weapon level is ~+10% damage — priced at the fixed weapon-level PP value.
-        int price = priceOf(BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS, context);
-        String name = "Level Up: " + target.getDisplayName()
-                + " (Lv" + target.getWeaponLevel() + " -> Lv" + (target.getWeaponLevel() + 1) + ")";
-        return new ShopEntry(OfferCategory.WEAPON_LEVEL_UP, OfferRarity.COMMON, name,
-                "Raise weapon stats by one level.", price, 0, target,
-                "LEVELUP:" + target.getDisplayName());
+        return buildLevelUpOffer(target, context);
+    }
+
+    @Override
+    public ShopEntry rollLadderRungOffer(ShopContext context) {
+        WeaponProfile equipped = context.equippedWeapon;
+        if (equipped == null || equipped.isLevelGapExempt()) return null;
+        if (equipped.getWeaponLevel() >= levelCeiling(context)) return null;
+        return buildLevelUpOffer(equipped, context);
     }
 
     @Override

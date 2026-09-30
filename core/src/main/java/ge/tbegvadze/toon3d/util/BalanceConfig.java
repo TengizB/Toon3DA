@@ -1899,8 +1899,6 @@ public final class BalanceConfig {
     public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = 90f;
     /** HP restored per power point when pricing a medkit (heal amount / this = its PP value). Range: 8–16. */
     public static final float SHOP_HEAL_HP_PER_POWER_POINT     = 11f;
-    /** PP value of a single weapon LEVEL-UP offer (a level is ~+10% weapon damage). Range: 8–14. */
-    public static final float SHOP_WEAPON_LEVEL_UP_POWER_POINTS = 10f;
     // A weapon TIER-UPGRADE prices on the ABILITY-PP budget its destination tier unlocks
     // (TIER_ABILITY_PP_BUDGET_*, SECTION 15) — the marquee value is the ability slot the tier buys.
     // A PLAYER-ABILITY boon prices on the level-up card's own PP (LEVEL_UP_BUDGET_PP), since a shop
@@ -2479,8 +2477,8 @@ public final class BalanceConfig {
     /**
      * Power-point value the shop prices the LEVEL UP rung at (through GameMath.shopPrice, like every
      * offer). Deliberately LOW: the rung is a reliable ladder step, not a marquee purchase — 1.5 PP is
-     * 54 credits at depth 1 (a third of one combat floor) and 184 at depth 25 (47%). Replaces
-     * SHOP_WEAPON_LEVEL_UP_POWER_POINTS (10 PP = 2-3 floors of income) for the rung. Range: 1.0–2.0.
+     * 54 credits at depth 1 (a third of one combat floor) and 184 at depth 25 (47%). Prices EVERY shop weapon level-up
+     * (the old 10 PP constant is gone). Range: 1.0–2.0.
      */
     public static final float LADDER_LEVEL_UP_POWER_POINTS = 1.5f;
 }

@@ -761,6 +761,9 @@ CREDITS (the currency economy):
   Credit chips per floor 3–7. Depth scale 0.12. Credit Fang ability (GameBalance).
   SHOP / UAC Fabricator (GameBalance SHOP_*): 1–2 machines/floor, 9 offers each,
   category weights, depth+rarity pricing, base prices per offer type.
+  The LEVEL UP rung: guaranteed for the equipped weapon while level < depth+1, priced
+  LADDER_LEVEL_UP_POWER_POINTS (1.5 PP) through GameMath.shopPrice — R-LADDER-AFFORD
+  (every shop weapon level-up costs this; the Fist never gets one; it vanishes at the cap).
 
 ⚠️ Not-good note (IMPORTANT): the CREDIT half of the economy is effectively BROKEN
 as a balance lever. Credits are awarded everywhere, but the doc/idea history flags

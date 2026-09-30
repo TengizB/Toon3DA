@@ -542,8 +542,6 @@ public final class GameBalance {
     public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
     /** HP restored per power point when pricing a medkit. */
     public static final float SHOP_HEAL_HP_PER_POWER_POINT     = BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
-    /** PP value of a single weapon level-up offer. */
-    public static final float SHOP_WEAPON_LEVEL_UP_POWER_POINTS = BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS;
     /** Ammo "large box" multiplier over the standard box size (price derives from the larger supply). */
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER  = BalanceConfig.SHOP_AMMO_LARGE_BOX_MULTIPLIER;
 

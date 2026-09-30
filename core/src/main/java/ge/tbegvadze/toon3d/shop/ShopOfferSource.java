@@ -18,6 +18,13 @@ public interface ShopOfferSource {
 
     ShopEntry rollLevelUpOffer(ShopContext context, Random random);
 
+    /**
+     * The guaranteed LEVEL UP rung (R13): the level-up offer for the EQUIPPED weapon, or null when
+     * there is no equipped weapon, it is level-gap-exempt (the Fist), or it already stands at
+     * min(MAX_WEAPON_LEVEL, depth + 1) — at the cap the offer disappears.
+     */
+    ShopEntry rollLadderRungOffer(ShopContext context);
+
     ShopEntry rollAbilityOffer(ShopContext context, Random random);
 
     ShopEntry rollAmmoOffer(ShopContext context, Random random);

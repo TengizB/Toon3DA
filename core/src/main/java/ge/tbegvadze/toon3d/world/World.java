@@ -1789,7 +1789,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(depth, ownedWeapons);
+        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon());
     }
 
     /**

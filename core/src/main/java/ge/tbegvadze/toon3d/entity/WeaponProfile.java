@@ -18,6 +18,8 @@ public interface WeaponProfile {
     WeaponTier getTier();
     int        getWeaponLevel();   // 1..WeaponConstants.MAX_WEAPON_LEVEL (10)
     boolean    isMelee();
+    /** True for a weapon outside the level-gap power ladder (the Fist) — it never gets a shop LEVEL UP rung. */
+    boolean    isLevelGapExempt();
 
     // ── Effective stats (base * level scaling) ─────────────────────────────
     // These are the ONLY numbers gameplay logic should read; never bypass with base fields.

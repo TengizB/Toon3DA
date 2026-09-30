@@ -1131,6 +1131,13 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 1 / CP5 — the shop LEVEL UP rung (R13): every Fabricator stocks a
+    guaranteed LEVEL UP offer for the EQUIPPED weapon (outside the weighted roll; ShopContext now
+    carries the equipped weapon) while its level < depth + 1; no shop level-up ever raises a weapon
+    above depth + 1 (offer filter + purchase guard); the Fist never gets a rung. Every weapon
+    level-up costs BalanceSchema.ladderLevelUpPrice(depth) (LADDER_LEVEL_UP_POWER_POINTS 1.5 PP);
+    SHOP_WEAPON_LEVEL_UP_POWER_POINTS (10 PP) is deleted. R-LADDER-AFFORD green.
+
   balance-overhaul order 1 / CP4 — BossBalance re-derived from GameMath.expectedPlayerAtDepth
     (HP from its DPT, DPT/verb caps from its eHP, the gate from the start weapon on the ladder,
     reward in depth-1 ammo terms at the depth's price level); S-LAG band (waived with the

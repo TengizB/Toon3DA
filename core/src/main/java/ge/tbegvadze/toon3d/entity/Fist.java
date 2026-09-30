@@ -15,7 +15,7 @@ public final class Fist extends MeleeWeapon {
     }
 
     /** R4: the Fist's level always equals the floor's threat level — it never takes a level-gap penalty. */
-    @Override protected boolean isLevelGapExempt() { return true; }
+    @Override public boolean isLevelGapExempt() { return true; }
 
     @Override public ItemType getItemType() { return ItemType.WEAPON_FIST; }
 }

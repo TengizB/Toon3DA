@@ -277,7 +277,7 @@ public abstract class Weapon implements WeaponProfile {
     }
 
     /** R4: a level-gap-exempt weapon (the Fist) always counts as on-level and takes no penalty. */
-    protected boolean isLevelGapExempt() { return false; }
+    public boolean isLevelGapExempt() { return false; }
 
     private int tierOrdinalOrCommon() {
         return tier == null ? 0 : tier.ordinal();
