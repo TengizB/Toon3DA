@@ -1,0 +1,405 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: The 25-Floor Run — finite descent, bosses, economy
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+
+Order 7 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-6 (the finished player model: ladder, supply, matchups,
+heavies, builds).
+
+
+OVERVIEW
+--------
+The owner: "the goal is to have something like 20-25 levels, then the game
+ends"; "every 5 levels there is a boss"; "for a skilled player levels 10-15
+should feel very challenging but fair if the player was prepared well enough";
+first boss "reachable without many attempts, but still challenging"; bosses are
+"sometimes OK, sometimes too hard, sometimes too easy"; "shops everywhere are too
+expensive"; EVENT / MYSTERY "no".
+
+Today the descent is ENDLESS: three named acts, then "THE BREACH" appended
+forever; the story's Core ending exchange already waits at the depth-25 boss
+(route region index 4 maps to StoryRegion.CORE) but fires only once per SAVE,
+after which runs continue downward with nothing to reach. This order makes the
+run FINITE: five fixed regions of five floors, bosses at 5/10/15/20/25, and the
+depth-25 boss ends the run as a VICTORY. It then re-derives the things that only
+make sense against a finite run and the finished player model: a region
+difficulty curve with its peak where the owner wants it, boss fights derived
+from the on-curve player and checked for consistency, a shop economy an on-curve
+player can actually use, and EVENT/MYSTERY rewards in the new currencies.
+
+
+SCOPE
+-----
+IN
+  - Route map: FIXED_REGION_COUNT 5, region E ("the_core" theme), no appended
+    bands, generation ends at RUN_FINAL_DEPTH (25).
+  - Final clear: the depth-25 boss's defeat ends the run (VICTORY); story ending
+    handling per the open question's answer (default below).
+  - Win stats: runs won, best (fewest-turn) win — StatsStore keys, wiped by
+    NEW OPERATOR.
+  - Boss table as data (depth -> archetype + fight targets); boss stats derived
+    from ExpectedPlayer; boss consistency rules.
+  - Region difficulty curve (region TP dial, elite weights) with the 10-15 peak.
+  - Shop economy re-derived (price level, machine counts, SHOP-node discount).
+  - EVENT / MYSTERY rewards re-expressed in ladder currencies.
+  - Run-outcome sim bands replacing S-FAIR's depth band; S-BOSS; S-SHOP.
+  - NAV console header "FLOOR n / 25".
+
+OUT (deliberately not doing now)
+  - New bosses. The existing three archetypes fill five slots through a data
+    table; a new final boss is a follow-up idea (recommended, see ASSUMPTIONS).
+  - New Game+ / endless mode after victory / meta-unlocks.
+  - New story lines beyond UI chrome ("DESCENT COMPLETE") and the region name
+    handling below. If the owner answers Q1 with option C, that content is a
+    narrative follow-up idea, not this order.
+  - REST node changes (owner: REST is "ok").
+  - Boss AI choreography (Hunter-Killer brain) changes.
+  - The unimplemented roguelike_order_19_win_condition_and_final_floor.txt
+    (floor-15 finale, extraction point, post-win ENDLESS MODE) CONTRADICTS this
+    order and is superseded by it: no extraction point, no endless mode, the
+    finale is depth 25. Recommended: the owner marks that file
+    "REJECTED: superseded by balance-overhaul-order-7".
+
+
+GAMEPLAY LOOP
+-------------
+  1. Run start: NAV console header reads "FLOOR 1 / 25"; five region crests
+     along the map's spine, the last one THE CORE's.
+  2. Floors 1-5 (Outer Facility): the teaching region; the depth-5 boss is a
+     real test a prepared first-timer can pass.
+  3. Floors 10-15 (Research Wing boss, Reactor Depths): the peak — the hardest
+     COMBAT/ELITE floors relative to an on-curve player.
+  4. Floors 16-25 (The Breach, The Core): hard, but a player who built well and
+     managed resources stays on top.
+  5. Depth 25: the final boss dies -> the run ends as a VICTORY. The instance
+     report is labelled "DESCENT COMPLETE". The story ending follows Q1's answer.
+
+
+RULES
+-----
+Run shape
+  F1  The route map has exactly RUN_FINAL_DEPTH (25) floors in 5 fixed regions:
+      A OUTER FACILITY 1-5, B RESEARCH WING 6-10, C REACTOR DEPTHS 11-15,
+      D THE BREACH 16-20, E THE CORE 21-25. No band is appended after E;
+      RouteMap never creates a layer beyond 25; the old lazy Breach extension
+      path is removed. StoryRegion.fromRouteRegionIndex is unchanged (index 4 ->
+      CORE), so the story's five regions and the route's five regions now align
+      exactly.
+  F2  Region E display name: "THE CORE" on the NAV console only if it does not
+      break the vocabulary ladder — if "Core" has a StoryTerm row whose earliest
+      region is CORE, the NAV console shows the neutral name "DEEP SHAFT" until
+      the save's deepest region has reached CORE. (Check StoryTermCatalog.)
+  F3  Bosses every 5 floors via a BossTable (register() rows: depth, archetype,
+      target fight turns, survival ratio): 5 OVERSEER 22, 10 CORRUPTOR 26,
+      15 HELL_BARON 30, 20 OVERSEER 32, 25 CORRUPTOR 36 (the existing modulo
+      cycle made explicit, so the current Core ending boss is unchanged).
+  F4  VICTORY: when the depth-25 boss is defeated, the run ends. The player is
+      never sent to a floor 26. RunStats outcome = VICTORY; the instance report
+      page shows "DESCENT COMPLETE" (a framing-strings chrome id); StatsStore
+      increments runs won and records the best win (fewest turns). NEW OPERATOR
+      wipes both.
+  F5  STORY AT VICTORY — DEFAULT (pending Q1): if the save has not reached an
+      ending, the Core ending exchange opens exactly as today and its answer ends
+      the run through commitPendingStoryEnding. If the save HAS reached an ending,
+      the ending exchange opens again (the choice is the victory; the player may
+      choose differently), and the launch screen from then on prints the LATEST
+      ending. The exchange's one-shot "seen" flag is not consulted for this one
+      id at a final clear; every other exchange keeps its one-shot rule.
+  F6  NAV console header shows "FLOOR n / 25" (route overlay chrome).
+
+Difficulty curve
+  F7  REGION_TP_BUDGET_MULTIPLIER = {A 0.85, B 1.00, C 1.25, D 1.20, E 1.30}
+      (the Reactor Depths peak the owner asked for; D dips slightly as the build
+      comes online, E is the finale). ELITE weight multipliers: A 0.6, B 1.0,
+      C 1.6, D 1.4, E 1.6. R-REGION bounds widen to [0.8, 1.5] and its
+      "monotonic non-decreasing" clause is replaced by "C >= B >= A and E >= D".
+  F8  RUN-OUTCOME bands (sim, replacing S-FAIR's median-death-depth [8,14]):
+        TACTICAL   win rate (clears 25) in [0.20, 0.40]; >= 0.60 reach depth 10;
+                   median death depth of losses in [11, 18].
+        NAIVE      win rate <= 0.03; median death depth in [4, 8].
+        S-SKILL    TACTICAL median depth - NAIVE median depth >= 5.
+        FIRST BOSS TACTICAL clears it on >= 0.75 of seeds that reach it; NAIVE
+                   reaches it on >= 0.40 and clears it on >= 0.15.
+        S-GATE     HOARDER-START-WEAPON first-boss clears = 0 (unchanged).
+        Readable deaths >= 0.90 (unchanged).
+
+Bosses
+  F9  Boss HP/damage derive from ExpectedPlayer(depth) and the row's targets
+      (R-BOSS-* rules kept, inputs updated): an on-curve TACTICAL player's fight
+      lasts the target +/- 25%.
+  F10 BOSS CONSISTENCY (S-BOSS, sim): for each boss row, over seeds where
+      TACTICAL reaches it: fight turns coefficient of variation <= 0.30; median
+      player HP fraction at the kill in [0.30, 0.60]; no boss's TACTICAL clear
+      rate outside [0.50, 0.90] (first boss: >= 0.75 per F8).
+  F11 Pre-boss provisioning guarantee (the layer before every boss offers SHOP
+      or CACHE) is kept; the boss floor's arena supply follows R-BOSS-AMMO.
+
+Economy
+  F12 R-CREDITS v2: for every region, modelled on-curve credit income per floor
+      / the price of the NEEDED BUNDLE per floor in [1.10, 1.40]. NEEDED BUNDLE =
+      one order-2 LEVEL UP rung + 1.5 consumables at the on-curve player's
+      typical need + one tier upgrade per region amortised over its floors.
+      SHOP_CREDITS_PER_POWER_POINT and SHOP_DEPTH_PRICE_SCALE are re-fitted to
+      hold it.
+  F13 Machines: exactly 1 Fabricator per non-boss floor; SHOP nodes have 2 with
+      prices x SHOP_NODE_PRICE_MULTIPLIER (0.80). The guaranteed LEVEL UP rung
+      (order 2) stays.
+  F14 S-SHOP (sim): TACTICAL buys >= 1.5 offers per floor visited; its median
+      unspent credits at death <= 1.5 floors of income.
+
+Events and mysteries
+  F15 Every EVENT choice and MYSTERY outcome reward is re-expressed in ladder
+      currencies (EventEffect data): weapon LEVEL +1 (capped at d+1), a perk rank
+      of a carried tag, a heal fraction, an armour fraction, credits (in floors
+      of income), a weapon drop at d..d+1. Costs likewise (HP fraction, credits,
+      a harder next floor). R-MYSTERY-EV re-derived: MYSTERY expected value >=
+      COMBAT's, with higher variance; each EVENT offers >= 1 choice whose value is
+      >= a COMBAT floor's supply.
+
+
+PLAYER EXPERIENCE
+-----------------
+A run has a shape and an end: five acts, five bosses, a peak in the middle, a
+finale, and a win that means something. The player can see how far they are
+("FLOOR 12 / 25"). Shops become a place to spend, not to window-shop. Events and
+mysteries speak the same currencies as everything else, so their choices read.
+
+
+TECHNICAL NOTES
+---------------
+  util/RouteMapConstants / route/RouteMapGenerator / RouteMap / RegionPlan /
+  RegionSpec        FIXED_REGION_COUNT 5; region E spec + weights; lazy append
+                    removed; generation capped at RUN_FINAL_DEPTH.
+  route/RegionAmbienceRegistry + render/routeicons   region E ambience row and a
+                    crest painter row (the_core), per the route doc's recipes.
+  route/BossTable   + registry rows (F3); util/BossBalance reads rows instead of
+                    the modulo; EnemyType boss archetypes unchanged.
+  world/World       final clear -> VICTORY path; F5 ending behaviour through
+                    requestCoreEndingExchange (repeatable at final clear for that
+                    one id); RunStats outcome.
+  narrative         ExchangeSystem: a per-id "repeatable at final clear" flag on
+                    the Core ending definition (data, not a switch); StoryProgress
+                    records the latest ending (recordEndingReached already exists).
+  util/StatsStore   RUNS_WON, BEST_WIN_TURNS keys; wiped in
+                    World.wipeAllPersistentProgress.
+  render            FramingScreenRenderer / InstanceReportRenderer "DESCENT
+                    COMPLETE" label; RouteMapOverlayRenderer header F6.
+  shop              DefaultShopOfferSource price level + SHOP-node discount;
+                    ShopProfile machine counts.
+  route/FacilityEvents, MysteryProfile, EventEffect   rewards in ladder
+                    currencies.
+  util/BalanceConfig SECTION 25 — RUN SHAPE & ECONOMY: region dial, elite
+                    weights, boss table numbers, credit band, price knobs,
+                    run-outcome bands, S-BOSS/S-SHOP numbers.
+  sim               BalanceSimulator runs to depth 25 and records VICTORY;
+                    SimReport prints win rates, boss tables, shop stats.
+
+
+VISUAL DESIGN
+-------------
+Region E crest: procedural, per docs/route-map-system.txt's crest recipe;
+accent a deep violet-white distinct from the Breach. "FLOOR n / 25" in the NAV
+header font. "DESCENT COMPLETE" in the report's title style. No new textures.
+
+
+BALANCE NOTES
+-------------
+Balance-bearing: region dial, elite weights, boss table, credit band, prices,
+event/mystery values, every sim band (SECTION 25, schema, sim). The F8 run-
+outcome bands are the series' headline targets; order 8 moves the dials to hit
+them in real play.
+
+
+INTERACTIONS
+------------
+  - Story: region alignment (5 route regions = 5 story regions), the Core ending
+    at depth 25 (F5), vocabulary ladder for the region name (F2),
+    docs/story-ui-system.txt and the endings framing.
+  - Route economics: R-ROUTE-* horizon ends at 25; pre-boss guarantees kept.
+  - Order-1 DEV START max depth 25 is now the real end.
+  - Orders 2-6: every derivation reads ExpectedPlayer.
+
+
+EDGE CASES
+----------
+  - Death on the depth-25 boss floor after the boss dies but before the ending
+    exchange opens: the kill already counts as VICTORY (the run ends on the
+    defeat, the exchange is presented as the victory's first beat).
+  - App killed during the ending exchange: the exchange is spent when answered
+    (existing rule), so it re-asks — but the run is over; on relaunch the title
+    screen shows the previous state and the victory counts (recorded at the
+    defeat, F4).
+  - OBEY ending: continues into a fresh print — that is a new run starting at
+    depth 1 (unchanged behaviour).
+  - DEV START at depth 25: a dev run's victory is logged but never recorded in
+    StatsStore or StoryStore (order-1 sandbox).
+  - Route-map node types forced by guarantees on layer 24 (pre-boss) still hold.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  The route map of any seed has exactly 25 layers in 5 regions, the last
+      layer a BOSS node; no code path appends a layer beyond 25 (read the code;
+      RouteMapGeneratorTest updated).
+  A2  Killing the depth-25 boss ends the run: no floor 26; the report shows
+      "DESCENT COMPLETE"; StatsStore runs-won increments; NEW OPERATOR resets it.
+  A3  On a save with no ending, the Core ending exchange opens after the kill as
+      today; on a save with an ending already recorded, behaviour matches the
+      decided Q1 option (default F5: it opens again and the launch screen shows
+      the latest ending).
+  A4  NAV header shows "FLOOR n / 25"; region E has its crest and ambience; its
+      name obeys F2.
+  A5  BalanceAuditTest: R-REGION (new bounds/shape), R-BOSS-* on the BossTable
+      rows, R-CREDITS v2, R-MYSTERY-EV / event value rule, R-ROUTE-* at horizon
+      25, all green.
+  A6  Sim: F8 run-outcome bands, S-BOSS (F10) and S-SHOP (F14) reported; the
+      depth-derived ones enforced when the navigation waiver expires (reported
+      until then); S-GATE enforced; both gates green.
+  A7  docs/route-map-system.txt (finite run, region E, boss table),
+      docs/story-ui-system.txt (final clear + ending behaviour),
+      docs/game-balance-authority.txt + knowledge (SECTIONS 9, 12, 16 rewritten;
+      overrides) updated.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect + math-expert)  SECTION 25, BossTable,
+     region E spec/ambience rows.
+  2. LOGIC  (java-architect)  finite route generation, VICTORY path, ending
+     behaviour, StatsStore keys, boss derivation, shop economy, event/mystery
+     effects, sim to depth 25.
+  3. RENDER  (libgdx-specialist)  region E crest painter, NAV header, report
+     label.
+  4. CONTENT  (java-architect)  "DESCENT COMPLETE" framing chrome id; region E
+     name handling per F2 (no new story lines under the default).
+  5. TESTS  Balance-bearing: extend BalanceAuditTest (R-REGION, R-BOSS-* rows,
+     R-CREDITS v2, event/mystery value, route horizon) and BalanceSimTest (F8
+     run-outcome bands, S-BOSS, S-SHOP), replacing the S-FAIR depth band and the
+     old R-CREDITS / R-REGION assertions. Existing RouteMapGeneratorTest,
+     RouteMapTest, RouteEconomicsTest, Order10RegistriesTest, StoryFramingTest,
+     StoryPersistenceTest UPDATED where finite-run behaviour legitimately
+     changes. No new test files. Both gates.
+  6. DOCS  as A7, plus the CLAUDE.md-referenced route doc sections on endless
+     descent rewritten as finite.
+
+RISKS AND UNKNOWNS
+  - Removing the endless append touches route determinism tests; update them in
+    CP1.
+  - The narrative layer's "once" doctrine vs F5; only Q1 settles it.
+  - Sim runs to 25 are longer; watch balanceSim runtime (SIM_SEED_COUNT may need
+    a per-band subset — a sim/ change, balance-scope).
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  the route map is finite (25 layers, 5 regions, region E spec/ambience/
+       crest, no append path); NAV header F6; route tests updated; A1, A4 hold;
+       both gates green
+  CP2  depth-25 boss defeat ends the run as VICTORY with the report label and
+       win stats; ending behaviour per the Q1 decision; A2, A3 hold; build green
+  CP3  BossTable rows drive bosses; derivation from ExpectedPlayer; R-BOSS-*
+       green on all five rows; both gates green
+  CP4  region dial + elite weights (F7) live; R-REGION updated; sim run-outcome
+       bands (F8) replace S-FAIR's depth band; both gates green
+  CP5  shop economy (F12, F13) live; R-CREDITS v2 green; S-SHOP reported; both
+       gates green
+  CP6  event/mystery rewards in ladder currencies (F15); R-MYSTERY-EV / event
+       value green; both gates green
+  CP7  S-BOSS consistency reported; all docs; A5, A6, A7 hold; both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  Exactly 25 floors (not "20-25" variable): five regions of five align with
+       the story's five regions and with the existing Core-ending placement.
+  AS2  "The Breach" stays as region D's name/theme, now finite; region E is new.
+  AS3  The existing modulo boss cycle (Overseer, Corruptor, Hell Baron, Overseer,
+       Corruptor) is kept as an explicit table so the current Core ending boss
+       does not change; a dedicated final boss is a strongly recommended
+       follow-up idea.
+  AS4  Win rate 20-40% for a skilled (TACTICAL) player and ~15% first-boss clears
+       for a naive player match "roguelike and casual" and "first boss without
+       many attempts"; order 8 moves these with real logs.
+  AS5  One Fabricator per floor (not 1-2 random) makes the shop a reliable rung
+       without making every floor a shopping trip.
+  AS6  Win stats (runs won, best win) are welcome and cheap; the NEW OPERATOR
+       wipe covers them.
+  AS7  EVENT/MYSTERY stay structurally as they are; only their rewards/costs are
+       re-expressed.
+
+
+DECISIONS
+---------
+  D1  Run length: finite, ~20-25 floors, then the game ends (owner, C4) ->
+      exactly 25, five regions, VICTORY at the depth-25 boss.  (2026-09-30)
+  D2  Boss every 5 floors (owner, C3) -> BossTable rows at 5/10/15/20/25.
+      (2026-09-30)
+  D3  Floors 10-15 very challenging but fair (owner, C3) -> region C is the
+      dial's peak (F7).  (2026-09-30)
+  D4  Shops too expensive everywhere (owner, D6) -> R-CREDITS v2 with a surplus
+      band [1.10, 1.40].  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+  Q1  When a player clears depth 25 on a save that has ALREADY reached a story
+      ending, what happens at the moment of victory?
+        A (DEFAULT) the Core ending exchange opens again; the player may choose a
+          different ending; the launch screen shows the latest one. Bends the
+          narrative "say it once" doctrine for this one beat, in exchange for
+          every win having its climax and all four endings being reachable.
+        B the previously chosen ending is replayed automatically (same card /
+          freeze), no choice.
+        C a new, short "descent complete" victory card with its own ORA line
+          (new narrative content, a separate narrative idea file first).
+      Default A. If the owner says "defaults are fine", move this to DECISIONS as
+      A and this file becomes implementable (orders 1-6 do not depend on it).
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+Overridden by THIS order:
+  - The ENDLESS descent (FIXED_REGION_COUNT 3 + lazily appended "THE BREACH"
+    bands; knowledge-doc problem 8 "graceful degradation past ~20") -> finite
+    25-floor run (F1).
+  - S-FAIR's TACTICAL median death depth [SIM_TARGET_DEPTH_MIN 8, MAX 14] ->
+    the F8 run-outcome bands; SIM_SKILL_DEPTH_GAP_MIN 3 -> 5.
+  - R-REGION bounds [0.8, 1.3] + monotonic non-decreasing A<=B<=C<=D ->
+    [0.8, 1.5], C >= B >= A and E >= D (the 10-15 peak).
+  - REGION_TP_BUDGET_MULTIPLIER {0.90, 1.00, 1.15, 1.25} -> F7 values; per-region
+    ELITE multipliers -> F7 values.
+  - Boss cadence by modulo in BossBalance and per-boss *_DEPTH /
+    *_TARGET_FIGHT_TURNS constants -> BossTable rows; R-BOSS-* inputs from
+    ExpectedPlayer.
+  - R-CREDITS band [0.9, 1.4] on the old purchase bundle -> R-CREDITS v2
+    [1.10, 1.40] on the NEEDED BUNDLE; SHOP_CREDITS_PER_POWER_POINT 36,
+    SHOP_MIN/MAX_PER_FLOOR 1/2 + SHOP_SECOND_MACHINE_CHANCE -> F12/F13.
+  - R-MYSTERY-EV and event pricing -> F15 in ladder currencies.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-2..6.txt,
+          roguelike_order_19_win_condition_and_final_floor.txt,
+          branching-facility-route-map-order-*.txt, story-ui-order-5/8.txt,
+          new-game-balancr-order-6/7.txt (boss + route economics, superseded
+          parts), shop_order_*.txt
+  Docs:   docs/route-map-system.txt, docs/story-ui-system.txt,
+          docs/game-balance-authority.txt, docs/game-balance-knowledge.txt

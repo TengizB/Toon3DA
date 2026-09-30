@@ -1,0 +1,444 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Combat
+TITLE: Weapon Roles and Matchups — told to the player
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+
+Order 4 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on orders 1-3 (logs/dials, ladder, groups + supply planner).
+
+
+OVERVIEW
+--------
+The owner uses the Chaingun, Assault Rifle and Plasma Rifle for everything
+"because they hit from range and there is plenty of ammo", finds shotguns
+"useless — not worth the risk of being hit up close, ammo limited", the
+Incinerator "useless — very low damage", never switches weapon per enemy "but I
+wish I would — this is a great thing to implement, and it must be communicated
+to the player". Enemies "all feel the same".
+
+This order gives every weapon a DAMAGE CLASS and every enemy family a TRAIT, and
+joins them with a small, readable MATCHUP TABLE (a multiplier per class x trait).
+It retunes each weapon toward a ROLE that is the best answer somewhere and never
+everywhere — shotguns win up close and stagger what they hit, the Incinerator
+clears groups and burns the dead, energy cracks machine shields, the Railgun and
+explosives crack golem plate, and the automatic rifles stay the reliable
+generalist that is RESISTED by armour. Ammo supply is re-weighted so the
+generalist's bullets are the scarce ones. Then it TELLS the player, five ways:
+hit words, trait glyphs on health bars, weapon class glyphs, the compare card,
+and a pulsing SWITCH button that jumps straight to the right gun — plus one ORA
+teaching line.
+
+
+SCOPE
+-----
+IN
+  - DamageClass per weapon; EnemyTrait per family (overridable per archetype);
+    MatchupCatalog rows (class x trait -> multiplier).
+  - Matchup applied in player->enemy damage resolution; Threat-Point pricing made
+    trait-aware.
+  - Role retunes: Shotgun, Double-Barrel, Incinerator, Plasma Rifle, Arc Cannon,
+    Railgun, Grenade Launcher (base numbers + one signature property each where
+    listed); Assault Rifle / Chaingun stay the generalists.
+  - Per-ammo-type supply generosity in the order-3 SupplyPlanner.
+  - Communication C1-C6 (RULES).
+  - Sim: TacticalPolicy switches by matchup; new S-SWITCH band.
+  - MATCHUP_STRENGTH developer dial.
+
+OUT (deliberately not doing now)
+  - Heavy telegraphed enemy attacks and how the shotgun stagger interacts with
+    them beyond "stagger cancels the target's committed action" — order 5
+    owns the heavy verbs.
+  - New weapons or new enemies. Every class and trait maps onto existing content.
+  - Melee rework beyond assigning BLADE / BLUNT classes.
+  - Perks that boost classes — order 6.
+  - Enemy AI changes (who targets whom, kiting) — unchanged.
+  - A bestiary / inspect screen or "scan" verb (forbidden by the bestiary voice
+    rules; the glyph on the health bar is the inspect).
+
+
+GAMEPLAY LOOP
+-------------
+  1. A Rimeshell Lancer (GOLEM -> PLATED) steps into the lane. Its health bar
+     shows a small plate glyph. The player fires the Assault Rifle: the hit
+     number flashes grey and "RESISTED" appears above the bar.
+  2. The SWITCH WEAPON button pulses amber (the Railgun in the bag is effective
+     vs PLATED and has ammo). One tap switches DIRECTLY to the Railgun (not the
+     next weapon in the cycle). Switching costs its normal turn.
+  3. First time in the save: ORA (teaching topic MATCHUP) — "Those rounds are
+     glancing off. Something in your bag will bite."
+  4. The Railgun hit flashes amber: "WEAK POINT". The Lancer dies in a third of
+     the turns.
+  5. A pack of four Crawlers (UNDEAD -> BURNABLE) rushes in: the Incinerator's
+     cone lights all four and the burn finishes them while the player backs off.
+  6. A Shell Brute (INSECT -> CHITIN) closes: at 1 tile the Shotgun blast knocks
+     it back a tile and staggers it — it loses its next action.
+
+
+RULES
+-----
+Classes, traits, matchups
+  M1  DamageClass (data on each weapon, declared by the weapon, never a switch):
+        BALLISTIC  Assault Rifle, Chaingun (and the pistol ammo fallback)
+        SPREAD     Shotgun, Double-Barrel Shotgun
+        ENERGY     Plasma Rifle, Arc Cannon
+        RAIL       Railgun
+        FIRE       Incinerator
+        EXPLOSIVE  Grenade Launcher (and barrels, for matchup purposes)
+        BLADE      Combat Knife, Chainsaw
+        BLUNT      Fist, Hammer
+  M2  EnemyTrait per EnemyFamily (an archetype may override):
+        ABERRATION -> FLESH     (the neutral baseline)
+        MACHINE    -> SHIELDED
+        GOLEM      -> PLATED
+        UNDEAD     -> BURNABLE
+        INSECT     -> CHITIN
+        DEMON      -> INFERNAL
+      Bosses carry their family's trait.
+  M3  MatchupCatalog defaults (multiplier applied to the player's hit after the
+      ladder, before enemy Block/armour; 1.0 unless listed):
+                   BALLISTIC SPREAD ENERGY RAIL FIRE EXPLOSIVE BLADE BLUNT
+        FLESH        1.0      1.0    1.0   1.0  1.0   1.0      1.0   1.0
+        SHIELDED     0.65     0.8    1.5   1.0  0.8   1.0      0.8   1.2
+        PLATED       0.55     0.8    0.9   1.4  0.6   1.3      0.6   1.4
+        BURNABLE     1.0      1.0    1.0   1.0  1.8   1.1      1.1   1.0
+        CHITIN       0.75     1.35   1.0   1.1  1.4   1.0      1.2   1.0
+        INFERNAL     1.0      1.1    1.35  1.0  0.3   0.9      1.0   1.0
+      Status damage the player applies (burn/bleed) uses the class of the weapon
+      that applied it. The MATCHUP_STRENGTH dial raises each multiplier to the
+      dial's power (1.0 shipped).
+  M4  Classification thresholds: a multiplier >= 1.3 is EFFECTIVE; <= 0.8 is
+      RESISTED; between is NEUTRAL. These drive all communication.
+
+Weapon roles (base numbers at LV1 COMMON; the order-2 ladder scales them)
+  W1  SHOTGUN — point-blank burst. Falloff by distance: 1 tile 100%, 2 tiles
+      85%, 3 tiles 55%, 4 tiles 30%, 5 tiles 15%. Base damage set so that at 1-2
+      tiles its per-turn damage is >= 2.0x the Assault Rifle's at 3 tiles
+      (R-ROLE-4). A hit at 1 tile KNOCKS BACK a non-BOSS, non-MINI_ELITE target
+      one tile if that tile is walkable and free. A hit at <= 2 tiles STAGGERS the
+      target: it loses its next committed action (the intent icon shows the
+      existing STUNNED glyph for that turn). Stagger cannot chain on the same
+      enemy two turns running.
+  W2  DOUBLE-BARREL — both barrels in one action: ~1.8x the Shotgun's hit, same
+      falloff shape but one tile shorter, same knockback/stagger; clip 2.
+  W3  INCINERATOR — group clearer and burner. Cone unchanged (7 tiles). Impact
+      per target set to ~0.6x the Assault Rifle's hit; BURN from the Incinerator
+      stacks up to 3 on one target, each stack ticking FLAME_BURN_FRACTION of the
+      weapon's (ladder-scaled) hit per turn for FLAME_BURN_TURNS (4); burn keeps
+      ticking on a target that walks out of the cone. Target (R-ROLE): clears a
+      group of 3 on-curve chaff in the cone in <= 2 sprays; vs a BURNABLE soldier
+      its TTK is <= 0.8x the Assault Rifle's.
+  W4  PLASMA RIFLE — pierces every enemy in the lane (existing); ENERGY.
+  W5  ARC CANNON — chain unchanged; ENERGY; the chain ignores RESISTED
+      multipliers below 1.0 (it always does at least neutral) so it stays a
+      group tool.
+  W6  RAILGUN — RAIL, full-pierce, charge unchanged; base damage re-fitted under
+      R-ROLE (its old out-of-band waiver is re-decided, see OVERRIDE CLAUSE).
+  W7  GRENADE LAUNCHER — EXPLOSIVE splash; self-damage kept.
+  W8  ASSAULT RIFLE / CHAINGUN — unchanged shape; the reference generalist.
+
+Role rules (replace the weaponPowerScore bands)
+  R-ROLE uses REFERENCE SCENARIOS (all at the expected player's level, depth 5
+  and depth 15), each = target trait x group size x engagement range:
+    S1 FLESH single, 3-5 tiles            S5 BURNABLE group of 3, 1-3 tiles
+    S2 FLESH group of 3, 1-3 tiles        S6 CHITIN single, 1-2 tiles
+    S3 SHIELDED single, 3-5 tiles         S7 INFERNAL single, 3-5 tiles
+    S4 PLATED single, 3-6 tiles           S8 BRUISER charging from 3 tiles
+                                             (turns of damage taken before dead)
+  R-ROLE-1 NICHE      every class except BALLISTIC is the best (fewest turns to
+                      clear, ammo-feasible) in >= 1 scenario by >= 20% over the
+                      best BALLISTIC weapon.
+  R-ROLE-2 GENERALIST BALLISTIC is within 1.3x of the best in S1 and is never
+                      best in S3 or S4.
+  R-ROLE-3 NO DOMINANCE no class is best in more than 2 scenarios.
+  R-ROLE-4 RISK PAYS  SPREAD per-turn damage at 1-2 tiles >= 2.0x BALLISTIC at
+                      3 tiles, equal level and rarity.
+  R-ROLE-5 AMMO FEASIBLE every class can clear its niche scenario with <= one
+                      average floor's planned supply of its ammo type.
+
+Ammo
+  A-1 The order-3 SupplyPlanner's 70/30 carried/off-type split is weighted by a
+      per-AmmoType generosity factor (BalanceConfig): BULLETS 0.8, SHELLS 1.3,
+      FUEL 1.3, CELLS 1.0, GRENADES 1.0, SLUGS 0.9 (normalised so total planned
+      supply per floor is unchanged). Reserve caps re-fitted so SHELLS and FUEL
+      bank ~1.5 floors and BULLETS ~1.0.
+
+Communication
+  C1  HIT WORDS: every player hit on an enemy colours that enemy's health-bar HP
+      text for 0.4 s — amber if EFFECTIVE, grey if RESISTED, white otherwise —
+      and the first EFFECTIVE / RESISTED hit on each enemy shows the word
+      "WEAK POINT" / "RESISTED" above its bar for 0.8 s (cosmetic timers).
+  C2  TRAIT GLYPH: every enemy health bar draws its trait glyph (procedural, no
+      textures) at the bar's left end: SHIELDED hexagon, PLATED square plate,
+      BURNABLE flame, CHITIN segmented arc, INFERNAL horned ember. FLESH draws
+      none. Glyph colour = the effective weapon class's colour.
+  C3  CLASS GLYPH: the HUD right panel draws the equipped weapon's class glyph
+      before its name (bullet, spread fan, bolt, rail line, flame, blast star,
+      blade, hammer), in the class colour.
+  C4  SWITCH HINT: when the enemy the player is facing (nearest awake enemy in the
+      facing lane within the equipped weapon's range) is RESISTED by the
+      equipped weapon AND a carried weapon with ammo is EFFECTIVE against it,
+      the SWITCH WEAPON touch button pulses amber (cosmetic) and its next tap
+      switches DIRECTLY to that weapon (still one turn). When no hint is active,
+      SWITCH cycles as today. The hint clears when the target dies, leaves the
+      lane, or the player switches.
+  C5  COMPARE CARD / INVENTORY: each weapon shows "STRONG VS" and "WEAK VS" with
+      the trait glyphs from its class's row (>= 1.3 / <= 0.8).
+  C6  ORA TeachingTopic MATCHUP (TACTICAL, re-teach threshold 3): first taught on
+      the first RESISTED hit while a C4 hint is available; re-taught after three
+      more hint episodes in which the player kept firing the resisted weapon for
+      >= 3 turns. No numbers (docs/narrative-authority.txt).
+
+
+PLAYER EXPERIENCE
+-----------------
+Weapon choice becomes a per-fight decision with a readable reason: the glyph on
+the enemy says what it is, the hit word says whether your gun is working, the
+SWITCH button tells you there is a better answer in your bag and takes you to
+it. Shotguns become a deliberate close-range gamble that pays (stagger,
+knockback, huge hit, generous shells). The Incinerator becomes the group and
+undead answer. The automatic rifles are still the safe choice — until armour
+shows up. Learned by ORA once (MATCHUP) and by the colour of every hit after.
+
+
+TECHNICAL NOTES
+---------------
+  entity/DamageClass            enum with glyph id + colour data.
+  enemy/EnemyTrait              enum with glyph id.
+  enemy/EnemyFamily             trait() per family (data); EnemyType.trait()
+                                defaults to family().trait(), overridable.
+  entity/MatchupCatalog         + MatchupTable: register() rows (class, trait,
+                                multiplier), bootstrap once; lookup by ordinal.
+  entity/Weapon                 damageClass() declared by each subclass (data).
+  util/GameMath                 matchupMultiplier(multiplier, dial),
+                                classifyMatchup(...), shotgun falloff-by-tile,
+                                incinerator stack tick, trait-adjusted enemy eHP
+                                for TP pricing, R-ROLE scenario evaluation
+                                (turns-to-clear per scenario).
+  Damage resolution             the player->enemy hit path (EnemyHitTarget /
+                                EnemyManager damage entry) applies the matchup
+                                once, after the ladder and before Block/armour.
+  Knockback / stagger           reuse the Hammer's existing knockback path;
+                                stagger = the enemy's next committed action is
+                                replaced by the EXISTING IntentVerb.STUNNED (and
+                                its existing intent glyph) for one turn — no new
+                                verb.
+  level/SupplyPlanner           per-AmmoType generosity (A-1).
+  util/BalanceConfig            SECTION 22 — MATCHUPS & ROLES: the table defaults
+                                (also registered as rows, the rows READ these
+                                constants), thresholds, shotgun falloff table,
+                                knockback/stagger rules, incinerator stack
+                                numbers, ammo generosity, reserve caps, scenario
+                                definitions, R-ROLE margins.
+  render                        EnemyRenderer / health bars (C1, C2), HudRenderer
+                                (C3), compare card + InventoryOverlayRenderer
+                                (C5), TouchControllerRenderer pulse (C4 visual).
+  input                         PlayerController switch semantics (C4) — the hint
+                                target is computed by a small headless helper
+                                (entity/MatchupAdvisor) shared with the sim.
+  narrative                     TeachingTopic.MATCHUP + first/re-teach strings;
+                                firing sites in World (evidence from the hint).
+  sim                           TacticalPolicy uses MatchupAdvisor to switch;
+                                NAIVE never switches (unchanged).
+  world/DevDial                 MATCHUP_STRENGTH; DevRunLog adds per-floor damage
+                                dealt by DamageClass, RESISTED/EFFECTIVE hit
+                                counts, hint-driven switches.
+
+
+VISUAL DESIGN
+-------------
+Class colours: BALLISTIC pale brass (0.85,0.75,0.45), SPREAD orange
+(1.0,0.55,0.15), ENERGY cyan (0.30,0.85,1.0), RAIL white-violet (0.85,0.75,1.0),
+FIRE red-orange (1.0,0.35,0.10), EXPLOSIVE yellow (1.0,0.85,0.20), BLADE silver,
+BLUNT steel grey. Glyphs are 12x12 world-unit ShapeRenderer figures, pre-built
+vertex lists (no allocation in render). The SWITCH pulse is an amber outline
+alpha 0.4..1.0 at 2 Hz on the existing button, drawn only while the hint is
+active.
+
+
+BALANCE NOTES
+-------------
+Balance-bearing: matchup multipliers, weapon base numbers, shotgun falloff,
+incinerator stacks, ammo generosity, reserve caps, R-ROLE scenarios and margins,
+trait-aware TP. Defaults above are starting points for math-expert to satisfy
+R-ROLE and the order-2 R-LADDER simultaneously (R-LADDER's reference weapon stays
+the Assault Rifle vs FLESH).
+
+
+INTERACTIONS
+------------
+  - Order-2 ladder: matchup multiplies after the ladder; R-LADDER unaffected
+    because its reference is FLESH.
+  - Order-3 supply: ammo generosity weights; groups make AoE classes matter.
+  - Order-5: stagger is the shotgun's answer to heavy wind-ups (order 5 wires
+    heavies to respect STAGGERED).
+  - Hazards: barrels count as EXPLOSIVE vs traits; fire tiles as FIRE.
+  - Bestiary voice lines stay as shipped (they already say how to fight each
+    type; no numbers). Sound: no new sound (catalog at cap); RESISTED reuses the
+    existing ricochet/impact sound if one exists, otherwise silent.
+
+
+EDGE CASES
+----------
+  - Stagger on an enemy mid-WIND_UP: the committed charge is cancelled (the
+    wind-up is lost, not delayed).
+  - Knockback into a hazard tile: allowed (that is the tactic); into a wall,
+    door, prop or another enemy: no knockback, stagger still applies.
+  - Switch hint with an empty effective weapon: not offered (needs ammo).
+  - Two effective weapons: hint picks the higher multiplier, ties -> the one with
+    more ammo.
+  - Boss traits: bosses take matchups like their family; knockback never applies
+    to bosses; stagger on a boss is capped by the boss AI (no stagger during a
+    phase transition) — boss choreography otherwise untouched.
+  - Incinerator burn on an enemy that dies: stacks vanish; burn can kill.
+  - Action lock mid-animation: the hint only changes the NEXT tap's meaning.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Every weapon class and every enemy family declares its class/trait as data
+      (read the code); MatchupCatalog holds the M3 rows; no switch on class or
+      trait in damage code.
+  A2  BalanceAuditTest R-ROLE-1..5 green; BalanceReport prints a MATCHUP table
+      (class x trait) and a SCENARIO table (turns-to-clear per class per
+      scenario at depths 5 and 15).
+  A3  On desktop, shooting a golem with the Assault Rifle shows grey HP text and
+      "RESISTED"; with the Railgun, amber and "WEAK POINT"; health bars of all
+      five non-FLESH families show their glyph.
+  A4  With a resisted target in the lane and an effective carried weapon with
+      ammo, SWITCH pulses and one tap equips that weapon (not the next in
+      cycle); with no hint, SWITCH cycles as before.
+  A5  A Shotgun hit at 1 tile knocks a Gore Biter back one tile (free tile
+      behind) and its next action is skipped with the STUNNED glyph shown; at 3
+      tiles no stagger.
+  A6  An Incinerator spray into a group of three depth-1 chaff, twice, kills all
+      three (order-1 DEV START depth 1, ON-CURVE kit + Incinerator).
+  A7  ORA's MATCHUP line fires once and resolves through the strings file; no
+      number in it.
+  A8  Sim: S-SWITCH (TACTICAL >= 1.0 matchup-driven switches per COMBAT floor)
+      reported and enforced (not depth-derived, so not covered by the navigation
+      waiver); both gates green.
+  A9  Docs record the R-WEAPON -> R-ROLE replacement and the Railgun waiver
+      decision; docs/weapon-creation-guide.txt tells a new weapon to declare a
+      DamageClass and meet R-ROLE; docs/enemy-system.txt lists traits.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect + math-expert)  DamageClass, EnemyTrait,
+     MatchupCatalog, SECTION 22, GameMath scenario math, BalanceReport tables.
+  2. LOGIC  (weapon-creator for W1-W7 weapon behaviour; java-architect for
+     damage resolution, TP pricing, stagger, supply weights, MatchupAdvisor,
+     switch semantics, sim policy).
+  3. RENDER  (libgdx-specialist)  C1-C5 visuals.
+  4. CONTENT  (java-architect)  TeachingTopic.MATCHUP + strings per the
+     narrative add-a-line protocol.
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-ROLE-1..5 and
+     trait-aware R-ENEMY TP; replace the R-WEAPON power-band assertions and the
+     Railgun waiver assertion with them; extend BalanceSimTest with S-SWITCH.
+     Existing weapon/enemy tests (e.g. RimeshellLancerTest) and
+     StoryLocalizationTest UPDATED where numbers/ids legitimately change. No new
+     test files. Both gates.
+  6. DOCS  docs/game-balance-authority.txt + knowledge (R-ROLE, matchup table,
+     overrides, living tables), docs/weapon-creation-guide.txt,
+     docs/enemy-system.txt, docs/story-ui-system.txt (MATCHUP topic).
+
+RISKS AND UNKNOWNS
+  - The 3D health bars are small on a phone; confirm the glyph reads at 12 units
+    early (CP5) — enlarge if needed, it is cosmetic.
+  - Knockback reuses the Hammer path — confirm it handles enemies mid-charge.
+  - R-ROLE and R-LADDER both constrain base damage; fit together (math-expert).
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  DamageClass, EnemyTrait, family traits, MatchupCatalog rows, weapon class
+       declarations and SECTION 22 exist; matchup not yet applied (CP2 wires it);
+       build green
+  CP2  matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY
+       updated; MATCHUP_STRENGTH dial; both gates green
+  CP3  W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks);
+       R-ROLE-1..5 replace R-WEAPON bands; Railgun waiver resolved; A2, A5, A6
+       hold; both gates green
+  CP4  per-type ammo generosity in SupplyPlanner and re-fitted reserve caps;
+       R-ROLE-5 + R-SUPPLY green; both gates green
+  CP5  C1, C2, C3, C5 visuals on desktop; A3 holds
+  CP6  C4 switch hint + direct switch + MATCHUP teaching topic; A4, A7 hold
+  CP7  sim TacticalPolicy switching + S-SWITCH; log fields; all docs; A1, A8, A9
+       hold; both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  One trait per family is enough identity; per-archetype overrides exist but
+       none are used by default.
+  AS2  FLESH (Aberrations) is the neutral family where the generalist rifles
+       are fine — the "rifle floors" still exist.
+  AS3  Shotgun stagger + knockback is the "reward for the risk" the owner is
+       missing; generous shells (A-1) remove the "ammo limited" complaint.
+  AS4  The SWITCH button jumping directly to the suggested weapon is an
+       improvement, not a surprise (it only happens while it pulses).
+  AS5  Matchup multipliers are shown as words and colours, never as numbers on
+       the HUD; the compare card lists traits by glyph.
+  AS6  Barrels counting as EXPLOSIVE makes hazards part of the matchup language
+       (order 5 builds on it).
+  AS7  No new sound: the catalog is at its 64 cap and hit feedback is visual.
+  AS8  The Railgun's old "scarcity-gated over-band" waiver is resolved by R-ROLE
+       (it is now priced as the PLATED niche weapon with its own ammo feasibility
+       check) — the waiver is deleted, not extended.
+
+
+DECISIONS
+---------
+  D1  Weapon switching per enemy is wanted and must be communicated (owner, H3)
+      -> matchup table + five communication channels + ORA topic.  (2026-09-30)
+  D2  Shotguns and the Incinerator must be worth using (owner, H1/H2) -> SPREAD
+      and FIRE roles with R-ROLE niche guarantees.  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+Overridden by THIS order:
+  - R-WEAPON (weaponPowerScore role bands sidearm 8-14 / workhorse 12-18 /
+    burst 18-26 / heavy 24-32, REFERENCE_AMMO_EFFICIENCY normaliser) ->
+    REPLACED by R-ROLE-1..5 (scenario niches, generalist bound, no dominance,
+    risk pays, ammo feasible).
+  - WAIVER [WEAPON_POWER] Railgun 45.0 vs heavy band -> DELETED; the Railgun is
+    governed by R-ROLE (PLATED niche + ammo feasibility).
+  - "Enemy eHP == raw HP / no mitigation" pricing assumption -> trait-aware eHP
+    in TP (R-ENEMY re-priced).
+  - Incinerator crediting "impact + one full burn application per shot" ->
+    stacking burn priced by scenario (S2/S5).
+  - FLAME_IMPACT_DAMAGE / FLAME_FALLOFF / FLAME_BURN_* and the shotgun /
+    double-barrel damage/falloff numbers -> the W1-W3 role numbers.
+  - The order-3 70/30 carried split -> weighted by per-AmmoType generosity;
+    AMMO_RESERVE_CAP_* re-fitted.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-2/3.txt,
+          incinerator-flamethrower.txt, shotgun-weapon-system.txt,
+          weapon-compare-rework.txt, enemy-health-bars-hit-reactions.txt
+  Docs:   docs/weapon-creation-guide.txt, docs/enemy-system.txt,
+          docs/enemy-health-bars.txt, docs/game-balance-authority.txt

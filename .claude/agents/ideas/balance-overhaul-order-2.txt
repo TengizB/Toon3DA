@@ -1,0 +1,455 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Progression
+TITLE: The Power Ladder — levels and rarity that matter
+CREATED: 2026-09-30
+IMPLEMENTED: -
+---
+
+Order 2 of 8 in the balance-overhaul series (index: balance-overhaul.txt).
+Depends on order 1 (dev kit + dials).
+
+
+OVERVIEW
+--------
+The owner's top complaint: "I can play with a level-1 weapon very confidently even
+on higher levels. I want to feel that a level-2 weapon is actually much stronger
+than a level-1 weapon, and enemy health must scale with it. I want to feel like I
+cannot play with a level-1 weapon on a level-3 map." Today a weapon level is +10%
+damage (linear), enemy HP grows 4.2% a floor, rarity is contractually forbidden
+from raising power, and the player's HP never grows with character level — so the
+gap between a lazy and a prepared player is a rounding error.
+
+This order builds ONE steep, readable power ladder shared by both sides: every
+floor has a THREAT LEVEL equal to its depth; weapon damage and enemy HP grow by
+the same compound step; a weapon BELOW the floor's threat level takes a sharp
+multiplicative penalty per level; rarity multiplies damage; character level
+multiplies max HP/armour while enemy damage grows to match; heals become a
+percentage of max. The result: an on-curve player's fights feel the same length
+at floor 1 and floor 20, a player two levels behind feels it immediately, and the
+game SAYS so on the HUD. Base enemy HP is rebased so fights are short (no more
+sponges) — floors will get more bodies in order 3.
+
+
+SCOPE
+-----
+IN
+  - Floor THREAT LEVEL = depth; RUN_FINAL_DEPTH = 25 introduced as the audit
+    horizon for every depth-swept rule (the run itself ends at 25 in order 7).
+  - Compound weapon level growth, level-gap multiplier, rarity damage multiplier.
+  - Enemy HP / damage compound growth fitted to the ladder; rebased depth-1 enemy
+    HP to the TTK targets.
+  - Player max HP / max armour growth per character level; heals and armour
+    pickups as fractions of max.
+  - ONE expected-player model, GameMath.expectedPlayerAtDepth, used by the audit,
+    the simulator, boss derivation and the order-1 dev kit.
+  - Shop weapon LEVEL-UP made a reliable, affordable ladder rung.
+  - Communication: weapon level vs floor threat on the HUD, the weapon compare
+    card, floor arrival, and one ORA teaching topic.
+  - New schema rule R-LADDER replacing R-DEPTH and R-GEARGATE; every other
+    depth-swept rule re-fitted to the new curves at horizon 1..25.
+  - LEVEL_GAP developer dial (order-1 registry row).
+
+OUT (deliberately not doing now)
+  - More enemies per floor, groups, supply planner — order 3 (floors will feel
+    faster but still sparse after this order; expected).
+  - Weapon roles, damage classes, matchups — order 4. This order keeps every
+    weapon's ROLE shape; it changes the ladder they sit on.
+  - Heavy attacks, guard, armour rework — order 5.
+  - Perks/keystones and ability rework — order 6 (abilities are only re-spanned
+    to the longer level range here, not redesigned).
+  - Ending the run at 25, bosses 20/25, full shop economy — order 7.
+  - A weapon-XP / "weapon levels up by use" system. Levels come from finds and
+    the shop only (see D-notes).
+  - Showing numbers to the story layer. ORA never states a number.
+
+
+GAMEPLAY LOOP
+-------------
+  1. Floor 4 loads -> event text "THREAT LV 4" for 2 s beside the floor name.
+  2. HUD right panel shows "SHOTGUN  LV 2" with a red down-arrow: the weapon is
+     two levels under the floor. Shots visibly take ~1.7x as many hits as they
+     did on floor 2.
+  3. First time this happens in the save: ORA (teaching topic UNDERGEARED):
+     "That gun's falling behind what lives down here. Upgrade it or replace it."
+  4. Player finds an ASSAULT RIFLE LV 4 (UNCOMMON). The compare card shows
+     "LV 4 / FLOOR 4" and the effective damage of both weapons ON THIS FLOOR.
+     Picking it up is a decision the numbers make obvious.
+  5. At a Fabricator: "LEVEL UP: SHOTGUN LV 2 -> 3" is always one of the offers
+     for the equipped weapon, priced so one floor's credits buy it. The player
+     chooses: keep a favourite gun on the ladder with credits, or switch to finds
+     and spend credits on supplies.
+
+
+RULES
+-----
+  R1  THREAT LEVEL of a floor = its depth d (1..RUN_FINAL_DEPTH). Boss floors,
+      gates and calm floors use the same value.
+  R2  Player outgoing weapon damage per hit:
+        base(weapon) * LADDER_GROWTH^(L-1) * rarityMultiplier(tier)
+                     * levelGapMultiplier(L - d)   [then the order-1 PLAYER_DAMAGE
+                                                    dial, then existing modifiers]
+      L = weapon level (1..MAX_WEAPON_LEVEL). One GameMath method composes it.
+  R3  levelGapMultiplier(gap):
+        gap < 0 : max(LEVEL_GAP_FLOOR, LEVEL_GAP_PENALTY_BASE ^ (-gap * dial))
+        gap = 0 : 1.0
+        gap > 0 : 1 + LEVEL_GAP_BONUS_PER_LEVEL * min(gap, LEVEL_GAP_BONUS_CAP_LEVELS)
+      Defaults: PENALTY_BASE 0.82, FLOOR 0.25, BONUS_PER_LEVEL 0.05, BONUS_CAP 2.
+      dial = the order-1 LEVEL_GAP developer dial (1.0 shipped).
+  R4  The FIST is exempt: its level always equals the floor's threat level and
+      it takes no gap penalty (it is the never-softlock backstop, S-SOFTLOCK).
+      Every other melee weapon follows R2/R3.
+  R5  rarityMultiplier: COMMON 1.00, UNCOMMON 1.10, RARE 1.20, EPIC 1.32,
+      LEGENDARY 1.45 (on top of the tier's ability budget, which stays).
+  R6  Weapon levels: MAX_WEAPON_LEVEL = RUN_FINAL_DEPTH + 2 (27). Found / dropped
+      weapons roll level d + offset, offset weights {-1: 30, 0: 50, +1: 20}
+      (order 3 sets per-node offsets for ELITE/CACHE rewards). Start weapon: L1.
+      Ability magnitudes, accuracy, reload and clip level-scaling are RE-SPANNED
+      so their old level-1..10 curve now spans 1..MAX (same start and end
+      values), keeping R-ABILITY's priced budgets meaningful.
+  R7  Enemy max HP at depth d = rebasedBaseHP(type) * ENEMY_HEALTH_GROWTH^(d-1);
+      enemy outgoing damage = baseDamage(type) * ENEMY_DAMAGE_GROWTH^(d-1).
+      Both growth values are FITTED (math-expert) so R-LADDER L1 holds; starting
+      points 1.09 / 1.07. The old 1.042 / 1.073 constants are replaced.
+  R8  Rebased depth-1 TTK targets (on-curve player, reference workhorse = the
+      Assault Rifle, COMMON L1, measured at 3 tiles including falloff):
+        CHAFF 1-2 hits | SOLDIER 3-4 | BRUISER 5-7 | MINI_ELITE 8-12.
+      Rebased depth-1 TTD targets (hits the player survives from full HP+armour,
+      ordinary attacks only): CHAFF >= 10 | SOLDIER 7-9 | BRUISER 4-6 |
+      MINI_ELITE 3-5. Base HP / damage of each EnemyType is set to land inside its
+      role's targets; the new values live in BalanceConfig SECTION 2.
+  R9  Player max HP = PLAYER_MAX_HEALTH * PLAYER_VITALITY_GROWTH^(level-1) + card/
+      stat bonuses; max armour likewise with the same growth. Starting value 1.07,
+      fitted with R7's damage growth so R-LADDER L1 (TTD half) holds.
+  R10 Heals are fractions of max: MEDKIT_FULL ('H') 0.45 of max HP, STIM ('+')
+      0.18, ARMOUR_SHARD ('a') 0.15 of max armour, ARMOUR_VEST ('A') 0.60.
+      (Replaces the flat 90 / 32 / 14 / 62 values.) Rounded, minimum 1.
+  R11 Expected player at depth d (GameMath.expectedPlayerAtDepth, pure): weapon
+      level d, expected rarity multiplier for d's region (from the per-region drop
+      tier bands WEAPON_DROP_TIER_*_BY_REGION), character level
+      1 + EXPECTED_LEVELS_PER_DEPTH * (d-1), max HP/armour per R9, expected card
+      offence/defence power at that level, reference weapon per R8. This is THE
+      on-curve player for audit, sim, boss derivation (R-BOSS-*) and the order-1
+      ON-CURVE dev kit.
+  R12 R-LADDER (new schema rule; replaces R-DEPTH and R-GEARGATE), for every depth
+      1..RUN_FINAL_DEPTH and every non-boss role's reference archetype:
+        L1 ON-CURVE FLAT  expected-player TTK and TTD stay within +/-15% of their
+                          depth-1 values.
+        L2 LAG PUNISHED   weapon level d-2 -> TTK >= 1.5x on-curve;
+                          d-4 -> >= 2.5x; the start weapon (L1 COMMON) at d >= 5
+                          -> >= 3.0x.
+        L3 AHEAD BOUNDED  weapon level d+2 -> TTK >= 0.75x on-curve.
+        L4 LEVEL FELT     on floor d, level d vs level d-1: DPT gain >= +25%.
+        L5 RARITY FELT    each tier step >= +8% DPT; LEGENDARY >= +40% vs COMMON
+                          at equal level (abilities excluded).
+        L6 VITALITY FELT  character level d-3 -> TTD <= 0.80x on-curve.
+      (Check with defaults: L4 = 1.08/0.82 = 1.32; L2 at d-2 = 1/(0.857*0.672)
+      = 1.74, at d-4 = 3.0.)
+  R13 SHOP LEVEL-UP RUNG: every Fabricator machine always offers LEVEL UP for the
+      equipped weapon (a guaranteed slot, outside the random category roll) while
+      its level < d + 1; a shop level-up can never raise a weapon above d + 1.
+      Price: R-LADDER-AFFORD — at every depth 1..25 the level-up price is <= 50% of
+      the modelled credit income of one COMBAT floor at that depth.
+  R14 COMMUNICATION (must all exist):
+        a. HUD right panel: "LV n" after the weapon name. Colour: normal when
+           L >= d, amber when L = d-1, red with a down-arrow glyph when L <= d-2,
+           green up-arrow when L > d. Glyphs are procedural (no textures).
+        b. Floor arrival: event text "THREAT LV d" under the existing floor/node
+           arrival text, 2 s (cosmetic).
+        c. Weapon compare / pickup card: both weapons show "LV n" and their
+           EFFECTIVE per-hit damage on THIS floor (gap and rarity applied).
+        d. Inventory weapon rows show "LV n" with the same colour rule.
+        e. ORA TeachingTopic UNDERGEARED (TACTICAL, re-teach threshold 3): first
+           taught when the equipped weapon is >= 2 levels under the floor for a
+           whole floor arrival; re-taught (different, shorter words) after 3
+           further floors started that far behind. Lines follow
+           docs/narrative-authority.txt: no numbers.
+  R15 The TacticalPolicy buys the level-up rung for its main weapon when behind
+      and it can afford it; HOARDER-START-WEAPON never does (unchanged). NAIVE
+      never shops (unchanged).
+
+
+PLAYER EXPERIENCE
+-----------------
+Every find and every Fabricator visit now asks "does this keep me on the ladder?"
+Falling behind is not a silent drift but a red arrow and fights that visibly
+drag — and the fix is always in reach (a find, one floor of credits, or the
+rarity of what you already carry). Taught by ORA once (UNDERGEARED) and by the
+HUD colour forever after. The floor's threat level is announced on arrival so
+the player always knows the number they are measured against.
+
+
+TECHNICAL NOTES
+---------------
+  util/BalanceConfig  new SECTION 20 — POWER LADDER: RUN_FINAL_DEPTH,
+                      LADDER_GROWTH, LEVEL_GAP_* (4), RARITY_DAMAGE_MULTIPLIER[5],
+                      ENEMY_HEALTH_GROWTH, ENEMY_DAMAGE_GROWTH,
+                      PLAYER_VITALITY_GROWTH, heal/armour FRACTIONS, WEAPON level
+                      roll offset weights, the R8 TTK/TTD target bands,
+                      LADDER_AFFORD_FRACTION (0.5). Removed/replaced:
+                      WEAPON_LEVEL_DAMAGE_PER_LEVEL, ENEMY_HEALTH_SCALE_PER_DEPTH,
+                      ENEMY_DAMAGE_SCALE_PER_DEPTH, MEDKIT_*_HEAL, ARMOUR_*_VALUE
+                      (shims in ItemConstants/EnemyConstants/WeaponConstants follow;
+                      the R-DOT shim-integrity reflection stays green).
+                      MAX_WEAPON_LEVEL moves to BalanceConfig (WeaponConstants
+                      re-exports).
+  util/GameMath       ladderScale(level), levelGapMultiplier(gap, dial),
+                      rarityDamageMultiplier(tier ordinal), weaponLadderDamage(...),
+                      enemyHealthAtDepth / enemyDamageAtDepth (replace the
+                      compound helpers), playerVitalityScale(level),
+                      expectedPlayerAtDepth(d) -> a small immutable value type
+                      (util/ExpectedPlayer: weaponLevel, rarityMultiplier,
+                      characterLevel, damagePerTurn, effectiveHitPoints),
+                      ladderTurnsToKill(...) for the audit. Each with the
+                      Formula/Derivation/Edge-case block.
+  entity/Weapon       reads the current floor threat level (set by World at floor
+                      build, like other per-floor state) and composes damage via
+                      GameMath.weaponLadderDamage; Fist exemption per R4.
+  entity/WeaponRoller level roll per R6; re-spanned level scaling helpers.
+  enemy/EnemyManager  spawn HP/damage via the new GameMath methods (+ order-1
+                      dials).
+  progression/        max HP/armour growth on level-up (PlayerStats /
+                      PlayerProgress); heals resolve fractions in PlayerInventory.
+  shop                DefaultShopOfferSource: guaranteed level-up slot + cap +
+                      price from the ladder rung.
+  render              HudRenderer (LV tag + glyph), weapon compare / inventory
+                      rows (InventoryOverlayRenderer and the compare card),
+                      EventTextSystem arrival line.
+  narrative           TeachingTopic.UNDERGEARED row + first/re-teach strings in
+                      TeachingCatalog / story-strings.properties; firing site in
+                      World at floor arrival.
+  sim                 TacticalPolicy buys the rung (R15); SimWorld uses
+                      expectedPlayerAtDepth where it models the player.
+  world/DevDial       new row LEVEL_GAP (applies next floor); order-1 ON-CURVE
+                      kit switched to expectedPlayerAtDepth.
+  util/BalanceSchema  R-LADDER (six sub-checks), R-LADDER-AFFORD; removal of
+                      R-DEPTH and R-GEARGATE rule bodies (their RuleKinds retired);
+                      re-fits listed under OVERRIDE CLAUSE.
+  util/BalanceReport  new LADDER table (TTK/TTD per role at d = 1,5,10,15,20,25 for
+                      on-curve, d-2, d-4, start weapon, d+2) replacing the DEPTH
+                      COUPLING table.
+
+
+VISUAL DESIGN
+-------------
+LV tag: same HUD font as the weapon name, one step smaller. Amber
+(1.0, 0.70, 0.15) and red (0.95, 0.22, 0.18) reuse existing HUD warning colours
+if present. The arrow glyph is a 3-line procedural chevron 10x8 world units drawn
+with ShapeRenderer immediately right of the tag. "THREAT LV d" uses the existing
+event-text style in the region accent colour.
+
+
+BALANCE NOTES
+-------------
+All of it is balance-bearing (BalanceConfig, GameMath, BalanceSchema, sim).
+Starting values above are DEFAULTS for math-expert to fit, not final: the fit
+target is R-LADDER. Expected enemy HP at depth 25 is roughly 7-10x depth 1 —
+health bars will show bigger numbers deep; acceptable (health bar geometry is
+fraction-based). Credits and ammo supply are re-fitted only enough to keep the
+old scarcity/credit rules green at the new horizon; order 3 replaces the supply
+model and order 7 the economy.
+
+
+INTERACTIONS
+------------
+  - Scarcity: ammo DEMAND now rides ENEMY_HEALTH_GROWTH and SUPPLY rides the
+    expected player's per-hit damage growth; R-SCARCITY-DEPTH is re-fitted at
+    1..25 (region multipliers) until order 3 replaces it.
+  - Bosses: BossBalance derives from expectedPlayerAtDepth, so boss HP moves with
+    the ladder; R-BOSS-GATE becomes easier to satisfy (the start weapon is now
+    catastrophically behind at depth 5).
+  - XP: R-XP-PACE horizon 1..25; character level cap raised to >= 30 if lower.
+  - Order-1 dev kit and dials, story teaching layer, HUD, shop, route rewards.
+
+
+EDGE CASES
+----------
+  - Weapon picked up mid-floor above/below the floor: effective immediately; the
+    HUD recolours on pickup.
+  - Floor threat level changes only at floor build; a weapon levelled at a shop
+    recolours immediately.
+  - Level 27 cap reached: the rung offer disappears (not shown greyed).
+  - Fist equipped with no ammo anywhere: exempt, never penalised (R4).
+  - Heal fraction when max HP changes mid-effect (level-up this turn): heal
+    resolves against max HP at the moment of use.
+  - Existing saves: runs are not saved mid-run, so no migration; nothing
+    persistent changes.
+  - Enemies that summon: summoned units spawn at the floor's d like any other.
+  - DEV START with LEVEL_GAP dial 0: no penalty, used to A/B the feel.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  BalanceReport's LADDER table shows, for every role, on-curve TTK/TTD at
+      depths 1..25 within +/-15% of depth 1, and every R-LADDER L2-L6 bound met;
+      BalanceAuditTest fails if any is broken (R-LADDER).
+  A2  DEV START depth 3 / COMBAT / BARE (start weapon L1): the HUD shows the
+      weapon "LV 1" in red with a down-arrow and "THREAT LV 3" on arrival; a
+      soldier-role enemy takes >= 1.5x the hits it takes with an on-curve
+      (ON-CURVE kit) weapon on the same request.
+  A3  At depth 1 with the start kit, a Gore Biter dies in 1-2 Assault-Rifle hits
+      at 3 tiles, a soldier in 3-4, a Shell Brute in 5-7 (R8), read from the
+      order-1 log damage events or by counting shots.
+  A4  A MEDKIT_FULL restores 45% of current max HP at character level 1 and at
+      character level 10 (check two values on desktop).
+  A5  Every Fabricator shows a LEVEL UP offer for the equipped weapon when its
+      level <= d; none when level = d + 1; the price is <= half of one COMBAT
+      floor's modelled income (R-LADDER-AFFORD green).
+  A6  The compare card and inventory rows show LV and effective per-hit damage on
+      this floor for both weapons.
+  A7  ORA's UNDERGEARED line fires once on the first qualifying floor arrival and
+      resolves through story-strings.properties (no !id! marker); it contains no
+      number.
+  A8  R-DEPTH and R-GEARGATE no longer exist as enforced rules; their removal and
+      R-LADDER's text are in docs/game-balance-authority.txt with the override
+      record; docs/game-balance-knowledge.txt SECTIONS 4, 6, 10 describe the
+      ladder.
+  A9  ./gradlew test and ./gradlew balanceSim are green; S-GATE still 0%; the new
+      S-LAG band (HOARDER-START-WEAPON median death depth <= 6) is reported and
+      enforced unless covered by the existing navigation waiver, whose expiry
+      condition it inherits.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (math-expert + java-architect)  SECTION 20 constants,
+     GameMath ladder methods, util/ExpectedPlayer, BalanceReport LADDER table.
+  2. LOGIC  (java-architect)  Weapon / WeaponRoller / EnemyManager / progression
+     / PlayerInventory / shop wiring; rebased EnemyType numbers; sim policy R15;
+     LEVEL_GAP dial; dev kit on expectedPlayerAtDepth.
+  3. RENDER  (libgdx-specialist)  HUD LV tag + glyph, compare card, inventory
+     rows, arrival event text.
+  4. CONTENT  (java-architect)  TeachingTopic.UNDERGEARED + two strings, per
+     docs/narrative-authority.txt (the add-a-line protocol).
+  5. TESTS  Balance-bearing: extend BalanceAuditTest with R-LADDER (L1-L6) and
+     R-LADDER-AFFORD, update its R-WEAPON / R-ENEMY / R-HEAL / R-SCARCITY-DEPTH /
+     R-HEALDRAIN-DEPTH / R-XP-PACE / R-BOSS-* / R-CARD-BREAKPOINT assertions to the
+     re-fitted rules, retire the R-DEPTH / R-GEARGATE assertions (replaced, not
+     deleted-to-pass: R-LADDER asserts the stronger property); extend
+     BalanceSimTest with S-LAG. Both gates. Existing enemy tests
+     (AuricSentinelShardTest etc.) and StoryLocalizationTest are UPDATED where
+     numbers/ids legitimately change. No new test files.
+  6. DOCS  docs/game-balance-authority.txt (R-LADDER, R-LADDER-AFFORD, S-LAG,
+     override records, regenerated living tables, CHANGELOG line);
+     docs/game-balance-knowledge.txt (sections 3, 4, 6, 7, 10, 12);
+     docs/weapon-creation-guide.txt (ladder damage path, rarity multiplier);
+     docs/xp-level-progression.txt (vitality growth); docs/story-ui-system.txt
+     (UNDERGEARED topic).
+
+RISKS AND UNKNOWNS
+  - Fitting ENEMY_HEALTH_GROWTH with card + rarity growth may need a per-region
+    correction term; allowed if expressed as data in SECTION 20.
+  - Boss derivation re-fit may shift fight lengths; order 7 owns boss
+    consistency, this order only keeps R-BOSS-* green.
+  - Many existing assertions move at once: do the constants+formulas+R-LADDER
+    first (CP1), then wire, so each checkpoint is green.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  SECTION 20 constants, the GameMath ladder methods, util/ExpectedPlayer
+       and BalanceReport's LADDER table exist; R-LADDER + R-LADDER-AFFORD are
+       asserted on the formulas and green; nothing wired into gameplay yet
+       (finished by CP2-CP4); both gates green
+  CP2  weapon damage (R2-R6, Fist exemption) and enemy HP/damage growth (R7) are
+       live with rebased EnemyType numbers (R8); R-DEPTH and R-GEARGATE retired;
+       R-WEAPON / R-ENEMY re-banded; both gates green
+  CP3  player vitality growth (R9) and fractional heals (R10) live; R-HEAL /
+       R-HEALDRAIN-DEPTH / R-SCARCITY-DEPTH / R-XP-PACE / R-CARD-BREAKPOINT
+       re-fitted at 1..25; both gates green
+  CP4  BossBalance and the sim read expectedPlayerAtDepth; R-BOSS-* green;
+       TacticalPolicy buys the rung; S-LAG reported; both gates green
+  CP5  shop guaranteed level-up rung, cap and price live (R13); A5 holds
+  CP6  HUD LV tag, compare card, inventory rows, arrival "THREAT LV d" and the
+       UNDERGEARED teaching topic work on desktop; A2, A6, A7 hold
+  CP7  LEVEL_GAP dial + ON-CURVE dev kit on the new model; all docs updated;
+       living tables regenerated; A1, A3, A4, A8, A9 hold; both gates green
+
+
+ASSUMPTIONS
+-----------
+  AS1  "Level" in the owner's answers means the weapon's LV and the floor depth
+       ("level-3 map" = floor 3). The ladder makes weapon LV comparable to depth
+       one-for-one.
+  AS2  Weapon levels come only from finds and the shop; no weapon XP.
+  AS3  A 0.82-per-level penalty with a 0.25 floor is steep enough ("cannot play
+       with LV1 on floor 3" reads as ~1.7x longer fights on floor 3 and ~3x by
+       floor 5 — lethal once enemy damage growth compounds). Tunable via the
+       LEVEL_GAP dial in order 8.
+  AS4  The Fist is the only exemption; the Combat Knife and other melee follow
+       the ladder like guns.
+  AS5  Heals as percentages keep a medkit meaningful at every depth; the absolute
+       numbers the player sees still grow.
+  AS6  Rarity gives a flat damage multiplier AND keeps its ability budget
+       (abilities are redesigned in order 6).
+  AS7  A small "ahead" bonus (+5%/level, cap 2) is enough reward for an elite
+       find without trivialising a floor.
+  AS8  The floor threat level is a whole number equal to depth (no region jumps),
+       so every floor steps the same amount.
+  AS9  Keeping one favourite weapon on the ladder should cost about half of a
+       floor's credits — a real trade against supplies, never out of reach.
+  AS10 Bigger enemy HP numbers deep in the run are acceptable.
+
+
+DECISIONS
+---------
+  D1  Falling behind must be punished; higher-level weapons MUCH stronger; enemy
+      HP scales with it (owner, B3/E4) -> compound ladder + level-gap penalty +
+      R-LADDER.  (2026-09-30)
+  D2  Rarity must be meaningful (owner, H4) -> rarity damage multiplier,
+      overriding "rarity never raises the band".  (2026-09-30)
+  D3  Run length target 25 floors (owner, C4) -> RUN_FINAL_DEPTH = 25 as the
+      audit horizon now; the ending itself is order 7.  (2026-09-30)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+OVERRIDE CLAUSE
+---------------
+The owner explicitly authorises this series to OVERRIDE ANY previously added
+balance rule, band, waiver, policy, anchor or schema entry (BalanceSchema rules/
+bands/waivers, BalanceConfig bands and anchors, sim/BehavioralBands S-* bands,
+sim policies, and every decision in earlier balance_order_*, new-game-balancr-
+order-* and game-difficulty-rebalance-fair-challenge idea files) in favour of
+this series. Any override must, in the same checkpoint: (a) name the rule being
+replaced, (b) state the new rule, (c) update BalanceSchema / BalanceAuditTest /
+BalanceSimTest / docs/game-balance-authority.txt / docs/game-balance-knowledge.txt
+so both gates stay green against the NEW rule. It never permits deleting,
+disabling, @Ignore-ing or weakening a test — tests are UPDATED to the new rule.
+
+Overridden by THIS order (each recorded in the authority doc when it lands):
+  - R-DEPTH (depth-coupling ratio [0.9,1.2] vs playerPowerAtDepthV2, 1..15)
+      -> REPLACED by R-LADDER L1 (on-curve TTK/TTD flat +/-15%, 1..25).
+  - R-GEARGATE (1.35-per-region gear step, golden-ratio gate at region 2 entry)
+      -> REPLACED by R-LADDER L2/L4 (per-floor ladder, lag multipliers).
+  - R-WEAPON's clause "higher rarity never raises a band"
+      -> rarity multiplies damage (R5); role bands are evaluated at L1 COMMON.
+  - WEAPON_LEVEL_DAMAGE_PER_LEVEL (+10% linear), MAX_WEAPON_LEVEL 10
+      -> LADDER_GROWTH compound, MAX_WEAPON_LEVEL 27.
+  - ENEMY_HEALTH_SCALE_PER_DEPTH 1.042 ("held to protect order-3 scarcity") and
+    ENEMY_DAMAGE_SCALE_PER_DEPTH 1.073 -> fitted ENEMY_HEALTH/DAMAGE_GROWTH.
+  - REFERENCE_PLAYER_DPT 25 / REFERENCE_PLAYER_EHP 205 as FIXED anchors
+      -> expectedPlayerAtDepth(d); the depth-1 values remain the depth-1 anchor.
+  - R-ENEMY TP bands and golden-ratio bands -> re-derived from the R8 TTK/TTD
+    targets.
+  - Flat heal values and R-HEAL's flat survival-turns pricing -> fractional heals.
+  - Horizon 1..15 of R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH / R-XP-PACE / R-CREDITS
+    -> 1..25, re-fitted (to be replaced wholesale by orders 3 and 7).
+  - R-BOSS-* inputs (expectedPlayerSustainedDamagePerTurn) -> expectedPlayerAtDepth.
+  - GUARANTEED_UPGRADE_PER_REGION pity rule stays until order 3 re-homes it.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul.txt, balance-overhaul-order-1.txt,
+          new-game-balancr-order-2.txt (gear gate, superseded),
+          new-game-balancr-order-4.txt (coupling v2, superseded),
+          weapon-levels-tiers-abilities.txt, weapon-compare-rework.txt
+  Docs:   docs/game-balance-authority.txt, docs/game-balance-knowledge.txt,
+          docs/weapon-creation-guide.txt, docs/xp-level-progression.txt,
+          docs/narrative-authority.txt
