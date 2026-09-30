@@ -2358,4 +2358,142 @@ public final class BalanceConfig {
      */
     public static final float ROUTE_TRAJECTORY_COUPLING_MIN = 0.80f;
     public static final float ROUTE_TRAJECTORY_COUPLING_MAX = 1.55f;
+
+    // =====================================================================================
+    // SECTION 20 — THE POWER LADDER (balance-overhaul order 1)
+    // ONE steep, readable ladder shared by both sides. Every floor has a THREAT LEVEL equal to its
+    // depth; weapon damage and enemy HP grow by compound steps FITTED so an on-curve player's fights
+    // feel the same length at floor 1 and floor 25; a weapon BELOW the floor's threat level takes a
+    // sharp multiplicative penalty per level; rarity multiplies damage; character level multiplies max
+    // HP/armour while enemy damage grows to match. The contract is R-LADDER (six sub-checks) and
+    // R-LADDER-AFFORD in BalanceSchema; the one expected-player model is GameMath.expectedPlayerAtDepth.
+    // See docs/game-balance-authority.txt (R-LADDER) and .claude/agents/ideas/balance-overhaul-order-1.txt.
+    // =====================================================================================
+
+    /** The audit horizon of every depth-swept rule (the run itself ends here in balance-overhaul order 6). */
+    public static final int   RUN_FINAL_DEPTH = 25;
+
+    /** Compound weapon damage step per weapon level: base * LADDER_GROWTH^(level-1). Range: 1.05–1.10. */
+    public static final float LADDER_GROWTH = 1.08f;
+
+    // --- LEVEL GAP (R3): weapon level L on a floor of threat level d, gap = L - d.
+    /** Per-level multiplicative penalty below the floor's threat level: BASE^(-gap * STEEPNESS). Range: 0.75–0.90. */
+    public static final float LEVEL_GAP_PENALTY_BASE     = 0.82f;
+    /** The penalty never drops a hit below this fraction of its on-level value. Range: 0.15–0.40. */
+    public static final float LEVEL_GAP_FLOOR            = 0.25f;
+    /** Damage bonus per level ABOVE the floor's threat level (a small reward for an elite find). Range: 0.0–0.10. */
+    public static final float LEVEL_GAP_BONUS_PER_LEVEL  = 0.05f;
+    /** Levels of "ahead" bonus that count; beyond this the bonus is flat. Range: 1–3. */
+    public static final int   LEVEL_GAP_BONUS_CAP_LEVELS = 2;
+    /**
+     * THE one knob that scales the whole lag penalty: 1.0 = the designed ladder, 0 disables the penalty
+     * entirely (the order-7 feel pass tunes it). Range: 0.0–1.5.
+     */
+    public static final float LEVEL_GAP_STEEPNESS        = 1.0f;
+
+    /**
+     * Rarity damage multiplier, indexed by WeaponTier ordinal (COMMON, UNCOMMON, RARE, EPIC, LEGENDARY),
+     * on top of the tier's ability budget (which stays). Overrides the old "rarity never raises a band".
+     */
+    public static final float[] RARITY_DAMAGE_MULTIPLIER = {1.00f, 1.10f, 1.20f, 1.32f, 1.45f};
+
+    // --- ENEMY + PLAYER GROWTH (R7, R9) — FITTED so R-LADDER L1 holds at every depth 1..RUN_FINAL_DEPTH.
+    // Fit (balance-overhaul order 1): the expected player's per-hit damage grows by LADDER_GROWTH^(d-1)
+    // times the region's expected rarity times the expected offence-card lift (6% of reference DPT per
+    // character level); the least-max-deviation compound rate for enemy HP over 1..25 is 1.139, holding
+    // on-curve turns-to-kill within +/-13% of depth 1 (the residual wobble is the per-region rarity step).
+    // Enemy damage is fitted the same way against max HP/armour growth (PLAYER_VITALITY_GROWTH) plus the
+    // expected defence-card eHP, holding turns-to-die within +/-14%. Enemy HP at depth 25 is ~23x depth 1
+    // (health bars are fraction-based; AS10 accepts the bigger numbers).
+    /** Per-floor compound enemy HP growth: baseHP * growth^(depth-1). Fitted for R-LADDER L1. Range: 1.08–1.16. */
+    public static final float ENEMY_HEALTH_GROWTH    = 1.139f;
+    /** Per-floor compound enemy damage growth: baseDmg * growth^(depth-1). Fitted for R-LADDER L1. Range: 1.06–1.12. */
+    public static final float ENEMY_DAMAGE_GROWTH    = 1.103f;
+    /**
+     * Per-character-level compound growth of max HP AND max armour (R9):
+     * PLAYER_MAX_HEALTH * growth^(level-1) + card/stat bonuses. 1.09 keeps R-LADDER L6 (three levels
+     * behind survives <= 80% as long) with margin. Range: 1.06–1.12.
+     */
+    public static final float PLAYER_VITALITY_GROWTH = 1.09f;
+
+    /** Expected fraction of each level's LEVEL_UP_BUDGET_PP spent on OFFENCE by the on-curve player. Range: 0.3–0.6. */
+    public static final float LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION = 0.50f;
+    /** Expected fraction of each level's LEVEL_UP_BUDGET_PP spent on DEFENCE (flat eHP, per R9). Range: 0.3–0.6. */
+    public static final float LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION = 0.50f;
+
+    // --- HEALS AS FRACTIONS OF MAX (R10): resolved against max HP / max armour at the moment of use.
+    /** Field medkit ('H'): fraction of max HP restored. */
+    public static final float MEDKIT_FULL_HEAL_FRACTION = 0.45f;
+    /** Stim pack ('+'): fraction of max HP restored. */
+    public static final float MEDKIT_STIM_HEAL_FRACTION = 0.18f;
+    /** Armour shard ('a'): fraction of max armour restored. */
+    public static final float ARMOUR_SHARD_FRACTION     = 0.15f;
+    /** Security vest ('A'): fraction of max armour restored. */
+    public static final float ARMOUR_VEST_FRACTION      = 0.60f;
+
+    // --- FOUND / DROPPED WEAPON LEVEL ROLL (R6): level = floor threat level + offset, weighted.
+    /** Level offsets a found weapon may roll relative to the floor's threat level. */
+    public static final int[] WEAPON_LEVEL_ROLL_OFFSETS = {-1, 0, 1};
+    /** Relative weights of WEAPON_LEVEL_ROLL_OFFSETS (same order). */
+    public static final int[] WEAPON_LEVEL_ROLL_WEIGHTS = {30, 50, 20};
+
+    // --- R8 REBASED DEPTH-1 TARGETS (on-curve player; reference workhorse = Assault Rifle, COMMON L1,
+    // measured per hit at LADDER_REFERENCE_RANGE_TILES including falloff). TTK = hits to kill the enemy;
+    // TTD = ordinary enemy hits the player survives from full HP + armour (REFERENCE_PLAYER_EHP).
+    /** Range at which the R8 reference hit is measured (falloff included). */
+    public static final int   LADDER_REFERENCE_RANGE_TILES = 3;
+    public static final int   LADDER_TTK_HITS_CHAFF_MIN      = 1;
+    public static final int   LADDER_TTK_HITS_CHAFF_MAX      = 2;
+    public static final int   LADDER_TTK_HITS_SOLDIER_MIN    = 3;
+    public static final int   LADDER_TTK_HITS_SOLDIER_MAX    = 4;
+    public static final int   LADDER_TTK_HITS_BRUISER_MIN    = 5;
+    public static final int   LADDER_TTK_HITS_BRUISER_MAX    = 7;
+    public static final int   LADDER_TTK_HITS_MINI_ELITE_MIN = 8;
+    public static final int   LADDER_TTK_HITS_MINI_ELITE_MAX = 12;
+    /** CHAFF has no TTD ceiling: it must merely be survivable for at least this many hits. */
+    public static final int   LADDER_TTD_HITS_CHAFF_MIN      = 10;
+    public static final int   LADDER_TTD_HITS_SOLDIER_MIN    = 7;
+    public static final int   LADDER_TTD_HITS_SOLDIER_MAX    = 9;
+    public static final int   LADDER_TTD_HITS_BRUISER_MIN    = 4;
+    public static final int   LADDER_TTD_HITS_BRUISER_MAX    = 6;
+    public static final int   LADDER_TTD_HITS_MINI_ELITE_MIN = 3;
+    public static final int   LADDER_TTD_HITS_MINI_ELITE_MAX = 5;
+
+    // --- R-LADDER BOUNDS (R12). Ratios are CONTINUOUS turns (eHP / per-hit damage, un-rounded), so the
+    // one-hit quantisation of a chaff kill cannot hide a lag penalty.
+    /** L1: on-curve TTK and TTD stay within +/- this fraction of their depth-1 values. */
+    public static final float LADDER_ON_CURVE_TOLERANCE        = 0.15f;
+    /** L2: two levels behind must take at least this many times as long to kill. */
+    public static final float LADDER_LAG_TWO_MIN_TTK_RATIO     = 1.5f;
+    /** L2: four levels behind must take at least this many times as long to kill. */
+    public static final float LADDER_LAG_FOUR_MIN_TTK_RATIO    = 2.5f;
+    /** L2: the start weapon (L1 COMMON) from LADDER_START_WEAPON_FROM_DEPTH on. */
+    public static final float LADDER_START_WEAPON_MIN_TTK_RATIO = 3.0f;
+    /** L2: first depth the start-weapon bound applies at. */
+    public static final int   LADDER_START_WEAPON_FROM_DEPTH   = 5;
+    /** L3: two levels ahead may shorten a kill to no less than this fraction of on-curve. */
+    public static final float LADDER_AHEAD_TWO_MIN_TTK_RATIO   = 0.75f;
+    /** L4: on floor d, weapon level d vs d-1 must gain at least this fraction of DPT. */
+    public static final float LADDER_LEVEL_FELT_MIN_GAIN       = 0.25f;
+    /** L5: every rarity tier step must gain at least this fraction of DPT at equal level. */
+    public static final float LADDER_RARITY_STEP_MIN_GAIN      = 0.08f;
+    /** L5: LEGENDARY vs COMMON at equal level must gain at least this fraction of DPT. */
+    public static final float LADDER_LEGENDARY_MIN_GAIN        = 0.40f;
+    /** L6: character levels behind the curve the vitality check measures. */
+    public static final int   LADDER_VITALITY_LAG_LEVELS       = 3;
+    /** L6: that many levels behind must survive no more than this fraction of on-curve TTD. */
+    public static final float LADDER_VITALITY_LAG_MAX_TTD_RATIO = 0.80f;
+
+    /**
+     * R-LADDER-AFFORD (R13): the shop's LEVEL UP rung must cost at most this fraction of one COMBAT
+     * floor's modelled credit income, at every depth 1..RUN_FINAL_DEPTH.
+     */
+    public static final float LADDER_AFFORD_FRACTION = 0.5f;
+    /**
+     * Power-point value the shop prices the LEVEL UP rung at (through GameMath.shopPrice, like every
+     * offer). Deliberately LOW: the rung is a reliable ladder step, not a marquee purchase — 1.5 PP is
+     * 54 credits at depth 1 (a third of one combat floor) and 184 at depth 25 (47%). Replaces
+     * SHOP_WEAPON_LEVEL_UP_POWER_POINTS (10 PP = 2-3 floors of income) for the rung. Range: 1.0–2.0.
+     */
+    public static final float LADDER_LEVEL_UP_POWER_POINTS = 1.5f;
 }

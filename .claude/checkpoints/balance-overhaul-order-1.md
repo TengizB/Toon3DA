@@ -49,7 +49,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — SECTION 20 constants, GameMath ladder methods, `util/ExpectedPlayer`, BalanceReport
+- [x] **CP1** — SECTION 20 constants, GameMath ladder methods, `util/ExpectedPlayer`, BalanceReport
       LADDER table; R-LADDER + R-LADDER-AFFORD asserted on the formulas.
       DONE WHEN: those exist, nothing wired into gameplay yet, both gates green.
 - [ ] **CP2** — weapon damage R2-R6 (Fist exemption) and enemy HP/damage growth R7 live with rebased
@@ -75,3 +75,31 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   core/lwjgl3/assets/gradle*/docs, `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle`
   with the `buildscript{}` block removed and `configure(subprojects)`. Maven Central sometimes answers
   429 — retry with backoff. Test XML lands in the REAL `core/build/test-results/`.
+- **BASELINE sim (35ddeaf):** all three policies median depth 1.0; 180-187/200 runs STALL on floor 1
+  (the navigation waiver). A2's sim half cannot be read from ordinary played runs → CP4 must measure
+  the LADDER REPORT on a dedicated sub-matrix (e.g. runs STARTED at depths 3-5 with an on-curve kit
+  vs the start kit), not from the stalled depth-1 matrix.
+- **ROOT CAUSE found:** `Weapon.damageAtDistance()` multiplies the RAW base `damage`, never
+  `effectiveDamage` — weapon level has never reached an actual hit (only the inspect card). CP2 must
+  route damageAtDistance (and every melee/Railgun/Grenade/Incinerator damage path) through
+  `GameMath.weaponLadderDamage`.
+- **CP1 handover:** `GameMath.ladderScale(growth, level)`, `levelGapMultiplier(gap)` (+ primitive),
+  `rarityDamageMultiplier(tierOrdinal)`, `weaponLadderDamage(base, level, tierOrdinal, threatLevel,
+  gapExempt)`, `enemyHealthAtDepth(base, d)` / `enemyDamageAtDepth(base, d)`, `playerVitalityScale(cL)`,
+  `fractionOfMaximum(max, fraction)`, `expectedRarityMultiplierAtDepth(d)`, `ladderReferenceHitDamage()`
+  (AR at 3 tiles = 15.2), `expectedPlayer(d, wL, rarity, cL)`, `expectedCharacterLevelAtDepth(d)`,
+  `expectedPlayerAtDepth(d)`, `ladderTurnsToKill(eHP, hit)`. `util/ExpectedPlayer` fields: depth,
+  weaponLevel, rarityMultiplier, levelGapMultiplier, characterLevel, damagePerTurn (d1 = 25),
+  referenceHitDamage (d1 = 15.2), maxHealth, maxArmor, effectiveHitPoints (d1 = 205).
+  BalanceSchema: `ladderResults()`, `ladderAffordResults()`, `ladderReferenceArchetype(role)`,
+  `ladderTurnsToKill/ToDie(type, d, player)`, `ladderStartWeaponPlayer(d)`,
+  `ladderWeaponOffsetPlayer(d, offset)`, `ladderLevelUpPrice(d)`, `combatFloorCreditIncome(d)`.
+- **DECISION (not in spec):** offence cards are modelled as a multiplicative PP lift (the boss
+  derivation's existing convention) and defence cards as flat eHP (R9 wording). With that, the fit
+  needs enemy HP growth 1.139 (not the 1.09 starting point) — HP at d25 ≈ 23x, above the spec's
+  informal "7-10x" estimate; AS10 accepts bigger numbers. Recorded in the authority doc.
+- **DECISION:** the rung is priced at the NEW `LADDER_LEVEL_UP_POWER_POINTS` = 1.5 PP (54 cr at d1,
+  184 at d25); the shop still reads `SHOP_WEAPON_LEVEL_UP_POWER_POINTS` (10 PP) until CP5 switches it.
+- **TEMPORARY:** old constants (ENEMY_*_SCALE_PER_DEPTH, WEAPON_LEVEL_DAMAGE_PER_LEVEL, flat heals,
+  MAX_WEAPON_LEVEL 10 in WeaponConstants) still live; CP2/CP3 replace them. R-DEPTH / R-GEARGATE still
+  enforced until CP2.

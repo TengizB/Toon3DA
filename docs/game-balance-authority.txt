@@ -442,6 +442,50 @@ R-SINGLE-DIFFICULTY (RuleKind.SINGLE_DIFFICULTY) — ONE difficulty, locked (ord
   options are ever wanted they must be framed as exactly that (e.g. animation speed) and never
   as balance-touching modes; this rule is the tripwire.
 
+R-LADDER (RuleKind.LADDER) — THE POWER LADDER (balance-overhaul order 1)
+  Every floor has a THREAT LEVEL equal to its depth. Weapon damage climbs a compound ladder
+  (base * LADDER_GROWTH^(L-1) * rarity * levelGapMultiplier(L - d)); enemy HP and damage climb
+  FITTED compound curves (ENEMY_HEALTH_GROWTH / ENEMY_DAMAGE_GROWTH); max HP/armour climb
+  PLAYER_VITALITY_GROWTH per character level. A weapon BELOW the floor's level takes
+  LEVEL_GAP_PENALTY_BASE^levels (floor LEVEL_GAP_FLOOR, scaled by LEVEL_GAP_STEEPNESS); one
+  ABOVE gains LEVEL_GAP_BONUS_PER_LEVEL (capped). All values: BalanceConfig SECTION 20.
+  THE ONE EXPECTED PLAYER: GameMath.expectedPlayerAtDepth(d) -> util/ExpectedPlayer — weapon
+  level d, the region's expected rarity (mean of the WEAPON_DROP_TIER band ends), character
+  level 1 + EXPECTED_LEVELS_PER_DEPTH*(d-1), offence cards as a PP %-lift (50% of the level
+  budget), defence cards as flat eHP (50%), vitality-scaled max HP/armour. Its depth-1 DPT is
+  REFERENCE_PLAYER_DPT and its depth-1 eHP REFERENCE_PLAYER_EHP (the anchors stay the depth-1
+  anchors). The audit, the simulator and the boss derivation read this one model.
+  Six sub-checks, for every depth 1..RUN_FINAL_DEPTH (25) and every non-boss role's reference
+  archetype (CHAFF Gore Biter, SOLDIER Void Shroud, BRUISER Shell Brute, MINI_ELITE Iron
+  Stalker). Turns are CONTINUOUS (eHP / per-hit damage) so one-hit rounding hides nothing:
+    L1 ON-CURVE FLAT  on-curve TTK and TTD within +/-15% of their depth-1 values.
+    L2 LAG PUNISHED   weapon level d-2 -> TTK >= 1.5x on-curve; d-4 -> >= 2.5x; the start
+                      weapon (L1 COMMON) at d >= 5 -> >= 3.0x.
+    L3 AHEAD BOUNDED  weapon level d+2 -> TTK >= 0.75x on-curve.
+    L4 LEVEL FELT     on floor d, level d vs level d-1: DPT gain >= +25%.
+    L5 RARITY FELT    each tier step >= +8% DPT; LEGENDARY >= +40% vs COMMON (equal level,
+                      abilities excluded).
+    L6 VITALITY FELT  character level d-3 -> TTD <= 0.80x on-curve.
+  THE FIT: ENEMY_HEALTH_GROWTH 1.139 is the least-max-deviation compound rate over 1..25
+  against the expected player's per-hit growth (ladder x rarity x offence lift); on-curve TTK
+  wobbles within +/-13% (the residual is the per-region rarity step). ENEMY_DAMAGE_GROWTH
+  1.103 is fitted the same way against vitality 1.09 + flat defence-card eHP (+/-14%).
+  With the defaults L4 = 1.08/0.82 = 1.32, L2 = 1.73 at d-2 and 3.01 at d-4, L3 = 0.78,
+  L6 = 0.79 at worst. Enemy HP at depth 25 is ~23x depth 1 (fraction-based health bars; AS10).
+  WHY: a weapon level used to be +10% linear, enemy HP grew 4.2%/floor, rarity could not raise
+  power and max HP never grew — so a lazy and a prepared player differed by a rounding error
+  (the owner: "I can play with a level-1 weapon very confidently even on higher levels").
+  REPLACES R-DEPTH and R-GEARGATE (override record: balance-overhaul order 1 OVERRIDE CLAUSE;
+  retired when the ladder goes live in gameplay, CP2).
+
+R-LADDER-AFFORD (RuleKind.LADDER_AFFORD) — the shop rung is always in reach (balance-overhaul order 1)
+  At every depth 1..RUN_FINAL_DEPTH the Fabricator's LEVEL UP rung (priced through
+  GameMath.shopPrice at LADDER_LEVEL_UP_POWER_POINTS = 1.5 PP) costs <= LADDER_AFFORD_FRACTION
+  (0.5) of one COMBAT floor's modelled credit income (model-floor kill bounties scaled by
+  CREDIT_DEPTH_SCALE + expected credit chips). Measured: 54 of 159 credits at depth 1 (0.34),
+  184 of 389 at depth 25 (0.47). WHY: keeping a favourite gun on the ladder must be a real
+  trade against supplies (about half a floor's credits), never out of reach.
+
 NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor guard)
   A player who wastes ammo must never die to an empty inventory screen. When total
   remaining potential damage (all reserves * per-shot damage + one melee swing) falls
@@ -1043,6 +1087,12 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 1 / CP1 — added BalanceConfig SECTION 20 (THE POWER LADDER), the
+    GameMath ladder methods, util/ExpectedPlayer, R-LADDER + R-LADDER-AFFORD (asserted on the
+    formulas) and BalanceReport's LADDER table. Nothing wired into gameplay yet (CP2-CP6).
+    Fitted growth: enemy HP 1.139, enemy damage 1.103, vitality 1.09 (starting points were
+    1.09 / 1.07 / 1.07 — the fit also carries rarity and card lift, so the rates rose).
+
   encounter density (this commit) — the floor budget now converts into BODIES instead
     of stranding a quarter of itself: the anchor gained a real ceiling
     (ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION, replacing a fallback that let one

@@ -572,6 +572,22 @@ class BalanceAuditTest {
         }
     }
 
+    /**
+     * R-LADDER (balance-overhaul order 1): the power ladder at every depth 1..RUN_FINAL_DEPTH for every
+     * non-boss role — on-curve fights stay flat, a lagging weapon is punished, running ahead is bounded,
+     * and a weapon level, a rarity step and a character level are each FELT.
+     */
+    @Test
+    void thePowerLadderHoldsAtEveryDepthToTheRunEnd() {
+        assertNoViolations(BalanceSchema.ladderResults());
+    }
+
+    /** R-LADDER-AFFORD (balance-overhaul order 1): the shop LEVEL UP rung is at most half a combat floor's credits. */
+    @Test
+    void theLevelUpRungIsAffordableEveryFloor() {
+        assertNoViolations(BalanceSchema.ladderAffordResults());
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

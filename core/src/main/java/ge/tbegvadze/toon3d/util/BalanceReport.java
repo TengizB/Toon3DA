@@ -56,6 +56,8 @@ public final class BalanceReport {
         System.out.println();
         printRegionDangerTable();
         System.out.println();
+        printLadderTable();
+        System.out.println();
         printDepthCouplingTable();
         System.out.println();
         printGearCurveTable();
@@ -1046,5 +1048,54 @@ public final class BalanceReport {
         System.out.println("  bankFloors = full reserve / floor demand (anti-hoard target ~"
                 + BalanceConfig.RESERVE_BANKING_FLOORS_TARGET + ").  netHpDrain = INCOMING - HEAL_SUPPLY.");
         System.out.println("Out-of-band rows FAIL BalanceAuditTest unless waived — see docs/game-balance-authority.txt.");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // LADDER (balance-overhaul order 1, R-LADDER) — hits-to-kill / hits-to-die per role at the
+    // sampled depths for the on-curve player and every lagging / ahead variant the rule checks.
+    // Continuous hits (eHP / per-hit damage); the integer a player counts is the ceiling.
+    // -----------------------------------------------------------------------------------
+    private static final int[] LADDER_SAMPLE_DEPTHS = {1, 5, 10, 15, 20, 25};
+
+    private static void printLadderTable() {
+        System.out.println("LADDER (balance-overhaul order 1, R-LADDER) — continuous hits to KILL (TTK) / to DIE (TTD)");
+        System.out.println("  growth: weapon " + BalanceConfig.LADDER_GROWTH + "/level, enemy HP "
+                + BalanceConfig.ENEMY_HEALTH_GROWTH + " + dmg " + BalanceConfig.ENEMY_DAMAGE_GROWTH
+                + " /floor, vitality " + BalanceConfig.PLAYER_VITALITY_GROWTH + "/char level; gap penalty "
+                + BalanceConfig.LEVEL_GAP_PENALTY_BASE + "^levels (floor " + BalanceConfig.LEVEL_GAP_FLOOR
+                + ", steepness " + BalanceConfig.LEVEL_GAP_STEEPNESS + ")");
+        System.out.printf("  %-24s %5s %7s %7s %7s %7s %7s %7s %7s%n",
+                "role (reference)", "depth", "onTTK", "d-2", "d-4", "start", "d+2", "onTTD", "cL-3TTD");
+        System.out.println("  ------------------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.enemy.EnemyRole role : ge.tbegvadze.toon3d.enemy.EnemyRole.values()) {
+            ge.tbegvadze.toon3d.enemy.EnemyType reference = BalanceSchema.ladderReferenceArchetype(role);
+            if (reference == null) continue;
+            for (int depth : LADDER_SAMPLE_DEPTHS) {
+                ExpectedPlayer onCurve = GameMath.expectedPlayerAtDepth(depth);
+                float onKill = BalanceSchema.ladderTurnsToKill(reference, depth, onCurve);
+                float onDie  = BalanceSchema.ladderTurnsToDie(reference, depth, onCurve);
+                String lagTwo  = depth - 2 >= 1 ? String.format("%7.2f", BalanceSchema.ladderTurnsToKill(reference,
+                        depth, BalanceSchema.ladderWeaponOffsetPlayer(depth, -2))) : "      -";
+                String lagFour = depth - 4 >= 1 ? String.format("%7.2f", BalanceSchema.ladderTurnsToKill(reference,
+                        depth, BalanceSchema.ladderWeaponOffsetPlayer(depth, -4))) : "      -";
+                float startKill = BalanceSchema.ladderTurnsToKill(reference, depth,
+                        BalanceSchema.ladderStartWeaponPlayer(depth));
+                float aheadKill = BalanceSchema.ladderTurnsToKill(reference, depth,
+                        BalanceSchema.ladderWeaponOffsetPlayer(depth, 2));
+                int laggingLevel = GameMath.expectedCharacterLevelAtDepth(depth) - BalanceConfig.LADDER_VITALITY_LAG_LEVELS;
+                String vitality = laggingLevel >= 1 ? String.format("%7.2f", BalanceSchema.ladderTurnsToDie(reference,
+                        depth, GameMath.expectedPlayer(depth, depth, GameMath.expectedRarityMultiplierAtDepth(depth),
+                                laggingLevel))) : "      -";
+                System.out.printf("  %-24s %5d %7.2f %s %s %7.2f %7.2f %7.2f %s%n",
+                        role + " (" + reference.displayName() + ")", depth, onKill, lagTwo, lagFour,
+                        startKill, aheadKill, onDie, vitality);
+            }
+        }
+        System.out.println("  LEVEL-UP RUNG (R-LADDER-AFFORD, <= " + BalanceConfig.LADDER_AFFORD_FRACTION
+                + " of one combat floor's credits):");
+        for (int depth : LADDER_SAMPLE_DEPTHS) {
+            System.out.printf("    depth %2d: price %5d vs combat-floor income %6.0f%n", depth,
+                    BalanceSchema.ladderLevelUpPrice(depth), BalanceSchema.combatFloorCreditIncome(depth));
+        }
     }
 }

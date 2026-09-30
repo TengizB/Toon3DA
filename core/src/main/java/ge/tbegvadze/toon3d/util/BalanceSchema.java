@@ -140,6 +140,10 @@ public final class BalanceSchema {
         ROUTE_GUARANTEES,
         /** R-SINGLE-DIFFICULTY (order 8): exactly one starting-attribute block; no mode-family naming anywhere. */
         SINGLE_DIFFICULTY,
+        /** R-LADDER (balance-overhaul order 1): the power ladder — on-curve flat, lag punished, ahead bounded, level/rarity/vitality felt. */
+        LADDER,
+        /** R-LADDER-AFFORD (balance-overhaul order 1): the shop LEVEL UP rung costs <= LADDER_AFFORD_FRACTION of one COMBAT floor's income. */
+        LADDER_AFFORD,
         /** S-GATE (order 9): 0% of HOARDER-START-WEAPON seeds clear the first boss. */
         SIM_GATE,
         /** S-FAIR (order 9): TACTICAL median death depth in band; deaths readable. */
@@ -773,6 +777,8 @@ public final class BalanceSchema {
         results.addAll(trajectoryResults());
         results.addAll(routeGuaranteeResults());
         results.addAll(singleDifficultyResults());
+        results.addAll(ladderResults());
+        results.addAll(ladderAffordResults());
         return results;
     }
 
@@ -2296,5 +2302,183 @@ public final class BalanceSchema {
         } catch (IllegalAccessException illegalAccess) {
             throw new IllegalStateException("cannot read public constant " + field, illegalAccess);
         }
+    }
+
+    // =====================================================================================
+    // R-LADDER + R-LADDER-AFFORD (balance-overhaul order 1) — THE POWER LADDER.
+    // Every floor has a THREAT LEVEL = depth; weapon damage and enemy HP climb the same fitted compound
+    // ladder; a weapon under the floor's level takes the R3 penalty. All six sub-checks read the ONE
+    // expected-player model (GameMath.expectedPlayerAtDepth / expectedPlayer), for every depth
+    // 1..RUN_FINAL_DEPTH and every non-boss role's reference archetype. Turns are CONTINUOUS
+    // (GameMath.ladderTurnsToKill) so a ratio is never hidden by one-hit rounding.
+    //   L1 ON-CURVE FLAT  on-curve TTK and TTD within +/-LADDER_ON_CURVE_TOLERANCE of depth 1.
+    //   L2 LAG PUNISHED   weapon level d-2 -> TTK >= 1.5x; d-4 -> >= 2.5x; start weapon (L1 COMMON) at
+    //                     d >= 5 -> >= 3.0x on-curve.
+    //   L3 AHEAD BOUNDED  weapon level d+2 -> TTK >= 0.75x on-curve.
+    //   L4 LEVEL FELT     on floor d, level d vs d-1: DPT gain >= +25%.
+    //   L5 RARITY FELT    each tier step >= +8% DPT; LEGENDARY >= +40% vs COMMON (equal level).
+    //   L6 VITALITY FELT  character level d-3 -> TTD <= 0.80x on-curve.
+    // Replaces R-DEPTH (depth coupling) and R-GEARGATE (region gear step) — see the authority doc's
+    // override record.
+    // =====================================================================================
+
+    /** The reference archetype each non-boss role is proven on (data, not a switch). */
+    private static final Map<EnemyRole, EnemyType> LADDER_ROLE_REFERENCE = buildLadderRoleReference();
+
+    private static Map<EnemyRole, EnemyType> buildLadderRoleReference() {
+        Map<EnemyRole, EnemyType> references = new EnumMap<>(EnemyRole.class);
+        references.put(EnemyRole.CHAFF,      EnemyType.GORE_BITER);
+        references.put(EnemyRole.SOLDIER,    EnemyType.VOID_SHROUD);
+        references.put(EnemyRole.BRUISER,    EnemyType.SHELL_BRUTE);
+        references.put(EnemyRole.MINI_ELITE, EnemyType.IRON_STALKER);
+        return Collections.unmodifiableMap(references);
+    }
+
+    /** The R-LADDER reference archetype for a role, or null for BOSS (bosses follow SECTION 14). */
+    public static EnemyType ladderReferenceArchetype(EnemyRole role) {
+        return LADDER_ROLE_REFERENCE.get(role);
+    }
+
+    /** Continuous hits the given player needs to kill the archetype at a depth (R-LADDER TTK). */
+    public static float ladderTurnsToKill(EnemyType enemyType, int depth, ExpectedPlayer player) {
+        float enemyEffectiveHitPoints = GameMath.enemyHealthAtDepth(enemyType.effectiveHitPoints(), depth);
+        return GameMath.ladderTurnsToKill(enemyEffectiveHitPoints, player.referenceHitDamage);
+    }
+
+    /** Continuous ordinary hits of the archetype the given player survives at a depth (R-LADDER TTD). */
+    public static float ladderTurnsToDie(EnemyType enemyType, int depth, ExpectedPlayer player) {
+        float enemyHit = GameMath.enemyDamageAtDepth(enemyType.attackDamage(), depth);
+        return GameMath.ladderTurnsToKill(player.effectiveHitPoints, enemyHit);
+    }
+
+    /** The start weapon's player on a floor: weapon L1, COMMON, but the on-curve character level. */
+    public static ExpectedPlayer ladderStartWeaponPlayer(int depth) {
+        return GameMath.expectedPlayer(depth, 1, GameMath.rarityDamageMultiplier(0),
+                GameMath.expectedCharacterLevelAtDepth(depth));
+    }
+
+    /** An on-curve player whose weapon sits {@code levelOffset} levels off the floor (rarity unchanged). */
+    public static ExpectedPlayer ladderWeaponOffsetPlayer(int depth, int levelOffset) {
+        int weaponLevel = Math.max(1, Math.min(BalanceConfig.RUN_FINAL_DEPTH + 2, depth + levelOffset));
+        return GameMath.expectedPlayer(depth, weaponLevel, GameMath.expectedRarityMultiplierAtDepth(depth),
+                GameMath.expectedCharacterLevelAtDepth(depth));
+    }
+
+    private static RuleResult ladderMinimum(String subject, float value, float minimum, String detail) {
+        return new RuleResult(RuleKind.LADDER, subject, value, minimum, Float.POSITIVE_INFINITY,
+                value >= minimum, detail);
+    }
+
+    private static RuleResult ladderMaximum(String subject, float value, float maximum, String detail) {
+        return new RuleResult(RuleKind.LADDER, subject, value, 0f, maximum, value <= maximum, detail);
+    }
+
+    /** R-LADDER: the six sub-checks at every depth 1..RUN_FINAL_DEPTH for every non-boss role. */
+    public static List<RuleResult> ladderResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float tolerance = BalanceConfig.LADDER_ON_CURVE_TOLERANCE;
+        ExpectedPlayer depthOnePlayer = GameMath.expectedPlayerAtDepth(1);
+        for (Map.Entry<EnemyRole, EnemyType> entry : LADDER_ROLE_REFERENCE.entrySet()) {
+            EnemyRole role = entry.getKey();
+            EnemyType reference = entry.getValue();
+            float depthOneKill = ladderTurnsToKill(reference, 1, depthOnePlayer);
+            float depthOneDie  = ladderTurnsToDie(reference, 1, depthOnePlayer);
+            for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+                String where = role + " (" + reference.displayName() + ") depth " + depth;
+                ExpectedPlayer onCurve = GameMath.expectedPlayerAtDepth(depth);
+                float onCurveKill = ladderTurnsToKill(reference, depth, onCurve);
+                float onCurveDie  = ladderTurnsToDie(reference, depth, onCurve);
+
+                // L1 — on-curve fights feel the same length at every depth.
+                float killDrift = onCurveKill / depthOneKill;
+                float dieDrift  = onCurveDie / depthOneDie;
+                results.add(new RuleResult(RuleKind.LADDER, "L1 on-curve TTK " + where, killDrift,
+                        1f - tolerance, 1f + tolerance,
+                        killDrift >= 1f - tolerance && killDrift <= 1f + tolerance,
+                        String.format("%.2f hits vs %.2f at depth 1", onCurveKill, depthOneKill)));
+                results.add(new RuleResult(RuleKind.LADDER, "L1 on-curve TTD " + where, dieDrift,
+                        1f - tolerance, 1f + tolerance,
+                        dieDrift >= 1f - tolerance && dieDrift <= 1f + tolerance,
+                        String.format("%.2f hits vs %.2f at depth 1", onCurveDie, depthOneDie)));
+
+                // L2 — falling behind is punished.
+                if (depth - 2 >= 1) {
+                    float ratio = ladderTurnsToKill(reference, depth, ladderWeaponOffsetPlayer(depth, -2)) / onCurveKill;
+                    results.add(ladderMinimum("L2 lag-2 TTK " + where, ratio,
+                            BalanceConfig.LADDER_LAG_TWO_MIN_TTK_RATIO, "weapon level d-2 vs on-curve"));
+                }
+                if (depth - 4 >= 1) {
+                    float ratio = ladderTurnsToKill(reference, depth, ladderWeaponOffsetPlayer(depth, -4)) / onCurveKill;
+                    results.add(ladderMinimum("L2 lag-4 TTK " + where, ratio,
+                            BalanceConfig.LADDER_LAG_FOUR_MIN_TTK_RATIO, "weapon level d-4 vs on-curve"));
+                }
+                if (depth >= BalanceConfig.LADDER_START_WEAPON_FROM_DEPTH) {
+                    float ratio = ladderTurnsToKill(reference, depth, ladderStartWeaponPlayer(depth)) / onCurveKill;
+                    results.add(ladderMinimum("L2 start-weapon TTK " + where, ratio,
+                            BalanceConfig.LADDER_START_WEAPON_MIN_TTK_RATIO, "L1 COMMON vs on-curve"));
+                }
+
+                // L3 — running ahead is bounded.
+                float aheadRatio = ladderTurnsToKill(reference, depth, ladderWeaponOffsetPlayer(depth, 2)) / onCurveKill;
+                results.add(ladderMinimum("L3 ahead-2 TTK " + where, aheadRatio,
+                        BalanceConfig.LADDER_AHEAD_TWO_MIN_TTK_RATIO, "weapon level d+2 vs on-curve"));
+
+                // L6 — character level is felt in survival.
+                int laggingLevel = GameMath.expectedCharacterLevelAtDepth(depth) - BalanceConfig.LADDER_VITALITY_LAG_LEVELS;
+                if (laggingLevel >= 1) {
+                    ExpectedPlayer lagging = GameMath.expectedPlayer(depth, depth,
+                            GameMath.expectedRarityMultiplierAtDepth(depth), laggingLevel);
+                    float ratio = ladderTurnsToDie(reference, depth, lagging) / onCurveDie;
+                    results.add(ladderMaximum("L6 vitality lag TTD " + where, ratio,
+                            BalanceConfig.LADDER_VITALITY_LAG_MAX_TTD_RATIO, "character level " + laggingLevel
+                                    + " vs " + GameMath.expectedCharacterLevelAtDepth(depth)));
+                }
+            }
+        }
+
+        // L4 — a level is felt: on floor d, level d vs level d-1 (role-independent: pure weapon DPT).
+        for (int depth = 2; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+            float gain = GameMath.expectedPlayerAtDepth(depth).damagePerTurn
+                    / ladderWeaponOffsetPlayer(depth, -1).damagePerTurn - 1f;
+            results.add(ladderMinimum("L4 level felt depth " + depth, gain,
+                    BalanceConfig.LADDER_LEVEL_FELT_MIN_GAIN, "level d vs d-1 on floor d"));
+        }
+
+        // L5 — rarity is felt (equal level; abilities excluded).
+        float[] rarity = BalanceConfig.RARITY_DAMAGE_MULTIPLIER;
+        for (int tier = 1; tier < rarity.length; tier++) {
+            float gain = GameMath.rarityDamageMultiplier(tier) / GameMath.rarityDamageMultiplier(tier - 1) - 1f;
+            results.add(ladderMinimum("L5 rarity step tier " + (tier - 1) + "->" + tier, gain,
+                    BalanceConfig.LADDER_RARITY_STEP_MIN_GAIN, "equal level, abilities excluded"));
+        }
+        float legendaryGain = GameMath.rarityDamageMultiplier(rarity.length - 1) / GameMath.rarityDamageMultiplier(0) - 1f;
+        results.add(ladderMinimum("L5 LEGENDARY vs COMMON", legendaryGain,
+                BalanceConfig.LADDER_LEGENDARY_MIN_GAIN, "equal level, abilities excluded"));
+        return results;
+    }
+
+    /** The shop's price for the LEVEL UP rung at a depth (the one price DefaultShopOfferSource charges). */
+    public static int ladderLevelUpPrice(int depth) {
+        return GameMath.shopPrice(BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS,
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+    }
+
+    /** Modelled credit income of one COMBAT floor at a depth: depth-scaled kill bounties + credit chips. */
+    public static float combatFloorCreditIncome(int depth) {
+        return modelFloorKillCreditReward() * (1f + BalanceConfig.CREDIT_DEPTH_SCALE * (Math.max(1, depth) - 1))
+                + chipIncomePerFloor();
+    }
+
+    /** R-LADDER-AFFORD: the level-up rung costs <= LADDER_AFFORD_FRACTION of one combat floor's income. */
+    public static List<RuleResult> ladderAffordResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+            float income = combatFloorCreditIncome(depth);
+            float fraction = income <= 0f ? Float.POSITIVE_INFINITY : ladderLevelUpPrice(depth) / income;
+            results.add(new RuleResult(RuleKind.LADDER_AFFORD, "level-up rung depth " + depth, fraction,
+                    0f, BalanceConfig.LADDER_AFFORD_FRACTION, fraction <= BalanceConfig.LADDER_AFFORD_FRACTION,
+                    "price " + ladderLevelUpPrice(depth) + " vs one combat floor " + Math.round(income)));
+        }
+        return results;
     }
 }

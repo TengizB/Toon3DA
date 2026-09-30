@@ -5741,4 +5741,281 @@ public final class GameMath {
         if (pitch > maximumPitch) return maximumPitch;
         return pitch;
     }
+
+    // =========================================================================
+    // THE POWER LADDER (balance-overhaul order 1) — weapon level vs floor threat level,
+    // rarity, enemy/player growth and the ONE expected-player model (BalanceConfig SECTION 20).
+    // =========================================================================
+
+    /*
+     * Formula: ladderScale — compound weapon-level damage step (R2)
+     * Derivation:
+     *   Each weapon level multiplies damage by the ladder growth g:
+     *       ladderScale(L) = g ^ (L - 1)
+     *   so level 1 is the base stat block and every level is the same RELATIVE step (a level-10
+     *   weapon's step is as noticeable as a level-2 weapon's), replacing the old +10% linear rule.
+     *   Worked: g = 1.08, L = 5 -> 1.08^4 = 1.360.
+     * Edge cases:
+     *   level < 1 is clamped to 1 (-> 1.0); growth <= 0 is nonsensical config and returns 1.0.
+     */
+    public static float ladderScale(float growth, int level) {
+        if (growth <= 0f) {
+            return 1f;
+        }
+        return (float) Math.pow(growth, Math.max(1, level) - 1);
+    }
+
+    /*
+     * Formula: levelGapMultiplier — the lag penalty / ahead bonus (R3)
+     * Derivation:
+     *   gap = weaponLevel - floorThreatLevel.
+     *     gap < 0 : max(floor, penaltyBase ^ (-gap * steepness))   — compound per level behind
+     *     gap = 0 : 1.0
+     *     gap > 0 : 1 + bonusPerLevel * min(gap, bonusCapLevels)    — small, capped reward ahead
+     *   steepness scales the exponent, so 0 disables the penalty and 1 is the designed ladder.
+     *   Worked (0.82 / 0.25 / 0.05 / 2): gap -2 -> 0.672, gap -4 -> 0.452, gap -7 -> 0.25 (floor),
+     *   gap +1 -> 1.05, gap +5 -> 1.10.
+     * Edge cases:
+     *   steepness <= 0 -> no penalty (1.0 for any gap <= 0).
+     *   floor is applied only below the threat level; the ahead bonus is never negative.
+     */
+    public static float levelGapMultiplier(int gap, float penaltyBase, float floor,
+                                           float bonusPerLevel, int bonusCapLevels, float steepness) {
+        if (gap < 0) {
+            if (steepness <= 0f) {
+                return 1f;
+            }
+            float penalty = (float) Math.pow(penaltyBase, -gap * steepness);
+            return Math.max(floor, penalty);
+        }
+        if (gap == 0) {
+            return 1f;
+        }
+        return 1f + Math.max(0f, bonusPerLevel) * Math.min(gap, Math.max(0, bonusCapLevels));
+    }
+
+    /*
+     * Formula: levelGapMultiplier (configured) — R3 with the SECTION 20 defaults
+     * Derivation:
+     *   Convenience overload reading BalanceConfig's LEVEL_GAP_* constants, so every call site (weapon
+     *   damage, the HUD compare card, the audit) resolves the gap through the one configured curve.
+     * Edge cases: as the primitive above.
+     */
+    public static float levelGapMultiplier(int gap) {
+        return levelGapMultiplier(gap, BalanceConfig.LEVEL_GAP_PENALTY_BASE, BalanceConfig.LEVEL_GAP_FLOOR,
+                BalanceConfig.LEVEL_GAP_BONUS_PER_LEVEL, BalanceConfig.LEVEL_GAP_BONUS_CAP_LEVELS,
+                BalanceConfig.LEVEL_GAP_STEEPNESS);
+    }
+
+    /*
+     * Formula: rarityDamageMultiplier — rarity multiplies damage (R5)
+     * Derivation:
+     *   A table lookup indexed by the WeaponTier ordinal (COMMON 0 .. LEGENDARY 4):
+     *       rarityDamageMultiplier(t) = table[clamp(t, 0, table.length - 1)]
+     *   Kept as data so the order-7 feel pass retunes the table, never this method.
+     * Edge cases:
+     *   empty/null table -> 1.0; an out-of-range ordinal is clamped to the nearest end.
+     */
+    public static float rarityDamageMultiplier(float[] table, int tierOrdinal) {
+        if (table == null || table.length == 0) {
+            return 1f;
+        }
+        int clamped = Math.max(0, Math.min(table.length - 1, tierOrdinal));
+        return table[clamped];
+    }
+
+    /*
+     * Formula: rarityDamageMultiplier (configured) — R5 with BalanceConfig.RARITY_DAMAGE_MULTIPLIER
+     * Derivation: the primitive above over the SECTION 20 table.
+     * Edge cases: as the primitive above.
+     */
+    public static float rarityDamageMultiplier(int tierOrdinal) {
+        return rarityDamageMultiplier(BalanceConfig.RARITY_DAMAGE_MULTIPLIER, tierOrdinal);
+    }
+
+    /*
+     * Formula: weaponLadderDamage — the ONE composition of a player hit's ladder factors (R2, R4)
+     * Derivation:
+     *   perHit = base * LADDER_GROWTH^(L-1) * rarityMultiplier(tier) * levelGapMultiplier(L - d)
+     *   (then the existing modifiers — falloff, marksmanship, cards, crits — are applied by their owners).
+     *   gapExempt (the FIST, R4) treats the weapon as exactly on-level: its level is the floor's threat
+     *   level and it takes no gap penalty, so it is always the never-softlock backstop (S-SOFTLOCK).
+     *   Worked: Assault Rifle 20, L4, UNCOMMON, floor 4 -> 20 * 1.2597 * 1.10 * 1.0 = 27.7.
+     *           Same gun at L2 on floor 4 -> 20 * 1.08 * 1.10 * 0.6724 = 16.0.
+     * Edge cases:
+     *   floorThreatLevel < 1 is clamped to 1; weaponLevel < 1 is clamped to 1.
+     *   baseDamage <= 0 -> 0 (a non-damaging weapon stays non-damaging).
+     */
+    public static float weaponLadderDamage(float baseDamage, int weaponLevel, int tierOrdinal,
+                                           int floorThreatLevel, boolean gapExempt) {
+        if (baseDamage <= 0f) {
+            return 0f;
+        }
+        int threatLevel = Math.max(1, floorThreatLevel);
+        int level = gapExempt ? threatLevel : Math.max(1, weaponLevel);
+        float gapMultiplier = gapExempt ? 1f : levelGapMultiplier(level - threatLevel);
+        return baseDamage * ladderScale(BalanceConfig.LADDER_GROWTH, level)
+                * rarityDamageMultiplier(tierOrdinal) * gapMultiplier;
+    }
+
+    /*
+     * Formula: enemyHealthAtDepth — compound enemy HP growth (R7)
+     * Derivation:
+     *   maxHP(d) = baseHP * ENEMY_HEALTH_GROWTH ^ (d - 1)
+     *   Fitted (with enemyDamageAtDepth) so the on-curve player's turns-to-kill stays within
+     *   +/-15% of depth 1 at every depth 1..RUN_FINAL_DEPTH (R-LADDER L1).
+     * Edge cases: depth < 1 is clamped to 1 (-> baseHP).
+     */
+    public static float enemyHealthAtDepth(float baseHealth, int depth) {
+        return baseHealth * compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_GROWTH, Math.max(1, depth));
+    }
+
+    /*
+     * Formula: enemyDamageAtDepth — compound enemy damage growth (R7)
+     * Derivation:
+     *   damage(d) = baseDamage * ENEMY_DAMAGE_GROWTH ^ (d - 1)
+     *   Fitted against the player's vitality growth so on-curve turns-to-die stays within +/-15%.
+     * Edge cases: depth < 1 is clamped to 1 (-> baseDamage).
+     */
+    public static float enemyDamageAtDepth(float baseDamage, int depth) {
+        return baseDamage * compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_GROWTH, Math.max(1, depth));
+    }
+
+    /*
+     * Formula: playerVitalityScale — max HP / max armour growth per character level (R9)
+     * Derivation:
+     *   vitality(L) = PLAYER_VITALITY_GROWTH ^ (L - 1); max HP = PLAYER_MAX_HEALTH * vitality(L)
+     *   (+ card/stat bonuses, which stay flat), max armour likewise.
+     * Edge cases: characterLevel < 1 is clamped to 1 (-> 1.0).
+     */
+    public static float playerVitalityScale(int characterLevel) {
+        return ladderScale(BalanceConfig.PLAYER_VITALITY_GROWTH, characterLevel);
+    }
+
+    /*
+     * Formula: fractionOfMaximum — a heal/armour pickup resolved against the CURRENT max (R10)
+     * Derivation:
+     *   restored = max(1, round(maximum * fraction))
+     *   Resolved at the moment of use, so a level-up that raised max HP this turn is honoured.
+     *   Worked: 130 max HP * 0.45 = 58.5 -> 59.
+     * Edge cases:
+     *   maximum <= 0 or fraction <= 0 -> 0 (nothing to restore); otherwise at least 1.
+     */
+    public static int fractionOfMaximum(int maximum, float fraction) {
+        if (maximum <= 0 || fraction <= 0f) {
+            return 0;
+        }
+        return Math.max(1, Math.round(maximum * fraction));
+    }
+
+    /*
+     * Formula: expectedRarityMultiplierAtDepth — the rarity an on-curve player carries (R11)
+     * Derivation:
+     *   The region's dropped-weapon tier band [WEAPON_DROP_TIER_MIN, _MAX]_BY_REGION (ordinals clamped
+     *   to the rarity table) is averaged at its two ends — the same (min + max) / 2 reading the
+     *   order-4 ability budget uses:
+     *       expectedRarity(d) = (rarity(minTier(r)) + rarity(maxTier(r))) / 2,  r = region(d)
+     *   Worked: region 0 {COMMON, UNCOMMON} -> (1.00 + 1.10) / 2 = 1.05.
+     * Edge cases: depths past the last band clamp to the last band (the deepest region's gear).
+     */
+    public static float expectedRarityMultiplierAtDepth(int depth) {
+        int[] minimums = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION;
+        int[] maximums = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int region = Math.min(minimums.length - 1,
+                regionIndexAtDepth(Math.max(1, depth), BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE));
+        return (rarityDamageMultiplier(minimums[region]) + rarityDamageMultiplier(maximums[region])) / 2f;
+    }
+
+    /*
+     * Formula: ladderReferenceHitDamage — the R8 reference hit at depth 1
+     * Derivation:
+     *   The Assault Rifle (COMMON, L1) per-hit damage at LADDER_REFERENCE_RANGE_TILES, falloff included,
+     *   through the same linear falloff the weapon uses in play:
+     *       hit = ASSAULT_RIFLE_DAMAGE * clamp(1 - dropCoeff * range, DAMAGE_MIN_MULTIPLIER, 1)
+     *   Worked: 20 * (1 - 0.08 * 3) = 15.2.
+     * Edge cases: none (all inputs are constants).
+     */
+    public static float ladderReferenceHitDamage() {
+        return BalanceConfig.ASSAULT_RIFLE_DAMAGE * damageDropMultiplier(BalanceConfig.ASSAULT_RIFLE_DAMAGE_DROP_COEFF,
+                BalanceConfig.LADDER_REFERENCE_RANGE_TILES, BalanceConfig.DAMAGE_MIN_MULTIPLIER);
+    }
+
+    /*
+     * Formula: expectedPlayer — the expected-player model at a depth, optionally off-curve (R11)
+     * Derivation:
+     *   Weapon side (per-hit, relative to depth 1):
+     *       weaponFactor = LADDER_GROWTH^(wL-1) * rarity * levelGapMultiplier(wL - d)
+     *       offenceLift  = 1 + OFFENCE_FRACTION * LEVEL_UP_BUDGET_PP * (cL - 1) / 100   (PP = % DPT)
+     *       relative     = weaponFactor * offenceLift / expectedRarity(1)
+     *   so the depth-1 ON-CURVE player (wL 1, cL 1, rarity = expectedRarity(1)) reads exactly 1.0:
+     *       damagePerTurn      = REFERENCE_PLAYER_DPT      * relative   (the fixed depth-1 anchor)
+     *       referenceHitDamage = ladderReferenceHitDamage() * relative  (the R8 hits yardstick)
+     *   Survival side (R9 — vitality multiplies max HP/armour, cards stay flat):
+     *       maxHealth = PLAYER_MAX_HEALTH * vitality(cL), maxArmor = PLAYER_MAX_ARMOR * vitality(cL)
+     *       eHP       = maxHealth + maxArmor + REFERENCE_PLAYER_EHP * DEFENCE_FRACTION * PP * (cL-1) / 100
+     *   Offence cards are modelled multiplicatively (the established "PP = %-gain" convention the boss
+     *   derivation already uses), so the lag ratios R-LADDER L2-L4 compare WEAPONS at equal character.
+     * Edge cases:
+     *   depth, weaponLevel, characterLevel < 1 are clamped to 1; a rarity multiplier <= 0 reads as 0 DPT.
+     */
+    public static ExpectedPlayer expectedPlayer(int depth, int weaponLevel, float rarityMultiplier,
+                                                int characterLevel) {
+        int clampedDepth = Math.max(1, depth);
+        int clampedWeaponLevel = Math.max(1, weaponLevel);
+        int clampedCharacterLevel = Math.max(1, characterLevel);
+        float gapMultiplier = levelGapMultiplier(clampedWeaponLevel - clampedDepth);
+        float weaponFactor = ladderScale(BalanceConfig.LADDER_GROWTH, clampedWeaponLevel)
+                * Math.max(0f, rarityMultiplier) * gapMultiplier;
+        float offenceLift = 1f + BalanceConfig.LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION
+                * BalanceConfig.LEVEL_UP_BUDGET_PP * (clampedCharacterLevel - 1) / 100f;
+        float relative = weaponFactor * offenceLift / expectedRarityMultiplierAtDepth(1);
+
+        float vitality = playerVitalityScale(clampedCharacterLevel);
+        float maxHealth = BalanceConfig.PLAYER_MAX_HEALTH * vitality;
+        float maxArmor = BalanceConfig.PLAYER_MAX_ARMOR * vitality;
+        float cardEffectiveHitPoints = BalanceConfig.REFERENCE_PLAYER_EHP
+                * BalanceConfig.LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION
+                * BalanceConfig.LEVEL_UP_BUDGET_PP * (clampedCharacterLevel - 1) / 100f;
+        return new ExpectedPlayer(clampedDepth, clampedWeaponLevel, rarityMultiplier, gapMultiplier,
+                clampedCharacterLevel, BalanceConfig.REFERENCE_PLAYER_DPT * relative,
+                ladderReferenceHitDamage() * relative, maxHealth, maxArmor,
+                maxHealth + maxArmor + cardEffectiveHitPoints);
+    }
+
+    /*
+     * Formula: expectedCharacterLevelAtDepth — the on-curve character level (R11)
+     * Derivation: cL(d) = round(1 + EXPECTED_LEVELS_PER_DEPTH * (d - 1)), at least 1.
+     * Edge cases: depth < 1 is clamped to 1.
+     */
+    public static int expectedCharacterLevelAtDepth(int depth) {
+        return Math.max(1, Math.round(1f + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH * (Math.max(1, depth) - 1)));
+    }
+
+    /*
+     * Formula: expectedPlayerAtDepth — THE on-curve player (R11)
+     * Derivation:
+     *   expectedPlayer(d, weaponLevel = d, rarity = expectedRarity(d), characterLevel = cL(d)).
+     *   Read by the audit (R-LADDER), the simulator and the boss derivation — one model, one yardstick.
+     * Edge cases: depth < 1 is clamped to 1.
+     */
+    public static ExpectedPlayer expectedPlayerAtDepth(int depth) {
+        int clampedDepth = Math.max(1, depth);
+        return expectedPlayer(clampedDepth, clampedDepth, expectedRarityMultiplierAtDepth(clampedDepth),
+                expectedCharacterLevelAtDepth(clampedDepth));
+    }
+
+    /*
+     * Formula: ladderTurnsToKill — continuous hits-to-kill for the ladder audit (R12)
+     * Derivation:
+     *   turns = targetEffectiveHitPoints / damagePerHit, UN-rounded, so ratio checks (lag, ahead,
+     *   on-curve drift) are not hidden by the one-hit quantisation of a small kill. The integer
+     *   hits a player actually counts is ceil(turns) (GameMath.turnsToKill).
+     * Edge cases: damagePerHit <= 0 -> Float.POSITIVE_INFINITY (never dies).
+     */
+    public static float ladderTurnsToKill(float targetEffectiveHitPoints, float damagePerHit) {
+        if (damagePerHit <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return targetEffectiveHitPoints / damagePerHit;
+    }
 }
