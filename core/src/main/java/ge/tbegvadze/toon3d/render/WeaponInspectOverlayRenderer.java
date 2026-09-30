@@ -729,7 +729,9 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private void buildStatCache(WeaponRoll groundRoll, Weapon arsenalWeapon, Weapon activeWeapon) {
         if (arsenalWeapon != null && groundRoll != null) {
             int level = groundRoll.weaponLevel;
-            cachedGroundDamage = GameMath.weaponScaledDamage(arsenalWeapon.getBaseDamage(), level);
+            int threatLevel = activeWeapon != null ? activeWeapon.getFloorThreatLevel() : level;
+            cachedGroundDamage = Math.round(GameMath.weaponLadderDamage(arsenalWeapon.getBaseDamage(), level,
+                    groundRoll.tier.ordinal(), threatLevel, false));
             cachedGroundClip   = GameMath.weaponScaledClipSize(arsenalWeapon.getBaseClipSize(), level);
             cachedGroundReload = GameMath.weaponScaledReloadTicks(arsenalWeapon.getBaseReloadTicks(), level);
             cachedGroundRange  = GameMath.weaponScaledRange(arsenalWeapon.getBaseRange(), level, arsenalWeapon.isMelee());

@@ -1317,6 +1317,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (Weapon weapon : inventory.getArsenal()) {
             weapon.setAbilityResolver(abilityResolver);
         }
+        syncWeaponThreatLevels();
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) {
             meleeWeapon.setAbilityResolver(abilityResolver);
@@ -2014,7 +2015,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Update
     // -------------------------------------------------------------------------
 
+    /**
+     * Sets the current floor's threat level (its depth, clamped to >= 1 for the staging room) on every
+     * weapon the player owns. Idempotent; called right after a floor build and every frame, so a pickup,
+     * purchase or swap is on the ladder before the next hit resolves.
+     */
+    public void syncWeaponThreatLevels() {
+        inventory.syncFloorThreatLevel(Math.max(1, currentDepth));
+    }
+
     public void update(float deltaTime) {
+        syncWeaponThreatLevels();
         // OVERLAY PRECEDENCE (order-7 Part E): a hard-pause overlay — death, level-up, inventory,
         // shop, weapon inspect, the nav console, an event choice — owns the screen. Suppress the
         // bark layer while one is open: requests still QUEUE, nothing is delivered or aged, and the
@@ -4499,9 +4510,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (consumed == null) return;
         int healAmount = 0;
         if (consumed == ItemType.MEDKIT_SMALL) {
-            healAmount = ItemConstants.MEDKIT_STIM_HEAL;
+            healAmount = MedicalTier.STIM.healAmountFor(player.getMaxHealth());
         } else if (consumed == ItemType.MEDKIT_LARGE) {
-            healAmount = ItemConstants.MEDKIT_FULL_HEAL;
+            healAmount = MedicalTier.FIELD_MEDKIT.healAmountFor(player.getMaxHealth());
         }
         if (healAmount > 0) {
             player.applyHealing(healAmount);
@@ -4882,12 +4893,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Level-up ceremony: advance the level and record the pick so future offers lean into this
         // build. (The shop path deliberately does NOT do this — a purchase is not a level-up.)
         playerProgress.advanceLevel();
+        applyVitalityGrowth();
         upgradeCardDeck.registerPick(card);
 
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
         }
         runPhase = RunPhase.PLAYING;
+    }
+
+    /** R9: raises max HP and max armour by the vitality-ladder step for the level just reached. */
+    private void applyVitalityGrowth() {
+        int newLevel = playerProgress.getPlayerLevel();
+        player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, newLevel));
+        player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, newLevel));
     }
 
     /**

@@ -183,14 +183,15 @@ public class Incinerator extends Weapon {
                 if (enemyHitTarget != null) {
                     Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                     if (hitEnemy != null) {
-                        int impactDamage = (distanceTiles >= range)
+                        float ladderMultiplier = getLadderDamageMultiplier();
+                        int impactDamage = Math.round(((distanceTiles >= range)
                                 ? WeaponConstants.FLAME_FALLOFF
-                                : WeaponConstants.FLAME_IMPACT_DAMAGE;
+                                : WeaponConstants.FLAME_IMPACT_DAMAGE) * ladderMultiplier);
                         enemyHitTarget.applyDamageTo(hitEnemy, impactDamage);
                         // Set the enemy on fire — the DoT keeps ticking after the spray ends.
                         enemyHitTarget.applyBurningStatus(hitEnemy,
                                 WeaponConstants.FLAME_BURN_TURNS,
-                                WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN);
+                                Math.max(1, Math.round(WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN * ladderMultiplier)));
                         // Fire passes through enemies — do NOT break or return here.
                     }
                 }

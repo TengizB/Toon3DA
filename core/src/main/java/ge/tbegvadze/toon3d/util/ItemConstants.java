@@ -6,8 +6,8 @@ public final class ItemConstants {
     private ItemConstants() {}
 
     // Medical pickup system — stim-packs ('+') and field medkits ('H')
-    public static final int   MEDKIT_STIM_HEAL                = BalanceConfig.MEDKIT_STIM_HEAL;
-    public static final int   MEDKIT_FULL_HEAL                = BalanceConfig.MEDKIT_FULL_HEAL;
+    public static final float MEDKIT_STIM_HEAL_FRACTION       = BalanceConfig.MEDKIT_STIM_HEAL_FRACTION;
+    public static final float MEDKIT_FULL_HEAL_FRACTION       = BalanceConfig.MEDKIT_FULL_HEAL_FRACTION;
     public static final float PLAYER_HEAL_DURATION            = 0.18f;
     public static final float MEDKIT_STIM_SPRITE_HEIGHT       = 0.20f;
     public static final float MEDKIT_FULL_SPRITE_HEIGHT       = 0.30f;
@@ -18,8 +18,8 @@ public final class ItemConstants {
     public static final int   PLAYER_MAX_ARMOR                = BalanceConfig.PLAYER_MAX_ARMOR;
 
     // Armour pickup system — shards ('a') and security vests ('A')
-    public static final int   ARMOUR_SHARD_VALUE              = BalanceConfig.ARMOUR_SHARD_VALUE;
-    public static final int   ARMOUR_VEST_VALUE               = BalanceConfig.ARMOUR_VEST_VALUE;
+    public static final float ARMOUR_SHARD_FRACTION           = BalanceConfig.ARMOUR_SHARD_FRACTION;
+    public static final float ARMOUR_VEST_FRACTION            = BalanceConfig.ARMOUR_VEST_FRACTION;
     public static final float ARMOUR_SHARD_SPRITE_HEIGHT      = 0.25f;
     public static final float ARMOUR_VEST_SPRITE_HEIGHT       = 0.35f;
     // Fraction of each incoming hit that is absorbed by armour (depleting it instead of HP).

@@ -49,10 +49,14 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.enemyThreatPointResults());
     }
 
-    /** R-ENEMY: soldier/bruiser golden ratios land in band (chaff pack-exempt, mini-elite spike-exempt). */
+    /**
+     * R-ENEMY part 2 (balance-overhaul order 1, R8): every archetype's depth-1 hits-to-kill (on-curve Assault
+     * Rifle at 3 tiles) and hits-to-die (205-eHP start player) land in its role's bands. Replaces the
+     * golden-ratio bands (and their chaff / mini-elite exemptions): every role now has a target.
+     */
     @Test
-    void enemyGoldenRatiosLandInRoleBands() {
-        assertNoViolations(BalanceSchema.enemyGoldenRatioResults());
+    void enemyFightLengthsLandInTheirRoleHitBands() {
+        assertNoViolations(BalanceSchema.enemyHitResults());
     }
 
     /** R-CARD: every level-up card prices into the power-point budget band. */
@@ -73,11 +77,8 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.telegraphResults());
     }
 
-    /** R-DEPTH: the depth-coupling ratio holds its band across depths 1..15. */
-    @Test
-    void depthCouplingHoldsThroughDepthFifteen() {
-        assertNoViolations(BalanceSchema.depthCouplingResults());
-    }
+    // R-DEPTH (depth coupling, 1..15) was RETIRED by balance-overhaul order 1 and REPLACED by R-LADDER L1
+    // (on-curve TTK/TTD flat within +/-15% at 1..25), asserted by thePowerLadderHoldsAtEveryDepthToTheRunEnd.
 
     /** R-SCARCITY: model-floor supply/demand, per-weapon shares, and heal net-drain all in band. */
     @Test
@@ -103,11 +104,9 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.coverageResults());
     }
 
-    /** R-GEARGATE: the starting loadout is fair in region 1, reads underpowered by the gate, on-curve stays fair. */
-    @Test
-    void theGearGateExistsAndTheStartIsFair() {
-        assertNoViolations(BalanceSchema.gearGateResults());
-    }
+    // R-GEARGATE (region gear step + golden-ratio gate) was RETIRED by balance-overhaul order 1 and REPLACED
+    // by R-LADDER L2/L4 (per-floor lag multipliers, level felt), asserted by
+    // thePowerLadderHoldsAtEveryDepthToTheRunEnd — a stronger, per-floor version of the same property.
 
     /** R-ABILITY: every ability is priced and fits the richest tier's ceiling; tier budgets are monotonic. */
     @Test
@@ -132,7 +131,7 @@ class BalanceAuditTest {
                 float ceiling = ge.tbegvadze.toon3d.entity.WeaponRoller.tierAbilityPowerPointBudget(tier)
                         * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
                 for (boolean isMelee : new boolean[]{false, true}) {
-                    for (int level = 1; level <= 10; level++) {
+                    for (int level = 1; level <= WeaponConstants.MAX_WEAPON_LEVEL; level++) {
                         ge.tbegvadze.toon3d.entity.AbilityInstance[] abilities =
                                 roller.rollAbilitySet(isMelee, tier, level);
                         float total = ge.tbegvadze.toon3d.entity.WeaponRoller
@@ -150,15 +149,15 @@ class BalanceAuditTest {
                 () -> "Budgeted ability rolls exceeded their tier ceiling:\n" + String.join("\n", overspends));
     }
 
-    /** R-SCARCITY-DEPTH (order 3): the scarcity ratio S holds [0.75, 0.95] at every depth 1..15. */
+    /** R-SCARCITY-DEPTH (order 3; horizon 1..25 since balance-overhaul order 1): S holds [0.75, 0.95] at every depth. */
     @Test
-    void scarcityHoldsAtEveryDepthOneToFifteen() {
+    void scarcityHoldsAtEveryDepthToTheRunEnd() {
         assertNoViolations(BalanceSchema.scarcityDepthResults());
     }
 
-    /** R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] at every depth 1..15. */
+    /** R-HEALDRAIN-DEPTH (order 3; horizon 1..25 since balance-overhaul order 1): net HP drain holds [5%, 15%] per floor. */
     @Test
-    void healDrainHoldsAtEveryDepthOneToFifteen() {
+    void healDrainHoldsAtEveryDepthToTheRunEnd() {
         assertNoViolations(BalanceSchema.healDrainDepthResults());
     }
 
@@ -198,9 +197,9 @@ class BalanceAuditTest {
                 "an empty floor (no remaining demand) never triggers the lifeline");
     }
 
-    /** R-XP-PACE (order 4): every floor awards [1.0, 1.3] level-ups worth of XP at depths 1..15. */
+    /** R-XP-PACE (order 4; horizon 1..25 since balance-overhaul order 1): every floor awards [1.0, 1.3] level-ups of XP. */
     @Test
-    void xpPacingHoldsAtEveryDepthOneToFifteen() {
+    void xpPacingHoldsAtEveryDepthToTheRunEnd() {
         assertNoViolations(BalanceSchema.xpPaceResults());
     }
 

@@ -52,10 +52,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP1** — SECTION 20 constants, GameMath ladder methods, `util/ExpectedPlayer`, BalanceReport
       LADDER table; R-LADDER + R-LADDER-AFFORD asserted on the formulas.
       DONE WHEN: those exist, nothing wired into gameplay yet, both gates green.
-- [ ] **CP2** — weapon damage R2-R6 (Fist exemption) and enemy HP/damage growth R7 live with rebased
+- [x] **CP2** — weapon damage R2-R6 (Fist exemption) and enemy HP/damage growth R7 live with rebased
       EnemyType numbers R8; R-DEPTH and R-GEARGATE retired; R-WEAPON / R-ENEMY re-banded.
       DONE WHEN: live in gameplay code, both gates green.
-- [ ] **CP3** — player vitality growth R9 and fractional heals R10 live; R-HEAL / R-HEALDRAIN-DEPTH /
+- [x] **CP3** — player vitality growth R9 and fractional heals R10 live; R-HEAL / R-HEALDRAIN-DEPTH /
       R-SCARCITY-DEPTH / R-XP-PACE / R-CARD-BREAKPOINT re-fitted at 1..25.
       DONE WHEN: live, both gates green.
 - [ ] **CP4** — BossBalance and the sim read `expectedPlayerAtDepth`; R-BOSS-* green; TacticalPolicy
@@ -103,3 +103,33 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **TEMPORARY:** old constants (ENEMY_*_SCALE_PER_DEPTH, WEAPON_LEVEL_DAMAGE_PER_LEVEL, flat heals,
   MAX_WEAPON_LEVEL 10 in WeaponConstants) still live; CP2/CP3 replace them. R-DEPTH / R-GEARGATE still
   enforced until CP2.
+- **CP2+CP3 FOLDED (one commit):** switching the enemy growth to the ladder broke the heal/scarcity
+  rules, which cannot be re-fitted without R9/R10, so CP3 landed in the CP2 commit (both boxes ticked).
+- **CP2/3 handover (weapon side, java-architect spoke):** `Weapon.setFloorThreatLevel(int)` /
+  `getFloorThreatLevel()` (0 = unset = on-level), `getLadderDamageMultiplier()`, `getLevelGapMultiplier()`
+  (1.0 for the exempt Fist), `protected isLevelGapExempt()` (Fist overrides true);
+  `PlayerInventory.syncFloorThreatLevel(int)`; `World.syncWeaponThreatLevels()` runs after floor build
+  and at the top of every `update()`; `SimWorld.syncWeaponThreatLevels()` (private) in buildFloor and
+  around every action. `GameMath.respannedLegacyWeaponLevel(int)`; `weaponScaledDamage` DELETED.
+  `WeaponRoller.rollLevel` uses WEAPON_LEVEL_ROLL_OFFSETS/WEIGHTS. `BalanceConfig.MAX_WEAPON_LEVEL` 27
+  (WeaponConstants re-exports). Flat ability magnitudes (KINETIC_SLAM wall bonus, REND/static) and hazard
+  damage are deliberately NOT on the ladder (priced by R-ABILITY / not weapon hits).
+- **CP2/3 handover (heal side, java-architect spoke):** `PlayerStats.vitalityGrowthDelta(base, newLevel)`;
+  `World.applyVitalityGrowth()` after `playerProgress.advanceLevel()` in `applyUpgradeCard()`; SimWorld
+  `resolvePendingLevelUps()` mirrors it. `MedicalTier.healAmountFor(maxHealth)` / `getHealFraction()`;
+  `Level.armourRestoreFractionOfPickup(char)`. ItemWindow shows "+45% HP" (no player access there).
+  `DefaultShopOfferSource` prices medkits at PLAYER_MAX_HEALTH (ShopContext has no max HP).
+- **DECISIONS (CP2/3, not in spec):** expected DEFENCE card share 0.25 (was 0.5 in CP1) — keeps the TTD
+  drift ±7% so R-HEALDRAIN can hold (a larger flat share bends the survival curve); ENEMY_DAMAGE_GROWTH
+  1.097. R8 damage chosen at the LOW end of each band (chaff damage unchanged). Enemy block gains rebased
+  to ~1 reference hit and the BLOCK_MAX cap now rides enemy HP growth. Route model: ammo PP ÷ expected hit
+  growth, credit PP ÷ shop depth factor. R-HEAL re-stated as fraction bands (spec's override clause).
+- **DEAD END:** cutting ammo by drop FREQUENCY makes guaranteed boxes 43% richer vs demand and breaks
+  R-TRAJECTORY/R-CALM-COST — cut box SIZE instead.
+- **TESTS UPDATED (not new):** BalanceAuditTest (R-DEPTH/R-GEARGATE methods replaced by comments pointing at
+  R-LADDER; golden-ratio -> enemyHitResults; three renames to "ToTheRunEnd"; roll sweep to MAX level),
+  Spiresower/RimeshellLancer tests (golden ratio -> R8 hit bands), AuricSentinelShardTest (hit < rebased
+  HP), RouteEconomicsTest (clinic stock constant), LevelGeneratorSnapshotTest (re-baselined digest,
+  confirmed stable across two JVM runs). Count 451 -> 449 (two retired-rule methods).
+- **NEXT (CP4):** BossBalance still derives from its own `expectedPlayerDamagePerTurn` (flat card PP) and
+  `REFERENCE_PLAYER_EHP` — switch to `GameMath.expectedPlayerAtDepth`. R-BOSS-* currently green.

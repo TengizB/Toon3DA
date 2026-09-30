@@ -87,25 +87,42 @@ R-WEAPON (RuleKind.WEAPON_POWER)
   Every ranged weapon is registered in BalanceSchema.rangedWeapons() with a
   ROLE; its weaponPowerScore must land in the role band:
     sidearm 8-14 | workhorse 12-18 | burst/specialist 18-26 | heavy/charge 24-32
-  WHY: the bands overlap deliberately so roles form a ladder, not silos; higher
-  rarity never raises a band — rarity buys ABILITIES, not raw DPT. Crediting
+  WHY: the bands overlap deliberately so roles form a ladder, not silos. Role
+  bands are evaluated at LEVEL 1, COMMON (the ladder multiplies every weapon the
+  same way, so a role's SHAPE is level-independent). OVERRIDDEN (balance-overhaul
+  order 1): the old clause "higher rarity never raises a band — rarity buys
+  ABILITIES, not raw DPT" is gone — rarity now MULTIPLIES damage (R5,
+  RARITY_DAMAGE_MULTIPLIER 1.00/1.10/1.20/1.32/1.45) on top of its ability
+  budget, and R-LADDER L5 proves every tier step is felt. Crediting
   notes (data on each spec): Railgun scored at full charge; Grenade Launcher on
   centre splash; Arc Cannon on the primary bolt (lateral chain uncredited);
   Incinerator as impact + one full burn application per shot (DoT is damage and
   counts toward TTK — an acknowledged muzzle-style over-credit, like falloff).
 
-R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_GOLDEN_RATIO)
-  Every non-boss archetype (EnemyType.values(), role() as designer data) must
-  land its threatPoints in the role TP band:
-    chaff 16-34 | soldier 36-66 | bruiser 70-120 | mini-elite 160-310
-  and (SOLDIER/BRUISER only) its golden ratio in band:
-    soldier [3, 8] | bruiser [2, 4]
-  WHY: TP is the currency the encounter budget spends; a mis-priced archetype
-  corrupts every floor. Golden ratio below band = swingy/unfair, above =
-  damage sponge. CHAFF is pack-exempt (budgeted by pack TP, a lone unit reads
-  ~9-14); MINI_ELITE deliberately reads UNDER the duel band (a spike you avoid
-  or spend heavies on). BOSS is exempt from both — governed by the SECTION 14
-  boss ruleset instead.
+R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-overhaul order 1 (R8)
+  Part 2 — THE R8 HIT BANDS (replace the golden-ratio bands): every non-boss
+  archetype's depth-1 fight length lands in its role's targets, measured against
+  the on-curve reference — the Assault Rifle, COMMON L1, at 3 tiles (15.2 per hit)
+  — and the 205-eHP start player:
+                 hits to kill   ordinary hits the player survives
+    CHAFF          1-2            >= 10
+    SOLDIER        3-4            7-9
+    BRUISER        5-7            4-6
+    MINI_ELITE     8-12           3-5
+  (BalanceSchema.enemyHitResults / enemyHitsToKill / enemyHitsToDie). There are no
+  exemptions any more: the chaff pack exemption and the mini-elite spike exemption
+  of the golden ratio are gone — every role has a target.
+  Part 1 — TP BANDS, RE-DERIVED from R8: each role's band is COMPUTED from the
+  centre of its R8 box (centre eHP = mean hits-to-kill x 15.2; centre hit =
+  205 / mean hits-to-die, an open-ended band using 1.5 x its floor; TP at melee
+  positional, cadence 1) spread by LADDER_TP_BAND_LOW/HIGH_FACTOR (0.5 / 1.6) —
+  wide enough for ranged/status positional (<= 1.55) and cadence-2 archetypes.
+  WHY: the owner's "no more sponges": fights are short and hits land hard, and
+  the TP currency stays priced against the same box the fight is.
+  OVERRIDE RECORD: GOLDEN_RATIO_* bands and the hand-set ENEMY_TP_* bands (chaff
+  16-34 | soldier 36-66 | bruiser 70-120 | mini-elite 160-310) -> the rules above.
+  Every archetype's depth-1 HP/damage was rebased (BalanceConfig SECTION 2 note);
+  damage sits at the LOW end of each band because the heal economy absorbs it.
 
 R-CARD (RuleKind.CARD_BUDGET)
   Every level-up card (UpgradeCard.values(), estimatedPowerPoints()) must price
@@ -114,14 +131,18 @@ R-CARD (RuleKind.CARD_BUDGET)
   (L * 12 PP at level L), which is what keeps every build on the
   depth-coupling curve.
 
-R-HEAL (RuleKind.HEAL_PRICING)
-  Every heal/armour pickup (BalanceSchema.healPickups()) is priced in SURVIVAL
-  TURNS BOUGHT = value / averageIncomingDamagePerTurn on the model floor:
-    small pickups ('+' stim, 'a' shard):  [2, 6] turns
-    large pickups ('H' medkit, 'A' vest): [8, 16] turns
-  WHY: under band = worthless filler; over band = removes the resource decision
-  (a pickup should buy part of a fight, never a full reset). Current values:
-  stim 5.0, shard 2.2, medkit 14.1, vest 9.7.
+R-HEAL (RuleKind.HEAL_PRICING) — RE-STATED by balance-overhaul order 1 (R10)
+  Every heal/armour pickup restores a FRACTION of the max it refills, resolved at
+  the moment of use (GameMath.fractionOfMaximum): 'H' medkit 0.45 max HP, '+' stim
+  0.18, 'a' shard 0.15 max armour, 'A' vest 0.60. The rule bands that fraction:
+    small pickups ('+', 'a'):  [0.10, 0.25] of max
+    large pickups ('H', 'A'):  [0.40, 0.70] of max
+  Survival turns bought on the model floor stay in the rule detail as information.
+  WHY: a heal must keep its meaning at every depth while max HP grows with
+  character level (R9) — a flat 90 HP was a full reset at level 1 and a sip at 20.
+  OVERRIDE RECORD: flat MEDKIT_STIM_HEAL 32 / MEDKIT_FULL_HEAL 90 /
+  ARMOUR_SHARD_VALUE 14 / ARMOUR_VEST_VALUE 62 and the survival-turns bands
+  (small [2,6], large [8,16]) -> the fractions and fraction bands above.
 
 R-TELEGRAPH (RuleKind.TELEGRAPH)
   Registered attack list: BalanceSchema.telegraphAttacks(). No UN-readable
@@ -135,29 +156,19 @@ R-TELEGRAPH (RuleKind.TELEGRAPH)
   NOTE: any NEW attack path must be added to the registered list — the audit
   only checks attacks it knows about.
 
-R-DEPTH (RuleKind.DEPTH_COUPLING) — RE-DERIVED vs the HONEST power model (order 4)
-  depthCouplingRatio must hold [0.9, 1.2] for every depth 1..15, where player
-  power is now GameMath.playerPowerAtDepthV2 — the HONEST total-power model:
-      playerPowerV2(d) = cardPower(d) * gearRamp(d) * abilityPower(d)
-        cardPower   = the old v1 linear level-up term (1 + budgetPP*lpd*(d-1)/100)
-        gearRamp    = gearRampAtDepth (order-2 gear curve, CONTINUOUS ramp form —
-                      reaches the step value at each region's end, no boundary
-                      jumps, because a fixed ratio band cannot absorb a x1.35 jump;
-                      the STEP gearCurve stays the gate's tool)
-        abilityPower= 1 + expectedAbilityPowerPointsAtDepth/100 (the priced weapon
-                      ability budget the expected arsenal carries, order-2 tables)
-  WHY v2: the OLD coupling counted ONLY cards, defending a FICTION of player power;
-  difficulty tuned against fiction cannot feel right (order 4, problem 1). The
-  honest curve is far steeper (v2(15) ~= 5.5 vs the fiction's 2.68), so the enemy
-  DAMAGE compound was RE-FIT 1.032 -> 1.073 (HEALTH held at 1.042 so order-3
-  scarcity is untouched; damage cancels in the heal-drain fraction and only
-  interacts with the gate, which stays in band — region-2 on-curve soldier golden
-  ratio = 3.0). The ratio now holds [0.9, 1.2] for 1..15 (~0.95..1.16) with NO
-  under-band fudge; depths 16..20 (printed, not audited) degrade GRACEFULLY to the
-  EASY side (an on-curve player pulls slightly ahead), never unfair-hard.
+R-DEPTH (RuleKind.DEPTH_COUPLING) — RETIRED by balance-overhaul order 1
+  OVERRIDE RECORD: the depth-coupling ratio (playerPowerAtDepthV2 / enemy threat
+  scale in [0.9, 1.2] at 1..15) is REPLACED by R-LADDER L1 (on-curve TTK and TTD
+  within +/-15% of depth 1 at every depth 1..25), which proves the stronger, per-
+  fight property directly. GameMath.playerPowerAtDepth / playerPowerAtDepthV2 /
+  depthCouplingRatio / gearRampAtDepth / expectedAbilityPowerPointsAtDepth /
+  playerPowerAtLevelAndDepth and DEPTH_COUPLING_RATIO_* are deleted.
 
-R-XP-PACE (RuleKind.XP_PACE) — XP pacing is a RULE, not a hope (order 4)
-  For every depth 1..15: floorRosterXp(d) / xpRequired(expectedLevel(d)) in
+R-XP-PACE (RuleKind.XP_PACE) — XP pacing is a RULE, not a hope (order 4; horizon 1..25 since balance-overhaul order 1)
+  RE-FIT (balance-overhaul order 1): horizon 1..RUN_FINAL_DEPTH (25), and the
+  geometric XP growth follows the NEW threat compound: 1.118 -> 1.2495
+  (= ENEMY_HEALTH_GROWTH 1.139 x ENEMY_DAMAGE_GROWTH 1.097), so the yield stays
+  depth-stable at ~1.11. For every depth: floorRosterXp(d) / xpRequired(expectedLevel(d)) in
   [XP_FLOOR_YIELD_MIN, MAX] = [1.0, 1.3] level-ups per floor. Per-enemy XP is
   DERIVED — xpReward = XP_PER_THREAT_POINT * enemyThreatAtDepth (one knob replaces
   13 hand-set constants) — and the XP curve is GEOMETRIC (base * growth^(level-1),
@@ -173,6 +184,10 @@ R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the figh
   (GameMath.turnsToKillBreakpointGain), a DEFENCE card survives a whole extra hit
   (turnsToDie gain). Cards keep their equal PP budget (R-CARD); this rule proves
   the budget is spent where it FEELS different next fight, not just on the sheet.
+  RE-FIT (balance-overhaul order 1): measured against the ON-CURVE ExpectedPlayer
+  at every depth 1..25 (was the gear-curve DPT and the fixed 205 eHP, 1..15);
+  offence cards apply as a %-lift of the on-curve DPT (the model's convention),
+  defence cards as flat eHP. The reference soldier (Void Shroud) is unchanged.
 
 R-SCARCITY (RuleKind.SCARCITY)
   On the model floor (BalanceConfig SECTION 10): floor-wide S = SUPPLY/DEMAND
@@ -218,37 +233,21 @@ COVERAGE (RuleKind.COVERAGE) — the anti-"shipped unpriced" rule
   floor budget for weeks. New content that skips pricing no longer produces a
   green build.
 
-R-GEARGATE (RuleKind.GEAR_GATE) — the expected arsenal curve (new-game-balancr order 2)
-  Order 2 replaces the single fixed player anchor with a per-depth EXPECTED
-  PLAYER whose weapon power steps up once per 5-floor region:
-    gearCurve(d)                = GEAR_CURVE_PER_REGION ^ floor((d-1)/band)   (1.35^region)
-    expectedPlayerDamagePerTurn = REFERENCE_PLAYER_DPT * gearCurve(d)
-  gearCurve is 1.0 across all of region 1, so expectedPlayerDamagePerTurn(1..5)
-  == REFERENCE_PLAYER_DPT EXACTLY (the run begins on the curve). The rule proves
-  the GATE on a reference SOLDIER (Void Shroud) through the golden-ratio lens:
-    1. START FAIR    — stagnant (never-upgraded, reference-DPT) golden ratio at
-                       depth 1 is IN the soldier band [3,8];
-    2. GATE FIRES    — the SAME stagnant player's golden ratio at the region-2
-                       entry depth is BELOW the band (the start weapon now reads
-                       underpowered — stagnation is punished);
-    3. ON-CURVE FAIR — the EXPECTED player (reference * gearCurve) golden ratio
-                       at that same depth is back IN band (upgrading keeps you
-                       fair — the "find better gear or die" loop);
-    + ANCHOR         — expectedPlayerDamagePerTurn(1..5) == REFERENCE_PLAYER_DPT.
-  Region-1 fairness for the WHOLE roster is already guaranteed by R-ENEMY (same
-  reference-DPT lens at depth 1); R-GEARGATE adds the depth axis. The curve is
-  SUPPLIED, not just demanded: dropped weapons roll their tier from a per-region
-  BAND (WEAPON_DROP_TIER_*_BY_REGION: region 1 COMMON..UNCOMMON, region 2
-  UNCOMMON..RARE, ...), and THE PITY RULE (GUARANTEED_UPGRADE_PER_REGION, tracked
-  in RunStats) force-spawns one in-band weapon on a region's last floor if none
-  was placed. WHY: the old contract anchored every enemy to a FIXED 25 DPT
-  forever, so never upgrading was viable by construction — you could beat a boss
-  with the starting-room weapon. Now stagnation is FELT as mounting pressure and
-  becomes lethal.
+R-GEARGATE (RuleKind.GEAR_GATE) — RETIRED by balance-overhaul order 1
+  OVERRIDE RECORD: the per-region gear step (GEAR_CURVE_PER_REGION 1.35^region) and
+  its golden-ratio gate at the region-2 entry are REPLACED by R-LADDER L2/L4 — a
+  per-FLOOR ladder (weapon level vs threat level) whose lag penalty is proven at
+  every depth 1..25, a stronger form of "stagnation is punished". What SURVIVES: the
+  supply half — dropped weapons still roll their tier from WEAPON_DROP_TIER_*_BY_REGION
+  (now also the expected rarity of the on-curve player) and THE PITY RULE
+  (GUARANTEED_UPGRADE_PER_REGION) stays until balance-overhaul order 2 re-homes it.
+  GameMath.gearCurveAtDepth / expectedPlayerDamagePerTurn and GEAR_CURVE_PER_REGION
+  are deleted (GEAR_CURVE_REGION_BAND_SIZE stays: every per-region table indexes by it).
 
 R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2)
   Rarity NEVER raises a weapon's POWER band (that is a role property, R-WEAPON) —
-  it buys ABILITIES, and abilities are now PRICED in the SAME power points (PP =
+  it buys ABILITIES [OVERRIDDEN by balance-overhaul order 1: rarity now ALSO
+  multiplies damage — R5 — while keeping this ability budget], and abilities are now PRICED in the SAME power points (PP =
   %-of-reference DPT/eHP) the level-up cards use (GameMath.abilityPowerPoints;
   an ability's magnitude converted to a %-of-reference, discounted by a
   utilisation weight for how often it applies). Each tier has an ability-PP
@@ -264,39 +263,44 @@ R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2
   priced content in one pass. Magnitudes may still be tuned freely — the price
   recomputes from the magnitude, so tuning stays free.
 
-R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — scarcity across the whole run (new-game-balancr order 3)
+R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — scarcity across the whole run (order 3; RE-FIT by balance-overhaul order 1)
   R-SCARCITY checks the ammo economy on ONE depth-1 model floor; R-SCARCITY-DEPTH
   carries that anchor down the run and requires the scarcity ratio S in [0.75,
-  0.95] at EVERY depth 1..15. The two curves it rides (deterministic, one source):
-    DEMAND(d) = modelFloorDemand * healthScale^(d-1)          (enemy eHP compounds)
-    SUPPLY(d) = modelFloorSupply * gearCurve(d)               (the EXPECTED arsenal,
-                                  * AMMO_SUPPLY_REGION_MULTIPLIER[region]  order 2)
+  0.95] at EVERY depth 1..RUN_FINAL_DEPTH (25; was 1..15). The two curves it rides:
+    DEMAND(d) = modelFloorDemand * ENEMY_HEALTH_GROWTH^(d-1)   (enemy eHP compounds)
+    SUPPLY(d) = modelFloorSupply * expectedHitGrowthAtDepth(d)   (each ammo unit hits
+                                  * AMMO_SUPPLY_REGION_MULTIPLIER[r]   as hard as the
+                                                                  on-curve weapon)
     S(d)      = SUPPLY(d) / DEMAND(d)               (GameMath.scarcityRatioAtDepth)
-  SUPPLY is priced against the guns the player is EXPECTED to hold at d (gearCurve),
-  not the starting weapons — or an upgrade would silently break the economy. Because
-  gear steps ~+35%/region while eHP compounds ~+23%/region, S drifts within/across
-  regions; the FIFTH lever AMMO_SUPPLY_REGION_MULTIPLIER (SECTION 5, default 1.0,
-  here {1.08, 1.00, 0.94}) trims region 1's within-region dip up and the deeper
-  regions' gear-outruns-eHP rise down, holding the band at all 15 depths. The slug
-  reserve-banking gate stays the TIGHTEST (~1.0 floor at depth 1) — the Railgun
-  power-band waiver is justified by scarcity, re-checked here.
+  Enemy HP growth is FITTED to the expected hit growth (R-LADDER L1), so S is near
+  depth-stable; the residual per-region rarity wobble is trimmed by the per-region
+  lever, now five entries {1.03, 1.00, 0.98, 0.98, 1.10}.
+  RE-FIT RECORD: the R8 rebase cut model-floor DEMAND 720 -> 502, so LEVER 2 box
+  sizes and LEVER 3 caps were cut ~0.7x (SECTION 5 note). SIZE, not frequency, is the
+  lever so a guaranteed box (cache / event / vault) keeps its share of a floor. The
+  slug reserve-banking gate stays the TIGHTEST — the Railgun waiver still holds.
 
-R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — the heal economy, enforced (order 3)
-  The per-floor NET HP drain holds [5%, 15%] of the player's current-difficulty eHP
-  at EVERY depth 1..15 (R-SCARCITY only pins the model floor). Incoming damage, heal
-  supply and eHP all ride the enemy-damage curve, so the drain FRACTION is depth-
-  STABLE (GameMath.netHpDrainFractionAtDepth):
-    netDrainFraction(d) = (incomingBase - healBase * HEAL_SUPPLY_REGION_MULTIPLIER[r])
-                          / REFERENCE_PLAYER_EHP
-  The shared depth factor cancels; with the region multipliers at their 1.0 default
-  every floor costs ~11.5% of your depth-scaled eHP. WHY: HP is a slowly depleting
-  run-resource — medkits are decisions ("spend now or bank"), and reaching a boss at
-  full resources means you played well, not that the game is generous.
+R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — the heal economy, enforced (order 3; RE-FIT by balance-overhaul order 1)
+  The per-floor NET HP drain holds [5%, 15%] of the expected player's eHP at EVERY
+  depth 1..RUN_FINAL_DEPTH (25; was 1..15) (GameMath.netHpDrainFractionAtDepth):
+    incoming(d) = incomingBase * ENEMY_DAMAGE_GROWTH^(d-1)
+    heal(d)     = healBase * eHP(d)/eHP(1) * HEAL_SUPPLY_REGION_MULTIPLIER[r]
+                  (heals are FRACTIONS of max, and max includes the flat card bonuses)
+    drain(d)    = (incoming(d) - heal(d)) / expectedPlayerAtDepth(d).effectiveHitPoints
+  The drain is a small DIFFERENCE, so it amplifies the R-LADDER turns-to-die drift
+  several times — the reason the expected defence-card share is 0.25 (it keeps that
+  drift within +/-7%) and the heal lever grew to five entries {1, 1, 1, 1.03, 1.10}.
+  RE-FIT RECORD: MODEL_FLOOR_EXPECTED_MEDKITS 1.5 -> 2.8 and _ARMOUR_PICKUPS 1.0 ->
+  1.6, re-synced to the generator's default per-room chances (8 rooms x 0.35 / 0.20);
+  the old undercount priced a heal economy harsher than the game places, and the R8
+  rebase made every fight costlier. WHY (unchanged): HP is a slowly depleting run
+  resource — medkits are decisions, not a timer.
 
 R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
   Currency without a coupled sink is a score counter. The rule couples income to the
   shop: expected income per region / price of the expected purchase bundle in [0.9,
-  1.4] for every region across depths 1..15.
+  1.4] for every region across depths 1..RUN_FINAL_DEPTH (25; was 1..15, balance-
+  overhaul order 1 — no value re-fit was needed).
     income(region)  = sum over the region's floors of (killBounty(d) + chipIncome)
                       (GameMath.creditIncomePerRegion; killBounty scales linearly)
     bundle(region)  = 1 significant (weapon-class, 12 PP) + 1.5 small (supply, 3 PP)
@@ -390,9 +394,19 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
                        headlessly and walked under three deterministic policies (SAFEST / DEADLIEST /
                        BALANCED); at every region boundary the cumulative order-3/4 quantities are
                        measured over the nodes ACTUALLY VISITED, each priced by its own row: scarcity S
-                       [0.55, 1.60], per-floor net HP drain [-0.85, +0.45], XP pace [0.70, 2.30], and
-                       depth coupling [0.80, 1.50] AT THE LEVEL THE ROUTE ACTUALLY BOUGHT (a route that
-                       skips fights stands below the curve — GameMath.levelForCumulativeXp). All three
+                       [0.55, 1.70], per-floor net HP drain [-0.85, +0.65], XP pace [0.70, 2.95], and
+                       depth coupling [0.80, 1.65] AT THE LEVEL THE ROUTE ACTUALLY BOUGHT (a route that
+                       skips fights stands below the curve — GameMath.levelForCumulativeXp; coupling
+                       is GameMath.ladderCouplingAtCharacterLevel since balance-overhaul order 1). RE-FIT
+                       RECORD (balance-overhaul order 1): the four UPPER ends moved to the re-measured
+                       range + ~5% (SAFEST S 1.60, DEADLIEST drain 0.62 / XP pace 2.78 / coupling 1.58):
+                       R8 fights land harder, the XP curve steepened to 1.2495/level, and coupling is now
+                       read on the ladder model. The route model now reads AMMO in depth-1 damage terms
+                       (divided by the expected hit growth, like HP already was) and CREDITS at the
+                       depth's shop price level, and guaranteed heals are fractions (no /damage-curve
+                       decay; the REST clinic stock no longer grows with depth). Payoffs re-priced for
+                       the box-size cut: REST_STIMS 1 -> 2, EVENT_AMMO_BOXES 5 -> 6, EVENT_XP_LARGE
+                       150 -> 200, AFFIX_SWARM_VAULT_AMMO_BOXES 4 -> 9. All three
                        must hold: SAFEST rides the generous edge, DEADLIEST the starved edge, and those
                        ENDS are the game's real difficulty range (printed by BalanceReport).
     R-ROUTE-GUARANTEES no lane strands a run. Enforced at MAP-GEN by a deterministic no-RNG fixpoint
@@ -1087,6 +1101,17 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 1 / CP2+CP3 — the ladder is LIVE. Weapon hits compose through
+    GameMath.weaponLadderDamage (the old Weapon.damageAtDistance used the RAW base damage, so a
+    weapon level NEVER reached a hit — the root of the owner's complaint); MAX_WEAPON_LEVEL 27;
+    level scaling of accuracy/reload/clip/range/abilities re-spanned 1..27; enemy HP/damage grow
+    1.139 / 1.097 per floor; every archetype rebased to R8; max HP/armour grow 1.09 per character
+    level; heals are fractions of max. RETIRED: R-DEPTH, R-GEARGATE. RE-STATED: R-ENEMY (R8 hit
+    bands + derived TP bands), R-HEAL (fraction bands). RE-FIT at 1..25: R-SCARCITY-DEPTH,
+    R-HEALDRAIN-DEPTH, R-XP-PACE (growth 1.2495), R-CREDITS, R-CARD-BREAKPOINT; R-TRAJECTORY upper
+    ends; route model reads ammo/credits/heals in depth-1 terms. Ammo boxes/caps ~0.7x; model heal
+    counts re-synced to the generator. balanceSim: every enforced band still green (same waivers).
+
   balance-overhaul order 1 / CP1 — added BalanceConfig SECTION 20 (THE POWER LADDER), the
     GameMath ladder methods, util/ExpectedPlayer, R-LADDER + R-LADDER-AFFORD (asserted on the
     formulas) and BalanceReport's LADDER table. Nothing wired into gameplay yet (CP2-CP6).

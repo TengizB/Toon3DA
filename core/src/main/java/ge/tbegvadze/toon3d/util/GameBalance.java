@@ -117,21 +117,19 @@ public final class GameBalance {
     // =========================================================================
     // ENEMY DEPTH SCALING — enemies grow stronger on each new dungeon floor
     //
-    // Health formula:  baseHP * HEALTH_SCALE ^ (depth − 1)
-    //   depth 1: ×1.00   depth 2: ×1.08   depth 3: ×1.17
-    //   depth 4: ×1.26   depth 5: ×1.36   depth 10: ×2.00
+    // Health formula:  baseHP * ENEMY_HEALTH_GROWTH ^ (depth − 1)   (power ladder, 1.139)
+    //   depth 1: ×1.00   depth 5: ×1.68   depth 10: ×3.23   depth 25: ×22.7
     //
-    // Damage formula:  baseDmg * DAMAGE_SCALE ^ (depth − 1)
-    //   depth 1: ×1.00   depth 2: ×1.06   depth 3: ×1.12
-    //   depth 4: ×1.19   depth 5: ×1.26   depth 10: ×1.69
+    // Damage formula:  baseDmg * ENEMY_DAMAGE_GROWTH ^ (depth − 1)   (power ladder, 1.103)
+    //   depth 1: ×1.00   depth 5: ×1.48   depth 10: ×2.41   depth 25: ×10.5
     // =========================================================================
 
     // Depth scaling factors are balance values — see BalanceConfig.
     /** Per-floor HP multiplier applied as a compound factor. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH;
+    public static final float ENEMY_HEALTH_GROWTH = BalanceConfig.ENEMY_HEALTH_GROWTH;
 
     /** Per-floor damage multiplier applied as a compound factor. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH;
+    public static final float ENEMY_DAMAGE_GROWTH = BalanceConfig.ENEMY_DAMAGE_GROWTH;
 
     // =========================================================================
     // Derived-value helpers — thin wrappers delegating math to GameMath
@@ -148,18 +146,18 @@ public final class GameBalance {
 
     /**
      * Returns the compound HP scale multiplier for the given dungeon depth.
-     * depth=1 → 1.0 (no scaling); depth=2 → {@value #ENEMY_HEALTH_SCALE_PER_DEPTH}; etc.
+     * depth=1 → 1.0 (no scaling); depth=2 → {@value #ENEMY_HEALTH_GROWTH}; etc.
      */
     public static float enemyHealthScaleForDepth(int dungeonDepth) {
-        return GameMath.compoundScaleForDepth(ENEMY_HEALTH_SCALE_PER_DEPTH, dungeonDepth);
+        return GameMath.compoundScaleForDepth(ENEMY_HEALTH_GROWTH, dungeonDepth);
     }
 
     /**
      * Returns the compound damage scale multiplier for the given dungeon depth.
-     * depth=1 → 1.0 (no scaling); depth=2 → {@value #ENEMY_DAMAGE_SCALE_PER_DEPTH}; etc.
+     * depth=1 → 1.0 (no scaling); depth=2 → {@value #ENEMY_DAMAGE_GROWTH}; etc.
      */
     public static float enemyDamageScaleForDepth(int dungeonDepth) {
-        return GameMath.compoundScaleForDepth(ENEMY_DAMAGE_SCALE_PER_DEPTH, dungeonDepth);
+        return GameMath.compoundScaleForDepth(ENEMY_DAMAGE_GROWTH, dungeonDepth);
     }
 
     // =========================================================================

@@ -303,6 +303,7 @@ public final class SimWorld implements LevelTransitionListener {
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);
         for (Weapon weapon : arsenal) weapon.setAbilityResolver(abilityResolver);
+        syncWeaponThreatLevels();
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) meleeWeapon.setAbilityResolver(abilityResolver);
 
@@ -575,6 +576,7 @@ public final class SimWorld implements LevelTransitionListener {
      * (slide, rotate, fire, door) completes inside the loop; the cap is a safety net, never a rule.
      */
     private void stepOneAction(TouchAction action) {
+        syncWeaponThreatLevels();
         actionSource.present(action);
         for (int step = 0; step < BalanceConfig.SIM_MAX_STEPS_PER_ACTION; step++) {
             doorManager.update(BalanceConfig.SIM_TIME_STEP_SECONDS);
@@ -584,6 +586,12 @@ public final class SimWorld implements LevelTransitionListener {
             if (step > 0 && playerController.isIdle()) break;
         }
         actionSource.clear();
+        syncWeaponThreatLevels();
+    }
+
+    /** Mirrors World.syncWeaponThreatLevels: every owned weapon is compared against this floor's depth. */
+    private void syncWeaponThreatLevels() {
+        inventory.syncFloorThreatLevel(Math.max(1, currentDepth));
     }
 
     /** Draws and applies level-up cards until the pending queue is empty (mirrors World). */
@@ -596,6 +604,9 @@ public final class SimWorld implements LevelTransitionListener {
             if (chosen == null) break;
             applyUpgradeCardEffects(chosen);
             playerProgress.advanceLevel();
+            int newLevel = playerProgress.getPlayerLevel();
+            player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, newLevel));
+            player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, newLevel));
             upgradeCardDeck.registerPick(chosen);
         }
     }

@@ -134,7 +134,8 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
         boolean field = random.nextBoolean();
         ItemType itemType = field ? ItemType.MEDKIT_LARGE : ItemType.MEDKIT_SMALL;
         // Priced on HP restored, converted to PP.
-        int healAmount = field ? BalanceConfig.MEDKIT_FULL_HEAL : BalanceConfig.MEDKIT_STIM_HEAL;
+        int healAmount = GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH,
+                field ? BalanceConfig.MEDKIT_FULL_HEAL_FRACTION : BalanceConfig.MEDKIT_STIM_HEAL_FRACTION);
         float valuePowerPoints = healAmount / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
         int price = priceOf(valuePowerPoints, context);
         return new ShopEntry(OfferCategory.MEDKIT, OfferRarity.COMMON, itemType.getDisplayName(),

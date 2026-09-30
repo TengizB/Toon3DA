@@ -378,10 +378,10 @@ public final class EnemyManager implements EnemyHitTarget {
 
     /** Creates and fully initialises a depth-scaled Enemy instance. */
     private static Enemy initScaledEnemy(EnemyType type, int tileColumn, int tileRow, int effectiveDepth) {
-        float healthScale = GameBalance.enemyHealthScaleForDepth(effectiveDepth);
-        float damageScale = GameBalance.enemyDamageScaleForDepth(effectiveDepth);
+        // Power ladder (balance-overhaul order 1, R7): HP and damage climb the fitted compound curves.
+        float damageScale = GameMath.enemyDamageAtDepth(1f, effectiveDepth);
         Enemy enemy = new Enemy(type, tileColumn, tileRow);
-        int scaledHealth = Math.max(1, Math.round(type.maxHealth() * healthScale));
+        int scaledHealth = Math.max(1, Math.round(GameMath.enemyHealthAtDepth(type.maxHealth(), effectiveDepth)));
         enemy.maxHealth              = scaledHealth;
         enemy.health                 = scaledHealth;
         enemy.attackDamageMultiplier = damageScale;
@@ -458,7 +458,7 @@ public final class EnemyManager implements EnemyHitTarget {
             return BossBalance.statsForDepth(currentDepth).xpReward;
         }
         return GameMath.xpRewardAtDepth(BalanceConfig.XP_PER_THREAT_POINT, enemyType.baseThreatPoints(),
-                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
+                BalanceConfig.ENEMY_HEALTH_GROWTH, BalanceConfig.ENEMY_DAMAGE_GROWTH,
                 currentDepth);
     }
 
@@ -1220,7 +1220,7 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private void executeDefend(Enemy enemy, PlannedAction plan) {
         enemy.state = EnemyState.DEFENDING;
-        enemy.gainBlock(plan.blockGain, BalanceConfig.BLOCK_MAX, BalanceConfig.BLOCK_DECAY_TURNS);
+        enemy.gainBlock(plan.blockGain, depthScaledBlockCap(enemy), BalanceConfig.BLOCK_DECAY_TURNS);
     }
 
     /**
@@ -2226,8 +2226,13 @@ public final class EnemyManager implements EnemyHitTarget {
         int blockGain = GameMath.defendBlockGain(
                 defendBlockGainBase(enemy.type.role()),
                 GameBalance.enemyHealthScaleForDepth(enemy.dungeonLevel),
-                BalanceConfig.BLOCK_MAX);
+                depthScaledBlockCap(enemy));
         plan.setDefend(enemy.tileColumn, enemy.tileRow, blockGain);
+    }
+
+    /** The Block cap at this enemy's depth: BLOCK_MAX rides the enemy HP growth (power ladder). */
+    private static int depthScaledBlockCap(Enemy enemy) {
+        return Math.round(GameMath.enemyHealthAtDepth(BalanceConfig.BLOCK_MAX, enemy.dungeonLevel));
     }
 
     /** Depth-1 base Block for a bracing role; 0 for roles that never DEFEND (CHAFF/BOSS). */

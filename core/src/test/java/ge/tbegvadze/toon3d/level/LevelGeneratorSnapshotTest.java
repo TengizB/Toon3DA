@@ -93,8 +93,12 @@ class LevelGeneratorSnapshotTest {
      * determinism contract: same seed ⇒ same grid. Do NOT hand-edit; regenerate only via a deliberate,
      * reviewed behaviour change.
      */
+    // RE-BASELINE (balance-overhaul order 1, the POWER LADDER): the R8 rebase re-set every archetype's
+    // depth-1 HP and damage, which re-prices their Threat Points, so the encounter planner spends the same
+    // floor budget on a different roster (and the ammo box sizes the generator stamps changed). A
+    // deliberate balance change; the digest was confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "0922b639074c7f4efe2cc687bbee66e5f4188e92ebe73ff85ddd5e809b141649";
+            "50244378179daa82ad5aa0066b7284b007401df2ff77ffd1fa8d73331b36c961";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

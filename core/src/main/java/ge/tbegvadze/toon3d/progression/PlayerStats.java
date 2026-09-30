@@ -391,4 +391,16 @@ public final class PlayerStats {
         }
         return 1.0f;
     }
+
+    /**
+     * How much a base maximum (max HP or max armour) grows when the character reaches
+     * {@code newCharacterLevel} under the vitality ladder (R9): round(base * scale(L)) minus
+     * round(base * scale(L-1)). Only calls {@link GameMath#playerVitalityScale}; flat card bonuses
+     * are applied separately and never scaled.
+     */
+    public static int vitalityGrowthDelta(int baseMaximum, int newCharacterLevel) {
+        int newMaximum      = Math.round(baseMaximum * GameMath.playerVitalityScale(newCharacterLevel));
+        int previousMaximum = Math.round(baseMaximum * GameMath.playerVitalityScale(newCharacterLevel - 1));
+        return newMaximum - previousMaximum;
+    }
 }

@@ -193,9 +193,9 @@ public class GrenadeLauncher extends Weapon {
             char splashCell  = level.getCell(splashColumn, splashRow);
             boolean splashIsBarrel = barrelHitTarget != null
                     && barrelHitTarget.isExplosiveBarrel(splashColumn, splashRow);
-            int splashDamage = (offsetIndex == 0)
+            int splashDamage = Math.round(((offsetIndex == 0)
                     ? WeaponConstants.GRENADE_SPLASH_DAMAGE
-                    : WeaponConstants.GRENADE_FALLOFF_DAMAGE;
+                    : WeaponConstants.GRENADE_FALLOFF_DAMAGE) * getLadderDamageMultiplier());
             // A crystal spire caught in the blast takes the splash damage before it absorbs the rest — a
             // blast weapon clears spires and the golem together, which is the whole point of bringing one
             // to a Verdant Spiresower (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt).

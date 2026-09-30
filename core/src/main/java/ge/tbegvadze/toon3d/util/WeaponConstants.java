@@ -430,8 +430,9 @@ public final class WeaponConstants {
     public static final float WEAPON_PICKUP_GLOW_ALPHA             = 0.55f;  // additive glow opacity
 
     // ── Weapon level scaling ────────────────────────────────────────────────
-    public static final int   MAX_WEAPON_LEVEL                      = 10;
-    public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL         = BalanceConfig.WEAPON_LEVEL_DAMAGE_PER_LEVEL;  // +10% per level (balance: BalanceConfig)
+    public static final int   MAX_WEAPON_LEVEL                      = BalanceConfig.MAX_WEAPON_LEVEL;  // balance: BalanceConfig SECTION 20
+    /** The level span the legacy accuracy/reload/clip/range/ability curves were authored for (R6 re-span source). */
+    public static final int   LEGACY_WEAPON_LEVEL_SPAN              = 10;
     public static final float WEAPON_LEVEL_ACCURACY_PER_LEVEL       = 0.02f;  // +2% per level
     public static final float WEAPON_LEVEL_ACCURACY_MINIMUM         = 0.50f;  // accuracy floor
     public static final float WEAPON_LEVEL_RELOAD_STEP              = 0.15f;  // ticks reduced per level

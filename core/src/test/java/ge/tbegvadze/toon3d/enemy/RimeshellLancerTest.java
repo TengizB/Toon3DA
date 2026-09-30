@@ -128,7 +128,7 @@ class RimeshellLancerTest {
         assertEquals('[', EnemyType.RIMESHELL_LANCER.spawnChar());
     }
 
-    /** PROMISE 4 — Threat Points and golden ratio sit in the SOLDIER bands (the balance audit's rules). */
+    /** PROMISE 4 — Threat Points and the R8 hit counts sit in the SOLDIER bands (the balance audit's rules). */
     @Test
     void pricesIntoTheSoldierBands() {
         float threatPoints = EnemyType.RIMESHELL_LANCER.baseThreatPoints();
@@ -138,12 +138,15 @@ class RimeshellLancerTest {
                 "Lancer TP " + threatPoints + " must sit in the SOLDIER band "
                         + Arrays.toString(tpBand));
 
-        float goldenRatio = BalanceSchema.goldenRatioOf(EnemyType.RIMESHELL_LANCER);
-        float[] grBand = BalanceSchema.goldenRatioBand(EnemyRole.SOLDIER);
-        assertNotNull(grBand);
-        assertTrue(goldenRatio >= grBand[0] && goldenRatio <= grBand[1],
-                "Lancer golden ratio " + goldenRatio + " must sit in the SOLDIER band "
-                        + Arrays.toString(grBand));
+        // R8 (balance-overhaul order 1) replaced the golden-ratio band with the SOLDIER hit bands.
+        int hitsToKill = BalanceSchema.enemyHitsToKill(EnemyType.RIMESHELL_LANCER);
+        int hitsToDie = BalanceSchema.enemyHitsToDie(EnemyType.RIMESHELL_LANCER);
+        float[] hitBand = BalanceSchema.enemyHitBand(EnemyRole.SOLDIER);
+        assertNotNull(hitBand);
+        assertTrue(hitsToKill >= hitBand[0] && hitsToKill <= hitBand[1],
+                "Lancer hits to kill " + hitsToKill + " must sit in the SOLDIER band " + Arrays.toString(hitBand));
+        assertTrue(hitsToDie >= hitBand[2] && hitsToDie <= hitBand[3],
+                "Lancer hits to die " + hitsToDie + " must sit in the SOLDIER band " + Arrays.toString(hitBand));
     }
 
     /** PROMISE 5 — a SOLDIER at minSpawnDepth 1, so the planner can field it on every floor. */

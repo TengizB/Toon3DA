@@ -78,16 +78,14 @@ public final class BalanceSchema {
         WEAPON_POWER,
         /** R-ENEMY (part 1): every archetype declares a ROLE; threatPoints must land in the role TP band. */
         ENEMY_THREAT_POINTS,
-        /** R-ENEMY (part 2): golden ratio (TTD/TTK) in the role band. CHAFF is pack-exempt; MINI_ELITE is a deliberate spike. */
-        ENEMY_GOLDEN_RATIO,
+        /** R-ENEMY (part 2, balance-overhaul order 1 R8): depth-1 hits-to-kill / hits-to-die land in the role's R8 bands. */
+        ENEMY_HITS,
         /** R-CARD: every level-up card prices into LEVEL_UP_BUDGET_PP ± tolerance. */
         CARD_BUDGET,
         /** R-HEAL: every heal/armour pickup prices into its survival-turns-bought band. */
         HEAL_PRICING,
         /** R-TELEGRAPH: no attack > 25% reference eHP un-telegraphed; boss hard cap 35%. */
         TELEGRAPH,
-        /** R-DEPTH: depth-coupling ratio in [MIN, MAX] for depths 1..15. */
-        DEPTH_COUPLING,
         /** R-SCARCITY: model-floor S in [0.75, 0.95] floor-wide, < 0.60 per weapon; heal net-drain in band. */
         SCARCITY,
         /** R-DOT: exactly one definition per status; shim files must re-export BalanceConfig byte-for-byte. */
@@ -96,8 +94,6 @@ public final class BalanceSchema {
         FLAGS,
         /** COVERAGE: every content entry (weapon item, consumable, ammo type, enemy role) is classified/priced. */
         COVERAGE,
-        /** R-GEARGATE (order 2): the starting loadout is fair in region 1 but reads underpowered by the gate depth. */
-        GEAR_GATE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
         /** R-SCARCITY-DEPTH (order 3): the scarcity ratio S holds [0.75, 0.95] at EVERY depth 1..15. */
@@ -424,16 +420,23 @@ public final class BalanceSchema {
     private static final Map<EnemyRole, float[]> ENEMY_THREAT_POINT_BANDS = buildEnemyThreatPointBands();
 
     private static Map<EnemyRole, float[]> buildEnemyThreatPointBands() {
+        // Re-derived from the R8 hit targets (balance-overhaul order 1): the TP of the centre of each
+        // role's R8 box, spread by LADDER_TP_BAND_LOW/HIGH_FACTOR. BOSS deliberately absent (SECTION 14).
         Map<EnemyRole, float[]> bands = new EnumMap<>(EnemyRole.class);
-        bands.put(EnemyRole.CHAFF,
-                new float[]{BalanceConfig.ENEMY_TP_CHAFF_MIN,      BalanceConfig.ENEMY_TP_CHAFF_MAX});
-        bands.put(EnemyRole.SOLDIER,
-                new float[]{BalanceConfig.ENEMY_TP_SOLDIER_MIN,    BalanceConfig.ENEMY_TP_SOLDIER_MAX});
-        bands.put(EnemyRole.BRUISER,
-                new float[]{BalanceConfig.ENEMY_TP_BRUISER_MIN,    BalanceConfig.ENEMY_TP_BRUISER_MAX});
-        bands.put(EnemyRole.MINI_ELITE,
-                new float[]{BalanceConfig.ENEMY_TP_MINI_ELITE_MIN, BalanceConfig.ENEMY_TP_MINI_ELITE_MAX});
-        // BOSS deliberately absent: bosses are governed by the SECTION 14 ruleset, not TP bands.
+        for (Map.Entry<EnemyRole, float[]> entry : buildEnemyHitBands().entrySet()) {
+            float[] hitBand = entry.getValue();
+            float centreHitsToKill = (hitBand[0] + hitBand[1]) / 2f;
+            float centreHitsToDie = Float.isInfinite(hitBand[3])
+                    ? hitBand[2] * BalanceConfig.LADDER_TTD_OPEN_BAND_CENTRE_FACTOR
+                    : (hitBand[2] + hitBand[3]) / 2f;
+            float centreEffectiveHitPoints = centreHitsToKill * GameMath.ladderReferenceHitDamage();
+            float centreHit = BalanceConfig.REFERENCE_PLAYER_EHP / centreHitsToDie;
+            float centreThreatPoints = GameMath.threatPoints(centreHit, 1, centreEffectiveHitPoints,
+                    BalanceConfig.REFERENCE_PLAYER_DPT, BalanceConfig.POSITIONAL_MULT_MELEE);
+            bands.put(entry.getKey(), new float[]{
+                    centreThreatPoints * BalanceConfig.LADDER_TP_BAND_LOW_FACTOR,
+                    centreThreatPoints * BalanceConfig.LADDER_TP_BAND_HIGH_FACTOR});
+        }
         return Collections.unmodifiableMap(bands);
     }
 
@@ -443,23 +446,35 @@ public final class BalanceSchema {
         return band == null ? null : band.clone();
     }
 
-    /** The [min, max] golden-ratio band for a role, or null when the role is exempt by contract. */
-    public static float[] goldenRatioBand(EnemyRole role) {
-        float[] band = ENEMY_GOLDEN_RATIO_BANDS.get(role);
+    /**
+     * The R8 hit bands for a role — {hitsToKillMin, hitsToKillMax, hitsToDieMin, hitsToDieMax} — or null
+     * for BOSS (bosses follow the SECTION 14 ruleset). CHAFF has no hits-to-die ceiling (+infinity).
+     */
+    public static float[] enemyHitBand(EnemyRole role) {
+        float[] band = ENEMY_HIT_BANDS.get(role);
         return band == null ? null : band.clone();
     }
 
-    // Golden-ratio bands per role. CHAFF and MINI_ELITE are exempt BY CONTRACT: chaff is budgeted
-    // by pack TP (a lone unit reads ~9), and a mini-elite is a deliberate spike the player avoids
-    // or spends heavies on (reads under the duel band by design).
-    private static final Map<EnemyRole, float[]> ENEMY_GOLDEN_RATIO_BANDS = buildEnemyGoldenRatioBands();
+    // R8 (balance-overhaul order 1) hit bands per role, as DATA: depth-1 hits the on-curve reference
+    // (Assault Rifle, COMMON L1, at LADDER_REFERENCE_RANGE_TILES) needs to kill the archetype, and the
+    // archetype's ordinary hits the 205-eHP start player survives. Replaces the golden-ratio bands (the
+    // CHAFF pack exemption and the MINI_ELITE spike exemption are gone: every role now has a target).
+    private static final Map<EnemyRole, float[]> ENEMY_HIT_BANDS = buildEnemyHitBands();
 
-    private static Map<EnemyRole, float[]> buildEnemyGoldenRatioBands() {
+    private static Map<EnemyRole, float[]> buildEnemyHitBands() {
         Map<EnemyRole, float[]> bands = new EnumMap<>(EnemyRole.class);
-        bands.put(EnemyRole.SOLDIER,
-                new float[]{BalanceConfig.GOLDEN_RATIO_TRASH_MIN,   BalanceConfig.GOLDEN_RATIO_TRASH_MAX});
-        bands.put(EnemyRole.BRUISER,
-                new float[]{BalanceConfig.GOLDEN_RATIO_BRUISER_MIN, BalanceConfig.GOLDEN_RATIO_BRUISER_MAX});
+        bands.put(EnemyRole.CHAFF, new float[]{
+                BalanceConfig.LADDER_TTK_HITS_CHAFF_MIN, BalanceConfig.LADDER_TTK_HITS_CHAFF_MAX,
+                BalanceConfig.LADDER_TTD_HITS_CHAFF_MIN, Float.POSITIVE_INFINITY});
+        bands.put(EnemyRole.SOLDIER, new float[]{
+                BalanceConfig.LADDER_TTK_HITS_SOLDIER_MIN, BalanceConfig.LADDER_TTK_HITS_SOLDIER_MAX,
+                BalanceConfig.LADDER_TTD_HITS_SOLDIER_MIN, BalanceConfig.LADDER_TTD_HITS_SOLDIER_MAX});
+        bands.put(EnemyRole.BRUISER, new float[]{
+                BalanceConfig.LADDER_TTK_HITS_BRUISER_MIN, BalanceConfig.LADDER_TTK_HITS_BRUISER_MAX,
+                BalanceConfig.LADDER_TTD_HITS_BRUISER_MIN, BalanceConfig.LADDER_TTD_HITS_BRUISER_MAX});
+        bands.put(EnemyRole.MINI_ELITE, new float[]{
+                BalanceConfig.LADDER_TTK_HITS_MINI_ELITE_MIN, BalanceConfig.LADDER_TTK_HITS_MINI_ELITE_MAX,
+                BalanceConfig.LADDER_TTD_HITS_MINI_ELITE_MIN, BalanceConfig.LADDER_TTD_HITS_MINI_ELITE_MAX});
         return Collections.unmodifiableMap(bands);
     }
 
@@ -567,11 +582,13 @@ public final class BalanceSchema {
     /** One priced heal/armour pickup: value restored + which survival-turns band it must land in. */
     public static final class HealPickupSpec {
         public final String  displayName;
+        public final float   maxFraction;
         public final int     restoredValue;
         public final boolean isLargePickup;
 
-        HealPickupSpec(String displayName, int restoredValue, boolean isLargePickup) {
+        HealPickupSpec(String displayName, float maxFraction, int restoredValue, boolean isLargePickup) {
             this.displayName   = displayName;
+            this.maxFraction   = maxFraction;
             this.restoredValue = restoredValue;
             this.isLargePickup = isLargePickup;
         }
@@ -581,11 +598,45 @@ public final class BalanceSchema {
 
     private static List<HealPickupSpec> buildHealPickupRegistry() {
         List<HealPickupSpec> registry = new ArrayList<>();
-        registry.add(new HealPickupSpec("Stim pack '+'",    BalanceConfig.MEDKIT_STIM_HEAL,   false));
-        registry.add(new HealPickupSpec("Field medkit 'H'", BalanceConfig.MEDKIT_FULL_HEAL,   true));
-        registry.add(new HealPickupSpec("Armour shard 'a'", BalanceConfig.ARMOUR_SHARD_VALUE, false));
-        registry.add(new HealPickupSpec("Security vest 'A'", BalanceConfig.ARMOUR_VEST_VALUE, true));
+        // R10 (balance-overhaul order 1): heals are FRACTIONS of max; priced here at the depth-1 player.
+        registry.add(new HealPickupSpec("Stim pack '+'",     BalanceConfig.MEDKIT_STIM_HEAL_FRACTION,
+                modelStimHeal(),         false));
+        registry.add(new HealPickupSpec("Field medkit 'H'",  BalanceConfig.MEDKIT_FULL_HEAL_FRACTION,
+                modelFullMedkitHeal(),   true));
+        registry.add(new HealPickupSpec("Armour shard 'a'",  BalanceConfig.ARMOUR_SHARD_FRACTION,
+                modelArmourShardValue(), false));
+        registry.add(new HealPickupSpec("Security vest 'A'", BalanceConfig.ARMOUR_VEST_FRACTION,
+                modelArmourVestValue(),  true));
         return Collections.unmodifiableList(registry);
+    }
+
+    /** Stim pack at the depth-1 player: MEDKIT_STIM_HEAL_FRACTION of PLAYER_MAX_HEALTH (R10). */
+    public static int modelStimHeal() {
+        return GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH, BalanceConfig.MEDKIT_STIM_HEAL_FRACTION);
+    }
+
+    /** Field medkit at the depth-1 player: MEDKIT_FULL_HEAL_FRACTION of PLAYER_MAX_HEALTH (R10). */
+    public static int modelFullMedkitHeal() {
+        return GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH, BalanceConfig.MEDKIT_FULL_HEAL_FRACTION);
+    }
+
+    /** Armour shard at the depth-1 player: ARMOUR_SHARD_FRACTION of PLAYER_MAX_ARMOR (R10). */
+    public static int modelArmourShardValue() {
+        return GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_ARMOR, BalanceConfig.ARMOUR_SHARD_FRACTION);
+    }
+
+    /** Security vest at the depth-1 player: ARMOUR_VEST_FRACTION of PLAYER_MAX_ARMOR (R10). */
+    public static int modelArmourVestValue() {
+        return GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_ARMOR, BalanceConfig.ARMOUR_VEST_FRACTION);
+    }
+
+    /** Depth-1 heal SUPPLY the model floor hands out (expected medkits + armour pickups, R10 values). */
+    public static float modelFloorHealSupply() {
+        float averageMedkitHeal  = (modelStimHeal() + modelFullMedkitHeal()) / 2f;
+        float averageArmourValue = (modelArmourShardValue() + modelArmourVestValue()) / 2f;
+        return GameMath.healSupplyPerFloor(
+                BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
+                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
     }
 
     /** The registered heal pickups — BalanceReport's HEAL PRICING rows iterate exactly this list. */
@@ -746,16 +797,14 @@ public final class BalanceSchema {
         List<RuleResult> results = new ArrayList<>();
         results.addAll(weaponPowerResults());
         results.addAll(enemyThreatPointResults());
-        results.addAll(enemyGoldenRatioResults());
+        results.addAll(enemyHitResults());
         results.addAll(cardBudgetResults());
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
-        results.addAll(depthCouplingResults());
         results.addAll(scarcityResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
-        results.addAll(gearGateResults());
         results.addAll(abilityBudgetResults());
         results.addAll(scarcityDepthResults());
         results.addAll(healDrainDepthResults());
@@ -811,33 +860,37 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-ENEMY: golden ratio (turns-to-die / turns-to-kill at the reference player) in the role band.
-     * TTK uses the SUSTAINED reference DPT (contract decision); CHAFF and MINI_ELITE are exempt by
-     * contract (pack budgeting / deliberate spike).
+     * R-ENEMY part 2 (balance-overhaul order 1, R8): every non-boss archetype's depth-1 fight length lands in
+     * its role's hit bands — hits the on-curve reference weapon needs to kill it (eHP / the R8 reference hit,
+     * rounded up) and ordinary hits of it the start player survives (REFERENCE_PLAYER_EHP / its hit, up).
      */
-    public static List<RuleResult> enemyGoldenRatioResults() {
+    public static List<RuleResult> enemyHitResults() {
         List<RuleResult> results = new ArrayList<>();
         for (EnemyType enemyType : EnemyType.values()) {
-            float[] band = ENEMY_GOLDEN_RATIO_BANDS.get(enemyType.role());
-            if (band == null) continue; // CHAFF/MINI_ELITE/BOSS: exempt by contract
-            float goldenRatio = goldenRatioOf(enemyType);
-            boolean inBand = goldenRatio >= band[0] && goldenRatio <= band[1];
-            results.add(new RuleResult(RuleKind.ENEMY_GOLDEN_RATIO, enemyType.displayName(),
-                    goldenRatio, band[0], band[1], inBand, "role " + enemyType.role()));
+            float[] band = ENEMY_HIT_BANDS.get(enemyType.role());
+            if (band == null) continue; // BOSS: SECTION 14 ruleset; unknown roles are a COVERAGE violation
+            int hitsToKill = enemyHitsToKill(enemyType);
+            int hitsToDie = enemyHitsToDie(enemyType);
+            results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to kill",
+                    hitsToKill, band[0], band[1], hitsToKill >= band[0] && hitsToKill <= band[1],
+                    "role " + enemyType.role() + String.format("; eHP %.0f / %.1f per reference hit",
+                            enemyType.effectiveHitPoints(), GameMath.ladderReferenceHitDamage())));
+            results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to die",
+                    hitsToDie, band[2], band[3], hitsToDie >= band[2] && hitsToDie <= band[3],
+                    "role " + enemyType.role() + "; " + BalanceConfig.REFERENCE_PLAYER_EHP + " eHP / "
+                            + enemyType.attackDamage() + " per hit"));
         }
         return results;
     }
 
-    /** Golden ratio of one archetype at the reference player (shared by the audit and the report). */
-    public static float goldenRatioOf(EnemyType enemyType) {
-        // Order 5: enemy eHP runs through the shared survivability primitive (EnemyType.effectiveHitPoints
-        // -> GameMath.enemyEffectiveHitPoints), not a hard-coded raw-HP shortcut, so the first mitigating
-        // archetype re-prices its own golden ratio for free.
-        float enemyEffectiveHitPoints = enemyType.effectiveHitPoints();
-        int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, BalanceConfig.REFERENCE_PLAYER_DPT);
-        float enemyDamagePerTurn = (float) enemyType.attackDamage() / Math.max(1, enemyType.attackCadenceTurns());
-        int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
-        return GameMath.goldenRatio(turnsToDie, turnsToKill);
+    /** Depth-1 hits the R8 reference weapon needs to kill the archetype (shared by the audit and the report). */
+    public static int enemyHitsToKill(EnemyType enemyType) {
+        return GameMath.turnsToKill(enemyType.effectiveHitPoints(), GameMath.ladderReferenceHitDamage());
+    }
+
+    /** Depth-1 ordinary hits of the archetype the 205-eHP start player survives (shared by the audit and the report). */
+    public static int enemyHitsToDie(EnemyType enemyType) {
+        return GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyType.attackDamage());
     }
 
     /** R-CARD: every level-up card prices into the power-point budget band. */
@@ -854,21 +907,28 @@ public final class BalanceSchema {
         return results;
     }
 
-    /** R-HEAL: every heal/armour pickup buys a survival-turn count inside its size band. */
+    /**
+     * R-HEAL (re-stated by balance-overhaul order 1): every heal/armour pickup restores a FRACTION of the
+     * max it refills (R10), and that fraction lands in its size band — small pickups top up a slice, large
+     * ones buy most of a fight but never a full reset. Survival turns bought on the model floor ride along
+     * in the detail (information; they fell with the R8 rebase's harder hits).
+     */
     public static List<RuleResult> healPricingResults() {
         float averageIncomingDamagePerTurn = modelFloorAverageIncomingDamagePerTurn();
         List<RuleResult> results = new ArrayList<>();
         for (HealPickupSpec pickup : HEAL_PICKUPS) {
-            float survivalTurns = GameMath.survivalTurnsBought(pickup.restoredValue, averageIncomingDamagePerTurn);
             float bandMinimum = pickup.isLargePickup
-                    ? BalanceConfig.HEAL_LARGE_SURVIVAL_TURNS_MIN : BalanceConfig.HEAL_SMALL_SURVIVAL_TURNS_MIN;
+                    ? BalanceConfig.HEAL_LARGE_MAX_FRACTION_MIN : BalanceConfig.HEAL_SMALL_MAX_FRACTION_MIN;
             float bandMaximum = pickup.isLargePickup
-                    ? BalanceConfig.HEAL_LARGE_SURVIVAL_TURNS_MAX : BalanceConfig.HEAL_SMALL_SURVIVAL_TURNS_MAX;
-            boolean inBand = survivalTurns >= bandMinimum && survivalTurns <= bandMaximum;
-            results.add(new RuleResult(RuleKind.HEAL_PRICING, pickup.displayName, survivalTurns,
+                    ? BalanceConfig.HEAL_LARGE_MAX_FRACTION_MAX : BalanceConfig.HEAL_SMALL_MAX_FRACTION_MAX;
+            boolean inBand = pickup.maxFraction >= bandMinimum && pickup.maxFraction <= bandMaximum;
+            float survivalTurns = GameMath.survivalTurnsBought(pickup.restoredValue, averageIncomingDamagePerTurn);
+            results.add(new RuleResult(RuleKind.HEAL_PRICING, pickup.displayName, pickup.maxFraction,
                     bandMinimum, bandMaximum, inBand,
-                    (pickup.isLargePickup ? "large" : "small") + " pickup; survival turns at "
-                            + String.format("%.1f", averageIncomingDamagePerTurn) + " avg incoming dmg/turn"));
+                    (pickup.isLargePickup ? "large" : "small") + " pickup; " + pickup.restoredValue
+                            + " at the depth-1 player = " + String.format("%.1f", survivalTurns)
+                            + " survival turns at " + String.format("%.1f", averageIncomingDamagePerTurn)
+                            + " avg incoming dmg/turn"));
         }
         return results;
     }
@@ -895,69 +955,14 @@ public final class BalanceSchema {
     }
 
     /**
-     * The expected weapon ABILITY-PP budget per region (new-game-balancr order 4), derived from order 2's
-     * data: the average of the tier ability-PP budgets over the region's dropped-weapon tier band
-     * (WEAPON_DROP_TIER_MIN/MAX_BY_REGION). This is the honest ability-power input to playerPowerAtDepthV2;
-     * a purely data-driven read of the priced catalogue, never a switch. Indexed 0-based by region.
-     */
-    private static final float[] REGION_ABILITY_BUDGET_POINTS = computeRegionAbilityBudgetPoints();
-
-    private static float[] computeRegionAbilityBudgetPoints() {
-        int regionCount = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION.length;
-        WeaponTier[] tiers = WeaponTier.values();
-        float[] budgets = new float[regionCount];
-        for (int region = 0; region < regionCount; region++) {
-            int minOrdinal = Math.max(0, Math.min(tiers.length - 1, BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION[region]));
-            int maxOrdinal = Math.max(0, Math.min(tiers.length - 1, BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION[region]));
-            float minBudget = WeaponRoller.tierAbilityPowerPointBudget(tiers[minOrdinal]);
-            float maxBudget = WeaponRoller.tierAbilityPowerPointBudget(tiers[maxOrdinal]);
-            budgets[region] = (minBudget + maxBudget) / 2f;
-        }
-        return budgets;
-    }
-
-    public static float[] regionAbilityBudgetPoints() {
-        return REGION_ABILITY_BUDGET_POINTS;
-    }
-
-    /** The player's honest total-power multiplier at a depth (order 4 v2 model) — shared by the rule and the report. */
-    public static float playerPowerV2(int depth) {
-        return GameMath.playerPowerAtDepthV2(BalanceConfig.LEVEL_UP_BUDGET_PP,
-                BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, BalanceConfig.GEAR_CURVE_PER_REGION,
-                regionAbilityBudgetPoints(), depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
-    }
-
-    /**
-     * R-DEPTH: the depth-coupling ratio holds its band across depths 1..15, measured against the HONEST
-     * total-power model (new-game-balancr order 4) — cardPower * gearRamp * abilityPower, not the old
-     * cards-only fiction. Depths 16+ are surfaced by BalanceReport (may degrade gracefully to the EASY
-     * side); the rule enforces the tuned range 1..15.
-     */
-    public static List<RuleResult> depthCouplingResults() {
-        List<RuleResult> results = new ArrayList<>();
-        for (int depth = 1; depth <= 15; depth++) {
-            float playerPower = playerPowerV2(depth);
-            float enemyThreat = GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                    BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
-            float ratio = GameMath.depthCouplingRatio(playerPower, enemyThreat);
-            boolean inBand = ratio >= BalanceConfig.DEPTH_COUPLING_RATIO_MIN
-                    && ratio <= BalanceConfig.DEPTH_COUPLING_RATIO_MAX;
-            results.add(new RuleResult(RuleKind.DEPTH_COUPLING, "depth " + depth, ratio,
-                    BalanceConfig.DEPTH_COUPLING_RATIO_MIN, BalanceConfig.DEPTH_COUPLING_RATIO_MAX,
-                    inBand, "v2 honest power model"));
-        }
-        return results;
-    }
-
-    /**
      * R-REGION (new-game-balancr order 5): the REGION DANGER DIAL is a budgeted, provably-fair number, not
      * a vibe. It checks that (1) every region's TP multiplier sits in [MIN, MAX]; (2) the dial is monotonic
      * non-decreasing across regions (a deeper region is never easier); (3) the two lethal regions (C/D)
      * out-dial region A by a measurable margin — a lethal region is EXPLICITLY, budgeted-ly lethal; and
-     * (4) the depth-coupling audit still holds for depths 1..15 in every region lane. Point (4) is the key
-     * fairness proof: the region dial scales the BUDGET (how many bodies), not the per-enemy threat scale,
-     * so the per-fight coupling ratio is region-INDEPENDENT and stays in band in every lane — region danger
-     * is an attrition tax of extra bodies, not an unfair per-duel spike.
+     * (4) the power ladder (R-LADDER L1) still holds in every region lane. Point (4) is the key fairness
+     * proof: the region dial scales the BUDGET (how many bodies), not the per-enemy growth, so the on-curve
+     * fight length is region-INDEPENDENT in every lane — region danger is an attrition tax of extra bodies,
+     * not an unfair per-duel spike.
      */
     public static List<RuleResult> regionResults() {
         List<RuleResult> results = new ArrayList<>();
@@ -994,21 +999,20 @@ public final class BalanceSchema {
                     regionDisplayName(region) + " dial " + multipliers[region] + " vs A " + regionAMultiplier));
         }
 
-        // 4. Depth-coupling holds 1..15 in every region lane (region-independent by construction — the
-        //    dial scales budget, not per-enemy threat). One result per lane confirms the whole sweep stays
-        //    in band, so the depth-coupling audit provably "includes" the region dial as fair.
+        // 4. The power ladder (R-LADDER L1) holds in every region lane: the dial scales the BUDGET (how
+        //    many bodies), never the per-enemy growth, so the on-curve fight length is region-independent.
+        //    One result per lane confirms the whole 1..RUN_FINAL_DEPTH sweep stays inside the L1 tolerance.
+        //    (balance-overhaul order 1: replaces the retired R-DEPTH coupling check.)
+        float tolerance = BalanceConfig.LADDER_ON_CURVE_TOLERANCE;
+        boolean ladderFlat = true;
+        for (RuleResult ladder : ladderResults()) {
+            if (ladder.subject.startsWith("L1 ") && !ladder.satisfied) ladderFlat = false;
+        }
         for (int region = 0; region < multipliers.length; region++) {
-            boolean laneHolds = true;
-            for (int depth = 1; depth <= 15; depth++) {
-                float ratio = GameMath.depthCouplingRatio(playerPowerV2(depth),
-                        GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth));
-                if (ratio < BalanceConfig.DEPTH_COUPLING_RATIO_MIN
-                        || ratio > BalanceConfig.DEPTH_COUPLING_RATIO_MAX) laneHolds = false;
-            }
             results.add(new RuleResult(RuleKind.REGION_DANGER,
-                    "region " + region + " lane coupling 1..15", laneHolds ? 1f : 0f, 1f, 1f, laneHolds,
-                    regionDisplayName(region) + " — per-fight coupling is region-independent and in band"));
+                    "region " + region + " lane ladder 1.." + BalanceConfig.RUN_FINAL_DEPTH, ladderFlat ? 1f : 0f,
+                    1f, 1f, ladderFlat, regionDisplayName(region)
+                            + " — per-fight length is region-independent and within +/-" + tolerance));
         }
         return results;
     }
@@ -1050,11 +1054,7 @@ public final class BalanceSchema {
 
         float incoming = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
                 BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-        float averageMedkitHeal = (BalanceConfig.MEDKIT_STIM_HEAL + BalanceConfig.MEDKIT_FULL_HEAL) / 2f;
-        float averageArmourValue = (BalanceConfig.ARMOUR_SHARD_VALUE + BalanceConfig.ARMOUR_VEST_VALUE) / 2f;
-        float healSupply = GameMath.healSupplyPerFloor(
-                BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
-                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
+        float healSupply = modelFloorHealSupply();
         float netDrainFraction = GameMath.netHpDrainPerFloor(incoming, healSupply)
                 / BalanceConfig.REFERENCE_PLAYER_EHP;
         boolean drainInBand = netDrainFraction >= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN
@@ -1111,9 +1111,8 @@ public final class BalanceSchema {
     public static float modelledScarcityAtDepth(int depth) {
         int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
         float demand = GameMath.floorDemandAtDepth(modelFloorDemand(),
-                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+                BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
         float supply = GameMath.ammoSupplyAtDepth(modelFloorTotalRangedSupply(),
-                BalanceConfig.GEAR_CURVE_PER_REGION,
                 BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
         return GameMath.scarcityRatioAtDepth(supply, demand);
     }
@@ -1124,17 +1123,17 @@ public final class BalanceSchema {
         float modelSupply = modelFloorTotalRangedSupply();
         float worstWeaponSupply = modelFloorWorstWeaponSupply();
         int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        for (int depth = 1; depth <= 15; depth++) {
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
             float demand = GameMath.floorDemandAtDepth(modelDemand,
-                    BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
-            float supply = GameMath.ammoSupplyAtDepth(modelSupply, BalanceConfig.GEAR_CURVE_PER_REGION,
+                    BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
+            float supply = GameMath.ammoSupplyAtDepth(modelSupply,
                     BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
             float scarcity = GameMath.scarcityRatioAtDepth(supply, demand);
             boolean inBand = scarcity >= BalanceConfig.SCARCITY_RATIO_FLOOR_MIN
                     && scarcity <= BalanceConfig.SCARCITY_RATIO_FLOOR_MAX;
             // Worst per-weapon share at this depth (SUPPLY of the single biggest weapon over DEMAND).
             float worstSupply = GameMath.ammoSupplyAtDepth(worstWeaponSupply,
-                    BalanceConfig.GEAR_CURVE_PER_REGION, BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+                    BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
             float worstShare = GameMath.scarcityRatioAtDepth(worstSupply, demand);
             results.add(new RuleResult(RuleKind.SCARCITY_DEPTH, "S at depth " + depth, scarcity,
                     BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX, inBand,
@@ -1153,17 +1152,13 @@ public final class BalanceSchema {
         List<RuleResult> results = new ArrayList<>();
         float incomingBase = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
                 BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-        float averageMedkitHeal  = (BalanceConfig.MEDKIT_STIM_HEAL + BalanceConfig.MEDKIT_FULL_HEAL) / 2f;
-        float averageArmourValue = (BalanceConfig.ARMOUR_SHARD_VALUE + BalanceConfig.ARMOUR_VEST_VALUE) / 2f;
-        float healBase = GameMath.healSupplyPerFloor(
-                BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
-                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
+        float healBase = modelFloorHealSupply();
         int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        for (int depth = 1; depth <= 15; depth++) {
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
             float healRegionMultiplier = GameMath.perRegionMultiplierAtDepth(
                     BalanceConfig.HEAL_SUPPLY_REGION_MULTIPLIER, depth, band);
             float drainFraction = GameMath.netHpDrainFractionAtDepth(incomingBase, healBase,
-                    healRegionMultiplier, BalanceConfig.REFERENCE_PLAYER_EHP);
+                    healRegionMultiplier, depth);
             boolean inBand = drainFraction >= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN
                     && drainFraction <= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX;
             results.add(new RuleResult(RuleKind.HEALDRAIN_DEPTH, "net drain at depth " + depth, drainFraction,
@@ -1220,7 +1215,7 @@ public final class BalanceSchema {
         int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
         float killCreditBase = modelFloorKillCreditReward();
         float chipIncome = chipIncomePerFloor();
-        int regionCount = (15 + band - 1) / band; // regions spanning depths 1..15
+        int regionCount = (BalanceConfig.RUN_FINAL_DEPTH + band - 1) / band; // regions spanning 1..RUN_FINAL_DEPTH
         for (int region = 0; region < regionCount; region++) {
             int firstDepth = region * band + 1;
             int representativeDepth = firstDepth + (band - 1) / 2; // region's middle floor
@@ -1249,15 +1244,15 @@ public final class BalanceSchema {
     /** The XP a floor's roster is worth at a depth (order 4): XP_PER_THREAT_POINT * fill-target * budget. */
     public static float floorRosterXp(int depth) {
         float floorBudget = GameMath.floorThreatPointBudget(BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
-                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+                BalanceConfig.ENEMY_HEALTH_GROWTH, BalanceConfig.ENEMY_DAMAGE_GROWTH, depth);
         return BalanceConfig.XP_PER_THREAT_POINT
                 * BalanceConfig.ENCOUNTER_BUDGET_FILL_TARGET_FRACTION * floorBudget;
     }
 
-    /** R-XP-PACE: available XP / xpRequired(expectedLevel) in [MIN, MAX] for every depth 1..15. */
+    /** R-XP-PACE: available XP / xpRequired(expectedLevel) in [MIN, MAX] for every depth 1..RUN_FINAL_DEPTH. */
     public static List<RuleResult> xpPaceResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (int depth = 1; depth <= 15; depth++) {
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
             int expectedLevel = GameMath.expectedLevelAtDepth(BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
             int requiredXp = GameMath.xpRequiredForLevelGeometric(BalanceConfig.XP_BASE_REQUIREMENT,
                     BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL, expectedLevel);
@@ -1278,30 +1273,35 @@ public final class BalanceSchema {
     // equal PP budget (R-CARD); this rule proves the budget is spent where it changes the fight.
     // =====================================================================================
 
-    /** Max integer breakpoint a card crosses at a depth: offence turns-shaved OR defence turns-survived, vs the region soldier. */
+    /**
+     * Max integer breakpoint a card crosses at a depth: offence turns-shaved OR defence turns-survived, vs the
+     * region soldier, for the ON-CURVE expected player (balance-overhaul order 1: the ExpectedPlayer model
+     * replaces the retired gear-curve DPT and the fixed reference eHP).
+     */
     public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
-        EnemyType soldier = GEAR_GATE_REFERENCE_SOLDIER;
-        float soldierEffectiveHitPoints = soldier.effectiveHitPoints()
-                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
-        float soldierDamagePerTurn = ((float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()))
-                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
-        float expectedPlayerDamagePerTurn = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
-                BalanceConfig.GEAR_CURVE_PER_REGION, depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        EnemyType soldier = REGION_REFERENCE_SOLDIER;
+        ExpectedPlayer player = GameMath.expectedPlayerAtDepth(depth);
+        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.effectiveHitPoints(), depth);
+        float soldierDamagePerTurn = GameMath.enemyDamageAtDepth(
+                (float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()), depth);
         // OFFENCE: whole turns shaved off killing the soldier when the card's DPT is added.
+        // Offence cards are a PP %-lift on the player's DPT (the ExpectedPlayer convention), so the card's
+        // depth-1 gain is applied as a FRACTION of the on-curve DPT at this depth.
+        float offenceLift = card.damagePerTurnGain() / BalanceConfig.REFERENCE_PLAYER_DPT;
         int offenceBreakpoint = GameMath.turnsToKillBreakpointGain(soldierEffectiveHitPoints,
-                expectedPlayerDamagePerTurn, expectedPlayerDamagePerTurn + card.damagePerTurnGain());
+                player.damagePerTurn, player.damagePerTurn * (1f + offenceLift));
         // DEFENCE: whole extra turns the player survives the soldier when the card's eHP is added.
-        int turnsToDieBefore = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, soldierDamagePerTurn);
-        int turnsToDieAfter  = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP + card.effectiveHitPointGain(),
+        int turnsToDieBefore = GameMath.turnsToKill(player.effectiveHitPoints, soldierDamagePerTurn);
+        int turnsToDieAfter  = GameMath.turnsToKill(player.effectiveHitPoints + card.effectiveHitPointGain(),
                 soldierDamagePerTurn);
         int defenceBreakpoint = turnsToDieAfter - turnsToDieBefore;
         return Math.max(offenceBreakpoint, defenceBreakpoint);
     }
 
-    /** The deepest breakpoint a card crosses anywhere in depths 1..15 (shared by the rule and the report). */
+    /** The deepest breakpoint a card crosses anywhere in depths 1..RUN_FINAL_DEPTH (shared by the rule and the report). */
     public static int cardBestBreakpoint(UpgradeCard card) {
         int best = 0;
-        for (int depth = 1; depth <= 15; depth++) {
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
             best = Math.max(best, cardBreakpointGainAtDepth(card, depth));
         }
         return best;
@@ -1501,82 +1501,13 @@ public final class BalanceSchema {
         return results;
     }
 
-    // =====================================================================================
-    // R-GEARGATE (new-game-balancr order 2) — the starting loadout is FAIR at the start but reads
-    // UNDERPOWERED once the gear curve has stepped, while an ON-CURVE player stays fair. Proven on a
-    // reference SOLDIER at three points, all through the same golden-ratio lens (TTD / TTK):
-    //   1. START FAIR   — stagnant (reference-DPT) golden ratio at depth 1 is IN the soldier band.
-    //   2. GATE FIRES   — the SAME stagnant player's golden ratio at the region-2 entry depth is BELOW
-    //                     the band (the start weapon now reads underpowered — stagnation is punished).
-    //   3. ON-CURVE FAIR— the EXPECTED player (reference DPT * gearCurve) golden ratio at that same
-    //                     depth is back IN band (upgrading keeps you fair — "find better gear or die").
-    // Region-1 fairness for the WHOLE roster is already guaranteed by R-ENEMY (same reference-DPT lens
-    // at depth 1); this rule adds the depth axis the gear gate introduces.
-    // =====================================================================================
+    // The reference SOLDIER the card-breakpoint rule (and BalanceReport) prove a level-up against. It was
+    // the R-GEARGATE reference soldier; R-GEARGATE is retired (balance-overhaul order 1 — replaced by
+    // R-LADDER L2/L4) and the soldier stays as R-CARD-BREAKPOINT's yardstick, which is R-LADDER's SOLDIER.
+    private static final EnemyType REGION_REFERENCE_SOLDIER = EnemyType.VOID_SHROUD;
 
-    /** The reference "region-2 entry soldier" the gate is proven on (a standard, common SOLDIER). */
-    private static final EnemyType GEAR_GATE_REFERENCE_SOLDIER = EnemyType.VOID_SHROUD;
-
-    /** The reference soldier the gear gate is proven on (BalanceReport's GEAR CURVE table). */
-    public static EnemyType gearGateReferenceSoldier() { return GEAR_GATE_REFERENCE_SOLDIER; }
-
-    /** Display name of the gear-gate reference soldier. */
-    public static String gearGateReferenceSoldierName() { return GEAR_GATE_REFERENCE_SOLDIER.displayName(); }
-
-    /** Golden ratio of an archetype at a given depth against a player of the given sustained DPT. */
-    private static float gearGateGoldenRatio(EnemyType enemyType, int depth, float playerDamagePerTurn) {
-        float enemyEffectiveHitPoints = enemyType.effectiveHitPoints()
-                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
-        int turnsToKill = GameMath.turnsToKill(enemyEffectiveHitPoints, playerDamagePerTurn);
-        float enemyDamagePerTurn = ((float) enemyType.attackDamage() / Math.max(1, enemyType.attackCadenceTurns()))
-                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
-        int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
-        return GameMath.goldenRatio(turnsToDie, turnsToKill);
-    }
-
-    /** R-GEARGATE: the start is fair, the gate fires, and the on-curve player stays fair. */
-    public static List<RuleResult> gearGateResults() {
-        List<RuleResult> results = new ArrayList<>();
-        EnemyType soldier   = GEAR_GATE_REFERENCE_SOLDIER;
-        int region2Depth    = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE + 1; // first floor of region 2
-        float bandMin       = BalanceConfig.GOLDEN_RATIO_TRASH_MIN;
-        float bandMax       = BalanceConfig.GOLDEN_RATIO_TRASH_MAX;
-        float stagnantDpt   = BalanceConfig.REFERENCE_PLAYER_DPT; // never upgrades — keeps the depth-1 anchor
-        float expectedDpt   = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
-                BalanceConfig.GEAR_CURVE_PER_REGION, region2Depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
-
-        // 1. START FAIR — stagnant golden ratio at depth 1 is inside the soldier band.
-        float startGolden = gearGateGoldenRatio(soldier, 1, stagnantDpt);
-        results.add(new RuleResult(RuleKind.GEAR_GATE, soldier.displayName() + " region-1 start fair",
-                startGolden, bandMin, bandMax, startGolden >= bandMin && startGolden <= bandMax,
-                "starting loadout (reference DPT " + BalanceConfig.REFERENCE_PLAYER_DPT + ") vs depth-1 soldier"));
-
-        // 2. GATE FIRES — the same stagnant player is now UNDER the band at the region-2 entry depth.
-        float stagnantGateGolden = gearGateGoldenRatio(soldier, region2Depth, stagnantDpt);
-        results.add(new RuleResult(RuleKind.GEAR_GATE, soldier.displayName() + " region-2 gate fires",
-                stagnantGateGolden, 0f, bandMin, stagnantGateGolden < bandMin,
-                "stagnant starting loadout vs region-2 (depth " + region2Depth + ") soldier must read UNDER the band"));
-
-        // 3. ON-CURVE FAIR — the expected (geared) player is back in band at the same depth.
-        float expectedGateGolden = gearGateGoldenRatio(soldier, region2Depth, expectedDpt);
-        results.add(new RuleResult(RuleKind.GEAR_GATE, soldier.displayName() + " region-2 on-curve fair",
-                expectedGateGolden, bandMin, bandMax,
-                expectedGateGolden >= bandMin && expectedGateGolden <= bandMax,
-                "expected DPT " + String.format("%.1f", expectedDpt) + " (reference * gearCurve) vs the same soldier"));
-
-        // Anchor check: gearCurve is 1.0 across all of region 1, so expected == reference at depth 1..5.
-        boolean anchorHeld = true;
-        for (int depth = 1; depth <= BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE; depth++) {
-            float expected = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
-                    BalanceConfig.GEAR_CURVE_PER_REGION, depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
-            if (expected != BalanceConfig.REFERENCE_PLAYER_DPT) anchorHeld = false;
-        }
-        results.add(new RuleResult(RuleKind.GEAR_GATE, "region-1 anchor (expected == reference)",
-                anchorHeld ? 1f : 0f, 1f, 1f, anchorHeld,
-                "expectedPlayerDamagePerTurn(1.." + BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE
-                        + ") must equal REFERENCE_PLAYER_DPT exactly (the run begins on the curve)"));
-        return results;
-    }
+    /** The reference soldier R-CARD-BREAKPOINT proves a level-up against. */
+    public static EnemyType regionReferenceSoldier() { return REGION_REFERENCE_SOLDIER; }
 
     // =====================================================================================
     // R-ABILITY (new-game-balancr order 2) — TIER = a priced ABILITY BUDGET. Two guarantees:
@@ -1794,7 +1725,7 @@ public final class BalanceSchema {
             float demand       = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);
             float reserveDamage = BalanceConfig.RESERVE_BANKING_FLOORS_TARGET
                     * GameMath.floorDemandAtDepth(modelFloorDemand(),
-                            BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, archetype.canonicalDepth);
+                            BalanceConfig.ENEMY_HEALTH_GROWTH, archetype.canonicalDepth);
             float arenaDamage  = BossBalance.arenaAmmoBudgetDamage(stats.effectiveHitPoints);
             float coverage     = demand > 0f ? (reserveDamage + arenaDamage) / demand : Float.POSITIVE_INFINITY;
             results.add(new RuleResult(RuleKind.BOSS_AMMO, archetype.displayName + " ammo coverage",
@@ -1836,15 +1767,10 @@ public final class BalanceSchema {
         float averageBoxDamage = totalSupply / totalBoxes;
         float incoming = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
                 BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-        float averageMedkitHeal  = (BalanceConfig.MEDKIT_STIM_HEAL + BalanceConfig.MEDKIT_FULL_HEAL) / 2f;
-        float averageArmourValue = (BalanceConfig.ARMOUR_SHARD_VALUE + BalanceConfig.ARMOUR_VEST_VALUE) / 2f;
-        float healSupply = GameMath.healSupplyPerFloor(
-                BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
-                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
+        float healSupply = modelFloorHealSupply();
         return new RouteEconomicsModel.ModelFloor(modelFloorDemand(),
                 totalSupply * (roomBoxes / totalBoxes), totalSupply * (killBoxes / totalBoxes),
-                averageBoxDamage, incoming, healSupply, modelFloorKillCreditReward(), chipIncomePerFloor(),
-                regionAbilityBudgetPoints());
+                averageBoxDamage, incoming, healSupply, modelFloorKillCreditReward(), chipIncomePerFloor());
     }
 
     /** The priced ledger, with its registration latched exactly once (headless — no LibGDX touched). */

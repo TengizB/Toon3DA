@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
 import ge.tbegvadze.toon3d.util.BalanceConfig;
-import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 import org.junit.jupiter.api.Test;
 
@@ -121,22 +120,18 @@ class RouteEconomicsTest {
     }
 
     /**
-     * The MED-BAY's take-away stock scales with depth — a flat stock would decay into a dead node as
-     * incoming damage compounds. {@code RestProfile} stamps
-     * {@code GameMath.depthScaledPickupCount(...)} copies of each supply, so the guarantee LIST is the
-     * same shape at every depth while the number of pickups inside it grows.
+     * The MED-BAY's take-away stock keeps its value at every depth. Balance-overhaul order 1 (R10) made
+     * every medkit and armour pickup a FRACTION of the player's max, so the stock no longer has to grow
+     * with depth to stay worth routing to: the clinic stamps the same authored stock at depth 1 and deep.
      */
     @Test
-    void clinicStockScalesWithDepth() {
+    void clinicStockHoldsItsValueAtEveryDepth() {
         RestProfile profile = new RestProfile();
-        assertTrue(profile.resolve(node(RouteNodeType.REST), 1, 7L).guarantees().size() > 0,
-                "the clinic must stock take-away supplies");
-        int shallowMedkits = GameMath.depthScaledPickupCount(BalanceConfig.REST_MEDKITS,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, 1);
-        int deepMedkits = GameMath.depthScaledPickupCount(BalanceConfig.REST_MEDKITS,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, 14);
-        assertEquals(BalanceConfig.REST_MEDKITS, shallowMedkits, "depth 1 stocks the authored count");
-        assertTrue(deepMedkits > shallowMedkits, "a deep clinic must stock more medkits than a shallow one");
+        int shallowGuarantees = profile.resolve(node(RouteNodeType.REST), 1, 7L).guarantees().size();
+        int deepGuarantees = profile.resolve(node(RouteNodeType.REST), 14, 7L).guarantees().size();
+        assertTrue(shallowGuarantees > 0, "the clinic must stock take-away supplies");
+        assertEquals(shallowGuarantees, deepGuarantees,
+                "fractional heals keep their value, so a deep clinic stocks the same authored supplies");
     }
 
     // ---------------------------------------------------------------------

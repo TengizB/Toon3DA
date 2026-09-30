@@ -988,8 +988,8 @@ final class ItemWindow implements Disposable {
 
     private static String consumableHeal(ItemType itemType) {
         switch (itemType) {
-            case MEDKIT_SMALL: return "+" + ItemConstants.MEDKIT_STIM_HEAL + " HP";
-            case MEDKIT_LARGE: return "+" + ItemConstants.MEDKIT_FULL_HEAL + " HP";
+            case MEDKIT_SMALL: return "+" + Math.round(ItemConstants.MEDKIT_STIM_HEAL_FRACTION * 100f) + "% HP";
+            case MEDKIT_LARGE: return "+" + Math.round(ItemConstants.MEDKIT_FULL_HEAL_FRACTION * 100f) + "% HP";
             case STIMPACK:     return "+15 HP";
             default:           return "—";
         }

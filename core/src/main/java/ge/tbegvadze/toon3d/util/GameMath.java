@@ -2218,20 +2218,24 @@ public final class GameMath {
     // WEAPON LEVEL SCALING — damage, accuracy, reload, clip, range
     // =========================================================================
     /*
-     * Formula: Weapon level damage scaling
+     * Formula: respannedLegacyWeaponLevel — the old 1..10 scaling curves stretched over 1..MAX_WEAPON_LEVEL (R6)
      * Derivation:
-     *   scaledDamage = round(baseDamage * (1 + DAMAGE_PER_LEVEL * (level - 1)))
-     *   Level 1 returns baseDamage unchanged (multiplier = 1.0).
-     *   Each additional level adds WEAPON_LEVEL_DAMAGE_PER_LEVEL (10%) of baseDamage.
-     *   Level is clamped to [1, MAX_WEAPON_LEVEL] before computation.
+     *   The accuracy / reload / clip / range / ability curves were authored for levels 1..10. To keep
+     *   their start value (level 1) and end value (old level 10) while the ladder now runs to
+     *   MAX_WEAPON_LEVEL, level L maps to the old curve position
+     *       position = 1 + (L - 1) * (LEGACY_MAX - 1) / (MAX_WEAPON_LEVEL - 1)
+     *   with LEGACY_MAX = 10. L = 1 -> 1.0, L = MAX -> 10.0, linear between (continuous, unrounded).
+     *   Worked: MAX = 27, L = 14 -> 1 + 13 * 9 / 26 = 5.5.
      * Edge cases:
-     *   level = 1 → multiplier = 1.0, returns baseDamage unchanged.
-     *   baseDamage = 0 → returns 0 at any level (melee with 0 base).
+     *   level is clamped to [1, MAX_WEAPON_LEVEL]; MAX_WEAPON_LEVEL <= 1 returns 1.0 (no span to map).
      */
-    public static int weaponScaledDamage(int baseDamage, int weaponLevel) {
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
-        float multiplier = 1f + WeaponConstants.WEAPON_LEVEL_DAMAGE_PER_LEVEL * (clampedLevel - 1);
-        return Math.round(baseDamage * multiplier);
+    public static float respannedLegacyWeaponLevel(int weaponLevel) {
+        int maximumLevel = WeaponConstants.MAX_WEAPON_LEVEL;
+        if (maximumLevel <= 1) {
+            return 1f;
+        }
+        int clampedLevel = Math.max(1, Math.min(weaponLevel, maximumLevel));
+        return 1f + (clampedLevel - 1) * (WeaponConstants.LEGACY_WEAPON_LEVEL_SPAN - 1f) / (maximumLevel - 1f);
     }
 
     /*
@@ -2246,8 +2250,8 @@ public final class GameMath {
      *   If baseAccuracy < ACCURACY_MINIMUM even at level 1, the minimum floor is applied.
      */
     public static float weaponScaledAccuracy(float baseAccuracy, int weaponLevel) {
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
-        float scaled = baseAccuracy + WeaponConstants.WEAPON_LEVEL_ACCURACY_PER_LEVEL * (clampedLevel - 1);
+        float legacyPosition = respannedLegacyWeaponLevel(weaponLevel);
+        float scaled = baseAccuracy + WeaponConstants.WEAPON_LEVEL_ACCURACY_PER_LEVEL * (legacyPosition - 1f);
         return Math.max(WeaponConstants.WEAPON_LEVEL_ACCURACY_MINIMUM, Math.min(1f, scaled));
     }
 
@@ -2264,8 +2268,8 @@ public final class GameMath {
      */
     public static int weaponScaledReloadTicks(int baseReloadTicks, int weaponLevel) {
         if (baseReloadTicks == 0) return 0;
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
-        float scaled = baseReloadTicks - WeaponConstants.WEAPON_LEVEL_RELOAD_STEP * (clampedLevel - 1);
+        float legacyPosition = respannedLegacyWeaponLevel(weaponLevel);
+        float scaled = baseReloadTicks - WeaponConstants.WEAPON_LEVEL_RELOAD_STEP * (legacyPosition - 1f);
         return Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS, Math.round(scaled));
     }
 
@@ -2278,13 +2282,13 @@ public final class GameMath {
      *   Accumulated bonus uses floor() so clip-1 weapons stay at 1 until bonus >= 1.
      * Edge cases:
      *   baseClipSize = 0 (melee) → always returns 0 (no ammo system).
-     *   clip-1 weapons (Shotgun, Railgun) remain at 1 up to MAX_WEAPON_LEVEL (10),
+     *   clip-1 weapons (Shotgun, Railgun) remain at 1 up to MAX_WEAPON_LEVEL,
      *   since 8% × 9 levels ≈ 72% bonus, which floors to 0 (< 100% needed for +1).
      */
     public static int weaponScaledClipSize(int baseClipSize, int weaponLevel) {
         if (baseClipSize == 0) return 0;
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
-        int bonus = (int)(WeaponConstants.WEAPON_LEVEL_CLIP_PER_LEVEL * (clampedLevel - 1) * baseClipSize);
+        float legacyPosition = respannedLegacyWeaponLevel(weaponLevel);
+        int bonus = (int)(WeaponConstants.WEAPON_LEVEL_CLIP_PER_LEVEL * (legacyPosition - 1f) * baseClipSize);
         return baseClipSize + bonus;
     }
 
@@ -2300,9 +2304,9 @@ public final class GameMath {
      */
     public static int weaponScaledRange(int baseRange, int weaponLevel, boolean isMelee) {
         if (isMelee) return 1;
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        float legacyPosition = respannedLegacyWeaponLevel(weaponLevel);
         int bonus = Math.min(
-                (int)((clampedLevel - 1) * WeaponConstants.WEAPON_LEVEL_RANGE_PER_2_LEVELS / 2f),
+                (int)((legacyPosition - 1f) * WeaponConstants.WEAPON_LEVEL_RANGE_PER_2_LEVELS / 2f),
                 WeaponConstants.WEAPON_LEVEL_RANGE_MAX_BONUS);
         return baseRange + bonus;
     }
@@ -2336,8 +2340,8 @@ public final class GameMath {
      */
     public static float abilityMagnitudeScaled(float baseMagnitude, float perLevel,
                                                int weaponLevel, float maxMagnitude) {
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
-        float scaled = baseMagnitude + perLevel * (clampedLevel - 1);
+        float legacyPosition = respannedLegacyWeaponLevel(weaponLevel);
+        float scaled = baseMagnitude + perLevel * (legacyPosition - 1f);
         return Math.max(0f, Math.min(maxMagnitude, scaled));
     }
 
@@ -2354,9 +2358,9 @@ public final class GameMath {
      */
     public static int abilityCountScaled(int baseCount, int levelsPerStep,
                                          int weaponLevel, int minCount, int maxCount) {
-        int clampedLevel = Math.max(1, Math.min(weaponLevel, WeaponConstants.MAX_WEAPON_LEVEL));
+        float legacyPosition = respannedLegacyWeaponLevel(weaponLevel);
         int safeStep = Math.max(1, levelsPerStep);
-        int scaled = baseCount + (clampedLevel - 1) / safeStep;
+        int scaled = baseCount + (int) ((legacyPosition - 1f) / safeStep);
         return Math.max(minCount, Math.min(maxCount, scaled));
     }
 
@@ -3211,205 +3215,12 @@ public final class GameMath {
         return baseThreatPoints * depthThreatScale(healthScalePerDepth, damageScalePerDepth, depth);
     }
 
-    /*
-     * Formula: playerPowerAtDepth — the player's expected power multiplier on a given floor
-     * Derivation:
-     *   The depth-coupling invariant (docs/game-balance-authority.txt, DEPTH SCALING) compares the
-     *   player's power curve against the enemy threat curve and demands they stay coupled. The
-     *   enemy side is depthThreatScale (a COMPOUND curve). The player side is set by the level-up
-     *   power budget: every level grants a fixed LEVEL_UP_BUDGET_PP power points (idea 5), and the
-     *   total-PP invariant guarantees a player's total power at level L is L * budget regardless of
-     *   WHICH cards were taken. Modelling the player as gaining levelsPerDepth levels per floor
-     *   descended, the accumulated power points by depth d are:
-     *       accumulatedPowerPoints = budgetPowerPointsPerLevel * levelsPerDepth * (depth - 1)
-     *   Power points are a %-gain to the player's reference output (damagePerTurnPowerPoints is the
-     *   forward direction), so the player's power MULTIPLIER relative to the depth-1 baseline is:
-     *       playerPowerAtDepth = 1 + accumulatedPowerPoints / 100
-     *   This is deliberately ADDITIVE (linear in depth): the contract prices every upgrade as a flat
-     *   %-of-reference, so the player curve is linear while the enemy curve compounds. Keeping the
-     *   ratio in band over the run's depth range is therefore a matter of choosing an enemy compound
-     *   rate (ENEMY_*_SCALE_PER_DEPTH) gentle enough that the compound curve does not outrun the
-     *   linear one before the deepest floor. The conservative model ignores found weapons/armour,
-     *   which only HELP the player, so the real ratio is at least this favourable.
-     *   Worked: budget 12, 1 level/floor, depth 5 -> 1 + 12*1*4/100 = 1.48.
-     * Edge cases:
-     *   depth <= 1 -> floorsDescended is 0 -> returns 1.0 (floor 1 is the un-scaled baseline).
-     *   Negative inputs are nonsensical config; the result simply tracks them (BalanceReport would
-     *     surface a sub-1.0 floor-1 power as a bad number rather than being silently clamped).
-     */
-    public static float playerPowerAtDepth(float budgetPowerPointsPerLevel,
-                                           float levelsPerDepth, int depth) {
-        int floorsDescended = Math.max(0, depth - 1);
-        float accumulatedPowerPoints = budgetPowerPointsPerLevel * levelsPerDepth * floorsDescended;
-        return 1f + accumulatedPowerPoints / 100f;
-    }
 
-    /*
-     * Formula: depthCouplingRatio — the depth-coupling invariant (balance contract, DEPTH SCALING)
-     * Derivation:
-     *   The single number that says whether a floor is fair: how the player's expected power
-     *   compares to the floor's scaled enemy threat —
-     *       depthCouplingRatio = playerPowerAtDepth / enemyThreatScale
-     *   The invariant requires DEPTH_COUPLING_RATIO_MIN <= ratio <= DEPTH_COUPLING_RATIO_MAX
-     *   ([0.9, 1.2]): below the min the floor is unfair-hard (the player fell behind the curve),
-     *   above the max it is trivial-easy (the player outscaled it). Both inputs are multipliers
-     *   relative to the depth-1 baseline (playerPowerAtDepth and depthThreatScale), so at depth 1
-     *   both are 1.0 and the ratio is exactly 1.0 by construction.
-     *   Worked: player 1.48 / enemy 1.718 at depth 5 (old 1.08/1.06 scales) = 0.86 -> UNDER (hard).
-     * Edge cases:
-     *   enemyThreatScale <= 0 -> returns 0 (no threat to measure against; avoids divide-by-zero).
-     */
-    public static float depthCouplingRatio(float playerPowerAtDepth, float enemyThreatScale) {
-        if (enemyThreatScale <= 0f) {
-            return 0f;
-        }
-        return playerPowerAtDepth / enemyThreatScale;
-    }
 
-    /*
-     * Formula: gearCurveAtDepth — the arsenal the game EXPECTS you to hold (new-game-balancr order 2)
-     * Derivation:
-     *   The gear gate replaces the single fixed player anchor with a per-depth EXPECTED PLAYER whose
-     *   weapon power steps up once per region. Modelled as a step-per-region multiplier:
-     *       regionIndex  = floor((depth - 1) / regionBandSize)
-     *       gearCurve(d) = perRegionMultiplier ^ regionIndex
-     *   Because a region is regionBandSize (5) depths, gearCurve is 1.0 across the WHOLE first region
-     *   (depths 1..regionBandSize), so the run begins exactly on the anchor and steps up only when the
-     *   player crosses into region 2, 3, ... A player who never upgrades keeps the depth-1 anchor while
-     *   this curve rises — that gap (1/gearCurve) is the pressure the gear gate turns lethal.
-     *   Worked: perRegion 1.35, band 5 -> gearCurve(1..5)=1.0, gearCurve(6..10)=1.35, gearCurve(11..15)=1.82.
-     * Edge cases:
-     *   depth <= regionBandSize -> regionIndex 0 -> returns 1.0 (the whole first region is un-stepped).
-     *   regionBandSize <= 0 -> floored at 1 (avoids divide-by-zero / negative bands).
-     *   perRegionMultiplier <= 0 -> returns 0 at region >= 1 (nonsensical config surfaces as a bad number).
-     */
-    public static float gearCurveAtDepth(float perRegionMultiplier, int depth, int regionBandSize) {
-        int safeBandSize = Math.max(1, regionBandSize);
-        int regionIndex = Math.max(0, depth - 1) / safeBandSize;
-        return (float) Math.pow(perRegionMultiplier, regionIndex);
-    }
 
-    /*
-     * Formula: expectedPlayerDamagePerTurn — the player the game PRICES against at a depth (order 2)
-     * Derivation:
-     *   Enemies, boss HP, ammo demand and the floor budget should be priced against the player the
-     *   game EXPECTS at that depth, not the fixed depth-1 reference forever (that is what made "never
-     *   upgrade" viable by construction). The expected player's sustained DPT is the reference DPT
-     *   lifted by the gear curve (a later order multiplies in a card curve too):
-     *       expectedPlayerDamagePerTurn = referenceDamagePerTurn * gearCurveAtDepth(...)
-     *   By construction gearCurve is 1.0 across region 1, so expectedPlayerDamagePerTurn(1..5) equals
-     *   referenceDamagePerTurn EXACTLY (the audit checks this) — the anchor is preserved, then stepped.
-     *   Worked: reference 25, perRegion 1.35, band 5 -> depth 1..5 = 25, depth 6..10 = 33.75.
-     * Edge cases:
-     *   Inherits gearCurveAtDepth's edge cases; referenceDamagePerTurn <= 0 -> returns <= 0 verbatim
-     *     (no yardstick; BalanceReport would surface it rather than silently clamp).
-     */
-    public static float expectedPlayerDamagePerTurn(float referenceDamagePerTurn,
-                                                    float perRegionMultiplier,
-                                                    int depth, int regionBandSize) {
-        return referenceDamagePerTurn * gearCurveAtDepth(perRegionMultiplier, depth, regionBandSize);
-    }
 
-    /*
-     * Formula: gearRampAtDepth — the CONTINUOUS expected-arsenal curve for depth coupling (order 4)
-     * Derivation:
-     *   gearCurveAtDepth is a per-region STEP (flat within a region, +perRegion at each boundary). That
-     *   step is the right tool for the GATE (it measures a STAGNANT player against the arsenal the game
-     *   hands out in a region), but its boundary JUMPS make it unusable inside the honest depth-coupling
-     *   curve: a fixed ratio band [0.9, 1.2] cannot absorb a x1.35 single-depth jump. The truth the
-     *   coupling models is that gear is acquired GRADUALLY across a region, reaching the region's arsenal
-     *   by its end. So the ramp interpolates (log-linearly) from the previous region's step value to the
-     *   current region's step value across the region's floors, hitting gearCurveAtDepth exactly at each
-     *   region's LAST floor:
-     *       r        = regionIndexAtDepth(depth)
-     *       startVal = perRegion ^ max(0, r-1)     // arsenal carried in from the previous region
-     *       endVal   = perRegion ^ r               // this region's arsenal (== gearCurveAtDepth here)
-     *       p        = (depth - r*band) / band     // 0<p<=1 across the region (1 at its last floor)
-     *       gearRamp = startVal * (endVal/startVal) ^ p
-     *   Region 0 has startVal == endVal == 1, so the whole first region is flat 1.0 (the run begins on
-     *   the curve). gearRamp(5)=1.0, gearRamp(10)=perRegion, gearRamp(15)=perRegion^2 — the step values,
-     *   reached smoothly with no jumps. See playerPowerAtDepthV2.
-     * Edge cases:
-     *   regionBandSize <= 0 -> floored at 1 (avoids divide-by-zero).
-     *   depth <= regionBandSize -> region 0 -> returns 1.0 (flat first region).
-     *   perRegion <= 0 at region >= 1 -> surfaces as a bad number rather than being clamped.
-     */
-    public static float gearRampAtDepth(float perRegionMultiplier, int depth, int regionBandSize) {
-        int safeBandSize = Math.max(1, regionBandSize);
-        int regionIndex = Math.max(0, depth - 1) / safeBandSize;
-        float startValue = (float) Math.pow(perRegionMultiplier, Math.max(0, regionIndex - 1));
-        float endValue   = (float) Math.pow(perRegionMultiplier, regionIndex);
-        if (endValue == startValue) {
-            return startValue;
-        }
-        float positionInRegion = (depth - regionIndex * safeBandSize) / (float) safeBandSize;
-        return startValue * (float) Math.pow(endValue / startValue, positionInRegion);
-    }
 
-    /*
-     * Formula: expectedAbilityPowerPointsAtDepth — the ability PP the expected weapon carries (order 4)
-     * Derivation:
-     *   Order 2 priced every weapon ABILITY in power points and gave each rarity TIER an ability-PP
-     *   budget, and it gates dropped-weapon tiers per region. So the arsenal the game EXPECTS at a region
-     *   carries a computable ability-PP budget: the average tier budget over the region's drop band
-     *   (regionAbilityBudgetPoints[r], supplied by the caller from the order-2 tables). Measured as
-     *   NET-NEW power over the run's start (region 0 baseline), and RAMPED across the region like the
-     *   gear curve (abilities are acquired gradually, not in a lump at the boundary):
-     *       startPP = regionAbilityBudgetPoints[max(0,r-1)] - regionAbilityBudgetPoints[0]
-     *       endPP   = regionAbilityBudgetPoints[r]          - regionAbilityBudgetPoints[0]
-     *       p       = (depth - r*band) / band
-     *       result  = startPP + (endPP - startPP) * p       // linear ramp of PP within the region
-     *   Region 0 returns 0 (the run begins with a vanilla weapon), so playerPowerAtDepthV2 is exactly the
-     *   card curve there. This is the third, honest source folded into the total-power model.
-     * Edge cases:
-     *   regionBandSize <= 0 -> floored at 1.
-     *   regionAbilityBudgetPoints null/empty -> returns 0 (no ability model; v2 falls back to card*gear).
-     *   region index clamps to the last supplied entry (deeper regions reuse the deepest known budget).
-     */
-    public static float expectedAbilityPowerPointsAtDepth(float[] regionAbilityBudgetPoints,
-                                                          int depth, int regionBandSize) {
-        if (regionAbilityBudgetPoints == null || regionAbilityBudgetPoints.length == 0) {
-            return 0f;
-        }
-        int safeBandSize = Math.max(1, regionBandSize);
-        int regionIndex = Math.max(0, depth - 1) / safeBandSize;
-        int lastIndex = regionAbilityBudgetPoints.length - 1;
-        float baseline = regionAbilityBudgetPoints[0];
-        float startPoints = regionAbilityBudgetPoints[Math.min(Math.max(0, regionIndex - 1), lastIndex)] - baseline;
-        float endPoints   = regionAbilityBudgetPoints[Math.min(regionIndex, lastIndex)] - baseline;
-        float positionInRegion = (depth - regionIndex * safeBandSize) / (float) safeBandSize;
-        return startPoints + (endPoints - startPoints) * positionInRegion;
-    }
 
-    /*
-     * Formula: playerPowerAtDepthV2 — the HONEST total-power model (all sources) (order 4)
-     * Derivation:
-     *   The v1 curve (playerPowerAtDepth) counted ONLY level-up cards, so the difficulty defended a
-     *   FICTION of the player's real power and could not feel right (order 4, problem 1). v2 multiplies
-     *   the three honest, independent power sources the on-curve player actually accumulates:
-     *       playerPowerAtDepthV2 = cardPower(d) * gearRamp(d) * abilityPower(d)
-     *     - cardPower(d)   = 1 + budgetPP * levelsPerDepth * (d-1)/100   (the v1 linear level-up term)
-     *     - gearRamp(d)    = gearRampAtDepth(...)                        (found/bought weapons, continuous)
-     *     - abilityPower(d)= 1 + expectedAbilityPowerPointsAtDepth(...)/100  (priced weapon abilities)
-     *   The gear/ability curves are the CONTINUOUS ramp forms (not the step gearCurve) precisely because
-     *   the coupling band must hold at EVERY depth; the step form stays the gate's tool. This honest
-     *   (steeper) curve is what the enemy compound rates (ENEMY_*_SCALE_PER_DEPTH) are re-fit against so
-     *   the depth-coupling ratio (playerPowerAtDepthV2 / depthThreatScale) holds [0.9, 1.2] through the
-     *   tuned depth range — with no under-band fudge, degrading gracefully (to the EASY side) only deep.
-     *   Worked (budget 12, 1 level/floor, perRegion 1.35, band 5): v2(1)=1.0, v2(10)=~2.98, v2(15)=~5.5.
-     * Edge cases:
-     *   depth <= 1 -> cardPower 1.0, gearRamp 1.0, abilityPower 1.0 -> returns 1.0 (the baseline).
-     *   Inherits the ramp helpers' edge cases; a null ability array degrades v2 to card*gear.
-     */
-    public static float playerPowerAtDepthV2(float budgetPowerPointsPerLevel, float levelsPerDepth,
-                                             float gearPerRegionMultiplier, float[] regionAbilityBudgetPoints,
-                                             int depth, int regionBandSize) {
-        float cardPower = playerPowerAtDepth(budgetPowerPointsPerLevel, levelsPerDepth, depth);
-        float gearRamp = gearRampAtDepth(gearPerRegionMultiplier, depth, regionBandSize);
-        float abilityPower = 1f
-                + expectedAbilityPowerPointsAtDepth(regionAbilityBudgetPoints, depth, regionBandSize) / 100f;
-        return cardPower * gearRamp * abilityPower;
-    }
 
     /*
      * Formula: xpRewardAtDepth — the DERIVED per-kill XP, scaled to the enemy's depth (order 4)
@@ -4011,23 +3822,21 @@ public final class GameMath {
      * Formula: ammoSupplyAtDepth — the ranged damage a floor hands the player at depth d
      * Derivation:
      *   A floor's raw box count / box sizes are fixed, but each ammo unit buys MORE damage as the
-     *   player's arsenal improves (order 2's gear curve models exactly this). So the depth-1 model
-     *   SUPPLY is lifted by the gear curve and by the per-region supply lever:
-     *       ammoSupplyAtDepth = modelFloorSupply * gearCurveAtDepth(d) * regionSupplyMultiplier(d)
-     *   gearCurve is a per-region STEP (flat within a region, +perRegion at each boundary); the region
-     *   multiplier is the four-lever design's per-region trim/boost so a region can be tuned without
-     *   touching the global box sizes. Because gear steps ~+35%/region while eHP compounds only
-     *   ~+23%/region, deep regions tend to drift ABOVE the scarcity band — the region multiplier trims
-     *   them back (and boosts the within-region dip of region 1) into [0.75, 0.95].
+     *   player's weapon climbs the power ladder (balance-overhaul order 1). So the depth-1 model SUPPLY
+     *   rides the EXPECTED player's per-hit damage growth (expectedHitGrowthAtDepth — the same curve the
+     *   enemy HP growth is fitted to) times the per-region supply lever:
+     *       ammoSupplyAtDepth = modelFloorSupply * expectedHitGrowthAtDepth(d) * regionSupplyMultiplier(d)
+     *   DEMAND rides the enemy HP growth, which R-LADDER L1 holds within +/-15% of the hit growth, so S
+     *   stays near its depth-1 value; the region multiplier trims the residual per-region rarity wobble.
+     *   (Replaces the retired order-2 gear-curve step.)
      * Edge cases:
-     *   Inherits gearCurveAtDepth / perRegionMultiplierAtDepth edge cases; a 1.0 region multiplier and
-     *   depth-1 gear curve reproduce modelFloorSupply exactly.
+     *   Inherits perRegionMultiplierAtDepth edge cases; depth 1 with a 1.0 region multiplier reproduces
+     *   modelFloorSupply exactly.
      */
-    public static float ammoSupplyAtDepth(float modelFloorSupply, float perRegionGearMultiplier,
-                                          float[] regionSupplyMultipliers, int depth, int regionBandSize) {
-        float gearCurve = gearCurveAtDepth(perRegionGearMultiplier, depth, regionBandSize);
+    public static float ammoSupplyAtDepth(float modelFloorSupply, float[] regionSupplyMultipliers,
+                                          int depth, int regionBandSize) {
         float regionSupply = perRegionMultiplierAtDepth(regionSupplyMultipliers, depth, regionBandSize);
-        return modelFloorSupply * gearCurve * regionSupply;
+        return modelFloorSupply * expectedHitGrowthAtDepth(depth) * regionSupply;
     }
 
     /*
@@ -4048,31 +3857,34 @@ public final class GameMath {
     /*
      * Formula: netHpDrainFractionAtDepth — per-floor net HP loss as a fraction of eHP at depth d
      * Derivation:
-     *   Each floor should cost a small slice of HP you never recover (order 3, part B). Both the
-     *   incoming damage and the heal supply ride the enemy-damage curve (incoming grows with enemy
-     *   damage; heal supply is modelled to track it via depth spawn bonuses + the per-region heal
-     *   lever), and the player's "current-difficulty eHP" tracks the SAME curve (the depth-coupling
-     *   contract keeps survivability proportional to enemy threat). Writing D = compoundDepthMultiplier(
-     *   damageScale, d):
-     *       incoming(d)   = incomingBase * D
-     *       healSupply(d) = healSupplyBase * D * healRegionMultiplier(d)
-     *       eHP(d)        = referenceEHP  * D
+     *   Each floor should cost a small slice of HP you never recover (order 3, part B). On the power
+     *   ladder (balance-overhaul order 1) the three terms ride three FITTED curves:
+     *       incoming(d)   = incomingBase   * ENEMY_DAMAGE_GROWTH^(d-1)
+     *       eHP(d)        = expectedPlayerAtDepth(d).effectiveHitPoints
+     *       healSupply(d) = healSupplyBase * eHP(d) / eHP(1) * healRegionMultiplier(d)
+     *                       (heals are FRACTIONS of max HP/armour — R10 — and max includes the flat
+     *                        card bonuses, so the supply rides the player's whole pool)
      *       netDrainFraction(d) = (incoming(d) - healSupply(d)) / eHP(d)
-     *                           = (incomingBase - healSupplyBase * healRegionMultiplier(d)) / referenceEHP
-     *   The shared D cancels, so with the region multipliers at their 1.0 default the net drain is
-     *   depth-STABLE (each floor costs the same fraction of your depth-scaled eHP). The region lever
-     *   exists to nudge a region's drain without touching heal magnitudes. R-HEALDRAIN-DEPTH requires
-     *   the result in [0.05, 0.15] for every d in 1..15.
+     *                           = incomingBase/eHP(1) * r(d) - healSupplyBase/eHP(1) * healRegionMultiplier(d)
+     *   where r(d) = ENEMY_DAMAGE_GROWTH^(d-1) * eHP(1) / eHP(d) is the R-LADDER L1 turns-to-die drift
+     *   (fitted to within +/-7%). The drain is a small DIFFERENCE, so it amplifies that drift several
+     *   times; the per-region heal lever absorbs the regional part of it.
+     *   R-HEALDRAIN-DEPTH requires the result in [0.05, 0.15] for every d in 1..RUN_FINAL_DEPTH.
      * Edge cases:
-     *   referenceEHP <= 0 -> returns 0 (no eHP to measure a fraction of; avoids divide-by-zero).
+     *   depth < 1 is clamped to 1; a zero expected eHP returns 0 (no eHP to measure a fraction of).
      *   A negative result is meaningful (net HP GAIN — the anti-face-tank failure mode the band bans).
      */
     public static float netHpDrainFractionAtDepth(float incomingBase, float healSupplyBase,
-                                                  float healRegionMultiplier, float referenceEffectiveHitPoints) {
-        if (referenceEffectiveHitPoints <= 0f) {
+                                                  float healRegionMultiplier, int depth) {
+        int clampedDepth = Math.max(1, depth);
+        ExpectedPlayer player = expectedPlayerAtDepth(clampedDepth);
+        if (player.effectiveHitPoints <= 0f) {
             return 0f;
         }
-        return (incomingBase - healSupplyBase * healRegionMultiplier) / referenceEffectiveHitPoints;
+        float incoming = incomingBase * compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_GROWTH, clampedDepth);
+        float healSupply = healSupplyBase * player.effectiveHitPoints / expectedPlayerAtDepth(1).effectiveHitPoints
+                * healRegionMultiplier;
+        return (incoming - healSupply) / player.effectiveHitPoints;
     }
 
     /*
@@ -4408,31 +4220,6 @@ public final class GameMath {
         return 1 + (int) Math.floor(stepsCovered);
     }
 
-    /*
-     * Formula: playerPowerAtLevelAndDepth — the honest power model at a REAL level (order 7)
-     * Derivation:
-     *   playerPowerAtDepthV2 assumes the player is exactly ON the pacing curve (level == expected level
-     *   for the depth). A JOURNEY audit cannot assume that: the route chosen decides how much XP was
-     *   actually banked. This is the same three-factor product with the card term re-expressed against
-     *   the player's ACTUAL level rather than the depth's expected one:
-     *       power = (1 + budgetPP * (level - 1) / 100) * gearRamp(d) * (1 + abilityPP(d)/100)
-     *   With level == expectedLevelAtDepth(levelsPerDepth, d) it reproduces playerPowerAtDepthV2
-     *   exactly, so the per-floor rule and the journey rule read the same curve.
-     * Edge cases:
-     *   level <= 1 -> the card term is 1.0 (no levels banked). Inherits the ramp helpers' edge cases;
-     *   a null ability array degrades the product to card * gear.
-     */
-    public static float playerPowerAtLevelAndDepth(float budgetPowerPointsPerLevel, int playerLevel,
-                                                   float gearPerRegionMultiplier,
-                                                   float[] regionAbilityBudgetPoints,
-                                                   int depth, int regionBandSize) {
-        int levelsBanked = Math.max(0, playerLevel - 1);
-        float cardPower = 1f + budgetPowerPointsPerLevel * levelsBanked / 100f;
-        float gearRamp  = gearRampAtDepth(gearPerRegionMultiplier, depth, regionBandSize);
-        float abilityPower = 1f
-                + expectedAbilityPowerPointsAtDepth(regionAbilityBudgetPoints, depth, regionBandSize) / 100f;
-        return cardPower * gearRamp * abilityPower;
-    }
 
     // =========================================================================
     // MINI-MAP — FACING WEDGE GEOMETRY (replaces the unreadable facing line)
@@ -6017,5 +5804,37 @@ public final class GameMath {
             return Float.POSITIVE_INFINITY;
         }
         return targetEffectiveHitPoints / damagePerHit;
+    }
+
+    /*
+     * Formula: expectedHitGrowthAtDepth — how much harder the on-curve player hits than at depth 1 (R11)
+     * Derivation:
+     *   growth(d) = expectedPlayerAtDepth(d).referenceHitDamage / expectedPlayerAtDepth(1).referenceHitDamage
+     *   = ladder x rarity x offence-card lift, normalised to 1.0 at depth 1. Ammo supply (each unit buys
+     *   this much more damage) and the route model's guaranteed-box value ride it.
+     * Edge cases: depth < 1 is clamped to 1 (-> 1.0).
+     */
+    public static float expectedHitGrowthAtDepth(int depth) {
+        return expectedPlayerAtDepth(depth).referenceHitDamage / expectedPlayerAtDepth(1).referenceHitDamage;
+    }
+
+    /*
+     * Formula: ladderCouplingAtCharacterLevel — a real character level vs the on-curve one (R11)
+     * Derivation:
+     *   With the weapon held on the ladder (level d, the region's expected rarity), compare the total
+     *   power (DPT x eHP) of a player at the character level their XP actually bought against the
+     *   on-curve player at the same depth:
+     *       coupling = (dpt(d, cL) * eHP(cL)) / (dpt(d, cL(d)) * eHP(cL(d)))
+     *   1.0 = exactly on the curve; below = under-levelled for the floor; above = ahead of it. The route
+     *   trajectory audit reads it at the level a journey's XP bought (replaces the retired v2 coupling).
+     * Edge cases: characterLevel < 1 is clamped to 1; depth < 1 is clamped to 1.
+     */
+    public static float ladderCouplingAtCharacterLevel(int depth, int characterLevel) {
+        int clampedDepth = Math.max(1, depth);
+        ExpectedPlayer onCurve = expectedPlayerAtDepth(clampedDepth);
+        ExpectedPlayer actual = expectedPlayer(clampedDepth, clampedDepth,
+                expectedRarityMultiplierAtDepth(clampedDepth), Math.max(1, characterLevel));
+        float onCurvePower = onCurve.damagePerTurn * onCurve.effectiveHitPoints;
+        return onCurvePower <= 0f ? 0f : (actual.damagePerTurn * actual.effectiveHitPoints) / onCurvePower;
     }
 }

@@ -50,21 +50,19 @@ public final class RestProfile implements NodeLevelProfile {
     }
 
     /**
-     * The clinic's take-away supplies, placed near the exit so they are on the natural path out. The
-     * stock COUNT rides the enemy-damage depth curve (GameMath.depthScaledPickupCount): a REST node's
-     * whole payoff is healing, and flat hit points buy a shrinking share of the fight as depth scales,
-     * so a fixed stock would make the deep clinic a dead choice. One medkit early, three at depth 15 —
-     * "the deeper the facility, the better stocked its medical bay" (order 7, R-CALM-COST).
+     * The clinic's take-away supplies, placed near the exit so they are on the natural path out. Every
+     * medkit and armour pickup restores a FRACTION of the player's max (balance-overhaul order 1, R10),
+     * so a fixed stock keeps its relative value at every depth — the stock COUNT is the authored count
+     * at every depth (it used to ride the enemy-damage curve to prop up FLAT heals: one medkit early,
+     * three by depth 15).
      */
     private List<GuaranteedContent> buildClinicStock(int depth, long seed) {
         List<GuaranteedContent> stock = new ArrayList<>();
-        int medkits = GameMath.depthScaledPickupCount(RouteMapConstants.REST_MEDKITS,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        int medkits = RouteMapConstants.REST_MEDKITS;
         if (medkits > 0) {
             stock.add(Guarantees.pickup('H', medkits, Placement.NEAR_EXIT, seed));
         }
-        int armour = GameMath.depthScaledPickupCount(RouteMapConstants.REST_ARMOUR,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        int armour = RouteMapConstants.REST_ARMOUR;
         if (armour > 0) {
             char armourSymbol = depth >= RouteMapConstants.REST_ARMOUR_VEST_DEPTH ? 'A' : 'a';
             stock.add(Guarantees.pickup(armourSymbol, armour, Placement.NEAR_EXIT, seed));

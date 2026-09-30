@@ -58,10 +58,6 @@ public final class BalanceReport {
         System.out.println();
         printLadderTable();
         System.out.println();
-        printDepthCouplingTable();
-        System.out.println();
-        printGearCurveTable();
-        System.out.println();
         printAbilityPricingTable();
         System.out.println();
         printHazardTable();
@@ -200,7 +196,7 @@ public final class BalanceReport {
         System.out.println("ENEMIES (registry: EnemyType.values() through BalanceSchema bands)");
         System.out.println("  cycleDPT = order-5 cycle-averaged effective DPT (basic + priced specials); trueTP = cycle-averaged Threat Points.");
         System.out.printf("%-17s %-11s %5s %6s %5s %8s %8s %10s %-6s %9s %-6s%n",
-                "enemy", "role", "eHP", "atkDmg", "cad", "cycleDPT", "posMult", "trueTP", "in?", "TTD/TTK", "gr?");
+                "enemy", "role", "eHP", "atkDmg", "cad", "cycleDPT", "posMult", "trueTP", "in?", "kill|die", "R8?");
         System.out.println("------------------------------------------------------------------------------------");
         for (ge.tbegvadze.toon3d.enemy.EnemyType enemyType : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
             if (enemyType.role() == ge.tbegvadze.toon3d.enemy.EnemyRole.BOSS) continue; // SECTION 14 ruleset
@@ -220,17 +216,19 @@ public final class BalanceReport {
         String bandVerdictText = threatBand == null ? "n/a"
                 : bandVerdict(insideBand, threatPoints, threatBand[0]);
 
-        float goldenRatio = BalanceSchema.goldenRatioOf(enemyType);
-        float[] goldenBand = BalanceSchema.goldenRatioBand(enemyType.role());
-        String goldenVerdictText = goldenBand == null ? "exempt"
-                : bandVerdict(goldenRatio >= goldenBand[0] && goldenRatio <= goldenBand[1],
-                        goldenRatio, goldenBand[0]);
+        // R8 (balance-overhaul order 1): depth-1 hits to kill (R8 reference hit) | hits to die (205 eHP).
+        int hitsToKill = BalanceSchema.enemyHitsToKill(enemyType);
+        int hitsToDie = BalanceSchema.enemyHitsToDie(enemyType);
+        float[] hitBand = BalanceSchema.enemyHitBand(enemyType.role());
+        String hitVerdictText = hitBand == null ? "n/a"
+                : (hitsToKill >= hitBand[0] && hitsToKill <= hitBand[1]
+                        && hitsToDie >= hitBand[2] && hitsToDie <= hitBand[3]) ? "OK" : "OUT";
 
-        System.out.printf("%-17s %-11s %5.0f %6d %5d %8.2f %8.2f %10.1f %-6s %9.1f %-6s%n",
+        System.out.printf("%-17s %-11s %5.0f %6d %5d %8.2f %8.2f %10.1f %-6s %4d|%-4d %-6s%n",
                 enemyType.displayName(), enemyType.role().name(), enemyEffectiveHitPoints,
                 enemyType.attackDamage(), enemyType.attackCadenceTurns(), cycleAveragedDamagePerTurn,
                 enemyType.positionalMultiplier(), threatPoints, bandVerdictText,
-                goldenRatio, goldenVerdictText);
+                hitsToKill, hitsToDie, hitVerdictText);
     }
 
     // -----------------------------------------------------------------------------------
@@ -505,7 +503,7 @@ public final class BalanceReport {
             int entryDepth = region * band + 1;
             float regionBudget = GameMath.regionScaledFloorThreatPointBudget(
                     BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
-                    BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
+                    BalanceConfig.ENEMY_HEALTH_GROWTH, BalanceConfig.ENEMY_DAMAGE_GROWTH,
                     entryDepth, multipliers, band);
             boolean dialInBand = multipliers[region] >= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MIN
                     && multipliers[region] <= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MAX;
@@ -537,111 +535,6 @@ public final class BalanceReport {
             case 2:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_C_NAME;
             default: return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_D_NAME;
         }
-    }
-
-    // -----------------------------------------------------------------------------------
-    // DEPTH COUPLING — the fairness-over-depth invariant, now vs the HONEST total-power model (order 4).
-    // The player's power is the v2 curve (GameMath.playerPowerAtDepthV2 = cardPower * gearRamp *
-    // abilityPower — all sources, not the cards-only fiction), and it must stay coupled to the enemy
-    // threat curve (COMPOUND: GameMath.depthThreatScale). Their ratio holds [MIN, MAX] for depths 1..15
-    // (the rule range); depths 16..20 are printed so the graceful-degradation boundary is visible.
-    // This table is what the SECTION 3 enemy depth-scale RE-FIT is verified against.
-    // -----------------------------------------------------------------------------------
-    private static void printDepthCouplingTable() {
-        System.out.println("DEPTH COUPLING (order 4, HONEST v2 power) — player power vs enemy threat (band "
-                + String.format("%.2f-%.2f", BalanceConfig.DEPTH_COUPLING_RATIO_MIN,
-                        BalanceConfig.DEPTH_COUPLING_RATIO_MAX) + ")");
-        System.out.println("  enemy scale = " + BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH + " HP * "
-                + BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH + " dmg / floor (compound) ; player v2 = "
-                + "card(" + String.format("%.0f", GameBalance.LEVEL_UP_BUDGET_PP) + "PP*"
-                + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH + "/floor) * gearRamp("
-                + BalanceConfig.GEAR_CURVE_PER_REGION + "/region) * abilityRamp");
-        System.out.printf("%-6s %8s %8s %8s %9s %9s %8s %-12s%n",
-                "depth", "card", "gear", "abil", "playerV2", "enemy", "ratio", "in band?");
-        System.out.println("------------------------------------------------------------------------------------");
-        float[] regionAbilityBudgets = ge.tbegvadze.toon3d.util.BalanceSchema.regionAbilityBudgetPoints();
-        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        for (int depth = 1; depth <= 20; depth++) {
-            float cardPower = GameMath.playerPowerAtDepth(GameBalance.LEVEL_UP_BUDGET_PP,
-                    BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, depth);
-            float gearRamp = GameMath.gearRampAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, depth, band);
-            float abilityPower = 1f
-                    + GameMath.expectedAbilityPowerPointsAtDepth(regionAbilityBudgets, depth, band) / 100f;
-            float playerPower = GameMath.playerPowerAtDepthV2(GameBalance.LEVEL_UP_BUDGET_PP,
-                    BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, BalanceConfig.GEAR_CURVE_PER_REGION,
-                    regionAbilityBudgets, depth, band);
-            float enemyThreat = GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                    BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
-            float ratio = GameMath.depthCouplingRatio(playerPower, enemyThreat);
-            boolean inBand = ratio >= BalanceConfig.DEPTH_COUPLING_RATIO_MIN
-                    && ratio <= BalanceConfig.DEPTH_COUPLING_RATIO_MAX;
-            String verdict = inBand ? (depth <= 15 ? "OK" : "OK (past rule)")
-                    : (ratio < BalanceConfig.DEPTH_COUPLING_RATIO_MIN ? "UNDER(hard)" : "OVER(easy)");
-            if (depth == 16) {
-                System.out.println("  --- rule range 1..15 above ; 16+ printed for the degradation boundary ---");
-            }
-            System.out.printf("%-6d %8.3f %8.3f %8.3f %9.3f %9.3f %8.3f %-12s%n",
-                    depth, cardPower, gearRamp, abilityPower, playerPower, enemyThreat, ratio, verdict);
-        }
-    }
-
-    // -----------------------------------------------------------------------------------
-    // GEAR CURVE — the expected arsenal per region + the GEAR GATE (new-game-balancr order 2).
-    // Per region: its depth span, the gearCurve multiplier, the expected player DPT, the tier band
-    // droppable weapons roll from, and — for the reference soldier — the stagnant (never-upgraded)
-    // vs on-curve golden ratio, so the gate is visible: stagnant falls out of band, on-curve holds.
-    // -----------------------------------------------------------------------------------
-    private static void printGearCurveTable() {
-        int bandSize = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        System.out.println("GEAR CURVE — expected arsenal per region (perRegion "
-                + BalanceConfig.GEAR_CURVE_PER_REGION + ", band " + bandSize + " floors ; soldier golden band "
-                + String.format("%.0f-%.0f", BalanceConfig.GOLDEN_RATIO_TRASH_MIN, BalanceConfig.GOLDEN_RATIO_TRASH_MAX)
-                + ")");
-        System.out.printf("%-7s %-8s %6s %9s %-14s %10s %10s%n",
-                "region", "depths", "gear", "expDPT", "tier band", "stagnantGR", "onCurveGR");
-        System.out.println("------------------------------------------------------------------------------------");
-        int regionCount = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION.length;
-        for (int region = 0; region < regionCount; region++) {
-            int entryDepth = region * bandSize + 1;
-            float gear = GameMath.gearCurveAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, entryDepth, bandSize);
-            float expectedDpt = GameMath.expectedPlayerDamagePerTurn(BalanceConfig.REFERENCE_PLAYER_DPT,
-                    BalanceConfig.GEAR_CURVE_PER_REGION, entryDepth, bandSize);
-            String tierBand = tierName(BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION[region])
-                    + ".." + tierName(BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION[region]);
-            float stagnantGolden = referenceSoldierGolden(entryDepth, BalanceConfig.REFERENCE_PLAYER_DPT);
-            float onCurveGolden  = referenceSoldierGolden(entryDepth, expectedDpt);
-            System.out.printf("%-7d %-8s %6.2f %9.1f %-14s %10s %10s%n",
-                    region + 1, entryDepth + "-" + (entryDepth + bandSize - 1), gear, expectedDpt, tierBand,
-                    goldenVerdict(stagnantGolden), goldenVerdict(onCurveGolden));
-        }
-        System.out.println("  reference soldier: " + BalanceSchema.gearGateReferenceSoldierName()
-                + "   (stagnantGR = never-upgraded player ; onCurveGR = reference * gearCurve)");
-        System.out.println("  GATE: stagnantGR must fall OUT of the band by region 2 while onCurveGR stays IN — R-GEARGATE.");
-        System.out.println("  PITY: every region PLACES >= " + BalanceConfig.GUARANTEED_UPGRADE_PER_REGION
-                + " in-band weapon (RunStats-tracked force-spawn).");
-    }
-
-    private static float referenceSoldierGolden(int depth, float playerDamagePerTurn) {
-        ge.tbegvadze.toon3d.enemy.EnemyType soldier = BalanceSchema.gearGateReferenceSoldier();
-        float scaledEnemyEHP = enemyEffectiveHitPoints(soldier.maxHealth())
-                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
-        int turnsToKill = GameMath.turnsToKill(scaledEnemyEHP, playerDamagePerTurn);
-        float enemyDamagePerTurn = ((float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()))
-                * GameMath.compoundDepthMultiplier(BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
-        int turnsToDie = GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyDamagePerTurn);
-        return GameMath.goldenRatio(turnsToDie, turnsToKill);
-    }
-
-    private static String goldenVerdict(float golden) {
-        boolean inBand = golden >= BalanceConfig.GOLDEN_RATIO_TRASH_MIN
-                && golden <= BalanceConfig.GOLDEN_RATIO_TRASH_MAX;
-        return String.format("%.2f%s", golden, inBand ? "" : "*");
-    }
-
-    private static String tierName(int tierOrdinal) {
-        ge.tbegvadze.toon3d.entity.WeaponTier[] tiers = ge.tbegvadze.toon3d.entity.WeaponTier.values();
-        int clamped = Math.max(0, Math.min(tiers.length - 1, tierOrdinal));
-        return tiers[clamped].displayName;
     }
 
     // -----------------------------------------------------------------------------------
@@ -757,8 +650,8 @@ public final class BalanceReport {
         float incoming = GameMath.incomingDamagePerFloor(totalEnemyDamagePerTurn,
                 BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
 
-        float averageMedkitHeal = (BalanceConfig.MEDKIT_STIM_HEAL + BalanceConfig.MEDKIT_FULL_HEAL) / 2f;
-        float averageArmourValue = (BalanceConfig.ARMOUR_SHARD_VALUE + BalanceConfig.ARMOUR_VEST_VALUE) / 2f;
+        float averageMedkitHeal = (BalanceSchema.modelStimHeal() + BalanceSchema.modelFullMedkitHeal()) / 2f;
+        float averageArmourValue = (BalanceSchema.modelArmourShardValue() + BalanceSchema.modelArmourVestValue()) / 2f;
         float healSupply = GameMath.healSupplyPerFloor(BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
                 BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
 
@@ -770,7 +663,7 @@ public final class BalanceReport {
         // Informational: what a full medkit buys, in survival turns, at the floor's average rate.
         int floorEngagementTurns = Math.max(1, enemyCount * BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY);
         float averageIncomingDamagePerTurn = incoming / floorEngagementTurns;
-        float fullMedkitTurns = GameMath.survivalTurnsBought(BalanceConfig.MEDKIT_FULL_HEAL, averageIncomingDamagePerTurn);
+        float fullMedkitTurns = GameMath.survivalTurnsBought(BalanceSchema.modelFullMedkitHeal(), averageIncomingDamagePerTurn);
 
         System.out.println();
         System.out.println("HEAL ECONOMY — model floor");
@@ -779,7 +672,7 @@ public final class BalanceReport {
                 BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN * 100f, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX * 100f,
                 bandVerdict(drainInBand, drainFraction, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN));
         System.out.printf("  full medkit (%d HP) buys %.1f survival-turns at %.1f avg incoming dmg/turn (informational)%n",
-                BalanceConfig.MEDKIT_FULL_HEAL, fullMedkitTurns, averageIncomingDamagePerTurn);
+                BalanceSchema.modelFullMedkitHeal(), fullMedkitTurns, averageIncomingDamagePerTurn);
     }
 
     /** Enemy eHP with no dodge or flat reduction (the contract rule for current enemies). */
@@ -793,24 +686,24 @@ public final class BalanceReport {
     // shop price list. All numbers flow through the same BalanceSchema helpers the audit uses.
     // -----------------------------------------------------------------------------------
 
-    /** R-SCARCITY-DEPTH: the scarcity ratio S at every depth 1..15 (DEMAND up eHP curve, SUPPLY up gear curve). */
+    /** R-SCARCITY-DEPTH: the scarcity ratio S at every depth 1..25 (DEMAND up the enemy HP curve, SUPPLY up the expected hit growth). */
     private static void printScarcityDepthSweep() {
         System.out.println("SCARCITY DEPTH SWEEP (R-SCARCITY-DEPTH) — S=SUPPLY/DEMAND at each depth, band "
                 + String.format("%.2f-%.2f", BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX)
                 + "  [model supply=" + String.format("%.0f", BalanceSchema.modelFloorTotalRangedSupply())
                 + " demand=" + String.format("%.0f", BalanceSchema.modelFloorDemand()) + "]");
         System.out.printf("%-6s %-7s %8s %8s %8s %9s %-6s%n",
-                "depth", "region", "gearX", "DEMAND", "SUPPLY", "S", "in?");
+                "depth", "region", "hitX", "DEMAND", "SUPPLY", "S", "in?");
         System.out.println("------------------------------------------------------------------------------------");
         for (BalanceSchema.RuleResult result : BalanceSchema.scarcityDepthResults()) {
             int depth = Integer.parseInt(result.subject.replaceAll("[^0-9]", ""));
             int band  = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-            float gearX  = GameMath.gearCurveAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, depth, band)
+            float gearX  = GameMath.expectedHitGrowthAtDepth(depth)
                     * GameMath.perRegionMultiplierAtDepth(BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
             float demand = GameMath.floorDemandAtDepth(BalanceSchema.modelFloorDemand(),
-                    BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+                    BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
             float supply = GameMath.ammoSupplyAtDepth(BalanceSchema.modelFloorTotalRangedSupply(),
-                    BalanceConfig.GEAR_CURVE_PER_REGION, BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+                    BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
             System.out.printf("%-6d %-7d %8.2f %8.0f %8.0f %9.2f %-6s%n",
                     depth, GameMath.regionIndexAtDepth(depth, band), gearX, demand, supply, result.value,
                     bandVerdict(result.satisfied, result.value, result.bandMinimum));
@@ -870,10 +763,10 @@ public final class BalanceReport {
         System.out.println();
         System.out.println("------------------------------------------------------------------------------------");
         printShopPriceRow("Ammo box (15 x 20 dmg)", 15 * 20 / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT, depths);
-        printShopPriceRow("Stim medkit (" + BalanceConfig.MEDKIT_STIM_HEAL + " HP)",
-                BalanceConfig.MEDKIT_STIM_HEAL / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
-        printShopPriceRow("Field medkit (" + BalanceConfig.MEDKIT_FULL_HEAL + " HP)",
-                BalanceConfig.MEDKIT_FULL_HEAL / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
+        printShopPriceRow("Stim medkit (" + BalanceSchema.modelStimHeal() + " HP)",
+                BalanceSchema.modelStimHeal() / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
+        printShopPriceRow("Field medkit (" + BalanceSchema.modelFullMedkitHeal() + " HP)",
+                BalanceSchema.modelFullMedkitHeal() / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
         printShopPriceRow("Weapon level-up", BalanceConfig.SHOP_WEAPON_LEVEL_UP_POWER_POINTS, depths);
         printShopPriceRow("Tier up (RARE, 12 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
         printShopPriceRow("Tier up (EPIC, 20 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
@@ -1004,7 +897,7 @@ public final class BalanceReport {
             float demand = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);
             float reserveDamage = BalanceConfig.RESERVE_BANKING_FLOORS_TARGET
                     * GameMath.floorDemandAtDepth(BalanceSchema.modelFloorDemand(),
-                            BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth);
+                            BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
             float ammoCoverage = demand > 0f
                     ? (reserveDamage + BossBalance.arenaAmmoBudgetDamage(stats.effectiveHitPoints)) / demand
                     : Float.POSITIVE_INFINITY;

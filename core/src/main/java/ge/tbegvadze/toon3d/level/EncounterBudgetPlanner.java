@@ -124,8 +124,8 @@ public final class EncounterBudgetPlanner {
         // spends more TP at the same depth — THEN the route-map node's per-node scale (order 7).
         float budget = GameMath.regionScaledFloorThreatPointBudget(
                 BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET,
-                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH,
+                BalanceConfig.ENEMY_HEALTH_GROWTH,
+                BalanceConfig.ENEMY_DAMAGE_GROWTH,
                 depth, BalanceConfig.REGION_TP_BUDGET_MULTIPLIER,
                 BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE) * budgetScale;
 
@@ -381,8 +381,8 @@ public final class EncounterBudgetPlanner {
     /** This archetype's depth-scaled Threat-Point cost on the planned floor. */
     private float threatOf(EnemyType type) {
         return GameMath.enemyThreatAtDepth(type.baseThreatPoints(),
-                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+                BalanceConfig.ENEMY_HEALTH_GROWTH,
+                BalanceConfig.ENEMY_DAMAGE_GROWTH, depth);
     }
 
     // -------------------------------------------------------------------------
