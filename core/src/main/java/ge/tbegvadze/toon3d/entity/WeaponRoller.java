@@ -165,9 +165,24 @@ public class WeaponRoller {
 
     // ── Private helpers ────────────────────────────────────────────────────
 
+    /** R6: floor depth plus a weighted offset (WEAPON_LEVEL_ROLL_OFFSETS / _WEIGHTS), clamped to [1, MAX]. */
     private int rollLevel(int floorDepth) {
-        int offset = rng.nextInt(3) - 1;  // -1, 0, or +1 uniformly
-        int level  = floorDepth + offset;
+        int[] offsets = BalanceConfig.WEAPON_LEVEL_ROLL_OFFSETS;
+        int[] weights = BalanceConfig.WEAPON_LEVEL_ROLL_WEIGHTS;
+        int totalWeight = 0;
+        for (int weightIndex = 0; weightIndex < weights.length; weightIndex++) {
+            totalWeight += weights[weightIndex];
+        }
+        int pick = rng.nextInt(Math.max(1, totalWeight));
+        int offset = 0;
+        for (int weightIndex = 0; weightIndex < weights.length; weightIndex++) {
+            pick -= weights[weightIndex];
+            if (pick < 0) {
+                offset = offsets[weightIndex];
+                break;
+            }
+        }
+        int level = floorDepth + offset;
         return Math.max(1, Math.min(WeaponConstants.MAX_WEAPON_LEVEL, level));
     }
 

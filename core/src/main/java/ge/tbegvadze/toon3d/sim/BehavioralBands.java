@@ -26,6 +26,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-ROUTE    — the priced map's drain survives contact with play</li>
  *   <li>S-ECONOMY  — the experienced scarcity ratio tracks the modelled one</li>
  *   <li>S-SOFTLOCK — a run may end, but never get stuck unable to damage anything</li>
+ *   <li>S-LAG      — a weapon that never climbs the power ladder ends the run early (balance-overhaul order 1)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -44,6 +45,7 @@ public final class BehavioralBands {
         PolicySummary hoarder  = matrix.get(HOARDER_ID);
 
         if (hoarder != null)  results.addAll(gateResults(hoarder));
+        if (hoarder != null)  results.add(lagResult(hoarder));
         if (tactical != null) results.addAll(fairResults(tactical));
         if (tactical != null && naive != null) results.add(skillResult(tactical, naive));
         if (tactical != null) results.add(routeResult(tactical));
@@ -61,6 +63,18 @@ public final class BehavioralBands {
                 clearedFraction <= BalanceConfig.SIM_GATE_MAX_CLEAR_FRACTION,
                 hoarder.runCount() + " seeds; R-BOSS-GATE proves the same thing on paper"));
         return results;
+    }
+
+    /**
+     * S-LAG (balance-overhaul order 1): a run whose weapon never climbs the power ladder must end early —
+     * the median ending depth of the start-weapon hoarder is at most SIM_LAG_MAX_MEDIAN_DEPTH.
+     */
+    private static RuleResult lagResult(PolicySummary hoarder) {
+        float medianDepth = hoarder.medianEndingDepth();
+        return BalanceSchema.result(RuleKind.SIM_LAG, "HOARDER-START-WEAPON median death depth",
+                medianDepth, 0f, BalanceConfig.SIM_LAG_MAX_MEDIAN_DEPTH,
+                medianDepth <= BalanceConfig.SIM_LAG_MAX_MEDIAN_DEPTH,
+                hoarder.runCount() + " seeds; " + hoarder.stalledRunCount() + " stalled");
     }
 
     /** S-FAIR: the intended run length, and deaths the player could see coming. */

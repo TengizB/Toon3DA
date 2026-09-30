@@ -20,8 +20,16 @@ public final class ShopContext {
     /** Weapons the player owns (loadout + melee); never null, may be empty. */
     public final List<WeaponProfile> ownedWeapons;
 
+    /** The weapon the player currently has EQUIPPED (the LEVEL UP rung's target); nullable. */
+    public final WeaponProfile equippedWeapon;
+
     public ShopContext(int depth, List<WeaponProfile> ownedWeapons) {
-        this.depth        = depth;
+        this(depth, ownedWeapons, null);
+    }
+
+    public ShopContext(int depth, List<WeaponProfile> ownedWeapons, WeaponProfile equippedWeapon) {
+        this.depth          = depth;
+        this.equippedWeapon = equippedWeapon;
         this.ownedWeapons = (ownedWeapons != null)
                 ? Collections.unmodifiableList(ownedWeapons)
                 : Collections.emptyList();

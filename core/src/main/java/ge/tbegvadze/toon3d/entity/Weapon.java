@@ -67,6 +67,8 @@ public abstract class Weapon implements WeaponProfile {
     private int              weaponLevel  = 1;
     private WeaponTier       tier         = WeaponTier.COMMON;
     private float            baseAccuracy = 1.0f;
+    /** Threat level (floor depth) this weapon is compared against; 0 = never set = treat as on-level. */
+    private int              floorThreatLevel = 0;
     private AbilityInstance[] abilities   = new AbilityInstance[0];
 
     // ── AbilityResolver wiring ───────────────────────────────────────────────
@@ -258,8 +260,53 @@ public abstract class Weapon implements WeaponProfile {
         recomputeEffectiveStats();
     }
 
+    /**
+     * Sets the current floor's threat level (its depth) and recomputes effective stats only when the
+     * value changed. Called by World / SimWorld (syncWeaponThreatLevels) — idempotent and cheap.
+     */
+    public void setFloorThreatLevel(int threatLevel) {
+        int sanitized = Math.max(0, threatLevel);
+        if (sanitized == floorThreatLevel) return;
+        floorThreatLevel = sanitized;
+        recomputeEffectiveStats();
+    }
+
+    /** The resolved threat level this weapon is compared against (its own level when never set). */
+    public int getFloorThreatLevel() {
+        return floorThreatLevel > 0 ? floorThreatLevel : weaponLevel;
+    }
+
+    /** R4: a level-gap-exempt weapon (the Fist) always counts as on-level and takes no penalty. */
+    public boolean isLevelGapExempt() { return false; }
+
+    private int tierOrdinalOrCommon() {
+        return tier == null ? 0 : tier.ordinal();
+    }
+
+    /** The pure ladder factor (level growth x rarity x level gap) applied to every base damage. */
+    public float getLadderDamageMultiplier() {
+        return GameMath.weaponLadderDamage(1f, weaponLevel, tierOrdinalOrCommon(),
+                getFloorThreatLevel(), isLevelGapExempt());
+    }
+
+    /**
+     * Levels this weapon stands above (+) or below (-) the given floor threat level; 0 for the
+     * level-gap-exempt Fist, which always reads on-level. Threat below 1 is clamped to 1.
+     */
+    public int getLevelStanding(int threatLevel) {
+        if (isLevelGapExempt()) return 0;
+        return weaponLevel - Math.max(1, threatLevel);
+    }
+
+    /** The level-gap factor alone (1.0 for the exempt Fist), for the HUD / compare card. */
+    public float getLevelGapMultiplier() {
+        if (isLevelGapExempt()) return 1f;
+        return GameMath.levelGapMultiplier(weaponLevel - Math.max(1, getFloorThreatLevel()));
+    }
+
     private void recomputeEffectiveStats() {
-        effectiveDamage      = GameMath.weaponScaledDamage(damage, weaponLevel);
+        effectiveDamage      = Math.round(GameMath.weaponLadderDamage(damage, weaponLevel,
+                tierOrdinalOrCommon(), getFloorThreatLevel(), isLevelGapExempt()));
         effectiveAccuracy    = GameMath.weaponScaledAccuracy(baseAccuracy, weaponLevel);
         effectiveClipSize    = GameMath.weaponScaledClipSize(clipSize, weaponLevel);
         effectiveReloadTicks = GameMath.weaponScaledReloadTicks(reloadTime, weaponLevel);
@@ -999,7 +1046,7 @@ public abstract class Weapon implements WeaponProfile {
     public int damageAtDistance(int distanceTiles) {
         float dropMultiplier = GameMath.damageDropMultiplier(damageDropCoefficient,
                 distanceTiles, WeaponConstants.DAMAGE_MIN_MULTIPLIER);
-        return Math.round(damage * dropMultiplier * fireCycleMultiplier);
+        return Math.round(damage * getLadderDamageMultiplier() * dropMultiplier * fireCycleMultiplier);
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }

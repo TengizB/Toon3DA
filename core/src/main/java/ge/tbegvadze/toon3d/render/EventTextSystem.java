@@ -56,6 +56,8 @@ public final class EventTextSystem {
     private final byte[]   colorTypes;
     // Banner-tier parallel arrays — only populated by spawnBanner(); 0/0f in legacy slots.
     private final byte[]   bannerTier;
+    // Per-slot lifetime (seconds): EVENT_TEXT_LIFE_SECONDS for every slot except spawnTimed().
+    private final float[]  lifeSeconds;
     private final float[]  bannerRed;
     private final float[]  bannerGreen;
     private final float[]  bannerBlue;
@@ -69,6 +71,7 @@ public final class EventTextSystem {
         ageSeconds  = new float[poolSize];
         colorTypes  = new byte[poolSize];
         bannerTier  = new byte[poolSize];
+        lifeSeconds = new float[poolSize];
         bannerRed   = new float[poolSize];
         bannerGreen = new float[poolSize];
         bannerBlue  = new float[poolSize];
@@ -80,7 +83,7 @@ public final class EventTextSystem {
         for (int slotIndex = 0; slotIndex < poolSize; slotIndex++) {
             if (texts[slotIndex] == null) continue;
             ageSeconds[slotIndex] += deltaTime;
-            if (ageSeconds[slotIndex] >= EffectConstants.EVENT_TEXT_LIFE_SECONDS) {
+            if (ageSeconds[slotIndex] >= lifeSeconds[slotIndex]) {
                 texts[slotIndex] = null;
                 bannerTier[slotIndex] = 0;
             }
@@ -101,6 +104,7 @@ public final class EventTextSystem {
         bannerRed[nextSlot]   = 0f;
         bannerGreen[nextSlot] = 0f;
         bannerBlue[nextSlot]  = 0f;
+        lifeSeconds[nextSlot] = EffectConstants.EVENT_TEXT_LIFE_SECONDS;
         nextSlot = (nextSlot + 1) % poolSize;
     }
 
@@ -118,8 +122,23 @@ public final class EventTextSystem {
         bannerRed[nextSlot]   = red;
         bannerGreen[nextSlot] = green;
         bannerBlue[nextSlot]  = blue;
+        lifeSeconds[nextSlot] = EffectConstants.EVENT_TEXT_LIFE_SECONDS;
         nextSlot = (nextSlot + 1) % poolSize;
     }
+
+    /**
+     * Spawns a plain (legacy-style) event text with an explicit RGB colour that lives for
+     * {@code lifeSeconds} instead of the default. Uses {@link #TIER_TAG}, which the renderer draws
+     * exactly like a legacy slot but with the explicit colour.
+     */
+    public void spawnTimed(String text, float red, float green, float blue, float lifeSeconds) {
+        spawnBanner(text, red, green, blue, TIER_TAG);
+        int slotIndex = (nextSlot + poolSize - 1) % poolSize;
+        this.lifeSeconds[slotIndex] = lifeSeconds;
+    }
+
+    /** Lifetime of the slot in seconds (age runs 0..this). */
+    public float getLifeSeconds(int slotIndex) { return lifeSeconds[slotIndex]; }
 
     /** Spawns a red damage text for the given net HP loss. Uses pre-built strings; no allocation. */
     public void spawnDamage(int netDamage) {

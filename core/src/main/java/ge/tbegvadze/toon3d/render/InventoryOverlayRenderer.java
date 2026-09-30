@@ -184,6 +184,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     /** Pass the current floor depth for the "SUBLEVEL N" header label. */
     public void setCurrentDepth(int depth) {
         this.currentDepth = depth;
+        weaponSlotsPanel.setThreatLevel(depth); // LV tag colours read the floor threat level (R14 d)
     }
 
     /** Returns the ItemType last consumed via the inventory overlay, or null if none. */

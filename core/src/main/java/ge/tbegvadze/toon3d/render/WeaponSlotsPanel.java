@@ -12,6 +12,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
@@ -82,6 +83,13 @@ final class WeaponSlotsPanel implements Disposable {
     // Optional data sources — set after construction, null-safe at render time
     // -------------------------------------------------------------------------
     private PlayerInventory   playerInventory;
+    /** The floor THREAT LEVEL (= depth, >= 1) the LV tags are coloured against (R14 d). */
+    private int               threatLevel = 1;
+    // Per-slot arrow glyph placement recorded by the text pass and drawn by the following line pass.
+    private final int[]   glyphStanding = new int[TOTAL_SLOT_COUNT];
+    private final float[] glyphX        = new float[TOTAL_SLOT_COUNT];
+    private final float[] glyphY        = new float[TOTAL_SLOT_COUNT];
+    private final Color   tagColor      = new Color();
     private WeaponHudRenderer weaponHudRenderer;
 
     // -------------------------------------------------------------------------
@@ -106,6 +114,10 @@ final class WeaponSlotsPanel implements Disposable {
 
     void setPlayerInventory(PlayerInventory playerInventory) {
         this.playerInventory = playerInventory;
+    }
+
+    void setThreatLevel(int threatLevel) {
+        this.threatLevel = Math.max(1, threatLevel);
     }
 
     void setWeaponHudRenderer(WeaponHudRenderer weaponHudRenderer) {
@@ -264,6 +276,9 @@ final class WeaponSlotsPanel implements Disposable {
     // -------------------------------------------------------------------------
 
     private void renderPassSprites(OrthographicCamera camera, float animationClock) {
+        for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
+            glyphStanding[slotIndex] = WeaponLevelTag.STANDING_NORMAL;
+        }
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
@@ -311,6 +326,26 @@ final class WeaponSlotsPanel implements Disposable {
         }
 
         spriteBatch.end();
+        renderPassGlyphs(camera);
+    }
+
+    /** Pass D — the LV tags' arrow glyphs, placed by the text pass (R14 d). */
+    private void renderPassGlyphs(OrthographicCamera camera) {
+        boolean anyGlyph = false;
+        for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
+            if (WeaponLevelTag.hasGlyph(glyphStanding[slotIndex])) { anyGlyph = true; break; }
+        }
+        if (!anyGlyph) return;
+        shapeRenderer.setProjectionMatrix(camera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
+            int standing = glyphStanding[slotIndex];
+            if (!WeaponLevelTag.hasGlyph(standing)) continue;
+            WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, tagColor);
+            shapeRenderer.setColor(tagColor);
+            WeaponLevelTag.drawGlyph(shapeRenderer, glyphX[slotIndex], glyphY[slotIndex], standing);
+        }
+        shapeRenderer.end();
     }
 
     // -------------------------------------------------------------------------
@@ -383,6 +418,21 @@ final class WeaponSlotsPanel implements Disposable {
         // Weapon name — amber when active, secondary otherwise
         font.setColor(state == SlotState.ACTIVE ? TEXT_PRIMARY : TEXT_SECONDARY);
         font.draw(spriteBatch, weapon.getDisplayName(), textX, textY);
+        glyphLayout.setText(font, weapon.getDisplayName());
+        float tagX = textX + glyphLayout.width + ItemConstants.INV_WEAPON_LEVEL_TAG_GAP;
+
+        // "LV n" after the name, coloured by the gap to the floor threat level (R14 d).
+        int standing = WeaponLevelTag.standing(weapon, threatLevel);
+        WeaponLevelTag.colorFor(standing, TEXT_SECONDARY, tagColor);
+        font.setColor(tagColor);
+        String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
+        font.draw(spriteBatch, tagLabel, tagX, textY);
+        if (WeaponLevelTag.hasGlyph(standing)) {
+            glyphLayout.setText(font, tagLabel);
+            glyphStanding[slotIndex] = standing;
+            glyphX[slotIndex] = tagX + glyphLayout.width + HudConstants.HUD_LEVEL_TAG_CHEVRON_GAP;
+            glyphY[slotIndex] = textY + ItemConstants.INV_WEAPON_LEVEL_GLYPH_LIFT;
+        }
         textY -= lineStep;
 
         // Ammo type

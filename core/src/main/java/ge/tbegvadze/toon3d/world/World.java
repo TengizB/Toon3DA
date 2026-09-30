@@ -125,6 +125,7 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.SoundConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -219,6 +220,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private RunPhase runPhase         = RunPhase.PLAYING;
     private float    fadeTimerSeconds = 0f;
     private int      currentDepth     = RenderConstants.STARTING_DEPTH;
+    /** Scratch for the floor-arrival THREAT line (built once per floor, never per frame). */
+    private final StringBuilder threatArrivalBuilder = new StringBuilder(16);
     /** order-10 B comprehension proxy: seconds on the FACILITY NAV console, reset whenever it opens. */
     private float    routeSelectElapsedSeconds = 0f;
 
@@ -1317,6 +1320,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         for (Weapon weapon : inventory.getArsenal()) {
             weapon.setAbilityResolver(abilityResolver);
         }
+        syncWeaponThreatLevels();
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) {
             meleeWeapon.setAbilityResolver(abilityResolver);
@@ -1788,7 +1792,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(depth, ownedWeapons);
+        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon());
     }
 
     /**
@@ -2014,7 +2018,17 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // Update
     // -------------------------------------------------------------------------
 
+    /**
+     * Sets the current floor's threat level (its depth, clamped to >= 1 for the staging room) on every
+     * weapon the player owns. Idempotent; called right after a floor build and every frame, so a pickup,
+     * purchase or swap is on the ladder before the next hit resolves.
+     */
+    public void syncWeaponThreatLevels() {
+        inventory.syncFloorThreatLevel(Math.max(1, currentDepth));
+    }
+
     public void update(float deltaTime) {
+        syncWeaponThreatLevels();
         // OVERLAY PRECEDENCE (order-7 Part E): a hard-pause overlay — death, level-up, inventory,
         // shop, weapon inspect, the nav console, an event choice — owns the screen. Suppress the
         // bark layer while one is open: requests still QUEUE, nothing is delivered or aged, and the
@@ -2600,6 +2614,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hudState.xpForNextLevel = playerProgress.getXpForNextLevel();
         hudState.medicalCharges = itemInventory.countOf(ItemType.MEDKIT_SMALL) + itemInventory.countOf(ItemType.MEDKIT_LARGE);
         hudState.credits        = playerStats.getCredits();
+        hudState.threatLevel    = Math.max(1, currentDepth);
         Weapon hudWeapon = inventory.getEquippedWeapon();
         if (hudWeapon != null) {
             hudState.currentAmmo = hudWeapon.getShotsInClip();
@@ -3050,6 +3065,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
     }
 
+    /** Posts "THREAT LV d" for {@code THREAT_ARRIVAL_SECONDS}, tinted with the current region's accent. */
+    private void postThreatArrivalText() {
+        if (eventTextSystem == null) return;
+        int regionIndex = 0;
+        if (routePlan != null) {
+            try {
+                regionIndex = routePlan.regionForDepth(currentDepth).regionIndex();
+            } catch (IllegalArgumentException outOfPlan) {
+                regionIndex = 0;
+            }
+        }
+        float[][] accents = HudConstants.THREAT_ARRIVAL_REGION_ACCENT;
+        float[] accent = accents[Math.max(0, Math.min(regionIndex, accents.length - 1))];
+        threatArrivalBuilder.setLength(0);
+        threatArrivalBuilder.append(HudConstants.THREAT_ARRIVAL_PREFIX).append(Math.max(1, currentDepth));
+        eventTextSystem.spawnTimed(threatArrivalBuilder.toString(), accent[0], accent[1], accent[2],
+                HudConstants.THREAT_ARRIVAL_SECONDS);
+    }
+
     /**
      * Announces + logs a region transition the first time the descent enters each region (route-map
      * order-10 theming). Reads the region's {@link RegionAmbience} identity for its display name and
@@ -3057,6 +3091,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * fires on every region change (boss or gate), not just on a gate node. No-op on a route-less world.
      */
     private void detectRegionEntry() {
+        // THREAT LV d (balance R14 b) goes up BEFORE the region's own arrival lines so it stacks
+        // underneath them (event text stacks upward in spawn order). Every floor, gate or not.
+        postThreatArrivalText();
         if (routePlan == null) return;
         RegionSpec region;
         try {
@@ -3139,6 +3176,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // about the loadout changes on the new floor, so this reads the state the departed floor
         // actually ended in.
         teachingSystem.onFloorArrived(countEquippedRangedWeapons() >= 2);
+        // UNDERGEARED (balance-overhaul-order-1 R14 e): equipped weapon two or more levels under this
+        // floor. The level-gap-exempt Fist always counts as on-level, so it never triggers the topic.
+        Weapon arrivalWeapon = inventory.getEquippedWeapon();
+        if (arrivalWeapon != null && !arrivalWeapon.isLevelGapExempt()
+                && arrivalWeapon.getWeaponLevel() <= currentDepth - 2) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.UNDERGEARED.getSubjectKey());
+            teachingSystem.onFloorArrivedUndergeared();
+        }
         // ORA introduces herself BEFORE she starts naming the place (narrative-rework order-2 D then
         // order-3). Both the cold open and this method fire on the first real floor, so asking here
         // first is what keeps "I'm ORA" ahead of "this is the Deepworks" in the queue. Guarded by
@@ -4499,9 +4544,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (consumed == null) return;
         int healAmount = 0;
         if (consumed == ItemType.MEDKIT_SMALL) {
-            healAmount = ItemConstants.MEDKIT_STIM_HEAL;
+            healAmount = MedicalTier.STIM.healAmountFor(player.getMaxHealth());
         } else if (consumed == ItemType.MEDKIT_LARGE) {
-            healAmount = ItemConstants.MEDKIT_FULL_HEAL;
+            healAmount = MedicalTier.FIELD_MEDKIT.healAmountFor(player.getMaxHealth());
         }
         if (healAmount > 0) {
             player.applyHealing(healAmount);
@@ -4536,6 +4581,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         Weapon activeWeapon  = meleeGround ? inventory.getMeleeWeapon() : inventory.getLoadout().active();
         int    convertAmount = computeConvertAmount(standingOn);
         weaponInspectOverlayRenderer.setFacilityTime(facilityTimeSeconds);
+        weaponInspectOverlayRenderer.setCurrentThreatLevel(Math.max(1, currentDepth));
         weaponInspectOverlayRenderer.show(standingOn, standingOn.weaponRoll,
                 arsenalWeapon, activeWeapon, inventory.getLoadout(), isStartingRoom, convertAmount, meleeGround);
         runPhase = RunPhase.WEAPON_INSPECT;
@@ -4882,12 +4928,20 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Level-up ceremony: advance the level and record the pick so future offers lean into this
         // build. (The shop path deliberately does NOT do this — a purchase is not a level-up.)
         playerProgress.advanceLevel();
+        applyVitalityGrowth();
         upgradeCardDeck.registerPick(card);
 
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
         }
         runPhase = RunPhase.PLAYING;
+    }
+
+    /** R9: raises max HP and max armour by the vitality-ladder step for the level just reached. */
+    private void applyVitalityGrowth() {
+        int newLevel = playerProgress.getPlayerLevel();
+        player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, newLevel));
+        player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, newLevel));
     }
 
     /**

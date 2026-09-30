@@ -328,7 +328,7 @@ public class PlayerController {
         int stimCount = itemInventory.countOf(ItemType.MEDKIT_SMALL);
         if (stimCount > 0) {
             int medkitCount     = itemInventory.countOf(ItemType.MEDKIT_LARGE);
-            int healthAfterStim = currentHealth + ItemConstants.MEDKIT_STIM_HEAL;
+            int healthAfterStim = currentHealth + MedicalTier.STIM.healAmountFor(maxHealth);
             if (healthAfterStim >= maxHealth || medkitCount == 0) return MedicalTier.STIM;
         }
         return MedicalTier.FIELD_MEDKIT;
@@ -340,7 +340,7 @@ public class PlayerController {
         ItemType type = tier.getItemType();
         if (itemInventory.countOf(type) <= 0) return 0;
         itemInventory.spend(type, 1);
-        return tier.getHealAmount();
+        return tier.healAmountFor(player.getMaxHealth());
     }
 
     private void pickUpArmourIfPresent(int tileColumn, int tileRow) {
@@ -348,7 +348,7 @@ public class PlayerController {
         if (Level.isArmourPickup(cell)) {
             // Anti-waste: only consume the pickup if the player is below max armour.
             if (player.getArmor() < player.getMaxArmor()) {
-                int restore = Level.armourRestoreOfPickup(cell);
+                int restore = GameMath.fractionOfMaximum(player.getMaxArmor(), Level.armourRestoreFractionOfPickup(cell));
                 player.applyArmor(restore);
                 level.consumePickupAt(tileColumn, tileRow);
                 if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_ARMOUR);

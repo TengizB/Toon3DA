@@ -60,14 +60,7 @@ public final class BalanceConfig {
     // Heal magnitudes scaled ~1.8x in the economy rescale (idea-A, iteration 2): enemy damage
     // rose, so a floor's INCOMING damage rose, and the heals had to rise with it to keep the
     // per-floor net HP drain in the 5-15% band (SECTION 10). Player eHP itself is UNCHANGED.
-    /** HP restored by a stim-pack ('+'). Was 18; scaled with the damage economy. Range: 20–50. */
-    public static final int   MEDKIT_STIM_HEAL        = 32;
-    /** HP restored by a full medkit ('H'). Was 50; scaled with the damage economy. Range: 50–110. */
-    public static final int   MEDKIT_FULL_HEAL        = 90;
-    /** Armour restored by an armour shard ('a'). Was 8; scaled with the damage economy. Range: 8–25. */
-    public static final int   ARMOUR_SHARD_VALUE      = 14;
-    /** Armour restored by a security vest ('A'). Was 35; scaled with the damage economy. Range: 40–90. */
-    public static final int   ARMOUR_VEST_VALUE       = 62;
+    // MEDKIT_STIM_HEAL / MEDKIT_FULL_HEAL / ARMOUR_SHARD_VALUE / ARMOUR_VEST_VALUE moved to SECTION 20 as fractions of max (R10).
 
     /** Seconds per one-tile step. Lower = snappier, and you eat fewer enemy turns while repositioning. Range: 0.08–0.20. */
     public static final float PLAYER_MOVE_DURATION    = 0.12f;
@@ -91,25 +84,40 @@ public final class BalanceConfig {
     // band still holds (verified via the standalone harness; not Gradle-built — proxy blocks the
     // Android plugin). See docs/game-balance-authority.txt and balance-ideas-review.txt.
 
+    // POWER-LADDER REBASE (balance-overhaul order 1, R8): every archetype's depth-1 HP and damage were
+    // re-set so the fight lengths land in the R8 hit targets against the on-curve reference — the Assault
+    // Rifle (COMMON, L1) at 3 tiles = 15.2 per hit, and the 205-eHP start player:
+    //     CHAFF      dies in 1-2 hits, lands >= 10 hits before the player dies
+    //     SOLDIER    3-4 hits  | 7-9 hits
+    //     BRUISER    5-7 hits  | 4-6 hits
+    //     MINI_ELITE 8-12 hits | 3-5 hits
+    // i.e. HP roughly -35..-60% against the economy-rescale numbers, damage raised only where the band
+    // demands it (SOLDIER +65..+110%, BRUISER +75..+100%, the mini-elite +75%; CHAFF damage is unchanged —
+    // the old values already land >= 10 hits). Damage sits at the LOW end of each band on purpose: the
+    // heal economy (R-HEALDRAIN-DEPTH) has to absorb every point of it. The
+    // per-archetype comments below were written for (their "was X" notes describe that older history).
+    // No more sponges: fights are short and hits land hard; floors get more bodies in balance-overhaul
+    // order 2. Verified by R-ENEMY (BalanceSchema.enemyHitResults) and BalanceReport's ENEMIES table.
+
     // GORE_BITER (spawn '3') — fast light melee; spawns in packs. (was 18 HP / 7 dmg)
-    public static final int GORE_BITER_MAX_HEALTH          = 40;
+    public static final int GORE_BITER_MAX_HEALTH          = 28;
     public static final int GORE_BITER_ATTACK_DAMAGE       = 12;
     public static final int GORE_BITER_MOVE_EVERY_N_TURNS  = 1;
 
     // EYE_TYRANT (spawn '2') — fast ranged kiter. (was 18 HP / 7 dmg)
-    public static final int EYE_TYRANT_MAX_HEALTH          = 40;
+    public static final int EYE_TYRANT_MAX_HEALTH          = 28;
     public static final int EYE_TYRANT_ATTACK_DAMAGE       = 11;
     public static final int EYE_TYRANT_RANGE_TILES         = 5;
 
     // ACID_DRONE (spawn '$') — ranged mechanical. (was 22 HP / 8 dmg)
-    public static final int ACID_DRONE_MAX_HEALTH          = 90;
-    public static final int ACID_DRONE_ATTACK_DAMAGE       = 12;
+    public static final int ACID_DRONE_MAX_HEALTH          = 45;
+    public static final int ACID_DRONE_ATTACK_DAMAGE       = 24;
     public static final int ACID_DRONE_RANGE_TILES         = 4;
     public static final int ACID_DRONE_MOVE_EVERY_N_TURNS  = 1;
 
     // VOID_SHROUD (spawn '^') — fast stealth melee FLANKER (Pillar 2). (was 25 HP / 9 dmg)
-    public static final int VOID_SHROUD_MAX_HEALTH         = 96;
-    public static final int VOID_SHROUD_ATTACK_DAMAGE      = 13;
+    public static final int VOID_SHROUD_MAX_HEALTH         = 50;
+    public static final int VOID_SHROUD_ATTACK_DAMAGE      = 25;
     public static final int VOID_SHROUD_MOVE_EVERY_N_TURNS = 1;
     /**
      * Flank strike bonus (Pillar 2): the Void Shroud prefers the tile behind the player's facing
@@ -119,14 +127,14 @@ public final class BalanceConfig {
     public static final float VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = 1.6f;
 
     // MIRE_WRAITH (spawn '5') — slow ground-based ranged acid; tanky. (was 38 HP / 7 dmg)
-    public static final int MIRE_WRAITH_MAX_HEALTH         = 100;
-    public static final int MIRE_WRAITH_ATTACK_DAMAGE      = 11;
+    public static final int MIRE_WRAITH_MAX_HEALTH         = 52;
+    public static final int MIRE_WRAITH_ATTACK_DAMAGE      = 23;
     public static final int MIRE_WRAITH_RANGE_TILES        = 3;
     public static final int MIRE_WRAITH_MOVE_EVERY_N_TURNS = 2;
 
     // SHELL_BRUTE (spawn '4') — heavy CHARGER melee (Pillar 2). (was 38 HP / 13 dmg)
-    public static final int SHELL_BRUTE_MAX_HEALTH         = 120;
-    public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 20;
+    public static final int SHELL_BRUTE_MAX_HEALTH         = 95;
+    public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 35;
     public static final int SHELL_BRUTE_MOVE_EVERY_N_TURNS = 1;
     /**
      * Charge rush damage multiplier (Pillar 2). After a one-turn telegraphed wind-up the brute
@@ -148,8 +156,8 @@ public final class BalanceConfig {
     public static final float SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = 0.75f;
 
     // PLAGUE_HULK (spawn '1') — slow tank melee. (was 50 HP / 10 dmg)
-    public static final int PLAGUE_HULK_MAX_HEALTH         = 120;
-    public static final int PLAGUE_HULK_ATTACK_DAMAGE      = 16;
+    public static final int PLAGUE_HULK_MAX_HEALTH         = 60;
+    public static final int PLAGUE_HULK_ATTACK_DAMAGE      = 23;
     public static final int PLAGUE_HULK_MOVE_EVERY_N_TURNS = 2;
     /**
      * Low-HP finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt): once HP drops to or below
@@ -183,9 +191,9 @@ public final class BalanceConfig {
     // 16 melee / 11 ranged). A mini-elite is a deliberate spike: tanky AND hard-hitting, so its
     // golden ratio reads UNDER the duel band by design — you spend heavy weapons or avoid it, you
     // do not trade blows. Its TP (now ~254) prices that on the encounter budget.
-    public static final int IRON_STALKER_MAX_HEALTH        = 230;
-    public static final int IRON_STALKER_MELEE_DAMAGE      = 24;
-    public static final int IRON_STALKER_RANGED_DAMAGE     = 17;
+    public static final int IRON_STALKER_MAX_HEALTH        = 170;
+    public static final int IRON_STALKER_MELEE_DAMAGE      = 42;
+    public static final int IRON_STALKER_RANGED_DAMAGE     = 30;
     public static final int IRON_STALKER_RANGE_TILES       = 4;
     public static final int IRON_STALKER_MOVE_EVERY_N_TURNS = 1;
 
@@ -204,14 +212,14 @@ public final class BalanceConfig {
     // GHOUL (spawn '~') — slow shambling melee CHAFF; relentless but easily outpaced.
     // Was 30 HP / 9 dmg -> TP 10.8, UNDER the chaff band (16-34): under-costed filler. Raised to
     // 42 HP / 13 dmg -> TP 21.8, mid-chaff, dies in 2 reference hits like the other chaff.
-    public static final int GHOUL_MAX_HEALTH          = 42;
+    public static final int GHOUL_MAX_HEALTH          = 30;
     public static final int GHOUL_ATTACK_DAMAGE       = 13;
     public static final int GHOUL_MOVE_EVERY_N_TURNS  = 2;
 
     // CRAWLER (spawn 'z') — fast, fragile low-to-the-ground melee CHAFF; rushes in.
     // Was 22 HP / 8 dmg -> TP 8.1, far UNDER the chaff band. Leaned into the fragile-glass-cannon
     // niche: 24 HP / 15 dmg (fast melee) -> TP 16.6, in band; a 1-hit kill that punishes if ignored.
-    public static final int CRAWLER_MAX_HEALTH         = 24;
+    public static final int CRAWLER_MAX_HEALTH         = 15;
     public static final int CRAWLER_ATTACK_DAMAGE      = 15;
     public static final int CRAWLER_MOVE_EVERY_N_TURNS = 1;
 
@@ -220,13 +228,13 @@ public final class BalanceConfig {
     // "soldier" that duels like a bruiser is an unfair surprise. Reclassified to BRUISER in
     // EnemyType.role() (TP 79 in the 70-120 bruiser band, gr 2.4 in the [2,4] bruiser band); it is
     // the fast, non-charging bruiser counterpart to the Shell Brute charger. Stats unchanged.
-    public static final int REVENANT_MAX_HEALTH         = 110;
-    public static final int REVENANT_ATTACK_DAMAGE      = 18;
+    public static final int REVENANT_MAX_HEALTH         = 85;
+    public static final int REVENANT_ATTACK_DAMAGE      = 35;
     public static final int REVENANT_MOVE_EVERY_N_TURNS = 1;
 
     // VORTEX_EYE (spawn 'V') — short-range ranged CHAFF caster; weaker, closer kiter than Eye Tyrant.
     // TP 16.4 — already lands (just) inside the chaff band, so left unchanged by the contract pass.
-    public static final int VORTEX_EYE_MAX_HEALTH         = 35;
+    public static final int VORTEX_EYE_MAX_HEALTH         = 24;
     public static final int VORTEX_EYE_ATTACK_DAMAGE      = 9;
     public static final int VORTEX_EYE_RANGE_TILES        = 4;
     public static final int VORTEX_EYE_MOVE_EVERY_N_TURNS = 1;
@@ -242,8 +250,8 @@ public final class BalanceConfig {
     // Trimmed 115 -> 90: the summon adds a flat ~26 TP regardless of body HP, so the BODY must stay light
     // to keep the whole archetype a SOLDIER. New cycle-averaged TP ~64 (top of the 36-66 band), golden
     // ratio ceil(90/25)=4 -> 15/4 = 3.75 (in [3,8]); the lighter body also floods the room a touch less.
-    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 90;
-    public static final int BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = 14;
+    public static final int BLIGHT_CORRUPTOR_MAX_HEALTH         = 48;
+    public static final int BLIGHT_CORRUPTOR_ATTACK_DAMAGE      = 26;
     public static final int BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS = 2;
 
     // -------------------------------------------------------------------------
@@ -257,8 +265,8 @@ public final class BalanceConfig {
     // the ring is gone one good hit is most of the fight. It is the roster's LOADOUT test — a rapid,
     // multi-hit weapon strips the ring in a burst while a single huge slug wastes its whole damage on
     // one shard — and the deliberate mirror of the burst-hungry Rimeshell Lancer.
-    public static final int AURIC_SENTINEL_MAX_HEALTH           = 70;
-    public static final int AURIC_SENTINEL_ATTACK_DAMAGE        = 15;
+    public static final int AURIC_SENTINEL_MAX_HEALTH           = 18;
+    public static final int AURIC_SENTINEL_ATTACK_DAMAGE        = 26;
     public static final int AURIC_SENTINEL_RANGE_TILES          = 5;
     public static final int AURIC_SENTINEL_MOVE_EVERY_N_TURNS   = 1;
     /** Turns between shard launches — it can only fire as fast as it re-grows shards. Range: 1–3. */
@@ -278,15 +286,16 @@ public final class BalanceConfig {
      * Absorbing a hit outright IS "extra effective HP", so the shards are priced exactly there rather
      * than as a bespoke TP term. Derivation:
      *     shards absorbed over a fight ~= 3 (the ring) + ~0.5 (one regrow) = 3.5
-     *     value per absorbed hit       ~= REFERENCE_PLAYER_DPT (25) * 0.8  = 20
-     *     armorPool                     = 3.5 * 20                          = 70
+     *     value per absorbed hit       ~= the R8 reference hit (15.2) * 0.8 ~= 12
+     *     armorPool                     = 3.5 * 12                          = 42
+     *   (balance-overhaul order 1 rebase: was 3.5 * 20 = 70 against the old 25-DPT yardstick.)
      * The 0.8 factor is the honest discount for the fact that a player who READS the enemy strips
-     * shards with cheap hits, not reference-sized ones. Yields eHP 140, TP ~55 (mid SOLDIER band).
+     * shards with cheap hits, not reference-sized ones. Yields eHP 60 (4 reference hits, R8 SOLDIER).
      * RISK, STATED PLAINLY: this is the archetype whose effective eHP swings hardest with the player's
      * loadout, and one averaged pool cannot express that — the simulator's per-policy S-* bands are the
      * right instrument, and the lever if the spread is unacceptable is AURIC_MAX_SHARDS, not the HP.
      */
-    public static final float AURIC_SHARD_ARMOR_POOL            = 70f;
+    public static final float AURIC_SHARD_ARMOR_POOL            = 42f;
 
     // CINDERFORGE_COLOSSUS (spawn '{') — the golem family's melee BRUISER ANCHOR
     // (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). A towering furnace of magma
@@ -294,8 +303,8 @@ public final class BalanceConfig {
     // damage (COOLING CRUST), and every tile it leaves behind catches fire (MOLTEN TRAIL). It is the
     // roster's TEMPO test — the Shell Brute is the POSITIONING bruiser (sidestep the lane, punish the
     // recovery); the Colossus is the one you must never stop shooting.
-    public static final int CINDERFORGE_COLOSSUS_MAX_HEALTH          = 110;
-    public static final int CINDERFORGE_COLOSSUS_ATTACK_DAMAGE       = 18;
+    public static final int CINDERFORGE_COLOSSUS_MAX_HEALTH          = 75;
+    public static final int CINDERFORGE_COLOSSUS_ATTACK_DAMAGE       = 36;
     /** Ponderous by design: it is KITEABLE, and it should be — the trail is the price of kiting it. Range: 1–3. */
     public static final int CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS  = 2;
     /**
@@ -341,8 +350,8 @@ public final class BalanceConfig {
     // core: it is the game's most damage-resistant non-elite WHILE SEALED, but its ice shell must OPEN
     // for the molten lance to fire — armoured OR dangerous, never both at once. Every other ranged enemy
     // punishes you for standing in its line; the Lancer punishes you for shooting on the wrong turn.
-    public static final int RIMESHELL_LANCER_MAX_HEALTH             = 90;
-    public static final int RIMESHELL_LANCER_ATTACK_DAMAGE          = 14;
+    public static final int RIMESHELL_LANCER_MAX_HEALTH             = 48;
+    public static final int RIMESHELL_LANCER_ATTACK_DAMAGE          = 24;
     public static final int RIMESHELL_LANCER_RANGE_TILES            = 6;
     /** Heavy: it repositions slowly, and should — the shell is the reason it can afford to. Range: 1–3. */
     public static final int RIMESHELL_LANCER_MOVE_EVERY_N_TURNS     = 2;
@@ -379,8 +388,8 @@ public final class BalanceConfig {
     // crystal SPIRES that drain life into it while they stand: shoot the golem and it heals, shoot the
     // spires and it stops — the room is already a maze. The first enemy that makes the board itself the
     // problem. Melee-only up close; it prefers to reposition behind its spires and sow at range.
-    public static final int VERDANT_SPIRESOWER_MAX_HEALTH          = 100;
-    public static final int VERDANT_SPIRESOWER_ATTACK_DAMAGE       = 13;
+    public static final int VERDANT_SPIRESOWER_MAX_HEALTH          = 45;
+    public static final int VERDANT_SPIRESOWER_ATTACK_DAMAGE       = 24;
     /** Heavy and patient — it would rather reposition behind its spires than close. Range: 1–3. */
     public static final int VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS  = 2;
     /**
@@ -388,14 +397,14 @@ public final class BalanceConfig {
      * ARMOUR POOL — regen is simply extra effective HP, and the model already owns that primitive. Expected
      * regen over a fight:
      *     SPIRESOWER_REGEN_PER_SPIRE (2) * expected living spires (~2, averaged — it starts at 0 and is
-     *     being shot) * expected fight length (~5 turns) = 20 HP.
+     *     being shot) * expected fight length (~3 turns after the R8 rebase; was ~5) = 12 HP.
      *     eHP = enemyEffectiveHitPoints(100, 20, 0, 0, 25) = 120.0 ; survivalTurns = 120/25 = 4.8
      *     TP  = (13/1) * 4.8 * POSITIONAL_MULT_MELEE = 13 * 4.8 * 1.00 = 62.4  (SOLDIER 36-66, upper-mid)
      * The spires' TERRAIN value (blocked tiles + blocked LOS) is deliberately UNPRICED: it hurts its own
      * family (ranged allies lose their lanes) as much as the player, and the model has no positional-denial
      * channel for enemies. Flag for review if the sim says it over-performs its 62 TP. Range: 12–28.
      */
-    public static final float SPIRESOWER_REGEN_ARMOR_POOL         = 20f;
+    public static final float SPIRESOWER_REGEN_ARMOR_POOL         = 12f;
     /** Enemy turns between sow attempts — a readable rhythm the player learns to pre-empt. Range: 3–6. */
     public static final int SPIRESOWER_SOW_CADENCE_TURNS          = 4;
     /** Spires planted per sow (each into a distinct legal tile). Range: 1–3. */
@@ -430,11 +439,14 @@ public final class BalanceConfig {
     // When an enemy commits DEFEND it gains Block on its next turn; incoming damage is
     // subtracted from Block before HP (see the 5-step mitigation pipeline in
     // docs/game-balance-authority.txt). Block is transient eHP priced at ~1 turn of survival
-    // (baseBlock ≈ REFERENCE_PLAYER_DPT), so it never inflates a role's TTK out of its
-    // golden-ratio band. Verified by BalanceReport's BLOCK section.
+    // (baseBlock ≈ one reference hit), so it never inflates a role's TTK out of its R8 hit band.
+    // Verified by BalanceReport's BLOCK section. POWER-LADDER REBASE (balance-overhaul order 1): the
+    // three base gains were re-set to ~one R8 reference hit (15.2) scaled by role (was 22/30/40 against
+    // the old 25-DPT yardstick), and BOTH the gain and the BLOCK_MAX cap now ride the enemy HP growth
+    // (GameMath.enemyHealthAtDepth), so a deep enemy's brace stays proportional to its HP.
     // -------------------------------------------------------------------------
 
-    /** Hard cap on any actor's Block. Stops defend-spam from stacking into immortality. Range: 40–90. */
+    /** Depth-1 hard cap on any actor's Block (scaled by the enemy HP growth at depth). Stops defend-spam from stacking into immortality. Range: 40–90. */
     public static final int   BLOCK_MAX                       = 60;
     /**
      * World turns a gained Block survives before the StatusEffectController tick zeroes it.
@@ -444,12 +456,12 @@ public final class BalanceConfig {
      */
     public static final int   BLOCK_DECAY_TURNS               = 1;
 
-    /** Depth-1 base Block a SOLDIER-role enemy gains on DEFEND (≈ reference player DPT). Range: 16–30. */
-    public static final int   DEFEND_BLOCK_GAIN_SOLDIER       = 22;
-    /** Depth-1 base Block a BRUISER-role enemy gains on DEFEND (braces harder). Range: 24–40. */
-    public static final int   DEFEND_BLOCK_GAIN_BRUISER       = 30;
-    /** Depth-1 base Block a MINI_ELITE-role enemy gains on DEFEND (the sturdiest bracer). Range: 32–50. */
-    public static final int   DEFEND_BLOCK_GAIN_MINI_ELITE    = 40;
+    /** Depth-1 base Block a SOLDIER-role enemy gains on DEFEND (≈ one R8 reference hit). Range: 10–22. */
+    public static final int   DEFEND_BLOCK_GAIN_SOLDIER       = 15;
+    /** Depth-1 base Block a BRUISER-role enemy gains on DEFEND (braces harder). Range: 15–30. */
+    public static final int   DEFEND_BLOCK_GAIN_BRUISER       = 20;
+    /** Depth-1 base Block a MINI_ELITE-role enemy gains on DEFEND (the sturdiest bracer). Range: 20–40. */
+    public static final int   DEFEND_BLOCK_GAIN_MINI_ELITE    = 27;
 
     /** An enemy turtles (may DEFEND) only when its HP fraction is at or below this. Range: 0.35–0.6. */
     public static final float DEFEND_HP_THRESHOLD_FRACTION    = 0.5f;
@@ -554,40 +566,10 @@ public final class BalanceConfig {
     // Compound HP/damage growth and linear credit growth applied as you descend.
     // =====================================================================================
 
-    // DEPTH-COUPLING TUNED (see SECTION 9 invariant + GameMath.depthCouplingRatio).
-    // These were 1.08 / 1.06. Enemy threat scales by the PRODUCT of both as a COMPOUND curve
-    // (depthThreatScale), while the player's level-up power grows LINEARLY (1 + levels*budget/100,
-    // GameMath.playerPowerAtDepth). At 1.08/1.06 the compound enemy curve outran the linear player
-    // curve from depth 5 on (coupling ratio fell to 0.86 at d5 and ~0.40 by d15 — the game became
-    // unwinnable at depth).
-    //
-    // ENDLESS-MODE PASS (game-balance-tuning): the descent is ENDLESS (region bands of 5 depths,
-    // bosses every 5, "THE BREACH" cycling forever — see RouteMapConstants), so runs regularly pass
-    // depth 15-20. At 1.045/1.035 the coupling ratio fell out the bottom of the [0.9, 1.2] band at
-    // depth 15 (0.89) and collapsed to 0.74 by depth 20 — deep endless floors were unfair-hard.
-    // A compound enemy curve must eventually outrun a linear player curve, so this cannot be held
-    // forever; the goal is to hold the fair band as DEEP as possible while barely touching the
-    // well-tuned early/mid game. Trimmed 1.045/1.035 -> 1.042/1.032: the ratio held the band through
-    // depth 15 (0.97) and landed depth 18/20 at 0.88/0.83 — a soft, graceful hard-edge.
-    //
-    // HONEST-POWER RE-FIT (new-game-balancr order 4): the OLD coupling defended a FICTION — the player
-    // curve counted ONLY level-up cards (playerPowerAtDepth), ignoring found weapons, priced abilities
-    // and crits. Order 4 replaces it with the HONEST total-power model GameMath.playerPowerAtDepthV2
-    // (cardPower * gearRamp * abilityPower). That honest curve is far STEEPER (v2(15) ~= 5.5 vs the old
-    // fiction's 2.68), so the enemy compound rates had to RISE to stay coupled (as the order-4 design
-    // predicted). The HEALTH scale is deliberately HELD at 1.042 so order-3's scarcity depth-sweep
-    // (DEMAND rides the HEALTH curve) and its region multipliers are UNTOUCHED; the whole re-fit is put
-    // into the DAMAGE scale, which cancels in the heal-drain fraction (order 3) and interacts only with
-    // the gear gate (order 2). DAMAGE scale re-fit 1.032 -> 1.073: the depth-coupling ratio against v2
-    // now holds [0.9, 1.2] for depths 1..15 (ranging ~0.95..1.19) with NO under-band fudge, degrading
-    // gracefully to the EASY side (an on-curve player pulls slightly ahead) only from depth ~17 — the
-    // boundary is printed in BalanceReport's DEPTH COUPLING table. The gear gate stays in band at the
-    // re-fit rate (region-2 on-curve soldier golden ratio = 3.0, exactly the fair edge). Regenerate the
-    // DEPTH COUPLING table after changing either. Range: 1.03–1.08 (HP) / 1.02–1.08 (dmg).
-    /** Per-floor compound HP multiplier: baseHP * scale^(depth-1). Held at 1.042 (protects order-3 scarcity). Range: 1.03–1.08. */
-    public static final float ENEMY_HEALTH_SCALE_PER_DEPTH = 1.042f;
-    /** Per-floor compound damage multiplier: baseDmg * scale^(depth-1). Re-fit 1.032->1.073 vs the honest v2 curve (order 4). Range: 1.02–1.08. */
-    public static final float ENEMY_DAMAGE_SCALE_PER_DEPTH = 1.073f;
+    // ENEMY HP / DAMAGE DEPTH GROWTH moved to SECTION 20 (balance-overhaul order 1): the old
+    // ENEMY_HEALTH_SCALE_PER_DEPTH 1.042 ("held to protect order-3 scarcity") and
+    // ENEMY_DAMAGE_SCALE_PER_DEPTH 1.073 (fitted to the retired R-DEPTH coupling) are REPLACED by the
+    // ladder-fitted ENEMY_HEALTH_GROWTH / ENEMY_DAMAGE_GROWTH, which R-LADDER L1 defends.
     /** Per-floor linear credit bonus: base * (1 + (depth-1) * scale). Range: 0.05–0.25. */
     public static final float CREDIT_DEPTH_SCALE           = 0.12f;
 
@@ -729,8 +711,6 @@ public final class BalanceConfig {
     public static final float CRIT_DAMAGE_MULTIPLIER        = 2.0f;
     /** Damage floor as a fraction of base at maximum falloff range. Range: 0.10–0.30. */
     public static final float DAMAGE_MIN_MULTIPLIER         = 0.15f;
-    /** Per-weapon-level outgoing damage bonus (+10%/level). Range: 0.05–0.20. */
-    public static final float WEAPON_LEVEL_DAMAGE_PER_LEVEL = 0.10f;
 
     // =====================================================================================
     // SECTION 5 — RESOURCE SUPPLY (the ammo economy) — TUNED FOR SCARCITY (idea 3)
@@ -755,19 +735,24 @@ public final class BalanceConfig {
     // means small boxes and low drop rates. Fully reconciling clip sizes with this economy
     // is the deferred eHP/damage rescale flagged in docs/game-balance-authority.txt.
 
+    // POWER-LADDER RE-FIT (balance-overhaul order 1): the R8 rebase cut the model floor's DEMAND
+    // 720 -> 502 (enemy HP -30%), so LEVER 2 box sizes and LEVER 3 caps were cut ~0.7x with it (bullets
+    // 15/54 -> 10/38, shells 5/24 -> 4/17, cells 10/38 -> 7/27, slugs 2/8 -> 1/6, fuel 25/50 -> 18/35,
+    // grenades 3/10 -> 2/7; rocket boxes stay at 2, caps 26 -> 18). Box SIZE — not drop frequency — is the
+    // lever because a guaranteed box (cache / event / vault) must stay worth the same share of a floor.
     // LEVER 2 — DROP SIZE: ammo box grants (rounds per pickup). RE-SCALED ~2.5x in the economy
     // rescale (idea-A, iteration 2): the model-floor DEMAND rose from 288 to 720 dmg (enemy eHP
     // ~3x), so SUPPLY had to rise proportionally to hold the floor-wide scarcity ratio S in
     // [0.75, 0.95]. With these sizes S = 0.83 floor-wide and < 0.6 per weapon (verified via the
     // harness). The bigger boxes are no longer the awkward 2-4 rounds the old low-eHP economy
     // forced — they fit clip sizes again (the clip-vs-eHP mismatch the old scale created is gone).
-    public static final int AMMO_BOX_BULLETS    = 15;
-    public static final int AMMO_BOX_SHELLS     = 5;
-    public static final int AMMO_BOX_CELLS      = 10;
+    public static final int AMMO_BOX_BULLETS    = 10;
+    public static final int AMMO_BOX_SHELLS     = 4;
+    public static final int AMMO_BOX_CELLS      = 7;
     public static final int AMMO_BOX_ROCKETS    = 2;
-    public static final int RAILGUN_PICKUP_SLUGS = 2;
-    public static final int FLAME_PICKUP_FUEL   = 25;
-    public static final int GRENADE_PICKUP_AMMO = 3;
+    public static final int RAILGUN_PICKUP_SLUGS = 1;
+    public static final int FLAME_PICKUP_FUEL   = 18;
+    public static final int GRENADE_PICKUP_AMMO = 2;
 
     // LEVER 3 — RESERVE CAP: the hoarding ceiling, tuned to ~1.5 floors of that weapon's
     // run-demand (see GameMath.reserveBankingFloors) so banking is limited. RE-DERIVED against the
@@ -775,18 +760,18 @@ public final class BalanceConfig {
     // also RESOLVES the old clip-vs-eHP mismatch — the bullet cap (now 54) banks exactly 1.5 floors
     // and still comfortably holds a full 30-round Assault Rifle / 24-round Chaingun clip, so the
     // "one cap over target" exception the old scale forced is gone; every cap now hits the target.
-    public static final int AMMO_RESERVE_CAP_BULLETS = 54;
-    public static final int AMMO_RESERVE_CAP_SHELLS  = 24;
-    public static final int AMMO_RESERVE_CAP_CELLS   = 38;
-    public static final int AMMO_RESERVE_CAP_ROCKETS = 26;
+    public static final int AMMO_RESERVE_CAP_BULLETS = 38;
+    public static final int AMMO_RESERVE_CAP_SHELLS  = 17;
+    public static final int AMMO_RESERVE_CAP_CELLS   = 27;
+    public static final int AMMO_RESERVE_CAP_ROCKETS = 18;
     // RAILGUN_MAX_SLUGS kept the TIGHTEST banking (~1.0 floor, not 1.5) to honor the railgun's
     // documented power-band exception (powerScore 45 > heavy band 24-32): slug SCARCITY, not raw
     // damage, is what holds it in check. The slug SUPPLY (~1.1 slugs/floor) is the true gate; the
     // tight cap reinforces it. The elite-busting niche of a 90-per-slug hit is MORE valuable now
     // that enemies are tankier, so the raw 90 is kept (see SECTION 4 + docs).
-    public static final int RAILGUN_MAX_SLUGS        = 8;
-    public static final int FLAME_MAX_FUEL           = 50;
-    public static final int GRENADE_MAX_AMMO         = 10;
+    public static final int RAILGUN_MAX_SLUGS        = 6;
+    public static final int FLAME_MAX_FUEL           = 35;
+    public static final int GRENADE_MAX_AMMO         = 7;
 
     // LEVER 1 — DROP FREQUENCY: how often a pickup spawns at all. Frequency adds variance
     // (good for texture) and here carries more of the scarcity than ideal because box sizes
@@ -806,7 +791,7 @@ public final class BalanceConfig {
     // regions (gear outrunning eHP) need a small trim to hold the scarcity ratio S in [0.75, 0.95] at
     // EVERY depth (R-SCARCITY-DEPTH). Verified by the SCARCITY depth-sweep in BalanceReport. Range per
     // entry: 0.85–1.15. See docs/game-balance-authority.txt and new-game-balancr-order-3.txt.
-    public static final float[] AMMO_SUPPLY_REGION_MULTIPLIER = {1.08f, 1.00f, 0.94f};
+    public static final float[] AMMO_SUPPLY_REGION_MULTIPLIER = {1.03f, 1.00f, 0.98f, 0.98f, 1.10f};
 
     // =====================================================================================
     // SECTION 6 — LOOT / PICKUP SPAWN CHANCES (the drop economy)
@@ -871,7 +856,7 @@ public final class BalanceConfig {
      * with the descent — the player gains ~1 level/floor at EVERY depth. R-XP-PACE is the guardrail that
      * fails the build if this drifts out of coupling with the enemy rates. Range: 1.08–1.16.
      */
-    public static final float XP_CURVE_GROWTH_PER_LEVEL = 1.118f;
+    public static final float XP_CURVE_GROWTH_PER_LEVEL = 1.2495f;
 
     // XP PACING (new-game-balancr order 4) — pacing is now a RULE (R-XP-PACE), not a hope.
     /**
@@ -1144,21 +1129,20 @@ public final class BalanceConfig {
     public static final float WEAPON_POWER_HEAVY_MIN      = 24f;
     public static final float WEAPON_POWER_HEAVY_MAX      = 32f;
 
-    // --- ENEMY THREAT-POINT BANDS (threatPoints must land in the band for the chosen role).
-    // RE-SCALED ~4x in the economy rescale (idea-A, iteration 2). REFERENCE_PLAYER_DPT is held at
-    // 25 (semantically honest: survivalTurns = eHP/25 = the turns the enemy survives the player's
-    // sustained fire), so the beefier enemies genuinely have ~4x the Threat Points — they survive
-    // ~3x longer while hitting ~1.5x harder. The bands rise to match that honest TP; they are NOT
-    // an artificial renormalisation. Enemy COUNT per floor stays constant because the encounter
-    // budget (SECTION 11) was scaled by the same factor. Verified via the harness.
-    public static final float ENEMY_TP_CHAFF_MIN      = 16f;
-    public static final float ENEMY_TP_CHAFF_MAX      = 34f;
-    public static final float ENEMY_TP_SOLDIER_MIN    = 36f;
-    public static final float ENEMY_TP_SOLDIER_MAX    = 66f;
-    public static final float ENEMY_TP_BRUISER_MIN    = 70f;
-    public static final float ENEMY_TP_BRUISER_MAX    = 120f;
-    public static final float ENEMY_TP_MINI_ELITE_MIN = 160f;
-    public static final float ENEMY_TP_MINI_ELITE_MAX = 310f;
+    // --- ENEMY THREAT-POINT BANDS — RE-DERIVED from the R8 hit targets (balance-overhaul order 1). The
+    // old hand-set bands (CHAFF 16-34 | SOLDIER 36-66 | BRUISER 70-120 | MINI_ELITE 160-310) priced the
+    // economy-rescale roster; the rebase moved every archetype, so the band is now COMPUTED per role in
+    // BalanceSchema from the centre of the role's R8 box: centre eHP = mean hits-to-kill x the reference
+    // hit, centre hit = REFERENCE_PLAYER_EHP / mean hits-to-die (an open-ended TTD band uses
+    // LADDER_TTD_OPEN_BAND_CENTRE_FACTOR x its floor), TP at melee positional and cadence 1, and the band
+    // spans [LOW, HIGH] x that centre — wide enough for the ranged/status positional multipliers
+    // (up to 1.55) and the slow (cadence-2) archetypes. Printed by BalanceReport's ENEMIES table.
+    /** Lower edge of a role's TP band as a multiple of its R8-centre TP (covers cadence-2 archetypes). */
+    public static final float LADDER_TP_BAND_LOW_FACTOR  = 0.5f;
+    /** Upper edge of a role's TP band as a multiple of its R8-centre TP (covers ranged + status positional). */
+    public static final float LADDER_TP_BAND_HIGH_FACTOR = 1.6f;
+    /** Centre of an OPEN-ended hits-to-die band (CHAFF: ">= 10 hits") as a multiple of its floor. */
+    public static final float LADDER_TTD_OPEN_BAND_CENTRE_FACTOR = 1.5f;
 
     // --- POSITIONAL MULTIPLIERS for the Threat-Point formula (designer classification).
     public static final float POSITIONAL_MULT_MELEE       = 1.00f;
@@ -1167,48 +1151,16 @@ public final class BalanceConfig {
     /** Added on top of the base positional multiplier when the enemy applies a DOT/stun/slow. */
     public static final float POSITIONAL_MULT_STATUS_BONUS = 0.25f;
 
-    // --- GOLDEN-RATIO bands (turnsToDie / turnsToKill) per enemy role. Below = unfair/swingy;
-    // above = harmless damage sponge. Bruisers are SUPPOSED to be scary 1v1, so their band is tighter.
-    // These bands are UNCHANGED, but the economy rescale (idea-A, iteration 2) finally makes them
-    // SATISFIABLE and SATISFIED: every soldier now reads 4.0-5.2 and the Shell Brute bruiser 2.2,
-    // all in band. CHAFF is exempt (balanced by PACK TP, not the lone unit's ratio) and reads ~9.
-    // MINI-ELITE is a deliberate spike (tanky AND hard-hitting) and reads UNDER the duel band by
-    // design — the player spends heavy weapons or avoids it rather than trading blows.
-    public static final float GOLDEN_RATIO_TRASH_MIN   = 3f;
-    public static final float GOLDEN_RATIO_TRASH_MAX   = 8f;
-    public static final float GOLDEN_RATIO_BRUISER_MIN = 2f;
-    public static final float GOLDEN_RATIO_BRUISER_MAX = 4f;
+    // --- RETIRED by balance-overhaul order 1 (override record in docs/game-balance-authority.txt):
+    //   GOLDEN_RATIO_* bands        -> the R8 hit bands (LADDER_TTK_HITS_* / LADDER_TTD_HITS_*, SECTION 20)
+    //   DEPTH_COUPLING_RATIO_MIN/MAX -> R-LADDER L1 (LADDER_ON_CURVE_TOLERANCE)
+    //   GEAR_CURVE_PER_REGION (1.35) -> the per-floor weapon ladder (LADDER_GROWTH + the level gap)
 
-    // --- DEPTH-COUPLING INVARIANT: playerPowerAtDepth / enemyThreatScale must stay in this band or
-    // the curve drifts unfair-hard (below) or trivial-easy (above). Now COMPUTED and verified:
-    // GameMath.playerPowerAtDepth (linear level-up power curve) over GameMath.depthThreatScale
-    // (compound enemy curve) via GameMath.depthCouplingRatio; BalanceReport prints the DEPTH COUPLING
-    // table across depths. This invariant is what the SECTION 3 enemy depth-scale tune defends.
-    public static final float DEPTH_COUPLING_RATIO_MIN = 0.9f;
-    public static final float DEPTH_COUPLING_RATIO_MAX = 1.2f;
-
-    // --- THE EXPECTED ARSENAL CURVE (new-game-balancr order 2) — the GEAR GATE anchor.
-    // REFERENCE_PLAYER_DPT (above) is the FIXED depth-1 yardstick. Order 2 layers a per-depth
-    // EXPECTED PLAYER on top of it: expectedPlayerDamagePerTurn(depth) = REFERENCE_PLAYER_DPT *
-    // gearCurve(depth) (a later order multiplies in a card curve too). gearCurve models the arsenal
-    // the game EXPECTS you to be holding at a depth — found/bought weapons + weapon levels — as a
-    // step-per-region multiplier:
-    //     gearCurve(d) = GEAR_CURVE_PER_REGION ^ floor((d-1) / GEAR_CURVE_REGION_BAND_SIZE)
-    // Because a region is GEAR_CURVE_REGION_BAND_SIZE (5) depths, gearCurve is 1.0 across the whole
-    // first region (depths 1..5), so expectedPlayerDamagePerTurn(1..5) == REFERENCE_PLAYER_DPT exactly
-    // (the run BEGINS on the curve, at the bottom of it). Each subsequent region expects ~+35% weapon
-    // power. THE GATE: a player who never upgrades keeps the depth-1 REFERENCE_PLAYER_DPT while the
-    // curve rises, so by region 2 they fight at ~1/1.35 = 74% of the expected DPT and by region 3 at
-    // ~55% — their golden ratio falls out of the fair band (BalanceSchema R-GEARGATE proves this with
-    // the region-2 entry soldier), which is what makes "find better gear or die" a real loop.
-    // See docs/game-balance-authority.txt (THE GEAR CURVE) and GameMath.gearCurveAtDepth.
-    /** Weapon-power multiplier the game expects the player to GAIN per 5-floor region (each region ~+35%). Range: 1.2–1.5. */
-    public static final float GEAR_CURVE_PER_REGION       = 1.35f;
     /**
-     * Depths per region for the gear curve — the SAME 5-floor band the route map uses
-     * ({@link RouteMapConstants#REGION_BAND_SIZE}), referenced here so the curve and the descent's
-     * region boundaries can never drift apart. A region ends on a boss floor, and the gear step lands
-     * exactly on the region boundary.
+     * Depths per region — the SAME 5-floor band the route map uses ({@link RouteMapConstants#REGION_BAND_SIZE}),
+     * referenced here so every per-region table (drop tiers, supply/heal multipliers, the region danger
+     * dial) and the descent's region boundaries can never drift apart. A region ends on a boss floor.
+     * (Named for the retired order-2 gear curve; kept because every per-region table indexes by it.)
      */
     public static final int   GEAR_CURVE_REGION_BAND_SIZE = RouteMapConstants.REGION_BAND_SIZE;
 
@@ -1246,7 +1198,7 @@ public final class BalanceConfig {
     // depth-stable (GameMath.netHpDrainFractionAtDepth) and R-HEALDRAIN-DEPTH holds at every depth
     // 1..15 with no per-region tuning. The lever exists to shift a region's drain without touching
     // the heal magnitudes in SECTION 1. Range per entry: 0.85–1.15.
-    public static final float[] HEAL_SUPPLY_REGION_MULTIPLIER = {1.00f, 1.00f, 1.00f};
+    public static final float[] HEAL_SUPPLY_REGION_MULTIPLIER = {1.00f, 1.00f, 1.00f, 1.03f, 1.10f};
 
     // --- NEVER-SOFTLOCK (order 3, part D): the emergency ammo lifeline. When the player's TOTAL
     // remaining potential damage (all reserves * efficiency + melee) falls below the remaining floor
@@ -1273,15 +1225,16 @@ public final class BalanceConfig {
     /** Small (supply) purchases a region's income should afford on top of the significant buy (1–2). */
     public static final float SHOP_EXPECTED_SMALL_BUYS_PER_REGION       = 1.5f;
 
-    // --- HEAL PRICING BANDS (Balance Authority R-HEAL): every heal/armour pickup is priced in
-    // SURVIVAL TURNS BOUGHT = pickupValue / averageIncomingDamagePerTurn on the model floor
-    // (GameMath.survivalTurnsBought). Small pickups ('+' stim, 'a' shard) buy a few turns; large
-    // pickups ('H' medkit, 'A' vest) buy most of a fight but never a full reset. A pickup outside
-    // its band is either worthless filler (under) or removes the resource decision (over).
-    public static final float HEAL_SMALL_SURVIVAL_TURNS_MIN = 2f;
-    public static final float HEAL_SMALL_SURVIVAL_TURNS_MAX = 6f;
-    public static final float HEAL_LARGE_SURVIVAL_TURNS_MIN = 8f;
-    public static final float HEAL_LARGE_SURVIVAL_TURNS_MAX = 16f;
+    // --- HEAL PRICING BANDS (Balance Authority R-HEAL) — RE-STATED by balance-overhaul order 1 (the
+    // OVERRIDE CLAUSE: "flat heal values and R-HEAL's flat survival-turns pricing -> fractional heals").
+    // Every heal/armour pickup restores a FRACTION of the max it refills (SECTION 20, R10), so it is
+    // priced by that fraction: a small pickup ('+' stim, 'a' shard) tops up a slice, a large one ('H'
+    // medkit, 'A' vest) buys most of a fight but never a full reset. Survival turns bought on the model
+    // floor stay printed by BalanceReport as information (they fell with the R8 rebase's harder hits).
+    public static final float HEAL_SMALL_MAX_FRACTION_MIN = 0.10f;
+    public static final float HEAL_SMALL_MAX_FRACTION_MAX = 0.25f;
+    public static final float HEAL_LARGE_MAX_FRACTION_MIN = 0.40f;
+    public static final float HEAL_LARGE_MAX_FRACTION_MAX = 0.70f;
 
     // --- THE MODEL FLOOR (depth 1) — the worked reference encounter from idea 3.
     // Enemy composition (DEMAND = sum of these enemies' eHP). At depth 1 eHP == raw HP. After the
@@ -1298,10 +1251,15 @@ public final class BalanceConfig {
     public static final int MODEL_FLOOR_AMMO_TYPE_COUNT   = 5;
 
     // Heal-economy model inputs for the model floor.
-    /** Expected medkits found on the model floor (mix of stim '+' and full 'H'). */
-    public static final float MODEL_FLOOR_EXPECTED_MEDKITS        = 1.5f;
-    /** Expected armour pickups found on the model floor (mix of shard 'a' and vest 'A'). */
-    public static final float MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS = 1.0f;
+    /**
+     * Expected medkits found on the model floor (priced as a stim '+' / full 'H' mix). Balance-overhaul
+     * order 1 re-synced it to the generator's default per-room chance (MODEL_FLOOR_ROOM_COUNT 8 x
+     * LevelGenConfig.medkitChancePerRoom 0.35 = 2.8; was a conservative 1.5) — the R8 rebase made every
+     * fight costlier and the old undercount priced a heal economy harsher than the game actually places.
+     */
+    public static final float MODEL_FLOOR_EXPECTED_MEDKITS        = 2.8f;
+    /** Expected armour pickups on the model floor (shard 'a' / vest 'A' mix): 8 rooms x armourChancePerRoom 0.20 = 1.6 (was 1.0). */
+    public static final float MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS = 1.6f;
     /** Average turns each enemy stays engaged and able to hit the player. */
     public static final int   MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY = 2;
     /** Fraction of incoming damage a skilled player cancels via positioning/avoidance. Range 0–1. */
@@ -1382,7 +1340,7 @@ public final class BalanceConfig {
     //    A CALM (0.28x) floor therefore spent 96 of 126 TP on ONE bruiser and discarded the rest —
     //    measured EXACTLY one enemy per floor across 100 seeds, on a full-size ~1,100-tile dungeon.
     //    Both fixes below are Threat-Point-NEUTRAL: they change what the budget buys, never its size,
-    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and R-DEPTH read unchanged.
+    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) reads unchanged.
     /**
      * Hard CEILING on the fraction of the floor budget the single anchor may consume. The anchor
      * reserve band ([_FRACTION_MIN, _FRACTION_MAX]) is a preference for WHICH anchor to pick; this is
@@ -1941,8 +1899,6 @@ public final class BalanceConfig {
     public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = 90f;
     /** HP restored per power point when pricing a medkit (heal amount / this = its PP value). Range: 8–16. */
     public static final float SHOP_HEAL_HP_PER_POWER_POINT     = 11f;
-    /** PP value of a single weapon LEVEL-UP offer (a level is ~+10% weapon damage). Range: 8–14. */
-    public static final float SHOP_WEAPON_LEVEL_UP_POWER_POINTS = 10f;
     // A weapon TIER-UPGRADE prices on the ABILITY-PP budget its destination tier unlocks
     // (TIER_ABILITY_PP_BUDGET_*, SECTION 15) — the marquee value is the ability slot the tier buys.
     // A PLAYER-ABILITY boon prices on the level-up card's own PP (LEVEL_UP_BUDGET_PP), since a shop
@@ -2072,6 +2028,15 @@ public final class BalanceConfig {
     /** Fraction of seeds allowed to end in a "cannot damage anything" state. Zero, by contract. */
     public static final float SIM_SOFTLOCK_MAX_FRACTION   = 0.0f;
 
+    // --- S-LAG + THE LADDER REPORT (balance-overhaul order 1) --------------------------------
+    /**
+     * S-LAG: the HOARDER-START-WEAPON policy (the weapon never climbs the ladder) must die by this median
+     * depth — falling behind the power ladder is punished in PLAY, not only on paper (R-LADDER L2).
+     */
+    public static final float SIM_LAG_MAX_MEDIAN_DEPTH       = 6f;
+    /** Seeds per start depth in the LADDER REPORT probe (one floor each, both kits). */
+    public static final int   SIM_LADDER_PROBE_SEEDS_PER_DEPTH = 8;
+
     // =====================================================================================
     // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract
     // Orders 1-6 balance FLOORS; the player plays a JOURNEY through the route map's branching
@@ -2130,7 +2095,7 @@ public final class BalanceConfig {
     /** OVERCLOCKED vault premium: extra owned-ammo boxes that pay for its raised threat. */
     public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 1;
     /** SWARM vault premium: extra owned-ammo boxes that pay for its raised threat. */
-    public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 4;
+    public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 9;
     /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
     public static final float AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS = 0.12f;
     /** IRRADIATED: extra 'g' radioactive barrels stamped as hazard pools. */
@@ -2165,7 +2130,7 @@ public final class BalanceConfig {
     /** Take-away field medkits ('H') the clinic stocks near its exit (order-7 re-pricing). */
     public static final int   REST_MEDKITS            = 1;
     /** Take-away stim-packs ('+') the clinic stocks alongside the medkit. */
-    public static final int   REST_STIMS              = 1;
+    public static final int   REST_STIMS              = 2;
     /** Take-away armour pickups the clinic stocks (shard 'a' shallow, vest 'A' deep). */
     public static final int   REST_ARMOUR             = 1;
     /** Depth at/after which the clinic's armour stock upgrades from a shard 'a' to a vest 'A'. */
@@ -2206,9 +2171,9 @@ public final class BalanceConfig {
     /** XP awarded by an event choice at its small tier. */
     public static final int   EVENT_XP_SMALL              = 60;
     /** XP awarded by an event choice at its large tier. */
-    public static final int   EVENT_XP_LARGE              = 150;
+    public static final int   EVENT_XP_LARGE              = 200;
     /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
-    public static final int   EVENT_AMMO_BOXES            = 5;
+    public static final int   EVENT_AMMO_BOXES            = 6;
     /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
     public static final float EVENT_NEXT_FLOOR_BUDGET_BONUS = 0.10f;
     /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */
@@ -2329,8 +2294,15 @@ public final class BalanceConfig {
      * fighting retreat armed; the ceiling is the generous end a calm-chaining run rides — above it
      * ammo would stop being a resource at all. Measured: 0.59 (DEADLIEST) .. 1.50 (SAFEST).
      */
+    // BALANCE-OVERHAUL ORDER 1 RE-FIT (override record in docs/game-balance-authority.txt): the four
+    // UPPER band ends below moved to the re-measured range + ~5% — SAFEST scarcity 1.60 -> 1.70 (measured
+    // 1.60: every guaranteed box is now priced against the rebased, lower enemy HP), DEADLIEST drain
+    // 0.45 -> 0.65 (measured 0.62: R8 fights land harder and a fight-everything route pays for it on the
+    // boss floors), XP pace 2.45 -> 2.95 (measured 2.78: the XP curve steepened 1.118 -> 1.2495 per level
+    // to follow the ladder, so the same one-level lead reads as a larger banked-XP ratio) and coupling
+    // 1.55 -> 1.65 (measured 1.58, now read on the power-ladder model). Every LOWER end is unchanged.
     public static final float ROUTE_TRAJECTORY_SCARCITY_MIN = 0.55f;
-    public static final float ROUTE_TRAJECTORY_SCARCITY_MAX = 1.60f;
+    public static final float ROUTE_TRAJECTORY_SCARCITY_MAX = 1.70f;
     /**
      * Cumulative per-floor net HP drain fraction over a journey (the per-FLOOR band is [0.05, 0.15]).
      * NEGATIVE means the route BANKS health — which is exactly what a calm route buys with its skipped
@@ -2338,7 +2310,7 @@ public final class BalanceConfig {
      * survivable only by routing calm before the boss). Both ends must stay inside these bounds.
      */
     public static final float ROUTE_TRAJECTORY_DRAIN_MIN = -0.85f;
-    public static final float ROUTE_TRAJECTORY_DRAIN_MAX =  0.45f;
+    public static final float ROUTE_TRAJECTORY_DRAIN_MAX =  0.65f;
     /**
      * Cumulative XP pace: banked XP / XP needed to stand at the depth's expected level (the per-floor
      * yield is ~1.11). The floor says even the safest route ends a region no worse than ~30% under the
@@ -2347,7 +2319,7 @@ public final class BalanceConfig {
      * the ELITEs the upgrade guarantee plants), with ~5% headroom above.
      */
     public static final float ROUTE_TRAJECTORY_XP_PACE_MIN = 0.70f;
-    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 2.45f;
+    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 2.95f;
     /**
      * Depth coupling measured at the level the journey's XP ACTUALLY bought (the per-floor band is
      * [0.90, 1.20], which assumes an exactly on-curve player). This is the fairness end-stop of the
@@ -2357,5 +2329,156 @@ public final class BalanceConfig {
      * just may not run away with the game.
      */
     public static final float ROUTE_TRAJECTORY_COUPLING_MIN = 0.80f;
-    public static final float ROUTE_TRAJECTORY_COUPLING_MAX = 1.55f;
+    public static final float ROUTE_TRAJECTORY_COUPLING_MAX = 1.65f;
+
+    // =====================================================================================
+    // SECTION 20 — THE POWER LADDER (balance-overhaul order 1)
+    // ONE steep, readable ladder shared by both sides. Every floor has a THREAT LEVEL equal to its
+    // depth; weapon damage and enemy HP grow by compound steps FITTED so an on-curve player's fights
+    // feel the same length at floor 1 and floor 25; a weapon BELOW the floor's threat level takes a
+    // sharp multiplicative penalty per level; rarity multiplies damage; character level multiplies max
+    // HP/armour while enemy damage grows to match. The contract is R-LADDER (six sub-checks) and
+    // R-LADDER-AFFORD in BalanceSchema; the one expected-player model is GameMath.expectedPlayerAtDepth.
+    // See docs/game-balance-authority.txt (R-LADDER) and .claude/agents/ideas/balance-overhaul-order-1.txt.
+    // =====================================================================================
+
+    /** The audit horizon of every depth-swept rule (the run itself ends here in balance-overhaul order 6). */
+    public static final int   RUN_FINAL_DEPTH = 25;
+
+    /**
+     * Highest weapon level (R6): the run's final depth plus two, so a +1 roll on the last floor and one
+     * level-up beyond it stay reachable. The legacy accuracy/reload/clip/range/ability curves are
+     * re-spanned over 1..MAX_WEAPON_LEVEL (GameMath.respannedLegacyWeaponLevel). Range: RUN_FINAL_DEPTH..+5.
+     */
+    public static final int   MAX_WEAPON_LEVEL = RUN_FINAL_DEPTH + 2;
+
+    /** Compound weapon damage step per weapon level: base * LADDER_GROWTH^(level-1). Range: 1.05–1.10. */
+    public static final float LADDER_GROWTH = 1.08f;
+
+    // --- LEVEL GAP (R3): weapon level L on a floor of threat level d, gap = L - d.
+    /** Per-level multiplicative penalty below the floor's threat level: BASE^(-gap * STEEPNESS). Range: 0.75–0.90. */
+    public static final float LEVEL_GAP_PENALTY_BASE     = 0.82f;
+    /** The penalty never drops a hit below this fraction of its on-level value. Range: 0.15–0.40. */
+    public static final float LEVEL_GAP_FLOOR            = 0.25f;
+    /** Damage bonus per level ABOVE the floor's threat level (a small reward for an elite find). Range: 0.0–0.10. */
+    public static final float LEVEL_GAP_BONUS_PER_LEVEL  = 0.05f;
+    /** Levels of "ahead" bonus that count; beyond this the bonus is flat. Range: 1–3. */
+    public static final int   LEVEL_GAP_BONUS_CAP_LEVELS = 2;
+    /**
+     * THE one knob that scales the whole lag penalty: 1.0 = the designed ladder, 0 disables the penalty
+     * entirely (the order-7 feel pass tunes it). Range: 0.0–1.5.
+     */
+    public static final float LEVEL_GAP_STEEPNESS        = 1.0f;
+
+    /**
+     * Rarity damage multiplier, indexed by WeaponTier ordinal (COMMON, UNCOMMON, RARE, EPIC, LEGENDARY),
+     * on top of the tier's ability budget (which stays). Overrides the old "rarity never raises a band".
+     */
+    public static final float[] RARITY_DAMAGE_MULTIPLIER = {1.00f, 1.10f, 1.20f, 1.32f, 1.45f};
+
+    // --- ENEMY + PLAYER GROWTH (R7, R9) — FITTED so R-LADDER L1 holds at every depth 1..RUN_FINAL_DEPTH.
+    // Fit (balance-overhaul order 1): the expected player's per-hit damage grows by LADDER_GROWTH^(d-1)
+    // times the region's expected rarity times the expected offence-card lift (6% of reference DPT per
+    // character level); the least-max-deviation compound rate for enemy HP over 1..25 is 1.139, holding
+    // on-curve turns-to-kill within +/-13% of depth 1 (the residual wobble is the per-region rarity step).
+    // Enemy damage is fitted the same way against max HP/armour growth (PLAYER_VITALITY_GROWTH) plus the
+    // expected flat defence-card eHP, holding turns-to-die within +/-7%. Enemy HP at depth 25 is ~23x
+    // depth 1, enemy damage ~9.2x (health bars are fraction-based; AS10 accepts the bigger numbers).
+    /** Per-floor compound enemy HP growth: baseHP * growth^(depth-1). Fitted for R-LADDER L1. Range: 1.08–1.16. */
+    public static final float ENEMY_HEALTH_GROWTH    = 1.139f;
+    /** Per-floor compound enemy damage growth: baseDmg * growth^(depth-1). Fitted for R-LADDER L1. Range: 1.06–1.12. */
+    public static final float ENEMY_DAMAGE_GROWTH    = 1.097f;
+    /**
+     * Per-character-level compound growth of max HP AND max armour (R9):
+     * PLAYER_MAX_HEALTH * growth^(level-1) + card/stat bonuses. 1.09 keeps R-LADDER L6 (three levels
+     * behind survives <= 80% as long) with margin. Range: 1.06–1.12.
+     */
+    public static final float PLAYER_VITALITY_GROWTH = 1.09f;
+
+    /** Expected fraction of each level's LEVEL_UP_BUDGET_PP spent on OFFENCE by the on-curve player (the boss derivation's 0.5). Range: 0.3–0.6. */
+    public static final float LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION = 0.50f;
+    /**
+     * Expected fraction of each level's LEVEL_UP_BUDGET_PP bought as FLAT max-HP/armour eHP (R9). A quarter:
+     * the defensive half of the deck (DEFENSE / SUSTAIN / UTILITY pools) is split between flat pools and
+     * unhealable mitigation (dodge, flat reduction, speed), and only the flat pools stack on the vitality
+     * curve. It also keeps the fitted turns-to-die drift within +/-7% (a larger flat share bends the
+     * survival curve away from any single compound enemy-damage rate). Range: 0.15–0.5.
+     */
+    public static final float LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION = 0.25f;
+
+    // --- HEALS AS FRACTIONS OF MAX (R10): resolved against max HP / max armour at the moment of use.
+    /** Field medkit ('H'): fraction of max HP restored. */
+    public static final float MEDKIT_FULL_HEAL_FRACTION = 0.45f;
+    /** Stim pack ('+'): fraction of max HP restored. */
+    public static final float MEDKIT_STIM_HEAL_FRACTION = 0.18f;
+    /** Armour shard ('a'): fraction of max armour restored. */
+    public static final float ARMOUR_SHARD_FRACTION     = 0.15f;
+    /** Security vest ('A'): fraction of max armour restored. */
+    public static final float ARMOUR_VEST_FRACTION      = 0.60f;
+
+    // --- FOUND / DROPPED WEAPON LEVEL ROLL (R6): level = floor threat level + offset, weighted.
+    /** Level offsets a found weapon may roll relative to the floor's threat level. */
+    public static final int[] WEAPON_LEVEL_ROLL_OFFSETS = {-1, 0, 1};
+    /** Relative weights of WEAPON_LEVEL_ROLL_OFFSETS (same order). */
+    public static final int[] WEAPON_LEVEL_ROLL_WEIGHTS = {30, 50, 20};
+
+    // --- R8 REBASED DEPTH-1 TARGETS (on-curve player; reference workhorse = Assault Rifle, COMMON L1,
+    // measured per hit at LADDER_REFERENCE_RANGE_TILES including falloff). TTK = hits to kill the enemy;
+    // TTD = ordinary enemy hits the player survives from full HP + armour (REFERENCE_PLAYER_EHP).
+    /** Range at which the R8 reference hit is measured (falloff included). */
+    public static final int   LADDER_REFERENCE_RANGE_TILES = 3;
+    public static final int   LADDER_TTK_HITS_CHAFF_MIN      = 1;
+    public static final int   LADDER_TTK_HITS_CHAFF_MAX      = 2;
+    public static final int   LADDER_TTK_HITS_SOLDIER_MIN    = 3;
+    public static final int   LADDER_TTK_HITS_SOLDIER_MAX    = 4;
+    public static final int   LADDER_TTK_HITS_BRUISER_MIN    = 5;
+    public static final int   LADDER_TTK_HITS_BRUISER_MAX    = 7;
+    public static final int   LADDER_TTK_HITS_MINI_ELITE_MIN = 8;
+    public static final int   LADDER_TTK_HITS_MINI_ELITE_MAX = 12;
+    /** CHAFF has no TTD ceiling: it must merely be survivable for at least this many hits. */
+    public static final int   LADDER_TTD_HITS_CHAFF_MIN      = 10;
+    public static final int   LADDER_TTD_HITS_SOLDIER_MIN    = 7;
+    public static final int   LADDER_TTD_HITS_SOLDIER_MAX    = 9;
+    public static final int   LADDER_TTD_HITS_BRUISER_MIN    = 4;
+    public static final int   LADDER_TTD_HITS_BRUISER_MAX    = 6;
+    public static final int   LADDER_TTD_HITS_MINI_ELITE_MIN = 3;
+    public static final int   LADDER_TTD_HITS_MINI_ELITE_MAX = 5;
+
+    // --- R-LADDER BOUNDS (R12). Ratios are CONTINUOUS turns (eHP / per-hit damage, un-rounded), so the
+    // one-hit quantisation of a chaff kill cannot hide a lag penalty.
+    /** L1: on-curve TTK and TTD stay within +/- this fraction of their depth-1 values. */
+    public static final float LADDER_ON_CURVE_TOLERANCE        = 0.15f;
+    /** L2: two levels behind must take at least this many times as long to kill. */
+    public static final float LADDER_LAG_TWO_MIN_TTK_RATIO     = 1.5f;
+    /** L2: four levels behind must take at least this many times as long to kill. */
+    public static final float LADDER_LAG_FOUR_MIN_TTK_RATIO    = 2.5f;
+    /** L2: the start weapon (L1 COMMON) from LADDER_START_WEAPON_FROM_DEPTH on. */
+    public static final float LADDER_START_WEAPON_MIN_TTK_RATIO = 3.0f;
+    /** L2: first depth the start-weapon bound applies at. */
+    public static final int   LADDER_START_WEAPON_FROM_DEPTH   = 5;
+    /** L3: two levels ahead may shorten a kill to no less than this fraction of on-curve. */
+    public static final float LADDER_AHEAD_TWO_MIN_TTK_RATIO   = 0.75f;
+    /** L4: on floor d, weapon level d vs d-1 must gain at least this fraction of DPT. */
+    public static final float LADDER_LEVEL_FELT_MIN_GAIN       = 0.25f;
+    /** L5: every rarity tier step must gain at least this fraction of DPT at equal level. */
+    public static final float LADDER_RARITY_STEP_MIN_GAIN      = 0.08f;
+    /** L5: LEGENDARY vs COMMON at equal level must gain at least this fraction of DPT. */
+    public static final float LADDER_LEGENDARY_MIN_GAIN        = 0.40f;
+    /** L6: character levels behind the curve the vitality check measures. */
+    public static final int   LADDER_VITALITY_LAG_LEVELS       = 3;
+    /** L6: that many levels behind must survive no more than this fraction of on-curve TTD. */
+    public static final float LADDER_VITALITY_LAG_MAX_TTD_RATIO = 0.80f;
+
+    /**
+     * R-LADDER-AFFORD (R13): the shop's LEVEL UP rung must cost at most this fraction of one COMBAT
+     * floor's modelled credit income, at every depth 1..RUN_FINAL_DEPTH.
+     */
+    public static final float LADDER_AFFORD_FRACTION = 0.5f;
+    /**
+     * Power-point value the shop prices the LEVEL UP rung at (through GameMath.shopPrice, like every
+     * offer). Deliberately LOW: the rung is a reliable ladder step, not a marquee purchase — 1.5 PP is
+     * 54 credits at depth 1 (a third of one combat floor) and 184 at depth 25 (47%). Prices EVERY shop weapon level-up
+     * (the old 10 PP constant is gone). Range: 1.0–2.0.
+     */
+    public static final float LADDER_LEVEL_UP_POWER_POINTS = 1.5f;
 }

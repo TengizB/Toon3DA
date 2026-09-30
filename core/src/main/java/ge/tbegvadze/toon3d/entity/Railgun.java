@@ -143,7 +143,8 @@ public class Railgun extends Weapon {
             if (enemyHitTarget != null) {
                 Object hitEnemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (hitEnemy != null) {
-                    float baseForCharge = WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[firedChargeLevel];
+                    float baseForCharge = WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[firedChargeLevel]
+                            * getLadderDamageMultiplier();
                     int computedDamage = Math.round(baseForCharge
                             * GameMath.railgunFalloff(distanceTiles,
                                     WeaponConstants.RAILGUN_DROP_COEFF,

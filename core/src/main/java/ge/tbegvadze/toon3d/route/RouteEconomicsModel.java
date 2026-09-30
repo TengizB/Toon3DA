@@ -54,7 +54,6 @@ public final class RouteEconomicsModel {
         public final float healSupplyHitPoints;
         public final float killCredits;
         public final float chipCredits;
-        public final float[] regionAbilityBudgetPoints;
 
         /**
          * @param demandDamage             sum of the model floor's enemy eHP (what a floor costs in ammo)
@@ -65,11 +64,10 @@ public final class RouteEconomicsModel {
          * @param healSupplyHitPoints      HP the model floor's medkit/armour pickups restore
          * @param killCredits              credits the model floor's roster pays out
          * @param chipCredits              credit-chip income placed on any floor (roster-independent)
-         * @param regionAbilityBudgetPoints per-region weapon-ability PP (order-4 honest power input)
          */
         public ModelFloor(float demandDamage, float roomSourcedSupplyDamage, float killSourcedSupplyDamage,
                           float averageAmmoBoxDamage, float incomingHitPoints, float healSupplyHitPoints,
-                          float killCredits, float chipCredits, float[] regionAbilityBudgetPoints) {
+                          float killCredits, float chipCredits) {
             this.demandDamage              = demandDamage;
             this.roomSourcedSupplyDamage   = roomSourcedSupplyDamage;
             this.killSourcedSupplyDamage   = killSourcedSupplyDamage;
@@ -78,7 +76,6 @@ public final class RouteEconomicsModel {
             this.healSupplyHitPoints       = healSupplyHitPoints;
             this.killCredits               = killCredits;
             this.chipCredits               = chipCredits;
-            this.regionAbilityBudgetPoints = regionAbilityBudgetPoints;
         }
     }
 
@@ -221,33 +218,31 @@ public final class RouteEconomicsModel {
 
         // --- THREAT: the depth- and region-ramped budget this node's roster spends.
         float floorBudget = GameMath.regionScaledFloorThreatPointBudget(
-                BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET, BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth, BalanceConfig.REGION_TP_BUDGET_MULTIPLIER,
+                BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET, BalanceConfig.ENEMY_HEALTH_GROWTH,
+                BalanceConfig.ENEMY_DAMAGE_GROWTH, depth, BalanceConfig.REGION_TP_BUDGET_MULTIPLIER,
                 band) * BalanceConfig.ENCOUNTER_BUDGET_FILL_TARGET_FRACTION;
         float threatCost = GameMath.nodeThreatCost(floorBudget, row.budgetScale(), affixScale);
 
         // --- AMMO: room-sourced supply is roster-independent, kill-sourced supply follows the roster.
         float ordinarySupplyBase = floor.roomSourcedSupplyDamage + floor.killSourcedSupplyDamage * rosterScale;
         float supplyDamage = GameMath.ammoSupplyAtDepth(ordinarySupplyBase * lootScale,
-                BalanceConfig.GEAR_CURVE_PER_REGION, BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+                BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
         float guaranteedBoxes = row.guaranteedAmmoBoxes() + (affix == null ? 0f : affix.guaranteedAmmoBoxes());
         supplyDamage += guaranteedBoxes * floor.averageAmmoBoxDamage
-                * GameMath.gearCurveAtDepth(BalanceConfig.GEAR_CURVE_PER_REGION, depth, band);
+                * GameMath.expectedHitGrowthAtDepth(depth);
         float demandDamage = GameMath.floorDemandAtDepth(floor.demandDamage,
-                BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH, depth) * rosterScale;
+                BalanceConfig.ENEMY_HEALTH_GROWTH, depth) * rosterScale;
 
-        // --- HP: incoming and ordinary heal supply both ride the enemy-DAMAGE curve, as does the
-        // player's current-difficulty eHP (order 3), so the shared factor is divided back out and the
-        // HP side is read in depth-1 eHP terms. A FLAT guaranteed medkit therefore correctly decays in
-        // relative value as depth scales, while the MED-BAY's max-HP-share heal correctly does not.
-        float damageDepthFactor = GameMath.compoundDepthMultiplier(
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
+        // --- HP: read in depth-1 eHP terms. Incoming rides the enemy-damage growth, which the power ladder
+        // FITS to the expected player's eHP growth (R-LADDER L1), and every heal is a FRACTION of max
+        // HP/armour (R10), so heals ride the player too — the shared depth factor cancels and every term,
+        // guaranteed pickups included, is priced at its depth-1 value (balance-overhaul order 1; the old
+        // division of FLAT guaranteed medkits by the damage curve is gone with the flat medkits).
         float healRegionMultiplier = GameMath.perRegionMultiplierAtDepth(
                 BalanceConfig.HEAL_SUPPLY_REGION_MULTIPLIER, depth, band);
         float incomingHitPoints = floor.incomingHitPoints * rosterScale;
         float healHitPoints = floor.healSupplyHitPoints * lootScale * healRegionMultiplier
                 + (row.guaranteedHealHitPoints() + (affix == null ? 0f : affix.guaranteedHealHitPoints()))
-                        / damageDepthFactor
                 + row.guaranteedHealEffectiveHitPointFraction() * BalanceConfig.REFERENCE_PLAYER_EHP;
 
         // --- CREDITS: chips are placed on any floor; kill bounty follows the roster and grows with depth.
@@ -265,11 +260,20 @@ public final class RouteEconomicsModel {
                 + row.guaranteedExperiencePoints() * levelCost / BalanceConfig.XP_BASE_REQUIREMENT;
 
         // --- Fold into power points.
-        float supplyPowerPoints = supplyDamage / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
-        float demandPowerPoints = demandDamage / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+        // Ammo is read in depth-1 damage terms, exactly as the HP side is: on the power ladder every ammo
+        // unit (and every enemy HP point) inflates with the expected per-hit growth, and an absolute-damage
+        // price would let a resource-heavy calm node's EV run away with depth while XP (level-normalised)
+        // stays flat (balance-overhaul order 1).
+        float hitGrowth = Math.max(1e-3f, GameMath.expectedHitGrowthAtDepth(depth));
+        float supplyPowerPoints = supplyDamage / hitGrowth / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+        float demandPowerPoints = demandDamage / hitGrowth / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
         float healPowerPoints     = healHitPoints     / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
         float incomingPowerPoints = incomingHitPoints / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
-        float creditPowerPoints   = credits / BalanceConfig.SHOP_CREDITS_PER_POWER_POINT;
+        // Credits are read at the price level of THIS depth: every shop offer's price rides
+        // 1 + SHOP_DEPTH_PRICE_SCALE * (depth - 1) (GameMath.shopPrice), so a credit buys less power deep
+        // and the depth-scaled kill bounty must not read as free extra power (balance-overhaul order 1).
+        float creditPowerPoints   = credits / (BalanceConfig.SHOP_CREDITS_PER_POWER_POINT
+                * GameMath.shopDepthPriceFactor(depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE));
         float experiencePowerPoints = experiencePoints / levelCost * BalanceConfig.LEVEL_UP_BUDGET_PP;
         float upgradePowerPoints    = row.upgradeOpportunity()
                 * BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_POWER_POINTS;
@@ -413,11 +417,9 @@ public final class RouteEconomicsModel {
         float experiencePace = cumulativeExperience / expectedExperience;
         int   playerLevel = GameMath.levelForCumulativeXp(BalanceConfig.XP_BASE_REQUIREMENT,
                 BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL, cumulativeExperience);
-        float playerPower = GameMath.playerPowerAtLevelAndDepth(BalanceConfig.LEVEL_UP_BUDGET_PP,
-                playerLevel, BalanceConfig.GEAR_CURVE_PER_REGION, floor.regionAbilityBudgetPoints, depth, band);
-        float enemyThreat = GameMath.depthThreatScale(BalanceConfig.ENEMY_HEALTH_SCALE_PER_DEPTH,
-                BalanceConfig.ENEMY_DAMAGE_SCALE_PER_DEPTH, depth);
-        float coupling = GameMath.depthCouplingRatio(playerPower, enemyThreat);
+        // Power ladder (balance-overhaul order 1): the level the journey's XP actually bought, against the
+        // on-curve character level at this depth, with the weapon held on the ladder.
+        float coupling = GameMath.ladderCouplingAtCharacterLevel(depth, playerLevel);
         return new TrajectorySample(depth, GameMath.regionIndexAtDepth(depth, band), floorsWalked,
                 scarcity, drain, experiencePace, coupling, playerLevel);
     }

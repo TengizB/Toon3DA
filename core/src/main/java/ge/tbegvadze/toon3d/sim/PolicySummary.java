@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.BalanceSchema;
 
 /**
@@ -121,7 +122,8 @@ public final class PolicySummary {
         int   samples  = 0;
         for (RunLedger run : runs) {
             for (FloorLedger floor : run.floors) {
-                float expectedLevel = 1f + BalanceConfig.EXPECTED_LEVELS_PER_DEPTH * (floor.depth - 1);
+                // The on-curve character level of THE expected-player model (balance-overhaul order 1).
+                float expectedLevel = GameMath.expectedCharacterLevelAtDepth(floor.depth);
                 totalGap += floor.playerLevelOnArrival - expectedLevel;
                 samples++;
             }

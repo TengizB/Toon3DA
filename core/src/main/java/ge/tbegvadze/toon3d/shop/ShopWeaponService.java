@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.shop;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponRoller;
 import ge.tbegvadze.toon3d.entity.WeaponTier;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * shop_order_3 bridge between the shop and the weapon system. Delivers the two weapon-improvement
@@ -40,7 +41,7 @@ public final class ShopWeaponService implements ShopEffectApplier {
         if (weapon == null) return false;
         switch (entry.category) {
             case WEAPON_TIER_UPGRADE: return weapon.canUpgradeTier();
-            case WEAPON_LEVEL_UP:     return weapon.canLevelUp();
+            case WEAPON_LEVEL_UP:     return weapon.canLevelUp() && withinDepthCeiling(weapon);
             default:                  return false;
         }
     }
@@ -54,12 +55,19 @@ public final class ShopWeaponService implements ShopEffectApplier {
                 roller.applyTierUpgrade(weapon, nextTier(weapon.getTier()));
                 break;
             case WEAPON_LEVEL_UP:
-                roller.applyLevelUp(weapon);
+                if (withinDepthCeiling(weapon)) roller.applyLevelUp(weapon);
                 break;
             default:
                 // Not a weapon offer — handled by another applier.
                 break;
         }
+    }
+
+    /** Defensive R13 guard: a shop never raises a non-exempt weapon above floor threat level + 1. */
+    private static boolean withinDepthCeiling(Weapon weapon) {
+        if (weapon.isLevelGapExempt()) return true;
+        int ceiling = Math.min(WeaponConstants.MAX_WEAPON_LEVEL, Math.max(1, weapon.getFloorThreatLevel()) + 1);
+        return weapon.getWeaponLevel() < ceiling;
     }
 
     /** Resolves an entry's payload to the concrete mutable weapon, or null if it isn't one. */

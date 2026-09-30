@@ -249,11 +249,11 @@ public class Level {
     }
 
     /**
-     * Returns the armour points granted by an armour pickup cell.
-     * Caller must guard with isArmourPickup() first.
+     * Returns the FRACTION of max armour granted by an armour pickup cell (resolve against the
+     * player's current max armour at pickup time). Caller must guard with isArmourPickup() first.
      */
-    public static int armourRestoreOfPickup(char cell) {
-        return cell == 'a' ? ItemConstants.ARMOUR_SHARD_VALUE : ItemConstants.ARMOUR_VEST_VALUE;
+    public static float armourRestoreFractionOfPickup(char cell) {
+        return cell == 'a' ? ItemConstants.ARMOUR_SHARD_FRACTION : ItemConstants.ARMOUR_VEST_FRACTION;
     }
 
     /**

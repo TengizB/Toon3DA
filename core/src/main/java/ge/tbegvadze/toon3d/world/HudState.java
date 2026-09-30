@@ -37,4 +37,7 @@ public class HudState {
 
     /** Current spendable credit balance. Drives the always-visible top-right credits readout. */
     public int     credits        = 0;
+
+    /** The floor's THREAT LEVEL (= current depth, >= 1). Drives the weapon LV tag colour (R14 a). */
+    public int     threatLevel    = 1;
 }

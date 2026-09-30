@@ -12,14 +12,35 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
  */
 public final class SimSettings {
 
-    private final int   depthCeiling;
-    private final int   turnsPerFloorCap;
-    private final float startingWeaponDamageMultiplier;
+    private final int     depthCeiling;
+    private final int     turnsPerFloorCap;
+    private final float   startingWeaponDamageMultiplier;
+    /** 0 = an ordinary run from the first floor; >= 1 = a one-floor LADDER probe started at that depth. */
+    private final int     ladderProbeDepth;
+    /** Probe only: true = the on-curve kit (weapons at the floor's level, region rarity); false = the start kit. */
+    private final boolean ladderProbeOnCurveKit;
 
     private SimSettings(int depthCeiling, int turnsPerFloorCap, float startingWeaponDamageMultiplier) {
+        this(depthCeiling, turnsPerFloorCap, startingWeaponDamageMultiplier, 0, false);
+    }
+
+    private SimSettings(int depthCeiling, int turnsPerFloorCap, float startingWeaponDamageMultiplier,
+                        int ladderProbeDepth, boolean ladderProbeOnCurveKit) {
         this.depthCeiling                   = depthCeiling;
         this.turnsPerFloorCap               = turnsPerFloorCap;
         this.startingWeaponDamageMultiplier = startingWeaponDamageMultiplier;
+        this.ladderProbeDepth               = ladderProbeDepth;
+        this.ladderProbeOnCurveKit          = ladderProbeOnCurveKit;
+    }
+
+    /**
+     * A one-floor LADDER probe (balance-overhaul order 1): the run starts AT {@code depth} with either the
+     * on-curve kit or the start kit (character level on-curve for both, so the difference is the weapon
+     * ladder alone), plays that one floor and records every hit dealt and taken for the LADDER REPORT.
+     */
+    public static SimSettings ladderProbe(int depth, boolean onCurveKit) {
+        int probeDepth = Math.max(1, depth);
+        return new SimSettings(probeDepth, BalanceConfig.SIM_TURNS_PER_FLOOR_CAP, 1.0f, probeDepth, onCurveKit);
     }
 
     /** The shipping configuration: SECTION 18 values, nothing sabotaged. */
@@ -39,8 +60,12 @@ public final class SimSettings {
      * sabotage the gate must catch. Only the acceptance test uses this.
      */
     public SimSettings withStartingWeaponDamageMultiplier(float multiplier) {
-        return new SimSettings(depthCeiling, turnsPerFloorCap, multiplier);
+        return new SimSettings(depthCeiling, turnsPerFloorCap, multiplier, ladderProbeDepth, ladderProbeOnCurveKit);
     }
+
+    public boolean isLadderProbe()         { return ladderProbeDepth >= 1; }
+    public int     ladderProbeDepth()      { return ladderProbeDepth; }
+    public boolean ladderProbeOnCurveKit() { return ladderProbeOnCurveKit; }
 
     public int   depthCeiling()                   { return depthCeiling; }
     public int   turnsPerFloorCap()               { return turnsPerFloorCap; }

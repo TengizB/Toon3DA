@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.route;
 
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 /**
@@ -34,29 +35,40 @@ public final class RouteEconomics {
 
     // Guaranteed heal values, assembled from the SAME payoff constants the profiles stamp. Armour is
     // priced at the VEST value each node carries from its *_ARMOUR_VEST_DEPTH (depths 4/6 onward),
-    // which covers the majority of the audited 1..15 range.
+    // which covers the majority of the audited 1..15 range. Power ladder (balance-overhaul order 1,
+    // R10): every heal is a FRACTION of the player's max, so it is priced here at the depth-1 player
+    // and keeps its relative value at every depth by construction (it grows with vitality).
+    private static final int MEDKIT_FULL_HEAL =
+            GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH, BalanceConfig.MEDKIT_FULL_HEAL_FRACTION);
+    private static final int MEDKIT_STIM_HEAL =
+            GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH, BalanceConfig.MEDKIT_STIM_HEAL_FRACTION);
+    private static final int ARMOUR_SHARD_VALUE =
+            GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_ARMOR, BalanceConfig.ARMOUR_SHARD_FRACTION);
+    private static final int ARMOUR_VEST_VALUE =
+            GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_ARMOR, BalanceConfig.ARMOUR_VEST_FRACTION);
+
     private static final float CACHE_HEAL_HIT_POINTS =
-              BalanceConfig.CACHE_MEDKITS * BalanceConfig.MEDKIT_FULL_HEAL
-            + BalanceConfig.CACHE_STIMS   * BalanceConfig.MEDKIT_STIM_HEAL
-            + BalanceConfig.CACHE_ARMOUR  * BalanceConfig.ARMOUR_VEST_VALUE;
+              BalanceConfig.CACHE_MEDKITS * MEDKIT_FULL_HEAL
+            + BalanceConfig.CACHE_STIMS   * MEDKIT_STIM_HEAL
+            + BalanceConfig.CACHE_ARMOUR  * ARMOUR_VEST_VALUE;
 
     private static final float ELITE_HEAL_HIT_POINTS =
-              BalanceConfig.ELITE_MEDKITS * BalanceConfig.MEDKIT_FULL_HEAL
-            + BalanceConfig.ELITE_STIMS   * BalanceConfig.MEDKIT_STIM_HEAL
-            + BalanceConfig.ELITE_ARMOUR  * BalanceConfig.ARMOUR_VEST_VALUE;
+              BalanceConfig.ELITE_MEDKITS * MEDKIT_FULL_HEAL
+            + BalanceConfig.ELITE_STIMS   * MEDKIT_STIM_HEAL
+            + BalanceConfig.ELITE_ARMOUR  * ARMOUR_VEST_VALUE;
 
     /**
      * The MED-BAY's total healing value as a FRACTION of the player's effective hit points: the
      * auto-doc's max-HP-share heal plus the clinic's take-away stock. Both are priced as an eHP
      * fraction rather than flat hit points because both hold their relative value as depth scales —
-     * the auto-doc heals a share of max HP, and {@code RestProfile} scales the stock COUNT by the
-     * enemy-damage curve (GameMath.depthScaledPickupCount).
+     * the auto-doc heals a share of max HP, and every take-away medkit/armour pickup is itself a
+     * fraction of max (R10), so the clinic's stock COUNT no longer needs to scale with depth.
      */
     private static final float REST_HEAL_EFFECTIVE_HIT_POINT_FRACTION =
             (RouteMapConstants.REST_HEAL_FRACTION * BalanceConfig.PLAYER_MAX_HEALTH
-                    + BalanceConfig.REST_MEDKITS * BalanceConfig.MEDKIT_FULL_HEAL
-                    + BalanceConfig.REST_STIMS   * BalanceConfig.MEDKIT_STIM_HEAL
-                    + BalanceConfig.REST_ARMOUR  * BalanceConfig.ARMOUR_VEST_VALUE)
+                    + BalanceConfig.REST_MEDKITS * MEDKIT_FULL_HEAL
+                    + BalanceConfig.REST_STIMS   * MEDKIT_STIM_HEAL
+                    + BalanceConfig.REST_ARMOUR  * ARMOUR_VEST_VALUE)
                     / BalanceConfig.REFERENCE_PLAYER_EHP;
 
     /**
@@ -66,7 +78,7 @@ public final class RouteEconomics {
      */
     private static final float EVENT_HEAL_EFFECTIVE_HIT_POINT_FRACTION =
             BalanceConfig.ROUTE_EVENT_EXPECTED_CHOICE_SHARE
-                    * (BalanceConfig.PLAYER_MAX_HEALTH + BalanceConfig.ARMOUR_VEST_VALUE)
+                    * (BalanceConfig.PLAYER_MAX_HEALTH + BalanceConfig.PLAYER_MAX_ARMOR)
                     / BalanceConfig.REFERENCE_PLAYER_EHP;
 
     /**
@@ -193,7 +205,7 @@ public final class RouteEconomics {
         registry.register(NodeEconomics.affix(RouteMapConstants.AFFIX_FORTIFIED_ID)
                 .displayName("FORTIFIED")
                 .guaranteedHealHitPoints(BalanceConfig.AFFIX_FORTIFIED_EXTRA_ARMOUR
-                        * BalanceConfig.ARMOUR_SHARD_VALUE)
+                        * ARMOUR_SHARD_VALUE)
                 .build());
 
         registry.register(NodeEconomics.affix(RouteMapConstants.AFFIX_VOLATILE_ID)
@@ -212,8 +224,8 @@ public final class RouteEconomics {
                 .scanToneId(MysteryOutcome.VAULT_JACKPOT.scanTone().name())
                 .budgetScale(BalanceConfig.ROUTE_LIGHT_BUDGET_SCALE)
                 .guaranteedAmmoBoxes(BalanceConfig.MYSTERY_VAULT_AMMO_BOXES)
-                .guaranteedHealHitPoints(BalanceConfig.ELITE_MEDKITS * BalanceConfig.MEDKIT_FULL_HEAL
-                        + BalanceConfig.ELITE_ARMOUR * BalanceConfig.ARMOUR_VEST_VALUE)
+                .guaranteedHealHitPoints(BalanceConfig.ELITE_MEDKITS * MEDKIT_FULL_HEAL
+                        + BalanceConfig.ELITE_ARMOUR * ARMOUR_VEST_VALUE)
                 .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_ELITE)
                 .build());
 
@@ -225,7 +237,7 @@ public final class RouteEconomics {
                 .budgetScale(1f)
                 .guaranteedAmmoBoxes(BalanceConfig.MYSTERY_WARREN_AMMO_BOXES)
                 .guaranteedHealHitPoints(BalanceConfig.MYSTERY_WARREN_MEDKITS
-                        * BalanceConfig.MEDKIT_FULL_HEAL)
+                        * MEDKIT_FULL_HEAL)
                 .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_COMBAT)
                 .build());
 
@@ -237,7 +249,7 @@ public final class RouteEconomics {
                 .scanToneId(MysteryOutcome.TRAP_GAUNTLET.scanTone().name())
                 .budgetScale(BalanceConfig.ROUTE_CALM_BUDGET_SCALE)
                 .guaranteedAmmoBoxes(BalanceConfig.MYSTERY_TRAP_AMMO_BOXES)
-                .guaranteedHealHitPoints(BalanceConfig.MYSTERY_TRAP_MEDKITS * BalanceConfig.MEDKIT_FULL_HEAL
+                .guaranteedHealHitPoints(BalanceConfig.MYSTERY_TRAP_MEDKITS * MEDKIT_FULL_HEAL
                         - BalanceConfig.ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS)
                 .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_CACHE)
                 .build());

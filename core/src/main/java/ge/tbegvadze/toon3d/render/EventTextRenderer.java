@@ -104,7 +104,7 @@ public final class EventTextRenderer implements Disposable {
             if (tier < EventTextSystem.TIER_SLAM) continue;
 
             float age      = eventTextSystem.getAge(slotIndex);
-            float fraction = age / EffectConstants.EVENT_TEXT_LIFE_SECONDS;
+            float fraction = age / eventTextSystem.getLifeSeconds(slotIndex);
             float alpha    = computeAlpha(tier, age, fraction);
 
             float fontScale = fontScaleForTier(tier);
@@ -149,7 +149,7 @@ public final class EventTextRenderer implements Disposable {
             if (text == null) continue;
 
             float age      = eventTextSystem.getAge(slotIndex);
-            float fraction = age / EffectConstants.EVENT_TEXT_LIFE_SECONDS;
+            float fraction = age / eventTextSystem.getLifeSeconds(slotIndex);
             byte  tier     = eventTextSystem.getBannerTier(slotIndex);
 
             float alpha     = computeAlpha(tier, age, fraction);

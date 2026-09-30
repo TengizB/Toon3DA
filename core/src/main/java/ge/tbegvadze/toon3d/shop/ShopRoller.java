@@ -42,6 +42,11 @@ public final class ShopRoller {
         List<ShopEntry> entries  = new ArrayList<>(entryCount);
         Set<String>     usedKeys = new HashSet<>();
 
+        // Guaranteed LEVEL UP rung (R13) for the equipped weapon — outside the weighted roll; its key
+        // joins the used set so the random level-up roll can never duplicate it.
+        ShopEntry rung = source.rollLadderRungOffer(context);
+        if (rung != null) addEntry(entries, usedKeys, rung);
+
         // Guaranteed SUPPLY slot (ammo or medkit) — always achievable.
         ShopEntry supply = rollSupply(context, random, usedKeys);
         if (supply != null) addEntry(entries, usedKeys, supply);

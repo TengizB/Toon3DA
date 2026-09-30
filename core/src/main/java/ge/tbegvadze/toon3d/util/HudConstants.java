@@ -237,4 +237,42 @@ public final class HudConstants {
     public static final float SHOP_RECEIPT_SECONDS           = 2.4f;    // how long the receipt stays up
     public static final float SHOP_RECEIPT_SCALE             = 1.0f;    // large, readable confirmation text
     public static final float SHOP_RECEIPT_Y_ABOVE_BOTTOM    = 72f;     // baseline above screen bottom (in footer)
+
+    // -------------------------------------------------------------------------
+    // Weapon LEVEL tag (balance-overhaul order-1, R14 a/d) — "LV n" beside each weapon, coloured by
+    // how far it trails the floor's THREAT LEVEL, plus a procedural up/down arrow glyph.
+    // -------------------------------------------------------------------------
+    public static final String HUD_LEVEL_TAG_PREFIX          = "LV ";
+    /** One step smaller than HUD_SLOT_NAME_SCALE. */
+    public static final float  HUD_LEVEL_TAG_SCALE           = 0.66f;
+    /** Levels 0..this have a pre-built label string; higher levels fall back to a concatenation. */
+    public static final int    HUD_LEVEL_TAG_CACHE_MAX       = 99;
+    /** Gap between the tag text and the arrow glyph, and the tag's inset from the slot's right edge. */
+    public static final float  HUD_LEVEL_TAG_CHEVRON_GAP     = 3f;
+    public static final float  HUD_LEVEL_TAG_SLOT_INSET      = 4f;
+    /** Baseline of the HUD tag, measured down from the top of the slot (mirrors the slot number). */
+    public static final float  HUD_LEVEL_TAG_TOP_INSET       = 3f;
+    /** Arrow glyph: 3 strokes (stem + two head strokes) in a 10 x 8 box. */
+    public static final float  HUD_LEVEL_CHEVRON_WIDTH       = 10f;
+    public static final float  HUD_LEVEL_CHEVRON_HEIGHT      = 8f;
+    /** Weapon one level under the floor threat: amber. Two or more under: red + down arrow. Over: green + up arrow. */
+    public static final float  HUD_LEVEL_AMBER_R = 1.00f, HUD_LEVEL_AMBER_G = 0.70f, HUD_LEVEL_AMBER_B = 0.15f;
+    public static final float  HUD_LEVEL_RED_R   = 0.95f, HUD_LEVEL_RED_G   = 0.22f, HUD_LEVEL_RED_B   = 0.18f;
+    public static final float  HUD_LEVEL_GREEN_R = 0.36f, HUD_LEVEL_GREEN_G = 0.90f, HUD_LEVEL_GREEN_B = 0.46f;
+    /** Gap (levels under the threat) at which the tag turns amber, and at which it turns red. */
+    public static final int    HUD_LEVEL_AMBER_GAP           = 1;
+    public static final int    HUD_LEVEL_RED_GAP             = 2;
+
+    // -------------------------------------------------------------------------
+    // Floor-arrival "THREAT LV d" event text (R14 b) — under the region/floor arrival text.
+    // -------------------------------------------------------------------------
+    public static final String THREAT_ARRIVAL_PREFIX         = "THREAT LV ";
+    public static final float  THREAT_ARRIVAL_SECONDS        = 2f;
+    /** Region accent colour rows {r, g, b} indexed by route region index; the last row repeats deeper. */
+    public static final float[][] THREAT_ARRIVAL_REGION_ACCENT = {
+        { 0.42f, 0.72f, 0.86f },
+        { 0.72f, 0.92f, 0.80f },
+        { 0.96f, 0.66f, 0.30f },
+        { 0.82f, 0.36f, 0.62f },
+    };
 }

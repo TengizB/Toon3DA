@@ -16,6 +16,7 @@ import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.render.Renderable;
+import ge.tbegvadze.toon3d.render.WeaponLevelTag;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
@@ -680,6 +681,21 @@ public class HudRenderer implements Renderable, Disposable {
             boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
             shapes.setColor(isActive ? SLOT_ACTIVE : SLOT_BORDER);
             shapes.rect(slotPositionX, originY, slotBoxWidth, slotBoxHeight);
+
+            // LV tag arrow glyph (R14 a): right-hand end of the slot's top row, beside the tag text.
+            Weapon weapon = displaySlotWeapon(inventory, displayIndex);
+            if (weapon != null && !player.isDead()) {
+                int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
+                if (WeaponLevelTag.hasGlyph(standing)) {
+                    WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
+                    shapes.setColor(temporaryColor);
+                    float glyphX = slotPositionX + slotBoxWidth - HudConstants.HUD_LEVEL_TAG_SLOT_INSET
+                            - HudConstants.HUD_LEVEL_CHEVRON_WIDTH;
+                    float glyphY = originY + slotBoxHeight - HudConstants.HUD_LEVEL_TAG_TOP_INSET
+                            - HudConstants.HUD_LEVEL_CHEVRON_HEIGHT;
+                    WeaponLevelTag.drawGlyph(shapes, glyphX, glyphY, standing);
+                }
+            }
         }
     }
 
@@ -712,6 +728,22 @@ public class HudRenderer implements Renderable, Disposable {
                 float nameY = originY + slotBoxHeight * 0.42f;
                 drawTextWithShadow(stringBuilder, nameX, nameY,
                         isActive ? SLOT_ACTIVE : TEXT_PRIMARY, HudConstants.HUD_SLOT_NAME_SCALE);
+            }
+
+            // "LV n" tag, top-right of the slot, coloured by the gap to the floor threat level.
+            if (filled && !isDead) {
+                int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
+                WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
+                String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
+                font.getData().setScale(HudConstants.HUD_LEVEL_TAG_SCALE);
+                glyphLayout.setText(font, tagLabel);
+                float rightEdge = slotPositionX + slotBoxWidth - HudConstants.HUD_LEVEL_TAG_SLOT_INSET;
+                if (WeaponLevelTag.hasGlyph(standing)) {
+                    rightEdge -= HudConstants.HUD_LEVEL_CHEVRON_WIDTH + HudConstants.HUD_LEVEL_TAG_CHEVRON_GAP;
+                }
+                drawTextWithShadow(tagLabel, rightEdge - glyphLayout.width,
+                        originY + slotBoxHeight - HudConstants.HUD_LEVEL_TAG_TOP_INSET,
+                        temporaryColor, HudConstants.HUD_LEVEL_TAG_SCALE);
             }
         }
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);

@@ -108,7 +108,7 @@ public abstract class MeleeWeapon extends Weapon {
 
     /** Returns the final damage to deal, scaled by any active fire-cycle multiplier. */
     protected int computeDamage() {
-        return Math.round(damage * getFireCycleMultiplier());
+        return Math.round(damage * getLadderDamageMultiplier() * getFireCycleMultiplier());
     }
 
     /**

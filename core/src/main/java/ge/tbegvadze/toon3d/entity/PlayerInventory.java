@@ -55,6 +55,21 @@ public class PlayerInventory {
         }
     }
 
+    /**
+     * Sets the floor threat level on every weapon the player owns (arsenal, loadout slots, melee slot).
+     * Idempotent and allocation-free — {@link Weapon#setFloorThreatLevel} recomputes only on change.
+     */
+    public void syncFloorThreatLevel(int threatLevel) {
+        for (int arsenalIndex = 0; arsenalIndex < arsenal.size(); arsenalIndex++) {
+            arsenal.get(arsenalIndex).setFloorThreatLevel(threatLevel);
+        }
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            Weapon slotWeapon = loadout.getSlot(slotIndex);
+            if (slotWeapon != null) slotWeapon.setFloorThreatLevel(threatLevel);
+        }
+        if (meleeWeapon != null) meleeWeapon.setFloorThreatLevel(threatLevel);
+    }
+
     public List<Weapon> getArsenal() {
         return Collections.unmodifiableList(arsenal);
     }

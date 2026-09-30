@@ -625,6 +625,14 @@ swing), and `World` itself (a death with an unused medkit, a floor arrival still
 the new geometry-only topics TURN/PORTAL/MACHINE/WEAPON_SWAP/BARREL/SKIP_TURN, each a cheap per-frame
 scan of world state that costs nothing after a topic's one-shot flag is spent).
 
+UNDERGEARED (balance-overhaul-order-1 R14 e) is the eighteenth topic: TACTICAL, re-teach threshold 3.
+Fired in `World.requestFloorArrivalBarks` on every real floor arrival where the equipped weapon takes
+a level-gap penalty (`getLevelGapMultiplier() < 1`, which excludes the exempt Fist) and
+`weaponLevel <= currentDepth - 2`. First teach: "That gun's falling behind what lives down here.
+Upgrade it or replace it." Re-teach: "Still outgunned. Fix the gun." Evidence is
+`TeachingSystem.onFloorArrivedUndergeared()`: each further qualifying arrival AFTER the first telling
+was delivered counts one toward the threshold of 3. No line states a number or a level.
+
 ADD A TEACHING TOPIC one value on `TeachingTopic` (tier + re-teach evidence threshold), its bark text
               (+ `.retaught` text if it has a threshold) in `BarkStrings` and the shipped properties
               file, and the firing condition + (if it has one) the evidence hook in `World` /

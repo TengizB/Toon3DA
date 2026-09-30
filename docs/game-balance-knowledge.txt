@@ -78,7 +78,7 @@ THE SINGLE SOURCE OF TRUTH:
      7  Progression (XP curve, level-up card budget, stat per-point rates)
      8  Status / DoT magnitudes (bleed/burn/stun per-turn + durations)
      9  Balance-rule anchors & bands (reference DPT/eHP, weapon power bands,
-        enemy TP bands, golden-ratio bands, depth-coupling invariant)
+        enemy TP bands (derived from R8), R8 hit bands, SECTION 20 power ladder)
     10  Resource scarcity model & the canonical MODEL FLOOR
     11  Encounter budget (floor Threat-Point budget + composition rules)
     12  Terrain hazards (fire/toxic lifetimes, spread, damage multipliers)
@@ -193,7 +193,7 @@ DERIVED SCORES:
                                              GameMath.depthThreatScale(...)
 
 REFERENCE ANCHORS (BalanceConfig SECTION 9):
-  REFERENCE_PLAYER_DPT      = 25   (held fixed; also the golden-ratio TTK metric)
+  REFERENCE_PLAYER_DPT      = 25   (the DEPTH-1 anchor of GameMath.expectedPlayerAtDepth; TP yardstick)
   REFERENCE_PLAYER_EHP      = 205  (the canonical start eHP; one difficulty)
   REFERENCE_AMMO_EFFICIENCY = 40   (weapon power-score normaliser)
 
@@ -213,11 +213,18 @@ Base pools:
   PLAYER_MAX_ARMOR       = 75    (armour soaks part of every hit)
   ARMOUR_ABSORB_FRACTION = 0.50  (fraction of each hit taken from armour, not HP)
 
-Heals (HP/armour is a RESOURCE — see SECTION 12):
-  MEDKIT_STIM_HEAL  = 32   ('+')      MEDKIT_FULL_HEAL = 90   ('H')
-  ARMOUR_SHARD_VALUE= 14   ('a')      ARMOUR_VEST_VALUE= 62   ('A')
-  (All ~1.8x their legacy values after the economy rescale, to track higher
-   incoming damage. A heal is priced in "turns of survival bought" — SECTION 12.)
+VITALITY GROWTH (balance-overhaul order 1, R9): max HP AND max armour grow per
+CHARACTER level — PLAYER_MAX_HEALTH * PLAYER_VITALITY_GROWTH^(level-1) (1.09), armour
+likewise; card/stat bonuses stay FLAT on top. World.applyVitalityGrowth runs at every
+level-up (PlayerStats.vitalityGrowthDelta). Level 10: 283 HP + 163 armour before cards.
+
+Heals (HP/armour is a RESOURCE — see SECTION 12) are FRACTIONS OF MAX (R10), resolved
+at the moment of use (GameMath.fractionOfMaximum), so a heal means the same at every
+character level:
+  stim '+'  0.18 max HP     field medkit 'H'  0.45 max HP
+  shard 'a' 0.15 max armour security vest 'A' 0.60 max armour
+  (Replaced the flat 32 / 90 / 14 / 62. R-HEAL now bands the FRACTION: small pickups
+   [0.10, 0.25], large [0.40, 0.70].)
 
 The five-step DAMAGE-MITIGATION PIPELINE (single source of truth; every actor
 resolves damage in EXACTLY this order — GameMath, docs/game-balance-authority.txt):
@@ -275,11 +282,24 @@ MELEE (BalanceConfig SECTION 4 / GameBalance):
 GLOBAL WEAPON KNOBS (BalanceConfig SECTION 4):
   CRIT_DAMAGE_MULTIPLIER        = 2.0   (crit deals 2x base)
   DAMAGE_MIN_MULTIPLIER         = 0.15  (damage floor at max falloff range)
-  WEAPON_LEVEL_DAMAGE_PER_LEVEL = 0.10  (+10% outgoing per weapon level)
+  THE POWER LADDER (balance-overhaul order 1; BalanceConfig SECTION 20) replaced the
+  old +10%-per-level rule — which never even reached a hit: Weapon.damageAtDistance used
+  the RAW base damage. Every hit now composes through GameMath.weaponLadderDamage:
+    perHit = base * LADDER_GROWTH^(L-1) * rarity(tier) * levelGap(L - floorThreatLevel)
+    LADDER_GROWTH 1.08; rarity COMMON 1.00 / UNCOMMON 1.10 / RARE 1.20 / EPIC 1.32 /
+    LEGENDARY 1.45; levelGap below the floor = 0.82^levels (floor 0.25, x
+    LEVEL_GAP_STEEPNESS 1.0 — the one knob, 0 disables), above = +5%/level (cap 2).
+    The FIST is exempt (always on-level) — the never-softlock backstop.
+  MAX_WEAPON_LEVEL 27 (RUN_FINAL_DEPTH 25 + 2); accuracy/reload/clip/range/ability
+  level scaling RE-SPANNED so the old 1..10 curve now spans 1..27. Found weapons roll
+  floor depth + {-1: 30, 0: 50, +1: 20}. World/SimWorld sync every owned gun's floor
+  threat level (Weapon.setFloorThreatLevel) every frame.
   Railgun-specific: RAILGUN_DAMAGE_MIN_MULTIPLIER=0.70, RAILGUN_DROP_COEFF=0.02.
 
 WEAPON POWER BANDS (weaponPowerScore MUST land in the band for its role;
-BalanceConfig SECTION 9; higher rarity does NOT raise the band — it buys abilities):
+BalanceConfig SECTION 9; evaluated at LEVEL 1 COMMON — rarity now multiplies damage
+(balance-overhaul order 1) on top of its ability budget, and the ladder multiplies every
+role the same way, so the role SHAPE is level-independent):
   sidearm 8–14 | workhorse 12–18 | burst/specialist 18–26 | heavy/charge 24–32
   Current scores (from the living table): Shotgun 23.1, DblSG 19.1, Plasma 18.7,
   AssaultRifle 13.7, Chaingun 12.6, Railgun(full) 45.0 (OVER — intentional
@@ -340,8 +360,9 @@ File: BalanceConfig SECTION 7; docs/xp-level-progression.txt; progression/*.
 
 XP CURVE (GEOMETRIC — re-shaped for pacing, new-game-balancr order 4):
   xpRequired(level) = XP_BASE_REQUIREMENT * XP_CURVE_GROWTH_PER_LEVEL ^ (level-1)
-  XP_BASE_REQUIREMENT = 150, XP_CURVE_GROWTH_PER_LEVEL = 1.118.
-  (L1->2: 150, L5->6: 234, L10->11: 409, ...)  GameMath.xpRequiredForLevelGeometric
+  XP_BASE_REQUIREMENT = 150, XP_CURVE_GROWTH_PER_LEVEL = 1.2495 (balance-overhaul
+  order 1: = ENEMY_HEALTH_GROWTH 1.139 x ENEMY_DAMAGE_GROWTH 1.097; was 1.118).
+  (L1->2: 150, L5->6: 366, L10->11: 1117, ...)  GameMath.xpRequiredForLevelGeometric
   WHY geometric: the old polynomial (base*level^1.3) grew at a different rate than
   the enemy threat a floor's roster is worth (that grows GEOMETRICALLY), so pacing
   drifted. The growth 1.118 tracks the enemy compound (HEALTH*DAMAGE scale), so —
@@ -382,7 +403,12 @@ ATTRIBUTE (STAT) SYSTEM (BalanceConfig SECTION 7 + GameBalance caps/bases):
   The ONE canonical starting stat block lives in BalanceConfig SECTION 7
   (PLAYER_START_* = 2/2/2/2); there are no difficulty modes: see SECTION 17.
 
-⚠️ Not-good note: the total-PP invariant is elegant on paper but assumes the
+EXPECTED CARDS in the one expected-player model (GameMath.expectedPlayerAtDepth):
+  LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION 0.5 of each level's 12 PP as a %-lift on DPT,
+  LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION 0.25 as FLAT eHP (the rest is unhealable
+  mitigation / utility). Character level on-curve = 1 + (depth - 1).
+
+⚠️ Not-good note (partly superseded by the power ladder): the total-PP invariant is elegant on paper but assumes the
 player only gains power from level-up cards. In reality found weapons, weapon
 abilities (SECTION 5, unpriced), crits, and consumables all add uncounted power.
 So "every build sits on the curve" is true only for the CARD contribution, not
@@ -395,40 +421,42 @@ SECTION 7 — ENEMIES: STATS, ROLES, THREAT POINTS (the numerator)
 ================================================================================
 File: BalanceConfig SECTION 2 (stats) + SECTION 9 (bands). enemy/EnemyType.role().
 
-Each archetype (depth-1 base stats: HP / attack / cadence / range):
-  Gore Biter '3'      40 / 12 / every turn / melee            CHAFF
-  Eye Tyrant '2'      40 / 11 / every turn / range 5          CHAFF (ranged kiter)
-  Acid Drone '$'      90 / 12 / every turn / range 4          SOLDIER (ranged)
-  Void Shroud '^'     96 / 13 / every turn / melee FLANKER    SOLDIER
-                      (VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER = 1.6 from behind)
-  Mire Wraith '5'    100 / 11 / every 2 turns / range 3       SOLDIER (ranged acid)
-  Shell Brute '4'    120 / 20 / every turn / melee CHARGER    BRUISER
-                      (CHARGE x2.4 telegraphed; trigger 2–5 tiles; STOP_SHORT 0.75)
-  Plague Hulk '1'    120 / 16 / every 2 turns / melee tank    SOLDIER
-                      (self-destruct <30% HP: 2-turn brace, x3.0 blast capped 68,
-                       leaves toxic cloud)
-  Iron Stalker '!'   230 / 24 melee, 17 ranged / range 4      MINI_ELITE
-  -- necrotic faction --
-  Ghoul '~'           42 / 13 / every 2 turns / melee         CHAFF
-  Crawler 'z'         24 / 15 / every turn / melee            CHAFF (fragile glass)
-  Revenant 'K'       110 / 18 / every turn / melee            BRUISER (fast, no charge)
-  Vortex Eye 'V'      35 / 9  / every turn / range 4          CHAFF (ranged caster)
-  Blight Corruptor '*'115 / 14 / every 2 turns / melee summoner SOLDIER
+Each archetype — depth-1 base stats REBASED by balance-overhaul order 1 (R8) to land
+the rule's hit targets against the Assault Rifle (COMMON L1) at 3 tiles = 15.2/hit and
+the 205-eHP start player. eHP / hit / cadence -> hits to kill | hits the player survives:
+  Gore Biter '3'       28 / 12 / 1  -> 2 | 18     CHAFF
+  Eye Tyrant '2'       28 / 11 / 1  -> 2 | 19     CHAFF (ranged kiter)
+  Ghoul '~'            30 / 13 / 1  -> 2 | 16     CHAFF
+  Crawler 'z'          15 / 15 / 1  -> 1 | 14     CHAFF (fragile glass)
+  Vortex Eye 'V'       24 /  9 / 1  -> 2 | 23     CHAFF (ranged caster)
+  Acid Drone '$'       45 / 24 / 1  -> 3 | 9      SOLDIER (ranged)
+  Void Shroud '^'      50 / 25 / 1  -> 4 | 9      SOLDIER (flank x1.6 from behind)
+  Mire Wraith '5'      52 / 23 / 1  -> 4 | 9      SOLDIER (ranged acid)
+  Plague Hulk '1'      60 / 23 / 2  -> 4 | 9      SOLDIER (self-destruct, x3.0 capped 68)
+  Blight Corruptor '*' 48 / 26 / 1  -> 4 | 8      SOLDIER (summoner)
+  Auric Sentinel '('   60 / 26 / 2  -> 4 | 8      SOLDIER (18 HP + 42 shard pool)
+  Rimeshell Lancer '[' 60 / 24 / 2  -> 4 | 9      SOLDIER (48 HP, flat 5)
+  Verdant Spiresower'}'57 / 24 / 1  -> 4 | 9      SOLDIER (45 HP + 12 regen pool)
+  Shell Brute '4'      95 / 35 / 1  -> 7 | 6      BRUISER (charge x2.4 telegraphed)
+  Revenant 'K'         85 / 35 / 1  -> 6 | 6      BRUISER
+  Cinderforge '{'      85 / 36 / 1  -> 6 | 6      BRUISER (75 HP, crust ~3 flat)
+  Iron Stalker '!'    170 / 42 melee, 30 ranged / 1 -> 12 | 5   MINI_ELITE
+Depth growth: HP x ENEMY_HEALTH_GROWTH^(d-1) (1.139), damage x ENEMY_DAMAGE_GROWTH^(d-1)
+(1.097) — SECTION 10.
 
-ENEMY TP BANDS (threatPoints must land in band; BalanceConfig SECTION 9):
-  chaff 16–34 | soldier 36–66 | bruiser 70–120 | mini-elite 160–310 | boss: own rules
-GOLDEN-RATIO BANDS (TTD/TTK; below = swingy/unfair, above = damage sponge):
-  chaff/soldier [3,8] | bruiser [2,4]. Chaff is EXEMPT (budgeted by pack TP, not the
-  lone unit; reads ~9). Mini-elite reads UNDER the duel band BY DESIGN (a spike you
-  avoid or spend heavies on).
+R8 HIT BANDS (replace the golden-ratio bands; no exemptions any more):
+  CHAFF 1-2 | >= 10   SOLDIER 3-4 | 7-9   BRUISER 5-7 | 4-6   MINI_ELITE 8-12 | 3-5
+ENEMY TP BANDS — DERIVED from the R8 box centres (x0.5 .. x1.6):
+  chaff ~6.2-20 | soldier ~27-87 | bruiser ~75-240 | mini-elite ~156-499 | boss: own rules
 
 GLOBAL ENEMY AI KNOBS (BalanceConfig SECTION 2):
   ALERT_RADIUS_TILES=4, CHAIN_ALERT_RADIUS_TILES=5, LOS_MAX_RANGE_TILES=8,
   RANGED_KITE_MIN_TILES=2, STUCK_TURNS_BEFORE_WIGGLE=2.
 
 BLOCK & DEFEND (shared damage-absorption buffer; BalanceConfig SECTION 2):
-  BLOCK_MAX=60, BLOCK_DECAY_TURNS=1.
-  DEFEND_BLOCK_GAIN: SOLDIER 22, BRUISER 30, MINI_ELITE 40 (≈1 turn of survival).
+  BLOCK_MAX=60 at depth 1, riding the enemy HP growth; BLOCK_DECAY_TURNS=1.
+  DEFEND_BLOCK_GAIN: SOLDIER 15, BRUISER 20, MINI_ELITE 27 (≈1 reference hit; rebased by
+  balance-overhaul order 1 from 22/30/40, and depth-scaled with the enemy HP growth).
   DEFEND_HP_THRESHOLD_FRACTION=0.5 (turtle when low), BRUISER cadence every 3 turns,
   DEFEND_MAX_CONSECUTIVE_TURNS=2. Status DoT bypasses Block (the answer to turtling).
 
@@ -563,37 +591,37 @@ SECTION 10 — DEPTH SCALING & THE COUPLING INVARIANT (the master curve)
 ================================================================================
 File: BalanceConfig SECTION 3 + SECTION 9 invariant; GameMath depth methods.
 
-Enemy threat COMPOUNDS per floor:
-  HP:     baseHP  * ENEMY_HEALTH_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.042
-  Damage: baseDmg * ENEMY_DAMAGE_SCALE_PER_DEPTH ^ (depth-1),  scale = 1.073 (order 4)
-  enemyThreatAtDepth = baseTP * depthThreatScale(1.042, 1.073, depth)
+THE POWER LADDER (balance-overhaul order 1; BalanceConfig SECTION 20). Every floor has
+a THREAT LEVEL = its depth (1..RUN_FINAL_DEPTH 25). Both sides climb FITTED compound curves:
+  Enemy HP:     baseHP  * ENEMY_HEALTH_GROWTH ^ (d-1)   1.139  (d25 ~ 23x)
+  Enemy damage: baseDmg * ENEMY_DAMAGE_GROWTH ^ (d-1)   1.097  (d25 ~ 9.2x)
+  Weapon:       base * 1.08^(L-1) * rarity * levelGap(L - d)   (SECTION 4)
+  Player pool:  max HP/armour * 1.09^(characterLevel-1) + flat cards (SECTION 3)
+  enemyThreatAtDepth = baseTP * depthThreatScale(1.139, 1.097, d) (budget + XP ride it)
 Credits scale LINEARLY: base * (1 + (depth-1)*CREDIT_DEPTH_SCALE), scale = 0.12.
 
-Player power — THE HONEST TOTAL-POWER MODEL v2 (new-game-balancr order 4):
-  playerPowerAtDepthV2 = cardPower(d) * gearRamp(d) * abilityPower(d)   (ALL sources)
-    cardPower    = the old linear level-up term (v1)
-    gearRamp     = order-2 gear curve in CONTINUOUS ramp form (reaches the step value
-                   at each region end; no boundary jumps a fixed band can't absorb)
-    abilityPower = 1 + expected weapon-ability PP / 100 (order-2 priced tables)
-  The old v1 curve counted ONLY cards — a FICTION. v2 is honest and far steeper
-  (v2(15) ~= 5.5 vs 2.68), which is WHY the enemy DAMAGE rate was re-fit up.
+THE ONE EXPECTED PLAYER: GameMath.expectedPlayerAtDepth(d) -> util/ExpectedPlayer —
+weapon level d, the region's expected rarity (mean of the WEAPON_DROP_TIER band ends),
+character level d, offence cards 0.5 x 12 PP/level as a %-lift, defence 0.25 x 12 PP/level
+as flat eHP. Depth-1 DPT = REFERENCE_PLAYER_DPT 25, depth-1 eHP = REFERENCE_PLAYER_EHP 205.
+The audit (R-LADDER), the boss derivation (BossBalance), scarcity supply growth
+(expectedHitGrowthAtDepth), heal drain, card breakpoints and the sim all read it.
 
-THE DEPTH-COUPLING INVARIANT (must hold or the game goes unfair/trivial):
-  0.9 <= playerPowerAtDepthV2(d) / enemyThreatScale(d) <= 1.2   (order 4 uses v2)
-                                             GameMath.depthCouplingRatio(...)
-  Bounds: BalanceConfig DEPTH_COUPLING_RATIO_MIN/MAX. Enforced 1..15 (R-DEPTH).
-  History: 1.08/1.06 broke by depth 5; 1.045/1.035; 1.042/1.032 (v1, under at 18+).
-  Order 4: re-derived vs v2, DAMAGE re-fit 1.032 -> 1.073 (HEALTH held at 1.042 so
-  order-3 scarcity is untouched). Now IN band 1..15 (~0.95..1.16) with NO under-band
-  fudge; depths 16..20 (printed, not audited) degrade to the EASY side (on-curve
-  player pulls slightly ahead), never unfair-hard. The gate stays in band at the
-  re-fit rate (region-2 on-curve soldier golden ratio = 3.0, the fair edge).
+R-LADDER (replaces the retired depth-coupling invariant R-DEPTH and the gear gate
+R-GEARGATE) — checked at every depth 1..25 for every role's reference archetype:
+  L1 on-curve TTK/TTD within +/-15% of depth 1 (measured: TTK +/-13%, TTD +/-7%)
+  L2 weapon d-2 -> TTK >= 1.5x (1.73), d-4 -> >= 2.5x (3.01), start weapon d>=5 -> >= 3x
+  L3 weapon d+2 -> TTK >= 0.75x (0.78)   L4 level d vs d-1 on floor d: >= +25% (+32%)
+  L5 each rarity step >= +8%, LEGENDARY >= +40%   L6 character d-3 -> TTD <= 0.80x
+BalanceReport's LADDER table prints the TTK/TTD grid; the balance-sim LADDER REPORT
+measures the same thing in PLAY (one-floor probes at every depth).
 
 Depth generosity bumps (BalanceConfig SECTION 3): at full depth, extra enemies
 (LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX=2), heavy-upgrade chance 0.60, +medkit 0.15,
 +ammo 0.20, extra-ammo 0.50.
 
-⚠️ Not-good note: the invariant is defended by a MODELLED linear player curve that
+⚠️ Not-good note (pre-ladder, kept for history — the ladder model now carries weapon
+level, rarity and cards; abilities are still outside it): the invariant is defended by a MODELLED linear player curve that
 ignores found loot and abilities (which only help the player), so the real ratio
 is "at least this favourable" — meaning the deep-floor "graceful hard edge" may
 actually be easier than modelled, or the early game harder, depending on real loot
@@ -661,7 +689,7 @@ ENCOUNTER BUDGET V3 (encounter density) — the budget is only worth what it BUY
      SHOP 5.1 -> 7.4; standard COMBAT floors move < 1 body (the leak only ever
      mattered where the budget was small).
      TP-NEUTRAL, NOT eHP-NEUTRAL: total Threat Points per floor are unchanged, so
-     every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and R-DEPTH read the
+     every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and the ladder read the
      same — but several cheap bodies carry more total eHP, and so more ammo demand,
      than the one anchor they replace. SIM_ECONOMY emergency-lifeline floors moved
      0.04 -> 0.06 as a result (inside the existing waiver). If it climbs further the
@@ -679,8 +707,8 @@ ENCOUNTER BUDGET V3 (encounter density) — the budget is only worth what it BUY
   and depth-2 spawn histograms are byte-identical, as are depth-3 and depth-5. Twelve
   floors of descent buy ~3 extra bodies (12.4 -> 15.8). Deeper floors are stronger,
   never busier. Fixing it means a per-depth multiplier on the BUDGET that is not
-  applied to per-enemy cost, which moves total floor threat and therefore the R-DEPTH
-  coupling curve — a balance change with its own audit obligations, not a bug fix.
+  applied to per-enemy cost, which moves total floor threat and therefore the scarcity /
+  heal-drain / XP curves (R-DEPTH is retired; balance-overhaul order 2 owns floor density) — a balance change with its own audit obligations, not a bug fix.
   3. THE REGION DANGER DIAL (fixes problem 12): route regions stop being frequency-
      only. Each region declares REGION_TP_BUDGET_MULTIPLIER (A OUTER FACILITY 0.9 |
      B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE BREACH 1.25) applied ON TOP
@@ -690,7 +718,7 @@ ENCOUNTER BUDGET V3 (encounter density) — the budget is only worth what it BUY
      and that C/D out-dial A by >= REGION_TP_LETHAL_MARGIN. Node WEIGHT multipliers
      (RouteMapConstants) still own FLAVOUR (what kind of rooms); the TP dial owns HOW
      HARD. FAIRNESS: the dial scales the BUDGET (body count), NOT the per-enemy threat
-     scale, so per-fight depth-coupling (R-DEPTH) holds in every region lane — region
+     scale, so the per-fight ladder (R-LADDER L1; was R-DEPTH) holds in every region lane — region
      danger is an attrition tax of extra bodies, not an unfair per-duel spike.
   4. ELITE-GAUNTLET floors keep their 0.15 chance but must still fit the (region-
      scaled) budget — a composition choice, not a budget override.
@@ -730,10 +758,13 @@ THE CENTRAL EQUATION (per floor, "fight everything" basis):
 THE FOUR LEVERS (all in BalanceConfig):
   1 DROP FREQUENCY  ENEMY_AMMO_DROP_CHANCE=0.10, MELEE_KILL_AMMO_DROP_CHANCE=0.20,
                     LEVEL_GEN_AMMO_CHANCE_PER_ROOM=0.20                (SECTION 5)
-  2 DROP SIZE       AMMO_BOX_BULLETS 15 / SHELLS 5 / CELLS 10 / ROCKETS 2,
-                    RAILGUN_PICKUP_SLUGS 2, FLAME_PICKUP_FUEL 25, GRENADE 3 (SECTION 5)
-  3 RESERVE CAP     AMMO_RESERVE_CAP_BULLETS 54 / SHELLS 24 / CELLS 38 / ROCKETS 26,
-                    RAILGUN_MAX_SLUGS 8, FLAME_MAX_FUEL 50, GRENADE_MAX_AMMO 10 (SECTION 5)
+  2 DROP SIZE       AMMO_BOX_BULLETS 10 / SHELLS 4 / CELLS 7 / ROCKETS 2,
+                    RAILGUN_PICKUP_SLUGS 1, FLAME_PICKUP_FUEL 18, GRENADE 2 (SECTION 5)
+  3 RESERVE CAP     AMMO_RESERVE_CAP_BULLETS 38 / SHELLS 17 / CELLS 27 / ROCKETS 18,
+                    RAILGUN_MAX_SLUGS 6, FLAME_MAX_FUEL 35, GRENADE_MAX_AMMO 7 (SECTION 5)
+                    (LEVERS 2+3 cut ~0.7x by balance-overhaul order 1 with the R8 demand drop)
+  5 PER-REGION      AMMO_SUPPLY_REGION_MULTIPLIER {1.03, 1.00, 0.98, 0.98, 1.10};
+                    SUPPLY rides the expected per-hit growth, DEMAND the enemy HP growth
   4 DEMAND          enemy density / eHP per floor (the TP budget)  (SECTION 2/11)
   Tune LEVER 4 (demand) + LEVER 2 (drop size) first — biggest effect.
 
@@ -752,15 +783,19 @@ HEAL ECONOMY (HP is a resource too):
 
 THE MODEL FLOOR (depth 1 reference; BalanceConfig SECTION 10):
   6x Gore Biter + 3x Eye Tyrant + 2x Shell Brute + 1x Plague Hulk
-  DEMAND = 720 damage, ~432 TP. All SECTION 5 levers are tuned against THIS floor.
-  Current living-table result: S = 0.83 floor-wide, every per-weapon S < 0.6,
-  netHpDrain 11.5% of eHP — all in band.
+  DEMAND = 502 damage after the R8 rebase (was 720), ~435 TP. Expected pickups 2.8
+  medkits + 1.6 armour (re-synced to the generator's per-room chances; was 1.5 / 1.0).
+  Depth sweeps run 1..25: S 0.82-0.92, net HP drain 7.5-13% of the expected player's eHP
+  (heals ride the player's pool; HEAL_SUPPLY_REGION_MULTIPLIER {1, 1, 1, 1.03, 1.10}).
 
 CREDITS (the currency economy):
   Per-kill credits (BalanceConfig SECTION 2): 5–40 (boss 250 placeholder).
   Credit chips per floor 3–7. Depth scale 0.12. Credit Fang ability (GameBalance).
   SHOP / UAC Fabricator (GameBalance SHOP_*): 1–2 machines/floor, 9 offers each,
   category weights, depth+rarity pricing, base prices per offer type.
+  The LEVEL UP rung: guaranteed for the equipped weapon while level < depth+1, priced
+  LADDER_LEVEL_UP_POWER_POINTS (1.5 PP) through GameMath.shopPrice — R-LADDER-AFFORD
+  (every shop weapon level-up costs this; the Fist never gets one; it vanishes at the cap).
 
 ⚠️ Not-good note (IMPORTANT): the CREDIT half of the economy is effectively BROKEN
 as a balance lever. Credits are awarded everywhere, but the doc/idea history flags
@@ -867,9 +902,9 @@ bodies) at the same depth, not merely rolls dangerous nodes more often. The node
 WEIGHT multipliers above stay for FLAVOUR (what kind of rooms); the TP dial owns HOW
 HARD. R-REGION gates it (bounded [0.8,1.3], monotonic non-decreasing A<=B<=C<=D, C/D
 out-dial A by >= REGION_TP_LETHAL_MARGIN). Per-fight fairness is preserved: the dial
-scales body COUNT, not per-enemy threat, so depth-coupling (R-DEPTH) holds in every
-region lane. (The endless "Breach" coupling degradation past depth ~20 in SECTION 10
-is a separate, still-open issue — the region dial does not change per-enemy scaling.)
+scales body COUNT, not per-enemy threat, so the per-fight ladder (R-LADDER L1) holds in
+every region lane. (The ladder is audited to RUN_FINAL_DEPTH 25; endless depth past it is
+balance-overhaul order 6's to end.)
 
 
 ================================================================================
@@ -908,7 +943,11 @@ block. Key methods (never inline any of these — always call GameMath):
   Primitives:    effectiveHitPoints, sustainedDamagePerTurn, ammoEfficiency,
                  turnsToKill, threatPoints.
   Derived:       weaponPowerScore, goldenRatio, depthThreatScale,
-                 depthCouplingRatio, playerPowerAtDepth.
+                 ladderScale, levelGapMultiplier, rarityDamageMultiplier, weaponLadderDamage,
+                 enemyHealthAtDepth/enemyDamageAtDepth, playerVitalityScale, fractionOfMaximum,
+                 expectedPlayer/expectedPlayerAtDepth (util/ExpectedPlayer), expectedHitGrowthAtDepth,
+                 ladderCouplingAtCharacterLevel, shopDepthPriceFactor (balance-overhaul order 1;
+                 depthCouplingRatio / playerPowerAtDepth(V2) / gearCurveAtDepth are DELETED).
   Progression:   xpRequiredForLevel, compoundScaleForDepth,
                  damagePerTurnPowerPoints, effectiveHitPointPowerPoints.
   Scarcity:      reserveBankingFloors + the scarcity/heal-economy block.
@@ -1001,6 +1040,20 @@ math contract, but it is provisional throughout, unplaytested, incomplete in its
 consolidation, and broken in the credit/boss/ability areas. It MUST be refined.
 Do not present any current number to a user as a finished, correct value.
 
+
+  BALANCE-OVERHAUL ORDER 1 (the power ladder) — what it fixed and what it leaves open:
+  - FIXED: a weapon level never reached an actual hit (Weapon.damageAtDistance multiplied the
+    RAW base damage) — the root of "a level-1 weapon plays confidently on higher levels".
+  - FIXED: rarity could not raise power; max HP never grew; heals were flat; enemy HP grew
+    4.2%/floor. All now ride the fitted ladder (SECTION 10).
+  - OPEN: the expected card shares (offence 0.5 as a %-lift, flat defence 0.25) are MODEL
+    assumptions; the ladder fit and the heal drain both lean on them. The played LADDER REPORT
+    is the check — re-read it after any card change.
+  - OPEN: enemy HP reaches ~23x depth 1 by depth 25 (fraction-based health bars; accepted).
+  - OPEN: floors are faster but sparse after the R8 rebase (fewer HP per Threat Point) —
+    balance-overhaul order 2 adds bodies.
+  - OPEN: the LV tag / THREAT LV / compare card were verified by build + Xvfb launch only,
+    never looked at on a screen.
 
 ================================================================================
 SECTION 21 — HOW TO CHANGE BALANCE SAFELY (workflow for future sessions)

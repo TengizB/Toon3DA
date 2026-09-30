@@ -67,7 +67,11 @@ public enum TeachingTopic {
     /** The first level-up card. */
     LEVEL_UP(TeachingTier.CRITICAL, 0),
     /** A better weapon than the one carried is on the floor. */
-    WEAPON_SWAP(TeachingTier.TACTICAL, 0);
+    WEAPON_SWAP(TeachingTier.TACTICAL, 0),
+
+    // ---- balance-overhaul-order-1 R14 e ----
+    /** The equipped weapon is two or more levels under the floor on arrival. Re-taught after 3 further floors started that far behind. */
+    UNDERGEARED(TeachingTier.TACTICAL, 3);
 
     private final TeachingTier tier;
     private final int          reteachEvidenceThreshold;

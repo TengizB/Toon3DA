@@ -210,7 +210,57 @@ public final class SimWorld implements LevelTransitionListener {
                 new ShopAbilityService(this::applyUpgradeCardEffects));
 
         buildStartingLoadout();
+        if (settings.isLadderProbe()) {
+            currentDepth = settings.ladderProbeDepth();
+            applyLadderProbeKit();
+        }
     }
+
+    /**
+     * The LADDER probe kit (balance-overhaul order 1): every gun at the floor's threat level with the
+     * region's lowest drop tier (on-curve kit) or at level 1 COMMON (start kit); the character at the
+     * on-curve level with its vitality growth for BOTH kits, so the report isolates the weapon ladder;
+     * full reserves so a probe measures hits, not ammo luck.
+     */
+    private void applyLadderProbeKit() {
+        boolean onCurve = settings.ladderProbeOnCurveKit();
+        int weaponLevel = onCurve ? currentDepth : 1;
+        ge.tbegvadze.toon3d.entity.WeaponTier[] tiers = ge.tbegvadze.toon3d.entity.WeaponTier.values();
+        int[] regionMinimumTiers = BalanceConfig.WEAPON_DROP_TIER_MIN_BY_REGION;
+        int region = Math.min(regionMinimumTiers.length - 1,
+                GameMath.regionIndexAtDepth(currentDepth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE));
+        ge.tbegvadze.toon3d.entity.WeaponTier tier = onCurve
+                ? tiers[Math.min(tiers.length - 1, regionMinimumTiers[region])]
+                : ge.tbegvadze.toon3d.entity.WeaponTier.COMMON;
+        for (Weapon weapon : arsenal) {
+            weapon.configureRoll(weaponLevel, tier, new ge.tbegvadze.toon3d.entity.AbilityInstance[0]);
+        }
+        int characterLevel = GameMath.expectedCharacterLevelAtDepth(currentDepth);
+        for (int level = 2; level <= characterLevel; level++) {
+            player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, level));
+            player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, level));
+        }
+        // The expected level-up CARDS of that character, exactly as the ExpectedPlayer model prices them: the
+        // offence share as a %-lift on every hit, the flat-defence share as extra max HP.
+        float cardBudgetLevels = (characterLevel - 1) * BalanceConfig.LEVEL_UP_BUDGET_PP / 100f;
+        ladderProbeOffenceLift = 1f + BalanceConfig.LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION * cardBudgetLevels;
+        player.adjustMaxHealth(Math.round(BalanceConfig.REFERENCE_PLAYER_EHP
+                * BalanceConfig.LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION * cardBudgetLevels));
+        player.applyHealing(player.getMaxHealth());
+        player.applyArmor(player.getMaxArmor());
+        for (AmmoType ammoType : AmmoType.values()) {
+            itemInventory.tryAdd(ammoType.getItemType(), LADDER_PROBE_AMMO_FILL);
+        }
+    }
+
+    /** The probe's expected offence-card lift on every player hit (1.0 outside a LADDER probe). */
+    private float ladderProbeOffenceLift = 1f;
+
+    /** Rounds of every ammo type a LADDER probe starts with (the inventory's own caps apply). */
+    private static final int LADDER_PROBE_AMMO_FILL = 999;
+
+    /** The role of the enemy whose attack is resolving right now, so the next damage event is attributed to it. */
+    private ge.tbegvadze.toon3d.enemy.EnemyRole pendingAttackerRole;
 
     // =====================================================================================
     // RUN
@@ -224,9 +274,14 @@ public final class SimWorld implements LevelTransitionListener {
         routePlan = RegionPlan.defaultPlan();
         routeMap  = routeMapGenerator.generate(runSeed, routePlan);
         // The staging room is skipped: it is a weapon-choice vestibule, and every band is stated
-        // against the standard starting loadout (BalanceConfig SECTION 7 / R-GEARGATE). The run's
-        // FIRST real choice is therefore the depth-1 route node, exactly as on device.
-        commitNextNode();
+        // against the standard starting loadout (BalanceConfig SECTION 7). The run's FIRST real choice
+        // is therefore the depth-1 route node, exactly as on device. A LADDER probe starts mid-descent,
+        // so it plays the depth-driven floor (no route node — World's own fallback).
+        if (settings.isLadderProbe()) {
+            pendingNode = null;
+        } else {
+            commitNextNode();
+        }
 
         while (currentDepth <= settings.depthCeiling()) {
             buildFloor();
@@ -303,6 +358,7 @@ public final class SimWorld implements LevelTransitionListener {
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);
         for (Weapon weapon : arsenal) weapon.setAbilityResolver(abilityResolver);
+        syncWeaponThreatLevels();
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) meleeWeapon.setAbilityResolver(abilityResolver);
 
@@ -313,9 +369,19 @@ public final class SimWorld implements LevelTransitionListener {
                 playerStats.addCredits(Math.round(baseReward
                         * (1f + (dungeonDepth - 1) * GameBalance.CREDIT_DEPTH_SCALE))));
         enemyManager.setEmergencySupplyListener(() -> floorLedger.emergencySupplyFired = true);
+        if (settings.isLadderProbe()) {
+            enemyManager.setPlayerHitListener((enemyType, enemyMaxHealth, damage) ->
+                    ledger.ladderHitsToKillByRole.get(enemyType.role().ordinal()).add(enemyMaxHealth / (float) damage));
+            enemyManager.setEnemyAttackListener(new ge.tbegvadze.toon3d.enemy.EnemyAttackListener() {
+                @Override public void onMeleeAttack(Enemy enemy) { pendingAttackerRole = enemy.type.role(); }
+                @Override public void onRangedAttack(Enemy enemy, int playerColumn, int playerRow) {
+                    pendingAttackerRole = enemy.type.role();
+                }
+            });
+        }
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
-        enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier());
-        enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier());
+        enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier() * ladderProbeOffenceLift);
+        enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);
         enemyManager.setLoadout(inventory.getLoadout());
         enemyManager.setStatusEffectController(statusEffectController);
 
@@ -575,6 +641,9 @@ public final class SimWorld implements LevelTransitionListener {
      * (slide, rotate, fire, door) completes inside the loop; the cap is a safety net, never a rule.
      */
     private void stepOneAction(TouchAction action) {
+        syncWeaponThreatLevels();
+        // A missed enemy attack must not credit a later hazard/DoT tick to its role (LADDER REPORT noise).
+        pendingAttackerRole = null;
         actionSource.present(action);
         for (int step = 0; step < BalanceConfig.SIM_MAX_STEPS_PER_ACTION; step++) {
             doorManager.update(BalanceConfig.SIM_TIME_STEP_SECONDS);
@@ -584,6 +653,12 @@ public final class SimWorld implements LevelTransitionListener {
             if (step > 0 && playerController.isIdle()) break;
         }
         actionSource.clear();
+        syncWeaponThreatLevels();
+    }
+
+    /** Mirrors World.syncWeaponThreatLevels: every owned weapon is compared against this floor's depth. */
+    private void syncWeaponThreatLevels() {
+        inventory.syncFloorThreatLevel(Math.max(1, currentDepth));
     }
 
     /** Draws and applies level-up cards until the pending queue is empty (mirrors World). */
@@ -596,6 +671,9 @@ public final class SimWorld implements LevelTransitionListener {
             if (chosen == null) break;
             applyUpgradeCardEffects(chosen);
             playerProgress.advanceLevel();
+            int newLevel = playerProgress.getPlayerLevel();
+            player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, newLevel));
+            player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, newLevel));
             upgradeCardDeck.registerPick(chosen);
         }
     }
@@ -613,8 +691,8 @@ public final class SimWorld implements LevelTransitionListener {
             playerProgress.addFlatDamageBonus(card.flatDamageDelta);
             enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         }
-        enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier());
-        enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier());
+        enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier() * ladderProbeOffenceLift);
+        enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);
     }
 
     /**
@@ -691,7 +769,7 @@ public final class SimWorld implements LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(currentDepth, ownedWeapons);
+        return new ShopContext(currentDepth, ownedWeapons, inventory.getEquippedWeapon());
     }
 
     // =====================================================================================
@@ -700,6 +778,11 @@ public final class SimWorld implements LevelTransitionListener {
 
     private void onPlayerDamaged(int netDamage) {
         if (floorLedger != null) floorLedger.healthLost += netDamage;
+        if (pendingAttackerRole != null && netDamage > 0) {
+            float fullPool = player.getMaxHealth() + player.getMaxArmor();
+            ledger.ladderHitsToDieByRole.get(pendingAttackerRole.ordinal()).add(fullPool / netDamage);
+        }
+        pendingAttackerRole = null;
     }
 
     private void recordDeath(boolean threatWasTelegraphed, boolean inResourceCrisis) {

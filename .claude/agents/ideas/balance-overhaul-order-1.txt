@@ -1,9 +1,30 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: The Power Ladder — levels and rarity that matter
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-09-30
 ---
+IMPLEMENTATION NOTE (2026-09-30, reviewer PASS WITH FIXES; fixes applied)
+  - ROOT CAUSE found: Weapon.damageAtDistance used the RAW base damage, so weapon levels
+    never reached a hit. Every hit now composes through GameMath.weaponLadderDamage.
+  - FIT (R7/R9, "defaults to fit"): enemy HP 1.139/floor, damage 1.097, vitality 1.09;
+    enemy HP ~23x depth 1 at depth 25 (above the informal 7-10x; AS10). Expected cards:
+    offence 0.5 of the level budget as a %-lift, flat defence 0.25 (0.5 made the heal-drain
+    rule unsatisfiable). XP curve growth 1.118 -> 1.2495.
+  - R8 damage at the LOW end of each band; chaff damage unchanged. Enemy block gains rebased.
+  - R-HEAL re-stated as fraction-of-max bands (override clause). Ammo box sizes/caps ~0.7x;
+    model heal counts re-synced to the generator (2.8 / 1.6); per-region supply/heal levers
+    extended to 5 regions. Route model reads ammo in depth-1 terms and credits at the depth's
+    shop price level; R-TRAJECTORY upper band ends re-fitted with record.
+  - CP2 and CP3 landed as one commit (the heal re-fit needed R9/R10).
+  - R14a: the HUD has no right-panel weapon name, so the LV tag sits on the left-panel slot
+    strip. R15: TacticalPolicy buys the rung only while BEHIND (level < depth).
+  - S-LAG reads OK only because hoarder runs stall on floor 1; it inherits the navigation
+    waiver. The played check is the LADDER REPORT (A2 read-out 2.35x).
+  - NOT VERIFIED ON A SCREEN: the desktop halves of A2 (red LV 1 + THREAT LV 3), A3 (counting
+    shots), A4 (medkit % at levels 1 and 10) and A6. Build + tests + balanceSim are green and
+    the desktop build runs under Xvfb without exceptions, but only reached the title screen.
+    These need an owner look.
 
 Order 1 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on nothing in the series (a green build). Does NOT depend on the

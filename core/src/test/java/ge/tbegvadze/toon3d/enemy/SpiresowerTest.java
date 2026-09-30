@@ -60,7 +60,7 @@ class SpiresowerTest {
                 "sowing is a bespoke WIND_UP -> sow hook, not a catalogued SpecialAbility — COVERAGE stays green");
     }
 
-    /** Threat Points and golden ratio sit in the SOLDIER bands (the balance audit's rules). */
+    /** Threat Points and the R8 hit counts sit in the SOLDIER bands (the balance audit's rules). */
     @Test
     void pricesIntoTheSoldierBands() {
         float threatPoints = EnemyType.VERDANT_SPIRESOWER.baseThreatPoints();
@@ -69,11 +69,14 @@ class SpiresowerTest {
         assertTrue(threatPoints >= tpBand[0] && threatPoints <= tpBand[1],
                 "Spiresower TP " + threatPoints + " must sit in the SOLDIER band " + Arrays.toString(tpBand));
 
-        float goldenRatio = BalanceSchema.goldenRatioOf(EnemyType.VERDANT_SPIRESOWER);
-        float[] grBand = BalanceSchema.goldenRatioBand(EnemyRole.SOLDIER);
-        assertNotNull(grBand);
-        assertTrue(goldenRatio >= grBand[0] && goldenRatio <= grBand[1],
-                "Spiresower golden ratio " + goldenRatio + " must sit in the SOLDIER band "
-                        + Arrays.toString(grBand));
+        // R8 (balance-overhaul order 1) replaced the golden-ratio band with the SOLDIER hit bands.
+        int hitsToKill = BalanceSchema.enemyHitsToKill(EnemyType.VERDANT_SPIRESOWER);
+        int hitsToDie = BalanceSchema.enemyHitsToDie(EnemyType.VERDANT_SPIRESOWER);
+        float[] hitBand = BalanceSchema.enemyHitBand(EnemyRole.SOLDIER);
+        assertNotNull(hitBand);
+        assertTrue(hitsToKill >= hitBand[0] && hitsToKill <= hitBand[1],
+                "Spiresower hits to kill " + hitsToKill + " must sit in the SOLDIER band " + Arrays.toString(hitBand));
+        assertTrue(hitsToDie >= hitBand[2] && hitsToDie <= hitBand[3],
+                "Spiresower hits to die " + hitsToDie + " must sit in the SOLDIER band " + Arrays.toString(hitBand));
     }
 }

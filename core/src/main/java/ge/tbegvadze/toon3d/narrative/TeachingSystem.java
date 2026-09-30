@@ -158,6 +158,16 @@ public final class TeachingSystem {
         if (holdingTwoGunsNeverSwitched) evidenceCount[TeachingTopic.SWITCH_WEAPON.ordinal()]++;
     }
 
+    /**
+     * EVIDENCE (balance-overhaul-order-1 R14 e): a floor was ARRIVED AT with the equipped weapon two or
+     * more levels under it. Counts only once the first telling has actually been delivered, so the
+     * threshold means "further floors" after the first line, as the design states.
+     */
+    public void onFloorArrivedUndergeared() {
+        if (!taughtTimerStarted[TeachingTopic.UNDERGEARED.ordinal()]) return;
+        evidenceCount[TeachingTopic.UNDERGEARED.ordinal()]++;
+    }
+
     /** The player actually switched weapons — the "whole floors without switching" count resets. */
     public void onWeaponSwitched() {
         evidenceCount[TeachingTopic.SWITCH_WEAPON.ordinal()] = 0;

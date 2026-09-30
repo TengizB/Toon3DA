@@ -262,6 +262,10 @@ public final class BarkStrings {
         strings.put("story.bark.control.machine",    "Stand next to it and hit use. Only one I've seen working.");
         strings.put("story.bark.control.portal",     "That's the way down. Step on it, I'll bring up the map.");
         strings.put("story.bark.control.level_up",   "You've got a point to spend. It sticks for this run only.");
+        strings.put("story.bark.control.undergeared",
+                                                     "That gun's falling behind what lives down here. Upgrade it or replace it.");
+        strings.put("story.bark.control.retaught.undergeared",
+                                                     "Still outgunned. Fix the gun.");
         strings.put("story.bark.control.weapon_swap","Better gun on the floor. Check the stats before you take it.");
     }
 

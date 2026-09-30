@@ -224,3 +224,38 @@ PALETTE (hex → float RGB)
   WARN_YELLOW     #FFE000  (1.000, 0.878, 0.000)
   ALERT_RED       #FF2A2A  (1.000, 0.165, 0.165)
   LED_GREEN       #30FF60  (0.188, 1.000, 0.376)
+
+
+WEAPON LEVEL TAG ("LV n") + THREAT LEVEL  (balance-overhaul order-1, R14)
+-------------------------------------------------------------------------
+NOTE: the HUD has no separate right panel any more; the equipped weapon's name lives in the
+left panel's weapon-slot strip, so the tag sits in EACH filled slot (top-right, mirroring the slot
+number top-left).
+
+Tag: "LV n" (n = Weapon.getWeaponLevel()), same HUD font one step smaller
+(HudConstants.HUD_LEVEL_TAG_SCALE 0.66 vs the 0.78 slot-name scale). Label strings are pre-built
+(render/WeaponLevelTag.label), so nothing allocates in render().
+
+Colour rule vs the floor THREAT LEVEL d (= current depth, clamped >= 1; HudState.threatLevel,
+written by World each frame). gap = Weapon.getLevelStanding(d) = L - d, forced to 0 for the
+level-gap-exempt Fist:
+  gap >  0        green  (0.36, 0.90, 0.46) + UP arrow
+  gap == 0        normal HUD text colour
+  gap == -1       amber  (1.00, 0.70, 0.15)
+  gap <= -2       red    (0.95, 0.22, 0.18) + DOWN arrow
+Thresholds and colours are HudConstants.HUD_LEVEL_*. The colour is read live each frame, so it
+recolours immediately on pickup / swap / shop level-up.
+
+Arrow glyph: procedural, 3 ShapeRenderer line strokes (stem + two head strokes) in a 10 x 8 world
+unit box (HUD_LEVEL_CHEVRON_WIDTH/HEIGHT), drawn immediately right of the tag text in the
+Pass-B line pass (WeaponLevelTag.drawGlyph). No textures.
+
+The same tag + rule appears on the inventory weapon rows (WeaponSlotsPanel, after the weapon name,
+glyph drawn in a trailing line pass) and on the weapon pickup/inspect card (column headings
+"FOUND  LV n" / "ACTIVE  LV n", DAMAGE row = EFFECTIVE per-hit damage on THIS floor via
+GameMath.weaponLadderDamage with the CURRENT threat level for the ground weapon too).
+
+Floor arrival: World.postThreatArrivalText() spawns the event text "THREAT LV d"
+(HudConstants.THREAT_ARRIVAL_PREFIX) for THREAT_ARRIVAL_SECONDS (2 s) in the region accent colour
+(THREAT_ARRIVAL_REGION_ACCENT), BEFORE the region-gate arrival lines so it stacks underneath them.
+EventTextSystem.spawnTimed() carries a per-slot lifetime for this.

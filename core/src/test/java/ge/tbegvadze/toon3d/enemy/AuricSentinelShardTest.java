@@ -66,8 +66,10 @@ class AuricSentinelShardTest {
         assertEquals(0, sentinel.shardCount);
         assertEquals(fullHealth, sentinel.health, "stripping the ring must not itself deal damage");
 
-        sentinel.applyDamage(25);
-        assertEquals(fullHealth - 25, sentinel.health, "an exposed Sentinel takes full damage");
+        // A hit smaller than the (glassy, rebased by balance-overhaul order 1) body, so "full damage" is
+        // visible as an exact HP drop rather than clamped at zero.
+        sentinel.applyDamage(10);
+        assertEquals(fullHealth - 10, sentinel.health, "an exposed Sentinel takes full damage");
     }
 
     /**
