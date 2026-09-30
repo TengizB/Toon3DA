@@ -693,21 +693,25 @@ Incinerator            HEAVY          31.0     32.0       27.7        24-32 OK
 
 ENEMIES (registry: EnemyType.values() through BalanceSchema bands)
   cycleDPT = order-5 cycle-averaged effective DPT (basic + priced specials); trueTP = cycle-averaged Threat Points.
-enemy             role          eHP atkDmg   cad cycleDPT  posMult     trueTP in?      TTD/TTK gr?   
+enemy             role          eHP atkDmg   cad cycleDPT  posMult     trueTP in?     kill|die R8?   
 ------------------------------------------------------------------------------------
-Plague Hulk       SOLDIER       120     16     2    11.40     1.00       54.7 OK           5.2 OK    
-Eye Tyrant        CHAFF          40     11     1    11.55     1.30       24.0 OK           9.5 exempt
-Gore Biter        CHAFF          40     12     1    12.00     1.15       22.1 OK           9.0 exempt
-Shell Brute       BRUISER       120     20     1    20.00     1.00       96.0 OK           2.2 OK    
-Mire Wraith       SOLDIER       100     11     1     9.83     1.30       51.1 OK           4.8 OK    
-Iron Stalker      MINI_ELITE    230     24     1    27.30     1.15      288.8 OK           0.9 exempt
-Acid Drone        SOLDIER        90     12     1    10.50     1.30       49.1 OK           4.5 OK    
-Void Shroud       SOLDIER        96     13     1    13.00     1.15       57.4 OK           4.0 OK    
-Ghoul             CHAFF          42     13     1    13.00     1.00       21.8 OK           8.0 exempt
-Crawler           CHAFF          24     15     1    15.00     1.15       16.6 OK          14.0 exempt
-Revenant          BRUISER       110     18     1    18.00     1.00       79.2 OK           2.4 OK    
-Vortex Eye        CHAFF          35      9     1     9.60     1.30       17.5 OK          11.5 exempt
-Blight Corruptor  SOLDIER        90     14     1    17.78     1.00       64.0 OK           3.8 OK    
+Plague Hulk       SOLDIER        60     23     2    16.39     1.00       39.3 OK        4|9    OK    
+Eye Tyrant        CHAFF          28     11     1    11.55     1.30       16.8 OK        2|19   OK    
+Gore Biter        CHAFF          28     12     1    12.00     1.15       15.5 OK        2|18   OK    
+Shell Brute       BRUISER        95     35     1    35.00     1.00      133.0 OK        7|6    OK    
+Mire Wraith       SOLDIER        52     23     1    17.83     1.30       48.2 OK        4|9    OK    
+Iron Stalker      MINI_ELITE    170     42     1    47.78     1.15      373.6 OK       12|5    OK    
+Acid Drone        SOLDIER        45     24     1    18.50     1.30       43.3 OK        3|9    OK    
+Void Shroud       SOLDIER        50     25     1    25.00     1.15       57.5 OK        4|9    OK    
+Ghoul             CHAFF          30     13     1    13.00     1.00       15.6 OK        2|16   OK    
+Crawler           CHAFF          15     15     1    15.00     1.15       10.3 OK        1|14   OK    
+Revenant          BRUISER        85     35     1    35.00     1.00      119.0 OK        6|6    OK    
+Vortex Eye        CHAFF          24      9     1     9.60     1.30       12.0 OK        2|23   OK    
+Blight Corruptor  SOLDIER        48     26     1    28.86     1.00       55.4 OK        4|8    OK    
+Auric Sentinel    SOLDIER        60     26     2    13.00     1.30       40.6 OK        4|8    OK    
+Cinderforge Colossus BRUISER        85     36     1    36.00     1.00      122.7 OK        6|6    OK    
+Rimeshell Lancer  SOLDIER        60     24     2    12.00     1.30       37.4 OK        4|9    OK    
+Verdant Spiresower SOLDIER        57     24     1    24.00     1.00       54.7 OK        4|9    OK    
 
 WAIVERS (registry: BalanceSchema.activeWaivers())
 ------------------------------------------------------------------------------------
@@ -732,13 +736,16 @@ WAIVERS (registry: BalanceSchema.activeWaivers())
   [SIM_ECONOMY]  emergency lifeline floors
     reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
     expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+  [SIM_LAG]      HOARDER-START-WEAPON median death depth
+    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
+    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
 
 BLOCK & DEFEND (order-3)
 role          baseBlk   blkMax   decay  survTurns in?   
 ------------------------------------------------------------------
-SOLDIER            22       60       1       0.88 OK    
-BRUISER            30       60       1       1.20 OK    
-MINI_ELITE         40       60       1       1.60 OK    
+SOLDIER            15       60       1       0.60 OK    
+BRUISER            20       60       1       0.80 OK    
+MINI_ELITE         27       60       1       1.08 OK    
 survTurns = baseBlk / REFERENCE_PLAYER_DPT (turns of survival one DEFEND buys).
 in? = OK when survTurns is in [0.6, 2.0] — ~1 turn bought, never a stall.
 BRUISER also braces on a fixed cadence every 3 turns; CHAFF/BOSS never brace.
@@ -747,12 +754,12 @@ Turtle trigger: HP <= 50% and the player is positioned to hit next turn.
 TACTICAL MODIFIERS (order-6)
 power            mult    cap effect                                  
 --------------------------------------------------------------------------------
-VULNERABLE      x2.00      2  target takes +dmg; TTK 5 -> 3 turns
+VULNERABLE      x2.00      2  target takes +dmg; TTK 4 -> 2 turns
 WEAK            x0.75 1hit/refresh  attacker deals -25% (softens a telegraphed hit)
 EXPOSED             -  1 hit  next hit ignores Block; lasts 2 turn(s), 1 hit
-BACKSTAB        x1.30 conditional  from behind facing; TTK 5 -> 4 turns
+BACKSTAB        x1.30 conditional  from behind facing; TTK 4 -> 3 turns
 --------------------------------------------------------------------------------
-Reference SOLDIER eHP = 110, player DPT = 25. VULNERABLE is stack-capped so even
+Reference SOLDIER eHP = 85, player DPT = 25. VULNERABLE is stack-capped so even
 at max stacks it shaves ~1 turn off a soldier, never trivializing a boss's eHP.
 BACKSTAB is priced as a conditional (like crit): it needs positioning, so its
 reliable value is self-limiting and it stays a nudge, not an execution check.
@@ -778,88 +785,108 @@ HOLLOW POINTS        OFFENSE   DAMAGE            12.0 no       OK     +1
 MARKSMAN TRAINING    OFFENSE   MARKSMANSHIP      12.0 no       OK     +1      
 BRUTAL STRENGTH      OFFENSE   STRENGTH          12.0 no       OK     +1      
 GLASS CANNON         OFFENSE   DAMAGE            11.2 YES      OK     +1      
-COMBAT ARMOR         DEFENSE   ARMOR             11.7 no       OK     +2      
-TOUGHENED HIDE       DEFENSE   TOUGHNESS         11.8 no       OK     +2      
-VITALITY             SUSTAIN   HEALTH            12.2 no       OK     +2      
-IRON CONSTITUTION    SUSTAIN   HEALTH            11.2 YES      OK     +2      
-EVASION TRAINING     UTILITY   AGILITY           11.1 no       OK     +2      
-RECKLESS CHARGE      UTILITY   AGILITY           12.1 YES      OK     +2      
+COMBAT ARMOR         DEFENSE   ARMOR             11.7 no       OK     +1      
+TOUGHENED HIDE       DEFENSE   TOUGHNESS         11.8 no       OK     +1      
+VITALITY             SUSTAIN   HEALTH            12.2 no       OK     +1      
+IRON CONSTITUTION    SUSTAIN   HEALTH            11.2 YES      OK     +1      
+EVASION TRAINING     UTILITY   AGILITY           11.1 no       OK     +1      
+RECKLESS CHARGE      UTILITY   AGILITY           12.1 YES      OK     +1      
 ------------------------------------------------------------------------------------
 INVARIANT: every card in band => total PP at level L = L * budget (build-independent).  ALL CARDS IN BAND
 R-CARD-BREAKPOINT (order 4): each card crosses >= 1 TTK/TTD breakpoint vs the region soldier.  ALL CROSS
 
 XP PACING (order 4) — floor XP / xpRequired(expected level)  (band 1.0-1.3 level-ups/floor)
-  per-enemy XP = 0.35 * depth-scaled TP ; curve = 150 * 1.118^(level-1) (geometric, tracks enemy compound)
+  per-enemy XP = 0.35 * depth-scaled TP ; curve = 150 * 1.2495^(level-1) (geometric, tracks enemy compound)
 depth    expLvl   avail XP     req XP    yield in band?
 ------------------------------------------------------------------------------------
 1             1        166        150    1.108 OK      
-2             2        186        167    1.113 OK      
-3             3        208        187    1.111 OK      
-4             4        232        209    1.112 OK      
-5             5        260        234    1.110 OK      
-6             6        290        261    1.113 OK      
-7             7        325        292    1.112 OK      
-8             8        363        327    1.110 OK      
-9             9        406        366    1.109 OK      
-10           10        454        409    1.110 OK      
-11           11        508        457    1.111 OK      
-12           12        567        511    1.110 OK      
-13           13        634        571    1.111 OK      
-14           14        709        639    1.110 OK      
-15           15        793        714    1.111 OK      
+2             2        208        187    1.111 OK      
+3             3        260        234    1.109 OK      
+4             4        324        292    1.111 OK      
+5             5        405        365    1.110 OK      
+6             6        506        456    1.110 OK      
+7             7        633        570    1.110 OK      
+8             8        790        713    1.109 OK      
+9             9        988        891    1.108 OK      
+10           10       1234       1113    1.109 OK      
+11           11       1542       1391    1.109 OK      
+12           12       1927       1738    1.109 OK      
+13           13       2407       2172    1.108 OK      
+14           14       3008       2714    1.108 OK      
+15           15       3758       3391    1.108 OK      
 
-SCARCITY — model floor (depth 1): 12 enemies, 8 rooms, DEMAND=720 dmg ; expected ammo boxes/floor=2.80 (0.56/type)
+SCARCITY — model floor (depth 1): 12 enemies, 8 rooms, DEMAND=502 dmg ; expected ammo boxes/floor=2.80 (0.56/type)
 ammoType   boxSize  dmg/unit   supply    perWpnS <0.6?     bankFloors
 ------------------------------------------------------------------------------------
-Bullets         15        20      168       0.23 OK              1.50
-Shells           5        44      123       0.17 OK              1.47
-Cells           10        28      157       0.22 OK              1.48
-Rockets          2        42       47       0.07 OK              1.52
-Slugs            2        90      101       0.14 OK              1.00
+Bullets         10        20      112       0.22 OK              1.51
+Shells           4        44       99       0.20 OK              1.49
+Cells            7        28      110       0.22 OK              1.51
+Rockets          2        42       47       0.09 OK              1.51
+Slugs            1        90       50       0.10 OK              1.08
 ------------------------------------------------------------------------------------
-FLOOR-WIDE  SUPPLY=596  DEMAND=720  S=0.83  band=0.75-0.95  OK
+FLOOR-WIDE  SUPPLY=418  DEMAND=502  S=0.83  band=0.75-0.95  OK
 
 HEAL ECONOMY — model floor
-  INCOMING=153  HEAL_SUPPLY=130  netHpDrain=24  (11.5% of 205 eHP ; band 5-15%)  OK
-  full medkit (90 HP) buys 14.1 survival-turns at 6.4 avg incoming dmg/turn (informational)
+  INCOMING=187  HEAL_SUPPLY=160  netHpDrain=27  (13.1% of 205 eHP ; band 5-15%)  OK
+  full medkit (59 HP) buys 7.6 survival-turns at 7.8 avg incoming dmg/turn (informational)
 
-SCARCITY DEPTH SWEEP (R-SCARCITY-DEPTH) — S=SUPPLY/DEMAND at each depth, band 0.75-0.95  [model supply=596 demand=720]
-depth  region     gearX   DEMAND   SUPPLY         S in?   
+SCARCITY DEPTH SWEEP (R-SCARCITY-DEPTH) — S=SUPPLY/DEMAND at each depth, band 0.75-0.95  [model supply=418 demand=502]
+depth  region      hitX   DEMAND   SUPPLY         S in?   
 ------------------------------------------------------------------------------------
-1      0           1.08      720      644      0.89 OK    
-2      0           1.08      750      644      0.86 OK    
-3      0           1.08      782      644      0.82 OK    
-4      0           1.08      815      644      0.79 OK    
-5      0           1.08      849      644      0.76 OK    
-6      1           1.35      884      804      0.91 OK    
-7      1           1.35      922      804      0.87 OK    
-8      1           1.35      960      804      0.84 OK    
-9      1           1.35     1001      804      0.80 OK    
-10     1           1.35     1043      804      0.77 OK    
-11     2           1.71     1086     1021      0.94 OK    
-12     2           1.71     1132     1021      0.90 OK    
-13     2           1.71     1180     1021      0.87 OK    
-14     2           1.71     1229     1021      0.83 OK    
-15     2           1.71     1281     1021      0.80 OK    
+1      0           1.03      502      430      0.86 OK    
+2      0           1.18      572      493      0.86 OK    
+3      0           1.35      651      562      0.86 OK    
+4      0           1.53      742      640      0.86 OK    
+5      0           1.74      845      726      0.86 OK    
+6      1           2.09      962      874      0.91 OK    
+7      1           2.36     1096      987      0.90 OK    
+8      1           2.67     1248     1114      0.89 OK    
+9      1           3.00     1422     1253      0.88 OK    
+10     1           3.37     1620     1409      0.87 OK    
+11     2           4.06     1845     1697      0.92 OK    
+12     2           4.55     2101     1902      0.90 OK    
+13     2           5.09     2393     2128      0.89 OK    
+14     2           5.69     2726     2378      0.87 OK    
+15     2           6.36     3105     2655      0.86 OK    
+16     3           7.79     3536     3255      0.92 OK    
+17     3           8.68     4028     3626      0.90 OK    
+18     3           9.66     4588     4036      0.88 OK    
+19     3          10.74     5226     4489      0.86 OK    
+20     3          11.94     5952     4987      0.84 OK    
+21     4          14.88     6779     6216      0.92 OK    
+22     4          16.51     7722     6896      0.89 OK    
+23     4          18.30     8795     7645      0.87 OK    
+24     4          20.28    10017     8470      0.85 OK    
+25     4          22.45    11410     9379      0.82 OK    
 
 HEAL DRAIN DEPTH SWEEP (R-HEALDRAIN-DEPTH) — net HP loss per floor, band 5-15% of depth-scaled eHP
 depth  region     drain% in?   
 ------------------------------------------------------------------------------------
-1      0           11.5% OK    
-2      0           11.5% OK    
-3      0           11.5% OK    
-4      0           11.5% OK    
-5      0           11.5% OK    
-6      1           11.5% OK    
-7      1           11.5% OK    
-8      1           11.5% OK    
-9      1           11.5% OK    
-10     1           11.5% OK    
-11     2           11.5% OK    
-12     2           11.5% OK    
-13     2           11.5% OK    
-14     2           11.5% OK    
-15     2           11.5% OK    
+1      0           13.1% OK    
+2      0           11.3% OK    
+3      0            9.9% OK    
+4      0            8.9% OK    
+5      0            8.2% OK    
+6      1            7.7% OK    
+7      1            7.5% OK    
+8      1            7.5% OK    
+9      1            7.6% OK    
+10     1            7.9% OK    
+11     2            8.2% OK    
+12     2            8.7% OK    
+13     2            9.2% OK    
+14     2            9.9% OK    
+15     2           10.5% OK    
+16     3            8.9% OK    
+17     3            9.7% OK    
+18     3           10.6% OK    
+19     3           11.4% OK    
+20     3           12.3% OK    
+21     4            7.8% OK    
+22     4            8.7% OK    
+23     4            9.6% OK    
+24     4           10.6% OK    
+25     4           11.6% OK    
 
 CREDIT ECONOMY (R-CREDITS) — income(region) / bundle price, band 0.90-1.40  [kill base=80/floor  chips=79/floor]
 region       income     bundle    ratio in?   
@@ -867,15 +894,17 @@ region       income     bundle    ratio in?
 0               891        713     1.25 OK    
 1              1131       1010     1.12 OK    
 2              1371       1307     1.05 OK    
+3              1611       1604     1.00 OK    
+4              1851       1901     0.97 OK    
   (bundle = 1 significant @ 12PP + 1.5 small @ 3PP each)
 
 SHOP PRICING — price = valuePP * 36 cr/PP * depthFactor (zero hand-set base prices)
 offer                      valuePP  d1       d5       d10      d15    
 ------------------------------------------------------------------------------------
 Ammo box (15 x 20 dmg)         3.3  120      168      228      288    
-Stim medkit (32 HP)            2.9  105      147      199      251    
-Field medkit (90 HP)           8.2  295      412      560      707    
-Weapon level-up               10.0  360      504      684      864    
+Stim medkit (23 HP)            2.1  75       105      143      181    
+Field medkit (59 HP)           5.4  193      270      367      463    
+Weapon level-up                1.5  54       76       103      130    
 Tier up (RARE, 12 PP)         12.0  432      605      821      1037   
 Tier up (EPIC, 20 PP)         20.0  720      1008     1368     1728   
 Player ability boon (~12 PP)    12.0  432      605      821      1037   
@@ -883,58 +912,57 @@ Player ability boon (~12 PP)    12.0  432      605      821      1037
 ENCOUNTER BUDGET (idea 4) — base budget = 500 TP at depth 1
 depth    budget    spent  count anchor         maxType%  mix?    rules? 
 ------------------------------------------------------------------------------------
-1           450      446     15 Shell Brute    31        OK      OK     
-2           503      491     14 Shell Brute    21        OK      OK     
-3           563      550     13 Shell Brute    32        OK      OK     
-5           703      694     14 Shell Brute    24        OK      OK     
-8          1092     1068     14 Shell Brute    20        OK      OK     
+1           450      449     15 Shell Brute    30        OK      OK     
+2           562      562     18 Shell Brute    30        OK      OK     
+3           703      690     12 Shell Brute    30        OK      OK     
+5          1097     1091     18 Shell Brute    30        OK      OK     
+8          2377     2349     22 Shell Brute    27        OK      OK     
 
 REGION DANGER DIAL (R-REGION, order 5) — TP multiplier applied ON TOP of the depth curve
 region   name                 dial   entryD regionBudget dial? 
 ------------------------------------------------------------------------------------
 A        OUTER FACILITY       0.90        1        450 OK    
-B        RESEARCH WING        1.00        6        874 OK    
-C        REACTOR DEPTHS       1.15       11       1755 OK    
-D        THE BREACH           1.25       16       3333 OK    
+B        RESEARCH WING        1.00        6       1523 OK    
+C        REACTOR DEPTHS       1.15       11       5333 OK    
+D        THE BREACH           1.25       16      17654 OK    
   DIAL: monotonic non-decreasing (A<=B<=C<=D); C/D out-dial A by >= 0.1 (measurably lethal).
   FAIRNESS: the dial scales the BUDGET (body count), NOT per-enemy threat — per-fight depth-coupling holds in every region lane (R-DEPTH).
 
-DEPTH COUPLING (order 4, HONEST v2 power) — player power vs enemy threat (band 0.90-1.20)
-  enemy scale = 1.042 HP * 1.073 dmg / floor (compound) ; player v2 = card(12PP*1.0/floor) * gearRamp(1.35/region) * abilityRamp
-depth      card     gear     abil  playerV2     enemy    ratio in band?    
-------------------------------------------------------------------------------------
-1         1.000    1.000    1.000     1.000     1.000    1.000 OK          
-2         1.120    1.000    1.000     1.120     1.118    1.002 OK          
-3         1.240    1.000    1.000     1.240     1.250    0.992 OK          
-4         1.360    1.000    1.000     1.360     1.398    0.973 OK          
-5         1.480    1.000    1.000     1.480     1.563    0.947 OK          
-6         1.600    1.062    1.012     1.719     1.747    0.984 OK          
-7         1.720    1.128    1.024     1.986     1.953    1.017 OK          
-8         1.840    1.197    1.036     2.282     2.184    1.045 OK          
-9         1.960    1.271    1.048     2.611     2.442    1.069 OK          
-10        2.080    1.350    1.060     2.976     2.730    1.090 OK          
-11        2.200    1.434    1.074     3.387     3.053    1.110 OK          
-12        2.320    1.522    1.088     3.842     3.413    1.126 OK          
-13        2.440    1.616    1.102     4.346     3.816    1.139 OK          
-14        2.560    1.716    1.116     4.903     4.267    1.149 OK          
-15        2.680    1.823    1.130     5.519     4.770    1.157 OK          
-  --- rule range 1..15 above ; 16+ printed for the degradation boundary ---
-16        2.800    1.935    1.148     6.221     5.333    1.166 OK (past rule)
-17        2.920    2.055    1.166     6.997     5.963    1.173 OK (past rule)
-18        3.040    2.182    1.184     7.854     6.667    1.178 OK (past rule)
-19        3.160    2.317    1.202     8.801     7.454    1.181 OK (past rule)
-20        3.280    2.460    1.220     9.845     8.335    1.181 OK (past rule)
-
-GEAR CURVE — expected arsenal per region (perRegion 1.35, band 5 floors ; soldier golden band 3-8)
-region  depths     gear    expDPT tier band      stagnantGR  onCurveGR
-------------------------------------------------------------------------------------
-1       1-5        1.00      25.0 Common..Uncommon       4.00       4.00
-2       6-10       1.35      33.8 Uncommon..Rare      2.40*       3.00
-3       11-15      1.82      45.6 Rare..Epic          1.33*      2.00*
-4       16-20      2.46      61.5 Epic..Legendary      0.75*      2.00*
-  reference soldier: Void Shroud   (stagnantGR = never-upgraded player ; onCurveGR = reference * gearCurve)
-  GATE: stagnantGR must fall OUT of the band by region 2 while onCurveGR stays IN — R-GEARGATE.
-  PITY: every region PLACES >= 1 in-band weapon (RunStats-tracked force-spawn).
+LADDER (balance-overhaul order 1, R-LADDER) — continuous hits to KILL (TTK) / to DIE (TTD)
+  growth: weapon 1.08/level, enemy HP 1.139 + dmg 1.097 /floor, vitality 1.09/char level; gap penalty 0.82^levels (floor 0.25, steepness 1.0)
+  role (reference)         depth   onTTK     d-2     d-4   start     d+2   onTTD cL-3TTD
+  ------------------------------------------------------------------------------------
+  CHAFF (Gore Biter)           1    1.84       -       -    1.93    1.44   17.08       -
+  CHAFF (Gore Biter)           5    1.84    3.19    5.53    5.81    1.43   18.07   13.21
+  CHAFF (Gore Biter)          10    1.76    3.06    5.30   16.21    1.37   18.13   13.79
+  CHAFF (Gore Biter)          15    1.76    3.05    5.29   26.01    1.37   17.58   13.60
+  CHAFF (Gore Biter)          20    1.79    3.11    5.39   42.86    1.40   16.80   13.09
+  CHAFF (Gore Biter)          25    2.05    3.56    6.17   72.07    1.60   15.98   12.48
+  SOLDIER (Void Shroud)        1    3.29       -       -    3.45    2.56    8.20       -
+  SOLDIER (Void Shroud)        5    3.28    5.69    9.88   10.37    2.56    8.67    6.34
+  SOLDIER (Void Shroud)       10    3.15    5.46    9.47   28.94    2.45    8.70    6.62
+  SOLDIER (Void Shroud)       15    3.14    5.44    9.44   46.44    2.45    8.44    6.53
+  SOLDIER (Void Shroud)       20    3.20    5.55    9.63   76.54    2.50    8.07    6.28
+  SOLDIER (Void Shroud)       25    3.66    6.35   11.02  128.69    2.86    7.67    5.99
+  BRUISER (Shell Brute)        1    6.25       -       -    6.56    4.87    5.86       -
+  BRUISER (Shell Brute)        5    6.24   10.82   18.76   19.70    4.86    6.19    4.53
+  BRUISER (Shell Brute)       10    5.98   10.37   18.00   54.99    4.66    6.22    4.73
+  BRUISER (Shell Brute)       15    5.96   10.34   17.94   88.24    4.65    6.03    4.66
+  BRUISER (Shell Brute)       20    6.08   10.55   18.30  145.43    4.74    5.76    4.49
+  BRUISER (Shell Brute)       25    6.96   12.07   20.94  244.52    5.42    5.48    4.28
+  MINI_ELITE (Iron Stalker)     1   11.18       -       -   11.74    8.72    4.88       -
+  MINI_ELITE (Iron Stalker)     5   11.16   19.36   33.58   35.25    8.70    5.16    3.77
+  MINI_ELITE (Iron Stalker)    10   10.70   18.57   32.20   98.41    8.34    5.18    3.94
+  MINI_ELITE (Iron Stalker)    15   10.67   18.50   32.10  157.90    8.31    5.02    3.89
+  MINI_ELITE (Iron Stalker)    20   10.89   18.88   32.75  260.25    8.48    4.80    3.74
+  MINI_ELITE (Iron Stalker)    25   12.46   21.61   37.48  437.56    9.71    4.57    3.57
+  LEVEL-UP RUNG (R-LADDER-AFFORD, <= 0.5 of one combat floor's credits):
+    depth  1: price    54 vs combat-floor income    159
+    depth  5: price    76 vs combat-floor income    197
+    depth 10: price   103 vs combat-floor income    245
+    depth 15: price   130 vs combat-floor income    293
+    depth 20: price   157 vs combat-floor income    341
+    depth 25: price   184 vs combat-floor income    389
 
 ABILITY PRICING — PP cost per ability (budget = PP a tier may spend on abilities)
   tier budgets: Common=0  Uncommon=6  Rare=12  Epic=20  Legendary=30  (±20%)
@@ -984,93 +1012,95 @@ Toxic 'q'        2.0      4.0          6         24.0
 TELEGRAPH AUDIT (idea 4, Pillar 5) — cap = 25% of 205 eHP = 51 dmg / un-telegraphed hit
 attack                    hit@d1 readable?       cap@ verdict
 ------------------------------------------------------------------------------------
-Gore Biter bite               12 NONE              22 OK     
-Plague Hulk smash             16 NONE              18 OK     
+Gore Biter bite               12 NONE              17 OK     
+Plague Hulk smash             23 NONE              10 OK     
 Plague Hulk blast             68 TELE               1 OK     
-Void Shroud strike            13 NONE              21 OK     
-Void Shroud flank             21 FACE              14 OK     
-Shell Brute melee             20 NONE              15 OK     
-Shell Brute CHARGE            48 TELE               2 OK     
-Iron Stalker melee            24 NONE              12 OK     
-Iron Stalker shot             17 LANE              17 OK     
-Eye Tyrant beam               11 LANE              23 OK     
-Acid Drone spit               12 LANE              22 OK     
-Mire Wraith acid              11 LANE              23 OK     
-Ghoul claw                    13 NONE              21 OK     
-Crawler bite                  15 NONE              19 OK     
-Revenant strike               18 NONE              16 OK     
-Vortex Eye bolt                9 LANE              26 OK     
-Blight Corr. smash            14 NONE              20 OK     
+Void Shroud strike            25 NONE               9 OK     
+Void Shroud flank             40 FACE               4 OK     
+Shell Brute melee             35 NONE               6 OK     
+Shell Brute CHARGE            84 TELE               1 OK     
+Iron Stalker melee            42 NONE               4 OK     
+Iron Stalker shot             30 LANE               7 OK     
+Eye Tyrant beam               11 LANE              18 OK     
+Acid Drone spit               24 LANE              10 OK     
+Mire Wraith acid              23 LANE              10 OK     
+Ghoul claw                    13 NONE              16 OK     
+Crawler bite                  15 NONE              15 OK     
+Revenant strike               35 NONE               6 OK     
+Vortex Eye bolt                9 LANE              20 OK     
+Blight Corr. smash            26 NONE               9 OK     
+Auric shard launch            26 LANE               9 OK     
+Cinderforge slam              36 NONE               5 OK     
 
 BOSS RULESET (order 6) — HP/DPT/verbs/reward all DERIVED (BossBalance), no flat constants. survivalRatio band 0.40-0.70 ; single-hit caps: telegraph >25% eHP, hard 35% eHP
 boss         depth  expDPT    derHP  bossDPT   target   gate fairRatio   reward  ammoCov
 ------------------------------------------------------------------------------------------
-The Overseer     5    32.5      715     18.6       22  2.08x     0.50     1244    2.28x
-The Corruptor    10    40.0     1120     14.6       28  2.56x     0.50     1455    1.90x
-Hell Baron      15    47.5     1615     12.1       34  3.04x     0.50     1712    1.69x
+The Overseer     5    42.2      928     28.5       22  5.06x     0.50     1622    1.87x
+The Corruptor    10    84.3     2361     35.8       28 14.72x     0.50     2349    1.53x
+Hell Baron      15   162.1     5513     45.4       34 23.69x     0.50     3154    1.34x
 ------------------------------------------------------------------------------------------
   GATE holds when start-weapon TTK >= 2.0x survivable turns (WITH max heals = 25% eHP). phase seams (2-phase): 50% (death).
 boss verb                 dmg       %eHP capVerdict  
-Overseer melee             14       6.8% OK          
-Overseer charge            34      16.6% OK          
-Overseer laser             21      10.2% OK          
-Corruptor acid             21      10.2% OK          
-Hell Baron fire             6       2.9% OK          
-Hell Baron cleave1         21      10.2% OK          
-Hell Baron cleave2         35      17.1% OK          
+Overseer melee             21      10.2% OK          
+Overseer charge            51      24.9% OK          
+Overseer laser             31      15.1% OK          
+Corruptor acid             50      24.4% OK          
+Hell Baron fire            23      11.2% OK          
+Hell Baron cleave1         77      37.6% BANNED      
+Hell Baron cleave2        132      64.4% BANNED      
 
 ROUTE ECONOMICS (order 7) — the node EV ledger at depth 5; EV in power points, threat in TP. permanent-power weight 2.6, risk 3.0 PP per standard floor
 subject                    threat resDelta progress   reward       EV pips        in?   
 ------------------------------------------------------------------------------------
-combat                        668     1.07    16.19    66.50    40.16 STANDARD    OK    
-elite                        1002    12.28    25.19   112.78    73.27 DANGER      OK    
-cache                         187    24.20     3.96    41.02    33.65 CALM        OK    
-shop                          334     9.56     9.60    46.18    33.01 CALM        OK    
-rest                            0    34.86     0.00    34.86    34.86 CALM        OK    
-mystery                       418    17.77    10.81    60.46    43.99 GAMBLE      OK    
-event                           0    18.03     4.80    30.51    30.51 CALM        OK    
-boss                         1336   -31.64    23.98    77.39    24.71 SET_PIECE   OK    
-region_gate                     0     6.32     0.00     6.32     6.32 SET_PIECE   OK    
-irradiated                    668   -20.05    11.99    34.46     8.12 -           -     
-overclocked                   802   -21.70    14.39    43.72    12.11 -           -     
-swarm                        1002   -20.62    17.99    61.15    21.64 -           -     
-fortified                     668   -19.09    11.99    35.42     9.08 -           -     
-volatile                      668   -20.05    11.99    34.46     8.12 -           -     
-VAULT_JACKPOT                 334    29.44    13.20    75.42    62.25 -           -     
-SECRET_WARREN                 668    11.97    16.19    77.40    51.06 -           -     
-TRAP_GAUNTLET                 187    21.11     3.96    37.94    30.56 -           -     
-AMBUSH                       1002    12.28    25.19   112.78    73.27 -           -     
-LORE_SIGNAL                     0    34.86     0.00    34.86    34.86 -           -     
-MALFUNCTION                   187     0.07     3.36    15.33     7.96 -           -     
+combat                       1042     0.69    16.19    65.30    39.78 STANDARD    OK    
+elite                        1563     8.15    25.18   107.41    69.13 DANGER      OK    
+cache                         292    22.41     3.96    39.01    31.86 CALM        OK    
+shop                          521     9.75     9.59    45.95    33.19 CALM        OK    
+rest                            0    32.04     0.00    32.04    32.04 CALM        OK    
+mystery                       651    14.92    10.81    57.10    41.14 GAMBLE      OK    
+event                           0    18.02     6.40    34.66    34.66 CALM        OK    
+boss                         2084   -32.32    23.98    75.06    24.02 SET_PIECE   OK    
+region_gate                     0     6.58     0.00     6.58     6.58 SET_PIECE   OK    
+irradiated                   1042   -20.17    11.99    33.52     8.00 -           -     
+overclocked                  1250   -22.55    14.39    41.89    11.26 -           -     
+swarm                        1563   -15.34    17.98    65.20    26.93 -           -     
+fortified                    1042   -19.17    11.99    34.52     9.00 -           -     
+volatile                     1042   -20.17    11.99    33.52     8.00 -           -     
+VAULT_JACKPOT                 521    25.83    13.19    71.40    58.64 -           -     
+SECRET_WARREN                1042     9.37    16.19    73.98    48.46 -           -     
+TRAP_GAUNTLET                 292    18.32     3.96    34.92    27.77 -           -     
+AMBUSH                       1563     8.15    25.18   107.41    69.13 -           -     
+LORE_SIGNAL                     0    32.04     0.00    32.04    32.04 -           -     
+MALFUNCTION                   292    -0.96     3.36    14.08     6.93 -           -     
 ------------------------------------------------------------------------------------
-  standard COMBAT node EV = 40.16. calm discount band 10-35%; risk premium band 1.00-1.20; mystery EV tolerance ±15%
+  standard COMBAT node EV = 39.78. calm discount band 10-35%; risk premium band 1.00-1.20; mystery EV tolerance ±15%
   AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.
-  risk premium elite                       1.17  OK
-  risk premium elite + irradiated          1.17  OK
-  risk premium elite + overclocked         1.04  OK
+  risk premium elite                       1.09  OK
+  risk premium elite + irradiated          1.09  OK
+  risk premium elite + overclocked         1.01  OK
   risk premium elite + swarm               1.01  OK
-  risk premium elite + fortified           1.19  OK
-  risk premium elite + volatile            1.17  OK
-  cache EV discount                       0.12  OK
-  shop EV discount                        0.18  OK
-  rest EV discount                        0.13  OK
-  event EV discount                       0.32  OK
+  risk premium elite + fortified           1.11  OK
+  risk premium elite + volatile            1.09  OK
+  cache EV discount                       0.30  OK
+  shop EV discount                        0.16  OK
+  rest EV discount                        0.34  OK
+  event EV discount                       0.13  OK
 
 TRAJECTORY (order 7) — cumulative bands over 100 real maps, sampled at every region boundary; worst reading per policy
 policy / metric                                worst band               in?   
 ------------------------------------------------------------------------------------
-SAFEST cumulative scarcity S                    1.55 [   0.55,   1.60] OK    
-SAFEST net HP drain / floor                    -0.77 [  -0.85,   0.45] OK    
-SAFEST XP pace                                  0.79 [   0.70,   2.45] OK    
-SAFEST depth coupling                           0.87 [   0.80,   1.55] OK    
-DEADLIEST cumulative scarcity S                 0.61 [   0.55,   1.60] OK    
-DEADLIEST net HP drain / floor                  0.40 [  -0.85,   0.45] OK    
-DEADLIEST XP pace                               2.33 [   0.70,   2.45] OK    
-DEADLIEST depth coupling                        1.47 [   0.80,   1.55] OK    
-BALANCED cumulative scarcity S                  1.49 [   0.55,   1.60] OK    
-BALANCED net HP drain / floor                   0.21 [  -0.85,   0.45] OK    
-BALANCED XP pace                                0.93 [   0.70,   2.45] OK    
-BALANCED depth coupling                         0.87 [   0.80,   1.55] OK    
+SAFEST cumulative scarcity S                    0.65 [   0.55,   1.70] OK    
+SAFEST net HP drain / floor                    -0.67 [  -0.85,   0.65] OK    
+SAFEST XP pace                                  0.99 [   0.70,   2.95] OK    
+SAFEST depth coupling                           0.86 [   0.80,   1.65] OK    
+DEADLIEST cumulative scarcity S                 0.60 [   0.55,   1.70] OK    
+DEADLIEST net HP drain / floor                  0.62 [  -0.85,   0.65] OK    
+DEADLIEST XP pace                               2.78 [   0.70,   2.95] OK    
+DEADLIEST depth coupling                        1.58 [   0.80,   1.65] OK    
+BALANCED cumulative scarcity S                  0.69 [   0.55,   1.70] OK    
+BALANCED net HP drain / floor                   0.30 [  -0.85,   0.65] OK    
+BALANCED XP pace                                1.12 [   0.70,   2.95] OK    
+BALANCED depth coupling                         1.45 [   0.80,   1.65] OK    
 ------------------------------------------------------------------------------------
   R-ROUTE-GUARANTEES reachability over 100 seeds       0 violation(s)  OK
     100 seeds: every lane reaches an upgrade, a calm node and pre-boss provisioning; every layer offers a real choice
@@ -1191,7 +1221,8 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the ENCOUNTER DENSITY matrix.
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 1 matrix
+(the power ladder), with the LADDER REPORT it now prints.
 
   ================================================================================
   BALANCE SIMULATION SUMMARY (new-game-balancr order 9)
@@ -1203,26 +1234,27 @@ SECTION 6 mirrors BalanceReport. The run below is the ENCOUNTER DENSITY matrix.
   POLICIES
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
-  NAIVE                    200     1.0     184     1.00      0.00      0.00    -0.38
-  TACTICAL                 200     1.0     171     1.00      0.00      0.00    -0.69
-  HOARDER-START-WEAPON     200     1.0     170     1.00      0.00      0.00    -0.68
+  NAIVE                    200     1.0     188     1.00      0.00      0.00    -0.35
+  TACTICAL                 200     1.0     175     1.00      0.00      0.00    -0.60
+  HOARDER-START-WEAPON     200     1.0     176     1.00      0.00      0.00    -0.60
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
   policy                      S-gap  emergency    bossTurns
-  NAIVE                       3.287      0.000          0.0
-  TACTICAL                    2.824      0.064        900.0
-  HOARDER-START-WEAPON        2.772      0.069        900.0
+  NAIVE                       3.593      0.004          0.0
+  TACTICAL                    2.962      0.029        900.0
+  HOARDER-START-WEAPON        2.923      0.032        900.0
 
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
   OK   [SIM_GATE] HOARDER first-boss clears: value=0.00 band=0.00..0.00 OK — 200 seeds; R-BOSS-GATE proves the same thing on paper
-  WAIV [SIM_FAIR] TACTICAL median death depth: value=1.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 171 stalled
+  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=1.00 band=0.00..6.00 OK — 200 seeds; 176 stalled
+  WAIV [SIM_FAIR] TACTICAL median death depth: value=1.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 175 stalled
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
   WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=0.00 band=3.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 1.0 vs NAIVE 1.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.18 band=-1.10..0.70 OK — order-7 modelled band widened by the play tolerance
-  WAIV [SIM_ECONOMY] experienced S vs modelled S: value=2.82 band=0.00..0.08 OUT-OF-BAND (WAIVED) — mean absolute gap across every played floor
-  WAIV [SIM_ECONOMY] emergency lifeline floors: value=0.06 band=0.00..0.05 OUT-OF-BAND (WAIVED) — the never-softlock ammo drop is a backstop, not a supply line
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.18 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  WAIV [SIM_ECONOMY] experienced S vs modelled S: value=2.96 band=0.00..0.08 OUT-OF-BAND (WAIVED) — mean absolute gap across every played floor
+  OK   [SIM_ECONOMY] emergency lifeline floors: value=0.03 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
@@ -1231,17 +1263,43 @@ SECTION 6 mirrors BalanceReport. The run below is the ENCOUNTER DENSITY matrix.
   BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails
   `./gradlew balanceSim`.
 
+  LADDER REPORT (balance-overhaul order 1) — PLAYED median hits to KILL / to DIE
+  --------------------------------------------------------------------------------
+  One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
+  start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
+  role        depths  onKill lagKill  ratio |   onDie  lagDie
+  CHAFF        1-5      1.89    2.50   1.32 |   41.86   53.00
+  CHAFF        6-10     2.16   12.00   5.56 |   61.14   43.49
+  CHAFF       11-15     1.41   14.71  10.45 |   41.73   39.94
+  CHAFF       16-20     1.76   30.13  17.12 |   56.53   34.15
+  CHAFF       21-25     2.06   43.10  20.89 |   45.29   31.61
+  SOLDIER      1-5      3.28    5.58   1.70 |   20.66   21.50
+  SOLDIER      6-10     2.87   17.20   6.00 |   20.38   20.94
+  SOLDIER     11-15     3.17   37.60  11.87 |   20.23   19.43
+  SOLDIER     16-20     3.40   62.71  18.46 |   18.41   17.91
+  SOLDIER     21-25     3.43   81.00  23.64 |   16.62   16.96
+  BRUISER      1-5      5.28   10.25   1.94 |   13.95   13.95
+  BRUISER      6-10     6.41   29.57   4.61 |   10.21    7.58
+  BRUISER     11-15     6.40   43.86   6.86 |   13.60   10.67
+  BRUISER     16-20     4.84   98.33  20.33 |    7.77   10.84
+  BRUISER     21-25     5.54  130.70  23.58 |   12.65    9.21
+  MINI_ELITE   1-5      9.63   17.00   1.77 |    8.03    6.79
+  MINI_ELITE   6-10     9.27   80.33   8.66 |    6.77    5.77
+  MINI_ELITE  11-15     6.34   68.86  10.86 |    9.30    6.89
+  MINI_ELITE  16-20    10.24  196.67  19.20 |       -    3.80
+  MINI_ELITE  21-25    10.07  339.20  33.70 |    7.19    3.59
+  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.35 (target >= 1.5)
+
 READING IT HONESTLY (SECTION 7 says to, even when green):
-  - No FAIL lines; the gate passes.
-  - SIM_ECONOMY emergency-lifeline floors moved 0.04 -> 0.06, crossing its 0.05
-    ceiling. It passes only because the navigation waiver already covers it. This is
-    the honest cost of the encounter-density change: it is Threat-Point-neutral but
-    NOT eHP-neutral, because several cheap bodies carry more total eHP — and so more
-    ammo demand — than the one expensive anchor they replaced. Watch this number; if
-    it keeps climbing, the answer is AMMO_SUPPLY, not fewer enemies.
-  - Experienced-vs-modelled S IMPROVED (4.05 -> 2.82) and the level gap narrowed
-    (-0.81 -> -0.69): the played economy moved TOWARD the model, not away.
-  - TACTICAL median death depth read 2.0 -> 1.0 and stalls 176 -> 171. With 171/200
-    runs ending on the turn cap, this statistic still measures the scripted
-    navigator's competence, not the game's difficulty — exactly what its waiver says.
-Closing the stall gap remains the next order of business, and it expires six waivers.
+  - No FAIL lines; the gate passes. S-LAG reads OK at 1.0, but that is the navigation stall,
+    not the ladder: it is waived with the other navigation-limited bands for exactly that reason.
+  - The LADDER REPORT is the new, honest read of the ladder in play: on-curve hits-to-kill stay
+    flat across depths 1..25 in every role (the probes carry the model's card lifts), while the
+    start kit's ratio climbs from ~1.7x (depths 1-5) to ~20-34x (21-25). A2's SOLDIER read-out at
+    depths 3-5 is 2.35x against a 1.5x target. The probes are small (8 seeds per depth per kit):
+    single cells, especially MINI_ELITE, are noisy.
+  - Played hits-to-DIE sit well above the R8 paper targets (e.g. SOLDIER ~20 vs 7-9): the probe
+    divides the full pool by NET damage after armour absorption and counts every attributed hit,
+    including chip damage — a different (softer) yardstick than R8's ordinary-hit count. Read it
+    as a depth TREND (flat on-curve), not as a check of the R8 numbers.
+  - Stalls are unchanged (~175/200); closing the navigation gap still expires the waivers.

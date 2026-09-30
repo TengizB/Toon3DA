@@ -65,8 +65,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A5 holds, build green.
 - [x] **CP6** — HUD LV tag, compare card, inventory rows, arrival "THREAT LV d", UNDERGEARED topic.
       DONE WHEN: A2, A6, A7 hold, build green.
-- [ ] **CP7** — all docs updated; living tables regenerated; reviewer PASS.
-      DONE WHEN: A1, A3, A4, A8, A9 hold; both gates green; STATUS IMPLEMENTED.
+- [x] **CP7a** — all docs updated; living tables (authority SECTION 6 + SECTION 8) regenerated.
+      DONE WHEN: authority/knowledge/weapon-creation/xp docs describe the ladder; both gates green.
+- [ ] **CP7b** — reviewer PASS; STATUS IMPLEMENTED.
+      DONE WHEN: A1, A3, A4, A8, A9 hold; reviewer PASS; idea STATUS IMPLEMENTED + date.
 
 ## NOTES CARRIED FORWARD
 
@@ -162,3 +164,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **VERIFY (honest):** `./gradlew lwjgl3:run` under Xvfb runs 150 s with no exceptions (title screen only). The
   LV tag / chevron / THREAT LV text / compare card were NOT seen on a screen — no screenshot tooling here. A2's
   desktop half and A6 need an on-device or desktop look by the owner.
+- **CP7a handover:** authority SECTION 6 = BalanceReport output (run with -Dfile.encoding=UTF-8 or the
+  em-dashes print as '?'); SECTION 8 = the latest balance-sim summary incl. the LADDER REPORT + an honest
+  reading. Knowledge doc SECTIONS 3/4/6/7/10/12/18/20 rewritten for the ladder; weapon-creation-guide gains
+  "THE LADDER DAMAGE PATH"; xp-level-progression gains VITALITY GROWTH. Reviewer owed next (CP7b).

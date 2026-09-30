@@ -68,21 +68,35 @@ ENEMY DEPTH SCALING
 On each dungeon floor transition (World.rebuildForLevel), EnemyManager is constructed
 with the new currentDepth.  During buildInitialEnemies():
 
-  scaledHealth = max(1, round(type.maxHealth() × ENEMY_HEALTH_SCALE_PER_DEPTH^(depth-1)))
+  scaledHealth = max(1, round(GameMath.enemyHealthAtDepth(type.maxHealth(), depth)))
+                 = type.maxHealth() × ENEMY_HEALTH_GROWTH^(depth-1)      (1.139, the power ladder)
   enemy.maxHealth = scaledHealth
   enemy.health    = scaledHealth
-  enemy.attackDamageMultiplier = ENEMY_DAMAGE_SCALE_PER_DEPTH^(depth-1)
+  enemy.attackDamageMultiplier = GameMath.enemyDamageAtDepth(1, depth) = ENEMY_DAMAGE_GROWTH^(depth-1) (1.097)
 
 The Enemy.scaledAttackDamage() method is used in EnemyManager.actEnemy() instead of
 type.attackDamage().  EnemyRenderer.java uses enemy.maxHealth (not type.maxHealth())
 for the floating health-bar fill fraction.
 
-Scale example (CORRUPTOR base HP=60, base DMG=14):
-  depth 1:  HP= 60, DMG=14   (×1.00)
-  depth 2:  HP= 69, DMG=15   (×1.15 / ×1.10)
-  depth 3:  HP= 79, DMG=17   (×1.32 / ×1.21)
-  depth 5:  HP=105, DMG=20   (×1.75 / ×1.46)
-  depth 10: HP=211, DMG=33   (×3.52 / ×2.36)
+Scale example (Void Shroud, rebased base HP=50, base DMG=25 — balance-overhaul order 1):
+  depth 1:  HP=  50, DMG= 25   (×1.00 / ×1.00)
+  depth 5:  HP=  84, DMG= 37   (×1.68 / ×1.45)
+  depth 10: HP= 162, DMG= 58   (×3.23 / ×2.30)
+  depth 25: HP=1133, DMG=231   (×22.7 / ×9.2)
+The player keeps pace through the weapon ladder (SECTION 20 of BalanceConfig; weapon level
+= floor threat level) and VITALITY GROWTH below — R-LADDER holds the fight length flat.
+
+
+VITALITY GROWTH (balance-overhaul order 1, R9)
+-----------------------------------------------
+Every character level multiplies the BASE max HP and max armour by PLAYER_VITALITY_GROWTH
+(1.09): max = PLAYER_MAX_HEALTH × 1.09^(level-1) (armour likewise), with every flat card
+and stat bonus added on top unscaled. World.applyVitalityGrowth() adds the step
+(PlayerStats.vitalityGrowthDelta) at each level-up through Player.adjustMaxHealth /
+adjustMaxArmor, so current HP rises by the same amount. Heals are FRACTIONS of max (medkit
+0.45, stim 0.18, shard 0.15 / vest 0.60 of max armour), so they grow with it.
+XP curve: xpRequired(L) = 150 × 1.2495^(L-1) (= enemy HP growth × enemy damage growth, so a
+floor still buys ~1.1 levels at every depth — R-XP-PACE, audited to depth 25).
 
 
 PLAYER STAT BONUSES

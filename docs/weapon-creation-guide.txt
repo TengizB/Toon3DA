@@ -36,6 +36,8 @@ Group them under a comment block, after the existing weapon groups.
 
 Required constants:
   <WEAPON>_DAMAGE              int     base damage at distance 1
+                                       (the LEVEL-1 COMMON value: every hit is then scaled by the
+                                        power ladder — see "THE LADDER DAMAGE PATH" below)
   <WEAPON>_CLIP_SIZE           int     shots before forced reload
   <WEAPON>_RELOAD_TIME_TICKS   int     move-steps required to reload
   <WEAPON>_DAMAGE_DROP_COEFF   float   fraction of damage lost per tile (0.10–0.25 typical)
@@ -535,3 +537,22 @@ Loop variable over tiles must describe what it counts:
   [ ] World.java updated to instantiate and equip the new weapon
   [ ] Idea file in .claude/agents/ideas/ updated to STATUS: IMPLEMENTED
   [ ] Build passes: ./gradlew :core:compileJava
+
+THE LADDER DAMAGE PATH (balance-overhaul order 1) — MANDATORY for every weapon
+---------------------------------------------------------------------------------
+A weapon's base damage is its level-1 COMMON value. EVERY hit it lands must be scaled by
+the power ladder, composed in ONE place — GameMath.weaponLadderDamage(base, level,
+tierOrdinal, floorThreatLevel, gapExempt):
+    perHit = base * 1.08^(L-1) * rarity(tier) * levelGap(L - floorThreatLevel)
+  - Weapon.damageAtDistance(distance) already applies it (falloff and the fire-cycle
+    multiplier on top) — use it in marchShot and you are done.
+  - Any OTHER damage path (a charge table, a splash, an impact + burn, a melee swing) must
+    multiply its base by Weapon.getLadderDamageMultiplier(); never read a raw *_DAMAGE
+    constant into applyDamageTo. (Before order 1, damageAtDistance used the RAW base damage,
+    so weapon levels never reached a hit — do not reintroduce that.)
+  - Flat ability magnitudes priced by R-ABILITY (e.g. a wall-slam bonus) and hazard damage
+    stay OFF the ladder.
+  - Only the Fist is level-gap exempt (override isLevelGapExempt() -> true); a new melee
+    weapon follows the ladder like a gun.
+  - World/SimWorld sync every owned weapon's floor threat level (setFloorThreatLevel) —
+    a new weapon added to the arsenal is covered automatically.
