@@ -211,22 +211,22 @@ Shotgun, Assault Rifle, Chaingun, Plasma Rifle, Arc Cannon, Railgun, Incinerator
 Grenade Launcher.
 
 **H1.** Which weapons feel too strong? Which feel useless?
-Answer:
+Answer: flamethrower feels useless. also I feel not much difference between hight level weapons and lower level weapons, they all feel the same difficulty vice. none feels too strong. also all shotguns feels useless, not much of a difference damage vice for the risk of being hit up close.
 
 **H2.** Which weapon do you use most, and why?
-Answer:
+Answer: the minigun, the assault rifle, the laser gun I use the most. because they hit from range and usually there is a plenty of resources to use them. no need to use shotguns because damage not worth it and ammo is limited. there is no reason using flame thrower because it deals very low damage.
 
 **H3.** Do you switch weapons depending on the enemy, or does one weapon do
 everything?
-Answer:
+Answer: No I do not, but I with I would, this is a great thing to implement, but now there is no difference. also if this will be implemented then some how it must be communicated with a player.
 
 **H4.** Do weapon rarities / abilities feel meaningful? Is a rare weapon exciting to
 find?
-Answer:
+Answer: absolutely not, but they must be, it does not provide meaningful bonuses. abilities do not provide meaningful bonuses well quite a lot of them. rare weapons can be found but there is no reason to.
 
 **H5.** Does fighting take too many shots (enemies are sponges) or too few (fights over
 instantly)? Which enemies are the worst sponges?
-Answer:
+Answer: usually enemies take lot of shots to kill, except some and with some weapons but the general all feel the same.
 
 ---
 
@@ -239,21 +239,21 @@ Auric Sentinel, Hell Baron, Cinderforge Colossus, Overseer (boss).
 
 **I1.** Which enemies are too dangerous / frustrating? Why? (damage, HP, range,
 special ability, appear in too large groups…)
-Answer:
+Answer: none, they should be dangerous ones or should have generous attacks. enemies must feel different apart from each other.
 
 **I2.** Which enemies are pushovers or boring?
-Answer:
+Answer: can't answer 
 
 **I3.** Are there too many enemies on a floor, too few, or about right? Does it
 change by depth?
-Answer:
+Answer: too few enemies. changes a bit with depth but still levels feel empty
 
 **I4.** Do enemy groups feel fair? Any combination that is simply unbeatable or unfair?
-Answer:
+Answer: no, and rarely there are groups, I withe there were groups.
 
 **I5.** Do the enemy warnings (intent telegraphs) work — can you see what an enemy is
 about to do and react in time?
-Answer:
+Answer: yes, but should be communicated even better 
 
 **I6.** Special abilities (summons, buffs, area strikes, self-destruct, beams) — any
 that feel cheap or impossible to counter?
