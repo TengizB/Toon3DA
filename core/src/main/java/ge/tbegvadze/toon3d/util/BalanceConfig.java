@@ -2525,6 +2525,7 @@ public final class BalanceConfig {
     // REST / EVENT / MYSTERY). Their bespoke stock still rides the profiles' guarantees.
     /** MYSTERY: threat 1.0 — the hidden outcome's own EnemyBudgetOverride scales it (order 6 retunes). */
     public static final float NODE_SUPPLY_MYSTERY_THREAT      = 1.00f;
+    public static final float NODE_SUPPLY_MYSTERY_BODIES      = 1.00f;
     /** EVENT: the event room's own budget scale is the threat (RouteMapConstants.EVENT_BUDGET_SCALE). */
     public static final float NODE_SUPPLY_EVENT_THREAT        = 1.00f;
     /** REGION_GATE: threat 0 — the airlock is a story beat, not a fight. */

@@ -22,7 +22,7 @@ import java.util.List;
  *   <li>Config: bright (no unlit/flicker floors), NO hazards (radioactive barrels off), crates +
  *       lockers on, one large cargo bay, columns for depth.</li>
  *   <li>Threat + supply: the CACHE {@link NodeSupplySpec} (balance-overhaul order 2) — a light
- *       roster (0.35x threat and bodies, never zero: a cache is not a free heal) and a net-GAIN
+ *       roster (0.30x threat, 0.35x bodies, never zero: a cache is not a free heal) and a net-GAIN
  *       plan of ammo (split by the weapons the player carries), heals, armour and chips, placed by
  *       the shared FloorPopulator.</li>
  *   <li>Guarantees (post-generation, deterministic from the floor seed): brighten floors and
@@ -55,7 +55,7 @@ public final class CacheProfile implements NodeLevelProfile {
 
         LevelGenConfig config = buildDepotConfig();
         // Calm-but-not-empty and a net supply GAIN: the CACHE NodeSupplySpec (balance-overhaul order 2)
-        // sets the light roster (0.35x threat and bodies) and the depot's planned ammo / heals / armour.
+        // sets the light roster (0.30x threat, 0.35x bodies) and the depot's planned ammo / heals / armour.
         config.supplySpec = RouteRegistries.nodeSupplySpecs().get(RouteNodeType.CACHE);
         return new LevelPlan(GeneratorId.ROOMS_MST, config, buildSetDressing(seed));
     }

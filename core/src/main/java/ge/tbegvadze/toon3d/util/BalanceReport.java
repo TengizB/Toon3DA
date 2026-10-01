@@ -671,12 +671,14 @@ public final class BalanceReport {
                 armourPut  += report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.ARMOUR);
                 credits    += report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.CREDITS);
             }
-            float n = cell.size();
+            float sampleCount = cell.size();
             System.out.printf("%-16s %-11s %3d %6.1f %6.1f %6s %5.0f %6.2f %5.2f %6.0f/%-6.0f %5.2f/%-5.2f %5.2f/%-5.2f %7.0f%n",
-                    first.generatorName, first.spec.type(), first.depth, bodies / n, groups / n,
+                    first.generatorName, first.spec.type(), first.depth,
+                    bodies / sampleCount, groups / sampleCount,
                     contactCount == 0 ? "-" : String.format("%.1f", contact / contactCount),
-                    walk / n, density / n, threat / n, ammoPlan / n, ammoPut / n, healPlan / n, healPut / n,
-                    armourPlan / n, armourPut / n, credits / n);
+                    walk / sampleCount, density / sampleCount, threat / sampleCount,
+                    ammoPlan / sampleCount, ammoPut / sampleCount, healPlan / sampleCount, healPut / sampleCount,
+                    armourPlan / sampleCount, armourPut / sampleCount, credits / sampleCount);
         }
     }
 

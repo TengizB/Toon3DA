@@ -1,9 +1,32 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: Full Floors, Fair Supply — density and supply planner
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-01
 ---
+IMPLEMENTATION NOTE (2026-10-01) — where the build diverged from this spec (all recorded in
+.claude/checkpoints/balance-overhaul-order-2.md and the authority doc's change log):
+  - E1: bodies scale by spec.bodyScale apart from spec.threat and the region dial (threat buys
+    heavier groups under the Threat-Point CAP, not more bodies). ELITE bodyScale is 1.05, not ~1.2:
+    E1 x E6 x E7 cannot all hold at depth otherwise. Measured ELITE density 3.8-4.5 in [3.0, 5.0].
+  - S10 numbers moved to keep existing contract bands green once the route ledger was re-derived
+    from the specs: CACHE threat 0.30 (R-HONEST-SAFE caps a safe-looking node at 0.30; bodies stay
+    0.35), CACHE ammo 2.0 / drain -1.25 / credits 1.2, SHOP ammo 2.0 / drain -0.75 / credits 2.0
+    (R-CALM-COST). Two waivers: R-CALM-COST "rest EV discount" and "event EV discount" (their
+    contents are order 6's; expire with order 6).
+  - S8: chips are spec.creditScale x SUPPLY_CREDIT_CHIPS_PER_FLOOR at the mean chip value — not
+    depth-scaled (the kill bounty carries the depth growth, as before).
+  - INTERACTIONS "gated-region bonus reward stays": deleted instead — supply is planned and the S4
+    heal floor is never behind a keycard; the exit is still steered into the gated region.
+  - C1: the two lines are drawn in the route overlay's confirm bar for the FOCUSED revealed node
+    (the map cards are too small for two lines); strings on NodeTypeDefinition.supplyPromise.
+  - S-ECONOMY re-based to "experienced vs planned supply" (share of planned ammo picked up); it
+    stays under the existing navigation waiver. S-SUPPLY is enforced. A4's depth bands beyond 1-5
+    are proven by R-SUPPLY's generator sweep (the stalling sim navigator rarely leaves floor 1).
+  - MYSTERY outcome floors still build on the COMBAT spec (order 6); the ledger prices them on the
+    MYSTERY spec, whose supply numbers equal COMBAT's.
+  - OPEN FOR THE OWNER (not blocking): the ELITE card says "WEAPON +2 LV, RARE+" (C1) but S10's tier
+    floor is region minimum + 1 (UNCOMMON+ in region A) and the offset is +1..+2.
 
 Order 2 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on order 1 (ExpectedPlayer, ladder, fractional heals). Does NOT depend

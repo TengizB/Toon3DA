@@ -9,11 +9,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The ELITE HOTZONE node's profile (route-map order-9): a containment breach — fewer enemies but MEAN
- * ones, hazards live, red alert pulsing. High risk, but the facility stored something worth guarding
- * here, so an ELITE promises a heavier supply plan and a reward weapon behind its anchor group. This is
- * the DANGER counterweight to the CALM cache/rest nodes (order-8): routing here is a deliberate gamble
- * for a bigger payoff.
+ * The ELITE HOTZONE node's profile (route-map order-9): a containment breach — HEAVIER groups (1.6x
+ * threat) on a tighter footprint, hazards live, red alert pulsing. High risk, but the facility stored
+ * something worth guarding here, so an ELITE promises a heavier supply plan and a reward weapon behind
+ * its anchor group. This is the DANGER counterweight to the CALM cache/rest nodes (order-8): routing
+ * here is a deliberate gamble for a bigger payoff.
  *
  * <p>Recipe:
  * <ul>

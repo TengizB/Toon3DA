@@ -78,7 +78,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP6** — node specs drive COMBAT/ELITE/CACHE/SHOP contents; weapon cadence replaces the pity
       rule; route economics re-derived; node card lines drawn.
       DONE WHEN: route economics tests green; A6 holds.
-- [ ] **CP7** — sim FLOOR REPORT, S-SUPPLY + re-based S-ECONOMY; all docs updated; reviewer PASS.
+- [x] **CP7** — sim FLOOR REPORT, S-SUPPLY + re-based S-ECONOMY; all docs updated; reviewer PASS.
       DONE WHEN: A4, A7, A8 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -270,3 +270,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   PIPELINE), enemy-system (carriers), knowledge SECTIONS 11 + 12 rewritten, authority S-ECONOMY / S-SUPPLY / waivers /
   change log / SECTION 6 + 8 regenerated, CLAUDE.md band count. Gates: core:test 453 (pre-existing StoryBarkTest only);
   balanceSim exit 0, BalanceSimTest 10/10 — S-SUPPLY 0.79 in [0.55, 0.80], 0 floors below the heal floor, A4 gap 0-6%.
+- **CP7 reviewer: PASS WITH FIXES.** Blocking fixed in the closing commit: route-map-system.txt node catalog,
+  profile catalog and EnemyBudgetOverride paragraph rewritten to the spec-driven contents; IMPLEMENTATION NOTE
+  added to the idea file. Non-blocking taken: stale Cache/Elite profile comments, BalanceReport `n` ->
+  `sampleCount`, NODE_SUPPLY_MYSTERY_BODIES. Left (owner / later orders): ELITE card "RARE+" copy vs tier floor;
+  S-SUPPLY at 0.79 on a thin sample (linear_corridor COMBAT exits ~0.92); ELITE heal+armour ~= COMBAT's (spec
+  numbers, order-7 feel pass); ELITE_MEDKITS/ARMOUR now serve only MYSTERY/affix rows; planned chips all one value
+  (one chip sprite); SupplyPlanner.depthOneDamagePerUnit switch; template weights inline. Desktop checks for A5/A6
+  owed outside this container. STATUS: IMPLEMENTED 2026-10-01.

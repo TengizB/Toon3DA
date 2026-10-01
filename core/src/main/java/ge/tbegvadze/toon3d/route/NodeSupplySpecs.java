@@ -117,7 +117,7 @@ public final class NodeSupplySpecs {
     public static NodeSupplySpec mystery() {
         return NodeSupplySpec.builder(RouteNodeType.MYSTERY, NodeSupplySpec.EncounterKind.COMBAT)
                 .threat(BalanceConfig.NODE_SUPPLY_MYSTERY_THREAT)
-                .bodies(BalanceConfig.NODE_SUPPLY_MYSTERY_THREAT)
+                .bodies(BalanceConfig.NODE_SUPPLY_MYSTERY_BODIES)
                 .ammoRatio(BalanceConfig.NODE_SUPPLY_COMBAT_AMMO_RATIO)
                 .drainTarget(BalanceConfig.NODE_SUPPLY_COMBAT_DRAIN_TARGET)
                 .armourShare(BalanceConfig.NODE_SUPPLY_COMBAT_ARMOUR_SHARE)

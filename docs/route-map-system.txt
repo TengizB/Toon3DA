@@ -274,17 +274,20 @@ Enemy budget overrides (respecting the balance contract):
   EncounterBudgetPlanner. It is threaded via LevelGenConfig.enemyBudgetScale into all three standard
   generators (LevelGenerator / LinearCorridorGenerator / CavernGenerator). The depth ramp is applied
   FIRST, then the scale — so a SHOP at depth 8 is depth-8-scaled AND calm, never depth-frozen.
-  Helpers: EnemyBudgetOverride.calm() (0.35x, CACHE/REST), .light() (0.5x, SHOP), .scaled(x). Clamped
-  to [0.1, 4.0].
+  Helpers: EnemyBudgetOverride.calm(), .light(), .scaled(x), .empty(). Clamped to [0.1, 4.0].
+  Since balance-overhaul order 2 a NODE TYPE's own threat is NOT an override: it is its NodeSupplySpec
+  threat scale (COMBAT 1.0, ELITE 1.6, CACHE 0.30, SHOP 0.35), carried on LevelGenConfig.supplySpec.
+  Overrides now carry only EXTRA multipliers — an ELITE affix, an EVENT next-floor bonus, a MYSTERY
+  outcome (calm()/light() survive for the MYSTERY outcomes and REST, order 6's to retune).
 
 V1 profile catalog (levelProfileId -> profile):
   combat_standard -> DefaultCombatProfile  (order-3 baseline + registry fallback)
-  shop            -> ShopProfile           (order-7: standard floor, .light() budget; vending already
-                                            guaranteed on every floor by World.seedVendingMachines)
+  shop            -> ShopProfile           (order-7: standard floor on the SHOP NodeSupplySpec — light
+                                            resistance; vending guaranteed by World.seedVendingMachines)
   boss            -> BossProfile           (order-7: forwards to GeneratorId.BOSS_ARENA; the boss is
                                             seeded by BossFloorController)
-  supply_cache    -> CacheProfile          (order-8: bright depot, calm budget, owned-ammo + medkit +
-                                            armour + crates payoff; see CALM NODES)
+  supply_cache    -> CacheProfile          (order-8: bright depot on the CACHE NodeSupplySpec — light roster,
+                                            net-gain planned supply; crates/lockers dressing; see CALM NODES)
   rest_medbay     -> RestProfile           (order-8: MedBayGenerator clinic + auto-doc heal station;
                                             see CALM NODES)
   elite_hotzone / mystery                  -> order-9   (ELITE / MYSTERY)
@@ -821,12 +824,12 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
   id          type         tier       weight  profile         generator(s)          icon         guaranteed / reward
   ----------- ------------ ---------- ------- --------------- --------------------- ------------ -------------------------------------------
   combat      COMBAT       STANDARD    34     combat_standard pre-rolled pool*      icon_combat  ordinary encounter; the descent backbone
-  elite       ELITE        DANGER      14     elite_hotzone   pre-rolled pool*      icon_elite   1.5x budget, hazards, red alert, +affix;
-                                                                                                 GATED_ROOM vault: owned-ammo + armour + rack,
-                                                                                                 priced against its threat (R-RISK-PREMIUM)
-  cache       CACHE        CALM        14     supply_cache    ROOMS_MST (fixed)     icon_cache   bright depot, calm budget; medkit + crates +
-                                                                                                 owned-ammo boxes (priced, R-CALM-COST)
-  shop        SHOP         CALM        11     shop            pre-rolled pool*      icon_shop    standard floor, light budget; vending stock
+  elite       ELITE        DANGER      14     elite_hotzone   pre-rolled pool*      icon_elite   ELITE spec: 1.6x threat (WARBAND anchor), hazards,
+                                                                                                 red alert, +affix; vault ammo share + vest + a
+                                                                                                 +1..+2 weapon behind the anchor (R-RISK-PREMIUM)
+  cache       CACHE        CALM        14     supply_cache    ROOMS_MST (fixed)     icon_cache   bright depot, CACHE spec: 0.30x threat, net-gain
+                                                                                                 planned supply (priced, R-CALM-COST)
+  shop        SHOP         CALM        11     shop            pre-rolled pool*      icon_shop    SHOP spec: 0.35x threat; vending stock
   rest        REST         CALM        11     rest_medbay     MED_BAY               icon_rest    empty clinic; FULL one-shot auto-doc heal +
                                                                                                  depth-scaled take-away stock
   mystery     MYSTERY      GAMBLE      10     mystery         (delegates/builds)    icon_mystery '?' until entry; weighted outcome table**
