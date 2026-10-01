@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
-import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -48,7 +47,7 @@ import java.util.function.Predicate;
  *
  * Grid convention: (0,0) = bottom-left tile, Y-up. No LibGDX imports — pure Java.
  */
-public class LinearCorridorGenerator implements ILevelGenerator {
+public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvider {
 
     private enum RoomType {
         ENTRANCE, STANDARD, SERVER_ROOM,
@@ -102,7 +101,16 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     private final long                   seed;
     private final LevelGenConfig         config;
     private       List<int[]>            spineCenterTiles;
-    private       List<WeaponSpawnPoint> weaponSpawnPoints;
+
+    // Supply regions (balance-overhaul order 2, SupplySlotProvider): side-room index per interior tile,
+    // -1 on the spine and every other connector. Built once the layout is final.
+    private       int[][]                supplyRegionMap;
+    private       List<Room>             supplyRooms;
+
+    // The encounter step's facts for the floor report.
+    private       int                    lastAnchorSpawnIndex = -1;
+    private       float                  lastThreatSpent;
+    private       float                  lastThreatCap;
 
     // Dungeon floor this generator is building for (1-based); drives the encounter Threat-Point
     // budget (balance idea 4, Pillar 1). Defaults to 1; set via generate(int dungeonDepth).
@@ -132,8 +140,10 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     public Level generate() {
         char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
-        spineCenterTiles  = new ArrayList<>();
-        weaponSpawnPoints = new ArrayList<>();
+        spineCenterTiles     = new ArrayList<>();
+        lastAnchorSpawnIndex = -1;
+        lastThreatSpent      = 0f;
+        lastThreatCap        = 0f;
 
         boolean horizontal = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_HORIZONTAL_CHANCE;
         List<Room> rooms   = horizontal ? buildHorizontalSpine(grid) : buildVerticalSpine(grid);
@@ -159,8 +169,6 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         placeDoors(grid);
 
         placeProps(grid, rooms);
-        placePickups(grid, rooms);
-        placeWeaponSpawns(grid, rooms);
 
         // Phase 4 — Enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
         // Pillar 1) across the side rooms instead of rolling each room independently.
@@ -177,8 +185,15 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         // Phase 6 — Stairs
         stampStairsDown(grid, rooms);
 
-        return new Level(grid, spawnPoints, weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed));
+        // Phase 7 — SUPPLY (balance-overhaul order 2, S1): every pickup, weapon drop, credit chip and
+        // carrier comes from the shared planner, placed against the finished layout.
+        buildSupplyRegionMap(rooms);
+        FloorPopulator.Result populated = FloorPopulator.populate(
+                ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(), grid, this, spawnPoints,
+                new FloorPopulator.EncounterFacts(lastAnchorSpawnIndex, lastThreatSpent, lastThreatCap, 0, 0),
+                config, dungeonDepth, seed);
+        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed)));
     }
 
     // -------------------------------------------------------------------------
@@ -1490,8 +1505,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     }
 
     /**
-     * Four columns framing a central reward pedestal — a small shrine. The pickup sits on the
-     * open centre tile; the columns occupy the diagonals so all four cardinal lanes stay clear.
+     * Four columns framing a central pedestal — a small shrine. The columns occupy the diagonals so all
+     * four cardinal lanes stay clear; the centre is left open for the shared supply placement.
      */
     private void layoutCentralAltar(char[][] grid, Room room) {
         int centerColumn = room.centerColumn();
@@ -1500,10 +1515,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         tryPlaceColumnAt(grid, centerColumn + 1, centerRow - 1);
         tryPlaceColumnAt(grid, centerColumn - 1, centerRow + 1);
         tryPlaceColumnAt(grid, centerColumn + 1, centerRow + 1);
-        if (isWalkableFloor(grid, centerColumn, centerRow)
-                && !isAdjacentToDoor(grid, centerColumn, centerRow)) {
-            grid[centerRow][centerColumn] = random.nextBoolean() ? 'A' : 'H';
-        }
+        // The pedestal stays empty here (balance-overhaul order 2): the shared SupplyPlanner decides
+        // every pickup on a generated floor, so no room rolls its own reward.
     }
 
     /** A few small crate/locker cover clusters offset from the centre, for tactical cover. */
@@ -1598,144 +1611,9 @@ public class LinearCorridorGenerator implements ILevelGenerator {
     // Phase 3 — Pickups
     // -------------------------------------------------------------------------
 
-    private void placePickups(char[][] grid, List<Room> rooms) {
-        for (Room room : rooms) {
-            if (room.type == RoomType.ENTRANCE) continue;
-
-            float medkitChance;
-            float armourChance;
-            float ammoChance;
-
-            switch (room.type) {
-                case MEDICAL_BAY:
-                    tryPlacePickup(grid, room, 'H');
-                    tryPlacePickup(grid, room, 'H');
-                    continue;
-                case ARMORY:
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_ARMOUR_CHANCE)
-                        tryPlacePickup(grid, room, 'A');
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_MEDKIT_CHANCE)
-                        tryPlacePickup(grid, room, 'H');
-                    tryPlacePickup(grid, room, randomAmmoChar());
-                    if (random.nextBoolean()) tryPlacePickup(grid, room, randomAmmoChar());
-                    continue;
-                case SERVER_ROOM:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
-                    ammoChance   = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE;
-                    break;
-                case COMMAND_CENTER:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_COMMAND_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_COMMAND_ARMOUR_CHANCE;
-                    ammoChance   = LevelGenConstants.LEVEL_GEN_COMMAND_AMMO_CHANCE;
-                    break;
-                case STORAGE_BAY:
-                    // Cargo hold — loot hub: guaranteed ammo, generous armour.
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_COMMAND_ARMOUR_CHANCE)
-                        tryPlacePickup(grid, room, 'A');
-                    tryPlacePickup(grid, room, randomAmmoChar());
-                    if (random.nextBoolean()) tryPlacePickup(grid, room, randomAmmoChar());
-                    continue;
-                case RESEARCH_LAB:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_COMMAND_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE;
-                    ammoChance   = LevelGenConstants.LEVEL_GEN_COMMAND_AMMO_CHANCE;
-                    break;
-                case POWER_PLANT:
-                case REACTOR:
-                case CRYO_CHAMBER:
-                case CONTAINMENT_BLOCK:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE;
-                    ammoChance   = LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE;
-                    break;
-                default:
-                    medkitChance = config.medkitChancePerRoom;
-                    armourChance = config.armourChancePerRoom;
-                    ammoChance   = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
-                    break;
-            }
-
-            // A large-modified room (Room.isLarge) floors its chances at the same boosted levels a
-            // LARGE landmark room used to guarantee — size alone earns richer loot regardless of type
-            // (mirrors LevelGenerator.placePickups; skipped for MEDICAL_BAY/ARMORY/STORAGE_BAY, which
-            // roll their own bespoke pickups above and never reach here).
-            if (room.isLarge) {
-                medkitChance = Math.max(medkitChance, LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE);
-                armourChance = Math.max(armourChance, LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE);
-                ammoChance   = Math.max(ammoChance, LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM);
-            }
-
-            if (config.medkits    && random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
-            if (config.armourKits && random.nextFloat() < armourChance)  tryPlacePickup(grid, room, 'A');
-            if (random.nextFloat() < ammoChance) tryPlacePickup(grid, room, randomAmmoChar());
-        }
-    }
-
     // -------------------------------------------------------------------------
     // Phase 3 — Weapon spawns
     // -------------------------------------------------------------------------
-
-    private void placeWeaponSpawns(char[][] grid, List<Room> rooms) {
-        for (Room room : rooms) {
-            if (room.type == RoomType.ARMORY) {
-                tryPlaceWeaponSpawn(grid, room);
-                break;
-            }
-        }
-        for (Room room : rooms) {
-            if (room.type == RoomType.ENTRANCE || room.type == RoomType.ARMORY) continue;
-            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
-                tryPlaceWeaponSpawn(grid, room);
-            }
-        }
-    }
-
-    private boolean tryPlaceWeaponSpawn(char[][] grid, Room room) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) return false;
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            char cell = grid[tileRow][tileColumn];
-            if (cell != ' ' && cell != 'l') continue;
-            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            weaponSpawnPoints.add(new WeaponSpawnPoint(tileColumn, tileRow, randomWeaponItemType()));
-            return true;
-        }
-        return false;
-    }
-
-    private ItemType randomWeaponItemType() {
-        switch (random.nextInt(5)) {
-            case 0:  return ItemType.WEAPON_SHOTGUN;
-            case 1:  return ItemType.WEAPON_CHAINGUN;
-            case 2:  return ItemType.WEAPON_ASSAULT_RIFLE;
-            case 3:  return ItemType.WEAPON_PLASMA;
-            default: return ItemType.WEAPON_ROCKET;
-        }
-    }
-
-    private void tryPlacePickup(char[][] grid, Room room, char pickupChar) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) return;
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (isWalkableFloor(grid, tileColumn, tileRow)) {
-                grid[tileRow][tileColumn] = pickupChar;
-                return;
-            }
-        }
-    }
-
-    private char randomAmmoChar() {
-        switch (random.nextInt(5)) {
-            case 0:  return '6';
-            case 1:  return '7';
-            case 2:  return '8';
-            case 3:  return '9';
-            default: return '0';
-        }
-    }
 
     // -------------------------------------------------------------------------
     // Door placement
@@ -1809,6 +1687,8 @@ public class LinearCorridorGenerator implements ILevelGenerator {
         EncounterBudgetPlanner.Plan plan =
                 new EncounterBudgetPlanner(dungeonDepth, random, config.enemyBudgetScale).plan();
         List<EnemyType> roster = plan.enemies();
+        lastThreatSpent = plan.spentThreatPoints();
+        lastThreatCap   = plan.floorBudget();
         if (roster.isEmpty()) return;
 
         // Non-entrance rooms (1..n-1), deepest-first. Along a spine, later index = farther from
@@ -1831,6 +1711,7 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             for (int orderIndex = 0; orderIndex < roomOrder.length; orderIndex++) {
                 int roomIndex = roomOrder[orderIndex];
                 if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), anchor, usedTiles, spawnPoints)) {
+                    lastAnchorSpawnIndex = spawnPoints.size() - 1;
                     roomSpentThreat[roomIndex] += plan.threatOf(anchor);
                     anchorIndexInRoster = 0; // anchor is always roster element 0
                     break;
@@ -2339,7 +2220,44 @@ public class LinearCorridorGenerator implements ILevelGenerator {
             }
         }
         grid[centerRow][centerColumn] = 'p';
-        return new Level(grid, new ArrayList<>(), new ArrayList<>(),
-                         LevelPalettes.generatedWithBaseWall(seed));
+        // Even the fallback goes through the shared supply pipeline (S1).
+        supplyRooms     = null;
+        supplyRegionMap = null;
+        FloorPopulator.Result populated = FloorPopulator.populate(
+                ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(), grid, this, new ArrayList<>(),
+                new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config, dungeonDepth, seed);
+        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed)));
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 7 — supply regions (balance-overhaul order 2: SupplySlotProvider)
+    // -------------------------------------------------------------------------
+
+    /** Records which side room owns each interior tile; the spine stays a connector. */
+    private void buildSupplyRegionMap(List<Room> rooms) {
+        supplyRooms     = rooms;
+        supplyRegionMap = new int[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
+        for (int[] row : supplyRegionMap) java.util.Arrays.fill(row, CONNECTOR_REGION);
+        for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+                for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                    if (isInBounds(tileColumn, tileRow)) supplyRegionMap[tileRow][tileColumn] = roomIndex;
+                }
+            }
+        }
+    }
+
+    @Override
+    public int supplyRegionAt(int tileColumn, int tileRow) {
+        if (supplyRegionMap == null || !isInBounds(tileColumn, tileRow)) return CONNECTOR_REGION;
+        return supplyRegionMap[tileRow][tileColumn];
+    }
+
+    @Override
+    public boolean isLargeSupplyRegion(int regionId) {
+        return supplyRooms != null && regionId >= 0 && regionId < supplyRooms.size()
+                && supplyRooms.get(regionId).isLarge;
     }
 }

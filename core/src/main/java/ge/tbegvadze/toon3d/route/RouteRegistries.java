@@ -226,26 +226,26 @@ public final class RouteRegistries {
         registry.register(GeneratorId.LINEAR_CORRIDOR, (seed, config) ->
                 config != null ? new LinearCorridorGenerator(seed, config) : new LinearCorridorGenerator(seed));
 
-        // CavernGenerator honours only the encounter-budget scale from config (route-map order-7);
-        // it defaults every other generation parameter internally.
-        registry.register(GeneratorId.CAVERN, (seed, config) ->
-                config != null ? new CavernGenerator(seed, config.enemyBudgetScale) : new CavernGenerator(seed));
+        // CavernGenerator honours the encounter-budget scale (route-map order-7) and the order-2 supply
+        // fields from config; it defaults every other generation parameter internally.
+        registry.register(GeneratorId.CAVERN, (seed, config) -> new CavernGenerator(seed, config));
 
         // BossArenaGenerator is a bespoke, seed-driven procedural arena (boss ORDER 7): the seed drives
-        // its room size, cover/alcove/lighting jitter, and fairness re-rolls. It ignores config.
-        registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator(seed));
+        // its room size, cover/alcove/lighting jitter, and fairness re-rolls. It reads only the order-2 supply
+        // fields from config.
+        registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator(seed, config));
 
         // MedBayGenerator is the bespoke REST-node clinic (route-map order-8); seed drives its only
-        // variation (alcove side + pod count). It ignores config and is NOT in the standard pool.
-        registry.register(GeneratorId.MED_BAY, (seed, config) -> new MedBayGenerator(seed));
+        // variation (alcove side + pod count). It reads only the order-2 supply fields from config and is NOT in the standard pool.
+        registry.register(GeneratorId.MED_BAY, (seed, config) -> new MedBayGenerator(seed, config));
 
         // EventRoomGenerator is the bespoke EVENT-node chamber (route-map order-10); a small curated
         // room around one interactable. Seed drives only decal variation. NOT in the standard pool.
-        registry.register(GeneratorId.EVENT_ROOM, (seed, config) -> new EventRoomGenerator(seed));
+        registry.register(GeneratorId.EVENT_ROOM, (seed, config) -> new EventRoomGenerator(seed, config));
 
         // GateAirlockGenerator is the bespoke REGION_GATE ceremonial bulkhead (route-map order-10).
-        // Seed drives only sparse dressing. It ignores config and is NOT in the standard pool.
-        registry.register(GeneratorId.GATE_AIRLOCK, (seed, config) -> new GateAirlockGenerator(seed));
+        // Seed drives only sparse dressing. It reads only the order-2 supply fields from config and is NOT in the standard pool.
+        registry.register(GeneratorId.GATE_AIRLOCK, (seed, config) -> new GateAirlockGenerator(seed, config));
     }
 
     /**

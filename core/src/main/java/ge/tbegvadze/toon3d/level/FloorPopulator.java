@@ -75,8 +75,16 @@ public final class FloorPopulator {
 
     /** The spec a config asks for: its own, else the registered COMBAT row. */
     public static NodeSupplySpec specOf(LevelGenConfig config) {
+        return specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.COMBAT);
+    }
+
+    /**
+     * The spec a config asks for: its own, else the registered row for {@code defaultType} — a bespoke
+     * generator (the boss arena, the clinic, the event room, the airlock) defaults to its node's row.
+     */
+    public static NodeSupplySpec specOf(LevelGenConfig config, ge.tbegvadze.toon3d.route.RouteNodeType defaultType) {
         if (config != null && config.supplySpec != null) return config.supplySpec;
-        return RouteRegistries.nodeSupplySpecs().getOrCombat(null);
+        return RouteRegistries.nodeSupplySpecs().getOrCombat(defaultType);
     }
 
     /**
@@ -94,7 +102,13 @@ public final class FloorPopulator {
     public static Result populate(String generatorName, char[][] grid, SupplySlotProvider provider,
                                   List<EnemySpawnPoint> spawnPoints, EncounterFacts facts,
                                   LevelGenConfig config, int depth, long seed) {
-        NodeSupplySpec   spec   = specOf(config);
+        return populate(generatorName, grid, provider, spawnPoints, facts, config, specOf(config), depth, seed);
+    }
+
+    /** {@link #populate} with an explicit spec (a bespoke generator passes its node type's default). */
+    public static Result populate(String generatorName, char[][] grid, SupplySlotProvider provider,
+                                  List<EnemySpawnPoint> spawnPoints, EncounterFacts facts,
+                                  LevelGenConfig config, NodeSupplySpec spec, int depth, long seed) {
         SupplySlotSurvey survey = SupplySlotSurvey.survey(grid, provider);
 
         // --- The roster the floor actually fields (its demand), and which rooms hold a fight.

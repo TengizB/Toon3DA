@@ -520,6 +520,16 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE  = 0.50f;
     // Minimum Chebyshev distance from player spawn at which cave-body enemies may appear.
     public static final int   LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS      = 6;
+    // Supply regions in a cave (balance-overhaul order 2): the open cave body is cut into fixed pockets
+    // of this size so the shared supply placement spreads pickups across the cave (S7) rather than
+    // treating the whole cave as one room.
+    public static final int   LEVEL_GEN_CAVE_SUPPLY_POCKET_WIDTH    = 12;
+    public static final int   LEVEL_GEN_CAVE_SUPPLY_POCKET_HEIGHT   = 9;
+    // A stamped chamber with at least this interior area counts as LARGE (it may host two groups, E3).
+    public static final int   LEVEL_GEN_CAVE_LARGE_CHAMBER_AREA     = 48;
+    // Supply pockets for the bespoke single-chamber generators (boss arena, clinic, event room, airlock):
+    // square pockets of this side, each its own supply region (balance-overhaul order 2, S7).
+    public static final int   SPECIAL_ROOM_SUPPLY_POCKET_SIZE       = 6;
 
     // -------------------------------------------------------------------------
     // CAVERN generator — sci-fi biome regions

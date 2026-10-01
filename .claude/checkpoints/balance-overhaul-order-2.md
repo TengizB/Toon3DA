@@ -59,9 +59,17 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: its per-room chances and the 0.70 stim path are gone; snapshot test updated; both
       gates green.
 - [ ] **CP3** — CAVERN, LINEAR_CORRIDOR, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK build through
-      SupplyPlanner; carriers replace drop rolls.
-      DONE WHEN: Cavern's MEDICAL_BAY-only medkit path is gone; full R-SUPPLY sweep green;
-      BalanceReport SUPPLY/DENSITY table prints; A1, A2 hold.
+      SupplyPlanner; carriers replace drop rolls. Split into three commits:
+  - [x] **CP3a** — the six generators build through FloorPopulator.
+        DONE WHEN: no generator places a pickup / weapon by its own rule; Cavern's MEDICAL_BAY-only medkit
+        path is gone; fast gate green.
+  - [ ] **CP3b** — carriers drop on death (independent drop rolls gone); World / SimWorld read planned
+        credits + planned weapon offsets/tiers and feed `carriedAmmoTypes`.
+        DONE WHEN: build + both gates green.
+  - [ ] **CP3c** — R-SUPPLY generator sweep + BalanceReport SUPPLY/DENSITY table; R-SCARCITY /
+        R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH replaced (override clause); dead per-room / per-kill / chip
+        constants deleted.
+        DONE WHEN: full R-SUPPLY sweep green; table prints; A1, A2 hold; both gates green.
 - [ ] **CP4** — group templates, body targets, group placement, shape + first-contact rules in every
       combat generator.
       DONE WHEN: R-DENSITY (bodies/shape/contact) green; A5 partly (contact, count).
@@ -145,3 +153,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **TEMPORARY (CP3 resolves):** EnemyManager still rolls independent drops + ignores carriers; World still seeds
   the 3-7 chip roll and rolls weapon spawns the old way (planned offset/tier unused); LevelGenConfig
   medkit/armour per-room chance fields still exist (LinearCorridor / Cache profile read them).
+- **CP3a handover:** CavernGenerator / LinearCorridorGenerator implement SupplySlotProvider (cave: chambers =
+  regions 0..n-1, cave body cut into 12x9 pockets `LEVEL_GEN_CAVE_SUPPLY_POCKET_*`; linear: side rooms, spine =
+  connector). `CavernGenerator(seed, LevelGenConfig)` replaces `(seed, float enemyBudgetScale)` (budget scale 0
+  now honoured as "empty"). BossArena / MedBay / EventRoom / GateAirlock take `(seed, LevelGenConfig)` and use
+  `PocketSupplyRegions` (6x6, `SPECIAL_ROOM_SUPPLY_POCKET_SIZE`) + `FloorPopulator.specOf(config, <their node
+  type>)`. Linear's central-altar 'A'/'H' roll removed (pedestal left empty). Probe d1 ground supply: rooms 1.55 H,
+  linear 1.45 H, cavern 1.40 H (cavern was 0.45). GeneratorReachabilityTest / BossArenaGeneratorTest unchanged
+  and green; the snapshot test only digests LevelGenerator (unchanged by CP3a).

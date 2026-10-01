@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
-import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
@@ -28,14 +27,15 @@ import java.util.Random;
  *                          CRYO_CHAMBER, STANDARD roles to the stamped chambers.
  * Phase 5 — Decoration:    varied cave walls, atmospheric floor lighting, decals,
  *                          stalagmite columns, optional barrel cluster.
- * Phase 6 — Pickups:       per-chamber loot based on room type.
+ * Phase 6 — (removed)      per-chamber loot is gone (balance-overhaul order 2): the shared
+ *                          FloorPopulator plans and places every pickup after the layout is final.
  * Phase 7 — Enemies:       scatter spawn points in cave body outside safe radius.
  * Phase 8 — Stairs:        BFS to find tile farthest from player spawn.
  * Phase 9 — Connectivity:  final BFS audit; emergency tunnel if any chamber isolated.
  *
  * Grid convention: (0,0) = bottom-left tile, Y-up. No LibGDX imports — pure Java.
  */
-public class CavernGenerator implements ILevelGenerator {
+public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
 
     private enum ChamberType {
         ENTRANCE, STANDARD, MEDICAL_BAY, ARMORY, CRYO_CHAMBER, CONTAINMENT_BLOCK
@@ -65,7 +65,17 @@ public class CavernGenerator implements ILevelGenerator {
     private final long   seed;
     private       int    spawnColumn;
     private       int    spawnRow;
-    private       List<WeaponSpawnPoint> weaponSpawnPoints;
+
+    // Supply regions (balance-overhaul order 2, SupplySlotProvider): each stamped chamber is one region;
+    // the open cave body is cut into fixed-size POCKETS so supply spreads across the cave instead of
+    // piling into one huge region. Built once the layout is final.
+    private       int[][]       supplyRegionMap;
+    private       List<Chamber> supplyChambers;
+
+    // The encounter step's facts for the floor report.
+    private       int   lastAnchorSpawnIndex = -1;
+    private       float lastThreatSpent;
+    private       float lastThreatCap;
 
     // Per-tile biome id for the open cave body; -1 = wall, chamber, or unseeded.
     // Populated by assignBiomes() and consumed by every cave-body decoration pass.
@@ -79,18 +89,25 @@ public class CavernGenerator implements ILevelGenerator {
     // ramp is still applied first inside EncounterBudgetPlanner.
     private final float enemyBudgetScale;
 
+    // The floor's config (balance-overhaul order 2): the node's supply spec, the carried ammo types and
+    // the weapon cadence flag the shared supply planner reads. Never null.
+    private final LevelGenConfig config;
+
     public CavernGenerator(long seed) {
-        this(seed, 1f);
+        this(seed, new LevelGenConfig());
     }
 
     /**
-     * @param enemyBudgetScale multiplier on the depth-scaled encounter budget (from a route-map
-     *                         node's {@code LevelGenConfig.enemyBudgetScale}); 1.0 = normal.
+     * @param config the floor's generation config — this generator honours its encounter-budget scale and
+     *               the order-2 supply fields; every other generation parameter defaults internally.
      */
-    public CavernGenerator(long seed, float enemyBudgetScale) {
+    public CavernGenerator(long seed, LevelGenConfig config) {
         this.random           = new Random(seed);
         this.seed             = seed;
-        this.enemyBudgetScale = enemyBudgetScale > 0f ? enemyBudgetScale : 1f;
+        this.config           = config != null ? config : new LevelGenConfig();
+        // Exactly 0 is a legal "empty floor" request (EnemyBudgetOverride.empty); only a negative scale
+        // is meaningless and falls back to the normal budget.
+        this.enemyBudgetScale = this.config.enemyBudgetScale >= 0f ? this.config.enemyBudgetScale : 1f;
     }
 
     // -------------------------------------------------------------------------
@@ -108,7 +125,9 @@ public class CavernGenerator implements ILevelGenerator {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
 
-        weaponSpawnPoints = new ArrayList<>();
+        lastAnchorSpawnIndex = -1;
+        lastThreatSpent      = 0f;
+        lastThreatCap        = 0f;
         spawnColumn = gridWidth  / 2;
         spawnRow    = gridHeight / 2;
 
@@ -146,12 +165,6 @@ public class CavernGenerator implements ILevelGenerator {
         decorateCaveBody(grid, chamberMask, biomes);
         decorateChambers(grid, chambers);
 
-        // Phase 6 — pickups
-        placePickups(grid, chambers);
-
-        // Phase 7 — weapon spawns
-        placeWeaponSpawns(grid, chambers);
-
         // Phase 8 — enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
         // Pillar 1) instead of a flat biome-weighted spawn count.
         List<EnemySpawnPoint> spawnPoints = placeEnemies(grid);
@@ -166,8 +179,16 @@ public class CavernGenerator implements ILevelGenerator {
         // pocket whose centre lies elsewhere. This guarantees every walkable floor tile is reachable.
         repairUnreachableFloorRegions(grid);
 
-        return new Level(grid, spawnPoints, weaponSpawnPoints,
-                         LevelPalettes.generatedWithBaseWall(seed));
+        // Phase 11 — SUPPLY (balance-overhaul order 2, S1): every pickup, weapon drop, credit chip and
+        // carrier comes from the shared planner. The old MEDICAL_BAY-only medkit path is gone: a cave
+        // floor carries the same heal floor and supply-to-demand ratio as a rooms floor at its depth.
+        buildSupplyRegionMap(chambers);
+        FloorPopulator.Result populated = FloorPopulator.populate(
+                ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(), grid, this, spawnPoints,
+                new FloorPopulator.EncounterFacts(lastAnchorSpawnIndex, lastThreatSpent, lastThreatCap, 0, 0),
+                config, dungeonDepth, seed);
+        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed)));
     }
 
     // -------------------------------------------------------------------------
@@ -1047,82 +1068,9 @@ public class CavernGenerator implements ILevelGenerator {
     // Phase 6 — pickups
     // -------------------------------------------------------------------------
 
-    private void placePickups(char[][] grid, List<Chamber> chambers) {
-        for (Chamber chamber : chambers) {
-            if (chamber.type == ChamberType.ENTRANCE) continue;
-            switch (chamber.type) {
-                case MEDICAL_BAY:
-                    tryPlacePickup(grid, chamber, 'H');
-                    tryPlacePickup(grid, chamber, 'H');
-                    break;
-                case ARMORY:
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_ARMOUR_CHANCE)
-                        tryPlacePickup(grid, chamber, 'A');
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_ARMORY_MEDKIT_CHANCE)
-                        tryPlacePickup(grid, chamber, 'H');
-                    tryPlacePickup(grid, chamber, randomAmmoChar());
-                    if (random.nextBoolean()) tryPlacePickup(grid, chamber, randomAmmoChar());
-                    break;
-                case CRYO_CHAMBER:
-                case CONTAINMENT_BLOCK:
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE)
-                        tryPlacePickup(grid, chamber, 'H');
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE)
-                        tryPlacePickup(grid, chamber, 'A');
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE)
-                        tryPlacePickup(grid, chamber, randomAmmoChar());
-                    break;
-                default:
-                    if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM)
-                        tryPlacePickup(grid, chamber, randomAmmoChar());
-                    break;
-            }
-        }
-    }
-
-    private void tryPlacePickup(char[][] grid, Chamber chamber, char pickupChar) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            if (chamber.interiorWidth() <= 0 || chamber.interiorHeight() <= 0) return;
-            int tileColumn = chamber.leftColumn + 1 + random.nextInt(chamber.interiorWidth());
-            int tileRow    = chamber.bottomRow  + 1 + random.nextInt(chamber.interiorHeight());
-            if (isWalkableTile(grid[tileRow][tileColumn])) {
-                grid[tileRow][tileColumn] = pickupChar;
-                return;
-            }
-        }
-    }
-
     // -------------------------------------------------------------------------
     // Phase 6 — weapon spawns
     // -------------------------------------------------------------------------
-
-    private void placeWeaponSpawns(char[][] grid, List<Chamber> chambers) {
-        for (Chamber chamber : chambers) {
-            if (chamber.type == ChamberType.ARMORY) {
-                tryPlaceWeaponSpawn(grid, chamber);
-                break;
-            }
-        }
-        for (Chamber chamber : chambers) {
-            if (chamber.type == ChamberType.ENTRANCE || chamber.type == ChamberType.ARMORY) continue;
-            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
-                tryPlaceWeaponSpawn(grid, chamber);
-            }
-        }
-    }
-
-    private boolean tryPlaceWeaponSpawn(char[][] grid, Chamber chamber) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            if (chamber.interiorWidth() <= 0 || chamber.interiorHeight() <= 0) return false;
-            int tileColumn = chamber.leftColumn + 1 + random.nextInt(chamber.interiorWidth());
-            int tileRow    = chamber.bottomRow  + 1 + random.nextInt(chamber.interiorHeight());
-            if (isWalkableTile(grid[tileRow][tileColumn])) {
-                weaponSpawnPoints.add(new WeaponSpawnPoint(tileColumn, tileRow, randomWeaponItemType()));
-                return true;
-            }
-        }
-        return false;
-    }
 
     // -------------------------------------------------------------------------
     // Phase 7 — enemy placement (cave body scatter)
@@ -1143,7 +1091,10 @@ public class CavernGenerator implements ILevelGenerator {
         EncounterBudgetPlanner.Plan plan =
                 new EncounterBudgetPlanner(dungeonDepth, random, enemyBudgetScale).plan();
         List<EnemyType> roster = plan.enemies();
+        lastThreatSpent = plan.spentThreatPoints();
+        lastThreatCap   = plan.floorBudget();
         if (roster.isEmpty()) return spawnPoints;
+        if (plan.anchor() != null) lastAnchorSpawnIndex = 0;   // the planner emits the anchor first
 
         boolean[][] usedTiles = new boolean[gridHeight][gridWidth];
         // PACK COHERENCE IN SPACE: the planner emits a pack as a run of consecutive identical entries.
@@ -1511,8 +1462,14 @@ public class CavernGenerator implements ILevelGenerator {
             }
         }
         grid[centerRow][centerColumn] = 'p';
-        return new Level(grid, new ArrayList<>(), new ArrayList<>(),
-                         LevelPalettes.generatedWithBaseWall(seed));
+        // Even the fallback goes through the shared supply pipeline (S1).
+        supplyChambers  = new ArrayList<>();
+        buildSupplyRegionMap(supplyChambers);
+        FloorPopulator.Result populated = FloorPopulator.populate(
+                ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(), grid, this, new ArrayList<>(),
+                new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config, dungeonDepth, seed);
+        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed)));
     }
 
     // -------------------------------------------------------------------------
@@ -1542,23 +1499,46 @@ public class CavernGenerator implements ILevelGenerator {
         return minInclusive + random.nextInt(maxInclusive - minInclusive + 1);
     }
 
-    private char randomAmmoChar() {
-        switch (random.nextInt(5)) {
-            case 0:  return '6';
-            case 1:  return '7';
-            case 2:  return '8';
-            case 3:  return '9';
-            default: return '0';
+    // -------------------------------------------------------------------------
+    // Phase 11 — supply regions (balance-overhaul order 2: SupplySlotProvider)
+    // -------------------------------------------------------------------------
+
+    /** Chambers are regions 0..n-1; the cave body is cut into fixed pockets numbered after them. */
+    private void buildSupplyRegionMap(List<Chamber> chambers) {
+        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
+        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        int pocketWidth  = LevelGenConstants.LEVEL_GEN_CAVE_SUPPLY_POCKET_WIDTH;
+        int pocketHeight = LevelGenConstants.LEVEL_GEN_CAVE_SUPPLY_POCKET_HEIGHT;
+        int pocketColumns = (gridWidth + pocketWidth - 1) / pocketWidth;
+        supplyChambers  = chambers;
+        supplyRegionMap = new int[gridHeight][gridWidth];
+        for (int tileRow = 0; tileRow < gridHeight; tileRow++) {
+            for (int tileColumn = 0; tileColumn < gridWidth; tileColumn++) {
+                int pocket = (tileRow / pocketHeight) * pocketColumns + (tileColumn / pocketWidth);
+                supplyRegionMap[tileRow][tileColumn] = chambers.size() + pocket;
+            }
+        }
+        for (int chamberIndex = 0; chamberIndex < chambers.size(); chamberIndex++) {
+            Chamber chamber = chambers.get(chamberIndex);
+            for (int tileRow = chamber.bottomRow + 1; tileRow < chamber.topRow; tileRow++) {
+                for (int tileColumn = chamber.leftColumn + 1; tileColumn < chamber.rightColumn; tileColumn++) {
+                    if (isInBounds(tileColumn, tileRow)) supplyRegionMap[tileRow][tileColumn] = chamberIndex;
+                }
+            }
         }
     }
 
-    private ItemType randomWeaponItemType() {
-        switch (random.nextInt(5)) {
-            case 0:  return ItemType.WEAPON_SHOTGUN;
-            case 1:  return ItemType.WEAPON_CHAINGUN;
-            case 2:  return ItemType.WEAPON_ASSAULT_RIFLE;
-            case 3:  return ItemType.WEAPON_PLASMA;
-            default: return ItemType.WEAPON_ROCKET;
-        }
+    @Override
+    public int supplyRegionAt(int tileColumn, int tileRow) {
+        if (supplyRegionMap == null || !isInBounds(tileColumn, tileRow)) return CONNECTOR_REGION;
+        return supplyRegionMap[tileRow][tileColumn];
+    }
+
+    @Override
+    public boolean isLargeSupplyRegion(int regionId) {
+        // Only a stamped chamber can count as large; a cave pocket is a fixed-size cut of the open cave.
+        return supplyChambers != null && regionId >= 0 && regionId < supplyChambers.size()
+                && supplyChambers.get(regionId).interiorWidth() * supplyChambers.get(regionId).interiorHeight()
+                        >= LevelGenConstants.LEVEL_GEN_CAVE_LARGE_CHAMBER_AREA;
     }
 }

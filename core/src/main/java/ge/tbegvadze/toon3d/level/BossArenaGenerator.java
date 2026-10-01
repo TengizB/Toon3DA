@@ -72,9 +72,18 @@ public final class BossArenaGenerator implements ILevelGenerator {
 
     private BossArenaLayout layout;
 
+    // The floor's config (balance-overhaul order 2): the node's supply spec, the carried ammo types and
+    // the weapon cadence flag the shared supply pipeline reads. Null = this generator's node-type defaults.
+    private final LevelGenConfig config;
+
     public BossArenaGenerator(long seed) {
+        this(seed, null);
+    }
+
+    public BossArenaGenerator(long seed, LevelGenConfig config) {
         this.random = new Random(seed);
         this.seed   = seed;
+        this.config = config;
     }
 
     /** The layout chosen by the most recent {@link #generate(int)} call. Null before the first call. */
@@ -169,8 +178,15 @@ public final class BossArenaGenerator implements ILevelGenerator {
         this.layout = new BossArenaLayout(centerColumn, doorRow, exitColumn, exitRow,
                 bossColumn, bossRow, alcoveTiles);
 
-        return new Level(matrix, spawnPoints, new ArrayList<>(),
-                         LevelPalettes.generatedWithBaseWall(seed));
+        // SUPPLY (balance-overhaul order 2, S1/S10): the arena's ammo plan is R-BOSS-AMMO's arena budget,
+        // placed by the shared pipeline; the boss marker is never priced and never a carrier.
+        FloorPopulator.Result populated = FloorPopulator.populate(ge.tbegvadze.toon3d.route.GeneratorId.BOSS_ARENA.stableId(), matrix,
+                new PocketSupplyRegions(matrix[0].length, LevelGenConstants.SPECIAL_ROOM_SUPPLY_POCKET_SIZE,
+                        LevelGenConstants.SPECIAL_ROOM_SUPPLY_POCKET_SIZE),
+                spawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
+                FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.BOSS), dungeonDepth, seed);
+        return populated.attachTo(new Level(matrix, populated.spawnPoints, populated.weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed)));
     }
 
     // -------------------------------------------------------------------------
