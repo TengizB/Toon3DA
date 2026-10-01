@@ -2519,6 +2519,8 @@ public final class BalanceConfig {
     public static final float SUPPLY_CARRIER_SHARE   = 0.25f;
     /** S7: no single room / chamber holds more than this share of any category (count basis). */
     public static final float SUPPLY_MAX_ROOM_SHARE  = 0.35f;
+    /** S6 edge case: a carrier dying on an occupied tile drops onto the nearest free tile within this radius. */
+    public static final int   CARRIER_DROP_SEARCH_RADIUS = 2;
     /** S7: placement score bonus for a slot on the start->exit walk path. */
     public static final float SUPPLY_EXIT_PATH_BONUS  = 1.0f;
     /** S7: placement score bonus for a slot inside a room that holds an enemy group (reward the fight). */

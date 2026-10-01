@@ -311,6 +311,13 @@ public class Enemy implements StatusHost {
      */
     public boolean spawnedByBossSummon       = false;
 
+    /**
+     * The pickup symbol this enemy CARRIES (balance-overhaul order 2, S6): a planned share of the floor's
+     * ammo / heal supply, copied from its spawn point. Dropped on death — whatever the cause — exactly
+     * once; {@code 0} = carries nothing (and drops nothing). Summoned adds never carry.
+     */
+    public char    carriedDrop               = 0;
+
     // Status effect storage — pre-allocated at construction, never replaced
     private final EnumMap<StatusType, StatusEffect> activeEffects;
     private StatusResistance statusResistance = StatusResistance.defaultResistance();

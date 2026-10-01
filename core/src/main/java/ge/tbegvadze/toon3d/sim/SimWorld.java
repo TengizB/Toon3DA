@@ -485,7 +485,7 @@ public final class SimWorld implements LevelTransitionListener {
         NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(pendingNode.type);
         NodeLevelProfile   profile    = RouteRegistries.levelProfiles().getOrDefault(definition.levelProfileId());
         LevelPlan          plan       = profile.resolve(pendingNode, currentDepth, seed);
-        LevelGenConfig     config     = applyEnemyBudget(plan.config(), plan.enemyBudget());
+        LevelGenConfig     config     = applyFloorSupplyInputs(applyEnemyBudget(plan.config(), plan.enemyBudget()));
         ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(currentDepth);
         captureBossArenaLayout(generator);
@@ -499,6 +499,25 @@ public final class SimWorld implements LevelTransitionListener {
         if (generator instanceof BossArenaGenerator) {
             pendingBossArenaLayout = ((BossArenaGenerator) generator).getLayout();
         }
+    }
+
+    /**
+     * Folds the order-2 supply inputs into the config (mirrors World.applyFloorSupplyInputs): the ammo
+     * types of the weapons the simulated player carries at floor build.
+     */
+    private LevelGenConfig applyFloorSupplyInputs(LevelGenConfig config) {
+        LevelGenConfig effective = config != null ? config : new LevelGenConfig();
+        java.util.EnumSet<ge.tbegvadze.toon3d.item.AmmoType> carried =
+                java.util.EnumSet.noneOf(ge.tbegvadze.toon3d.item.AmmoType.class);
+        ge.tbegvadze.toon3d.entity.Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                if (weapon != null && weapon.getAmmoType() != null) carried.add(weapon.getAmmoType());
+            }
+        }
+        effective.carriedAmmoTypes = carried;
+        return effective;
     }
 
     /** Folds a node's encounter-budget override into the plan's config (mirrors World.applyEnemyBudget). */
@@ -517,7 +536,11 @@ public final class SimWorld implements LevelTransitionListener {
                                                    spawnPoint.weaponItemType, 1);
             Weapon baseWeapon = playerController.findWeaponInArsenalForType(spawnPoint.weaponItemType);
             if (baseWeapon != null) {
-                groundItem.weaponRoll = weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+                // A PLANNED drop (order 2, S9) rolls at its planned level offset / tier floor (mirrors World).
+                groundItem.weaponRoll = spawnPoint.planned
+                        ? weaponRoller.rollPlannedToSnapshot(baseWeapon, currentDepth,
+                                spawnPoint.levelOffset, spawnPoint.tierBonus)
+                        : weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
             }
             groundItems.add(groundItem);
         }

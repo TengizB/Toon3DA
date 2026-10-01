@@ -257,6 +257,9 @@ public final class ItemConstants {
     public static final int   CREDIT_LARGE_BASE            = 70;
     public static final int   CREDIT_LARGE_JITTER          = 15;
     // Spawn weights — proportional; SMALL+MEDIUM+LARGE need not sum to any specific value.
+    // A planned chip whose tile a later World step claimed (a shop stand tile, a weapon offer) moves to
+    // the nearest free tile within this many rings (balance-overhaul order 2, S8).
+    public static final int   CREDIT_CHIP_RELOCATE_RADIUS  = 3;
     public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = BalanceConfig.CREDIT_SPAWN_WEIGHT_SMALL;
     public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = BalanceConfig.CREDIT_SPAWN_WEIGHT_MEDIUM;
     public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = BalanceConfig.CREDIT_SPAWN_WEIGHT_LARGE;

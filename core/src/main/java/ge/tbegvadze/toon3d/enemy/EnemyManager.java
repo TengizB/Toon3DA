@@ -121,7 +121,6 @@ public final class EnemyManager implements EnemyHitTarget {
     private final int[]        wiggleLegalColumns;  // reused in wiggleStep — avoids allocation in takeTurn
     private final int[]        wiggleLegalRows;
     private final Random       wiggleRandom;
-    private final Random       dropRandom;
     private final Random       effectRandom;
 
     /**
@@ -210,7 +209,6 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private static final long SPAWN_STREAM_SALT  = 0x5DEECE66DL;
     private static final long WIGGLE_STREAM_SALT = 0x1D2B7A3CL;
-    private static final long DROP_STREAM_SALT   = 0x9E3779B9L;
     private static final long EFFECT_STREAM_SALT = 0x27D4EB2FL;
 
     /** Seed used by the legacy (unseeded-looking) constructor so tests and tools stay reproducible. */
@@ -247,7 +245,6 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleLegalColumns = new int[4];
         this.wiggleLegalRows    = new int[4];
         this.wiggleRandom       = new Random(randomSeed ^ WIGGLE_STREAM_SALT);
-        this.dropRandom         = new Random(randomSeed ^ DROP_STREAM_SALT);
         this.effectRandom       = new Random(randomSeed ^ EFFECT_STREAM_SALT);
     }
 
@@ -387,7 +384,10 @@ public final class EnemyManager implements EnemyHitTarget {
                     effectiveDepth = Math.max(1, dungeonDepth - 1);
                 }
             }
-            list.add(initScaledEnemy(type, spawnPoint.tileColumn, spawnPoint.tileRow, effectiveDepth));
+            Enemy enemy = initScaledEnemy(type, spawnPoint.tileColumn, spawnPoint.tileRow, effectiveDepth);
+            // S6 (balance-overhaul order 2): a planned carrier holds its share of the floor's supply.
+            enemy.carriedDrop = spawnPoint.carriedDrop;
+            list.add(enemy);
         }
         return list;
     }
@@ -717,7 +717,7 @@ public final class EnemyManager implements EnemyHitTarget {
             if (killCreditListener != null) {
                 killCreditListener.onEnemyKilledForCredits(depthScaledCreditReward(enemy.type), currentDepth);
             }
-            killEnemy(enemy, thisKillWasMelee);
+            killEnemy(enemy);
             if (impactEventListener != null) {
                 impactEventListener.onEnemyKilled(worldX, worldY, heightMultiplier, totalDamage);
             }
@@ -917,7 +917,7 @@ public final class EnemyManager implements EnemyHitTarget {
         // Apply any self-inflicted deaths (e.g. a detonating Plague Hulk) AFTER the loop above
         // finishes, so removing them never shifts enemies.get(index) mid-iteration (R-self-destruct).
         for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
-            killEnemy(pendingExecuteDeaths[deathIndex], false);
+            killEnemy(pendingExecuteDeaths[deathIndex]);
             pendingExecuteDeaths[deathIndex] = null;
         }
     }
@@ -2671,10 +2671,10 @@ public final class EnemyManager implements EnemyHitTarget {
             impactEventListener.onEnemyKilled(enemy.worldCenterX(), enemy.worldCenterY(),
                     enemy.type.heightMultiplier(), 0);
         }
-        killEnemy(enemy, false);
+        killEnemy(enemy);
     }
 
-    private void killEnemy(Enemy enemy, boolean isMeleeKill) {
+    private void killEnemy(Enemy enemy) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
         // Every death passes through here, whatever killed it, so the family's death voice is fired
         // here rather than at each of the half-dozen sites that fire the visual death burst.
@@ -2711,95 +2711,44 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemy.type == EnemyType.VERDANT_SPIRESOWER && spireHitTarget != null) {
             spireHitTarget.shatterSpiresOf(enemy.getId());
         }
-        char currentCell = level.getCell(enemy.tileColumn, enemy.tileRow);
-        if (!Level.isStairsDown(currentCell)
-                && !Level.isMedicalPickup(currentCell)
-                && !Level.isArmourPickup(currentCell)
-                && !Level.isKeycardPickup(currentCell)
-                && !Level.isAmmoPickup(currentCell)) {
-            // ORDER 6 ammo lifeline: a summoned add killed while the player is out of ammo in the
-            // sealed boss arena ALWAYS drops matching ammo, replacing the normal roll (Fairness F5).
-            char guaranteedAmmo = guaranteedSummonerAmmoDrop(enemy);
-            char drop;
-            if (guaranteedAmmo != 0) {
-                drop = guaranteedAmmo;
+        // DEATH DROP (balance-overhaul order 2, S6): drops are PLANNED, never rolled. A carrier drops the
+        // supply the floor planner handed it — on any death, exactly once; everyone else leaves a corpse.
+        // The two never-softlock lifelines stay and are the only reactive drops: the boss-summon ammo
+        // guarantee, and the once-per-floor emergency ammo (checked only on a kill that carries nothing,
+        // so a planned drop is never swallowed).
+        char carried = enemy.carriedDrop;
+        enemy.carriedDrop = 0;
+        char drop;
+        char guaranteedAmmo = guaranteedSummonerAmmoDrop(enemy);
+        if (guaranteedAmmo != 0) {
+            drop = guaranteedAmmo;
+        } else if (carried != 0) {
+            drop = carried;
+        } else {
+            char emergencyAmmo = emergencySupplyDrop(enemy);
+            if (emergencyAmmo != 0) {
+                drop = emergencyAmmo;
+                emergencySupplyGrantedThisFloor = true;
+                if (emergencySupplyListener != null) emergencySupplyListener.onEmergencySupplyGranted();
             } else {
-                // NEVER-SOFTLOCK (new-game-balancr order 3, part D): if the player's remaining potential
-                // damage has fallen catastrophically below the remaining floor demand, force this drop to
-                // be ammo for an equipped weapon (once per floor). Keeps "wasted all my ammo" deaths as
-                // fighting retreats, never empty-inventory softlocks. Evaluated BEFORE the normal roll.
-                char emergencyAmmo = emergencySupplyDrop(enemy);
-                if (emergencyAmmo != 0) {
-                    drop = emergencyAmmo;
-                    emergencySupplyGrantedThisFloor = true;
-                    if (emergencySupplyListener != null) emergencySupplyListener.onEmergencySupplyGranted();
-                } else {
-                    drop = rollEnemyDrop(enemy.type, isMeleeKill);
-                }
+                drop = 'm'; // corpse decal, no item
             }
-            level.setCell(enemy.tileColumn, enemy.tileRow, drop);
-            if (dropPlacedListener != null) {
-                dropPlacedListener.onDropPlaced(enemy.tileColumn, enemy.tileRow, drop);
+        }
+        if (drop == 'm') {
+            if (isFreeDropTile(enemy.tileColumn, enemy.tileRow)) {
+                placeDeathDrop(enemy.tileColumn, enemy.tileRow, drop);
             }
+        } else {
+            // An item must land: on the death tile when it is free, else the nearest free tile (a pickup,
+            // keycard or the stairs already there must not swallow a planned drop).
+            int[] tile = findFreeDropTile(enemy.tileColumn, enemy.tileRow);
+            if (tile != null) placeDeathDrop(tile[0], tile[1], drop);
         }
         // Area-denial death hook (Pillar 2/3): e.g. a Plague Hulk leaves a toxic cloud here.
         if (enemyDeathHazardListener != null) {
             enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow, enemy.selfDestructed);
         }
         enemies.remove(enemy);
-    }
-
-    private char rollEnemyDrop(EnemyType type, boolean isMeleeKill) {
-        float dropChance = isMeleeKill
-                ? GameBalance.MELEE_KILL_AMMO_DROP_CHANCE
-                : EnemyConstants.ENEMY_AMMO_DROP_CHANCE;
-        if (dropRandom.nextFloat() >= dropChance) {
-            return 'm'; // corpse decal, no item
-        }
-        if (isMeleeKill && loadout != null) {
-            char meleeAmmo = rollLoadoutAmmoDrop();
-            if (meleeAmmo != 0) return meleeAmmo;
-        }
-        switch (type) {
-            case PLAGUE_HULK:  return '6'; // bullets — basic melee tank
-            case EYE_TYRANT:   return '8'; // cells   — energy-based ranged
-            case GORE_BITER:   return '7'; // shells  — brawler
-            case SHELL_BRUTE:  return '6'; // bullets — heavy charger
-            case MIRE_WRAITH:  return '8'; // cells   — acid ranged
-            case IRON_STALKER: return '6'; // bullets — armored elite
-            case ACID_DRONE:   return '8'; // cells   — mechanical ranged
-            case VOID_SHROUD:  return '6'; // bullets — stealth melee
-            case GHOUL:        return '6'; // bullets — shambling chaff
-            case CRAWLER:      return '6'; // bullets — fast chaff
-            case REVENANT:     return '7'; // shells  — heavy undead brawler
-            case VORTEX_EYE:   return '8'; // cells   — energy caster (ranged)
-            case BLIGHT_CORRUPTOR: return '7'; // shells — infected brute
-            case AURIC_SENTINEL:   return '8'; // cells  — crystal golem, energy ranged
-            case CINDERFORGE_COLOSSUS: return '7'; // shells — heavy melee golem anchor
-            case RIMESHELL_LANCER: return '8'; // cells  — crystal golem, molten energy lance
-            default:           return '6';
-        }
-    }
-
-    /**
-     * Picks an ammo pickup character matching one of the player's equipped ranged weapons.
-     * Returns 0 if no ranged weapon is currently equipped (melee-only loadout).
-     */
-    private char rollLoadoutAmmoDrop() {
-        // Collect pickup chars for every equipped ranged weapon slot.
-        int count = 0;
-        char[] candidates = new char[loadout.getSlotCount()];
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-            Weapon weapon = loadout.getSlot(slotIndex);
-            if (weapon != null && !(weapon instanceof MeleeWeapon)) {
-                AmmoType ammoType = weapon.getAmmoType();
-                if (ammoType != null) {
-                    candidates[count++] = ammoType.getPickupTileChar();
-                }
-            }
-        }
-        if (count == 0) return 0;
-        return candidates[dropRandom.nextInt(count)];
     }
 
     /**
@@ -2904,5 +2853,46 @@ public final class EnemyManager implements EnemyHitTarget {
         if (weapon == null || weapon instanceof MeleeWeapon) return 0;
         AmmoType ammoType = weapon.getAmmoType();
         return ammoType != null ? ammoType.getPickupTileChar() : 0;
+    }
+
+    /** Whether a death drop may be written onto a tile (not the stairs, not an existing pickup). */
+    private boolean isFreeDropTile(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileRow < 0 || tileColumn >= level.getWidth() || tileRow >= level.getHeight()) {
+            return false;
+        }
+        char cell = level.getCell(tileColumn, tileRow);
+        if (Level.isStairsDown(cell) || Level.isMedicalPickup(cell) || Level.isArmourPickup(cell)
+                || Level.isKeycardPickup(cell) || Level.isAmmoPickup(cell)) {
+            return false;
+        }
+        return !Level.isWall(cell) && !Level.isPropSolid(cell) && !Level.isDoor(cell);
+    }
+
+    /**
+     * The death tile when it is free, else the nearest free tile within
+     * {@link BalanceConfig#CARRIER_DROP_SEARCH_RADIUS} (ring by ring, deterministic order), else
+     * {@code null}. The ground-item placement fallback for a planned carrier drop (S6 edge case).
+     */
+    private int[] findFreeDropTile(int tileColumn, int tileRow) {
+        if (isFreeDropTile(tileColumn, tileRow)) return new int[]{tileColumn, tileRow};
+        for (int ring = 1; ring <= BalanceConfig.CARRIER_DROP_SEARCH_RADIUS; ring++) {
+            for (int rowOffset = -ring; rowOffset <= ring; rowOffset++) {
+                for (int columnOffset = -ring; columnOffset <= ring; columnOffset++) {
+                    if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;
+                    if (isFreeDropTile(tileColumn + columnOffset, tileRow + rowOffset)) {
+                        return new int[]{tileColumn + columnOffset, tileRow + rowOffset};
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Writes a death drop and tells the drop listener (World mirrors it into the renderers). */
+    private void placeDeathDrop(int tileColumn, int tileRow, char drop) {
+        level.setCell(tileColumn, tileRow, drop);
+        if (dropPlacedListener != null) {
+            dropPlacedListener.onDropPlaced(tileColumn, tileRow, drop);
+        }
     }
 }

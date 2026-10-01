@@ -84,6 +84,31 @@ public class WeaponRoller {
         return new WeaponRoll(rolledLevel, rolledTier, rolledAbilities);
     }
 
+    /**
+     * A PLANNED weapon drop (balance-overhaul order 2, S9): the SupplyPlanner already decided this drop's
+     * level offset from the floor depth and, for an ELITE reward, a tier floor above the region minimum,
+     * so neither is rolled here. Only the tier inside the allowed band and the abilities are rolled.
+     *
+     * @param weapon      the weapon used for ability eligibility (never modified)
+     * @param floorDepth  current dungeon floor (1-based)
+     * @param levelOffset the planned offset: level = floorDepth + levelOffset, clamped to [1, MAX]
+     * @param tierBonus   steps above the region's minimum drop tier the roll may not go below, or a
+     *                    negative value for the plain region band
+     */
+    public WeaponRoll rollPlannedToSnapshot(Weapon weapon, int floorDepth, int levelOffset, int tierBonus) {
+        int        plannedLevel = Math.max(1, Math.min(WeaponConstants.MAX_WEAPON_LEVEL, floorDepth + levelOffset));
+        WeaponTier minimumTier  = regionMinTier(floorDepth);
+        WeaponTier maximumTier  = regionMaxTier(floorDepth);
+        if (tierBonus > 0) {
+            minimumTier = tierByOrdinal(minimumTier.ordinal() + tierBonus);
+            if (maximumTier.ordinal() < minimumTier.ordinal()) maximumTier = minimumTier;
+        }
+        WeaponTier        rolledTier      = rollTierClamped(floorDepth, minimumTier, maximumTier);
+        if (rolledTier.ordinal() < minimumTier.ordinal()) rolledTier = minimumTier;
+        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, plannedLevel);
+        return new WeaponRoll(plannedLevel, rolledTier, rolledAbilities);
+    }
+
     /** The lowest tier that counts as a real weapon UPGRADE (UNCOMMON or better) — the pity threshold. */
     public static WeaponTier upgradeTierThreshold() {
         return WeaponTier.UNCOMMON;

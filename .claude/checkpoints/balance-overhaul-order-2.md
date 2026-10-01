@@ -63,7 +63,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   - [x] **CP3a** — the six generators build through FloorPopulator.
         DONE WHEN: no generator places a pickup / weapon by its own rule; Cavern's MEDICAL_BAY-only medkit
         path is gone; fast gate green.
-  - [ ] **CP3b** — carriers drop on death (independent drop rolls gone); World / SimWorld read planned
+  - [x] **CP3b** — carriers drop on death (independent drop rolls gone); World / SimWorld read planned
         credits + planned weapon offsets/tiers and feed `carriedAmmoTypes`.
         DONE WHEN: build + both gates green.
   - [ ] **CP3c** — R-SUPPLY generator sweep + BalanceReport SUPPLY/DENSITY table; R-SCARCITY /
@@ -161,3 +161,14 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   type>)`. Linear's central-altar 'A'/'H' roll removed (pedestal left empty). Probe d1 ground supply: rooms 1.55 H,
   linear 1.45 H, cavern 1.40 H (cavern was 0.45). GeneratorReachabilityTest / BossArenaGeneratorTest unchanged
   and green; the snapshot test only digests LevelGenerator (unchanged by CP3a).
+- **CP3b handover:** `Enemy.carriedDrop` (copied from the spawn point in `EnemyManager.buildInitialEnemies`);
+  `killEnemy(Enemy)` (melee flag gone) drops: boss-summon lifeline > carried item > emergency lifeline > 'm'.
+  An item that lands on an occupied tile moves to the nearest free tile within `CARRIER_DROP_SEARCH_RADIUS` (2)
+  (`findFreeDropTile` / `placeDeathDrop`). `rollEnemyDrop`, `rollLoadoutAmmoDrop`, `dropRandom` deleted — the
+  constants ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_CHANCE are now read ONLY by the BalanceSchema model (CP3c
+  deletes them with the scarcity rules). `WeaponRoller.rollPlannedToSnapshot(weapon, depth, levelOffset,
+  tierBonus)`; World + SimWorld use it for `spawnPoint.planned`; `World/SimWorld.applyFloorSupplyInputs(config)`
+  fills `carriedAmmoTypes`. `World.seedCreditChips(level, items, reserved)` reads `level.getCreditSpawnPoints()`
+  (relocates within `ItemConstants.CREDIT_CHIP_RELOCATE_RADIUS` = 3; hand levels + staging room get no chips);
+  the CREDIT_CHIPS_PER_FLOOR_MIN/MAX + *_JITTER roll is no longer read by World (BalanceSchema still reads
+  MIN/MAX — CP3c). SimWorld still seeds no credit chips (unchanged; it never did).
