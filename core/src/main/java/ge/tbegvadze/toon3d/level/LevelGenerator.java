@@ -103,7 +103,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
         GORE_NEST, ATMOSPHERIC_PLANT
     }
 
-    private final Random         random;
+    private       Random         random;
     private final LevelGenConfig config;
 
     // The floor's master seed (same value World.floorSeed feeds this generator). Stored so order-8 can
@@ -114,6 +114,11 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
     // Dungeon floor this generator is building for (1-based). Drives the encounter Threat-Point
     // budget (balance idea 4). Defaults to 1; set via generate(int dungeonDepth).
     private int dungeonDepth = 1;
+
+    // E6 footprint scale (balance-overhaul order 2): rooms are placed inside a centred window of sqrt(scale)
+    // of the grid on each axis, and the room-count target scales with it. 1 = the whole grid.
+    private float footprintScale = 1f;
+    private int   footprintTarget;
 
     // MST room-pair references captured during connectivity so widenSelectedCorridors()
     // can re-carve chosen edges at width 3 without re-running the MST selection.
@@ -149,8 +154,22 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
         return generate();
     }
 
+    /**
+     * Builds the floor to its E6 footprint target (balance-overhaul order 2): {@link FootprintPlanner}
+     * rebuilds at a corrected room window until the walkable footprint lands within tolerance.
+     */
     @Override
     public Level generate() {
+        return FootprintPlanner.buildToTarget(config, dungeonDepth,
+                LevelGenConstants.FOOTPRINT_NATURAL_WALKABLE_ROOMS, seed, (scale, attemptSeed, target) -> {
+                    footprintScale  = scale;
+                    footprintTarget = target;
+                    random          = new Random(attemptSeed);
+                    return generateOnce();
+                });
+    }
+
+    private Level generateOnce() {
         char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
         mstEdgeRooms          = new ArrayList<>();
@@ -227,7 +246,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
         FloorPopulator.Result populated = FloorPopulator.populate(
                 ge.tbegvadze.toon3d.route.GeneratorId.ROOMS_MST.stableId(), grid, this, placement.spawnPoints,
                 new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
-                        encounter.floorBudget(), encounter.bodyTarget(), 0),
+                        encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
 
         // order-8 STEP B — build this level's varied palette from the rooms actually placed and attach it.
@@ -283,7 +302,21 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
         List<Room> rooms    = new ArrayList<>();
         int        attempts = 0;
 
-        while (rooms.size() < LevelGenConstants.LEVEL_GEN_TARGET_ROOMS
+        // E6 footprint window (balance-overhaul order 2): a centred sub-rectangle of the grid, sqrt(scale)
+        // of each axis, that every room must fit inside; the room-count target scales with its area.
+        float axisScale    = (float) Math.sqrt(footprintScale);
+        int windowWidth    = Math.max(LevelGenConstants.FOOTPRINT_MIN_WINDOW_WIDTH,
+                Math.round(LevelGenConstants.LEVEL_GEN_GRID_WIDTH * axisScale));
+        int windowHeight   = Math.max(LevelGenConstants.FOOTPRINT_MIN_WINDOW_HEIGHT,
+                Math.round(LevelGenConstants.LEVEL_GEN_GRID_HEIGHT * axisScale));
+        windowWidth        = Math.min(LevelGenConstants.LEVEL_GEN_GRID_WIDTH, windowWidth);
+        windowHeight       = Math.min(LevelGenConstants.LEVEL_GEN_GRID_HEIGHT, windowHeight);
+        int windowLeft     = (LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - windowWidth)  / 2;
+        int windowBottom   = (LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - windowHeight) / 2;
+        int targetRooms    = Math.max(LevelGenConstants.FOOTPRINT_MIN_ROOMS,
+                Math.round(LevelGenConstants.LEVEL_GEN_TARGET_ROOMS * footprintScale));
+
+        while (rooms.size() < targetRooms
                 && attempts < LevelGenConstants.LEVEL_GEN_PLACEMENT_TRIES) {
             attempts++;
 
@@ -307,12 +340,12 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
             int totalWidth     = interiorWidth  + 2;
             int totalHeight    = interiorHeight + 2;
 
-            int maxLeftColumn = LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - totalWidth  - 1;
-            int maxBottomRow  = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - totalHeight - 1;
+            int maxLeftColumn = windowWidth  - totalWidth  - 1;
+            int maxBottomRow  = windowHeight - totalHeight - 1;
             if (maxLeftColumn < 1 || maxBottomRow < 1) continue;
 
-            int leftColumn = 1 + random.nextInt(maxLeftColumn);
-            int bottomRow  = 1 + random.nextInt(maxBottomRow);
+            int leftColumn = windowLeft   + 1 + random.nextInt(maxLeftColumn);
+            int bottomRow  = windowBottom + 1 + random.nextInt(maxBottomRow);
             Room candidate = new Room(leftColumn, bottomRow,
                                       leftColumn + totalWidth  - 1,
                                       bottomRow  + totalHeight - 1);

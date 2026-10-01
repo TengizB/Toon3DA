@@ -95,12 +95,17 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         }
     }
 
-    private final Random                 random;
+    private       Random                 random;
     // Raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`, so it
     // never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
     private final long                   seed;
     private final LevelGenConfig         config;
     private       List<int[]>            spineCenterTiles;
+
+    // E6 footprint scale (balance-overhaul order 2): the spine (and its bend) is scaled to this fraction of
+    // its usual length. 1 = the full-length artery.
+    private       float                  footprintScale = 1f;
+    private       int                    footprintTarget;
 
     // Supply regions (balance-overhaul order 2, SupplySlotProvider): side-room index per interior tile,
     // -1 on the spine and every other connector. Built once the layout is final.
@@ -132,8 +137,22 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         return generate();
     }
 
+    /**
+     * Builds the corridor to its E6 footprint target (balance-overhaul order 2): {@link FootprintPlanner}
+     * rebuilds at a corrected spine length until the walkable footprint lands within tolerance.
+     */
     @Override
     public Level generate() {
+        return FootprintPlanner.buildToTarget(config, dungeonDepth,
+                LevelGenConstants.FOOTPRINT_NATURAL_WALKABLE_LINEAR, seed, (scale, attemptSeed, target) -> {
+                    footprintScale  = scale;
+                    footprintTarget = target;
+                    random          = new Random(attemptSeed);
+                    return generateOnce();
+                });
+    }
+
+    private Level generateOnce() {
         char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
         spineCenterTiles     = new ArrayList<>();
@@ -191,7 +210,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         FloorPopulator.Result populated = FloorPopulator.populate(
                 ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(), grid, this, placement.spawnPoints,
                 new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
-                        encounter.floorBudget(), encounter.bodyTarget(), 0),
+                        encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          LevelPalettes.generatedWithBaseWall(seed)));
@@ -211,7 +230,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         // Spine length: 75–90 % of grid width, centred horizontally
         int spineLength      = (int)(gridWidth * randomFloat(
             LevelGenConstants.LEVEL_GEN_SPINE_LENGTH_MIN_FRAC,
-            LevelGenConstants.LEVEL_GEN_SPINE_LENGTH_MAX_FRAC));
+            LevelGenConstants.LEVEL_GEN_SPINE_LENGTH_MAX_FRAC) * footprintScale);
         int spineStartColumn = Math.max(1, (gridWidth - spineLength) / 2);
         int spineEndColumn   = Math.min(gridWidth - 2, spineStartColumn + spineLength - 1);
 
@@ -302,6 +321,8 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         int aboveSpace = gridHeight - 2 - spineRow;
         boolean extendAbove = aboveSpace >= belowSpace;
         int availableSpace  = extendAbove ? aboveSpace : belowSpace;
+        // E6 (balance-overhaul order 2): the bend shrinks with the footprint scale like the spine does.
+        availableSpace = (int) (availableSpace * footprintScale);
         if (availableSpace < LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH) return;
 
         int bendLength = Math.max(LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH,
@@ -447,7 +468,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         // Spine length: 75–90 % of grid height, centred vertically
         int spineLength   = (int)(gridHeight * randomFloat(
             LevelGenConstants.LEVEL_GEN_SPINE_LENGTH_MIN_FRAC,
-            LevelGenConstants.LEVEL_GEN_SPINE_LENGTH_MAX_FRAC));
+            LevelGenConstants.LEVEL_GEN_SPINE_LENGTH_MAX_FRAC) * footprintScale);
         int spineStartRow = Math.max(1, (gridHeight - spineLength) / 2);
         int spineEndRow   = Math.min(gridHeight - 2, spineStartRow + spineLength - 1);
 
@@ -561,6 +582,8 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         int leftSpace  = spineColumn - 1;
         boolean extendRight = rightSpace >= leftSpace;
         int availableSpace  = extendRight ? rightSpace : leftSpace;
+        // E6 (balance-overhaul order 2): the bend shrinks with the footprint scale like the spine does.
+        availableSpace = (int) (availableSpace * footprintScale);
         if (availableSpace < LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH) return;
 
         int bendLength = Math.max(LevelGenConstants.LEVEL_GEN_SPINE_BEND_MIN_LENGTH,

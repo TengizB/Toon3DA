@@ -2511,9 +2511,13 @@ public final class BalanceConfig {
     public static final int   NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MIN = -1;
     public static final int   NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MAX = 0;
 
-    /** ELITE threat cap = 1.6x COMBAT (A6). Bodies rise less: the extra threat buys a WARBAND, not a crowd. */
+    /**
+     * ELITE threat cap = 1.6x COMBAT (A6). Bodies barely rise (1.05x): the extra threat buys HEAVIER groups
+     * (a WARBAND anchor), not a crowd — 1.2x bodies on the lower half of a region's footprint cannot hold
+     * the ELITE density band (34 bodies / 625 tiles = 5.4 per 100 at depth 25).
+     */
     public static final float NODE_SUPPLY_ELITE_THREAT        = 1.60f;
-    public static final float NODE_SUPPLY_ELITE_BODIES        = 1.20f;
+    public static final float NODE_SUPPLY_ELITE_BODIES        = 1.05f;
     public static final float NODE_SUPPLY_ELITE_AMMO_RATIO    = 0.85f;
     /** ELITE vault: extra ammo (as a share of roster demand) placed behind the anchor group. */
     public static final float NODE_SUPPLY_ELITE_VAULT_AMMO_RATIO = 0.25f;

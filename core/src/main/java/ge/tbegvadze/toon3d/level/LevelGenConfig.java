@@ -162,4 +162,11 @@ public final class LevelGenConfig {
 
     /** S9 cadence: the previous non-boss floor offered no weapon at level >= its depth. Set by World. */
     public boolean weaponCadenceDue = false;
+
+    /**
+     * E6 footprint: the walkable tiles a combat generator (rooms / corridor / cave) builds to. 0 = derive it
+     * from the floor's region range (the normal case — see {@link FootprintPlanner}); a negative value =
+     * build at natural size (no target).
+     */
+    public int targetWalkableTiles = 0;
 }

@@ -73,7 +73,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP4** — group templates, body targets, group placement, shape + first-contact rules in every
       combat generator.
       DONE WHEN: R-DENSITY (bodies/shape/contact) green; A5 partly (contact, count).
-- [ ] **CP5** — footprint targets in the three combat generators.
+- [x] **CP5** — footprint targets in the three combat generators.
       DONE WHEN: R-DENSITY footprint + density green; A3, A5 hold.
 - [ ] **CP6** — node specs drive COMBAT/ELITE/CACHE/SHOP contents; weapon cadence replaces the pity
       rule; route economics re-derived; node card lines drawn.
@@ -213,3 +213,27 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **NEXT (CP5):** footprint. Rooms walk ~1130, linear ~690, cave ~2100 tiles vs region A target 350-550.
   `LevelGenConfig.targetWalkableTiles` (set where? — profile/World: GameMath.footprintTargetWalkableTiles(region,
   roll, spec.footprintLowerHalf)); the sweep's `sweepConfig` must set it too. Density bands then audited.
+- **CP5 handover:** `level/FootprintPlanner` — `footprintRange(spec, depth)` (E6 range, ELITE lower half),
+  `targetWalkableTiles(config, depth, seed)` (config.targetWalkableTiles > 0 explicit, < 0 natural size, 0 =
+  seeded roll in range), `buildToTarget(config, depth, naturalWalkable, seed, TargetedBuild)`. The three combat
+  generators wrap `generateOnce()` in it via a footprint SCALE (rooms/cave: centred layout window + scaled room
+  count; linear: spine length + bend space); bespoke generators untouched. The target FOLLOWS the bodies a build
+  fielded (`GameMath.walkableTilesForDensity(bodies, band midpoint)`, clamped to the range) — so nobody needs to
+  set `targetWalkableTiles`: profiles/World/sweep leave it 0 and the floor seed decides. Stop rule: inside range
+  AND density band AND error <= 0.7 x 15%; up to 16 attempts (`LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS`), else
+  best-ranked. `FloorContentReport.targetWalkableTiles` is the LAST attempt's target (informational only; the
+  audit reads the range, not it).
+- **CP5 dead end:** the first cut computed `bodies / aim` without the x100 (density is per 100 tiles), so the
+  target always clamped to the range floor and deep floors broke 4.0/100 — fixed by the GameMath inverse.
+- **CP5 audit:** `densitySweepResults` adds "footprint smallest/largest (E6)" (combat layouts, specs with a
+  density band; range +/-15%, depth-1 COMBAT strict 350-550 per A5) and "density lowest/highest (E7)"; test
+  `everyGeneratedFloorHoldsItsFootprintAndDensity`. Probe (30 seeds x 3 layouts x COMBAT/ELITE/CACHE/SHOP x
+  {1,5,10,15,20,25}) = 0 of 2160 floors out of either band. Snapshot re-baselined `e3b48d81...` (stable over two
+  JVM runs). Gates: core:test 452 tests, only the pre-existing StoryBarkTest failure; balanceSim exit 0 — TACTICAL
+  152/200 stalled, median depth 1 (WAIVED, navigation), emergency lifeline 0.04 (band 0.05). The smaller,
+  fuller floors moved the TACTICAL median from 2 to 1; CP7's S-SUPPLY read must look at this honestly.
+- **DECISION (CP5):** ELITE body scale 1.05 (was 1.2) — 1.2 cannot fit the lower-half footprint under the 5.0
+  density ceiling at depth; recorded in the authority doc's R-DENSITY block.
+- **NEXT (CP6):** profiles set `config.supplySpec`; drop node-type EnemyBudgetOverride + ELITE/CACHE pickup
+  guarantees + AmmoCacheRequest; weapon cadence replaces the pity rule; route economics from specs (delete
+  ROUTE_MODEL_LEGACY_*); node card C1 lines; A6 audit.

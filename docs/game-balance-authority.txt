@@ -295,13 +295,32 @@ R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
   Read from the SAME generator sweep as R-SUPPLY (every generator x node type x depths
   {1,5,10,15,20,25} x 30 seeds), per cell, worst case over its seeds:
     bodies (E1)        COMBAT 12-16 at depth 1 rising linearly to 22-28 at depth 25
-                       (BODY_TARGET_*), x the node's body scale (ELITE 1.2, CACHE / SHOP
+                       (BODY_TARGET_*), x the node's body scale (ELITE 1.05, CACHE / SHOP
                        0.35); fewest and most both inside the band
     shape (E4)         COMBAT / ELITE: >= 75% of enemies in groups of >= 2, >= 2 groups
                        of >= 3, <= 3 lone enemies
     first contact (E5) COMBAT / ELITE: the nearest member of a group of >= 2 within 18
                        walk tiles of the start (12 on depth 1), never in the start room
-    footprint (E6) + density (E7)  — added by CP5
+    footprint (E6)     ROOMS_MST / LINEAR_CORRIDOR / CAVERN on every spec with a density
+                       band: walkable tiles inside the region range +/-15%
+                       (FOOTPRINT_MIN/MAX_BY_REGION: A 350-550, B 450-650, C/D/E 500-750;
+                       ELITE the lower half); the run's FIRST COMBAT floor strictly
+                       inside 350-550 (A5)
+    density (E7)       enemies per 100 walkable tiles: COMBAT [2.2, 4.0], ELITE
+                       [3.0, 5.0], CACHE / SHOP [0.6, 1.5]; lowest and highest both inside
+  HOW THE GENERATORS MEET E6 + E7 (CP5): level/FootprintPlanner rebuilds the floor (up to
+  LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS = 16, a derived seed per attempt) at a footprint
+  SCALE — a centred layout window for rooms and caves, the spine length for corridors —
+  corrected by target / measured walkable each time. The target FOLLOWS the bodies the
+  build fielded: GameMath.walkableTilesForDensity(bodies, the band's midpoint), clamped to
+  the region range, so footprint and density hold together; the first build inside the
+  range, inside the density band and within 0.7 x 15% of the target is kept, else the best
+  ranked. Measured over 30 seeds x the three layouts x COMBAT/ELITE/CACHE/SHOP x the audit
+  depths: zero floors outside either band.
+  DECISION (CP5): the ELITE body scale is 1.05, not 1.2. At 1.2 the deep ELITE body band
+  (26-34) cannot fit the lower-half footprint (500-625) under the 5.0 density ceiling; the
+  ELITE's extra threat is carried by its 1.6x Threat-Point cap (heavier groups), which E1
+  already intended, so the body count stays near COMBAT's.
   HOW THE PLANNER MEETS IT: level/EncounterBudgetPlanner fills the body target with
   registered GROUP TEMPLATES (level/EncounterGroupTemplates: PACK 3-5 chaff of one type,
   FIRETEAM 2 soldiers + 2 chaff, ESCORT bruiser + 2-3 chaff [COMBAT anchor], BATTERY 1-2

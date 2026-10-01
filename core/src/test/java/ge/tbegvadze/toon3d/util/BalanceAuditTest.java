@@ -630,6 +630,16 @@ class BalanceAuditTest {
                 "first contact", "start room"));
     }
 
+    /**
+     * R-DENSITY, footprint half (balance-overhaul order 2, A3 / A5): the three combat layouts build to their
+     * region's walkable-tile range +/-15% (E6; the run's first COMBAT floor strictly 350-550), and every
+     * floor whose spec has a density band keeps its enemies per 100 walkable tiles inside it (E7).
+     */
+    @Test
+    void everyGeneratedFloorHoldsItsFootprintAndDensity() {
+        assertNoViolations(BalanceSchema.densitySweepResults("footprint", "density"));
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

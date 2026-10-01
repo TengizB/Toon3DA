@@ -59,7 +59,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         int interiorHeight() { return Math.max(0, topRow      - bottomRow  - 1); }
     }
 
-    private final Random random;
+    private       Random random;
     // The raw floor seed, kept for deterministic per-level BASE-WALL selection (independent of `random`,
     // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
     private final long   seed;
@@ -84,6 +84,11 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     // Route-map order-7 encounter-budget multiplier (1.0 = normal). CALM nodes lower it; the depth
     // ramp is still applied first inside EncounterBudgetPlanner.
     private final float enemyBudgetScale;
+
+    // E6 footprint scale (balance-overhaul order 2): the cave grows only inside a centred window of
+    // sqrt(scale) of the grid on each axis; everything outside it stays rock. 1 = the whole grid.
+    private float footprintScale = 1f;
+    private int   footprintTarget;
 
     // The floor's config (balance-overhaul order 2): the node's supply spec, the carried ammo types and
     // the weapon cadence flag the shared supply planner reads. Never null.
@@ -116,8 +121,22 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         return generate();
     }
 
+    /**
+     * Builds the cave to its E6 footprint target (balance-overhaul order 2): {@link FootprintPlanner}
+     * rebuilds at a corrected cave window until the walkable footprint lands within tolerance.
+     */
     @Override
     public Level generate() {
+        return FootprintPlanner.buildToTarget(config, dungeonDepth,
+                LevelGenConstants.FOOTPRINT_NATURAL_WALKABLE_CAVE, seed, (scale, attemptSeed, target) -> {
+                    footprintScale  = scale;
+                    footprintTarget = target;
+                    random          = new Random(attemptSeed);
+                    return generateOnce();
+                });
+    }
+
+    private Level generateOnce() {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
 
@@ -185,7 +204,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         FloorPopulator.Result populated = FloorPopulator.populate(
                 ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(), grid, this, placement.spawnPoints,
                 new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
-                        encounter.floorBudget(), encounter.bodyTarget(), 0),
+                        encounter.floorBudget(), encounter.bodyTarget(), footprintTarget),
                 config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          LevelPalettes.generatedWithBaseWall(seed)));
@@ -198,10 +217,18 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     private void initNoise(boolean[][] solid) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
+        // E6 footprint window (balance-overhaul order 2): only a centred sub-rectangle of the grid may open.
+        float axisScale  = (float) Math.sqrt(footprintScale);
+        int windowWidth  = Math.min(gridWidth,  Math.round(gridWidth  * axisScale));
+        int windowHeight = Math.min(gridHeight, Math.round(gridHeight * axisScale));
+        int windowLeft   = (gridWidth  - windowWidth)  / 2;
+        int windowBottom = (gridHeight - windowHeight) / 2;
         for (int tileRow = 0; tileRow < gridHeight; tileRow++) {
             for (int tileColumn = 0; tileColumn < gridWidth; tileColumn++) {
-                // Force a 1-tile solid border around the entire grid
-                if (tileRow == 0 || tileRow == gridHeight - 1
+                boolean outsideWindow = tileColumn < windowLeft || tileColumn >= windowLeft + windowWidth
+                        || tileRow < windowBottom || tileRow >= windowBottom + windowHeight;
+                // Force a 1-tile solid border around the entire grid (and rock outside the window)
+                if (outsideWindow || tileRow == 0 || tileRow == gridHeight - 1
                         || tileColumn == 0 || tileColumn == gridWidth - 1) {
                     solid[tileRow][tileColumn] = true;
                 } else {

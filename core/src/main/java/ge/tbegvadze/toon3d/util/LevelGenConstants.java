@@ -68,6 +68,22 @@ public final class LevelGenConstants {
     // (balance-overhaul order 2, E5): from its centre the spine — and the floor's first fight — must be
     // within FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES walk tiles.
     public static final int   LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM     = 7;
+    // FOOTPRINT TARGETS (balance-overhaul order 2, E6): the combat generators build to a walkable-tile
+    // target (BalanceConfig FOOTPRINT_*) by rebuilding at a corrected footprint SCALE. A build within
+    // FOOTPRINT_AIM_FRACTION of the +/-15% tolerance stops the loop early; otherwise the closest of
+    // FOOTPRINT_MAX_ATTEMPTS builds is kept. The NATURAL figures are each generator's typical walkable
+    // tiles at scale 1 (measured), the first guess's denominator.
+    public static final int   FOOTPRINT_MAX_ATTEMPTS               = 16;
+    public static final float FOOTPRINT_MIN_SCALE                  = 0.12f;
+    public static final float FOOTPRINT_AIM_FRACTION               = 0.7f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_ROOMS     = 1130f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_LINEAR    = 700f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_CAVE      = 2100f;
+    // ROOMS_MST at a footprint scale: rooms are placed inside a centred window of sqrt(scale) of the grid on
+    // each axis (never narrower than these), and the room count target scales with the area.
+    public static final int   FOOTPRINT_MIN_WINDOW_WIDTH           = 24;
+    public static final int   FOOTPRINT_MIN_WINDOW_HEIGHT          = 18;
+    public static final int   FOOTPRINT_MIN_ROOMS                  = 5;
     // (balance-overhaul order 2) The tactical room-cap classifier and the random spawn-tile probes are
     // gone with the per-room budget: groups are placed one per room by level/EncounterPlacer, which reads
     // every room's spawnable tiles from the finished layout.

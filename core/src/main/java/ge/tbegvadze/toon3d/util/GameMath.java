@@ -5928,6 +5928,20 @@ public final class GameMath {
     }
 
     /*
+     * Formula: walkableTilesForDensity — the footprint at which a roster sits at a target density (E6 x E7)
+     * Derivation: invert densityPerHundredTiles:
+     *       density = enemyCount * 100 / walkable   =>   walkable = enemyCount * 100 / density
+     *   rounded to the nearest whole tile.
+     * Edge cases: targetDensity <= 0 or enemyCount <= 0 -> 0 (no density to aim at).
+     */
+    public static int walkableTilesForDensity(int enemyCount, float targetDensity) {
+        if (targetDensity <= 0f || enemyCount <= 0) {
+            return 0;
+        }
+        return Math.round(enemyCount * 100f / targetDensity);
+    }
+
+    /*
      * Formula: footprintTargetWalkableTiles — the walkable-tile target a combat generator builds to (E6)
      * Derivation:
      *   Each region owns a [min, max] range (deeper regions reuse the last row); the floor's seeded roll
