@@ -5931,42 +5931,22 @@ public final class GameMath {
     }
 
     /*
-     * Formula: walkableTilesForDensity — the footprint at which a roster sits at a target density (E6 x E7)
-     * Derivation: invert densityPerHundredTiles:
-     *       density = enemyCount * 100 / walkable   =>   walkable = enemyCount * 100 / density
-     *   rounded to the nearest whole tile.
-     * Edge cases: targetDensity <= 0 or enemyCount <= 0 -> 0 (no density to aim at).
-     */
-    public static int walkableTilesForDensity(int enemyCount, float targetDensity) {
-        if (targetDensity <= 0f || enemyCount <= 0) {
-            return 0;
-        }
-        return Math.round(enemyCount * 100f / targetDensity);
-    }
-
-    /*
-     * Formula: footprintTargetWalkableTiles — the walkable-tile target a combat generator builds to (E6)
+     * Formula: footprintTargetWalkableTiles — the walkable-tile target a combat layout builds to (E6)
      * Derivation:
-     *   Each region owns a [min, max] range (deeper regions reuse the last row); the floor's seeded roll
-     *   picks inside it, an ELITE floor inside the LOWER half (a tighter, hotter arena):
-     *       high'  = lowerHalfOnly ? (min + max) / 2 : max
-     *       target = round(min + unitRoll * (high' - min))
-     * Edge cases: empty tables -> 0 (no target: the generator keeps its natural size); regionIndex
-     *   clamped to the table; unitRoll clamped to [0, 1].
+     *   The owner sets the size as a CUT from the layout's ORIGINAL walkable size, ramped by depth
+     *   (deeper floors reuse the last entry of the table):
+     *       cut    = reductionByDepth[min(depth, length) - 1]
+     *       target = round(originalWalkableTiles * (1 - cut))
+     *   e.g. ROOMS_MST 1130 -> 565 on floor 1 (cut 0.50), 904 from floor 5 (cut 0.20).
+     * Edge cases: empty table or originalWalkableTiles <= 0 -> 0 (no target: natural size); depth < 1
+     *   treated as 1; the cut is clamped to [0, 1].
      */
-    public static int footprintTargetWalkableTiles(int[] minimumByRegion, int[] maximumByRegion,
-                                                   int regionIndex, float unitRoll, boolean lowerHalfOnly) {
-        if (minimumByRegion == null || maximumByRegion == null
-                || minimumByRegion.length == 0 || maximumByRegion.length == 0) {
+    public static int footprintTargetWalkableTiles(int originalWalkableTiles, float[] reductionByDepth, int depth) {
+        if (reductionByDepth == null || reductionByDepth.length == 0 || originalWalkableTiles <= 0) {
             return 0;
         }
-        int index = Math.max(0, Math.min(Math.min(minimumByRegion.length, maximumByRegion.length) - 1, regionIndex));
-        float low  = minimumByRegion[index];
-        float high = maximumByRegion[index];
-        if (lowerHalfOnly) {
-            high = (low + high) / 2f;
-        }
-        float roll = Math.max(0f, Math.min(1f, unitRoll));
-        return Math.round(low + roll * (high - low));
+        int index = Math.min(reductionByDepth.length, Math.max(1, depth)) - 1;
+        float cut = Math.max(0f, Math.min(1f, reductionByDepth[index]));
+        return Math.round(originalWalkableTiles * (1f - cut));
     }
 }

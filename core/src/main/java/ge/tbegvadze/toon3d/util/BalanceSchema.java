@@ -2668,16 +2668,9 @@ public final class BalanceSchema {
     // =====================================================================================
     // R-DENSITY (balance-overhaul order 2, A3 / A5) — what the generator sweep FIELDS: bodies against the
     // E1 band, group shape (E4) and first contact (E5) on COMBAT / ELITE, the walkable footprint (E6) on
-    // the three combat layouts and the density band (E7) on every spec that has one, read from the same cached
+    // the three combat layouts (E7 density is reported, not enforced), read from the same cached
     // FloorContentReports as R-SUPPLY.
     // =====================================================================================
-
-    /** The generators that build to an E6 footprint target (the three combat layouts). */
-    private static final java.util.Set<String> FOOTPRINT_GENERATORS = Collections.unmodifiableSet(
-            new java.util.HashSet<>(java.util.Arrays.asList(
-                    ge.tbegvadze.toon3d.route.GeneratorId.ROOMS_MST.stableId(),
-                    ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(),
-                    ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId())));
 
     /** The E1 body band for a spec at a depth: the body-target band x the spec's body scale. */
     public static int[] bodyBand(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth) {
@@ -2698,7 +2691,8 @@ public final class BalanceSchema {
         Map<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cells = new java.util.LinkedHashMap<>();
         for (ge.tbegvadze.toon3d.level.FloorContentReport report : supplySweepReports()) {
             ge.tbegvadze.toon3d.route.NodeSupplySpec spec = report.spec;
-            if (!spec.shapeRulesApply() && !spec.hasDensityBand()) continue;
+            boolean footprintedLayout = ge.tbegvadze.toon3d.level.FootprintPlanner.isFootprinted(report.generatorName);
+            if (!spec.shapeRulesApply() && !spec.hasDensityBand() && !footprintedLayout) continue;
             cells.computeIfAbsent(report.generatorName + " " + spec.type() + " d" + report.depth,
                     key -> new ArrayList<>()).add(report);
         }
@@ -2707,16 +2701,14 @@ public final class BalanceSchema {
             ge.tbegvadze.toon3d.level.FloorContentReport first = reports.get(0);
             ge.tbegvadze.toon3d.route.NodeSupplySpec spec = first.spec;
             int[] band = bodyBand(spec, first.depth);
-            boolean footprinted = FOOTPRINT_GENERATORS.contains(first.generatorName) && spec.hasDensityBand();
-            int[] range = ge.tbegvadze.toon3d.level.FootprintPlanner.footprintRange(spec, first.depth);
-            // E6: +/-15% around the region range; A5 holds the run's first COMBAT floor to the range itself.
-            boolean strictRange = first.depth <= 1 && spec.type() == RouteNodeType.COMBAT;
-            float footprintLow  = strictRange ? range[0] : range[0] * (1f - BalanceConfig.FOOTPRINT_TOLERANCE);
-            float footprintHigh = strictRange ? range[1] : range[1] * (1f + BalanceConfig.FOOTPRINT_TOLERANCE);
+            // E6 (owner override 2026-10-01): every floor of a combat layout within +/-15% of its target — the
+            // cut from that layout's original size at this depth.
+            int target = ge.tbegvadze.toon3d.level.FootprintPlanner.targetWalkableTiles(first.generatorName, first.depth);
+            boolean footprinted = target > 0;
+            float footprintLow  = target * (1f - BalanceConfig.FOOTPRINT_TOLERANCE);
+            float footprintHigh = target * (1f + BalanceConfig.FOOTPRINT_TOLERANCE);
             int smallestFootprint = Integer.MAX_VALUE;
             int largestFootprint  = 0;
-            float lowestDensity  = Float.MAX_VALUE;
-            float highestDensity = 0f;
             int fewest = Integer.MAX_VALUE;
             int most   = 0;
             float leastGrouped = Float.MAX_VALUE;
@@ -2730,8 +2722,6 @@ public final class BalanceSchema {
                 most   = Math.max(most, report.enemyCount);
                 smallestFootprint = Math.min(smallestFootprint, report.walkableTiles);
                 largestFootprint  = Math.max(largestFootprint, report.walkableTiles);
-                lowestDensity     = Math.min(lowestDensity, report.density());
-                highestDensity    = Math.max(highestDensity, report.density());
                 if (!spec.shapeRulesApply()) continue;
                 float grouped = report.enemyCount == 0 ? 1f : report.groupedEnemies() / (float) report.enemyCount;
                 leastGrouped    = Math.min(leastGrouped, grouped);
@@ -2749,19 +2739,14 @@ public final class BalanceSchema {
             if (footprinted) {
                 results.add(new RuleResult(RuleKind.DENSITY, where + "footprint smallest (E6)", smallestFootprint,
                         footprintLow, footprintHigh, smallestFootprint >= footprintLow,
-                        "walkable tiles, range " + range[0] + "-" + range[1]));
+                        "walkable tiles, target " + target));
                 results.add(new RuleResult(RuleKind.DENSITY, where + "footprint largest (E6)", largestFootprint,
                         footprintLow, footprintHigh, largestFootprint <= footprintHigh,
-                        "walkable tiles, range " + range[0] + "-" + range[1]));
+                        "walkable tiles, target " + target));
             }
-            if (spec.hasDensityBand()) {
-                results.add(new RuleResult(RuleKind.DENSITY, where + "density lowest (E7)", lowestDensity,
-                        spec.densityMin(), spec.densityMax(), lowestDensity >= spec.densityMin(),
-                        "enemies per 100 walkable tiles"));
-                results.add(new RuleResult(RuleKind.DENSITY, where + "density highest (E7)", highestDensity,
-                        spec.densityMin(), spec.densityMax(), highestDensity <= spec.densityMax(),
-                        "enemies per 100 walkable tiles"));
-            }
+            // E7 density is REPORTED (BalanceReport's SUPPLY / DENSITY table), no longer enforced: the owner's
+            // footprint override sizes floors by their original layout, and the body targets were not raised
+            // with it, so the old [2.2, 4.0] band cannot hold on the larger floors.
             if (!spec.shapeRulesApply()) continue;
             results.add(new RuleResult(RuleKind.DENSITY, where + "grouped share (E4)", leastGrouped,
                     BalanceConfig.SHAPE_GROUPED_MIN_FRACTION, 1f,

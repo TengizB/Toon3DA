@@ -635,7 +635,7 @@ SECTION 11 — ENCOUNTER BUDGET: BODIES, GROUPS, FOOTPRINT (rewritten by balance
 Files: BalanceConfig SECTION 21 (BODY_TARGET_*, GROUP_*, SHAPE_*, FIRST_CONTACT_*, FOOTPRINT_*,
 DENSITY_*); level/EncounterBudgetPlanner, EncounterGroupTemplate(s) + registry, EncounterPlacer,
 FootprintPlanner; GameMath.bodyTargetAtDepth / densityPerHundredTiles / footprintTargetWalkableTiles /
-walkableTilesForDensity. Audited by R-DENSITY (docs/game-balance-authority.txt).
+Audited by R-DENSITY (docs/game-balance-authority.txt).
 
 WHAT A FLOOR FIELDS. The planner fills a BODY TARGET, not a Threat-Point budget:
   bodies(d) = lerp(BODY_TARGET_MIN/MAX_DEPTH_ONE 12-16, _DEEP 22-28, d / 25) x spec.bodyScale
@@ -659,13 +659,12 @@ PLACEMENT (E3 / E5). level/EncounterPlacer puts each group in ONE room (cluster 
   group holds (a LARGE room may take two). Shape (E4): >= 75% of enemies in groups of >= 2, >= 2 groups
   of >= 3, <= 3 lone enemies.
 
-FOOTPRINT + DENSITY (E6 / E7). The three combat layouts (ROOMS_MST, LINEAR_CORRIDOR, CAVERN) build to a
-  walkable-tile target inside the region's range (A 350-550, B 450-650, C/D/E 500-750; ELITE the lower
-  half) through level/FootprintPlanner: rebuild at a corrected footprint SCALE (a centred layout window,
-  or the corridor spine length) up to FOOTPRINT_MAX_ATTEMPTS (16); the target FOLLOWS the bodies the
-  build fielded (bodies x 100 / the density band's midpoint), so footprint and density hold together —
-  COMBAT 2.2-4.0, ELITE 3.0-5.0, CACHE / SHOP 0.6-1.5 enemies per 100 walkable tiles. Measured over the
-  audit sweep: zero floors out of either band.
+FOOTPRINT (E6, owner override 2026-10-01). The three combat layouts (ROOMS_MST, LINEAR_CORRIDOR,
+  CAVERN) build to a cut from their ORIGINAL walkable size (rooms 1130, corridor 700, cave 2100): 50% on
+  floor 1, 40% / 30% / 25% on floors 2-4, 20% from floor 5 on — e.g. rooms 565 -> 904, caves 1050 -> 1680
+  — through level/FootprintPlanner (rebuild at a corrected footprint SCALE, up to 24 attempts, +/-15%).
+  DENSITY (E7) is reported only: with the body targets unchanged, COMBAT reads ~1.8-2.7 enemies per 100
+  tiles on rooms, ~2.9-4.5 on corridors, ~0.9-1.4 on caves.
 
 WHAT IT REPLACED (override record in the authority doc, R-DENSITY): "enemy COUNT is depth-invariant",
   the anchor budget fractions, the elite-anchor floor chance, the per-room TP cap + room-geometry

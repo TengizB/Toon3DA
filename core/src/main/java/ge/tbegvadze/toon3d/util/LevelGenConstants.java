@@ -72,13 +72,13 @@ public final class LevelGenConstants {
     // target (BalanceConfig FOOTPRINT_*) by rebuilding at a corrected footprint SCALE. A build within
     // FOOTPRINT_AIM_FRACTION of the +/-15% tolerance stops the loop early; otherwise the closest of
     // FOOTPRINT_MAX_ATTEMPTS builds is kept. The NATURAL figures are each generator's typical walkable
-    // tiles at scale 1 (measured), the first guess's denominator.
-    public static final int   FOOTPRINT_MAX_ATTEMPTS               = 16;
+    // tiles at scale 1 (measured) — the ORIGINAL sizes the E6 cut is taken from (BalanceConfig owns them).
+    public static final int   FOOTPRINT_MAX_ATTEMPTS               = 24;
     public static final float FOOTPRINT_MIN_SCALE                  = 0.12f;
     public static final float FOOTPRINT_AIM_FRACTION               = 0.7f;
-    public static final float FOOTPRINT_NATURAL_WALKABLE_ROOMS     = 1130f;
-    public static final float FOOTPRINT_NATURAL_WALKABLE_LINEAR    = 700f;
-    public static final float FOOTPRINT_NATURAL_WALKABLE_CAVE      = 2100f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_ROOMS     = BalanceConfig.FOOTPRINT_ORIGINAL_WALKABLE_ROOMS;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_LINEAR    = BalanceConfig.FOOTPRINT_ORIGINAL_WALKABLE_LINEAR;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_CAVE      = BalanceConfig.FOOTPRINT_ORIGINAL_WALKABLE_CAVERN;
     // ROOMS_MST at a footprint scale: rooms are placed inside a centred window of sqrt(scale) of the grid on
     // each axis (never narrower than these), and the room count target scales with the area.
     public static final int   FOOTPRINT_MIN_WINDOW_WIDTH           = 24;

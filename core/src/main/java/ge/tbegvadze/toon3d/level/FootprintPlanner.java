@@ -4,112 +4,109 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
 
-import java.util.Random;
-
 /**
- * FOOTPRINT TARGETS (balance-overhaul order 2, E6): the three combat generators build to a target number of
- * WALKABLE tiles from their region's range (region A 350-550, B 450-650, C/D/E 500-750; an ELITE floor the
- * lower half) instead of always filling the 80x45 grid — "levels are big but empty". Each generator exposes
- * one size knob (a 0..1 footprint SCALE: a centred layout window for rooms and caves, the spine length for
- * corridors); this class picks the target, then builds, measures the walkable footprint, and rebuilds with a
- * proportionally corrected scale until it lands within {@link BalanceConfig#FOOTPRINT_TOLERANCE}, keeping
- * the closest build. Deterministic: attempt 0 uses the floor seed itself, later attempts a derived seed.
+ * FOOTPRINT TARGETS (balance-overhaul order 2, E6 — owner override 2026-10-01): the three combat layouts
+ * build to a CUT from their ORIGINAL walkable size instead of always filling the 80x45 grid — half on
+ * floor 1, then 40% / 30% / 25%, and a fifth from floor 5 on ({@link BalanceConfig#FOOTPRINT_REDUCTION_BY_DEPTH}
+ * x the layout's {@code FOOTPRINT_ORIGINAL_WALKABLE_*}). Each generator exposes one size knob (a 0..1
+ * footprint SCALE: a centred layout window for rooms and caves, the spine length for corridors); this class
+ * builds, measures the walkable footprint, and rebuilds at a scale corrected by the mean tiles-per-scale
+ * measured so far until it lands within {@link BalanceConfig#FOOTPRINT_TOLERANCE}, keeping the closest build
+ * that fielded its body target. Deterministic: attempt 0 uses
+ * the floor seed itself, later attempts a derived seed.
  */
 public final class FootprintPlanner {
 
-    /** Seed salt for the target roll (independent of the layout stream). */
-    private static final long TARGET_SEED_SALT  = 0xF007_9417L;
     /** Seed step between rebuild attempts. */
     private static final long ATTEMPT_SEED_STEP = 0x9E3779B97F4A7C15L;
 
+    /** Each footprinted layout's ORIGINAL walkable size, by generator stable id (the E6 baseline). */
+    private static final java.util.Map<String, Integer> ORIGINAL_WALKABLE_TILES = buildOriginals();
 
     private FootprintPlanner() {}
 
-    /**
-     * The walkable-tile RANGE a floor's region allows (E6): region A 350-550, B 450-650, C/D/E 500-750
-     * (deeper regions reuse the last row); an ELITE floor the lower half.
-     */
-    public static int[] footprintRange(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth) {
-        int region = regionIndex(depth);
-        int low  = GameMath.footprintTargetWalkableTiles(BalanceConfig.FOOTPRINT_MIN_BY_REGION,
-                BalanceConfig.FOOTPRINT_MAX_BY_REGION, region, 0f, spec.footprintLowerHalf());
-        int high = GameMath.footprintTargetWalkableTiles(BalanceConfig.FOOTPRINT_MIN_BY_REGION,
-                BalanceConfig.FOOTPRINT_MAX_BY_REGION, region, 1f, spec.footprintLowerHalf());
-        return new int[]{low, high};
+    private static java.util.Map<String, Integer> buildOriginals() {
+        java.util.Map<String, Integer> originals = new java.util.HashMap<>();
+        originals.put(ge.tbegvadze.toon3d.route.GeneratorId.ROOMS_MST.stableId(),
+                BalanceConfig.FOOTPRINT_ORIGINAL_WALKABLE_ROOMS);
+        originals.put(ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(),
+                BalanceConfig.FOOTPRINT_ORIGINAL_WALKABLE_LINEAR);
+        originals.put(ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(),
+                BalanceConfig.FOOTPRINT_ORIGINAL_WALKABLE_CAVERN);
+        return java.util.Collections.unmodifiableMap(originals);
+    }
+
+    /** Whether a generator (by stable id) builds to an E6 footprint target. */
+    public static boolean isFootprinted(String generatorName) {
+        return ORIGINAL_WALKABLE_TILES.containsKey(generatorName);
+    }
+
+    /** The E6 target for a footprinted generator (by stable id) at a depth, or 0 when it has none. */
+    public static int targetWalkableTiles(String generatorName, int depth) {
+        Integer original = ORIGINAL_WALKABLE_TILES.get(generatorName);
+        return original == null ? 0 : GameMath.footprintTargetWalkableTiles(original,
+                BalanceConfig.FOOTPRINT_REDUCTION_BY_DEPTH, depth);
     }
 
     /**
-     * The walkable-tile target a floor first aims at: the config's explicit target when positive, none
-     * when negative (natural size), else the region's range at the floor's seeded roll.
+     * The walkable-tile target a floor builds to: the config's explicit target when positive, none when
+     * negative (natural size), else the cut from the layout's original size at this depth.
      */
-    public static int targetWalkableTiles(LevelGenConfig config, int depth, long seed) {
+    public static int targetWalkableTiles(LevelGenConfig config, int depth, float originalWalkableTiles) {
         if (config != null && config.targetWalkableTiles > 0) return config.targetWalkableTiles;
         if (config != null && config.targetWalkableTiles < 0) return 0;
-        float roll = new Random(seed ^ TARGET_SEED_SALT).nextFloat();
-        return GameMath.footprintTargetWalkableTiles(BalanceConfig.FOOTPRINT_MIN_BY_REGION,
-                BalanceConfig.FOOTPRINT_MAX_BY_REGION, regionIndex(depth), roll,
-                FloorPopulator.specOf(config).footprintLowerHalf());
+        return GameMath.footprintTargetWalkableTiles(Math.round(originalWalkableTiles),
+                BalanceConfig.FOOTPRINT_REDUCTION_BY_DEPTH, depth);
     }
 
     /**
      * Builds toward the floor's footprint. With no target (explicitly natural size) builds once at full
-     * scale. Otherwise each build is measured: when the node's spec has a density band (E7), the target
-     * FOLLOWS the bodies that build actually fielded — bodies / the band's midpoint density, clamped to
-     * the region range (E6) — so the footprint and the density hold together; the loop stops at the first
-     * build within tolerance of that target AND inside the density band, else keeps the closest.
+     * scale. Otherwise each build is measured and the scale corrected by target / (mean tiles per unit scale so
+     * far); the loop stops at the first build that fields its bodies within {@code FOOTPRINT_AIM_FRACTION} of
+     * the tolerance, else keeps the closest such build.
      *
-     * @param config          the floor's config (spec, explicit target)
-     * @param depth           floor depth (1-based)
-     * @param naturalWalkable the generator's typical walkable tiles at scale 1 (the first guess's base)
-     * @param seed            the floor seed (attempt 0 builds with it unchanged)
-     * @param builder         one scaled build; it is told the current target for its report
+     * @param config                the floor's config (explicit target)
+     * @param depth                 floor depth (1-based)
+     * @param originalWalkableTiles the generator's ORIGINAL walkable tiles at scale 1 (the cut's baseline)
+     * @param seed                  the floor seed (attempt 0 builds with it unchanged)
+     * @param builder               one scaled build; it is told the target for its report
      */
-    public static Level buildToTarget(LevelGenConfig config, int depth, float naturalWalkable, long seed,
+    public static Level buildToTarget(LevelGenConfig config, int depth, float originalWalkableTiles, long seed,
                                       TargetedBuild builder) {
-        int target = targetWalkableTiles(config, depth, seed);
+        int target = targetWalkableTiles(config, depth, originalWalkableTiles);
         if (target <= 0) return builder.build(1f, seed, 0);
-        ge.tbegvadze.toon3d.route.NodeSupplySpec spec = FloorPopulator.specOf(config);
-        boolean explicit = config != null && config.targetWalkableTiles > 0;
-        int[] range = footprintRange(spec, depth);
-        boolean densityAim = spec.hasDensityBand() && !explicit;
-        float aim = densityAim ? (spec.densityMin() + spec.densityMax()) / 2f : 0f;
 
-        float scale = clampScale(target / Math.max(1f, naturalWalkable));
+        float scale = clampScale(target / Math.max(1f, originalWalkableTiles));
         Level best = null;
         float bestError = Float.MAX_VALUE;
+        float tilesPerScaleSum = 0f;
         for (int attempt = 0; attempt < LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS; attempt++) {
             Level built = builder.build(scale, seed + attempt * ATTEMPT_SEED_STEP, target);
             FloorContentReport report = built.getFloorContentReport();
             int walkable = report != null ? report.walkableTiles : 0;
-            if (densityAim && report != null && report.enemyCount > 0) {
-                target = Math.max(range[0], Math.min(range[1], GameMath.walkableTilesForDensity(report.enemyCount, aim)));
-            }
             float error = Math.abs(walkable - target) / (float) Math.max(1, target);
-            boolean densityOk = !densityAim || report == null
-                    || (report.density() >= spec.densityMin() && report.density() <= spec.densityMax());
-            boolean inRange = explicit || (walkable >= range[0] && walkable <= range[1]);
-            // A build that breaks the density band or leaves the region range ranks behind every one that holds.
-            float rank = error + (densityOk ? 0f : 1f) + (inRange ? 0f : 1f);
+            // A build whose encounter fell short of its body target (E1) ranks behind every build that
+            // fielded it: the footprint must never be bought with an empty floor.
+            boolean fielded = report == null || report.enemyCount >= report.bodyTarget;
+            float rank = error + (fielded ? 0f : 1f);
             if (best == null || rank < bestError) {
                 best      = built;
                 bestError = rank;
             }
-            if (densityOk && inRange && error <= BalanceConfig.FOOTPRINT_TOLERANCE * LevelGenConstants.FOOTPRINT_AIM_FRACTION) {
-                break;
-            }
+            if (fielded && error <= BalanceConfig.FOOTPRINT_TOLERANCE * LevelGenConstants.FOOTPRINT_AIM_FRACTION) break;
             if (walkable <= 0) break;
-            scale = clampScale(scale * target / walkable);
+            // A layout's size at a given scale varies a lot from seed to seed (a corridor spine at scale 0.6
+            // measures anywhere from ~250 to ~600 tiles), so the correction uses the MEAN tiles-per-scale over
+            // every attempt so far rather than the last attempt alone, which would chase that noise.
+            tilesPerScaleSum += walkable / scale;
+            scale = clampScale(target / (tilesPerScaleSum / (attempt + 1)));
         }
         return best;
     }
 
-    /** One build of a generator at a footprint scale with a given RNG seed, told its current target. */
+    /** One build of a generator at a footprint scale with a given RNG seed, told its target. */
     public interface TargetedBuild {
         Level build(float footprintScale, long attemptSeed, int targetWalkableTiles);
-    }
-
-    private static int regionIndex(int depth) {
-        return Math.max(0, Math.max(1, depth) - 1) / Math.max(1, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
     }
 
     private static float clampScale(float scale) {

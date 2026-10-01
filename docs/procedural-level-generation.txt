@@ -55,8 +55,10 @@ LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM and GATE_AIRLOCK all fi
 
 FOOTPRINT (E6). The three combat layouts are wrapped in level/FootprintPlanner.buildToTarget: each
 build is measured and rebuilt (up to LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS, a derived seed per
-attempt) at a corrected footprint SCALE until the walkable tiles land in the region's range (A
-350-550, B 450-650, C/D/E 500-750; ELITE the lower half) AND the density band — ROOMS_MST and CAVERN
+attempt) at a footprint SCALE corrected by the mean tiles-per-scale measured so far, until the walkable
+tiles land within 15% of the target — the layout's ORIGINAL size (rooms 1130, corridor 700, cave 2100)
+cut by 50% on floor 1, 40% / 30% / 25% on floors 2-4 and 20% from floor 5 on (owner override
+2026-10-01; BalanceConfig FOOTPRINT_REDUCTION_BY_DEPTH) — and the floor fields its bodies. ROOMS_MST and CAVERN
 shrink a centred layout window (rooms also scale their target room count), LINEAR_CORRIDOR its spine
 length and bend space. The linear entrance room is always small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7)
 so floor 1's first contact can sit within 12 walk tiles.
