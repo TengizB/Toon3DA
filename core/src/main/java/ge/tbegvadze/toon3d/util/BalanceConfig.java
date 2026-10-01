@@ -2448,11 +2448,18 @@ public final class BalanceConfig {
     /** E5: on the run's FIRST floor (depth 1) the first group stands within this many walk tiles. */
     public static final int   FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES = 12;
 
-    // --- E6 FOOTPRINT (target walkable tiles per region index A..E) --------------------------
-    /** E6: low end of each region's target walkable-tile range (index = region 0..4, deeper reuse last). */
-    public static final int[] FOOTPRINT_MIN_BY_REGION = {350, 450, 500, 500, 500};
-    /** E6: high end of each region's target walkable-tile range. */
-    public static final int[] FOOTPRINT_MAX_BY_REGION = {550, 650, 750, 750, 750};
+    // --- E6 FOOTPRINT (OWNER OVERRIDE 2026-10-01: a cut from each layout's ORIGINAL size) ---------
+    // Each combat layout builds to its ORIGINAL walkable size (before balance-overhaul order 2) minus a
+    // depth-ramped cut: half on floor 1, easing to a fifth from floor 5 on (deeper floors reuse the last
+    // entry). Replaced the per-region 350-550 / 450-650 / 500-750 ranges, which cut caves by ~65-79%.
+    /** E6: the cut from the original size per depth (index = depth - 1; deeper floors reuse the last). */
+    public static final float[] FOOTPRINT_REDUCTION_BY_DEPTH = {0.50f, 0.40f, 0.30f, 0.25f, 0.20f};
+    /** E6: ROOMS_MST's original walkable tiles on a full 80x45 grid (measured before the footprint cut). */
+    public static final int   FOOTPRINT_ORIGINAL_WALKABLE_ROOMS  = 1130;
+    /** E6: LINEAR_CORRIDOR's original walkable tiles (measured before the footprint cut). */
+    public static final int   FOOTPRINT_ORIGINAL_WALKABLE_LINEAR = 700;
+    /** E6: CAVERN's original walkable tiles (measured before the footprint cut). */
+    public static final int   FOOTPRINT_ORIGINAL_WALKABLE_CAVERN = 2100;
     /** E6: a generator builds to its target within +/- this fraction. */
     public static final float FOOTPRINT_TOLERANCE     = 0.15f;
 

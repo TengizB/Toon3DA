@@ -67,7 +67,6 @@ public final class NodeSupplySpecs {
                 .weaponBehindAnchor()
                 .shapeRules()
                 .density(BalanceConfig.DENSITY_ELITE_MIN, BalanceConfig.DENSITY_ELITE_MAX)
-                .footprintLowerHalf()
                 .build();
     }
 

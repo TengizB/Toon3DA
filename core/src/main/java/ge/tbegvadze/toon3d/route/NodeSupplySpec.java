@@ -49,7 +49,6 @@ public final class NodeSupplySpec {
     private final boolean shapeRulesApply;
     private final float   densityMin;
     private final float   densityMax;
-    private final boolean footprintLowerHalf;
     private final boolean bossArenaAmmo;
 
     private NodeSupplySpec(Builder builder) {
@@ -77,7 +76,6 @@ public final class NodeSupplySpec {
         this.shapeRulesApply      = builder.shapeRulesApply;
         this.densityMin           = builder.densityMin;
         this.densityMax           = builder.densityMax;
-        this.footprintLowerHalf   = builder.footprintLowerHalf;
         this.bossArenaAmmo        = builder.bossArenaAmmo;
     }
 
@@ -121,15 +119,13 @@ public final class NodeSupplySpec {
     public boolean healFloorApplies()           { return healFloorApplies; }
     /** Whether the E4 shape and E5 first-contact rules apply (COMBAT / ELITE). */
     public boolean shapeRulesApply()            { return shapeRulesApply; }
-    /** E7 density band low end (enemies per 100 walkable tiles); NaN = not audited. */
+    /** E7 density band low end (enemies per 100 walkable tiles; REPORTED, not enforced since 2026-10-01); NaN = none. */
     public float   densityMin()                 { return densityMin; }
     /** E7 density band high end; NaN = not audited. */
     public float   densityMax()                 { return densityMax; }
-    /** Whether the floor builds to the LOWER half of its region's footprint range (E6, ELITE). */
-    public boolean footprintLowerHalf()         { return footprintLowerHalf; }
     /** Whether the ammo plan is the boss arena's R-BOSS-AMMO budget instead of a roster demand (BOSS). */
     public boolean bossArenaAmmo()              { return bossArenaAmmo; }
-    /** Whether the density band is audited for this node type. */
+    /** Whether the node type carries a (reported) density band. */
     public boolean hasDensityBand()             { return !Float.isNaN(densityMin) && !Float.isNaN(densityMax); }
 
     @Override public String toString() {
@@ -159,7 +155,6 @@ public final class NodeSupplySpec {
         private boolean shapeRulesApply      = false;
         private float   densityMin           = Float.NaN;
         private float   densityMax           = Float.NaN;
-        private boolean footprintLowerHalf   = false;
         private boolean bossArenaAmmo        = false;
 
         private Builder(RouteNodeType type, EncounterKind encounterKind) {
@@ -191,7 +186,6 @@ public final class NodeSupplySpec {
             this.densityMax = maximum;
             return this;
         }
-        public Builder footprintLowerHalf()                { this.footprintLowerHalf = true; return this; }
         public Builder bossArenaAmmo()                     { this.bossArenaAmmo = true; return this; }
 
         public NodeSupplySpec build() {

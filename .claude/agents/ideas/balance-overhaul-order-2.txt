@@ -25,6 +25,11 @@ IMPLEMENTATION NOTE (2026-10-01) — where the build diverged from this spec (al
     are proven by R-SUPPLY's generator sweep (the stalling sim navigator rarely leaves floor 1).
   - MYSTERY outcome floors still build on the COMBAT spec (order 6); the ledger prices them on the
     MYSTERY spec, whose supply numbers equal COMBAT's.
+  - OWNER OVERRIDE 2026-10-01 (E6 / E7 / A5): the owner judged the footprint too small (rooms -60%, caves
+    -79% on floor 1). E6 is now a cut from each combat layout's ORIGINAL walkable size — 50% / 40% / 30% /
+    25% on floors 1-4, 20% from floor 5 on, every node type alike (no ELITE lower half); E7 density is
+    reported, not enforced (bodies were not raised); A5's "walkable tiles 350-550" becomes "within 15% of
+    the floor-1 target" (rooms 565, corridor 350, cave 1050).
   - OPEN FOR THE OWNER (not blocking): the ELITE card says "WEAPON +2 LV, RARE+" (C1) but S10's tier
     floor is region minimum + 1 (UNCOMMON+ in region A) and the offset is +1..+2.
 

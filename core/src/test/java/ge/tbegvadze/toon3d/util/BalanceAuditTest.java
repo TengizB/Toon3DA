@@ -641,13 +641,13 @@ class BalanceAuditTest {
     }
 
     /**
-     * R-DENSITY, footprint half (balance-overhaul order 2, A3 / A5): the three combat layouts build to their
-     * region's walkable-tile range +/-15% (E6; the run's first COMBAT floor strictly 350-550), and every
-     * floor whose spec has a density band keeps its enemies per 100 walkable tiles inside it (E7).
+     * R-DENSITY, footprint half (balance-overhaul order 2 E6, owner override 2026-10-01): every floor of the
+     * three combat layouts builds within +/-15% of its target — the layout's ORIGINAL walkable size cut by
+     * 50% / 40% / 30% / 25% on floors 1-4 and 20% from floor 5. E7 density is reported, not enforced.
      */
     @Test
-    void everyGeneratedFloorHoldsItsFootprintAndDensity() {
-        assertNoViolations(BalanceSchema.densitySweepResults("footprint", "density"));
+    void everyGeneratedFloorHoldsItsFootprint() {
+        assertNoViolations(BalanceSchema.densitySweepResults("footprint"));
     }
 
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */

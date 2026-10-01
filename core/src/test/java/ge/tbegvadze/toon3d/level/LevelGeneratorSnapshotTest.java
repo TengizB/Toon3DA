@@ -106,7 +106,7 @@ class LevelGeneratorSnapshotTest {
     // in the nearest room, anchor group deepest), which moves every enemy and the RNG stream behind it.
     // Confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "e3b48d81f926aa4be6d22e5d02cace231942acae1ee1d35fa65884ef65ad15a0";
+            "23e6f3826a375a589755094b701bcef6c6fd3bf10d050ee0c1a0dfcb543e37ad";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
