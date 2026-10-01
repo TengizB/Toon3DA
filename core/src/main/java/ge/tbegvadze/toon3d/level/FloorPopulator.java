@@ -141,6 +141,19 @@ public final class FloorPopulator {
             EnemySpawnPoint anchor = spawnPoints.get(facts.anchorSpawnIndex);
             anchorRegion = survey.regionAt(anchor.tileColumn, anchor.tileRow);
             anchorWalk   = regionWalkDistance(slots, survey, anchorRegion, anchor);
+            // C2: when the anchor group fills its room (no free slot in it), offer the anchor's OWN tile —
+            // the reward WEAPON (never a grid-stamped pickup) then lies under the guardian, claimed once it is down.
+            if (!hasSlotInRegion(slots, anchorRegion)) {
+                int walk = survey.walkDistanceWithKeycards(anchor.tileColumn, anchor.tileRow);
+                if (walk >= 0) {
+                    int noKeycardWalk = survey.walkDistanceWithoutKeycard(anchor.tileColumn, anchor.tileRow);
+                    SupplySlot anchorSlot = new SupplySlot(anchor.tileColumn, anchor.tileRow, anchorRegion, walk,
+                            noKeycardWalk >= 0, survey.isOnExitPath(anchor.tileColumn, anchor.tileRow));
+                    anchorSlot.groupRegion = true;
+                    anchorSlot.weaponOnly  = true;
+                    slots.add(anchorSlot);
+                }
+            }
         }
 
         // --- Plan + place.
@@ -149,7 +162,7 @@ public final class FloorPopulator {
                 GameMath.expectedPlayerAtDepth(depth),
                 config == null ? null : config.carriedAmmoTypes, seed,
                 config != null && config.weaponCadenceDue, bossEffectiveHitPoints));
-        SupplyPlacement placement = SupplyPlanner.place(plan, slots, carriers, anchorRegion,
+        SupplyPlacement placement = SupplyPlanner.place(plan, slots, carriers, anchorRegion, anchorWalk,
                 survey.maximumKeycardFreeDistance() / 2, seed);
 
         // --- Stamp.
@@ -217,6 +230,12 @@ public final class FloorPopulator {
         return new FloorContentReport(generatorName, spec, depth, survey.walkableTileCount(),
                 facts.targetWalkableTiles, enemies, facts.threatSpent, facts.threatCap, facts.bodyTarget,
                 groupSizes, lone, firstContact, inStart, anchorRegion, anchorWalk, plan, placement);
+    }
+
+    private static boolean hasSlotInRegion(List<SupplySlot> slots, int region) {
+        if (region < 0) return true;
+        for (SupplySlot slot : slots) if (slot.regionId == region) return true;
+        return false;
     }
 
     /** The shortest walk into a room (from its slots), falling back to the anchor's own tile. */

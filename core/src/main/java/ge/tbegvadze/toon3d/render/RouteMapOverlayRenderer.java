@@ -154,6 +154,12 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private String regionThemeId;                  // order-5: selects the title-plate crest painter
     private String legendText  = "";
     private float  legendTextX;
+    // C1 (balance-overhaul order 2): the focused node's threat word + reward promise, or empty.
+    private String promiseThreatText = "";
+    private String promiseRewardText = "";
+    private float  promiseThreatX;
+    private float  promiseRewardX;
+    private Color  promiseThreatColor;
     private float  cancelLabelX, cancelLabelY, engageLabelX, engageLabelY;
     private float  toggleLabelXMap, toggleLabelXDetail, toggleLabelY;
 
@@ -449,6 +455,22 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
         layout.setText(font, legendText);
         legendTextX = viewportCenterX - layout.width / 2f;
+
+        // C1: a revealed COMBAT / ELITE / CACHE / SHOP card states its threat and its reward instead.
+        promiseThreatText = "";
+        promiseRewardText = "";
+        if (focusNode != null && focusNode.revealed) {
+            NodeTypeDefinition definition = nodeTypes.get(focusNode.type);
+            if (definition.threatWord() != null && definition.rewardPromise() != null) {
+                promiseThreatText  = definition.threatWord();
+                promiseRewardText  = definition.rewardPromise();
+                promiseThreatColor = accentFor(focusNode);
+                layout.setText(font, promiseThreatText);
+                promiseThreatX = viewportCenterX - layout.width / 2f;
+                layout.setText(font, promiseRewardText);
+                promiseRewardX = viewportCenterX - layout.width / 2f;
+            }
+        }
     }
 
     private String truncateToWidth(String text, float scale, float maxWidth) {
@@ -1449,9 +1471,19 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
         // Legend hint — now rendered in the confirm bar's centre gap (between CANCEL and ENGAGE), since
         // the dedicated legend strip band was retired to give the map more vertical room.
-        if (!legendText.isEmpty()) {
+        float legendMiddleY = (RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + RouteMapConstants.CONFIRM_BAR_TOP_Y) / 2f;
+        if (!promiseThreatText.isEmpty()) {
+            // C1: threat word in the node's accent colour, reward promise in neutral grey.
             font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
-            float legendY = (RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + RouteMapConstants.CONFIRM_BAR_TOP_Y) / 2f + 6f;
+            setFont(promiseThreatColor, 1f);
+            font.draw(batch, promiseThreatText, promiseThreatX,
+                      legendMiddleY + RouteMapConstants.LEGEND_PROMISE_THREAT_OFFSET_Y);
+            setFont(palette.textDim, 0.95f);
+            font.draw(batch, promiseRewardText, promiseRewardX,
+                      legendMiddleY + RouteMapConstants.LEGEND_PROMISE_REWARD_OFFSET_Y);
+        } else if (!legendText.isEmpty()) {
+            font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
+            float legendY = legendMiddleY + 6f;
             setFont(regionTint, 0.95f);
             font.draw(batch, legendText, legendTextX, legendY);
         }

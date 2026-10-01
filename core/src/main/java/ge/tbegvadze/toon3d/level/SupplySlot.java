@@ -21,6 +21,8 @@ public final class SupplySlot {
     public final boolean onExitPath;
     /** Whether the owning room hosts an encounter group (S7 preference: reward the fight). */
     boolean groupRegion;
+    /** An anchor's own tile, offered to the anchor-bound reward weapon only (C2); never stamped with a symbol. */
+    boolean weaponOnly;
 
     public SupplySlot(int tileColumn, int tileRow, int regionId, int walkDistance,
                boolean reachableWithoutKeycard, boolean onExitPath) {

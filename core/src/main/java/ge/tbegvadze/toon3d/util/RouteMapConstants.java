@@ -339,6 +339,13 @@ public final class RouteMapConstants {
     public static final float REGION_TEXT_SCALE  = 1.0f;
     public static final float NODE_LABEL_SCALE   = 0.9f;
     public static final float LEGEND_TEXT_SCALE  = 0.95f;
+    /**
+     * The focused node's C1 supply promise (balance-overhaul order 2): two stacked lines in the confirm
+     * bar's centre gap — the threat word above (node accent colour), the reward promise below (grey).
+     * Baseline offsets from the bar's vertical middle.
+     */
+    public static final float LEGEND_PROMISE_THREAT_OFFSET_Y = 22f;
+    public static final float LEGEND_PROMISE_REWARD_OFFSET_Y = -6f;
     public static final float CONFIRM_LABEL_SCALE = 1.1f;
 
     // =========================================================================
@@ -512,16 +519,6 @@ public final class RouteMapConstants {
     // ---- SUPPLY CACHE (RouteNodeType.CACHE, profile "supply_cache") --------
     // BALANCE SHIMS (order 7): the cache payoff is an order-3 economy input now — it is priced in
     // the node EV ledger and bounded by R-CALM-COST, so the numbers live in BalanceConfig SECTION 19.
-    /** Ammo boxes stamped in the cargo bay, spread across the player's OWNED ammo types. */
-    public static final int   CACHE_AMMO_BOXES      = BalanceConfig.CACHE_AMMO_BOXES;
-    /** Guaranteed field medkits ('H') in a cache. */
-    public static final int   CACHE_MEDKITS         = BalanceConfig.CACHE_MEDKITS;
-    /** Guaranteed stim-packs ('+') in a cache (a small top-up alongside the medkit). */
-    public static final int   CACHE_STIMS           = BalanceConfig.CACHE_STIMS;
-    /** Guaranteed armour pickups in a cache (shard 'a' shallow, vest 'A' deep). */
-    public static final int   CACHE_ARMOUR          = BalanceConfig.CACHE_ARMOUR;
-    /** Depth at/after which the cache armour drop upgrades from a shard 'a' to a vest 'A'. */
-    public static final int   CACHE_ARMOUR_VEST_DEPTH = BalanceConfig.CACHE_ARMOUR_VEST_DEPTH;
     /** Crates ('C') stamped as depot set-dressing. */
     public static final int   CACHE_CRATES          = 3;
     /** Lockers ('L') stamped as depot set-dressing. */
@@ -558,19 +555,8 @@ public final class RouteMapConstants {
     // player arrives with, punishing if routed here low — that IS the gamble the map sells.
 
     // ---- ELITE HOTZONE (RouteNodeType.ELITE, profile "elite_hotzone") ------
-    /**
-     * Multiplier on the raw depth-scaled encounter budget for an ELITE floor. Above 1 so the fight is
-     * a mini-setpiece; the "fewer bodies, meaner enemies" fantasy is approximated by the planner
-     * spending a larger budget on higher-Threat enemies. Never bypasses the depth ramp (order-3
-     * invariant) — it scales the depth budget, it does not replace it. Clamped by EnemyBudgetOverride.
-     */
-    public static final float ELITE_BUDGET_SCALE       = BalanceConfig.ELITE_BUDGET_SCALE;
-    /** Ammo boxes stamped in the gated vault (priced against the threat premium, R-RISK-PREMIUM). */
-    public static final int   ELITE_AMMO_BOXES         = BalanceConfig.ELITE_AMMO_BOXES;
     /** Guaranteed field medkits ('H') behind the vault. */
     public static final int   ELITE_MEDKITS            = BalanceConfig.ELITE_MEDKITS;
-    /** Guaranteed stim-packs ('+') behind the vault. */
-    public static final int   ELITE_STIMS              = BalanceConfig.ELITE_STIMS;
     /** Guaranteed armour pickups behind the vault (shard 'a' shallow, vest 'A' deep). */
     public static final int   ELITE_ARMOUR             = BalanceConfig.ELITE_ARMOUR;
     /** Depth at/after which the ELITE armour drop upgrades from a shard 'a' to a vest 'A'. */

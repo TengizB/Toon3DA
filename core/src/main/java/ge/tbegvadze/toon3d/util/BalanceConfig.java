@@ -772,15 +772,9 @@ public final class BalanceConfig {
     // are gone). How MUCH ammo a floor holds is planned from its roster (SECTION 21, R-SUPPLY); the box
     // sizes above still set the grain.
 
-    // LEVER 5 — PER-REGION SUPPLY MULTIPLIER (new-game-balancr order 3): a per-region trim/boost on
-    // ammo SUPPLY so a region can be tuned without touching the global box sizes. Indexed by 0-based
-    // region (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); depths past the last entry clamp to it.
-    // WHY it is not all-1.0: SUPPLY rides the gear curve (steps ~+35%/region) while DEMAND rides enemy
-    // eHP (compounds ~+23%/region), so region 1's within-region dip needs a small boost and the deeper
-    // regions (gear outrunning eHP) need a small trim to hold the scarcity ratio S in [0.75, 0.95] at
-    // EVERY depth (R-SCARCITY-DEPTH). Verified by the SCARCITY depth-sweep in BalanceReport. Range per
-    // entry: 0.85–1.15. See docs/game-balance-authority.txt and new-game-balancr-order-3.txt.
-    public static final float[] AMMO_SUPPLY_REGION_MULTIPLIER = {1.03f, 1.00f, 0.98f, 0.98f, 1.10f};
+    // LEVER 5 (per-region AMMO_SUPPLY_REGION_MULTIPLIER) — DELETED by balance-overhaul order 2 (CP6):
+    // supply is planned from each floor's own roster demand, so it tracks demand at every depth by
+    // construction and no region trim is left for it to correct.
 
     // =====================================================================================
     // SECTION 6 — LOOT / PICKUP SPAWN CHANCES (the drop economy)
@@ -1159,14 +1153,8 @@ public final class BalanceConfig {
     public static final float HEAL_NET_DRAIN_FRACTION_MIN = 0.05f;
     public static final float HEAL_NET_DRAIN_FRACTION_MAX = 0.15f;
 
-    // --- PER-REGION HEAL SUPPLY MULTIPLIER (new-game-balancr order 3, part B): the heal-economy
-    // twin of AMMO_SUPPLY_REGION_MULTIPLIER — a per-region nudge on heal/armour SUPPLY, indexed the
-    // same way (clamped past the last entry). Defaults to 1.0: incoming damage, heal supply and the
-    // player's current-difficulty eHP all ride the enemy-damage curve, so the net-drain FRACTION is
-    // depth-stable (GameMath.netHpDrainFractionAtDepth) and R-HEALDRAIN-DEPTH holds at every depth
-    // 1..15 with no per-region tuning. The lever exists to shift a region's drain without touching
-    // the heal magnitudes in SECTION 1. Range per entry: 0.85–1.15.
-    public static final float[] HEAL_SUPPLY_REGION_MULTIPLIER = {1.00f, 1.00f, 1.00f, 1.03f, 1.10f};
+    // --- PER-REGION HEAL SUPPLY MULTIPLIER — DELETED by balance-overhaul order 2 (CP6): heals are
+    // planned per floor from its own incoming damage (SECTION 21, S3/S4); nothing reads a region nudge.
 
     // --- NEVER-SOFTLOCK (order 3, part D): the emergency ammo lifeline. When the player's TOTAL
     // remaining potential damage (all reserves * efficiency + melee) falls below the remaining floor
@@ -1755,12 +1743,8 @@ public final class BalanceConfig {
     public static final int[] WEAPON_DROP_TIER_MIN_BY_REGION = {0, 1, 2, 3};
     /** Per-region MAXIMUM dropped-weapon tier ordinal, indexed by region (clamped to last entry). */
     public static final int[] WEAPON_DROP_TIER_MAX_BY_REGION = {1, 2, 3, 5};
-    /**
-     * THE PITY RULE: every region must PLACE at least this many weapons at its tier band so no run is
-     * starved of its curve by RNG. RunStats tracks upgrades seen this region; the floor generator
-     * force-spawns one at a region's last floor if the region is about to end at zero. Range: 1–2.
-     */
-    public static final int   GUARANTEED_UPGRADE_PER_REGION = 1;
+    // THE PITY RULE (GUARANTEED_UPGRADE_PER_REGION) — DELETED by balance-overhaul order 2 (CP6): replaced by
+    // the two-floor weapon CADENCE (S9, RunStats.weaponCadenceDue -> LevelGenConfig.weaponCadenceDue).
 
     // =====================================================================================
     // SECTION 16 — SHOP ECONOMY (UAC Fabricator)
@@ -1967,11 +1951,6 @@ public final class BalanceConfig {
     /** Calm-but-not-empty floors (SHOP, MYSTERY vault): real but light resistance. Range: 0.4–0.6. */
     public static final float ROUTE_LIGHT_BUDGET_SCALE = 0.50f;
     /**
-     * ELITE floor budget: a mini-setpiece. Its REWARD must price up with it (R-RISK-PREMIUM),
-     * so raising this without raising the vault fails the audit. Range: 1.3–1.8.
-     */
-    public static final float ELITE_BUDGET_SCALE       = 1.5f;
-    /**
      * EVENT floor budget — ZERO, because EventRoomGenerator emits an empty spawn list by design
      * (a curated story beat in a ~135-tile room, not a dungeon to clear). Was 0.15f, which was a
      * DEAD number: the generator ignored it and the RouteEconomics EVENT row already priced the
@@ -2015,16 +1994,6 @@ public final class BalanceConfig {
     // A calm node buys safety with TEMPO and LOOT: its total EV must sit 10-30% BELOW a
     // standard combat node's. The order-8 hand-set payoffs sat far ABOVE it (a chained
     // cache/rest route sailed over the order-3 supply band), so they are re-priced here.
-    /** Ammo boxes stamped in a cache's cargo bay, spread across OWNED ammo types. Range: 1–3. */
-    public static final int   CACHE_AMMO_BOXES        = 2;
-    /** Guaranteed field medkits ('H') in a cache. */
-    public static final int   CACHE_MEDKITS           = 1;
-    /** Guaranteed stim-packs ('+') in a cache. */
-    public static final int   CACHE_STIMS             = 0;
-    /** Guaranteed armour pickups in a cache (shard 'a' shallow, vest 'A' deep). */
-    public static final int   CACHE_ARMOUR            = 0;
-    /** Depth at/after which the cache armour drop upgrades from a shard 'a' to a vest 'A'. */
-    public static final int   CACHE_ARMOUR_VEST_DEPTH = 6;
     /**
      * MED-BAY auto-doc one-shot heal, as a fraction of the player's max HP. Raised from the
      * order-8 hand-set 0.35: a REST node earns NO floor XP and almost no loot, so at 0.35 it
@@ -2041,12 +2010,8 @@ public final class BalanceConfig {
     public static final int   REST_ARMOUR_VEST_DEPTH  = 4;
 
     // --- D. ELITE PAYOFF (the vault the risk premium pays for, R-RISK-PREMIUM) ------------
-    /** Ammo boxes stamped in the gated vault. Range: 2–5. */
-    public static final int   ELITE_AMMO_BOXES        = 3;
     /** Guaranteed field medkits ('H') behind the vault. */
     public static final int   ELITE_MEDKITS           = 1;
-    /** Guaranteed stim-packs ('+') behind the vault. */
-    public static final int   ELITE_STIMS             = 1;
     /** Guaranteed armour pickups behind the vault (shard 'a' shallow, vest 'A' deep). */
     public static final int   ELITE_ARMOUR            = 1;
     /** Depth at/after which the ELITE armour drop upgrades from a shard 'a' to a vest 'A'. */
@@ -2135,6 +2100,13 @@ public final class BalanceConfig {
     // SHOP is not 1.0 either: its purchase is paid for at a fair price (GameMath.shopPrice), so only
     // the CHOOSE-EXACTLY-WHAT-YOU-NEED surplus over a random drop is credited.
     public static final float ROUTE_UPGRADE_OPPORTUNITY_COMBAT = 0.35f;
+    /**
+     * Balance-overhaul order 2: the upgrade opportunity ONE expected on-level weapon offer is worth.
+     * COMBAT / ELITE / CACHE rows derive theirs from their NodeSupplySpec weapons
+     * (GameMath.expectedOnLevelWeaponOffers x this), so a spec change re-prices the map. 0.70 keeps
+     * COMBAT (0.5 offers) at the historic 0.35.
+     */
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON = 0.70f;
     public static final float ROUTE_UPGRADE_OPPORTUNITY_ELITE  = 0.60f;
     public static final float ROUTE_UPGRADE_OPPORTUNITY_SHOP   = 0.30f;
     public static final float ROUTE_UPGRADE_OPPORTUNITY_CACHE  = 0.05f;
@@ -2144,16 +2116,8 @@ public final class BalanceConfig {
     public static final float ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS = 45f;
     /** HP a MALFUNCTION sector's failing hazards are expected to cost (the bad-but-survivable pull). */
     public static final float ROUTE_MALFUNCTION_HAZARD_HIT_POINTS   = 55f;
-    /** Ordinary-loot share a MALFUNCTION sector rolls (its config switches medkits/armour off). */
-    public static final float ROUTE_MALFUNCTION_LOOT_SCALE          = 0.5f;
     /** Share of an EVENT's payoff any single choice delivers, averaged over the v1 choice catalogue. */
     public static final float ROUTE_EVENT_EXPECTED_CHOICE_SHARE     = 0.40f;
-    /**
-     * Share of a standard floor's ORDINARY room loot a bespoke, curated small floor rolls
-     * (MED_BAY clinic, EVENT room, GATE airlock — a handful of rooms, not a full dungeon).
-     * Range: 0.2–0.6.
-     */
-    public static final float ROUTE_BESPOKE_FLOOR_LOOT_SCALE = 0.35f;
 
     // --- I. THE ROUTE BANDS (what the audit enforces) -------------------------------------
     /** R-RISK-PREMIUM: (reward premium)/(threat premium) — danger pays, slightly better than fair. */
@@ -2530,22 +2494,28 @@ public final class BalanceConfig {
     /** ELITE reward tier floor: the region's minimum drop tier plus this many steps. */
     public static final int   NODE_SUPPLY_ELITE_WEAPON_TIER_BONUS = 1;
 
-    public static final float NODE_SUPPLY_CACHE_THREAT        = 0.35f;
+    // CACHE threat 0.30, not the idea's 0.35 starting value: R-HONEST-SAFE caps a safe-looking node's
+    /** A6: an ELITE floor's spent Threat Points over a COMBAT floor's at the same depth (~1.6x). */
+    public static final float ELITE_THREAT_RATIO_MIN = 1.40f;
+    public static final float ELITE_THREAT_RATIO_MAX = 1.80f;
+
+    // threat ratio at ROUTE_HONEST_SAFE_MAX_THREAT_RATIO (0.30); bodies stay 0.35 (balance-overhaul o2 CP6).
+    public static final float NODE_SUPPLY_CACHE_THREAT        = 0.30f;
     public static final float NODE_SUPPLY_CACHE_BODIES        = 0.35f;
-    public static final float NODE_SUPPLY_CACHE_AMMO_RATIO    = 1.50f;
+    public static final float NODE_SUPPLY_CACHE_AMMO_RATIO    = 2.00f;
     /** CACHE: negative drain = the heals deliberately exceed the modelled incoming damage (a breather). */
-    public static final float NODE_SUPPLY_CACHE_DRAIN_TARGET  = -0.25f;
+    public static final float NODE_SUPPLY_CACHE_DRAIN_TARGET  = -1.25f;
     public static final float NODE_SUPPLY_CACHE_ARMOUR_SHARE  = 0.40f;
-    public static final float NODE_SUPPLY_CACHE_CREDITS       = 0.80f;
+    public static final float NODE_SUPPLY_CACHE_CREDITS       = 1.20f;
     public static final int   NODE_SUPPLY_CACHE_WEAPONS       = 1;
     public static final float NODE_SUPPLY_CACHE_WEAPON_CHANCE = 0.50f;
 
     public static final float NODE_SUPPLY_SHOP_THREAT         = 0.35f;
     public static final float NODE_SUPPLY_SHOP_BODIES         = 0.35f;
-    public static final float NODE_SUPPLY_SHOP_AMMO_RATIO     = 1.00f;
-    public static final float NODE_SUPPLY_SHOP_DRAIN_TARGET   = 0.00f;
+    public static final float NODE_SUPPLY_SHOP_AMMO_RATIO     = 2.00f;
+    public static final float NODE_SUPPLY_SHOP_DRAIN_TARGET   = -0.75f;
     public static final float NODE_SUPPLY_SHOP_ARMOUR_SHARE   = 0.20f;
-    public static final float NODE_SUPPLY_SHOP_CREDITS        = 1.00f;
+    public static final float NODE_SUPPLY_SHOP_CREDITS        = 2.00f;
 
     // REST / EVENT / MYSTERY / BOSS / REGION_GATE carry TODAY'S contents as a spec (order 6 retunes
     // REST / EVENT / MYSTERY). Their bespoke stock still rides the profiles' guarantees.
@@ -2557,14 +2527,6 @@ public final class BalanceConfig {
     public static final float NODE_SUPPLY_GATE_THREAT         = 0.00f;
 
     // --- AUDIT SWEEP (R-SUPPLY / R-DENSITY) ---------------------------------------------------
-    /**
-     * TEMPORARY (CP3c -> CP6): the route ledger's legacy model-floor box counts (the old 8 rooms x 0.20 room
-     * boxes and 12 kills x 0.10 kill boxes). The dice they described are gone; the route bands were fitted
-     * to them, so the ledger keeps them until CP6 re-derives it from the NodeSupplySpec rows.
-     */
-    public static final float ROUTE_MODEL_LEGACY_ROOM_AMMO_BOXES = 1.6f;
-    /** TEMPORARY (CP3c -> CP6): see ROUTE_MODEL_LEGACY_ROOM_AMMO_BOXES. */
-    public static final float ROUTE_MODEL_LEGACY_KILL_AMMO_BOXES = 1.2f;
 
     /** A2/A3: seeds per (generator x node type x depth) cell of the R-SUPPLY / R-DENSITY sweep. */
     public static final int   SUPPLY_AUDIT_SEED_COUNT = 30;

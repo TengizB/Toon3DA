@@ -3725,7 +3725,7 @@ public final class GameMath {
      *   region of regionBandSize depths (the SAME band the route map uses). The 0-based region index is:
      *       regionIndexAtDepth = floor((depth - 1) / regionBandSize)
      *   depths 1..5 -> region 0, 6..10 -> region 1, and so on. This is the shared index every
-     *   per-region lever (AMMO_SUPPLY_REGION_MULTIPLIER, HEAL_SUPPLY_REGION_MULTIPLIER, tier bands)
+     *   per-region lever (REGION_TP_BUDGET_MULTIPLIER, tier bands)
      *   reads, so no two of them can drift apart.
      * Edge cases:
      *   regionBandSize <= 0 -> treated as 1 (every depth is its own region) to avoid divide-by-zero.
@@ -3769,27 +3769,6 @@ public final class GameMath {
      */
     public static float floorDemandAtDepth(float modelFloorDemand, float healthScalePerDepth, int depth) {
         return modelFloorDemand * compoundDepthMultiplier(healthScalePerDepth, depth);
-    }
-
-    /*
-     * Formula: ammoSupplyAtDepth — the ranged damage a floor hands the player at depth d
-     * Derivation:
-     *   A floor's raw box count / box sizes are fixed, but each ammo unit buys MORE damage as the
-     *   player's weapon climbs the power ladder (balance-overhaul order 1). So the depth-1 model SUPPLY
-     *   rides the EXPECTED player's per-hit damage growth (expectedHitGrowthAtDepth — the same curve the
-     *   enemy HP growth is fitted to) times the per-region supply lever:
-     *       ammoSupplyAtDepth = modelFloorSupply * expectedHitGrowthAtDepth(d) * regionSupplyMultiplier(d)
-     *   DEMAND rides the enemy HP growth, which R-LADDER L1 holds within +/-15% of the hit growth, so S
-     *   stays near its depth-1 value; the region multiplier trims the residual per-region rarity wobble.
-     *   (Replaces the retired order-2 gear-curve step.)
-     * Edge cases:
-     *   Inherits perRegionMultiplierAtDepth edge cases; depth 1 with a 1.0 region multiplier reproduces
-     *   modelFloorSupply exactly.
-     */
-    public static float ammoSupplyAtDepth(float modelFloorSupply, float[] regionSupplyMultipliers,
-                                          int depth, int regionBandSize) {
-        float regionSupply = perRegionMultiplierAtDepth(regionSupplyMultipliers, depth, regionBandSize);
-        return modelFloorSupply * expectedHitGrowthAtDepth(depth) * regionSupply;
     }
 
     /*
@@ -3971,6 +3950,30 @@ public final class GameMath {
                                        float nodeBudgetScale, float affixBudgetMultiplier) {
         float threatCost = regionScaledFloorThreatPointBudget * nodeBudgetScale * affixBudgetMultiplier;
         return threatCost > 0f ? threatCost : 0f;
+    }
+
+    /*
+     * Formula: expectedOnLevelWeaponOffers — on-level weapons a floor's supply spec offers (S9)
+     * Derivation:
+     *   A spec drops `drops` weapons, each with probability `chance`, at an integer level offset drawn
+     *   uniformly from [offsetMin, offsetMax]. A weapon at offset >= 0 (level >= the floor's depth) is
+     *   the one that can be an UPGRADE (the cadence rule's "level >= d"). So
+     *       onLevelShare = |{o in [offsetMin, offsetMax] : o >= 0}| / (offsetMax - offsetMin + 1)
+     *       offers       = drops * chance * onLevelShare
+     *   COMBAT 1 @ -1..0 -> 0.5; ELITE 1 @ +1..+2 -> 1.0; CACHE 1 @ 0 at 50% -> 0.5.
+     * Edge cases: drops <= 0 or chance <= 0 -> 0; offsetMax < offsetMin is treated as the single
+     *   offset offsetMin; chance is clamped to [0, 1].
+     */
+    public static float expectedOnLevelWeaponOffers(int drops, float chance, int offsetMin, int offsetMax) {
+        if (drops <= 0 || chance <= 0f) {
+            return 0f;
+        }
+        int high = Math.max(offsetMin, offsetMax);
+        int width = high - offsetMin + 1;
+        int onLevel = Math.max(0, high - Math.max(0, offsetMin) + 1);
+        if (high < 0) onLevel = 0;
+        float share = (float) Math.min(onLevel, width) / width;
+        return drops * Math.min(1f, chance) * share;
     }
 
     /*

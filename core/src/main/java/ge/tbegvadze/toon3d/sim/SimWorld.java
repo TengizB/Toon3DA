@@ -517,6 +517,8 @@ public final class SimWorld implements LevelTransitionListener {
             }
         }
         effective.carriedAmmoTypes = carried;
+        // S9: the two-floor weapon cadence (mirrors World / RunStats.weaponCadenceDue).
+        effective.weaponCadenceDue = !lastNonBossFloorOfferedOnLevelWeapon;
         return effective;
     }
 
@@ -528,9 +530,13 @@ public final class SimWorld implements LevelTransitionListener {
         return effective;
     }
 
+    /** The two-floor weapon cadence (balance-overhaul order 2, S9; mirrors RunStats). */
+    private boolean lastNonBossFloorOfferedOnLevelWeapon = true;
+
     /** Rolls each weapon spawn point into a GroundItem with a real WeaponRoll (mirrors World). */
     private void buildGroundItems() {
         groundItems = new ArrayList<>();
+        boolean offeredOnLevelWeapon = false;
         for (WeaponSpawnPoint spawnPoint : level.getWeaponSpawnPoints()) {
             GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
                                                    spawnPoint.weaponItemType, 1);
@@ -541,9 +547,12 @@ public final class SimWorld implements LevelTransitionListener {
                         ? weaponRoller.rollPlannedToSnapshot(baseWeapon, currentDepth,
                                 spawnPoint.levelOffset, spawnPoint.tierBonus)
                         : weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+                if (groundItem.weaponRoll.weaponLevel >= currentDepth) offeredOnLevelWeapon = true;
             }
             groundItems.add(groundItem);
         }
+        // The weapon cadence (mirrors RunStats.recordFloorWeaponOffer): a boss floor neither pays nor breaks it.
+        if (!GameMath.isBossFloor(currentDepth)) lastNonBossFloorOfferedOnLevelWeapon = offeredOnLevelWeapon;
     }
 
     // =====================================================================================

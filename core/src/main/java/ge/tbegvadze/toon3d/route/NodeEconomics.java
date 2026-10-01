@@ -17,9 +17,8 @@ import java.util.Objects;
  *       depth ramp — the route-map DEPTH RAMP INVARIANT still holds.</li>
  *   <li><b>RESOURCES</b> — the guaranteed payoff ({@link #guaranteedAmmoBoxes()},
  *       {@link #guaranteedHealHitPoints()}, {@link #guaranteedHealEffectiveHitPointFraction()},
- *       {@link #creditDelta()}) plus {@link #ordinaryLootScale()}, the share of a standard
- *       floor's ORDINARY room loot this node's floor rolls (a bespoke one-room clinic rolls
- *       far fewer loot slots than a full dungeon).</li>
+ *       {@link #creditDelta()}) on top of the floor's ORDINARY supply, which is the node's
+ *       NodeSupplySpec plan (balance-overhaul order 2), not a field of the row.</li>
  *   <li><b>PROGRESS</b> — {@link #upgradeOpportunity()}: the share of one reliable weapon-class
  *       upgrade this node offers. Floor XP is DERIVED from the threat actually faced, so it needs
  *       no field.</li>
@@ -51,7 +50,6 @@ public final class NodeEconomics {
     private final String        displayName;
     private final RouteNodeType nodeType;
     private final float         budgetScale;
-    private final float         ordinaryLootScale;
     private final float         guaranteedAmmoBoxes;
     private final float         guaranteedHealHitPoints;
     private final float         guaranteedHealEffectiveHitPointFraction;
@@ -70,7 +68,6 @@ public final class NodeEconomics {
         this.displayName         = builder.displayName == null ? builder.id : builder.displayName;
         this.nodeType            = builder.nodeType;
         this.budgetScale         = builder.budgetScale;
-        this.ordinaryLootScale   = builder.ordinaryLootScale;
         this.guaranteedAmmoBoxes = builder.guaranteedAmmoBoxes;
         this.guaranteedHealHitPoints                 = builder.guaranteedHealHitPoints;
         this.guaranteedHealEffectiveHitPointFraction = builder.guaranteedHealEffectiveHitPointFraction;
@@ -111,11 +108,6 @@ public final class NodeEconomics {
      */
     public float budgetScale() {
         return budgetScale;
-    }
-
-    /** Share of a standard floor's ORDINARY (room + kill sourced) loot this node's floor rolls. */
-    public float ordinaryLootScale() {
-        return ordinaryLootScale;
     }
 
     /** Guaranteed ammo boxes this subject stamps (owned-ammo vault / depot payout). */
@@ -191,7 +183,7 @@ public final class NodeEconomics {
 
     /** Starts an AFFIX row (a threat/reward modifier folded onto its host node). */
     public static Builder affix(String id) {
-        return new Builder(Kind.AFFIX, id).budgetScale(1f).ordinaryLootScale(0f);
+        return new Builder(Kind.AFFIX, id).budgetScale(1f);
     }
 
     /** Starts a MYSTERY_OUTCOME row of the hidden table. */
@@ -206,7 +198,6 @@ public final class NodeEconomics {
         private String        displayName;
         private RouteNodeType nodeType;
         private float         budgetScale       = 1f;
-        private float         ordinaryLootScale = 1f;
         private float         guaranteedAmmoBoxes;
         private float         guaranteedHealHitPoints;
         private float         guaranteedHealEffectiveHitPointFraction;
@@ -236,11 +227,6 @@ public final class NodeEconomics {
 
         public Builder budgetScale(float budgetScale) {
             this.budgetScale = budgetScale;
-            return this;
-        }
-
-        public Builder ordinaryLootScale(float ordinaryLootScale) {
-            this.ordinaryLootScale = ordinaryLootScale;
             return this;
         }
 

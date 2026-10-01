@@ -146,6 +146,7 @@ public final class RouteRegistries {
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_COMBAT)
                 .dangerTier(DangerTier.STANDARD).accentColorId("combat")
                 .forced(false).levelProfileId("combat_standard").iconPainterId("icon_combat")
+                .supplyPromise("RESISTANCE", "STANDARD SUPPLY")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.ELITE)
@@ -154,22 +155,25 @@ public final class RouteRegistries {
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_ELITE)
                 .dangerTier(DangerTier.DANGER).accentColorId("elite")
                 .forced(false).levelProfileId("elite_hotzone").iconPainterId("icon_elite")
+                .supplyPromise("HEAVY RESISTANCE", "WEAPON +2 LV, RARE+")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.CACHE)
                 .id("cache").displayName("SUPPLY CACHE")
-                .hintLine("Guaranteed ammo + medkit. Light resistance.")
+                .hintLine("Light resistance. A supply surplus to restock.")
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_CACHE)
                 .dangerTier(DangerTier.CALM).accentColorId("cache")
                 .forced(false).levelProfileId("supply_cache").iconPainterId("icon_cache")
+                .supplyPromise("LIGHT RESISTANCE", "SUPPLIES")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.SHOP)
                 .id("shop").displayName("BLACK MARKET")
-                .hintLine("Spend credits on gear. No threat.")
+                .hintLine("Spend credits on gear. Light resistance.")
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_SHOP)
                 .dangerTier(DangerTier.CALM).accentColorId("shop")
                 .forced(false).levelProfileId("shop").iconPainterId("icon_shop")
+                .supplyPromise("LIGHT RESISTANCE", "FABRICATORS")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.REST)

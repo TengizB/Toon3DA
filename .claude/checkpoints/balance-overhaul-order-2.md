@@ -75,7 +75,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: R-DENSITY (bodies/shape/contact) green; A5 partly (contact, count).
 - [x] **CP5** — footprint targets in the three combat generators.
       DONE WHEN: R-DENSITY footprint + density green; A3, A5 hold.
-- [ ] **CP6** — node specs drive COMBAT/ELITE/CACHE/SHOP contents; weapon cadence replaces the pity
+- [x] **CP6** — node specs drive COMBAT/ELITE/CACHE/SHOP contents; weapon cadence replaces the pity
       rule; route economics re-derived; node card lines drawn.
       DONE WHEN: route economics tests green; A6 holds.
 - [ ] **CP7** — sim FLOOR REPORT, S-SUPPLY + re-based S-ECONOMY; all docs updated; reviewer PASS.
@@ -237,3 +237,25 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **NEXT (CP6):** profiles set `config.supplySpec`; drop node-type EnemyBudgetOverride + ELITE/CACHE pickup
   guarantees + AmmoCacheRequest; weapon cadence replaces the pity rule; route economics from specs (delete
   ROUTE_MODEL_LEGACY_*); node card C1 lines; A6 audit.
+- **CP6 handover:** profiles set `config.supplySpec` (ELITE/CACHE/SHOP; COMBAT default; SHOP not on a boss
+  depth); node-type budget overrides + pickup guarantees gone (props, shop machines, MYSTERY outcomes, affix
+  extras stay — an affix's budget is an EXTRA multiplier, its vault boxes still use AmmoCacheRequest). Cadence:
+  `RunStats.weaponCadenceDue()/recordFloorWeaponOffer(boss, offeredOnLevel)` -> `config.weaponCadenceDue`
+  (World.applyFloorSupplyInputs; SimWorld mirrors with a field). Ledger: `RouteEconomicsModel.supplySpecFor(row)`
+  (NODE -> own type, MYSTERY_OUTCOME -> MYSTERY) + `SupplyPlanner.plannedHealFraction/plannedArmourFraction/
+  plannedCreditChips` (shared with plan()); `ModelFloor(demand, boxDamage, incoming, killCredits)`;
+  `RouteEconomics.floorWeaponUpgradeOpportunity(spec)`. `SupplyPlanner.place(..., anchorRegion, anchorWalkDistance,
+  half, seed)`; anchor-bound WEAPON placed before vault ammo; `SupplySlot.weaponOnly` anchor-tile slot.
+  `BalanceSchema.eliteRewardResults()` (A6) + test `everyEliteFloorPaysItsThreatWithAWeaponBehindTheAnchor`;
+  BalanceReport ELITE PROMISE table. C1: `NodeTypeDefinition.supplyPromise(...)`, drawn by
+  RouteMapOverlayRenderer in the confirm bar when a revealed node is focused.
+- **CP6 decisions (spec numbers moved, recorded in the authority change log):** CACHE threat 0.30 (R-HONEST-SAFE);
+  CACHE ammo 2.0 / drain -1.25 / credits 1.2; SHOP ammo 2.0 / drain -0.75 / credits 2.0 (R-CALM-COST).
+  WAIVERS: R-CALM-COST rest + event (order 6). OWNER FLAG: ELITE card says "RARE+" but the tier floor is
+  region-min + 1 (UNCOMMON+ in region A) — copy is the idea's; flag in the final report.
+- **CP6 gates:** core:test 453 tests, only the pre-existing StoryBarkTest failure; snapshot unchanged
+  (COMBAT default path). balanceSim exit 0 — TACTICAL 167/200 stalled (152 at CP5), median 1 (WAIVED),
+  emergency lifeline 0.02.
+- **NEXT (CP7):** sim FLOOR REPORT (SimReport), S-SUPPLY band + re-based S-ECONOMY (BehavioralBands / BalanceSimTest
+  / BalanceSchema), docs (procedural-level-generation, enemy-system carriers, knowledge SECTIONS 11/12 + living
+  tables), reviewer gate, STATUS IMPLEMENTED.

@@ -16,7 +16,7 @@ import java.util.List;
  * <ul>
  *   <li>Builds a normal combat-style floor (a deterministic pick from the standard generator pool, or
  *       the pre-rolled generator if the node carries one).</li>
- *   <li>Lowers the encounter budget via {@link EnemyBudgetOverride#light()} — light resistance, never
+ *   <li>Lowers the encounter via the SHOP {@link NodeSupplySpec} (balance-overhaul order 2) — light resistance, never
  *       depth-frozen (the depth ramp is still applied first).</li>
  * </ul>
  *
@@ -43,10 +43,14 @@ public final class ShopProfile implements NodeLevelProfile {
     public LevelPlan resolve(RouteNode node, int depth, long seed) {
         GeneratorId generatorId = resolveGeneratorId(node, depth, seed);
         LevelGenConfig config = new LevelGenConfig();
+        // Calm-but-not-empty: the SHOP NodeSupplySpec (balance-overhaul order 2) keeps light resistance
+        // (0.35x threat and bodies) so it isn't a free heal, but never a full fight. A boss depth keeps the
+        // arena's own spec.
+        if (generatorId != GeneratorId.BOSS_ARENA) {
+            config.supplySpec = RouteRegistries.nodeSupplySpecs().get(RouteNodeType.SHOP);
+        }
         List<GuaranteedContent> guarantees = Collections.emptyList();
-        // Calm-but-not-empty: the shop keeps light resistance so it isn't a free heal, but never a
-        // full fight. The budget is still a function of raw depth (scaled, not frozen).
-        return new LevelPlan(generatorId, config, guarantees, EnemyBudgetOverride.light());
+        return new LevelPlan(generatorId, config, guarantees);
     }
 
     private GeneratorId resolveGeneratorId(RouteNode node, int depth, long seed) {

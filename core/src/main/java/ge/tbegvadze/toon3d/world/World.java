@@ -1219,8 +1219,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /**
      * Folds the floor-build inputs the order-2 SupplyPlanner reads into the generator config (never
-     * null afterwards): the ammo types of the weapons the player carries right now (S2's 70/30 split).
-     * Supply never reads the player's current HP or ammo COUNT (AS1) — only which weapons they hold.
+     * null afterwards): the ammo types of the weapons the player carries right now (S2's 70/30 split) and
+     * whether the two-floor weapon cadence is due (S9). Supply never reads the player's current HP or ammo COUNT (AS1) — only which weapons they hold.
      */
     private LevelGenConfig applyFloorSupplyInputs(LevelGenConfig config) {
         LevelGenConfig effective = config != null ? config : new LevelGenConfig();
@@ -1230,6 +1230,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (ammoType != null) carried.add(ammoType);
         }
         effective.carriedAmmoTypes = carried;
+        // S9: the two-floor weapon cadence (the previous non-boss floor offered no on-level weapon).
+        effective.weaponCadenceDue = runStats.weaponCadenceDue();
         return effective;
     }
 
@@ -1577,11 +1579,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // its band (region 1 COMMON..UNCOMMON, region 2 UNCOMMON..RARE, ...), so the arsenal the game
         // supplies keeps pace with the expected gear curve — finding better weapons is what survives.
         groundItems = new java.util.ArrayList<>();
-        // THE PITY RULE: track upgrades placed this region so a region never ends starved of its curve.
-        int upgradeRegionIndex = Math.max(0, currentDepth - 1) / BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        runStats.enterUpgradeRegion(upgradeRegionIndex);
-        GroundItem firstWeaponGroundItem = null;
-        Weapon     firstWeaponBase       = null;
+        // THE WEAPON CADENCE (balance-overhaul order 2, S9): note whether this floor offered a weapon at
+        // level >= its depth, so the next non-boss floor's plan can owe one if it did not.
+        boolean offeredOnLevelWeapon = false;
         for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
             GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
                                                    spawnPoint.weaponItemType, 1);
@@ -1596,25 +1596,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                         ? weaponRoller.rollPlannedToSnapshot(baseWeapon, currentDepth,
                                 spawnPoint.levelOffset, spawnPoint.tierBonus)
                         : weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
-                if (firstWeaponGroundItem == null) {
-                    firstWeaponGroundItem = groundItem;
-                    firstWeaponBase       = baseWeapon;
-                }
-                if (isWeaponUpgrade(groundItem.weaponRoll)) {
-                    runStats.recordWeaponUpgradeSeen();
+                if (groundItem.weaponRoll != null && groundItem.weaponRoll.weaponLevel >= currentDepth) {
+                    offeredOnLevelWeapon = true;
                 }
             }
             groundItems.add(groundItem);
         }
-        // On a region's LAST floor, if no in-band upgrade was placed all region, force one onto the
-        // floor's first weapon drop so the run is never starved of its gear curve by RNG (the pity rule).
-        boolean regionLastFloor = currentDepth % BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE == 0;
-        if (regionLastFloor && runStats.regionUpgradeQuotaUnmet()
-                && firstWeaponGroundItem != null && firstWeaponBase != null) {
-            firstWeaponGroundItem.weaponRoll =
-                    weaponRoller.rollGuaranteedUpgradeToSnapshot(firstWeaponBase, currentDepth);
-            runStats.recordWeaponUpgradeSeen();
-        }
+        runStats.recordFloorWeaponOffer(GameMath.isBossFloor(currentDepth), offeredOnLevelWeapon);
         // The starting room's weapon/melee offer tiles aren't registered as ground items yet
         // (setupStartRoomWeaponOffers runs after this method returns), so reserve them here
         // to keep credit chips from landing on the same tile as a weapon offer. Every open
@@ -5267,16 +5255,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         melee.setPlayerAccuracyMultiplier(playerStats.getAccuracyMultiplier());
         weaponRoller.configureRunStart(melee);
         return melee;
-    }
-
-    /**
-     * Whether a rolled weapon drop counts as a real UPGRADE for the pity rule (new-game-balancr
-     * order 2): a tier of UNCOMMON or better. COMMON drops are vanilla and do not satisfy a region's
-     * guaranteed-upgrade quota.
-     */
-    private boolean isWeaponUpgrade(WeaponRoll weaponRoll) {
-        return weaponRoll != null
-                && weaponRoll.tier.ordinal() >= WeaponRoller.upgradeTierThreshold().ordinal();
     }
 
     /**

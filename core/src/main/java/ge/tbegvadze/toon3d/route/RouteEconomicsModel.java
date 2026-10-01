@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.level.SupplyPlanner;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.ExpectedPlayer;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -17,9 +19,9 @@ import java.util.List;
  * <ul>
  *   <li>THREAT — {@code GameMath.regionScaledFloorThreatPointBudget} x the node's budget scale
  *       (and its affix multiplier), via {@code GameMath.nodeThreatCost}.</li>
- *   <li>AMMO — the order-3 supply/demand curves ({@code ammoSupplyAtDepth},
- *       {@code floorDemandAtDepth}), split into the ROOM-sourced share (constant per floor) and the
- *       KILL-sourced share (which follows the roster, so it follows the budget scale).</li>
+ *   <li>AMMO — the roster's demand ({@code floorDemandAtDepth}) x the node's NodeSupplySpec ammo
+ *       ratio (+ an ELITE vault's): the same plan {@code level/SupplyPlanner} builds the floor with
+ *       (balance-overhaul order 2), so supply follows the roster, and so the budget scale.</li>
  *   <li>HP — the order-3 heal economy ({@code incomingDamagePerFloor} / {@code healSupplyPerFloor}
  *       baselines), measured as a fraction of the player's CURRENT-difficulty eHP, which is why the
  *       shared enemy-damage depth factor is divided back out.</li>
@@ -47,35 +49,25 @@ public final class RouteEconomicsModel {
      */
     public static final class ModelFloor {
         public final float demandDamage;
-        public final float roomSourcedSupplyDamage;
-        public final float killSourcedSupplyDamage;
         public final float averageAmmoBoxDamage;
         public final float incomingHitPoints;
-        public final float healSupplyHitPoints;
         public final float killCredits;
-        public final float chipCredits;
 
         /**
-         * @param demandDamage             sum of the model floor's enemy eHP (what a floor costs in ammo)
-         * @param roomSourcedSupplyDamage  ammo damage the floor's ROOMS supply (independent of the roster)
-         * @param killSourcedSupplyDamage  ammo damage the floor's KILLS supply (follows the roster)
-         * @param averageAmmoBoxDamage     damage one guaranteed ammo box is worth
-         * @param incomingHitPoints        HP the model floor's roster lands on the player
-         * @param healSupplyHitPoints      HP the model floor's medkit/armour pickups restore
-         * @param killCredits              credits the model floor's roster pays out
-         * @param chipCredits              credit-chip income placed on any floor (roster-independent)
+         * The floor's SUPPLY is not an input any more (balance-overhaul order 2): every node's ammo, heals,
+         * armour and chips are planned from its roster by its NodeSupplySpec, exactly as the floor is built.
+         *
+         * @param demandDamage          sum of the model floor's enemy eHP (what a floor costs in ammo)
+         * @param averageAmmoBoxDamage  depth-1 damage one guaranteed ammo box is worth (mean over the types)
+         * @param incomingHitPoints     HP the model floor's roster lands on the player
+         * @param killCredits           credits the model floor's roster pays out
          */
-        public ModelFloor(float demandDamage, float roomSourcedSupplyDamage, float killSourcedSupplyDamage,
-                          float averageAmmoBoxDamage, float incomingHitPoints, float healSupplyHitPoints,
-                          float killCredits, float chipCredits) {
-            this.demandDamage              = demandDamage;
-            this.roomSourcedSupplyDamage   = roomSourcedSupplyDamage;
-            this.killSourcedSupplyDamage   = killSourcedSupplyDamage;
-            this.averageAmmoBoxDamage      = averageAmmoBoxDamage;
-            this.incomingHitPoints         = incomingHitPoints;
-            this.healSupplyHitPoints       = healSupplyHitPoints;
-            this.killCredits               = killCredits;
-            this.chipCredits               = chipCredits;
+        public ModelFloor(float demandDamage, float averageAmmoBoxDamage, float incomingHitPoints,
+                          float killCredits) {
+            this.demandDamage         = demandDamage;
+            this.averageAmmoBoxDamage = averageAmmoBoxDamage;
+            this.incomingHitPoints    = incomingHitPoints;
+            this.killCredits          = killCredits;
         }
     }
 
@@ -214,7 +206,7 @@ public final class RouteEconomicsModel {
         int   band       = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
         float affixScale = affix == null ? 1f : affix.budgetScale();
         float rosterScale = row.budgetScale() * affixScale;
-        float lootScale   = row.ordinaryLootScale();
+        NodeSupplySpec spec = supplySpecFor(row);
 
         // --- THREAT: the depth- and region-ramped budget this node's roster spends.
         float floorBudget = GameMath.regionScaledFloorThreatPointBudget(
@@ -223,30 +215,38 @@ public final class RouteEconomicsModel {
                 band) * BalanceConfig.ENCOUNTER_BUDGET_FILL_TARGET_FRACTION;
         float threatCost = GameMath.nodeThreatCost(floorBudget, row.budgetScale(), affixScale);
 
-        // --- AMMO: room-sourced supply is roster-independent, kill-sourced supply follows the roster.
-        float ordinarySupplyBase = floor.roomSourcedSupplyDamage + floor.killSourcedSupplyDamage * rosterScale;
-        float supplyDamage = GameMath.ammoSupplyAtDepth(ordinarySupplyBase * lootScale,
-                BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
+        // --- AMMO (balance-overhaul order 2, S2): the floor's supply is PLANNED from its roster — the node
+        // spec's ammo ratio (plus an ELITE vault's) times the demand the roster brings — so it tracks
+        // demand at every depth by construction. Guaranteed boxes (an affix's vault premium, a MYSTERY
+        // outcome's cache) ride on top at the on-curve box value.
+        float demandDamage = GameMath.floorDemandAtDepth(floor.demandDamage,
+                BalanceConfig.ENEMY_HEALTH_GROWTH, depth) * rosterScale;
+        // A BOSS arena plans the R-BOSS-AMMO budget (a fraction of the boss's eHP, its whole demand).
+        float ammoRatio = spec.bossArenaAmmo() ? BalanceConfig.BOSS_ARENA_AMMO_BUDGET_FRACTION
+                                               : spec.ammoRatio() + spec.vaultAmmoRatio();
+        float supplyDamage = demandDamage * ammoRatio;
         float guaranteedBoxes = row.guaranteedAmmoBoxes() + (affix == null ? 0f : affix.guaranteedAmmoBoxes());
         supplyDamage += guaranteedBoxes * floor.averageAmmoBoxDamage
                 * GameMath.expectedHitGrowthAtDepth(depth);
-        float demandDamage = GameMath.floorDemandAtDepth(floor.demandDamage,
-                BalanceConfig.ENEMY_HEALTH_GROWTH, depth) * rosterScale;
 
         // --- HP: read in depth-1 eHP terms. Incoming rides the enemy-damage growth, which the power ladder
         // FITS to the expected player's eHP growth (R-LADDER L1), and every heal is a FRACTION of max
-        // HP/armour (R10), so heals ride the player too — the shared depth factor cancels and every term,
-        // guaranteed pickups included, is priced at its depth-1 value (balance-overhaul order 1; the old
-        // division of FLAT guaranteed medkits by the damage curve is gone with the flat medkits).
-        float healRegionMultiplier = GameMath.perRegionMultiplierAtDepth(
-                BalanceConfig.HEAL_SUPPLY_REGION_MULTIPLIER, depth, band);
+        // HP/armour (R10), so heals ride the player too — the shared depth factor cancels and every term is
+        // priced at its depth-1 value. The planned heal + armour come from the SAME SupplyPlanner formulas
+        // the floor is built with (S3 / S4: incoming x (1 - drainTarget), never below the heal floor).
         float incomingHitPoints = floor.incomingHitPoints * rosterScale;
-        float healHitPoints = floor.healSupplyHitPoints * lootScale * healRegionMultiplier
+        ExpectedPlayer depthOnePlayer = GameMath.expectedPlayerAtDepth(1);
+        float maximumHealth = Math.max(1f, depthOnePlayer.maxHealth);
+        float incomingFraction = incomingHitPoints / maximumHealth;
+        float plannedHealHitPoints = (SupplyPlanner.plannedHealFraction(spec, incomingFraction, depthOnePlayer)
+                + SupplyPlanner.plannedArmourFraction(spec, incomingFraction, depthOnePlayer)) * maximumHealth;
+        float healHitPoints = plannedHealHitPoints
                 + (row.guaranteedHealHitPoints() + (affix == null ? 0f : affix.guaranteedHealHitPoints()))
                 + row.guaranteedHealEffectiveHitPointFraction() * BalanceConfig.REFERENCE_PLAYER_EHP;
 
-        // --- CREDITS: chips are placed on any floor; kill bounty follows the roster and grows with depth.
-        float credits = floor.chipCredits * lootScale
+        // --- CREDITS: the spec's planned chips (S8) plus the kill bounty, which follows the roster and
+        // grows with depth.
+        float credits = SupplyPlanner.plannedCreditChips(spec) * Math.round(SupplyPlanner.averageCreditChipValue())
                 + floor.killCredits * rosterScale * (1f + BalanceConfig.CREDIT_DEPTH_SCALE * (depth - 1))
                 + row.creditDelta();
 
@@ -293,6 +293,17 @@ public final class RouteEconomicsModel {
         return new NodePrice(row.id(), row.displayName(), threatCost, supplyDamage, demandDamage,
                 incomingHitPoints, healHitPoints, experiencePoints, resourceDelta, progress,
                 reward, expectedValue);
+    }
+
+    /**
+     * The supply spec a row's floor is BUILT with (balance-overhaul order 2): a NODE row's own type, a
+     * MYSTERY outcome the MYSTERY row's (the outcome scales the roster, the planner still plans the floor).
+     * One source — the ledger can never price a floor the generator does not build.
+     */
+    static NodeSupplySpec supplySpecFor(NodeEconomics row) {
+        RouteNodeType type = row.kind() == NodeEconomics.Kind.MYSTERY_OUTCOME ? RouteNodeType.MYSTERY
+                : row.nodeType() != null ? row.nodeType() : RouteNodeType.COMBAT;
+        return RouteRegistries.nodeSupplySpecs().getOrCombat(type);
     }
 
     /** The threat ratio a node reads against a standard COMBAT node at the same depth (drives the pips). */

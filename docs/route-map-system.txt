@@ -332,22 +332,20 @@ REST_* / HEAL_STATION_SYMBOL) and LevelGenConstants (MED_BAY_*).
 SUPPLY CACHE  (RouteNodeType.CACHE, profile "supply_cache", CacheProfile)
   A UAC forward depot. Reuses a STANDARD generator (fixed to ROOMS_MST for a tidy depot read) with a
   bright, hazard-free config (no unlit/flicker floors, no radioactive barrels; crates + lockers + one
-  cargo bay + columns; medkit/armour chances bumped). Budget = EnemyBudgetOverride.calm() (light
-  chaff, never elite, never zero — a cache is not a free heal; depth ramp still applied first).
-  Guaranteed payoff (post-generation, FARTHEST_ROOM = the deep cargo bay, deterministic from floorSeed).
-  Every count is a BalanceConfig SECTION 19 value, priced by R-CALM-COST (order-7 re-priced them DOWN:
-  a chained cache route used to sail above the order-3 supply band):
+  cargo bay + columns). Threat + supply = the CACHE NodeSupplySpec (balance-overhaul order 2): a light
+  roster (0.30x threat, 0.35x bodies — never zero, a cache is not a free heal) and a net-GAIN plan of
+  ammo (split 70/30 by the weapons the player carries), heals, armour, chips and a 50% weapon at the
+  floor's level, all placed by the shared FloorPopulator. The profile only adds set dressing:
     - brightenFloors() TILE_THEME so the depot never reads unsafe
-    - CACHE_MEDKITS 'H' + CACHE_STIMS '+'   (v1: 1 medkit, 0 stims)
-    - CACHE_ARMOUR: 'a' shard shallow, 'A' vest from depth CACHE_ARMOUR_VEST_DEPTH (v1: 0)
-    - CACHE_CRATES 'C' + CACHE_LOCKERS 'L' as set dressing
-    - CACHE_AMMO_BOXES ammo boxes across the player's OWNED ammo types (v1: 2 — smart ammo, see below)
+    - CACHE_CRATES 'C' + CACHE_LOCKERS 'L'
   The reliable WEAPON payout is the ELITE node; the cache stays about consumables so the two read
   distinctly.
 
   SMART (owned-aware) AMMO — the LevelPlan.ammoCache seam:
     A profile can't see the arsenal (resolve() has no player state), and a GuaranteedContent only gets
-    the Level. So CacheProfile attaches an AmmoCacheRequest (count + Placement) to its LevelPlan, and
+    the Level. So a profile attaches an AmmoCacheRequest (count + Placement) to its LevelPlan — since
+    balance-overhaul order 2 only MYSTERY outcomes and ELITE affix vault premiums do (CACHE / ELITE base
+    ammo is the spec plan, already split by the carried weapons) — and
     World.fulfillAmmoCache reads the loadout's ammo types (Weapon.getAmmoType -> pickupTileChar),
     distributes the boxes evenly across the OWNED symbols (falling back to all 5 types for a melee-only
     run), and stamps via GuaranteedContentStamper. Owned-logic lives in World (which legitimately owns
@@ -403,12 +401,12 @@ ELITE HOTZONE  (RouteNodeType.ELITE, profile "elite_hotzone", EliteProfile)
   pre-rolled combat generator (the SHAPE is a normal floor; the danger is budget + affix + hazards).
   Config: radioactive barrels up (ELITE_RADIOACTIVE_BARREL_WEIGHT), an arena room, flicker/unlit dread,
   lock-and-key ON so clearing the floor can literally unlock the vault. FloorEffects = redAlert +
-  ELITE_STING_TEXT. Budget = ELITE_BUDGET_SCALE of the raw depth budget (a mini-setpiece). Reward
-  (~1.5x, GATED_ROOM = deep vault, deterministic from floorSeed): an owned-ammo vault (ELITE_AMMO_BOXES
-  via the same AmmoCacheRequest seam as CACHE), a depth-scaled armour drop ('a' shard / 'A' vest from
-  ELITE_ARMOUR_VEST_DEPTH), medkits/stims, a weapon-rack '=' display, cover columns 'P'. (A true
-  guaranteed WEAPON SPAWN is a future upgrade — weapon spawns come from WeaponSpawnPoints, not stampable
-  tiles — so the reliable payout is the ammo/armour/consumable vault + the rack as its visual promise.)
+  ELITE_STING_TEXT. Threat + reward = the ELITE NodeSupplySpec (balance-overhaul order 2): 1.6x threat
+  through the shared encounter planner (a WARBAND anchor), a vault ammo share, the guaranteed vest, and
+  ONE reward weapon at level d+1..d+2 with a tier floor one above the region minimum, placed IN OR PAST
+  the anchor group's room (on the anchor's own tile when the group fills its room) and tinted by the
+  existing ground rarity glow. The profile only dresses the vault: a weapon-rack '=' display and cover
+  columns 'P'. An affix multiplies the spec's threat and may add vault boxes (AmmoCacheRequest).
 
   NODE AFFIXES (NodeAffixRegistry + NodeAffixDefinition):
     Rolled at MAP-GEN (RouteMapGenerator.rollAffix, AFFIX_ROLL_CHANCE_ELITE, from the node's affix
@@ -462,14 +460,28 @@ was hand-set outside the floor economy — so the game the audit checked (a floo
 player plays (a JOURNEY of chosen nodes) were different games. Now every node the map can offer
 carries a PRICE, and the journey itself is audited.
 
+RE-DERIVED FROM THE NODE SPECS (balance-overhaul order 2, CP6): every row is now priced on the
+NodeSupplySpec its floor is BUILT with, through the same SupplyPlanner formulas — ammo = roster demand x
+(ammoRatio + vault ratio), heals + armour = plannedHealFraction / plannedArmourFraction of the row's
+incoming damage, chips = plannedCreditChips. COMBAT / ELITE / CACHE / SHOP take their threat from the
+spec and COMBAT / ELITE / CACHE their upgrade opportunity from the spec's weapons
+(GameMath.expectedOnLevelWeaponOffers x ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON). The
+ordinaryLootScale field below is GONE (a floor's ordinary loot IS its spec plan). See the authority
+doc's CP6 change-log entry for the tuned spec numbers and the REST / EVENT R-CALM-COST waivers.
+
+ROUTE CARD SUPPLY PROMISE (C1): NodeTypeDefinition.supplyPromise(threatWord, rewardPromise) — COMBAT
+"RESISTANCE" / "STANDARD SUPPLY", ELITE "HEAVY RESISTANCE" / "WEAPON +2 LV, RARE+", CACHE "LIGHT
+RESISTANCE" / "SUPPLIES", SHOP "LIGHT RESISTANCE" / "FABRICATORS". When a revealed node carrying one is
+focused, RouteMapOverlayRenderer draws the two lines in the confirm bar's centre gap instead of the hint
+line: the threat word in the node's accent colour, the reward promise in neutral grey
+(LEGEND_PROMISE_*_OFFSET_Y). Nodes without a promise keep their hint line.
+
 THE NODE EV LEDGER (route/NodeEconomics + NodeEconomicsRegistry + RouteEconomics)
   One NodeEconomics row per NODE TYPE, per ELITE AFFIX and per MYSTERY OUTCOME, registered in
   route/RouteEconomics exactly like a node type or an affix. A row declares:
     budgetScale        threat: its multiplier on the raw depth-scaled Threat-Point budget (1.0 ==
                        a standard COMBAT floor). Priced at what the floor ACTUALLY spawns — MED_BAY /
                        EVENT_ROOM / GATE_AIRLOCK emit ZERO spawn points, so those rows price 0.
-    ordinaryLootScale  the share of a standard floor's ordinary room/kill loot its floor rolls (a
-                       bespoke one-room clinic rolls far fewer loot slots than a full dungeon).
     guaranteed*        its payoff: ammo boxes, flat healing, eHP-fraction healing, credits, XP.
     upgradeOpportunity the share of ONE weapon-class upgrade it reliably offers.
   util/RouteEconomicsModel folds a row into one comparable EV (GameMath.nodeExpectedValue) using the
@@ -507,8 +519,8 @@ ROUTE GUARANTEES AT MAP-GEN (RouteMapGenerator.repairBandGuarantees — a determ
   until nothing changes; every rewrite targets the nearest NEUTRAL node ahead, which is what makes it
   converge):
     - UPGRADE per region : from every node with room ahead of it (depth <= region.lastDepth - 3), some
-      forward path inside the region still reaches an ELITE or SHOP. Order 2's pity rule becomes a
-      graph property instead of a spawn hope.
+      forward path inside the region still reaches an ELITE or SHOP. (The floor-level pity rule is
+      gone too: balance-overhaul order 2's two-floor WEAPON CADENCE owes an on-level weapon.)
     - CALM per region    : the same, for a CACHE or REST.
     - PRE-BOSS PROVISION : the layer before every boss offers a reachable SHOP/CACHE (order 6's beat).
       This is what covers the band's TAIL, where there is no longer room to carry the two per-region

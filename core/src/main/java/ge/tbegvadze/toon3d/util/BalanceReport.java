@@ -46,6 +46,8 @@ public final class BalanceReport {
         System.out.println();
         printSupplyDensityTable();
         System.out.println();
+        printEliteRewardTable();
+        System.out.println();
         printCreditEconomyTable();
         System.out.println();
         printShopPricingTable();
@@ -675,6 +677,17 @@ public final class BalanceReport {
                     contactCount == 0 ? "-" : String.format("%.1f", contact / contactCount),
                     walk / n, density / n, threat / n, ammoPlan / n, ammoPut / n, healPlan / n, healPut / n,
                     armourPlan / n, armourPut / n, credits / n);
+        }
+    }
+
+    /** A6: the ELITE promise — threat over COMBAT and the reward weapon behind the anchor group. */
+    private static void printEliteRewardTable() {
+        System.out.println("ELITE PROMISE (R-SUPPLY A6) — threat ratio band "
+                + String.format("%.2f-%.2f", BalanceConfig.ELITE_THREAT_RATIO_MIN, BalanceConfig.ELITE_THREAT_RATIO_MAX)
+                + "; reward weapon level >= d+1 in or past the anchor room on every floor");
+        for (BalanceSchema.RuleResult result : BalanceSchema.eliteRewardResults()) {
+            System.out.printf("%-4s %-44s %6.2f  %s%n", result.satisfied ? "OK" : "FAIL", result.subject,
+                    result.value, result.detail == null ? "" : result.detail);
         }
     }
 

@@ -94,24 +94,16 @@ public final class SupplyPlanner {
         }
 
         // --- S3 / S4 HEALS + ARMOUR ------------------------------------------------------------
-        boolean healFloorApplies = spec.healFloorApplies();
-        float healFloor  = healFloorApplies ? BalanceConfig.SUPPLY_HEAL_FLOOR_FRACTION : 0f;
-        float totalValue = GameMath.plannedHealValue(incomingFraction, spec.drainTarget(),
-                healFloor, healFloorApplies);
-        float armourValue = totalValue * spec.armourShare();
-        if (spec.guaranteedVest()) {
-            // ELITE's promised vest is part of the PLAN, not a bonus on top of it (S5 tracks it).
-            armourValue = Math.max(armourValue, armourPickupValue(BalanceConfig.ARMOUR_VEST_FRACTION, player));
-        }
-        // The heal floor is HEAL value: armour never stands in for the one medkit a floor guarantees.
-        float healValue   = Math.max(totalValue - armourValue, healFloor);
+        float healFloor   = healFloorFraction(spec);
+        float healValue   = plannedHealFraction(spec, incomingFraction, player);
+        float armourValue = plannedArmourFraction(spec, incomingFraction, player);
         planned.put(SupplyCategory.HEAL, healValue);
         planned.put(SupplyCategory.ARMOUR, armourValue);
         addHealPickups(pickups, healValue, healFloor);
         addArmourPickups(pickups, armourValue, player, spec.guaranteedVest());
 
         // --- S8 CREDITS --------------------------------------------------------------------------
-        int chips = Math.round(spec.creditScale() * BalanceConfig.SUPPLY_CREDIT_CHIPS_PER_FLOOR);
+        int chips = plannedCreditChips(spec);
         int chipValue = Math.round(averageCreditChipValue());
         planned.put(SupplyCategory.CREDITS, (float) chips * chipValue);
         for (int chipIndex = 0; chipIndex < chips; chipIndex++) {
@@ -125,6 +117,43 @@ public final class SupplyPlanner {
         // --- S6 CARRIERS -------------------------------------------------------------------------
         List<PlannedPickup> withCarriers = assignCarriers(pickups, request.roster.size(), random);
         return new SupplyPlan(depth, rosterEffectiveHitPoints, incomingFraction, healFloor, planned, withCarriers);
+    }
+
+    /** S4: the heal floor a spec's floor carries, as a fraction of expected max HP (0 when exempt). */
+    public static float healFloorFraction(NodeSupplySpec spec) {
+        return spec.healFloorApplies() ? BalanceConfig.SUPPLY_HEAL_FLOOR_FRACTION : 0f;
+    }
+
+    /**
+     * S3: the ARMOUR value a floor plans (fraction of expected max HP) — the spec's armour share of the
+     * planned value; ELITE's promised vest is part of the PLAN, not a bonus on top of it (S5 tracks it).
+     * Shared with the route ledger (route/RouteEconomicsModel) so the map is priced on this same plan.
+     */
+    public static float plannedArmourFraction(NodeSupplySpec spec, float incomingFraction, ExpectedPlayer player) {
+        float healFloor  = healFloorFraction(spec);
+        float totalValue = GameMath.plannedHealValue(incomingFraction, spec.drainTarget(),
+                healFloor, spec.healFloorApplies());
+        float armourValue = totalValue * spec.armourShare();
+        if (spec.guaranteedVest()) {
+            armourValue = Math.max(armourValue, armourPickupValue(BalanceConfig.ARMOUR_VEST_FRACTION, player));
+        }
+        return armourValue;
+    }
+
+    /**
+     * S3 / S4: the HEAL value a floor plans (fraction of expected max HP) — the planned value less its
+     * armour, never below the heal floor: armour never stands in for the one medkit a floor guarantees.
+     */
+    public static float plannedHealFraction(NodeSupplySpec spec, float incomingFraction, ExpectedPlayer player) {
+        float healFloor  = healFloorFraction(spec);
+        float totalValue = GameMath.plannedHealValue(incomingFraction, spec.drainTarget(),
+                healFloor, spec.healFloorApplies());
+        return Math.max(totalValue - plannedArmourFraction(spec, incomingFraction, player), healFloor);
+    }
+
+    /** S8: credit chips a spec's floor plans (spec.creditScale x the per-floor chip count, rounded). */
+    public static int plannedCreditChips(NodeSupplySpec spec) {
+        return Math.round(spec.creditScale() * BalanceConfig.SUPPLY_CREDIT_CHIPS_PER_FLOOR);
     }
 
     /** The ammo types the order-1 expected player carries (the reference workhorse eats BULLETS). */
@@ -340,11 +369,15 @@ public final class SupplyPlanner {
      * @param slots               every ground-eligible slot (already excluding enemy / weapon tiles)
      * @param carrierSpawnIndices spawn-list indices of the enemies that may carry a drop
      * @param anchorRegionId      the anchor group's room, or a negative id when the floor has none
+     * @param anchorWalkDistance  the shortest walk into the anchor group's room (its own tile when the group
+     *                            fills the room), or a negative value when unknown — "past the anchor" means
+     *                            at least this deep
      * @param halfDistance        the S4 "first half" walk distance
      * @param seed                the floor seed (placement jitter)
      */
     public static SupplyPlacement place(SupplyPlan plan, List<SupplySlot> slots, List<Integer> carrierSpawnIndices,
-                                        int anchorRegionId, int halfDistance, long seed) {
+                                        int anchorRegionId, int anchorWalkDistance, int halfDistance,
+                                        long seed) {
         Random random = new Random(seed ^ PLACEMENT_SEED_SALT);
         List<SupplyPlacement.GroundPlacement>   ground   = new ArrayList<>();
         List<SupplyPlacement.CarrierAssignment> carriers = new ArrayList<>();
@@ -361,10 +394,17 @@ public final class SupplyPlanner {
             }
         }
 
-        // --- Ground: heal floor first, then the anchor-bound pickups, then everything else by category.
+        // --- Ground: heal floor first, then the anchor-bound pickups (the reward WEAPON before the vault
+        // ammo, so the anchor room's few free tiles go to the promise the route card made — C2), then
+        // everything else by category.
         List<PlannedPickup> ordered = new ArrayList<>();
         for (PlannedPickup pickup : groundQueue) if (pickup.healFloor) ordered.add(pickup);
-        for (PlannedPickup pickup : groundQueue) if (!pickup.healFloor && pickup.behindAnchor) ordered.add(pickup);
+        for (PlannedPickup pickup : groundQueue) {
+            if (!pickup.healFloor && pickup.behindAnchor && pickup.category == SupplyCategory.WEAPON) ordered.add(pickup);
+        }
+        for (PlannedPickup pickup : groundQueue) {
+            if (!pickup.healFloor && pickup.behindAnchor && pickup.category != SupplyCategory.WEAPON) ordered.add(pickup);
+        }
         for (SupplyCategory category : SupplyCategory.values()) {
             for (PlannedPickup pickup : groundQueue) {
                 if (!pickup.healFloor && !pickup.behindAnchor && pickup.category == category) ordered.add(pickup);
@@ -376,7 +416,9 @@ public final class SupplyPlanner {
         Map<SupplyCategory, Map<Integer, Integer>> roomCounts = new EnumMap<>(SupplyCategory.class);
         for (SupplyCategory category : SupplyCategory.values()) roomCounts.put(category, new HashMap<>());
 
-        int anchorDistance = Integer.MAX_VALUE;
+        // The anchor's depth comes from the caller: when the anchor group fills its room no free slot
+        // carries that room's id, and a slot-derived depth would leave "past the anchor" unmatchable.
+        int anchorDistance = anchorWalkDistance >= 0 ? anchorWalkDistance : Integer.MAX_VALUE;
         for (SupplySlot slot : slots) {
             if (slot.regionId == anchorRegionId && anchorRegionId >= 0) {
                 anchorDistance = Math.min(anchorDistance, slot.walkDistance);
@@ -404,6 +446,7 @@ public final class SupplyPlanner {
                 for (int slotIndex = 0; slotIndex < slots.size(); slotIndex++) {
                     if (taken[slotIndex]) continue;
                     SupplySlot slot = slots.get(slotIndex);
+                    if (slot.weaponOnly && !(pickup.behindAnchor && pickup.category == SupplyCategory.WEAPON)) continue;
                     boolean roomFull = !slot.isConnector()
                             && perRoom.getOrDefault(slot.regionId, 0) >= roomCap;
                     if (tier == 0 && (slot.isConnector() || roomFull)) continue;
@@ -423,6 +466,9 @@ public final class SupplyPlanner {
                     float score = random.nextFloat();
                     if (slot.onExitPath)    score += BalanceConfig.SUPPLY_EXIT_PATH_BONUS;
                     if (slot.groupRegion)   score += BalanceConfig.SUPPLY_GROUP_ROOM_BONUS;
+                    // Nothing in or past the anchor was free: the anchor-bound pickup takes the DEEPEST
+                    // tile left, so it still sits as far behind the fight as the floor allows.
+                    if (pickup.behindAnchor && tier >= 3) score += slot.walkDistance;
                     if (score > bestScore) {
                         bestScore = score;
                         chosen    = slotIndex;

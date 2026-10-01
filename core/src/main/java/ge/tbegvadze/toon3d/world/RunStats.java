@@ -87,45 +87,28 @@ public class RunStats {
     }
 
     // =====================================================================================
-    // THE PITY RULE (new-game-balancr order 2): track weapon UPGRADES the player is offered per
-    // region so the floor generator can force-spawn one when a region is about to end with zero,
-    // guaranteeing no run is starved of the gear curve by RNG. "Upgrade" = an UNCOMMON-or-better
-    // weapon PLACED on a floor of the region (ground drop, cache, armory, or shop stock).
+    // THE WEAPON CADENCE (balance-overhaul order 2, S9 — replaces the per-region pity rule): across any
+    // two consecutive non-boss floors the player is offered at least one weapon at level >= the floor's
+    // depth. The floor build reads weaponCadenceDue() into LevelGenConfig.weaponCadenceDue (the
+    // SupplyPlanner then guarantees an on-level drop) and records what the built floor actually offered.
     // =====================================================================================
 
-    private int currentUpgradeRegionIndex     = -1;
-    private int weaponUpgradesSeenThisRegion   = 0;
+    private boolean lastNonBossFloorOfferedOnLevelWeapon = true;
+
+    /** Whether the next non-boss floor owes the player an on-level weapon (the previous one offered none). */
+    public boolean weaponCadenceDue() {
+        return !lastNonBossFloorOfferedOnLevelWeapon;
+    }
 
     /**
-     * Announces the region the player is now generating floors for. Crossing into a NEW region resets
-     * the per-region upgrade counter (each region owns its own pity quota); re-announcing the same
-     * region is a no-op, so this is safe to call once per floor build.
+     * Records what a just-built floor offered. A boss floor neither pays nor breaks the cadence.
      *
-     * @param regionIndex 0-based region index, {@code floor((depth-1) / GEAR_CURVE_REGION_BAND_SIZE)}
+     * @param bossFloor            whether the floor is a boss arena
+     * @param offeredOnLevelWeapon whether any weapon on it rolled at level >= the floor's depth
      */
-    public void enterUpgradeRegion(int regionIndex) {
-        if (regionIndex != currentUpgradeRegionIndex) {
-            currentUpgradeRegionIndex   = regionIndex;
-            weaponUpgradesSeenThisRegion = 0;
-        }
-    }
-
-    /** Records that an in-band weapon upgrade was placed on the current region's floors. */
-    public void recordWeaponUpgradeSeen() {
-        weaponUpgradesSeenThisRegion++;
-    }
-
-    /** Weapon upgrades placed so far in the current region. */
-    public int getWeaponUpgradesSeenThisRegion() {
-        return weaponUpgradesSeenThisRegion;
-    }
-
-    /**
-     * Whether the current region still owes the player its guaranteed upgrade(s). The floor generator
-     * consults this on a region's LAST floor and force-spawns a pity weapon if it returns true.
-     */
-    public boolean regionUpgradeQuotaUnmet() {
-        return weaponUpgradesSeenThisRegion < BalanceConfig.GUARANTEED_UPGRADE_PER_REGION;
+    public void recordFloorWeaponOffer(boolean bossFloor, boolean offeredOnLevelWeapon) {
+        if (bossFloor) return;
+        lastNonBossFloorOfferedOnLevelWeapon = offeredOnLevelWeapon;
     }
 
     // =====================================================================================

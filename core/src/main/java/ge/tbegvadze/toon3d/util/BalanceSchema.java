@@ -240,6 +240,16 @@ public final class BalanceSchema {
                         + "off-type share of a floor's planned ammo (or the carried share once a railgun is held), "
                         + "and the slug reserve cap stays the tightest of all ammo types.");
         waiveNavigationLimitedBands();
+        // Balance-overhaul order 2 (CP6): the route ledger is now priced on what each floor is BUILT with
+        // (its NodeSupplySpec plan). The old ledger credited the bespoke MED-BAY and EVENT rooms with 35% of
+        // a combat floor's ordinary loot they never placed; priced honestly, REST sits below the calm band
+        // deep and EVENT a point above it shallow. Their contents are order 6's to retune (SCOPE OUT).
+        String bespokeReason = "Priced honestly on its NodeSupplySpec plan since balance-overhaul order 2: "
+                + "the bespoke room never placed the ordinary loot the old ledger credited it with, and "
+                + "its contents are balance-overhaul order 6's to retune.";
+        String bespokeExpiry = "Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).";
+        waive(RuleKind.CALM_COST, "rest EV discount",  bespokeReason, bespokeExpiry);
+        waive(RuleKind.CALM_COST, "event EV discount", bespokeReason, bespokeExpiry);
     }
 
     /**
@@ -832,6 +842,7 @@ public final class BalanceSchema {
         results.addAll(ladderAffordResults());
         results.addAll(supplyPlannerResults());
         results.addAll(supplySweepResults());
+        results.addAll(eliteRewardResults());
         results.addAll(densitySweepResults());
         return results;
     }
@@ -1672,26 +1683,19 @@ public final class BalanceSchema {
      * reference encounter the floor rules use (one source — the map can never drift from the floor).
      */
     public static RouteEconomicsModel.ModelFloor routeModelFloor() {
-        // TEMPORARY (balance-overhaul order 2, CP3c -> CP6): the route ledger is still priced on the legacy
-        // model floor's box model — ROUTE_MODEL_LEGACY_* room boxes + kill boxes split evenly over the five
-        // ammo types — because its bands (R-CALM-COST, R-TRAJECTORY, ...) were fitted to it. CP6 re-derives
-        // the whole ledger from the NodeSupplySpec rows (one source) and deletes these two constants.
-        float roomBoxes  = BalanceConfig.ROUTE_MODEL_LEGACY_ROOM_AMMO_BOXES;
-        float killBoxes  = BalanceConfig.ROUTE_MODEL_LEGACY_KILL_AMMO_BOXES;
-        float totalBoxes = Math.max(1e-3f, roomBoxes + killBoxes);
-        float perTypeBoxes = totalBoxes / AmmoType.values().length;
-        float totalSupply = 0f;
-        for (ScarcityRowSpec row : SCARCITY_ROWS) {
-            totalSupply += GameMath.ammoSupplyDamage(perTypeBoxes, row.boxSize, row.damagePerUnit);
+        // Balance-overhaul order 2 (CP6): the floor's SUPPLY is no longer a model-floor input — every node
+        // row is priced on its NodeSupplySpec's plan (route/RouteEconomicsModel), the same SupplyPlanner
+        // formulas the generators build with. Only the roster side (demand, incoming, bounty) and the value
+        // of one guaranteed box (the mean over the ammo types at depth 1) come from here.
+        float boxDamage = 0f;
+        for (AmmoType ammoType : AmmoType.values()) {
+            boxDamage += ge.tbegvadze.toon3d.level.SupplyPlanner.boxDamageAtDepth(ammoType, 1);
         }
-        float roomSupply = totalSupply * (roomBoxes / totalBoxes);
-        float killSupply = totalSupply * (killBoxes / totalBoxes);
-        float averageBoxDamage = totalSupply / totalBoxes;
+        float averageBoxDamage = boxDamage / AmmoType.values().length;
         float incoming = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
                 BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-        float healSupply = modelFloorHealSupply();
-        return new RouteEconomicsModel.ModelFloor(modelFloorDemand(), roomSupply, killSupply,
-                averageBoxDamage, incoming, healSupply, modelFloorKillCreditReward(), chipIncomePerFloor());
+        return new RouteEconomicsModel.ModelFloor(modelFloorDemand(), averageBoxDamage, incoming,
+                modelFloorKillCreditReward());
     }
 
     /** The priced ledger, with its registration latched exactly once (headless — no LibGDX touched). */
@@ -2366,7 +2370,7 @@ public final class BalanceSchema {
                     List<Integer> carriers = new ArrayList<>();
                     for (int index = 0; index < roster.size(); index++) carriers.add(index);
                     ge.tbegvadze.toon3d.level.SupplyPlacement placement = ge.tbegvadze.toon3d.level.SupplyPlanner
-                            .place(plan, slots, carriers, anchorRegion, halfDistance, seed);
+                            .place(plan, slots, carriers, anchorRegion, -1, halfDistance, seed);
                     accumulator.add(plan, placement);
                 }
                 accumulator.emit(results, "plan ");
@@ -2592,6 +2596,59 @@ public final class BalanceSchema {
         }
         for (Map.Entry<String, SupplyAuditAccumulator> cell : cells.entrySet()) {
             cell.getValue().emit(results, cell.getKey().substring(0, cell.getKey().indexOf('|')) + " ");
+        }
+        return results;
+    }
+
+    /**
+     * R-SUPPLY, the ELITE promise (balance-overhaul order 2, A6), over the same cached sweep: per
+     * generator and depth, the ELITE floor's mean spent Threat Points over the COMBAT floor's sits in
+     * [ELITE_THREAT_RATIO_MIN, MAX] (~1.6x), and EVERY ELITE floor places a reward weapon at level >= d+1
+     * in or past its anchor group's room (C2 — "behind the anchor").
+     */
+    public static synchronized List<RuleResult> eliteRewardResults() {
+        List<RuleResult> results = new ArrayList<>();
+        Map<String, float[]> threat = new java.util.LinkedHashMap<>();   // key -> {eliteSum, eliteN, combatSum, combatN}
+        Map<String, int[]>   reward = new java.util.LinkedHashMap<>();   // key -> {floors, rewarded}
+        for (ge.tbegvadze.toon3d.level.FloorContentReport report : supplySweepReports()) {
+            RouteNodeType type = report.spec.type();
+            if (type != RouteNodeType.ELITE && type != RouteNodeType.COMBAT) continue;
+            String key = report.generatorName + " d" + report.depth;
+            float[] sums = threat.computeIfAbsent(key, k -> new float[4]);
+            int offset = type == RouteNodeType.ELITE ? 0 : 2;
+            sums[offset]     += report.threatSpent;
+            sums[offset + 1] += 1f;
+            if (type != RouteNodeType.ELITE) continue;
+            int[] counts = reward.computeIfAbsent(key, k -> new int[2]);
+            counts[0]++;
+            for (ge.tbegvadze.toon3d.level.SupplyPlacement.GroundPlacement ground : report.placement.ground()) {
+                ge.tbegvadze.toon3d.level.PlannedPickup pickup = ground.pickup;
+                if (pickup.category != ge.tbegvadze.toon3d.level.SupplyCategory.WEAPON) continue;
+                boolean onLevelPlusOne = pickup.weaponLevelOffset >= 1;
+                boolean behindAnchor = report.anchorRegionId < 0
+                        || ground.regionId == report.anchorRegionId
+                        || ground.walkDistance >= report.anchorWalkDistance;
+                if (onLevelPlusOne && behindAnchor) {
+                    counts[1]++;
+                    break;
+                }
+            }
+        }
+        for (Map.Entry<String, float[]> cell : threat.entrySet()) {
+            float[] sums = cell.getValue();
+            if (sums[1] <= 0f || sums[3] <= 0f) continue;
+            float ratio = (sums[0] / sums[1]) / Math.max(1e-3f, sums[2] / sums[3]);
+            results.add(new RuleResult(RuleKind.SUPPLY, cell.getKey() + " elite threat ratio", ratio,
+                    BalanceConfig.ELITE_THREAT_RATIO_MIN, BalanceConfig.ELITE_THREAT_RATIO_MAX,
+                    ratio >= BalanceConfig.ELITE_THREAT_RATIO_MIN && ratio <= BalanceConfig.ELITE_THREAT_RATIO_MAX,
+                    "mean spent TP, ELITE over COMBAT"));
+        }
+        for (Map.Entry<String, int[]> cell : reward.entrySet()) {
+            int[] counts = cell.getValue();
+            float share = counts[1] / (float) Math.max(1, counts[0]);
+            results.add(new RuleResult(RuleKind.SUPPLY, cell.getKey() + " elite reward weapon", share, 1f, 1f,
+                    counts[1] == counts[0],
+                    counts[1] + "/" + counts[0] + " floors with a level >= d+1 weapon behind the anchor"));
         }
         return results;
     }

@@ -91,6 +91,16 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.supplySweepResults("tracking", "unplaced", "carrier share"));
     }
 
+    /**
+     * R-SUPPLY, the ELITE promise (balance-overhaul order 2, A6 / C2): on every combat generator and
+     * audited depth the ELITE floor spends ~1.6x a COMBAT floor's Threat Points, and every ELITE floor
+     * places its reward weapon at level >= d+1 in or past the anchor group's room.
+     */
+    @Test
+    void everyEliteFloorPaysItsThreatWithAWeaponBehindTheAnchor() {
+        assertNoViolations(BalanceSchema.eliteRewardResults());
+    }
+
     /** R-DOT: exactly one definition per status; every shim field re-exports BalanceConfig exactly. */
     @Test
     void statusDefinitionsAreUniqueAndShimsDoNotDiverge() {

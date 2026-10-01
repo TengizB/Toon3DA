@@ -268,7 +268,8 @@ R-GEARGATE (RuleKind.GEAR_GATE) — RETIRED by balance-overhaul order 1
   every depth 1..25, a stronger form of "stagnation is punished". What SURVIVES: the
   supply half — dropped weapons still roll their tier from WEAPON_DROP_TIER_*_BY_REGION
   (now also the expected rarity of the on-curve player) and THE PITY RULE
-  (GUARANTEED_UPGRADE_PER_REGION) stays until balance-overhaul order 2 re-homes it.
+  (GUARANTEED_UPGRADE_PER_REGION) stayed until balance-overhaul order 2 CP6 re-homed it as the
+  two-floor WEAPON CADENCE (S9; see the CP6 change-log entry).
   GameMath.gearCurveAtDepth / expectedPlayerDamagePerTurn and GEAR_CURVE_PER_REGION
   are deleted (GEAR_CURVE_REGION_BAND_SIZE stays: every per-region table indexes by it).
 
@@ -350,15 +351,14 @@ R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — RETIRED by balance-overhaul order
   REPLACED by R-SUPPLY's generator sweep at depths {1,5,10,15,20,25}: each floor's
   ammo is ammoRatio x its own roster eHP, priced per unit at the on-curve hit growth
   (GameMath.supplyDamagePerUnitAtDepth), so the box count is depth-stable by
-  construction. AMMO_SUPPLY_REGION_MULTIPLIER is no longer read by any floor rule (the
-  route model still reads it until CP6 re-derives the ledger).
+  construction. AMMO_SUPPLY_REGION_MULTIPLIER is DELETED (CP6: the route ledger is
+  re-derived from the node specs, so nothing reads a region supply trim).
 
 R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
   OVERRIDE RECORD: the 5-15% net-drain band on the model floor is REPLACED by R-SUPPLY's
   heal floor + tracking (the planned heal value = modelled incoming x (1 - the node's
   drainTarget), S3/S4) and, played, by the sim band S-SUPPLY (TACTICAL HP fraction at
-  COMBAT exit in [0.55, 0.80], CP7). HEAL_SUPPLY_REGION_MULTIPLIER survives only in the
-  route model until CP6.
+  COMBAT exit in [0.55, 0.80], CP7). HEAL_SUPPLY_REGION_MULTIPLIER is DELETED (CP6).
 
 R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
   Currency without a coupled sink is a score counter. The rule couples income to the
@@ -1232,6 +1232,41 @@ CHANGELOG
     the compare card prices both guns at THIS floor, floor arrival posts "THREAT LV d" for 2 s, and
     ORA teaches UNDERGEARED once (re-taught once after 3 more floors behind). No balance value moved.
 
+  balance-overhaul order 2 / CP6 — NODE SPECS DRIVE THE NODES; THE LEDGER IS RE-DERIVED.
+    Profiles put the node's NodeSupplySpec on the config (ELITE / CACHE / SHOP; COMBAT is the
+    default) and DROP their node-type budget overrides (ELITE_BUDGET_SCALE, calm(), light()) and
+    pickup guarantees (ELITE armour/medkit/stim + vault boxes, CACHE medkit/stim/armour + cargo
+    boxes); props, shop machines, MYSTERY outcomes and affix extras stay (an affix's budget is now
+    an EXTRA multiplier on the spec's threat; its extra vault boxes still ride AmmoCacheRequest).
+    WEAPON CADENCE replaces THE PITY RULE: RunStats.weaponCadenceDue() -> LevelGenConfig.
+    weaponCadenceDue whenever the previous non-boss floor offered no weapon at level >= its depth
+    (SimWorld mirrors it). ROUTE LEDGER (route/RouteEconomicsModel.priceDirect): every row is priced
+    on its floor's NodeSupplySpec — ammo = demand x (ammoRatio + vault) (BOSS: x
+    BOSS_ARENA_AMMO_BUDGET_FRACTION), heals + armour = SupplyPlanner.plannedHealFraction /
+    plannedArmourFraction (shared with the floor build), chips = SupplyPlanner.plannedCreditChips;
+    COMBAT / ELITE / CACHE / SHOP threat = the spec's threat scale; COMBAT / ELITE / CACHE upgrade
+    opportunity = GameMath.expectedOnLevelWeaponOffers(spec) x ROUTE_UPGRADE_OPPORTUNITY_PER_ON_
+    LEVEL_WEAPON (0.70, so COMBAT stays 0.35; ELITE 0.60 -> 0.70; CACHE 0.05 -> 0.35). The model
+    floor carries only demand / incoming / bounty / box value. DELETED: ROUTE_MODEL_LEGACY_{ROOM,
+    KILL}_AMMO_BOXES, NodeEconomics.ordinaryLootScale + ROUTE_BESPOKE_FLOOR_LOOT_SCALE + ROUTE_
+    MALFUNCTION_LOOT_SCALE, AMMO_SUPPLY_REGION_MULTIPLIER, HEAL_SUPPLY_REGION_MULTIPLIER, GameMath.
+    ammoSupplyAtDepth, ELITE_BUDGET_SCALE, ELITE_AMMO_BOXES, ELITE_STIMS, CACHE_{AMMO_BOXES,
+    MEDKITS,STIMS,ARMOUR,ARMOUR_VEST_DEPTH}, GUARANTEED_UPGRADE_PER_REGION, RunStats' pity counter,
+    WeaponRoller.rollGuaranteedUpgrade(ToSnapshot) / upgradeTierThreshold.
+    DECISIONS (spec numbers moved off the idea's starting values to keep existing bands green):
+    CACHE threat 0.35 -> 0.30 (R-HONEST-SAFE caps a safe-looking node at 0.30; bodies stay 0.35);
+    CACHE ammo 1.5 -> 2.0, drain -0.25 -> -1.25, credits 0.8 -> 1.2 and SHOP ammo 1.0 -> 2.0,
+    drain 0 -> -0.75, credits 1.0 -> 2.0 (R-CALM-COST: priced on their own small rosters the
+    idea's numbers left both 43-48% below COMBAT's EV; now CACHE 0.25-0.35, SHOP 0.21-0.33).
+    WAIVERS: R-CALM-COST "rest EV discount" and "event EV discount" — the old ledger credited
+    the bespoke rooms with 35% of a combat floor's loot they never placed; priced honestly REST
+    is 30-44% and EVENT 9-27% below COMBAT; their contents are order 6's (expires with order 6).
+    NEW: R-SUPPLY's ELITE PROMISE (BalanceSchema.eliteRewardResults, A6): ELITE spent TP over
+    COMBAT's in [ELITE_THREAT_RATIO_MIN 1.40, MAX 1.80] per generator x depth, and every ELITE
+    floor's reward weapon at level >= d+1 in or past the anchor room (the placer seats the reward
+    weapon before the vault ammo; when the anchor group fills its room the weapon lies on the
+    anchor's own tile). Route card C1 lines: NodeTypeDefinition.supplyPromise(threat, reward).
+
   balance-overhaul order 2 / CP1-CP3 — FULL FLOORS, FAIR SUPPLY (the supply half). Added
     BalanceConfig SECTION 21 (SUPPLY & DENSITY), route/NodeSupplySpec (+ registry, one row per
     node type), level/SupplyPlanner + FloorPopulator + SupplySlotSurvey, and R-SUPPLY (planner
@@ -1243,8 +1278,8 @@ CHANGELOG
     loot chance (server / large / armory / command / hazard rooms, LEVEL_GEN_RANDOM_ROOM_WEAPON_
     CHANCE), CREDIT_CHIPS_PER_FLOOR_MIN/MAX (+ chip jitters), MODEL_FLOOR_ROOM_COUNT /
     _AMMO_TYPE_COUNT, LevelGenConfig.medkits/armourKits/*ChancePerRoom and RouteMapConstants.
-    CACHE_*_CHANCE_PER_ROOM. TEMPORARY: the route ledger's model floor keeps the legacy box model
-    (ROUTE_MODEL_LEGACY_{ROOM,KILL}_AMMO_BOXES 1.6 / 1.2) until CP6 re-derives it from the specs.
+    CACHE_*_CHANCE_PER_ROOM. TEMPORARY (removed by CP6): the route ledger's model floor kept the
+    legacy box model (ROUTE_MODEL_LEGACY_{ROOM,KILL}_AMMO_BOXES 1.6 / 1.2).
 
   balance-overhaul order 1 / CP5 — the shop LEVEL UP rung (R13): every Fabricator stocks a
     guaranteed LEVEL UP offer for the EQUIPPED weapon (outside the weighted roll; ShopContext now
