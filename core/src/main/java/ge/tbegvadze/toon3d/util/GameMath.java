@@ -3582,26 +3582,6 @@ public final class GameMath {
     // =========================================================================
 
     /*
-     * Formula: expectedAmmoBoxesPerFloor — how many ammo pickups a floor hands you
-     * Derivation:
-     *   Two independent sources supply ammo over a floor:
-     *     roomBoxes = roomCount * ammoChancePerRoom        (generator room rolls)
-     *     killBoxes = enemyCount * ammoChancePerKill        (per-kill drops)
-     *     expectedBoxes = roomBoxes + killBoxes
-     *   This is the expectation (mean) over the floor's random rolls, so it is a
-     *   real number, not an integer. It feeds the per-type SUPPLY below.
-     *   Worked: 8 rooms * 0.20 + 12 enemies * 0.10 = 1.6 + 1.2 = 2.8 boxes.
-     * Edge cases:
-     *   Negative counts/chances are nonsensical inputs; the caller passes
-     *   non-negative tuning numbers, so no clamping is applied (the result would
-     *   simply be negative, which BalanceReport would surface as a bad config).
-     */
-    public static float expectedAmmoBoxesPerFloor(int roomCount, float ammoChancePerRoom,
-                                                  int enemyCount, float ammoChancePerKill) {
-        return roomCount * ammoChancePerRoom + enemyCount * ammoChancePerKill;
-    }
-
-    /*
      * Formula: ammoSupplyDamage — damage potential handed to the player for one ammo type
      * Derivation:
      *   Each ammo box of a type grants boxSize units; each unit buys

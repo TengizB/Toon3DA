@@ -183,8 +183,6 @@ public final class GameBalance {
     /** CHAINSAW — high sustained damage; no knockback (grinds in place). */
     public static final int MELEE_CHAINSAW_DAMAGE      = BalanceConfig.MELEE_CHAINSAW_DAMAGE;
 
-    /** Probability (0–1) that a melee kill drops an ammo pickup; higher than the ranged baseline. (Balance: BalanceConfig.) */
-    public static final float MELEE_KILL_AMMO_DROP_CHANCE = BalanceConfig.MELEE_KILL_AMMO_DROP_CHANCE;
 
     // =========================================================================
     // STAT SYSTEM — caps and per-point effect rates
@@ -498,8 +496,6 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_RIMESHELL_LANCER  = BalanceConfig.CREDIT_REWARD_RIMESHELL_LANCER;
     public static final int   CREDIT_REWARD_VERDANT_SPIRESOWER = BalanceConfig.CREDIT_REWARD_VERDANT_SPIRESOWER;
     public static final float CREDIT_DEPTH_SCALE          = BalanceConfig.CREDIT_DEPTH_SCALE;
-    public static final int   CREDIT_CHIPS_PER_FLOOR_MIN  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN;
-    public static final int   CREDIT_CHIPS_PER_FLOOR_MAX  = BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX;
 
     // =========================================================================
     // SHOP — UAC Fabricator vending machine placement (shop_order_1)

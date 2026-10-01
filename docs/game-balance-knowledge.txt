@@ -739,6 +739,11 @@ produce a lopsided or trivially easy floor. This is untested in real play.
 ================================================================================
 SECTION 12 — RESOURCE MANAGEMENT / SCARCITY ECONOMY (a core balance pillar)
 ================================================================================
+  SUPERSEDED IN PART (balance-overhaul order 2, CP3): the DROP FREQUENCY lever below (per-room and
+  per-kill chances) is GONE — every generated floor's ammo / heals / armour / credits / weapon drops
+  are PLANNED by level/SupplyPlanner from the floor's own roster and its NodeSupplySpec (BalanceConfig
+  SECTION 21), and audited by R-SUPPLY. Box SIZES (LEVER 2) and reserve CAPS (LEVER 3) still apply.
+  This section is rewritten in full at order 2's CP7; until then read the order-2 idea file.
 Files: BalanceConfig SECTION 5 (levers) + SECTION 10 (model + bands); GameMath
 scarcity block; docs/game-balance-authority.txt (RESOURCE SCARCITY MODEL).
 This is one of the MOST important balance systems and the user's stated priority.

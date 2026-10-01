@@ -94,15 +94,8 @@ public final class LevelGenConfig {
      */
     public boolean enableLockAndKey = true;
 
-    // -------------------------------------------------------------------------
-    // Pickups (walkable; collected on contact)
-    // -------------------------------------------------------------------------
-
-    /** Field medkits ('H'). Placed in non-entrance rooms. */
-    public boolean medkits = true;
-
-    /** Security vests ('A'). Placed in non-entrance rooms. */
-    public boolean armourKits = true;
+    // Pickups are no longer configured per floor (balance-overhaul order 2): the SupplyPlanner places every
+    // medkit, armour, ammo box, weapon drop and credit chip from the node's {@link #supplySpec}.
 
     // -------------------------------------------------------------------------
     // Prop relative weights
@@ -136,16 +129,6 @@ public final class LevelGenConfig {
      * for column placement. Prevents columns from blocking tiny rooms.
      */
     public int columnMinRoomSize = 4;
-
-    // -------------------------------------------------------------------------
-    // Pickup placement parameters
-    // -------------------------------------------------------------------------
-
-    /** Probability (0–1) that any non-entrance room contains a medkit. */
-    public float medkitChancePerRoom = 0.35f;
-
-    /** Probability (0–1) that any non-entrance room contains an armour kit. */
-    public float armourChancePerRoom = 0.20f;
 
     // -------------------------------------------------------------------------
     // Encounter budget (route-map order-7)

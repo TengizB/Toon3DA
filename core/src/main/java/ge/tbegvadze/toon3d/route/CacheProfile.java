@@ -20,7 +20,7 @@ import java.util.List;
  *       depot read (boss depths still defer to the arena — {@link GameMath#isBossFloor(int)} is the
  *       single authority, matching the other profiles).</li>
  *   <li>Config: bright (no unlit/flicker floors), NO hazards (radioactive barrels off), crates +
- *       lockers on, one large cargo bay, columns for depth, medkit/armour chances bumped.</li>
+ *       lockers on, one large cargo bay, columns for depth.</li>
  *   <li>Budget: {@link EnemyBudgetOverride#calm()} — a couple of light stragglers scaled from raw
  *       depth, never an elite, never zero (a cache is not a free heal). The depth ramp is still
  *       applied first (order-3 invariant).</li>
@@ -62,7 +62,7 @@ public final class CacheProfile implements NodeLevelProfile {
                 EnemyBudgetOverride.calm(), ammoCache);
     }
 
-    /** A bright, hazard-free depot config: crates + lockers + a cargo bay, medkit/armour rich. */
+    /** A bright, hazard-free depot config: crates + lockers + a cargo bay. */
     private LevelGenConfig buildDepotConfig() {
         LevelGenConfig config = new LevelGenConfig();
         // Keep it bright — a safe read within 2 seconds of entering.
@@ -77,11 +77,6 @@ public final class CacheProfile implements NodeLevelProfile {
         config.enableLargeRooms = true;
         config.enableServerRooms = false;
         config.columns          = true;
-        // Consumable-rich rooms on top of the guaranteed payoff.
-        config.medkits          = true;
-        config.armourKits       = true;
-        config.medkitChancePerRoom = RouteMapConstants.CACHE_MEDKIT_CHANCE_PER_ROOM;
-        config.armourChancePerRoom = RouteMapConstants.CACHE_ARMOUR_CHANCE_PER_ROOM;
         return config;
     }
 

@@ -86,8 +86,6 @@ public final class BalanceSchema {
         HEAL_PRICING,
         /** R-TELEGRAPH: no attack > 25% reference eHP un-telegraphed; boss hard cap 35%. */
         TELEGRAPH,
-        /** R-SCARCITY: model-floor S in [0.75, 0.95] floor-wide, < 0.60 per weapon; heal net-drain in band. */
-        SCARCITY,
         /** R-DOT: exactly one definition per status; shim files must re-export BalanceConfig byte-for-byte. */
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
@@ -96,10 +94,6 @@ public final class BalanceSchema {
         COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
-        /** R-SCARCITY-DEPTH (order 3): the scarcity ratio S holds [0.75, 0.95] at EVERY depth 1..15. */
-        SCARCITY_DEPTH,
-        /** R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] of eHP at EVERY depth 1..15. */
-        HEALDRAIN_DEPTH,
         /** R-CREDITS (order 3): expected region income / price of the expected purchase bundle in [0.9, 1.4]. */
         CREDITS,
         /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
@@ -242,8 +236,9 @@ public final class BalanceSchema {
                 "Gated by slug scarcity, not raw damage: the 90-per-slug elite-buster hit is the "
                         + "heavy role's identity and supply (~1.1 slugs/floor, tightest reserve cap) "
                         + "is the real limiter.",
-                "Re-checked by order-3 R-SCARCITY-DEPTH: slug reserve banking stays the TIGHTEST gate "
-                        + "(~1.0 floor at depth 1, tightest of all ammo types) after the shop re-pricing.");
+                "Re-checked by balance-overhaul order 2 R-SUPPLY: slugs only ever arrive through the 30% "
+                        + "off-type share of a floor's planned ammo (or the carried share once a railgun is held), "
+                        + "and the slug reserve cap stays the tightest of all ammo types.");
         waiveNavigationLimitedBands();
     }
 
@@ -811,13 +806,10 @@ public final class BalanceSchema {
         results.addAll(cardBudgetResults());
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
-        results.addAll(scarcityResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
         results.addAll(abilityBudgetResults());
-        results.addAll(scarcityDepthResults());
-        results.addAll(healDrainDepthResults());
         results.addAll(creditResults());
         results.addAll(xpPaceResults());
         results.addAll(cardBreakpointResults());
@@ -839,6 +831,7 @@ public final class BalanceSchema {
         results.addAll(ladderResults());
         results.addAll(ladderAffordResults());
         results.addAll(supplyPlannerResults());
+        results.addAll(supplySweepResults());
         return results;
     }
 
@@ -1038,74 +1031,38 @@ public final class BalanceSchema {
         }
     }
 
-    /** R-SCARCITY: floor-wide S in band, every per-weapon S under its cap, heal net-drain in band. */
-    public static List<RuleResult> scarcityResults() {
-        float demand = modelFloorDemand();
-        float expectedBoxes = GameMath.expectedAmmoBoxesPerFloor(
-                BalanceConfig.MODEL_FLOOR_ROOM_COUNT, BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM,
-                modelFloorEnemyCount(), BalanceConfig.ENEMY_AMMO_DROP_CHANCE);
-        float boxesPerType = expectedBoxes / BalanceConfig.MODEL_FLOOR_AMMO_TYPE_COUNT;
-
-        List<RuleResult> results = new ArrayList<>();
-        float totalSupply = 0f;
-        for (ScarcityRowSpec row : SCARCITY_ROWS) {
-            float supply = GameMath.ammoSupplyDamage(boxesPerType, row.boxSize, row.damagePerUnit);
-            totalSupply += supply;
-            float perWeaponShare = GameMath.scarcityRatio(supply, demand);
-            boolean underCap = perWeaponShare < BalanceConfig.SCARCITY_PER_WEAPON_MAX;
-            results.add(new RuleResult(RuleKind.SCARCITY, "per-weapon S: " + row.ammoType.name(),
-                    perWeaponShare, 0f, BalanceConfig.SCARCITY_PER_WEAPON_MAX, underCap, null));
-        }
-        float floorWideScarcityRatio = GameMath.scarcityRatio(totalSupply, demand);
-        boolean floorWideInBand = floorWideScarcityRatio >= BalanceConfig.SCARCITY_RATIO_FLOOR_MIN
-                && floorWideScarcityRatio <= BalanceConfig.SCARCITY_RATIO_FLOOR_MAX;
-        results.add(new RuleResult(RuleKind.SCARCITY, "floor-wide S", floorWideScarcityRatio,
-                BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX,
-                floorWideInBand, "model floor DEMAND=" + Math.round(demand)));
-
-        float incoming = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
-                BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-        float healSupply = modelFloorHealSupply();
-        float netDrainFraction = GameMath.netHpDrainPerFloor(incoming, healSupply)
-                / BalanceConfig.REFERENCE_PLAYER_EHP;
-        boolean drainInBand = netDrainFraction >= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN
-                && netDrainFraction <= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX;
-        results.add(new RuleResult(RuleKind.SCARCITY, "heal net-drain fraction", netDrainFraction,
-                BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX,
-                drainInBand, "fraction of reference eHP lost per floor"));
-        return results;
-    }
-
     // =====================================================================================
     // ORDER-3 depth-sweep helpers — shared "one source" numbers for R-SCARCITY-DEPTH,
     // R-HEALDRAIN-DEPTH and R-CREDITS (the same model-floor primitives the SECTION-10 table uses).
     // =====================================================================================
 
-    /** Expected ammo boxes handed out on the model floor (LEVER 1 sources: rooms + kills). */
-    private static float modelFloorExpectedBoxes() {
-        return GameMath.expectedAmmoBoxesPerFloor(
-                BalanceConfig.MODEL_FLOOR_ROOM_COUNT, BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM,
-                modelFloorEnemyCount(), BalanceConfig.ENEMY_AMMO_DROP_CHANCE);
-    }
-
     /** Total ranged-ammo SUPPLY damage on the depth-1 model floor (the depth-sweep's baseline). */
     public static float modelFloorTotalRangedSupply() {
-        float boxesPerType = modelFloorExpectedBoxes() / BalanceConfig.MODEL_FLOOR_AMMO_TYPE_COUNT;
-        float totalSupply = 0f;
-        for (ScarcityRowSpec row : SCARCITY_ROWS) {
-            totalSupply += GameMath.ammoSupplyDamage(boxesPerType, row.boxSize, row.damagePerUnit);
-        }
-        return totalSupply;
+        return modelFloorPlan(1).roundedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO);
     }
 
-    /** Worst single-weapon SUPPLY damage on the model floor (the tightest per-weapon share driver). */
-    private static float modelFloorWorstWeaponSupply() {
-        float boxesPerType = modelFloorExpectedBoxes() / BalanceConfig.MODEL_FLOOR_AMMO_TYPE_COUNT;
-        float worst = 0f;
-        for (ScarcityRowSpec row : SCARCITY_ROWS) {
-            worst = Math.max(worst, GameMath.ammoSupplyDamage(boxesPerType, row.boxSize, row.damagePerUnit));
-        }
-        return worst;
+    /** Seed the model-floor example is planned with (any fixed value: only weapon / carrier rolls use it). */
+    private static final long MODEL_FLOOR_PLAN_SEED = 0x0DE1F100L;
+
+    /** The SECTION 10 model floor's roster (the printed example the planner is shown against). */
+    public static List<EnemyType> modelFloorRoster() {
+        List<EnemyType> roster = new ArrayList<>();
+        for (int count = 0; count < BalanceConfig.MODEL_FLOOR_GORE_BITER_COUNT; count++)  roster.add(EnemyType.GORE_BITER);
+        for (int count = 0; count < BalanceConfig.MODEL_FLOOR_EYE_TYRANT_COUNT; count++)  roster.add(EnemyType.EYE_TYRANT);
+        for (int count = 0; count < BalanceConfig.MODEL_FLOOR_SHELL_BRUTE_COUNT; count++) roster.add(EnemyType.SHELL_BRUTE);
+        for (int count = 0; count < BalanceConfig.MODEL_FLOOR_PLAGUE_HULK_COUNT; count++) roster.add(EnemyType.PLAGUE_HULK);
+        return roster;
+    }
+
+    /**
+     * The supply the order-2 planner hands the model floor's roster on a COMBAT node at a depth — the
+     * model floor survives only as this printed example (its old per-room / per-kill expected-box model
+     * is gone with the dice it described).
+     */
+    public static ge.tbegvadze.toon3d.level.SupplyPlan modelFloorPlan(int depth) {
+        return ge.tbegvadze.toon3d.level.SupplyPlanner.plan(new ge.tbegvadze.toon3d.level.SupplyRequest(
+                depth, ge.tbegvadze.toon3d.route.NodeSupplySpecs.combat(), modelFloorRoster(),
+                GameMath.expectedPlayerAtDepth(depth), null, MODEL_FLOOR_PLAN_SEED, false, 0));
     }
 
     /**
@@ -1120,64 +1077,9 @@ public final class BalanceSchema {
      * modelled floor are measured with the same yardstick.
      */
     public static float modelledScarcityAtDepth(int depth) {
-        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        float demand = GameMath.floorDemandAtDepth(modelFloorDemand(),
-                BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
-        float supply = GameMath.ammoSupplyAtDepth(modelFloorTotalRangedSupply(),
-                BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
-        return GameMath.scarcityRatioAtDepth(supply, demand);
-    }
-
-    public static List<RuleResult> scarcityDepthResults() {
-        List<RuleResult> results = new ArrayList<>();
-        float modelDemand = modelFloorDemand();
-        float modelSupply = modelFloorTotalRangedSupply();
-        float worstWeaponSupply = modelFloorWorstWeaponSupply();
-        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
-            float demand = GameMath.floorDemandAtDepth(modelDemand,
-                    BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
-            float supply = GameMath.ammoSupplyAtDepth(modelSupply,
-                    BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
-            float scarcity = GameMath.scarcityRatioAtDepth(supply, demand);
-            boolean inBand = scarcity >= BalanceConfig.SCARCITY_RATIO_FLOOR_MIN
-                    && scarcity <= BalanceConfig.SCARCITY_RATIO_FLOOR_MAX;
-            // Worst per-weapon share at this depth (SUPPLY of the single biggest weapon over DEMAND).
-            float worstSupply = GameMath.ammoSupplyAtDepth(worstWeaponSupply,
-                    BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
-            float worstShare = GameMath.scarcityRatioAtDepth(worstSupply, demand);
-            results.add(new RuleResult(RuleKind.SCARCITY_DEPTH, "S at depth " + depth, scarcity,
-                    BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX, inBand,
-                    "region " + GameMath.regionIndexAtDepth(depth, band)
-                            + "; worst per-weapon share " + String.format("%.2f", worstShare)));
-        }
-        return results;
-    }
-
-    /**
-     * R-HEALDRAIN-DEPTH (order 3): the per-floor net HP drain holds [5%, 15%] of the player's
-     * current-difficulty eHP at EVERY depth 1..15. Incoming damage, heal supply and eHP all ride the
-     * enemy-damage curve, so the drain FRACTION is depth-stable at the region multipliers' 1.0 default.
-     */
-    public static List<RuleResult> healDrainDepthResults() {
-        List<RuleResult> results = new ArrayList<>();
-        float incomingBase = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
-                BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-        float healBase = modelFloorHealSupply();
-        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
-            float healRegionMultiplier = GameMath.perRegionMultiplierAtDepth(
-                    BalanceConfig.HEAL_SUPPLY_REGION_MULTIPLIER, depth, band);
-            float drainFraction = GameMath.netHpDrainFractionAtDepth(incomingBase, healBase,
-                    healRegionMultiplier, depth);
-            boolean inBand = drainFraction >= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN
-                    && drainFraction <= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX;
-            results.add(new RuleResult(RuleKind.HEALDRAIN_DEPTH, "net drain at depth " + depth, drainFraction,
-                    BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX,
-                    inBand, "region " + GameMath.regionIndexAtDepth(depth, band)
-                            + " heal mult " + String.format("%.2f", healRegionMultiplier)));
-        }
-        return results;
+        ge.tbegvadze.toon3d.level.SupplyPlan plan = modelFloorPlan(depth);
+        return GameMath.scarcityRatioAtDepth(plan.roundedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO),
+                plan.rosterEffectiveHitPoints);
     }
 
     // --- CREDIT ECONOMY inputs (order 3, part C) — deterministic "one source" income model. ---
@@ -1192,16 +1094,9 @@ public final class BalanceSchema {
 
     /** Expected credit-chip income on a single floor (expected chip count * weighted average chip value). */
     public static float chipIncomePerFloor() {
-        float expectedChips = (BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MIN
-                + BalanceConfig.CREDIT_CHIPS_PER_FLOOR_MAX) / 2f;
-        float weightSmall  = BalanceConfig.CREDIT_SPAWN_WEIGHT_SMALL;
-        float weightMedium = BalanceConfig.CREDIT_SPAWN_WEIGHT_MEDIUM;
-        float weightLarge  = BalanceConfig.CREDIT_SPAWN_WEIGHT_LARGE;
-        float weightTotal  = weightSmall + weightMedium + weightLarge;
-        float averageChipValue = (weightSmall * ItemConstants.CREDIT_SMALL_BASE
-                + weightMedium * ItemConstants.CREDIT_MEDIUM_BASE
-                + weightLarge * ItemConstants.CREDIT_LARGE_BASE) / weightTotal;
-        return expectedChips * averageChipValue;
+        // S8 (balance-overhaul order 2): a COMBAT floor's planned chips, each worth the old table's mean.
+        int chips = Math.round(BalanceConfig.NODE_SUPPLY_COMBAT_CREDITS * BalanceConfig.SUPPLY_CREDIT_CHIPS_PER_FLOOR);
+        return chips * (float) Math.round(ge.tbegvadze.toon3d.level.SupplyPlanner.averageCreditChipValue());
     }
 
     /** The credit price of the expected per-region purchase BUNDLE (one weapon-class buy + supplies). */
@@ -1776,16 +1671,25 @@ public final class BalanceSchema {
      * reference encounter the floor rules use (one source — the map can never drift from the floor).
      */
     public static RouteEconomicsModel.ModelFloor routeModelFloor() {
-        float roomBoxes = BalanceConfig.MODEL_FLOOR_ROOM_COUNT * BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
-        float killBoxes = modelFloorEnemyCount() * BalanceConfig.ENEMY_AMMO_DROP_CHANCE;
+        // TEMPORARY (balance-overhaul order 2, CP3c -> CP6): the route ledger is still priced on the legacy
+        // model floor's box model — ROUTE_MODEL_LEGACY_* room boxes + kill boxes split evenly over the five
+        // ammo types — because its bands (R-CALM-COST, R-TRAJECTORY, ...) were fitted to it. CP6 re-derives
+        // the whole ledger from the NodeSupplySpec rows (one source) and deletes these two constants.
+        float roomBoxes  = BalanceConfig.ROUTE_MODEL_LEGACY_ROOM_AMMO_BOXES;
+        float killBoxes  = BalanceConfig.ROUTE_MODEL_LEGACY_KILL_AMMO_BOXES;
         float totalBoxes = Math.max(1e-3f, roomBoxes + killBoxes);
-        float totalSupply = modelFloorTotalRangedSupply();
+        float perTypeBoxes = totalBoxes / AmmoType.values().length;
+        float totalSupply = 0f;
+        for (ScarcityRowSpec row : SCARCITY_ROWS) {
+            totalSupply += GameMath.ammoSupplyDamage(perTypeBoxes, row.boxSize, row.damagePerUnit);
+        }
+        float roomSupply = totalSupply * (roomBoxes / totalBoxes);
+        float killSupply = totalSupply * (killBoxes / totalBoxes);
         float averageBoxDamage = totalSupply / totalBoxes;
         float incoming = GameMath.incomingDamagePerFloor(modelFloorEnemyDamagePerTurn(),
                 BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
         float healSupply = modelFloorHealSupply();
-        return new RouteEconomicsModel.ModelFloor(modelFloorDemand(),
-                totalSupply * (roomBoxes / totalBoxes), totalSupply * (killBoxes / totalBoxes),
+        return new RouteEconomicsModel.ModelFloor(modelFloorDemand(), roomSupply, killSupply,
                 averageBoxDamage, incoming, healSupply, modelFloorKillCreditReward(), chipIncomePerFloor());
     }
 
@@ -2603,5 +2507,105 @@ public final class BalanceSchema {
                         carried + " of " + carrierEligible + " eligible pickups"));
             }
         }
+    }
+
+
+    // =====================================================================================
+    // R-SUPPLY — the GENERATOR SWEEP (balance-overhaul order 2, A2): every generator x every node type it
+    // serves x SUPPLY_AUDIT_DEPTHS x SUPPLY_AUDIT_SEED_COUNT seeds, built through the real generator and
+    // read back from the FloorContentReport the shared populator attaches. Computed once per JVM and
+    // cached: the audit's three supply tests, the density rules and BalanceReport all read the same pass.
+    // =====================================================================================
+
+    /** Which node types each generator builds (data, never a switch): the sweep's matrix. */
+    private static final Map<ge.tbegvadze.toon3d.route.GeneratorId, RouteNodeType[]> GENERATOR_SERVES =
+            buildGeneratorServes();
+
+    private static Map<ge.tbegvadze.toon3d.route.GeneratorId, RouteNodeType[]> buildGeneratorServes() {
+        Map<ge.tbegvadze.toon3d.route.GeneratorId, RouteNodeType[]> serves = new java.util.LinkedHashMap<>();
+        RouteNodeType[] standard = {RouteNodeType.COMBAT, RouteNodeType.ELITE, RouteNodeType.SHOP, RouteNodeType.MYSTERY};
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.ROOMS_MST, new RouteNodeType[]{RouteNodeType.COMBAT,
+                RouteNodeType.ELITE, RouteNodeType.CACHE, RouteNodeType.SHOP, RouteNodeType.MYSTERY});
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR, standard);
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.CAVERN, standard);
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.BOSS_ARENA, new RouteNodeType[]{RouteNodeType.BOSS});
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.MED_BAY, new RouteNodeType[]{RouteNodeType.REST});
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.EVENT_ROOM, new RouteNodeType[]{RouteNodeType.EVENT});
+        serves.put(ge.tbegvadze.toon3d.route.GeneratorId.GATE_AIRLOCK, new RouteNodeType[]{RouteNodeType.REGION_GATE});
+        return Collections.unmodifiableMap(serves);
+    }
+
+    /** The generator x node-type matrix the sweep builds. */
+    public static Map<ge.tbegvadze.toon3d.route.GeneratorId, RouteNodeType[]> generatorServes() {
+        return GENERATOR_SERVES;
+    }
+
+    private static List<ge.tbegvadze.toon3d.level.FloorContentReport> cachedSweepReports;
+
+    /**
+     * Every floor of the sweep, in matrix order (generator, node type, depth, seed). Built once per JVM.
+     * The config is the one a node of that type hands the generator: the node's supply spec, the expected
+     * player's ammo types.
+     */
+    public static synchronized List<ge.tbegvadze.toon3d.level.FloorContentReport> supplySweepReports() {
+        if (cachedSweepReports != null) return cachedSweepReports;
+        List<ge.tbegvadze.toon3d.level.FloorContentReport> reports = new ArrayList<>();
+        for (Map.Entry<ge.tbegvadze.toon3d.route.GeneratorId, RouteNodeType[]> entry : GENERATOR_SERVES.entrySet()) {
+            for (RouteNodeType type : entry.getValue()) {
+                ge.tbegvadze.toon3d.route.NodeSupplySpec spec = RouteRegistries.nodeSupplySpecs().getOrCombat(type);
+                for (int depth : BalanceConfig.SUPPLY_AUDIT_DEPTHS) {
+                    for (int seedIndex = 0; seedIndex < BalanceConfig.SUPPLY_AUDIT_SEED_COUNT; seedIndex++) {
+                        long seed = GameMath.floorSeed(0x5EE7L + seedIndex * 7919L, depth);
+                        ge.tbegvadze.toon3d.level.LevelGenConfig config = sweepConfig(spec);
+                        ge.tbegvadze.toon3d.level.Level level = RouteRegistries.generators()
+                                .create(entry.getKey(), seed, config).generate(depth);
+                        ge.tbegvadze.toon3d.level.FloorContentReport report = level.getFloorContentReport();
+                        if (report != null) reports.add(report);
+                    }
+                }
+            }
+        }
+        cachedSweepReports = Collections.unmodifiableList(reports);
+        return cachedSweepReports;
+    }
+
+    /** The config a node of this spec's type hands its generator during the sweep. */
+    private static ge.tbegvadze.toon3d.level.LevelGenConfig sweepConfig(ge.tbegvadze.toon3d.route.NodeSupplySpec spec) {
+        ge.tbegvadze.toon3d.level.LevelGenConfig config = new ge.tbegvadze.toon3d.level.LevelGenConfig();
+        config.supplySpec = spec;
+        return config;
+    }
+
+    /** R-SUPPLY (generator sweep): every cell of the matrix, worst case over its seeds. */
+    public static synchronized List<RuleResult> supplySweepResults() {
+        List<RuleResult> results = new ArrayList<>();
+        Map<String, SupplyAuditAccumulator> cells = new java.util.LinkedHashMap<>();
+        for (ge.tbegvadze.toon3d.level.FloorContentReport report : supplySweepReports()) {
+            String key = report.generatorName + "|" + report.spec.type() + "|" + report.depth;
+            SupplyAuditAccumulator accumulator = cells.get(key);
+            if (accumulator == null) {
+                accumulator = new SupplyAuditAccumulator(report.spec, report.depth);
+                cells.put(key, accumulator);
+            }
+            accumulator.add(report.plan, report.placement);
+        }
+        for (Map.Entry<String, SupplyAuditAccumulator> cell : cells.entrySet()) {
+            cell.getValue().emit(results, cell.getKey().substring(0, cell.getKey().indexOf('|')) + " ");
+        }
+        return results;
+    }
+
+    /** The R-SUPPLY sweep results whose subject contains any of the given fragments (the per-test views). */
+    public static List<RuleResult> supplySweepResults(String... subjectFragments) {
+        List<RuleResult> selected = new ArrayList<>();
+        for (RuleResult result : supplySweepResults()) {
+            for (String fragment : subjectFragments) {
+                if (result.subject.contains(fragment)) {
+                    selected.add(result);
+                    break;
+                }
+            }
+        }
+        return selected;
     }
 }

@@ -99,6 +99,10 @@ public final class SupplyPlanner {
         float totalValue = GameMath.plannedHealValue(incomingFraction, spec.drainTarget(),
                 healFloor, healFloorApplies);
         float armourValue = totalValue * spec.armourShare();
+        if (spec.guaranteedVest()) {
+            // ELITE's promised vest is part of the PLAN, not a bonus on top of it (S5 tracks it).
+            armourValue = Math.max(armourValue, armourPickupValue(BalanceConfig.ARMOUR_VEST_FRACTION, player));
+        }
         // The heal floor is HEAL value: armour never stands in for the one medkit a floor guarantees.
         float healValue   = Math.max(totalValue - armourValue, healFloor);
         planned.put(SupplyCategory.HEAL, healValue);
@@ -390,23 +394,30 @@ public final class SupplyPlanner {
                     && healFloorEarly + ROUNDING_EPSILON < BalanceConfig.SUPPLY_HEAL_EARLY_SHARE
                             * (healFloorPlaced + pickup.value);
             int chosen = -1;
-            // Tiers of relaxation: rooms under the cap -> any room -> corridor connectors.
-            for (int tier = 0; tier < 3 && chosen < 0; tier++) {
+            // Tiers of relaxation: rooms under the cap -> corridor connectors (not rooms, so the S7 share
+            // is never broken) -> any room under the cap or connector (lets an anchor-bound pickup leave the
+            // anchor's room) -> (last resort) any tile, dropping the cap and the "early" and "behind the
+            // anchor" preferences. The heal floor is NEVER placed behind a keycard.
+            for (int tier = 0; tier < 4 && chosen < 0; tier++) {
                 float bestScore = -Float.MAX_VALUE;
                 for (int slotIndex = 0; slotIndex < slots.size(); slotIndex++) {
                     if (taken[slotIndex]) continue;
                     SupplySlot slot = slots.get(slotIndex);
-                    if (tier < 2 && slot.isConnector()) continue;
-                    if (tier == 0 && perRoom.getOrDefault(slot.regionId, 0) >= roomCap) continue;
+                    if (tier == 0 && (slot.isConnector()
+                            || perRoom.getOrDefault(slot.regionId, 0) >= roomCap)) continue;
+                    if (tier == 1 && !slot.isConnector()) continue;
                     if (pickup.healFloor) {
                         if (!slot.reachableWithoutKeycard) continue;
-                        if (needEarly && slot.walkDistance > halfDistance) continue;
+                        if (needEarly && tier < 3 && slot.walkDistance > halfDistance) continue;
                     }
-                    if (pickup.behindAnchor && anchorRegionId >= 0) {
+                    if (tier == 2 && !slot.isConnector()
+                            && perRoom.getOrDefault(slot.regionId, 0) >= roomCap) continue;
+                    if (pickup.behindAnchor && anchorRegionId >= 0 && tier < 3) {
+                        // In the anchor's room first; failing that, anywhere at least as deep as it.
                         boolean inAnchor = slot.regionId == anchorRegionId;
                         boolean past     = slot.walkDistance >= anchorDistance;
                         if (tier == 0 && !inAnchor) continue;
-                        if (tier == 1 && !past) continue;
+                        if (tier >= 1 && !past) continue;
                     }
                     float score = random.nextFloat();
                     if (slot.onExitPath)    score += BalanceConfig.SUPPLY_EXIT_PATH_BONUS;

@@ -526,10 +526,6 @@ public final class RouteMapConstants {
     public static final int   CACHE_CRATES          = 3;
     /** Lockers ('L') stamped as depot set-dressing. */
     public static final int   CACHE_LOCKERS         = 2;
-    /** Per-room medkit chance the cache config bumps (a depot is medkit-rich). */
-    public static final float CACHE_MEDKIT_CHANCE_PER_ROOM = 0.6f;
-    /** Per-room armour chance the cache config bumps. */
-    public static final float CACHE_ARMOUR_CHANCE_PER_ROOM = 0.4f;
 
     // ---- MED-BAY / REST (RouteNodeType.REST, profile "rest_medbay") --------
     /** The auto-doc heal-station prop tile. Reuses the holo-workstation 'W' (no new symbol); the

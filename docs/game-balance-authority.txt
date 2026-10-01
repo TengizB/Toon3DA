@@ -189,14 +189,42 @@ R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the figh
   offence cards apply as a %-lift of the on-curve DPT (the model's convention),
   defence cards as flat eHP. The reference soldier (Void Shroud) is unchanged.
 
-R-SCARCITY (RuleKind.SCARCITY)
-  On the model floor (BalanceConfig SECTION 10): floor-wide S = SUPPLY/DEMAND
-  in [0.75, 0.95]; every single weapon's share < 0.60; heal net-drain fraction
-  in [0.05, 0.15] of reference eHP. Every AmmoType must have a registered
-  scarcity row (coverage).
-  WHY: scarcity is what turns a shooter into a roguelike — supply lands just
-  below comfort so "shoot or save?" stays a real question; the per-weapon cap
-  forces diversification; the net drain keeps HP precious without starving.
+R-SCARCITY (RuleKind.SCARCITY) — RETIRED by balance-overhaul order 2 (CP3c)
+  OVERRIDE RECORD: the model-floor band (floor-wide S in [0.75, 0.95], per-weapon S
+  < 0.60, net drain 5-15%) priced DICE — per-room ammo chances, per-kill drop chances
+  — that no longer exist. REPLACED by R-SUPPLY (below): every generated floor's supply
+  is PLANNED from its own roster and tracked against that plan. The SECTION 10 model
+  floor survives only as a printed example (BalanceReport "SUPPLY PLAN — model floor
+  example"). The scarcity ROW registry stays — it is the AmmoType coverage check and
+  the per-unit damage table the planner prices against.
+
+R-SUPPLY (RuleKind.SUPPLY) — supply tracks demand (balance-overhaul order 2)
+  Every generator builds through ONE pipeline (layout -> SupplySlotSurvey ->
+  encounter -> SupplyPlanner.plan -> SupplyPlanner.place). The plan is derived from
+  the roster the floor ACTUALLY fields and the node's NodeSupplySpec (S2-S10); it
+  never reads the player's current HP or ammo. Asserted twice:
+    PLANNER LEVEL (BalanceSchema.supplyPlannerResults) — every spec x depths
+      {1,5,10,15,20,25} x 30 seeds, planned against a real roster and placed on a
+      synthetic eight-room floor.
+    GENERATOR SWEEP (BalanceSchema.supplySweepResults, A2) — every generator x every
+      node type it serves x the same depths x 30 seeds, read back from the
+      FloorContentReport the shared FloorPopulator attaches to each Level.
+  Per cell (worst case over its seeds):
+    heal floor   >= SUPPLY_HEAL_FLOOR_FRACTION (0.45 max HP = one 'H') of HEAL value
+                 placed reachable WITHOUT a keycard (not BOSS / REST / REGION_GATE)
+    first half   >= 50% of that heal floor within half the farthest keycard-free walk
+    tracking     |placed - plan| <= max(10% of plan, half the category's largest
+                 pickup) for AMMO / HEAL / ARMOUR / CREDITS ("only rounding to whole
+                 pickups may move it"); nothing unplaced
+    spread       no room / chamber holds more than max(1, floor(35% x count)) of a
+                 category's ground pickups (count basis; corridors are not rooms)
+    carriers     ~25% (+/-0.08) of the eligible ammo / non-floor heal pickups ride
+                 on enemies (S6)
+  WHY: three generators placed loot with three different codes built from
+  independent per-room chances — a rooms floor rolled ~8 medkits and ~10 ammo boxes
+  at depth 1, a cave ~0.45 medkits (only inside a MEDICAL_BAY chamber that might not
+  exist). "Sometimes too many resources, other times too little; I die in the caves
+  because they have no medkits." Supply is now what the fights cost, minus a bite.
 
 R-DOT (RuleKind.DOT_UNIQUENESS)
   Exactly ONE definition per status: the unified bases are
@@ -263,38 +291,20 @@ R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2
   priced content in one pass. Magnitudes may still be tuned freely — the price
   recomputes from the magnitude, so tuning stays free.
 
-R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — scarcity across the whole run (order 3; RE-FIT by balance-overhaul order 1)
-  R-SCARCITY checks the ammo economy on ONE depth-1 model floor; R-SCARCITY-DEPTH
-  carries that anchor down the run and requires the scarcity ratio S in [0.75,
-  0.95] at EVERY depth 1..RUN_FINAL_DEPTH (25; was 1..15). The two curves it rides:
-    DEMAND(d) = modelFloorDemand * ENEMY_HEALTH_GROWTH^(d-1)   (enemy eHP compounds)
-    SUPPLY(d) = modelFloorSupply * expectedHitGrowthAtDepth(d)   (each ammo unit hits
-                                  * AMMO_SUPPLY_REGION_MULTIPLIER[r]   as hard as the
-                                                                  on-curve weapon)
-    S(d)      = SUPPLY(d) / DEMAND(d)               (GameMath.scarcityRatioAtDepth)
-  Enemy HP growth is FITTED to the expected hit growth (R-LADDER L1), so S is near
-  depth-stable; the residual per-region rarity wobble is trimmed by the per-region
-  lever, now five entries {1.03, 1.00, 0.98, 0.98, 1.10}.
-  RE-FIT RECORD: the R8 rebase cut model-floor DEMAND 720 -> 502, so LEVER 2 box
-  sizes and LEVER 3 caps were cut ~0.7x (SECTION 5 note). SIZE, not frequency, is the
-  lever so a guaranteed box (cache / event / vault) keeps its share of a floor. The
-  slug reserve-banking gate stays the TIGHTEST — the Railgun waiver still holds.
+R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
+  OVERRIDE RECORD: S in [0.75, 0.95] at every depth on the model floor's dice curve is
+  REPLACED by R-SUPPLY's generator sweep at depths {1,5,10,15,20,25}: each floor's
+  ammo is ammoRatio x its own roster eHP, priced per unit at the on-curve hit growth
+  (GameMath.supplyDamagePerUnitAtDepth), so the box count is depth-stable by
+  construction. AMMO_SUPPLY_REGION_MULTIPLIER is no longer read by any floor rule (the
+  route model still reads it until CP6 re-derives the ledger).
 
-R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — the heal economy, enforced (order 3; RE-FIT by balance-overhaul order 1)
-  The per-floor NET HP drain holds [5%, 15%] of the expected player's eHP at EVERY
-  depth 1..RUN_FINAL_DEPTH (25; was 1..15) (GameMath.netHpDrainFractionAtDepth):
-    incoming(d) = incomingBase * ENEMY_DAMAGE_GROWTH^(d-1)
-    heal(d)     = healBase * eHP(d)/eHP(1) * HEAL_SUPPLY_REGION_MULTIPLIER[r]
-                  (heals are FRACTIONS of max, and max includes the flat card bonuses)
-    drain(d)    = (incoming(d) - heal(d)) / expectedPlayerAtDepth(d).effectiveHitPoints
-  The drain is a small DIFFERENCE, so it amplifies the R-LADDER turns-to-die drift
-  several times — the reason the expected defence-card share is 0.25 (it keeps that
-  drift within +/-7%) and the heal lever grew to five entries {1, 1, 1, 1.03, 1.10}.
-  RE-FIT RECORD: MODEL_FLOOR_EXPECTED_MEDKITS 1.5 -> 2.8 and _ARMOUR_PICKUPS 1.0 ->
-  1.6, re-synced to the generator's default per-room chances (8 rooms x 0.35 / 0.20);
-  the old undercount priced a heal economy harsher than the game places, and the R8
-  rebase made every fight costlier. WHY (unchanged): HP is a slowly depleting run
-  resource — medkits are decisions, not a timer.
+R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
+  OVERRIDE RECORD: the 5-15% net-drain band on the model floor is REPLACED by R-SUPPLY's
+  heal floor + tracking (the planned heal value = modelled incoming x (1 - the node's
+  drainTarget), S3/S4) and, played, by the sim band S-SUPPLY (TACTICAL HP fraction at
+  COMBAT exit in [0.55, 0.80], CP7). HEAL_SUPPLY_REGION_MULTIPLIER survives only in the
+  route model until CP6.
 
 R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
   Currency without a coupled sink is a score counter. The rule couples income to the
@@ -606,9 +616,10 @@ LIVE WAIVERS (one value waiver + the order-9 navigation-limited bands):
              (~1.1 slugs/floor, tightest reserve banking ~1.0 floor) is the
              real limiter. Nerfing the raw 90 would make the weapon worthless
              rather than merely scarce.
-    expires: re-checked by order-3 R-SCARCITY-DEPTH — slug reserve banking stays
-             the TIGHTEST gate (~1.0 floor at depth 1) after the shop re-pricing;
-             the waiver holds because scarcity, not raw damage, is the limiter.
+    expires: re-checked by balance-overhaul order 2 R-SUPPLY — slugs only ever arrive
+             through the 30% off-type share of a floor's planned ammo (or the carried
+             share once a railgun is held), and the slug reserve cap stays the tightest
+             of all ammo types; scarcity, not raw damage, is still the limiter.
 
   [SIM_FAIR] TACTICAL median death depth, [SIM_FAIR] TACTICAL readable deaths,
   [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
@@ -1166,6 +1177,20 @@ CHANGELOG
     red + down-chevron two or more behind, green + up-chevron ahead; the Fist always reads on-level),
     the compare card prices both guns at THIS floor, floor arrival posts "THREAT LV d" for 2 s, and
     ORA teaches UNDERGEARED once (re-taught once after 3 more floors behind). No balance value moved.
+
+  balance-overhaul order 2 / CP1-CP3 — FULL FLOORS, FAIR SUPPLY (the supply half). Added
+    BalanceConfig SECTION 21 (SUPPLY & DENSITY), route/NodeSupplySpec (+ registry, one row per
+    node type), level/SupplyPlanner + FloorPopulator + SupplySlotSurvey, and R-SUPPLY (planner
+    level + the generator sweep). Every generator now builds through the planner; carriers
+    replace per-kill drop rolls (both never-softlock lifelines kept). RETIRED (override clause):
+    R-SCARCITY, R-SCARCITY-DEPTH, R-HEALDRAIN-DEPTH -> R-SUPPLY. DELETED constants:
+    ENEMY_AMMO_DROP_CHANCE, MELEE_KILL_AMMO_DROP_CHANCE, LEVEL_GEN_AMMO_CHANCE_PER_ROOM, the
+    LEVEL_GEN_DEPTH_{MEDKIT,AMMO}_BONUS / _EXTRA_AMMO_CHANCE generosity bumps, every per-room-type
+    loot chance (server / large / armory / command / hazard rooms, LEVEL_GEN_RANDOM_ROOM_WEAPON_
+    CHANCE), CREDIT_CHIPS_PER_FLOOR_MIN/MAX (+ chip jitters), MODEL_FLOOR_ROOM_COUNT /
+    _AMMO_TYPE_COUNT, LevelGenConfig.medkits/armourKits/*ChancePerRoom and RouteMapConstants.
+    CACHE_*_CHANCE_PER_ROOM. TEMPORARY: the route ledger's model floor keeps the legacy box model
+    (ROUTE_MODEL_LEGACY_{ROOM,KILL}_AMMO_BOXES 1.6 / 1.2) until CP6 re-derives it from the specs.
 
   balance-overhaul order 1 / CP5 — the shop LEVEL UP rung (R13): every Fabricator stocks a
     guaranteed LEVEL UP offer for the EQUIPPED weapon (outside the weighted roll; ShopContext now

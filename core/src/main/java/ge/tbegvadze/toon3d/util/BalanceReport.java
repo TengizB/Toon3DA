@@ -44,9 +44,7 @@ public final class BalanceReport {
         System.out.println();
         printScarcityTable();
         System.out.println();
-        printScarcityDepthSweep();
-        System.out.println();
-        printHealDrainDepthSweep();
+        printSupplyDensityTable();
         System.out.println();
         printCreditEconomyTable();
         System.out.println();
@@ -573,106 +571,48 @@ public final class BalanceReport {
     // Every number is computed from BalanceConfig through GameMath, so it cannot drift.
     // -----------------------------------------------------------------------------------
     private static void printScarcityTable() {
-        // DEMAND = sum of every model-floor enemy's eHP (eHP == raw HP: no dodge/reduction).
-        float demand =
-                  BalanceConfig.MODEL_FLOOR_GORE_BITER_COUNT  * enemyEffectiveHitPoints(BalanceConfig.GORE_BITER_MAX_HEALTH)
-                + BalanceConfig.MODEL_FLOOR_EYE_TYRANT_COUNT  * enemyEffectiveHitPoints(BalanceConfig.EYE_TYRANT_MAX_HEALTH)
-                + BalanceConfig.MODEL_FLOOR_SHELL_BRUTE_COUNT * enemyEffectiveHitPoints(BalanceConfig.SHELL_BRUTE_MAX_HEALTH)
-                + BalanceConfig.MODEL_FLOOR_PLAGUE_HULK_COUNT * enemyEffectiveHitPoints(BalanceConfig.PLAGUE_HULK_MAX_HEALTH);
-        int enemyCount = BalanceConfig.MODEL_FLOOR_GORE_BITER_COUNT + BalanceConfig.MODEL_FLOOR_EYE_TYRANT_COUNT
-                + BalanceConfig.MODEL_FLOOR_SHELL_BRUTE_COUNT + BalanceConfig.MODEL_FLOOR_PLAGUE_HULK_COUNT;
-
-        // Expected ammo boxes per floor, split uniformly across the 5 floor-droppable types
-        // (matches the generator's randomAmmoChar() uniform roll).
-        float expectedBoxes = GameMath.expectedAmmoBoxesPerFloor(
-                BalanceConfig.MODEL_FLOOR_ROOM_COUNT, BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM,
-                enemyCount, BalanceConfig.ENEMY_AMMO_DROP_CHANCE);
-        float boxesPerType = expectedBoxes / BalanceConfig.MODEL_FLOOR_AMMO_TYPE_COUNT;
-
-        System.out.println("SCARCITY — model floor (depth 1): " + enemyCount + " enemies, "
-                + BalanceConfig.MODEL_FLOOR_ROOM_COUNT + " rooms, DEMAND=" + String.format("%.0f", demand)
-                + " dmg ; expected ammo boxes/floor=" + String.format("%.2f", expectedBoxes)
-                + " (" + String.format("%.2f", boxesPerType) + "/type)");
+        // The SECTION 10 model floor survives only as a PRINTED EXAMPLE (balance-overhaul order 2): its
+        // supply is what the SupplyPlanner hands that roster on a depth-1 COMBAT node, not a dice model.
+        ge.tbegvadze.toon3d.level.SupplyPlan plan = BalanceSchema.modelFloorPlan(1);
+        float demand = plan.rosterEffectiveHitPoints;
+        int enemyCount = BalanceSchema.modelFloorRoster().size();
+        java.util.Map<Character, Integer> boxesBySymbol = new java.util.HashMap<>();
+        for (ge.tbegvadze.toon3d.level.PlannedPickup pickup : plan.pickups()) {
+            if (pickup.category == ge.tbegvadze.toon3d.level.SupplyCategory.AMMO) {
+                boxesBySymbol.merge(pickup.symbol, 1, Integer::sum);
+            }
+        }
+        System.out.println("SUPPLY PLAN — model floor example (depth 1, COMBAT): " + enemyCount
+                + " enemies, DEMAND=" + String.format("%.0f", demand) + " dmg ; planned ammo damage="
+                + String.format("%.0f", plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO))
+                + " (ammoRatio " + BalanceConfig.NODE_SUPPLY_COMBAT_AMMO_RATIO + ", "
+                + String.format("%.0f%%", BalanceConfig.SUPPLY_CARRIED_SHARE * 100f) + " carried types)");
         System.out.printf("%-10s %7s %9s %8s %10s %-7s %12s%n",
-                "ammoType", "boxSize", "dmg/unit", "supply", "perWpnS", "<0.6?", "bankFloors");
+                "ammoType", "boxes", "dmg/unit", "supply", "perWpnS", "", "bankFloors");
         System.out.println("------------------------------------------------------------------------------------");
-
-        // Representative damage-per-unit = the per-shot damage of the weapon that eats this
-        // ammo (one shot costs one unit), so supply = boxes * boxSize * damagePerShot.
-        float railgunFull = BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE[BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE.length - 1];
-        float bulletsSupply = printScarcityRow("Bullets", boxesPerType, BalanceConfig.AMMO_BOX_BULLETS,
-                BalanceConfig.ASSAULT_RIFLE_DAMAGE, BalanceConfig.AMMO_RESERVE_CAP_BULLETS, demand);
-        float shellsSupply  = printScarcityRow("Shells",  boxesPerType, BalanceConfig.AMMO_BOX_SHELLS,
-                BalanceConfig.SHOTGUN_DAMAGE, BalanceConfig.AMMO_RESERVE_CAP_SHELLS, demand);
-        float cellsSupply   = printScarcityRow("Cells",   boxesPerType, BalanceConfig.AMMO_BOX_CELLS,
-                BalanceConfig.PLASMA_RIFLE_DAMAGE, BalanceConfig.AMMO_RESERVE_CAP_CELLS, demand);
-        float rocketsSupply = printScarcityRow("Rockets", boxesPerType, BalanceConfig.AMMO_BOX_ROCKETS,
-                BalanceConfig.GRENADE_SPLASH_DAMAGE, BalanceConfig.AMMO_RESERVE_CAP_ROCKETS, demand);
-        float slugsSupply   = printScarcityRow("Slugs",   boxesPerType, BalanceConfig.RAILGUN_PICKUP_SLUGS,
-                railgunFull, BalanceConfig.RAILGUN_MAX_SLUGS, demand);
-
-        float totalSupply = bulletsSupply + shellsSupply + cellsSupply + rocketsSupply + slugsSupply;
-        float scarcityRatio = GameMath.scarcityRatio(totalSupply, demand);
-        boolean ratioInBand = scarcityRatio >= BalanceConfig.SCARCITY_RATIO_FLOOR_MIN
-                && scarcityRatio <= BalanceConfig.SCARCITY_RATIO_FLOOR_MAX;
+        float totalSupply = 0f;
+        for (BalanceSchema.ScarcityRowSpec row : BalanceSchema.scarcityRows()) {
+            int boxes = boxesBySymbol.getOrDefault(row.ammoType.getPickupTileChar(), 0);
+            totalSupply += printScarcityRow(row.ammoType.getDisplayName(), boxes, row.boxSize,
+                    row.damagePerUnit, row.reserveCap, demand);
+        }
         System.out.println("------------------------------------------------------------------------------------");
-        System.out.printf("FLOOR-WIDE  SUPPLY=%.0f  DEMAND=%.0f  S=%.2f  band=%.2f-%.2f  %s%n",
-                totalSupply, demand, scarcityRatio,
-                BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX,
-                bandVerdict(ratioInBand, scarcityRatio, BalanceConfig.SCARCITY_RATIO_FLOOR_MIN));
-
-        printHealEconomy(demand, enemyCount);
+        System.out.printf("FLOOR-WIDE  SUPPLY=%.0f  DEMAND=%.0f  S=%.2f  (R-SUPPLY tracks the plan, not a band on S)%n",
+                totalSupply, demand, GameMath.scarcityRatio(totalSupply, demand));
+        System.out.printf("HEALS planned %.2f max-HP (heal floor %.2f) + armour %.2f ; incoming %.2f max-HP%n",
+                plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.HEAL), plan.healFloorValue,
+                plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.ARMOUR), plan.incomingFraction);
     }
 
     /** Prints one ammo-type row and returns that type's supply damage. */
-    private static float printScarcityRow(String ammoType, float boxesPerType, int boxSize,
+    private static float printScarcityRow(String ammoType, int boxes, int boxSize,
                                           float damagePerUnit, int reserveCap, float demand) {
-        float supply = GameMath.ammoSupplyDamage(boxesPerType, boxSize, damagePerUnit);
+        float supply = GameMath.ammoSupplyDamage(boxes, boxSize, damagePerUnit);
         float perWeaponShare = GameMath.scarcityRatio(supply, demand);
-        boolean underCap = perWeaponShare < BalanceConfig.SCARCITY_PER_WEAPON_MAX;
         float bankFloors = GameMath.reserveBankingFloors(reserveCap, damagePerUnit, demand);
         System.out.printf("%-10s %7d %9.0f %8.0f %10.2f %-7s %12.2f%n",
-                ammoType, boxSize, damagePerUnit, supply, perWeaponShare,
-                underCap ? "OK" : "OVER", bankFloors);
+                ammoType, boxes, damagePerUnit, supply, perWeaponShare, "", bankFloors);
         return supply;
-    }
-
-    /** Prints the heal economy: incoming damage, heal supply, and net HP drain vs band. */
-    private static void printHealEconomy(float demand, int enemyCount) {
-        // Total enemy damage-per-turn across the model floor (melee cadence folded in).
-        float totalEnemyDamagePerTurn =
-                  BalanceConfig.MODEL_FLOOR_GORE_BITER_COUNT  * (BalanceConfig.GORE_BITER_ATTACK_DAMAGE  / 1f)
-                + BalanceConfig.MODEL_FLOOR_EYE_TYRANT_COUNT  * (BalanceConfig.EYE_TYRANT_ATTACK_DAMAGE  / 1f)
-                + BalanceConfig.MODEL_FLOOR_SHELL_BRUTE_COUNT * (BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE / 1f)
-                + BalanceConfig.MODEL_FLOOR_PLAGUE_HULK_COUNT
-                        * (BalanceConfig.PLAGUE_HULK_ATTACK_DAMAGE / (float) BalanceConfig.PLAGUE_HULK_MOVE_EVERY_N_TURNS);
-
-        float incoming = GameMath.incomingDamagePerFloor(totalEnemyDamagePerTurn,
-                BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY, BalanceConfig.MODEL_FLOOR_AVOIDANCE_FACTOR);
-
-        float averageMedkitHeal = (BalanceSchema.modelStimHeal() + BalanceSchema.modelFullMedkitHeal()) / 2f;
-        float averageArmourValue = (BalanceSchema.modelArmourShardValue() + BalanceSchema.modelArmourVestValue()) / 2f;
-        float healSupply = GameMath.healSupplyPerFloor(BalanceConfig.MODEL_FLOOR_EXPECTED_MEDKITS, averageMedkitHeal,
-                BalanceConfig.MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS, averageArmourValue);
-
-        float netDrain = GameMath.netHpDrainPerFloor(incoming, healSupply);
-        float drainFraction = netDrain / BalanceConfig.REFERENCE_PLAYER_EHP;
-        boolean drainInBand = drainFraction >= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN
-                && drainFraction <= BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX;
-
-        // Informational: what a full medkit buys, in survival turns, at the floor's average rate.
-        int floorEngagementTurns = Math.max(1, enemyCount * BalanceConfig.MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY);
-        float averageIncomingDamagePerTurn = incoming / floorEngagementTurns;
-        float fullMedkitTurns = GameMath.survivalTurnsBought(BalanceSchema.modelFullMedkitHeal(), averageIncomingDamagePerTurn);
-
-        System.out.println();
-        System.out.println("HEAL ECONOMY — model floor");
-        System.out.printf("  INCOMING=%.0f  HEAL_SUPPLY=%.0f  netHpDrain=%.0f  (%.1f%% of %.0f eHP ; band %.0f-%.0f%%)  %s%n",
-                incoming, healSupply, netDrain, drainFraction * 100f, BalanceConfig.REFERENCE_PLAYER_EHP,
-                BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN * 100f, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX * 100f,
-                bandVerdict(drainInBand, drainFraction, BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN));
-        System.out.printf("  full medkit (%d HP) buys %.1f survival-turns at %.1f avg incoming dmg/turn (informational)%n",
-                BalanceSchema.modelFullMedkitHeal(), fullMedkitTurns, averageIncomingDamagePerTurn);
     }
 
     /** Enemy eHP with no dodge or flat reduction (the contract rule for current enemies). */
@@ -686,43 +626,49 @@ public final class BalanceReport {
     // shop price list. All numbers flow through the same BalanceSchema helpers the audit uses.
     // -----------------------------------------------------------------------------------
 
-    /** R-SCARCITY-DEPTH: the scarcity ratio S at every depth 1..25 (DEMAND up the enemy HP curve, SUPPLY up the expected hit growth). */
-    private static void printScarcityDepthSweep() {
-        System.out.println("SCARCITY DEPTH SWEEP (R-SCARCITY-DEPTH) — S=SUPPLY/DEMAND at each depth, band "
-                + String.format("%.2f-%.2f", BalanceConfig.SCARCITY_RATIO_FLOOR_MIN, BalanceConfig.SCARCITY_RATIO_FLOOR_MAX)
-                + "  [model supply=" + String.format("%.0f", BalanceSchema.modelFloorTotalRangedSupply())
-                + " demand=" + String.format("%.0f", BalanceSchema.modelFloorDemand()) + "]");
-        System.out.printf("%-6s %-7s %8s %8s %8s %9s %-6s%n",
-                "depth", "region", "hitX", "DEMAND", "SUPPLY", "S", "in?");
-        System.out.println("------------------------------------------------------------------------------------");
-        for (BalanceSchema.RuleResult result : BalanceSchema.scarcityDepthResults()) {
-            int depth = Integer.parseInt(result.subject.replaceAll("[^0-9]", ""));
-            int band  = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-            float gearX  = GameMath.expectedHitGrowthAtDepth(depth)
-                    * GameMath.perRegionMultiplierAtDepth(BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
-            float demand = GameMath.floorDemandAtDepth(BalanceSchema.modelFloorDemand(),
-                    BalanceConfig.ENEMY_HEALTH_GROWTH, depth);
-            float supply = GameMath.ammoSupplyAtDepth(BalanceSchema.modelFloorTotalRangedSupply(),
-                    BalanceConfig.AMMO_SUPPLY_REGION_MULTIPLIER, depth, band);
-            System.out.printf("%-6d %-7d %8.2f %8.0f %8.0f %9.2f %-6s%n",
-                    depth, GameMath.regionIndexAtDepth(depth, band), gearX, demand, supply, result.value,
-                    bandVerdict(result.satisfied, result.value, result.bandMinimum));
+    /**
+     * SUPPLY / DENSITY (balance-overhaul order 2) — what every generator x node type actually builds at the
+     * audited depths, averaged over the R-SUPPLY sweep's seeds (the same pass the audit asserts on):
+     * bodies, groups, first-contact walk, footprint, density, and planned vs placed supply per category.
+     */
+    private static void printSupplyDensityTable() {
+        System.out.println("SUPPLY / DENSITY (R-SUPPLY / R-DENSITY) — mean over "
+                + BalanceConfig.SUPPLY_AUDIT_SEED_COUNT + " seeds per row; ammo in damage, heal/armour in max-HP");
+        System.out.printf("%-16s %-11s %3s %6s %6s %6s %5s %6s %5s %13s %11s %11s %7s%n",
+                "generator", "node", "d", "bodies", "groups", "1stCon", "walk", "dens", "TP/x",
+                "ammo plan/put", "heal p/put", "armr p/put", "credits");
+        System.out.println("-----------------------------------------------------------------------------------------------------------------------");
+        java.util.Map<String, java.util.List<ge.tbegvadze.toon3d.level.FloorContentReport>> cells = new java.util.LinkedHashMap<>();
+        for (ge.tbegvadze.toon3d.level.FloorContentReport report : BalanceSchema.supplySweepReports()) {
+            cells.computeIfAbsent(report.generatorName + "|" + report.spec.type() + "|" + report.depth,
+                    key -> new java.util.ArrayList<>()).add(report);
         }
-    }
-
-    /** R-HEALDRAIN-DEPTH: the per-floor net HP drain fraction at every depth 1..15. */
-    private static void printHealDrainDepthSweep() {
-        System.out.println("HEAL DRAIN DEPTH SWEEP (R-HEALDRAIN-DEPTH) — net HP loss per floor, band "
-                + String.format("%.0f-%.0f%%", BalanceConfig.HEAL_NET_DRAIN_FRACTION_MIN * 100f,
-                        BalanceConfig.HEAL_NET_DRAIN_FRACTION_MAX * 100f)
-                + " of depth-scaled eHP");
-        System.out.printf("%-6s %-7s %9s %-6s%n", "depth", "region", "drain%", "in?");
-        System.out.println("------------------------------------------------------------------------------------");
-        for (BalanceSchema.RuleResult result : BalanceSchema.healDrainDepthResults()) {
-            int depth = Integer.parseInt(result.subject.replaceAll("[^0-9]", ""));
-            System.out.printf("%-6d %-7d %8.1f%% %-6s%n",
-                    depth, GameMath.regionIndexAtDepth(depth, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE),
-                    result.value * 100f, bandVerdict(result.satisfied, result.value, result.bandMinimum));
+        for (java.util.List<ge.tbegvadze.toon3d.level.FloorContentReport> cell : cells.values()) {
+            ge.tbegvadze.toon3d.level.FloorContentReport first = cell.get(0);
+            float bodies = 0f, groups = 0f, contact = 0f, walk = 0f, density = 0f, threat = 0f;
+            float ammoPlan = 0f, ammoPut = 0f, healPlan = 0f, healPut = 0f, armourPlan = 0f, armourPut = 0f, credits = 0f;
+            int contactCount = 0;
+            for (ge.tbegvadze.toon3d.level.FloorContentReport report : cell) {
+                bodies  += report.enemyCount;
+                groups  += report.groupCount();
+                if (report.firstContactWalkTiles >= 0) { contact += report.firstContactWalkTiles; contactCount++; }
+                walk    += report.walkableTiles;
+                density += report.density();
+                threat  += report.threatCap > 0f ? report.threatSpent / report.threatCap : 0f;
+                ammoPlan   += report.plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO);
+                ammoPut    += report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO);
+                healPlan   += report.plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.HEAL);
+                healPut    += report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.HEAL);
+                armourPlan += report.plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.ARMOUR);
+                armourPut  += report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.ARMOUR);
+                credits    += report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.CREDITS);
+            }
+            float n = cell.size();
+            System.out.printf("%-16s %-11s %3d %6.1f %6.1f %6s %5.0f %6.2f %5.2f %6.0f/%-6.0f %5.2f/%-5.2f %5.2f/%-5.2f %7.0f%n",
+                    first.generatorName, first.spec.type(), first.depth, bodies / n, groups / n,
+                    contactCount == 0 ? "-" : String.format("%.1f", contact / contactCount),
+                    walk / n, density / n, threat / n, ammoPlan / n, ammoPut / n, healPlan / n, healPut / n,
+                    armourPlan / n, armourPut / n, credits / n);
         }
     }
 

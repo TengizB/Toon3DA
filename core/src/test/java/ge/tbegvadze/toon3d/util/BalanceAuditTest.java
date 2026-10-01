@@ -80,10 +80,15 @@ class BalanceAuditTest {
     // R-DEPTH (depth coupling, 1..15) was RETIRED by balance-overhaul order 1 and REPLACED by R-LADDER L1
     // (on-curve TTK/TTD flat within +/-15% at 1..25), asserted by thePowerLadderHoldsAtEveryDepthToTheRunEnd.
 
-    /** R-SCARCITY: model-floor supply/demand, per-weapon shares, and heal net-drain all in band. */
+    /**
+     * R-SUPPLY generator sweep — TRACKING (replaces R-SCARCITY, balance-overhaul order 2 override): on every
+     * generator x node type x audited depth x 30 seeds, every category's placed supply is within +/-10% of
+     * the plan derived from that floor's own roster (or one pickup's rounding), nothing is left unplaced,
+     * and a quarter of the eligible supply rides on carriers.
+     */
     @Test
-    void scarcityModelHoldsOnTheModelFloor() {
-        assertNoViolations(BalanceSchema.scarcityResults());
+    void everyGeneratedFloorTracksItsOwnDemand() {
+        assertNoViolations(BalanceSchema.supplySweepResults("tracking", "unplaced", "carrier share"));
     }
 
     /** R-DOT: exactly one definition per status; every shim field re-exports BalanceConfig exactly. */
@@ -149,16 +154,23 @@ class BalanceAuditTest {
                 () -> "Budgeted ability rolls exceeded their tier ceiling:\n" + String.join("\n", overspends));
     }
 
-    /** R-SCARCITY-DEPTH (order 3; horizon 1..25 since balance-overhaul order 1): S holds [0.75, 0.95] at every depth. */
+    /**
+     * R-SUPPLY generator sweep — SPREAD (replaces R-SCARCITY-DEPTH, balance-overhaul order 2 override): at
+     * every audited depth no room / chamber holds more than 35% of any category's pickups.
+     */
     @Test
-    void scarcityHoldsAtEveryDepthToTheRunEnd() {
-        assertNoViolations(BalanceSchema.scarcityDepthResults());
+    void everyGeneratedFloorSpreadsItsSupplyAtEveryDepth() {
+        assertNoViolations(BalanceSchema.supplySweepResults("room-share"));
     }
 
-    /** R-HEALDRAIN-DEPTH (order 3; horizon 1..25 since balance-overhaul order 1): net HP drain holds [5%, 15%] per floor. */
+    /**
+     * R-SUPPLY generator sweep — HEAL FLOOR (replaces R-HEALDRAIN-DEPTH, balance-overhaul order 2 override):
+     * every non-BOSS / REST / REGION_GATE floor of every generator carries at least one medkit's worth of
+     * heal value reachable without a keycard, half of it in the first half of the floor.
+     */
     @Test
-    void healDrainHoldsAtEveryDepthToTheRunEnd() {
-        assertNoViolations(BalanceSchema.healDrainDepthResults());
+    void everyGeneratedFloorCarriesTheHealFloorAtEveryDepth() {
+        assertNoViolations(BalanceSchema.supplySweepResults("heal floor"));
     }
 
     /** R-CREDITS (order 3): expected region income / expected purchase-bundle price stays in [0.9, 1.4]. */

@@ -585,12 +585,6 @@ public final class BalanceConfig {
     public static final int   LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX      = 2;
     /** At full depth, chance a light spawn is upgraded to a heavy archetype. Range: 0.0–1.0. */
     public static final float LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE = 0.60f;
-    /** Additive medkit-chance bonus at full depth. Range: 0.0–0.4. */
-    public static final float LEVEL_GEN_DEPTH_MEDKIT_BONUS         = 0.15f;
-    /** Additive ammo-chance bonus at full depth. Range: 0.0–0.4. */
-    public static final float LEVEL_GEN_DEPTH_AMMO_BONUS           = 0.20f;
-    /** At full depth, chance a room receives a bonus second ammo box. Range: 0.0–1.0. */
-    public static final float LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE    = 0.50f;
 
     // =====================================================================================
     // SECTION 4 — WEAPON OUTPUT (damage / clip / range / falloff / reload)
@@ -773,15 +767,10 @@ public final class BalanceConfig {
     public static final int FLAME_MAX_FUEL           = 35;
     public static final int GRENADE_MAX_AMMO         = 7;
 
-    // LEVER 1 — DROP FREQUENCY: how often a pickup spawns at all. Frequency adds variance
-    // (good for texture) and here carries more of the scarcity than ideal because box sizes
-    // can only shrink so far before they stop being sensible "boxes" — see the magnitude note.
-    /** Chance a ranged-weapon kill drops an ammo pickup. Range: 0.05–0.6. */
-    public static final float ENEMY_AMMO_DROP_CHANCE         = 0.10f;
-    /** Chance a melee kill drops an ammo pickup (kept above the ranged rate to reward the risky melee path). Range: 0.1–0.8. */
-    public static final float MELEE_KILL_AMMO_DROP_CHANCE    = 0.20f;
-    /** Base chance any non-entrance room contains at least one ammo box. Range: 0.1–0.6. */
-    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM = 0.20f;
+    // LEVER 1 — DROP FREQUENCY was REPLACED by balance-overhaul order 2: ammo is no longer rolled per
+    // room or per kill (ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_CHANCE / LEVEL_GEN_AMMO_CHANCE_PER_ROOM
+    // are gone). How MUCH ammo a floor holds is planned from its roster (SECTION 21, R-SUPPLY); the box
+    // sizes above still set the grain.
 
     // LEVER 5 — PER-REGION SUPPLY MULTIPLIER (new-game-balancr order 3): a per-region trim/boost on
     // ammo SUPPLY so a region can be tuned without touching the global box sizes. Indexed by 0-based
@@ -804,37 +793,16 @@ public final class BalanceConfig {
     /** Hard cap on enemies spawned per room. Range: 1–5. */
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM = 3;
 
-    // Credit-chip floor spawns per level and their tier weights (proportional, need not sum to 100).
-    public static final int CREDIT_CHIPS_PER_FLOOR_MIN  = 3;
-    public static final int CREDIT_CHIPS_PER_FLOOR_MAX  = 7;
+    // Credit-chip tier weights (proportional, need not sum to 100): their weighted mean is the value of
+    // one planned chip (SupplyPlanner.averageCreditChipValue); the chip COUNT is SECTION 21's.
     public static final int CREDIT_SPAWN_WEIGHT_SMALL   = 70;
     public static final int CREDIT_SPAWN_WEIGHT_MEDIUM  = 24;
     public static final int CREDIT_SPAWN_WEIGHT_LARGE   = 6;
 
-    // -------------------------------------------------------------------------------------
-    // LOOT ROOM BUDGETS — per-room-type pickup chances. These are the real spawn dials:
-    // they decide how generous each themed room is with heals, armour, ammo and weapons.
-    // -------------------------------------------------------------------------------------
-    // Server room (data vault).
-    public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE = 0.55f;
-    public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE = 0.35f;
-    // Large landmark room.
-    public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE  = 0.50f;
-    public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE  = 0.30f;
-    public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE  = 0.30f;
-    // Standard room weapon spawn.
-    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = 0.35f;
-    // Armory.
-    public static final float LEVEL_GEN_ARMORY_MEDKIT_CHANCE = 0.40f;
-    public static final float LEVEL_GEN_ARMORY_ARMOUR_CHANCE = 0.80f;
-    // Command center.
-    public static final float LEVEL_GEN_COMMAND_MEDKIT_CHANCE = 0.50f;
-    public static final float LEVEL_GEN_COMMAND_ARMOUR_CHANCE = 0.50f;
-    public static final float LEVEL_GEN_COMMAND_AMMO_CHANCE   = 0.60f;
-    // Hazard rooms (power plant / cryo / containment) — reduced loot for the danger.
-    public static final float LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE = 0.25f;
-    public static final float LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE = 0.20f;
-    public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE   = 0.30f;
+    // LOOT ROOM BUDGETS (the per-room-type pickup and weapon chances) and the per-floor 3-7 credit-chip
+    // roll were DELETED by balance-overhaul order 2: every pickup, weapon drop and credit chip on a
+    // generated floor is planned by the SupplyPlanner (SECTION 21) — themed rooms are now pure
+    // decoration and a cave floor carries the same supply as a rooms floor at its depth.
 
     // =====================================================================================
     // SECTION 7 — PROGRESSION REWARDS (XP curve + level-up payouts + stat rates)
@@ -1245,10 +1213,6 @@ public final class BalanceConfig {
     public static final int MODEL_FLOOR_EYE_TYRANT_COUNT  = 3;
     public static final int MODEL_FLOOR_SHELL_BRUTE_COUNT = 2;
     public static final int MODEL_FLOOR_PLAGUE_HULK_COUNT = 1;
-    /** Rooms on the model floor that can roll an ammo box (LEVER 1 source count). */
-    public static final int MODEL_FLOOR_ROOM_COUNT        = 8;
-    /** Floor-droppable ammo types the generator rolls uniformly (bullets/shells/cells/rockets/slugs). */
-    public static final int MODEL_FLOOR_AMMO_TYPE_COUNT   = 5;
 
     // Heal-economy model inputs for the model floor.
     /**
@@ -2637,6 +2601,15 @@ public final class BalanceConfig {
     public static final float NODE_SUPPLY_GATE_THREAT         = 0.00f;
 
     // --- AUDIT SWEEP (R-SUPPLY / R-DENSITY) ---------------------------------------------------
+    /**
+     * TEMPORARY (CP3c -> CP6): the route ledger's legacy model-floor box counts (the old 8 rooms x 0.20 room
+     * boxes and 12 kills x 0.10 kill boxes). The dice they described are gone; the route bands were fitted
+     * to them, so the ledger keeps them until CP6 re-derives it from the NodeSupplySpec rows.
+     */
+    public static final float ROUTE_MODEL_LEGACY_ROOM_AMMO_BOXES = 1.6f;
+    /** TEMPORARY (CP3c -> CP6): see ROUTE_MODEL_LEGACY_ROOM_AMMO_BOXES. */
+    public static final float ROUTE_MODEL_LEGACY_KILL_AMMO_BOXES = 1.2f;
+
     /** A2/A3: seeds per (generator x node type x depth) cell of the R-SUPPLY / R-DENSITY sweep. */
     public static final int   SUPPLY_AUDIT_SEED_COUNT = 30;
     /** A2/A3: the sparse depths the sweep visits. */

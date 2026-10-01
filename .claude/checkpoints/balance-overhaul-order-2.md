@@ -58,7 +58,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP2** — ROOMS_MST (LevelGenerator) builds through slots + SupplyPlanner.
       DONE WHEN: its per-room chances and the 0.70 stim path are gone; snapshot test updated; both
       gates green.
-- [ ] **CP3** — CAVERN, LINEAR_CORRIDOR, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK build through
+- [x] **CP3** — CAVERN, LINEAR_CORRIDOR, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK build through
       SupplyPlanner; carriers replace drop rolls. Split into three commits:
   - [x] **CP3a** — the six generators build through FloorPopulator.
         DONE WHEN: no generator places a pickup / weapon by its own rule; Cavern's MEDICAL_BAY-only medkit
@@ -66,7 +66,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   - [x] **CP3b** — carriers drop on death (independent drop rolls gone); World / SimWorld read planned
         credits + planned weapon offsets/tiers and feed `carriedAmmoTypes`.
         DONE WHEN: build + both gates green.
-  - [ ] **CP3c** — R-SUPPLY generator sweep + BalanceReport SUPPLY/DENSITY table; R-SCARCITY /
+  - [x] **CP3c** — R-SUPPLY generator sweep + BalanceReport SUPPLY/DENSITY table; R-SCARCITY /
         R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH replaced (override clause); dead per-room / per-kill / chip
         constants deleted.
         DONE WHEN: full R-SUPPLY sweep green; table prints; A1, A2 hold; both gates green.
@@ -172,3 +172,22 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (relocates within `ItemConstants.CREDIT_CHIP_RELOCATE_RADIUS` = 3; hand levels + staging room get no chips);
   the CREDIT_CHIPS_PER_FLOOR_MIN/MAX + *_JITTER roll is no longer read by World (BalanceSchema still reads
   MIN/MAX — CP3c). SimWorld still seeds no credit chips (unchanged; it never did).
+- **CP3c handover:** `BalanceSchema.supplySweepReports()` (cached per JVM; generator x node types in
+  `generatorServes()` x SUPPLY_AUDIT_DEPTHS x 30 seeds; config = `supplySpec` only) and
+  `supplySweepResults(String... subjectFragments)` — the three replaced test methods filter it: "tracking" /
+  "unplaced" / "carrier share", "room-share", "heal floor". CP4/CP5's R-DENSITY should read the SAME cached
+  reports (add `densitySweepResults()`), not regenerate. `modelFloorPlan(depth)` / `modelFloorRoster()`;
+  `chipIncomePerFloor()` = planned chips x rounded mean chip value (R-CREDITS unchanged numerically).
+  BalanceReport: `printSupplyDensityTable()` (reads the sweep) + the model-floor SUPPLY PLAN example; the two
+  depth sweeps are gone. Placement tiers: rooms under cap -> connectors -> rooms under cap past the anchor ->
+  anything (heal floor never keycard-gated). ELITE's guaranteed vest is part of the planned armour value.
+  Full fast gate ~28 s (sweep ~6 s).
+- **DEAD END:** re-basing the route ledger's model floor on the planner (all supply roster-driven, box value
+  200) knocks R-TRAJECTORY (SAFEST S 1.96 > 1.70) and R-CALM-COST (rest 0.36) out of band — the ledger's bands
+  were fitted to the legacy box model. Hence the TEMPORARY `ROUTE_MODEL_LEGACY_{ROOM,KILL}_AMMO_BOXES` (1.6 /
+  1.2) in SECTION 21; CP6 re-derives the ledger from the specs and must delete them.
+- **DECISION:** MYSTERY's MALFUNCTION outcome ("no reward", medkits/armour off) now gets the MYSTERY spec's
+  planned supply incl. the S4 heal floor (S4 is binding for MYSTERY); order 6 retunes.
+- **DOCS (override clause):** authority doc R-SCARCITY / R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH -> RETIRED
+  records + new R-SUPPLY block + change-log entry; knowledge SECTION 12 carries a SUPERSEDED banner (full
+  rewrite owed in CP7 with the living tables).
