@@ -31,6 +31,41 @@ Shattered Pixel Dungeon (open-source roguelike by 00-Evan):
   Phase 5b— Lock-and-Key Gate (one bridge door locked; matching keycard placed reachably)
   Phase 6 — Stairs            (single exit in the spatially deepest room / gated region)
 
+=== SHARED FLOOR PIPELINE (balance-overhaul order 2 — every generator) ===
+
+No generator places a pickup or an enemy by its own rule any more. ROOMS_MST (LevelGenerator),
+LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM and GATE_AIRLOCK all finish their layout
+(rooms / chambers / spine, decoration, lock-and-key gate, stairs) and then run ONE pipeline:
+
+  layout + gate + stairs
+    -> SupplySlotSurvey      walk distance from the start (with / without keycards), the exit path,
+                             the room / chamber / connector id of every candidate tile (each generator
+                             implements level/SupplySlotProvider; bespoke rooms use PocketSupplyRegions)
+    -> EncounterBudgetPlanner a BODY TARGET filled with EncounterGroupTemplate rows (PACK, FIRETEAM,
+                             ESCORT, BATTERY, WARBAND, HUNTER) under the Threat-Point CAP
+    -> EncounterPlacer       one group per room; first contact <= 18 walk tiles (12 on floor 1), never
+                             in the start room; the anchor group in the deepest room
+    -> SupplyPlanner.plan    ammo / heals / armour / credits / weapons from the roster's demand and the
+                             node's NodeSupplySpec (carried by LevelGenConfig.supplySpec; default COMBAT)
+    -> SupplyPlanner.place   ground slots (spread cap, heal floor reachable without a keycard and
+                             half-early, the ELITE reward weapon in or past the anchor room) + CARRIERS
+                             (enemies that drop a planned pickup on death)
+    -> FloorPopulator        stamps pickup symbols, sets carried drops / group ids on spawn points, adds
+                             planned WeaponSpawnPoints + CreditSpawnPoints, attaches a FloorContentReport
+
+FOOTPRINT (E6). The three combat layouts are wrapped in level/FootprintPlanner.buildToTarget: each
+build is measured and rebuilt (up to LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS, a derived seed per
+attempt) at a corrected footprint SCALE until the walkable tiles land in the region's range (A
+350-550, B 450-650, C/D/E 500-750; ELITE the lower half) AND the density band — ROOMS_MST and CAVERN
+shrink a centred layout window (rooms also scale their target room count), LINEAR_CORRIDOR its spine
+length and bend space. The linear entrance room is always small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7)
+so floor 1's first contact can sit within 12 walk tiles.
+
+The numbers live in BalanceConfig SECTION 21 and are audited by R-SUPPLY / R-DENSITY over a
+30-seed x generator x node type x depth {1,5,10,15,20,25} sweep (BalanceSchema.supplySweepReports);
+BalanceReport prints the SUPPLY / DENSITY table and the ELITE PROMISE. The per-room loot chances, the
+MEDICAL_BAY-only cave medkit and the 3d/10 spawn rolls described further down are HISTORICAL.
+
 === DEPTH GRADIENT (position carries meaning) ===
 
 After connectivity, each room is assigned a "depth" = its hop distance from the
@@ -38,11 +73,11 @@ entrance room (room 0) over the MST room tree (computeRoomDepths). Normalised to
 [0,1], this drives a deliberate difficulty/reward curve so exploration ramps up
 rather than spreading loot/threat randomly:
 
-  - Enemy count    : deeper rooms add up to LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX enemies.
-  - Enemy toughness: deeper rooms upgrade light/ranged spawns ('3'/'2') into heavy
-                     archetypes ('1'/'4'/'5') with probability scaling with depth.
-  - Loot richness  : deeper rooms get additive medkit/ammo bonuses and a chance at a
-                     bonus ammo box.
+  - Enemies        : NO LONGER rolled per room (balance-overhaul order 2) — the encounter
+                     planner fills a body target with group templates; the anchor group takes
+                     the deepest room (see SHARED FLOOR PIPELINE).
+  - Loot           : NO LONGER position-rolled (balance-overhaul order 2) — every pickup is
+                     PLANNED by the shared supply pipeline below (see SHARED FLOOR PIPELINE).
   - Stairs         : stamped in the spatially deepest room (landmark tie-break), so the
                      exit always sits at the far end of the journey.
 
@@ -63,8 +98,9 @@ genuine cut:
   3. The matching keycard is placed in the deepest room still reachable WITHOUT the
      gate, verified against the flood mask — never stranded. If no key tile can be
      placed, the gate is reverted to a plain door.
-  4. A bonus reward (medkit + ammo) is dropped in the deepest gated room, and the
-     level exit is steered into the gated region (Phase 6) so unlocking pays off.
+  4. The level exit is steered into the gated region (Phase 6) so unlocking pays off.
+     (The old bonus medkit + ammo drop is gone: supply is planned, and the S4 heal floor is
+     never placed behind a keycard.)
 
 Because locked doors are BFS-passable (not walls/props/columns), the Phase 5
 connectivity audit and physical reachability are unaffected — the gate is a purely
@@ -195,7 +231,7 @@ geometry for the raycaster.
     randomPropChar() distribution:
       g=22%, E=8%, C=10%, T=10%, L=8%, .=16%, m=14%, O=12%
 
-3d. Enemy spawns (non-entrance rooms, placed after props to avoid overlap):
+3d. Enemy spawns — HISTORICAL (replaced by the SHARED FLOOR PIPELINE, balance-overhaul order 2):
     enemyCount = min(MAX_ENEMIES, 1 + random(max(1, area/6)))
     For each spawn: pick random walkable floor tile (' ', 'l', 'u', 'f')
     char = '1' with probability CORRUPTOR_RATIO (0.65), else '2'

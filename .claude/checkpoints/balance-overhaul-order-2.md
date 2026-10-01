@@ -259,3 +259,14 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **NEXT (CP7):** sim FLOOR REPORT (SimReport), S-SUPPLY band + re-based S-ECONOMY (BehavioralBands / BalanceSimTest
   / BalanceSchema), docs (procedural-level-generation, enemy-system carriers, knowledge SECTIONS 11/12 + living
   tables), reviewer gate, STATUS IMPLEMENTED.
+- **CP7 work (committed before the reviewer gate; box ticks only on PASS):** FloorLedger FLOOR REPORT fields
+  (generator, node, spawned, groups, heal placed / heal floor / reachable heal, ammo planned dmg + units,
+  planned S, health in/out, turns to first exchange, died with no heals) filled by `SimWorld.recordPlannedContent`;
+  PolicySummary `meanExperiencedSupplyShare / meanCombatExitHealthFraction / floorsBelowHealFloor / allFloors`;
+  `RuleKind.SIM_SUPPLY` + BehavioralBands `supplyResults`; S-ECONOMY re-based ("experienced vs planned supply",
+  waiver renamed); SimReport FLOOR REPORT + A4 comparison; BalanceSimTest `combatFloorsAreLeftHurtAndNeverBelowTheHealFloor`.
+  Deleted: SIM_ECONOMY_SCARCITY_TOLERANCE, BalanceSchema.modelledScarcityAtDepth, FloorLedger.rangedSupplyDamage /
+  experiencedScarcityRatio, SimWorld.measureRangedSupplyDamage. Docs: procedural-level-generation (SHARED FLOOR
+  PIPELINE), enemy-system (carriers), knowledge SECTIONS 11 + 12 rewritten, authority S-ECONOMY / S-SUPPLY / waivers /
+  change log / SECTION 6 + 8 regenerated, CLAUDE.md band count. Gates: core:test 453 (pre-existing StoryBarkTest only);
+  balanceSim exit 0, BalanceSimTest 10/10 — S-SUPPLY 0.79 in [0.55, 0.80], 0 floors below the heal floor, A4 gap 0-6%.

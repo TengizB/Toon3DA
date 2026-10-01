@@ -146,8 +146,16 @@ public final class BalanceSchema {
         SIM_SKILL,
         /** S-ROUTE (order 9): played per-floor drain matches the order-7 modelled trajectory band. */
         SIM_ROUTE,
-        /** S-ECONOMY (order 9): experienced S tracks the modelled S; the emergency lifeline stays rare. */
+        /**
+         * S-ECONOMY (order 9; re-based by balance-overhaul order 2): the supply a played floor actually
+         * yields tracks the supply its planner put down; the emergency lifeline stays rare.
+         */
         SIM_ECONOMY,
+        /**
+         * S-SUPPLY (balance-overhaul order 2): TACTICAL leaves a COMBAT floor at a mean health fraction in
+         * [SIM_SUPPLY_EXIT_HEALTH_MIN, MAX] ("not full"), and no played floor is below its heal floor.
+         */
+        SIM_SUPPLY,
         /** S-SOFTLOCK (order 9): zero seeds end in a "cannot damage anything" state. */
         SIM_SOFTLOCK,
         /** S-LAG (balance-overhaul order 1): the start-weapon hoarder dies by SIM_LAG_MAX_MEDIAN_DEPTH (median). */
@@ -270,7 +278,7 @@ public final class BalanceSchema {
         waive(RuleKind.SIM_FAIR,    "TACTICAL readable deaths",    reason, expiry);
         waive(RuleKind.SIM_SKILL,   "TACTICAL vs NAIVE depth gap", reason, expiry);
         waive(RuleKind.SIM_ROUTE,   "played per-floor net drain",  reason, expiry);
-        waive(RuleKind.SIM_ECONOMY, "experienced S vs modelled S", reason, expiry);
+        waive(RuleKind.SIM_ECONOMY, "experienced vs planned supply", reason, expiry);
         waive(RuleKind.SIM_ECONOMY, "emergency lifeline floors",   reason, expiry);
         // S-LAG (balance-overhaul order 1) inherits this waiver and its expiry: a hoarder that STALLS on
         // floor 1 reads as "dies early" for navigation reasons, so the band is reported but not yet a
@@ -1083,17 +1091,6 @@ public final class BalanceSchema {
      * SUPPLY rides the EXPECTED-arsenal gear curve times the per-region supply multiplier. This is the
      * whole-run generalisation of the depth-1 R-SCARCITY model-floor check.
      */
-    /**
-     * The scarcity ratio S the order-3 model predicts for a depth — the single arithmetic the
-     * depth-scarcity rule and the order-9 simulator both compare against, so a played run and a
-     * modelled floor are measured with the same yardstick.
-     */
-    public static float modelledScarcityAtDepth(int depth) {
-        ge.tbegvadze.toon3d.level.SupplyPlan plan = modelFloorPlan(depth);
-        return GameMath.scarcityRatioAtDepth(plan.roundedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO),
-                plan.rosterEffectiveHitPoints);
-    }
-
     // --- CREDIT ECONOMY inputs (order 3, part C) — deterministic "one source" income model. ---
 
     /** Total per-kill credit reward the model-floor roster pays out (the floor's kill-income base). */

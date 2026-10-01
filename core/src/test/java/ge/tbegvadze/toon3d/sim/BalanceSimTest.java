@@ -97,10 +97,19 @@ class BalanceSimTest {
         assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_ROUTE));
     }
 
-    /** S-ECONOMY — the experienced scarcity ratio tracks the modelled one. */
+    /** S-ECONOMY — the supply a played floor yields tracks the supply its planner put down (re-based, order 2). */
     @Test
     void playedEconomyMatchesTheModelledEconomy() {
         assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_ECONOMY));
+    }
+
+    /**
+     * S-SUPPLY (balance-overhaul order 2, A7) — TACTICAL leaves a COMBAT floor hurt but standing (mean exit
+     * health fraction in band) and no played floor sits below its S4 heal floor.
+     */
+    @Test
+    void combatFloorsAreLeftHurtAndNeverBelowTheHealFloor() {
+        assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_SUPPLY));
     }
 
     /**

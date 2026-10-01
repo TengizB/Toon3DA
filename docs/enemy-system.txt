@@ -157,6 +157,20 @@ Enemy damages player:
   Player.health starts at PLAYER_MAX_HEALTH (100).
   Player.isDead() returns true when health reaches 0.
 
+## Death Drops — CARRIERS (balance-overhaul order 2)
+
+There are no per-kill drop ROLLS any more. A generated floor's SupplyPlanner hands ~SUPPLY_CARRIER_SHARE
+(0.25) of its ammo and non-floor heals to specific spawned enemies (seeded from the floor seed;
+EnemySpawnPoint.carriedDrop -> Enemy.carriedDrop). On death, by any cause (the player, a hazard, a
+barrel, another enemy), EnemyManager.killEnemy drops, in priority order: the boss-summon lifeline >
+the CARRIED pickup (exactly once) > the never-softlock emergency ammo lifeline > the gore decal 'm'.
+The drop lands on the death tile or the nearest free tile within CARRIER_DROP_SEARCH_RADIUS. Summons
+are never carriers. An enemy left alive keeps its loot — skipping a fight costs its supply by design.
+ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_CHANCE and the random drop table are deleted.
+
+Spawn points also carry a groupId (the EncounterGroup they were placed with); the encounter planner
+and placer are described in docs/procedural-level-generation.txt (SHARED FLOOR PIPELINE).
+
 ## Rendering
 
 EnemyRenderer (render/EnemyRenderer.java):

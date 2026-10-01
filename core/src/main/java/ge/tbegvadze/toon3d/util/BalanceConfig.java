@@ -1896,11 +1896,15 @@ public final class BalanceConfig {
 
     // --- F. S-ECONOMY: the played economy matches the modelled one -----------------------
     /**
-     * Tolerance between the scarcity ratio S the runs EXPERIENCE and the S the order-3 model
-     * predicts for that depth. Wider than a rounding error, tighter than a re-derivation: if the
-     * played S drifts past this, the model is describing a different game than the one shipping.
+     * S-ECONOMY (re-based by balance-overhaul order 2): the mean share of a floor's PLANNED ammo units the
+     * player actually picks up, over the floors they EXIT. Below the minimum, the planner puts supply
+     * where play does not reach it; above the maximum, unplanned income is leaking in.
      */
-    public static final float SIM_ECONOMY_SCARCITY_TOLERANCE = 0.08f;
+    public static final float SIM_ECONOMY_SUPPLY_SHARE_MIN = 0.75f;
+    public static final float SIM_ECONOMY_SUPPLY_SHARE_MAX = 1.10f;
+    /** S-SUPPLY (balance-overhaul order 2, AS2): TACTICAL's mean health fraction leaving a COMBAT floor. */
+    public static final float SIM_SUPPLY_EXIT_HEALTH_MIN = 0.55f;
+    public static final float SIM_SUPPLY_EXIT_HEALTH_MAX = 0.80f;
     /** Fraction of TACTICAL floors allowed to fire the never-softlock emergency ammo lifeline. */
     public static final float SIM_ECONOMY_EMERGENCY_MAX_FRACTION = 0.05f;
 
