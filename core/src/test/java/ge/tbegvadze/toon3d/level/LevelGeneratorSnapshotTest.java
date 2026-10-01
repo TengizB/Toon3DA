@@ -97,8 +97,12 @@ class LevelGeneratorSnapshotTest {
     // depth-1 HP and damage, which re-prices their Threat Points, so the encounter planner spends the same
     // floor budget on a different roster (and the ammo box sizes the generator stamps changed). A
     // deliberate balance change; the digest was confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 2, CP2 — FULL FLOORS, FAIR SUPPLY): ROOMS_MST no longer rolls
+    // per-room loot, weapon racks or vault / research-lab rewards; every pickup is placed by the shared
+    // SupplyPlanner AFTER the layout, gate and stairs are final, from the roster's demand. A deliberate
+    // balance change; the new digest was confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "50244378179daa82ad5aa0066b7284b007401df2ff77ffd1fa8d73331b36c961";
+            "70424713aab0185c8a09590188684385284fa4e9cc12422b038381b6f5be37a8";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

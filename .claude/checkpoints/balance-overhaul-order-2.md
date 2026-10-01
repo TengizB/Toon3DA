@@ -55,7 +55,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP1** — SupplyPlanner, SupplyRequest/Plan, SupplySlotProvider, NodeSupplySpec registry (all
       node rows) and SECTION 21 exist, headless and unwired.
       DONE WHEN: they exist, planner-level R-SUPPLY checks green, both gates green.
-- [ ] **CP2** — ROOMS_MST (LevelGenerator) builds through slots + SupplyPlanner.
+- [x] **CP2** — ROOMS_MST (LevelGenerator) builds through slots + SupplyPlanner.
       DONE WHEN: its per-room chances and the 0.70 stim path are gone; snapshot test updated; both
       gates green.
 - [ ] **CP3** — CAVERN, LINEAR_CORRIDOR, BOSS_ARENA, MED_BAY, EVENT_ROOM, GATE_AIRLOCK build through
@@ -129,3 +129,19 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   generator sweep. Test: `BalanceAuditTest.theSupplyPlannerTracksDemandOnEverySpec`.
 - **TEMPORARY:** R-SCARCITY / R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH still enforced on the old model constants;
   they are REPLACED (override clause) in CP3 when the generator sweep lands.
+- **CP2 handover:** `level/FloorPopulator.populate(generatorName, grid, provider, spawnPoints,
+  new FloorPopulator.EncounterFacts(anchorSpawnIndex, threatSpent, threatCap, bodyTarget, targetWalkableTiles),
+  config, depth, seed)` -> `Result{spawnPoints (carriers set), weaponSpawnPoints (planned), creditSpawnPoints,
+  report}`; build the Level from it and call `result.attachTo(level)`. `FloorPopulator.specOf(config)`.
+  `Level.getCreditSpawnPoints()` / `getFloorContentReport()` (null on hand levels + staging room).
+  `EnemySpawnPoint(spawnChar, col, row, carriedDrop, groupId)` + `withCarriedDrop` / `withGroupId`;
+  `WeaponSpawnPoint(col, row, type, planned, levelOffset, tierBonus)`; `EnemyType.fromSpawnChar(char)`;
+  `LevelGenConfig.supplySpec / carriedAmmoTypes / weaponCadenceDue`. LevelGenerator implements
+  SupplySlotProvider via `buildSupplyRegionMap(rooms)` (room index per interior tile). Populate runs AFTER the
+  lock-and-key gate and the stairs. Research-lab reward, vault reward pickups, per-room loot and weapon racks
+  deleted from LevelGenerator. Snapshot re-baselined (`70424713...`, stable over two JVM runs).
+- **CP2 measurement:** ROOMS_MST ground supply d1 = 1.55 H, 0.9 '+', 2.85 armour, 2.05 ammo boxes (was 8.2 H,
+  3.4 armour, 10.4 ammo of dice). Carrier drops are NOT yet live (EnemyManager ignores `carriedDrop` until CP3).
+- **TEMPORARY (CP3 resolves):** EnemyManager still rolls independent drops + ignores carriers; World still seeds
+  the 3-7 chip roll and rolls weapon spawns the old way (planned offset/tier unused); LevelGenConfig
+  medkit/armour per-room chance fields still exist (LinearCorridor / Cache profile read them).

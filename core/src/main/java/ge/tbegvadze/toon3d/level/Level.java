@@ -48,6 +48,18 @@ public class Level {
     private final   LevelPalette           palette;
 
     /**
+     * Credit chips the supply planner placed (balance-overhaul order 2, S8). Empty on hand-made levels
+     * and the staging room. Populated post-construction via {@link #attachPlannedContent}.
+     */
+    private final   List<CreditSpawnPoint> creditSpawnPoints = new java.util.ArrayList<>();
+
+    /**
+     * What the shared floor populator planned and placed on this floor (order 2) — the R-SUPPLY /
+     * R-DENSITY audit and the sim FLOOR REPORT read it. {@code null} on hand-made levels.
+     */
+    private         FloorContentReport     floorContentReport;
+
+    /**
      * Builds a level using the shared {@link LevelPalettes#legacy()} palette — today's exact global
      * symbol → sprite mapping. This overload keeps every existing loader/generator call site unchanged
      * while the migration is in progress.
@@ -113,6 +125,26 @@ public class Level {
      */
     public List<int[]> getEventStationTiles() {
         return Collections.unmodifiableList(eventStationTiles);
+    }
+
+    /**
+     * Attaches the planned credit chips and the content report a generated floor was built with
+     * (balance-overhaul order 2). Called once by the shared floor populator's caller.
+     */
+    void attachPlannedContent(List<CreditSpawnPoint> credits, FloorContentReport report) {
+        creditSpawnPoints.clear();
+        if (credits != null) creditSpawnPoints.addAll(credits);
+        floorContentReport = report;
+    }
+
+    /** The planned credit chips (S8). Empty on hand-made levels. Unmodifiable. */
+    public List<CreditSpawnPoint> getCreditSpawnPoints() {
+        return Collections.unmodifiableList(creditSpawnPoints);
+    }
+
+    /** What the floor populator planned and placed, or {@code null} on a hand-made level. */
+    public FloorContentReport getFloorContentReport() {
+        return floorContentReport;
     }
 
     /** Returns the read-only list of enemy spawn points extracted by LevelLoader. */

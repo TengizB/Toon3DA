@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
-import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.tileset.RoomSymbolDemand;
@@ -83,7 +82,7 @@ import java.util.Random;
  * No LibGDX imports — pure Java logic, fully unit-testable without an OpenGL context.
  * Lives in the level package to access the package-private Level(char[][], List) constructor.
  */
-public class LevelGenerator implements ILevelGenerator {
+public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
 
     private enum WallContext { CORRIDOR, ROOM, MIXED, INTERIOR }
 
@@ -124,8 +123,15 @@ public class LevelGenerator implements ILevelGenerator {
     // placeWideHallwayColumns() can walk them in order and space columns evenly.
     private List<int[]> wideHallwaySpineTiles;
 
-    // Weapon spawn points collected during phase 3; consumed by World to create GroundItems.
-    private List<WeaponSpawnPoint> weaponSpawnPoints;
+    // Supply region map (balance-overhaul order 2): room index per interior tile, -1 elsewhere. Built
+    // once the layout is final; read by the shared floor populator through SupplySlotProvider.
+    private int[][]    supplyRegionMap;
+    private List<Room> supplyRooms;
+
+    // The encounter step's facts for the floor report (anchor spawn index, threat spent / cap).
+    private int   lastAnchorSpawnIndex = -1;
+    private float lastThreatSpent;
+    private float lastThreatCap;
 
     public LevelGenerator(long seed) {
         this(seed, new LevelGenConfig());
@@ -153,7 +159,9 @@ public class LevelGenerator implements ILevelGenerator {
         fillAll(grid, 'x');
         mstEdgeRooms          = new ArrayList<>();
         wideHallwaySpineTiles = new ArrayList<>();
-        weaponSpawnPoints     = new ArrayList<>();
+        lastAnchorSpawnIndex  = -1;
+        lastThreatSpent       = 0f;
+        lastThreatCap         = 0f;
 
         List<Room> rooms = placeRooms();
         if (rooms.size() < 2) return buildFallbackLevel();
@@ -191,8 +199,6 @@ public class LevelGenerator implements ILevelGenerator {
         // order-8 STEP C — sparse per-level accents in GENERIC rooms and corridors from the FREED
         // (unreserved) flexible symbols, so freed symbols appear and two seeds visibly differ.
         stampGenericVarietyAccents(grid, rooms);
-        placePickups(grid, rooms, roomDepths, maxRoomDepth);
-        placeWeaponSpawns(grid, rooms);
 
         // Phase 4 — enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
         // Pillar 1) instead of rolling enemies room-by-room at random.
@@ -210,15 +216,25 @@ public class LevelGenerator implements ILevelGenerator {
         // Phase 5b — lock-and-key gating (after connectivity so the gate is a true cut)
         boolean[] gatedRooms = null;
         if (config.enableLockAndKey) {
-            gatedRooms = placeLockAndKeyGate(grid, rooms, roomDepths, spawnPoints);
+            gatedRooms = placeLockAndKeyGate(grid, rooms, roomDepths);
         }
 
         // Phase 6 — stamp exactly one stairs-down exit in the deepest room (behind the gate if one exists)
         stampStairsDown(grid, rooms, roomDepths, gatedRooms);
 
+        // Phase 7 — SUPPLY (balance-overhaul order 2, S1): every pickup, weapon drop, credit chip and
+        // carrier comes from the shared planner, priced against the roster this floor actually fields and
+        // placed against the FINISHED layout (so the heal floor can be kept out of the keycard vault).
+        buildSupplyRegionMap(rooms);
+        FloorPopulator.Result populated = FloorPopulator.populate(
+                ge.tbegvadze.toon3d.route.GeneratorId.ROOMS_MST.stableId(), grid, this, spawnPoints,
+                new FloorPopulator.EncounterFacts(lastAnchorSpawnIndex, lastThreatSpent, lastThreatCap, 0, 0),
+                config, dungeonDepth, seed);
+
         // order-8 STEP B — build this level's varied palette from the rooms actually placed and attach it.
         // The generator only ever wrote SYMBOLS; the palette is what makes those symbols look varied.
-        return new Level(grid, spawnPoints, weaponSpawnPoints, allocatePalette(rooms));
+        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                allocatePalette(rooms)));
     }
 
     // -------------------------------------------------------------------------
@@ -2171,14 +2187,8 @@ public class LevelGenerator implements ILevelGenerator {
                         && isWalkableFloor(grid, barrierStartCol, approachRow)) {
                     grid[approachRow][barrierStartCol] = 'e';
                 }
-                // Reward in open room area
-                int rewardRow    = barrierRow + 1;
-                int rewardColumn = barrierStartCol + 1;
-                if (rewardRow < room.topRow
-                        && rewardColumn < room.rightColumn
-                        && isWalkableFloor(grid, rewardColumn, rewardRow)) {
-                    grid[rewardRow][rewardColumn] = pickResearchLabReward();
-                }
+                // The lab's reward is no longer rolled here (balance-overhaul order 2, S1/S5): every
+                // pickup on a generated floor comes from the shared SupplyPlanner.
             }
 
             // --- Additional energy scorch decals ---
@@ -2613,15 +2623,6 @@ public class LevelGenerator implements ILevelGenerator {
         }
     }
 
-    private char pickResearchLabReward() {
-        float roll = random.nextFloat();
-        if (roll < 0.35f) return 'H';   // field medkit
-        if (roll < 0.65f) return 'A';   // security vest
-        if (roll < 0.80f) return 'r';   // red keycard
-        if (roll < 0.90f) return 'y';   // yellow keycard
-        return 'a';                      // armour shard fallback
-    }
-
     private char randomContainmentPropChar() {
         float roll = random.nextFloat();
         if (roll < 0.30f) return '&';   // bio-pod
@@ -2715,177 +2716,6 @@ public class LevelGenerator implements ILevelGenerator {
             if (roll < cumulative) return chars[propIndex];
         }
         return chars[count - 1];
-    }
-
-    /**
-     * Places medkit ('H'), stim-pack ('+'), and armour-kit ('A') pickups in non-entrance rooms.
-     * Per-type boosts:
-     *   MEDICAL_BAY:    high medkit + stim chance (loot hub).
-     *   ARMORY:         high armour chance, low medkit (last-stand gear).
-     *   COMMAND_CENTER: moderate medkit + armour (VIP resupply).
-     *   SERVER_ROOM:    existing boosted chances.
-     * A large-modified room (Room.isLarge) additionally floors its chances at the same boosted
-     * levels a LARGE landmark room used to guarantee — size alone earns richer loot regardless
-     * of the room's type (skipped for MEDICAL_BAY/ARMORY, which roll their own bespoke pickups
-     * below and never reach the boost).
-     */
-    private void placePickups(char[][] grid, List<Room> rooms, int[] roomDepths, int maxRoomDepth) {
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            Room  room          = rooms.get(roomIndex);
-            float depthFraction = maxRoomDepth > 0 ? roomDepths[roomIndex] / (float) maxRoomDepth : 0f;
-            float medkitChance  = config.medkitChancePerRoom;
-            float armourChance  = config.armourChancePerRoom;
-            float ammoChance    = LevelGenConstants.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
-
-            switch (room.type) {
-                case SERVER_ROOM:
-                    medkitChance = LevelGenConstants.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
-                    armourChance = LevelGenConstants.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
-                    ammoChance   = 0.45f;
-                    break;
-                case MEDICAL_BAY:
-                    tryPlacePickup(grid, room, 'H');
-                    if (random.nextFloat() < 0.70f) tryPlacePickup(grid, room, '+');
-                    if (random.nextFloat() < 0.30f) tryPlacePickup(grid, room, 'A');
-                    if (random.nextFloat() < 0.30f) tryPlacePickup(grid, room, randomAmmoChar());
-                    continue;
-                case ARMORY:
-                    if (random.nextFloat() < 0.80f) tryPlacePickup(grid, room, 'A');
-                    if (random.nextFloat() < 0.40f) tryPlacePickup(grid, room, 'H');
-                    // Armory always has ammo; often two boxes
-                    tryPlacePickup(grid, room, randomAmmoChar());
-                    if (random.nextBoolean()) tryPlacePickup(grid, room, randomAmmoChar());
-                    continue;
-                case COMMAND_CENTER:
-                    medkitChance = 0.50f;
-                    armourChance = 0.50f;
-                    ammoChance   = 0.60f;
-                    break;
-                case POWER_PLANT:
-                case CRYO_CHAMBER:
-                case CONTAINMENT_BLOCK:
-                    medkitChance = 0.25f;
-                    armourChance = 0.20f;
-                    ammoChance   = 0.30f;
-                    break;
-                default:
-                    break;
-            }
-
-            if (room.isLarge) {
-                medkitChance = Math.max(medkitChance, LevelGenConstants.LEVEL_GEN_LARGE_MEDKIT_CHANCE);
-                armourChance = Math.max(armourChance, LevelGenConstants.LEVEL_GEN_LARGE_ARMOUR_CHANCE);
-                ammoChance   = Math.max(ammoChance, 0.55f);
-            }
-
-            // Depth gradient: deeper rooms are richer to sustain the harder fights there.
-            medkitChance += depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_MEDKIT_BONUS;
-            ammoChance   += depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_AMMO_BONUS;
-
-            if (config.medkits    && random.nextFloat() < medkitChance) tryPlacePickup(grid, room, 'H');
-            if (config.armourKits && random.nextFloat() < armourChance)  tryPlacePickup(grid, room, 'A');
-            if (random.nextFloat() < ammoChance) tryPlacePickup(grid, room, randomAmmoChar());
-            if (random.nextFloat() < depthFraction * LevelGenConstants.LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE) {
-                tryPlacePickup(grid, room, randomAmmoChar());
-            }
-        }
-    }
-
-    private char randomAmmoChar() {
-        switch (random.nextInt(5)) {
-            case 0:  return '6'; // bullets
-            case 1:  return '7'; // shells
-            case 2:  return '8'; // cells
-            case 3:  return '9'; // rockets
-            default: return '0'; // slugs
-        }
-    }
-
-    /**
-     * Places weapon pickups across the level as WeaponSpawnPoints (no grid tile written).
-     *
-     * Two independent passes:
-     *   1. All special rooms (SERVER_ROOM, MEDICAL_BAY, ARMORY, CRYO_CHAMBER,
-     *      POWER_PLANT, COMMAND_CENTER, CONTAINMENT_BLOCK, RESEARCH_LAB) — guaranteed
-     *      placement so every special room always contains a weapon.
-     *   2. STANDARD rooms — each has a LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE independent
-     *      chance, giving varied weapon distribution across ordinary rooms.
-     *
-     * Spawns are recorded in weaponSpawnPoints; World instantiates a GroundItem from each.
-     * The grid tile itself is NOT modified — weapon ground items are entity-side only.
-     */
-    private void placeWeaponSpawns(char[][] grid, List<Room> rooms) {
-        // Pass 1: All special rooms (non-ENTRANCE, non-STANDARD) get a guaranteed weapon.
-        for (Room room : rooms) {
-            if (room.type == RoomType.ENTRANCE) continue;
-            if (room.type == RoomType.STANDARD) continue;
-            tryPlaceWeaponSpawn(grid, room);
-        }
-
-        // Pass 2: STANDARD rooms each get a random chance.
-        for (Room room : rooms) {
-            if (room.type != RoomType.STANDARD) continue;
-            if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE) {
-                tryPlaceWeaponSpawn(grid, room);
-            }
-        }
-    }
-
-    /**
-     * Attempts up to 20 times to find a walkable floor tile in the room that holds no
-     * prop or pickup, then records a WeaponSpawnPoint there.
-     * Returns true when a spawn was successfully placed; false when no eligible tile was found.
-     */
-    private boolean tryPlaceWeaponSpawn(char[][] grid, Room room) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            char cell = grid[tileRow][tileColumn];
-            // Only place on plain walkable floor — not on a prop, pickup, door axis, etc.
-            if (cell != ' ' && cell != 'l') continue;
-            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            if (isOccupiedByWeaponSpawn(tileColumn, tileRow)) continue;
-            weaponSpawnPoints.add(new WeaponSpawnPoint(tileColumn, tileRow, randomWeaponItemType()));
-            return true;
-        }
-        return false;
-    }
-
-    /** True if a weapon ground item was already recorded at this tile (weapon spawns are entity-side, not grid-encoded). */
-    private boolean isOccupiedByWeaponSpawn(int tileColumn, int tileRow) {
-        for (WeaponSpawnPoint spawnPoint : weaponSpawnPoints) {
-            if (spawnPoint.tileColumn == tileColumn && spawnPoint.tileRow == tileRow) return true;
-        }
-        return false;
-    }
-
-    /** Returns one of the implemented weapon ItemTypes at equal probability (ranged and melee). */
-    private ItemType randomWeaponItemType() {
-        switch (random.nextInt(12)) {
-            case 0:  return ItemType.WEAPON_SHOTGUN;
-            case 1:  return ItemType.WEAPON_DOUBLE_BARREL;
-            case 2:  return ItemType.WEAPON_CHAINGUN;
-            case 3:  return ItemType.WEAPON_ASSAULT_RIFLE;
-            case 4:  return ItemType.WEAPON_PLASMA;
-            case 5:  return ItemType.WEAPON_INCINERATOR;
-            case 6:  return ItemType.WEAPON_RAILGUN;
-            case 7:  return ItemType.WEAPON_ARC_CANNON;
-            case 8:  return ItemType.WEAPON_ROCKET;
-            case 9:  return ItemType.WEAPON_KNIFE;
-            case 10: return ItemType.WEAPON_HAMMER;
-            default: return ItemType.WEAPON_CHAINSAW;
-        }
-    }
-
-    private void tryPlacePickup(char[][] grid, Room room, char pickupChar) {
-        for (int attempt = 0; attempt < 20; attempt++) {
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (isWalkableFloor(grid, tileColumn, tileRow)) {
-                grid[tileRow][tileColumn] = pickupChar;
-                return;
-            }
-        }
     }
 
     private void placeRustWallsNearUnlit(char[][] grid) {
@@ -2993,6 +2823,8 @@ public class LevelGenerator implements ILevelGenerator {
         EncounterBudgetPlanner.Plan plan =
                 new EncounterBudgetPlanner(dungeonDepth, random, config.enemyBudgetScale).plan();
         List<EnemyType> roster = plan.enemies();
+        lastThreatSpent = plan.spentThreatPoints();
+        lastThreatCap   = plan.floorBudget();
         if (roster.isEmpty()) return;
 
         // Non-entrance room indices (1..n-1) sorted deepest-first over the MST depth gradient.
@@ -3024,6 +2856,7 @@ public class LevelGenerator implements ILevelGenerator {
             for (int roomOrderIndex = 0; roomOrderIndex < roomOrder.length; roomOrderIndex++) {
                 int roomIndex = roomOrder[roomOrderIndex];
                 if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), anchor, usedTiles, spawnPoints)) {
+                    lastAnchorSpawnIndex = spawnPoints.size() - 1;
                     roomSpentThreat[roomIndex] += plan.threatOf(anchor);
                     anchorIndexInRoster = 0; // anchor is always roster element 0 (added first)
                     break;
@@ -3212,6 +3045,37 @@ public class LevelGenerator implements ILevelGenerator {
                                 EnemyType enemy, int tileColumn, int tileRow) {
         usedTiles[tileRow][tileColumn] = true;
         spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 7 — Supply regions (balance-overhaul order 2: SupplySlotProvider)
+    // -------------------------------------------------------------------------
+
+    /** Records which room owns each interior tile, so the shared supply placement can spread by room. */
+    private void buildSupplyRegionMap(List<Room> rooms) {
+        supplyRooms     = rooms;
+        supplyRegionMap = new int[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
+        for (int[] row : supplyRegionMap) java.util.Arrays.fill(row, CONNECTOR_REGION);
+        for (int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) {
+            Room room = rooms.get(roomIndex);
+            for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
+                for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
+                    if (isInBounds(tileColumn, tileRow)) supplyRegionMap[tileRow][tileColumn] = roomIndex;
+                }
+            }
+        }
+    }
+
+    @Override
+    public int supplyRegionAt(int tileColumn, int tileRow) {
+        if (supplyRegionMap == null || !isInBounds(tileColumn, tileRow)) return CONNECTOR_REGION;
+        return supplyRegionMap[tileRow][tileColumn];
+    }
+
+    @Override
+    public boolean isLargeSupplyRegion(int regionId) {
+        return supplyRooms != null && regionId >= 0 && regionId < supplyRooms.size()
+                && supplyRooms.get(regionId).isLarge;
     }
 
     // -------------------------------------------------------------------------
@@ -3530,8 +3394,7 @@ public class LevelGenerator implements ILevelGenerator {
      * are respected — a door paralleled by a loop corridor cuts nothing and is rejected). The
      * deepest such region is preferred so the gate guards the most rewarding part of the map.
      */
-    private boolean[] placeLockAndKeyGate(char[][] grid, List<Room> rooms, int[] roomDepths,
-                                          List<EnemySpawnPoint> spawnPoints) {
+    private boolean[] placeLockAndKeyGate(char[][] grid, List<Room> rooms, int[] roomDepths) {
         int spawnColumn = rooms.get(0).centerColumn();
         int spawnRow    = rooms.get(0).centerRow();
         int roomCount   = rooms.size();
@@ -3610,28 +3473,9 @@ public class LevelGenerator implements ILevelGenerator {
             return null;
         }
 
-        // Reward behind the gate so unlocking pays off beyond just reaching the exit.
-        int rewardRoomIndex = deepestGatedRoomIndex(rooms, roomDepths, gatedRooms);
-        if (rewardRoomIndex >= 0) {
-            Room rewardRoom = rooms.get(rewardRoomIndex);
-            placeRewardPickup(grid, rewardRoom, 'H', spawnPoints);
-            placeRewardPickup(grid, rewardRoom, randomAmmoChar(), spawnPoints);
-        }
+        // The vault's reward is part of the floor's supply PLAN now (balance-overhaul order 2): the shared
+        // SupplyPlanner may place supply behind the gate, but never the heal floor (S4).
         return gatedRooms;
-    }
-
-    /** Returns the gated room with the greatest depth, or -1 when none are gated. */
-    private int deepestGatedRoomIndex(List<Room> rooms, int[] roomDepths, boolean[] gatedRooms) {
-        int bestIndex = -1;
-        int bestDepth = -1;
-        for (int roomIndex = 1; roomIndex < rooms.size(); roomIndex++) {
-            if (!gatedRooms[roomIndex]) continue;
-            if (roomDepths[roomIndex] > bestDepth) {
-                bestDepth = roomDepths[roomIndex];
-                bestIndex = roomIndex;
-            }
-        }
-        return bestIndex;
     }
 
     /**
@@ -3692,31 +3536,6 @@ public class LevelGenerator implements ILevelGenerator {
             if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
             grid[tileRow][tileColumn] = keycardPickupChar;
             return true;
-        }
-        return false;
-    }
-
-    /**
-     * Places a reward pickup on a plain walkable floor tile that is not occupied by an enemy
-     * spawn point and not adjacent to a door. No-op if no eligible tile is found.
-     */
-    private void placeRewardPickup(char[][] grid, Room room, char pickupChar,
-                                   List<EnemySpawnPoint> spawnPoints) {
-        for (int attempt = 0; attempt < 25; attempt++) {
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            char cell = grid[tileRow][tileColumn];
-            if (cell != ' ' && cell != 'l' && cell != 'u' && cell != 'f') continue;
-            if (isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
-            if (isOccupiedBySpawn(spawnPoints, tileColumn, tileRow)) continue;
-            grid[tileRow][tileColumn] = pickupChar;
-            return;
-        }
-    }
-
-    private boolean isOccupiedBySpawn(List<EnemySpawnPoint> spawnPoints, int tileColumn, int tileRow) {
-        for (EnemySpawnPoint spawn : spawnPoints) {
-            if (spawn.tileColumn == tileColumn && spawn.tileRow == tileRow) return true;
         }
         return false;
     }
@@ -3806,7 +3625,14 @@ public class LevelGenerator implements ILevelGenerator {
             }
         }
         grid[22][40] = 'p';
-        return new Level(grid, new ArrayList<>(), new ArrayList<>(),
-                         LevelPalettes.generatedWithBaseWall(seed));
+        // Even the degenerate fallback goes through the shared supply pipeline (S1): its one open area is
+        // all connector tiles, which the placement uses as its last-resort slots.
+        supplyRooms     = null;
+        supplyRegionMap = null;
+        FloorPopulator.Result populated = FloorPopulator.populate(
+                ge.tbegvadze.toon3d.route.GeneratorId.ROOMS_MST.stableId(), grid, this, new ArrayList<>(),
+                new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config, dungeonDepth, seed);
+        return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                         LevelPalettes.generatedWithBaseWall(seed)));
     }
 }

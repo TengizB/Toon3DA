@@ -158,4 +158,25 @@ public final class LevelGenConfig {
      * ramp — the budget is still computed from raw depth first, then scaled.
      */
     public float enemyBudgetScale = 1f;
+
+    // -------------------------------------------------------------------------
+    // Supply & density (balance-overhaul order 2)
+    // -------------------------------------------------------------------------
+
+    /**
+     * What this floor's node type CONTAINS (S10): threat, bodies and the supply the
+     * {@link SupplyPlanner} derives from the roster. {@code null} = the COMBAT row (a floor built
+     * without a route node). The node type's own threat lives HERE; {@link #enemyBudgetScale} carries
+     * only the extra multipliers on top (an ELITE affix, an event's next-floor bonus, a mystery outcome).
+     */
+    public ge.tbegvadze.toon3d.route.NodeSupplySpec supplySpec = null;
+
+    /**
+     * Ammo types of the weapons the player carries at floor build (S2), set by World / the simulator.
+     * {@code null} or empty = the expected player's types. Supply never reads the player's CURRENT ammo.
+     */
+    public java.util.Set<ge.tbegvadze.toon3d.item.AmmoType> carriedAmmoTypes = null;
+
+    /** S9 cadence: the previous non-boss floor offered no weapon at level >= its depth. Set by World. */
+    public boolean weaponCadenceDue = false;
 }
