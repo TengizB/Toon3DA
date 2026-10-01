@@ -1110,7 +1110,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // in on top and then consumed, so it applies to exactly this floor and never compounds.
         EnemyBudgetOverride budget = applyNextFloorBudgetBonus(plan.enemyBudget());
         pendingNextFloorBudgetBonus = 0f;
-        LevelGenConfig config = applyEnemyBudget(plan.config(), budget);
+        LevelGenConfig config = applyFloorSupplyInputs(applyEnemyBudget(plan.config(), budget));
         ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(depth);
         captureBossArenaLayout(generator);
@@ -1215,6 +1215,24 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
         }
         return symbols;
+    }
+
+    /**
+     * Folds the floor-build inputs the order-2 SupplyPlanner reads into the generator config (never
+     * null afterwards): the ammo types of the weapons the player carries right now (S2's 70/30 split) and
+     * whether the two-floor weapon cadence is due (S9). Supply never reads the player's current HP or ammo COUNT (AS1) — only which weapons they hold.
+     */
+    private LevelGenConfig applyFloorSupplyInputs(LevelGenConfig config) {
+        LevelGenConfig effective = config != null ? config : new LevelGenConfig();
+        java.util.EnumSet<AmmoType> carried = java.util.EnumSet.noneOf(AmmoType.class);
+        for (Character symbol : collectOwnedAmmoSymbols()) {
+            AmmoType ammoType = AmmoType.fromPickupChar(symbol);
+            if (ammoType != null) carried.add(ammoType);
+        }
+        effective.carriedAmmoTypes = carried;
+        // S9: the two-floor weapon cadence (the previous non-boss floor offered no on-level weapon).
+        effective.weaponCadenceDue = runStats.weaponCadenceDue();
+        return effective;
     }
 
     /**
@@ -1561,11 +1579,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // its band (region 1 COMMON..UNCOMMON, region 2 UNCOMMON..RARE, ...), so the arsenal the game
         // supplies keeps pace with the expected gear curve — finding better weapons is what survives.
         groundItems = new java.util.ArrayList<>();
-        // THE PITY RULE: track upgrades placed this region so a region never ends starved of its curve.
-        int upgradeRegionIndex = Math.max(0, currentDepth - 1) / BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        runStats.enterUpgradeRegion(upgradeRegionIndex);
-        GroundItem firstWeaponGroundItem = null;
-        Weapon     firstWeaponBase       = null;
+        // THE WEAPON CADENCE (balance-overhaul order 2, S9): note whether this floor offered a weapon at
+        // level >= its depth, so the next non-boss floor's plan can owe one if it did not.
+        boolean offeredOnLevelWeapon = false;
         for (WeaponSpawnPoint spawnPoint : targetLevel.getWeaponSpawnPoints()) {
             GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
                                                    spawnPoint.weaponItemType, 1);
@@ -1575,26 +1591,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 baseWeapon = createMeleeWeaponForType(spawnPoint.weaponItemType);
             }
             if (baseWeapon != null) {
-                groundItem.weaponRoll = weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
-                if (firstWeaponGroundItem == null) {
-                    firstWeaponGroundItem = groundItem;
-                    firstWeaponBase       = baseWeapon;
-                }
-                if (isWeaponUpgrade(groundItem.weaponRoll)) {
-                    runStats.recordWeaponUpgradeSeen();
+                // A PLANNED drop (order 2, S9) rolls at its planned level offset / tier floor.
+                groundItem.weaponRoll = spawnPoint.planned
+                        ? weaponRoller.rollPlannedToSnapshot(baseWeapon, currentDepth,
+                                spawnPoint.levelOffset, spawnPoint.tierBonus)
+                        : weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+                if (groundItem.weaponRoll != null && groundItem.weaponRoll.weaponLevel >= currentDepth) {
+                    offeredOnLevelWeapon = true;
                 }
             }
             groundItems.add(groundItem);
         }
-        // On a region's LAST floor, if no in-band upgrade was placed all region, force one onto the
-        // floor's first weapon drop so the run is never starved of its gear curve by RNG (the pity rule).
-        boolean regionLastFloor = currentDepth % BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE == 0;
-        if (regionLastFloor && runStats.regionUpgradeQuotaUnmet()
-                && firstWeaponGroundItem != null && firstWeaponBase != null) {
-            firstWeaponGroundItem.weaponRoll =
-                    weaponRoller.rollGuaranteedUpgradeToSnapshot(firstWeaponBase, currentDepth);
-            runStats.recordWeaponUpgradeSeen();
-        }
+        runStats.recordFloorWeaponOffer(GameMath.isBossFloor(currentDepth), offeredOnLevelWeapon);
         // The starting room's weapon/melee offer tiles aren't registered as ground items yet
         // (setupStartRoomWeaponOffers runs after this method returns), so reserve them here
         // to keep credit chips from landing on the same tile as a weapon offer. Every open
@@ -1624,63 +1632,66 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 }
             }
         }
-        seedCreditChips(targetLevel, groundItems, currentDepth, reservedTiles);
+        seedCreditChips(targetLevel, groundItems, reservedTiles);
 
         propRenderer.setGroundItems(groundItems);
         levelRenderer.setGroundItems(groundItems);
         playerController.setGroundItems(groundItems);
     }
 
-    private void seedCreditChips(Level targetLevel, java.util.List<GroundItem> items, int depth,
+    /**
+     * Turns the floor's PLANNED credit chips (balance-overhaul order 2, S8 — the SupplyPlanner decided
+     * how many and where, replacing the old 3-7 chip roll) into credit ground items. A planned chip that
+     * a later World step made unusable (a vending machine's stand tile, a weapon offer, a shop machine)
+     * moves to the nearest free tile instead of vanishing. Levels with no plan (hand-made levels, the
+     * staging room) carry no chips.
+     */
+    private void seedCreditChips(Level targetLevel, java.util.List<GroundItem> items,
                                   java.util.List<int[]> reservedTiles) {
-        // Seeded off the floor seed (order 9 determinism audit) — chip placement is part of the run.
-        java.util.Random chipRandom = new java.util.Random(GameMath.floorSeed(runSeed, depth) ^ 0xC417C417L);
-        int chipCount = GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN
-                + chipRandom.nextInt(GameBalance.CREDIT_CHIPS_PER_FLOOR_MAX
-                                     - GameBalance.CREDIT_CHIPS_PER_FLOOR_MIN + 1);
+        for (ge.tbegvadze.toon3d.level.CreditSpawnPoint chip : targetLevel.getCreditSpawnPoints()) {
+            int[] tile = nearestFreeChipTile(targetLevel, items, reservedTiles, chip.tileColumn, chip.tileRow);
+            if (tile == null) continue;
+            items.add(new GroundItem(tile[0], tile[1], creditChipTypeFor(chip.amount), Math.max(1, chip.amount)));
+        }
+    }
 
-        java.util.List<int[]> walkableTiles = new java.util.ArrayList<>();
-        for (int tileColumn = 0; tileColumn < targetLevel.getWidth(); tileColumn++) {
-            for (int tileRow = 0; tileRow < targetLevel.getHeight(); tileRow++) {
-                char cell = targetLevel.getCell(tileColumn, tileRow);
-                if (Level.isWall(cell) || Level.isPropSolid(cell) || Level.isStairsDown(cell)) continue;
-                // Never stack a credit chip onto another grid-encoded pickup (keycard, medical,
-                // armour, ammo) or onto a weapon ground item already seeded into items.
-                if (Level.isKeycardPickup(cell) || Level.isMedicalPickup(cell)
-                        || Level.isArmourPickup(cell) || Level.isAmmoPickup(cell)) continue;
-                if (isOccupiedByGroundItem(items, tileColumn, tileRow)) continue;
-                if (isReservedTile(reservedTiles, tileColumn, tileRow)) continue;
-                walkableTiles.add(new int[]{tileColumn, tileRow});
+    /** The credit chip sprite whose base value is nearest the chip's amount. */
+    private static ItemType creditChipTypeFor(int amount) {
+        int smallGap  = Math.abs(amount - ItemConstants.CREDIT_SMALL_BASE);
+        int mediumGap = Math.abs(amount - ItemConstants.CREDIT_MEDIUM_BASE);
+        int largeGap  = Math.abs(amount - ItemConstants.CREDIT_LARGE_BASE);
+        if (smallGap <= mediumGap && smallGap <= largeGap) return ItemType.CREDIT_SMALL;
+        return mediumGap <= largeGap ? ItemType.CREDIT_MEDIUM : ItemType.CREDIT_LARGE;
+    }
+
+    /** The chip's own tile when it is still free, else the nearest free tile within a few rings, else null. */
+    private int[] nearestFreeChipTile(Level targetLevel, java.util.List<GroundItem> items,
+                                      java.util.List<int[]> reservedTiles, int tileColumn, int tileRow) {
+        for (int ring = 0; ring <= ItemConstants.CREDIT_CHIP_RELOCATE_RADIUS; ring++) {
+            for (int rowOffset = -ring; rowOffset <= ring; rowOffset++) {
+                for (int columnOffset = -ring; columnOffset <= ring; columnOffset++) {
+                    if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;
+                    int column = tileColumn + columnOffset;
+                    int row    = tileRow + rowOffset;
+                    if (isFreeChipTile(targetLevel, items, reservedTiles, column, row)) return new int[]{column, row};
+                }
             }
         }
+        return null;
+    }
 
-        int totalWeight = ItemConstants.CREDIT_SPAWN_WEIGHT_SMALL
-                + ItemConstants.CREDIT_SPAWN_WEIGHT_MEDIUM
-                + ItemConstants.CREDIT_SPAWN_WEIGHT_LARGE;
-        for (int chipIndex = 0; chipIndex < chipCount && !walkableTiles.isEmpty(); chipIndex++) {
-            int[] tile = walkableTiles.remove(chipRandom.nextInt(walkableTiles.size()));
-            int tierRoll = chipRandom.nextInt(totalWeight);
-            ItemType chipType;
-            int chipAmount;
-            if (tierRoll < ItemConstants.CREDIT_SPAWN_WEIGHT_SMALL) {
-                chipType   = ItemType.CREDIT_SMALL;
-                chipAmount = ItemConstants.CREDIT_SMALL_BASE
-                        + chipRandom.nextInt(ItemConstants.CREDIT_SMALL_JITTER * 2 + 1)
-                        - ItemConstants.CREDIT_SMALL_JITTER;
-            } else if (tierRoll < ItemConstants.CREDIT_SPAWN_WEIGHT_SMALL
-                                  + ItemConstants.CREDIT_SPAWN_WEIGHT_MEDIUM) {
-                chipType   = ItemType.CREDIT_MEDIUM;
-                chipAmount = ItemConstants.CREDIT_MEDIUM_BASE
-                        + chipRandom.nextInt(ItemConstants.CREDIT_MEDIUM_JITTER * 2 + 1)
-                        - ItemConstants.CREDIT_MEDIUM_JITTER;
-            } else {
-                chipType   = ItemType.CREDIT_LARGE;
-                chipAmount = ItemConstants.CREDIT_LARGE_BASE
-                        + chipRandom.nextInt(ItemConstants.CREDIT_LARGE_JITTER * 2 + 1)
-                        - ItemConstants.CREDIT_LARGE_JITTER;
-            }
-            items.add(new GroundItem(tile[0], tile[1], chipType, Math.max(1, chipAmount)));
-        }
+    private boolean isFreeChipTile(Level targetLevel, java.util.List<GroundItem> items,
+                                   java.util.List<int[]> reservedTiles, int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileRow < 0 || tileColumn >= targetLevel.getWidth()
+                || tileRow >= targetLevel.getHeight()) return false;
+        char cell = targetLevel.getCell(tileColumn, tileRow);
+        if (Level.isWall(cell) || Level.isPropSolid(cell) || Level.isStairsDown(cell) || Level.isDoor(cell)) return false;
+        // Never stack a credit chip onto another grid-encoded pickup (keycard, medical, armour, ammo) or
+        // onto a weapon ground item already seeded into items.
+        if (Level.isKeycardPickup(cell) || Level.isMedicalPickup(cell)
+                || Level.isArmourPickup(cell) || Level.isAmmoPickup(cell)) return false;
+        if (isOccupiedByGroundItem(items, tileColumn, tileRow)) return false;
+        return !isReservedTile(reservedTiles, tileColumn, tileRow);
     }
 
     /** True if any ground item (e.g. a weapon spawn) already occupies this tile. */
@@ -5244,16 +5255,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         melee.setPlayerAccuracyMultiplier(playerStats.getAccuracyMultiplier());
         weaponRoller.configureRunStart(melee);
         return melee;
-    }
-
-    /**
-     * Whether a rolled weapon drop counts as a real UPGRADE for the pity rule (new-game-balancr
-     * order 2): a tier of UNCOMMON or better. COMMON drops are vanilla and do not satisfy a region's
-     * guaranteed-upgrade quota.
-     */
-    private boolean isWeaponUpgrade(WeaponRoll weaponRoll) {
-        return weaponRoll != null
-                && weaponRoll.tier.ordinal() >= WeaponRoller.upgradeTierThreshold().ordinal();
     }
 
     /**

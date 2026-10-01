@@ -47,16 +47,6 @@ public final class RouteEconomics {
     private static final int ARMOUR_VEST_VALUE =
             GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_ARMOR, BalanceConfig.ARMOUR_VEST_FRACTION);
 
-    private static final float CACHE_HEAL_HIT_POINTS =
-              BalanceConfig.CACHE_MEDKITS * MEDKIT_FULL_HEAL
-            + BalanceConfig.CACHE_STIMS   * MEDKIT_STIM_HEAL
-            + BalanceConfig.CACHE_ARMOUR  * ARMOUR_VEST_VALUE;
-
-    private static final float ELITE_HEAL_HIT_POINTS =
-              BalanceConfig.ELITE_MEDKITS * MEDKIT_FULL_HEAL
-            + BalanceConfig.ELITE_STIMS   * MEDKIT_STIM_HEAL
-            + BalanceConfig.ELITE_ARMOUR  * ARMOUR_VEST_VALUE;
-
     /**
      * The MED-BAY's total healing value as a FRACTION of the player's effective hit points: the
      * auto-doc's max-HP-share heal plus the clinic's take-away stock. Both are priced as an eHP
@@ -82,6 +72,16 @@ public final class RouteEconomics {
                     / BalanceConfig.REFERENCE_PLAYER_EHP;
 
     /**
+     * The upgrade opportunity a floor's own weapon drops are worth (balance-overhaul order 2): the spec's
+     * expected on-level weapon offers x {@link BalanceConfig#ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON}.
+     */
+    static float floorWeaponUpgradeOpportunity(NodeSupplySpec spec) {
+        return GameMath.expectedOnLevelWeaponOffers(spec.weaponDrops(), spec.weaponDropChance(),
+                spec.weaponLevelOffsetMin(), spec.weaponLevelOffsetMax())
+                * BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON;
+    }
+
+    /**
      * Registers the whole v1 ledger. Exposed so tests (and
      * {@code RouteRegistries.nodeEconomics()}) can populate a fresh registry.
      */
@@ -96,45 +96,43 @@ public final class RouteEconomics {
     // =========================================================================
 
     private static void registerNodes(NodeEconomicsRegistry registry) {
+        // COMBAT / ELITE / CACHE / SHOP (balance-overhaul order 2): their threat is the node's
+        // NodeSupplySpec threat scale and their supply is the spec's PLAN (RouteEconomicsModel prices it
+        // with the planner's own formulas) — one source, so the price tag is the floor the generator builds.
         // COMBAT — the reference node. Everything else is priced as a premium or a discount on it.
         registry.register(NodeEconomics.node(RouteNodeType.COMBAT, STANDARD_COMBAT_ID)
                 .displayName("HOSTILE ZONE")
-                .budgetScale(1f)
-                .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_COMBAT)
+                .budgetScale(NodeSupplySpecs.combat().threatScale())
+                .upgradeOpportunity(floorWeaponUpgradeOpportunity(NodeSupplySpecs.combat()))
                 .build());
 
-        // ELITE — the DANGER premium: 1.5x the depth budget, paid for by the gated vault.
+        // ELITE — the DANGER premium: 1.6x the threat, paid for by the vault share, the heavier armour
+        // plan with its guaranteed vest, more chips and the +1..+2 weapon behind the anchor group.
         registry.register(NodeEconomics.node(RouteNodeType.ELITE, "elite")
                 .displayName("ELITE HOTZONE")
-                .budgetScale(BalanceConfig.ELITE_BUDGET_SCALE)
-                .guaranteedAmmoBoxes(BalanceConfig.ELITE_AMMO_BOXES)
-                .guaranteedHealHitPoints(ELITE_HEAL_HIT_POINTS)
-                .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_ELITE)
+                .budgetScale(NodeSupplySpecs.elite().threatScale())
+                .upgradeOpportunity(floorWeaponUpgradeOpportunity(NodeSupplySpecs.elite()))
                 .build());
 
-        // CACHE — a CALM depot: light stragglers, a guaranteed consumable payoff.
+        // CACHE — a CALM depot: light stragglers, a net-GAIN supply plan (drain target below zero).
         registry.register(NodeEconomics.node(RouteNodeType.CACHE, "cache")
                 .displayName("SUPPLY CACHE")
-                .budgetScale(BalanceConfig.ROUTE_CALM_BUDGET_SCALE)
-                .guaranteedAmmoBoxes(BalanceConfig.CACHE_AMMO_BOXES)
-                .guaranteedHealHitPoints(CACHE_HEAL_HIT_POINTS)
-                .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_CACHE)
+                .budgetScale(NodeSupplySpecs.cache().threatScale())
+                .upgradeOpportunity(floorWeaponUpgradeOpportunity(NodeSupplySpecs.cache()))
                 .build());
 
         // SHOP — a standard floor with light resistance. The PURCHASE is paid for at a fair price
         // (GameMath.shopPrice), so only the "buy exactly what you need" surplus is credited.
         registry.register(NodeEconomics.node(RouteNodeType.SHOP, "shop")
                 .displayName("BLACK MARKET")
-                .budgetScale(BalanceConfig.ROUTE_LIGHT_BUDGET_SCALE)
+                .budgetScale(NodeSupplySpecs.shop().threatScale())
                 .upgradeOpportunity(BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_SHOP)
                 .build());
 
         // REST — the honest sanctuary: MedBayGenerator emits ZERO spawn points, so priced threat is 0.
-        // A curated clinic also rolls far fewer ordinary loot slots than a full dungeon floor.
         registry.register(NodeEconomics.node(RouteNodeType.REST, "rest")
                 .displayName("MED-BAY")
                 .budgetScale(0f)
-                .ordinaryLootScale(BalanceConfig.ROUTE_BESPOKE_FLOOR_LOOT_SCALE)
                 .guaranteedHealEffectiveHitPointFraction(REST_HEAL_EFFECTIVE_HIT_POINT_FRACTION)
                 .build());
 
@@ -150,7 +148,6 @@ public final class RouteEconomics {
         registry.register(NodeEconomics.node(RouteNodeType.EVENT, "event")
                 .displayName("DISTRESS BEACON")
                 .budgetScale(0f)
-                .ordinaryLootScale(BalanceConfig.ROUTE_BESPOKE_FLOOR_LOOT_SCALE)
                 .guaranteedAmmoBoxes(BalanceConfig.ROUTE_EVENT_EXPECTED_CHOICE_SHARE
                         * BalanceConfig.EVENT_AMMO_BOXES)
                 // The v1 event choices heal by FRACTION (a full patch-up, armour to full), not by a flat
@@ -166,7 +163,6 @@ public final class RouteEconomics {
         registry.register(NodeEconomics.node(RouteNodeType.BOSS, "boss")
                 .displayName("BOSS ARENA")
                 .budgetScale(BalanceConfig.ROUTE_BOSS_THREAT_SCALE)
-                .ordinaryLootScale(BalanceConfig.ROUTE_BESPOKE_FLOOR_LOOT_SCALE)
                 .forced(true)
                 .build());
 
@@ -174,7 +170,6 @@ public final class RouteEconomics {
         registry.register(NodeEconomics.node(RouteNodeType.REGION_GATE, "region_gate")
                 .displayName("REGION GATE")
                 .budgetScale(0f)
-                .ordinaryLootScale(BalanceConfig.ROUTE_BESPOKE_FLOOR_LOOT_SCALE)
                 .forced(true)
                 .build());
     }
@@ -271,13 +266,13 @@ public final class RouteEconomics {
                 .build());
 
         // MALFUNCTION — the bad-but-survivable pull: a failing sector, no reward, unlit (its config
-        // switches medkits/armour off, hence the halved ordinary loot) and a hazard bite on the way.
+        // switches the lights off; its supply is the MYSTERY spec's plan, order 6 retunes it) and a hazard
+        // bite on the way.
         registry.register(NodeEconomics.mysteryOutcome(MysteryOutcome.MALFUNCTION.name())
                 .displayName("MYSTERY: MALFUNCTION")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_MALFUNCTION)
                 .scanToneId(MysteryOutcome.MALFUNCTION.scanTone().name())
                 .budgetScale(BalanceConfig.ROUTE_CALM_BUDGET_SCALE)
-                .ordinaryLootScale(BalanceConfig.ROUTE_MALFUNCTION_LOOT_SCALE)
                 .guaranteedHealHitPoints(-BalanceConfig.ROUTE_MALFUNCTION_HAZARD_HIT_POINTS)
                 .build());
     }

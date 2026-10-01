@@ -26,6 +26,8 @@ public final class NodeTypeDefinition {
     private final boolean forced;
     private final String levelProfileId;
     private final String iconPainterId;
+    private final String threatWord;
+    private final String rewardPromise;
 
     private NodeTypeDefinition(Builder builder) {
         this.type           = Objects.requireNonNull(builder.type, "type");
@@ -38,6 +40,21 @@ public final class NodeTypeDefinition {
         this.forced         = builder.forced;
         this.levelProfileId = Objects.requireNonNull(builder.levelProfileId, "levelProfileId");
         this.iconPainterId  = Objects.requireNonNull(builder.iconPainterId, "iconPainterId");
+        this.threatWord     = builder.threatWord;
+        this.rewardPromise  = builder.rewardPromise;
+    }
+
+    /**
+     * The route card's one-line THREAT word (balance-overhaul order 2, C1 — e.g. "HEAVY RESISTANCE"),
+     * drawn in the node's accent colour; {@code null} when the node type carries no supply promise.
+     */
+    public String threatWord() {
+        return threatWord;
+    }
+
+    /** The route card's one-line REWARD promise (C1 — e.g. "WEAPON +2 LV, RARE+"), or {@code null}. */
+    public String rewardPromise() {
+        return rewardPromise;
     }
 
     /** The node kind this definition describes. */
@@ -107,6 +124,8 @@ public final class NodeTypeDefinition {
         private boolean forced;
         private String levelProfileId;
         private String iconPainterId;
+        private String threatWord;
+        private String rewardPromise;
 
         private Builder(RouteNodeType type) {
             this.type = type;
@@ -154,6 +173,13 @@ public final class NodeTypeDefinition {
 
         public Builder iconPainterId(String iconPainterId) {
             this.iconPainterId = iconPainterId;
+            return this;
+        }
+
+        /** C1: the node card's threat word + reward promise (both or neither). */
+        public Builder supplyPromise(String threatWord, String rewardPromise) {
+            this.threatWord    = threatWord;
+            this.rewardPromise = rewardPromise;
             return this;
         }
 

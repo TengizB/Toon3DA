@@ -24,7 +24,8 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-FAIR     — deaths land in the intended depth window and read as fair</li>
  *   <li>S-SKILL    — playing well is worth depths; the gap IS the difficulty range</li>
  *   <li>S-ROUTE    — the priced map's drain survives contact with play</li>
- *   <li>S-ECONOMY  — the experienced scarcity ratio tracks the modelled one</li>
+ *   <li>S-ECONOMY  — the supply a played floor yields tracks the supply its planner put down</li>
+ *   <li>S-SUPPLY   — TACTICAL leaves a COMBAT floor hurt, and no floor is below its heal floor</li>
  *   <li>S-SOFTLOCK — a run may end, but never get stuck unable to damage anything</li>
  *   <li>S-LAG      — a weapon that never climbs the power ladder ends the run early (balance-overhaul order 1)</li>
  * </ul>
@@ -50,6 +51,7 @@ public final class BehavioralBands {
         if (tactical != null && naive != null) results.add(skillResult(tactical, naive));
         if (tactical != null) results.add(routeResult(tactical));
         if (tactical != null) results.addAll(economyResults(tactical));
+        if (tactical != null) results.addAll(supplyResults(tactical));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
     }
@@ -124,17 +126,41 @@ public final class BehavioralBands {
     /** S-ECONOMY: the played scarcity ratio tracks the model, and the lifeline stays a lifeline. */
     private static List<RuleResult> economyResults(PolicySummary tactical) {
         List<RuleResult> results = new ArrayList<>();
-        float scarcityGap = tactical.meanScarcityGapVersusModel();
-        results.add(BalanceSchema.result(RuleKind.SIM_ECONOMY, "experienced S vs modelled S",
-                scarcityGap, 0f, BalanceConfig.SIM_ECONOMY_SCARCITY_TOLERANCE,
-                scarcityGap <= BalanceConfig.SIM_ECONOMY_SCARCITY_TOLERANCE,
-                "mean absolute gap across every played floor"));
+        float supplyShare = tactical.meanExperiencedSupplyShare();
+        boolean measured  = !Float.isNaN(supplyShare);
+        results.add(BalanceSchema.result(RuleKind.SIM_ECONOMY, "experienced vs planned supply",
+                measured ? supplyShare : 0f, BalanceConfig.SIM_ECONOMY_SUPPLY_SHARE_MIN,
+                BalanceConfig.SIM_ECONOMY_SUPPLY_SHARE_MAX,
+                measured && supplyShare >= BalanceConfig.SIM_ECONOMY_SUPPLY_SHARE_MIN
+                        && supplyShare <= BalanceConfig.SIM_ECONOMY_SUPPLY_SHARE_MAX,
+                measured ? "mean share of each exited floor's planned ammo picked up" : "no exited floor planned ammo"));
 
         float emergencyFraction = tactical.emergencySupplyFloorFraction();
         results.add(BalanceSchema.result(RuleKind.SIM_ECONOMY, "emergency lifeline floors",
                 emergencyFraction, 0f, BalanceConfig.SIM_ECONOMY_EMERGENCY_MAX_FRACTION,
                 emergencyFraction <= BalanceConfig.SIM_ECONOMY_EMERGENCY_MAX_FRACTION,
                 "the never-softlock ammo drop is a backstop, not a supply line"));
+        return results;
+    }
+
+    /**
+     * S-SUPPLY (balance-overhaul order 2, A7): TACTICAL leaves a COMBAT floor hurt but standing — its mean
+     * health fraction at the exit inside [SIM_SUPPLY_EXIT_HEALTH_MIN, MAX] (AS2: "usually full HP" was the
+     * complaint) — and NO played floor of any run sits below its S4 heal floor.
+     */
+    private static List<RuleResult> supplyResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        float exitHealth = tactical.meanCombatExitHealthFraction();
+        boolean measured = !Float.isNaN(exitHealth);
+        results.add(BalanceSchema.result(RuleKind.SIM_SUPPLY, "TACTICAL COMBAT exit health",
+                measured ? exitHealth : 0f, BalanceConfig.SIM_SUPPLY_EXIT_HEALTH_MIN,
+                BalanceConfig.SIM_SUPPLY_EXIT_HEALTH_MAX,
+                measured && exitHealth >= BalanceConfig.SIM_SUPPLY_EXIT_HEALTH_MIN
+                        && exitHealth <= BalanceConfig.SIM_SUPPLY_EXIT_HEALTH_MAX,
+                measured ? "mean health fraction leaving a COMBAT floor by its exit" : "no COMBAT floor exited"));
+        int belowFloor = tactical.floorsBelowHealFloor();
+        results.add(BalanceSchema.result(RuleKind.SIM_SUPPLY, "floors below the heal floor",
+                belowFloor, 0f, 0f, belowFloor == 0, "reachable heal value under the S4 floor"));
         return results;
     }
 

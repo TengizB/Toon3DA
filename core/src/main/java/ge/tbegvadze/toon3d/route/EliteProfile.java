@@ -9,11 +9,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The ELITE HOTZONE node's profile (route-map order-9): a containment breach — fewer enemies but MEAN
- * ones, hazards live, red alert pulsing. High risk, but the facility stored something worth guarding
- * here, so an ELITE promises a guaranteed ~1.5x reward, often behind a keycard-gated vault. This is
- * the DANGER counterweight to the CALM cache/rest nodes (order-8): routing here is a deliberate gamble
- * for a bigger payoff.
+ * The ELITE HOTZONE node's profile (route-map order-9): a containment breach — HEAVIER groups (1.6x
+ * threat) on a tighter footprint, hazards live, red alert pulsing. High risk, but the facility stored
+ * something worth guarding here, so an ELITE promises a heavier supply plan and a reward weapon behind
+ * its anchor group. This is the DANGER counterweight to the CALM cache/rest nodes (order-8): routing
+ * here is a deliberate gamble for a bigger payoff.
  *
  * <p>Recipe:
  * <ul>
@@ -24,11 +24,10 @@ import java.util.List;
  *   <li>Config: hazard-forward — radioactive barrels weighted up, large arena room on, some flicker /
  *       unlit dread, oil/corpses up. Lock-and-key on so clearing the floor can literally unlock the
  *       payout. {@link FloorEffects#redAlert()} lights the emergency pulse the moment you arrive.</li>
- *   <li>Budget: {@link RouteMapConstants#ELITE_BUDGET_SCALE} of the raw depth budget — a mini-setpiece,
- *       still depth-scaled (order-3 invariant). The affix may raise it further.</li>
- *   <li>Reward (post-generation, deterministic from the floor seed): an owned-ammo vault cache plus a
- *       depth-scaled armour pickup, medkits, stims and a weapon-rack display, placed in the deep gated
- *       room so clearing the guardian earns the vault.</li>
+ *   <li>Threat + reward: the ELITE {@link NodeSupplySpec} (balance-overhaul order 2) — 1.6x threat
+ *       through the shared encounter planner (a WARBAND anchor), the vault ammo share, the guaranteed
+ *       vest and a +1..+2 reward weapon one tier up, placed behind the anchor group. The profile only
+ *       dresses the vault (a weapon rack, cover columns). The affix may raise the threat further.</li>
  *   <li>Affix: if the node rolled a {@link NodeAffix} at map-gen, its {@link NodeAffixDefinition} (from
  *       the {@link NodeAffixRegistry}) folds its typed modifiers in — config bias, budget multiplier,
  *       and extra hazard / cover / armour guarantees.</li>
@@ -62,29 +61,36 @@ public final class EliteProfile implements NodeLevelProfile {
         }
 
         LevelGenConfig config = buildHotzoneConfig();
-        List<GuaranteedContent> guarantees = buildRewardGuarantees(depth, seed);
-        float budgetScale = RouteMapConstants.ELITE_BUDGET_SCALE;
-        int   vaultAmmoBoxes = RouteMapConstants.ELITE_AMMO_BOXES;
+        // The ELITE's threat, supply and reward weapon are the node's NodeSupplySpec (balance-overhaul
+        // order 2): 1.6x threat, the vault share, the guaranteed vest and the +1..+2 weapon behind the
+        // anchor group are all planned by the shared FloorPopulator — no profile-side budget or pickups.
+        config.supplySpec = RouteRegistries.nodeSupplySpecs().get(RouteNodeType.ELITE);
+        List<GuaranteedContent> guarantees = buildSetDressing(seed);
+        EnemyBudgetOverride budget = null;
+        AmmoCacheRequest vault = null;
 
         // Fold in the map-gen affix, if any: a bundle of typed modifiers, no bespoke per-affix code.
         NodeAffixDefinition affix = node != null && node.affix != null
                 ? affixes.definition(node.affix.id()) : null;
         if (affix != null) {
             affix.applyToConfig(config);
-            budgetScale *= affix.budgetScaleMultiplier();
+            // An affix multiplies the spec's threat (an EXTRA multiplier, never the node type's own).
+            if (affix.budgetScaleMultiplier() != 1f) {
+                budget = EnemyBudgetOverride.scaled(affix.budgetScaleMultiplier());
+            }
             // An affix that raises the THREAT must raise the REWARD with it (R-RISK-PREMIUM, order 7):
             // SWARM / OVERCLOCKED add vault boxes so their risk premium stays in the [1.0, 1.2] band.
-            vaultAmmoBoxes += affix.extraVaultAmmoBoxes();
+            if (affix.extraVaultAmmoBoxes() > 0) {
+                vault = new AmmoCacheRequest(affix.extraVaultAmmoBoxes(), Placement.GATED_ROOM);
+            }
             guarantees.addAll(affix.extraGuarantees(depth, seed));
         }
 
-        AmmoCacheRequest vault = new AmmoCacheRequest(vaultAmmoBoxes, Placement.GATED_ROOM);
         FloorEffects effects = RouteMapConstants.ELITE_RED_ALERT
                 ? FloorEffects.redAlert().withSting(RouteMapConstants.ELITE_STING_TEXT)
                 : FloorEffects.NONE.withSting(RouteMapConstants.ELITE_STING_TEXT);
 
-        return new LevelPlan(resolveGeneratorId(node, seed), config, guarantees,
-                EnemyBudgetOverride.scaled(budgetScale), vault, effects);
+        return new LevelPlan(resolveGeneratorId(node, seed), config, guarantees, budget, vault, effects);
     }
 
     /** A hazard-forward hotzone config: barrels up, an arena room, dread lighting, lock-and-key on. */
@@ -109,19 +115,12 @@ public final class EliteProfile implements NodeLevelProfile {
     }
 
     /**
-     * The guaranteed ~1.5x payoff, placed in the deep gated vault ({@link Placement#GATED_ROOM}) so the
-     * player must clear the guardian to claim it. Ammo is fulfilled separately via the owned-aware
-     * {@link AmmoCacheRequest}; everything else is symbol-stamped here.
+     * The vault's SET DRESSING (a weapon rack promising "worth guarding" in the gated room, plus cover
+     * columns). The payoff itself — ammo vault, armour, medkits, the reward weapon — is the ELITE spec's
+     * plan (balance-overhaul order 2), placed by the shared FloorPopulator behind the anchor group.
      */
-    private List<GuaranteedContent> buildRewardGuarantees(int depth, long seed) {
+    private List<GuaranteedContent> buildSetDressing(long seed) {
         List<GuaranteedContent> guarantees = new ArrayList<>();
-        // A depth-scaled armour drop: a shard shallow, a full vest deep.
-        char armourSymbol = depth >= RouteMapConstants.ELITE_ARMOUR_VEST_DEPTH ? 'A' : 'a';
-        guarantees.add(Guarantees.pickup(armourSymbol, RouteMapConstants.ELITE_ARMOUR, Placement.GATED_ROOM, seed));
-        // Field medkits + a stim top-up for surviving the fight.
-        guarantees.add(Guarantees.pickup('H', RouteMapConstants.ELITE_MEDKITS, Placement.GATED_ROOM, seed));
-        guarantees.add(Guarantees.pickup('+', RouteMapConstants.ELITE_STIMS, Placement.GATED_ROOM, seed));
-        // The vault set-dressing: a weapon rack promising "worth guarding", plus cover columns.
         guarantees.add(Guarantees.prop('=', RouteMapConstants.ELITE_WEAPON_RACKS, Placement.GATED_ROOM, seed));
         guarantees.add(Guarantees.prop('P', RouteMapConstants.ELITE_COVER_COLUMNS, Placement.SCATTERED, seed));
         return guarantees;

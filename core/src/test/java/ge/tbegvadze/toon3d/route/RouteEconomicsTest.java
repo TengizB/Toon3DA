@@ -70,24 +70,26 @@ class RouteEconomicsTest {
         NodeAffixRegistry affixes = new NodeAffixRegistry();
         RouteRegistries.registerAffixes(affixes);
 
-        // CACHE: a calm depot.
+        // Balance-overhaul order 2: a node's threat is its NodeSupplySpec's, carried on the config the
+        // profile hands the generator — the ledger must price exactly that spec (one source).
         LevelPlan cachePlan = new CacheProfile().resolve(node(RouteNodeType.CACHE), 3, 11L);
         assertEquals(ledger.forNodeType(RouteNodeType.CACHE).budgetScale(),
-                cachePlan.enemyBudget().budgetScale(), 1e-4f,
-                "CACHE ledger price must match CacheProfile's requested budget");
+                cachePlan.config().supplySpec.threatScale(), 1e-4f,
+                "CACHE ledger price must match the spec CacheProfile builds with");
+        assertEquals(null, cachePlan.enemyBudget(), "CACHE carries no node-type budget override");
 
-        // ELITE: the priced mini-setpiece.
         LevelPlan elitePlan = new EliteProfile(new GeneratorRegistry(), affixes)
                 .resolve(node(RouteNodeType.ELITE), 3, 11L);
         assertEquals(ledger.forNodeType(RouteNodeType.ELITE).budgetScale(),
-                elitePlan.enemyBudget().budgetScale(), 1e-4f,
-                "ELITE ledger price must match EliteProfile's requested budget");
+                elitePlan.config().supplySpec.threatScale(), 1e-4f,
+                "ELITE ledger price must match the spec EliteProfile builds with");
+        assertEquals(null, elitePlan.enemyBudget(), "a plain ELITE carries no node-type budget override");
 
-        // SHOP: light resistance.
         LevelPlan shopPlan = new ShopProfile(new GeneratorRegistry()).resolve(node(RouteNodeType.SHOP), 3, 11L);
         assertEquals(ledger.forNodeType(RouteNodeType.SHOP).budgetScale(),
-                shopPlan.enemyBudget().budgetScale(), 1e-4f,
-                "SHOP ledger price must match ShopProfile's requested budget");
+                shopPlan.config().supplySpec.threatScale(), 1e-4f,
+                "SHOP ledger price must match the spec ShopProfile builds with");
+        assertEquals(null, shopPlan.enemyBudget(), "SHOP carries no node-type budget override");
 
         // REST / EVENT / GATE are priced at ZERO threat because their bespoke generators emit no enemy
         // spawn points at all — the honest read of a sanctuary, whatever budget the plan carries.
@@ -97,8 +99,9 @@ class RouteEconomicsTest {
     }
 
     /**
-     * R-RISK-PREMIUM's supply side: an affix that raises the ELITE budget must raise the vault with
-     * it. SWARM and OVERCLOCKED therefore stamp MORE owned-ammo boxes than a plain elite vault.
+     * R-RISK-PREMIUM's supply side: an affix that raises the ELITE threat must raise the vault with it.
+     * Since balance-overhaul order 2 a plain ELITE's vault is its NodeSupplySpec plan (no profile-side
+     * box request); SWARM and OVERCLOCKED multiply the spec's threat and stamp owned-ammo boxes on top.
      */
     @Test
     void threatRaisingAffixesRaiseTheVaultTheyArePricedAgainst() {
@@ -106,15 +109,18 @@ class RouteEconomicsTest {
         RouteRegistries.registerAffixes(affixes);
         EliteProfile profile = new EliteProfile(new GeneratorRegistry(), affixes);
 
-        int plainBoxes = profile.resolve(node(RouteNodeType.ELITE), 3, 11L).ammoCache().boxCount();
+        LevelPlan plain = profile.resolve(node(RouteNodeType.ELITE), 3, 11L);
+        int plainBoxes = plain.ammoCache() == null ? 0 : plain.ammoCache().boxCount();
+        assertEquals(RouteNodeType.ELITE, plain.config().supplySpec.type(),
+                "the ELITE floor is planned on the ELITE supply spec");
         for (String affixId : new String[]{RouteMapConstants.AFFIX_SWARM_ID,
                 RouteMapConstants.AFFIX_OVERCLOCKED_ID}) {
             RouteNode affixed = node(RouteNodeType.ELITE);
             affixed.affix = affixes.definition(affixId).toToken();
             LevelPlan plan = profile.resolve(affixed, 3, 11L);
-            assertTrue(plan.enemyBudget().budgetScale() > BalanceConfig.ELITE_BUDGET_SCALE - 1e-4f,
-                    affixId + " must raise (or hold) the elite budget");
-            assertTrue(plan.ammoCache().boxCount() > plainBoxes,
+            assertTrue(plan.enemyBudget() != null && plan.enemyBudget().budgetScale() > 1f - 1e-4f,
+                    affixId + " must raise (or hold) the elite threat");
+            assertTrue(plan.ammoCache() != null && plan.ammoCache().boxCount() > plainBoxes,
                     affixId + " raises the threat, so its vault must price up with it");
         }
     }

@@ -32,9 +32,18 @@ public class EventRoomGenerator implements ILevelGenerator {
     // so it never perturbs the generated grid). See LevelPalettes.generatedWithBaseWall.
     private final long   seed;
 
+    // The floor's config (balance-overhaul order 2): the node's supply spec, the carried ammo types and
+    // the weapon cadence flag the shared supply pipeline reads. Null = this generator's node-type defaults.
+    private final LevelGenConfig config;
+
     public EventRoomGenerator(long seed) {
+        this(seed, null);
+    }
+
+    public EventRoomGenerator(long seed, LevelGenConfig config) {
         this.random = new Random(seed);
         this.seed   = seed;
+        this.config = config;
     }
 
     @Override
@@ -98,8 +107,15 @@ public class EventRoomGenerator implements ILevelGenerator {
 
         List<EnemySpawnPoint>  enemySpawnPoints  = new ArrayList<>(); // ZERO enemies — a story beat.
         List<WeaponSpawnPoint> weaponSpawnPoints = new ArrayList<>();
-        Level level = new Level(grid, enemySpawnPoints, weaponSpawnPoints,
-                                LevelPalettes.generatedWithBaseWall(seed));
+        // SUPPLY (balance-overhaul order 2, S1): even a bespoke chamber goes through the shared pipeline —
+        // its node type's spec decides what it holds (today's contents; order 6 retunes REST / EVENT).
+        FloorPopulator.Result populated = FloorPopulator.populate(ge.tbegvadze.toon3d.route.GeneratorId.EVENT_ROOM.stableId(), grid,
+                new PocketSupplyRegions(grid[0].length, LevelGenConstants.SPECIAL_ROOM_SUPPLY_POCKET_SIZE,
+                        LevelGenConstants.SPECIAL_ROOM_SUPPLY_POCKET_SIZE),
+                enemySpawnPoints, new FloorPopulator.EncounterFacts(-1, 0f, 0f, 0, 0), config,
+                FloorPopulator.specOf(config, ge.tbegvadze.toon3d.route.RouteNodeType.EVENT), dungeonDepth, seed);
+        Level level = populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
+                                LevelPalettes.generatedWithBaseWall(seed)));
         level.markEventStation(stationColumn, stationRow);
         return level;
     }

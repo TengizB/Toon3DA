@@ -189,14 +189,42 @@ R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the figh
   offence cards apply as a %-lift of the on-curve DPT (the model's convention),
   defence cards as flat eHP. The reference soldier (Void Shroud) is unchanged.
 
-R-SCARCITY (RuleKind.SCARCITY)
-  On the model floor (BalanceConfig SECTION 10): floor-wide S = SUPPLY/DEMAND
-  in [0.75, 0.95]; every single weapon's share < 0.60; heal net-drain fraction
-  in [0.05, 0.15] of reference eHP. Every AmmoType must have a registered
-  scarcity row (coverage).
-  WHY: scarcity is what turns a shooter into a roguelike — supply lands just
-  below comfort so "shoot or save?" stays a real question; the per-weapon cap
-  forces diversification; the net drain keeps HP precious without starving.
+R-SCARCITY (RuleKind.SCARCITY) — RETIRED by balance-overhaul order 2 (CP3c)
+  OVERRIDE RECORD: the model-floor band (floor-wide S in [0.75, 0.95], per-weapon S
+  < 0.60, net drain 5-15%) priced DICE — per-room ammo chances, per-kill drop chances
+  — that no longer exist. REPLACED by R-SUPPLY (below): every generated floor's supply
+  is PLANNED from its own roster and tracked against that plan. The SECTION 10 model
+  floor survives only as a printed example (BalanceReport "SUPPLY PLAN — model floor
+  example"). The scarcity ROW registry stays — it is the AmmoType coverage check and
+  the per-unit damage table the planner prices against.
+
+R-SUPPLY (RuleKind.SUPPLY) — supply tracks demand (balance-overhaul order 2)
+  Every generator builds through ONE pipeline (layout -> SupplySlotSurvey ->
+  encounter -> SupplyPlanner.plan -> SupplyPlanner.place). The plan is derived from
+  the roster the floor ACTUALLY fields and the node's NodeSupplySpec (S2-S10); it
+  never reads the player's current HP or ammo. Asserted twice:
+    PLANNER LEVEL (BalanceSchema.supplyPlannerResults) — every spec x depths
+      {1,5,10,15,20,25} x 30 seeds, planned against a real roster and placed on a
+      synthetic eight-room floor.
+    GENERATOR SWEEP (BalanceSchema.supplySweepResults, A2) — every generator x every
+      node type it serves x the same depths x 30 seeds, read back from the
+      FloorContentReport the shared FloorPopulator attaches to each Level.
+  Per cell (worst case over its seeds):
+    heal floor   >= SUPPLY_HEAL_FLOOR_FRACTION (0.45 max HP = one 'H') of HEAL value
+                 placed reachable WITHOUT a keycard (not BOSS / REST / REGION_GATE)
+    first half   >= 50% of that heal floor within half the farthest keycard-free walk
+    tracking     |placed - plan| <= max(10% of plan, half the category's largest
+                 pickup) for AMMO / HEAL / ARMOUR / CREDITS ("only rounding to whole
+                 pickups may move it"); nothing unplaced
+    spread       no room / chamber holds more than max(1, floor(35% x count)) of a
+                 category's ground pickups (count basis; corridors are not rooms)
+    carriers     ~25% (+/-0.08) of the eligible ammo / non-floor heal pickups ride
+                 on enemies (S6)
+  WHY: three generators placed loot with three different codes built from
+  independent per-room chances — a rooms floor rolled ~8 medkits and ~10 ammo boxes
+  at depth 1, a cave ~0.45 medkits (only inside a MEDICAL_BAY chamber that might not
+  exist). "Sometimes too many resources, other times too little; I die in the caves
+  because they have no medkits." Supply is now what the fights cost, minus a bite.
 
 R-DOT (RuleKind.DOT_UNIQUENESS)
   Exactly ONE definition per status: the unified bases are
@@ -240,7 +268,8 @@ R-GEARGATE (RuleKind.GEAR_GATE) — RETIRED by balance-overhaul order 1
   every depth 1..25, a stronger form of "stagnation is punished". What SURVIVES: the
   supply half — dropped weapons still roll their tier from WEAPON_DROP_TIER_*_BY_REGION
   (now also the expected rarity of the on-curve player) and THE PITY RULE
-  (GUARANTEED_UPGRADE_PER_REGION) stays until balance-overhaul order 2 re-homes it.
+  (GUARANTEED_UPGRADE_PER_REGION) stayed until balance-overhaul order 2 CP6 re-homed it as the
+  two-floor WEAPON CADENCE (S9; see the CP6 change-log entry).
   GameMath.gearCurveAtDepth / expectedPlayerDamagePerTurn and GEAR_CURVE_PER_REGION
   are deleted (GEAR_CURVE_REGION_BAND_SIZE stays: every per-region table indexes by it).
 
@@ -263,38 +292,73 @@ R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2
   priced content in one pass. Magnitudes may still be tuned freely — the price
   recomputes from the magnitude, so tuning stays free.
 
-R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — scarcity across the whole run (order 3; RE-FIT by balance-overhaul order 1)
-  R-SCARCITY checks the ammo economy on ONE depth-1 model floor; R-SCARCITY-DEPTH
-  carries that anchor down the run and requires the scarcity ratio S in [0.75,
-  0.95] at EVERY depth 1..RUN_FINAL_DEPTH (25; was 1..15). The two curves it rides:
-    DEMAND(d) = modelFloorDemand * ENEMY_HEALTH_GROWTH^(d-1)   (enemy eHP compounds)
-    SUPPLY(d) = modelFloorSupply * expectedHitGrowthAtDepth(d)   (each ammo unit hits
-                                  * AMMO_SUPPLY_REGION_MULTIPLIER[r]   as hard as the
-                                                                  on-curve weapon)
-    S(d)      = SUPPLY(d) / DEMAND(d)               (GameMath.scarcityRatioAtDepth)
-  Enemy HP growth is FITTED to the expected hit growth (R-LADDER L1), so S is near
-  depth-stable; the residual per-region rarity wobble is trimmed by the per-region
-  lever, now five entries {1.03, 1.00, 0.98, 0.98, 1.10}.
-  RE-FIT RECORD: the R8 rebase cut model-floor DEMAND 720 -> 502, so LEVER 2 box
-  sizes and LEVER 3 caps were cut ~0.7x (SECTION 5 note). SIZE, not frequency, is the
-  lever so a guaranteed box (cache / event / vault) keeps its share of a floor. The
-  slug reserve-banking gate stays the TIGHTEST — the Railgun waiver still holds.
+R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
+  Read from the SAME generator sweep as R-SUPPLY (every generator x node type x depths
+  {1,5,10,15,20,25} x 30 seeds), per cell, worst case over its seeds:
+    bodies (E1)        COMBAT 12-16 at depth 1 rising linearly to 22-28 at depth 25
+                       (BODY_TARGET_*), x the node's body scale (ELITE 1.05, CACHE / SHOP
+                       0.35); fewest and most both inside the band
+    shape (E4)         COMBAT / ELITE: >= 75% of enemies in groups of >= 2, >= 2 groups
+                       of >= 3, <= 3 lone enemies
+    first contact (E5) COMBAT / ELITE: the nearest member of a group of >= 2 within 18
+                       walk tiles of the start (12 on depth 1), never in the start room
+    footprint (E6)     ROOMS_MST / LINEAR_CORRIDOR / CAVERN on every spec with a density
+                       band: walkable tiles inside the region range +/-15%
+                       (FOOTPRINT_MIN/MAX_BY_REGION: A 350-550, B 450-650, C/D/E 500-750;
+                       ELITE the lower half); the run's FIRST COMBAT floor strictly
+                       inside 350-550 (A5)
+    density (E7)       enemies per 100 walkable tiles: COMBAT [2.2, 4.0], ELITE
+                       [3.0, 5.0], CACHE / SHOP [0.6, 1.5]; lowest and highest both inside
+  HOW THE GENERATORS MEET E6 + E7 (CP5): level/FootprintPlanner rebuilds the floor (up to
+  LevelGenConstants.FOOTPRINT_MAX_ATTEMPTS = 16, a derived seed per attempt) at a footprint
+  SCALE — a centred layout window for rooms and caves, the spine length for corridors —
+  corrected by target / measured walkable each time. The target FOLLOWS the bodies the
+  build fielded: GameMath.walkableTilesForDensity(bodies, the band's midpoint), clamped to
+  the region range, so footprint and density hold together; the first build inside the
+  range, inside the density band and within 0.7 x 15% of the target is kept, else the best
+  ranked. Measured over 30 seeds x the three layouts x COMBAT/ELITE/CACHE/SHOP x the audit
+  depths: zero floors outside either band.
+  DECISION (CP5): the ELITE body scale is 1.05, not 1.2. At 1.2 the deep ELITE body band
+  (26-34) cannot fit the lower-half footprint (500-625) under the 5.0 density ceiling; the
+  ELITE's extra threat is carried by its 1.6x Threat-Point cap (heavier groups), which E1
+  already intended, so the body count stays near COMBAT's.
+  HOW THE PLANNER MEETS IT: level/EncounterBudgetPlanner fills the body target with
+  registered GROUP TEMPLATES (level/EncounterGroupTemplates: PACK 3-5 chaff of one type,
+  FIRETEAM 2 soldiers + 2 chaff, ESCORT bruiser + 2-3 chaff [COMBAT anchor], BATTERY 1-2
+  ranged soldiers + 2 melee chaff, WARBAND mini-elite + 2 soldiers [ELITE anchor, depth
+  >= 3], HUNTER a lone bruiser / flanker [<= 20% of groups]); the Threat-Point budget
+  (x the region dial x the node's threat scale) is the CAP, and each pick aims at the
+  threat-per-body still to spend, so an ELITE's 1.6x cap buys heavier groups (measured
+  ~1.6x COMBAT's spent TP at every depth), not a crowd. level/EncounterPlacer puts each
+  group in ONE room (cluster radius LEVEL_GEN_PACK_CLUSTER_RADIUS): first contact in the
+  nearest room off the start (or the corridor pocket within the limit), the anchor group
+  in the deepest room, every other group in a room no group holds (a LARGE room takes two).
+  OVERRIDE RECORD (CP4): "enemy COUNT is depth-invariant (a known non-goal)" -> body
+  targets grow with depth (E1). REPLACED and DELETED: ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN/
+  MAX + _CEILING_FRACTION (-> template anchors), ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE/
+  _MIN_DEPTH (-> WARBAND on ELITE nodes only, GROUP_WARBAND_MIN_DEPTH 3), ENCOUNTER_PER_ROOM_
+  TP_FRACTION_CAP 0.25 + ROOM_OPEN/CHOKEPOINT_TP_MULTIPLIER (-> GROUP_TP_FRACTION_CAP 0.35
+  per group, anchor exempt), CHAFF_PACK_MIN/MAX + consecutive-run packs + the remainder pass
+  (-> templates; GROUP_CHAFF_SLOT_MIN 2 keeps "chaff never spawns alone", asserted by the
+  re-stated pack-coherence test), ENCOUNTER_MAX_SINGLE_TYPE_FRACTION (-> GROUP_MAX_SINGLE_
+  TYPE_FRACTION, same 0.40). ENCOUNTER_BUDGET_FILL_TARGET_FRACTION 0.95 survives (the
+  planner's aim; R-XP-PACE reads it). The linear generator's entrance room is now always
+  small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7): a 19x11 entrance put every non-start tile
+  beyond 12 walk tiles, making E5 on depth 1 geometrically impossible.
 
-R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — the heal economy, enforced (order 3; RE-FIT by balance-overhaul order 1)
-  The per-floor NET HP drain holds [5%, 15%] of the expected player's eHP at EVERY
-  depth 1..RUN_FINAL_DEPTH (25; was 1..15) (GameMath.netHpDrainFractionAtDepth):
-    incoming(d) = incomingBase * ENEMY_DAMAGE_GROWTH^(d-1)
-    heal(d)     = healBase * eHP(d)/eHP(1) * HEAL_SUPPLY_REGION_MULTIPLIER[r]
-                  (heals are FRACTIONS of max, and max includes the flat card bonuses)
-    drain(d)    = (incoming(d) - heal(d)) / expectedPlayerAtDepth(d).effectiveHitPoints
-  The drain is a small DIFFERENCE, so it amplifies the R-LADDER turns-to-die drift
-  several times — the reason the expected defence-card share is 0.25 (it keeps that
-  drift within +/-7%) and the heal lever grew to five entries {1, 1, 1, 1.03, 1.10}.
-  RE-FIT RECORD: MODEL_FLOOR_EXPECTED_MEDKITS 1.5 -> 2.8 and _ARMOUR_PICKUPS 1.0 ->
-  1.6, re-synced to the generator's default per-room chances (8 rooms x 0.35 / 0.20);
-  the old undercount priced a heal economy harsher than the game places, and the R8
-  rebase made every fight costlier. WHY (unchanged): HP is a slowly depleting run
-  resource — medkits are decisions, not a timer.
+R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
+  OVERRIDE RECORD: S in [0.75, 0.95] at every depth on the model floor's dice curve is
+  REPLACED by R-SUPPLY's generator sweep at depths {1,5,10,15,20,25}: each floor's
+  ammo is ammoRatio x its own roster eHP, priced per unit at the on-curve hit growth
+  (GameMath.supplyDamagePerUnitAtDepth), so the box count is depth-stable by
+  construction. AMMO_SUPPLY_REGION_MULTIPLIER is DELETED (CP6: the route ledger is
+  re-derived from the node specs, so nothing reads a region supply trim).
+
+R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
+  OVERRIDE RECORD: the 5-15% net-drain band on the model floor is REPLACED by R-SUPPLY's
+  heal floor + tracking (the planned heal value = modelled incoming x (1 - the node's
+  drainTarget), S3/S4) and, played, by the sim band S-SUPPLY (TACTICAL HP fraction at
+  COMBAT exit in [0.55, 0.80], CP7). HEAL_SUPPLY_REGION_MULTIPLIER is DELETED (CP6).
 
 R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
   Currency without a coupled sink is a score counter. The rule couples income to the
@@ -538,7 +602,7 @@ S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
   HOARDER-START-WEAPON never does.
 
-S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SOFTLOCK (RuleKind.SIM_*, order 9)
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
   it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
@@ -575,9 +639,18 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SOFTLOCK (RuleKind.SIM_*, or
   S-ROUTE     The played per-floor net HP drain sits inside the order-7 modelled trajectory
               band, widened by SIM_ROUTE_TRAJECTORY_TOLERANCE (play dodges fights the ledger
               charges for). WHY: the priced map must survive contact with play.
-  S-ECONOMY   The experienced scarcity ratio S is within SIM_ECONOMY_SCARCITY_TOLERANCE (0.08)
-              of the modelled S per depth, and the never-softlock lifeline fires on < 5% of
-              floors. WHY: if the played S drifts, the model describes a different game.
+  S-ECONOMY   RE-BASED by balance-overhaul order 2 (CP7): the mean share of each EXITED floor's
+              PLANNED ammo units the player actually picked up sits in [SIM_ECONOMY_SUPPLY_SHARE_
+              MIN 0.75, MAX 1.10] (the old "experienced S vs modelled S" compared the player's
+              CARRIED ammo against the retired model-floor S), and the never-softlock lifeline
+              fires on < 5% of floors. WHY: below the band the planner puts supply where play does
+              not reach it; above it, unplanned income is leaking in.
+  S-SUPPLY    (balance-overhaul order 2) TACTICAL's mean health fraction leaving a COMBAT floor by
+              its exit sits in [SIM_SUPPLY_EXIT_HEALTH_MIN 0.55, MAX 0.80], and ZERO played floors
+              hold less reachable heal value than their S4 heal floor. WHY (AS2): "usually full
+              HP" was the complaint — a normal floor should cost something; REST and CACHE are
+              where HP comes back. NOT waived: it reads exited floors only, so the navigation stall
+              shrinks its sample but does not bias it.
   S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
               tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
               fighting retreat, not a dead end. The band exists to keep that structural
@@ -606,13 +679,14 @@ LIVE WAIVERS (one value waiver + the order-9 navigation-limited bands):
              (~1.1 slugs/floor, tightest reserve banking ~1.0 floor) is the
              real limiter. Nerfing the raw 90 would make the weapon worthless
              rather than merely scarce.
-    expires: re-checked by order-3 R-SCARCITY-DEPTH — slug reserve banking stays
-             the TIGHTEST gate (~1.0 floor at depth 1) after the shop re-pricing;
-             the waiver holds because scarcity, not raw damage, is the limiter.
+    expires: re-checked by balance-overhaul order 2 R-SUPPLY — slugs only ever arrive
+             through the 30% off-type share of a floor's planned ammo (or the carried
+             share once a railgun is held), and the slug reserve cap stays the tightest
+             of all ammo types; scarcity, not raw damage, is still the limiter.
 
   [SIM_FAIR] TACTICAL median death depth, [SIM_FAIR] TACTICAL readable deaths,
   [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
-  [SIM_ECONOMY] experienced S vs modelled S, [SIM_ECONOMY] emergency lifeline floors,
+  [SIM_ECONOMY] experienced vs planned supply (re-based, order 2 CP7), [SIM_ECONOMY] emergency lifeline floors,
   [SIM_LAG] HOARDER-START-WEAPON median death depth (balance-overhaul order 1 — inherits
   this waiver and its expiry; it reads 1.0 today because hoarder runs STALL on floor 1,
   which says nothing about the ladder — R-LADDER L2 and the LADDER REPORT carry the claim)
@@ -630,6 +704,14 @@ LIVE WAIVERS (one value waiver + the order-9 navigation-limited bands):
              count is printed in every balance-sim report (the "stalled" column), so
              the moment the harness is good enough the waiver must be deleted and
              the bands enforced against the real numbers.
+
+  [CALM_COST] rest EV discount, [CALM_COST] event EV discount (balance-overhaul order 2, CP6)
+    reason:  the route ledger is now priced on each floor's NodeSupplySpec plan. The old
+             ledger credited the bespoke MED-BAY and EVENT rooms with 35% of a combat
+             floor's ordinary loot they never placed; priced honestly REST sits 30-44% and
+             EVENT 9-27% below COMBAT's EV (band 10-35%). Their contents are order 6's to
+             retune (SCOPE OUT of order 2).
+    expires: with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).
 
 --------------------------------------------------------------------------------
 SECTION 5 — NEW-CONTENT CHECKLIST
@@ -717,7 +799,7 @@ WAIVERS (registry: BalanceSchema.activeWaivers())
 ------------------------------------------------------------------------------------
   [WEAPON_POWER] Railgun (full charge)
     reason:  Gated by slug scarcity, not raw damage: the 90-per-slug elite-buster hit is the heavy role's identity and supply (~1.1 slugs/floor, tightest reserve cap) is the real limiter.
-    expires: Re-checked by order-3 R-SCARCITY-DEPTH: slug reserve banking stays the TIGHTEST gate (~1.0 floor at depth 1, tightest of all ammo types) after the shop re-pricing.
+    expires: Re-checked by balance-overhaul order 2 R-SUPPLY: slugs only ever arrive through the 30% off-type share of a floor's planned ammo (or the carried share once a railgun is held), and the slug reserve cap stays the tightest of all ammo types.
   [SIM_FAIR]     TACTICAL median death depth
     reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
     expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
@@ -730,7 +812,7 @@ WAIVERS (registry: BalanceSchema.activeWaivers())
   [SIM_ROUTE]    played per-floor net drain
     reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
     expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_ECONOMY]  experienced S vs modelled S
+  [SIM_ECONOMY]  experienced vs planned supply
     reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
     expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
   [SIM_ECONOMY]  emergency lifeline floors
@@ -739,6 +821,12 @@ WAIVERS (registry: BalanceSchema.activeWaivers())
   [SIM_LAG]      HOARDER-START-WEAPON median death depth
     reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
     expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+  [CALM_COST]    rest EV discount
+    reason:  Priced honestly on its NodeSupplySpec plan since balance-overhaul order 2: the bespoke room never placed the ordinary loot the old ledger credited it with, and its contents are balance-overhaul order 6's to retune.
+    expires: Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).
+  [CALM_COST]    event EV discount
+    reason:  Priced honestly on its NodeSupplySpec plan since balance-overhaul order 2: the bespoke room never placed the ordinary loot the old ledger credited it with, and its contents are balance-overhaul order 6's to retune.
+    expires: Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).
 
 BLOCK & DEFEND (order-3)
 role          baseBlk   blkMax   decay  survTurns in?   
@@ -815,87 +903,170 @@ depth    expLvl   avail XP     req XP    yield in band?
 14           14       3008       2714    1.108 OK      
 15           15       3758       3391    1.108 OK      
 
-SCARCITY — model floor (depth 1): 12 enemies, 8 rooms, DEMAND=502 dmg ; expected ammo boxes/floor=2.80 (0.56/type)
-ammoType   boxSize  dmg/unit   supply    perWpnS <0.6?     bankFloors
+SUPPLY PLAN — model floor example (depth 1, COMBAT): 12 enemies, DEMAND=502 dmg ; planned ammo damage=427 (ammoRatio 0.85, 70% carried types)
+ammoType     boxes  dmg/unit   supply    perWpnS           bankFloors
 ------------------------------------------------------------------------------------
-Bullets         10        20      112       0.22 OK              1.51
-Shells           4        44       99       0.20 OK              1.49
-Cells            7        28      110       0.22 OK              1.51
-Rockets          2        42       47       0.09 OK              1.51
-Slugs            1        90       50       0.10 OK              1.08
+Bullets          2        20      400       0.80                 1.51
+Shells           0        44        0       0.00                 1.49
+Plasma Cells       0        28        0       0.00                 1.51
+Rockets          0        42        0       0.00                 1.51
+Slugs            0        90        0       0.00                 1.08
 ------------------------------------------------------------------------------------
-FLOOR-WIDE  SUPPLY=418  DEMAND=502  S=0.83  band=0.75-0.95  OK
+FLOOR-WIDE  SUPPLY=400  DEMAND=502  S=0.80  (R-SUPPLY tracks the plan, not a band on S)
+HEALS planned 0.83 max-HP (heal floor 0.45) + armour 0.21 ; incoming 1.29 max-HP
 
-HEAL ECONOMY — model floor
-  INCOMING=187  HEAL_SUPPLY=160  netHpDrain=27  (13.1% of 205 eHP ; band 5-15%)  OK
-  full medkit (59 HP) buys 7.6 survival-turns at 7.8 avg incoming dmg/turn (informational)
+SUPPLY / DENSITY (R-SUPPLY / R-DENSITY) — mean over 30 seeds per row; ammo in damage, heal/armour in max-HP
+generator        node          d bodies groups 1stCon  walk   dens  TP/x ammo plan/put  heal p/put  armr p/put credits
+-----------------------------------------------------------------------------------------------------------------------
+rooms_mst        COMBAT        1   14.1    3.8    9.6   446   3.16  0.89    418/418     0.97/0.96   0.24/0.25       80
+rooms_mst        COMBAT        5   15.7    4.4   12.9   487   3.22  0.93    712/713     1.06/1.06   0.26/0.27       80
+rooms_mst        COMBAT       10   18.0    5.0   13.3   581   3.10  0.94   1575/1553    1.25/1.23   0.31/0.33       80
+rooms_mst        COMBAT       15   20.5    5.9   13.6   652   3.15  0.93   3365/3374    1.46/1.44   0.37/0.37       80
+rooms_mst        COMBAT       20   22.5    6.2   12.1   693   3.25  0.94   7157/7082    1.69/1.67   0.42/0.43       80
+rooms_mst        COMBAT       25   24.5    6.7   11.7   706   3.47  0.94  14477/15100   1.76/1.75   0.44/0.44       80
+rooms_mst        ELITE         1   15.0    4.0    9.6   388   3.87  0.81    664/714     0.86/0.83   0.38/0.38      128
+rooms_mst        ELITE         5   16.4    4.6   13.3   410   4.00  0.94   1120/1198    0.84/0.82   0.36/0.36      128
+rooms_mst        ELITE        10   18.9    5.3   12.3   484   3.91  0.93   2437/2535    1.04/1.05   0.45/0.44      128
+rooms_mst        ELITE        15   21.3    6.1   12.6   537   3.97  0.93   5431/5663    1.20/1.20   0.52/0.52      128
+rooms_mst        ELITE        20   23.3    6.7   12.4   575   4.06  0.94  11688/11955   1.41/1.39   0.60/0.60      128
+rooms_mst        ELITE        25   26.3    7.4   12.7   589   4.46  0.93  22805/22825   1.55/1.55   0.66/0.66      128
+rooms_mst        CACHE         1    4.9    1.2   21.4   460   1.07  0.50    247/248     0.58/0.58   0.38/0.37       96
+rooms_mst        CACHE         5    5.4    1.4   22.7   493   1.10  0.53    434/432     0.65/0.65   0.43/0.44       96
+rooms_mst        CACHE        10    6.2    2.0   22.2   577   1.08  0.57    966/983     0.75/0.73   0.50/0.50       96
+rooms_mst        CACHE        15    7.1    2.0   25.4   671   1.06  0.55   2135/2213    0.85/0.84   0.57/0.57       96
+rooms_mst        CACHE        20    8.0    2.1   24.8   697   1.14  0.57   4464/4511    1.04/1.04   0.69/0.70       96
+rooms_mst        CACHE        25    8.8    2.3   25.7   700   1.26  0.65   9954/9936    1.14/1.14   0.76/0.76       96
+rooms_mst        SHOP          1    4.9    1.2   23.1   460   1.07  0.46    261/262     0.58/0.58   0.14/0.15      160
+rooms_mst        SHOP          5    5.4    1.4   22.4   495   1.10  0.48    451/462     0.68/0.68   0.17/0.17      160
+rooms_mst        SHOP         10    6.2    2.0   22.2   577   1.08  0.49    962/991     0.76/0.77   0.19/0.19      160
+rooms_mst        SHOP         15    7.1    2.0   25.2   671   1.06  0.48   2153/2213    0.90/0.89   0.23/0.22      160
+rooms_mst        SHOP         20    8.0    2.0   24.6   697   1.14  0.50   4563/4567    1.07/1.06   0.27/0.27      160
+rooms_mst        SHOP         25    8.8    2.3   25.4   700   1.26  0.57  10123/10116   1.18/1.18   0.29/0.29      160
+rooms_mst        MYSTERY       1   13.9    3.8   14.9   426   3.31  0.88    413/411     0.96/0.93   0.24/0.25       80
+rooms_mst        MYSTERY       5   15.8    4.5   15.3   429   3.74  0.93    724/733     1.04/1.03   0.26/0.26       80
+rooms_mst        MYSTERY      10   17.7    4.8   15.8   530   3.37  0.91   1506/1513    1.21/1.20   0.30/0.30       80
+rooms_mst        MYSTERY      15   20.5    5.7   15.4   601   3.48  0.93   3442/3413    1.45/1.43   0.36/0.35       80
+rooms_mst        MYSTERY      20   22.2    6.1   14.2   599   3.76  0.93   7185/7109    1.62/1.61   0.41/0.41       80
+rooms_mst        MYSTERY      25   25.1    7.0   13.4   601   4.23  0.93  14372/14828   1.80/1.78   0.45/0.45       80
+linear_corridor  COMBAT        1   13.8    3.9    8.8   451   3.08  0.90    413/411     0.96/0.94   0.24/0.25       80
+linear_corridor  COMBAT        5   15.5    4.3   14.1   502   3.10  0.92    717/721     1.06/1.06   0.26/0.26       80
+linear_corridor  COMBAT       10   18.0    5.1   12.7   562   3.22  0.93   1575/1582    1.23/1.22   0.31/0.31       80
+linear_corridor  COMBAT       15   19.9    5.5   13.4   639   3.12  0.93   3306/3257    1.45/1.45   0.36/0.35       80
+linear_corridor  COMBAT       20   22.3    6.1   14.8   688   3.24  0.93   7111/6919    1.65/1.66   0.41/0.41       80
+linear_corridor  COMBAT       25   24.1    6.7   13.4   703   3.42  0.94  14493/15084   1.72/1.72   0.43/0.43       80
+linear_corridor  ELITE         1   14.9    4.0    8.3   384   3.91  0.81    648/691     0.88/0.84   0.38/0.38      128
+linear_corridor  ELITE         5   16.7    4.7   12.8   411   4.08  0.94   1132/1215    0.86/0.84   0.37/0.37      128
+linear_corridor  ELITE        10   19.2    5.3   12.8   499   3.86  0.94   2488/2579    1.02/1.02   0.44/0.44      128
+linear_corridor  ELITE        15   22.3    6.3   12.8   563   3.96  0.94   5493/5753    1.28/1.26   0.55/0.54      128
+linear_corridor  ELITE        20   23.6    6.7   14.0   574   4.11  0.93  11418/11607   1.41/1.40   0.60/0.60      128
+linear_corridor  ELITE        25   26.1    7.4   13.7   591   4.42  0.94  22797/22782   1.54/1.54   0.66/0.66      128
+linear_corridor  SHOP          1    4.7    1.0   39.7   450   1.06  0.40    229/234     0.57/0.59   0.14/0.14      160
+linear_corridor  SHOP          5    5.3    1.3   33.0   487   1.08  0.47    433/447     0.67/0.68   0.17/0.18      160
+linear_corridor  SHOP         10    6.3    2.0   27.8   581   1.09  0.50   1032/1049    0.74/0.73   0.19/0.18      160
+linear_corridor  SHOP         15    7.0    2.0   34.4   656   1.07  0.49   2221/2243    0.88/0.86   0.22/0.22      160
+linear_corridor  SHOP         20    7.7    2.1   31.5   685   1.13  0.51   4833/4912    0.98/0.97   0.25/0.25      160
+linear_corridor  SHOP         25    8.5    2.2   26.0   707   1.20  0.56   9978/9911    1.11/1.12   0.28/0.28      160
+linear_corridor  MYSTERY       1   14.4    4.0   16.3   430   3.42  0.91    427/431     0.98/0.96   0.25/0.25       80
+linear_corridor  MYSTERY       5   16.0    4.4   18.5   431   3.80  0.91    716/721     1.07/1.07   0.27/0.27       80
+linear_corridor  MYSTERY      10   18.3    4.9   20.0   530   3.49  0.91   1572/1567    1.23/1.22   0.31/0.31       80
+linear_corridor  MYSTERY      15   20.7    5.8   18.2   591   3.54  0.92   3374/3317    1.47/1.45   0.37/0.37       80
+linear_corridor  MYSTERY      20   22.4    6.3   17.3   601   3.78  0.93   6997/6918    1.68/1.69   0.42/0.42       80
+linear_corridor  MYSTERY      25   25.0    6.9   17.5   599   4.23  0.93  14672/15388   1.83/1.81   0.46/0.45       80
+cavern           COMBAT        1   14.0    3.9    7.5   442   3.18  0.89    421/414     0.96/0.94   0.24/0.24       80
+cavern           COMBAT        5   15.6    4.4    8.6   487   3.21  0.93    713/711     1.05/1.03   0.26/0.26       80
+cavern           COMBAT       10   18.2    5.1    8.6   585   3.12  0.92   1563/1566    1.22/1.22   0.30/0.30       80
+cavern           COMBAT       15   20.1    5.6    8.6   645   3.13  0.93   3338/3318    1.44/1.43   0.36/0.35       80
+cavern           COMBAT       20   22.8    6.2    8.8   693   3.29  0.92   7272/7153    1.65/1.63   0.41/0.42       80
+cavern           COMBAT       25   25.0    6.9    9.2   716   3.50  0.94  14627/14948   1.81/1.79   0.45/0.46       80
+cavern           ELITE         1   14.7    4.1    8.3   387   3.79  0.85    668/708     0.88/0.86   0.38/0.38      128
+cavern           ELITE         5   16.3    4.4    8.2   398   4.11  0.94   1129/1200    0.87/0.84   0.38/0.37      128
+cavern           ELITE        10   19.0    5.3    7.9   483   3.93  0.93   2433/2514    1.02/1.01   0.44/0.44      128
+cavern           ELITE        15   21.5    6.1    8.3   544   3.95  0.93   5335/5553    1.25/1.25   0.54/0.53      128
+cavern           ELITE        20   23.4    6.6    8.5   576   4.07  0.93  11497/11864   1.39/1.36   0.60/0.60      128
+cavern           ELITE        25   26.0    7.3    8.6   585   4.45  0.94  23600/23579   1.53/1.51   0.65/0.66      128
+cavern           SHOP          1    4.8    1.1   18.8   452   1.06  0.44    247/245     0.54/0.54   0.13/0.14      160
+cavern           SHOP          5    5.3    1.3   18.8   484   1.09  0.47    435/447     0.65/0.67   0.16/0.17      160
+cavern           SHOP         10    6.3    2.0   17.5   595   1.06  0.50   1007/1027    0.78/0.78   0.20/0.19      160
+cavern           SHOP         15    7.0    2.0   18.2   654   1.07  0.47   2095/2157    0.87/0.88   0.22/0.22      160
+cavern           SHOP         20    8.0    2.1   18.1   699   1.14  0.52   4817/4802    1.04/1.03   0.26/0.26      160
+cavern           SHOP         25    9.0    2.2   20.9   716   1.26  0.59  10364/10098   1.20/1.20   0.30/0.30      160
+cavern           MYSTERY       1   14.1    3.8   10.8   422   3.38  0.88    418/421     0.93/0.90   0.23/0.24       80
+cavern           MYSTERY       5   16.1    4.4    9.7   428   3.85  0.92    716/729     1.06/1.09   0.27/0.27       80
+cavern           MYSTERY      10   18.4    5.0   11.9   524   3.56  0.94   1623/1616    1.26/1.23   0.31/0.32       80
+cavern           MYSTERY      15   20.5    5.8   11.7   601   3.47  0.93   3361/3335    1.47/1.48   0.37/0.37       80
+cavern           MYSTERY      20   22.5    6.2   10.1   599   3.80  0.93   7156/6991    1.62/1.62   0.41/0.40       80
+cavern           MYSTERY      25   25.0    6.7   10.7   595   4.25  0.93  14636/15116   1.79/1.78   0.45/0.44       80
+boss_arena       BOSS          1    0.0    0.0      -   679   0.00  0.00    275/284     0.00/0.00   0.00/0.00       80
+boss_arena       BOSS          5    0.0    0.0      -   685   0.00  0.00    464/479     0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         10    0.0    0.0      -   713   0.00  0.00   1181/1261    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         15    0.0    0.0      -   701   0.00  0.00   2757/2594    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         20    0.0    0.0      -   665   0.00  0.00   3351/3460    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         25    0.0    0.0      -   714   0.00  0.00   7144/7633    0.00/0.00   0.00/0.00       80
+med_bay          REST          1    0.0    0.0      -   216   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+med_bay          REST          5    0.0    0.0      -   213   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+med_bay          REST         10    0.0    0.0      -   214   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+med_bay          REST         15    0.0    0.0      -   215   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+med_bay          REST         20    0.0    0.0      -   217   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+med_bay          REST         25    0.0    0.0      -   214   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+event_room       EVENT         1    0.0    0.0      -   135   0.00  0.00      0/0       0.45/0.45   0.00/0.00       80
+event_room       EVENT         5    0.0    0.0      -   135   0.00  0.00      0/0       0.45/0.45   0.00/0.00       80
+event_room       EVENT        10    0.0    0.0      -   135   0.00  0.00      0/0       0.45/0.45   0.00/0.00       80
+event_room       EVENT        15    0.0    0.0      -   135   0.00  0.00      0/0       0.45/0.45   0.00/0.00       80
+event_room       EVENT        20    0.0    0.0      -   135   0.00  0.00      0/0       0.45/0.45   0.00/0.00       80
+event_room       EVENT        25    0.0    0.0      -   135   0.00  0.00      0/0       0.45/0.45   0.00/0.00       80
+gate_airlock     REGION_GATE   1    0.0    0.0      -   131   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+gate_airlock     REGION_GATE   5    0.0    0.0      -   131   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+gate_airlock     REGION_GATE  10    0.0    0.0      -   131   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+gate_airlock     REGION_GATE  15    0.0    0.0      -   131   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+gate_airlock     REGION_GATE  20    0.0    0.0      -   131   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
+gate_airlock     REGION_GATE  25    0.0    0.0      -   131   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
 
-SCARCITY DEPTH SWEEP (R-SCARCITY-DEPTH) — S=SUPPLY/DEMAND at each depth, band 0.75-0.95  [model supply=418 demand=502]
-depth  region      hitX   DEMAND   SUPPLY         S in?   
-------------------------------------------------------------------------------------
-1      0           1.03      502      430      0.86 OK    
-2      0           1.18      572      493      0.86 OK    
-3      0           1.35      651      562      0.86 OK    
-4      0           1.53      742      640      0.86 OK    
-5      0           1.74      845      726      0.86 OK    
-6      1           2.09      962      874      0.91 OK    
-7      1           2.36     1096      987      0.90 OK    
-8      1           2.67     1248     1114      0.89 OK    
-9      1           3.00     1422     1253      0.88 OK    
-10     1           3.37     1620     1409      0.87 OK    
-11     2           4.06     1845     1697      0.92 OK    
-12     2           4.55     2101     1902      0.90 OK    
-13     2           5.09     2393     2128      0.89 OK    
-14     2           5.69     2726     2378      0.87 OK    
-15     2           6.36     3105     2655      0.86 OK    
-16     3           7.79     3536     3255      0.92 OK    
-17     3           8.68     4028     3626      0.90 OK    
-18     3           9.66     4588     4036      0.88 OK    
-19     3          10.74     5226     4489      0.86 OK    
-20     3          11.94     5952     4987      0.84 OK    
-21     4          14.88     6779     6216      0.92 OK    
-22     4          16.51     7722     6896      0.89 OK    
-23     4          18.30     8795     7645      0.87 OK    
-24     4          20.28    10017     8470      0.85 OK    
-25     4          22.45    11410     9379      0.82 OK    
+ELITE PROMISE (R-SUPPLY A6) — threat ratio band 1.40-1.80; reward weapon level >= d+1 in or past the anchor room on every floor
+OK   rooms_mst d1 elite threat ratio                1.46  mean spent TP, ELITE over COMBAT
+OK   rooms_mst d5 elite threat ratio                1.62  mean spent TP, ELITE over COMBAT
+OK   rooms_mst d10 elite threat ratio               1.59  mean spent TP, ELITE over COMBAT
+OK   rooms_mst d15 elite threat ratio               1.61  mean spent TP, ELITE over COMBAT
+OK   rooms_mst d20 elite threat ratio               1.60  mean spent TP, ELITE over COMBAT
+OK   rooms_mst d25 elite threat ratio               1.59  mean spent TP, ELITE over COMBAT
+OK   linear_corridor d1 elite threat ratio          1.44  mean spent TP, ELITE over COMBAT
+OK   linear_corridor d5 elite threat ratio          1.63  mean spent TP, ELITE over COMBAT
+OK   linear_corridor d10 elite threat ratio         1.62  mean spent TP, ELITE over COMBAT
+OK   linear_corridor d15 elite threat ratio         1.63  mean spent TP, ELITE over COMBAT
+OK   linear_corridor d20 elite threat ratio         1.60  mean spent TP, ELITE over COMBAT
+OK   linear_corridor d25 elite threat ratio         1.60  mean spent TP, ELITE over COMBAT
+OK   cavern d1 elite threat ratio                   1.52  mean spent TP, ELITE over COMBAT
+OK   cavern d5 elite threat ratio                   1.61  mean spent TP, ELITE over COMBAT
+OK   cavern d10 elite threat ratio                  1.62  mean spent TP, ELITE over COMBAT
+OK   cavern d15 elite threat ratio                  1.61  mean spent TP, ELITE over COMBAT
+OK   cavern d20 elite threat ratio                  1.62  mean spent TP, ELITE over COMBAT
+OK   cavern d25 elite threat ratio                  1.59  mean spent TP, ELITE over COMBAT
+OK   rooms_mst d1 elite reward weapon               1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   rooms_mst d5 elite reward weapon               1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   rooms_mst d10 elite reward weapon              1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   rooms_mst d15 elite reward weapon              1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   rooms_mst d20 elite reward weapon              1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   rooms_mst d25 elite reward weapon              1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   linear_corridor d1 elite reward weapon         1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   linear_corridor d5 elite reward weapon         1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   linear_corridor d10 elite reward weapon        1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   linear_corridor d15 elite reward weapon        1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   linear_corridor d20 elite reward weapon        1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   linear_corridor d25 elite reward weapon        1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   cavern d1 elite reward weapon                  1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   cavern d5 elite reward weapon                  1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   cavern d10 elite reward weapon                 1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   cavern d15 elite reward weapon                 1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   cavern d20 elite reward weapon                 1.00  30/30 floors with a level >= d+1 weapon behind the anchor
+OK   cavern d25 elite reward weapon                 1.00  30/30 floors with a level >= d+1 weapon behind the anchor
 
-HEAL DRAIN DEPTH SWEEP (R-HEALDRAIN-DEPTH) — net HP loss per floor, band 5-15% of depth-scaled eHP
-depth  region     drain% in?   
-------------------------------------------------------------------------------------
-1      0           13.1% OK    
-2      0           11.3% OK    
-3      0            9.9% OK    
-4      0            8.9% OK    
-5      0            8.2% OK    
-6      1            7.7% OK    
-7      1            7.5% OK    
-8      1            7.5% OK    
-9      1            7.6% OK    
-10     1            7.9% OK    
-11     2            8.2% OK    
-12     2            8.7% OK    
-13     2            9.2% OK    
-14     2            9.9% OK    
-15     2           10.5% OK    
-16     3            8.9% OK    
-17     3            9.7% OK    
-18     3           10.6% OK    
-19     3           11.4% OK    
-20     3           12.3% OK    
-21     4            7.8% OK    
-22     4            8.7% OK    
-23     4            9.6% OK    
-24     4           10.6% OK    
-25     4           11.6% OK    
-
-CREDIT ECONOMY (R-CREDITS) — income(region) / bundle price, band 0.90-1.40  [kill base=80/floor  chips=79/floor]
+CREDIT ECONOMY (R-CREDITS) — income(region) / bundle price, band 0.90-1.40  [kill base=80/floor  chips=80/floor]
 region       income     bundle    ratio in?   
 ------------------------------------------------------------------------------------
-0               891        713     1.25 OK    
-1              1131       1010     1.12 OK    
-2              1371       1307     1.05 OK    
-3              1611       1604     1.00 OK    
-4              1851       1901     0.97 OK    
+0               896        713     1.26 OK    
+1              1136       1010     1.12 OK    
+2              1376       1307     1.05 OK    
+3              1616       1604     1.01 OK    
+4              1856       1901     0.98 OK    
   (bundle = 1 significant @ 12PP + 1.5 small @ 3PP each)
 
 SHOP PRICING — price = valuePP * 36 cr/PP * depthFactor (zero hand-set base prices)
@@ -909,14 +1080,16 @@ Tier up (RARE, 12 PP)         12.0  432      605      821      1037
 Tier up (EPIC, 20 PP)         20.0  720      1008     1368     1728   
 Player ability boon (~12 PP)    12.0  432      605      821      1037   
 
-ENCOUNTER BUDGET (idea 4) — base budget = 500 TP at depth 1
-depth    budget    spent  count anchor         maxType%  mix?    rules? 
+ENCOUNTER (balance-overhaul order 2) — COMBAT floor: body target filled with group templates under a Threat-Point CAP (base 500 TP at depth 1)
+depth       cap    spent bodies target groups                             anchor         maxType%  mix?    rules? 
 ------------------------------------------------------------------------------------
-1           450      449     15 Shell Brute    30        OK      OK     
-2           562      562     18 Shell Brute    30        OK      OK     
-3           703      690     12 Shell Brute    30        OK      OK     
-5          1097     1091     18 Shell Brute    30        OK      OK     
-8          2377     2349     22 Shell Brute    27        OK      OK     
+1           450      394     15     15 ESCO3 BATT3 BATT4 PACK5            Shell Brute    30        OK      OK     
+2           562      493     15     15 ESCO4 BATT3 FIRE4 PACK4            Cinderforge Colossus 27        OK      OK     
+3           703      592     16     16 ESCO3 FIRE4 PACK4 PACK5            Shell Brute    30        OK      OK     
+5          1097     1017     16     16 ESCO4 PACK5 BATT4 BATT3            Cinderforge Colossus 27        OK      OK     
+8          2377     2235     18     18 ESCO3 BATT4 PACK3 PACK5 BATT3      Shell Brute    31        OK      OK     
+15        12998    12278     21     21 ESCO4 BATT3 BATT4 BATT4 PACK3 BATT3 Cinderforge Colossus 23        OK      OK     
+25       131042   128055     26     26 ESCO4 PACK3 BATT3 PACK5 PACK3 BATT4 FIRE4 Shell Brute    21        OK      OK     
 
 REGION DANGER DIAL (R-REGION, order 5) — TP multiplier applied ON TOP of the depth curve
 region   name                 dial   entryD regionBudget dial? 
@@ -957,12 +1130,12 @@ LADDER (balance-overhaul order 1, R-LADDER) — continuous hits to KILL (TTK) / 
   MINI_ELITE (Iron Stalker)    20   10.89   18.88   32.75  260.25    8.48    4.80    3.74
   MINI_ELITE (Iron Stalker)    25   12.46   21.61   37.48  437.56    9.71    4.57    3.57
   LEVEL-UP RUNG (R-LADDER-AFFORD, <= 0.5 of one combat floor's credits):
-    depth  1: price    54 vs combat-floor income    159
-    depth  5: price    76 vs combat-floor income    197
-    depth 10: price   103 vs combat-floor income    245
-    depth 15: price   130 vs combat-floor income    293
-    depth 20: price   157 vs combat-floor income    341
-    depth 25: price   184 vs combat-floor income    389
+    depth  1: price    54 vs combat-floor income    160
+    depth  5: price    76 vs combat-floor income    198
+    depth 10: price   103 vs combat-floor income    246
+    depth 15: price   130 vs combat-floor income    294
+    depth 20: price   157 vs combat-floor income    342
+    depth 25: price   184 vs combat-floor income    390
 
 ABILITY PRICING — PP cost per ability (budget = PP a tier may spend on abilities)
   tier budgets: Common=0  Uncommon=6  Rare=12  Epic=20  Legendary=30  (±20%)
@@ -1052,54 +1225,54 @@ Hell Baron cleave2        132      64.4% BANNED
 ROUTE ECONOMICS (order 7) — the node EV ledger at depth 5; EV in power points, threat in TP. permanent-power weight 2.6, risk 3.0 PP per standard floor
 subject                    threat resDelta progress   reward       EV pips        in?   
 ------------------------------------------------------------------------------------
-combat                       1042     0.69    16.19    65.30    39.78 STANDARD    OK    
-elite                        1563     8.15    25.18   107.41    69.13 DANGER      OK    
-cache                         292    22.41     3.96    39.01    31.86 CALM        OK    
-shop                          521     9.75     9.59    45.95    33.19 CALM        OK    
-rest                            0    32.04     0.00    32.04    32.04 CALM        OK    
-mystery                       651    14.92    10.81    57.10    41.14 GAMBLE      OK    
-event                           0    18.02     6.40    34.66    34.66 CALM        OK    
-boss                         2084   -32.32    23.98    75.06    24.02 SET_PIECE   OK    
-region_gate                     0     6.58     0.00     6.58     6.58 SET_PIECE   OK    
-irradiated                   1042   -20.17    11.99    33.52     8.00 -           -     
-overclocked                  1250   -22.55    14.39    41.89    11.26 -           -     
-swarm                        1563   -15.34    17.98    65.20    26.93 -           -     
-fortified                    1042   -19.17    11.99    34.52     9.00 -           -     
-volatile                     1042   -20.17    11.99    33.52     8.00 -           -     
-VAULT_JACKPOT                 521    25.83    13.19    71.40    58.64 -           -     
-SECRET_WARREN                1042     9.37    16.19    73.98    48.46 -           -     
-TRAP_GAUNTLET                 292    18.32     3.96    34.92    27.77 -           -     
-AMBUSH                       1563     8.15    25.18   107.41    69.13 -           -     
-LORE_SIGNAL                     0    32.04     0.00    32.04    32.04 -           -     
-MALFUNCTION                   292    -0.96     3.36    14.08     6.93 -           -     
+combat                       1042    -0.29    16.19    64.32    38.80 STANDARD    OK    
+elite                        1667    -0.95    27.58   106.80    65.97 DANGER      OK    
+cache                         313    10.64     7.80    37.66    30.01 CALM        OK    
+shop                          365    10.40     7.80    38.55    29.62 CALM        OK    
+rest                            0    27.04     0.00    27.04    27.04 CALM        OK    
+mystery                       670     9.07    11.24    52.78    36.36 GAMBLE      OK    
+event                           0    18.34     6.40    34.98    34.98 CALM        OK    
+boss                         2084     0.72    23.98   108.11    57.07 SET_PIECE   OK    
+region_gate                     0     1.59     0.00     1.59     1.59 SET_PIECE   OK    
+irradiated                   1042    -0.29    11.99    53.40    27.88 -           -     
+overclocked                  1250     0.99    14.39    65.42    34.80 -           -     
+swarm                        1563    13.69    17.98    94.23    55.95 -           -     
+fortified                    1042     0.71    11.99    54.40    28.88 -           -     
+volatile                     1042    -0.29    11.99    53.40    27.88 -           -     
+VAULT_JACKPOT                 521    16.73    13.19    62.30    49.54 -           -     
+SECRET_WARREN                1042     8.39    16.19    73.00    47.48 -           -     
+TRAP_GAUNTLET                 292     8.23     3.96    24.83    17.68 -           -     
+AMBUSH                       1667    -0.95    27.58   106.80    65.97 -           -     
+LORE_SIGNAL                     0    27.04     0.00    27.04    27.04 -           -     
+MALFUNCTION                   292    -1.35     3.36    13.68     6.53 -           -     
 ------------------------------------------------------------------------------------
-  standard COMBAT node EV = 39.78. calm discount band 10-35%; risk premium band 1.00-1.20; mystery EV tolerance ±15%
+  standard COMBAT node EV = 38.80. calm discount band 10-35%; risk premium band 1.00-1.20; mystery EV tolerance ±15%
   AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.
-  risk premium elite                       1.09  OK
-  risk premium elite + irradiated          1.09  OK
+  risk premium elite                       1.03  OK
+  risk premium elite + irradiated          1.03  OK
   risk premium elite + overclocked         1.01  OK
-  risk premium elite + swarm               1.01  OK
-  risk premium elite + fortified           1.11  OK
-  risk premium elite + volatile            1.09  OK
-  cache EV discount                       0.30  OK
-  shop EV discount                        0.16  OK
-  rest EV discount                        0.34  OK
-  event EV discount                       0.13  OK
+  risk premium elite + swarm               1.05  OK
+  risk premium elite + fortified           1.04  OK
+  risk premium elite + volatile            1.03  OK
+  cache EV discount                       0.32  OK
+  shop EV discount                        0.33  OK
+  rest EV discount                        0.44  OUT-OF-BAND
+  event EV discount                       0.09  OUT-OF-BAND
 
 TRAJECTORY (order 7) — cumulative bands over 100 real maps, sampled at every region boundary; worst reading per policy
 policy / metric                                worst band               in?   
 ------------------------------------------------------------------------------------
-SAFEST cumulative scarcity S                    0.65 [   0.55,   1.70] OK    
-SAFEST net HP drain / floor                    -0.67 [  -0.85,   0.65] OK    
-SAFEST XP pace                                  0.99 [   0.70,   2.95] OK    
+SAFEST cumulative scarcity S                    0.68 [   0.55,   1.70] OK    
+SAFEST net HP drain / floor                    -0.68 [  -0.85,   0.65] OK    
+SAFEST XP pace                                  1.00 [   0.70,   2.95] OK    
 SAFEST depth coupling                           0.86 [   0.80,   1.65] OK    
-DEADLIEST cumulative scarcity S                 0.60 [   0.55,   1.70] OK    
-DEADLIEST net HP drain / floor                  0.62 [  -0.85,   0.65] OK    
-DEADLIEST XP pace                               2.78 [   0.70,   2.95] OK    
+DEADLIEST cumulative scarcity S                 0.71 [   0.55,   1.70] OK    
+DEADLIEST net HP drain / floor                  0.33 [  -0.85,   0.65] OK    
+DEADLIEST XP pace                               2.89 [   0.70,   2.95] OK    
 DEADLIEST depth coupling                        1.58 [   0.80,   1.65] OK    
-BALANCED cumulative scarcity S                  0.69 [   0.55,   1.70] OK    
-BALANCED net HP drain / floor                   0.30 [  -0.85,   0.65] OK    
-BALANCED XP pace                                1.12 [   0.70,   2.95] OK    
+BALANCED cumulative scarcity S                  0.72 [   0.55,   1.70] OK    
+BALANCED net HP drain / floor                  -0.46 [  -0.85,   0.65] OK    
+BALANCED XP pace                                1.10 [   0.70,   2.95] OK    
 BALANCED depth coupling                         1.45 [   0.80,   1.65] OK    
 ------------------------------------------------------------------------------------
   R-ROUTE-GUARANTEES reachability over 100 seeds       0 violation(s)  OK
@@ -1167,6 +1340,65 @@ CHANGELOG
     the compare card prices both guns at THIS floor, floor arrival posts "THREAT LV d" for 2 s, and
     ORA teaches UNDERGEARED once (re-taught once after 3 more floors behind). No balance value moved.
 
+  balance-overhaul order 2 / CP7 — THE PLAYED READ. The sim gained the FLOOR REPORT (SimReport: per
+    generator x node type x depth band — enemies spawned / killed, groups, turns to the first damage
+    exchange, heal value placed, floors below the heal floor, ammo planned / picked up, health on
+    entry / exit, deaths holding no medkit) with the A4 CAVERN-vs-ROOMS_MST heal comparison, the new
+    S-SUPPLY band (RuleKind.SIM_SUPPLY) and a RE-BASED S-ECONOMY ("experienced vs planned supply";
+    SIM_ECONOMY_SCARCITY_TOLERANCE, BalanceSchema.modelledScarcityAtDepth and FloorLedger's carried-
+    ammo S are DELETED). First read: TACTICAL leaves COMBAT floors at 0.79 health (band 0.55-0.80),
+    zero floors below the heal floor, CAVERN heal value within 0-6% of ROOMS_MST; supply share 0.57
+    (waived — the navigator stalls with carriers alive and pickups behind it).
+
+  balance-overhaul order 2 / CP6 — NODE SPECS DRIVE THE NODES; THE LEDGER IS RE-DERIVED.
+    Profiles put the node's NodeSupplySpec on the config (ELITE / CACHE / SHOP; COMBAT is the
+    default) and DROP their node-type budget overrides (ELITE_BUDGET_SCALE, calm(), light()) and
+    pickup guarantees (ELITE armour/medkit/stim + vault boxes, CACHE medkit/stim/armour + cargo
+    boxes); props, shop machines, MYSTERY outcomes and affix extras stay (an affix's budget is now
+    an EXTRA multiplier on the spec's threat; its extra vault boxes still ride AmmoCacheRequest).
+    WEAPON CADENCE replaces THE PITY RULE: RunStats.weaponCadenceDue() -> LevelGenConfig.
+    weaponCadenceDue whenever the previous non-boss floor offered no weapon at level >= its depth
+    (SimWorld mirrors it). ROUTE LEDGER (route/RouteEconomicsModel.priceDirect): every row is priced
+    on its floor's NodeSupplySpec — ammo = demand x (ammoRatio + vault) (BOSS: x
+    BOSS_ARENA_AMMO_BUDGET_FRACTION), heals + armour = SupplyPlanner.plannedHealFraction /
+    plannedArmourFraction (shared with the floor build), chips = SupplyPlanner.plannedCreditChips;
+    COMBAT / ELITE / CACHE / SHOP threat = the spec's threat scale; COMBAT / ELITE / CACHE upgrade
+    opportunity = GameMath.expectedOnLevelWeaponOffers(spec) x ROUTE_UPGRADE_OPPORTUNITY_PER_ON_
+    LEVEL_WEAPON (0.70, so COMBAT stays 0.35; ELITE 0.60 -> 0.70; CACHE 0.05 -> 0.35). The model
+    floor carries only demand / incoming / bounty / box value. DELETED: ROUTE_MODEL_LEGACY_{ROOM,
+    KILL}_AMMO_BOXES, NodeEconomics.ordinaryLootScale + ROUTE_BESPOKE_FLOOR_LOOT_SCALE + ROUTE_
+    MALFUNCTION_LOOT_SCALE, AMMO_SUPPLY_REGION_MULTIPLIER, HEAL_SUPPLY_REGION_MULTIPLIER, GameMath.
+    ammoSupplyAtDepth, ELITE_BUDGET_SCALE, ELITE_AMMO_BOXES, ELITE_STIMS, CACHE_{AMMO_BOXES,
+    MEDKITS,STIMS,ARMOUR,ARMOUR_VEST_DEPTH}, GUARANTEED_UPGRADE_PER_REGION, RunStats' pity counter,
+    WeaponRoller.rollGuaranteedUpgrade(ToSnapshot) / upgradeTierThreshold.
+    DECISIONS (spec numbers moved off the idea's starting values to keep existing bands green):
+    CACHE threat 0.35 -> 0.30 (R-HONEST-SAFE caps a safe-looking node at 0.30; bodies stay 0.35);
+    CACHE ammo 1.5 -> 2.0, drain -0.25 -> -1.25, credits 0.8 -> 1.2 and SHOP ammo 1.0 -> 2.0,
+    drain 0 -> -0.75, credits 1.0 -> 2.0 (R-CALM-COST: priced on their own small rosters the
+    idea's numbers left both 43-48% below COMBAT's EV; now CACHE 0.25-0.35, SHOP 0.21-0.33).
+    WAIVERS: R-CALM-COST "rest EV discount" and "event EV discount" — the old ledger credited
+    the bespoke rooms with 35% of a combat floor's loot they never placed; priced honestly REST
+    is 30-44% and EVENT 9-27% below COMBAT; their contents are order 6's (expires with order 6).
+    NEW: R-SUPPLY's ELITE PROMISE (BalanceSchema.eliteRewardResults, A6): ELITE spent TP over
+    COMBAT's in [ELITE_THREAT_RATIO_MIN 1.40, MAX 1.80] per generator x depth, and every ELITE
+    floor's reward weapon at level >= d+1 in or past the anchor room (the placer seats the reward
+    weapon before the vault ammo; when the anchor group fills its room the weapon lies on the
+    anchor's own tile). Route card C1 lines: NodeTypeDefinition.supplyPromise(threat, reward).
+
+  balance-overhaul order 2 / CP1-CP3 — FULL FLOORS, FAIR SUPPLY (the supply half). Added
+    BalanceConfig SECTION 21 (SUPPLY & DENSITY), route/NodeSupplySpec (+ registry, one row per
+    node type), level/SupplyPlanner + FloorPopulator + SupplySlotSurvey, and R-SUPPLY (planner
+    level + the generator sweep). Every generator now builds through the planner; carriers
+    replace per-kill drop rolls (both never-softlock lifelines kept). RETIRED (override clause):
+    R-SCARCITY, R-SCARCITY-DEPTH, R-HEALDRAIN-DEPTH -> R-SUPPLY. DELETED constants:
+    ENEMY_AMMO_DROP_CHANCE, MELEE_KILL_AMMO_DROP_CHANCE, LEVEL_GEN_AMMO_CHANCE_PER_ROOM, the
+    LEVEL_GEN_DEPTH_{MEDKIT,AMMO}_BONUS / _EXTRA_AMMO_CHANCE generosity bumps, every per-room-type
+    loot chance (server / large / armory / command / hazard rooms, LEVEL_GEN_RANDOM_ROOM_WEAPON_
+    CHANCE), CREDIT_CHIPS_PER_FLOOR_MIN/MAX (+ chip jitters), MODEL_FLOOR_ROOM_COUNT /
+    _AMMO_TYPE_COUNT, LevelGenConfig.medkits/armourKits/*ChancePerRoom and RouteMapConstants.
+    CACHE_*_CHANCE_PER_ROOM. TEMPORARY (removed by CP6): the route ledger's model floor kept the
+    legacy box model (ROUTE_MODEL_LEGACY_{ROOM,KILL}_AMMO_BOXES 1.6 / 1.2).
+
   balance-overhaul order 1 / CP5 — the shop LEVEL UP rung (R13): every Fabricator stocks a
     guaranteed LEVEL UP offer for the EQUIPPED weapon (outside the weighted roll; ShopContext now
     carries the equipped weapon) while its level < depth + 1; no shop level-up ever raises a weapon
@@ -1221,8 +1453,8 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 1 matrix
-(the power ladder), with the LADDER REPORT it now prints.
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 2 matrix
+(planned supply, group encounters, footprint targets, node specs), with the FLOOR REPORT.
 
   ================================================================================
   BALANCE SIMULATION SUMMARY (new-game-balancr order 9)
@@ -1234,27 +1466,50 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 1 m
   POLICIES
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
-  NAIVE                    200     1.0     188     1.00      0.00      0.00    -0.35
-  TACTICAL                 200     1.0     175     1.00      0.00      0.00    -0.60
-  HOARDER-START-WEAPON     200     1.0     176     1.00      0.00      0.00    -0.60
+  NAIVE                    200     1.0     181     1.00      0.00      0.00    -0.44
+  TACTICAL                 200     1.0     167     1.00      0.00      0.00    -0.60
+  HOARDER-START-WEAPON     200     1.0     166     1.00      0.00      0.00    -0.57
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
-  policy                      S-gap  emergency    bossTurns
-  NAIVE                       3.593      0.004          0.0
-  TACTICAL                    2.962      0.029        900.0
-  HOARDER-START-WEAPON        2.923      0.032        900.0
+  policy                 supplyTook  emergency    bossTurns
+  NAIVE                       0.198      0.000        900.0
+  TACTICAL                    0.567      0.024        812.4
+  HOARDER-START-WEAPON        0.574      0.021        608.8
+
+  FLOOR REPORT (TACTICAL) — means per played floor; heal in max-HP, ammo in units, HP as a health fraction
+  --------------------------------------------------------------------------------
+  generator        node     depth  floor  spawn killed   grp 1stDmg   heal  <flr ammo p/took  hpIn hpOut  0-heal
+  cavern           COMBAT    1-5      51   14.1    6.4   3.9    7.6   1.23     0    15/5     0.99  0.73       8
+  cavern           ELITE     1-5      26   16.0    4.2   4.3    6.8   1.32     0    21/3     0.95  0.94      10
+  cavern           SHOP      1-5       2    5.5    3.0   1.5   26.0   0.67     0    10/9     1.00  0.93       0
+  event_room       EVENT     1-5       7    0.0    0.0   0.0      -   0.45     0     0/0     0.69  0.79       0
+  linear_corridor  COMBAT    1-5      42   14.1    4.8   3.8   42.4   1.20     0    15/4     1.00  0.92       5
+  linear_corridor  ELITE     1-5       9   17.0    4.3   4.6   67.0   1.42     0    23/3     0.97  1.00       1
+  linear_corridor  SHOP      1-5       2    5.0    2.0   1.0   12.0   0.71     0    14/0     1.00  1.00       0
+  med_bay          REST      1-5      10    0.0    0.0   0.0      -   0.00     0     0/0     0.79  0.79       0
+  rooms_mst        CACHE     1-5     106    5.0    2.3   1.1   62.2   0.96     0    10/4     0.97  0.97       1
+  rooms_mst        COMBAT    1-5      50   14.3    5.2   3.9   32.4   1.20     0    15/5     0.98  0.70       4
+  rooms_mst        ELITE     1-5      21   16.5    3.7   4.5   14.6   1.33     0    22/5     0.92  0.77       3
+  rooms_mst        SHOP      1-5       3    5.0    3.3   1.0   18.0   0.71     0     8/7     0.77  0.95       0
+
+  A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
+    COMBAT    1-5   cavern 1.23   rooms_mst 1.20   gap    2% OK
+    ELITE     1-5   cavern 1.32   rooms_mst 1.33   gap    0% OK
+    SHOP      1-5   cavern 0.67   rooms_mst 0.71   gap    6% OK
 
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
   OK   [SIM_GATE] HOARDER first-boss clears: value=0.00 band=0.00..0.00 OK — 200 seeds; R-BOSS-GATE proves the same thing on paper
-  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=1.00 band=0.00..6.00 OK — 200 seeds; 176 stalled
-  WAIV [SIM_FAIR] TACTICAL median death depth: value=1.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 175 stalled
+  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=1.00 band=0.00..6.00 OK — 200 seeds; 166 stalled
+  WAIV [SIM_FAIR] TACTICAL median death depth: value=1.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 167 stalled
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
   WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=0.00 band=3.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 1.0 vs NAIVE 1.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.18 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
-  WAIV [SIM_ECONOMY] experienced S vs modelled S: value=2.96 band=0.00..0.08 OUT-OF-BAND (WAIVED) — mean absolute gap across every played floor
-  OK   [SIM_ECONOMY] emergency lifeline floors: value=0.03 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.19 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.57 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
+  OK   [SIM_ECONOMY] emergency lifeline floors: value=0.02 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
+  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.79 band=0.55..0.80 OK — mean health fraction leaving a COMBAT floor by its exit
+  OK   [SIM_SUPPLY] floors below the heal floor: value=0.00 band=0.00..0.00 OK — reachable heal value under the S4 floor
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
@@ -1268,38 +1523,32 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 1 m
   One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
   role        depths  onKill lagKill  ratio |   onDie  lagDie
-  CHAFF        1-5      1.89    2.50   1.32 |   41.86   53.00
-  CHAFF        6-10     2.16   12.00   5.56 |   61.14   43.49
-  CHAFF       11-15     1.41   14.71  10.45 |   41.73   39.94
-  CHAFF       16-20     1.76   30.13  17.12 |   56.53   34.15
-  CHAFF       21-25     2.06   43.10  20.89 |   45.29   31.61
-  SOLDIER      1-5      3.28    5.58   1.70 |   20.66   21.50
-  SOLDIER      6-10     2.87   17.20   6.00 |   20.38   20.94
-  SOLDIER     11-15     3.17   37.60  11.87 |   20.23   19.43
-  SOLDIER     16-20     3.40   62.71  18.46 |   18.41   17.91
-  SOLDIER     21-25     3.43   81.00  23.64 |   16.62   16.96
-  BRUISER      1-5      5.28   10.25   1.94 |   13.95   13.95
-  BRUISER      6-10     6.41   29.57   4.61 |   10.21    7.58
-  BRUISER     11-15     6.40   43.86   6.86 |   13.60   10.67
-  BRUISER     16-20     4.84   98.33  20.33 |    7.77   10.84
-  BRUISER     21-25     5.54  130.70  23.58 |   12.65    9.21
-  MINI_ELITE   1-5      9.63   17.00   1.77 |    8.03    6.79
-  MINI_ELITE   6-10     9.27   80.33   8.66 |    6.77    5.77
-  MINI_ELITE  11-15     6.34   68.86  10.86 |    9.30    6.89
-  MINI_ELITE  16-20    10.24  196.67  19.20 |       -    3.80
-  MINI_ELITE  21-25    10.07  339.20  33.70 |    7.19    3.59
-  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.35 (target >= 1.5)
+  CHAFF        1-5      2.73    5.25   1.92 |   53.75   53.75
+  CHAFF        6-10     2.50   12.86   5.14 |   71.20   46.70
+  CHAFF       11-15     1.93   16.71   8.65 |   55.18   39.94
+  CHAFF       16-20     3.49   31.29   8.96 |       -   32.97
+  CHAFF       21-25     2.11   52.60  24.94 |   41.55   26.87
+  SOLDIER      1-5      4.88    5.90   1.21 |   19.53   20.38
+  SOLDIER      6-10     3.54   15.00   4.24 |   20.39   15.73
+  SOLDIER     11-15     3.68   33.00   8.98 |   20.18   16.52
+  SOLDIER     16-20     3.28   52.83  16.10 |   20.67   16.76
+  SOLDIER     21-25     3.83   63.00  16.46 |   18.44   15.63
+  BRUISER      1-5      6.07    9.46   1.56 |       -       -
+  BRUISER      6-10     7.09   39.33   5.55 |       -   21.83
+  BRUISER     11-15     4.67   55.20  11.82 |       -   17.86
+  BRUISER     16-20     3.71       -      - |       -       -
+  BRUISER     21-25     5.89       -      - |       -       -
+  MINI_ELITE   1-5         -       -      - |       -       -
+  MINI_ELITE   6-10        -       -      - |       -       -
+  MINI_ELITE  11-15        -       -      - |       -       -
+  MINI_ELITE  16-20        -       -      - |       -       -
+  MINI_ELITE  21-25        -       -      - |       -       -
+  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.10 (target >= 1.5)
 
-READING IT HONESTLY (SECTION 7 says to, even when green):
-  - No FAIL lines; the gate passes. S-LAG reads OK at 1.0, but that is the navigation stall,
-    not the ladder: it is waived with the other navigation-limited bands for exactly that reason.
-  - The LADDER REPORT is the new, honest read of the ladder in play: on-curve hits-to-kill stay
-    flat across depths 1..25 in every role (the probes carry the model's card lifts), while the
-    start kit's ratio climbs from ~1.7x (depths 1-5) to ~20-34x (21-25). A2's SOLDIER read-out at
-    depths 3-5 is 2.35x against a 1.5x target. The probes are small (8 seeds per depth per kit):
-    single cells, especially MINI_ELITE, are noisy.
-  - Played hits-to-DIE sit well above the R8 paper targets (e.g. SOLDIER ~20 vs 7-9): the probe
-    divides the full pool by NET damage after armour absorption and counts every attributed hit,
-    including chip damage — a different (softer) yardstick than R8's ordinary-hit count. Read it
-    as a depth TREND (flat on-curve), not as a check of the R8 numbers.
-  - Stalls are unchanged (~175/200); closing the navigation gap still expires the waivers.
+  READING IT (balance-overhaul order 2):
+  - S-SUPPLY holds: TACTICAL leaves COMBAT floors hurt (0.79) and no floor is below its heal floor.
+  - A4: CAVERN heal value present is within 0-6% of ROOMS_MST at the same node type in the band the
+    sim reaches (1-5); deeper bands are proven by R-SUPPLY's generator sweep (heal floor met and
+    tracking within 10% at depths 1..25), because the stalling navigator rarely gets past floor 1.
+  - Stalls rose to ~167/200 (from ~150 before order 2): floors are now denser and the navigator stops
+    for more fights. Closing the navigation gap still expires the waivers.

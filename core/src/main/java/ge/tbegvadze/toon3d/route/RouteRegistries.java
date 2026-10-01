@@ -28,6 +28,7 @@ public final class RouteRegistries {
     private static final FacilityEventRegistry    EVENTS         = new FacilityEventRegistry();
     private static final RegionAmbienceRegistry   REGION_AMBIENCE = new RegionAmbienceRegistry();
     private static final NodeEconomicsRegistry    NODE_ECONOMICS  = new NodeEconomicsRegistry();
+    private static final NodeSupplySpecRegistry   NODE_SUPPLY_SPECS = new NodeSupplySpecRegistry();
     private static boolean bootstrapped = false;
     // Per-registry latches so the three registries the headless BALANCE AUDIT reads (node types,
     // generators, node economics) can be pulled in isolation — the audit prices and walks the map
@@ -36,6 +37,7 @@ public final class RouteRegistries {
     private static boolean generatorsRegistered    = false;
     private static boolean nodeEconomicsRegistered = false;
     private static boolean affixesRegistered       = false;
+    private static boolean nodeSupplySpecsRegistered = false;
 
     private RouteRegistries() {}
 
@@ -68,6 +70,19 @@ public final class RouteRegistries {
             RouteEconomics.registerAll(NODE_ECONOMICS);
         }
         return NODE_ECONOMICS;
+    }
+
+    /**
+     * The shared NODE SUPPLY SPECS (balance-overhaul order 2, S10) — what a floor of each node type
+     * contains. Populated on first access so the generators, the headless balance audit and the route
+     * ledger all read the same rows without booting the whole route subsystem.
+     */
+    public static synchronized NodeSupplySpecRegistry nodeSupplySpecs() {
+        if (!nodeSupplySpecsRegistered) {
+            nodeSupplySpecsRegistered = true;
+            NodeSupplySpecs.registerAll(NODE_SUPPLY_SPECS);
+        }
+        return NODE_SUPPLY_SPECS;
     }
 
     /** The shared node-level-profile registry (order-3: node -&gt; floor pipeline). */
@@ -112,6 +127,7 @@ public final class RouteRegistries {
         nodeTypes();
         generators();
         nodeEconomics();
+        nodeSupplySpecs();
         affixes();
         registerEvents(EVENTS);
         registerRegionAmbience(REGION_AMBIENCE);
@@ -130,6 +146,7 @@ public final class RouteRegistries {
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_COMBAT)
                 .dangerTier(DangerTier.STANDARD).accentColorId("combat")
                 .forced(false).levelProfileId("combat_standard").iconPainterId("icon_combat")
+                .supplyPromise("RESISTANCE", "STANDARD SUPPLY")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.ELITE)
@@ -138,22 +155,25 @@ public final class RouteRegistries {
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_ELITE)
                 .dangerTier(DangerTier.DANGER).accentColorId("elite")
                 .forced(false).levelProfileId("elite_hotzone").iconPainterId("icon_elite")
+                .supplyPromise("HEAVY RESISTANCE", "WEAPON +2 LV, RARE+")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.CACHE)
                 .id("cache").displayName("SUPPLY CACHE")
-                .hintLine("Guaranteed ammo + medkit. Light resistance.")
+                .hintLine("Light resistance. A supply surplus to restock.")
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_CACHE)
                 .dangerTier(DangerTier.CALM).accentColorId("cache")
                 .forced(false).levelProfileId("supply_cache").iconPainterId("icon_cache")
+                .supplyPromise("LIGHT RESISTANCE", "SUPPLIES")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.SHOP)
                 .id("shop").displayName("BLACK MARKET")
-                .hintLine("Spend credits on gear. No threat.")
+                .hintLine("Spend credits on gear. Light resistance.")
                 .baseWeight(RouteMapConstants.NODE_WEIGHT_SHOP)
                 .dangerTier(DangerTier.CALM).accentColorId("shop")
                 .forced(false).levelProfileId("shop").iconPainterId("icon_shop")
+                .supplyPromise("LIGHT RESISTANCE", "FABRICATORS")
                 .build());
 
         registry.register(NodeTypeDefinition.builder(RouteNodeType.REST)
@@ -210,26 +230,26 @@ public final class RouteRegistries {
         registry.register(GeneratorId.LINEAR_CORRIDOR, (seed, config) ->
                 config != null ? new LinearCorridorGenerator(seed, config) : new LinearCorridorGenerator(seed));
 
-        // CavernGenerator honours only the encounter-budget scale from config (route-map order-7);
-        // it defaults every other generation parameter internally.
-        registry.register(GeneratorId.CAVERN, (seed, config) ->
-                config != null ? new CavernGenerator(seed, config.enemyBudgetScale) : new CavernGenerator(seed));
+        // CavernGenerator honours the encounter-budget scale (route-map order-7) and the order-2 supply
+        // fields from config; it defaults every other generation parameter internally.
+        registry.register(GeneratorId.CAVERN, (seed, config) -> new CavernGenerator(seed, config));
 
         // BossArenaGenerator is a bespoke, seed-driven procedural arena (boss ORDER 7): the seed drives
-        // its room size, cover/alcove/lighting jitter, and fairness re-rolls. It ignores config.
-        registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator(seed));
+        // its room size, cover/alcove/lighting jitter, and fairness re-rolls. It reads only the order-2 supply
+        // fields from config.
+        registry.register(GeneratorId.BOSS_ARENA, (seed, config) -> new BossArenaGenerator(seed, config));
 
         // MedBayGenerator is the bespoke REST-node clinic (route-map order-8); seed drives its only
-        // variation (alcove side + pod count). It ignores config and is NOT in the standard pool.
-        registry.register(GeneratorId.MED_BAY, (seed, config) -> new MedBayGenerator(seed));
+        // variation (alcove side + pod count). It reads only the order-2 supply fields from config and is NOT in the standard pool.
+        registry.register(GeneratorId.MED_BAY, (seed, config) -> new MedBayGenerator(seed, config));
 
         // EventRoomGenerator is the bespoke EVENT-node chamber (route-map order-10); a small curated
         // room around one interactable. Seed drives only decal variation. NOT in the standard pool.
-        registry.register(GeneratorId.EVENT_ROOM, (seed, config) -> new EventRoomGenerator(seed));
+        registry.register(GeneratorId.EVENT_ROOM, (seed, config) -> new EventRoomGenerator(seed, config));
 
         // GateAirlockGenerator is the bespoke REGION_GATE ceremonial bulkhead (route-map order-10).
-        // Seed drives only sparse dressing. It ignores config and is NOT in the standard pool.
-        registry.register(GeneratorId.GATE_AIRLOCK, (seed, config) -> new GateAirlockGenerator(seed));
+        // Seed drives only sparse dressing. It reads only the order-2 supply fields from config and is NOT in the standard pool.
+        registry.register(GeneratorId.GATE_AIRLOCK, (seed, config) -> new GateAirlockGenerator(seed, config));
     }
 
     /**

@@ -82,22 +82,54 @@ public final class PolicySummary {
     }
 
     /**
-     * Mean absolute gap between the scarcity ratio S the runs EXPERIENCED on a floor and the S the
-     * order-3 model predicts for that depth — the S-ECONOMY subject.
+     * S-ECONOMY (re-based by balance-overhaul order 2): the mean share of each EXITED floor's planned ammo
+     * units the runs actually picked up. NaN when no exited floor planned any ammo.
      */
-    public float meanScarcityGapVersusModel() {
-        float totalGap = 0f;
-        int   samples  = 0;
+    public float meanExperiencedSupplyShare() {
+        float total = 0f;
+        int   floors = 0;
         for (RunLedger run : runs) {
             for (FloorLedger floor : run.floors) {
-                if (floor.demandDamage <= 0f) continue;
-                float experienced = floor.experiencedScarcityRatio();
-                float modelled    = BalanceSchema.modelledScarcityAtDepth(floor.depth);
-                totalGap += Math.abs(experienced - modelled);
-                samples++;
+                if (!floor.exited) continue;
+                float share = floor.experiencedSupplyShare();
+                if (Float.isNaN(share)) continue;
+                total += share;
+                floors++;
             }
         }
-        return samples == 0 ? 0f : totalGap / samples;
+        return floors == 0 ? Float.NaN : total / floors;
+    }
+
+    /** S-SUPPLY: mean health fraction on LEAVING a COMBAT floor through its exit. NaN when none was left. */
+    public float meanCombatExitHealthFraction() {
+        float total = 0f;
+        int   floors = 0;
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (!floor.exited || !"COMBAT".equals(floor.nodeType)) continue;
+                total += floor.healthFractionOnExit;
+                floors++;
+            }
+        }
+        return floors == 0 ? Float.NaN : total / floors;
+    }
+
+    /** S-SUPPLY: played floors whose reachable heal value fell short of their S4 heal floor. */
+    public int floorsBelowHealFloor() {
+        int count = 0;
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (!floor.healFloorMet()) count++;
+            }
+        }
+        return count;
+    }
+
+    /** Every played floor of every run, in order (the FLOOR REPORT's input). */
+    public List<FloorLedger> allFloors() {
+        List<FloorLedger> floors = new java.util.ArrayList<>();
+        for (RunLedger run : runs) floors.addAll(run.floors);
+        return floors;
     }
 
     /**

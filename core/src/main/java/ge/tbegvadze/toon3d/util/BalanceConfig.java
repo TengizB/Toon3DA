@@ -585,12 +585,6 @@ public final class BalanceConfig {
     public static final int   LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX      = 2;
     /** At full depth, chance a light spawn is upgraded to a heavy archetype. Range: 0.0–1.0. */
     public static final float LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE = 0.60f;
-    /** Additive medkit-chance bonus at full depth. Range: 0.0–0.4. */
-    public static final float LEVEL_GEN_DEPTH_MEDKIT_BONUS         = 0.15f;
-    /** Additive ammo-chance bonus at full depth. Range: 0.0–0.4. */
-    public static final float LEVEL_GEN_DEPTH_AMMO_BONUS           = 0.20f;
-    /** At full depth, chance a room receives a bonus second ammo box. Range: 0.0–1.0. */
-    public static final float LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE    = 0.50f;
 
     // =====================================================================================
     // SECTION 4 — WEAPON OUTPUT (damage / clip / range / falloff / reload)
@@ -773,25 +767,14 @@ public final class BalanceConfig {
     public static final int FLAME_MAX_FUEL           = 35;
     public static final int GRENADE_MAX_AMMO         = 7;
 
-    // LEVER 1 — DROP FREQUENCY: how often a pickup spawns at all. Frequency adds variance
-    // (good for texture) and here carries more of the scarcity than ideal because box sizes
-    // can only shrink so far before they stop being sensible "boxes" — see the magnitude note.
-    /** Chance a ranged-weapon kill drops an ammo pickup. Range: 0.05–0.6. */
-    public static final float ENEMY_AMMO_DROP_CHANCE         = 0.10f;
-    /** Chance a melee kill drops an ammo pickup (kept above the ranged rate to reward the risky melee path). Range: 0.1–0.8. */
-    public static final float MELEE_KILL_AMMO_DROP_CHANCE    = 0.20f;
-    /** Base chance any non-entrance room contains at least one ammo box. Range: 0.1–0.6. */
-    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM = 0.20f;
+    // LEVER 1 — DROP FREQUENCY was REPLACED by balance-overhaul order 2: ammo is no longer rolled per
+    // room or per kill (ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_CHANCE / LEVEL_GEN_AMMO_CHANCE_PER_ROOM
+    // are gone). How MUCH ammo a floor holds is planned from its roster (SECTION 21, R-SUPPLY); the box
+    // sizes above still set the grain.
 
-    // LEVER 5 — PER-REGION SUPPLY MULTIPLIER (new-game-balancr order 3): a per-region trim/boost on
-    // ammo SUPPLY so a region can be tuned without touching the global box sizes. Indexed by 0-based
-    // region (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); depths past the last entry clamp to it.
-    // WHY it is not all-1.0: SUPPLY rides the gear curve (steps ~+35%/region) while DEMAND rides enemy
-    // eHP (compounds ~+23%/region), so region 1's within-region dip needs a small boost and the deeper
-    // regions (gear outrunning eHP) need a small trim to hold the scarcity ratio S in [0.75, 0.95] at
-    // EVERY depth (R-SCARCITY-DEPTH). Verified by the SCARCITY depth-sweep in BalanceReport. Range per
-    // entry: 0.85–1.15. See docs/game-balance-authority.txt and new-game-balancr-order-3.txt.
-    public static final float[] AMMO_SUPPLY_REGION_MULTIPLIER = {1.03f, 1.00f, 0.98f, 0.98f, 1.10f};
+    // LEVER 5 (per-region AMMO_SUPPLY_REGION_MULTIPLIER) — DELETED by balance-overhaul order 2 (CP6):
+    // supply is planned from each floor's own roster demand, so it tracks demand at every depth by
+    // construction and no region trim is left for it to correct.
 
     // =====================================================================================
     // SECTION 6 — LOOT / PICKUP SPAWN CHANCES (the drop economy)
@@ -804,37 +787,16 @@ public final class BalanceConfig {
     /** Hard cap on enemies spawned per room. Range: 1–5. */
     public static final int   LEVEL_GEN_MAX_ENEMIES_PER_ROOM = 3;
 
-    // Credit-chip floor spawns per level and their tier weights (proportional, need not sum to 100).
-    public static final int CREDIT_CHIPS_PER_FLOOR_MIN  = 3;
-    public static final int CREDIT_CHIPS_PER_FLOOR_MAX  = 7;
+    // Credit-chip tier weights (proportional, need not sum to 100): their weighted mean is the value of
+    // one planned chip (SupplyPlanner.averageCreditChipValue); the chip COUNT is SECTION 21's.
     public static final int CREDIT_SPAWN_WEIGHT_SMALL   = 70;
     public static final int CREDIT_SPAWN_WEIGHT_MEDIUM  = 24;
     public static final int CREDIT_SPAWN_WEIGHT_LARGE   = 6;
 
-    // -------------------------------------------------------------------------------------
-    // LOOT ROOM BUDGETS — per-room-type pickup chances. These are the real spawn dials:
-    // they decide how generous each themed room is with heals, armour, ammo and weapons.
-    // -------------------------------------------------------------------------------------
-    // Server room (data vault).
-    public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE = 0.55f;
-    public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE = 0.35f;
-    // Large landmark room.
-    public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE  = 0.50f;
-    public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE  = 0.30f;
-    public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE  = 0.30f;
-    // Standard room weapon spawn.
-    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = 0.35f;
-    // Armory.
-    public static final float LEVEL_GEN_ARMORY_MEDKIT_CHANCE = 0.40f;
-    public static final float LEVEL_GEN_ARMORY_ARMOUR_CHANCE = 0.80f;
-    // Command center.
-    public static final float LEVEL_GEN_COMMAND_MEDKIT_CHANCE = 0.50f;
-    public static final float LEVEL_GEN_COMMAND_ARMOUR_CHANCE = 0.50f;
-    public static final float LEVEL_GEN_COMMAND_AMMO_CHANCE   = 0.60f;
-    // Hazard rooms (power plant / cryo / containment) — reduced loot for the danger.
-    public static final float LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE = 0.25f;
-    public static final float LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE = 0.20f;
-    public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE   = 0.30f;
+    // LOOT ROOM BUDGETS (the per-room-type pickup and weapon chances) and the per-floor 3-7 credit-chip
+    // roll were DELETED by balance-overhaul order 2: every pickup, weapon drop and credit chip on a
+    // generated floor is planned by the SupplyPlanner (SECTION 21) — themed rooms are now pure
+    // decoration and a cave floor carries the same supply as a rooms floor at its depth.
 
     // =====================================================================================
     // SECTION 7 — PROGRESSION REWARDS (XP curve + level-up payouts + stat rates)
@@ -1191,14 +1153,8 @@ public final class BalanceConfig {
     public static final float HEAL_NET_DRAIN_FRACTION_MIN = 0.05f;
     public static final float HEAL_NET_DRAIN_FRACTION_MAX = 0.15f;
 
-    // --- PER-REGION HEAL SUPPLY MULTIPLIER (new-game-balancr order 3, part B): the heal-economy
-    // twin of AMMO_SUPPLY_REGION_MULTIPLIER — a per-region nudge on heal/armour SUPPLY, indexed the
-    // same way (clamped past the last entry). Defaults to 1.0: incoming damage, heal supply and the
-    // player's current-difficulty eHP all ride the enemy-damage curve, so the net-drain FRACTION is
-    // depth-stable (GameMath.netHpDrainFractionAtDepth) and R-HEALDRAIN-DEPTH holds at every depth
-    // 1..15 with no per-region tuning. The lever exists to shift a region's drain without touching
-    // the heal magnitudes in SECTION 1. Range per entry: 0.85–1.15.
-    public static final float[] HEAL_SUPPLY_REGION_MULTIPLIER = {1.00f, 1.00f, 1.00f, 1.03f, 1.10f};
+    // --- PER-REGION HEAL SUPPLY MULTIPLIER — DELETED by balance-overhaul order 2 (CP6): heals are
+    // planned per floor from its own incoming damage (SECTION 21, S3/S4); nothing reads a region nudge.
 
     // --- NEVER-SOFTLOCK (order 3, part D): the emergency ammo lifeline. When the player's TOTAL
     // remaining potential damage (all reserves * efficiency + melee) falls below the remaining floor
@@ -1245,10 +1201,6 @@ public final class BalanceConfig {
     public static final int MODEL_FLOOR_EYE_TYRANT_COUNT  = 3;
     public static final int MODEL_FLOOR_SHELL_BRUTE_COUNT = 2;
     public static final int MODEL_FLOOR_PLAGUE_HULK_COUNT = 1;
-    /** Rooms on the model floor that can roll an ammo box (LEVER 1 source count). */
-    public static final int MODEL_FLOOR_ROOM_COUNT        = 8;
-    /** Floor-droppable ammo types the generator rolls uniformly (bullets/shells/cells/rockets/slugs). */
-    public static final int MODEL_FLOOR_AMMO_TYPE_COUNT   = 5;
 
     // Heal-economy model inputs for the model floor.
     /**
@@ -1283,81 +1235,21 @@ public final class BalanceConfig {
     /** Depth-1 floor Threat-Point budget the generator spends on enemies. Range: 350–650. */
     public static final float FLOOR_BASE_THREAT_POINT_BUDGET = 500f;
 
-    /** Reserve at least this fraction of the floor budget for the single anchor enemy. Range: 0.10–0.25. */
-    public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN = 0.15f;
-    /** Reserve at most this fraction of the floor budget for the single anchor enemy. Range: 0.25–0.40. */
-    public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX = 0.30f;
-
-    /** No single enemy TYPE may consume more than this fraction of the floor budget (variety rule). Range: 0.30–0.55. */
-    public static final float ENCOUNTER_MAX_SINGLE_TYPE_FRACTION = 0.40f;
-
+    // ENCOUNTER COMPOSITION — REPLACED by balance-overhaul order 2 (override clause). The anchor reserve
+    // band + ceiling (ENCOUNTER_ANCHOR_BUDGET_*), the elite-gauntlet roll (ENCOUNTER_ELITE_ANCHOR_*), the
+    // per-room cap (ENCOUNTER_PER_ROOM_TP_FRACTION_CAP 0.25) and its room-geometry multipliers
+    // (ROOM_OPEN / ROOM_CHOKEPOINT), consecutive-run chaff packs (CHAFF_PACK_MIN / MAX) and the remainder
+    // pass are all GONE: a floor now fills a growing BODY TARGET with registered GROUP TEMPLATES (SECTION
+    // 21: BODY_TARGET_*, GROUP_*), the anchor is a template (ESCORT / WARBAND), the per-group cap is
+    // GROUP_TP_FRACTION_CAP 0.35, and chaff never spawns alone because every chaff slot fields at least
+    // GROUP_CHAFF_SLOT_MIN of one archetype. Only the fill target survives: the planner aims each pick at
+    // the threat-per-body still to spend so the roster ends near this fraction of the cap.
     /**
-     * No single (non-anchor) room may hold more than this fraction of the floor budget. Lowered
-     * 0.35 -> 0.25 alongside the load-balanced room distribution (LevelGenerator /
-     * LinearCorridorGenerator placeEnemyLoadBalanced): with enemies now fanned out across the whole
-     * floor this is a safety ceiling that stops a single room from becoming an un-winnable pile-up
-     * for a low-level player, rather than the primary distribution driver. Range: 0.25–0.45.
-     */
-    public static final float ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.25f;
-
-    /**
-     * Stop adding fill enemies once spent TP reaches this fraction of the budget — leaves a
-     * little headroom so a roster never overshoots the budget. Range: 0.85–1.0.
+     * The roster aims to spend this fraction of the floor's Threat-Point CAP by the time it reaches its
+     * body target (balance-overhaul order 2) — leaves a little headroom so a roster never overshoots. XP
+     * pacing (R-XP-PACE) reads the same fraction. Range: 0.85–1.0.
      */
     public static final float ENCOUNTER_BUDGET_FILL_TARGET_FRACTION = 0.95f;
-
-    /**
-     * Chance a floor is a deliberate "elite gauntlet" whose anchor is a mini-elite that exceeds
-     * the normal anchor reserve (the gauntlet-climax exception in idea 4). Range: 0.0–0.30.
-     */
-    public static final float ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15f;
-    /** Earliest depth an elite-gauntlet floor may appear, so floor 1 is never a mini-elite spike. Range: 2–5. */
-    public static final int   ENCOUNTER_ELITE_ANCHOR_MIN_DEPTH    = 3;
-
-    // --- ENCOUNTER BUDGET V2 (new-game-balancr order 5) — three additions on top of the composition
-    // rules above. See docs/game-balance-knowledge.txt (ENCOUNTER BUDGET V2) and new-game-balancr-order-5.
-
-    // 1. TACTICAL ROOM CAPS — a room's spent TP is capped against its GEOMETRY, computed from the
-    //    generator's room metadata (open vs chokepoint), never a per-room hand tag. An OPEN room has
-    //    nowhere to break a ranged enemy's cardinal line, so it is capped LOWER; a corridor-adjacent
-    //    chokepoint is more defensible, so it may hold a little MORE.
-    /** Per-room TP cap multiplier for an OPEN room (no cover, wide sightlines — ranged lines can't be broken). Range: 0.7–0.9. */
-    public static final float ROOM_OPEN_TP_MULTIPLIER       = 0.8f;
-    /** Per-room TP cap multiplier for a corridor-adjacent CHOKEPOINT room (defensible — the player can funnel). Range: 1.0–1.2. */
-    public static final float ROOM_CHOKEPOINT_TP_MULTIPLIER = 1.1f;
-
-    // 2. PACK COHERENCE — chaff spawns in packs, because the golden-band CHAFF exemption ASSUMES packs
-    //    (a lone chaff reads a harmless ~9 golden ratio; it is balanced by pack TP). The spawner now
-    //    guarantees the assumption instead of hoping for it.
-    /** Minimum chaff pack size the encounter spawner guarantees (the golden-band exemption assumes packs). Range: 2–3. */
-    public static final int   CHAFF_PACK_MIN               = 2;
-    /** Maximum chaff pack size a single pack may reach before a new pack is started. Range: 3–5. */
-    public static final int   CHAFF_PACK_MAX               = 4;
-
-    // 4. BUDGET->BODIES CONVERSION (encounter-density-and-corpse-semantics) — the budget is only worth
-    //    what it actually BUYS. Two leaks used to strand a large share of a small floor's budget:
-    //    an anchor fallback with no ceiling, and a remainder too small to afford a minimum chaff pack.
-    //    A CALM (0.28x) floor therefore spent 96 of 126 TP on ONE bruiser and discarded the rest —
-    //    measured EXACTLY one enemy per floor across 100 seeds, on a full-size ~1,100-tile dungeon.
-    //    Both fixes below are Threat-Point-NEUTRAL: they change what the budget buys, never its size,
-    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) reads unchanged.
-    /**
-     * Hard CEILING on the fraction of the floor budget the single anchor may consume. The anchor
-     * reserve band ([_FRACTION_MIN, _FRACTION_MAX]) is a preference for WHICH anchor to pick; this is
-     * the rule that makes it binding. When no anchor fits this ceiling the floor gets NO anchor and
-     * the whole budget goes to fill — the honest shape of a light floor ("light stragglers", per
-     * CacheProfile) rather than one bruiser standing alone in an empty dungeon.
-     * Range: 0.30–0.50.
-     */
-    public static final float ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION = ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX;
-    /**
-     * Whether the REMAINDER PASS may TOP UP a chaff type that is already present at full pack strength
-     * (>= CHAFF_PACK_MIN). It may never CREATE a lone chaff: the golden-band chaff exemption assumes
-     * packs, and R-ENEMY's pack-coherence audit (BalanceAuditTest.chaffAlwaysSpawnsInPacksOverAHundred
-     * Seeds) enforces that across 100 seeds x depths 1-15. Adding a 3rd Crawler to an existing pack of
-     * 2 keeps the invariant; adding a 1st Crawler breaks it. Non-chaff roles are always addable singly.
-     */
-    public static final boolean ENCOUNTER_REMAINDER_TOPS_UP_CHAFF_PACKS = true;
 
     // 3. THE REGION DANGER DIAL (fixes knowledge-doc problem 12) — route regions stop being frequency-only.
     //    Each region declares a Threat-Point budget multiplier applied ON TOP of the depth curve
@@ -1851,12 +1743,8 @@ public final class BalanceConfig {
     public static final int[] WEAPON_DROP_TIER_MIN_BY_REGION = {0, 1, 2, 3};
     /** Per-region MAXIMUM dropped-weapon tier ordinal, indexed by region (clamped to last entry). */
     public static final int[] WEAPON_DROP_TIER_MAX_BY_REGION = {1, 2, 3, 5};
-    /**
-     * THE PITY RULE: every region must PLACE at least this many weapons at its tier band so no run is
-     * starved of its curve by RNG. RunStats tracks upgrades seen this region; the floor generator
-     * force-spawns one at a region's last floor if the region is about to end at zero. Range: 1–2.
-     */
-    public static final int   GUARANTEED_UPGRADE_PER_REGION = 1;
+    // THE PITY RULE (GUARANTEED_UPGRADE_PER_REGION) — DELETED by balance-overhaul order 2 (CP6): replaced by
+    // the two-floor weapon CADENCE (S9, RunStats.weaponCadenceDue -> LevelGenConfig.weaponCadenceDue).
 
     // =====================================================================================
     // SECTION 16 — SHOP ECONOMY (UAC Fabricator)
@@ -2008,11 +1896,15 @@ public final class BalanceConfig {
 
     // --- F. S-ECONOMY: the played economy matches the modelled one -----------------------
     /**
-     * Tolerance between the scarcity ratio S the runs EXPERIENCE and the S the order-3 model
-     * predicts for that depth. Wider than a rounding error, tighter than a re-derivation: if the
-     * played S drifts past this, the model is describing a different game than the one shipping.
+     * S-ECONOMY (re-based by balance-overhaul order 2): the mean share of a floor's PLANNED ammo units the
+     * player actually picks up, over the floors they EXIT. Below the minimum, the planner puts supply
+     * where play does not reach it; above the maximum, unplanned income is leaking in.
      */
-    public static final float SIM_ECONOMY_SCARCITY_TOLERANCE = 0.08f;
+    public static final float SIM_ECONOMY_SUPPLY_SHARE_MIN = 0.75f;
+    public static final float SIM_ECONOMY_SUPPLY_SHARE_MAX = 1.10f;
+    /** S-SUPPLY (balance-overhaul order 2, AS2): TACTICAL's mean health fraction leaving a COMBAT floor. */
+    public static final float SIM_SUPPLY_EXIT_HEALTH_MIN = 0.55f;
+    public static final float SIM_SUPPLY_EXIT_HEALTH_MAX = 0.80f;
     /** Fraction of TACTICAL floors allowed to fire the never-softlock emergency ammo lifeline. */
     public static final float SIM_ECONOMY_EMERGENCY_MAX_FRACTION = 0.05f;
 
@@ -2063,11 +1955,6 @@ public final class BalanceConfig {
     /** Calm-but-not-empty floors (SHOP, MYSTERY vault): real but light resistance. Range: 0.4–0.6. */
     public static final float ROUTE_LIGHT_BUDGET_SCALE = 0.50f;
     /**
-     * ELITE floor budget: a mini-setpiece. Its REWARD must price up with it (R-RISK-PREMIUM),
-     * so raising this without raising the vault fails the audit. Range: 1.3–1.8.
-     */
-    public static final float ELITE_BUDGET_SCALE       = 1.5f;
-    /**
      * EVENT floor budget — ZERO, because EventRoomGenerator emits an empty spawn list by design
      * (a curated story beat in a ~135-tile room, not a dungeon to clear). Was 0.15f, which was a
      * DEAD number: the generator ignored it and the RouteEconomics EVENT row already priced the
@@ -2111,16 +1998,6 @@ public final class BalanceConfig {
     // A calm node buys safety with TEMPO and LOOT: its total EV must sit 10-30% BELOW a
     // standard combat node's. The order-8 hand-set payoffs sat far ABOVE it (a chained
     // cache/rest route sailed over the order-3 supply band), so they are re-priced here.
-    /** Ammo boxes stamped in a cache's cargo bay, spread across OWNED ammo types. Range: 1–3. */
-    public static final int   CACHE_AMMO_BOXES        = 2;
-    /** Guaranteed field medkits ('H') in a cache. */
-    public static final int   CACHE_MEDKITS           = 1;
-    /** Guaranteed stim-packs ('+') in a cache. */
-    public static final int   CACHE_STIMS             = 0;
-    /** Guaranteed armour pickups in a cache (shard 'a' shallow, vest 'A' deep). */
-    public static final int   CACHE_ARMOUR            = 0;
-    /** Depth at/after which the cache armour drop upgrades from a shard 'a' to a vest 'A'. */
-    public static final int   CACHE_ARMOUR_VEST_DEPTH = 6;
     /**
      * MED-BAY auto-doc one-shot heal, as a fraction of the player's max HP. Raised from the
      * order-8 hand-set 0.35: a REST node earns NO floor XP and almost no loot, so at 0.35 it
@@ -2137,12 +2014,8 @@ public final class BalanceConfig {
     public static final int   REST_ARMOUR_VEST_DEPTH  = 4;
 
     // --- D. ELITE PAYOFF (the vault the risk premium pays for, R-RISK-PREMIUM) ------------
-    /** Ammo boxes stamped in the gated vault. Range: 2–5. */
-    public static final int   ELITE_AMMO_BOXES        = 3;
     /** Guaranteed field medkits ('H') behind the vault. */
     public static final int   ELITE_MEDKITS           = 1;
-    /** Guaranteed stim-packs ('+') behind the vault. */
-    public static final int   ELITE_STIMS             = 1;
     /** Guaranteed armour pickups behind the vault (shard 'a' shallow, vest 'A' deep). */
     public static final int   ELITE_ARMOUR            = 1;
     /** Depth at/after which the ELITE armour drop upgrades from a shard 'a' to a vest 'A'. */
@@ -2231,6 +2104,13 @@ public final class BalanceConfig {
     // SHOP is not 1.0 either: its purchase is paid for at a fair price (GameMath.shopPrice), so only
     // the CHOOSE-EXACTLY-WHAT-YOU-NEED surplus over a random drop is credited.
     public static final float ROUTE_UPGRADE_OPPORTUNITY_COMBAT = 0.35f;
+    /**
+     * Balance-overhaul order 2: the upgrade opportunity ONE expected on-level weapon offer is worth.
+     * COMBAT / ELITE / CACHE rows derive theirs from their NodeSupplySpec weapons
+     * (GameMath.expectedOnLevelWeaponOffers x this), so a spec change re-prices the map. 0.70 keeps
+     * COMBAT (0.5 offers) at the historic 0.35.
+     */
+    public static final float ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON = 0.70f;
     public static final float ROUTE_UPGRADE_OPPORTUNITY_ELITE  = 0.60f;
     public static final float ROUTE_UPGRADE_OPPORTUNITY_SHOP   = 0.30f;
     public static final float ROUTE_UPGRADE_OPPORTUNITY_CACHE  = 0.05f;
@@ -2240,16 +2120,8 @@ public final class BalanceConfig {
     public static final float ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS = 45f;
     /** HP a MALFUNCTION sector's failing hazards are expected to cost (the bad-but-survivable pull). */
     public static final float ROUTE_MALFUNCTION_HAZARD_HIT_POINTS   = 55f;
-    /** Ordinary-loot share a MALFUNCTION sector rolls (its config switches medkits/armour off). */
-    public static final float ROUTE_MALFUNCTION_LOOT_SCALE          = 0.5f;
     /** Share of an EVENT's payoff any single choice delivers, averaged over the v1 choice catalogue. */
     public static final float ROUTE_EVENT_EXPECTED_CHOICE_SHARE     = 0.40f;
-    /**
-     * Share of a standard floor's ORDINARY room loot a bespoke, curated small floor rolls
-     * (MED_BAY clinic, EVENT room, GATE airlock — a handful of rooms, not a full dungeon).
-     * Range: 0.2–0.6.
-     */
-    public static final float ROUTE_BESPOKE_FLOOR_LOOT_SCALE = 0.35f;
 
     // --- I. THE ROUTE BANDS (what the audit enforces) -------------------------------------
     /** R-RISK-PREMIUM: (reward premium)/(threat premium) — danger pays, slightly better than fair. */
@@ -2481,4 +2353,188 @@ public final class BalanceConfig {
      * (the old 10 PP constant is gone). Range: 1.0–2.0.
      */
     public static final float LADDER_LEVEL_UP_POWER_POINTS = 1.5f;
+
+    // =====================================================================================
+    // SECTION 21 — SUPPLY & DENSITY (balance-overhaul order 2: full floors, fair supply)
+    // -------------------------------------------------------------------------------------
+    // Every generated floor is built through ONE pipeline: layout -> slot list -> ENCOUNTER plan ->
+    // SUPPLY plan -> placement (level/SupplyPlanner, level/EncounterBudgetPlanner). Supply is DERIVED
+    // from the floor's actual roster (its demand) and the node type's NodeSupplySpec — never from the
+    // player's current HP or ammo, and never from an independent per-room or per-kill dice roll.
+    // Replaces the SECTION 6 per-room chances, the SECTION 10 model floor as the tuning reference,
+    // the per-kill ammo drop chances, the credit-chip roll and the GUARANTEED_UPGRADE_PER_REGION pity
+    // rule. See docs/game-balance-authority.txt (R-SUPPLY, R-DENSITY, S-SUPPLY).
+    // =====================================================================================
+
+    // --- S2 AMMO split -------------------------------------------------------------------
+    /** S2: share of the ammo plan spread across the ammo types of the weapons the player CARRIES. */
+    public static final float SUPPLY_CARRIED_SHARE  = 0.70f;
+    /** S2: share of the ammo plan spread across every OTHER ammo type (so a found weapon is usable). */
+    public static final float SUPPLY_OFF_TYPE_SHARE = 0.30f;
+
+    // --- S3 HEALS (the incoming-damage model, re-based on the order-1 expected player) ---
+    /** S3: turns each planned enemy is modelled as engaging the player (the heal-economy model). */
+    public static final float SUPPLY_TURNS_ENGAGED_PER_ENEMY = 2.0f;
+    /** S3: fraction of the roster's possible damage a competent player avoids. Range 0.4-0.7. */
+    public static final float SUPPLY_AVOIDANCE_FACTOR        = 0.55f;
+
+    // --- S4 HEAL FLOOR ---------------------------------------------------------------------
+    /** S4: minimum heal value on every non-BOSS/REST/REGION_GATE floor, in fractions of max HP (one 'H'). */
+    public static final float SUPPLY_HEAL_FLOOR_FRACTION = 0.45f;
+    /** S4: share of the heal floor that must sit in the first half of the floor by walk distance. */
+    public static final float SUPPLY_HEAL_EARLY_SHARE    = 0.50f;
+
+    // --- S5 / S6 / S7 tracking, carriers, spread -----------------------------------------
+    /** S5: placed supply of every category stays within +/- this fraction of the plan. */
+    public static final float SUPPLY_TRACK_TOLERANCE = 0.10f;
+    /** S6: share of the ammo + (non-floor) heal plan handed to specific enemies as their drop. */
+    public static final float SUPPLY_CARRIER_SHARE   = 0.25f;
+    /** S7: no single room / chamber holds more than this share of any category (count basis). */
+    public static final float SUPPLY_MAX_ROOM_SHARE  = 0.35f;
+    /** S6 edge case: a carrier dying on an occupied tile drops onto the nearest free tile within this radius. */
+    public static final int   CARRIER_DROP_SEARCH_RADIUS = 2;
+    /** S7: placement score bonus for a slot on the start->exit walk path. */
+    public static final float SUPPLY_EXIT_PATH_BONUS  = 1.0f;
+    /** S7: placement score bonus for a slot inside a room that holds an enemy group (reward the fight). */
+    public static final float SUPPLY_GROUP_ROOM_BONUS = 1.5f;
+
+    // --- S8 CREDITS --------------------------------------------------------------------------
+    /** S8: credit chips a scale-1.0 floor carries (the old 3-7 roll's mean). */
+    public static final int   SUPPLY_CREDIT_CHIPS_PER_FLOOR = 5;
+
+    // --- E1 BODY TARGETS ---------------------------------------------------------------------
+    /** E1: COMBAT body target at depth 1 (low end). */
+    public static final int   BODY_TARGET_MIN_DEPTH_ONE        = 12;
+    /** E1: COMBAT body target at depth 1 (high end). */
+    public static final int   BODY_TARGET_MAX_DEPTH_ONE        = 16;
+    /** E1: COMBAT body target at BODY_TARGET_REFERENCE_DEEP_DEPTH (low end). */
+    public static final int   BODY_TARGET_MIN_DEEP             = 22;
+    /** E1: COMBAT body target at BODY_TARGET_REFERENCE_DEEP_DEPTH (high end). */
+    public static final int   BODY_TARGET_MAX_DEEP             = 28;
+    /** E1: depth the deep body targets are reached at (linear from depth 1; held beyond). */
+    public static final int   BODY_TARGET_REFERENCE_DEEP_DEPTH = 25;
+
+    // --- E2 / E3 / E4 GROUPS -----------------------------------------------------------------
+    /** E3: no non-anchor group may spend more than this fraction of the floor's threat cap. */
+    public static final float GROUP_TP_FRACTION_CAP          = 0.35f;
+    /** E2: HUNTER (a lone bruiser / flanker) groups are at most this fraction of a floor's groups. */
+    public static final float GROUP_HUNTER_MAX_FRACTION      = 0.20f;
+    /** E4: on COMBAT / ELITE floors at least this fraction of enemies stand in groups of >= 2. */
+    public static final float SHAPE_GROUPED_MIN_FRACTION     = 0.75f;
+    /** E4: at least this many groups of >= SHAPE_BIG_GROUP_SIZE members. */
+    public static final int   SHAPE_MIN_BIG_GROUPS           = 2;
+    /** E4: the size that counts as a "big" group. */
+    public static final int   SHAPE_BIG_GROUP_SIZE           = 3;
+    /** E4: at most this many enemies stand alone. */
+    public static final int   SHAPE_MAX_LONE_ENEMIES         = 3;
+    /** E2: every chaff slot fields at least this many of ONE archetype (chaff never spawns alone). */
+    public static final int   GROUP_CHAFF_SLOT_MIN           = 2;
+    /** E2: first depth an ELITE floor's anchor may be a WARBAND (a mini-elite + two soldiers). */
+    public static final int   GROUP_WARBAND_MIN_DEPTH        = 3;
+    /** E2: random noise added to a group pick's threat-per-body mismatch (variety between equal shapes). */
+    public static final float GROUP_SELECTION_NOISE          = 0.30f;
+    /** E2: random archetype draws tried per shape per pick before the shape is ruled out for that pick. */
+    public static final int   GROUP_INSTANTIATION_ATTEMPTS   = 4;
+    /** E2: the smallest remainder of bodies a shape can still field (a pick that strands fewer is penalised). */
+    public static final int   GROUP_MINIMUM_FILLABLE_REMAINDER = 3;
+    /** E5: a corridor-pocket first contact never stands closer than this to the start. */
+    public static final int   FIRST_CONTACT_MIN_WALK_TILES   = 5;
+    /** E2: no single archetype may spend more than this fraction of the cap (variety, when alternatives exist). */
+    public static final float GROUP_MAX_SINGLE_TYPE_FRACTION = 0.40f;
+
+    // --- E5 FIRST CONTACT -------------------------------------------------------------------
+    /** E5: the first group of >= 2 stands within this many walk tiles of the start. */
+    public static final int   FIRST_CONTACT_MAX_WALK_TILES             = 18;
+    /** E5: on the run's FIRST floor (depth 1) the first group stands within this many walk tiles. */
+    public static final int   FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES = 12;
+
+    // --- E6 FOOTPRINT (target walkable tiles per region index A..E) --------------------------
+    /** E6: low end of each region's target walkable-tile range (index = region 0..4, deeper reuse last). */
+    public static final int[] FOOTPRINT_MIN_BY_REGION = {350, 450, 500, 500, 500};
+    /** E6: high end of each region's target walkable-tile range. */
+    public static final int[] FOOTPRINT_MAX_BY_REGION = {550, 650, 750, 750, 750};
+    /** E6: a generator builds to its target within +/- this fraction. */
+    public static final float FOOTPRINT_TOLERANCE     = 0.15f;
+
+    // --- E7 DENSITY (enemies per 100 walkable tiles) ----------------------------------------
+    public static final float DENSITY_COMBAT_MIN = 2.2f;
+    public static final float DENSITY_COMBAT_MAX = 4.0f;
+    public static final float DENSITY_ELITE_MIN  = 3.0f;
+    public static final float DENSITY_ELITE_MAX  = 5.0f;
+    public static final float DENSITY_CALM_MIN   = 0.6f;
+    public static final float DENSITY_CALM_MAX   = 1.5f;
+
+    // --- S10 NODE SUPPLY SPECS (route/NodeSupplySpec rows read these; one block per node type) -
+    // threat = multiplier on the floor's threat CAP (the region dial and the node affix ride on top);
+    // bodies = multiplier on the E1 body target; ammoRatio = planned ammo damage / roster demand;
+    // drainTarget = share of modelled incoming damage the heals deliberately do NOT cover (negative =
+    // a net heal gain); armourShare = share of the heal value delivered as armour; credits = chip scale.
+    public static final float NODE_SUPPLY_COMBAT_THREAT       = 1.00f;
+    public static final float NODE_SUPPLY_COMBAT_BODIES       = 1.00f;
+    public static final float NODE_SUPPLY_COMBAT_AMMO_RATIO   = 0.85f;
+    public static final float NODE_SUPPLY_COMBAT_DRAIN_TARGET = 0.20f;
+    public static final float NODE_SUPPLY_COMBAT_ARMOUR_SHARE = 0.20f;
+    public static final float NODE_SUPPLY_COMBAT_CREDITS      = 1.00f;
+    public static final int   NODE_SUPPLY_COMBAT_WEAPONS      = 1;
+    public static final int   NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MIN = -1;
+    public static final int   NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MAX = 0;
+
+    /**
+     * ELITE threat cap = 1.6x COMBAT (A6). Bodies barely rise (1.05x): the extra threat buys HEAVIER groups
+     * (a WARBAND anchor), not a crowd — 1.2x bodies on the lower half of a region's footprint cannot hold
+     * the ELITE density band (34 bodies / 625 tiles = 5.4 per 100 at depth 25).
+     */
+    public static final float NODE_SUPPLY_ELITE_THREAT        = 1.60f;
+    public static final float NODE_SUPPLY_ELITE_BODIES        = 1.05f;
+    public static final float NODE_SUPPLY_ELITE_AMMO_RATIO    = 0.85f;
+    /** ELITE vault: extra ammo (as a share of roster demand) placed behind the anchor group. */
+    public static final float NODE_SUPPLY_ELITE_VAULT_AMMO_RATIO = 0.25f;
+    public static final float NODE_SUPPLY_ELITE_DRAIN_TARGET  = 0.30f;
+    public static final float NODE_SUPPLY_ELITE_ARMOUR_SHARE  = 0.30f;
+    public static final float NODE_SUPPLY_ELITE_CREDITS       = 1.60f;
+    public static final int   NODE_SUPPLY_ELITE_WEAPONS       = 1;
+    public static final int   NODE_SUPPLY_ELITE_WEAPON_OFFSET_MIN = 1;
+    public static final int   NODE_SUPPLY_ELITE_WEAPON_OFFSET_MAX = 2;
+    /** ELITE reward tier floor: the region's minimum drop tier plus this many steps. */
+    public static final int   NODE_SUPPLY_ELITE_WEAPON_TIER_BONUS = 1;
+
+    // CACHE threat 0.30, not the idea's 0.35 starting value: R-HONEST-SAFE caps a safe-looking node's
+    /** A6: an ELITE floor's spent Threat Points over a COMBAT floor's at the same depth (~1.6x). */
+    public static final float ELITE_THREAT_RATIO_MIN = 1.40f;
+    public static final float ELITE_THREAT_RATIO_MAX = 1.80f;
+
+    // threat ratio at ROUTE_HONEST_SAFE_MAX_THREAT_RATIO (0.30); bodies stay 0.35 (balance-overhaul o2 CP6).
+    public static final float NODE_SUPPLY_CACHE_THREAT        = 0.30f;
+    public static final float NODE_SUPPLY_CACHE_BODIES        = 0.35f;
+    public static final float NODE_SUPPLY_CACHE_AMMO_RATIO    = 2.00f;
+    /** CACHE: negative drain = the heals deliberately exceed the modelled incoming damage (a breather). */
+    public static final float NODE_SUPPLY_CACHE_DRAIN_TARGET  = -1.25f;
+    public static final float NODE_SUPPLY_CACHE_ARMOUR_SHARE  = 0.40f;
+    public static final float NODE_SUPPLY_CACHE_CREDITS       = 1.20f;
+    public static final int   NODE_SUPPLY_CACHE_WEAPONS       = 1;
+    public static final float NODE_SUPPLY_CACHE_WEAPON_CHANCE = 0.50f;
+
+    public static final float NODE_SUPPLY_SHOP_THREAT         = 0.35f;
+    public static final float NODE_SUPPLY_SHOP_BODIES         = 0.35f;
+    public static final float NODE_SUPPLY_SHOP_AMMO_RATIO     = 2.00f;
+    public static final float NODE_SUPPLY_SHOP_DRAIN_TARGET   = -0.75f;
+    public static final float NODE_SUPPLY_SHOP_ARMOUR_SHARE   = 0.20f;
+    public static final float NODE_SUPPLY_SHOP_CREDITS        = 2.00f;
+
+    // REST / EVENT / MYSTERY / BOSS / REGION_GATE carry TODAY'S contents as a spec (order 6 retunes
+    // REST / EVENT / MYSTERY). Their bespoke stock still rides the profiles' guarantees.
+    /** MYSTERY: threat 1.0 — the hidden outcome's own EnemyBudgetOverride scales it (order 6 retunes). */
+    public static final float NODE_SUPPLY_MYSTERY_THREAT      = 1.00f;
+    public static final float NODE_SUPPLY_MYSTERY_BODIES      = 1.00f;
+    /** EVENT: the event room's own budget scale is the threat (RouteMapConstants.EVENT_BUDGET_SCALE). */
+    public static final float NODE_SUPPLY_EVENT_THREAT        = 1.00f;
+    /** REGION_GATE: threat 0 — the airlock is a story beat, not a fight. */
+    public static final float NODE_SUPPLY_GATE_THREAT         = 0.00f;
+
+    // --- AUDIT SWEEP (R-SUPPLY / R-DENSITY) ---------------------------------------------------
+
+    /** A2/A3: seeds per (generator x node type x depth) cell of the R-SUPPLY / R-DENSITY sweep. */
+    public static final int   SUPPLY_AUDIT_SEED_COUNT = 30;
+    /** A2/A3: the sparse depths the sweep visits. */
+    public static final int[] SUPPLY_AUDIT_DEPTHS     = {1, 5, 10, 15, 20, 25};
 }

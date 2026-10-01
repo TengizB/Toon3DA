@@ -249,14 +249,15 @@ public final class ItemConstants {
     public static final float INV_CAT_DOT_MISC_G        = 0.75f;
     public static final float INV_CAT_DOT_MISC_B        = 0.75f;
 
-    // Credit chip floor pickups — 3 tiers with weighted random tier selection
+    // Credit chip floor pickups — 3 tiers; a planned chip (balance-overhaul order 2) shows the tier whose
+    // base is nearest its amount.
     public static final int   CREDIT_SMALL_BASE            = 8;
-    public static final int   CREDIT_SMALL_JITTER          = 2;
     public static final int   CREDIT_MEDIUM_BASE           = 25;
-    public static final int   CREDIT_MEDIUM_JITTER         = 5;
     public static final int   CREDIT_LARGE_BASE            = 70;
-    public static final int   CREDIT_LARGE_JITTER          = 15;
     // Spawn weights — proportional; SMALL+MEDIUM+LARGE need not sum to any specific value.
+    // A planned chip whose tile a later World step claimed (a shop stand tile, a weapon offer) moves to
+    // the nearest free tile within this many rings (balance-overhaul order 2, S8).
+    public static final int   CREDIT_CHIP_RELOCATE_RADIUS  = 3;
     public static final int   CREDIT_SPAWN_WEIGHT_SMALL    = BalanceConfig.CREDIT_SPAWN_WEIGHT_SMALL;
     public static final int   CREDIT_SPAWN_WEIGHT_MEDIUM   = BalanceConfig.CREDIT_SPAWN_WEIGHT_MEDIUM;
     public static final int   CREDIT_SPAWN_WEIGHT_LARGE    = BalanceConfig.CREDIT_SPAWN_WEIGHT_LARGE;

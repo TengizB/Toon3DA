@@ -64,23 +64,29 @@ public final class LevelGenConstants {
     // room max (LEVEL_GEN_ROOM_MAX_WIDTH/HEIGHT) so the modifier reads as genuinely oversized.
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH   = 28;
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT  = 20;
-    // TACTICAL ROOM CAP geometry classifier (new-game-balancr order 5, Pillar C.1). A room's share of
-    // the floor Threat-Point budget is scaled by its geometry: a LARGE room reads OPEN (wide sightlines,
-    // nowhere to break a ranged enemy's cardinal line) and caps LOWER; a small room whose smaller interior
-    // dimension is at most this many tiles reads as a corridor-like CHOKEPOINT (the player can funnel the
-    // pack) and caps HIGHER. Derived from the generator's own room metadata (Room.isLarge + interior dims),
-    // never a per-room hand tag. The cap multipliers themselves live in BalanceConfig (ROOM_*_TP_MULTIPLIER).
-    public static final int   LEVEL_GEN_CHOKEPOINT_INTERIOR_MAX = 3;
-
-    // ENEMY SPAWN TILE SEARCH. A spawn tile is found by random probing inside the room; when probing
-    // fails the room used to be retired PERMANENTLY, which silently dropped ~10% of every floor's
-    // planned roster (worst measured case: 13 enemies of one roster, i.e. most of the floor) because an
-    // unlucky probe run is indistinguishable from a genuinely full room. Probing is now backed by a
-    // deterministic full interior scan, so a room is only retired when it truly has no eligible tile.
-    /** Random tile probes before falling back to the deterministic full-interior scan. Range: 24–64. */
-    public static final int   LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS = 40;
-    /** As above for the cave generator, which probes the whole grid rather than one room. Range: 48–128. */
-    public static final int   LEVEL_GEN_CAVE_SPAWN_PROBE_ATTEMPTS  = 80;
+    // The linear generator's ENTRANCE room is always a small room of at most this interior side
+    // (balance-overhaul order 2, E5): from its centre the spine — and the floor's first fight — must be
+    // within FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES walk tiles.
+    public static final int   LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM     = 7;
+    // FOOTPRINT TARGETS (balance-overhaul order 2, E6): the combat generators build to a walkable-tile
+    // target (BalanceConfig FOOTPRINT_*) by rebuilding at a corrected footprint SCALE. A build within
+    // FOOTPRINT_AIM_FRACTION of the +/-15% tolerance stops the loop early; otherwise the closest of
+    // FOOTPRINT_MAX_ATTEMPTS builds is kept. The NATURAL figures are each generator's typical walkable
+    // tiles at scale 1 (measured), the first guess's denominator.
+    public static final int   FOOTPRINT_MAX_ATTEMPTS               = 16;
+    public static final float FOOTPRINT_MIN_SCALE                  = 0.12f;
+    public static final float FOOTPRINT_AIM_FRACTION               = 0.7f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_ROOMS     = 1130f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_LINEAR    = 700f;
+    public static final float FOOTPRINT_NATURAL_WALKABLE_CAVE      = 2100f;
+    // ROOMS_MST at a footprint scale: rooms are placed inside a centred window of sqrt(scale) of the grid on
+    // each axis (never narrower than these), and the room count target scales with the area.
+    public static final int   FOOTPRINT_MIN_WINDOW_WIDTH           = 24;
+    public static final int   FOOTPRINT_MIN_WINDOW_HEIGHT          = 18;
+    public static final int   FOOTPRINT_MIN_ROOMS                  = 5;
+    // (balance-overhaul order 2) The tactical room-cap classifier and the random spawn-tile probes are
+    // gone with the per-room budget: groups are placed one per room by level/EncounterPlacer, which reads
+    // every room's spawnable tiles from the finished layout.
 
     // PACK COHERENCE IN SPACE (encounter-density-and-corpse-semantics). The planner forms chaff packs
     // because the golden-band chaff exemption assumes them, then the load balancer used to scatter each
@@ -102,12 +108,7 @@ public final class LevelGenConstants {
     // Ratio of rack props that are lockers vs terminals in a server room.
     public static final float LEVEL_GEN_SERVER_LOCKER_RATIO        = 0.30f;
     // Boosted pickup chances for special rooms (loot hubs / set-piece arenas).
-    public static final float LEVEL_GEN_SERVER_MEDKIT_CHANCE       = BalanceConfig.LEVEL_GEN_SERVER_MEDKIT_CHANCE;
-    public static final float LEVEL_GEN_SERVER_ARMOUR_CHANCE       = BalanceConfig.LEVEL_GEN_SERVER_ARMOUR_CHANCE;
-    public static final float LEVEL_GEN_LARGE_MEDKIT_CHANCE        = BalanceConfig.LEVEL_GEN_LARGE_MEDKIT_CHANCE;
-    public static final float LEVEL_GEN_LARGE_ARMOUR_CHANCE        = BalanceConfig.LEVEL_GEN_LARGE_ARMOUR_CHANCE;
     // Base probability that any non-entrance room contains at least one ammo box pickup.
-    public static final float LEVEL_GEN_AMMO_CHANCE_PER_ROOM       = BalanceConfig.LEVEL_GEN_AMMO_CHANCE_PER_ROOM;
 
     // --- Wide hallway generation ---
     // Number of MST edges widened to 3-tile grand corridors per level.
@@ -134,10 +135,7 @@ public final class LevelGenConstants {
     // heavy archetype ('1' hulk / '4' brute / '5' wraith). Scales linearly with depth.
     public static final float LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE   = BalanceConfig.LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE;
     // Additive bonus to a room's medkit / ammo pickup chance at full depth.
-    public static final float LEVEL_GEN_DEPTH_MEDKIT_BONUS           = BalanceConfig.LEVEL_GEN_DEPTH_MEDKIT_BONUS;
-    public static final float LEVEL_GEN_DEPTH_AMMO_BONUS             = BalanceConfig.LEVEL_GEN_DEPTH_AMMO_BONUS;
     // At full depth, the chance a room receives a bonus second ammo box.
-    public static final float LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE      = BalanceConfig.LEVEL_GEN_DEPTH_EXTRA_AMMO_CHANCE;
 
     // -------------------------------------------------------------------------
     // LOCK-AND-KEY GATING
@@ -173,9 +171,7 @@ public final class LevelGenConstants {
     public static final int   LEVEL_GEN_ARMORY_MIN_WEAPON_RACKS  = 2;
     public static final int   LEVEL_GEN_ARMORY_MAX               = 1;
     // Probability that a LARGE room (when no ARMORY weapon was placed) gets a weapon pickup
-    public static final float LEVEL_GEN_LARGE_WEAPON_CHANCE      = BalanceConfig.LEVEL_GEN_LARGE_WEAPON_CHANCE;
     // Probability that a STANDARD room gets a random weapon spawn.
-    public static final float LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE = BalanceConfig.LEVEL_GEN_RANDOM_ROOM_WEAPON_CHANCE;
 
     // CRYO_CHAMBER — ~25% of levels, at most 2
     public static final float LEVEL_GEN_CRYO_CHANCE              = 0.25f;
@@ -437,15 +433,7 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_ROOM_CONTAINMENT_FLICKER_CHANCE    = 0.08f;
 
     // --- Shared per-room-type pickup chances (LOOT ROOM BUDGETS — see BalanceConfig) ---
-    public static final float LEVEL_GEN_ARMORY_MEDKIT_CHANCE               = BalanceConfig.LEVEL_GEN_ARMORY_MEDKIT_CHANCE;
-    public static final float LEVEL_GEN_ARMORY_ARMOUR_CHANCE               = BalanceConfig.LEVEL_GEN_ARMORY_ARMOUR_CHANCE;
-    public static final float LEVEL_GEN_COMMAND_MEDKIT_CHANCE              = BalanceConfig.LEVEL_GEN_COMMAND_MEDKIT_CHANCE;
-    public static final float LEVEL_GEN_COMMAND_ARMOUR_CHANCE              = BalanceConfig.LEVEL_GEN_COMMAND_ARMOUR_CHANCE;
-    public static final float LEVEL_GEN_COMMAND_AMMO_CHANCE                = BalanceConfig.LEVEL_GEN_COMMAND_AMMO_CHANCE;
     // POWER_PLANT / CRYO_CHAMBER / CONTAINMENT_BLOCK — hazardous/dark rooms (reduced loot)
-    public static final float LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE          = BalanceConfig.LEVEL_GEN_HAZARD_ROOM_MEDKIT_CHANCE;
-    public static final float LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE          = BalanceConfig.LEVEL_GEN_HAZARD_ROOM_ARMOUR_CHANCE;
-    public static final float LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE            = BalanceConfig.LEVEL_GEN_HAZARD_ROOM_AMMO_CHANCE;
 
     // -------------------------------------------------------------------------
     // START ROOM generator — staging room for weapon selection at run start
@@ -520,6 +508,16 @@ public final class LevelGenConstants {
     public static final float LEVEL_GEN_CAVE_BARREL_CLUSTER_CHANCE  = 0.50f;
     // Minimum Chebyshev distance from player spawn at which cave-body enemies may appear.
     public static final int   LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS      = 6;
+    // Supply regions in a cave (balance-overhaul order 2): the open cave body is cut into fixed pockets
+    // of this size so the shared supply placement spreads pickups across the cave (S7) rather than
+    // treating the whole cave as one room.
+    public static final int   LEVEL_GEN_CAVE_SUPPLY_POCKET_WIDTH    = 12;
+    public static final int   LEVEL_GEN_CAVE_SUPPLY_POCKET_HEIGHT   = 9;
+    // A stamped chamber with at least this interior area counts as LARGE (it may host two groups, E3).
+    public static final int   LEVEL_GEN_CAVE_LARGE_CHAMBER_AREA     = 48;
+    // Supply pockets for the bespoke single-chamber generators (boss arena, clinic, event room, airlock):
+    // square pockets of this side, each its own supply region (balance-overhaul order 2, S7).
+    public static final int   SPECIAL_ROOM_SUPPLY_POCKET_SIZE       = 6;
 
     // -------------------------------------------------------------------------
     // CAVERN generator — sci-fi biome regions

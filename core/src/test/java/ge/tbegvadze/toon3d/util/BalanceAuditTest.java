@@ -80,10 +80,25 @@ class BalanceAuditTest {
     // R-DEPTH (depth coupling, 1..15) was RETIRED by balance-overhaul order 1 and REPLACED by R-LADDER L1
     // (on-curve TTK/TTD flat within +/-15% at 1..25), asserted by thePowerLadderHoldsAtEveryDepthToTheRunEnd.
 
-    /** R-SCARCITY: model-floor supply/demand, per-weapon shares, and heal net-drain all in band. */
+    /**
+     * R-SUPPLY generator sweep — TRACKING (replaces R-SCARCITY, balance-overhaul order 2 override): on every
+     * generator x node type x audited depth x 30 seeds, every category's placed supply is within +/-10% of
+     * the plan derived from that floor's own roster (or one pickup's rounding), nothing is left unplaced,
+     * and a quarter of the eligible supply rides on carriers.
+     */
     @Test
-    void scarcityModelHoldsOnTheModelFloor() {
-        assertNoViolations(BalanceSchema.scarcityResults());
+    void everyGeneratedFloorTracksItsOwnDemand() {
+        assertNoViolations(BalanceSchema.supplySweepResults("tracking", "unplaced", "carrier share"));
+    }
+
+    /**
+     * R-SUPPLY, the ELITE promise (balance-overhaul order 2, A6 / C2): on every combat generator and
+     * audited depth the ELITE floor spends ~1.6x a COMBAT floor's Threat Points, and every ELITE floor
+     * places its reward weapon at level >= d+1 in or past the anchor group's room.
+     */
+    @Test
+    void everyEliteFloorPaysItsThreatWithAWeaponBehindTheAnchor() {
+        assertNoViolations(BalanceSchema.eliteRewardResults());
     }
 
     /** R-DOT: exactly one definition per status; every shim field re-exports BalanceConfig exactly. */
@@ -149,16 +164,23 @@ class BalanceAuditTest {
                 () -> "Budgeted ability rolls exceeded their tier ceiling:\n" + String.join("\n", overspends));
     }
 
-    /** R-SCARCITY-DEPTH (order 3; horizon 1..25 since balance-overhaul order 1): S holds [0.75, 0.95] at every depth. */
+    /**
+     * R-SUPPLY generator sweep — SPREAD (replaces R-SCARCITY-DEPTH, balance-overhaul order 2 override): at
+     * every audited depth no room / chamber holds more than 35% of any category's pickups.
+     */
     @Test
-    void scarcityHoldsAtEveryDepthToTheRunEnd() {
-        assertNoViolations(BalanceSchema.scarcityDepthResults());
+    void everyGeneratedFloorSpreadsItsSupplyAtEveryDepth() {
+        assertNoViolations(BalanceSchema.supplySweepResults("room-share"));
     }
 
-    /** R-HEALDRAIN-DEPTH (order 3; horizon 1..25 since balance-overhaul order 1): net HP drain holds [5%, 15%] per floor. */
+    /**
+     * R-SUPPLY generator sweep — HEAL FLOOR (replaces R-HEALDRAIN-DEPTH, balance-overhaul order 2 override):
+     * every non-BOSS / REST / REGION_GATE floor of every generator carries at least one medkit's worth of
+     * heal value reachable without a keycard, half of it in the first half of the floor.
+     */
     @Test
-    void healDrainHoldsAtEveryDepthToTheRunEnd() {
-        assertNoViolations(BalanceSchema.healDrainDepthResults());
+    void everyGeneratedFloorCarriesTheHealFloorAtEveryDepth() {
+        assertNoViolations(BalanceSchema.supplySweepResults("heal floor"));
     }
 
     /** R-CREDITS (order 3): expected region income / expected purchase-bundle price stays in [0.9, 1.4]. */
@@ -238,30 +260,37 @@ class BalanceAuditTest {
     }
 
     /**
-     * Order-5 PACK COHERENCE acceptance criterion: chaff ALWAYS spawns in packs of >= CHAFF_PACK_MIN.
-     * Proven over 100 seeds x depths 1..15 by planning the encounter roster and asserting no CHAFF-role
-     * type ever appears alone (the golden-band chaff exemption assumes packs — the spawner guarantees it).
+     * PACK COHERENCE (order 5; re-stated by balance-overhaul order 2): chaff never spawns alone. Since order 2
+     * every chaff slot of every group template fields at least GROUP_CHAFF_SLOT_MIN of ONE archetype, so no
+     * CHAFF-role type ever appears fewer times than that on a planned floor. Proven over 100 seeds x depths
+     * 1..15 for every node kind that fields enemies (COMBAT, ELITE, CALM).
      */
     @Test
     void chaffAlwaysSpawnsInPacksOverAHundredSeeds() {
         java.util.List<String> lonePacks = new java.util.ArrayList<>();
-        for (long seed = 0; seed < 100; seed++) {
-            for (int depth = 1; depth <= 15; depth++) {
-                ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
-                        new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
-                                depth, new java.util.Random(seed * 97L + depth)).plan();
-                java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> counts =
-                        new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
-                for (ge.tbegvadze.toon3d.enemy.EnemyType type : plan.enemies()) {
-                    counts.merge(type, 1, Integer::sum);
-                }
-                for (java.util.Map.Entry<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> entry
-                        : counts.entrySet()) {
-                    if (entry.getKey().role() == ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF
-                            && entry.getValue() < BalanceConfig.CHAFF_PACK_MIN) {
-                        lonePacks.add(String.format("  seed=%d depth=%d %s count=%d (< %d)",
-                                seed, depth, entry.getKey().displayName(), entry.getValue(),
-                                BalanceConfig.CHAFF_PACK_MIN));
+        ge.tbegvadze.toon3d.route.NodeSupplySpec[] specs = {
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.combat(),
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.elite(),
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.cache()};
+        for (ge.tbegvadze.toon3d.route.NodeSupplySpec spec : specs) {
+            for (long seed = 0; seed < 100; seed++) {
+                for (int depth = 1; depth <= 15; depth++) {
+                    ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
+                            new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
+                                    depth, new java.util.Random(seed * 97L + depth), 1f, spec).plan();
+                    java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> counts =
+                            new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
+                    for (ge.tbegvadze.toon3d.enemy.EnemyType type : plan.enemies()) {
+                        counts.merge(type, 1, Integer::sum);
+                    }
+                    for (java.util.Map.Entry<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> entry
+                            : counts.entrySet()) {
+                        if (entry.getKey().role() == ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF
+                                && entry.getValue() < BalanceConfig.GROUP_CHAFF_SLOT_MIN) {
+                            lonePacks.add(String.format("  %s seed=%d depth=%d %s count=%d (< %d)",
+                                    spec.type(), seed, depth, entry.getKey().displayName(), entry.getValue(),
+                                    BalanceConfig.GROUP_CHAFF_SLOT_MIN));
+                        }
                     }
                 }
             }
@@ -585,6 +614,40 @@ class BalanceAuditTest {
     @Test
     void theLevelUpRungIsAffordableEveryFloor() {
         assertNoViolations(BalanceSchema.ladderAffordResults());
+    }
+
+    /**
+     * R-SUPPLY, planner level (balance-overhaul order 2): every node spec x audit depth x audit seed is
+     * planned against a real roster and placed on a synthetic floor — heal floor keycard-free and half
+     * of it early, every category within +/-10% of plan (or one pickup's rounding), nothing unplaced, no
+     * room over 35% of a category, a quarter of the eligible supply on carriers.
+     */
+    @Test
+    void theSupplyPlannerTracksDemandOnEverySpec() {
+        assertNoViolations(BalanceSchema.supplyPlannerResults());
+    }
+
+    /**
+     * R-DENSITY, encounter half (balance-overhaul order 2, A3 / A5): on every generator x COMBAT / ELITE /
+     * CACHE / SHOP x audited depth x 30 seeds, the floor fields its E1 body target; COMBAT and ELITE floors
+     * keep >= 75% of enemies in groups of two or more, at least two groups of three or more and at most
+     * three lone enemies (E4), and meet their first group within 18 walk tiles of the start (12 on depth 1),
+     * never in the start room (E5).
+     */
+    @Test
+    void everyCombatFloorFieldsItsGroupsAndAFirstContact() {
+        assertNoViolations(BalanceSchema.densitySweepResults("bodies", "grouped", "big groups", "lone",
+                "first contact", "start room"));
+    }
+
+    /**
+     * R-DENSITY, footprint half (balance-overhaul order 2, A3 / A5): the three combat layouts build to their
+     * region's walkable-tile range +/-15% (E6; the run's first COMBAT floor strictly 350-550), and every
+     * floor whose spec has a density band keeps its enemies per 100 walkable tiles inside it (E7).
+     */
+    @Test
+    void everyGeneratedFloorHoldsItsFootprintAndDensity() {
+        assertNoViolations(BalanceSchema.densitySweepResults("footprint", "density"));
     }
 
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */

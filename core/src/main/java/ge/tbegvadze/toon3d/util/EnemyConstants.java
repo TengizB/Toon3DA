@@ -30,7 +30,6 @@ public final class EnemyConstants {
     // Enemy system — AI and combat
     // Only cosmetic fields (height/hover) stay here.
     // Probability (0–1) that a killed enemy drops an ammo pickup on its tile.
-    public static final float   ENEMY_AMMO_DROP_CHANCE           = BalanceConfig.ENEMY_AMMO_DROP_CHANCE;
     public static final int     ALERT_RADIUS_TILES               = BalanceConfig.ALERT_RADIUS_TILES;
     public static final int     CHAIN_ALERT_RADIUS_TILES         = BalanceConfig.CHAIN_ALERT_RADIUS_TILES;
     public static final int     LOS_MAX_RANGE_TILES              = BalanceConfig.LOS_MAX_RANGE_TILES;

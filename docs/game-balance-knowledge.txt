@@ -630,184 +630,107 @@ degradation, i.e. it gets unfairly hard and that is currently accepted, not fixe
 
 
 ================================================================================
-SECTION 11 — ENCOUNTER BUDGET (difficulty as a dial, not an accident)
+SECTION 11 — ENCOUNTER BUDGET: BODIES, GROUPS, FOOTPRINT (rewritten by balance-overhaul order 2)
 ================================================================================
-File: BalanceConfig SECTION 11; level/EncounterBudgetPlanner.java; GameMath.
+Files: BalanceConfig SECTION 21 (BODY_TARGET_*, GROUP_*, SHAPE_*, FIRST_CONTACT_*, FOOTPRINT_*,
+DENSITY_*); level/EncounterBudgetPlanner, EncounterGroupTemplate(s) + registry, EncounterPlacer,
+FootprintPlanner; GameMath.bodyTargetAtDepth / densityPerHundredTiles / footprintTargetWalkableTiles /
+walkableTilesForDensity. Audited by R-DENSITY (docs/game-balance-authority.txt).
 
-The generator SPENDS a per-floor Threat-Point budget instead of rolling enemies at
-random:
-  floorThreatPointBudget(depth) = FLOOR_BASE_THREAT_POINT_BUDGET * depthThreatScale(depth)
-  FLOOR_BASE_THREAT_POINT_BUDGET = 500 (depth 1).
-Because both the budget AND each enemy's TP cost scale by the same depth curve, the
-enemy COUNT stays ~constant across floors while each enemy gets stronger.
+WHAT A FLOOR FIELDS. The planner fills a BODY TARGET, not a Threat-Point budget:
+  bodies(d) = lerp(BODY_TARGET_MIN/MAX_DEPTH_ONE 12-16, _DEEP 22-28, d / 25) x spec.bodyScale
+              (COMBAT 1.0, ELITE 1.05, CACHE / SHOP 0.35; MYSTERY / EVENT / REST / BOSS / GATE their own)
+  The Threat-Point budget (FLOOR_BASE_THREAT_POINT_BUDGET x depth scale x REGION_TP_BUDGET_MULTIPLIER x
+  spec.threatScale x any EXTRA multiplier — affix, event bonus, mystery outcome) is the CAP on total
+  threat. Each pick aims at the threat-per-body still to spend, so ELITE's 1.6x cap buys HEAVIER groups
+  (~1.6x COMBAT's spent TP, R-SUPPLY's ELITE PROMISE), not a crowd. The enemy COUNT now grows with depth.
 
-COMPOSITION RULES the planner enforces:
-  ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN/MAX = 0.15 / 0.30 (one anchor bruiser/elite)
-  ENCOUNTER_MAX_SINGLE_TYPE_FRACTION = 0.40 (variety)
-  ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.25 (no un-winnable pile-up in one room)
-  ENCOUNTER_BUDGET_FILL_TARGET_FRACTION = 0.95 (headroom so rosters don't overshoot)
-  ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15 (min depth 3) — elite-gauntlet floors.
-  Every roster must contain BOTH ranged and melee archetypes.
+GROUPS (E2). The roster is assembled from registered EncounterGroupTemplate rows: PACK 3-5 chaff of one
+  type, FIRETEAM 2 soldiers + 2 chaff, ESCORT bruiser + 2-3 chaff (COMBAT anchor), BATTERY 1-2 ranged
+  soldiers + 2 melee chaff, WARBAND mini-elite + 2 soldiers (ELITE anchor, depth >= 3), HUNTER a lone
+  bruiser / flanker (<= 20% of groups). A group is capped at GROUP_TP_FRACTION_CAP (0.35) of the floor cap
+  (the anchor exempt); groups shrink to fit, picks leave a fillable remainder (0 or >= 3), each pick
+  reserves cap for the cheapest fill of the remaining bodies, 4 seeded draws per shape per pick.
 
-ENCOUNTER BUDGET V2 (new-game-balancr order 5) — three additions:
-  1. TACTICAL ROOM CAPS: a room's TP cap is scaled by its GEOMETRY, read from the
-     generator's room metadata (Room.isLarge + interior dims), never a hand tag —
-     ROOM_OPEN_TP_MULTIPLIER 0.8 (a LARGE/open room has nowhere to break a ranged
-     cardinal line, caps LOWER) | ROOM_CHOKEPOINT_TP_MULTIPLIER 1.1 (a narrow,
-     corridor-like room the player can funnel, caps HIGHER). Applied per room via
-     EncounterBudgetPlanner.Plan.perRoomThreatPointCap(open, choke) +
-     GameMath.roomGeometryThreatCapMultiplier; wired in LevelGenerator (caverns are
-     roomless/open so they only get the region dial).
-  2. PACK COHERENCE: chaff spawns in packs of CHAFF_PACK_MIN..MAX (2..4). The
-     golden-band chaff exemption ASSUMES packs (a lone chaff reads a harmless ~9
-     golden ratio, balanced by pack TP); the planner now GUARANTEES it — a chaff type
-     is only added when a full min-pack fits, and enters as a group. Proven by a
-     100-seed generator test (no chaff ever appears alone).
-     PACKS NOW LAND TOGETHER IN SPACE TOO (encounter density change): the planner had
-     always emitted packs, but the generators' load balancer then handed each member
-     to a different room, so the mean distance to the nearest other enemy was ~14
-     tiles (~14 player turns) and every fight was a solo duel — the pack this
-     exemption assumes had never once existed in play. Consecutive same-type roster
-     entries are now placed as ONE unit into ONE room, clustered within
-     LEVEL_GEN_PACK_CLUSTER_RADIUS. Measured nearest-neighbour: 13.9 -> 5.9 tiles.
+PLACEMENT (E3 / E5). level/EncounterPlacer puts each group in ONE room (cluster radius LEVEL_GEN_PACK_
+  CLUSTER_RADIUS): first contact in the nearest room off the start (or a corridor pocket within the
+  limit, >= FIRST_CONTACT_MIN_WALK_TILES 5 from the start) — <= 18 walk tiles, <= 12 on the run's first
+  floor, never in the start room; the anchor group in the deepest room; every other group in a room no
+  group holds (a LARGE room may take two). Shape (E4): >= 75% of enemies in groups of >= 2, >= 2 groups
+  of >= 3, <= 3 lone enemies.
 
-ENCOUNTER BUDGET V3 (encounter density) — the budget is only worth what it BUYS:
-  4. BUDGET -> BODIES. Two leaks stranded a large share of a SMALL floor's budget, so
-     a CALM/CACHE node — which uses the FULL ~1,100-tile ROOMS_MST dungeon at
-     ROUTE_CALM_BUDGET_SCALE 0.28 — spawned EXACTLY one enemy on every seed:
-       (a) chooseAnchor's fallback accepted any anchor fitting the WHOLE budget, so a
-           96 TP Shell Brute took 76% of a 126 TP floor. It is now bounded by
-           ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION; when nothing fits, the floor gets
-           NO anchor and the whole budget goes to fill (the honest shape of a light
-           floor), rather than one bruiser alone in an empty dungeon.
-       (b) CHAFF_PACK_MIN made the remainder unspendable (leftover 30 TP < cheapest
-           33 TP pack), so the fill loop broke and the change was discarded. A
-           REMAINDER PASS now buys the cheapest affordable enemy until nothing fits.
-           It may TOP UP a chaff type already at full pack strength but may never
-           CREATE a lone chaff, so pack coherence (2) still holds by construction.
-     Measured: CALM floor 1.0 -> 5.5 enemies at depth 1 on the SAME 126 TP budget;
-     SHOP 5.1 -> 7.4; standard COMBAT floors move < 1 body (the leak only ever
-     mattered where the budget was small).
-     TP-NEUTRAL, NOT eHP-NEUTRAL: total Threat Points per floor are unchanged, so
-     every route-economics price (R-CALM-COST, R-RISK-PREMIUM) and the ladder read the
-     same — but several cheap bodies carry more total eHP, and so more ammo demand,
-     than the one anchor they replace. SIM_ECONOMY emergency-lifeline floors moved
-     0.04 -> 0.06 as a result (inside the existing waiver). If it climbs further the
-     lever is AMMO_SUPPLY, not fewer enemies.
-  5. ZERO IS EXPRESSIBLE. EnemyBudgetOverride.empty() / a 0f scale now means "no
-     enemies on this floor". Previously a non-positive scale was read as "unset" and
-     became the FULL depth budget — asking for nothing gave you everything — which is
-     why EVENT/REST/REGION_GATE each hardcoded an empty spawn list instead, leaving
-     EVENT_BUDGET_SCALE 0.15 / GATE_BUDGET_SCALE 0.10 as dead numbers contradicting
-     the ledger rows that priced them at 0. Both constants are now 0.
+FOOTPRINT + DENSITY (E6 / E7). The three combat layouts (ROOMS_MST, LINEAR_CORRIDOR, CAVERN) build to a
+  walkable-tile target inside the region's range (A 350-550, B 450-650, C/D/E 500-750; ELITE the lower
+  half) through level/FootprintPlanner: rebuild at a corrected footprint SCALE (a centred layout window,
+  or the corridor spine length) up to FOOTPRINT_MAX_ATTEMPTS (16); the target FOLLOWS the bodies the
+  build fielded (bodies x 100 / the density band's midpoint), so footprint and density hold together —
+  COMBAT 2.2-4.0, ELITE 3.0-5.0, CACHE / SHOP 0.6-1.5 enemies per 100 walkable tiles. Measured over the
+  audit sweep: zero floors out of either band.
 
-  KNOWN NON-GOAL — enemy COUNT is still depth-invariant. floorThreatPointBudget and
-  enemyThreatAtDepth are multiplied by the SAME depthThreatScale factor, so
-  budget/cost — the bodies the budget buys — is constant by construction: the depth-1
-  and depth-2 spawn histograms are byte-identical, as are depth-3 and depth-5. Twelve
-  floors of descent buy ~3 extra bodies (12.4 -> 15.8). Deeper floors are stronger,
-  never busier. Fixing it means a per-depth multiplier on the BUDGET that is not
-  applied to per-enemy cost, which moves total floor threat and therefore the scarcity /
-  heal-drain / XP curves (R-DEPTH is retired; balance-overhaul order 2 owns floor density) — a balance change with its own audit obligations, not a bug fix.
-  3. THE REGION DANGER DIAL (fixes problem 12): route regions stop being frequency-
-     only. Each region declares REGION_TP_BUDGET_MULTIPLIER (A OUTER FACILITY 0.9 |
-     B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE BREACH 1.25) applied ON TOP
-     of the depth curve (GameMath.regionScaledFloorThreatPointBudget), so a lethal
-     region spends measurably MORE TP (more bodies) at the same depth. R-REGION (a
-     new schema rule) checks the dial is bounded [0.8,1.3], monotonic non-decreasing,
-     and that C/D out-dial A by >= REGION_TP_LETHAL_MARGIN. Node WEIGHT multipliers
-     (RouteMapConstants) still own FLAVOUR (what kind of rooms); the TP dial owns HOW
-     HARD. FAIRNESS: the dial scales the BUDGET (body count), NOT the per-enemy threat
-     scale, so the per-fight ladder (R-LADDER L1; was R-DEPTH) holds in every region lane — region
-     danger is an attrition tax of extra bodies, not an unfair per-duel spike.
-  4. ELITE-GAUNTLET floors keep their 0.15 chance but must still fit the (region-
-     scaled) budget — a composition choice, not a budget override.
-
-Level-gen spawn/loot density (BalanceConfig SECTION 6):
-  LEVEL_GEN_PROP_CHANCE=0.13, LEVEL_GEN_MAX_ENEMIES_PER_ROOM=3,
-  credit chips per floor 3–7 (weights small 70 / medium 24 / large 6),
-  per-room-type medkit/armour/ammo/weapon chances (server/large/armory/command/
-  hazard rooms each have their own budget).
-
-⚠️ Not-good note: the budget reproduces the SECTION 12 model floor "on average",
-but the actual per-seed rosters are only spot-checked via BalanceReport. Room-level
-distribution (which enemies end up crowded together) is governed by a load-balancer
-plus a safety cap, not by a tactical-placement model — so a bad seed can still
-produce a lopsided or trivially easy floor. This is untested in real play.
-
+WHAT IT REPLACED (override record in the authority doc, R-DENSITY): "enemy COUNT is depth-invariant",
+  the anchor budget fractions, the elite-anchor floor chance, the per-room TP cap + room-geometry
+  multipliers, chaff pack min/max + the remainder pass. ENCOUNTER_BUDGET_FILL_TARGET_FRACTION (0.95)
+  survives as the planner's aim (R-XP-PACE reads it); the 0.40 single-type cap survives as
+  GROUP_MAX_SINGLE_TYPE_FRACTION.
 
 ================================================================================
-SECTION 12 — RESOURCE MANAGEMENT / SCARCITY ECONOMY (a core balance pillar)
+SECTION 12 — RESOURCE MANAGEMENT: THE SUPPLY PLANNER (rewritten by balance-overhaul order 2)
 ================================================================================
-Files: BalanceConfig SECTION 5 (levers) + SECTION 10 (model + bands); GameMath
-scarcity block; docs/game-balance-authority.txt (RESOURCE SCARCITY MODEL).
-This is one of the MOST important balance systems and the user's stated priority.
+Files: BalanceConfig SECTION 21 (SUPPLY_*, NODE_SUPPLY_*) + SECTION 5 (box sizes, reserve caps);
+route/NodeSupplySpec(s) + registry; level/SupplyPlanner, SupplyRequest, SupplyPlan, SupplySlotSurvey,
+SupplyPlacement, FloorPopulator, FloorContentReport; GameMath.floorAmmoDemandUnits /
+floorExpectedIncomingDamage / plannedHealValue / supplyDamagePerUnitAtDepth. Audited by R-SUPPLY.
 
-WHY IT MATTERS: scarcity is what turns a shooter into a roguelike. With infinite
-ammo there are no resource DECISIONS. The goal is to land supply JUST BELOW comfort
-so clever spending is rewarded and careless spending is punished — NOT to starve.
+WHY IT MATTERS: scarcity is what turns a shooter into a roguelike — supply just below comfort, so clever
+spending is rewarded. The old answer was DICE (per-room and per-kill chances): supply was streaky, and a
+cave floor carried a fraction of a rooms floor's heals. Supply is now PLANNED from each floor's own
+demand and node type, never from the player's current HP or ammo (AS1 — "luck small, earned wins").
 
-THE CENTRAL EQUATION (per floor, "fight everything" basis):
-  DEMAND = sum of every enemy's eHP       (damage needed to clear the floor)
-  SUPPLY = sum over ammo pickups of (boxSize * damagePerAmmoUnit)  (ranged only)
-  S = SUPPLY / DEMAND
-  TARGET: S in [0.75, 0.95] floor-wide AND < 0.60 for any SINGLE weapon.
-    (BalanceConfig SCARCITY_RATIO_FLOOR_MIN/MAX/TARGET, SCARCITY_PER_WEAPON_MAX.)
-  Ammo alone covers ~75–95% of a floor; the rest is melee/avoidance/reserves.
+ONE PIPELINE (S1). Every generator: layout + gate + stairs -> SupplySlotSurvey (walk distances, keycard
+  reachability, exit path, rooms) -> encounter plan + placement -> SupplyPlanner.plan -> place ->
+  FloorPopulator stamps pickups, carriers, planned weapons and credit chips, and attaches a
+  FloorContentReport. Hand-made .txt levels keep their authored pickups.
 
-THE FOUR LEVERS (all in BalanceConfig):
-  1 DROP FREQUENCY  ENEMY_AMMO_DROP_CHANCE=0.10, MELEE_KILL_AMMO_DROP_CHANCE=0.20,
-                    LEVEL_GEN_AMMO_CHANCE_PER_ROOM=0.20                (SECTION 5)
-  2 DROP SIZE       AMMO_BOX_BULLETS 10 / SHELLS 4 / CELLS 7 / ROCKETS 2,
-                    RAILGUN_PICKUP_SLUGS 1, FLAME_PICKUP_FUEL 18, GRENADE 2 (SECTION 5)
-  3 RESERVE CAP     AMMO_RESERVE_CAP_BULLETS 38 / SHELLS 17 / CELLS 27 / ROCKETS 18,
-                    RAILGUN_MAX_SLUGS 6, FLAME_MAX_FUEL 35, GRENADE_MAX_AMMO 7 (SECTION 5)
-                    (LEVERS 2+3 cut ~0.7x by balance-overhaul order 1 with the R8 demand drop)
-  5 PER-REGION      AMMO_SUPPLY_REGION_MULTIPLIER {1.03, 1.00, 0.98, 0.98, 1.10};
-                    SUPPLY rides the expected per-hit growth, DEMAND the enemy HP growth
-  4 DEMAND          enemy density / eHP per floor (the TP budget)  (SECTION 2/11)
-  Tune LEVER 4 (demand) + LEVER 2 (drop size) first — biggest effect.
+THE PLAN, per floor:
+  AMMO (S2)     roster eHP at depth x spec.ammoRatio (+ an ELITE vault share), priced per unit at the
+                on-curve hit growth; SUPPLY_CARRIED_SHARE 0.70 over the ammo types of the weapons the
+                player carries, 0.30 over the rest; whole boxes by largest remainder.
+  HEALS (S3/S4) incoming = the roster's base DPT x the on-curve depth factor x SUPPLY_TURNS_ENGAGED_
+                PER_ENEMY x SUPPLY_AVOIDANCE_FACTOR, as a fraction of expected max HP; planned value =
+                incoming x (1 - spec.drainTarget), never below the HEAL FLOOR (0.45 max HP — one 'H') on
+                every floor but BOSS / REST / GATE; armour = spec.armourShare of it (ELITE: a guaranteed
+                vest). The heal floor is reachable without a keycard and at least half of it lies in the
+                first half of the floor by walk distance.
+  CREDITS (S8)  round(spec.creditScale x SUPPLY_CREDIT_CHIPS_PER_FLOOR 5) chips at the mean chip value.
+  WEAPONS (S9)  spec.weaponDrops at seeded level offsets (COMBAT -1..0, ELITE +1..+2 with a tier floor one
+                above the region minimum, CACHE 0 at 50%); the two-floor CADENCE (RunStats) owes an
+                on-level weapon when the previous non-boss floor offered none (replaced the pity rule).
+  CARRIERS (S6) ~SUPPLY_CARRIER_SHARE 0.25 of the ammo / non-floor heals ride specific enemies as their
+                drop (seeded); skipping a fight skips its loot. The never-softlock lifeline is the only
+                reactive rule and stays.
+  SPREAD (S7)   no room holds more than SUPPLY_MAX_ROOM_SHARE 0.35 of a category; exit-path and
+                group-room slots preferred; the ELITE reward weapon in or past the anchor group's room.
+  TRACKING (S5) placed within SUPPLY_TRACK_TOLERANCE 0.10 of plan per category (only rounding moves it).
 
-ANTI-HOARD: reserve caps bank only ~RESERVE_BANKING_FLOORS_TARGET=1.5 floors of a
-weapon's run-demand (GameMath.reserveBankingFloors). Enemy eHP compounds with depth
-while the ammo depth bonus is gentler, so S tightens as you descend and hoards get
-spent. Railgun slugs are the tightest gate (~1.0 floor) to honour its power
-exception.
+NODE SPECS (one NodeSupplySpec row per RouteNodeType; current numbers, see the authority doc's CP6 log
+for the two moved off the idea's starting values):
+  type    threat bodies ammo  vault drain  armour credits weapons
+  COMBAT  1.00   1.00   0.85  -     0.20   0.20   1.0     1 @ -1..0
+  ELITE   1.60   1.05   0.85  0.25  0.30   0.30+v 1.6     1 @ +1..+2, tier +1, behind the anchor
+  CACHE   0.30   0.35   2.00  -    -1.25   0.40   1.2     1 @ 0, 50%
+  SHOP    0.35   0.35   2.00  -    -0.75   0.20   2.0     0 (the fabricators)
+  REST / EVENT / MYSTERY / BOSS / REGION_GATE: today's contents as a spec (order 6 retunes them);
+  BOSS plans the R-BOSS-AMMO arena budget; REGION_GATE threat 0.
 
-HEAL ECONOMY (HP is a resource too):
-  INCOMING    = totalEnemyDPT * turnsEngaged * (1 - avoidanceFactor)
-  HEAL_SUPPLY = medkits*avgHeal + armour*avgArmour
-  netHpDrain  = INCOMING - HEAL_SUPPLY  (target: small NET LOSS, 5–15% of eHP/floor)
-    (BalanceConfig HEAL_NET_DRAIN_FRACTION_MIN/MAX.)
-  Each floor should cost some HP you don't recover, so HP slowly becomes precious.
+LEVERS THAT SURVIVE: box SIZES (LEVER 2) set the grain, reserve CAPS (LEVER 3) bound hoarding. DELETED:
+  every per-room / per-kill drop chance, the depth generosity bumps, the 3-7 chip roll, the per-region
+  ammo and heal supply multipliers, GUARANTEED_UPGRADE_PER_REGION, and the model-floor dice rules
+  (R-SCARCITY, R-SCARCITY-DEPTH, R-HEALDRAIN-DEPTH -> R-SUPPLY). The route ledger prices every node on
+  the same plan (route-map-system.txt, "RE-DERIVED FROM THE NODE SPECS").
 
-THE MODEL FLOOR (depth 1 reference; BalanceConfig SECTION 10):
-  6x Gore Biter + 3x Eye Tyrant + 2x Shell Brute + 1x Plague Hulk
-  DEMAND = 502 damage after the R8 rebase (was 720), ~435 TP. Expected pickups 2.8
-  medkits + 1.6 armour (re-synced to the generator's per-room chances; was 1.5 / 1.0).
-  Depth sweeps run 1..25: S 0.82-0.92, net HP drain 7.5-13% of the expected player's eHP
-  (heals ride the player's pool; HEAL_SUPPLY_REGION_MULTIPLIER {1, 1, 1, 1.03, 1.10}).
-
-CREDITS (the currency economy):
-  Per-kill credits (BalanceConfig SECTION 2): 5–40 (boss 250 placeholder).
-  Credit chips per floor 3–7. Depth scale 0.12. Credit Fang ability (GameBalance).
-  SHOP / UAC Fabricator (GameBalance SHOP_*): 1–2 machines/floor, 9 offers each,
-  category weights, depth+rarity pricing, base prices per offer type.
-  The LEVEL UP rung: guaranteed for the equipped weapon while level < depth+1, priced
-  LADDER_LEVEL_UP_POWER_POINTS (1.5 PP) through GameMath.shopPrice — R-LADDER-AFFORD
-  (every shop weapon level-up costs this; the Fist never gets one; it vanishes at the cap).
-
-⚠️ Not-good note (IMPORTANT): the CREDIT half of the economy is effectively BROKEN
-as a balance lever. Credits are awarded everywhere, but the doc/idea history flags
-that a real spending SINK (the shop) was a prerequisite blocker — currency with no
-sink is a meaningless counter, not a resource. Shop constants EXIST in GameBalance,
-but the shop's integration/pricing is unproven and was explicitly "blocked/deferred"
-in the design notes. Until the shop is verified in play, treat all credit numbers,
-shop weights, and shop prices as UNBALANCED placeholders. The ammo/heal half is
-modelled but was verified only by the arithmetic harness — NEVER playtested. So
-even the "in band" scarcity result is provisional and must be refined against real
-play. This is the single biggest gap between "looks balanced" and "is balanced".
-
+PLAYED (S-SUPPLY / S-ECONOMY, the sim): TACTICAL leaves COMBAT floors at ~0.79 health (band 0.55-0.80),
+  no played floor is below its heal floor; the share of planned ammo picked up reads 0.57 (waived — the
+  navigator stalls with carriers alive). The sim FLOOR REPORT prints the per-generator x node breakdown.
 
 ================================================================================
 SECTION 13 — TERRAIN HAZARDS (two-sided danger folded into the TP contract)

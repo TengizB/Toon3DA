@@ -141,8 +141,8 @@ public final class MysteryProfile implements NodeLevelProfile {
         config.unlitFloors      = true;
         config.flickeringFloors = true;
         config.normalFloors     = false;
-        config.medkits    = false;
-        config.armourKits = false;
+        // "No reward" is now the planner's MYSTERY spec at its calm budget (balance-overhaul order 2): the
+        // floor still carries the S4 heal floor; order 6 retunes each mystery outcome's contents.
         List<GuaranteedContent> guarantees = new ArrayList<>();
         guarantees.add(Guarantees.prop('g', RouteMapConstants.MYSTERY_TRAP_BARRELS, Placement.SCATTERED, seed));
         // No reward — just a hazardous shortcut. Calm budget keeps it survivable (permadeath is harsh).

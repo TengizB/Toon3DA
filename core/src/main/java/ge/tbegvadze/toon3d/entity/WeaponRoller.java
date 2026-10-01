@@ -52,41 +52,28 @@ public class WeaponRoller {
     }
 
     /**
-     * THE PITY RULE (new-game-balancr order 2): rolls a GUARANTEED in-band upgrade for a region — a
-     * weapon whose tier is forced to at least this region's band minimum (and no higher than its max),
-     * so a region can never end with the player starved of the gear its curve expects. The floor
-     * generator calls this for the pity spawn it force-places when a region is about to end with zero
-     * upgrades seen (RunStats tracks the count).
+     * A PLANNED weapon drop (balance-overhaul order 2, S9): the SupplyPlanner already decided this drop's
+     * level offset from the floor depth and, for an ELITE reward, a tier floor above the region minimum,
+     * so neither is rolled here. Only the tier inside the allowed band and the abilities are rolled.
      *
-     * @param weapon     the weapon instance to configure
-     * @param floorDepth current dungeon floor (1-based); selects the region band
+     * @param weapon      the weapon used for ability eligibility (never modified)
+     * @param floorDepth  current dungeon floor (1-based)
+     * @param levelOffset the planned offset: level = floorDepth + levelOffset, clamped to [1, MAX]
+     * @param tierBonus   steps above the region's minimum drop tier the roll may not go below, or a
+     *                    negative value for the plain region band
      */
-    public void rollGuaranteedUpgrade(Weapon weapon, int floorDepth) {
-        WeaponTier minTier            = regionMinTier(floorDepth);
-        int               rolledLevel = rollLevel(floorDepth);
-        WeaponTier        rolledTier  = rollTierClamped(floorDepth, minTier, regionMaxTier(floorDepth));
-        // Never below the region's guaranteed floor: a pity drop must actually BE an upgrade.
-        if (rolledTier.ordinal() < minTier.ordinal()) rolledTier = minTier;
-        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
-        weapon.configureRoll(rolledLevel, rolledTier, rolledAbilities);
-    }
-
-    /**
-     * Snapshot form of {@link #rollGuaranteedUpgrade} for the pity force-spawn (a floor's weapons are
-     * stored as {@link WeaponRoll} snapshots on ground items, not applied to a live weapon).
-     */
-    public WeaponRoll rollGuaranteedUpgradeToSnapshot(Weapon weapon, int floorDepth) {
-        WeaponTier minTier            = regionMinTier(floorDepth);
-        int               rolledLevel = rollLevel(floorDepth);
-        WeaponTier        rolledTier  = rollTierClamped(floorDepth, minTier, regionMaxTier(floorDepth));
-        if (rolledTier.ordinal() < minTier.ordinal()) rolledTier = minTier;
-        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, rolledLevel);
-        return new WeaponRoll(rolledLevel, rolledTier, rolledAbilities);
-    }
-
-    /** The lowest tier that counts as a real weapon UPGRADE (UNCOMMON or better) — the pity threshold. */
-    public static WeaponTier upgradeTierThreshold() {
-        return WeaponTier.UNCOMMON;
+    public WeaponRoll rollPlannedToSnapshot(Weapon weapon, int floorDepth, int levelOffset, int tierBonus) {
+        int        plannedLevel = Math.max(1, Math.min(WeaponConstants.MAX_WEAPON_LEVEL, floorDepth + levelOffset));
+        WeaponTier minimumTier  = regionMinTier(floorDepth);
+        WeaponTier maximumTier  = regionMaxTier(floorDepth);
+        if (tierBonus > 0) {
+            minimumTier = tierByOrdinal(minimumTier.ordinal() + tierBonus);
+            if (maximumTier.ordinal() < minimumTier.ordinal()) maximumTier = minimumTier;
+        }
+        WeaponTier        rolledTier      = rollTierClamped(floorDepth, minimumTier, maximumTier);
+        if (rolledTier.ordinal() < minimumTier.ordinal()) rolledTier = minimumTier;
+        AbilityInstance[] rolledAbilities = rollAbilities(weapon, rolledTier, plannedLevel);
+        return new WeaponRoll(plannedLevel, rolledTier, rolledAbilities);
     }
 
     /**

@@ -518,6 +518,18 @@ public enum EnemyType {
     public abstract int     attackCadenceTurns();
     /** Spawn-point character this archetype is created from (LevelLoader / EnemyManager mapping). */
     public abstract char    spawnChar();
+
+    /**
+     * The archetype a spawn character creates, or {@code null} for an unknown character or the boss
+     * marker. Data-driven over {@link #spawnChar()} (balance-overhaul order 2: the supply planner prices
+     * a generated roster from its spawn points).
+     */
+    public static EnemyType fromSpawnChar(char spawnChar) {
+        for (EnemyType type : values()) {
+            if (type.role() != EnemyRole.BOSS && type.spawnChar() == spawnChar) return type;
+        }
+        return null;
+    }
     /** One-sentence tactical VERB: the reason the player must fight this archetype differently. */
     public abstract String  tacticalVerb();
 

@@ -94,15 +94,8 @@ public final class LevelGenConfig {
      */
     public boolean enableLockAndKey = true;
 
-    // -------------------------------------------------------------------------
-    // Pickups (walkable; collected on contact)
-    // -------------------------------------------------------------------------
-
-    /** Field medkits ('H'). Placed in non-entrance rooms. */
-    public boolean medkits = true;
-
-    /** Security vests ('A'). Placed in non-entrance rooms. */
-    public boolean armourKits = true;
+    // Pickups are no longer configured per floor (balance-overhaul order 2): the SupplyPlanner places every
+    // medkit, armour, ammo box, weapon drop and credit chip from the node's {@link #supplySpec}.
 
     // -------------------------------------------------------------------------
     // Prop relative weights
@@ -138,16 +131,6 @@ public final class LevelGenConfig {
     public int columnMinRoomSize = 4;
 
     // -------------------------------------------------------------------------
-    // Pickup placement parameters
-    // -------------------------------------------------------------------------
-
-    /** Probability (0–1) that any non-entrance room contains a medkit. */
-    public float medkitChancePerRoom = 0.35f;
-
-    /** Probability (0–1) that any non-entrance room contains an armour kit. */
-    public float armourChancePerRoom = 0.20f;
-
-    // -------------------------------------------------------------------------
     // Encounter budget (route-map order-7)
     // -------------------------------------------------------------------------
 
@@ -158,4 +141,32 @@ public final class LevelGenConfig {
      * ramp — the budget is still computed from raw depth first, then scaled.
      */
     public float enemyBudgetScale = 1f;
+
+    // -------------------------------------------------------------------------
+    // Supply & density (balance-overhaul order 2)
+    // -------------------------------------------------------------------------
+
+    /**
+     * What this floor's node type CONTAINS (S10): threat, bodies and the supply the
+     * {@link SupplyPlanner} derives from the roster. {@code null} = the COMBAT row (a floor built
+     * without a route node). The node type's own threat lives HERE; {@link #enemyBudgetScale} carries
+     * only the extra multipliers on top (an ELITE affix, an event's next-floor bonus, a mystery outcome).
+     */
+    public ge.tbegvadze.toon3d.route.NodeSupplySpec supplySpec = null;
+
+    /**
+     * Ammo types of the weapons the player carries at floor build (S2), set by World / the simulator.
+     * {@code null} or empty = the expected player's types. Supply never reads the player's CURRENT ammo.
+     */
+    public java.util.Set<ge.tbegvadze.toon3d.item.AmmoType> carriedAmmoTypes = null;
+
+    /** S9 cadence: the previous non-boss floor offered no weapon at level >= its depth. Set by World. */
+    public boolean weaponCadenceDue = false;
+
+    /**
+     * E6 footprint: the walkable tiles a combat generator (rooms / corridor / cave) builds to. 0 = derive it
+     * from the floor's region range (the normal case — see {@link FootprintPlanner}); a negative value =
+     * build at natural size (no target).
+     */
+    public int targetWalkableTiles = 0;
 }

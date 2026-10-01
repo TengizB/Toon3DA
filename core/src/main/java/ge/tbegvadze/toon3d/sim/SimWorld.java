@@ -464,7 +464,8 @@ public final class SimWorld implements LevelTransitionListener {
         floorLedger.bossFloor            = bossFloorController != null;
         floorLedger.playerLevelOnArrival = playerProgress.getPlayerLevel();
         floorLedger.demandDamage         = measureFloorDemandDamage();
-        floorLedger.rangedSupplyDamage   = measureRangedSupplyDamage();
+        floorLedger.healthFractionOnEntry = healthFraction();
+        recordPlannedContent(level.getFloorContentReport());
         ledger.floors.add(floorLedger);
         ledger.depthReached = Math.max(ledger.depthReached, currentDepth);
         turnsOnFloor        = 0;
@@ -485,7 +486,7 @@ public final class SimWorld implements LevelTransitionListener {
         NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(pendingNode.type);
         NodeLevelProfile   profile    = RouteRegistries.levelProfiles().getOrDefault(definition.levelProfileId());
         LevelPlan          plan       = profile.resolve(pendingNode, currentDepth, seed);
-        LevelGenConfig     config     = applyEnemyBudget(plan.config(), plan.enemyBudget());
+        LevelGenConfig     config     = applyFloorSupplyInputs(applyEnemyBudget(plan.config(), plan.enemyBudget()));
         ILevelGenerator    generator  = RouteRegistries.generators().create(plan.generatorId(), seed, config);
         Level built = generator.generate(currentDepth);
         captureBossArenaLayout(generator);
@@ -501,6 +502,27 @@ public final class SimWorld implements LevelTransitionListener {
         }
     }
 
+    /**
+     * Folds the order-2 supply inputs into the config (mirrors World.applyFloorSupplyInputs): the ammo
+     * types of the weapons the simulated player carries at floor build.
+     */
+    private LevelGenConfig applyFloorSupplyInputs(LevelGenConfig config) {
+        LevelGenConfig effective = config != null ? config : new LevelGenConfig();
+        java.util.EnumSet<ge.tbegvadze.toon3d.item.AmmoType> carried =
+                java.util.EnumSet.noneOf(ge.tbegvadze.toon3d.item.AmmoType.class);
+        ge.tbegvadze.toon3d.entity.Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                if (weapon != null && weapon.getAmmoType() != null) carried.add(weapon.getAmmoType());
+            }
+        }
+        effective.carriedAmmoTypes = carried;
+        // S9: the two-floor weapon cadence (mirrors World / RunStats.weaponCadenceDue).
+        effective.weaponCadenceDue = !lastNonBossFloorOfferedOnLevelWeapon;
+        return effective;
+    }
+
     /** Folds a node's encounter-budget override into the plan's config (mirrors World.applyEnemyBudget). */
     private static LevelGenConfig applyEnemyBudget(LevelGenConfig config, EnemyBudgetOverride override) {
         if (override == null) return config;
@@ -509,18 +531,29 @@ public final class SimWorld implements LevelTransitionListener {
         return effective;
     }
 
+    /** The two-floor weapon cadence (balance-overhaul order 2, S9; mirrors RunStats). */
+    private boolean lastNonBossFloorOfferedOnLevelWeapon = true;
+
     /** Rolls each weapon spawn point into a GroundItem with a real WeaponRoll (mirrors World). */
     private void buildGroundItems() {
         groundItems = new ArrayList<>();
+        boolean offeredOnLevelWeapon = false;
         for (WeaponSpawnPoint spawnPoint : level.getWeaponSpawnPoints()) {
             GroundItem groundItem = new GroundItem(spawnPoint.tileColumn, spawnPoint.tileRow,
                                                    spawnPoint.weaponItemType, 1);
             Weapon baseWeapon = playerController.findWeaponInArsenalForType(spawnPoint.weaponItemType);
             if (baseWeapon != null) {
-                groundItem.weaponRoll = weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+                // A PLANNED drop (order 2, S9) rolls at its planned level offset / tier floor (mirrors World).
+                groundItem.weaponRoll = spawnPoint.planned
+                        ? weaponRoller.rollPlannedToSnapshot(baseWeapon, currentDepth,
+                                spawnPoint.levelOffset, spawnPoint.tierBonus)
+                        : weaponRoller.rollToSnapshot(baseWeapon, currentDepth);
+                if (groundItem.weaponRoll.weaponLevel >= currentDepth) offeredOnLevelWeapon = true;
             }
             groundItems.add(groundItem);
         }
+        // The weapon cadence (mirrors RunStats.recordFloorWeaponOffer): a boss floor neither pays nor breaks it.
+        if (!GameMath.isBossFloor(currentDepth)) lastNonBossFloorOfferedOnLevelWeapon = offeredOnLevelWeapon;
     }
 
     // =====================================================================================
@@ -536,6 +569,7 @@ public final class SimWorld implements LevelTransitionListener {
             TouchAction action = policy.chooseAction(view);
             if (action == null || action == TouchAction.NONE) action = TouchAction.SKIP_TURN;
             int ammoBefore     = countAllAmmo();
+            int healthLostAtStart = floorLedger.healthLost;
             int columnBefore   = view.playerTileColumn();
             int rowBefore      = view.playerTileRow();
 
@@ -551,6 +585,10 @@ public final class SimWorld implements LevelTransitionListener {
             floorLedger.ammoSpent += Math.max(0, ammoBefore - countAllAmmo());
             turnsOnFloor++;
             floorLedger.turnsSpent = turnsOnFloor;
+            if (floorLedger.turnsToFirstDamageExchange < 0
+                    && (ammoBefore > countAllAmmo() || floorLedger.healthLost > healthLostAtStart)) {
+                floorLedger.turnsToFirstDamageExchange = turnsOnFloor;
+            }
 
             if (!player.isAlive()) {
                 recordDeath(threatWasTelegraphed, inResourceCrisis);
@@ -560,6 +598,7 @@ public final class SimWorld implements LevelTransitionListener {
         }
         floorLedger.enemiesLeftAlive = countLiveEnemies();
         floorLedger.exited           = descentRequested;
+        floorLedger.healthFractionOnExit = healthFraction();
         if (floorBoss != null) floorLedger.bossKilled = !floorBoss.isAlive();
         if (floorLedger.bossFloor && floorLedger.bossKilled
                 && currentDepth == Constants.BOSS_FLOOR_INTERVAL) {
@@ -785,7 +824,42 @@ public final class SimWorld implements LevelTransitionListener {
         pendingAttackerRole = null;
     }
 
+    /** Player health over max health — the S-SUPPLY measure (armour excluded: it is not HP). */
+    private float healthFraction() {
+        return player.getMaxHealth() <= 0 ? 0f : player.getHealth() / (float) player.getMaxHealth();
+    }
+
+    /** Copies what the shared FloorPopulator planned for this floor into the FLOOR REPORT fields. */
+    private void recordPlannedContent(ge.tbegvadze.toon3d.level.FloorContentReport report) {
+        if (report == null) return;
+        floorLedger.generatorName  = report.generatorName;
+        floorLedger.nodeType       = report.spec.type().name();
+        floorLedger.enemiesSpawned = report.enemyCount;
+        floorLedger.groups         = report.groupCount();
+        floorLedger.healValuePlaced = report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.HEAL)
+                + report.placement.placedValue(ge.tbegvadze.toon3d.level.SupplyCategory.ARMOUR);
+        floorLedger.healFloorFraction = report.plan.healFloorValue;
+        float reachable = 0f;
+        for (ge.tbegvadze.toon3d.level.SupplyPlacement.GroundPlacement ground : report.placement.ground()) {
+            if (ground.pickup.category == ge.tbegvadze.toon3d.level.SupplyCategory.HEAL && ground.reachableWithoutKeycard) {
+                reachable += ground.pickup.value;
+            }
+        }
+        floorLedger.reachableHealValue = reachable;
+        floorLedger.ammoPlannedDamage  = report.plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO);
+        floorLedger.plannedScarcityRatio = GameMath.scarcityRatio(floorLedger.ammoPlannedDamage,
+                report.plan.rosterEffectiveHitPoints);
+        int units = 0;
+        for (ge.tbegvadze.toon3d.level.PlannedPickup pickup : report.plan.pickups()) {
+            if (pickup.category != ge.tbegvadze.toon3d.level.SupplyCategory.AMMO) continue;
+            ge.tbegvadze.toon3d.item.AmmoType ammoType = ge.tbegvadze.toon3d.item.AmmoType.fromPickupChar(pickup.symbol);
+            if (ammoType != null) units += ammoType.getAmountPerBox();
+        }
+        floorLedger.ammoPlannedUnits = units;
+    }
+
     private void recordDeath(boolean threatWasTelegraphed, boolean inResourceCrisis) {
+        floorLedger.diedWithNoHealsHeld = view.medkitCount() == 0;
         ledger.ending                      = RunLedger.Ending.KILLED;
         ledger.endingDepth                 = currentDepth;
         ledger.deathWasTelegraphed         = threatWasTelegraphed;
@@ -818,24 +892,6 @@ public final class SimWorld implements LevelTransitionListener {
             demand += enemy.maxHealth;
         }
         return demand;
-    }
-
-    /**
-     * Damage the marine's CURRENT ranged ammo can deliver — the SUPPLY term of S. Counted per ammo
-     * type at the damage-per-unit of the best equipped weapon that uses it, matching the schema's
-     * model-floor supply arithmetic.
-     */
-    private float measureRangedSupplyDamage() {
-        float supply = 0f;
-        Loadout loadout = inventory.getLoadout();
-        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-            Weapon weapon = loadout.getSlot(slotIndex);
-            if (weapon == null || weapon.getAmmoType() == null) continue;
-            AmmoType ammoType = weapon.getAmmoType();
-            int units = itemInventory.countOf(ammoType.getItemType()) + weapon.getShotsInClip();
-            supply += units * (float) weapon.getEffectiveDamage();
-        }
-        return supply;
     }
 
     private int countAllAmmo() {
