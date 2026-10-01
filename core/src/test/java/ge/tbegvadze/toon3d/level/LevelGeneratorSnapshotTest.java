@@ -101,8 +101,12 @@ class LevelGeneratorSnapshotTest {
     // per-room loot, weapon racks or vault / research-lab rewards; every pickup is placed by the shared
     // SupplyPlanner AFTER the layout, gate and stairs are final, from the roster's demand. A deliberate
     // balance change; the new digest was confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 2, CP4 — GROUPS): the encounter is now a growing body target
+    // filled with group templates and placed one group per room AFTER the gate and stairs (first contact
+    // in the nearest room, anchor group deepest), which moves every enemy and the RNG stream behind it.
+    // Confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "70424713aab0185c8a09590188684385284fa4e9cc12422b038381b6f5be37a8";
+            "8b350df10eb650d63cbc45569d06aa6f971fb84ba8697eeeb5ada0c0db325182";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

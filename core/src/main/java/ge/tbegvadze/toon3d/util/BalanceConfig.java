@@ -1247,81 +1247,21 @@ public final class BalanceConfig {
     /** Depth-1 floor Threat-Point budget the generator spends on enemies. Range: 350–650. */
     public static final float FLOOR_BASE_THREAT_POINT_BUDGET = 500f;
 
-    /** Reserve at least this fraction of the floor budget for the single anchor enemy. Range: 0.10–0.25. */
-    public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN = 0.15f;
-    /** Reserve at most this fraction of the floor budget for the single anchor enemy. Range: 0.25–0.40. */
-    public static final float ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX = 0.30f;
-
-    /** No single enemy TYPE may consume more than this fraction of the floor budget (variety rule). Range: 0.30–0.55. */
-    public static final float ENCOUNTER_MAX_SINGLE_TYPE_FRACTION = 0.40f;
-
+    // ENCOUNTER COMPOSITION — REPLACED by balance-overhaul order 2 (override clause). The anchor reserve
+    // band + ceiling (ENCOUNTER_ANCHOR_BUDGET_*), the elite-gauntlet roll (ENCOUNTER_ELITE_ANCHOR_*), the
+    // per-room cap (ENCOUNTER_PER_ROOM_TP_FRACTION_CAP 0.25) and its room-geometry multipliers
+    // (ROOM_OPEN / ROOM_CHOKEPOINT), consecutive-run chaff packs (CHAFF_PACK_MIN / MAX) and the remainder
+    // pass are all GONE: a floor now fills a growing BODY TARGET with registered GROUP TEMPLATES (SECTION
+    // 21: BODY_TARGET_*, GROUP_*), the anchor is a template (ESCORT / WARBAND), the per-group cap is
+    // GROUP_TP_FRACTION_CAP 0.35, and chaff never spawns alone because every chaff slot fields at least
+    // GROUP_CHAFF_SLOT_MIN of one archetype. Only the fill target survives: the planner aims each pick at
+    // the threat-per-body still to spend so the roster ends near this fraction of the cap.
     /**
-     * No single (non-anchor) room may hold more than this fraction of the floor budget. Lowered
-     * 0.35 -> 0.25 alongside the load-balanced room distribution (LevelGenerator /
-     * LinearCorridorGenerator placeEnemyLoadBalanced): with enemies now fanned out across the whole
-     * floor this is a safety ceiling that stops a single room from becoming an un-winnable pile-up
-     * for a low-level player, rather than the primary distribution driver. Range: 0.25–0.45.
-     */
-    public static final float ENCOUNTER_PER_ROOM_TP_FRACTION_CAP = 0.25f;
-
-    /**
-     * Stop adding fill enemies once spent TP reaches this fraction of the budget — leaves a
-     * little headroom so a roster never overshoots the budget. Range: 0.85–1.0.
+     * The roster aims to spend this fraction of the floor's Threat-Point CAP by the time it reaches its
+     * body target (balance-overhaul order 2) — leaves a little headroom so a roster never overshoots. XP
+     * pacing (R-XP-PACE) reads the same fraction. Range: 0.85–1.0.
      */
     public static final float ENCOUNTER_BUDGET_FILL_TARGET_FRACTION = 0.95f;
-
-    /**
-     * Chance a floor is a deliberate "elite gauntlet" whose anchor is a mini-elite that exceeds
-     * the normal anchor reserve (the gauntlet-climax exception in idea 4). Range: 0.0–0.30.
-     */
-    public static final float ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE = 0.15f;
-    /** Earliest depth an elite-gauntlet floor may appear, so floor 1 is never a mini-elite spike. Range: 2–5. */
-    public static final int   ENCOUNTER_ELITE_ANCHOR_MIN_DEPTH    = 3;
-
-    // --- ENCOUNTER BUDGET V2 (new-game-balancr order 5) — three additions on top of the composition
-    // rules above. See docs/game-balance-knowledge.txt (ENCOUNTER BUDGET V2) and new-game-balancr-order-5.
-
-    // 1. TACTICAL ROOM CAPS — a room's spent TP is capped against its GEOMETRY, computed from the
-    //    generator's room metadata (open vs chokepoint), never a per-room hand tag. An OPEN room has
-    //    nowhere to break a ranged enemy's cardinal line, so it is capped LOWER; a corridor-adjacent
-    //    chokepoint is more defensible, so it may hold a little MORE.
-    /** Per-room TP cap multiplier for an OPEN room (no cover, wide sightlines — ranged lines can't be broken). Range: 0.7–0.9. */
-    public static final float ROOM_OPEN_TP_MULTIPLIER       = 0.8f;
-    /** Per-room TP cap multiplier for a corridor-adjacent CHOKEPOINT room (defensible — the player can funnel). Range: 1.0–1.2. */
-    public static final float ROOM_CHOKEPOINT_TP_MULTIPLIER = 1.1f;
-
-    // 2. PACK COHERENCE — chaff spawns in packs, because the golden-band CHAFF exemption ASSUMES packs
-    //    (a lone chaff reads a harmless ~9 golden ratio; it is balanced by pack TP). The spawner now
-    //    guarantees the assumption instead of hoping for it.
-    /** Minimum chaff pack size the encounter spawner guarantees (the golden-band exemption assumes packs). Range: 2–3. */
-    public static final int   CHAFF_PACK_MIN               = 2;
-    /** Maximum chaff pack size a single pack may reach before a new pack is started. Range: 3–5. */
-    public static final int   CHAFF_PACK_MAX               = 4;
-
-    // 4. BUDGET->BODIES CONVERSION (encounter-density-and-corpse-semantics) — the budget is only worth
-    //    what it actually BUYS. Two leaks used to strand a large share of a small floor's budget:
-    //    an anchor fallback with no ceiling, and a remainder too small to afford a minimum chaff pack.
-    //    A CALM (0.28x) floor therefore spent 96 of 126 TP on ONE bruiser and discarded the rest —
-    //    measured EXACTLY one enemy per floor across 100 seeds, on a full-size ~1,100-tile dungeon.
-    //    Both fixes below are Threat-Point-NEUTRAL: they change what the budget buys, never its size,
-    //    so every route-economics price (R-CALM-COST, R-RISK-PREMIUM) reads unchanged.
-    /**
-     * Hard CEILING on the fraction of the floor budget the single anchor may consume. The anchor
-     * reserve band ([_FRACTION_MIN, _FRACTION_MAX]) is a preference for WHICH anchor to pick; this is
-     * the rule that makes it binding. When no anchor fits this ceiling the floor gets NO anchor and
-     * the whole budget goes to fill — the honest shape of a light floor ("light stragglers", per
-     * CacheProfile) rather than one bruiser standing alone in an empty dungeon.
-     * Range: 0.30–0.50.
-     */
-    public static final float ENCOUNTER_ANCHOR_BUDGET_CEILING_FRACTION = ENCOUNTER_ANCHOR_BUDGET_FRACTION_MAX;
-    /**
-     * Whether the REMAINDER PASS may TOP UP a chaff type that is already present at full pack strength
-     * (>= CHAFF_PACK_MIN). It may never CREATE a lone chaff: the golden-band chaff exemption assumes
-     * packs, and R-ENEMY's pack-coherence audit (BalanceAuditTest.chaffAlwaysSpawnsInPacksOverAHundred
-     * Seeds) enforces that across 100 seeds x depths 1-15. Adding a 3rd Crawler to an existing pack of
-     * 2 keeps the invariant; adding a 1st Crawler breaks it. Non-chaff roles are always addable singly.
-     */
-    public static final boolean ENCOUNTER_REMAINDER_TOPS_UP_CHAFF_PACKS = true;
 
     // 3. THE REGION DANGER DIAL (fixes knowledge-doc problem 12) — route regions stop being frequency-only.
     //    Each region declares a Threat-Point budget multiplier applied ON TOP of the depth curve
@@ -2519,6 +2459,18 @@ public final class BalanceConfig {
     public static final int   SHAPE_BIG_GROUP_SIZE           = 3;
     /** E4: at most this many enemies stand alone. */
     public static final int   SHAPE_MAX_LONE_ENEMIES         = 3;
+    /** E2: every chaff slot fields at least this many of ONE archetype (chaff never spawns alone). */
+    public static final int   GROUP_CHAFF_SLOT_MIN           = 2;
+    /** E2: first depth an ELITE floor's anchor may be a WARBAND (a mini-elite + two soldiers). */
+    public static final int   GROUP_WARBAND_MIN_DEPTH        = 3;
+    /** E2: random noise added to a group pick's threat-per-body mismatch (variety between equal shapes). */
+    public static final float GROUP_SELECTION_NOISE          = 0.30f;
+    /** E2: random archetype draws tried per shape per pick before the shape is ruled out for that pick. */
+    public static final int   GROUP_INSTANTIATION_ATTEMPTS   = 4;
+    /** E2: the smallest remainder of bodies a shape can still field (a pick that strands fewer is penalised). */
+    public static final int   GROUP_MINIMUM_FILLABLE_REMAINDER = 3;
+    /** E5: a corridor-pocket first contact never stands closer than this to the start. */
+    public static final int   FIRST_CONTACT_MIN_WALK_TILES   = 5;
     /** E2: no single archetype may spend more than this fraction of the cap (variety, when alternatives exist). */
     public static final float GROUP_MAX_SINGLE_TYPE_FRACTION = 0.40f;
 

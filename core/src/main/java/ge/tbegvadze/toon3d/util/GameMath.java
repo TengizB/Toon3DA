@@ -3170,33 +3170,6 @@ public final class GameMath {
     }
 
     /*
-     * Formula: roomGeometryThreatCapMultiplier — TACTICAL ROOM CAPS (order 5, Pillar C.1)
-     * Derivation:
-     *   A room's share of the floor's Threat-Point budget is capped against its GEOMETRY, because the same
-     *   TP is more dangerous in an open room than a defensible one. An OPEN room (no cover, wide sightlines)
-     *   gives the player nowhere to break a ranged enemy's cardinal line, so it is capped LOWER; a
-     *   corridor-adjacent CHOKEPOINT room lets the player funnel the pack, so it may hold a little MORE —
-     *       multiplier = openMultiplier        if isOpenRoom
-     *                    chokepointMultiplier   if isChokepointRoom
-     *                    1.0                    otherwise (a neutral room)
-     *   The flags come from the generator's own room metadata (footprint / corridor adjacency), never a
-     *   per-room hand tag. OPEN takes precedence if a room somehow reads as both (a big room is open first).
-     * Edge cases:
-     *   Neither flag -> 1.0 (the base per-room cap is unchanged). Both flags -> open wins (the conservative,
-     *     lower cap). The multipliers themselves are validated in band by BalanceSchema.
-     */
-    public static float roomGeometryThreatCapMultiplier(boolean isOpenRoom, boolean isChokepointRoom,
-                                                        float openMultiplier, float chokepointMultiplier) {
-        if (isOpenRoom) {
-            return openMultiplier;
-        }
-        if (isChokepointRoom) {
-            return chokepointMultiplier;
-        }
-        return 1f;
-    }
-
-    /*
      * Formula: enemyThreatAtDepth — an archetype's Threat-Point cost on a given floor
      * Derivation:
      *   An enemy's depth-1 base Threat-Point value (EnemyType.baseThreatPoints) is scaled

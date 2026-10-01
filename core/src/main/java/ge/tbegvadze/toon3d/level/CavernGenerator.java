@@ -1,6 +1,5 @@
 package ge.tbegvadze.toon3d.level;
 
-import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.tileset.LevelPalettes;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.LevelGenConstants;
@@ -29,9 +28,10 @@ import java.util.Random;
  *                          stalagmite columns, optional barrel cluster.
  * Phase 6 — (removed)      per-chamber loot is gone (balance-overhaul order 2): the shared
  *                          FloorPopulator plans and places every pickup after the layout is final.
- * Phase 7 — Enemies:       scatter spawn points in cave body outside safe radius.
  * Phase 8 — Stairs:        BFS to find tile farthest from player spawn.
  * Phase 9 — Connectivity:  final BFS audit; emergency tunnel if any chamber isolated.
+ * Phase 11 — Encounter + supply (balance-overhaul order 2): group templates placed one group per
+ *                          chamber / cave pocket; the shared FloorPopulator plans every pickup.
  *
  * Grid convention: (0,0) = bottom-left tile, Y-up. No LibGDX imports — pure Java.
  */
@@ -72,10 +72,6 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     private       int[][]       supplyRegionMap;
     private       List<Chamber> supplyChambers;
 
-    // The encounter step's facts for the floor report.
-    private       int   lastAnchorSpawnIndex = -1;
-    private       float lastThreatSpent;
-    private       float lastThreatCap;
 
     // Per-tile biome id for the open cave body; -1 = wall, chamber, or unseeded.
     // Populated by assignBiomes() and consumed by every cave-body decoration pass.
@@ -125,9 +121,6 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
 
-        lastAnchorSpawnIndex = -1;
-        lastThreatSpent      = 0f;
-        lastThreatCap        = 0f;
         spawnColumn = gridWidth  / 2;
         spawnRow    = gridHeight / 2;
 
@@ -165,12 +158,8 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         decorateCaveBody(grid, chamberMask, biomes);
         decorateChambers(grid, chambers);
 
-        // Phase 8 — enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
-        // Pillar 1) instead of a flat biome-weighted spawn count.
-        List<EnemySpawnPoint> spawnPoints = placeEnemies(grid);
-
         // Phase 9 — stairs
-        stampStairsDown(grid, spawnPoints);
+        stampStairsDown(grid);
 
         // Phase 10 — connectivity audit
         verifyChamberConnectivity(grid, chambers);
@@ -183,9 +172,20 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
         // carrier comes from the shared planner. The old MEDICAL_BAY-only medkit path is gone: a cave
         // floor carries the same heal floor and supply-to-demand ratio as a rooms floor at its depth.
         buildSupplyRegionMap(chambers);
+
+        // Phase 11a — ENCOUNTER (balance-overhaul order 2, E1-E5): group templates placed one group per
+        // chamber / cave pocket on the FINISHED cave — first contact in the nearest pocket off the start,
+        // the anchor group deepest — instead of a scatter across the whole cave body.
+        ge.tbegvadze.toon3d.route.NodeSupplySpec spec = FloorPopulator.specOf(config);
+        EncounterBudgetPlanner.Plan encounter =
+                new EncounterBudgetPlanner(dungeonDepth, random, enemyBudgetScale, spec).plan();
+        EncounterPlacer.Placement placement = EncounterPlacer.place(grid, SupplySlotSurvey.survey(grid, this),
+                encounter, this::isCaveSpawnCell, random, dungeonDepth, spec.shapeRulesApply());
+
         FloorPopulator.Result populated = FloorPopulator.populate(
-                ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(), grid, this, spawnPoints,
-                new FloorPopulator.EncounterFacts(lastAnchorSpawnIndex, lastThreatSpent, lastThreatCap, 0, 0),
+                ge.tbegvadze.toon3d.route.GeneratorId.CAVERN.stableId(), grid, this, placement.spawnPoints,
+                new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
+                        encounter.floorBudget(), encounter.bodyTarget(), 0),
                 config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          LevelPalettes.generatedWithBaseWall(seed)));
@@ -1067,123 +1067,16 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     // -------------------------------------------------------------------------
     // Phase 6 — pickups
     // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
-    // Phase 6 — weapon spawns
+    // Phase 11 — encounter spawn rule (balance-overhaul order 2: EncounterPlacer)
     // -------------------------------------------------------------------------
 
-    // -------------------------------------------------------------------------
-    // Phase 7 — enemy placement (cave body scatter)
-    // -------------------------------------------------------------------------
-
-    /**
-     * Spends the floor's encounter Threat-Point budget (balance idea 4, Pillar 1) by scattering
-     * the planned roster across eligible cave tiles. The cave has no discrete rooms, so the
-     * EncounterBudgetPlanner roster (which already enforces the anchor / type-variety /
-     * ranged-melee-mix composition rules) is simply realised on walkable tiles beyond the spawn
-     * safe radius — replacing the old flat biome-weighted spawn count.
-     */
-    private List<EnemySpawnPoint> placeEnemies(char[][] grid) {
-        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
-        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
-        List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
-
-        EncounterBudgetPlanner.Plan plan =
-                new EncounterBudgetPlanner(dungeonDepth, random, enemyBudgetScale).plan();
-        List<EnemyType> roster = plan.enemies();
-        lastThreatSpent = plan.spentThreatPoints();
-        lastThreatCap   = plan.floorBudget();
-        if (roster.isEmpty()) return spawnPoints;
-        if (plan.anchor() != null) lastAnchorSpawnIndex = 0;   // the planner emits the anchor first
-
-        boolean[][] usedTiles = new boolean[gridHeight][gridWidth];
-        // PACK COHERENCE IN SPACE: the planner emits a pack as a run of consecutive identical entries.
-        // A cave has no rooms to place them in, so the pack clusters around its first member instead —
-        // the same "the player meets groups, not a scattering of solo duels" guarantee the room-based
-        // generators get from tryPlacePackInRoom.
-        for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
-            EnemyType enemy    = roster.get(rosterIndex);
-            int       packSize = packRunLengthAt(roster, rosterIndex);
-            if (!placeOneEnemy(grid, usedTiles, spawnPoints, enemy)) {
-                continue;   // no eligible tile anywhere in the cave — nothing more to try
-            }
-            EnemySpawnPoint leader = spawnPoints.get(spawnPoints.size() - 1);
-            int placed = 1;
-            for (int ring = 1; ring <= LevelGenConstants.LEVEL_GEN_PACK_CLUSTER_RADIUS
-                    && placed < packSize; ring++) {
-                for (int rowOffset = -ring; rowOffset <= ring && placed < packSize; rowOffset++) {
-                    for (int columnOffset = -ring; columnOffset <= ring && placed < packSize; columnOffset++) {
-                        if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;
-                        int tileColumn = leader.tileColumn + columnOffset;
-                        int tileRow    = leader.tileRow    + rowOffset;
-                        if (!isCaveSpawnTile(grid, usedTiles, tileColumn, tileRow)) continue;
-                        usedTiles[tileRow][tileColumn] = true;
-                        spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
-                        placed++;
-                    }
-                }
-            }
-            // Cave walls can make the cluster too tight for the whole pack; the rest go anywhere
-            // eligible rather than being dropped (the budget for them was already spent).
-            while (placed < packSize && placeOneEnemy(grid, usedTiles, spawnPoints, enemy)) {
-                placed++;
-            }
-            rosterIndex += packSize - 1;
-        }
-        return spawnPoints;
-    }
-
-    /**
-     * Length of the run of consecutive identical entries starting at {@code startIndex} — how
-     * {@link EncounterBudgetPlanner} emits a pack — capped at {@code CHAFF_PACK_MAX}.
-     */
-    private int packRunLengthAt(List<EnemyType> roster, int startIndex) {
-        EnemyType type   = roster.get(startIndex);
-        int       length = 1;
-        while (startIndex + length < roster.size()
-                && roster.get(startIndex + length) == type
-                && length < BalanceConfig.CHAFF_PACK_MAX) {
-            length++;
-        }
-        return length;
-    }
-
-    /**
-     * Places one enemy on any eligible cave tile: random probing first, then a deterministic full-grid
-     * scan. The scan matters — probing alone silently dropped the enemy (and the Threat Points already
-     * spent on it) whenever the probes missed, which on a cave-shaped grid is often.
-     */
-    private boolean placeOneEnemy(char[][] grid, boolean[][] usedTiles,
-                                  List<EnemySpawnPoint> spawnPoints, EnemyType enemy) {
-        int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
-        int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
-        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_PROBE_ATTEMPTS; attempt++) {
-            int tileColumn = 1 + random.nextInt(gridWidth  - 2);
-            int tileRow    = 1 + random.nextInt(gridHeight - 2);
-            if (!isCaveSpawnTile(grid, usedTiles, tileColumn, tileRow)) continue;
-            usedTiles[tileRow][tileColumn] = true;
-            spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
-            return true;
-        }
-        for (int tileRow = 1; tileRow < gridHeight - 1; tileRow++) {
-            for (int tileColumn = 1; tileColumn < gridWidth - 1; tileColumn++) {
-                if (!isCaveSpawnTile(grid, usedTiles, tileColumn, tileRow)) continue;
-                usedTiles[tileRow][tileColumn] = true;
-                spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** An unclaimed, walkable cave tile outside the player's spawn safe radius. */
-    private boolean isCaveSpawnTile(char[][] grid, boolean[][] usedTiles, int tileColumn, int tileRow) {
+    /** A walkable cave tile (floor or decal, not the start) outside the player's spawn safe radius. */
+    private boolean isCaveSpawnCell(char[][] grid, int tileColumn, int tileRow) {
         if (tileColumn < 1 || tileColumn >= LevelGenConstants.LEVEL_GEN_GRID_WIDTH  - 1) return false;
         if (tileRow    < 1 || tileRow    >= LevelGenConstants.LEVEL_GEN_GRID_HEIGHT - 1) return false;
         char cell = grid[tileRow][tileColumn];
         if (!isWalkableTile(cell) && !isDecal(cell)) return false;
         if (cell == 'p')                             return false;
-        if (usedTiles[tileRow][tileColumn])          return false;
         int chebyshevDistance = Math.max(Math.abs(tileColumn - spawnColumn),
                                          Math.abs(tileRow    - spawnRow));
         return chebyshevDistance >= LevelGenConstants.LEVEL_GEN_CAVE_SPAWN_SAFE_RADIUS;
@@ -1193,7 +1086,7 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
     // Phase 8 — stairs (BFS farthest from spawn)
     // -------------------------------------------------------------------------
 
-    private void stampStairsDown(char[][] grid, List<EnemySpawnPoint> spawnPoints) {
+    private void stampStairsDown(char[][] grid) {
         int gridWidth  = LevelGenConstants.LEVEL_GEN_GRID_WIDTH;
         int gridHeight = LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
         int[][] distance = new int[gridHeight][gridWidth];

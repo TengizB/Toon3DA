@@ -432,12 +432,13 @@ public final class BalanceReport {
     // Uses a fixed seed so the report is reproducible run-to-run.
     // -----------------------------------------------------------------------------------
     private static void printEncounterTable() {
-        System.out.println("ENCOUNTER BUDGET (idea 4) — base budget = "
-                + String.format("%.0f", BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET) + " TP at depth 1");
-        System.out.printf("%-6s %8s %8s %6s %-14s %-9s %-7s %-7s%n",
-                "depth", "budget", "spent", "count", "anchor", "maxType%", "mix?", "rules?");
+        System.out.println("ENCOUNTER (balance-overhaul order 2) — COMBAT floor: body target filled with group templates "
+                + "under a Threat-Point CAP (base " + String.format("%.0f", BalanceConfig.FLOOR_BASE_THREAT_POINT_BUDGET)
+                + " TP at depth 1)");
+        System.out.printf("%-6s %8s %8s %6s %6s %-34s %-14s %-9s %-7s %-7s%n",
+                "depth", "cap", "spent", "bodies", "target", "groups", "anchor", "maxType%", "mix?", "rules?");
         System.out.println("------------------------------------------------------------------------------------");
-        int[] depths = {1, 2, 3, 5, 8};
+        int[] depths = {1, 2, 3, 5, 8, 15, 25};
         for (int depth : depths) {
             printEncounterRow(depth);
         }
@@ -472,14 +473,19 @@ public final class BalanceReport {
 
         boolean anchorOk = plan.anchor() != null;
         // Anchor is exempt from the per-type cap; fill types must respect it.
-        boolean typeOk   = maxFillTypeFraction <= BalanceConfig.ENCOUNTER_MAX_SINGLE_TYPE_FRACTION + 0.001f;
+        boolean typeOk   = maxFillTypeFraction <= BalanceConfig.GROUP_MAX_SINGLE_TYPE_FRACTION + 0.001f;
         boolean mixOk    = hasRanged && hasMelee;
         boolean allRules = anchorOk && typeOk && mixOk;
 
         String anchorName = plan.anchor() == null ? "(none)" : plan.anchor().displayName();
-        System.out.printf("%-6d %8.0f %8.0f %6d %-14s %-9.0f %-7s %-7s%n",
-                depth, plan.floorBudget(), plan.spentThreatPoints(), roster.size(),
-                anchorName, maxTypeFraction * 100f,
+        StringBuilder shapes = new StringBuilder();
+        for (ge.tbegvadze.toon3d.level.EncounterGroup group : plan.groups()) {
+            if (shapes.length() > 0) shapes.append(' ');
+            shapes.append(group.templateId, 0, Math.min(4, group.templateId.length())).append(group.size());
+        }
+        System.out.printf("%-6d %8.0f %8.0f %6d %6d %-34s %-14s %-9.0f %-7s %-7s%n",
+                depth, plan.floorBudget(), plan.spentThreatPoints(), roster.size(), plan.bodyTarget(),
+                shapes, anchorName, maxTypeFraction * 100f,
                 mixOk ? "OK" : "NO", allRules ? "OK" : "CHECK");
     }
 

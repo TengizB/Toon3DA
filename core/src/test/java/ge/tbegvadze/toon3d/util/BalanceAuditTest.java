@@ -250,30 +250,37 @@ class BalanceAuditTest {
     }
 
     /**
-     * Order-5 PACK COHERENCE acceptance criterion: chaff ALWAYS spawns in packs of >= CHAFF_PACK_MIN.
-     * Proven over 100 seeds x depths 1..15 by planning the encounter roster and asserting no CHAFF-role
-     * type ever appears alone (the golden-band chaff exemption assumes packs — the spawner guarantees it).
+     * PACK COHERENCE (order 5; re-stated by balance-overhaul order 2): chaff never spawns alone. Since order 2
+     * every chaff slot of every group template fields at least GROUP_CHAFF_SLOT_MIN of ONE archetype, so no
+     * CHAFF-role type ever appears fewer times than that on a planned floor. Proven over 100 seeds x depths
+     * 1..15 for every node kind that fields enemies (COMBAT, ELITE, CALM).
      */
     @Test
     void chaffAlwaysSpawnsInPacksOverAHundredSeeds() {
         java.util.List<String> lonePacks = new java.util.ArrayList<>();
-        for (long seed = 0; seed < 100; seed++) {
-            for (int depth = 1; depth <= 15; depth++) {
-                ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
-                        new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
-                                depth, new java.util.Random(seed * 97L + depth)).plan();
-                java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> counts =
-                        new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
-                for (ge.tbegvadze.toon3d.enemy.EnemyType type : plan.enemies()) {
-                    counts.merge(type, 1, Integer::sum);
-                }
-                for (java.util.Map.Entry<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> entry
-                        : counts.entrySet()) {
-                    if (entry.getKey().role() == ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF
-                            && entry.getValue() < BalanceConfig.CHAFF_PACK_MIN) {
-                        lonePacks.add(String.format("  seed=%d depth=%d %s count=%d (< %d)",
-                                seed, depth, entry.getKey().displayName(), entry.getValue(),
-                                BalanceConfig.CHAFF_PACK_MIN));
+        ge.tbegvadze.toon3d.route.NodeSupplySpec[] specs = {
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.combat(),
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.elite(),
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.cache()};
+        for (ge.tbegvadze.toon3d.route.NodeSupplySpec spec : specs) {
+            for (long seed = 0; seed < 100; seed++) {
+                for (int depth = 1; depth <= 15; depth++) {
+                    ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
+                            new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
+                                    depth, new java.util.Random(seed * 97L + depth), 1f, spec).plan();
+                    java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> counts =
+                            new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
+                    for (ge.tbegvadze.toon3d.enemy.EnemyType type : plan.enemies()) {
+                        counts.merge(type, 1, Integer::sum);
+                    }
+                    for (java.util.Map.Entry<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> entry
+                            : counts.entrySet()) {
+                        if (entry.getKey().role() == ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF
+                                && entry.getValue() < BalanceConfig.GROUP_CHAFF_SLOT_MIN) {
+                            lonePacks.add(String.format("  %s seed=%d depth=%d %s count=%d (< %d)",
+                                    spec.type(), seed, depth, entry.getKey().displayName(), entry.getValue(),
+                                    BalanceConfig.GROUP_CHAFF_SLOT_MIN));
+                        }
                     }
                 }
             }
@@ -608,6 +615,19 @@ class BalanceAuditTest {
     @Test
     void theSupplyPlannerTracksDemandOnEverySpec() {
         assertNoViolations(BalanceSchema.supplyPlannerResults());
+    }
+
+    /**
+     * R-DENSITY, encounter half (balance-overhaul order 2, A3 / A5): on every generator x COMBAT / ELITE /
+     * CACHE / SHOP x audited depth x 30 seeds, the floor fields its E1 body target; COMBAT and ELITE floors
+     * keep >= 75% of enemies in groups of two or more, at least two groups of three or more and at most
+     * three lone enemies (E4), and meet their first group within 18 walk tiles of the start (12 on depth 1),
+     * never in the start room (E5).
+     */
+    @Test
+    void everyCombatFloorFieldsItsGroupsAndAFirstContact() {
+        assertNoViolations(BalanceSchema.densitySweepResults("bodies", "grouped", "big groups", "lone",
+                "first contact", "start room"));
     }
 
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */

@@ -632,6 +632,10 @@ degradation, i.e. it gets unfairly hard and that is currently accepted, not fixe
 ================================================================================
 SECTION 11 — ENCOUNTER BUDGET (difficulty as a dial, not an accident)
 ================================================================================
+  SUPERSEDED (balance-overhaul order 2, CP4): the composition rules below are REPLACED — a floor
+  fills a growing BODY TARGET with GROUP TEMPLATES under a Threat-Point CAP, and the enemy COUNT now
+  grows with depth (12-16 at depth 1 -> 22-28 at depth 25). See docs/game-balance-authority.txt R-DENSITY.
+  This section is rewritten in full at order 2's CP7.
 File: BalanceConfig SECTION 11; level/EncounterBudgetPlanner.java; GameMath.
 
 The generator SPENDS a per-floor Threat-Point budget instead of rolling enemies at

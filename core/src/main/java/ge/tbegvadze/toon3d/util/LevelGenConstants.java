@@ -64,23 +64,13 @@ public final class LevelGenConstants {
     // room max (LEVEL_GEN_ROOM_MAX_WIDTH/HEIGHT) so the modifier reads as genuinely oversized.
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH   = 28;
     public static final int   LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT  = 20;
-    // TACTICAL ROOM CAP geometry classifier (new-game-balancr order 5, Pillar C.1). A room's share of
-    // the floor Threat-Point budget is scaled by its geometry: a LARGE room reads OPEN (wide sightlines,
-    // nowhere to break a ranged enemy's cardinal line) and caps LOWER; a small room whose smaller interior
-    // dimension is at most this many tiles reads as a corridor-like CHOKEPOINT (the player can funnel the
-    // pack) and caps HIGHER. Derived from the generator's own room metadata (Room.isLarge + interior dims),
-    // never a per-room hand tag. The cap multipliers themselves live in BalanceConfig (ROOM_*_TP_MULTIPLIER).
-    public static final int   LEVEL_GEN_CHOKEPOINT_INTERIOR_MAX = 3;
-
-    // ENEMY SPAWN TILE SEARCH. A spawn tile is found by random probing inside the room; when probing
-    // fails the room used to be retired PERMANENTLY, which silently dropped ~10% of every floor's
-    // planned roster (worst measured case: 13 enemies of one roster, i.e. most of the floor) because an
-    // unlucky probe run is indistinguishable from a genuinely full room. Probing is now backed by a
-    // deterministic full interior scan, so a room is only retired when it truly has no eligible tile.
-    /** Random tile probes before falling back to the deterministic full-interior scan. Range: 24–64. */
-    public static final int   LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS = 40;
-    /** As above for the cave generator, which probes the whole grid rather than one room. Range: 48–128. */
-    public static final int   LEVEL_GEN_CAVE_SPAWN_PROBE_ATTEMPTS  = 80;
+    // The linear generator's ENTRANCE room is always a small room of at most this interior side
+    // (balance-overhaul order 2, E5): from its centre the spine — and the floor's first fight — must be
+    // within FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES walk tiles.
+    public static final int   LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM     = 7;
+    // (balance-overhaul order 2) The tactical room-cap classifier and the random spawn-tile probes are
+    // gone with the per-room budget: groups are placed one per room by level/EncounterPlacer, which reads
+    // every room's spawnable tiles from the finished layout.
 
     // PACK COHERENCE IN SPACE (encounter-density-and-corpse-semantics). The planner forms chaff packs
     // because the golden-band chaff exemption assumes them, then the load balancer used to scatter each

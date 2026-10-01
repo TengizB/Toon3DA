@@ -394,24 +394,25 @@ public final class SupplyPlanner {
                     && healFloorEarly + ROUNDING_EPSILON < BalanceConfig.SUPPLY_HEAL_EARLY_SHARE
                             * (healFloorPlaced + pickup.value);
             int chosen = -1;
-            // Tiers of relaxation: rooms under the cap -> corridor connectors (not rooms, so the S7 share
-            // is never broken) -> any room under the cap or connector (lets an anchor-bound pickup leave the
-            // anchor's room) -> (last resort) any tile, dropping the cap and the "early" and "behind the
-            // anchor" preferences. The heal floor is NEVER placed behind a keycard.
-            for (int tier = 0; tier < 4 && chosen < 0; tier++) {
+            // Tiers of relaxation: 0 rooms under the cap -> 1 corridor connectors (not rooms, so the S7
+            // share is never broken) -> 2 rooms under the cap past the anchor (lets an anchor-bound pickup
+            // leave the anchor's room) -> 3 any room under the cap or connector, dropping the "early" and
+            // "behind the anchor" preferences -> 4 (last resort) any tile. The heal floor is NEVER placed
+            // behind a keycard.
+            for (int tier = 0; tier < 5 && chosen < 0; tier++) {
                 float bestScore = -Float.MAX_VALUE;
                 for (int slotIndex = 0; slotIndex < slots.size(); slotIndex++) {
                     if (taken[slotIndex]) continue;
                     SupplySlot slot = slots.get(slotIndex);
-                    if (tier == 0 && (slot.isConnector()
-                            || perRoom.getOrDefault(slot.regionId, 0) >= roomCap)) continue;
+                    boolean roomFull = !slot.isConnector()
+                            && perRoom.getOrDefault(slot.regionId, 0) >= roomCap;
+                    if (tier == 0 && (slot.isConnector() || roomFull)) continue;
                     if (tier == 1 && !slot.isConnector()) continue;
+                    if ((tier == 2 || tier == 3) && roomFull) continue;
                     if (pickup.healFloor) {
                         if (!slot.reachableWithoutKeycard) continue;
                         if (needEarly && tier < 3 && slot.walkDistance > halfDistance) continue;
                     }
-                    if (tier == 2 && !slot.isConnector()
-                            && perRoom.getOrDefault(slot.regionId, 0) >= roomCap) continue;
                     if (pickup.behindAnchor && anchorRegionId >= 0 && tier < 3) {
                         // In the anchor's room first; failing that, anywhere at least as deep as it.
                         boolean inAnchor = slot.regionId == anchorRegionId;

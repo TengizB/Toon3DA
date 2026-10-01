@@ -70,7 +70,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
         R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH replaced (override clause); dead per-room / per-kill / chip
         constants deleted.
         DONE WHEN: full R-SUPPLY sweep green; table prints; A1, A2 hold; both gates green.
-- [ ] **CP4** — group templates, body targets, group placement, shape + first-contact rules in every
+- [x] **CP4** — group templates, body targets, group placement, shape + first-contact rules in every
       combat generator.
       DONE WHEN: R-DENSITY (bodies/shape/contact) green; A5 partly (contact, count).
 - [ ] **CP5** — footprint targets in the three combat generators.
@@ -191,3 +191,25 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **DOCS (override clause):** authority doc R-SCARCITY / R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH -> RETIRED
   records + new R-SUPPLY block + change-log entry; knowledge SECTION 12 carries a SUPERSEDED banner (full
   rewrite owed in CP7 with the living tables).
+- **CP4 handover:** `EncounterBudgetPlanner(depth, random, budgetScale, spec).plan()` -> `Plan.groups()`
+  (`EncounterGroup{templateId, members, anchor, threat}`), `enemies()`, `anchor()`, `floorBudget()` (the CAP),
+  `spentThreatPoints()`, `bodyTarget()`, `threatOf()`. Templates: `EncounterGroupTemplateRegistry.shared()` /
+  `EncounterGroupTemplates.registerAll` (PACK/FIRETEAM/ESCORT/BATTERY/WARBAND/HUNTER), slot roles in
+  `EncounterGroupRole` (per-constant `admits`). `EncounterPlacer.place(grid, survey, plan, spawnRule, random, depth,
+  firstContactRule)` -> `Placement{spawnPoints (groupId set), anchorSpawnIndex}`. All three combat generators now
+  run encounter AFTER gate + stairs (`buildSupplyRegionMap` first, then survey -> plan -> place -> populate).
+  `BalanceSchema.densitySweepResults(String...)` + `bodyBand(spec, depth)`; test
+  `everyCombatFloorFieldsItsGroupsAndAFirstContact`. Pack-coherence test re-stated on GROUP_CHAFF_SLOT_MIN over
+  COMBAT/ELITE/CACHE specs. Snapshot re-baselined (`8b350df1...`, stable over two JVM runs).
+- **CP4 measurements (20 seeds):** bodies hit target (COMBAT d1 ~13.6/13.9, d25 24.8); ELITE spent TP ~1.6x COMBAT
+  at d1/5/10/25 (A6 numerical half); first contact d1: rooms ~10, cave ~8, linear ~11 tiles. balanceSim: TACTICAL
+  148/200 stalled (was 174), median depth 2; emergency lifeline floors 0.04 (band 0.05 — watch it in CP5-CP7).
+- **DECISIONS (CP4):** first contact may fall back to a corridor POCKET (connector tiles within the limit, >=
+  FIRST_CONTACT_MIN_WALK_TILES 5 from the start) when no room is close enough; the linear entrance room is always
+  small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7). Planner: groups shrink to fit the per-group cap; picks leave a
+  fillable remainder (0 or >= 3); each pick reserves cap for the cheapest fill of the remaining bodies; 4 random
+  draws per shape per pick. Supply placement gained a 5th tier (cap kept, anchor/early preferences dropped)
+  before the no-constraint last resort.
+- **NEXT (CP5):** footprint. Rooms walk ~1130, linear ~690, cave ~2100 tiles vs region A target 350-550.
+  `LevelGenConfig.targetWalkableTiles` (set where? — profile/World: GameMath.footprintTargetWalkableTiles(region,
+  roll, spec.footprintLowerHalf)); the sweep's `sweepConfig` must set it too. Density bands then audited.

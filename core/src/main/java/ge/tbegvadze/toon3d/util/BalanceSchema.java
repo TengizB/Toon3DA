@@ -832,6 +832,7 @@ public final class BalanceSchema {
         results.addAll(ladderAffordResults());
         results.addAll(supplyPlannerResults());
         results.addAll(supplySweepResults());
+        results.addAll(densitySweepResults());
         return results;
     }
 
@@ -2599,6 +2600,101 @@ public final class BalanceSchema {
     public static List<RuleResult> supplySweepResults(String... subjectFragments) {
         List<RuleResult> selected = new ArrayList<>();
         for (RuleResult result : supplySweepResults()) {
+            for (String fragment : subjectFragments) {
+                if (result.subject.contains(fragment)) {
+                    selected.add(result);
+                    break;
+                }
+            }
+        }
+        return selected;
+    }
+
+
+    // =====================================================================================
+    // R-DENSITY (balance-overhaul order 2, A3 / A5) — what the generator sweep FIELDS: bodies against the
+    // E1 band, group shape (E4) and first contact (E5) on COMBAT / ELITE, read from the same cached
+    // FloorContentReports as R-SUPPLY.
+    // =====================================================================================
+
+    /** The E1 body band for a spec at a depth: the body-target band x the spec's body scale. */
+    public static int[] bodyBand(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth) {
+        float low  = GameMath.bodyTargetAtDepth(depth, 0f,
+                BalanceConfig.BODY_TARGET_MIN_DEPTH_ONE, BalanceConfig.BODY_TARGET_MAX_DEPTH_ONE,
+                BalanceConfig.BODY_TARGET_MIN_DEEP, BalanceConfig.BODY_TARGET_MAX_DEEP,
+                BalanceConfig.BODY_TARGET_REFERENCE_DEEP_DEPTH) * spec.bodyScale();
+        float high = GameMath.bodyTargetAtDepth(depth, 1f,
+                BalanceConfig.BODY_TARGET_MIN_DEPTH_ONE, BalanceConfig.BODY_TARGET_MAX_DEPTH_ONE,
+                BalanceConfig.BODY_TARGET_MIN_DEEP, BalanceConfig.BODY_TARGET_MAX_DEEP,
+                BalanceConfig.BODY_TARGET_REFERENCE_DEEP_DEPTH) * spec.bodyScale();
+        return new int[]{Math.round(low), Math.round(high)};
+    }
+
+    /** R-DENSITY over the generator sweep: one result per check per cell, worst case over its seeds. */
+    public static synchronized List<RuleResult> densitySweepResults() {
+        List<RuleResult> results = new ArrayList<>();
+        Map<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cells = new java.util.LinkedHashMap<>();
+        for (ge.tbegvadze.toon3d.level.FloorContentReport report : supplySweepReports()) {
+            ge.tbegvadze.toon3d.route.NodeSupplySpec spec = report.spec;
+            if (!spec.shapeRulesApply() && !spec.hasDensityBand()) continue;
+            cells.computeIfAbsent(report.generatorName + " " + spec.type() + " d" + report.depth,
+                    key -> new ArrayList<>()).add(report);
+        }
+        for (Map.Entry<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cell : cells.entrySet()) {
+            List<ge.tbegvadze.toon3d.level.FloorContentReport> reports = cell.getValue();
+            ge.tbegvadze.toon3d.level.FloorContentReport first = reports.get(0);
+            ge.tbegvadze.toon3d.route.NodeSupplySpec spec = first.spec;
+            int[] band = bodyBand(spec, first.depth);
+            int fewest = Integer.MAX_VALUE;
+            int most   = 0;
+            float leastGrouped = Float.MAX_VALUE;
+            int fewestBigGroups = Integer.MAX_VALUE;
+            int mostLone = 0;
+            int farthestContact = 0;
+            int missingContact = 0;
+            int inStartRoom = 0;
+            for (ge.tbegvadze.toon3d.level.FloorContentReport report : reports) {
+                fewest = Math.min(fewest, report.enemyCount);
+                most   = Math.max(most, report.enemyCount);
+                if (!spec.shapeRulesApply()) continue;
+                float grouped = report.enemyCount == 0 ? 1f : report.groupedEnemies() / (float) report.enemyCount;
+                leastGrouped    = Math.min(leastGrouped, grouped);
+                fewestBigGroups = Math.min(fewestBigGroups, report.groupsOfAtLeast(BalanceConfig.SHAPE_BIG_GROUP_SIZE));
+                mostLone        = Math.max(mostLone, report.loneEnemies);
+                if (report.firstContactWalkTiles < 0) missingContact++;
+                else farthestContact = Math.max(farthestContact, report.firstContactWalkTiles);
+                if (report.groupInStartRegion) inStartRoom++;
+            }
+            String where = cell.getKey() + " ";
+            results.add(new RuleResult(RuleKind.DENSITY, where + "bodies fewest (E1)", fewest, band[0], band[1],
+                    fewest >= band[0], reports.size() + " floors"));
+            results.add(new RuleResult(RuleKind.DENSITY, where + "bodies most (E1)", most, band[0], band[1],
+                    most <= band[1], reports.size() + " floors"));
+            if (!spec.shapeRulesApply()) continue;
+            results.add(new RuleResult(RuleKind.DENSITY, where + "grouped share (E4)", leastGrouped,
+                    BalanceConfig.SHAPE_GROUPED_MIN_FRACTION, 1f,
+                    leastGrouped >= BalanceConfig.SHAPE_GROUPED_MIN_FRACTION, "worst floor"));
+            results.add(new RuleResult(RuleKind.DENSITY, where + "big groups (E4)", fewestBigGroups,
+                    BalanceConfig.SHAPE_MIN_BIG_GROUPS, Float.POSITIVE_INFINITY,
+                    fewestBigGroups >= BalanceConfig.SHAPE_MIN_BIG_GROUPS,
+                    "groups of >= " + BalanceConfig.SHAPE_BIG_GROUP_SIZE + ", worst floor"));
+            results.add(new RuleResult(RuleKind.DENSITY, where + "lone enemies (E4)", mostLone, 0f,
+                    BalanceConfig.SHAPE_MAX_LONE_ENEMIES, mostLone <= BalanceConfig.SHAPE_MAX_LONE_ENEMIES, "worst floor"));
+            int limit = first.depth <= 1 ? BalanceConfig.FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES
+                                         : BalanceConfig.FIRST_CONTACT_MAX_WALK_TILES;
+            results.add(new RuleResult(RuleKind.DENSITY, where + "first contact walk (E5)", farthestContact, 0f, limit,
+                    farthestContact <= limit && missingContact == 0,
+                    missingContact == 0 ? "worst floor" : missingContact + " floors had no group of two or more"));
+            results.add(new RuleResult(RuleKind.DENSITY, where + "group in start room (E5)", inStartRoom, 0f, 0f,
+                    inStartRoom == 0, null));
+        }
+        return results;
+    }
+
+    /** The R-DENSITY results whose subject contains any of the given fragments (the per-test views). */
+    public static List<RuleResult> densitySweepResults(String... subjectFragments) {
+        List<RuleResult> selected = new ArrayList<>();
+        for (RuleResult result : densitySweepResults()) {
             for (String fragment : subjectFragments) {
                 if (result.subject.contains(fragment)) {
                     selected.add(result);

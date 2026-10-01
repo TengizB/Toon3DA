@@ -291,6 +291,41 @@ R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2
   priced content in one pass. Magnitudes may still be tuned freely — the price
   recomputes from the magnitude, so tuning stays free.
 
+R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
+  Read from the SAME generator sweep as R-SUPPLY (every generator x node type x depths
+  {1,5,10,15,20,25} x 30 seeds), per cell, worst case over its seeds:
+    bodies (E1)        COMBAT 12-16 at depth 1 rising linearly to 22-28 at depth 25
+                       (BODY_TARGET_*), x the node's body scale (ELITE 1.2, CACHE / SHOP
+                       0.35); fewest and most both inside the band
+    shape (E4)         COMBAT / ELITE: >= 75% of enemies in groups of >= 2, >= 2 groups
+                       of >= 3, <= 3 lone enemies
+    first contact (E5) COMBAT / ELITE: the nearest member of a group of >= 2 within 18
+                       walk tiles of the start (12 on depth 1), never in the start room
+    footprint (E6) + density (E7)  — added by CP5
+  HOW THE PLANNER MEETS IT: level/EncounterBudgetPlanner fills the body target with
+  registered GROUP TEMPLATES (level/EncounterGroupTemplates: PACK 3-5 chaff of one type,
+  FIRETEAM 2 soldiers + 2 chaff, ESCORT bruiser + 2-3 chaff [COMBAT anchor], BATTERY 1-2
+  ranged soldiers + 2 melee chaff, WARBAND mini-elite + 2 soldiers [ELITE anchor, depth
+  >= 3], HUNTER a lone bruiser / flanker [<= 20% of groups]); the Threat-Point budget
+  (x the region dial x the node's threat scale) is the CAP, and each pick aims at the
+  threat-per-body still to spend, so an ELITE's 1.6x cap buys heavier groups (measured
+  ~1.6x COMBAT's spent TP at every depth), not a crowd. level/EncounterPlacer puts each
+  group in ONE room (cluster radius LEVEL_GEN_PACK_CLUSTER_RADIUS): first contact in the
+  nearest room off the start (or the corridor pocket within the limit), the anchor group
+  in the deepest room, every other group in a room no group holds (a LARGE room takes two).
+  OVERRIDE RECORD (CP4): "enemy COUNT is depth-invariant (a known non-goal)" -> body
+  targets grow with depth (E1). REPLACED and DELETED: ENCOUNTER_ANCHOR_BUDGET_FRACTION_MIN/
+  MAX + _CEILING_FRACTION (-> template anchors), ENCOUNTER_ELITE_ANCHOR_FLOOR_CHANCE/
+  _MIN_DEPTH (-> WARBAND on ELITE nodes only, GROUP_WARBAND_MIN_DEPTH 3), ENCOUNTER_PER_ROOM_
+  TP_FRACTION_CAP 0.25 + ROOM_OPEN/CHOKEPOINT_TP_MULTIPLIER (-> GROUP_TP_FRACTION_CAP 0.35
+  per group, anchor exempt), CHAFF_PACK_MIN/MAX + consecutive-run packs + the remainder pass
+  (-> templates; GROUP_CHAFF_SLOT_MIN 2 keeps "chaff never spawns alone", asserted by the
+  re-stated pack-coherence test), ENCOUNTER_MAX_SINGLE_TYPE_FRACTION (-> GROUP_MAX_SINGLE_
+  TYPE_FRACTION, same 0.40). ENCOUNTER_BUDGET_FILL_TARGET_FRACTION 0.95 survives (the
+  planner's aim; R-XP-PACE reads it). The linear generator's entrance room is now always
+  small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7): a 19x11 entrance put every non-start tile
+  beyond 12 walk tiles, making E5 on depth 1 geometrically impossible.
+
 R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
   OVERRIDE RECORD: S in [0.75, 0.95] at every depth on the model floor's dice curve is
   REPLACED by R-SUPPLY's generator sweep at depths {1,5,10,15,20,25}: each floor's

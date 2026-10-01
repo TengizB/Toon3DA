@@ -107,10 +107,6 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     private       int[][]                supplyRegionMap;
     private       List<Room>             supplyRooms;
 
-    // The encounter step's facts for the floor report.
-    private       int                    lastAnchorSpawnIndex = -1;
-    private       float                  lastThreatSpent;
-    private       float                  lastThreatCap;
 
     // Dungeon floor this generator is building for (1-based); drives the encounter Threat-Point
     // budget (balance idea 4, Pillar 1). Defaults to 1; set via generate(int dungeonDepth).
@@ -141,9 +137,6 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
         fillAll(grid, 'x');
         spineCenterTiles     = new ArrayList<>();
-        lastAnchorSpawnIndex = -1;
-        lastThreatSpent      = 0f;
-        lastThreatCap        = 0f;
 
         boolean horizontal = random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_HORIZONTAL_CHANCE;
         List<Room> rooms   = horizontal ? buildHorizontalSpine(grid) : buildVerticalSpine(grid);
@@ -170,11 +163,6 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
 
         placeProps(grid, rooms);
 
-        // Phase 4 — Enemies: spend the floor's encounter Threat-Point budget (balance idea 4,
-        // Pillar 1) across the side rooms instead of rolling each room independently.
-        List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
-        placeBudgetedEncounter(grid, rooms, spawnPoints);
-
         // Atmospheric post-passes
         placeRustWallsNearUnlit(grid);
         placeGoreWallsNearCorpses(grid);
@@ -188,9 +176,22 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         // Phase 7 — SUPPLY (balance-overhaul order 2, S1): every pickup, weapon drop, credit chip and
         // carrier comes from the shared planner, placed against the finished layout.
         buildSupplyRegionMap(rooms);
+
+        // Phase 7a — ENCOUNTER (balance-overhaul order 2, E1-E5): group templates placed one group per
+        // side room on the FINISHED layout — first contact in the nearest room off the start, the anchor
+        // group in the deepest room.
+        ge.tbegvadze.toon3d.route.NodeSupplySpec spec = FloorPopulator.specOf(config);
+        EncounterBudgetPlanner.Plan encounter =
+                new EncounterBudgetPlanner(dungeonDepth, random, config.enemyBudgetScale, spec).plan();
+        EncounterPlacer.Placement placement = EncounterPlacer.place(grid, SupplySlotSurvey.survey(grid, this),
+                encounter, (cells, tileColumn, tileRow) -> isEnemySpawnEligible(cells, tileColumn, tileRow)
+                        && !isAdjacentToDoor(cells, tileColumn, tileRow),
+                random, dungeonDepth, spec.shapeRulesApply());
+
         FloorPopulator.Result populated = FloorPopulator.populate(
-                ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(), grid, this, spawnPoints,
-                new FloorPopulator.EncounterFacts(lastAnchorSpawnIndex, lastThreatSpent, lastThreatCap, 0, 0),
+                ge.tbegvadze.toon3d.route.GeneratorId.LINEAR_CORRIDOR.stableId(), grid, this, placement.spawnPoints,
+                new FloorPopulator.EncounterFacts(placement.anchorSpawnIndex, encounter.spentThreatPoints(),
+                        encounter.floorBudget(), encounter.bodyTarget(), 0),
                 config, dungeonDepth, seed);
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
                          LevelPalettes.generatedWithBaseWall(seed)));
@@ -249,9 +250,9 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
                                             int spineRow, int spineStartColumn, int spineEndColumn) {
         int spineHalfWidth = LevelGenConstants.LEVEL_GEN_SPINE_WIDTH / 2;
 
-        // ENTRANCE: near the spine head (leftmost slot)
+        // ENTRANCE: near the spine head (leftmost slot); always a SMALL room (see tryPlaceHorizontalSideRoom)
         Room entranceRoom = tryPlaceHorizontalSideRoom(
-            grid, rooms, spineStartColumn + 1, spineRow, spineHalfWidth, random.nextBoolean());
+            grid, rooms, spineStartColumn + 1, spineRow, spineHalfWidth, random.nextBoolean(), true);
         if (entranceRoom != null) {
             entranceRoom.type    = RoomType.ENTRANCE;
             entranceRoom.isLarge = false; // never the large modifier, regardless of its placement roll
@@ -264,10 +265,10 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         int landmarkCutoff = spineEndColumn - LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX;
         while (slotColumn <= landmarkCutoff) {
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, spineRow, spineHalfWidth, true);
+                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, spineRow, spineHalfWidth, true, false);
             }
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, spineRow, spineHalfWidth, false);
+                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, spineRow, spineHalfWidth, false, false);
             }
             slotColumn += randomBetween(
                 LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN,
@@ -276,7 +277,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
 
         // LANDMARK: near the spine tail (rightmost slot)
         tryPlaceHorizontalSideRoom(
-            grid, rooms, spineEndColumn - 1, spineRow, spineHalfWidth, random.nextBoolean());
+            grid, rooms, spineEndColumn - 1, spineRow, spineHalfWidth, random.nextBoolean(), false);
 
         // Guarantee the first room in the list is ENTRANCE
         if (!rooms.isEmpty() && rooms.get(0).type != RoomType.ENTRANCE) {
@@ -333,10 +334,10 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             : bendEndRow + LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX;
         while (extendAbove ? slotRow <= landmarkCutoff : slotRow >= landmarkCutoff) {
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, slotRow, true);
+                tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, slotRow, true, false);
             }
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, slotRow, false);
+                tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, slotRow, false, false);
             }
             slotRow += extendAbove
                 ? randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX)
@@ -345,7 +346,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
 
         // Landmark near the bend's far end.
         int landmarkRow = extendAbove ? bendEndRow - 1 : bendEndRow + 1;
-        tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, landmarkRow, random.nextBoolean());
+        tryPlaceVerticalSideRoom(grid, rooms, bendColumn, spineHalfWidth, landmarkRow, random.nextBoolean(), false);
     }
 
     /**
@@ -355,23 +356,27 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
      */
     private Room tryPlaceHorizontalSideRoom(char[][] grid, List<Room> rooms,
                                              int slotColumn, int spineRow, int spineHalfWidth,
-                                             boolean northSide) {
+                                             boolean northSide, boolean entrance) {
         // Independent size tiers: a small chance of the LARGE modifier (significantly oversized,
         // shared with LevelGenerator — see LEVEL_GEN_LARGE_MODIFIER_CHANCE), else the existing
-        // "bigRoom" oversized-band roll, else the normal small/medium range.
-        boolean rollLarge  = config.enableLargeRooms
+        // "bigRoom" oversized-band roll, else the normal small/medium range. The ENTRANCE is always a
+        // small room (balance-overhaul order 2, E5): from its centre the player must reach the spine —
+        // and the floor's first fight — within FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES.
+        boolean rollLarge  = !entrance && config.enableLargeRooms
                 && random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_CHANCE;
-        boolean bigRoom    = !rollLarge && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        boolean bigRoom    = !entrance && !rollLarge
+                && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        int smallMaximum   = entrance ? LevelGenConstants.LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM : 8;
         int interiorWidth  = rollLarge
             ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH)
             : bigRoom
                 ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
-                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, smallMaximum);
         int interiorHeight = rollLarge
             ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT)
             : bigRoom
                 ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
-                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, smallMaximum);
         int totalWidth     = interiorWidth  + 2;
         int totalHeight    = interiorHeight + 2;
 
@@ -508,7 +513,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         int spineHalfWidth = LevelGenConstants.LEVEL_GEN_SPINE_WIDTH / 2;
 
         Room entranceRoom = tryPlaceVerticalSideRoom(
-            grid, rooms, spineColumn, spineHalfWidth, spineStartRow + 1, random.nextBoolean());
+            grid, rooms, spineColumn, spineHalfWidth, spineStartRow + 1, random.nextBoolean(), true);
         if (entranceRoom != null) {
             entranceRoom.type    = RoomType.ENTRANCE;
             entranceRoom.isLarge = false; // never the large modifier, regardless of its placement roll
@@ -520,10 +525,10 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         int landmarkCutoff = spineEndRow - LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX;
         while (slotRow <= landmarkCutoff) {
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceVerticalSideRoom(grid, rooms, spineColumn, spineHalfWidth, slotRow, true);
+                tryPlaceVerticalSideRoom(grid, rooms, spineColumn, spineHalfWidth, slotRow, true, false);
             }
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceVerticalSideRoom(grid, rooms, spineColumn, spineHalfWidth, slotRow, false);
+                tryPlaceVerticalSideRoom(grid, rooms, spineColumn, spineHalfWidth, slotRow, false, false);
             }
             slotRow += randomBetween(
                 LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN,
@@ -531,7 +536,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
         }
 
         tryPlaceVerticalSideRoom(
-            grid, rooms, spineColumn, spineHalfWidth, spineEndRow - 1, random.nextBoolean());
+            grid, rooms, spineColumn, spineHalfWidth, spineEndRow - 1, random.nextBoolean(), false);
 
         if (!rooms.isEmpty() && rooms.get(0).type != RoomType.ENTRANCE) {
             rooms.get(0).type    = RoomType.ENTRANCE;
@@ -588,10 +593,10 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             : bendEndColumn + LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX;
         while (extendRight ? slotColumn <= landmarkCutoff : slotColumn >= landmarkCutoff) {
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, bendRow, spineHalfWidth, true);
+                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, bendRow, spineHalfWidth, true, false);
             }
             if (random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_SIDE_ROOM_CHANCE) {
-                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, bendRow, spineHalfWidth, false);
+                tryPlaceHorizontalSideRoom(grid, rooms, slotColumn, bendRow, spineHalfWidth, false, false);
             }
             slotColumn += extendRight
                 ? randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MIN, LevelGenConstants.LEVEL_GEN_SPINE_SIDE_STEP_MAX)
@@ -600,7 +605,7 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
 
         // Landmark near the bend's far end.
         int landmarkColumn = extendRight ? bendEndColumn - 1 : bendEndColumn + 1;
-        tryPlaceHorizontalSideRoom(grid, rooms, landmarkColumn, bendRow, spineHalfWidth, random.nextBoolean());
+        tryPlaceHorizontalSideRoom(grid, rooms, landmarkColumn, bendRow, spineHalfWidth, random.nextBoolean(), false);
     }
 
     /**
@@ -609,21 +614,23 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
      */
     private Room tryPlaceVerticalSideRoom(char[][] grid, List<Room> rooms,
                                            int spineColumn, int spineHalfWidth,
-                                           int slotRow, boolean eastSide) {
-        // Independent size tiers — mirrors tryPlaceHorizontalSideRoom.
-        boolean rollLarge  = config.enableLargeRooms
+                                           int slotRow, boolean eastSide, boolean entrance) {
+        // Independent size tiers — mirrors tryPlaceHorizontalSideRoom (the ENTRANCE is always small).
+        boolean rollLarge  = !entrance && config.enableLargeRooms
                 && random.nextFloat() < LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_CHANCE;
-        boolean bigRoom    = !rollLarge && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        boolean bigRoom    = !entrance && !rollLarge
+                && random.nextFloat() < LevelGenConstants.LEVEL_GEN_SPINE_BIG_ROOM_CHANCE;
+        int smallMaximum   = entrance ? LevelGenConstants.LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM : 8;
         int interiorWidth  = rollLarge
             ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_WIDTH)
             : bigRoom
                 ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_WIDTH)
-                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, 8);
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_WIDTH, smallMaximum);
         int interiorHeight = rollLarge
             ? randomBetween(LevelGenConstants.LEVEL_GEN_LARGE_MIN_DIM, LevelGenConstants.LEVEL_GEN_LARGE_MODIFIER_MAX_HEIGHT)
             : bigRoom
                 ? randomBetween(9, LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MAX_HEIGHT)
-                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, 8);
+                : randomBetween(LevelGenConstants.LEVEL_GEN_SPINE_ROOM_MIN_HEIGHT, smallMaximum);
         int totalWidth     = interiorWidth  + 2;
         int totalHeight    = interiorHeight + 2;
 
@@ -1674,206 +1681,6 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
     // -------------------------------------------------------------------------
     // Phase 4 — Enemy placement
     // -------------------------------------------------------------------------
-
-    /**
-     * Spends the floor's encounter Threat-Point budget across the side rooms (balance idea 4,
-     * Pillar 1), reusing the shared EncounterBudgetPlanner. The anchor goes in the deepest room
-     * (highest spine index, exempt from the per-room cap); the rest fill under the per-room cap.
-     * Mirrors LevelGenerator.placeBudgetedEncounter, adapted to the spine's room ordering.
-     */
-    private void placeBudgetedEncounter(char[][] grid, List<Room> rooms, List<EnemySpawnPoint> spawnPoints) {
-        if (rooms.size() < 2) return;
-
-        EncounterBudgetPlanner.Plan plan =
-                new EncounterBudgetPlanner(dungeonDepth, random, config.enemyBudgetScale).plan();
-        List<EnemyType> roster = plan.enemies();
-        lastThreatSpent = plan.spentThreatPoints();
-        lastThreatCap   = plan.floorBudget();
-        if (roster.isEmpty()) return;
-
-        // Non-entrance rooms (1..n-1), deepest-first. Along a spine, later index = farther from
-        // the entrance, so descending index is a natural depth order.
-        Integer[] roomOrder = new Integer[rooms.size() - 1];
-        for (int index = 0; index < roomOrder.length; index++) {
-            roomOrder[index] = index + 1;
-        }
-        java.util.Arrays.sort(roomOrder, (left, right) -> Integer.compare(right, left));
-
-        float[]  roomSpentThreat = new float[rooms.size()];
-        boolean[][] usedTiles = new boolean[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT]
-                                            [LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
-        float perRoomCap = plan.perRoomThreatPointCap();
-
-        // Anchor first — deepest room, exempt from the per-room cap.
-        EnemyType anchor              = plan.anchor();
-        int       anchorIndexInRoster = -1;
-        if (anchor != null) {
-            for (int orderIndex = 0; orderIndex < roomOrder.length; orderIndex++) {
-                int roomIndex = roomOrder[orderIndex];
-                if (tryPlaceEnemyInRoom(grid, rooms.get(roomIndex), anchor, usedTiles, spawnPoints)) {
-                    lastAnchorSpawnIndex = spawnPoints.size() - 1;
-                    roomSpentThreat[roomIndex] += plan.threatOf(anchor);
-                    anchorIndexInRoster = 0; // anchor is always roster element 0
-                    break;
-                }
-            }
-        }
-
-        // Distribute the remaining roster by load-balancing across the side rooms instead of packing
-        // the deepest few up to the per-room cap (balance fix: the old deepest-first fill left most
-        // rooms empty while stuffing 2-3 rooms into a low-level death trap). Each enemy drops into the
-        // eligible room with the lowest depth-weighted load; along a spine the room index doubles as
-        // the depth, so deeper rooms (higher index) still trend denser.
-        // PACK COHERENCE IN SPACE: consecutive identical roster entries are one pack and land in ONE
-        // room together, instead of being handed to the load balancer individually and split apart.
-        boolean[] roomTilesExhausted = new boolean[rooms.size()];
-        for (int rosterIndex = 0; rosterIndex < roster.size(); rosterIndex++) {
-            if (rosterIndex == anchorIndexInRoster) continue;
-            EnemyType enemy    = roster.get(rosterIndex);
-            int       packSize = packRunLengthAt(roster, rosterIndex, anchorIndexInRoster);
-            float     cost     = plan.threatOf(enemy);
-            placePackLoadBalanced(grid, rooms, roomOrder, enemy, packSize, cost, perRoomCap,
-                    roomSpentThreat, roomTilesExhausted, usedTiles, spawnPoints);
-            rosterIndex += packSize - 1;
-        }
-    }
-
-    /**
-     * Length of the run of consecutive identical entries starting at {@code startIndex} — the shape in
-     * which {@link EncounterBudgetPlanner} emits a pack — capped at {@code CHAFF_PACK_MAX} so a long
-     * remainder-pass tail of one type cannot pile into a single room.
-     */
-    private int packRunLengthAt(List<EnemyType> roster, int startIndex, int anchorIndexInRoster) {
-        EnemyType type   = roster.get(startIndex);
-        int       length = 1;
-        while (startIndex + length < roster.size()
-                && roster.get(startIndex + length) == type
-                && (startIndex + length) != anchorIndexInRoster
-                && length < BalanceConfig.CHAFF_PACK_MAX) {
-            length++;
-        }
-        return length;
-    }
-
-    /**
-     * Places one enemy into the least-loaded eligible room, spreading the roster across the spine
-     * (balance fix: no empty rooms, no over-stuffed death-trap room). "Load" is a room's spent Threat
-     * Points divided by its depth weight (1 + room index, since later spine rooms are deeper), so
-     * deeper rooms absorb proportionally more while enemies still fan out. First pass honours the
-     * per-room cap; a second pass falls back to any room with a free tile so the budget is spent.
-     */
-    private void placePackLoadBalanced(char[][] grid, List<Room> rooms, Integer[] roomOrder,
-                                       EnemyType enemy, int packSize, float cost, float perRoomCap,
-                                       float[] roomSpentThreat, boolean[] roomTilesExhausted,
-                                       boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
-        float packCost = cost * packSize;
-        for (int phase = 0; phase < 2; phase++) {
-            boolean capPhase = (phase == 0);
-            while (true) {
-                int   bestRoom  = -1;
-                float bestLoad  = Float.MAX_VALUE;
-                int   bestDepth = -1;
-                for (Integer roomIndex : roomOrder) {
-                    if (roomTilesExhausted[roomIndex]) continue;
-                    // The room is charged for the whole pack, so the cap is tested against the total.
-                    if (capPhase && roomSpentThreat[roomIndex] + packCost > perRoomCap) continue;
-                    float weight = 1f + roomIndex;
-                    float load   = roomSpentThreat[roomIndex] / weight;
-                    if (load < bestLoad || (load == bestLoad && roomIndex > bestDepth)) {
-                        bestLoad  = load;
-                        bestDepth = roomIndex;
-                        bestRoom  = roomIndex;
-                    }
-                }
-                if (bestRoom < 0) break;
-                int placed = tryPlacePackInRoom(grid, rooms.get(bestRoom), enemy, packSize,
-                        usedTiles, spawnPoints);
-                if (placed > 0) {
-                    roomSpentThreat[bestRoom] += cost * placed;
-                    if (placed == packSize) return;
-                    // Room held part of the pack — carry the rest onward instead of dropping it.
-                    packSize -= placed;
-                    packCost  = cost * packSize;
-                    continue;
-                }
-                roomTilesExhausted[bestRoom] = true;
-            }
-        }
-    }
-
-    /**
-     * Places up to {@code packSize} members of one archetype in a single room, clustered within
-     * {@link LevelGenConstants#LEVEL_GEN_PACK_CLUSTER_RADIUS} of the first member so the group fights
-     * as a group. Returns how many were placed (0 only when the room has no eligible tile at all).
-     */
-    private int tryPlacePackInRoom(char[][] grid, Room room, EnemyType enemy, int packSize,
-                                   boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
-        if (!tryPlaceEnemyInRoom(grid, room, enemy, usedTiles, spawnPoints)) return 0;
-
-        EnemySpawnPoint leader = spawnPoints.get(spawnPoints.size() - 1);
-        int placed = 1;
-        int radius = LevelGenConstants.LEVEL_GEN_PACK_CLUSTER_RADIUS;
-        for (int ring = 1; ring <= radius && placed < packSize; ring++) {
-            for (int rowOffset = -ring; rowOffset <= ring && placed < packSize; rowOffset++) {
-                for (int columnOffset = -ring; columnOffset <= ring && placed < packSize; columnOffset++) {
-                    if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;
-                    int tileColumn = leader.tileColumn + columnOffset;
-                    int tileRow    = leader.tileRow    + rowOffset;
-                    if (!isInsideRoomInterior(room, tileColumn, tileRow))       continue;
-                    if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
-                    claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
-                    placed++;
-                }
-            }
-        }
-        while (placed < packSize
-                && tryPlaceEnemyInRoom(grid, room, enemy, usedTiles, spawnPoints)) {
-            placed++;
-        }
-        return placed;
-    }
-
-    /** Records an enemy spawn on a free, eligible, non-door-adjacent tile in the room. */
-    private boolean tryPlaceEnemyInRoom(char[][] grid, Room room, EnemyType enemy,
-                                        boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints) {
-        if (room.interiorWidth() <= 0 || room.interiorHeight() <= 0) return false;
-        for (int attempt = 0; attempt < LevelGenConstants.LEVEL_GEN_ENEMY_SPAWN_PROBE_ATTEMPTS; attempt++) {
-            int tileColumn = room.leftColumn + 1 + random.nextInt(room.interiorWidth());
-            int tileRow    = room.bottomRow  + 1 + random.nextInt(room.interiorHeight());
-            if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
-            claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
-            return true;
-        }
-        // Random probing missing is not evidence the room is full — settle it deterministically before
-        // retiring the room, so an unlucky probe run stops silently dropping planned enemies.
-        for (int tileRow = room.bottomRow + 1; tileRow < room.topRow; tileRow++) {
-            for (int tileColumn = room.leftColumn + 1; tileColumn < room.rightColumn; tileColumn++) {
-                if (!isSpawnableTile(grid, usedTiles, tileColumn, tileRow)) continue;
-                claimSpawnTile(usedTiles, spawnPoints, enemy, tileColumn, tileRow);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isInsideRoomInterior(Room room, int tileColumn, int tileRow) {
-        return tileColumn > room.leftColumn && tileColumn < room.rightColumn
-            && tileRow    > room.bottomRow  && tileRow    < room.topRow;
-    }
-
-    /** A tile an enemy may spawn on: eligible terrain, not beside a door, not already claimed. */
-    private boolean isSpawnableTile(char[][] grid, boolean[][] usedTiles, int tileColumn, int tileRow) {
-        // isEnemySpawnEligible bounds-checks first, so the usedTiles access below is safe.
-        return isEnemySpawnEligible(grid, tileColumn, tileRow)
-            && !isAdjacentToDoor(grid, tileColumn, tileRow)
-            && !usedTiles[tileRow][tileColumn];
-    }
-
-    private void claimSpawnTile(boolean[][] usedTiles, List<EnemySpawnPoint> spawnPoints,
-                                EnemyType enemy, int tileColumn, int tileRow) {
-        usedTiles[tileRow][tileColumn] = true;
-        spawnPoints.add(new EnemySpawnPoint(enemy.spawnChar(), tileColumn, tileRow));
-    }
 
     // -------------------------------------------------------------------------
     // Atmospheric post-passes
