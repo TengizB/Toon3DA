@@ -140,6 +140,10 @@ public final class BalanceSchema {
         LADDER,
         /** R-LADDER-AFFORD (balance-overhaul order 1): the shop LEVEL UP rung costs <= LADDER_AFFORD_FRACTION of one COMBAT floor's income. */
         LADDER_AFFORD,
+        /** R-SUPPLY (balance-overhaul order 2): supply tracks the roster's demand per node spec; heal floor; spread. */
+        SUPPLY,
+        /** R-DENSITY (balance-overhaul order 2): bodies, groups, first contact, footprint and density per node type. */
+        DENSITY,
         /** S-GATE (order 9): 0% of HOARDER-START-WEAPON seeds clear the first boss. */
         SIM_GATE,
         /** S-FAIR (order 9): TACTICAL median death depth in band; deaths readable. */
@@ -834,6 +838,7 @@ public final class BalanceSchema {
         results.addAll(singleDifficultyResults());
         results.addAll(ladderResults());
         results.addAll(ladderAffordResults());
+        results.addAll(supplyPlannerResults());
         return results;
     }
 
@@ -2417,5 +2422,186 @@ public final class BalanceSchema {
                     "price " + ladderLevelUpPrice(depth) + " vs one combat floor " + Math.round(income)));
         }
         return results;
+    }
+
+
+    // =====================================================================================
+    // R-SUPPLY (balance-overhaul order 2) — the SUPPLY PLANNER, checked on its own.
+    // Every registered NodeSupplySpec x SUPPLY_AUDIT_DEPTHS x SUPPLY_AUDIT_SEED_COUNT seeds is planned
+    // against a real encounter roster and placed on a SYNTHETIC floor (eight rooms walking away from the
+    // start, the last behind a keycard), so the planner's own rules — heal floor, half-early, tracking,
+    // spread, carriers — are proven independently of any generator. The GENERATOR sweep (every
+    // generator x node type x depth) lives in supplySweepResults / densitySweepResults.
+    // =====================================================================================
+
+    /** Rooms on the synthetic audit floor (room index = walk order from the start). */
+    private static final int SYNTHETIC_ROOM_COUNT       = 8;
+    /** Ground slots per synthetic room. */
+    private static final int SYNTHETIC_SLOTS_PER_ROOM   = 14;
+    /** Walk tiles between consecutive synthetic rooms. */
+    private static final int SYNTHETIC_ROOM_SPACING     = 7;
+
+    /** R-SUPPLY (planner level): every spec x audit depth, worst case over the audit seeds. */
+    public static List<RuleResult> supplyPlannerResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<ge.tbegvadze.toon3d.level.SupplySlot> slots = syntheticSupplyFloor();
+        int halfDistance = syntheticHalfDistance(slots);
+        int anchorRegion = SYNTHETIC_ROOM_COUNT - 2;
+        for (ge.tbegvadze.toon3d.route.NodeSupplySpec spec : RouteRegistries.nodeSupplySpecs().all()) {
+            for (int depth : BalanceConfig.SUPPLY_AUDIT_DEPTHS) {
+                SupplyAuditAccumulator accumulator = new SupplyAuditAccumulator(spec, depth);
+                for (int seedIndex = 0; seedIndex < BalanceConfig.SUPPLY_AUDIT_SEED_COUNT; seedIndex++) {
+                    long seed = GameMath.floorSeed(0x5_0991L + seedIndex, depth);
+                    List<EnemyType> roster = syntheticRoster(spec, depth, seed);
+                    int bossEffectiveHitPoints = spec.bossArenaAmmo()
+                            ? BossBalance.statsForDepth(depth).effectiveHitPoints : 0;
+                    ge.tbegvadze.toon3d.level.SupplyPlan plan = ge.tbegvadze.toon3d.level.SupplyPlanner.plan(
+                            new ge.tbegvadze.toon3d.level.SupplyRequest(depth, spec, roster,
+                                    GameMath.expectedPlayerAtDepth(depth), null, seed, false, bossEffectiveHitPoints));
+                    List<Integer> carriers = new ArrayList<>();
+                    for (int index = 0; index < roster.size(); index++) carriers.add(index);
+                    ge.tbegvadze.toon3d.level.SupplyPlacement placement = ge.tbegvadze.toon3d.level.SupplyPlanner
+                            .place(plan, slots, carriers, anchorRegion, halfDistance, seed);
+                    accumulator.add(plan, placement);
+                }
+                accumulator.emit(results, "plan ");
+            }
+        }
+        return results;
+    }
+
+    /** A roster for the planner-level audit: what the encounter planner fields for this spec and depth. */
+    private static List<EnemyType> syntheticRoster(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth, long seed) {
+        if (spec.encounterKind() == ge.tbegvadze.toon3d.route.NodeSupplySpec.EncounterKind.NONE) {
+            return Collections.emptyList();
+        }
+        return new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(depth, new java.util.Random(seed),
+                spec.threatScale()).plan().enemies();
+    }
+
+    /** Eight rooms walking away from the start plus a corridor run; the last room sits behind a keycard. */
+    private static List<ge.tbegvadze.toon3d.level.SupplySlot> syntheticSupplyFloor() {
+        List<ge.tbegvadze.toon3d.level.SupplySlot> slots = new ArrayList<>();
+        for (int room = 0; room < SYNTHETIC_ROOM_COUNT; room++) {
+            boolean gated = room == SYNTHETIC_ROOM_COUNT - 1;
+            for (int slot = 0; slot < SYNTHETIC_SLOTS_PER_ROOM; slot++) {
+                int distance = 3 + room * SYNTHETIC_ROOM_SPACING + slot % 5;
+                ge.tbegvadze.toon3d.level.SupplySlot supplySlot = new ge.tbegvadze.toon3d.level.SupplySlot(
+                        room * 10 + slot % 5, slot / 5, room, distance, !gated, slot == 2);
+                slots.add(supplySlot);
+            }
+        }
+        for (int corridor = 0; corridor < 10; corridor++) {
+            slots.add(new ge.tbegvadze.toon3d.level.SupplySlot(corridor, 40,
+                    ge.tbegvadze.toon3d.level.SupplySlotProvider.CONNECTOR_REGION, 5 + corridor * 4, true, true));
+        }
+        return slots;
+    }
+
+    private static int syntheticHalfDistance(List<ge.tbegvadze.toon3d.level.SupplySlot> slots) {
+        int farthest = 0;
+        for (ge.tbegvadze.toon3d.level.SupplySlot slot : slots) {
+            if (slot.reachableWithoutKeycard) farthest = Math.max(farthest, slot.walkDistance);
+        }
+        return farthest / 2;
+    }
+
+    /**
+     * Accumulates the R-SUPPLY measurements of one (spec, depth) cell over its seeds and emits the
+     * worst case of each check — shared by the planner-level audit and the generator sweep.
+     */
+    public static final class SupplyAuditAccumulator {
+        private final ge.tbegvadze.toon3d.route.NodeSupplySpec spec;
+        private final int depth;
+        private int   floors;
+        private float minimumHealFloor   = Float.MAX_VALUE;
+        private float minimumEarlyShare  = Float.MAX_VALUE;
+        private float worstTracking      = 0f;
+        private String worstTrackingWhat = "";
+        private int   unplaced;
+        private int   spreadViolations;
+        private float worstRoomShare;
+        private int   carried;
+        private int   carrierEligible;
+
+        public SupplyAuditAccumulator(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth) {
+            this.spec  = spec;
+            this.depth = depth;
+        }
+
+        /** Folds one planned + placed floor in. */
+        public void add(ge.tbegvadze.toon3d.level.SupplyPlan plan, ge.tbegvadze.toon3d.level.SupplyPlacement placement) {
+            floors++;
+            if (spec.healFloorApplies()) {
+                float floorValue = placement.keycardFreeHealFloorValue();
+                minimumHealFloor  = Math.min(minimumHealFloor, floorValue);
+                float earlyShare  = floorValue <= 0f ? 0f : placement.earlyHealFloorValue() / floorValue;
+                minimumEarlyShare = Math.min(minimumEarlyShare, earlyShare);
+            }
+            for (ge.tbegvadze.toon3d.level.SupplyCategory category : new ge.tbegvadze.toon3d.level.SupplyCategory[]{
+                    ge.tbegvadze.toon3d.level.SupplyCategory.AMMO, ge.tbegvadze.toon3d.level.SupplyCategory.HEAL,
+                    ge.tbegvadze.toon3d.level.SupplyCategory.ARMOUR, ge.tbegvadze.toon3d.level.SupplyCategory.CREDITS}) {
+                float planned   = plan.plannedValue(category);
+                float placed    = placement.placedValue(category);
+                float allowance = Math.max(BalanceConfig.SUPPLY_TRACK_TOLERANCE * planned,
+                        0.5f * plan.largestPickupValue(category));
+                float error     = allowance <= 0f ? (Math.abs(placed - planned) > 1e-3f ? Float.MAX_VALUE : 0f)
+                                                  : Math.abs(placed - planned) / allowance;
+                if (error > worstTracking) {
+                    worstTracking     = error;
+                    worstTrackingWhat = category + " planned " + Math.round(planned) + " placed " + Math.round(placed);
+                }
+                int count = 0;
+                for (ge.tbegvadze.toon3d.level.SupplyPlacement.GroundPlacement ground : placement.ground()) {
+                    if (ground.pickup.category == category) count++;
+                }
+                float share = placement.maximumRoomShare(category);
+                if (placement.maximumRoomCount(category) > 1) {
+                    worstRoomShare = Math.max(worstRoomShare, share);
+                    if (share > BalanceConfig.SUPPLY_MAX_ROOM_SHARE + 1e-4f
+                            && placement.maximumRoomCount(category)
+                                    > Math.max(1, (int) Math.floor(BalanceConfig.SUPPLY_MAX_ROOM_SHARE * count))) {
+                        spreadViolations++;
+                    }
+                }
+            }
+            unplaced += placement.unplaced().size();
+            int eligible = 0;
+            for (ge.tbegvadze.toon3d.level.PlannedPickup pickup : plan.pickups()) {
+                boolean ammo = pickup.category == ge.tbegvadze.toon3d.level.SupplyCategory.AMMO && !pickup.behindAnchor;
+                boolean heal = pickup.category == ge.tbegvadze.toon3d.level.SupplyCategory.HEAL && !pickup.healFloor;
+                if (ammo || heal) eligible++;
+            }
+            carrierEligible += eligible;
+            carried         += placement.carriers().size();
+        }
+
+        /** Emits one result per check, worst case over every folded floor. */
+        public void emit(List<RuleResult> results, String prefix) {
+            if (floors == 0) return;
+            String cell = prefix + spec.type() + " d" + depth;
+            if (spec.healFloorApplies()) {
+                results.add(new RuleResult(RuleKind.SUPPLY, cell + " heal floor (keycard-free)", minimumHealFloor,
+                        BalanceConfig.SUPPLY_HEAL_FLOOR_FRACTION - 1e-3f, Float.POSITIVE_INFINITY,
+                        minimumHealFloor >= BalanceConfig.SUPPLY_HEAL_FLOOR_FRACTION - 1e-3f,
+                        "worst of " + floors + " floors, fraction of max HP"));
+                results.add(new RuleResult(RuleKind.SUPPLY, cell + " heal floor first-half share", minimumEarlyShare,
+                        BalanceConfig.SUPPLY_HEAL_EARLY_SHARE, 1f,
+                        minimumEarlyShare >= BalanceConfig.SUPPLY_HEAL_EARLY_SHARE - 1e-4f, null));
+            }
+            results.add(new RuleResult(RuleKind.SUPPLY, cell + " tracking error / allowance", worstTracking, 0f, 1f,
+                    worstTracking <= 1f, worstTrackingWhat));
+            results.add(new RuleResult(RuleKind.SUPPLY, cell + " unplaced pickups", unplaced, 0f, 0f,
+                    unplaced == 0, null));
+            results.add(new RuleResult(RuleKind.SUPPLY, cell + " room-share violations", spreadViolations, 0f, 0f,
+                    spreadViolations == 0, "worst multi-pickup room share " + String.format("%.2f", worstRoomShare)));
+            if (carrierEligible >= 4 * floors) {
+                float share = carried / (float) carrierEligible;
+                results.add(new RuleResult(RuleKind.SUPPLY, cell + " carrier share", share,
+                        BalanceConfig.SUPPLY_CARRIER_SHARE - 0.08f, BalanceConfig.SUPPLY_CARRIER_SHARE + 0.08f,
+                        Math.abs(share - BalanceConfig.SUPPLY_CARRIER_SHARE) <= 0.08f,
+                        carried + " of " + carrierEligible + " eligible pickups"));
+            }
+        }
     }
 }

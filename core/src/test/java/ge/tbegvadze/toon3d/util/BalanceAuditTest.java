@@ -587,6 +587,17 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.ladderAffordResults());
     }
 
+    /**
+     * R-SUPPLY, planner level (balance-overhaul order 2): every node spec x audit depth x audit seed is
+     * planned against a real roster and placed on a synthetic floor — heal floor keycard-free and half
+     * of it early, every category within +/-10% of plan (or one pickup's rounding), nothing unplaced, no
+     * room over 35% of a category, a quarter of the eligible supply on carriers.
+     */
+    @Test
+    void theSupplyPlannerTracksDemandOnEverySpec() {
+        assertNoViolations(BalanceSchema.supplyPlannerResults());
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

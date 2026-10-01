@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Level Design
 TITLE: Full Floors, Fair Supply — density and supply planner
 CREATED: 2026-09-30

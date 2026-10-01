@@ -2481,4 +2481,162 @@ public final class BalanceConfig {
      * (the old 10 PP constant is gone). Range: 1.0–2.0.
      */
     public static final float LADDER_LEVEL_UP_POWER_POINTS = 1.5f;
+
+    // =====================================================================================
+    // SECTION 21 — SUPPLY & DENSITY (balance-overhaul order 2: full floors, fair supply)
+    // -------------------------------------------------------------------------------------
+    // Every generated floor is built through ONE pipeline: layout -> slot list -> ENCOUNTER plan ->
+    // SUPPLY plan -> placement (level/SupplyPlanner, level/EncounterBudgetPlanner). Supply is DERIVED
+    // from the floor's actual roster (its demand) and the node type's NodeSupplySpec — never from the
+    // player's current HP or ammo, and never from an independent per-room or per-kill dice roll.
+    // Replaces the SECTION 6 per-room chances, the SECTION 10 model floor as the tuning reference,
+    // the per-kill ammo drop chances, the credit-chip roll and the GUARANTEED_UPGRADE_PER_REGION pity
+    // rule. See docs/game-balance-authority.txt (R-SUPPLY, R-DENSITY, S-SUPPLY).
+    // =====================================================================================
+
+    // --- S2 AMMO split -------------------------------------------------------------------
+    /** S2: share of the ammo plan spread across the ammo types of the weapons the player CARRIES. */
+    public static final float SUPPLY_CARRIED_SHARE  = 0.70f;
+    /** S2: share of the ammo plan spread across every OTHER ammo type (so a found weapon is usable). */
+    public static final float SUPPLY_OFF_TYPE_SHARE = 0.30f;
+
+    // --- S3 HEALS (the incoming-damage model, re-based on the order-1 expected player) ---
+    /** S3: turns each planned enemy is modelled as engaging the player (the heal-economy model). */
+    public static final float SUPPLY_TURNS_ENGAGED_PER_ENEMY = 2.0f;
+    /** S3: fraction of the roster's possible damage a competent player avoids. Range 0.4-0.7. */
+    public static final float SUPPLY_AVOIDANCE_FACTOR        = 0.55f;
+
+    // --- S4 HEAL FLOOR ---------------------------------------------------------------------
+    /** S4: minimum heal value on every non-BOSS/REST/REGION_GATE floor, in fractions of max HP (one 'H'). */
+    public static final float SUPPLY_HEAL_FLOOR_FRACTION = 0.45f;
+    /** S4: share of the heal floor that must sit in the first half of the floor by walk distance. */
+    public static final float SUPPLY_HEAL_EARLY_SHARE    = 0.50f;
+
+    // --- S5 / S6 / S7 tracking, carriers, spread -----------------------------------------
+    /** S5: placed supply of every category stays within +/- this fraction of the plan. */
+    public static final float SUPPLY_TRACK_TOLERANCE = 0.10f;
+    /** S6: share of the ammo + (non-floor) heal plan handed to specific enemies as their drop. */
+    public static final float SUPPLY_CARRIER_SHARE   = 0.25f;
+    /** S7: no single room / chamber holds more than this share of any category (count basis). */
+    public static final float SUPPLY_MAX_ROOM_SHARE  = 0.35f;
+    /** S7: placement score bonus for a slot on the start->exit walk path. */
+    public static final float SUPPLY_EXIT_PATH_BONUS  = 1.0f;
+    /** S7: placement score bonus for a slot inside a room that holds an enemy group (reward the fight). */
+    public static final float SUPPLY_GROUP_ROOM_BONUS = 1.5f;
+
+    // --- S8 CREDITS --------------------------------------------------------------------------
+    /** S8: credit chips a scale-1.0 floor carries (the old 3-7 roll's mean). */
+    public static final int   SUPPLY_CREDIT_CHIPS_PER_FLOOR = 5;
+
+    // --- E1 BODY TARGETS ---------------------------------------------------------------------
+    /** E1: COMBAT body target at depth 1 (low end). */
+    public static final int   BODY_TARGET_MIN_DEPTH_ONE        = 12;
+    /** E1: COMBAT body target at depth 1 (high end). */
+    public static final int   BODY_TARGET_MAX_DEPTH_ONE        = 16;
+    /** E1: COMBAT body target at BODY_TARGET_REFERENCE_DEEP_DEPTH (low end). */
+    public static final int   BODY_TARGET_MIN_DEEP             = 22;
+    /** E1: COMBAT body target at BODY_TARGET_REFERENCE_DEEP_DEPTH (high end). */
+    public static final int   BODY_TARGET_MAX_DEEP             = 28;
+    /** E1: depth the deep body targets are reached at (linear from depth 1; held beyond). */
+    public static final int   BODY_TARGET_REFERENCE_DEEP_DEPTH = 25;
+
+    // --- E2 / E3 / E4 GROUPS -----------------------------------------------------------------
+    /** E3: no non-anchor group may spend more than this fraction of the floor's threat cap. */
+    public static final float GROUP_TP_FRACTION_CAP          = 0.35f;
+    /** E2: HUNTER (a lone bruiser / flanker) groups are at most this fraction of a floor's groups. */
+    public static final float GROUP_HUNTER_MAX_FRACTION      = 0.20f;
+    /** E4: on COMBAT / ELITE floors at least this fraction of enemies stand in groups of >= 2. */
+    public static final float SHAPE_GROUPED_MIN_FRACTION     = 0.75f;
+    /** E4: at least this many groups of >= SHAPE_BIG_GROUP_SIZE members. */
+    public static final int   SHAPE_MIN_BIG_GROUPS           = 2;
+    /** E4: the size that counts as a "big" group. */
+    public static final int   SHAPE_BIG_GROUP_SIZE           = 3;
+    /** E4: at most this many enemies stand alone. */
+    public static final int   SHAPE_MAX_LONE_ENEMIES         = 3;
+    /** E2: no single archetype may spend more than this fraction of the cap (variety, when alternatives exist). */
+    public static final float GROUP_MAX_SINGLE_TYPE_FRACTION = 0.40f;
+
+    // --- E5 FIRST CONTACT -------------------------------------------------------------------
+    /** E5: the first group of >= 2 stands within this many walk tiles of the start. */
+    public static final int   FIRST_CONTACT_MAX_WALK_TILES             = 18;
+    /** E5: on the run's FIRST floor (depth 1) the first group stands within this many walk tiles. */
+    public static final int   FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES = 12;
+
+    // --- E6 FOOTPRINT (target walkable tiles per region index A..E) --------------------------
+    /** E6: low end of each region's target walkable-tile range (index = region 0..4, deeper reuse last). */
+    public static final int[] FOOTPRINT_MIN_BY_REGION = {350, 450, 500, 500, 500};
+    /** E6: high end of each region's target walkable-tile range. */
+    public static final int[] FOOTPRINT_MAX_BY_REGION = {550, 650, 750, 750, 750};
+    /** E6: a generator builds to its target within +/- this fraction. */
+    public static final float FOOTPRINT_TOLERANCE     = 0.15f;
+
+    // --- E7 DENSITY (enemies per 100 walkable tiles) ----------------------------------------
+    public static final float DENSITY_COMBAT_MIN = 2.2f;
+    public static final float DENSITY_COMBAT_MAX = 4.0f;
+    public static final float DENSITY_ELITE_MIN  = 3.0f;
+    public static final float DENSITY_ELITE_MAX  = 5.0f;
+    public static final float DENSITY_CALM_MIN   = 0.6f;
+    public static final float DENSITY_CALM_MAX   = 1.5f;
+
+    // --- S10 NODE SUPPLY SPECS (route/NodeSupplySpec rows read these; one block per node type) -
+    // threat = multiplier on the floor's threat CAP (the region dial and the node affix ride on top);
+    // bodies = multiplier on the E1 body target; ammoRatio = planned ammo damage / roster demand;
+    // drainTarget = share of modelled incoming damage the heals deliberately do NOT cover (negative =
+    // a net heal gain); armourShare = share of the heal value delivered as armour; credits = chip scale.
+    public static final float NODE_SUPPLY_COMBAT_THREAT       = 1.00f;
+    public static final float NODE_SUPPLY_COMBAT_BODIES       = 1.00f;
+    public static final float NODE_SUPPLY_COMBAT_AMMO_RATIO   = 0.85f;
+    public static final float NODE_SUPPLY_COMBAT_DRAIN_TARGET = 0.20f;
+    public static final float NODE_SUPPLY_COMBAT_ARMOUR_SHARE = 0.20f;
+    public static final float NODE_SUPPLY_COMBAT_CREDITS      = 1.00f;
+    public static final int   NODE_SUPPLY_COMBAT_WEAPONS      = 1;
+    public static final int   NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MIN = -1;
+    public static final int   NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MAX = 0;
+
+    /** ELITE threat cap = 1.6x COMBAT (A6). Bodies rise less: the extra threat buys a WARBAND, not a crowd. */
+    public static final float NODE_SUPPLY_ELITE_THREAT        = 1.60f;
+    public static final float NODE_SUPPLY_ELITE_BODIES        = 1.20f;
+    public static final float NODE_SUPPLY_ELITE_AMMO_RATIO    = 0.85f;
+    /** ELITE vault: extra ammo (as a share of roster demand) placed behind the anchor group. */
+    public static final float NODE_SUPPLY_ELITE_VAULT_AMMO_RATIO = 0.25f;
+    public static final float NODE_SUPPLY_ELITE_DRAIN_TARGET  = 0.30f;
+    public static final float NODE_SUPPLY_ELITE_ARMOUR_SHARE  = 0.30f;
+    public static final float NODE_SUPPLY_ELITE_CREDITS       = 1.60f;
+    public static final int   NODE_SUPPLY_ELITE_WEAPONS       = 1;
+    public static final int   NODE_SUPPLY_ELITE_WEAPON_OFFSET_MIN = 1;
+    public static final int   NODE_SUPPLY_ELITE_WEAPON_OFFSET_MAX = 2;
+    /** ELITE reward tier floor: the region's minimum drop tier plus this many steps. */
+    public static final int   NODE_SUPPLY_ELITE_WEAPON_TIER_BONUS = 1;
+
+    public static final float NODE_SUPPLY_CACHE_THREAT        = 0.35f;
+    public static final float NODE_SUPPLY_CACHE_BODIES        = 0.35f;
+    public static final float NODE_SUPPLY_CACHE_AMMO_RATIO    = 1.50f;
+    /** CACHE: negative drain = the heals deliberately exceed the modelled incoming damage (a breather). */
+    public static final float NODE_SUPPLY_CACHE_DRAIN_TARGET  = -0.25f;
+    public static final float NODE_SUPPLY_CACHE_ARMOUR_SHARE  = 0.40f;
+    public static final float NODE_SUPPLY_CACHE_CREDITS       = 0.80f;
+    public static final int   NODE_SUPPLY_CACHE_WEAPONS       = 1;
+    public static final float NODE_SUPPLY_CACHE_WEAPON_CHANCE = 0.50f;
+
+    public static final float NODE_SUPPLY_SHOP_THREAT         = 0.35f;
+    public static final float NODE_SUPPLY_SHOP_BODIES         = 0.35f;
+    public static final float NODE_SUPPLY_SHOP_AMMO_RATIO     = 1.00f;
+    public static final float NODE_SUPPLY_SHOP_DRAIN_TARGET   = 0.00f;
+    public static final float NODE_SUPPLY_SHOP_ARMOUR_SHARE   = 0.20f;
+    public static final float NODE_SUPPLY_SHOP_CREDITS        = 1.00f;
+
+    // REST / EVENT / MYSTERY / BOSS / REGION_GATE carry TODAY'S contents as a spec (order 6 retunes
+    // REST / EVENT / MYSTERY). Their bespoke stock still rides the profiles' guarantees.
+    /** MYSTERY: threat 1.0 — the hidden outcome's own EnemyBudgetOverride scales it (order 6 retunes). */
+    public static final float NODE_SUPPLY_MYSTERY_THREAT      = 1.00f;
+    /** EVENT: the event room's own budget scale is the threat (RouteMapConstants.EVENT_BUDGET_SCALE). */
+    public static final float NODE_SUPPLY_EVENT_THREAT        = 1.00f;
+    /** REGION_GATE: threat 0 — the airlock is a story beat, not a fight. */
+    public static final float NODE_SUPPLY_GATE_THREAT         = 0.00f;
+
+    // --- AUDIT SWEEP (R-SUPPLY / R-DENSITY) ---------------------------------------------------
+    /** A2/A3: seeds per (generator x node type x depth) cell of the R-SUPPLY / R-DENSITY sweep. */
+    public static final int   SUPPLY_AUDIT_SEED_COUNT = 30;
+    /** A2/A3: the sparse depths the sweep visits. */
+    public static final int[] SUPPLY_AUDIT_DEPTHS     = {1, 5, 10, 15, 20, 25};
 }

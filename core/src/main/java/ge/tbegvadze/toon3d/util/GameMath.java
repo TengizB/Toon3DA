@@ -5848,4 +5848,155 @@ public final class GameMath {
         float onCurvePower = onCurve.damagePerTurn * onCurve.effectiveHitPoints;
         return onCurvePower <= 0f ? 0f : (actual.damagePerTurn * actual.effectiveHitPoints) / onCurvePower;
     }
+
+
+    // =========================================================================
+    // SUPPLY & DENSITY (balance-overhaul order 2) — the planner's arithmetic.
+    // -------------------------------------------------------------------------
+    // Supply is DERIVED from the floor's planned roster (demand) and the node spec, never from the
+    // player's current state. Every number the SupplyPlanner / EncounterBudgetPlanner / R-SUPPLY /
+    // R-DENSITY audit compute goes through these methods.
+    // =========================================================================
+
+    /*
+     * Formula: supplyDamagePerUnitAtDepth — what one ammo unit is worth to the on-curve player (S2)
+     * Derivation:
+     *   An ammo unit buys one shot of the weapon that eats it; on the ladder that shot grows with the
+     *   on-curve player's hit growth (order 1, R11):
+     *       damagePerUnit(d) = depthOneDamagePerUnit * expectedHitGrowthAtDepth(d)
+     *   So the same planned DAMAGE needs fewer units as the player climbs — the box count stays
+     *   depth-stable while demand and damage grow together.
+     * Edge cases: depthOneDamagePerUnit <= 0 -> 0 (an ammo type with no damage value supplies nothing).
+     */
+    public static float supplyDamagePerUnitAtDepth(float depthOneDamagePerUnit, int depth) {
+        if (depthOneDamagePerUnit <= 0f) {
+            return 0f;
+        }
+        return depthOneDamagePerUnit * expectedHitGrowthAtDepth(depth);
+    }
+
+    /*
+     * Formula: floorAmmoDemandUnits — ammo units a roster costs the expected player (S2)
+     * Derivation:
+     *   Killing the roster means dealing its total eHP; each unit of an ammo type deals that type's
+     *   per-unit damage at this depth:
+     *       demandUnits = rosterEffectiveHitPoints / damagePerUnitAtDepth
+     *   The planner multiplies the DAMAGE plan by the node's ammoRatio and the type's share BEFORE
+     *   converting to units, so this is the conversion step.
+     *   Worked: 600 eHP / 20 damage per bullet = 30 bullets (3 boxes of 10).
+     * Edge cases: damagePerUnitAtDepth <= 0 or eHP <= 0 -> 0 units (nothing to buy / no value per unit).
+     */
+    public static float floorAmmoDemandUnits(float rosterEffectiveHitPoints, float damagePerUnitAtDepth) {
+        if (rosterEffectiveHitPoints <= 0f || damagePerUnitAtDepth <= 0f) {
+            return 0f;
+        }
+        return rosterEffectiveHitPoints / damagePerUnitAtDepth;
+    }
+
+    /*
+     * Formula: floorExpectedIncomingDamage — the heal-economy incoming model, re-based (S3)
+     * Derivation:
+     *   The order-3 model (incomingDamagePerFloor) read a FIXED model floor at depth 1. Re-based, it
+     *   reads the floor's ACTUAL roster at its depth and is expressed against the order-1 expected
+     *   player, in fractions of that player's max HP:
+     *       rosterDpt(d) = sum over planned enemies of (attackDamage / attackCadence) * damageGrowth(d)
+     *       incoming     = rosterDpt(d) * turnsEngagedPerEnemy * (1 - avoidanceFactor)
+     *       fraction     = incoming / expectedPlayer.maxHealth
+     *   The roster's depth-1 DPT is summed by the caller (rosterBaseDamagePerTurn); enemyDamageAtDepth
+     *   is linear in its base, so scaling the sum equals summing the scaled members.
+     * Edge cases: avoidance clamped to [0, 0.99]; turnsEngaged < 0 -> 0; maxHealth <= 0 -> 0.
+     */
+    public static float floorExpectedIncomingDamage(float rosterBaseDamagePerTurn, int depth,
+                                                    ExpectedPlayer expectedPlayer,
+                                                    float turnsEngagedPerEnemy, float avoidanceFactor) {
+        if (expectedPlayer == null || expectedPlayer.maxHealth <= 0f) {
+            return 0f;
+        }
+        float incoming = incomingDamagePerFloor(enemyDamageAtDepth(rosterBaseDamagePerTurn, depth),
+                turnsEngagedPerEnemy, avoidanceFactor);
+        return incoming / expectedPlayer.maxHealth;
+    }
+
+    /*
+     * Formula: plannedHealValue — heal value a floor hands back, in fractions of max HP (S3 + S4)
+     * Derivation:
+     *   The node decides how much of the modelled incoming damage the floor deliberately leaves
+     *   UNCOVERED (drainTarget, 0.20 on COMBAT, negative on CACHE = a net gain):
+     *       value = incomingFraction * (1 - drainTarget)
+     *   and the HEAL FLOOR (S4) lifts it to at least healFloorFraction on every non-exempt floor:
+     *       value = max(value, healFloorFraction)   when the floor applies
+     * Edge cases: negative incoming -> treated as 0; result never negative.
+     */
+    public static float plannedHealValue(float incomingFraction, float drainTarget,
+                                         float healFloorFraction, boolean healFloorApplies) {
+        float value = Math.max(0f, incomingFraction) * (1f - drainTarget);
+        if (healFloorApplies) {
+            value = Math.max(value, healFloorFraction);
+        }
+        return Math.max(0f, value);
+    }
+
+    /*
+     * Formula: bodyTargetAtDepth — how many bodies a floor fills (E1)
+     * Derivation:
+     *   The target band rises LINEARLY from [minAtOne, maxAtOne] at depth 1 to [minDeep, maxDeep] at
+     *   deepDepth and is held beyond it:
+     *       t     = clamp((d - 1) / (deepDepth - 1), 0, 1)
+     *       low   = minAtOne + t * (minDeep - minAtOne)
+     *       high  = maxAtOne + t * (maxDeep - maxAtOne)
+     *       value = low + unitRoll * (high - low)
+     *   unitRoll in [0,1) is the floor's seeded roll, so the same floor always fills the same count.
+     *   Independent of per-enemy cost: the Threat-Point budget is now a CAP, the body count the target.
+     * Edge cases: deepDepth <= 1 -> t = 1; unitRoll clamped to [0, 1]; depth < 1 treated as 1.
+     */
+    public static float bodyTargetAtDepth(int depth, float unitRoll, int minAtOne, int maxAtOne,
+                                          int minDeep, int maxDeep, int deepDepth) {
+        float progress = deepDepth <= 1 ? 1f
+                : Math.max(0f, Math.min(1f, (Math.max(1, depth) - 1) / (float) (deepDepth - 1)));
+        float low  = minAtOne + progress * (minDeep - minAtOne);
+        float high = maxAtOne + progress * (maxDeep - maxAtOne);
+        float roll = Math.max(0f, Math.min(1f, unitRoll));
+        return low + roll * (high - low);
+    }
+
+    /*
+     * Formula: densityPerHundredTiles — enemies per 100 walkable tiles (E7)
+     * Derivation:
+     *       density = enemyCount * 100 / walkableTiles
+     *   COMBAT floors sit in [2.2, 4.0], ELITE in [3.0, 5.0], CACHE / SHOP in [0.6, 1.5] — the measure of
+     *   "big but empty" the footprint rule (E6) and the body target (E1) are tuned against together.
+     * Edge cases: walkableTiles <= 0 -> 0 (no floor to measure).
+     */
+    public static float densityPerHundredTiles(int enemyCount, int walkableTiles) {
+        if (walkableTiles <= 0) {
+            return 0f;
+        }
+        return enemyCount * 100f / walkableTiles;
+    }
+
+    /*
+     * Formula: footprintTargetWalkableTiles — the walkable-tile target a combat generator builds to (E6)
+     * Derivation:
+     *   Each region owns a [min, max] range (deeper regions reuse the last row); the floor's seeded roll
+     *   picks inside it, an ELITE floor inside the LOWER half (a tighter, hotter arena):
+     *       high'  = lowerHalfOnly ? (min + max) / 2 : max
+     *       target = round(min + unitRoll * (high' - min))
+     * Edge cases: empty tables -> 0 (no target: the generator keeps its natural size); regionIndex
+     *   clamped to the table; unitRoll clamped to [0, 1].
+     */
+    public static int footprintTargetWalkableTiles(int[] minimumByRegion, int[] maximumByRegion,
+                                                   int regionIndex, float unitRoll, boolean lowerHalfOnly) {
+        if (minimumByRegion == null || maximumByRegion == null
+                || minimumByRegion.length == 0 || maximumByRegion.length == 0) {
+            return 0;
+        }
+        int index = Math.max(0, Math.min(Math.min(minimumByRegion.length, maximumByRegion.length) - 1, regionIndex));
+        float low  = minimumByRegion[index];
+        float high = maximumByRegion[index];
+        if (lowerHalfOnly) {
+            high = (low + high) / 2f;
+        }
+        float roll = Math.max(0f, Math.min(1f, unitRoll));
+        return Math.round(low + roll * (high - low));
+    }
 }

@@ -16,7 +16,9 @@ R-SCARCITY / R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH; route economics re-derived) a
 `sim/BalanceSimTest` (S-SUPPLY, re-based S-ECONOMY). No new test files. Existing generator/route
 tests UPDATED where behaviour legitimately changes. Both gates every checkpoint.
 **STARTED:** 2026-10-01
-**BASELINE:** branched from `2207b75`. Gate result recorded in NOTES once the baseline run finishes.
+**BASELINE:** branched from `2207b75`. Mirror build green; 449 tests, 1 pre-existing failure — `StoryBarkTest`
+("a joke survived into the deepest strata: bark.depth.core.2", narrative content, not ours). balanceSim green
+(36 s; TACTICAL 174/200 runs stall on floor 1 — the navigation waiver). Any OTHER red test is ours.
 
 ## HOW TO RESUME AFTER A CUT
 
@@ -50,7 +52,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — SupplyPlanner, SupplyRequest/Plan, SupplySlotProvider, NodeSupplySpec registry (all
+- [x] **CP1** — SupplyPlanner, SupplyRequest/Plan, SupplySlotProvider, NodeSupplySpec registry (all
       node rows) and SECTION 21 exist, headless and unwired.
       DONE WHEN: they exist, planner-level R-SUPPLY checks green, both gates green.
 - [ ] **CP2** — ROOMS_MST (LevelGenerator) builds through slots + SupplyPlanner.
@@ -77,3 +79,53 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   desktop-only MIRROR build in the session scratchpad: symlinks to core/lwjgl3/assets/gradle*/docs,
   `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle` with the `buildscript{}` block
   removed and `configure(subprojects)`. Test XML lands in the REAL `core/build/test-results/`.
+
+- **ARCHITECTURE CONTRACT (decided at CP1 — follow it):**
+  - `LevelGenConfig` will carry `supplySpec` (route.NodeSupplySpec; null -> `RouteRegistries.nodeSupplySpecs()
+    .getOrCombat(null)` i.e. COMBAT), `carriedAmmoTypes` (EnumSet<AmmoType>, null -> expected player's {BULLETS}),
+    `weaponCadenceDue`, `targetWalkableTiles` (CP5). `enemyBudgetScale` stays and now carries ONLY extra
+    multipliers (affix, event bonus, mystery outcome); node-type threat comes from the spec. Profiles that set
+    `EnemyBudgetOverride.calm()/light()/ELITE_BUDGET_SCALE` for their NODE TYPE drop that override in CP6.
+  - Pipeline per generator (S1): build layout + decoration + lock-and-key + stairs FIRST, then a shared
+    `level/FloorPopulator` (CP2) does: `SupplySlotSurvey.survey(grid, provider)` -> encounter plan + placement
+    (CP2/3: the old planner + generator placement; CP4: templates via shared placement) -> `SupplyPlanner.plan`
+    -> `SupplyPlanner.place` -> stamp grid symbols, carriers onto spawn points, WeaponSpawnPoints with planned
+    offset/tier, credit spawn points, and a `FloorContentReport` attached to the Level for the audit / sim.
+  - Every generator implements `SupplySlotProvider` (`supplyRegionAt(col,row)` -> room/chamber id or -1
+    corridor; `isLargeSupplyRegion(id)`). Start = 'p', exit = '>' found in the grid by the survey.
+  - Carriers: `EnemySpawnPoint` gains a carried drop char; EnemyManager drops it on death (any cause, summons
+    never carry); independent per-kill drop rolls deleted (CP3); emergency lifeline + boss-summon lifeline kept.
+  - Credits: Level carries planned credit chips; World.seedCreditChips reads them (CP3).
+  - Weapons: `WeaponSpawnPoint` gains level offset + tier bonus; World/SimWorld roll via a new
+    `WeaponRoller.rollPlannedToSnapshot(base, depth, offset, tierBonus)`; S9 cadence in RunStats
+    (`lastNonBossFloorOfferedOnLevelWeapon`) -> `config.weaponCadenceDue`; pity rule deleted (CP6).
+- **DECISIONS (not settled by the spec):**
+  - E1 x E6 x E7 are numerically inconsistent if spec.threat (1.6) and the region dial (up to 1.25) multiply
+    BODIES (ELITE d1: 1.6 x 14 bodies on <=450 tiles = 5.0+/100; region E d25: 1.25 x 25 on <=750 = 4.2 > 4.0).
+    So threat + region dial scale the TP CAP; bodies scale by a separate `NodeSupplySpec.bodyScale`
+    (ELITE 1.2, CACHE/SHOP 0.35). A6 "ELITE threat ~1.6x" is measured on TP spent.
+  - The anchor group (ESCORT / WARBAND) is exempt from GROUP_TP_FRACTION_CAP (a lone Iron Stalker is 374 TP vs an
+    ELITE d1 group cap of 252) — the existing "anchor exempt from the per-room cap" exception carried over.
+  - S7 spread is COUNT based: a room may hold max(1, floor(0.35 x count)) pickups of a category (with 2 pickups
+    on a floor "35%" can only mean one each). Corridor (connector) tiles are not rooms; used only as a fallback.
+  - S5 tracking allowance = max(10% of plan, half the largest pickup of the category) — "only rounding to whole
+    pickups may move it". Placed must equal the rounded plan (zero unplaced).
+  - Heal floor = HEAL value (armour never substitutes). S4 "first half" = half of the farthest keycard-free
+    walk distance on the floor.
+  - EVENT is not exempt from S4 (spec lists BOSS/REST/REGION_GATE only) -> an event room gains one 'H'.
+  - BOSS ammo plan = BossBalance.arenaAmmoBudgetDamage(boss eHP) — the arena did NOT place it before; it will now.
+  - Credits: chips = round(creditScale x SUPPLY_CREDIT_CHIPS_PER_FLOOR(5)), each worth the old weighted mean chip
+    value (no depth scaling, so R-CREDITS' chip term is unchanged at scale 1.0).
+  - ELITE card "RARE+" vs S10 "tier >= region min + 1": built as S10 (region A: UNCOMMON). Flag to owner.
+- **CP1 handover:** `SupplyPlanner.plan(SupplyRequest)` / `place(plan, slots, carrierSpawnIndices,
+  anchorRegionId, halfDistance, seed)`; `SupplyPlan.plannedValue/roundedValue/count/largestPickupValue`;
+  `SupplyPlacement.placedValue/keycardFreeHealFloorValue/earlyHealFloorValue/maximumRoomShare/maximumRoomCount`;
+  `SupplySlotSurvey.survey(grid, provider)` (+ walk distances, exit path, `walkableTileCount()`);
+  `SupplyPlanner.boxDamageAtDepth/depthOneDamagePerUnit/averageCreditChipValue/armourPickupValue`.
+  GameMath: `supplyDamagePerUnitAtDepth, floorAmmoDemandUnits, floorExpectedIncomingDamage, plannedHealValue,
+  bodyTargetAtDepth, densityPerHundredTiles, footprintTargetWalkableTiles`. `RouteRegistries.nodeSupplySpecs()`
+  (latched, audit-safe). BalanceSchema: `RuleKind.SUPPLY`, `RuleKind.DENSITY`, `supplyPlannerResults()`,
+  public `SupplyAuditAccumulator(spec, depth).add(plan, placement)/emit(results, prefix)` — reuse it for the CP3
+  generator sweep. Test: `BalanceAuditTest.theSupplyPlannerTracksDemandOnEverySpec`.
+- **TEMPORARY:** R-SCARCITY / R-SCARCITY-DEPTH / R-HEALDRAIN-DEPTH still enforced on the old model constants;
+  they are REPLACED (override clause) in CP3 when the generator sweep lands.

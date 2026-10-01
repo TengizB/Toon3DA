@@ -28,6 +28,7 @@ public final class RouteRegistries {
     private static final FacilityEventRegistry    EVENTS         = new FacilityEventRegistry();
     private static final RegionAmbienceRegistry   REGION_AMBIENCE = new RegionAmbienceRegistry();
     private static final NodeEconomicsRegistry    NODE_ECONOMICS  = new NodeEconomicsRegistry();
+    private static final NodeSupplySpecRegistry   NODE_SUPPLY_SPECS = new NodeSupplySpecRegistry();
     private static boolean bootstrapped = false;
     // Per-registry latches so the three registries the headless BALANCE AUDIT reads (node types,
     // generators, node economics) can be pulled in isolation — the audit prices and walks the map
@@ -36,6 +37,7 @@ public final class RouteRegistries {
     private static boolean generatorsRegistered    = false;
     private static boolean nodeEconomicsRegistered = false;
     private static boolean affixesRegistered       = false;
+    private static boolean nodeSupplySpecsRegistered = false;
 
     private RouteRegistries() {}
 
@@ -68,6 +70,19 @@ public final class RouteRegistries {
             RouteEconomics.registerAll(NODE_ECONOMICS);
         }
         return NODE_ECONOMICS;
+    }
+
+    /**
+     * The shared NODE SUPPLY SPECS (balance-overhaul order 2, S10) — what a floor of each node type
+     * contains. Populated on first access so the generators, the headless balance audit and the route
+     * ledger all read the same rows without booting the whole route subsystem.
+     */
+    public static synchronized NodeSupplySpecRegistry nodeSupplySpecs() {
+        if (!nodeSupplySpecsRegistered) {
+            nodeSupplySpecsRegistered = true;
+            NodeSupplySpecs.registerAll(NODE_SUPPLY_SPECS);
+        }
+        return NODE_SUPPLY_SPECS;
     }
 
     /** The shared node-level-profile registry (order-3: node -&gt; floor pipeline). */
@@ -112,6 +127,7 @@ public final class RouteRegistries {
         nodeTypes();
         generators();
         nodeEconomics();
+        nodeSupplySpecs();
         affixes();
         registerEvents(EVENTS);
         registerRegionAmbience(REGION_AMBIENCE);
