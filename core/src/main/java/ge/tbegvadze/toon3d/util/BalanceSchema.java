@@ -164,8 +164,8 @@ public final class BalanceSchema {
         /** S-LAG (balance-overhaul order 1): the start-weapon hoarder dies by SIM_LAG_MAX_MEDIAN_DEPTH (median). */
         SIM_LAG,
         /**
-         * S-SWITCH (balance-overhaul order 3, A8): TACTICAL takes >= SIM_SWITCH_MIN_PER_COMBAT_FLOOR
-         * matchup-driven (C4 hint) weapon switches per played COMBAT floor. Not depth-derived — never waived.
+         * S-SWITCH (balance-overhaul order 3, A8 re-stated by D3): the C4 hint works — enough COMBAT floors
+         * show one, TACTICAL takes it, and each hinted COMBAT floor yields a switch. Never waived.
          */
         SIM_SWITCH
     }

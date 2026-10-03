@@ -53,7 +53,7 @@ public final class BehavioralBands {
         if (tactical != null) results.add(routeResult(tactical));
         if (tactical != null) results.addAll(economyResults(tactical));
         if (tactical != null) results.addAll(supplyResults(tactical));
-        if (tactical != null) results.add(switchResult(tactical));
+        if (tactical != null) results.addAll(switchResults(tactical));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
     }
@@ -167,17 +167,35 @@ public final class BehavioralBands {
     }
 
     /**
-     * S-SWITCH (balance-overhaul order 3, A8): TACTICAL takes at least SIM_SWITCH_MIN_PER_COMBAT_FLOOR
-     * matchup-driven switches (a SWITCH tap while the C4 hint was up, landing on the hinted gun) per played
-     * COMBAT floor — the matchup layer is a decision the competent player actually makes.
+     * S-SWITCH (balance-overhaul order 3, A8 as re-stated by D3): the C4 hint WORKS — enough COMBAT floors
+     * show one (SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS), TACTICAL takes it (SIM_SWITCH_MIN_TAKE_RATE), and every
+     * floor that shows one produces a matchup switch (SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR). The raw
+     * per-COMBAT-floor count is reported, not banded: it measures the start kit's class spread, not the hint.
      */
-    private static RuleResult switchResult(PolicySummary tactical) {
-        float perFloor = tactical.meanMatchupSwitchesPerCombatFloor();
-        boolean measured = !Float.isNaN(perFloor);
-        return BalanceSchema.result(RuleKind.SIM_SWITCH, "TACTICAL matchup switches per COMBAT floor",
-                measured ? perFloor : 0f, BalanceConfig.SIM_SWITCH_MIN_PER_COMBAT_FLOOR, Float.POSITIVE_INFINITY,
-                measured && perFloor >= BalanceConfig.SIM_SWITCH_MIN_PER_COMBAT_FLOOR,
-                measured ? "SWITCH taps taken on the C4 hint" : "no COMBAT floor played");
+    private static List<RuleResult> switchResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        int[] floors = tactical.combatFloorsAndHintedCombatFloors();
+        int hintedFloors = floors[1];
+        results.add(BalanceSchema.result(RuleKind.SIM_SWITCH, "TACTICAL COMBAT floors showing a hint",
+                hintedFloors, BalanceConfig.SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS, Float.POSITIVE_INFINITY,
+                hintedFloors >= BalanceConfig.SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS,
+                "of " + floors[0] + " COMBAT floors; keeps the two lines below off an empty sample"));
+        float takeRate = tactical.hintTakeRate();
+        boolean takeMeasured = !Float.isNaN(takeRate);
+        results.add(BalanceSchema.result(RuleKind.SIM_SWITCH, "TACTICAL hint take rate",
+                takeMeasured ? takeRate : 0f, BalanceConfig.SIM_SWITCH_MIN_TAKE_RATE, Float.POSITIVE_INFINITY,
+                takeMeasured && takeRate >= BalanceConfig.SIM_SWITCH_MIN_TAKE_RATE,
+                takeMeasured ? "hint-driven switches / hint episodes" : "no hint appeared"));
+        float perHintedFloor = tactical.matchupSwitchesPerHintedCombatFloor();
+        boolean floorMeasured = !Float.isNaN(perHintedFloor);
+        float perCombatFloor = tactical.meanMatchupSwitchesPerCombatFloor();
+        results.add(BalanceSchema.result(RuleKind.SIM_SWITCH, "TACTICAL switches per hinted COMBAT floor",
+                floorMeasured ? perHintedFloor : 0f, BalanceConfig.SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR,
+                Float.POSITIVE_INFINITY,
+                floorMeasured && perHintedFloor >= BalanceConfig.SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR,
+                String.format("info: %.2f per COMBAT floor overall (kit-limited, not banded — D3)",
+                        Float.isNaN(perCombatFloor) ? 0f : perCombatFloor)));
+        return results;
     }
 
     /** S-SOFTLOCK: no run may end unable to damage anything. Zero, by contract, for every policy. */

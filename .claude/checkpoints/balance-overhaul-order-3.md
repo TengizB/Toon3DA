@@ -80,7 +80,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED. Split:
   - [x] **CP7a** — sim plays the C4 hint; TacticalPolicy takes hints + kit diversity; MATCHUP REPORT; S-SWITCH
         band; planned-heal re-fit; TP weight DECISION 0. DONE WHEN: committed; only S-SWITCH red (owner question).
-  - [ ] **CP7b** — S-SWITCH resolved per the owner's answer; docs (A9) complete; A1 grep; both gates green.
+  - [x] **CP7b** — S-SWITCH resolved per the owner's answer; docs (A9) complete; A1 grep; both gates green.
   - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -185,3 +185,15 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   COMBAT floor that SHOWED a hint 1.00; only 21/167 COMBAT floors showed a hint. Cause: Chaingun+Shotgun start kit,
   2 usable slots, ~85% of runs stall on floor 1 (navigation waiver), kit diversity adds ENERGY 5% / RAIL 2% damage
   share only. OWNER QUESTION raised: how A8's S-SWITCH should read. Docs (A9) were mid-edit at the cut — CP7b finishes.
+- **CP7b handover:** owner delegated A8 ("make the best decision"); hub chose D3 (recorded in the idea file):
+  S-SWITCH = three lines in `BehavioralBands.switchResults` — hinted COMBAT floors >= 10 (`SIM_SWITCH_MIN_HINTED_
+  COMBAT_FLOORS`), take rate >= 0.8 (`SIM_SWITCH_MIN_TAKE_RATE`), switches per hinted COMBAT floor >= 1.0
+  (`SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR`); old `SIM_SWITCH_MIN_PER_COMBAT_FLOOR` deleted; BalanceSimTest
+  asserts 3 lines, none waived. A9 docs done: weapon-creation-guide (DamageClass + WeaponRoleModel row + R-ROLE +
+  SpreadImpact), enemy-system (trait table per family, application point, TP split, stagger/knockback, burn
+  stacks), authority S-SWITCH entry + change log + SECTION 8 regenerated; EnemyFamily Javadoc refreshed;
+  CLAUDE.md sim row (nine S-* bands). A1 grep clean (only TouchAction.FIRE matches). Gates: core:test 453, only
+  StoryBarkTest; balanceSim exit 0 — S-SWITCH 21 hinted floors / take 1.00 / 1.00 per hinted floor; S-SUPPLY 0.78.
+- **CP7c next:** reviewer gate. Owner flags for the final report: A5 Gore Biter dies at 1 tile (mechanics proven
+  on Shell Brute/Revenant); Chaingun ~2x AR per turn; bullet reserve 25 < AR clip 30; C3 glyph on slot strip (no
+  right panel); FUEL -> CELLS; TP weight 0 (decision); desktop visual checks owed (A3, A4, A5, A6 in-game).

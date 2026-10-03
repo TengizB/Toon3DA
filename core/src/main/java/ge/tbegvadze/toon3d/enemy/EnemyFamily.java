@@ -9,17 +9,18 @@ package ge.tbegvadze.toon3d.enemy;
  * golems. Two archetypes in the same family read as belonging to the same bestiary page even when
  * their roles differ (the UNDEAD family holds chaff, a bruiser and a caster).
  *
- * <p><b>PURELY DESCRIPTIVE TODAY.</b> Nothing in the simulation, the spawn pipeline, the encounter
- * budget or the renderers reads {@link EnemyType#family()} yet — adding it changed no behaviour. It
- * exists so the metadata is already in place, and already correct for every archetype, when the
- * FAMILY-COHERENT FLOOR rule lands: a generated floor will pick ONE family and draw its whole roster
- * from that family's archetypes, so a level reads as a single infestation rather than a random
- * bestiary dump. Until then, every archetype remains spawnable on every floor exactly as before.
+ * <p><b>WHAT READS IT.</b> The matchup layer (balance-overhaul order 3) reads the family's {@link #trait()}
+ * on every player hit, the bestiary voice and the gameplay-sound family voices key off it, and
+ * the trait glyph on every health bar comes from it. The spawn pipeline still does NOT: every
+ * archetype remains spawnable on every floor. The FAMILY-COHERENT FLOOR rule (a generated floor
+ * picking ONE family and drawing its roster from it, so a level reads as a single infestation
+ * rather than a random bestiary dump) is still unbuilt.
  *
  * <p>When that rule is implemented it must go through {@code EncounterBudgetPlanner}'s roster
  * selection (filter the candidate archetypes by the floor's chosen family) — never through a switch
  * on {@link EnemyType}. A family must therefore hold enough archetypes to fill a floor's role wheel
- * (chaff + soldier + an anchor); {@link #GOLEM} is the first family authored to that standard.
+ * (chaff + soldier + an anchor); {@link #GOLEM} (Auric Sentinel, Cinderforge Colossus, Rimeshell
+ * Lancer, Verdant Spiresower) is the first family authored to that standard.
  *
  * <p><b>MATCHUP TRAIT (balance-overhaul order 3).</b> Each family declares the {@link EnemyTrait}
  * its members present to the player's damage ({@link #trait()}) — the row of the matchup table.

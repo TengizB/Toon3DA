@@ -406,6 +406,12 @@ DECISIONS
       -> matchup table + five communication channels + ORA topic.  (2026-09-30)
   D2  Shotguns and the Incinerator must be worth using (owner, H1/H2) -> SPREAD
       and FIRE roles with R-ROLE niche guarantees.  (2026-09-30)
+  D3  A8's S-SWITCH re-stated (owner delegated the call to the hub, 2026-10-03): ">= 1.0 matchup
+      switches per COMBAT floor" measured 0.13 because the Chaingun + Shotgun start kit can only
+      answer CHITIN (take rate 1.00; 21 of 167 COMBAT floors showed a hint). The band now proves
+      the hint WORKS: >= 10 TACTICAL COMBAT floors show a hint, take rate >= 0.8, and >= 1.0
+      switches per COMBAT floor that showed a hint. The per-floor count stays reported, unbanded.
+      Changing the start kit was rejected: it would reopen orders 1-2's fitted bands. (2026-10-03)
 
 
 OPEN QUESTIONS

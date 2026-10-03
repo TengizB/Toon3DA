@@ -123,13 +123,13 @@ class BalanceSimTest {
     }
 
     /**
-     * S-SWITCH (balance-overhaul order 3, A8) — TACTICAL takes the C4 SWITCH hint: at least
-     * SIM_SWITCH_MIN_PER_COMBAT_FLOOR matchup-driven switches per played COMBAT floor. Not waived.
+     * S-SWITCH (balance-overhaul order 3, A8 re-stated by D3) — the C4 SWITCH hint works: enough COMBAT
+     * floors show one, TACTICAL takes it, and every hinted COMBAT floor yields a switch. Not waived.
      */
     @Test
     void tacticalSwitchesWeaponsByMatchup() {
         List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_SWITCH);
-        assertFalse(results.isEmpty(), "S-SWITCH is evaluated");
+        assertEquals(3, results.size(), "S-SWITCH evaluates hinted floors, take rate and per-hinted-floor switches");
         assertTrue(results.stream().noneMatch(result -> result.waived), "S-SWITCH is never waived");
         assertBandsHold(results);
     }

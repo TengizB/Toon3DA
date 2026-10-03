@@ -2620,12 +2620,18 @@ public final class BalanceConfig {
     /** A-1: a reserve cap's banked floors may sit this far either side of its target (whole-unit rounding). */
     public static final float AMMO_BANKING_FLOORS_TOLERANCE = 0.15f;
 
-    // --- S-SWITCH (CP7, A8) ------------------------------------------------------------------------
-    /**
-     * S-SWITCH: TACTICAL's matchup-driven (C4 SWITCH-hint) weapon switches per played COMBAT floor must be
-     * at least this. A fight-level count, not depth-derived, so the navigation waivers do not cover it.
-     */
-    public static final float SIM_SWITCH_MIN_PER_COMBAT_FLOOR = 1.0f;
+    // --- S-SWITCH (CP7, A8 — re-stated by DECISION D3) ----------------------------------------------
+    // A8 as first written ("TACTICAL >= 1.0 matchup switches per COMBAT floor") measured how often the sim's
+    // Chaingun + Shotgun start kit happens to meet a CHITIN target, not whether the C4 hint works: measured
+    // 0.13 per COMBAT floor with a take rate of 1.00 (21 of 167 COMBAT floors ever showed a hint). Re-stated
+    // (override clause) as three lines: the hint is TAKEN when it appears, it produces a switch on every
+    // floor that shows it, and enough floors show it that the first two are not read off an empty sample.
+    /** S-SWITCH: TACTICAL's hint take rate (hint-driven switches / hint episodes) must be at least this. */
+    public static final float SIM_SWITCH_MIN_TAKE_RATE = 0.8f;
+    /** S-SWITCH: hint-driven switches per COMBAT floor ON WHICH A HINT APPEARED must be at least this. */
+    public static final float SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR = 1.0f;
+    /** S-SWITCH: at least this many TACTICAL COMBAT floors across the matrix must show a hint (non-vacuous). */
+    public static final int   SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS = 10;
 
     // --- R-ROLE — the reference scenarios and margins (replace the R-WEAPON power bands) -----------
     // Each scenario = a target trait x group size x engagement band; its archetype (the representative
