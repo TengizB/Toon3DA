@@ -640,7 +640,8 @@ public final class BalanceReport {
                 + " enemies, DEMAND=" + String.format("%.0f", demand) + " dmg ; planned ammo damage="
                 + String.format("%.0f", plan.plannedValue(ge.tbegvadze.toon3d.level.SupplyCategory.AMMO))
                 + " (ammoRatio " + BalanceConfig.NODE_SUPPLY_COMBAT_AMMO_RATIO + ", "
-                + String.format("%.0f%%", BalanceConfig.SUPPLY_CARRIED_SHARE * 100f) + " carried types)");
+                + String.format("%.0f%%", BalanceConfig.SUPPLY_CARRIED_SHARE * 100f)
+                + " carried types, weighted by A-1 generosity)");
         System.out.printf("%-10s %7s %9s %8s %10s %-7s %12s%n",
                 "ammoType", "boxes", "dmg/unit", "supply", "perWpnS", "", "bankFloors");
         System.out.println("------------------------------------------------------------------------------------");

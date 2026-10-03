@@ -714,7 +714,10 @@ ONE PIPELINE (S1). Every generator: layout + gate + stairs -> SupplySlotSurvey (
 THE PLAN, per floor:
   AMMO (S2)     roster eHP at depth x spec.ammoRatio (+ an ELITE vault share), priced per unit at the
                 on-curve hit growth; SUPPLY_CARRIED_SHARE 0.70 over the ammo types of the weapons the
-                player carries, 0.30 over the rest; whole boxes by largest remainder.
+                player carries, 0.30 over the rest, each share WEIGHTED by its A-1 generosity (bullets
+                0.8, shells 1.3, cells 1.0, rockets 1.0, slugs 0.9) and re-normalised so the total is
+                unchanged (balance-overhaul order 3); whole boxes by largest remainder. Reserve caps bank
+                ~1.0 floor of bullets / slugs and ~1.5 of shells / cells / rockets (caps 25/11/27/21/7).
   HEALS (S3/S4) incoming = the roster's base DPT x the on-curve depth factor x SUPPLY_TURNS_ENGAGED_
                 PER_ENEMY x SUPPLY_AVOIDANCE_FACTOR, as a fraction of expected max HP; planned value =
                 incoming x (1 - spec.drainTarget), never below the HEAL FLOOR (0.45 max HP — one 'H') on

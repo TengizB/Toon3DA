@@ -288,6 +288,24 @@ R-SUPPLY (RuleKind.SUPPLY) — supply tracks demand (balance-overhaul order 2)
                  category's ground pickups (count basis; corridors are not rooms)
     carriers     ~25% (+/-0.08) of the eligible ammo / non-floor heal pickups ride
                  on enemies (S6)
+  RESERVE BANKS (BalanceSchema.ammoBankingResults, balance-overhaul order 3 A-1): every
+    ammo type's full reserve banks AmmoType.getBankingFloorsTarget() floors of the model
+    floor's demand (cap x damage per unit / 502), +/- AMMO_BANKING_FLOORS_TOLERANCE 0.15:
+    BULLETS 1.0, SHELLS 1.5, CELLS 1.5, ROCKETS 1.5, SLUGS 1.0.
+  A-1 AMMO GENEROSITY (balance-overhaul order 3, CP4): the S2 split is WEIGHTED per
+    AmmoType (getSupplyGenerosity — BULLETS 0.8, SHELLS 1.3, CELLS 1.0, ROCKETS 1.0,
+    SLUGS 0.9) and RE-NORMALISED (GameMath.normalisedAmmoShare), so a floor's total
+    planned ammo damage is unchanged and only the mix moves. With only the rifle carried
+    the shares go 70 / 7.5 x4 -> bullets 64%, shells 11.1%, cells 8.6%, rockets 8.6%,
+    slugs 7.7%. MAPPING: the spec's GRENADES are AmmoType.ROCKETS; the spec's FUEL has no
+    type of its own — the Incinerator burns CELLS (shared with the Plasma Rifle and the
+    Arc Cannon), which keep 1.0.
+    OVERRIDE RECORD: the order-2 unweighted 70/30 carried / off-type split -> weighted
+    and normalised as above. RESERVE CAPS re-fitted to the per-type banking targets:
+    BULLETS 38 -> 25 (1.51 -> 1.00 floors), SHELLS 11 (1.45, unchanged since CP3b's
+    17 -> 11), CELLS 27 (1.51, unchanged), ROCKETS 18 -> 21 (1.29 -> 1.51), SLUGS 6 -> 7
+    (0.90 -> 1.05). RESERVE_BANKING_FLOORS_TARGET (1.5, the aggregate R-BOSS-AMMO reads)
+    is unchanged.
   WHY: three generators placed loot with three different codes built from
   independent per-room chances — a rooms floor rolled ~8 medkits and ~10 ammo boxes
   at depth 1, a cave ~0.45 medkits (only inside a MEDICAL_BAY chamber that might not
@@ -843,7 +861,7 @@ INFERNAL        1.00       1.10       1.35E      1.00       0.30R      0.90     
 SCENARIO (R-ROLE, depth 5) — turns to clear; S8 = bruiser hits taken
 weapon                 class          S1      S2      S3      S4      S5      S6      S7      S8
 ------------------------------------------------------------------------------------------------
-Assault Rifle          BALLISTIC   4.98    5.90    5.74   13.78    8.04    8.21    4.15    6.00 
+Assault Rifle          BALLISTIC   4.98    5.90    5.74   13.78!   8.04    8.21    4.15    6.00 
 Chaingun               BALLISTIC   2.35    2.83    2.71    6.54!   2.89    3.51    1.96    1.00 
 Shotgun                SPREAD      6.20!   4.62    6.00!  14.58!   4.67    2.35    4.43    0.00*
 Double-Barrel Shotgun  SPREAD      4.24!   4.37!   4.10!  10.31!   4.40!   0.81*   2.70!   0.00*
@@ -853,7 +871,7 @@ Railgun                RAIL        1.91*   5.41    1.68    1.94*   5.44    5.25 
 Incinerator            FIRE        3.31!   1.95    3.13!   6.98!   0.84*   2.49!   7.79!   3.00 
 Grenade Launcher       EXPLOSIVE   2.08    1.09*   1.56    2.27    1.06    5.29    1.92    5.00 
   scenarios: S1 FLESH x1 3-5 (Plague Hulk); S2 FLESH x3 1-3 (Gore Biter); S3 SHIELDED x1 3-5 (Acid Drone); S4 PLATED x1 3-6 (Cinderforge Colossus); S5 BURNABLE x3 1-3 (Ghoul); S6 CHITIN x1 1-2 (Shell Brute); S7 INFERNAL x1 3-5 (Void Shroud); S8 CHITIN charge 3 (Shell Brute);
-  ammo per average COMBAT floor: BULLETS 16.5; SHELLS 3.0; CELLS 7.0; ROCKETS 4.3; SLUGS 2.1;
+  ammo per average COMBAT floor: BULLETS 12.0; SHELLS 3.0; CELLS 7.0; ROCKETS 4.3; SLUGS 2.1;
 
 SCENARIO (R-ROLE, depth 15) — turns to clear; S8 = bruiser hits taken
 weapon                 class          S1      S2      S3      S4      S5      S6      S7      S8
@@ -868,17 +886,17 @@ Railgun                RAIL        1.87*   5.39    1.65    1.90*   5.42    5.19 
 Incinerator            FIRE        3.14!   1.82    3.81!   6.59!   0.72*   2.32!   7.33!   3.00 
 Grenade Launcher       EXPLOSIVE   1.99    1.04*   1.49    2.17    1.02    5.15    1.84    5.00 
   scenarios: S1 FLESH x1 3-5 (Plague Hulk); S2 FLESH x3 1-3 (Gore Biter); S3 SHIELDED x1 3-5 (Acid Drone); S4 PLATED x1 3-6 (Cinderforge Colossus); S5 BURNABLE x3 1-3 (Ghoul); S6 CHITIN x1 1-2 (Shell Brute); S7 INFERNAL x1 3-5 (Void Shroud); S8 CHITIN charge 3 (Shell Brute);
-  ammo per average COMBAT floor: BULLETS 20.0; SHELLS 3.0; CELLS 7.0; ROCKETS 5.8; SLUGS 2.9;
+  ammo per average COMBAT floor: BULLETS 19.5; SHELLS 3.0; CELLS 7.0; ROCKETS 5.8; SLUGS 2.9;
 
   R-ROLE-3 BALLISTIC scenarios best d5             0.00 OK          of 8
-  R-ROLE-5 BALLISTIC ammo feasible d5              9.00 OK          Chaingun in S1 (BULLETS per floor 16.5)
+  R-ROLE-5 BALLISTIC ammo feasible d5              9.00 OK          Chaingun in S1 (BULLETS per floor 12.0)
   R-ROLE-1 SPREAD niche d5                         4.36 OK          best in S6; margin = best BALLISTIC / class best
   R-ROLE-3 SPREAD scenarios best d5                2.00 OK          of 8
   R-ROLE-5 SPREAD ammo feasible d5                 2.00 OK          Double-Barrel Shotgun in S6 (SHELLS per floor 3.0)
   R-ROLE-1 ENERGY niche d5                         2.15 OK          best in S3; margin = best BALLISTIC / class best
   R-ROLE-3 ENERGY scenarios best d5                2.00 OK          of 8
   R-ROLE-5 ENERGY ammo feasible d5                 2.00 OK          Arc Cannon in S3 (CELLS per floor 7.0)
-  R-ROLE-1 RAIL niche d5                           7.11 OK          best in S4; margin = best BALLISTIC / class best
+  R-ROLE-1 RAIL niche d5                          60.00 OK          best in S4; margin = best BALLISTIC / class best
   R-ROLE-3 RAIL scenarios best d5                  2.00 OK          of 8
   R-ROLE-5 RAIL ammo feasible d5                   1.00 OK          Railgun in S1 (SLUGS per floor 2.1)
   R-ROLE-1 FIRE niche d5                           3.44 OK          best in S5; margin = best BALLISTIC / class best
@@ -890,9 +908,9 @@ Grenade Launcher       EXPLOSIVE   1.99    1.04*   1.49    2.17    1.02    5.15 
   A6 Incinerator sprays to clear S2 d5             2.00 OK          1.95 turns
   R-ROLE-2 BALLISTIC vs best in S1 d5              1.23 OK          best BALLISTIC / best overall
   R-ROLE-2 BALLISTIC not best in S3 d5             2.15 OK          best BALLISTIC / best other class (must exceed 1)
-  R-ROLE-2 BALLISTIC not best in S4 d5             7.11 OK          best BALLISTIC / best other class (must exceed 1)
+  R-ROLE-2 BALLISTIC not best in S4 d5         Infinity OK          best BALLISTIC / best other class (must exceed 1)
   R-ROLE-3 BALLISTIC scenarios best d15            0.00 OK          of 8
-  R-ROLE-5 BALLISTIC ammo feasible d15             9.00 OK          Chaingun in S1 (BULLETS per floor 20.0)
+  R-ROLE-5 BALLISTIC ammo feasible d15             9.00 OK          Chaingun in S1 (BULLETS per floor 19.5)
   R-ROLE-1 SPREAD niche d15                        4.36 OK          best in S6; margin = best BALLISTIC / class best
   R-ROLE-3 SPREAD scenarios best d15               2.00 OK          of 8
   R-ROLE-5 SPREAD ammo feasible d15                2.00 OK          Double-Barrel Shotgun in S6 (SHELLS per floor 3.0)
@@ -1043,103 +1061,103 @@ depth    expLvl   avail XP     req XP    yield in band?
 14           14       3008       2714    1.108 OK      
 15           15       3758       3391    1.108 OK      
 
-SUPPLY PLAN — model floor example (depth 1, COMBAT): 12 enemies, DEMAND=502 dmg ; planned ammo damage=427 (ammoRatio 0.85, 70% carried types)
+SUPPLY PLAN — model floor example (depth 1, COMBAT): 12 enemies, DEMAND=502 dmg ; planned ammo damage=427 (ammoRatio 0.85, 70% carried types, weighted by A-1 generosity)
 ammoType     boxes  dmg/unit   supply    perWpnS           bankFloors
 ------------------------------------------------------------------------------------
-Bullets          2        20      400       0.80                 1.51
+Bullets          1        20      200       0.40                 1.00
 Shells           0        66        0       0.00                 1.45
 Plasma Cells       0        28        0       0.00                 1.51
-Rockets          0        36        0       0.00                 1.29
-Slugs            0        75        0       0.00                 0.90
+Rockets          1        36       72       0.14                 1.51
+Slugs            1        75       75       0.15                 1.05
 ------------------------------------------------------------------------------------
-FLOOR-WIDE  SUPPLY=400  DEMAND=502  S=0.80  (R-SUPPLY tracks the plan, not a band on S)
+FLOOR-WIDE  SUPPLY=347  DEMAND=502  S=0.69  (R-SUPPLY tracks the plan, not a band on S)
 HEALS planned 0.83 max-HP (heal floor 0.45) + armour 0.21 ; incoming 1.29 max-HP
 
 SUPPLY / DENSITY (R-SUPPLY / R-DENSITY) — mean over 30 seeds per row; ammo in damage, heal/armour in max-HP
 generator        node          d bodies groups 1stCon  walk   dens  TP/x ammo plan/put  heal p/put  armr p/put credits
 -----------------------------------------------------------------------------------------------------------------------
-rooms_mst        COMBAT        1   14.2    3.9    9.9   564   2.53  0.90    425/419     0.97/0.96   0.24/0.25       80
-rooms_mst        COMBAT        5   15.9    4.5   13.4   913   1.76  0.94    734/730     1.09/1.09   0.27/0.27       80
-rooms_mst        COMBAT       10   18.1    5.0   12.8   895   2.03  0.94   1580/1587    1.24/1.22   0.31/0.31       80
-rooms_mst        COMBAT       15   20.3    5.9   14.1   880   2.31  0.95   3416/3385    1.46/1.45   0.37/0.36       80
-rooms_mst        COMBAT       20   22.9    6.4   12.3   899   2.56  0.94   7297/7200    1.67/1.66   0.42/0.43       80
-rooms_mst        COMBAT       25   25.1    6.8   12.3   902   2.79  0.94  14656/14837   1.81/1.78   0.45/0.45       80
-rooms_mst        ELITE         1   14.9    4.0    9.7   564   2.65  0.80    655/693     0.86/0.84   0.38/0.38      128
-rooms_mst        ELITE         5   16.6    4.5   12.3   916   1.83  0.93   1104/1186    0.87/0.85   0.38/0.38      128
+rooms_mst        COMBAT        1   14.2    3.9    9.9   564   2.53  0.90    425/395     0.97/0.96   0.24/0.25       80
+rooms_mst        COMBAT        5   15.9    4.5   13.4   913   1.76  0.94    734/661     1.09/1.09   0.27/0.27       80
+rooms_mst        COMBAT       10   18.1    5.0   12.8   895   2.03  0.94   1580/1577    1.24/1.22   0.31/0.31       80
+rooms_mst        COMBAT       15   20.3    5.9   14.1   880   2.31  0.95   3416/3401    1.46/1.45   0.37/0.36       80
+rooms_mst        COMBAT       20   22.9    6.4   12.3   899   2.56  0.94   7297/7196    1.67/1.66   0.42/0.43       80
+rooms_mst        COMBAT       25   25.1    6.8   12.3   902   2.79  0.94  14656/14811   1.81/1.78   0.45/0.45       80
+rooms_mst        ELITE         1   14.9    4.0    9.7   564   2.65  0.80    655/689     0.86/0.84   0.38/0.38      128
+rooms_mst        ELITE         5   16.6    4.5   12.3   916   1.83  0.93   1104/1169    0.87/0.85   0.38/0.38      128
 rooms_mst        ELITE        10   19.1    5.2   12.9   895   2.14  0.94   2518/2550    1.01/1.02   0.43/0.44      128
-rooms_mst        ELITE        15   21.3    6.0   13.4   880   2.43  0.93   5423/5593    1.22/1.22   0.52/0.52      128
-rooms_mst        ELITE        20   24.0    6.8   13.2   899   2.69  0.94  11459/11778   1.45/1.43   0.62/0.63      128
-rooms_mst        ELITE        25   26.2    7.4   12.7   902   2.92  0.95  23550/23631   1.56/1.57   0.67/0.67      128
+rooms_mst        ELITE        15   21.3    6.0   13.4   880   2.43  0.93   5423/5587    1.22/1.22   0.52/0.52      128
+rooms_mst        ELITE        20   24.0    6.8   13.2   899   2.69  0.94  11459/11763   1.45/1.43   0.62/0.63      128
+rooms_mst        ELITE        25   26.2    7.4   12.7   902   2.92  0.95  23550/23564   1.56/1.57   0.67/0.67      128
 rooms_mst        CACHE         1    5.0    1.1   32.2   564   0.88  0.50    238/251     0.60/0.61   0.39/0.38       96
 rooms_mst        CACHE         5    5.4    1.4   36.0   911   0.60  0.55    447/452     0.66/0.64   0.44/0.44       96
 rooms_mst        CACHE        10    6.5    2.0   24.6   895   0.73  0.60   1035/1027    0.75/0.76   0.50/0.50       96
-rooms_mst        CACHE        15    7.1    2.0   29.7   880   0.81  0.57   2184/2149    0.89/0.87   0.59/0.60       96
-rooms_mst        CACHE        20    8.1    2.0   29.1   899   0.91  0.57   4531/4475    1.03/1.01   0.68/0.69       96
-rooms_mst        CACHE        25    8.7    2.3   27.5   902   0.97  0.64   9666/9390    1.14/1.14   0.76/0.76       96
+rooms_mst        CACHE        15    7.1    2.0   29.7   880   0.81  0.57   2184/2099    0.89/0.87   0.59/0.60       96
+rooms_mst        CACHE        20    8.1    2.0   29.1   899   0.91  0.57   4531/4503    1.03/1.01   0.68/0.69       96
+rooms_mst        CACHE        25    8.7    2.3   27.5   902   0.97  0.64   9666/9276    1.14/1.14   0.76/0.76       96
 rooms_mst        SHOP          1    5.0    1.1   31.6   564   0.88  0.44    244/251     0.61/0.64   0.15/0.16      160
 rooms_mst        SHOP          5    5.5    1.5   33.0   913   0.61  0.49    468/473     0.66/0.65   0.16/0.17      160
-rooms_mst        SHOP         10    6.5    2.0   24.6   895   0.73  0.53   1076/1108    0.78/0.78   0.19/0.19      160
-rooms_mst        SHOP         15    7.1    2.0   32.3   880   0.81  0.49   2226/2187    0.92/0.91   0.23/0.23      160
-rooms_mst        SHOP         20    8.1    2.0   29.1   899   0.91  0.48   4538/4496    1.05/1.03   0.26/0.26      160
-rooms_mst        SHOP         25    8.7    2.2   27.7   902   0.97  0.57  10228/10047   1.15/1.13   0.29/0.29      160
-rooms_mst        MYSTERY       1   14.2    3.9   18.5   564   2.53  0.90    425/419     0.97/0.96   0.24/0.25       80
-rooms_mst        MYSTERY       5   15.9    4.5   23.4   913   1.76  0.94    734/730     1.09/1.09   0.27/0.27       80
-rooms_mst        MYSTERY      10   18.1    5.0   19.0   895   2.03  0.94   1580/1587    1.24/1.22   0.31/0.31       80
-rooms_mst        MYSTERY      15   20.3    5.9   17.3   880   2.31  0.95   3416/3385    1.46/1.45   0.37/0.36       80
-rooms_mst        MYSTERY      20   22.9    6.4   19.3   899   2.56  0.94   7297/7200    1.67/1.66   0.42/0.43       80
-rooms_mst        MYSTERY      25   25.1    6.8   15.6   902   2.79  0.94  14656/14837   1.81/1.78   0.45/0.45       80
-linear_corridor  COMBAT        1   14.2    3.9    8.0   338   4.20  0.90    424/428     0.95/0.94   0.24/0.24       80
-linear_corridor  COMBAT        5   15.7    4.3   12.7   554   2.85  0.93    705/685     1.08/1.09   0.27/0.27       80
-linear_corridor  COMBAT       10   18.1    5.0   13.1   552   3.28  0.92   1552/1554    1.25/1.25   0.31/0.31       80
-linear_corridor  COMBAT       15   20.6    5.6   13.6   549   3.76  0.92   3462/3450    1.46/1.44   0.36/0.36       80
+rooms_mst        SHOP         10    6.5    2.0   24.6   895   0.73  0.53   1076/1094    0.78/0.78   0.19/0.19      160
+rooms_mst        SHOP         15    7.1    2.0   32.3   880   0.81  0.49   2226/2121    0.92/0.91   0.23/0.23      160
+rooms_mst        SHOP         20    8.1    2.0   29.1   899   0.91  0.48   4538/4421    1.05/1.03   0.26/0.26      160
+rooms_mst        SHOP         25    8.7    2.2   27.7   902   0.97  0.57  10228/9989    1.15/1.13   0.29/0.29      160
+rooms_mst        MYSTERY       1   14.2    3.9   18.5   564   2.53  0.90    425/395     0.97/0.96   0.24/0.25       80
+rooms_mst        MYSTERY       5   15.9    4.5   23.4   913   1.76  0.94    734/661     1.09/1.09   0.27/0.27       80
+rooms_mst        MYSTERY      10   18.1    5.0   19.0   895   2.03  0.94   1580/1577    1.24/1.22   0.31/0.31       80
+rooms_mst        MYSTERY      15   20.3    5.9   17.3   880   2.31  0.95   3416/3401    1.46/1.45   0.37/0.36       80
+rooms_mst        MYSTERY      20   22.9    6.4   19.3   899   2.56  0.94   7297/7196    1.67/1.66   0.42/0.43       80
+rooms_mst        MYSTERY      25   25.1    6.8   15.6   902   2.79  0.94  14656/14811   1.81/1.78   0.45/0.45       80
+linear_corridor  COMBAT        1   14.2    3.9    8.0   338   4.20  0.90    424/419     0.95/0.94   0.24/0.24       80
+linear_corridor  COMBAT        5   15.7    4.3   12.7   554   2.85  0.93    705/632     1.08/1.09   0.27/0.27       80
+linear_corridor  COMBAT       10   18.1    5.0   13.1   552   3.28  0.92   1552/1566    1.25/1.25   0.31/0.31       80
+linear_corridor  COMBAT       15   20.6    5.6   13.6   549   3.76  0.92   3462/3439    1.46/1.44   0.36/0.36       80
 linear_corridor  COMBAT       20   22.7    6.3   12.2   556   4.10  0.93   7195/6714    1.63/1.64   0.41/0.42       80
-linear_corridor  COMBAT       25   25.5    7.1   12.2   552   4.63  0.93  14760/15109   1.84/1.83   0.46/0.46       80
-linear_corridor  ELITE         1   14.9    4.1    8.5   338   4.41  0.83    669/710     0.88/0.85   0.38/0.37      128
-linear_corridor  ELITE         5   16.6    4.6   13.7   554   3.01  0.95   1153/1231    0.86/0.84   0.37/0.37      128
+linear_corridor  COMBAT       25   25.5    7.1   12.2   552   4.63  0.93  14760/15077   1.84/1.83   0.46/0.46       80
+linear_corridor  ELITE         1   14.9    4.1    8.5   338   4.41  0.83    669/706     0.88/0.85   0.38/0.37      128
+linear_corridor  ELITE         5   16.6    4.6   13.7   554   3.01  0.95   1153/1216    0.86/0.84   0.37/0.37      128
 linear_corridor  ELITE        10   19.0    5.3   12.7   552   3.45  0.94   2483/2509    1.03/1.02   0.44/0.44      128
-linear_corridor  ELITE        15   21.6    6.2   12.2   549   3.94  0.94   5401/5609    1.24/1.23   0.53/0.53      128
-linear_corridor  ELITE        20   23.9    6.8   12.0   556   4.32  0.94  11695/11940   1.44/1.43   0.62/0.61      128
-linear_corridor  ELITE        25   26.8    7.3   12.1   552   4.86  0.94  23946/24000   1.57/1.58   0.67/0.67      128
+linear_corridor  ELITE        15   21.6    6.2   12.2   549   3.94  0.94   5401/5630    1.24/1.23   0.53/0.53      128
+linear_corridor  ELITE        20   23.9    6.8   12.0   556   4.32  0.94  11695/11925   1.44/1.43   0.62/0.61      128
+linear_corridor  ELITE        25   26.8    7.3   12.1   552   4.86  0.94  23946/24021   1.57/1.58   0.67/0.67      128
 linear_corridor  SHOP          1    4.9    1.1   33.4   338   1.44  0.42    242/253     0.56/0.56   0.14/0.14      160
 linear_corridor  SHOP          5    5.6    1.6   32.0   554   1.01  0.48    468/480     0.66/0.65   0.16/0.16      160
 linear_corridor  SHOP         10    6.4    2.0   27.0   552   1.17  0.53   1071/1069    0.80/0.79   0.20/0.20      160
-linear_corridor  SHOP         15    7.1    2.0   26.6   549   1.30  0.49   2216/2204    0.91/0.92   0.23/0.23      160
-linear_corridor  SHOP         20    7.9    2.1   28.9   556   1.43  0.52   4803/4817    1.04/1.04   0.26/0.27      160
-linear_corridor  SHOP         25    9.0    2.3   23.6   552   1.63  0.56   9937/9711    1.26/1.25   0.32/0.32      160
-linear_corridor  MYSTERY       1   14.2    3.9   20.8   338   4.20  0.90    424/428     0.95/0.94   0.24/0.24       80
-linear_corridor  MYSTERY       5   15.7    4.3   18.8   554   2.85  0.93    705/685     1.08/1.09   0.27/0.27       80
-linear_corridor  MYSTERY      10   18.1    5.0   17.5   552   3.28  0.92   1552/1554    1.25/1.25   0.31/0.31       80
-linear_corridor  MYSTERY      15   20.6    5.6   17.3   549   3.76  0.92   3462/3450    1.46/1.44   0.36/0.36       80
+linear_corridor  SHOP         15    7.1    2.0   26.6   549   1.30  0.49   2216/2104    0.91/0.92   0.23/0.23      160
+linear_corridor  SHOP         20    7.9    2.1   28.9   556   1.43  0.52   4803/4472    1.04/1.04   0.26/0.27      160
+linear_corridor  SHOP         25    9.0    2.3   23.6   552   1.63  0.56   9937/9445    1.26/1.25   0.32/0.32      160
+linear_corridor  MYSTERY       1   14.2    3.9   20.8   338   4.20  0.90    424/419     0.95/0.94   0.24/0.24       80
+linear_corridor  MYSTERY       5   15.7    4.3   18.8   554   2.85  0.93    705/632     1.08/1.09   0.27/0.27       80
+linear_corridor  MYSTERY      10   18.1    5.0   17.5   552   3.28  0.92   1552/1566    1.25/1.25   0.31/0.31       80
+linear_corridor  MYSTERY      15   20.6    5.6   17.3   549   3.76  0.92   3462/3439    1.46/1.44   0.36/0.36       80
 linear_corridor  MYSTERY      20   22.7    6.3   15.8   556   4.10  0.93   7195/6714    1.63/1.64   0.41/0.42       80
-linear_corridor  MYSTERY      25   25.5    7.1   15.4   552   4.63  0.93  14760/15109   1.84/1.83   0.46/0.46       80
-cavern           COMBAT        1   14.3    3.9    9.0  1068   1.34  0.90    424/421     0.99/0.96   0.25/0.25       80
-cavern           COMBAT        5   15.7    4.4   10.0  1741   0.91  0.94    727/736     1.06/1.05   0.27/0.27       80
-cavern           COMBAT       10   18.1    4.9    9.0  1711   1.06  0.93   1548/1551    1.21/1.19   0.30/0.30       80
-cavern           COMBAT       15   19.9    5.5   10.3  1712   1.17  0.92   3331/3322    1.45/1.44   0.36/0.36       80
-cavern           COMBAT       20   22.5    6.1    9.3  1680   1.35  0.92   6981/6704    1.67/1.66   0.42/0.42       80
-cavern           COMBAT       25   24.5    6.8    9.2  1701   1.45  0.94  14558/15107   1.79/1.78   0.45/0.45       80
-cavern           ELITE         1   15.0    4.0    8.3  1068   1.41  0.84    662/709     0.90/0.87   0.39/0.38      128
+linear_corridor  MYSTERY      25   25.5    7.1   15.4   552   4.63  0.93  14760/15077   1.84/1.83   0.46/0.46       80
+cavern           COMBAT        1   14.3    3.9    9.0  1068   1.34  0.90    424/403     0.99/0.96   0.25/0.25       80
+cavern           COMBAT        5   15.7    4.4   10.0  1741   0.91  0.94    727/665     1.06/1.05   0.27/0.27       80
+cavern           COMBAT       10   18.1    4.9    9.0  1711   1.06  0.93   1548/1543    1.21/1.19   0.30/0.30       80
+cavern           COMBAT       15   19.9    5.5   10.3  1712   1.17  0.92   3331/3288    1.45/1.44   0.36/0.36       80
+cavern           COMBAT       20   22.5    6.1    9.3  1680   1.35  0.92   6981/6703    1.67/1.66   0.42/0.42       80
+cavern           COMBAT       25   24.5    6.8    9.2  1701   1.45  0.94  14558/15077   1.79/1.78   0.45/0.45       80
+cavern           ELITE         1   15.0    4.0    8.3  1068   1.41  0.84    662/699     0.90/0.87   0.39/0.38      128
 cavern           ELITE         5   16.4    4.5    9.4  1741   0.95  0.95   1138/1218    0.86/0.84   0.37/0.37      128
 cavern           ELITE        10   19.1    5.4    9.0  1711   1.12  0.94   2470/2510    1.03/1.05   0.44/0.44      128
-cavern           ELITE        15   20.9    6.1    9.5  1712   1.22  0.94   5391/5562    1.22/1.22   0.52/0.52      128
-cavern           ELITE        20   23.6    6.9    9.8  1680   1.41  0.94  11623/11888   1.45/1.45   0.62/0.62      128
-cavern           ELITE        25   25.7    7.2    9.3  1701   1.51  0.94  23215/23417   1.54/1.55   0.66/0.65      128
+cavern           ELITE        15   20.9    6.1    9.5  1712   1.22  0.94   5391/5610    1.22/1.22   0.52/0.52      128
+cavern           ELITE        20   23.6    6.9    9.8  1680   1.41  0.94  11623/11873   1.45/1.45   0.62/0.62      128
+cavern           ELITE        25   25.7    7.2    9.3  1701   1.51  0.94  23215/23425   1.54/1.55   0.66/0.65      128
 cavern           SHOP          1    5.0    1.1   27.0  1068   0.47  0.44    253/258     0.58/0.59   0.14/0.14      160
 cavern           SHOP          5    5.4    1.4   34.7  1741   0.31  0.47    442/468     0.65/0.67   0.16/0.16      160
 cavern           SHOP         10    6.4    2.0   31.0  1711   0.37  0.51   1026/1027    0.79/0.77   0.20/0.20      160
-cavern           SHOP         15    6.9    2.0   28.7  1712   0.41  0.48   2136/2064    0.88/0.87   0.22/0.21      160
-cavern           SHOP         20    7.9    2.0   31.1  1680   0.47  0.52   4863/4870    0.98/0.97   0.24/0.25      160
-cavern           SHOP         25    8.6    2.2   28.4  1701   0.51  0.54   9734/9673    1.15/1.15   0.29/0.29      160
-cavern           MYSTERY       1   14.3    3.9   17.3  1068   1.34  0.90    424/421     0.99/0.96   0.25/0.25       80
-cavern           MYSTERY       5   15.7    4.4   20.0  1741   0.91  0.94    727/736     1.06/1.05   0.27/0.27       80
-cavern           MYSTERY      10   18.1    4.9   20.6  1711   1.06  0.93   1548/1551    1.21/1.19   0.30/0.30       80
-cavern           MYSTERY      15   19.9    5.5   20.3  1712   1.17  0.92   3331/3322    1.45/1.44   0.36/0.36       80
-cavern           MYSTERY      20   22.5    6.1   14.0  1680   1.35  0.92   6981/6704    1.67/1.66   0.42/0.42       80
-cavern           MYSTERY      25   24.5    6.8   13.6  1701   1.45  0.94  14558/15107   1.79/1.78   0.45/0.45       80
+cavern           SHOP         15    6.9    2.0   28.7  1712   0.41  0.48   2136/2010    0.88/0.87   0.22/0.21      160
+cavern           SHOP         20    7.9    2.0   31.1  1680   0.47  0.52   4863/4623    0.98/0.97   0.24/0.25      160
+cavern           SHOP         25    8.6    2.2   28.4  1701   0.51  0.54   9734/9394    1.15/1.15   0.29/0.29      160
+cavern           MYSTERY       1   14.3    3.9   17.3  1068   1.34  0.90    424/403     0.99/0.96   0.25/0.25       80
+cavern           MYSTERY       5   15.7    4.4   20.0  1741   0.91  0.94    727/665     1.06/1.05   0.27/0.27       80
+cavern           MYSTERY      10   18.1    4.9   20.6  1711   1.06  0.93   1548/1543    1.21/1.19   0.30/0.30       80
+cavern           MYSTERY      15   19.9    5.5   20.3  1712   1.17  0.92   3331/3288    1.45/1.44   0.36/0.36       80
+cavern           MYSTERY      20   22.5    6.1   14.0  1680   1.35  0.92   6981/6703    1.67/1.66   0.42/0.42       80
+cavern           MYSTERY      25   24.5    6.8   13.6  1701   1.45  0.94  14558/15077   1.79/1.78   0.45/0.45       80
 boss_arena       BOSS          1    0.0    0.0      -   679   0.00  0.00    275/272     0.00/0.00   0.00/0.00       80
 boss_arena       BOSS          5    0.0    0.0      -   685   0.00  0.00    464/459     0.00/0.00   0.00/0.00       80
 boss_arena       BOSS         10    0.0    0.0      -   713   0.00  0.00   1181/1170    0.00/0.00   0.00/0.00       80
-boss_arena       BOSS         15    0.0    0.0      -   701   0.00  0.00   2757/2594    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         15    0.0    0.0      -   701   0.00  0.00   2757/2250    0.00/0.00   0.00/0.00       80
 boss_arena       BOSS         20    0.0    0.0      -   665   0.00  0.00   3351/3314    0.00/0.00   0.00/0.00       80
 boss_arena       BOSS         25    0.0    0.0      -   714   0.00  0.00   7144/7082    0.00/0.00   0.00/0.00       80
 med_bay          REST          1    0.0    0.0      -   216   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
@@ -1473,6 +1491,14 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 3 / CP4 — A-1 AMMO GENEROSITY. SupplyPlanner weights the S2 carried /
+    off-type split per AmmoType (BULLETS 0.8, SHELLS 1.3, CELLS 1.0, ROCKETS 1.0, SLUGS 0.9;
+    GameMath.normalisedAmmoShare keeps the floor's total), reserve caps re-fitted to per-type
+    banking targets (bullets 38 -> 25 ~1.0 floor; rockets 18 -> 21 and slugs 6 -> 7 re-fit after the
+    CP3b damage changes), new R-SUPPLY "reserve banks" lines. R-ROLE unchanged and green (no '!' moved
+    into a niche). LevelGeneratorSnapshotTest re-baselined. Gates: test green except the pre-existing
+    StoryBarkTest; balanceSim exit 0 — S-SUPPLY 0.80, stalls 171/200 (no heal re-fit needed).
+
   balance-overhaul order 3 / CP3b — R-ROLE REPLACES R-WEAPON. The reference-scenario model
     (util/WeaponRoleModel, GameMath.roleScenarioClear / roleScenarioBruiserHitsTaken /
     roleScenarioSustainedDamagePerTurn, SECTION 22 scenario geometry + margins) and RuleKind
@@ -1633,7 +1659,7 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (CP3b) matrix
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (CP4) matrix
 (planned supply, group encounters, footprint targets, node specs), with the FLOOR REPORT.
 
   ================================================================================
@@ -1670,7 +1696,7 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (
   med_bay          REST      1-5      12    0.0    0.0   0.0      -   0.00     0     0/0     0.84  0.84       0
   rooms_mst        CACHE     1-5     124    5.0    2.1   1.1   47.8   0.93     0     5/2     0.95  0.96       1
   rooms_mst        COMBAT    1-5      52   14.4    5.0   3.9   17.8   1.21     0    14/4     0.98  0.78       4
-  rooms_mst        ELITE     1-5      22   17.5    3.9   4.9   22.1   1.45     0    21/5     0.88  0.87       4
+  rooms_mst        ELITE     1-5      22   17.5    4.1   4.9   22.1   1.45     0    20/6     0.88  0.87       4
   rooms_mst        SHOP      1-5       7    5.3    1.9   1.3   34.8   0.83     0     6/2     0.97  0.90       0
 
   A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
@@ -1703,20 +1729,20 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (
   One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
   role        depths  onKill lagKill  ratio |   onDie  lagDie
-  CHAFF        1-5      2.55    6.25   2.46 |   60.00   52.00
-  CHAFF        6-10     2.27   11.67   5.15 |   48.88   53.50
-  CHAFF       11-15     2.40   20.38   8.51 |   60.15   42.29
-  CHAFF       16-20     3.49   28.13   8.06 |   55.27   28.63
-  CHAFF       21-25     2.89   54.00  18.70 |   41.64   33.56
-  SOLDIER      1-5      4.62    6.50   1.41 |   21.50   21.50
-  SOLDIER      6-10     2.94   19.00   6.47 |   20.38   18.74
-  SOLDIER     11-15     3.41   32.63   9.57 |   19.01   14.31
-  SOLDIER     16-20     3.38   63.40  18.79 |   19.83   18.33
-  SOLDIER     21-25     3.91   42.75  10.93 |   17.09   15.94
-  BRUISER      1-5      4.72    9.70   2.05 |       -       -
-  BRUISER      6-10     5.60   47.20   8.42 |       -       -
-  BRUISER     11-15     7.48   51.14   6.84 |   33.24       -
-  BRUISER     16-20     5.44   44.60   8.20 |       -       -
+  CHAFF        1-5      2.77    6.25   2.26 |   56.50   53.00
+  CHAFF        6-10     2.00   11.33   5.67 |   48.88   53.50
+  CHAFF       11-15     2.17   20.38   9.38 |   55.67   42.29
+  CHAFF       16-20     3.49   28.13   8.06 |   45.27   28.63
+  CHAFF       21-25     2.79   54.00  19.38 |   41.13   33.56
+  SOLDIER      1-5      4.11    6.19   1.51 |   21.50   21.21
+  SOLDIER      6-10     2.94   19.00   6.46 |   21.40   18.61
+  SOLDIER     11-15     3.41   32.63   9.56 |   18.97   14.31
+  SOLDIER     16-20     3.66   63.40  17.33 |   20.27   18.33
+  SOLDIER     21-25     3.75   42.75  11.39 |   17.19   15.94
+  BRUISER      1-5      5.79    9.46   1.63 |       -       -
+  BRUISER      6-10     5.60   40.17   7.17 |       -       -
+  BRUISER     11-15     7.48   51.14   6.84 |   39.90       -
+  BRUISER     16-20     5.77   44.60   7.73 |       -       -
   BRUISER     21-25     5.15       -      - |       -       -
   MINI_ELITE   1-5         -       -      - |       -       -
   MINI_ELITE   6-10        -       -      - |       -       -
@@ -1725,7 +1751,8 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (
   MINI_ELITE  21-25        -       -      - |       -       -
   A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.05 (target >= 1.5)
 
-  READING IT (balance-overhaul order 3, CP3b — R-ROLE fit):
+  READING IT (balance-overhaul order 3, CP3b R-ROLE fit + CP4 A-1 generosity — CP4 moved only the
+  ELITE ammo row and the ladder probes; S-SUPPLY is unchanged at 0.80):
   - S-SUPPLY holds at its cap: TACTICAL leaves COMBAT floors at 0.80 (0.75 before order 3). The start kit
     is Chaingun + Shotgun, and the R-ROLE Shotgun (66, falloff table, stagger, knockback) is the
     stronger half of it; no floor is below its heal floor. Watch it: any further start-kit buff needs

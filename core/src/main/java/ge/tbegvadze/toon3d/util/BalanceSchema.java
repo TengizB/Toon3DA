@@ -740,6 +740,7 @@ public final class BalanceSchema {
         results.addAll(ladderResults());
         results.addAll(ladderAffordResults());
         results.addAll(supplyPlannerResults());
+        results.addAll(ammoBankingResults());
         results.addAll(supplySweepResults());
         results.addAll(eliteRewardResults());
         results.addAll(densitySweepResults());
@@ -2391,6 +2392,27 @@ public final class BalanceSchema {
     private static final int SYNTHETIC_SLOTS_PER_ROOM   = 14;
     /** Walk tiles between consecutive synthetic rooms. */
     private static final int SYNTHETIC_ROOM_SPACING     = 7;
+
+    /**
+     * R-SUPPLY "reserve banks" (balance-overhaul order 3, A-1): every ammo type's FULL reserve banks its
+     * AmmoType.getBankingFloorsTarget() floors of the model floor's demand (GameMath.reserveBankingFloors),
+     * within AMMO_BANKING_FLOORS_TOLERANCE — the generalist's bullets ~1.0, shells and cells ~1.5.
+     */
+    public static List<RuleResult> ammoBankingResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float demand = modelFloorDemand();
+        for (ScarcityRowSpec row : SCARCITY_ROWS) {
+            float banked = GameMath.reserveBankingFloors(row.reserveCap, row.damagePerUnit, demand);
+            float target = row.ammoType.getBankingFloorsTarget();
+            float low  = target - BalanceConfig.AMMO_BANKING_FLOORS_TOLERANCE;
+            float high = target + BalanceConfig.AMMO_BANKING_FLOORS_TOLERANCE;
+            results.add(new RuleResult(RuleKind.SUPPLY, "reserve banks " + row.ammoType.name(), banked, low, high,
+                    banked >= low && banked <= high,
+                    String.format("cap %d x %.0f dmg / %.0f model-floor demand (target %.1f floors)",
+                            row.reserveCap, row.damagePerUnit, demand, target)));
+        }
+        return results;
+    }
 
     /** R-SUPPLY (planner level): every spec x audit depth, worst case over the audit seeds. */
     public static List<RuleResult> supplyPlannerResults() {

@@ -217,14 +217,22 @@ public final class SupplyPlanner {
         float carriedShare = otherCount == 0 ? 1f : BalanceConfig.SUPPLY_CARRIED_SHARE;
         float otherShare   = carriedCount == 0 ? 1f : BalanceConfig.SUPPLY_OFF_TYPE_SHARE;
 
+        // A-1 (balance-overhaul order 3): weight each type's base share by its generosity, then
+        // re-normalise (GameMath.normalisedAmmoShare) so the floor's total planned damage is unchanged.
+        float weightedShareSum = 0f;
+        for (AmmoType type : types) {
+            weightedShareSum += baseAmmoShare(type, carried, carriedShare, otherShare, carriedCount, otherCount)
+                    * Math.max(0f, type.getSupplyGenerosity());
+        }
+
         int[]   boxes     = new int[types.length];
         float[] remainder = new float[types.length];
         float   placed    = 0f;
         for (int typeIndex = 0; typeIndex < types.length; typeIndex++) {
             AmmoType type = types[typeIndex];
-            float share = carried.contains(type)
-                    ? carriedShare / Math.max(1, carriedCount)
-                    : otherShare / Math.max(1, otherCount);
+            float share = GameMath.normalisedAmmoShare(
+                    baseAmmoShare(type, carried, carriedShare, otherShare, carriedCount, otherCount),
+                    type.getSupplyGenerosity(), weightedShareSum);
             float boxDamage = boxDamageAtDepth(type, depth);
             if (boxDamage <= 0f) continue;
             float exact = damage * share / boxDamage;
@@ -257,6 +265,14 @@ public final class SupplyPlanner {
             }
         }
         return placed;
+    }
+
+    /** S2: one type's base share of the ammo plan — the carried share split over carried types, else the off-type share. */
+    private static float baseAmmoShare(AmmoType type, Set<AmmoType> carried, float carriedShare, float otherShare,
+                                       int carriedCount, int otherCount) {
+        return carried.contains(type)
+                ? carriedShare / Math.max(1, carriedCount)
+                : otherShare / Math.max(1, otherCount);
     }
 
     /** S3 / S4: field medkits 'H' first, the remainder as stims '+'; the first medkit(s) are the floor. */

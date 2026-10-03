@@ -3573,6 +3573,29 @@ public final class GameMath {
     }
 
     /*
+     * Formula: normalisedAmmoShare — A-1 per-type generosity on the planned ammo split
+     * Derivation:
+     *   The SupplyPlanner splits a floor's planned ammo DAMAGE over the ammo types with base shares s_t
+     *   (SUPPLY_CARRIED_SHARE over the carried types, SUPPLY_OFF_TYPE_SHARE over the rest; sum s_t = 1).
+     *   A-1 weights each by its generosity g_t, then re-normalises so the shares still sum to 1:
+     *       W = sum_t s_t x g_t
+     *       share_t = s_t x g_t / W
+     *   so sum_t share_t = 1 and the floor's TOTAL planned ammo damage is unchanged — only the mix moves
+     *   (equal weights reproduce the base split exactly).
+     *   Worked (carried = BULLETS only): bullets 0.70 x 0.8 = 0.56, four off types 0.075 x {1.3, 1.0,
+     *   1.0, 0.9} = 0.315, W = 0.875 -> bullets 0.64, shells 0.111, cells 0.086, rockets 0.086, slugs 0.077.
+     * Edge cases:
+     *   W <= 0 (every weight or share zero) -> the base share is returned unchanged; a negative weight
+     *   is treated as 0 (that type gets no ammo).
+     */
+    public static float normalisedAmmoShare(float baseShare, float generosity, float weightedShareSum) {
+        if (weightedShareSum <= 0f) {
+            return baseShare;
+        }
+        return baseShare * Math.max(0f, generosity) / weightedShareSum;
+    }
+
+    /*
      * Formula: reserveBankingFloors — how many floors of fights a full reserve banks
      * Derivation:
      *   A reserve cap of reserveCap units of a weapon, at damagePerAmmoUnit each,

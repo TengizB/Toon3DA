@@ -112,8 +112,11 @@ class LevelGeneratorSnapshotTest {
     // the base damage of the weapon that eats it — Shotgun 44 -> 66 (and the shell box 4 -> 3, so a box stays
     // worth the same share of a floor), Grenade centre 42 -> 36, Railgun full charge 90 -> 75 — so the planned
     // ammo pickups (and the RNG stream behind them) moved. Confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 3, CP4 — A-1 AMMO GENEROSITY): the planner now weights each ammo
+    // type's carried / off-type share by its generosity (bullets 0.8, shells 1.3, slugs 0.9; normalised, so
+    // the floor's total is unchanged), which moves which boxes are placed. Confirmed stable across two runs.
     private static final String EXPECTED_DIGEST =
-            "2170ba3f4e692ebe6b264f1f4e24dd5b45707b6e1a70dcf207f7a842b8a5d38f";
+            "ed9cdc81ba89b5cf8305d92dde6f7958e224865480fb167788a092e34bd53f6b";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

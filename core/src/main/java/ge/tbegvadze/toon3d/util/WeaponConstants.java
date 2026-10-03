@@ -277,12 +277,13 @@ public final class WeaponConstants {
     public static final float WEAPON_FLAME_HEIGHT     = 80f;
     public static final float WEAPON_FLAME_BASE_WIDTH =  160f;
 
-    // Railgun — charge-up infinite-pierce hitscan sniper (SLUGS ammo)
+    // Railgun — charge-up infinite-pierce hitscan sniper (SLUGS ammo). Governed by R-ROLE since
+    // balance-overhaul order 3 (its old power-band waiver is deleted); full charge fitted to 75.
     // Damage table (coefficient 0.02, floor 0.70):
     //   charge 1 (half), distance 1: 40 × 1.00 = 40
     //   charge 1 (half), distance 16: 40 × max(0.70, 1 - 0.02×15) = 40 × 0.70 = 28
-    //   charge 2 (full), distance 1: 90 × 1.00 = 90
-    //   charge 2 (full), distance 16: 90 × 0.70 = 63
+    //   charge 2 (full), distance 1: 75 × 1.00 = 75
+    //   charge 2 (full), distance 16: 75 × 0.70 = 53
     // Balance values (damage, range, falloff, clip, reload, ammo) live in BalanceConfig.
     public static final int[]   RAILGUN_DAMAGE_BY_CHARGE          = BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE;
     public static final int     RAILGUN_MAX_CHARGE                = 2;

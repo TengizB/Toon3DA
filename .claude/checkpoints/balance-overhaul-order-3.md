@@ -70,7 +70,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
         DONE WHEN: build green; only R-WEAPON (DB + Incinerator) and S-SUPPLY red — both resolved by CP3b.
   - [x] **CP3b** — numbers fitted under R-ROLE-1..5 (replacing R-WEAPON + the Railgun waiver); S-SUPPLY back in band.
         DONE WHEN: A2, A5, A6 hold; both gates green.
-- [ ] **CP4** — per-type ammo generosity in SupplyPlanner and re-fitted reserve caps.
+- [x] **CP4** — per-type ammo generosity in SupplyPlanner and re-fitted reserve caps.
       DONE WHEN: R-ROLE-5 + R-SUPPLY green; both gates green.
 - [ ] **CP5** — C1, C2, C3, C5 visuals.
       DONE WHEN: A3 holds (build green; desktop check owed if no display).
@@ -142,3 +142,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Grenade S1/S4. Stale Railgun waiver comments remain at BalanceConfig RAILGUN_MAX_SLUGS / RAILGUN_PICKUP_SLUGS and
   WeaponConstants — fix in CP4.
 - **CP3b gates:** core:test 453, only StoryBarkTest; balanceSim exit 0, S-SUPPLY 0.80, TACTICAL 171/200 stalled.
+- **CP4 handover:** `AmmoType.getSupplyGenerosity() / getBankingFloorsTarget()` (SECTION 22 constants, no switch);
+  `GameMath.normalisedAmmoShare(base, generosity, weightedSum)` in `SupplyPlanner.addAmmoPickups` (floor total
+  unchanged). Mapping: GRENADES -> ROCKETS; FUEL does not exist (Incinerator burns CELLS, 1.0) — spec's "FUEL ~1.5
+  floors" lands on CELLS (1.51). Caps: BULLETS 38->25 (1.00 floors), SHELLS 11 (1.45), CELLS 27 (1.51), ROCKETS
+  18->21 (1.51), SLUGS 6->7 (1.05). `BalanceSchema.ammoBankingResults()` (+/-0.15 of target). Snapshot `ed9cdc81...`.
+  OWNER FLAG: bullet reserve 25 < AR clip 30 (scarce generalist, intended by A-1).
+- **CP4 gates:** core:test 453, only StoryBarkTest; balanceSim exit 0, S-SUPPLY 0.80 (AT the cap — any later
+  start-kit buff owes the planned-heal re-fit in the same change). R-ROLE unchanged.

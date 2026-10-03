@@ -746,22 +746,19 @@ public final class BalanceConfig {
     public static final int FLAME_PICKUP_FUEL   = 18;
     public static final int GRENADE_PICKUP_AMMO = 2;
 
-    // LEVER 3 — RESERVE CAP: the hoarding ceiling, tuned to ~1.5 floors of that weapon's
-    // run-demand (see GameMath.reserveBankingFloors) so banking is limited. RE-DERIVED against the
-    // rescaled model-floor DEMAND (720): cap = ~1.5 * DEMAND / damagePerUnit. The bigger enemy eHP
-    // also RESOLVES the old clip-vs-eHP mismatch — the bullet cap (now 54) banks exactly 1.5 floors
-    // and still comfortably holds a full 30-round Assault Rifle / 24-round Chaingun clip, so the
-    // "one cap over target" exception the old scale forced is gone; every cap now hits the target.
-    public static final int AMMO_RESERVE_CAP_BULLETS = 38;
-    // Shells 17 -> 11 (CP3b): the same banked DAMAGE at the re-fitted Shotgun (17 x 44 ~= 11 x 66); CP4
-    // re-fits every cap against the per-type generosity.
+    // LEVER 3 — RESERVE CAP: the hoarding ceiling. RE-FITTED by balance-overhaul order 3 (A-1, CP4) to a
+    // PER-TYPE banking target (SECTION 22 AMMO_BANKING_FLOORS_*; R-SUPPLY "reserve banks" defends it):
+    //     cap = round(target x model-floor DEMAND (502) / damagePerUnit)    (GameMath.reserveBankingFloors)
+    // The generalist's BULLETS bank ~1.0 floor (38 -> 25: the scarce ammo is the reliable gun's), the SPREAD
+    // shells and the cells the Incinerator / Plasma / Arc share bank ~1.5 (11 and 27 hold), rockets
+    // re-fit to 1.5 after the order-3 Grenade fit (18 -> 21), and slugs stay the tightest bank, ~1.0
+    // (6 -> 7, after the Railgun's 90 -> 75). A full Assault Rifle clip (30) now refills from a full
+    // reserve in one reload only partially (25) — deliberate: the generalist's ammo is the scarce one.
+    public static final int AMMO_RESERVE_CAP_BULLETS = 25;
     public static final int AMMO_RESERVE_CAP_SHELLS  = 11;
     public static final int AMMO_RESERVE_CAP_CELLS   = 27;
-    public static final int AMMO_RESERVE_CAP_ROCKETS = 18;
-    // RAILGUN_MAX_SLUGS kept the TIGHTEST banking (~1.0 floor, not 1.5) to honor the railgun's
-    // since-deleted power-band waiver (balance-overhaul order 3, AS8). The Railgun is now governed by
-    // R-ROLE (its PLATED niche plus R-ROLE-5's one-floor ammo check); the cap is CP4's to re-fit.
-    public static final int RAILGUN_MAX_SLUGS        = 6;
+    public static final int AMMO_RESERVE_CAP_ROCKETS = 21;
+    public static final int RAILGUN_MAX_SLUGS        = 7;
     public static final int FLAME_MAX_FUEL           = 35;
     public static final int GRENADE_MAX_AMMO         = 7;
 
@@ -2595,6 +2592,26 @@ public final class BalanceConfig {
     public static final float   FLAME_BURN_FRACTION   = 0.6f;
     /** W3: Incinerator burn stacks on one target, at most (one stack per spray). */
     public static final int     FLAME_BURN_MAX_STACKS = 3;
+
+    // --- A-1 AMMO GENEROSITY (CP4) — per-AmmoType weights on the order-2 carried / off-type split -------
+    // SupplyPlanner multiplies each type's 70/30 share by its weight and RE-NORMALISES the shares to sum
+    // 1 (GameMath.normalisedAmmoShare), so a floor's TOTAL planned ammo damage is unchanged — only the
+    // mix moves: the generalist's bullets get scarcer, shells richer. Read through AmmoType (data, no
+    // switch). The spec's FUEL has no AmmoType of its own — the Incinerator burns CELLS (shared with the
+    // Plasma Rifle and the Arc Cannon), which keep 1.0; the spec's GRENADES are AmmoType.ROCKETS.
+    public static final float AMMO_SUPPLY_GENEROSITY_BULLETS = 0.8f;
+    public static final float AMMO_SUPPLY_GENEROSITY_SHELLS  = 1.3f;
+    public static final float AMMO_SUPPLY_GENEROSITY_CELLS   = 1.0f;
+    public static final float AMMO_SUPPLY_GENEROSITY_ROCKETS = 1.0f;
+    public static final float AMMO_SUPPLY_GENEROSITY_SLUGS   = 0.9f;
+    /** A-1: floors of model-floor demand a FULL reserve of each type banks (the cap re-fit target). */
+    public static final float AMMO_BANKING_FLOORS_BULLETS = 1.0f;
+    public static final float AMMO_BANKING_FLOORS_SHELLS  = 1.5f;
+    public static final float AMMO_BANKING_FLOORS_CELLS   = 1.5f;
+    public static final float AMMO_BANKING_FLOORS_ROCKETS = 1.5f;
+    public static final float AMMO_BANKING_FLOORS_SLUGS   = 1.0f;
+    /** A-1: a reserve cap's banked floors may sit this far either side of its target (whole-unit rounding). */
+    public static final float AMMO_BANKING_FLOORS_TOLERANCE = 0.15f;
 
     // --- R-ROLE — the reference scenarios and margins (replace the R-WEAPON power bands) -----------
     // Each scenario = a target trait x group size x engagement band; its archetype (the representative
