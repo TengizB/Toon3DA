@@ -76,12 +76,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A3 holds (build green; desktop check owed if no display).
 - [x] **CP6** — C4 switch hint + direct switch + MATCHUP teaching topic.
       DONE WHEN: A4, A7 hold; build + fast gate green.
-- [ ] **CP7** — sim TacticalPolicy switching + S-SWITCH + MATCHUP REPORT; all docs; reviewer PASS.
+- [x] **CP7** — sim TacticalPolicy switching + S-SWITCH + MATCHUP REPORT; all docs; reviewer PASS.
       DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED. Split:
   - [x] **CP7a** — sim plays the C4 hint; TacticalPolicy takes hints + kit diversity; MATCHUP REPORT; S-SWITCH
         band; planned-heal re-fit; TP weight DECISION 0. DONE WHEN: committed; only S-SWITCH red (owner question).
   - [x] **CP7b** — S-SWITCH resolved per the owner's answer; docs (A9) complete; A1 grep; both gates green.
-  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
+  - [x] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -205,3 +205,6 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Weapon.armDamageClass); MatchupGlyphs naming. Left, recorded in the note: C5 inventory rows, W3 BURNABLE-soldier
   target, S-SWITCH take-rate lines pass by construction (only the hinted-floor count can fail). Gates after fixes:
   core:test 453, only StoryBarkTest; balanceSim exit 0.
+- **CP7c reviewer round 2: PASS** (a184ae7). STATUS: IMPLEMENTED 2026-10-03. Owed outside this container: desktop
+  checks of A3 (hit words + glyphs), A4 (SWITCH pulse), A5 (STUNNED glyph in game), A6 (two sprays vs three Gore
+  Biters in game), compare-card row spacing.

@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Weapon Roles and Matchups — told to the player
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-03
 ---
 IMPLEMENTATION NOTE (2026-10-03) — where the build diverges from this plan:
   - A5: a 1-tile Shotgun hit (base 66 after the R-ROLE fit) KILLS a floor-1 Gore Biter, and knockback /
