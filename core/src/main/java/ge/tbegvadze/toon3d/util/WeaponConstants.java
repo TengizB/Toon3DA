@@ -35,7 +35,7 @@ public final class WeaponConstants {
     public static final int     SHOTGUN_DAMAGE             = BalanceConfig.SHOTGUN_DAMAGE;
     public static final int     SHOTGUN_CLIP_SIZE          = BalanceConfig.SHOTGUN_CLIP_SIZE;
     public static final int     SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.SHOTGUN_RELOAD_TIME_TICKS;
-    public static final float   SHOTGUN_DAMAGE_DROP_COEFF  = BalanceConfig.SHOTGUN_DAMAGE_DROP_COEFF;
+    public static final float[] SHOTGUN_FALLOFF_BY_TILE    = BalanceConfig.SHOTGUN_FALLOFF_BY_TILE;
     public static final int     SHOTGUN_RANGE_TILES        = BalanceConfig.SHOTGUN_RANGE_TILES;
     // SHOTGUN_PENETRATION: false = stops at first enemy (v1); true = pierces (future)
     public static final boolean SHOTGUN_PENETRATION        = false;
@@ -55,7 +55,7 @@ public final class WeaponConstants {
     public static final int     DBL_SHOTGUN_DAMAGE             = BalanceConfig.DBL_SHOTGUN_DAMAGE;
     public static final int     DBL_SHOTGUN_CLIP_SIZE          = BalanceConfig.DBL_SHOTGUN_CLIP_SIZE;
     public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.DBL_SHOTGUN_RELOAD_TIME_TICKS;
-    public static final float   DBL_SHOTGUN_DAMAGE_DROP_COEFF  = BalanceConfig.DBL_SHOTGUN_DAMAGE_DROP_COEFF;
+    public static final float[] DBL_SHOTGUN_FALLOFF_BY_TILE    = BalanceConfig.DOUBLE_BARREL_FALLOFF_BY_TILE;
     public static final int     DBL_SHOTGUN_RANGE_TILES        = BalanceConfig.DBL_SHOTGUN_RANGE_TILES;
     // DBL_SHOTGUN_PENETRATION: false = stops at first enemy (spread dissipates on first target)
     public static final boolean DBL_SHOTGUN_PENETRATION        = false;
@@ -313,7 +313,11 @@ public final class WeaponConstants {
     // Balance values (impact/falloff/burn/range/clip/ammo) live in BalanceConfig.
     public static final int     FLAME_IMPACT_DAMAGE        = BalanceConfig.FLAME_IMPACT_DAMAGE;
     public static final int     FLAME_FALLOFF              = BalanceConfig.FLAME_FALLOFF;
-    public static final int     FLAME_BURN_DAMAGE_PER_TURN = BalanceConfig.FLAME_BURN_DAMAGE_PER_TURN;
+    public static final float   FLAME_BURN_FRACTION        = BalanceConfig.FLAME_BURN_FRACTION;
+    public static final int     FLAME_BURN_MAX_STACKS      = BalanceConfig.FLAME_BURN_MAX_STACKS;
+    /** Depth-1 burn per stack per turn, for display (the live value is ladder-scaled in Incinerator). */
+    public static final int     FLAME_BURN_DAMAGE_PER_STACK =
+            GameMath.incineratorBurnPerStack(BalanceConfig.FLAME_IMPACT_DAMAGE, BalanceConfig.FLAME_BURN_FRACTION);
     public static final int     FLAME_BURN_TURNS           = BalanceConfig.FLAME_BURN_TURNS;
     public static final float   FLAME_DAMAGE_DROP_COEFF    = BalanceConfig.FLAME_DAMAGE_DROP_COEFF;
     public static final int     FLAME_RANGE_TILES          = BalanceConfig.FLAME_RANGE_TILES;
@@ -481,6 +485,13 @@ public final class WeaponConstants {
     public static final float ASSAULT_RIFLE_BASE_ACCURACY         = 0.88f;
     public static final float ARC_CANNON_BASE_ACCURACY            = 0.88f;
     public static final float MELEE_BASE_ACCURACY                 = 1.00f;
+
+    /**
+     * Drop coefficient handed to the Weapon base by weapons whose falloff is a per-tile TABLE (Shotgun,
+     * Double-Barrel — balance-overhaul order 3, W1/W2). They override damageAtDistance, so the base
+     * coefficient curve is never evaluated for them.
+     */
+    public static final float TABLE_FALLOFF_DROP_COEFFICIENT = 0f;
 
     // ── Damage-class colours (balance-overhaul order 3, VISUAL DESIGN) ──────
     // Read by entity/DamageClass; render builds its Colors from these floats (C1-C5). Cosmetic.

@@ -3,13 +3,14 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
  * Short-range cone flamethrower that sprays a widening fan of fire directly ahead.
  *
- * Stats: impact damage 8 (5 at depth 3), clipSize 30 fuel, reloadTime 1 tick,
- * dropCoeff 0.0 (depth falloff handled explicitly), range 3 tiles.
+ * Stats: impact FLAME_IMPACT_DAMAGE (FLAME_FALLOFF at the cone's far edge), clipSize 30 fuel,
+ * reloadTime 1 tick, dropCoeff 0.0 (depth falloff handled explicitly), range 3 tiles.
  *
  * Each spray consumes FUEL_PER_SHOT (3) fuel units. canFire() therefore requires
  * at least FUEL_PER_SHOT fuel and NORMAL state — not just > 0 as with standard weapons.
@@ -26,15 +27,15 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  * deducts the remaining (FUEL_PER_SHOT - 1) units immediately so the total consumed
  * per spray is exactly FUEL_PER_SHOT.
  *
- * Damage table (explicit depth falloff, no drop coefficient):
- *   depth 1: FLAME_IMPACT_DAMAGE = 8
- *   depth 2: FLAME_IMPACT_DAMAGE = 8
- *   depth 3: FLAME_FALLOFF       = 5   (edge of range, reduced)
+ * Damage (explicit depth falloff, no drop coefficient; ladder-scaled):
+ *   depth 1-2: FLAME_IMPACT_DAMAGE;  depth 3: FLAME_FALLOFF (edge of range, reduced)
  *
- * Burn DoT: each enemy struck by the cone is set on fire via
- * EnemyHitTarget.applyBurningStatus(), routing into the shared StatusEffectController
- * as a BURNING status (FLAME_BURN_DAMAGE_PER_TURN over FLAME_BURN_TURNS turns). The
- * burn keeps ticking after the player stops firing — the weapon's signature mechanic.
+ * Burn DoT — the FIRE role (balance-overhaul order 3, W3): each enemy struck by the cone gains one
+ * burn STACK via EnemyHitTarget.applyBurningStack(), up to FLAME_BURN_MAX_STACKS. Every stack ticks
+ * FLAME_BURN_FRACTION of the ladder-scaled impact hit per turn (GameMath.incineratorBurnPerStack) for
+ * FLAME_BURN_TURNS turns, refreshed by each new stack. The burn keeps ticking after the target leaves
+ * the cone, can kill (credited to the player), and dies with the enemy. The matchup (FIRE vs trait)
+ * pre-multiplies each stack's magnitude.
  *
  * Tile ignition: every reachable cone tile is also passed to a HazardIgniteTarget
  * (HazardManager.igniteFire), bathing the floor area in spreading fire so the cone
@@ -112,7 +113,7 @@ public class Incinerator extends Weapon {
      *     Walk distanceTiles from 1..range along the facing + perpendicular axes.
      *     Skip tiles not in the cone shape (lateral +-1 are blocked at distanceTiles < 2).
      *     Stop the ray at the first wall, closed door, column, or solid prop on this lateral ray.
-     *     Apply FLAME_IMPACT_DAMAGE (or FLAME_FALLOFF at max depth) to each enemy hit.
+     *     Apply FLAME_IMPACT_DAMAGE (or FLAME_FALLOFF at max depth) to each enemy hit, plus one burn stack.
      *     Detonate explosive barrels and stop the ray.
      *     Fire passes through enemies (no early return on enemy hit).
      *   Return FireResult.MISSED — cone has no single stop tile.
@@ -189,10 +190,14 @@ public class Incinerator extends Weapon {
                                 ? WeaponConstants.FLAME_FALLOFF
                                 : WeaponConstants.FLAME_IMPACT_DAMAGE) * ladderMultiplier);
                         enemyHitTarget.applyDamageTo(hitEnemy, impactDamage);
-                        // Set the enemy on fire — the DoT keeps ticking after the spray ends.
-                        enemyHitTarget.applyBurningStatus(hitEnemy,
-                                WeaponConstants.FLAME_BURN_TURNS,
-                                Math.max(1, Math.round(WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN * ladderMultiplier)));
+                        // W3 (balance-overhaul order 3): add one burn STACK — each stack ticks a fraction
+                        // of the weapon's ladder-scaled hit, up to FLAME_BURN_MAX_STACKS; it keeps ticking
+                        // after the target leaves the cone and dies with it.
+                        int burnPerStack = GameMath.incineratorBurnPerStack(
+                                WeaponConstants.FLAME_IMPACT_DAMAGE * ladderMultiplier,
+                                WeaponConstants.FLAME_BURN_FRACTION);
+                        enemyHitTarget.applyBurningStack(hitEnemy, WeaponConstants.FLAME_BURN_TURNS,
+                                burnPerStack, WeaponConstants.FLAME_BURN_MAX_STACKS);
                         // Fire passes through enemies — do NOT break or return here.
                     }
                 }

@@ -396,15 +396,17 @@ public final class BalanceSchema {
                 BalanceConfig.ARC_CANNON_CLIP_SIZE, BalanceConfig.ARC_CANNON_DAMAGE,
                 BalanceConfig.ARC_CANNON_RELOAD_TIME_TICKS, 1,
                 "credited on the primary bolt; the decaying lateral chain is uncredited bonus AoE"));
-        // Incinerator credited per shot as impact + one full burn application (DoT is damage and
-        // counts toward TTK — knowledge doc SECTION 15). Successive shots REFRESH rather than stack
-        // the burn, so this is a muzzle-style over-credit, acknowledged like weapon falloff crediting.
+        // Incinerator credited per shot as impact + one burn STACK's full application (DoT is damage and
+        // counts toward TTK — knowledge doc SECTION 15). Since balance-overhaul order 3 (W3) each spray
+        // ADDS a stack (up to FLAME_BURN_MAX_STACKS); R-ROLE (CP3b) prices the stacking by scenario and
+        // replaces this power-score row.
         registry.add(new RangedWeaponSpec("Incinerator", ItemType.WEAPON_INCINERATOR, WeaponRole.HEAVY,
                 BalanceConfig.FLAME_CLIP_SIZE,
                 BalanceConfig.FLAME_IMPACT_DAMAGE
-                        + BalanceConfig.FLAME_BURN_DAMAGE_PER_TURN * BalanceConfig.FLAME_BURN_TURNS,
+                        + GameMath.incineratorBurnPerStack(BalanceConfig.FLAME_IMPACT_DAMAGE,
+                                BalanceConfig.FLAME_BURN_FRACTION) * BalanceConfig.FLAME_BURN_TURNS,
                 BalanceConfig.FLAME_RELOAD_TICKS, 1,
-                "credited as impact + one full burn application per shot (DoT counts toward TTK)"));
+                "credited as impact + one burn stack's full application per shot (DoT counts toward TTK)"));
         return Collections.unmodifiableList(registry);
     }
 

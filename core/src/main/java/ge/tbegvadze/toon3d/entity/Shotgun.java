@@ -3,23 +3,19 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
- * Single-shell, one-step-reload shotgun.
+ * Single-shell, one-step-reload shotgun — the SPREAD point-blank role (balance-overhaul order 3, W1).
  *
- * Stats: damage 44, clipSize 1, reloadTime 1 tick, dropCoeff 0.18, range 5.
- * One shot depletes the clip; one completed tile-step reloads it.
+ * One shot depletes the 1-shell clip; one completed tile-step reloads it. marchShot() walks the facing
+ * direction tile by tile up to SHOTGUN_RANGE_TILES and stops at the first wall / door / cover / enemy.
  *
- * marchShot() walks the facing direction tile by tile up to SHOTGUN_RANGE_TILES.
- * Stops at the first wall.
- *
- * Worked damage table (coefficient 0.18, floor 0.15):
- *   distance 1: 44 × 0.82 = 36   (bread-and-butter adjacent shot)
- *   distance 2: 44 × 0.64 = 28
- *   distance 3: 44 × 0.46 = 20
- *   distance 4: 44 × 0.28 = 12
- *   distance 5: 44 × 0.15 =  7   (clamped by floor; edge of range)
+ * Falloff is a per-tile TABLE, BalanceConfig.SHOTGUN_FALLOFF_BY_TILE (index = distance - 1; beyond the
+ * table the shot does nothing), applied to the ladder-scaled base damage (see damageAtDistance). A hit
+ * at 1 tile knocks a non-BOSS, non-MINI_ELITE target back one tile; a hit at <= 2 tiles staggers it
+ * (SpreadImpact). The numbers are SECTION 22 data — never restate them here.
  */
 public class Shotgun extends Weapon {
 
@@ -28,7 +24,7 @@ public class Shotgun extends Weapon {
               WeaponConstants.SHOTGUN_DAMAGE,
               WeaponConstants.SHOTGUN_CLIP_SIZE,
               WeaponConstants.SHOTGUN_RELOAD_TIME_TICKS,
-              WeaponConstants.SHOTGUN_DAMAGE_DROP_COEFF,
+              WeaponConstants.TABLE_FALLOFF_DROP_COEFFICIENT,
               WeaponConstants.SHOTGUN_RANGE_TILES,
               AmmoType.SHELLS);
         setBaseAccuracy(WeaponConstants.SHOTGUN_BASE_ACCURACY);
@@ -37,6 +33,15 @@ public class Shotgun extends Weapon {
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_SHOTGUN; }
     @Override public DamageClass damageClass() { return DamageClass.SPREAD; }
+
+    /**
+     * Per-tile falloff TABLE (balance-overhaul order 3, W1) instead of the base drop coefficient; the
+     * ladder and fire-cycle terms are the shared {@link #damageWithFalloff} composition.
+     */
+    @Override
+    public int damageAtDistance(int distanceTiles) {
+        return damageWithFalloff(GameMath.shotgunFalloffAtTile(WeaponConstants.SHOTGUN_FALLOFF_BY_TILE, distanceTiles));
+    }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,
@@ -75,6 +80,11 @@ public class Shotgun extends Weapon {
                     int damageThisHit = damageAtDistance(distanceTiles);
                     setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
+                    // W1/W2 (balance-overhaul order 3): the close-range payoff — knockback at 1 tile,
+                    // stagger at <= 2 tiles. Resolved before the ability callbacks so a resolver bonus
+                    // reads the post-knockback position.
+                    SpreadImpact.applyCloseRangeImpact(enemyHitTarget, hitEnemy, distanceTiles,
+                            facingStepColumn, facingStepRow);
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     enemiesHit++;

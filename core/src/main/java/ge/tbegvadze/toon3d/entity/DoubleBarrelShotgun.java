@@ -3,25 +3,19 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
- * Break-open double-barrel shotgun — fires one barrel per shot, two shots before reload.
+ * Break-open double-barrel shotgun — the SPREAD role's heavier, shorter cousin (balance-overhaul
+ * order 3, W2). Both barrels go off in ONE action (the built-in BURST_FIRE added in configureRoll), so
+ * the 2-shell clip is one action; the break-open reload then costs 1 tick. No penetration — the blast
+ * dissipates on the first enemy contacted.
  *
- * Stats: damage 32, clipSize 2, reloadTime 1 tick, dropCoeff 0.22, range 4 tiles.
- * Each fire() call depletes one barrel (shotsInClip decremented by 1 per fire).
- * Both barrels must be empty before the break-open reload begins, costing 1 movement tick.
- * No penetration — the blast dissipates on the first enemy contacted.
- *
- * marchShot() walks the facing direction tile by tile up to DBL_SHOTGUN_RANGE_TILES.
- * Stops at the first wall, closed door, or explosive barrel. Hits the first enemy and
- * returns — pellets do not pierce through multiple targets.
- *
- * Damage table (coefficient 0.22, floor 0.15):
- *   distance 1: 32 × 0.78 = 25   (adjacent — devastating burst damage)
- *   distance 2: 32 × 0.56 = 18
- *   distance 3: 32 × 0.34 = 11
- *   distance 4: 32 × 0.15 =  5   (clamped by floor; edge of range)
+ * Falloff is the Shotgun's shape one tile shorter, BalanceConfig.DOUBLE_BARREL_FALLOFF_BY_TILE, applied
+ * per barrel to the ladder-scaled per-barrel damage (~0.9x the Shotgun's, so the action is ~1.8x).
+ * Each barrel's hit carries the same knockback / stagger as the Shotgun (SpreadImpact); a second
+ * stagger in the same action is a no-op. The numbers are SECTION 22 data — never restate them here.
  */
 public class DoubleBarrelShotgun extends Weapon {
 
@@ -30,7 +24,7 @@ public class DoubleBarrelShotgun extends Weapon {
               WeaponConstants.DBL_SHOTGUN_DAMAGE,
               WeaponConstants.DBL_SHOTGUN_CLIP_SIZE,
               WeaponConstants.DBL_SHOTGUN_RELOAD_TIME_TICKS,
-              WeaponConstants.DBL_SHOTGUN_DAMAGE_DROP_COEFF,
+              WeaponConstants.TABLE_FALLOFF_DROP_COEFFICIENT,
               WeaponConstants.DBL_SHOTGUN_RANGE_TILES,
               AmmoType.SHELLS);
         setBaseAccuracy(WeaponConstants.DOUBLE_BARREL_SHOTGUN_BASE_ACCURACY);
@@ -56,6 +50,15 @@ public class DoubleBarrelShotgun extends Weapon {
             weaponAbilities = extended;
         }
         super.configureRoll(level, weaponTier, weaponAbilities);
+    }
+
+    /**
+     * Per-tile falloff TABLE (balance-overhaul order 3, W2) instead of the base drop coefficient; the
+     * ladder and fire-cycle terms are the shared {@link #damageWithFalloff} composition.
+     */
+    @Override
+    public int damageAtDistance(int distanceTiles) {
+        return damageWithFalloff(GameMath.shotgunFalloffAtTile(WeaponConstants.DBL_SHOTGUN_FALLOFF_BY_TILE, distanceTiles));
     }
 
     @Override
@@ -96,6 +99,11 @@ public class DoubleBarrelShotgun extends Weapon {
                     int damageThisHit = damageAtDistance(distanceTiles);
                     setLastHitEnemy(hitEnemy, damageThisHit, enemyHitTarget.isAtFullHp(hitEnemy));
                     enemyHitTarget.applyDamageTo(hitEnemy, damageThisHit);
+                    // W1/W2 (balance-overhaul order 3): the close-range payoff — knockback at 1 tile,
+                    // stagger at <= 2 tiles. Resolved before the ability callbacks so a resolver bonus
+                    // reads the post-knockback position.
+                    SpreadImpact.applyCloseRangeImpact(enemyHitTarget, hitEnemy, distanceTiles,
+                            facingStepColumn, facingStepRow);
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     enemiesHit++;

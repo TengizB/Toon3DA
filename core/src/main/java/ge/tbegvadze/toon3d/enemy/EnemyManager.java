@@ -154,6 +154,9 @@ public final class EnemyManager implements EnemyHitTarget {
     private DamageClass activationDamageClass = null;
     // W5: while true, a matchup below 1.0 is raised to neutral (the Arc Cannon's chain leaps).
     private boolean activationMatchupFloorNeutral = false;
+    // World turns taken by this manager (incremented at the top of takeTurn). The SPREAD stagger's
+    // no-chain rule compares it against Enemy.lastStaggeredTurn (balance-overhaul order 3, W1).
+    private int worldTurnIndex = 0;
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
     private Loadout loadout = null;
     /**
@@ -805,15 +808,78 @@ public final class EnemyManager implements EnemyHitTarget {
     public void applyBurningStatus(Object enemyObject, int turns, int magnitudePerTurn) {
         if (statusEffectController == null) return;
         Enemy enemy = (Enemy) enemyObject;
-        // M3: status damage the player applies uses the class of the weapon that applied it — the burn's
-        // per-turn magnitude is pre-multiplied by the activation's matchup (Incinerator = FIRE).
-        int matchedMagnitude = magnitudePerTurn;
-        if (activationDamageClass != null) {
-            float matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
-            if (activationMatchupFloorNeutral) matchupMultiplier = Math.max(1f, matchupMultiplier);
-            matchedMagnitude = Math.max(1, Math.round(magnitudePerTurn * matchupMultiplier));
-        }
-        statusEffectController.apply(enemy, StatusType.BURNING, turns, matchedMagnitude, this);
+        statusEffectController.apply(enemy, StatusType.BURNING, turns,
+                matchedStatusMagnitude(enemy, magnitudePerTurn), this);
+    }
+
+    /**
+     * Adds one Incinerator burn STACK (balance-overhaul order 3, W3) through the controller's stacking
+     * rule: the stack count grows to {@code maxStacks}, every stack ticks the (largest applied) per-stack
+     * magnitude, and each new stack refreshes the shared timer. The per-stack magnitude takes the
+     * activation's matchup exactly like a plain burn.
+     */
+    @Override
+    public void applyBurningStack(Object enemyObject, int turns, int magnitudePerStack, int maxStacks) {
+        if (statusEffectController == null) return;
+        Enemy enemy = (Enemy) enemyObject;
+        statusEffectController.applyStacking(enemy, StatusType.BURNING, turns,
+                matchedStatusMagnitude(enemy, magnitudePerStack), maxStacks, this);
+    }
+
+    /**
+     * M3: status damage the player applies uses the class of the weapon that applied it — a per-turn
+     * magnitude is pre-multiplied by the activation's matchup (Incinerator = FIRE). No activation = as is.
+     */
+    private int matchedStatusMagnitude(Enemy enemy, int magnitudePerTurn) {
+        if (activationDamageClass == null) return magnitudePerTurn;
+        float matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
+        if (activationMatchupFloorNeutral) matchupMultiplier = Math.max(1f, matchupMultiplier);
+        return Math.max(1, Math.round(magnitudePerTurn * matchupMultiplier));
+    }
+
+    /**
+     * SPREAD STAGGER (balance-overhaul order 3, W1): the enemy's next committed action is cancelled —
+     * the same {@code skipNextAction} the R6 stun uses, consumed by phaseBExecute, which also loses a
+     * committed WIND_UP outright (the next COMMIT plans afresh). The intent is set to STUNNED NOW, so the
+     * icon the player reads for the coming turn is already the truth (the R6 status stun only reaches
+     * the intent at execution). Refused: a dead or not-yet-alerted enemy, a BOSS (boss choreography is
+     * owned by BossFloorController, which has no stagger hook — bosses ignore shotgun stagger), an
+     * action that is already cancelled, and a stagger within SHOTGUN_STAGGER_MIN_TURNS_BETWEEN world
+     * turns of the last one (no chaining two turns running).
+     */
+    @Override
+    public boolean tryStaggerEnemy(Object enemyObject) {
+        Enemy enemy = (Enemy) enemyObject;
+        if (!enemy.isAlive() || !enemy.isAlerted()) return false;
+        if (enemy instanceof Boss || enemy.type.role() == EnemyRole.BOSS) return false;
+        if (enemy.skipNextAction) return false;
+        if (worldTurnIndex - enemy.lastStaggeredTurn < BalanceConfig.SHOTGUN_STAGGER_MIN_TURNS_BETWEEN) return false;
+        enemy.skipNextAction     = true;
+        enemy.lastStaggeredTurn  = worldTurnIndex;
+        enemy.plannedAction.verb = IntentVerb.STUNNED;
+        enemy.notifyCommitted(IntentVerb.STUNNED);   // the existing intent pop marks the change
+        return true;
+    }
+
+    /**
+     * SPREAD KNOCKBACK (balance-overhaul order 3, W1): one tile along (stepColumn, stepRow), away from
+     * the player, through the Hammer's {@link #tryPushEnemy} path (bounds, walls, solid props, columns,
+     * spires, closed doors and other enemies all refuse it; hazard decal tiles are walkable, so a push
+     * into fire or toxin is allowed — that is the tactic). Additionally refused: BOSS and MINI_ELITE
+     * targets, and ANY door tile, open or not (EDGE CASES). An enemy mid-WIND_UP is simply relocated; its
+     * committed action re-validates from the new tile at execution (and a 1-tile hit also staggers it).
+     */
+    @Override
+    public boolean tryKnockbackEnemy(Object enemyObject, int stepColumn, int stepRow) {
+        Enemy enemy = (Enemy) enemyObject;
+        if (!enemy.isAlive()) return false;
+        if (enemy instanceof Boss) return false;
+        EnemyRole role = enemy.type.role();
+        if (role == EnemyRole.BOSS || role == EnemyRole.MINI_ELITE) return false;
+        int targetColumn = enemy.tileColumn + stepColumn;
+        int targetRow    = enemy.tileRow    + stepRow;
+        if (Level.isDoor(level.getCell(targetColumn, targetRow))) return false;
+        return tryPushEnemy(enemy, targetColumn, targetRow);
     }
 
     /**
@@ -889,6 +955,7 @@ public final class EnemyManager implements EnemyHitTarget {
         cachedPlayer       = player;
         cachedPlayerColumn = playerColumn;
         cachedPlayerRow    = playerRow;
+        worldTurnIndex++;
         rebuildOccupancy();
         phaseA(playerColumn, playerRow);
         phaseBExecute(playerColumn, playerRow, player);

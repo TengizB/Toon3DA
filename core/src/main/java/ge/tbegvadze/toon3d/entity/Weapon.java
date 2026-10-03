@@ -1067,7 +1067,18 @@ public abstract class Weapon implements WeaponProfile {
     public int damageAtDistance(int distanceTiles) {
         float dropMultiplier = GameMath.damageDropMultiplier(damageDropCoefficient,
                 distanceTiles, WeaponConstants.DAMAGE_MIN_MULTIPLIER);
-        return Math.round(damage * getLadderDamageMultiplier() * dropMultiplier * fireCycleMultiplier);
+        return damageWithFalloff(dropMultiplier);
+    }
+
+    /**
+     * The weapon's hit at a given falloff fraction: base damage x ladder x falloff x the fire-cycle
+     * multiplier, rounded — the single composition every distance rule shares. Weapons with a per-tile
+     * falloff TABLE (Shotgun, Double-Barrel — balance-overhaul order 3) override
+     * {@link #damageAtDistance} and pass their table's fraction here, so the ladder and fire-cycle
+     * terms can never drift between falloff shapes.
+     */
+    protected int damageWithFalloff(float falloffMultiplier) {
+        return Math.round(damage * getLadderDamageMultiplier() * falloffMultiplier * fireCycleMultiplier);
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }

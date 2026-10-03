@@ -95,6 +95,38 @@ public final class StatusEffectController {
     }
 
     /**
+     * Applies one STACK of a stacking DoT (balance-overhaul order 3, W3 — the Incinerator burn). The rule,
+     * chosen as the simplest correct one (no per-stack timers, zero allocation):
+     *   - first application: stacks = 1, magnitude = the per-stack value, timer = duration;
+     *   - each further application: stacks + 1 (capped at {@code maxStacks}), the SHARED timer refreshed to
+     *     the longer of the two, the per-stack magnitude the larger of the two, the source re-attributed;
+     *   - a tick deals magnitude x stacks; all stacks expire together.
+     * Immunity and resistance scale duration and magnitude exactly as {@link #apply} does. A plain
+     * {@link #apply} on an already-stacked effect only refreshes it (REFRESH_DURATION) — the stack count
+     * grows only through this method.
+     */
+    public void applyStacking(StatusHost host, StatusType type, int turns, int magnitudePerStack,
+                              int maxStacks, Object source) {
+        StatusResistance resistance = host.getStatusResistance();
+        if (resistance.isImmune(type)) {
+            return;
+        }
+        int effectiveDuration  = Math.max(1, Math.round(turns * resistance.durationMultiplier(type)));
+        int effectiveMagnitude = Math.round(magnitudePerStack * resistance.damageMultiplier(type));
+        StatusEffect existing = host.getActiveEffects().get(type);
+        if (!existing.isActive()) {
+            existing.remainingTurns = effectiveDuration;
+            existing.magnitude      = effectiveMagnitude;
+            existing.stacks         = 1;
+        } else {
+            existing.stacks         = Math.min(Math.max(1, existing.stacks) + 1, Math.max(1, maxStacks));
+            existing.remainingTurns = Math.max(existing.remainingTurns, effectiveDuration);
+            existing.magnitude      = Math.max(existing.magnitude, effectiveMagnitude);
+        }
+        existing.source = source;
+    }
+
+    /**
      * Ticks all active status effects on the player and all living enemies.
      * Called once per world turn from StatusEffectSubscriber, before enemy AI (EnemyTurnSubscriber).
      */
@@ -230,7 +262,8 @@ public final class StatusEffectController {
     private static void applyEnemyTickEffect(Enemy enemy, StatusEffect effect, StatusType type) {
         switch (type) {
             case BURNING:
-                enemy.applyDoTDamage(effect.magnitude);
+                // Stacked burns (Incinerator, order 3 W3) tick magnitude x stacks; any other burn has 1.
+                enemy.applyDoTDamage(effect.magnitude * Math.max(1, effect.stacks));
                 break;
             case POISONED:
                 enemy.applyDoTDamage(effect.magnitude * effect.stacks);
@@ -264,7 +297,8 @@ public final class StatusEffectController {
      *   Poison     → STACK_MAGNITUDE (each application adds +1 stack)
      *   Vulnerable → STACK_MAGNITUDE (order-6: each mark adds a stack up to VULNERABLE_MAX_STACKS so
      *                a setup build can layer marks, but a small cap keeps it off a boss's neck)
-     *   Burning    → REFRESH_DURATION (re-application resets to the longer timer, no stack)
+     *   Burning    → REFRESH_DURATION (re-application resets to the longer timer, no stack; the
+     *                Incinerator adds stacks through applyStacking — balance-overhaul order 3, W3)
      *   Empowered  → REFRESH_DURATION (re-stim refreshes, does not stack to ×2.25)
      *   Weak       → REFRESH_DURATION (order-6: re-application refreshes the debuff window)
      *   Exposed    → REFRESH_DURATION (order-6: a one-hit flag; re-applying keeps it armed longer)

@@ -117,6 +117,13 @@ public class Enemy implements StatusHost {
     public boolean skipNextAction = false;
 
     /**
+     * EnemyManager world-turn index of the last SPREAD stagger on this enemy (balance-overhaul order 3,
+     * W1) — the no-chain rule refuses a new stagger within SHOTGUN_STAGGER_MIN_TURNS_BETWEEN turns of it.
+     * Starts far in the past so the first stagger is always allowed.
+     */
+    public int lastStaggeredTurn = Integer.MIN_VALUE / 2;
+
+    /**
      * No-repeat memory for scripted SPECIAL abilities (strategy-combat-order-5). One reused instance;
      * the COMMIT step records each chosen ability so a multi-ability caster rotates its script rather
      * than spamming one move. Never allocated inside the turn loop.

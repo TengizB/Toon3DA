@@ -592,21 +592,22 @@ public final class BalanceConfig {
     // reloadTicks is how many turns a reload eats.
     // =====================================================================================
 
-    // Shotgun — high single-shot burst, 1-shell clip.
-    // Was 50 (powerScore 28.0, OVER the 18-26 burst band — best sustained DPT AND best
-    // ammo efficiency of the non-charge guns). Trimmed to 44 (powerScore 23.1, in band)
-    // so it no longer invalidates the other guns. See docs/game-balance-authority.txt.
+    // Shotgun — high single-shot burst, 1-shell clip. Point-blank role (balance-overhaul order 3, W1):
+    // the per-tile falloff is the SECTION 22 table SHOTGUN_FALLOFF_BY_TILE (the drop coefficient is
+    // gone), and a close hit knocks back / staggers (SECTION 22). 44 is the order-3 STARTING value —
+    // CP3b fits it under R-ROLE-4 (SPREAD at 1-2 tiles >= 2.0x BALLISTIC at 3 tiles).
     public static final int   SHOTGUN_DAMAGE             = 44;
     public static final int   SHOTGUN_CLIP_SIZE          = 1;
     public static final int   SHOTGUN_RANGE_TILES        = 5;
-    public static final float SHOTGUN_DAMAGE_DROP_COEFF  = 0.18f;
     public static final int   SHOTGUN_RELOAD_TIME_TICKS  = 1;
 
-    // Double-Barrel Shotgun — higher burst, shorter range, 2-shot clip.
-    public static final int   DBL_SHOTGUN_DAMAGE             = 32;
+    // Double-Barrel Shotgun — both barrels in ONE action (the built-in BURST_FIRE), 2-shell clip,
+    // one tile shorter than the Shotgun (W2: DOUBLE_BARREL_FALLOFF_BY_TILE). Per-barrel damage is
+    // ~0.9x the Shotgun's so the two-barrel action lands ~1.8x the Shotgun hit. Was 32 (two barrels
+    // = 1.45x); 40 is the order-3 STARTING value — CP3b fits it under R-ROLE.
+    public static final int   DBL_SHOTGUN_DAMAGE             = 40;
     public static final int   DBL_SHOTGUN_CLIP_SIZE          = 2;
     public static final int   DBL_SHOTGUN_RANGE_TILES        = 4;
-    public static final float DBL_SHOTGUN_DAMAGE_DROP_COEFF  = 0.22f;
     public static final int   DBL_SHOTGUN_RELOAD_TIME_TICKS  = 1;
 
     // Plasma Rifle — piercing, long range, lower per-shot damage.
@@ -653,9 +654,11 @@ public final class BalanceConfig {
     public static final int   RAILGUN_CLIP_SIZE             = 1;
     public static final int   RAILGUN_RELOAD_TIME_TICKS     = 2;
 
-    // Incinerator — short-range cone flamethrower. Impact + per-turn burn DoT (see section 8).
-    public static final int   FLAME_IMPACT_DAMAGE     = 8;
-    public static final int   FLAME_FALLOFF           = 5;
+    // Incinerator — short-range cone flamethrower. Impact + STACKING burn DoT (W3; burn numbers in
+    // SECTION 22). Impact per target ~0.6x the Assault Rifle's base hit (20): was 8 / 5 at the cone
+    // edge; 12 / 8 are the order-3 STARTING values — CP3b fits them under R-ROLE (S2 / S5).
+    public static final int   FLAME_IMPACT_DAMAGE     = 12;
+    public static final int   FLAME_FALLOFF           = 8;
     public static final float FLAME_DAMAGE_DROP_COEFF = 0.0f;
     public static final int   FLAME_RANGE_TILES       = 3;
     public static final int   FLAME_CLIP_SIZE         = 30;
@@ -1029,8 +1032,8 @@ public final class BalanceConfig {
     public static final int   INCENDIARY_BURN_DURATION           = 3;
     public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS = 1;
 
-    // Incinerator weapon burn (the flamethrower's own burn DoT).
-    public static final int FLAME_BURN_DAMAGE_PER_TURN = 6;
+    // Incinerator weapon burn (the flamethrower's own burn DoT). Per-stack damage and the stack cap
+    // live in SECTION 22 (FLAME_BURN_FRACTION, FLAME_BURN_MAX_STACKS — balance-overhaul order 3, W3).
     public static final int FLAME_BURN_TURNS           = 4;
 
     // Stagger Rounds (STUN — on hit).
@@ -2585,6 +2588,33 @@ public final class BalanceConfig {
      * S-SUPPLY is NOT loosened to make room for it.
      */
     public static final float MATCHUP_TP_REFERENCE_WEIGHT = 0.0f;
+
+    // --- W1/W2 SPREAD ROLE (Shotgun / Double-Barrel) — starting values, CP3b fits them ------------
+    /**
+     * W1: Shotgun damage fraction by tile distance; index = distance - 1, beyond the table = 0
+     * (GameMath.shotgunFalloffAtTile). Replaces the 0.18 drop coefficient.
+     */
+    public static final float[] SHOTGUN_FALLOFF_BY_TILE       = {1.00f, 0.85f, 0.55f, 0.30f, 0.15f};
+    /** W2: the Double-Barrel's falloff — the Shotgun's shape, one tile shorter (range 4). */
+    public static final float[] DOUBLE_BARREL_FALLOFF_BY_TILE = {1.00f, 0.85f, 0.55f, 0.30f};
+    /** W1: a SPREAD hit at or inside this many tiles knocks a non-BOSS, non-MINI_ELITE target back one tile. */
+    public static final int     SHOTGUN_KNOCKBACK_MAX_TILES   = 1;
+    /** W1: a SPREAD hit at or inside this many tiles STAGGERS the target (its next committed action is lost). */
+    public static final int     SHOTGUN_STAGGER_MAX_TILES     = 2;
+    /**
+     * W1: world turns that must separate two staggers on the same enemy — 2 means a stagger on turn N
+     * blocks turn N+1 ("cannot chain two turns running") and allows turn N+2.
+     */
+    public static final int     SHOTGUN_STAGGER_MIN_TURNS_BETWEEN = 2;
+
+    // --- W3 FIRE ROLE (Incinerator burn) — starting values, CP3b fits them ------------------------
+    /**
+     * W3: each Incinerator burn stack ticks this fraction of the weapon's ladder-scaled impact hit per
+     * turn (GameMath.incineratorBurnPerStack). 0.5 x 12 = 6/turn per stack at depth 1 (the old flat 6).
+     */
+    public static final float   FLAME_BURN_FRACTION   = 0.5f;
+    /** W3: Incinerator burn stacks on one target, at most (one stack per spray). */
+    public static final int     FLAME_BURN_MAX_STACKS = 3;
 
     // --- M3 MATCHUP TABLE — one row per EnemyTrait, columns in DamageClass ordinal order ----
     //                                                 BALLISTIC SPREAD ENERGY RAIL  FIRE  EXPLOSIVE BLADE BLUNT

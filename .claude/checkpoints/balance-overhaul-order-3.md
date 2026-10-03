@@ -65,7 +65,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green.
 - [ ] **CP3** — W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks); R-ROLE-1..5
       replace R-WEAPON bands; Railgun waiver resolved.
-      DONE WHEN: A2, A5, A6 hold; both gates green.
+      DONE WHEN: A2, A5, A6 hold; both gates green. Split:
+  - [x] **CP3a** — role BEHAVIOURS live with starting numbers (falloff tables, knockback, stagger, burn stacks).
+        DONE WHEN: build green; only R-WEAPON (DB + Incinerator) and S-SUPPLY red — both resolved by CP3b.
+  - [ ] **CP3b** — numbers fitted under R-ROLE-1..5 (replacing R-WEAPON + the Railgun waiver); S-SUPPLY back in band.
+        DONE WHEN: A2, A5, A6 hold; both gates green.
 - [ ] **CP4** — per-type ammo generosity in SupplyPlanner and re-fitted reserve caps.
       DONE WHEN: R-ROLE-5 + R-SUPPLY green; both gates green.
 - [ ] **CP5** — C1, C2, C3, C5 visuals.
@@ -107,3 +111,17 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Spiresower limits) once TACTICAL switches by matchup, then re-baselines LevelGeneratorSnapshotTest + SECTION 6.
 - **CP2 gates:** core:test 453, only pre-existing StoryBarkTest; balanceSim exit 0, S-SUPPLY 0.78, TACTICAL 160/200
   stalled (baseline 162).
+- **CP3a handover:** `GameMath.shotgunFalloffAtTile(table, d)`, `incineratorBurnPerStack(ladderHit, fraction)`;
+  `Weapon.damageWithFalloff(mult)`; Shotgun/DB override `damageAtDistance` with `SHOTGUN_/DOUBLE_BARREL_FALLOFF_BY_TILE`.
+  `entity/SpreadImpact.applyCloseRangeImpact(target, enemy, d, stepCol, stepRow)` (knockback <=1, stagger <=2).
+  EnemyHitTarget `applyBurningStack / tryStaggerEnemy / tryKnockbackEnemy`; `EnemyManager.worldTurnIndex`;
+  `Enemy.lastStaggeredTurn`; `StatusEffectController.applyStacking` (one shared timer, tick = magnitude x stacks).
+  Decisions: bosses ignore stagger + knockback (no phase hook in boss AI); stagger sets plannedAction.verb=STUNNED
+  immediately (truthful intent); no chain = SHOTGUN_STAGGER_MIN_TURNS_BETWEEN 2; any door tile refuses knockback.
+  Starting numbers: SHOTGUN 44, DBL 40 (per barrel), FLAME_IMPACT 12, FLAME_FALLOFF 8, FLAME_BURN_FRACTION 0.5,
+  FLAME_BURN_MAX_STACKS 3, FLAME_BURN_TURNS 4. Deleted SHOTGUN/DBL_SHOTGUN_DAMAGE_DROP_COEFF, FLAME_BURN_DAMAGE_PER_TURN.
+- **TEMPORARY RED at CP3a (CP3b resolves):** R-WEAPON out of band (DB 26.67 > 26, Incinerator 33.05 > 32) — R-WEAPON
+  is REPLACED by R-ROLE in CP3b. balanceSim S-SUPPLY 0.82 > 0.80: bisected to the W1 shotgun table alone (the start
+  kit, real and sim, is Chaingun + Shotgun; point-blank 36 -> 44). DECISION (hub): keep the S-SUPPLY band; after the
+  R-ROLE fit, bring it back in band by re-fitting the SupplyPlanner's planned HEAL (SECTION 21 number, override
+  recorded) — the stronger start kit means a floor needs less heal to leave you equally hurt.

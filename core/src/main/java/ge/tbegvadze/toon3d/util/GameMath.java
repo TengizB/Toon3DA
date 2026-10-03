@@ -6041,6 +6041,40 @@ public final class GameMath {
         return effectiveHitPoints / referenceMultiplier;
     }
 
+    /*
+     * Formula: Shotgun falloff by tile (W1/W2)
+     * Derivation:
+     *   A spread weapon's damage fraction is a designer TABLE indexed by tile distance, not a linear
+     *   coefficient, because the role wants a cliff (100% / 85% at 1-2 tiles, then 55 / 30 / 15):
+     *       fraction(d) = table[d - 1]   for 1 <= d <= table.length
+     *       fraction(d) = 0              otherwise (outside the weapon's reach)
+     *   The final hit is base x ladder x fraction(d) x fireCycleMultiplier (Weapon.damageWithFalloff).
+     * Edge cases:
+     *   d <= 0 (the player's own tile) or d > length -> 0. A null or empty table -> 0. Table values are
+     *   used as written (no clamp), so a misconfigured value > 1 surfaces in the audit, not here.
+     */
+    public static float shotgunFalloffAtTile(float[] falloffByTile, int distanceTiles) {
+        if (falloffByTile == null || distanceTiles < 1 || distanceTiles > falloffByTile.length) {
+            return 0f;
+        }
+        return falloffByTile[distanceTiles - 1];
+    }
+
+    /*
+     * Formula: Incinerator burn per stack (W3)
+     * Derivation:
+     *   Each burn stack ticks a fixed FRACTION of the weapon's ladder-scaled impact hit, so the burn
+     *   scales with the weapon level exactly as the impact does:
+     *       perStack = max(1, round(ladderScaledHit x burnFraction))
+     *   Up to FLAME_BURN_MAX_STACKS stacks tick together: per-turn burn = perStack x stacks.
+     * Edge cases:
+     *   The floor of 1 keeps a burn from ever ticking 0 (an applied burn is always felt). A negative or
+     *   zero fraction still returns 1 — a fraction of 0 is not a supported "burn off" switch.
+     */
+    public static int incineratorBurnPerStack(float ladderScaledHit, float burnFraction) {
+        return Math.max(1, Math.round(ladderScaledHit * burnFraction));
+    }
+
     /** {@link #classifyMatchup} result: the multiplier is at or above the effective threshold. */
     public static final int MATCHUP_CLASS_EFFECTIVE = 1;
     /** {@link #classifyMatchup} result: the multiplier lies strictly between the thresholds. */
