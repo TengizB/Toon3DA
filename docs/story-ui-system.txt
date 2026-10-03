@@ -633,6 +633,16 @@ Upgrade it or replace it." Re-teach: "Still outgunned. Fix the gun." Evidence is
 `TeachingSystem.onFloorArrivedUndergeared()`: each further qualifying arrival AFTER the first telling
 was delivered counts one toward the threshold of 3. No line states a number or a level.
 
+MATCHUP (balance-overhaul-order-3 C6) is the nineteenth topic: TACTICAL, re-teach threshold 3. It
+teaches the C4 SWITCH HINT: `World.updateMatchupHint()` asks `entity/MatchupAdvisor` each idle frame
+for the nearest AWAKE enemy in the facing lane (within the equipped weapon's range, stopped by walls,
+solid props and closed doors) and whether a carried ranged weapon with ammo is EFFECTIVE against its
+trait while the equipped one is RESISTED. First teach (the first RESISTED hit while a hint is up):
+"Those rounds are glancing off. Something in your bag will bite." Re-teach: "Wrong tool. The bag
+knows." Evidence is `TeachingSystem.onMatchupHintIgnored()`: one point per hint EPISODE in which the
+player fires the resisted gun for `STORY_MATCHUP_HINT_EPISODE_FIRE_TURNS` (3) turns running (an
+episode ends when the hint clears), counted only after the first telling was delivered. No numbers.
+
 ADD A TEACHING TOPIC one value on `TeachingTopic` (tier + re-teach evidence threshold), its bark text
               (+ `.retaught` text if it has a threshold) in `BarkStrings` and the shipped properties
               file, and the firing condition + (if it has one) the evidence hook in `World` /

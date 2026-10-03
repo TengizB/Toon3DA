@@ -266,6 +266,10 @@ public final class BarkStrings {
                                                      "That gun's falling behind what lives down here. Upgrade it or replace it.");
         strings.put("story.bark.control.retaught.undergeared",
                                                      "Still outgunned. Fix the gun.");
+        strings.put("story.bark.control.matchup",
+                                                     "Those rounds are glancing off. Something in your bag will bite.");
+        strings.put("story.bark.control.retaught.matchup",
+                                                     "Wrong tool. The bag knows.");
         strings.put("story.bark.control.weapon_swap","Better gun on the floor. Check the stats before you take it.");
     }
 

@@ -74,7 +74,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: R-ROLE-5 + R-SUPPLY green; both gates green.
 - [x] **CP5** — C1, C2, C3, C5 visuals.
       DONE WHEN: A3 holds (build green; desktop check owed if no display).
-- [ ] **CP6** — C4 switch hint + direct switch + MATCHUP teaching topic.
+- [x] **CP6** — C4 switch hint + direct switch + MATCHUP teaching topic.
       DONE WHEN: A4, A7 hold; build + fast gate green.
 - [ ] **CP7** — sim TacticalPolicy switching + S-SWITCH + MATCHUP REPORT; all docs; reviewer PASS.
       DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
@@ -157,3 +157,14 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   WeaponInspectOverlayRenderer (card 680 tall, origin y 20). `ImpactEventListener.onEnemyMatchupHit` still
   unconsumed (harmless default). DESKTOP CHECK OWED (no display): glyph legibility at 9-16 units, compare-card row
   spacing (~29 units). Build green; core:test 453, only StoryBarkTest.
+- **CP6 handover:** `entity/MatchupAdvisor.findTarget(enemies, level, doorManager, col, row, stepCol, stepRow, range)`
+  (first living ALERTED enemy in the facing lane, stops at `level.isBlockedAt`) + `hintWeapon(equipped, loadout,
+  trait, distance)` (RESISTED equipped -> best EFFECTIVE loadout gun with ammo + range; ties: multiplier, ammo,
+  slot; melee never offered). `PlayerInventory.selectLoadoutWeapon(w)`; `PlayerController.setSwitchHintWeapon /
+  getSwitchHintWeapon` (trySwitchWeapon jumps when set). `TouchInputState.setSwitchHintActive / isSwitchHintActive`;
+  pulse in TouchControllerRenderer (GameMath.pulseMultiplier, TouchConstants.SWITCH_HINT_*; outline follows the
+  rect, not the corner radius). `World.updateMatchupHint()` each idle PLAYING frame; first teach = hint up AND
+  target.lastHitMatchup RESISTED; episode fire-turn counter on TickCause.FIRE -> `TeachingSystem.onMatchupHintIgnored()`
+  at STORY_MATCHUP_HINT_EPISODE_FIRE_TURNS (3). Strings `story.bark.control.matchup` / `.retaught.matchup`.
+  SimWorld does NOT set the hint yet — CP7 wires MatchupAdvisor into SimWorld/TacticalPolicy.
+  Gates: core:test 453, only StoryBarkTest; balanceSim exit 0 (unchanged; sim hint null). Desktop check owed for A4.

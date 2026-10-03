@@ -965,6 +965,8 @@ public final class StoryUiConstants {
      * does not otherwise gate (a re-teach row is STORY_CRITICAL, so it would otherwise ignore it).
      */
     public static final int STORY_TEACHING_MAX_RETEACHES_PER_FLOOR = 1;
+    /** C6 (balance-overhaul order 3): fire turns with the switch hint up and the resisted gun still held that make one MATCHUP re-teach evidence point per hint episode. */
+    public static final int STORY_MATCHUP_HINT_EPISODE_FIRE_TURNS = 3;
 
     /** How far {@code World} scans down the player's facing line for the {@code BARREL} teaching topic. */
     public static final int STORY_TEACHING_BARREL_SCAN_TILES = 6;
