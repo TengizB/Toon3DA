@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Combat
 TITLE: Weapon Roles and Matchups — told to the player
 CREATED: 2026-09-30
