@@ -70,6 +70,7 @@ public final class SimReport {
 
         PolicySummary tactical = matrix.get(BehavioralBands.TACTICAL_ID);
         if (tactical != null) appendFloorReport(report, tactical);
+        appendMatchupReport(report, matrix);
 
         report.append("BEHAVIOURAL BANDS\n");
         report.append("--------------------------------------------------------------------------------\n");
@@ -133,6 +134,61 @@ public final class SimReport {
             report.append(String.format("  %-8s %2d-%-3d cavern %.2f   rooms_mst %.2f   gap %4.0f%% %s%n",
                     cave.node, cave.firstDepth, cave.lastDepth, caveHeal, roomsHeal, gap * 100f,
                     gap <= BalanceConfig.SUPPLY_TRACK_TOLERANCE ? "OK" : "OUT"));
+        }
+        report.append('\n');
+    }
+
+    /**
+     * The MATCHUP REPORT (balance-overhaul order 3, CP7): per policy and depth band — the share of the
+     * player's landed damage each DamageClass dealt, EFFECTIVE / RESISTED hits per floor, and hint-driven
+     * (C4) switches per floor. Status ticks (burn) are not hits and are excluded.
+     */
+    private static void appendMatchupReport(StringBuilder report, Map<String, PolicySummary> matrix) {
+        ge.tbegvadze.toon3d.entity.DamageClass[] classes = ge.tbegvadze.toon3d.entity.DamageClass.values();
+        report.append("MATCHUP REPORT — per played floor; damage share by class (% of landed hit damage)\n");
+        report.append("--------------------------------------------------------------------------------\n");
+        StringBuilder header = new StringBuilder(String.format("%-20s %-6s %5s %6s %6s %6s", "policy", "depth",
+                "floor", "eff/f", "res/f", "swt/f"));
+        for (ge.tbegvadze.toon3d.entity.DamageClass damageClass : classes) {
+            header.append(String.format(" %5s", damageClass.name().substring(0, Math.min(5, damageClass.name().length()))));
+        }
+        report.append(header).append('\n');
+        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        for (PolicySummary summary : matrix.values()) {
+            Map<Integer, float[]> cells = new java.util.TreeMap<>();
+            for (FloorLedger floor : summary.allFloors()) {
+                int bandStart = ((Math.max(1, floor.depth) - 1) / band) * band + 1;
+                float[] sums = cells.computeIfAbsent(bandStart, k -> new float[4 + classes.length]);
+                sums[0] += 1f;
+                sums[1] += floor.effectiveHits;
+                sums[2] += floor.resistedHits;
+                sums[3] += floor.matchupSwitches;
+                for (int classIndex = 0; classIndex < classes.length; classIndex++) {
+                    sums[4 + classIndex] += floor.damageByClass[classIndex];
+                }
+            }
+            for (Map.Entry<Integer, float[]> cell : cells.entrySet()) {
+                float[] sums = cell.getValue();
+                float floors = sums[0];
+                float totalDamage = 0f;
+                for (int classIndex = 0; classIndex < classes.length; classIndex++) totalDamage += sums[4 + classIndex];
+                StringBuilder row = new StringBuilder(String.format("%-20s %2d-%-3d %5.0f %6.2f %6.2f %6.2f",
+                        summary.policyId, cell.getKey(), cell.getKey() + band - 1, floors,
+                        sums[1] / floors, sums[2] / floors, sums[3] / floors));
+                for (int classIndex = 0; classIndex < classes.length; classIndex++) {
+                    float share = totalDamage <= 0f ? 0f : 100f * sums[4 + classIndex] / totalDamage;
+                    row.append(String.format(" %5.0f", share));
+                }
+                report.append(row).append('\n');
+            }
+        }
+        report.append("  S-SWITCH alternatives (per policy): switches/COMBAT floor | hint take rate | switches per\n");
+        report.append("  COMBAT floor that showed a hint | COMBAT floors (hinted)\n");
+        for (PolicySummary summary : matrix.values()) {
+            int[] floorCounts = summary.combatFloorsAndHintedCombatFloors();
+            report.append(String.format("  %-20s %6.2f | %6.2f | %6.2f | %d (%d)%n", summary.policyId,
+                    summary.meanMatchupSwitchesPerCombatFloor(), summary.hintTakeRate(),
+                    summary.matchupSwitchesPerHintedCombatFloor(), floorCounts[0], floorCounts[1]));
         }
         report.append('\n');
     }

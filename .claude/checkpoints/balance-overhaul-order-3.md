@@ -77,7 +77,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP6** — C4 switch hint + direct switch + MATCHUP teaching topic.
       DONE WHEN: A4, A7 hold; build + fast gate green.
 - [ ] **CP7** — sim TacticalPolicy switching + S-SWITCH + MATCHUP REPORT; all docs; reviewer PASS.
-      DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
+      DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED. Split:
+  - [x] **CP7a** — sim plays the C4 hint; TacticalPolicy takes hints + kit diversity; MATCHUP REPORT; S-SWITCH
+        band; planned-heal re-fit; TP weight DECISION 0. DONE WHEN: committed; only S-SWITCH red (owner question).
+  - [ ] **CP7b** — S-SWITCH resolved per the owner's answer; docs (A9) complete; A1 grep; both gates green.
+  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -168,3 +172,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   at STORY_MATCHUP_HINT_EPISODE_FIRE_TURNS (3). Strings `story.bark.control.matchup` / `.retaught.matchup`.
   SimWorld does NOT set the hint yet — CP7 wires MatchupAdvisor into SimWorld/TacticalPolicy.
   Gates: core:test 453, only StoryBarkTest; balanceSim exit 0 (unchanged; sim hint null). Desktop check owed for A4.
+- **RESUMED after a usage-limit cut (2026-10-03 22:24 UTC):** the balance spoke died mid-CP7 with 15 files
+  uncommitted; verified on resume (build green, core:test only StoryBarkTest, balanceSim exit 1 on S-SWITCH only).
+- **CP7a handover:** `SimWorld.updateMatchupHint()` mirrors World; `SimView.switchHintWeapon()`; TacticalPolicy
+  step 2b takes the hint; `PlayerPolicy.slotToReplaceForGroundWeapon` (TACTICAL: take a found gun of a NEW class,
+  drop the redundant/emptiest, never the last armed gun). FloorLedger `matchupSwitches/effectiveHits/resistedHits/
+  damageByClass`; PolicySummary `meanMatchupSwitchesPerCombatFloor` + take rate + per-hinted-floor; SimReport
+  MATCHUP REPORT; `RuleKind.SIM_SWITCH`, `BehavioralBands.switchResult`, `SIM_SWITCH_MIN_PER_COMBAT_FLOOR` 1.0;
+  BalanceSimTest `tacticalSwitchesWeaponsByMatchup`. Heal re-fit: `SUPPLY_AVOIDANCE_FACTOR` 0.55 -> 0.70 (S-SUPPLY
+  0.80 -> 0.78). TP weight: DECISION 0 (w 0.25 -> S-SUPPLY 0.83, w 0.5 -> 0.81). Snapshot `2cf72803...`.
+- **S-SWITCH MEASURED (CP7a):** TACTICAL 0.13 per COMBAT floor (band >= 1.0). Hint take rate 1.00; switches per
+  COMBAT floor that SHOWED a hint 1.00; only 21/167 COMBAT floors showed a hint. Cause: Chaingun+Shotgun start kit,
+  2 usable slots, ~85% of runs stall on floor 1 (navigation waiver), kit diversity adds ENERGY 5% / RAIL 2% damage
+  share only. OWNER QUESTION raised: how A8's S-SWITCH should read. Docs (A9) were mid-edit at the cut — CP7b finishes.

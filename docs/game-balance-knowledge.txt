@@ -167,8 +167,8 @@ All in util/GameMath.java. Everything else is derived from these four.
      (EnemyType.neutralEffectiveHitPoints). Balance-overhaul order 3 (CP2) added the PRICED
      eHP (EnemyType.effectiveHitPoints) = neutral eHP / (1 + w x (m_BALLISTIC,trait - 1)),
      w = BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT — TP, XP and the encounter budget read the
-     priced value; the R8 hit bands and R-LADDER read the neutral one. w ships at 0 (temporary,
-     pending order 3 CP7's re-fit), so priced == neutral today.
+     priced value; the R8 hit bands and R-LADDER read the neutral one. w ships at 0 (a DECISION
+     of order 3 CP7 — w 0.25 / 0.5 put S-SUPPLY at 0.83 / 0.81), so priced == neutral today.
 
 2. DPT — DAMAGE PER TURN
      BURST DPT   = damage of one fire action (one turn).
@@ -323,6 +323,26 @@ sidearm 8-14 | workhorse 12-18 | burst 18-26 | heavy 24-32 and the Railgun's sca
   ENERGY S3 (SHIELDED) + S7 (INFERNAL), FIRE S5 (BURNABLE pack), SPREAD S6 (CHITIN close) + S8
   (charging bruiser). BALLISTIC is best nowhere and within 1.23x on S1 — the safe generalist.
   Falloff is now credited over each scenario's engagement band (no longer at the muzzle).
+
+MATCHUPS (balance-overhaul order 3) — damage class x enemy trait:
+  Every Weapon declares damageClass() (BALLISTIC rifle/chaingun, SPREAD shotguns, ENERGY plasma/arc,
+  RAIL, FIRE incinerator, EXPLOSIVE grenade, BLADE knife/chainsaw, BLUNT fist/hammer); every
+  EnemyFamily a trait (ABERRATION FLESH, MACHINE SHIELDED, GOLEM PLATED, UNDEAD BURNABLE, INSECT
+  CHITIN, DEMON INFERNAL; EnemyType.trait() may override, none do; bosses carry their family's).
+  The table (BalanceConfig SECTION 22 MATCHUP_ROW_*, registered by entity/MatchupCatalog):
+                 BALLISTIC SPREAD ENERGY RAIL FIRE EXPLOSIVE BLADE BLUNT
+    FLESH          1.0      1.0    1.0   1.0  1.0   1.0      1.0   1.0
+    SHIELDED       0.65     0.8    1.5   1.0  0.8   1.0      0.8   1.2
+    PLATED         0.55     0.8    0.9   1.4  0.6   1.3      0.6   1.4
+    BURNABLE       1.0      1.0    1.0   1.0  1.8   1.1      1.1   1.0
+    CHITIN         0.75     1.35   1.0   1.1  1.4   1.0      1.2   1.0
+    INFERNAL       1.0      1.1    1.35  1.0  0.3   0.9      1.0   1.0
+  >= 1.3 is EFFECTIVE, <= 0.8 RESISTED (M4). MATCHUP_STRENGTH 1.0 raises every cell to its power
+  (0 flattens all). Applied ONCE in EnemyManager.applyDamageTo, after the ladder and before Block;
+  barrels hit as EXPLOSIVE, fire tiles as FIRE, a weapon burn pre-multiplies its magnitude, and the
+  Arc's chain never drops below neutral. Trait-aware TP exists but is weighted 0 (see SECTION 2).
+  The sim plays it: TACTICAL takes the C4 SWITCH hint (S-SWITCH band, currently red — 0.12 switches
+  per COMBAT floor, an open owner question: the sim's Chaingun + Shotgun kit only answers CHITIN).
 
 ⚠️ Not-good note: the Chaingun's three-round action sustains about TWICE the Assault Rifle's
 per-turn damage (it was scored per bullet under the old power score). R-ROLE-4 is measured
@@ -487,7 +507,7 @@ being exactly raw HP (no dodge/reduction) is also a simplification that breaks t
 moment an armoured archetype is added. (Balance-overhaul order 3 built the fix:
 TP can price the generalist's MATCHUP against the archetype's trait, so CHITIN / SHIELDED /
 PLATED archetypes would cost more Threat Points than their raw HP alone says — but its weight
-ships at 0 until order 3 CP7 re-fits it.)
+ships at 0 — a CP7 DECISION: any w > 0 pushed S-SUPPLY over its cap.)
 
 
 ================================================================================
@@ -716,7 +736,9 @@ THE PLAN, per floor:
                 on-curve hit growth; SUPPLY_CARRIED_SHARE 0.70 over the ammo types of the weapons the
                 player carries, 0.30 over the rest, each share WEIGHTED by its A-1 generosity (bullets
                 0.8, shells 1.3, cells 1.0, rockets 1.0, slugs 0.9) and re-normalised so the total is
-                unchanged (balance-overhaul order 3); whole boxes by largest remainder. Reserve caps bank
+                unchanged (balance-overhaul order 3); whole boxes by largest remainder.
+                SUPPLY_AVOIDANCE_FACTOR re-fit 0.55 -> 0.70 (order 3 CP7): the stronger start kit and
+                hint switching mean a competent player avoids more of a floor (S-SUPPLY 0.80 -> 0.78). Reserve caps bank
                 ~1.0 floor of bullets / slugs and ~1.5 of shells / cells / rockets (caps 25/11/27/21/7).
   HEALS (S3/S4) incoming = the roster's base DPT x the on-curve depth factor x SUPPLY_TURNS_ENGAGED_
                 PER_ENEMY x SUPPLY_AVOIDANCE_FACTOR, as a fraction of expected max HP; planned value =

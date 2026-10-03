@@ -186,9 +186,12 @@ R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-ove
       generalist to kill, blended toward neutral because the on-curve player usually
       carries a second gun. Every archetype stays inside its role TP band for any
       w in [0, 0.83] (the Verdant Spiresower, PLATED, is the binding row).
-      w SHIPS AT 0 (a deliberate temporary state, CP2) — priced eHP == neutral eHP until
-      order 3 CP7 gives the TACTICAL policy matchup switching and re-fits w against
-      R-ENEMY and S-SUPPLY together (see the CP2 CHANGELOG entry).
+      w SHIPS AT 0 — a DECISION (balance-overhaul order 3, CP7), so priced eHP ==
+      neutral eHP. Re-fit with TACTICAL switching by matchup and the CP7 planned-heal
+      re-fit: w = 0.25 -> S-SUPPLY 0.83, w = 0.5 -> 0.81, both over the 0.80 cap (w = 0
+      -> 0.78). Pricing the rifle's armour penalty makes the planner trade armoured
+      bodies for unresisted ones, which the sim's two-gun kit beats more easily. Revisit
+      in the order-7 feel pass, with S-SUPPLY, once played kits carry more classes.
   OVERRIDE RECORD: "enemy eHP == raw HP / no mitigation" in TP pricing -> the priced
   eHP above; the R8 hit bands' eHP -> explicitly the NEUTRAL eHP (unchanged numbers).
 
@@ -694,7 +697,7 @@ S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
   HOARDER-START-WEAPON never does.
 
-S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKind.SIM_*, order 9)
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-SOFTLOCK (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
   it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
@@ -714,6 +717,11 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKin
     TACTICAL              keeps range, breaks the cardinal line vs ranged, guards a telegraphed
                           spike (never twice running), manages ammo across weapons, heals early,
                           buys the shop backstop, takes upgrades, routes by the order-7 node EV.
+                          Balance-overhaul order 3 (CP7): takes the C4 SWITCH hint whenever it is up
+                          (SimWorld computes it exactly as World.updateMatchupHint does — the real
+                          MatchupAdvisor + PlayerController jump), and keeps its kit DIVERSE: a found
+                          gun of a DamageClass the loadout lacks replaces the redundant / emptiest
+                          slot (never the last gun with ammo; PlayerPolicy.slotToReplaceForGroundWeapon).
     HOARDER-START-WEAPON  TACTICAL, but NEVER equips a weapon it finds or buys — the user's
                           boss-cheese reproduction, kept as a permanent regression case.
 
@@ -743,6 +751,26 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKin
               HP" was the complaint — a normal floor should cost something; REST and CACHE are
               where HP comes back. NOT waived: it reads exited floors only, so the navigation stall
               shrinks its sample but does not bias it.
+  S-SWITCH    (balance-overhaul order 3, A8) — BAND DEFINITION (one paragraph; swap it if the owner
+              picks another reading): TACTICAL takes >= SIM_SWITCH_MIN_PER_COMBAT_FLOOR (1.0)
+              matchup-driven weapon switches — a SWITCH tap taken while the C4 hint was up that
+              equipped the hinted gun — per played COMBAT floor (stalled floors included). NOT
+              waived: it is a fight-level count, not depth-derived. WHY: A8 — the matchup layer
+              must be a decision a competent player actually makes, not decoration.
+              STATUS (CP7): 0.12 — RED, an OPEN OWNER QUESTION. Cause: the sim's two usable slots
+              start as Chaingun + Shotgun, which answer only CHITIN (Shotgun 1.35 vs the Chaingun's
+              0.75 within 5 tiles); against SHIELDED and PLATED both are resisted, so no hint can
+              exist, and ~85% of runs stall on floor 1 where found guns are rare. The kit-diversity
+              rule changes almost nothing (RAIL 1% of damage). When a hint DOES appear TACTICAL takes
+              it every time (take rate 1.00; 1.00 switches per COMBAT floor that showed a hint, 18
+              of 155 floors). Options put to the owner: (a) keep the band, diversify the kit; (b)
+              re-state it as a take rate / per-hinted-floor rate; (c) waive with the navigation
+              waivers; (d) a two-class sim start kit.
+  MATCHUP REPORT (sim/SimReport, OUTPUT not an assertion; balance-overhaul order 3): per policy and
+              depth band — EFFECTIVE / RESISTED hits per floor (EnemyManager's onEnemyMatchupHit seam),
+              hint-driven switches per floor, each DamageClass's share of landed hit damage (the
+              class the activation armed; burn ticks excluded), plus the S-SWITCH alternatives line:
+              switches per COMBAT floor, hint take rate, switches per COMBAT floor that showed a hint.
   S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
               tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
               fighting retreat, not a dead end. The band exists to keep that structural
@@ -1491,6 +1519,17 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 3 / CP7 — THE SIM PLAYS THE MATCHUP. SimWorld computes the C4 SWITCH hint each
+    turn (MatchupAdvisor, as World does) and TACTICAL takes it; TACTICAL keeps a diverse kit
+    (PlayerPolicy.slotToReplaceForGroundWeapon). New band S-SWITCH (RuleKind.SIM_SWITCH, SECTION 22
+    SIM_SWITCH_MIN_PER_COMBAT_FLOOR 1.0, not waived) and the MATCHUP REPORT. PLANNED-HEAL RE-FIT
+    (approved at CP3): SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70 — the stronger start kit (R-ROLE Shotgun,
+    stagger, knockback) plus hint switching let a competent player avoid more of a floor; S-SUPPLY
+    0.80 (at the cap) -> 0.78; the S4 heal floor and every R-SUPPLY line unchanged and green.
+    MATCHUP_TP_REFERENCE_WEIGHT: 0 is now a DECISION (w = 0.25 / 0.5 put S-SUPPLY at 0.83 / 0.81).
+    LevelGeneratorSnapshotTest re-baselined (heal pickups moved). Gates: test green except the
+    pre-existing StoryBarkTest; balanceSim exit 1 on S-SWITCH alone (0.12 — the open owner question).
+
   balance-overhaul order 3 / CP4 — A-1 AMMO GENEROSITY. SupplyPlanner weights the S2 carried /
     off-type split per AmmoType (BULLETS 0.8, SHELLS 1.3, CELLS 1.0, ROCKETS 1.0, SLUGS 0.9;
     GameMath.normalisedAmmoShare keeps the floor's total), reserve caps re-fitted to per-type
@@ -1523,7 +1562,7 @@ CHANGELOG
     pierce); barrels hit as EXPLOSIVE, fire tiles as FIRE, a weapon-applied burn pre-multiplies its
     per-turn magnitude by the applying weapon's matchup, and the Arc Cannon's chain leaps never drop
     below neutral (W5). TP pricing is TRAIT-AWARE IN MECHANISM (R-ENEMY re-statement above) but
-    MATCHUP_TP_REFERENCE_WEIGHT SHIPS AT 0 — a DELIBERATE TEMPORARY STATE, so every TP/XP/budget
+    MATCHUP_TP_REFERENCE_WEIGHT SHIPS AT 0 — a DELIBERATE TEMPORARY STATE (made a DECISION at CP7), so every TP/XP/budget
     number is unchanged. WHY 0: at any w > 0 (0.1..0.75 tried) the only enforced read that moved was
     S-SUPPLY's TACTICAL COMBAT exit health (0.82-0.87 vs its 0.80 cap; 0.78 at w = 0), measured on a
     policy that never switches weapons and stalls ~80% of runs on floor 1 — the planner swaps pricier

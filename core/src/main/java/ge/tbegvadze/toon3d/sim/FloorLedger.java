@@ -92,6 +92,17 @@ public final class FloorLedger {
     /** Turns until the first damage exchange (a shot fired or a hit taken), or -1 when none happened. */
     public int turnsToFirstDamageExchange = -1;
 
+    // ---- MATCHUP REPORT (balance-overhaul order 3, CP7) ------------------------------------------------
+    /** SWITCH taps taken while the C4 hint was up that equipped the hinted gun (the S-SWITCH numerator). */
+    public int matchupSwitches;
+    /** C4 hint EPISODES: turns on which a hint appeared or changed gun (the take-rate denominator). */
+    public int hintEpisodes;
+    /** Player hits that landed EFFECTIVE / RESISTED (EnemyManager's onEnemyMatchupHit seam). */
+    public int effectiveHits;
+    public int resistedHits;
+    /** Damage the player's landed hits dealt, by DamageClass ordinal (status ticks excluded). */
+    public final float[] damageByClass = new float[ge.tbegvadze.toon3d.entity.DamageClass.values().length];
+
     /** True when the player died on this floor holding no medkit at all. */
     public boolean diedWithNoHealsHeld;
 

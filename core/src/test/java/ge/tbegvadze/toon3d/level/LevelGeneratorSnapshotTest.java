@@ -105,9 +105,8 @@ class LevelGeneratorSnapshotTest {
     // filled with group templates and placed one group per room AFTER the gate and stairs (first contact
     // in the nearest room, anchor group deepest), which moves every enemy and the RNG stream behind it.
     // Confirmed stable across two separate JVM runs.
-    // NOTE (balance-overhaul order 3, CP2): trait-aware TP ships with MATCHUP_TP_REFERENCE_WEIGHT = 0, so
-    // the planner's prices are unchanged. When CP7 re-fits the weight above 0 the planner buys a different
-    // roster on the same budget and this digest must be re-baselined then.
+    // NOTE (balance-overhaul order 3, CP2/CP7): trait-aware TP ships with MATCHUP_TP_REFERENCE_WEIGHT = 0 (a
+    // CP7 DECISION), so the planner's prices are unchanged; a later weight > 0 re-baselines this digest.
     // RE-BASELINE (balance-overhaul order 3, CP3b — R-ROLE fit): the SupplyPlanner prices a unit of ammo at
     // the base damage of the weapon that eats it — Shotgun 44 -> 66 (and the shell box 4 -> 3, so a box stays
     // worth the same share of a floor), Grenade centre 42 -> 36, Railgun full charge 90 -> 75 — so the planned
@@ -115,8 +114,11 @@ class LevelGeneratorSnapshotTest {
     // RE-BASELINE (balance-overhaul order 3, CP4 — A-1 AMMO GENEROSITY): the planner now weights each ammo
     // type's carried / off-type share by its generosity (bullets 0.8, shells 1.3, slugs 0.9; normalised, so
     // the floor's total is unchanged), which moves which boxes are placed. Confirmed stable across two runs.
+    // RE-BASELINE (balance-overhaul order 3, CP7 — planned-heal re-fit): SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70
+    // shrinks the planned heal on floors above the S4 floor, so the heal pickups (and the RNG stream behind
+    // them) moved. The TP weight stays 0 (DECISION), so rosters are unchanged. Stable across two runs.
     private static final String EXPECTED_DIGEST =
-            "ed9cdc81ba89b5cf8305d92dde6f7958e224865480fb167788a092e34bd53f6b";
+            "2cf728031b1dc95d8e2cd2119395a8f4fd81c98ca2e64682acee74b0846af7d1";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

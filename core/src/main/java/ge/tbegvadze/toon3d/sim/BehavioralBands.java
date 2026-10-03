@@ -28,6 +28,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-SUPPLY   — TACTICAL leaves a COMBAT floor hurt, and no floor is below its heal floor</li>
  *   <li>S-SOFTLOCK — a run may end, but never get stuck unable to damage anything</li>
  *   <li>S-LAG      — a weapon that never climbs the power ladder ends the run early (balance-overhaul order 1)</li>
+ *   <li>S-SWITCH   — a competent player switches guns by matchup when the game tells it to (balance-overhaul order 3)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -52,6 +53,7 @@ public final class BehavioralBands {
         if (tactical != null) results.add(routeResult(tactical));
         if (tactical != null) results.addAll(economyResults(tactical));
         if (tactical != null) results.addAll(supplyResults(tactical));
+        if (tactical != null) results.add(switchResult(tactical));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
     }
@@ -162,6 +164,20 @@ public final class BehavioralBands {
         results.add(BalanceSchema.result(RuleKind.SIM_SUPPLY, "floors below the heal floor",
                 belowFloor, 0f, 0f, belowFloor == 0, "reachable heal value under the S4 floor"));
         return results;
+    }
+
+    /**
+     * S-SWITCH (balance-overhaul order 3, A8): TACTICAL takes at least SIM_SWITCH_MIN_PER_COMBAT_FLOOR
+     * matchup-driven switches (a SWITCH tap while the C4 hint was up, landing on the hinted gun) per played
+     * COMBAT floor — the matchup layer is a decision the competent player actually makes.
+     */
+    private static RuleResult switchResult(PolicySummary tactical) {
+        float perFloor = tactical.meanMatchupSwitchesPerCombatFloor();
+        boolean measured = !Float.isNaN(perFloor);
+        return BalanceSchema.result(RuleKind.SIM_SWITCH, "TACTICAL matchup switches per COMBAT floor",
+                measured ? perFloor : 0f, BalanceConfig.SIM_SWITCH_MIN_PER_COMBAT_FLOOR, Float.POSITIVE_INFINITY,
+                measured && perFloor >= BalanceConfig.SIM_SWITCH_MIN_PER_COMBAT_FLOOR,
+                measured ? "SWITCH taps taken on the C4 hint" : "no COMBAT floor played");
     }
 
     /** S-SOFTLOCK: no run may end unable to damage anything. Zero, by contract, for every policy. */

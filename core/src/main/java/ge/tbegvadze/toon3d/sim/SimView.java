@@ -95,6 +95,13 @@ public final class SimView {
 
     public Weapon equippedWeapon() { return world.getEquippedWeapon(); }
 
+    /**
+     * The carried gun the C4 SWITCH hint points at this turn — the equipped gun is RESISTED by the enemy
+     * it faces and this one is EFFECTIVE with ammo (balance-overhaul order 3) — or null when no hint is up.
+     * A SWITCH_WEAPON tap while it is up equips exactly this gun.
+     */
+    public Weapon switchHintWeapon() { return world.switchHintWeapon(); }
+
     /** Reserve rounds left for the equipped weapon's ammo type (0 for melee, or when out). */
     public int reserveAmmoForEquipped() {
         Weapon weapon = equippedWeapon();

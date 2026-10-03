@@ -2355,8 +2355,15 @@ public final class BalanceConfig {
     // --- S3 HEALS (the incoming-damage model, re-based on the order-1 expected player) ---
     /** S3: turns each planned enemy is modelled as engaging the player (the heal-economy model). */
     public static final float SUPPLY_TURNS_ENGAGED_PER_ENEMY = 2.0f;
-    /** S3: fraction of the roster's possible damage a competent player avoids. Range 0.4-0.7. */
-    public static final float SUPPLY_AVOIDANCE_FACTOR        = 0.55f;
+    /**
+     * S3: fraction of the roster's possible damage a competent player avoids. Range 0.4-0.7.
+     * RE-FIT 0.55 -> 0.70 (balance-overhaul order 3, CP7 — the planned-heal re-fit decided at CP3): the
+     * order-3 start kit (the R-ROLE Shotgun with its stagger + knockback) and the C4 hint switching let a
+     * competent player avoid more of a floor's damage, so a floor needs less planned heal to leave him
+     * equally hurt. Brings S-SUPPLY's TACTICAL COMBAT exit health from the 0.80 cap to 0.78. The S4 heal
+     * floor (one 'H') is unaffected.
+     */
+    public static final float SUPPLY_AVOIDANCE_FACTOR        = 0.70f;
 
     // --- S4 HEAL FLOOR ---------------------------------------------------------------------
     /** S4: minimum heal value on every non-BOSS/REST/REGION_GATE floor, in fractions of max HP (one 'H'). */
@@ -2557,12 +2564,12 @@ public final class BalanceConfig {
      * gun. Moves TP, XP, the encounter budget and survival turns together; the R8 hit bands and
      * R-LADDER read the NEUTRAL eHP and do not move. Range: 0.0-1.0.
      *
-     * DELIBERATE TEMPORARY STATE (CP2): shipped at 0 — the machinery is live, weighted to zero. At any
-     * w > 0 the only enforced read that moves is S-SUPPLY's TACTICAL exit health (0.82-0.87 vs the 0.80
-     * cap), measured on a policy that never switches weapons and stalls ~80% of runs on floor 1. CP7
-     * gives TACTICAL matchup switching and RE-FITS this weight then, against R-ENEMY (every archetype
-     * stays in its TP band for any w <= ~0.83; the Verdant Spiresower binds) and S-SUPPLY together.
-     * S-SUPPLY is NOT loosened to make room for it.
+     * DECISION (balance-overhaul order 3, CP7): ships at 0 — the machinery stays live, weighted to zero.
+     * Re-fit with TACTICAL switching by matchup and the planned-heal re-fit (SUPPLY_AVOIDANCE_FACTOR 0.70):
+     * w = 0.25 -> S-SUPPLY 0.83, w = 0.5 -> 0.81, both over the 0.80 cap (w = 0: 0.78). Pricing the
+     * generalist's armour penalty makes the encounter planner swap armoured bodies for unresisted ones,
+     * which the sim's two-gun kit (Chaingun + Shotgun) beats more easily. R-ENEMY would allow w <= ~0.83.
+     * Revisit in the order-7 feel pass, together with S-SUPPLY, once played kits carry more classes.
      */
     public static final float MATCHUP_TP_REFERENCE_WEIGHT = 0.0f;
 
@@ -2612,6 +2619,13 @@ public final class BalanceConfig {
     public static final float AMMO_BANKING_FLOORS_SLUGS   = 1.0f;
     /** A-1: a reserve cap's banked floors may sit this far either side of its target (whole-unit rounding). */
     public static final float AMMO_BANKING_FLOORS_TOLERANCE = 0.15f;
+
+    // --- S-SWITCH (CP7, A8) ------------------------------------------------------------------------
+    /**
+     * S-SWITCH: TACTICAL's matchup-driven (C4 SWITCH-hint) weapon switches per played COMBAT floor must be
+     * at least this. A fight-level count, not depth-derived, so the navigation waivers do not cover it.
+     */
+    public static final float SIM_SWITCH_MIN_PER_COMBAT_FLOOR = 1.0f;
 
     // --- R-ROLE — the reference scenarios and margins (replace the R-WEAPON power bands) -----------
     // Each scenario = a target trait x group size x engagement band; its archetype (the representative

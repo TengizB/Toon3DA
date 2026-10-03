@@ -162,7 +162,12 @@ public final class BalanceSchema {
         /** S-SOFTLOCK (order 9): zero seeds end in a "cannot damage anything" state. */
         SIM_SOFTLOCK,
         /** S-LAG (balance-overhaul order 1): the start-weapon hoarder dies by SIM_LAG_MAX_MEDIAN_DEPTH (median). */
-        SIM_LAG
+        SIM_LAG,
+        /**
+         * S-SWITCH (balance-overhaul order 3, A8): TACTICAL takes >= SIM_SWITCH_MIN_PER_COMBAT_FLOOR
+         * matchup-driven (C4 hint) weapon switches per played COMBAT floor. Not depth-derived — never waived.
+         */
+        SIM_SWITCH
     }
 
     // =====================================================================================
