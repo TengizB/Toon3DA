@@ -37,10 +37,21 @@ class BalanceAuditTest {
                         + String.join("\n", violationLines));
     }
 
-    /** R-WEAPON: every registered ranged weapon's power score lands in its declared role band. */
+    /**
+     * R-ROLE (balance-overhaul order 3 — replaces R-WEAPON's power-score bands and the Railgun's
+     * scarcity waiver): every ranged class is the best answer somewhere and never everywhere, on the
+     * reference scenarios at depths 5 and 15 — niche, generalist bound, no dominance, risk pays, ammo
+     * feasible. Also pins that no WEAPON_ROLE result is ever waived (the Railgun waiver is gone, AS8).
+     */
     @Test
-    void weaponPowerScoresLandInRoleBands() {
-        assertNoViolations(BalanceSchema.weaponPowerResults());
+    void weaponRolesHoldOnTheReferenceScenarios() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.weaponRoleResults();
+        assertNoViolations(results);
+        assertTrue(BalanceSchema.activeWaivers().stream()
+                        .noneMatch(waiver -> waiver.kind == BalanceSchema.RuleKind.WEAPON_ROLE),
+                "R-ROLE carries no waiver");
+        assertTrue(results.stream().anyMatch(result -> result.subject.startsWith("R-ROLE-4")),
+                "R-ROLE-4 is evaluated for the SPREAD class");
     }
 
     /** R-ENEMY: every non-boss archetype's threat points land in its role band. */

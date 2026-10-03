@@ -106,10 +106,14 @@ class LevelGeneratorSnapshotTest {
     // in the nearest room, anchor group deepest), which moves every enemy and the RNG stream behind it.
     // Confirmed stable across two separate JVM runs.
     // NOTE (balance-overhaul order 3, CP2): trait-aware TP ships with MATCHUP_TP_REFERENCE_WEIGHT = 0, so
-    // the planner's prices — and this digest — are unchanged. When CP7 re-fits the weight above 0 the
-    // planner buys a different roster on the same budget and this digest must be re-baselined then.
+    // the planner's prices are unchanged. When CP7 re-fits the weight above 0 the planner buys a different
+    // roster on the same budget and this digest must be re-baselined then.
+    // RE-BASELINE (balance-overhaul order 3, CP3b — R-ROLE fit): the SupplyPlanner prices a unit of ammo at
+    // the base damage of the weapon that eats it — Shotgun 44 -> 66 (and the shell box 4 -> 3, so a box stays
+    // worth the same share of a floor), Grenade centre 42 -> 36, Railgun full charge 90 -> 75 — so the planned
+    // ammo pickups (and the RNG stream behind them) moved. Confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "23e6f3826a375a589755094b701bcef6c6fd3bf10d050ee0c1a0dfcb543e37ad";
+            "2170ba3f4e692ebe6b264f1f4e24dd5b45707b6e1a70dcf207f7a842b8a5d38f";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

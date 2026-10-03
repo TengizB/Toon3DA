@@ -594,18 +594,18 @@ public final class BalanceConfig {
 
     // Shotgun — high single-shot burst, 1-shell clip. Point-blank role (balance-overhaul order 3, W1):
     // the per-tile falloff is the SECTION 22 table SHOTGUN_FALLOFF_BY_TILE (the drop coefficient is
-    // gone), and a close hit knocks back / staggers (SECTION 22). 44 is the order-3 STARTING value —
-    // CP3b fits it under R-ROLE-4 (SPREAD at 1-2 tiles >= 2.0x BALLISTIC at 3 tiles).
-    public static final int   SHOTGUN_DAMAGE             = 44;
+    // gone), and a close hit knocks back / staggers (SECTION 22). FITTED under R-ROLE-4 (CP3b): 44 -> 66 —
+    // the smallest base whose SUSTAINED per-turn damage at 1-2 tiles (accuracy-weighted, the 1-tick reload
+    // counted) is >= 2.0x the Assault Rifle's at 3 tiles (25.9 vs 12.8 per turn).
+    public static final int   SHOTGUN_DAMAGE             = 66;
     public static final int   SHOTGUN_CLIP_SIZE          = 1;
     public static final int   SHOTGUN_RANGE_TILES        = 5;
     public static final int   SHOTGUN_RELOAD_TIME_TICKS  = 1;
 
     // Double-Barrel Shotgun — both barrels in ONE action (the built-in BURST_FIRE), 2-shell clip,
-    // one tile shorter than the Shotgun (W2: DOUBLE_BARREL_FALLOFF_BY_TILE). Per-barrel damage is
-    // ~0.9x the Shotgun's so the two-barrel action lands ~1.8x the Shotgun hit. Was 32 (two barrels
-    // = 1.45x); 40 is the order-3 STARTING value — CP3b fits it under R-ROLE.
-    public static final int   DBL_SHOTGUN_DAMAGE             = 40;
+    // one tile shorter than the Shotgun (W2: DOUBLE_BARREL_FALLOFF_BY_TILE). FITTED with the Shotgun (CP3b):
+    // 32 -> 59 per barrel = 0.9x the re-fitted Shotgun's 66, so the two-barrel action lands ~1.8x (W2).
+    public static final int   DBL_SHOTGUN_DAMAGE             = 59;
     public static final int   DBL_SHOTGUN_CLIP_SIZE          = 2;
     public static final int   DBL_SHOTGUN_RANGE_TILES        = 4;
     public static final int   DBL_SHOTGUN_RELOAD_TIME_TICKS  = 1;
@@ -638,16 +638,11 @@ public final class BalanceConfig {
     public static final int   ASSAULT_RIFLE_RELOAD_TIME_TICKS = 1;
 
     // Railgun — charge-up infinite-pierce sniper. Index by charge level: {0, half, full}.
-    // Full-charge powerScore is 45.0, OVER the 24-32 heavy band. RE-EVALUATED in the economy
-    // rescale (idea-A, iteration 2, secondary target): DECISION = KEEP as a documented
-    // scarcity-gated exception, do NOT fold into the band. Two reasons reinforce this now:
-    //   (1) its 90-per-slug efficiency is gated by slug SCARCITY (supply ~1.1 slugs/floor, plus the
-    //       tightest reserve cap RAILGUN_MAX_SLUGS=8 — see SECTION 5), not by raw damage; and
-    //   (2) the rescale made enemies far tankier (mini-elite 230 eHP), so a single big-burst slug
-    //       is a genuine elite-buster niche — exactly what the heavy/charge role should own.
-    // Per docs/game-balance-authority.txt, nerfing the raw 90 would make it worthless rather than
-    // merely scarce, so the raw number is left intact deliberately.
-    public static final int[] RAILGUN_DAMAGE_BY_CHARGE      = {0, 40, 90};
+    // W6 (balance-overhaul order 3): the old "scarcity-gated over-band" waiver is DELETED (AS8) and the
+    // full charge is FITTED under R-ROLE: 90 -> 75 — still a one-slug answer to the PLATED tank (S4,
+    // Cinderforge Colossus, 1.40x) and the FLESH soldier at range (S1), but no longer the fastest answer to
+    // the SHIELDED / INFERNAL soldiers too (R-ROLE-3: at most two scenarios best).
+    public static final int[] RAILGUN_DAMAGE_BY_CHARGE      = {0, 40, 75};
     public static final int   RAILGUN_RANGE_TILES           = 16;
     public static final float RAILGUN_DROP_COEFF            = 0.02f;
     public static final float RAILGUN_DAMAGE_MIN_MULTIPLIER = 0.70f;
@@ -655,8 +650,9 @@ public final class BalanceConfig {
     public static final int   RAILGUN_RELOAD_TIME_TICKS     = 2;
 
     // Incinerator — short-range cone flamethrower. Impact + STACKING burn DoT (W3; burn numbers in
-    // SECTION 22). Impact per target ~0.6x the Assault Rifle's base hit (20): was 8 / 5 at the cone
-    // edge; 12 / 8 are the order-3 STARTING values — CP3b fits them under R-ROLE (S2 / S5).
+    // SECTION 22). Impact per target 0.6x the Assault Rifle's base hit (20): was 8 / 5 at the cone edge;
+    // 12 / 8 hold under R-ROLE (CP3b): the S5 BURNABLE-group answer in under one turn, and three
+    // on-curve chaff (S2) cleared in two sprays at depths 5 and 15 (A6).
     public static final int   FLAME_IMPACT_DAMAGE     = 12;
     public static final int   FLAME_FALLOFF           = 8;
     public static final float FLAME_DAMAGE_DROP_COEFF = 0.0f;
@@ -665,11 +661,11 @@ public final class BalanceConfig {
     public static final int   FLAME_RELOAD_TICKS      = 1;
 
     // Grenade Launcher — bouncing AoE splash. Centre / orthogonal-neighbour / self damage.
-    // Centre splash was 30 (powerScore 15.6, UNDER the 24-32 heavy band). Raised to 42
-    // (powerScore 25.8, in band); falloff/self raised proportionally to keep the blast
-    // profile, with self kept modest so the player's own risk does not balloon.
-    public static final int   GRENADE_SPLASH_DAMAGE     = 42;
-    public static final int   GRENADE_FALLOFF_DAMAGE    = 22;
+    // W7 FITTED under R-ROLE (balance-overhaul order 3, CP3b): centre 42 -> 36, neighbours 22 -> 32 — the
+    // blast is a GROUP tool (the S2 FLESH-pack answer, ~1 turn) rather than the single-target hammer that
+    // won five of eight scenarios at 42 (R-ROLE-3). Self-damage unchanged.
+    public static final int   GRENADE_SPLASH_DAMAGE     = 36;
+    public static final int   GRENADE_FALLOFF_DAMAGE    = 32;
     public static final int   GRENADE_SELF_DAMAGE       = 24;
     public static final float GRENADE_DAMAGE_DROP_COEFF = 0.0f;
     public static final int   GRENADE_RANGE_TILES       = 6;
@@ -681,19 +677,16 @@ public final class BalanceConfig {
     // adjacent enemies in a cluster, dealing decaying damage to each additional target. No other
     // weapon chains between separated targets — this is the crowd-clear niche.
     //
-    // BALANCE (credited on the SINGLE-TARGET primary line, exactly as the Grenade Launcher is
-    // credited on its centre splash — the lateral chain is bonus AoE, uncredited, and its per-shot
-    // ceiling (~61 across 4 targets) stays well under the heavy-band Grenade Launcher's 130):
-    //   sustainedDPT = 7 * 28 / (7 + 2) = 21.78 ; ammoEff = 28 (1 cell/shot)
-    //   powerScore   = 21.78 * sqrt(28/40) = 18.2  -> BURST/SPECIALIST band 18-26, low end. OK.
-    // Distinct from the three existing burst weapons (Shotgun/Dbl/Plasma) by MECHANIC, not band.
-    public static final int   ARC_CANNON_DAMAGE            = 28;
+    // W5 FITTED under R-ROLE (balance-overhaul order 3, CP3b): 28 -> 40 — the ENERGY answer to the
+    // SHIELDED (S3, 1.5x) and INFERNAL (S7, 1.35x) soldiers; at 28 ENERGY was never the best answer
+    // anywhere (R-ROLE-1). The chain never drops below neutral (W5, EnemyManager).
+    public static final int   ARC_CANNON_DAMAGE            = 40;
     public static final int   ARC_CANNON_CLIP_SIZE         = 7;
     public static final int   ARC_CANNON_RANGE_TILES       = 7;
     public static final float ARC_CANNON_DAMAGE_DROP_COEFF = 0.08f;
     public static final int   ARC_CANNON_RELOAD_TIME_TICKS = 2;
     // Lateral chain (uncredited bonus): up to CHAIN_JUMPS leaps beyond the primary target, each
-    // dealing CHAIN_DAMAGE_MULTIPLIER^jump of the primary hit (28 -> 17 -> 10 -> 6).
+    // dealing CHAIN_DAMAGE_MULTIPLIER^jump of the primary hit (40 -> 24 -> 14 -> 9).
     public static final int   ARC_CANNON_CHAIN_JUMPS             = 3;
     public static final float ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER = 0.6f;
 
@@ -744,7 +737,9 @@ public final class BalanceConfig {
     // harness). The bigger boxes are no longer the awkward 2-4 rounds the old low-eHP economy
     // forced — they fit clip sizes again (the clip-vs-eHP mismatch the old scale created is gone).
     public static final int AMMO_BOX_BULLETS    = 10;
-    public static final int AMMO_BOX_SHELLS     = 4;
+    // Shells 4 -> 3 (balance-overhaul order 3, CP3b): the Shotgun's base rose 44 -> 66, so a 3-shell box is
+    // worth what a 4-shell box was (the box-SIZE lever's own rule above); CP4 re-fits generosity.
+    public static final int AMMO_BOX_SHELLS     = 3;
     public static final int AMMO_BOX_CELLS      = 7;
     public static final int AMMO_BOX_ROCKETS    = 2;
     public static final int RAILGUN_PICKUP_SLUGS = 1;
@@ -758,14 +753,14 @@ public final class BalanceConfig {
     // and still comfortably holds a full 30-round Assault Rifle / 24-round Chaingun clip, so the
     // "one cap over target" exception the old scale forced is gone; every cap now hits the target.
     public static final int AMMO_RESERVE_CAP_BULLETS = 38;
-    public static final int AMMO_RESERVE_CAP_SHELLS  = 17;
+    // Shells 17 -> 11 (CP3b): the same banked DAMAGE at the re-fitted Shotgun (17 x 44 ~= 11 x 66); CP4
+    // re-fits every cap against the per-type generosity.
+    public static final int AMMO_RESERVE_CAP_SHELLS  = 11;
     public static final int AMMO_RESERVE_CAP_CELLS   = 27;
     public static final int AMMO_RESERVE_CAP_ROCKETS = 18;
     // RAILGUN_MAX_SLUGS kept the TIGHTEST banking (~1.0 floor, not 1.5) to honor the railgun's
-    // documented power-band exception (powerScore 45 > heavy band 24-32): slug SCARCITY, not raw
-    // damage, is what holds it in check. The slug SUPPLY (~1.1 slugs/floor) is the true gate; the
-    // tight cap reinforces it. The elite-busting niche of a 90-per-slug hit is MORE valuable now
-    // that enemies are tankier, so the raw 90 is kept (see SECTION 4 + docs).
+    // since-deleted power-band waiver (balance-overhaul order 3, AS8). The Railgun is now governed by
+    // R-ROLE (its PLATED niche plus R-ROLE-5's one-floor ammo check); the cap is CP4's to re-fit.
     public static final int RAILGUN_MAX_SLUGS        = 6;
     public static final int FLAME_MAX_FUEL           = 35;
     public static final int GRENADE_MAX_AMMO         = 7;
@@ -1075,24 +1070,9 @@ public final class BalanceConfig {
      * 35% boss single hit) now provably protect the actual player pool in every run.
      */
     public static final float REFERENCE_PLAYER_EHP = 205f;
-    /**
-     * Reference ammo efficiency (damage per ammo unit) the weapon power score normalises
-     * against, so a reference-class weapon contributes a sqrt-factor of 1.0. Chosen so a
-     * sustained-DPT-25 shotgun-class weapon scores near the top of the burst band, which
-     * surfaces the shotgun as slightly over-band (a known follow-up tuning target).
-     */
-    public static final float REFERENCE_AMMO_EFFICIENCY = 40f;
-
-    // --- WEAPON POWER BANDS (weaponPowerScore must land in the band for the chosen role).
-    // Higher rarity does NOT raise these bands — it buys abilities (idea 5), not raw damage.
-    public static final float WEAPON_POWER_SIDEARM_MIN    = 8f;
-    public static final float WEAPON_POWER_SIDEARM_MAX    = 14f;
-    public static final float WEAPON_POWER_WORKHORSE_MIN  = 12f;
-    public static final float WEAPON_POWER_WORKHORSE_MAX  = 18f;
-    public static final float WEAPON_POWER_BURST_MIN      = 18f;
-    public static final float WEAPON_POWER_BURST_MAX      = 26f;
-    public static final float WEAPON_POWER_HEAVY_MIN      = 24f;
-    public static final float WEAPON_POWER_HEAVY_MAX      = 32f;
+    // REFERENCE_AMMO_EFFICIENCY and the WEAPON POWER BANDS (sidearm 8-14 / workhorse 12-18 / burst 18-26 /
+    // heavy 24-32) were RETIRED with R-WEAPON by balance-overhaul order 3: weapons are now governed by
+    // R-ROLE's reference scenarios (SECTION 22, util/WeaponRoleModel).
 
     // --- ENEMY THREAT-POINT BANDS — RE-DERIVED from the R8 hit targets (balance-overhaul order 1). The
     // old hand-set bands (CHAFF 16-34 | SOLDIER 36-66 | BRUISER 70-120 | MINI_ELITE 160-310) priced the
@@ -2612,9 +2592,52 @@ public final class BalanceConfig {
      * W3: each Incinerator burn stack ticks this fraction of the weapon's ladder-scaled impact hit per
      * turn (GameMath.incineratorBurnPerStack). 0.5 x 12 = 6/turn per stack at depth 1 (the old flat 6).
      */
-    public static final float   FLAME_BURN_FRACTION   = 0.5f;
+    public static final float   FLAME_BURN_FRACTION   = 0.6f;
     /** W3: Incinerator burn stacks on one target, at most (one stack per spray). */
     public static final int     FLAME_BURN_MAX_STACKS = 3;
+
+    // --- R-ROLE — the reference scenarios and margins (replace the R-WEAPON power bands) -----------
+    // Each scenario = a target trait x group size x engagement band; its archetype (the representative
+    // of that trait and role) is chosen in BalanceSchema's scenario registry. Evaluated for the ON-CURVE
+    // player (GameMath.expectedPlayerAtDepth) at every ROLE_SCENARIO_DEPTHS entry; the turns-to-clear
+    // model is GameMath.roleScenarioClear, S8 is GameMath.roleScenarioBruiserHitsTaken.
+    /** R-ROLE: the depths every scenario is evaluated at. */
+    public static final int[] ROLE_SCENARIO_DEPTHS          = {5, 15};
+    /** R-ROLE: turns after which a scenario counts as not cleared. */
+    public static final int   ROLE_SCENARIO_TURN_CAP        = 60;
+    /** R-ROLE: of a clustered group, how many stand in the firing lane (what a PIERCE shot reaches). */
+    public static final int   ROLE_GROUP_TARGETS_IN_LANE    = 2;
+    /** S1 FLESH single, 3-5 tiles. */
+    public static final int   ROLE_S1_GROUP = 1, ROLE_S1_MIN_TILES = 3, ROLE_S1_MAX_TILES = 5;
+    /** S2 FLESH group of 3 (on-curve chaff), 1-3 tiles. */
+    public static final int   ROLE_S2_GROUP = 3, ROLE_S2_MIN_TILES = 1, ROLE_S2_MAX_TILES = 3;
+    /** S3 SHIELDED single, 3-5 tiles. */
+    public static final int   ROLE_S3_GROUP = 1, ROLE_S3_MIN_TILES = 3, ROLE_S3_MAX_TILES = 5;
+    /** S4 PLATED single, 3-6 tiles. */
+    public static final int   ROLE_S4_GROUP = 1, ROLE_S4_MIN_TILES = 3, ROLE_S4_MAX_TILES = 6;
+    /** S5 BURNABLE group of 3, 1-3 tiles. */
+    public static final int   ROLE_S5_GROUP = 3, ROLE_S5_MIN_TILES = 1, ROLE_S5_MAX_TILES = 3;
+    /** S6 CHITIN single, 1-2 tiles. */
+    public static final int   ROLE_S6_GROUP = 1, ROLE_S6_MIN_TILES = 1, ROLE_S6_MAX_TILES = 2;
+    /** S7 INFERNAL single, 3-5 tiles. */
+    public static final int   ROLE_S7_GROUP = 1, ROLE_S7_MIN_TILES = 3, ROLE_S7_MAX_TILES = 5;
+    /** S8 a BRUISER charging from this many tiles — scored in hits it lands before it dies. */
+    public static final int   ROLE_S8_START_TILES = 3;
+    /** R-ROLE-1 NICHE: a non-BALLISTIC class's best must beat the best BALLISTIC by this factor. */
+    public static final float ROLE_NICHE_MARGIN               = 1.20f;
+    /** R-ROLE-2 GENERALIST: BALLISTIC within this factor of the best in S1. */
+    public static final float ROLE_GENERALIST_BOUND           = 1.30f;
+    /** R-ROLE-3 NO DOMINANCE: no class is best in more than this many scenarios (per depth). */
+    public static final int   ROLE_MAX_SCENARIOS_BEST         = 2;
+    /** R-ROLE-4 RISK PAYS: SPREAD sustained per-turn damage at 1-2 tiles over the Assault Rifle's at 3. */
+    public static final float ROLE_RISK_PAYS_RATIO            = 2.0f;
+    /** R-ROLE-4: the SPREAD engagement band and the generalist's reference range. */
+    public static final int   ROLE_RISK_SPREAD_MIN_TILES = 1, ROLE_RISK_SPREAD_MAX_TILES = 2;
+    public static final int   ROLE_RISK_GENERALIST_TILES = 3;
+    /** A6: the Incinerator clears S2 (three on-curve chaff) in at most this many sprays at every R-ROLE depth. */
+    public static final int   ROLE_INCINERATOR_S2_MAX_SPRAYS  = 2;
+    /** R-ROLE-5 AMMO FEASIBLE: seeds averaged for "one average COMBAT floor's planned supply". */
+    public static final int   ROLE_SUPPLY_SEED_COUNT          = 20;
 
     // --- M3 MATCHUP TABLE — one row per EnemyTrait, columns in DamageClass ordinal order ----
     //                                                 BALLISTIC SPREAD ENERGY RAIL  FIRE  EXPLOSIVE BLADE BLUNT

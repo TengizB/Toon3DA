@@ -63,12 +63,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP2** — matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY updated;
       MATCHUP_STRENGTH constant.
       DONE WHEN: both gates green.
-- [ ] **CP3** — W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks); R-ROLE-1..5
+- [x] **CP3** — W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks); R-ROLE-1..5
       replace R-WEAPON bands; Railgun waiver resolved.
       DONE WHEN: A2, A5, A6 hold; both gates green. Split:
   - [x] **CP3a** — role BEHAVIOURS live with starting numbers (falloff tables, knockback, stagger, burn stacks).
         DONE WHEN: build green; only R-WEAPON (DB + Incinerator) and S-SUPPLY red — both resolved by CP3b.
-  - [ ] **CP3b** — numbers fitted under R-ROLE-1..5 (replacing R-WEAPON + the Railgun waiver); S-SUPPLY back in band.
+  - [x] **CP3b** — numbers fitted under R-ROLE-1..5 (replacing R-WEAPON + the Railgun waiver); S-SUPPLY back in band.
         DONE WHEN: A2, A5, A6 hold; both gates green.
 - [ ] **CP4** — per-type ammo generosity in SupplyPlanner and re-fitted reserve caps.
       DONE WHEN: R-ROLE-5 + R-SUPPLY green; both gates green.
@@ -125,3 +125,20 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   kit, real and sim, is Chaingun + Shotgun; point-blank 36 -> 44). DECISION (hub): keep the S-SUPPLY band; after the
   R-ROLE fit, bring it back in band by re-fitting the SupplyPlanner's planned HEAL (SECTION 21 number, override
   recorded) — the stronger start kit means a floor needs less heal to leave you equally hurt.
+- **CP3b handover:** `util/WeaponRoleModel` (+ RoleScenarioWeapon/Pattern/Outcome) reads class/ammo/clip/reload/
+  range/accuracy/per-tile hit from a FRESH weapon instance; scenarios S1-S8 geometry + margins in SECTION 22;
+  GameMath `roleScenarioMeanHit / SustainedDamagePerTurn / Clear / BruiserHitsTaken`. `RuleKind.WEAPON_ROLE`,
+  `BalanceSchema.weaponRoleResults()` (R-ROLE-1..5 + A6 enforced); R-WEAPON, WeaponRole, RangedWeaponSpec,
+  WEAPON_POWER_* bands, REFERENCE_AMMO_EFFICIENCY, GameMath.weaponPowerScore and the Railgun waiver DELETED.
+  Test slot renamed `weaponRolesHoldOnTheReferenceScenarios`. Snapshot `2170ba3f...`.
+  Fit: Shotgun 44->66, DB 32->59/barrel, Arc 28->40, Railgun full 90->75, Grenade 42/22->36/32, burn fraction
+  0.5->0.6, shell box 4->3, shell cap 17->11. AR/Chaingun/Plasma/matchup cells unchanged. S4 representative =
+  Cinderforge Colossus (Lancer window too narrow). Melee exempt from R-ROLE-1 (recorded).
+- **CP3b decisions / owner flags:** A5 as written ("knocks a Gore Biter back") cannot be shown — a 66-damage
+  1-tile hit kills a d1 Gore Biter, and knockback/stagger skip dead targets; mechanics verified on Shell Brute
+  (knockback + STUNNED + skipped turn) and Revenant at 2 tiles (stagger, no knockback), Shell Brute at 3 tiles (none).
+  Record as IMPLEMENTATION NOTE. Chaingun sustains ~2x the AR per turn (R-ROLE-1 margins vs it; R-ROLE-4 vs AR per W1).
+  Thin: R-ROLE-4 2.03/2.0, R-ROLE-2 S1 1.20-1.23/1.30, S-SUPPLY exactly 0.80 (no heal re-fit needed), Railgun vs
+  Grenade S1/S4. Stale Railgun waiver comments remain at BalanceConfig RAILGUN_MAX_SLUGS / RAILGUN_PICKUP_SLUGS and
+  WeaponConstants — fix in CP4.
+- **CP3b gates:** core:test 453, only StoryBarkTest; balanceSim exit 0, S-SUPPLY 0.80, TACTICAL 171/200 stalled.
