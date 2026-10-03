@@ -14,4 +14,6 @@ public final class CombatKnife extends MeleeWeapon {
     }
 
     @Override public ItemType getItemType() { return ItemType.WEAPON_KNIFE; }
+
+    @Override public DamageClass damageClass() { return DamageClass.BLADE; }
 }

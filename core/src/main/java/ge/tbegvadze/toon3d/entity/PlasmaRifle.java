@@ -33,6 +33,7 @@ public class PlasmaRifle extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_PLASMA; }
+    @Override public DamageClass damageClass() { return DamageClass.ENERGY; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

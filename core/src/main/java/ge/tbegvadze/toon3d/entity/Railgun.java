@@ -47,6 +47,7 @@ public class Railgun extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_RAILGUN; }
+    @Override public DamageClass damageClass() { return DamageClass.RAIL; }
 
     // -------------------------------------------------------------------------
     // Charge-state accessors

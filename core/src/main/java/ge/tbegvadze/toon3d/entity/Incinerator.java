@@ -66,6 +66,7 @@ public class Incinerator extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_INCINERATOR; }
+    @Override public DamageClass damageClass() { return DamageClass.FIRE; }
 
     /**
      * The cone is a short-range area spray, not an aimed shot — it always connects.

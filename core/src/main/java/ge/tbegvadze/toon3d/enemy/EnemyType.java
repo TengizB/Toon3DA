@@ -496,6 +496,16 @@ public enum EnemyType {
      */
     public abstract EnemyFamily family();
 
+    /**
+     * The matchup TRAIT this archetype presents to the player's damage (balance-overhaul order 3,
+     * rule M2) — the row of {@code entity/MatchupTable}. Defaults to {@code family().trait()}; an
+     * archetype may override it as data (none do today — AS1). Bosses inherit their family's trait
+     * through this default.
+     */
+    public EnemyTrait trait() {
+        return family().trait();
+    }
+
     // -------------------------------------------------------------------------
     // Tactical metadata (balance idea 4 — Tactical Combat Depth)
     // role() / positionalMultiplier() / attackCadenceTurns() feed the Threat-Point

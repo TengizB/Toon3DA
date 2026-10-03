@@ -18,4 +18,6 @@ public final class Fist extends MeleeWeapon {
     @Override public boolean isLevelGapExempt() { return true; }
 
     @Override public ItemType getItemType() { return ItemType.WEAPON_FIST; }
+
+    @Override public DamageClass damageClass() { return DamageClass.BLUNT; }
 }

@@ -54,6 +54,7 @@ public class ArcCannon extends Weapon {
 
     @Override public boolean isMelee()      { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_ARC_CANNON; }
+    @Override public DamageClass damageClass() { return DamageClass.ENERGY; }
 
     /**
      * Marches the primary bolt to the first enemy in the facing line, applies its damage, then

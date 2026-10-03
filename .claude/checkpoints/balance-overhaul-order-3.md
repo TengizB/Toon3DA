@@ -18,7 +18,9 @@ the Railgun waiver; trait-aware R-ENEMY) and `sim/BalanceSimTest` (S-SWITCH). No
 Existing weapon/enemy/story tests UPDATED where numbers/ids legitimately change. Both gates every
 balance checkpoint. Render / input / narrative work ships with no new tests.
 **STARTED:** 2026-10-03
-**BASELINE:** branched from `09a78e0`. Baseline gate results recorded in NOTES at CP1.
+**BASELINE:** branched from `09a78e0`. Mirror build green; core:test 453 tests, 1 pre-existing failure —
+`StoryBarkTest` ("a joke survived into the deepest strata: bark.depth.core.2", narrative content, not ours).
+balanceSim exit 0. Any OTHER red test is ours.
 
 ## HOW TO RESUME AFTER A CUT
 
@@ -55,7 +57,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — DamageClass, EnemyTrait, family traits, MatchupCatalog rows, weapon class
+- [x] **CP1** — DamageClass, EnemyTrait, family traits, MatchupCatalog rows, weapon class
       declarations and SECTION 22 exist; matchup not yet applied.
       DONE WHEN: they exist, headless and unwired; build green.
 - [ ] **CP2** — matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY updated;
@@ -79,3 +81,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   desktop-only MIRROR build in the session scratchpad: symlinks to core/lwjgl3/assets/gradle*/docs,
   `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle` with the `buildscript{}` block
   removed and `configure(subprojects)`. Test XML lands in the REAL `core/build/test-results/`.
+- **CP1 handover:** `entity/DamageClass` (8, colour floats from `WeaponConstants.DAMAGE_CLASS_COLOR_*`),
+  `enemy/EnemyTrait` (`hasGlyph()`), `EnemyFamily(displayName, trait)` + `trait()`, `EnemyType.trait()` (defaults to
+  family; bosses are EnemyType constants -> family trait for free: OVERSEER SHIELDED, CORRUPTOR FLESH, HELL_BARON
+  INFERNAL). `entity/MatchupCatalog`: instance `register(class, trait, mult)` + `build()`; static `bootstrap()` /
+  `shared()` (lazy, latched) -> `MatchupTable.rawMultiplier / multiplier / classify -> MatchupOutcome /
+  strongAgainst / weakAgainst` (precomputed, no alloc). BalanceConfig SECTION 22: `MATCHUP_STRENGTH`,
+  `MATCHUP_EFFECTIVE_THRESHOLD`, `MATCHUP_RESISTED_THRESHOLD`, `MATCHUP_ROW_<TRAIT>` float[] in DamageClass order.
+  GameMath `matchupMultiplier(raw, strength)`, `classifyMatchup(...)` -> int code. `Weapon.damageClass()` abstract,
+  13 subclasses declare. Classification uses the STRENGTH-ADJUSTED multiplier (strength 0 -> all NEUTRAL).
+- **CP2 plan (from the CP1 survey):** carry the class like block pierce — `EnemyHitTarget.setActivationDamageClass`
+  set/cleared in `Weapon.fire()` beside `armBlockPierce`; matchup in `EnemyManager.applyDamageTo`'s
+  weak/vulnerable/backstab line; burn magnitude pre-multiplied in `applyBurningStatus`; barrels wrap their
+  `applyDamageTo` in EXPLOSIVE; hazard fire tiles FIRE; Arc chain floored at neutral (W5).

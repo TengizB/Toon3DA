@@ -38,6 +38,7 @@ public class DoubleBarrelShotgun extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_DOUBLE_BARREL; }
+    @Override public DamageClass damageClass() { return DamageClass.SPREAD; }
 
     @Override
     public void configureRoll(int level, WeaponTier weaponTier, AbilityInstance[] weaponAbilities) {

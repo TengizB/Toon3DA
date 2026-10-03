@@ -61,6 +61,7 @@ public class GrenadeLauncher extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_ROCKET; }
+    @Override public DamageClass damageClass() { return DamageClass.EXPLOSIVE; }
 
     /**
      * Marches the grenade forward, detonates on the first enemy it reaches (any distance),

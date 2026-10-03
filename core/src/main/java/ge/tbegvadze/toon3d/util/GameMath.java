@@ -5949,4 +5949,63 @@ public final class GameMath {
         float cut = Math.max(0f, Math.min(1f, reductionByDepth[index]));
         return Math.round(originalWalkableTiles * (1f - cut));
     }
+
+    // =====================================================================================
+    // MATCHUPS (balance-overhaul order 3) — damage class x enemy trait
+    // =====================================================================================
+
+    /*
+     * Formula: Matchup multiplier at a global strength
+     * Derivation:
+     *   The matchup table stores a raw multiplier r per (DamageClass, EnemyTrait) cell (M3).
+     *   A single dial s (BalanceConfig.MATCHUP_STRENGTH) scales how pronounced EVERY matchup is
+     *   without editing the table, symmetrically in log space:
+     *       multiplier = r ^ s
+     *   s = 1 -> the table as written; s = 0 -> r^0 = 1 for every cell (all matchups flattened);
+     *   s = 0.5 -> sqrt(r), so 1.5 becomes ~1.22 and 0.65 becomes ~0.81 (bonus and penalty shrink
+     *   by the same factor in log space, which a linear blend would not do).
+     * Edge cases:
+     *   r <= 0 is not a legal table value (it would zero or invert damage); it is treated as the
+     *   neutral 1.0. s <= 0 returns 1.0 exactly (no pow call, no -0/NaN drift). r == 1 returns 1.0.
+     */
+    public static float matchupMultiplier(float rawMultiplier, float strength) {
+        if (rawMultiplier <= 0f || strength <= 0f || rawMultiplier == 1f) {
+            return 1f;
+        }
+        if (strength == 1f) {
+            return rawMultiplier;
+        }
+        return (float) Math.pow(rawMultiplier, strength);
+    }
+
+    /*
+     * Formula: Matchup classification (M4)
+     * Derivation:
+     *   The communication layer (hit words, glyph colour, switch hint, compare card) speaks in three
+     *   words, never numbers. With effective threshold E and resisted threshold R (R < 1 < E):
+     *       multiplier >= E          -> EFFECTIVE  (+1)
+     *       multiplier <= R          -> RESISTED   (-1)
+     *       R < multiplier < E       -> NEUTRAL    ( 0)
+     *   The EFFECTIVE test runs first, so a mis-configured E <= R still yields a defined answer.
+     * Edge cases:
+     *   Pass the STRENGTH-ADJUSTED multiplier, so MATCHUP_STRENGTH = 0 classifies every cell NEUTRAL.
+     *   NaN fails both comparisons and reads NEUTRAL. Boundaries are inclusive (1.3 is EFFECTIVE,
+     *   0.8 is RESISTED) per M4.
+     */
+    public static int classifyMatchup(float multiplier, float effectiveThreshold, float resistedThreshold) {
+        if (multiplier >= effectiveThreshold) {
+            return MATCHUP_CLASS_EFFECTIVE;
+        }
+        if (multiplier <= resistedThreshold) {
+            return MATCHUP_CLASS_RESISTED;
+        }
+        return MATCHUP_CLASS_NEUTRAL;
+    }
+
+    /** {@link #classifyMatchup} result: the multiplier is at or above the effective threshold. */
+    public static final int MATCHUP_CLASS_EFFECTIVE = 1;
+    /** {@link #classifyMatchup} result: the multiplier lies strictly between the thresholds. */
+    public static final int MATCHUP_CLASS_NEUTRAL   = 0;
+    /** {@link #classifyMatchup} result: the multiplier is at or below the resisted threshold. */
+    public static final int MATCHUP_CLASS_RESISTED  = -1;
 }

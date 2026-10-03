@@ -2544,4 +2544,42 @@ public final class BalanceConfig {
     public static final int   SUPPLY_AUDIT_SEED_COUNT = 30;
     /** A2/A3: the sparse depths the sweep visits. */
     public static final int[] SUPPLY_AUDIT_DEPTHS     = {1, 5, 10, 15, 20, 25};
+
+    // =====================================================================================
+    // SECTION 22 — MATCHUPS & ROLES (balance-overhaul order 3: weapon roles and matchups)
+    // -------------------------------------------------------------------------------------
+    // Every weapon declares a DamageClass (entity/DamageClass) and every enemy family a trait
+    // (enemy/EnemyTrait). The MATCHUP TABLE joins them: one multiplier per class x trait, applied to
+    // the player's hit after the power ladder and before enemy Block/armour (M3). The rows below are
+    // the table's single source of truth — entity/MatchupCatalog.bootstrap() READS them and registers
+    // one row per cell; nothing else may hardcode a matchup number.
+    // Later checkpoints of order 3 land here too: the shotgun falloff table, knockback/stagger rules,
+    // incinerator burn stacks, per-AmmoType supply generosity + re-fitted reserve caps, the R-ROLE
+    // reference scenarios and margins. See docs/game-balance-authority.txt (R-ROLE).
+    // =====================================================================================
+
+    /**
+     * M3: every matchup multiplier is raised to this power before use (GameMath.matchupMultiplier).
+     * 1.0 = the table as written; 0 flattens every matchup to 1.0. Range: 0.0-1.5 (order 7 tunes it).
+     */
+    public static final float MATCHUP_STRENGTH            = 1.0f;
+    /** M4: a (strength-adjusted) multiplier at or above this is EFFECTIVE. */
+    public static final float MATCHUP_EFFECTIVE_THRESHOLD = 1.3f;
+    /** M4: a (strength-adjusted) multiplier at or below this is RESISTED. */
+    public static final float MATCHUP_RESISTED_THRESHOLD  = 0.8f;
+
+    // --- M3 MATCHUP TABLE — one row per EnemyTrait, columns in DamageClass ordinal order ----
+    //                                                 BALLISTIC SPREAD ENERGY RAIL  FIRE  EXPLOSIVE BLADE BLUNT
+    /** M3 row FLESH (Aberrations) — the neutral baseline. */
+    public static final float[] MATCHUP_ROW_FLESH    = {1.00f,  1.00f, 1.00f, 1.00f, 1.00f, 1.00f,  1.00f, 1.00f};
+    /** M3 row SHIELDED (Machines) — energy cracks the shield; bullets glance. */
+    public static final float[] MATCHUP_ROW_SHIELDED = {0.65f,  0.80f, 1.50f, 1.00f, 0.80f, 1.00f,  0.80f, 1.20f};
+    /** M3 row PLATED (Golems) — rail, explosives and blunt force crack plate; bullets and fire resisted. */
+    public static final float[] MATCHUP_ROW_PLATED   = {0.55f,  0.80f, 0.90f, 1.40f, 0.60f, 1.30f,  0.60f, 1.40f};
+    /** M3 row BURNABLE (Undead) — fire is the answer. */
+    public static final float[] MATCHUP_ROW_BURNABLE = {1.00f,  1.00f, 1.00f, 1.00f, 1.80f, 1.10f,  1.10f, 1.00f};
+    /** M3 row CHITIN (Insects) — spread and fire at close range; bullets resisted. */
+    public static final float[] MATCHUP_ROW_CHITIN   = {0.75f,  1.35f, 1.00f, 1.10f, 1.40f, 1.00f,  1.20f, 1.00f};
+    /** M3 row INFERNAL (Demons) — energy bites; fire is almost useless. */
+    public static final float[] MATCHUP_ROW_INFERNAL = {1.00f,  1.10f, 1.35f, 1.00f, 0.30f, 0.90f,  1.00f, 1.00f};
 }

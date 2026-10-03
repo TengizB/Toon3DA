@@ -481,4 +481,31 @@ public final class WeaponConstants {
     public static final float ASSAULT_RIFLE_BASE_ACCURACY         = 0.88f;
     public static final float ARC_CANNON_BASE_ACCURACY            = 0.88f;
     public static final float MELEE_BASE_ACCURACY                 = 1.00f;
+
+    // ── Damage-class colours (balance-overhaul order 3, VISUAL DESIGN) ──────
+    // Read by entity/DamageClass; render builds its Colors from these floats (C1-C5). Cosmetic.
+    public static final float DAMAGE_CLASS_COLOR_BALLISTIC_RED   = 0.85f;  // pale brass
+    public static final float DAMAGE_CLASS_COLOR_BALLISTIC_GREEN = 0.75f;
+    public static final float DAMAGE_CLASS_COLOR_BALLISTIC_BLUE  = 0.45f;
+    public static final float DAMAGE_CLASS_COLOR_SPREAD_RED      = 1.00f;  // orange
+    public static final float DAMAGE_CLASS_COLOR_SPREAD_GREEN    = 0.55f;
+    public static final float DAMAGE_CLASS_COLOR_SPREAD_BLUE     = 0.15f;
+    public static final float DAMAGE_CLASS_COLOR_ENERGY_RED      = 0.30f;  // cyan
+    public static final float DAMAGE_CLASS_COLOR_ENERGY_GREEN    = 0.85f;
+    public static final float DAMAGE_CLASS_COLOR_ENERGY_BLUE     = 1.00f;
+    public static final float DAMAGE_CLASS_COLOR_RAIL_RED        = 0.85f;  // white-violet
+    public static final float DAMAGE_CLASS_COLOR_RAIL_GREEN      = 0.75f;
+    public static final float DAMAGE_CLASS_COLOR_RAIL_BLUE       = 1.00f;
+    public static final float DAMAGE_CLASS_COLOR_FIRE_RED        = 1.00f;  // red-orange
+    public static final float DAMAGE_CLASS_COLOR_FIRE_GREEN      = 0.35f;
+    public static final float DAMAGE_CLASS_COLOR_FIRE_BLUE       = 0.10f;
+    public static final float DAMAGE_CLASS_COLOR_EXPLOSIVE_RED   = 1.00f;  // yellow
+    public static final float DAMAGE_CLASS_COLOR_EXPLOSIVE_GREEN = 0.85f;
+    public static final float DAMAGE_CLASS_COLOR_EXPLOSIVE_BLUE  = 0.20f;
+    public static final float DAMAGE_CLASS_COLOR_BLADE_RED       = 0.80f;  // silver
+    public static final float DAMAGE_CLASS_COLOR_BLADE_GREEN     = 0.82f;
+    public static final float DAMAGE_CLASS_COLOR_BLADE_BLUE      = 0.86f;
+    public static final float DAMAGE_CLASS_COLOR_BLUNT_RED       = 0.55f;  // steel grey
+    public static final float DAMAGE_CLASS_COLOR_BLUNT_GREEN     = 0.58f;
+    public static final float DAMAGE_CLASS_COLOR_BLUNT_BLUE      = 0.62f;
 }

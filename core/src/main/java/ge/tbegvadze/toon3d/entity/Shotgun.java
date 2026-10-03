@@ -36,6 +36,7 @@ public class Shotgun extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_SHOTGUN; }
+    @Override public DamageClass damageClass() { return DamageClass.SPREAD; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

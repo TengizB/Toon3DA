@@ -59,6 +59,7 @@ public class Chaingun extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_CHAINGUN; }
+    @Override public DamageClass damageClass() { return DamageClass.BALLISTIC; }
 
     /**
      * Chaingun rolls accuracy independently for each bullet in the burst rather than once

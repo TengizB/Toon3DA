@@ -1030,6 +1030,13 @@ public abstract class Weapon implements WeaponProfile {
     /** The ItemType entry matching this weapon, used by the inventory UI for display. */
     public abstract ItemType getItemType();
 
+    /**
+     * The DAMAGE CLASS this weapon deals (balance-overhaul order 3, rule M1) — the column of
+     * {@link MatchupTable}. Declared as data by every concrete weapon; damage code never switches on
+     * the weapon's class to find it.
+     */
+    public abstract DamageClass damageClass();
+
     /** Path to the texture shown when the weapon is idle and ready. */
     public abstract String getNormalTexturePath();
     /** Path to the texture shown during the muzzle-flash pose. */
