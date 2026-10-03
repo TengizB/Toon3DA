@@ -552,6 +552,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Route-map subsystem (order-3). bootstrap() is idempotent, so the death->new-run rebuild is
         // safe. The map itself is generated lazily at staging-room exit (see the FADING_OUT branch).
         RouteRegistries.bootstrap();
+        MatchupCatalog.bootstrap();   // balance-overhaul order 3: the class x trait matchup table
         // Tileset art catalog (symbol/sprite-reuse order-1). Idempotent, like RouteRegistries; nothing
         // reads it yet — it registers the complete inventory of today's wall/column/prop/decal art so
         // later orders' allocator + renderers can enumerate it instead of hardcoding a sprite list.

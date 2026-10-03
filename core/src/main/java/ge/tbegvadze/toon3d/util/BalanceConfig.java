@@ -2568,6 +2568,24 @@ public final class BalanceConfig {
     /** M4: a (strength-adjusted) multiplier at or below this is RESISTED. */
     public static final float MATCHUP_RESISTED_THRESHOLD  = 0.8f;
 
+    /**
+     * TRAIT-AWARE TP (CP2): how much of the reference GENERALIST's (BALLISTIC) matchup against an
+     * archetype's trait is priced into its Threat Points. referenceMultiplier = 1 + weight x (m - 1);
+     * eHP_priced = eHP / referenceMultiplier (GameMath.matchupReferenceMultiplier /
+     * traitAdjustedEnemyEffectiveHitPoints). 0 = the old trait-blind pricing; 1 = priced as if the
+     * player only ever carried a rifle. Between, because the on-curve player usually carries a second
+     * gun. Moves TP, XP, the encounter budget and survival turns together; the R8 hit bands and
+     * R-LADDER read the NEUTRAL eHP and do not move. Range: 0.0-1.0.
+     *
+     * DELIBERATE TEMPORARY STATE (CP2): shipped at 0 — the machinery is live, weighted to zero. At any
+     * w > 0 the only enforced read that moves is S-SUPPLY's TACTICAL exit health (0.82-0.87 vs the 0.80
+     * cap), measured on a policy that never switches weapons and stalls ~80% of runs on floor 1. CP7
+     * gives TACTICAL matchup switching and RE-FITS this weight then, against R-ENEMY (every archetype
+     * stays in its TP band for any w <= ~0.83; the Verdant Spiresower binds) and S-SUPPLY together.
+     * S-SUPPLY is NOT loosened to make room for it.
+     */
+    public static final float MATCHUP_TP_REFERENCE_WEIGHT = 0.0f;
+
     // --- M3 MATCHUP TABLE — one row per EnemyTrait, columns in DamageClass ordinal order ----
     //                                                 BALLISTIC SPREAD ENERGY RAIL  FIRE  EXPLOSIVE BLADE BLUNT
     /** M3 row FLESH (Aberrations) — the neutral baseline. */

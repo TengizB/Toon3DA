@@ -55,6 +55,20 @@ public interface ImpactEventListener {
     default void onEnemySpawned(int tileColumn, int tileRow, float heightMultiplier) {}
 
     /**
+     * Called when a player hit lands with a non-NEUTRAL matchup (balance-overhaul order 3, C1), so the
+     * presentation layer can colour the hit and float "WEAK POINT" / "RESISTED". Cosmetic only; the
+     * damage has already been applied. Default: no-op.
+     *
+     * @param worldX           world-space X of the enemy's centre tile
+     * @param worldY           world-space Y of the enemy's centre tile
+     * @param heightMultiplier the enemy type's billboard height fraction
+     * @param outcome          EFFECTIVE or RESISTED (never NEUTRAL)
+     * @param firstOfKind      true on the first hit of this outcome on this enemy (show the word)
+     */
+    default void onEnemyMatchupHit(float worldX, float worldY, float heightMultiplier,
+                                   MatchupOutcome outcome, boolean firstOfKind) {}
+
+    /**
      * Called when an orbiting shard is destroyed (elemental-golem-auric-sentinel), whether it was spent
      * absorbing a hit, spent launching a shot, or lost when the ring collapsed on death. Lets the effect
      * system play the gold "clink" — a spark burst plus a ring pulse — which, together with the gold

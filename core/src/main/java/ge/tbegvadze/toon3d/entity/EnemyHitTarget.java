@@ -91,6 +91,29 @@ public interface EnemyHitTarget {
     default void setActivationBlockPierce(float fraction) {}
 
     /**
+     * Arms the DAMAGE CLASS (balance-overhaul order 3, M3) every applyDamageTo() / applyBurningStatus()
+     * call resolves with until it is cleared with null. Set by Weapon.fire() at the start of an
+     * activation (beside the Block pierce) and cleared at its end, so every synchronous hit of the
+     * activation — base shot, burst extras, resolver bonuses — takes the weapon's matchup. Barrels set
+     * EXPLOSIVE around their own blast and restore the previous value. Null = no matchup (1.0).
+     * Default: no-op; EnemyManager overrides to store it.
+     */
+    default void setActivationDamageClass(DamageClass damageClass) {}
+
+    /** The damage class currently armed by {@link #setActivationDamageClass}, or null. Default null. */
+    default DamageClass getActivationDamageClass() { return null; }
+
+    /**
+     * While armed, a matchup multiplier below 1.0 is raised to 1.0 (W5: the Arc Cannon's chain always
+     * does at least neutral damage, so it stays a group tool). Armed by ArcCannon around its chain
+     * leaps only. Default: no-op.
+     */
+    default void setActivationMatchupFloorNeutral(boolean floorNeutral) {}
+
+    /** Whether {@link #setActivationMatchupFloorNeutral} is currently armed. Default false. */
+    default boolean isActivationMatchupFloorNeutral() { return false; }
+
+    /**
      * True when a live CRYSTAL SPIRE (grown by a Verdant Spiresower) occupies the given tile
      * (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). A spire is SOLID terrain, not an
      * enemy — it has no health bar, no AI, no XP — so it is reached through this shot seam rather than

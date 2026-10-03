@@ -408,6 +408,17 @@ public abstract class Weapon implements WeaponProfile {
      * so DoT ticks and barrel damage — which resolve outside the activation — are unaffected.
      * No-op when the weapon lacks ARMOR_PIERCE or the target is null.
      */
+    /**
+     * Arms this weapon's {@link #damageClass()} on the target for the whole fire activation, or clears
+     * it (balance-overhaul order 3, M3). Every applyDamageTo()/applyBurningStatus() call that resolves
+     * synchronously inside fire() then takes this weapon's matchup; damage resolving outside an
+     * activation (DoT ticks already applied, enemy turns) carries no class. No-op on a null target.
+     */
+    protected void armDamageClass(EnemyHitTarget target, boolean arm) {
+        if (target == null) return;
+        target.setActivationDamageClass(arm ? damageClass() : null);
+    }
+
     protected void armBlockPierce(EnemyHitTarget target, boolean arm) {
         if (target == null || !hasAbility(WeaponAbility.ARMOR_PIERCE)) return;
         target.setActivationBlockPierce(arm ? abilityMagnitude(WeaponAbility.ARMOR_PIERCE) : 0f);
@@ -821,6 +832,8 @@ public abstract class Weapon implements WeaponProfile {
 
         // ARMOR_PIERCE: bypass a fraction of the target's Block for every hit this activation.
         armBlockPierce(enemyHitTarget, true);
+        // MATCHUP (balance-overhaul order 3): every hit this activation resolves with this weapon's class.
+        armDamageClass(enemyHitTarget, true);
 
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
@@ -887,6 +900,7 @@ public abstract class Weapon implements WeaponProfile {
 
         // Disarm ARMOR_PIERCE so damage resolving after this activation keeps full Block absorption.
         armBlockPierce(enemyHitTarget, false);
+        armDamageClass(enemyHitTarget, false);
 
         return baseResult;
     }

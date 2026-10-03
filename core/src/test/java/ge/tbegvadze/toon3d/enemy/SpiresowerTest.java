@@ -47,9 +47,11 @@ class SpiresowerTest {
         assertEquals(EnemyConstants.SPIRESOWER_REGEN_ARMOR_POOL,
                 EnemyType.VERDANT_SPIRESOWER.armorPool(), 0.0001f,
                 "the armour pool IS the priced regeneration (2 HP/turn * ~2 spires * ~5 turns = 20)");
-        // eHP = raw HP + armour pool, since the sower has no dodge or flat reduction.
+        // NEUTRAL eHP = raw HP + armour pool, since the sower has no dodge or flat reduction (the trait-aware
+        // PRICED eHP — balance-overhaul order 3 — divides this by the generalist's weighted PLATED matchup;
+        // the weight ships at 0 pending CP7, so the two readings are equal today).
         assertEquals(EnemyType.VERDANT_SPIRESOWER.maxHealth() + EnemyConstants.SPIRESOWER_REGEN_ARMOR_POOL,
-                EnemyType.VERDANT_SPIRESOWER.effectiveHitPoints(), 0.5f,
+                EnemyType.VERDANT_SPIRESOWER.neutralEffectiveHitPoints(), 0.5f,
                 "the regen pool flows straight into effective HP");
     }
 

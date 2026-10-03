@@ -6,6 +6,7 @@ import java.util.List;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
 import ge.tbegvadze.toon3d.entity.AbilityResolver;
 import ge.tbegvadze.toon3d.entity.ArcCannon;
 import ge.tbegvadze.toon3d.entity.AssaultRifle;
@@ -184,6 +185,7 @@ public final class SimWorld implements LevelTransitionListener {
         // The same idempotent registry bootstraps World runs (route nodes, tileset art, rooms). The
         // render-side texture generators are deliberately NOT bootstrapped — no GL context here.
         RouteRegistries.bootstrap();
+        MatchupCatalog.bootstrap();
         TilesetRegistries.bootstrap();
         RoomBlueprints.bootstrap();
 

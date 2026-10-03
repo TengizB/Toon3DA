@@ -2,7 +2,9 @@ package ge.tbegvadze.toon3d.hazard;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.HazardIgniteTarget;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
@@ -233,8 +235,12 @@ public final class HazardManager implements HazardIgniteTarget {
         if (type == FIRE) {
             // Enemies burn faster than the player in the same fire tile — rewards herding a
             // swarm into the flame instead of just tagging them directly (see BalanceConfig).
+            // A fire tile is FIRE against the enemy's trait (balance-overhaul order 3): the undead burn
+            // hard, a demon barely notices. The player has no trait and takes the flat burn.
             int fireDamagePerTurn = (host instanceof Enemy)
-                    ? Math.round(EffectConstants.BURN_DAMAGE_PER_TURN * BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER)
+                    ? Math.max(1, Math.round(EffectConstants.BURN_DAMAGE_PER_TURN
+                            * BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER
+                            * MatchupCatalog.shared().multiplier(DamageClass.FIRE, ((Enemy) host).type.trait())))
                     : EffectConstants.BURN_DAMAGE_PER_TURN;
             statusEffectController.apply(host, StatusType.BURNING,
                     BalanceConfig.HAZARD_FIRE_BURN_TURNS, fireDamagePerTurn, null);

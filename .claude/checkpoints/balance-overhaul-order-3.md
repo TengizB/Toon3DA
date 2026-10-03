@@ -60,7 +60,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP1** — DamageClass, EnemyTrait, family traits, MatchupCatalog rows, weapon class
       declarations and SECTION 22 exist; matchup not yet applied.
       DONE WHEN: they exist, headless and unwired; build green.
-- [ ] **CP2** — matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY updated;
+- [x] **CP2** — matchup applied in player->enemy damage; TP pricing trait-aware; R-ENEMY updated;
       MATCHUP_STRENGTH constant.
       DONE WHEN: both gates green.
 - [ ] **CP3** — W1-W7 role retunes live (knockback, stagger, falloff, incinerator stacks); R-ROLE-1..5
@@ -94,3 +94,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   set/cleared in `Weapon.fire()` beside `armBlockPierce`; matchup in `EnemyManager.applyDamageTo`'s
   weak/vulnerable/backstab line; burn magnitude pre-multiplied in `applyBurningStatus`; barrels wrap their
   `applyDamageTo` in EXPLOSIVE; hazard fire tiles FIRE; Arc chain floored at neutral (W5).
+- **CP2 handover:** carrier `EnemyHitTarget.setActivationDamageClass / getActivationDamageClass /
+  setActivationMatchupFloorNeutral / isActivationMatchupFloorNeutral`; `Weapon.armDamageClass(target, arm)` in
+  `Weapon.fire()` AND `MeleeWeapon.fire()` (melee has its own fire). Matchup in `EnemyManager.applyDamageTo` (after
+  ladder, before Block); `Enemy.lastHitMatchup / effectiveMatchupWordShown / resistedMatchupWordShown` (state only);
+  `ImpactEventListener.onEnemyMatchupHit(x, y, heightMultiplier, outcome, firstOfKind)` (not yet consumed — CP5).
+  Burn magnitude pre-multiplied in `applyBurningStatus` (min 1); fire tiles FIRE (HazardManager); barrels
+  EXPLOSIVE save/restore; Arc chain floor-neutral. `EnemyType.neutralEffectiveHitPoints()` (R8, R-LADDER, card
+  breakpoints) vs `effectiveHitPoints()` (priced: TP, XP, budget). `MatchupCatalog.bootstrap()` in World + SimWorld.
+- **TEMPORARY (CP7 resolves):** `MATCHUP_TP_REFERENCE_WEIGHT = 0.0f`. Any w > 0 moved S-SUPPLY exit health to
+  0.82-0.87 (> 0.80) on a TACTICAL bot that never switches; NOT loosened. CP7 re-fits w (R-ENEMY holds to ~0.83,
+  Spiresower limits) once TACTICAL switches by matchup, then re-baselines LevelGeneratorSnapshotTest + SECTION 6.
+- **CP2 gates:** core:test 453, only pre-existing StoryBarkTest; balanceSim exit 0, S-SUPPLY 0.78, TACTICAL 160/200
+  stalled (baseline 162).

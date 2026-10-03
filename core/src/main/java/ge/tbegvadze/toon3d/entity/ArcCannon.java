@@ -182,8 +182,12 @@ public class ArcCannon extends Weapon {
             // Static Discharge, Lifesteal, etc.) apply to every chained target, mirroring the
             // Railgun's inline per-enemy dispatch.
             setLastHitEnemy(nextEnemy, leapDamage, enemyHitTarget.isAtFullHp(nextEnemy));
+            // W5 (balance-overhaul order 3): a chain leap never does less than neutral damage — the
+            // RESISTED floor covers the leap and its resolver bonuses, never the primary bolt.
+            enemyHitTarget.setActivationMatchupFloorNeutral(true);
             enemyHitTarget.applyDamageTo(nextEnemy, leapDamage);
             dispatchHitCallbacks(new FireResult(false, jumpIndex));
+            enemyHitTarget.setActivationMatchupFloorNeutral(false);
             clearLastHit();
 
             visitedColumns[visitedCount] = nextColumn;

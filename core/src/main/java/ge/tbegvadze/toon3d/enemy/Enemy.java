@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.enemy;
 
+import ge.tbegvadze.toon3d.entity.MatchupOutcome;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusHost;
 import ge.tbegvadze.toon3d.status.StatusResistance;
@@ -240,6 +241,17 @@ public class Enemy implements StatusHost {
      * spacing while {@link #shardRespaceTimerSeconds} runs. Never read by the simulation.
      */
     public int shardCountBeforeAbsorb = 0;
+
+    /**
+     * The M4 word of the most recent player hit on this enemy (balance-overhaul order 3, C1) — set by
+     * EnemyManager.applyDamageTo on every hit; NEUTRAL until the first. Presentation state only: the
+     * renderer owns the colour/word timers, the simulation never reads it.
+     */
+    public MatchupOutcome lastHitMatchup = MatchupOutcome.NEUTRAL;
+    /** True once an EFFECTIVE hit has landed on this enemy ("WEAK POINT" is shown once per enemy, C1). */
+    public boolean effectiveMatchupWordShown = false;
+    /** True once a RESISTED hit has landed on this enemy ("RESISTED" is shown once per enemy, C1). */
+    public boolean resistedMatchupWordShown = false;
 
     /**
      * Wall-clock seconds remaining in the ring's re-space animation, armed by ANY change to the shard

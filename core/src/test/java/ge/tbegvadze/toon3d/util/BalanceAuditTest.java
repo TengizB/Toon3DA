@@ -301,8 +301,11 @@ class BalanceAuditTest {
 
     /**
      * Order-5 acceptance criterion (enemy eHP path): every archetype's eHP runs through the shared
-     * GameMath.effectiveHitPoints primitive via EnemyType.effectiveHitPoints() — no raw-HP shortcut. With
-     * today's all-zero mitigation the result still equals raw maxHealth, but through the one formula.
+     * GameMath.effectiveHitPoints primitive via EnemyType.neutralEffectiveHitPoints() — no raw-HP shortcut.
+     * With today's all-zero mitigation the result still equals raw maxHealth, but through the one formula.
+     * Balance-overhaul order 3 (CP2): the PRICED eHP (EnemyType.effectiveHitPoints, what TP/XP read) is
+     * that neutral eHP through GameMath.traitAdjustedEnemyEffectiveHitPoints at the generalist's
+     * weighted matchup — never a second hand-rolled formula.
      */
     @Test
     void enemyEffectiveHitPointsRunThroughTheSharedPrimitive() {
@@ -310,8 +313,15 @@ class BalanceAuditTest {
                 : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
             float viaPrimitive = GameMath.enemyEffectiveHitPoints(type.maxHealth(), type.armorPool(),
                     type.dodgeChance(), type.flatReduction(), BalanceConfig.REFERENCE_PLAYER_DPT);
-            assertTrue(Math.abs(type.effectiveHitPoints() - viaPrimitive) < 1e-3f,
+            assertTrue(Math.abs(type.neutralEffectiveHitPoints() - viaPrimitive) < 1e-3f,
                     () -> type.displayName() + " eHP must come from GameMath.enemyEffectiveHitPoints");
+            float referenceMultiplier = GameMath.matchupReferenceMultiplier(
+                    ge.tbegvadze.toon3d.entity.MatchupCatalog.shared().multiplier(
+                            ge.tbegvadze.toon3d.entity.DamageClass.BALLISTIC, type.trait()),
+                    BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT);
+            float priced = GameMath.traitAdjustedEnemyEffectiveHitPoints(viaPrimitive, referenceMultiplier);
+            assertTrue(Math.abs(type.effectiveHitPoints() - priced) < 1e-3f,
+                    () -> type.displayName() + " priced eHP must be the neutral eHP at the generalist's matchup");
         }
     }
 

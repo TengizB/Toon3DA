@@ -163,7 +163,12 @@ All in util/GameMath.java. Everything else is derived from these four.
      - Dodge multiplies survivability by 1/(1 - dodge) (a dodged hit deals 0).
      - Flat reduction: each landed hit of size H only removes (H - R).
      Canonical start (130 HP, 75 armour, 0 dodge, 0 R) -> 205 eHP (the reference).
-     RULE: enemies currently have NO dodge/reduction, so enemy eHP == raw HP.
+     RULE: enemies currently have NO dodge/reduction, so NEUTRAL enemy eHP == raw HP
+     (EnemyType.neutralEffectiveHitPoints). Balance-overhaul order 3 (CP2) added the PRICED
+     eHP (EnemyType.effectiveHitPoints) = neutral eHP / (1 + w x (m_BALLISTIC,trait - 1)),
+     w = BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT — TP, XP and the encounter budget read the
+     priced value; the R8 hit bands and R-LADDER read the neutral one. w ships at 0 (temporary,
+     pending order 3 CP7's re-fit), so priced == neutral today.
 
 2. DPT — DAMAGE PER TURN
      BURST DPT   = damage of one fire action (one turn).
@@ -466,7 +471,10 @@ later tuning pass. That class of bug — content shipped before it is priced —
 recurring failure mode here. Assume other newer content may be un-priced too;
 always re-run BalanceReport's ENEMIES table after adding an archetype. Enemy eHP
 being exactly raw HP (no dodge/reduction) is also a simplification that breaks the
-moment an armoured archetype is added.
+moment an armoured archetype is added. (Balance-overhaul order 3 built the fix:
+TP can price the generalist's MATCHUP against the archetype's trait, so CHITIN / SHIELDED /
+PLATED archetypes would cost more Threat Points than their raw HP alone says — but its weight
+ships at 0 until order 3 CP7 re-fits it.)
 
 
 ================================================================================

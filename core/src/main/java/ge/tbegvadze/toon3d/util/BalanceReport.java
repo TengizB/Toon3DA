@@ -195,8 +195,10 @@ public final class BalanceReport {
     private static void printEnemyTable() {
         System.out.println("ENEMIES (registry: EnemyType.values() through BalanceSchema bands)");
         System.out.println("  cycleDPT = order-5 cycle-averaged effective DPT (basic + priced specials); trueTP = cycle-averaged Threat Points.");
-        System.out.printf("%-17s %-11s %5s %6s %5s %8s %8s %10s %-6s %9s %-6s%n",
-                "enemy", "role", "eHP", "atkDmg", "cad", "cycleDPT", "posMult", "trueTP", "in?", "kill|die", "R8?");
+        System.out.println("  eHP = matchup-neutral (R8 / R-LADDER read it); pricedHP = trait-aware eHP TP prices (order 3, CP2).");
+        System.out.printf("%-17s %-11s %-9s %5s %8s %6s %5s %8s %8s %10s %-6s %9s %-6s%n",
+                "enemy", "role", "trait", "eHP", "pricedHP", "atkDmg", "cad", "cycleDPT", "posMult", "trueTP", "in?",
+                "kill|die", "R8?");
         System.out.println("------------------------------------------------------------------------------------");
         for (ge.tbegvadze.toon3d.enemy.EnemyType enemyType : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
             if (enemyType.role() == ge.tbegvadze.toon3d.enemy.EnemyRole.BOSS) continue; // SECTION 14 ruleset
@@ -205,9 +207,11 @@ public final class BalanceReport {
     }
 
     private static void printEnemyRow(ge.tbegvadze.toon3d.enemy.EnemyType enemyType) {
-        // Order 5: enemy eHP runs through the shared survivability primitive (EnemyType.effectiveHitPoints),
-        // not a hard-coded raw-HP shortcut — with all-zero mitigation today it still equals raw HP.
-        float enemyEffectiveHitPoints = enemyType.effectiveHitPoints();
+        // Order 5: enemy eHP runs through the shared survivability primitive (EnemyType.neutralEffectiveHitPoints),
+        // not a hard-coded raw-HP shortcut — with all-zero mitigation today it still equals raw HP. Order 3
+        // (CP2) prices TP on the trait-aware eHP (EnemyType.effectiveHitPoints), printed beside it.
+        float enemyEffectiveHitPoints = enemyType.neutralEffectiveHitPoints();
+        float pricedEffectiveHitPoints = enemyType.effectiveHitPoints();
         float cycleAveragedDamagePerTurn = enemyType.cycleAveragedDamagePerTurn();
         float threatPoints = enemyType.baseThreatPoints();
         float[] threatBand = BalanceSchema.threatPointBand(enemyType.role());
@@ -224,8 +228,9 @@ public final class BalanceReport {
                 : (hitsToKill >= hitBand[0] && hitsToKill <= hitBand[1]
                         && hitsToDie >= hitBand[2] && hitsToDie <= hitBand[3]) ? "OK" : "OUT";
 
-        System.out.printf("%-17s %-11s %5.0f %6d %5d %8.2f %8.2f %10.1f %-6s %4d|%-4d %-6s%n",
-                enemyType.displayName(), enemyType.role().name(), enemyEffectiveHitPoints,
+        System.out.printf("%-17s %-11s %-9s %5.0f %8.1f %6d %5d %8.2f %8.2f %10.1f %-6s %4d|%-4d %-6s%n",
+                enemyType.displayName(), enemyType.role().name(), enemyType.trait().name(),
+                enemyEffectiveHitPoints, pricedEffectiveHitPoints,
                 enemyType.attackDamage(), enemyType.attackCadenceTurns(), cycleAveragedDamagePerTurn,
                 enemyType.positionalMultiplier(), threatPoints, bandVerdictText,
                 hitsToKill, hitsToDie, hitVerdictText);

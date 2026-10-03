@@ -105,6 +105,9 @@ class LevelGeneratorSnapshotTest {
     // filled with group templates and placed one group per room AFTER the gate and stairs (first contact
     // in the nearest room, anchor group deepest), which moves every enemy and the RNG stream behind it.
     // Confirmed stable across two separate JVM runs.
+    // NOTE (balance-overhaul order 3, CP2): trait-aware TP ships with MATCHUP_TP_REFERENCE_WEIGHT = 0, so
+    // the planner's prices — and this digest — are unchanged. When CP7 re-fits the weight above 0 the
+    // planner buys a different roster on the same budget and this digest must be re-baselined then.
     private static final String EXPECTED_DIGEST =
             "23e6f3826a375a589755094b701bcef6c6fd3bf10d050ee0c1a0dfcb543e37ad";
 

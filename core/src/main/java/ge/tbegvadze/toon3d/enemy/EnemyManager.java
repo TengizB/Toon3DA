@@ -1,10 +1,13 @@
 package ge.tbegvadze.toon3d.enemy;
 
 import ge.tbegvadze.toon3d.door.DoorManager;
+import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
 import ge.tbegvadze.toon3d.entity.HazardIgniteTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Loadout;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
+import ge.tbegvadze.toon3d.entity.MatchupOutcome;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Player;
@@ -145,6 +148,12 @@ public final class EnemyManager implements EnemyHitTarget {
     // Armed to the ability magnitude by Weapon.fire() at activation start, cleared to 0 at its end,
     // so only weapon hits pierce Block — DoT ticks and barrel damage resolve with pierce == 0.
     private float activationBlockPierceFraction = 0f;
+    // Damage class of the current fire activation (balance-overhaul order 3, M3). Armed by Weapon.fire()
+    // at activation start, cleared to null at its end; barrels arm EXPLOSIVE around their blast. Null =
+    // no matchup (1.0) — enemy-turn damage, DoT ticks and anything outside an activation.
+    private DamageClass activationDamageClass = null;
+    // W5: while true, a matchup below 1.0 is raised to neutral (the Arc Cannon's chain leaps).
+    private boolean activationMatchupFloorNeutral = false;
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
     private Loadout loadout = null;
     /**
@@ -662,7 +671,21 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.facingColumn, enemy.facingRow, enemy.tileColumn, enemy.tileRow,
                 cachedPlayerColumn, cachedPlayerRow);
         float backstabMultiplier = GameMath.backstabDamageMultiplier(backstab, EffectConstants.BACKSTAB_DAMAGE_PERCENT);
-        totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier);
+        // MATCHUP (balance-overhaul order 3, M3): the activation's damage class against the target's trait,
+        // after the ladder and before Block/armour — one multiplier in the same step as WEAK/VULNERABLE/
+        // BACKSTAB. Null class (no activation) = 1.0; the Arc chain floors a RESISTED cell at neutral (W5).
+        MatchupOutcome matchupOutcome = MatchupOutcome.NEUTRAL;
+        float matchupMultiplier = 1f;
+        if (activationDamageClass != null) {
+            matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
+            matchupOutcome    = MatchupCatalog.shared().classify(activationDamageClass, enemy.type.trait());
+            if (activationMatchupFloorNeutral && matchupMultiplier < 1f) {
+                matchupMultiplier = 1f;
+                matchupOutcome    = MatchupOutcome.NEUTRAL;
+            }
+        }
+        totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier
+                * matchupMultiplier);
         if (playerHitListener != null && totalDamage > 0) {
             playerHitListener.onPlayerHitEnemy(enemy.type, enemy.maxHealth, totalDamage);
         }
@@ -695,6 +718,8 @@ public final class EnemyManager implements EnemyHitTarget {
             spawnShardAbsorbFeedback(enemy);
             return;   // the shard ate the whole hit: no hit flash, no damage number, no HP change
         }
+        // A shard-absorbed hit returned above: only a hit that reached the body reads as a matchup word.
+        recordMatchupHit(enemy, matchupOutcome, worldX, worldY, heightMultiplier);
         if (crustBefore > 0 && enemy.crustStacks == 0) {
             spawnCrustShatterFeedback(enemy, crustBefore, fullCrust);
         }
@@ -729,6 +754,48 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * Records the M4 word of a player hit on the enemy and, for a non-NEUTRAL hit, tells the impact
+     * listener (balance-overhaul order 3, C1). The "first of kind" flag latches once per enemy per word,
+     * so the presentation can float "WEAK POINT" / "RESISTED" exactly once. Cosmetic state only.
+     */
+    private void recordMatchupHit(Enemy enemy, MatchupOutcome outcome,
+                                  float worldX, float worldY, float heightMultiplier) {
+        enemy.lastHitMatchup = outcome;
+        if (outcome == MatchupOutcome.NEUTRAL) return;
+        boolean firstOfKind;
+        if (outcome == MatchupOutcome.EFFECTIVE) {
+            firstOfKind = !enemy.effectiveMatchupWordShown;
+            enemy.effectiveMatchupWordShown = true;
+        } else {
+            firstOfKind = !enemy.resistedMatchupWordShown;
+            enemy.resistedMatchupWordShown = true;
+        }
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyMatchupHit(worldX, worldY, heightMultiplier, outcome, firstOfKind);
+        }
+    }
+
+    @Override
+    public void setActivationDamageClass(DamageClass damageClass) {
+        activationDamageClass = damageClass;
+    }
+
+    @Override
+    public DamageClass getActivationDamageClass() {
+        return activationDamageClass;
+    }
+
+    @Override
+    public void setActivationMatchupFloorNeutral(boolean floorNeutral) {
+        activationMatchupFloorNeutral = floorNeutral;
+    }
+
+    @Override
+    public boolean isActivationMatchupFloorNeutral() {
+        return activationMatchupFloorNeutral;
+    }
+
+    /**
      * Applies (or refreshes) a BURNING damage-over-time status on the given enemy.
      * Routed through the shared StatusEffectController so the burn ticks each world
      * turn, obeys per-enemy fire resistance/immunity, and attributes any DoT kill
@@ -737,8 +804,16 @@ public final class EnemyManager implements EnemyHitTarget {
     @Override
     public void applyBurningStatus(Object enemyObject, int turns, int magnitudePerTurn) {
         if (statusEffectController == null) return;
-        statusEffectController.apply((Enemy) enemyObject, StatusType.BURNING,
-                turns, magnitudePerTurn, this);
+        Enemy enemy = (Enemy) enemyObject;
+        // M3: status damage the player applies uses the class of the weapon that applied it — the burn's
+        // per-turn magnitude is pre-multiplied by the activation's matchup (Incinerator = FIRE).
+        int matchedMagnitude = magnitudePerTurn;
+        if (activationDamageClass != null) {
+            float matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
+            if (activationMatchupFloorNeutral) matchupMultiplier = Math.max(1f, matchupMultiplier);
+            matchedMagnitude = Math.max(1, Math.round(magnitudePerTurn * matchupMultiplier));
+        }
+        statusEffectController.apply(enemy, StatusType.BURNING, turns, matchedMagnitude, this);
     }
 
     /**

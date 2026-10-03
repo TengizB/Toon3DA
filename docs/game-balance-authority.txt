@@ -123,6 +123,24 @@ R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-ove
   16-34 | soldier 36-66 | bruiser 70-120 | mini-elite 160-310) -> the rules above.
   Every archetype's depth-1 HP/damage was rebased (BalanceConfig SECTION 2 note);
   damage sits at the LOW end of each band because the heal economy absorbs it.
+  RE-STATED by balance-overhaul order 3 (CP2) — MATCHUPS. Two eHP readings now exist:
+    NEUTRAL eHP (EnemyType.neutralEffectiveHitPoints) — the matchup-free survivability
+      primitive. Part 2 (the R8 hit bands), R-LADDER and R-CARD-BREAKPOINT read it: the
+      box describes the fight with an answer that is NOT resisted, and R-LADDER's
+      reference stays the Assault Rifle vs a neutral target.
+    PRICED eHP (EnemyType.effectiveHitPoints) — neutral eHP / referenceMultiplier, with
+      referenceMultiplier = 1 + w x (MatchupTable.multiplier(BALLISTIC, trait) - 1) and
+      w = BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT (GameMath.matchupReferenceMultiplier /
+      traitAdjustedEnemyEffectiveHitPoints). Part 1 (the TP bands), XP and the encounter
+      budget read it: an armoured archetype costs what it takes the reference
+      generalist to kill, blended toward neutral because the on-curve player usually
+      carries a second gun. Every archetype stays inside its role TP band for any
+      w in [0, 0.83] (the Verdant Spiresower, PLATED, is the binding row).
+      w SHIPS AT 0 (a deliberate temporary state, CP2) — priced eHP == neutral eHP until
+      order 3 CP7 gives the TACTICAL policy matchup switching and re-fits w against
+      R-ENEMY and S-SUPPLY together (see the CP2 CHANGELOG entry).
+  OVERRIDE RECORD: "enemy eHP == raw HP / no mitigation" in TP pricing -> the priced
+  eHP above; the R8 hit bands' eHP -> explicitly the NEUTRAL eHP (unchanged numbers).
 
 R-CARD (RuleKind.CARD_BUDGET)
   Every level-up card (UpgradeCard.values(), estimatedPowerPoints()) must price
@@ -781,25 +799,26 @@ Incinerator            HEAVY          31.0     32.0       27.7        24-32 OK
 
 ENEMIES (registry: EnemyType.values() through BalanceSchema bands)
   cycleDPT = order-5 cycle-averaged effective DPT (basic + priced specials); trueTP = cycle-averaged Threat Points.
-enemy             role          eHP atkDmg   cad cycleDPT  posMult     trueTP in?     kill|die R8?   
+  eHP = matchup-neutral (R8 / R-LADDER read it); pricedHP = trait-aware eHP TP prices (order 3, CP2).
+enemy             role        trait       eHP pricedHP atkDmg   cad cycleDPT  posMult     trueTP in?     kill|die R8?   
 ------------------------------------------------------------------------------------
-Plague Hulk       SOLDIER        60     23     2    16.39     1.00       39.3 OK        4|9    OK    
-Eye Tyrant        CHAFF          28     11     1    11.55     1.30       16.8 OK        2|19   OK    
-Gore Biter        CHAFF          28     12     1    12.00     1.15       15.5 OK        2|18   OK    
-Shell Brute       BRUISER        95     35     1    35.00     1.00      133.0 OK        7|6    OK    
-Mire Wraith       SOLDIER        52     23     1    17.83     1.30       48.2 OK        4|9    OK    
-Iron Stalker      MINI_ELITE    170     42     1    47.78     1.15      373.6 OK       12|5    OK    
-Acid Drone        SOLDIER        45     24     1    18.50     1.30       43.3 OK        3|9    OK    
-Void Shroud       SOLDIER        50     25     1    25.00     1.15       57.5 OK        4|9    OK    
-Ghoul             CHAFF          30     13     1    13.00     1.00       15.6 OK        2|16   OK    
-Crawler           CHAFF          15     15     1    15.00     1.15       10.3 OK        1|14   OK    
-Revenant          BRUISER        85     35     1    35.00     1.00      119.0 OK        6|6    OK    
-Vortex Eye        CHAFF          24      9     1     9.60     1.30       12.0 OK        2|23   OK    
-Blight Corruptor  SOLDIER        48     26     1    28.86     1.00       55.4 OK        4|8    OK    
-Auric Sentinel    SOLDIER        60     26     2    13.00     1.30       40.6 OK        4|8    OK    
-Cinderforge Colossus BRUISER        85     36     1    36.00     1.00      122.7 OK        6|6    OK    
-Rimeshell Lancer  SOLDIER        60     24     2    12.00     1.30       37.4 OK        4|9    OK    
-Verdant Spiresower SOLDIER        57     24     1    24.00     1.00       54.7 OK        4|9    OK    
+Plague Hulk       SOLDIER     FLESH        60     60.0     23     2    16.39     1.00       39.3 OK        4|9    OK    
+Eye Tyrant        CHAFF       FLESH        28     28.0     11     1    11.55     1.30       16.8 OK        2|19   OK    
+Gore Biter        CHAFF       FLESH        28     28.0     12     1    12.00     1.15       15.5 OK        2|18   OK    
+Shell Brute       BRUISER     CHITIN       95     95.0     35     1    35.00     1.00      133.0 OK        7|6    OK    
+Mire Wraith       SOLDIER     FLESH        52     52.0     23     1    17.83     1.30       48.2 OK        4|9    OK    
+Iron Stalker      MINI_ELITE  CHITIN      170    170.0     42     1    47.78     1.15      373.6 OK       12|5    OK    
+Acid Drone        SOLDIER     SHIELDED     45     45.0     24     1    18.50     1.30       43.3 OK        3|9    OK    
+Void Shroud       SOLDIER     INFERNAL     50     50.0     25     1    25.00     1.15       57.5 OK        4|9    OK    
+Ghoul             CHAFF       BURNABLE     30     30.0     13     1    13.00     1.00       15.6 OK        2|16   OK    
+Crawler           CHAFF       BURNABLE     15     15.0     15     1    15.00     1.15       10.3 OK        1|14   OK    
+Revenant          BRUISER     BURNABLE     85     85.0     35     1    35.00     1.00      119.0 OK        6|6    OK    
+Vortex Eye        CHAFF       BURNABLE     24     24.0      9     1     9.60     1.30       12.0 OK        2|23   OK    
+Blight Corruptor  SOLDIER     BURNABLE     48     48.0     26     1    28.86     1.00       55.4 OK        4|8    OK    
+Auric Sentinel    SOLDIER     PLATED       60     60.0     26     2    13.00     1.30       40.6 OK        4|8    OK    
+Cinderforge Colossus BRUISER     PLATED       85     85.2     36     1    36.00     1.00      122.7 OK        6|6    OK    
+Rimeshell Lancer  SOLDIER     PLATED       60     60.0     24     2    12.00     1.30       37.4 OK        4|9    OK    
+Verdant Spiresower SOLDIER     PLATED       57     57.0     24     1    24.00     1.00       54.7 OK        4|9    OK    
 
 WAIVERS (registry: BalanceSchema.activeWaivers())
 ------------------------------------------------------------------------------------
@@ -1340,6 +1359,22 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 3 / CP2 — THE MATCHUP IS LIVE. Player->enemy damage takes
+    MatchupTable.multiplier(weapon class, enemy trait) once, in EnemyManager.applyDamageTo's
+    WEAK/VULNERABLE/BACKSTAB step (after the ladder, before Block). The class rides the activation
+    (EnemyHitTarget.setActivationDamageClass, armed by Weapon.fire()/MeleeWeapon.fire() beside the Block
+    pierce); barrels hit as EXPLOSIVE, fire tiles as FIRE, a weapon-applied burn pre-multiplies its
+    per-turn magnitude by the applying weapon's matchup, and the Arc Cannon's chain leaps never drop
+    below neutral (W5). TP pricing is TRAIT-AWARE IN MECHANISM (R-ENEMY re-statement above) but
+    MATCHUP_TP_REFERENCE_WEIGHT SHIPS AT 0 — a DELIBERATE TEMPORARY STATE, so every TP/XP/budget
+    number is unchanged. WHY 0: at any w > 0 (0.1..0.75 tried) the only enforced read that moved was
+    S-SUPPLY's TACTICAL COMBAT exit health (0.82-0.87 vs its 0.80 cap; 0.78 at w = 0), measured on a
+    policy that never switches weapons and stalls ~80% of runs on floor 1 — the planner swaps pricier
+    armoured anchors for unresisted bodies the rifle-only bot handles easily. S-SUPPLY was NOT
+    loosened. CP7 (TACTICAL matchup switching) re-fits w against R-ENEMY (fits any w <= ~0.83) and
+    S-SUPPLY together. R8 / R-LADDER read the neutral eHP and did not move. Gates: test green except
+    the pre-existing StoryBarkTest; balanceSim exit 0 (S-SUPPLY 0.78).
+
   balance-overhaul order 1 / CP6 — communication (R14): the HUD slot strip, inventory rows and the
     weapon compare card show "LV n" coloured against the floor's threat level (amber one behind,
     red + down-chevron two or more behind, green + up-chevron ahead; the Fist always reads on-level),

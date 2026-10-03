@@ -898,7 +898,7 @@ public final class BalanceSchema {
             results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to kill",
                     hitsToKill, band[0], band[1], hitsToKill >= band[0] && hitsToKill <= band[1],
                     "role " + enemyType.role() + String.format("; eHP %.0f / %.1f per reference hit",
-                            enemyType.effectiveHitPoints(), GameMath.ladderReferenceHitDamage())));
+                            enemyType.neutralEffectiveHitPoints(), GameMath.ladderReferenceHitDamage())));
             results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to die",
                     hitsToDie, band[2], band[3], hitsToDie >= band[2] && hitsToDie <= band[3],
                     "role " + enemyType.role() + "; " + BalanceConfig.REFERENCE_PLAYER_EHP + " eHP / "
@@ -909,7 +909,9 @@ public final class BalanceSchema {
 
     /** Depth-1 hits the R8 reference weapon needs to kill the archetype (shared by the audit and the report). */
     public static int enemyHitsToKill(EnemyType enemyType) {
-        return GameMath.turnsToKill(enemyType.effectiveHitPoints(), GameMath.ladderReferenceHitDamage());
+        // Matchup-NEUTRAL eHP (balance-overhaul order 3 re-statement): R8 boxes the fight with an answer
+        // that is not resisted; the generalist's matchup cost is priced in TP, not in the box.
+        return GameMath.turnsToKill(enemyType.neutralEffectiveHitPoints(), GameMath.ladderReferenceHitDamage());
     }
 
     /** Depth-1 ordinary hits of the archetype the 205-eHP start player survives (shared by the audit and the report). */
@@ -1196,7 +1198,7 @@ public final class BalanceSchema {
     public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
         EnemyType soldier = REGION_REFERENCE_SOLDIER;
         ExpectedPlayer player = GameMath.expectedPlayerAtDepth(depth);
-        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.effectiveHitPoints(), depth);
+        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.neutralEffectiveHitPoints(), depth);
         float soldierDamagePerTurn = GameMath.enemyDamageAtDepth(
                 (float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()), depth);
         // OFFENCE: whole turns shaved off killing the soldier when the card's DPT is added.
@@ -2189,7 +2191,9 @@ public final class BalanceSchema {
 
     /** Continuous hits the given player needs to kill the archetype at a depth (R-LADDER TTK). */
     public static float ladderTurnsToKill(EnemyType enemyType, int depth, ExpectedPlayer player) {
-        float enemyEffectiveHitPoints = GameMath.enemyHealthAtDepth(enemyType.effectiveHitPoints(), depth);
+        // R-LADDER's reference is the Assault Rifle vs a NEUTRAL target (balance-overhaul order 3 keeps
+        // it matchup-free): read the neutral eHP, never the trait-priced one.
+        float enemyEffectiveHitPoints = GameMath.enemyHealthAtDepth(enemyType.neutralEffectiveHitPoints(), depth);
         return GameMath.ladderTurnsToKill(enemyEffectiveHitPoints, player.referenceHitDamage);
     }
 

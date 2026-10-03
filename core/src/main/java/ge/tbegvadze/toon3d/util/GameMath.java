@@ -6002,6 +6002,45 @@ public final class GameMath {
         return MATCHUP_CLASS_NEUTRAL;
     }
 
+    /*
+     * Formula: Matchup reference multiplier (trait-aware TP pricing)
+     * Derivation:
+     *   An archetype's Threat Points price how long the REFERENCE player takes to kill it. The
+     *   reference player's generalist (BALLISTIC) hits a trait at multiplier m, but the on-curve
+     *   player often carries a second gun that is not resisted, so only a weight w in [0, 1] of the
+     *   generalist's matchup is priced — a linear blend toward neutral:
+     *       referenceMultiplier = 1 + w x (m - 1)
+     *   w = 0 -> 1 (trait-blind, the pre-order-3 pricing); w = 1 -> m (rifle-only player).
+     * Edge cases:
+     *   w is clamped to [0, 1]. m <= 0 is not a legal table value and is treated as neutral 1.0, so
+     *   the result is always > 0 and safe to divide by.
+     */
+    public static float matchupReferenceMultiplier(float generalistMultiplier, float referenceWeight) {
+        if (generalistMultiplier <= 0f) {
+            return 1f;
+        }
+        float weight = Math.max(0f, Math.min(1f, referenceWeight));
+        return 1f + weight * (generalistMultiplier - 1f);
+    }
+
+    /*
+     * Formula: Trait-adjusted enemy effective HP (trait-aware TP pricing)
+     * Derivation:
+     *   Damage into the enemy is multiplied by the reference multiplier r (above), so the reference
+     *   player must deal eHP / r of its own nominal damage to kill it — equivalently, the enemy's
+     *   eHP measured in the player's nominal (pre-matchup) damage is
+     *       eHP_priced = eHP / r
+     *   r < 1 (resisted) inflates the priced eHP; r > 1 (effective) deflates it; r = 1 leaves it.
+     * Edge cases:
+     *   r <= 0 returns eHP unchanged (treated as neutral) — never a division by zero or a negative.
+     */
+    public static float traitAdjustedEnemyEffectiveHitPoints(float effectiveHitPoints, float referenceMultiplier) {
+        if (referenceMultiplier <= 0f) {
+            return effectiveHitPoints;
+        }
+        return effectiveHitPoints / referenceMultiplier;
+    }
+
     /** {@link #classifyMatchup} result: the multiplier is at or above the effective threshold. */
     public static final int MATCHUP_CLASS_EFFECTIVE = 1;
     /** {@link #classifyMatchup} result: the multiplier lies strictly between the thresholds. */
