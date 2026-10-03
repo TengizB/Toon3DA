@@ -1407,7 +1407,7 @@ public final class BalanceConfig {
     /**
      * The maximum heal supply the GATE credits to the fight, as a fraction of reference eHP (arena drops +
      * a bounded carry). Kept modest because the FIRST boss (Overseer, only ~+30% expected DPT over the start
-     * player) is the tightest gate — like the Railgun scarcity waiver, the shallowest case is the real limiter.
+     * player) is the tightest gate — the shallowest case is the real limiter.
      * Raising it narrows the gate margin at the Overseer first. Range: 0.15–0.35.
      */
     public static final float BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION = 0.25f;
@@ -2666,6 +2666,14 @@ public final class BalanceConfig {
     public static final float ROLE_GENERALIST_BOUND           = 1.30f;
     /** R-ROLE-3 NO DOMINANCE: no class is best in more than this many scenarios (per depth). */
     public static final int   ROLE_MAX_SCENARIOS_BEST         = 2;
+    /**
+     * R-ROLE-5: each ranged DamageClass's DECLARED niche scenario, indexed by DamageClass ordinal (the W1-W8
+     * role text: BALLISTIC the S1 generalist, SPREAD S6 point-blank chitin, ENERGY S3 shields, RAIL S4 plate
+     * (AS8 — the Railgun's ammo check), FIRE S5 burnable groups, EXPLOSIVE S2 groups; melee null, exempt).
+     * R-ROLE-5 checks ammo feasibility HERE — not wherever the class happens to sit closest to the best —
+     * so the niche the role exists for can never quietly price itself out of a floor's supply.
+     */
+    public static final String[] ROLE_DECLARED_NICHE_BY_CLASS = { "S1", "S6", "S3", "S4", "S5", "S2", null, null };
     /** R-ROLE-4 RISK PAYS: SPREAD sustained per-turn damage at 1-2 tiles over the Assault Rifle's at 3. */
     public static final float ROLE_RISK_PAYS_RATIO            = 2.0f;
     /** R-ROLE-4: the SPREAD engagement band and the generalist's reference range. */

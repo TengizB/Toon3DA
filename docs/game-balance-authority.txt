@@ -123,8 +123,12 @@ best answer SOMEWHERE and never everywhere.
                         Assault Rifle's at 3 tiles. The reference is the Assault
                         Rifle — W1's own wording and R-LADDER's generalist — not the
                         Chaingun (whose three-round action sustains ~2x the rifle).
-    R-ROLE-5 AMMO FEASIBLE every class clears its fastest-relative scenario
-                        with <= one AVERAGE COMBAT floor's planned supply of its
+    R-ROLE-5 AMMO FEASIBLE every class clears its DECLARED niche scenario
+                        (ROLE_DECLARED_NICHE_BY_CLASS: BALLISTIC S1, SPREAD S6,
+                        ENERGY S3, RAIL S4, FIRE S5, EXPLOSIVE S2 — reviewer fix:
+                        it read the first scenario the class was closest to the best
+                        in, which for RAIL was S1, so AS8's PLATED slug check never
+                        ran) with <= one AVERAGE COMBAT floor's planned supply of its
                         ammo type (the CURRENT SupplyPlanner over 20 rosters, the
                         player carrying BULLETS + that type).
     A6                  the Incinerator clears S2 in <= 2 sprays at both depths.
@@ -925,7 +929,7 @@ Grenade Launcher       EXPLOSIVE   1.99    1.04*   1.49    2.17    1.02    5.15 
   R-ROLE-5 ENERGY ammo feasible d5                 2.00 OK          Arc Cannon in S3 (CELLS per floor 7.0)
   R-ROLE-1 RAIL niche d5                          60.00 OK          best in S4; margin = best BALLISTIC / class best
   R-ROLE-3 RAIL scenarios best d5                  2.00 OK          of 8
-  R-ROLE-5 RAIL ammo feasible d5                   1.00 OK          Railgun in S1 (SLUGS per floor 2.1)
+  R-ROLE-5 RAIL ammo feasible d5                   1.00 OK          Railgun in S4 (SLUGS per floor 2.1)
   R-ROLE-1 FIRE niche d5                           3.44 OK          best in S5; margin = best BALLISTIC / class best
   R-ROLE-3 FIRE scenarios best d5                  1.00 OK          of 8
   R-ROLE-5 FIRE ammo feasible d5                   3.00 OK          Incinerator in S5 (CELLS per floor 7.0)
@@ -946,7 +950,7 @@ Grenade Launcher       EXPLOSIVE   1.99    1.04*   1.49    2.17    1.02    5.15 
   R-ROLE-5 ENERGY ammo feasible d15                2.00 OK          Arc Cannon in S3 (CELLS per floor 7.0)
   R-ROLE-1 RAIL niche d15                          6.95 OK          best in S4; margin = best BALLISTIC / class best
   R-ROLE-3 RAIL scenarios best d15                 2.00 OK          of 8
-  R-ROLE-5 RAIL ammo feasible d15                  1.00 OK          Railgun in S1 (SLUGS per floor 2.9)
+  R-ROLE-5 RAIL ammo feasible d15                  1.00 OK          Railgun in S4 (SLUGS per floor 2.9)
   R-ROLE-1 FIRE niche d15                          3.95 OK          best in S5; margin = best BALLISTIC / class best
   R-ROLE-3 FIRE scenarios best d15                 1.00 OK          of 8
   R-ROLE-5 FIRE ammo feasible d15                  3.00 OK          Incinerator in S5 (CELLS per floor 7.0)
@@ -1563,7 +1567,7 @@ CHANGELOG
     pierce); barrels hit as EXPLOSIVE, fire tiles as FIRE, a weapon-applied burn pre-multiplies its
     per-turn magnitude by the applying weapon's matchup, and the Arc Cannon's chain leaps never drop
     below neutral (W5). TP pricing is TRAIT-AWARE IN MECHANISM (R-ENEMY re-statement above) but
-    MATCHUP_TP_REFERENCE_WEIGHT SHIPS AT 0 — a DELIBERATE TEMPORARY STATE (made a DECISION at CP7), so every TP/XP/budget
+    MATCHUP_TP_REFERENCE_WEIGHT SHIPS AT 0 — a DECISION (CP7; temporary at CP2, decided once measured), so every TP/XP/budget
     number is unchanged. WHY 0: at any w > 0 (0.1..0.75 tried) the only enforced read that moved was
     S-SUPPLY's TACTICAL COMBAT exit health (0.82-0.87 vs its 0.80 cap; 0.78 at w = 0), measured on a
     policy that never switches weapons and stalls ~80% of runs on floor 1 — the planner swaps pricier

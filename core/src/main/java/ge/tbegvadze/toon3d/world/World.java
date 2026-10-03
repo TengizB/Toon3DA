@@ -3341,15 +3341,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * The rest of the tutorial (order-5): each control taught by one ORA line, the first time that
-     * control is genuinely useful — an empty magazine, real damage with a medkit in the bag, a second
-     * gun, something worth stashing.  Asking every frame is free: each row is one-shot for the life
-     * of the save, so after a player's first hour this method never produces anything again.
-     *
-     * <p>Deliberately NOT "teach everything at the start": six lines at once is a manual, and a
-     * manual is the thing this game replaced with a voice.
-     */
-    /**
      * C4 SWITCH HINT (balance-overhaul order 3): once per frame, with the player idle, find the awake
      * enemy in the facing lane and ask {@link MatchupAdvisor} whether a carried weapon answers it
      * better. The same answer drives the controller's direct-switch weapon and the touch button's
@@ -3402,6 +3393,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
     }
 
+    /**
+     * The rest of the tutorial (order-5): each control taught by one ORA line, the first time that
+     * control is genuinely useful — an empty magazine, real damage with a medkit in the bag, a second
+     * gun, something worth stashing.  Asking every frame is free: each row is one-shot for the life
+     * of the save, so after a player's first hour this method never produces anything again.
+     *
+     * <p>Deliberately NOT "teach everything at the start": six lines at once is a manual, and a
+     * manual is the thing this game replaced with a voice.
+     */
     private void requestControlHintBarks() {
         // reserveAmmo > 0 is doing real work: it is -1 for melee and for an empty hand (which have
         // nothing to reload) and 0 when the reserve is dry (nothing to reload WITH). Telling a player

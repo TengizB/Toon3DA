@@ -401,14 +401,6 @@ public abstract class Weapon implements WeaponProfile {
     }
 
     /**
-     * Arms this weapon's ARMOR_PIERCE Block-pierce on the given target for the whole fire
-     * activation, or clears it. All applyDamageTo() calls that resolve synchronously inside
-     * fire() (base hit, burst extras, resolver crit/execute/cleave bonuses) then bypass the
-     * armed fraction of the target's Block. Clearing (arm=false) restores full Block absorption
-     * so DoT ticks and barrel damage — which resolve outside the activation — are unaffected.
-     * No-op when the weapon lacks ARMOR_PIERCE or the target is null.
-     */
-    /**
      * Arms this weapon's {@link #damageClass()} on the target for the whole fire activation, or clears
      * it (balance-overhaul order 3, M3). Every applyDamageTo()/applyBurningStatus() call that resolves
      * synchronously inside fire() then takes this weapon's matchup; damage resolving outside an
@@ -419,6 +411,14 @@ public abstract class Weapon implements WeaponProfile {
         target.setActivationDamageClass(arm ? damageClass() : null);
     }
 
+    /**
+     * Arms this weapon's ARMOR_PIERCE Block-pierce on the given target for the whole fire
+     * activation, or clears it. All applyDamageTo() calls that resolve synchronously inside
+     * fire() (base hit, burst extras, resolver crit/execute/cleave bonuses) then bypass the
+     * armed fraction of the target's Block. Clearing (arm=false) restores full Block absorption
+     * so DoT ticks and barrel damage — which resolve outside the activation — are unaffected.
+     * No-op when the weapon lacks ARMOR_PIERCE or the target is null.
+     */
     protected void armBlockPierce(EnemyHitTarget target, boolean arm) {
         if (target == null || !hasAbility(WeaponAbility.ARMOR_PIERCE)) return;
         target.setActivationBlockPierce(arm ? abilityMagnitude(WeaponAbility.ARMOR_PIERCE) : 0f);

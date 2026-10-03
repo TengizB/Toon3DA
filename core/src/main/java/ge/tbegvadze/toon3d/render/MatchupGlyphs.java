@@ -128,9 +128,10 @@ public final class MatchupGlyphs {
             data[length++] = toX;     data[length++] = toY;
         }
 
-        void quad(float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3) {
-            triangle(x0, y0, x1, y1, x2, y2);
-            triangle(x0, y0, x2, y2, x3, y3);
+        void quad(float firstX, float firstY, float secondX, float secondY, float thirdX, float thirdY,
+                  float fourthX, float fourthY) {
+            triangle(firstX, firstY, secondX, secondY, thirdX, thirdY);
+            triangle(firstX, firstY, thirdX, thirdY, fourthX, fourthY);
         }
 
         void rect(float left, float bottom, float right, float top) {
@@ -141,23 +142,23 @@ public final class MatchupGlyphs {
         void arcBand(float centerX, float centerY, float innerRadius, float outerRadius,
                      float startRadians, float endRadians, int steps) {
             for (int step = 0; step < steps; step++) {
-                float angleA = startRadians + (endRadians - startRadians) * step / steps;
-                float angleB = startRadians + (endRadians - startRadians) * (step + 1) / steps;
-                quad(centerX + innerRadius * cos(angleA), centerY + innerRadius * sin(angleA),
-                     centerX + outerRadius * cos(angleA), centerY + outerRadius * sin(angleA),
-                     centerX + outerRadius * cos(angleB), centerY + outerRadius * sin(angleB),
-                     centerX + innerRadius * cos(angleB), centerY + innerRadius * sin(angleB));
+                float segmentStartRadians = startRadians + (endRadians - startRadians) * step / steps;
+                float segmentEndRadians = startRadians + (endRadians - startRadians) * (step + 1) / steps;
+                quad(centerX + innerRadius * cos(segmentStartRadians), centerY + innerRadius * sin(segmentStartRadians),
+                     centerX + outerRadius * cos(segmentStartRadians), centerY + outerRadius * sin(segmentStartRadians),
+                     centerX + outerRadius * cos(segmentEndRadians), centerY + outerRadius * sin(segmentEndRadians),
+                     centerX + innerRadius * cos(segmentEndRadians), centerY + innerRadius * sin(segmentEndRadians));
             }
         }
 
         /** Filled disc (fan) between two angles. */
         void fan(float centerX, float centerY, float radius, float startRadians, float endRadians, int steps) {
             for (int step = 0; step < steps; step++) {
-                float angleA = startRadians + (endRadians - startRadians) * step / steps;
-                float angleB = startRadians + (endRadians - startRadians) * (step + 1) / steps;
+                float segmentStartRadians = startRadians + (endRadians - startRadians) * step / steps;
+                float segmentEndRadians = startRadians + (endRadians - startRadians) * (step + 1) / steps;
                 triangle(centerX, centerY,
-                         centerX + radius * cos(angleA), centerY + radius * sin(angleA),
-                         centerX + radius * cos(angleB), centerY + radius * sin(angleB));
+                         centerX + radius * cos(segmentStartRadians), centerY + radius * sin(segmentStartRadians),
+                         centerX + radius * cos(segmentEndRadians), centerY + radius * sin(segmentEndRadians));
             }
         }
 

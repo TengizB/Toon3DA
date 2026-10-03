@@ -764,7 +764,7 @@ public final class BalanceSchema {
      *   <li>R-ROLE-3 NO DOMINANCE: no class best in more than ROLE_MAX_SCENARIOS_BEST scenarios.</li>
      *   <li>R-ROLE-4 RISK PAYS: every SPREAD weapon's sustained per-turn damage at 1-2 tiles is >=
      *       ROLE_RISK_PAYS_RATIO x the Assault Rifle's at 3 tiles (equal level and rarity, vs FLESH).</li>
-     *   <li>R-ROLE-5 AMMO FEASIBLE: every class clears its fastest-relative scenario with <= one average
+     *   <li>R-ROLE-5 AMMO FEASIBLE: every class clears its DECLARED niche (ROLE_DECLARED_NICHE_BY_CLASS) with <= one average
      *       COMBAT floor's planned supply of its ammo type.</li>
      * </ul>
      */
@@ -781,16 +781,8 @@ public final class BalanceSchema {
                 int bestCount = 0;
                 float bestMargin = 0f;
                 String nicheScenario = "none";
-                int closestIndex = -1;
-                float closestRatio = Float.POSITIVE_INFINITY;
                 for (int index = 0; index < scenarios.size(); index++) {
                     float classBest = table.classBest(damageClass, index);
-                    float overall = table.overallBest(index);
-                    if (!scenarios.get(index).bruiserCharge && !Float.isInfinite(classBest) && overall > 0f
-                            && classBest / overall < closestRatio) {
-                        closestRatio = classBest / overall;
-                        closestIndex = index;
-                    }
                     if (!table.isClassBest(damageClass, index)) continue;
                     bestCount++;
                     float ballisticBest = table.classBest(ballistic, index);
@@ -809,11 +801,12 @@ public final class BalanceSchema {
                 results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-3 " + damageClass + " scenarios best" + at,
                         bestCount, 0, BalanceConfig.ROLE_MAX_SCENARIOS_BEST,
                         bestCount <= BalanceConfig.ROLE_MAX_SCENARIOS_BEST, "of " + scenarios.size()));
-                if (closestIndex >= 0) {
-                    results.add(roleAmmoResult(table, damageClass, closestIndex, at));
+                String declaredNiche = BalanceConfig.ROLE_DECLARED_NICHE_BY_CLASS[damageClass.ordinal()];
+                if (declaredNiche != null) {
+                    results.add(roleAmmoResult(table, damageClass, scenarioIndex(declaredNiche), at));
                 } else {
                     results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-5 " + damageClass + " ammo feasible" + at,
-                            0f, 0f, 0f, false, "no weapon of the class clears any scenario on one floor's supply"));
+                            0f, 0f, 0f, false, "ranged class has no declared niche (ROLE_DECLARED_NICHE_BY_CLASS)"));
                 }
             }
             // A6: the Incinerator clears S2 (three on-curve chaff) in at most ROLE_INCINERATOR_S2_MAX_SPRAYS.

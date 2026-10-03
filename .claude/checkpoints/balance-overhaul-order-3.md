@@ -197,3 +197,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **CP7c next:** reviewer gate. Owner flags for the final report: A5 Gore Biter dies at 1 tile (mechanics proven
   on Shell Brute/Revenant); Chaingun ~2x AR per turn; bullet reserve 25 < AR clip 30; C3 glyph on slot strip (no
   right panel); FUEL -> CELLS; TP weight 0 (decision); desktop visual checks owed (A3, A4, A5, A6 in-game).
+- **CP7c reviewer round 1: PASS WITH FIXES** (report: scratchpad reviewer-verdict.md). Blocking fixed: (1) R-ROLE-5
+  now checks each class's DECLARED niche (`BalanceConfig.ROLE_DECLARED_NICHE_BY_CLASS`; RAIL -> S4, 1 slug vs 2.1/2.9
+  per floor) instead of the first closest-to-best scenario; (2) IMPLEMENTATION NOTE added to the idea file.
+  Non-blocking taken: ItemWindow Railgun range derived from the charge table (was "40-90"); stale FUEL /
+  applyBurningStatus / Railgun-waiver comments; orphaned Javadoc re-attached (World.updateMatchupHint,
+  Weapon.armDamageClass); MatchupGlyphs naming. Left, recorded in the note: C5 inventory rows, W3 BURNABLE-soldier
+  target, S-SWITCH take-rate lines pass by construction (only the hinted-floor count can fail). Gates after fixes:
+  core:test 453, only StoryBarkTest; balanceSim exit 0.

@@ -304,13 +304,13 @@ public final class WeaponConstants {
     public static final String  RAILGUN_FIRE_TEXTURE_PATH         = "textures/guns/railgun/railgun_fire.png";
     public static final String  RAILGUN_RELOAD_TEXTURE_PATH       = "textures/guns/railgun/railgun_reload.png";
 
-    // Incinerator — short-range cone flamethrower (FUEL ammo)
+    // Incinerator — short-range cone flamethrower (CELLS ammo; FIRE damage class)
     // Impact damage applied to every enemy in the cone on each spray.
     // Depth-3 (far-edge) tiles use FLAME_FALLOFF instead of FLAME_IMPACT_DAMAGE.
     // FLAME_DAMAGE_DROP_COEFF = 0.0: depth falloff is handled explicitly, not by the drop curve.
-    // Burn DoT constants (FLAME_BURN_*) drive the BURNING status applied to every enemy
-    // the cone hits — Incinerator.marchShot() calls EnemyHitTarget.applyBurningStatus(),
-    // which routes into StatusEffectController (StatusType.BURNING).
+    // Burn DoT constants (FLAME_BURN_*) drive the STACKING BURNING status applied to every enemy
+    // the cone hits — Incinerator.marchShot() calls EnemyHitTarget.applyBurningStack(), which
+    // routes into StatusEffectController.applyStacking (StatusType.BURNING, up to FLAME_BURN_MAX_STACKS).
     // Balance values (impact/falloff/burn/range/clip/ammo) live in BalanceConfig.
     public static final int     FLAME_IMPACT_DAMAGE        = BalanceConfig.FLAME_IMPACT_DAMAGE;
     public static final int     FLAME_FALLOFF              = BalanceConfig.FLAME_FALLOFF;

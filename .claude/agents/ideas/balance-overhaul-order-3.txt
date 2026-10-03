@@ -4,6 +4,27 @@ TITLE: Weapon Roles and Matchups — told to the player
 CREATED: 2026-09-30
 IMPLEMENTED: -
 ---
+IMPLEMENTATION NOTE (2026-10-03) — where the build diverges from this plan:
+  - A5: a 1-tile Shotgun hit (base 66 after the R-ROLE fit) KILLS a floor-1 Gore Biter, and knockback /
+    stagger skip dead targets, so A5 is shown on a Shell Brute (knocked back + STUNNED + turn skipped)
+    and a Revenant at 2 tiles (stagger, no knockback); no stagger at 3 tiles.
+  - C3: the HUD no longer has a right panel; the class glyph is drawn on the HUD slot strip for every
+    carried gun (equipped at full alpha).
+  - C5: STRONG VS / WEAK VS rows are on the weapon compare card (WeaponInspectOverlayRenderer) only,
+    not yet in the inventory overlay.
+  - A-1: there is no FUEL ammo — the Incinerator burns CELLS (1.0); the "FUEL banks ~1.5 floors" target
+    lands on CELLS. GRENADES = AmmoType.ROCKETS. ROCKETS / SLUGS caps re-fitted too.
+  - TP pricing: the trait-aware machinery is live but MATCHUP_TP_REFERENCE_WEIGHT ships at 0 (decision,
+    measured: w 0.25 / 0.5 push S-SUPPLY to 0.83 / 0.81), so the "R-ENEMY re-priced" override is dormant;
+    R8 / R-LADDER read neutralEffectiveHitPoints().
+  - R-ROLE: S4's representative is the Cinderforge Colossus (the Rimeshell window was too narrow); melee
+    classes are exempt from R-ROLE-1; R-ROLE-5 checks each class's DECLARED niche
+    (ROLE_DECLARED_NICHE_BY_CLASS); W3's "BURNABLE soldier TTK <= 0.8x AR" target has no scenario (S5 is a
+    group of three) and is not enforced.
+  - Bosses ignore shotgun stagger and knockback (the boss AI has no phase-transition hook).
+  - Sim: TACTICAL takes a found gun of a class its kit lacks (slotToReplaceForGroundWeapon). Planned-heal
+    re-fit SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70 keeps S-SUPPLY in band (0.78). A8 re-stated by D3.
+---
 
 Order 3 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on orders 1-2 (ladder, groups + supply planner). Does NOT depend on the
