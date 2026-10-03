@@ -72,7 +72,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
         DONE WHEN: A2, A5, A6 hold; both gates green.
 - [x] **CP4** — per-type ammo generosity in SupplyPlanner and re-fitted reserve caps.
       DONE WHEN: R-ROLE-5 + R-SUPPLY green; both gates green.
-- [ ] **CP5** — C1, C2, C3, C5 visuals.
+- [x] **CP5** — C1, C2, C3, C5 visuals.
       DONE WHEN: A3 holds (build green; desktop check owed if no display).
 - [ ] **CP6** — C4 switch hint + direct switch + MATCHUP teaching topic.
       DONE WHEN: A4, A7 hold; build + fast gate green.
@@ -150,3 +150,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   OWNER FLAG: bullet reserve 25 < AR clip 30 (scarce generalist, intended by A-1).
 - **CP4 gates:** core:test 453, only StoryBarkTest; balanceSim exit 0, S-SUPPLY 0.80 (AT the cap — any later
   start-kit buff owes the planned-heal re-fit in the same change). R-ROLE unchanged.
+- **CP5 handover:** `render/MatchupGlyphs` (`drawTrait` / `drawClass`, ShapeRenderer sink + Batch white-pixel
+  sink, x,y = bottom-left); `MatchupTable.bestClassAgainst(trait)`; Enemy cosmetic `matchupTint*/matchupWord*`
+  timers set in `recordMatchupHit`, decayed in `Enemy.advanceHitFlash`. C2 glyph left of bar (block number shifts
+  left). C3 on the HUD SLOT STRIP (no right panel exists) for every carried gun. C5 in
+  WeaponInspectOverlayRenderer (card 680 tall, origin y 20). `ImpactEventListener.onEnemyMatchupHit` still
+  unconsumed (harmless default). DESKTOP CHECK OWED (no display): glyph legibility at 9-16 units, compare-card row
+  spacing (~29 units). Build green; core:test 453, only StoryBarkTest.

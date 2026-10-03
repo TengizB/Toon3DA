@@ -280,3 +280,22 @@ KNOWN LIMITATIONS (v1)
 
 • Bars not shown for dormant enemies.  This is intentional design (see WHEN
   THE BAR IS VISIBLE), not a limitation.
+
+PART 3 — MATCHUP FEEDBACK (balance-overhaul order 3, C1 + C2)
+---------------------------------------------------------------
+TRAIT GLYPH (C2)   Every enemy whose EnemyTrait has a glyph (all but FLESH) draws it just LEFT of
+                   its bar: barLeft - gap - size, vertically centred. Size = clamp(barHeight x 2.2,
+                   9, 16) world units; hidden beyond 8 tiles. When a Block number is shown it moves
+                   further left, so the order is  [block] [glyph] [bar].  Colour = the class
+                   MatchupTable.bestClassAgainst(trait) (highest EFFECTIVE multiplier, ties to the
+                   lowest DamageClass ordinal); a trait no class is EFFECTIVE against draws neutral
+                   grey. Figures live in render/MatchupGlyphs (pre-built triangle lists, drawn
+                   through the bar pass's SpriteBatch white pixel — no extra begin/end, no alloc).
+                   Knobs: EnemyConstants.ENEMY_TRAIT_GLYPH_*.
+HIT WORDS (C1)     Every player hit sets Enemy.matchupTintSecondsRemaining / matchupTintOutcome
+                   (EnemyManager.recordMatchupHit): for 0.4 s the HP text is amber (EFFECTIVE), grey
+                   (RESISTED) or the normal white (NEUTRAL). The FIRST EFFECTIVE / RESISTED hit on each
+                   enemy also sets matchupWordSecondsRemaining: "WEAK POINT" / "RESISTED" above the bar
+                   (above the name tag when shown) for 0.8 s, fading over its last 0.25 s. Both timers
+                   decay in Enemy.advanceHitFlash. Words are pre-built GlyphLayouts. No numbers ever
+                   (AS5). Constants: EnemyConstants.ENEMY_MATCHUP_*.

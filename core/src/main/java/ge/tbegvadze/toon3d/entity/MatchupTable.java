@@ -29,6 +29,7 @@ public final class MatchupTable {
     private final MatchupOutcome[][] outcomeByTraitAndClass;
     private final List<List<EnemyTrait>> strongAgainstByClass;
     private final List<List<EnemyTrait>> weakAgainstByClass;
+    private final DamageClass[] bestClassByTrait;
 
     /**
      * @param rawByTraitAndClass  raw multipliers indexed [trait ordinal][class ordinal]; copied
@@ -69,6 +70,20 @@ public final class MatchupTable {
             strong.add(Collections.unmodifiableList(strongTraits));
             weak.add(Collections.unmodifiableList(weakTraits));
         }
+        this.bestClassByTrait = new DamageClass[traitCount];
+        for (EnemyTrait trait : EnemyTrait.values()) {
+            DamageClass best = null;
+            float bestMultiplier = 0f;
+            for (DamageClass damageClass : DamageClass.values()) {
+                if (outcomeByTraitAndClass[trait.ordinal()][damageClass.ordinal()] != MatchupOutcome.EFFECTIVE) continue;
+                float adjusted = multiplierByTraitAndClass[trait.ordinal()][damageClass.ordinal()];
+                if (best == null || adjusted > bestMultiplier) {   // strict: a tie keeps the lowest ordinal
+                    best = damageClass;
+                    bestMultiplier = adjusted;
+                }
+            }
+            bestClassByTrait[trait.ordinal()] = best;
+        }
         this.strongAgainstByClass = Collections.unmodifiableList(strong);
         this.weakAgainstByClass = Collections.unmodifiableList(weak);
     }
@@ -106,5 +121,13 @@ public final class MatchupTable {
     /** Traits this class is RESISTED by, in trait ordinal order. Unmodifiable, precomputed. */
     public List<EnemyTrait> weakAgainst(DamageClass damageClass) {
         return weakAgainstByClass.get(damageClass.ordinal());
+    }
+
+    /**
+     * The class with the highest EFFECTIVE multiplier against the trait (tie: lowest {@link DamageClass}
+     * ordinal), or {@code null} when no class is EFFECTIVE against it. The trait glyph's colour (C2).
+     */
+    public DamageClass bestClassAgainst(EnemyTrait trait) {
+        return bestClassByTrait[trait.ordinal()];
     }
 }

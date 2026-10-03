@@ -20,6 +20,12 @@ import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
+import ge.tbegvadze.toon3d.util.EnemyConstants;
+import ge.tbegvadze.toon3d.enemy.EnemyTrait;
+import ge.tbegvadze.toon3d.entity.DamageClass;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
+import ge.tbegvadze.toon3d.entity.MatchupTable;
+import java.util.List;
 
 import java.util.function.IntConsumer;
 
@@ -113,7 +119,9 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static final float STATS_TOP    = HEADER_Y;                          // 592
     private static final float STATS_BOTTOM = ABILITY_TOP;                       // 404
     private static final float COL_HEAD_BAND_H = 44f;                            // column-header row
-    private static final int   STAT_ROW_COUNT  = 4;
+    private static final int   STAT_ROW_COUNT  = 6;                            // 4 stats + STRONG VS + WEAK VS
+    private static final int   STRONG_ROW_INDEX = 4;
+    private static final int   WEAK_ROW_INDEX   = 5;
     // Stat column centres
     private static final float FOUND_COL_X  = CARD_X + 150f;                     // 340
     private static final float ACTIVE_COL_X = CARD_RIGHT - 150f;                 // 940
@@ -152,6 +160,7 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private final SpriteBatch   spriteBatch;
     private final BitmapFont    font;
     private final GlyphLayout   glyphLayout;
+    private final MatchupGlyphs matchupGlyphs = new MatchupGlyphs();
 
     // ── State (written by show()) ─────────────────────────────────────────────
     private boolean  visible        = false;
@@ -195,6 +204,10 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private int cachedActiveRange   = 0;
 
     private String cachedAbilityStrip = "";
+
+    // Damage class of each compared gun (null = no gun in that column) — drives the matchup rows (C5).
+    private DamageClass cachedFoundClass  = null;
+    private DamageClass cachedActiveClass = null;
 
     private String cachedConvertLabel = "CONVERT AMMO";
 
@@ -270,6 +283,8 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         cachedLevelTier  = "LV " + level + "  •  " + tier.displayName.toUpperCase();
 
         buildStatCache(groundRoll, arsenalWeapon, activeWeapon);
+        cachedFoundClass  = arsenalWeapon != null ? arsenalWeapon.damageClass() : null;
+        cachedActiveClass = activeWeapon  != null ? activeWeapon.damageClass()  : null;
         buildLevelHeads(level, arsenalWeapon, activeWeapon);
         buildAbilityStrip(groundRoll);
 
@@ -402,6 +417,10 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         shapeRenderer.rect(CARD_X, CARD_TOP - 5f, CARD_W, 5f); // slim tier stripe along the very top
         drawTierIconFilled(cachedTier, CARD_X + 40f, HEADER_Y + HEADER_H / 2f, 15f);
 
+        // STRONG VS / WEAK VS trait glyphs (C5) under each compared gun.
+        drawMatchupGlyphsFilled(cachedFoundClass,  FOUND_COL_X);
+        drawMatchupGlyphsFilled(cachedActiveClass, ACTIVE_COL_X);
+
         // Ability strip background
         shapeRenderer.setColor(ZONE_BG_COLOR);
         shapeRenderer.rect(CARD_X, ABILITY_Y, CARD_W, ABILITY_H);
@@ -429,6 +448,37 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         }
 
         shapeRenderer.end();
+    }
+
+    private float statBandCenter(int rowIndex) {
+        float rowsTop  = STATS_TOP - COL_HEAD_BAND_H;
+        float rowBandH = (rowsTop - STATS_BOTTOM) / STAT_ROW_COUNT;
+        return rowsTop - rowIndex * rowBandH - rowBandH / 2f;
+    }
+
+    /** Draws one column's STRONG VS and WEAK VS glyph rows (an empty row is drawn as a dash in the text pass). */
+    private void drawMatchupGlyphsFilled(DamageClass damageClass, float columnCenterX) {
+        if (damageClass == null) return;
+        MatchupTable table = MatchupCatalog.shared();
+        drawTraitGlyphRow(table.strongAgainst(damageClass), columnCenterX, statBandCenter(STRONG_ROW_INDEX), table);
+        drawTraitGlyphRow(table.weakAgainst(damageClass),   columnCenterX, statBandCenter(WEAK_ROW_INDEX),   table);
+    }
+
+    private void drawTraitGlyphRow(List<EnemyTrait> traits, float columnCenterX, float centerY, MatchupTable table) {
+        int count = traits.size();
+        if (count == 0) return;
+        float size = HudConstants.WEAPON_CARD_TRAIT_GLYPH_SIZE;
+        float step = size + HudConstants.WEAPON_CARD_TRAIT_GLYPH_GAP;
+        float left = columnCenterX - (count * size + (count - 1) * HudConstants.WEAPON_CARD_TRAIT_GLYPH_GAP) / 2f;
+        for (int traitIndex = 0; traitIndex < count; traitIndex++) {
+            EnemyTrait trait = traits.get(traitIndex);
+            DamageClass best = table.bestClassAgainst(trait);
+            float red   = best != null ? best.colorRed()   : EnemyConstants.ENEMY_TRAIT_GLYPH_NEUTRAL_RED;
+            float green = best != null ? best.colorGreen() : EnemyConstants.ENEMY_TRAIT_GLYPH_NEUTRAL_GREEN;
+            float blue  = best != null ? best.colorBlue()  : EnemyConstants.ENEMY_TRAIT_GLYPH_NEUTRAL_BLUE;
+            matchupGlyphs.drawTrait(shapeRenderer, trait, left + traitIndex * step, centerY - size / 2f, size,
+                    red, green, blue, 1f);
+        }
     }
 
     private void drawTierIconFilled(WeaponTier tier, float centerX, float centerY, float size) {
@@ -580,6 +630,24 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
         drawStatRow(rowsTop, rowBandH, 1, "CLIP",   cachedGroundClip,   cachedActiveClip,   false);
         drawStatRow(rowsTop, rowBandH, 2, "RELOAD", cachedGroundReload, cachedActiveReload, true);
         drawStatRow(rowsTop, rowBandH, 3, "RANGE",  cachedGroundRange,  cachedActiveRange,  false);
+
+        // Matchup rows (C5): words and glyphs only, never multipliers (AS5). Glyphs are drawn in the filled pass.
+        drawCentered(HudConstants.WEAPON_CARD_STRONG_VS_LABEL, CENTER_X, statBandCenter(STRONG_ROW_INDEX), FS_STAT, DIM_COLOR);
+        drawCentered(HudConstants.WEAPON_CARD_WEAK_VS_LABEL,   CENTER_X, statBandCenter(WEAK_ROW_INDEX),   FS_STAT, DIM_COLOR);
+        drawMatchupEmptyDashes(cachedFoundClass,  FOUND_COL_X);
+        drawMatchupEmptyDashes(cachedActiveClass, ACTIVE_COL_X);
+    }
+
+    /** A column with a gun but no trait in a row reads as a dash; a column with no gun stays blank. */
+    private void drawMatchupEmptyDashes(DamageClass damageClass, float columnCenterX) {
+        if (damageClass == null) return;
+        MatchupTable table = MatchupCatalog.shared();
+        if (table.strongAgainst(damageClass).isEmpty()) {
+            drawCentered(HudConstants.WEAPON_CARD_NO_MATCHUP_LABEL, columnCenterX, statBandCenter(STRONG_ROW_INDEX), FS_STAT, DIM_COLOR);
+        }
+        if (table.weakAgainst(damageClass).isEmpty()) {
+            drawCentered(HudConstants.WEAPON_CARD_NO_MATCHUP_LABEL, columnCenterX, statBandCenter(WEAK_ROW_INDEX), FS_STAT, DIM_COLOR);
+        }
     }
 
     private void drawStatRow(float rowsTop, float rowBandH, int rowIndex,

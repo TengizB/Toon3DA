@@ -764,6 +764,8 @@ public final class EnemyManager implements EnemyHitTarget {
     private void recordMatchupHit(Enemy enemy, MatchupOutcome outcome,
                                   float worldX, float worldY, float heightMultiplier) {
         enemy.lastHitMatchup = outcome;
+        enemy.matchupTintOutcome = outcome;
+        enemy.matchupTintSecondsRemaining = EnemyConstants.ENEMY_MATCHUP_TINT_SECONDS;
         if (outcome == MatchupOutcome.NEUTRAL) return;
         boolean firstOfKind;
         if (outcome == MatchupOutcome.EFFECTIVE) {
@@ -772,6 +774,10 @@ public final class EnemyManager implements EnemyHitTarget {
         } else {
             firstOfKind = !enemy.resistedMatchupWordShown;
             enemy.resistedMatchupWordShown = true;
+        }
+        if (firstOfKind) {
+            enemy.matchupWordOutcome = outcome;
+            enemy.matchupWordSecondsRemaining = EnemyConstants.ENEMY_MATCHUP_WORD_SECONDS;
         }
         if (impactEventListener != null) {
             impactEventListener.onEnemyMatchupHit(worldX, worldY, heightMultiplier, outcome, firstOfKind);

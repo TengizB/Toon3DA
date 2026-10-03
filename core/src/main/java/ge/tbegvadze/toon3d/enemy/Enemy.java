@@ -81,6 +81,14 @@ public class Enemy implements StatusHost {
     public int        stuckTurns         = 0;
     /** Wall-clock seconds remaining in the white hit-flash. Purely cosmetic — does not affect simulation. */
     public float      hitFlashTimerSeconds = 0f;
+    /** Seconds left tinting the HP text for the last player hit's matchup word (C1). Cosmetic only. */
+    public float      matchupTintSecondsRemaining = 0f;
+    /** The matchup word of the last player hit; read only while {@link #matchupTintSecondsRemaining} &gt; 0. */
+    public ge.tbegvadze.toon3d.entity.MatchupOutcome matchupTintOutcome = ge.tbegvadze.toon3d.entity.MatchupOutcome.NEUTRAL;
+    /** Seconds left floating the first-of-kind "WEAK POINT" / "RESISTED" word above the bar (C1). Cosmetic only. */
+    public float      matchupWordSecondsRemaining = 0f;
+    /** Which word floats; read only while {@link #matchupWordSecondsRemaining} &gt; 0. */
+    public ge.tbegvadze.toon3d.entity.MatchupOutcome matchupWordOutcome = ge.tbegvadze.toon3d.entity.MatchupOutcome.NEUTRAL;
     /** Wall-clock seconds remaining in the attack animation. Cosmetic only — never affects simulation. */
     public float      attackAnimTimerSeconds = 0f;
     /** Wall-clock seconds remaining in the pre-hit telegraph (same-turn flinch). Cosmetic only. */
@@ -853,6 +861,12 @@ public class Enemy implements StatusHost {
         if (hitFlashTimerSeconds > 0f) {
             hitFlashTimerSeconds -= deltaTime;
             if (hitFlashTimerSeconds < 0f) hitFlashTimerSeconds = 0f;
+        }
+        if (matchupTintSecondsRemaining > 0f) {
+            matchupTintSecondsRemaining = Math.max(0f, matchupTintSecondsRemaining - deltaTime);
+        }
+        if (matchupWordSecondsRemaining > 0f) {
+            matchupWordSecondsRemaining = Math.max(0f, matchupWordSecondsRemaining - deltaTime);
         }
     }
 
