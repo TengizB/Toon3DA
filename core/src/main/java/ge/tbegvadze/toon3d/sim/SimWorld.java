@@ -6,6 +6,7 @@ import java.util.List;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
 import ge.tbegvadze.toon3d.entity.AbilityResolver;
 import ge.tbegvadze.toon3d.entity.ArcCannon;
 import ge.tbegvadze.toon3d.entity.AssaultRifle;
@@ -157,6 +158,8 @@ public final class SimWorld implements LevelTransitionListener {
     private Boss                   floorBoss;
     private TickEventBus           tickEventBus;
     private PlayerController       playerController;
+    /** The C4 SWITCH hint's weapon this turn (null = no hint) — balance-overhaul order 3. */
+    private Weapon                 switchHintWeapon;
     private List<GroundItem>       groundItems = new ArrayList<>();
     private SimNavigator           navigator;
     private SimView                view;
@@ -184,6 +187,7 @@ public final class SimWorld implements LevelTransitionListener {
         // The same idempotent registry bootstraps World runs (route nodes, tileset art, rooms). The
         // render-side texture generators are deliberately NOT bootstrapped — no GL context here.
         RouteRegistries.bootstrap();
+        MatchupCatalog.bootstrap();
         TilesetRegistries.bootstrap();
         RoomBlueprints.bootstrap();
 
@@ -369,9 +373,26 @@ public final class SimWorld implements LevelTransitionListener {
                 playerStats.addCredits(Math.round(baseReward
                         * (1f + (dungeonDepth - 1) * GameBalance.CREDIT_DEPTH_SCALE))));
         enemyManager.setEmergencySupplyListener(() -> floorLedger.emergencySupplyFired = true);
+        // MATCHUP REPORT (balance-overhaul order 3): every landed player hit's damage, bucketed by the damage
+        // class the activation armed (EnemyManager's matchup step), plus — for a ladder probe — the hit's size.
+        enemyManager.setPlayerHitListener((enemyType, enemyMaxHealth, damage) -> {
+            ge.tbegvadze.toon3d.entity.DamageClass damageClass = enemyManager.getActivationDamageClass();
+            if (damageClass != null) floorLedger.damageByClass[damageClass.ordinal()] += damage;
+            if (settings.isLadderProbe()) {
+                ledger.ladderHitsToKillByRole.get(enemyType.role().ordinal()).add(enemyMaxHealth / (float) damage);
+            }
+        });
+        // ... and every non-NEUTRAL hit's M4 word, through the real C1 seam.
+        enemyManager.setImpactEventListener(new ge.tbegvadze.toon3d.entity.ImpactEventListener() {
+            @Override public void onEnemyHit(float worldX, float worldY, float heightMultiplier, int damageDealt) {}
+            @Override public void onEnemyKilled(float worldX, float worldY, float heightMultiplier, int killingBlowDamage) {}
+            @Override public void onEnemyMatchupHit(float worldX, float worldY, float heightMultiplier,
+                                                    ge.tbegvadze.toon3d.entity.MatchupOutcome outcome, boolean firstOfKind) {
+                if (outcome == ge.tbegvadze.toon3d.entity.MatchupOutcome.EFFECTIVE) floorLedger.effectiveHits++;
+                else if (outcome == ge.tbegvadze.toon3d.entity.MatchupOutcome.RESISTED) floorLedger.resistedHits++;
+            }
+        });
         if (settings.isLadderProbe()) {
-            enemyManager.setPlayerHitListener((enemyType, enemyMaxHealth, damage) ->
-                    ledger.ladderHitsToKillByRole.get(enemyType.role().ordinal()).add(enemyMaxHealth / (float) damage));
             enemyManager.setEnemyAttackListener(new ge.tbegvadze.toon3d.enemy.EnemyAttackListener() {
                 @Override public void onMeleeAttack(Enemy enemy) { pendingAttackerRole = enemy.type.role(); }
                 @Override public void onRangedAttack(Enemy enemy, int playerColumn, int playerRow) {
@@ -460,6 +481,7 @@ public final class SimWorld implements LevelTransitionListener {
         view      = new SimView(level, doorManager, enemyManager, player, itemInventory, this);
 
         floorLedger                      = new FloorLedger();
+        switchHintWeapon                 = null;
         floorLedger.depth                = currentDepth;
         floorLedger.bossFloor            = bossFloorController != null;
         floorLedger.playerLevelOnArrival = playerProgress.getPlayerLevel();
@@ -566,6 +588,8 @@ public final class SimWorld implements LevelTransitionListener {
             boolean threatWasTelegraphed = view.telegraphedThreatVisible();
             boolean inResourceCrisis     = isInResourceCrisis();
 
+            updateMatchupHint();
+            Weapon hintBeforeAction = switchHintWeapon;
             TouchAction action = policy.chooseAction(view);
             if (action == null || action == TouchAction.NONE) action = TouchAction.SKIP_TURN;
             int ammoBefore     = countAllAmmo();
@@ -574,6 +598,11 @@ public final class SimWorld implements LevelTransitionListener {
             int rowBefore      = view.playerTileRow();
 
             stepOneAction(action);
+            // S-SWITCH: a SWITCH tap taken while the C4 hint was up that landed on the hinted gun.
+            if (action == TouchAction.SWITCH_WEAPON && hintBeforeAction != null
+                    && inventory.getEquippedWeapon() == hintBeforeAction) {
+                floorLedger.matchupSwitches++;
+            }
 
             // A movement the game REFUSED (a keycard door with no key, an unmodelled blocker) leaves
             // the marine where it stood. Teach the navigator that tile so the policy re-routes instead
@@ -766,7 +795,13 @@ public final class SimWorld implements LevelTransitionListener {
                                                               : new ge.tbegvadze.toon3d.entity.AbilityInstance[0]);
         }
         if (existingSlot < 0) {
-            loadout.tryEquip(weapon);
+            if (!loadout.tryEquip(weapon)) {
+                // A full loadout: the policy may give up a slot for a new class (balance-overhaul order 3).
+                int replaced = policy.slotToReplaceForGroundWeapon(weapon, loadout, view);
+                if (replaced < 0) return;
+                loadout.removeSlot(replaced);
+                if (!loadout.tryEquip(weapon)) return;
+            }
             inventory.selectRangedActive();
             addStarterAmmoForWeapon(weapon);
         }
@@ -996,6 +1031,38 @@ public final class SimWorld implements LevelTransitionListener {
     int    getTurnsOnFloor()  { return turnsOnFloor; }
     boolean isBossFloor()     { return bossFloorController != null; }
     Weapon getEquippedWeapon() { return inventory.getEquippedWeapon(); }
+
+    /** The weapon the C4 SWITCH hint currently points at, or null (balance-overhaul order 3). */
+    Weapon switchHintWeapon() { return switchHintWeapon; }
+
+    /**
+     * The C4 SWITCH hint, computed exactly as World.updateMatchupHint does: the first alerted enemy in the
+     * facing lane within the equipped weapon's range (MatchupAdvisor.findTarget); if the equipped gun is
+     * RESISTED by it and a carried gun with ammo is EFFECTIVE, that gun (MatchupAdvisor.hintWeapon). Pushed
+     * into the real PlayerController, so a SWITCH tap jumps straight to it — the shipping semantics.
+     */
+    private void updateMatchupHint() {
+        Weapon equipped = inventory.getEquippedWeapon();
+        Weapon hint = null;
+        if (equipped != null && enemyManager != null && playerController != null && playerController.isIdle()) {
+            int stepColumn = Math.round(player.directionX);
+            int stepRow    = Math.round(player.directionY);
+            int column     = GameMath.worldToTile(player.positionX);
+            int row        = GameMath.worldToTile(player.positionY);
+            Enemy target = ge.tbegvadze.toon3d.entity.MatchupAdvisor.findTarget(enemyManager.getEnemies(), level,
+                    doorManager, column, row, stepColumn, stepRow, equipped.getEffectiveRange());
+            if (target != null) {
+                int distance = Math.abs(target.tileColumn - column) + Math.abs(target.tileRow - row);
+                hint = ge.tbegvadze.toon3d.entity.MatchupAdvisor.hintWeapon(equipped, inventory.getLoadout(),
+                        target.type.trait(), distance);
+            }
+        }
+        if (hint != null && hint != switchHintWeapon && floorLedger != null) {
+            floorLedger.hintEpisodes++;   // a hint appears (or points at a different gun): a new episode
+        }
+        switchHintWeapon = hint;
+        if (playerController != null) playerController.setSwitchHintWeapon(hint);
+    }
 
     /** The stairs-down tile of the current floor as {column, row}, or null when the floor has none. */
     int[] exitTile() { return exitTile; }

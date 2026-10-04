@@ -1,8 +1,29 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Combat
 TITLE: Weapon Roles and Matchups — told to the player
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-03
+---
+IMPLEMENTATION NOTE (2026-10-03) — where the build diverges from this plan:
+  - A5: a 1-tile Shotgun hit (base 66 after the R-ROLE fit) KILLS a floor-1 Gore Biter, and knockback /
+    stagger skip dead targets, so A5 is shown on a Shell Brute (knocked back + STUNNED + turn skipped)
+    and a Revenant at 2 tiles (stagger, no knockback); no stagger at 3 tiles.
+  - C3: the HUD no longer has a right panel; the class glyph is drawn on the HUD slot strip for every
+    carried gun (equipped at full alpha).
+  - C5: STRONG VS / WEAK VS rows are on the weapon compare card (WeaponInspectOverlayRenderer) only,
+    not yet in the inventory overlay.
+  - A-1: there is no FUEL ammo — the Incinerator burns CELLS (1.0); the "FUEL banks ~1.5 floors" target
+    lands on CELLS. GRENADES = AmmoType.ROCKETS. ROCKETS / SLUGS caps re-fitted too.
+  - TP pricing: the trait-aware machinery is live but MATCHUP_TP_REFERENCE_WEIGHT ships at 0 (decision,
+    measured: w 0.25 / 0.5 push S-SUPPLY to 0.83 / 0.81), so the "R-ENEMY re-priced" override is dormant;
+    R8 / R-LADDER read neutralEffectiveHitPoints().
+  - R-ROLE: S4's representative is the Cinderforge Colossus (the Rimeshell window was too narrow); melee
+    classes are exempt from R-ROLE-1; R-ROLE-5 checks each class's DECLARED niche
+    (ROLE_DECLARED_NICHE_BY_CLASS); W3's "BURNABLE soldier TTK <= 0.8x AR" target has no scenario (S5 is a
+    group of three) and is not enforced.
+  - Bosses ignore shotgun stagger and knockback (the boss AI has no phase-transition hook).
+  - Sim: TACTICAL takes a found gun of a class its kit lacks (slotToReplaceForGroundWeapon). Planned-heal
+    re-fit SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70 keeps S-SUPPLY in band (0.78). A8 re-stated by D3.
 ---
 
 Order 3 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
@@ -406,6 +427,12 @@ DECISIONS
       -> matchup table + five communication channels + ORA topic.  (2026-09-30)
   D2  Shotguns and the Incinerator must be worth using (owner, H1/H2) -> SPREAD
       and FIRE roles with R-ROLE niche guarantees.  (2026-09-30)
+  D3  A8's S-SWITCH re-stated (owner delegated the call to the hub, 2026-10-03): ">= 1.0 matchup
+      switches per COMBAT floor" measured 0.13 because the Chaingun + Shotgun start kit can only
+      answer CHITIN (take rate 1.00; 21 of 167 COMBAT floors showed a hint). The band now proves
+      the hint WORKS: >= 10 TACTICAL COMBAT floors show a hint, take rate >= 0.8, and >= 1.0
+      switches per COMBAT floor that showed a hint. The per-floor count stays reported, unbanded.
+      Changing the start kit was rejected: it would reopen orders 1-2's fitted bands. (2026-10-03)
 
 
 OPEN QUESTIONS

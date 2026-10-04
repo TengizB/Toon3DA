@@ -114,6 +114,64 @@ public final class PolicySummary {
         return floors == 0 ? Float.NaN : total / floors;
     }
 
+    /**
+     * S-SWITCH (balance-overhaul order 3): hint-driven SWITCH taps per played COMBAT floor (stalled floors
+     * included — a switch is a fight event, not a navigation one). NaN when no COMBAT floor was played.
+     */
+    public float meanMatchupSwitchesPerCombatFloor() {
+        int switches = 0;
+        int floors   = 0;
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (!"COMBAT".equals(floor.nodeType)) continue;
+                switches += floor.matchupSwitches;
+                floors++;
+            }
+        }
+        return floors == 0 ? Float.NaN : switches / (float) floors;
+    }
+
+    /** Hint take rate: hint-driven switches / hint episodes over every played floor (NaN when no hint). */
+    public float hintTakeRate() {
+        int switches = 0;
+        int episodes = 0;
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                switches += floor.matchupSwitches;
+                episodes += floor.hintEpisodes;
+            }
+        }
+        return episodes == 0 ? Float.NaN : switches / (float) episodes;
+    }
+
+    /** Hint-driven switches per COMBAT floor ON WHICH A HINT APPEARED (NaN when none did). */
+    public float matchupSwitchesPerHintedCombatFloor() {
+        int switches = 0;
+        int floors   = 0;
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (!"COMBAT".equals(floor.nodeType) || floor.hintEpisodes == 0) continue;
+                switches += floor.matchupSwitches;
+                floors++;
+            }
+        }
+        return floors == 0 ? Float.NaN : switches / (float) floors;
+    }
+
+    /** COMBAT floors played, and how many of them showed a C4 hint at least once. */
+    public int[] combatFloorsAndHintedCombatFloors() {
+        int combat = 0;
+        int hinted = 0;
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (!"COMBAT".equals(floor.nodeType)) continue;
+                combat++;
+                if (floor.hintEpisodes > 0) hinted++;
+            }
+        }
+        return new int[]{combat, hinted};
+    }
+
     /** S-SUPPLY: played floors whose reachable heal value fell short of their S4 heal floor. */
     public int floorsBelowHealFloor() {
         int count = 0;

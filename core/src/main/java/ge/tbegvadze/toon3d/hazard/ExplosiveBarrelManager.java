@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.hazard;
 
 import com.badlogic.gdx.math.MathUtils;
 import ge.tbegvadze.toon3d.entity.BarrelHitTarget;
+import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Player;
@@ -110,7 +111,15 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(blastColumn, blastRow);
                 if (enemy != null) {
+                    // AS6 (balance-overhaul order 3): a barrel blast is EXPLOSIVE against traits. A barrel
+                    // can detonate mid-activation (a shot into it), so restore whatever was armed.
+                    DamageClass previousClass = enemyHitTarget.getActivationDamageClass();
+                    boolean previousFloorNeutral = enemyHitTarget.isActivationMatchupFloorNeutral();
+                    enemyHitTarget.setActivationDamageClass(DamageClass.EXPLOSIVE);
+                    enemyHitTarget.setActivationMatchupFloorNeutral(false);
                     enemyHitTarget.applyDamageTo(enemy, EffectConstants.EXPLOSION_DAMAGE);
+                    enemyHitTarget.setActivationDamageClass(previousClass);
+                    enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
                 }
             }
 

@@ -1,5 +1,8 @@
 package ge.tbegvadze.toon3d.sim;
 
+import ge.tbegvadze.toon3d.entity.Loadout;
+import ge.tbegvadze.toon3d.entity.Weapon;
+
 import java.util.List;
 
 import ge.tbegvadze.toon3d.entity.WeaponRoll;
@@ -43,6 +46,15 @@ public interface PlayerPolicy {
      */
     default boolean acceptGroundWeapon(WeaponRoll groundRoll, WeaponRoll heldRoll, SimView view) {
         return true;
+    }
+
+    /**
+     * The loadout slot to give up for a NEW weapon type when every gun slot is full, or -1 to leave the
+     * weapon on the floor (balance-overhaul order 3, CP7). Default: -1 — the historic sim behaviour, where
+     * a full loadout simply could not take a found gun.
+     */
+    default int slotToReplaceForGroundWeapon(Weapon foundWeapon, Loadout loadout, SimView view) {
+        return -1;
     }
 
     /** Picks the next route node from the offered candidates. Default: the first candidate. */

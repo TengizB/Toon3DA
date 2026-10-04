@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.render.Renderable;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.TouchConstants;
 
 public final class TouchControllerRenderer implements Renderable, Disposable {
@@ -33,9 +34,12 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
 
     private final ShapeRenderer shapeRenderer;
     private final TouchButton[] buttons;
+    private final TouchInputState touchInputState;
     private boolean actionLocked;
+    private float switchHintClockSeconds;
 
     public TouchControllerRenderer(TouchInputState touchInputState) {
+        this.touchInputState = touchInputState;
         this.buttons       = touchInputState.getButtons();
         this.shapeRenderer = new ShapeRenderer();
     }
@@ -51,11 +55,21 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
+        boolean switchHintActive = touchInputState.isSwitchHintActive();
+        if (switchHintActive) {
+            switchHintClockSeconds += Gdx.graphics.getDeltaTime();
+        } else {
+            switchHintClockSeconds = 0f;
+        }
+
         for (TouchButton button : buttons) {
             if (!button.visible) continue;
             drawBody(button);
             drawBevel(button);
             drawIcon(button);
+            if (switchHintActive && button.action == TouchAction.SWITCH_WEAPON) {
+                drawSwitchHintOutline(button);
+            }
         }
 
         shapeRenderer.end();
@@ -94,6 +108,24 @@ public final class TouchControllerRenderer implements Renderable, Disposable {
         shapeRenderer.rect(x, y + radius, width, height - 2 * radius);
         shapeRenderer.arc(x + radius, y + radius,          radius, 180, 180); // bottom semicircle
         shapeRenderer.arc(x + radius, y + height - radius, radius,   0, 180); // top semicircle
+    }
+
+    /** Amber outline whose alpha pulses while the switch hint is active (cosmetic only). */
+    private void drawSwitchHintOutline(TouchButton button) {
+        float alpha = GameMath.pulseMultiplier(switchHintClockSeconds,
+            TouchConstants.SWITCH_HINT_PULSE_HERTZ,
+            TouchConstants.SWITCH_HINT_ALPHA_MINIMUM,
+            TouchConstants.SWITCH_HINT_ALPHA_MAXIMUM);
+        float thickness = TouchConstants.SWITCH_HINT_OUTLINE_THICKNESS;
+        float halfThickness = thickness / 2f;
+        float left = button.rectX, bottom = button.rectY;
+        float right = left + button.rectWidth, top = bottom + button.rectHeight;
+        shapeRenderer.setColor(TouchConstants.SWITCH_HINT_COLOR_RED,
+            TouchConstants.SWITCH_HINT_COLOR_GREEN, TouchConstants.SWITCH_HINT_COLOR_BLUE, alpha);
+        shapeRenderer.rectLine(left - halfThickness,  bottom, right + halfThickness, bottom, thickness);
+        shapeRenderer.rectLine(left - halfThickness,  top,    right + halfThickness, top,    thickness);
+        shapeRenderer.rectLine(left,  bottom, left,  top, thickness);
+        shapeRenderer.rectLine(right, bottom, right, top, thickness);
     }
 
     // -------------------------------------------------------------------------

@@ -913,6 +913,10 @@ final class ItemWindow implements Disposable {
         }
     }
 
+    /** Railgun charge-1 .. full-charge damage, derived from the charge table so it cannot drift from balance. */
+    private static final String RAILGUN_DAMAGE_RANGE_TEXT = WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[1] + "-"
+            + WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE.length - 1];
+
     private static String weaponDamage(ItemType itemType) {
         switch (itemType) {
             case WEAPON_SHOTGUN:       return String.valueOf(WeaponConstants.SHOTGUN_DAMAGE);
@@ -920,8 +924,8 @@ final class ItemWindow implements Disposable {
             case WEAPON_PLASMA:        return String.valueOf(WeaponConstants.PLASMA_RIFLE_DAMAGE);
             case WEAPON_CHAINGUN:      return WeaponConstants.CHAINGUN_DAMAGE + "/bolt";
             case WEAPON_ASSAULT_RIFLE: return WeaponConstants.ASSAULT_RIFLE_DAMAGE + "/round";
-            case WEAPON_RAILGUN:       return "40-90";
-            case WEAPON_INCINERATOR:   return WeaponConstants.FLAME_IMPACT_DAMAGE + "+" + WeaponConstants.FLAME_BURN_DAMAGE_PER_TURN + "/turn";
+            case WEAPON_RAILGUN:       return RAILGUN_DAMAGE_RANGE_TEXT;
+            case WEAPON_INCINERATOR:   return WeaponConstants.FLAME_IMPACT_DAMAGE + "+" + WeaponConstants.FLAME_BURN_DAMAGE_PER_STACK + "/turn";
             case WEAPON_ARC_CANNON:    return WeaponConstants.ARC_CANNON_DAMAGE + "+chain";
             case WEAPON_ROCKET:        return String.valueOf(WeaponConstants.GRENADE_SPLASH_DAMAGE);
             case WEAPON_FIST:          return "4";

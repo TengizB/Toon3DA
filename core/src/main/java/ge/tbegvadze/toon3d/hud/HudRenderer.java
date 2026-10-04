@@ -14,7 +14,9 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.Loadout;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
+import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.render.MatchupGlyphs;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.render.WeaponLevelTag;
 import ge.tbegvadze.toon3d.status.StatusEffect;
@@ -138,6 +140,7 @@ public class HudRenderer implements Renderable, Disposable {
     private float animationClockSeconds   = 0f;
 
     private String groundWeaponLabel = null;
+    private final MatchupGlyphs matchupGlyphs = new MatchupGlyphs();
 
     // Reusable scratch — no allocations inside render()
     private final StringBuilder stringBuilder = new StringBuilder(64);
@@ -666,6 +669,20 @@ public class HudRenderer implements Renderable, Disposable {
                 shapes.setColor(SLOT_EMPTY);
             }
             shapes.rect(slotPositionX, originY, slotBoxWidth, slotBoxHeight);
+
+            // Damage-class glyph (balance-overhaul order 3, C3): top row, right of the slot number, in the
+            // class colour — the equipped slot at full strength, the carried ones dimmed.
+            Weapon glyphWeapon = displaySlotWeapon(inventory, displayIndex);
+            if (glyphWeapon != null && !player.isDead()) {
+                DamageClass damageClass = glyphWeapon.damageClass();
+                matchupGlyphs.drawClass(shapes, damageClass,
+                        slotPositionX + HudConstants.HUD_CLASS_GLYPH_LEFT_INSET,
+                        originY + slotBoxHeight - HudConstants.HUD_CLASS_GLYPH_TOP_INSET
+                                - HudConstants.HUD_CLASS_GLYPH_SIZE,
+                        HudConstants.HUD_CLASS_GLYPH_SIZE,
+                        damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(),
+                        isActive ? 1f : HudConstants.HUD_CLASS_GLYPH_INACTIVE_ALPHA);
+            }
         }
     }
 

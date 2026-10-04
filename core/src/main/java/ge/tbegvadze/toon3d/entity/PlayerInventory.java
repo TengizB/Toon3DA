@@ -164,6 +164,19 @@ public class PlayerInventory {
     }
 
     /**
+     * Equips a specific carried ranged weapon directly (the C4 switch hint's jump). Leaves melee
+     * selection and selects the weapon's loadout slot. Returns false, changing nothing, when the
+     * weapon is not in the loadout.
+     */
+    public boolean selectLoadoutWeapon(Weapon weapon) {
+        int slotIndex = loadout.slotIndexOf(weapon);
+        if (slotIndex < 0) return false;
+        meleeSelected = false;
+        loadout.selectSlot(slotIndex);
+        return true;
+    }
+
+    /**
      * Clears all loadout slots without changing the arsenal or weapon configuration.
      * Used by the start room so the player begins completely unarmed.
      * Melee selection is cleared; the player starts without an active weapon.

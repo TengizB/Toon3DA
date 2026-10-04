@@ -57,6 +57,38 @@ public interface EnemyHitTarget {
     default void applyBurningStatus(Object enemy, int turns, int magnitudePerTurn) {}
 
     /**
+     * Adds one STACK of the Incinerator's burn (balance-overhaul order 3, W3): up to {@code maxStacks}
+     * stacks tick together, each {@code magnitudePerStack} per turn; a new stack refreshes the shared
+     * timer. Default: falls back to a plain (non-stacking) burn.
+     *
+     * @param enemy             the token returned by enemyAt()
+     * @param turns             burn duration in turns (refreshed by every stack)
+     * @param magnitudePerStack damage per turn per stack (before the matchup / fire resistance)
+     * @param maxStacks         stack cap
+     */
+    default void applyBurningStack(Object enemy, int turns, int magnitudePerStack, int maxStacks) {
+        applyBurningStatus(enemy, turns, magnitudePerStack);
+    }
+
+    /**
+     * Tries to STAGGER the enemy (balance-overhaul order 3, W1): its next committed action is cancelled
+     * and its intent reads STUNNED. The owner refuses bosses, an already-cancelled action, and a
+     * stagger two turns running. Default: no-op (false).
+     *
+     * @return true if the stagger landed
+     */
+    default boolean tryStaggerEnemy(Object enemy) { return false; }
+
+    /**
+     * Tries to knock the enemy one tile along (stepColumn, stepRow) — away from the player (W1). The
+     * owner refuses BOSS / MINI_ELITE targets and any wall, door, prop or occupied destination; hazard
+     * tiles are allowed. Default: no-op (false).
+     *
+     * @return true if the enemy moved
+     */
+    default boolean tryKnockbackEnemy(Object enemy, int stepColumn, int stepRow) { return false; }
+
+    /**
      * Applies (or refreshes) a VULNERABLE mark on the given enemy (strategy-combat-order-6): while it
      * lasts the target takes more damage from every incoming hit, and each application adds a stack up
      * to the balance-capped maximum. The "marking shot" setup — land a cheap mark, then dump the big
@@ -89,6 +121,29 @@ public interface EnemyHitTarget {
      * @param fraction fraction of the target's Block to bypass, in [0, 1]; 0 disarms
      */
     default void setActivationBlockPierce(float fraction) {}
+
+    /**
+     * Arms the DAMAGE CLASS (balance-overhaul order 3, M3) every applyDamageTo() / applyBurningStatus()
+     * call resolves with until it is cleared with null. Set by Weapon.fire() at the start of an
+     * activation (beside the Block pierce) and cleared at its end, so every synchronous hit of the
+     * activation — base shot, burst extras, resolver bonuses — takes the weapon's matchup. Barrels set
+     * EXPLOSIVE around their own blast and restore the previous value. Null = no matchup (1.0).
+     * Default: no-op; EnemyManager overrides to store it.
+     */
+    default void setActivationDamageClass(DamageClass damageClass) {}
+
+    /** The damage class currently armed by {@link #setActivationDamageClass}, or null. Default null. */
+    default DamageClass getActivationDamageClass() { return null; }
+
+    /**
+     * While armed, a matchup multiplier below 1.0 is raised to 1.0 (W5: the Arc Cannon's chain always
+     * does at least neutral damage, so it stays a group tool). Armed by ArcCannon around its chain
+     * leaps only. Default: no-op.
+     */
+    default void setActivationMatchupFloorNeutral(boolean floorNeutral) {}
+
+    /** Whether {@link #setActivationMatchupFloorNeutral} is currently armed. Default false. */
+    default boolean isActivationMatchupFloorNeutral() { return false; }
 
     /**
      * True when a live CRYSTAL SPIRE (grown by a Verdant Spiresower) occupies the given tile

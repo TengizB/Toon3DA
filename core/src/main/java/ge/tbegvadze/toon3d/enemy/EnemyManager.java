@@ -1,10 +1,13 @@
 package ge.tbegvadze.toon3d.enemy;
 
 import ge.tbegvadze.toon3d.door.DoorManager;
+import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
 import ge.tbegvadze.toon3d.entity.HazardIgniteTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Loadout;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
+import ge.tbegvadze.toon3d.entity.MatchupOutcome;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Player;
@@ -145,6 +148,15 @@ public final class EnemyManager implements EnemyHitTarget {
     // Armed to the ability magnitude by Weapon.fire() at activation start, cleared to 0 at its end,
     // so only weapon hits pierce Block — DoT ticks and barrel damage resolve with pierce == 0.
     private float activationBlockPierceFraction = 0f;
+    // Damage class of the current fire activation (balance-overhaul order 3, M3). Armed by Weapon.fire()
+    // at activation start, cleared to null at its end; barrels arm EXPLOSIVE around their blast. Null =
+    // no matchup (1.0) — enemy-turn damage, DoT ticks and anything outside an activation.
+    private DamageClass activationDamageClass = null;
+    // W5: while true, a matchup below 1.0 is raised to neutral (the Arc Cannon's chain leaps).
+    private boolean activationMatchupFloorNeutral = false;
+    // World turns taken by this manager (incremented at the top of takeTurn). The SPREAD stagger's
+    // no-chain rule compares it against Enemy.lastStaggeredTurn (balance-overhaul order 3, W1).
+    private int worldTurnIndex = 0;
     // Injected by World so melee kills can drop ammo matching the player's equipped ranged weapons.
     private Loadout loadout = null;
     /**
@@ -662,7 +674,21 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.facingColumn, enemy.facingRow, enemy.tileColumn, enemy.tileRow,
                 cachedPlayerColumn, cachedPlayerRow);
         float backstabMultiplier = GameMath.backstabDamageMultiplier(backstab, EffectConstants.BACKSTAB_DAMAGE_PERCENT);
-        totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier);
+        // MATCHUP (balance-overhaul order 3, M3): the activation's damage class against the target's trait,
+        // after the ladder and before Block/armour — one multiplier in the same step as WEAK/VULNERABLE/
+        // BACKSTAB. Null class (no activation) = 1.0; the Arc chain floors a RESISTED cell at neutral (W5).
+        MatchupOutcome matchupOutcome = MatchupOutcome.NEUTRAL;
+        float matchupMultiplier = 1f;
+        if (activationDamageClass != null) {
+            matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
+            matchupOutcome    = MatchupCatalog.shared().classify(activationDamageClass, enemy.type.trait());
+            if (activationMatchupFloorNeutral && matchupMultiplier < 1f) {
+                matchupMultiplier = 1f;
+                matchupOutcome    = MatchupOutcome.NEUTRAL;
+            }
+        }
+        totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier
+                * matchupMultiplier);
         if (playerHitListener != null && totalDamage > 0) {
             playerHitListener.onPlayerHitEnemy(enemy.type, enemy.maxHealth, totalDamage);
         }
@@ -695,6 +721,8 @@ public final class EnemyManager implements EnemyHitTarget {
             spawnShardAbsorbFeedback(enemy);
             return;   // the shard ate the whole hit: no hit flash, no damage number, no HP change
         }
+        // A shard-absorbed hit returned above: only a hit that reached the body reads as a matchup word.
+        recordMatchupHit(enemy, matchupOutcome, worldX, worldY, heightMultiplier);
         if (crustBefore > 0 && enemy.crustStacks == 0) {
             spawnCrustShatterFeedback(enemy, crustBefore, fullCrust);
         }
@@ -729,6 +757,54 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * Records the M4 word of a player hit on the enemy and, for a non-NEUTRAL hit, tells the impact
+     * listener (balance-overhaul order 3, C1). The "first of kind" flag latches once per enemy per word,
+     * so the presentation can float "WEAK POINT" / "RESISTED" exactly once. Cosmetic state only.
+     */
+    private void recordMatchupHit(Enemy enemy, MatchupOutcome outcome,
+                                  float worldX, float worldY, float heightMultiplier) {
+        enemy.lastHitMatchup = outcome;
+        enemy.matchupTintOutcome = outcome;
+        enemy.matchupTintSecondsRemaining = EnemyConstants.ENEMY_MATCHUP_TINT_SECONDS;
+        if (outcome == MatchupOutcome.NEUTRAL) return;
+        boolean firstOfKind;
+        if (outcome == MatchupOutcome.EFFECTIVE) {
+            firstOfKind = !enemy.effectiveMatchupWordShown;
+            enemy.effectiveMatchupWordShown = true;
+        } else {
+            firstOfKind = !enemy.resistedMatchupWordShown;
+            enemy.resistedMatchupWordShown = true;
+        }
+        if (firstOfKind) {
+            enemy.matchupWordOutcome = outcome;
+            enemy.matchupWordSecondsRemaining = EnemyConstants.ENEMY_MATCHUP_WORD_SECONDS;
+        }
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyMatchupHit(worldX, worldY, heightMultiplier, outcome, firstOfKind);
+        }
+    }
+
+    @Override
+    public void setActivationDamageClass(DamageClass damageClass) {
+        activationDamageClass = damageClass;
+    }
+
+    @Override
+    public DamageClass getActivationDamageClass() {
+        return activationDamageClass;
+    }
+
+    @Override
+    public void setActivationMatchupFloorNeutral(boolean floorNeutral) {
+        activationMatchupFloorNeutral = floorNeutral;
+    }
+
+    @Override
+    public boolean isActivationMatchupFloorNeutral() {
+        return activationMatchupFloorNeutral;
+    }
+
+    /**
      * Applies (or refreshes) a BURNING damage-over-time status on the given enemy.
      * Routed through the shared StatusEffectController so the burn ticks each world
      * turn, obeys per-enemy fire resistance/immunity, and attributes any DoT kill
@@ -737,8 +813,79 @@ public final class EnemyManager implements EnemyHitTarget {
     @Override
     public void applyBurningStatus(Object enemyObject, int turns, int magnitudePerTurn) {
         if (statusEffectController == null) return;
-        statusEffectController.apply((Enemy) enemyObject, StatusType.BURNING,
-                turns, magnitudePerTurn, this);
+        Enemy enemy = (Enemy) enemyObject;
+        statusEffectController.apply(enemy, StatusType.BURNING, turns,
+                matchedStatusMagnitude(enemy, magnitudePerTurn), this);
+    }
+
+    /**
+     * Adds one Incinerator burn STACK (balance-overhaul order 3, W3) through the controller's stacking
+     * rule: the stack count grows to {@code maxStacks}, every stack ticks the (largest applied) per-stack
+     * magnitude, and each new stack refreshes the shared timer. The per-stack magnitude takes the
+     * activation's matchup exactly like a plain burn.
+     */
+    @Override
+    public void applyBurningStack(Object enemyObject, int turns, int magnitudePerStack, int maxStacks) {
+        if (statusEffectController == null) return;
+        Enemy enemy = (Enemy) enemyObject;
+        statusEffectController.applyStacking(enemy, StatusType.BURNING, turns,
+                matchedStatusMagnitude(enemy, magnitudePerStack), maxStacks, this);
+    }
+
+    /**
+     * M3: status damage the player applies uses the class of the weapon that applied it — a per-turn
+     * magnitude is pre-multiplied by the activation's matchup (Incinerator = FIRE). No activation = as is.
+     */
+    private int matchedStatusMagnitude(Enemy enemy, int magnitudePerTurn) {
+        if (activationDamageClass == null) return magnitudePerTurn;
+        float matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
+        if (activationMatchupFloorNeutral) matchupMultiplier = Math.max(1f, matchupMultiplier);
+        return Math.max(1, Math.round(magnitudePerTurn * matchupMultiplier));
+    }
+
+    /**
+     * SPREAD STAGGER (balance-overhaul order 3, W1): the enemy's next committed action is cancelled —
+     * the same {@code skipNextAction} the R6 stun uses, consumed by phaseBExecute, which also loses a
+     * committed WIND_UP outright (the next COMMIT plans afresh). The intent is set to STUNNED NOW, so the
+     * icon the player reads for the coming turn is already the truth (the R6 status stun only reaches
+     * the intent at execution). Refused: a dead or not-yet-alerted enemy, a BOSS (boss choreography is
+     * owned by BossFloorController, which has no stagger hook — bosses ignore shotgun stagger), an
+     * action that is already cancelled, and a stagger within SHOTGUN_STAGGER_MIN_TURNS_BETWEEN world
+     * turns of the last one (no chaining two turns running).
+     */
+    @Override
+    public boolean tryStaggerEnemy(Object enemyObject) {
+        Enemy enemy = (Enemy) enemyObject;
+        if (!enemy.isAlive() || !enemy.isAlerted()) return false;
+        if (enemy instanceof Boss || enemy.type.role() == EnemyRole.BOSS) return false;
+        if (enemy.skipNextAction) return false;
+        if (worldTurnIndex - enemy.lastStaggeredTurn < BalanceConfig.SHOTGUN_STAGGER_MIN_TURNS_BETWEEN) return false;
+        enemy.skipNextAction     = true;
+        enemy.lastStaggeredTurn  = worldTurnIndex;
+        enemy.plannedAction.verb = IntentVerb.STUNNED;
+        enemy.notifyCommitted(IntentVerb.STUNNED);   // the existing intent pop marks the change
+        return true;
+    }
+
+    /**
+     * SPREAD KNOCKBACK (balance-overhaul order 3, W1): one tile along (stepColumn, stepRow), away from
+     * the player, through the Hammer's {@link #tryPushEnemy} path (bounds, walls, solid props, columns,
+     * spires, closed doors and other enemies all refuse it; hazard decal tiles are walkable, so a push
+     * into fire or toxin is allowed — that is the tactic). Additionally refused: BOSS and MINI_ELITE
+     * targets, and ANY door tile, open or not (EDGE CASES). An enemy mid-WIND_UP is simply relocated; its
+     * committed action re-validates from the new tile at execution (and a 1-tile hit also staggers it).
+     */
+    @Override
+    public boolean tryKnockbackEnemy(Object enemyObject, int stepColumn, int stepRow) {
+        Enemy enemy = (Enemy) enemyObject;
+        if (!enemy.isAlive()) return false;
+        if (enemy instanceof Boss) return false;
+        EnemyRole role = enemy.type.role();
+        if (role == EnemyRole.BOSS || role == EnemyRole.MINI_ELITE) return false;
+        int targetColumn = enemy.tileColumn + stepColumn;
+        int targetRow    = enemy.tileRow    + stepRow;
+        if (Level.isDoor(level.getCell(targetColumn, targetRow))) return false;
+        return tryPushEnemy(enemy, targetColumn, targetRow);
     }
 
     /**
@@ -814,6 +961,7 @@ public final class EnemyManager implements EnemyHitTarget {
         cachedPlayer       = player;
         cachedPlayerColumn = playerColumn;
         cachedPlayerRow    = playerRow;
+        worldTurnIndex++;
         rebuildOccupancy();
         phaseA(playerColumn, playerRow);
         phaseBExecute(playerColumn, playerRow, player);

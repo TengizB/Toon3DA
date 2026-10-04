@@ -12,6 +12,7 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -119,6 +120,18 @@ class BalanceSimTest {
     @Test
     void aWeaponThatNeverClimbsTheLadderEndsTheRunEarly() {
         assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_LAG));
+    }
+
+    /**
+     * S-SWITCH (balance-overhaul order 3, A8 re-stated by D3) — the C4 SWITCH hint works: enough COMBAT
+     * floors show one, TACTICAL takes it, and every hinted COMBAT floor yields a switch. Not waived.
+     */
+    @Test
+    void tacticalSwitchesWeaponsByMatchup() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_SWITCH);
+        assertEquals(3, results.size(), "S-SWITCH evaluates hinted floors, take rate and per-hinted-floor switches");
+        assertTrue(results.stream().noneMatch(result -> result.waived), "S-SWITCH is never waived");
+        assertBandsHold(results);
     }
 
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */

@@ -552,3 +552,46 @@ TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION (25% of reference eHP ≈ 51 dmg): no U
 may exceed it. The only big single hits (Shell Brute charge, boss slams) are telegraphed wind-ups;
 ranged attacks are "telegraphed" by the cardinal-line tell. See
 .claude/agents/ideas/balance_order_4_tactical_combat_depth.txt.
+
+
+ENEMY TRAITS AND MATCHUPS (balance-overhaul order 3)
+----------------------------------------------------
+Every EnemyFamily declares one enemy/EnemyTrait (EnemyFamily.trait()); EnemyType.trait() defaults
+to the family's and an archetype MAY override it (none does today). Bosses carry their family's.
+
+  ABERRATION -> FLESH     no glyph (neutral)  Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith, Corruptor (boss)
+  MACHINE    -> SHIELDED  hexagon             Acid Drone, Overseer (boss)
+  GOLEM      -> PLATED    square plate        Auric Sentinel, Cinderforge Colossus, Rimeshell Lancer,
+                                              Verdant Spiresower
+  UNDEAD     -> BURNABLE  flame               Ghoul, Crawler, Revenant, Vortex Eye, Blight Corruptor
+  INSECT     -> CHITIN    segmented arc       Shell Brute, Iron Stalker
+  DEMON      -> INFERNAL  horned ember        Void Shroud, Hell Baron (boss)
+
+APPLICATION POINT: EnemyManager.applyDamageTo multiplies the player's hit by
+MatchupCatalog.shared().multiplier(activation class, enemy.type.trait()) in the same step as Weak /
+Vulnerable / Backstab — after the weapon ladder, before Block and armour. The class is armed on the
+EnemyHitTarget by Weapon.fire() / MeleeWeapon.fire() (setActivationDamageClass) and cleared after;
+enemy-turn damage, DoT ticks and anything outside an activation take no matchup. Barrels arm
+EXPLOSIVE around their blast; fire hazard tiles scale their burn by FIRE; burn applied by a weapon is
+pre-multiplied by that weapon's matchup (min 1). The Arc Cannon's chain leaps never go below 1.0.
+>= 1.3 is EFFECTIVE, <= 0.8 RESISTED (classification drives every visual and the SWITCH hint).
+
+TP PRICING: EnemyType.neutralEffectiveHitPoints() (R8 hit bands, R-LADDER, card breakpoints) vs
+EnemyType.effectiveHitPoints() (TP, XP, encounter budget) = neutral / the generalist's weighted
+matchup; MATCHUP_TP_REFERENCE_WEIGHT ships at 0 (decision), so the two read the same today.
+
+STAGGER AND KNOCKBACK (SPREAD, entity/SpreadImpact):
+  - knockback: a hit at 1 tile pushes a non-BOSS, non-MINI_ELITE target one tile straight back
+    (EnemyManager.tryKnockbackEnemy -> the Hammer's tryPushEnemy path): refused by walls, solid
+    props, columns, spires, any door tile and other enemies; hazard decals allowed.
+  - stagger: a hit at <= 2 tiles cancels the target's next committed action — skipNextAction plus
+    plannedAction.verb = IntentVerb.STUNNED set immediately, so the intent icon is truthful during
+    the player's turn; phaseBExecute then skips the action exactly like the R6 stun. A committed
+    WIND_UP is lost, not delayed. Refused for bosses (no phase hook in BossFloorController), dead
+    or dormant enemies, an action already cancelled, and within SHOTGUN_STAGGER_MIN_TURNS_BETWEEN (2)
+    turns of the last stagger (EnemyManager.worldTurnIndex vs Enemy.lastStaggeredTurn).
+
+INCINERATOR BURN STACKS: each cone hit adds one stack (StatusEffectController.applyStacking) up to
+FLAME_BURN_MAX_STACKS (3); stacks share one timer (refreshed to the longer), a tick deals
+per-stack magnitude x stacks, and all expire together. Burn keeps ticking out of the cone, can kill
+(attributed to the player) and vanishes with the enemy.

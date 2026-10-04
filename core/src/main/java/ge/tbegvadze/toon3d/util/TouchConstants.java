@@ -52,4 +52,14 @@ public final class TouchConstants {
     public static final float PAUSE_BUTTON_SIZE         = 80f;
     public static final float PAUSE_BUTTON_CENTER_X     = 48f;
     public static final float PAUSE_BUTTON_CENTER_Y     = 336f;
+
+    // SWITCH-HINT outline (balance-overhaul order 3, C4): amber pulsing outline on the SWITCH WEAPON
+    // button while the switch hint is active.  Cosmetic only.
+    public static final float SWITCH_HINT_COLOR_RED         = 1.00f;
+    public static final float SWITCH_HINT_COLOR_GREEN       = 0.75f;
+    public static final float SWITCH_HINT_COLOR_BLUE        = 0.00f;
+    public static final float SWITCH_HINT_ALPHA_MINIMUM     = 0.4f;
+    public static final float SWITCH_HINT_ALPHA_MAXIMUM     = 1.0f;
+    public static final float SWITCH_HINT_PULSE_HERTZ       = 2f;
+    public static final float SWITCH_HINT_OUTLINE_THICKNESS = 4f;
 }

@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.enemy;
 
+import ge.tbegvadze.toon3d.entity.DamageClass;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BossBalance;
@@ -496,6 +498,16 @@ public enum EnemyType {
      */
     public abstract EnemyFamily family();
 
+    /**
+     * The matchup TRAIT this archetype presents to the player's damage (balance-overhaul order 3,
+     * rule M2) — the row of {@code entity/MatchupTable}. Defaults to {@code family().trait()}; an
+     * archetype may override it as data (none do today — AS1). Bosses inherit their family's trait
+     * through this default.
+     */
+    public EnemyTrait trait() {
+        return family().trait();
+    }
+
     // -------------------------------------------------------------------------
     // Tactical metadata (balance idea 4 — Tactical Combat Depth)
     // role() / positionalMultiplier() / attackCadenceTurns() feed the Threat-Point
@@ -641,13 +653,28 @@ public enum EnemyType {
     public int minSpawnDepth() { return 1; }
 
     /**
-     * This archetype's effective HP through the shared survivability primitive (order 5). With the
-     * default all-zero mitigation this equals raw {@code maxHealth()}; the flat-reduction term is priced
-     * against the player's sustained reference DPT (the same yardstick the TP survivalTurns uses).
+     * This archetype's MATCHUP-NEUTRAL effective HP through the shared survivability primitive (order 5).
+     * With the default all-zero mitigation this equals raw {@code maxHealth()}; the flat-reduction term is
+     * priced against the player's sustained reference DPT. This is the eHP a non-resisted weapon sees:
+     * the R8 hit bands and R-LADDER read it (balance-overhaul order 3 keeps both matchup-free).
      */
-    public float effectiveHitPoints() {
+    public float neutralEffectiveHitPoints() {
         return GameMath.enemyEffectiveHitPoints(maxHealth(), armorPool(), dodgeChance(),
                 flatReduction(), BalanceConfig.REFERENCE_PLAYER_DPT);
+    }
+
+    /**
+     * This archetype's PRICED effective HP — TRAIT-AWARE (balance-overhaul order 3, CP2): the neutral eHP
+     * divided by the reference generalist's (BALLISTIC) matchup against {@link #trait()}, blended toward
+     * neutral by {@code BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT}. Threat Points, XP, the encounter
+     * budget and survival turns all read this, so an armoured archetype costs what it takes to kill.
+     * Replaces the old "enemy eHP == raw HP" pricing assumption (see docs/game-balance-authority.txt).
+     */
+    public float effectiveHitPoints() {
+        float referenceMultiplier = GameMath.matchupReferenceMultiplier(
+                MatchupCatalog.shared().multiplier(DamageClass.BALLISTIC, trait()),
+                BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT);
+        return GameMath.traitAdjustedEnemyEffectiveHitPoints(neutralEffectiveHitPoints(), referenceMultiplier);
     }
 
     /**

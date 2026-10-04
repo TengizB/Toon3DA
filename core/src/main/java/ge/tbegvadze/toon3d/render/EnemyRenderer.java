@@ -16,10 +16,14 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
+import ge.tbegvadze.toon3d.enemy.EnemyTrait;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.enemy.IntentVerb;
 import ge.tbegvadze.toon3d.enemy.PlannedAction;
 import ge.tbegvadze.toon3d.enemy.SpecialAbility;
+import ge.tbegvadze.toon3d.entity.DamageClass;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
+import ge.tbegvadze.toon3d.entity.MatchupOutcome;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.status.StatusEffect;
@@ -141,6 +145,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final BitmapFont  nameTagFont;
     private final GlyphLayout nameTagLayout;
     private final GlyphLayout hpTextLayout;
+    // Matchup communication (balance-overhaul order 3): pre-built word layouts + shared glyph figures.
+    private final GlyphLayout matchupEffectiveWordLayout;
+    private final GlyphLayout matchupResistedWordLayout;
+    private final MatchupGlyphs matchupGlyphs = new MatchupGlyphs();
     // Line height of the name-tag font at its default scale — used to reserve on-screen headroom for
     // the floating UI cluster so it never clips off the top when an enemy is point-blank.
     private final float       nameTagLineHeight;
@@ -231,6 +239,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout        = new GlyphLayout();
         this.hpTextLayout         = new GlyphLayout();
+        this.matchupEffectiveWordLayout = new GlyphLayout();
+        this.matchupResistedWordLayout  = new GlyphLayout();
+        this.nameTagFont.getData().setScale(ENEMY_MATCHUP_WORD_FONT_SCALE);
+        this.matchupEffectiveWordLayout.setText(this.nameTagFont, ENEMY_MATCHUP_WORD_EFFECTIVE);
+        this.matchupResistedWordLayout.setText(this.nameTagFont, ENEMY_MATCHUP_WORD_RESISTED);
+        this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLineHeight    = this.nameTagFont.getLineHeight();
     }
 
@@ -1079,12 +1093,24 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     hpTextLayout.setText(nameTagFont, hpTextBuilder);
                     float hpTextX = barLeft + (barWidth  - hpTextLayout.width)  / 2f;
                     float hpTextY = barBottom + barHeight / 2f + hpTextLayout.height / 2f;
-                    nameTagFont.setColor(ENEMY_HP_TEXT_RED, ENEMY_HP_TEXT_GREEN, ENEMY_HP_TEXT_BLUE, 1f);
+                    Enemy hpTextEnemy = enemies.get(sortedIndices[sortedPosition]);
+                    if (hpTextEnemy.matchupTintSecondsRemaining > 0f
+                            && hpTextEnemy.matchupTintOutcome == MatchupOutcome.EFFECTIVE) {
+                        nameTagFont.setColor(ENEMY_MATCHUP_EFFECTIVE_RED, ENEMY_MATCHUP_EFFECTIVE_GREEN,
+                                ENEMY_MATCHUP_EFFECTIVE_BLUE, 1f);
+                    } else if (hpTextEnemy.matchupTintSecondsRemaining > 0f
+                            && hpTextEnemy.matchupTintOutcome == MatchupOutcome.RESISTED) {
+                        nameTagFont.setColor(ENEMY_MATCHUP_RESISTED_RED, ENEMY_MATCHUP_RESISTED_GREEN,
+                                ENEMY_MATCHUP_RESISTED_BLUE, 1f);
+                    } else {
+                        nameTagFont.setColor(ENEMY_HP_TEXT_RED, ENEMY_HP_TEXT_GREEN, ENEMY_HP_TEXT_BLUE, 1f);
+                    }
                     nameTagFont.draw(batch, hpTextLayout, hpTextX, hpTextY);
                     nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
                 }
 
                 Enemy tagEnemy = enemies.get(sortedIndices[sortedPosition]);
+                float wordBottomY = barBottom + barHeight + ENEMY_MATCHUP_WORD_GAP;
                 if (depth <= ENEMY_NAME_TAG_MAX_DISTANCE_TILES && !tagEnemy.nameTag.isEmpty()) {
                     nameTagLayout.setText(nameTagFont, tagEnemy.nameTag);
                     float tagX = barLeft + (barWidth - nameTagLayout.width) / 2f;
@@ -1092,6 +1118,43 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     resolveNameTagColor(tagEnemy.dungeonLevel, nameTagColor);
                     nameTagFont.setColor(nameTagColor);
                     nameTagFont.draw(batch, nameTagLayout, tagX, tagY);
+                    wordBottomY = tagY + ENEMY_MATCHUP_WORD_GAP;
+                }
+
+                // First-of-kind matchup word ("WEAK POINT" / "RESISTED"), above the bar and its name tag.
+                if (tagEnemy.matchupWordSecondsRemaining > 0f) {
+                    boolean wordEffective = tagEnemy.matchupWordOutcome == MatchupOutcome.EFFECTIVE;
+                    GlyphLayout wordLayout = wordEffective ? matchupEffectiveWordLayout : matchupResistedWordLayout;
+                    float wordAlpha = Math.min(1f, tagEnemy.matchupWordSecondsRemaining / ENEMY_MATCHUP_WORD_FADE_SECONDS);
+                    nameTagFont.getData().setScale(ENEMY_MATCHUP_WORD_FONT_SCALE);
+                    if (wordEffective) {
+                        nameTagFont.setColor(ENEMY_MATCHUP_EFFECTIVE_RED, ENEMY_MATCHUP_EFFECTIVE_GREEN,
+                                ENEMY_MATCHUP_EFFECTIVE_BLUE, wordAlpha);
+                    } else {
+                        nameTagFont.setColor(ENEMY_MATCHUP_RESISTED_RED, ENEMY_MATCHUP_RESISTED_GREEN,
+                                ENEMY_MATCHUP_RESISTED_BLUE, wordAlpha);
+                    }
+                    nameTagFont.draw(batch, wordLayout, barLeft + (barWidth - wordLayout.width) / 2f,
+                            wordBottomY + wordLayout.height);
+                    nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+                }
+
+                // Trait glyph (C2) at the bar's left end, in the colour of the class that is EFFECTIVE
+                // against the trait. The Block number (drawn further left) is shifted by the glyph's width.
+                float blockNumberShift = 0f;
+                EnemyTrait glyphTrait = tagEnemy.type.trait();
+                if (glyphTrait.hasGlyph() && depth <= ENEMY_TRAIT_GLYPH_MAX_DISTANCE_TILES) {
+                    float glyphSize = MathUtils.clamp(barHeight * ENEMY_TRAIT_GLYPH_BAR_HEIGHT_MULTIPLIER,
+                            ENEMY_TRAIT_GLYPH_MIN_SIZE, ENEMY_TRAIT_GLYPH_MAX_SIZE);
+                    DamageClass bestClass = MatchupCatalog.shared().bestClassAgainst(glyphTrait);
+                    float glyphRed   = bestClass != null ? bestClass.colorRed()   : ENEMY_TRAIT_GLYPH_NEUTRAL_RED;
+                    float glyphGreen = bestClass != null ? bestClass.colorGreen() : ENEMY_TRAIT_GLYPH_NEUTRAL_GREEN;
+                    float glyphBlue  = bestClass != null ? bestClass.colorBlue()  : ENEMY_TRAIT_GLYPH_NEUTRAL_BLUE;
+                    float glyphX = barLeft - ENEMY_TRAIT_GLYPH_BAR_GAP - glyphSize;
+                    float glyphY = barBottom + barHeight / 2f - glyphSize / 2f;
+                    matchupGlyphs.drawTrait(batch, whitePixelTexture, glyphTrait, glyphX, glyphY, glyphSize,
+                            glyphRed, glyphGreen, glyphBlue, 1f);
+                    blockNumberShift = glyphSize + ENEMY_TRAIT_GLYPH_BAR_GAP;
                 }
 
                 // Active-Block number (strategy-combat-order-3): the live shield value shown in
@@ -1102,7 +1165,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     hpTextBuilder.append(tagEnemy.block);
                     nameTagFont.getData().setScale(ENEMY_BLOCK_NUMBER_FONT_SCALE);
                     hpTextLayout.setText(nameTagFont, hpTextBuilder);
-                    float blockTextX = barLeft - ENEMY_BLOCK_NUMBER_BAR_GAP - hpTextLayout.width;
+                    float blockTextX = barLeft - blockNumberShift - ENEMY_BLOCK_NUMBER_BAR_GAP - hpTextLayout.width;
                     float blockTextY = barBottom + barHeight / 2f + hpTextLayout.height / 2f;
                     nameTagFont.setColor(ENEMY_BLOCK_NUMBER_RED, ENEMY_BLOCK_NUMBER_GREEN,
                             ENEMY_BLOCK_NUMBER_BLUE, 1f);

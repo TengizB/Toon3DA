@@ -259,3 +259,15 @@ Floor arrival: World.postThreatArrivalText() spawns the event text "THREAT LV d"
 (HudConstants.THREAT_ARRIVAL_PREFIX) for THREAT_ARRIVAL_SECONDS (2 s) in the region accent colour
 (THREAT_ARRIVAL_REGION_ACCENT), BEFORE the region-gate arrival lines so it stacks underneath them.
 EventTextSystem.spawnTimed() carries a per-slot lifetime for this.
+
+MATCHUP CLASS GLYPHS (balance-overhaul order 3, C3 + C5)
+---------------------------------------------------------
+SLOT STRIP   Each filled weapon slot draws its weapon's DamageClass glyph (render/MatchupGlyphs:
+             bullet, spread fan, bolt, rail line, flame, blast star, blade, hammer) in the class
+             colour, in the slot's top row right of the slot number — equipped slot full alpha,
+             carried slots 0.65, hidden when dead. (The idea said "right panel before the name";
+             the HUD no longer has a right panel, so the glyph rides the slot strip, on every
+             carried gun.) Constants: HudConstants.HUD_CLASS_GLYPH_*.
+COMPARE CARD WeaponInspectOverlayRenderer gains STRONG VS / WEAK VS rows (MatchupTable
+             strongAgainst / weakAgainst, multiplier >= 1.3 / <= 0.8) drawn as trait glyphs, "-"
+             when empty, no numbers. The card is 680 tall at origin y 20 to fit the two rows.

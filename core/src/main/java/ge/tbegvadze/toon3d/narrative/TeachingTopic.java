@@ -71,7 +71,11 @@ public enum TeachingTopic {
 
     // ---- balance-overhaul-order-1 R14 e ----
     /** The equipped weapon is two or more levels under the floor on arrival. Re-taught after 3 further floors started that far behind. */
-    UNDERGEARED(TeachingTier.TACTICAL, 3);
+    UNDERGEARED(TeachingTier.TACTICAL, 3),
+
+    // ---- balance-overhaul-order-3 C6 ----
+    /** The equipped weapon is RESISTED by what the player faces while a carried weapon would bite (the C4 switch hint). Re-taught after 3 hint episodes spent firing the resisted gun anyway. */
+    MATCHUP(TeachingTier.TACTICAL, 3);
 
     private final TeachingTier tier;
     private final int          reteachEvidenceThreshold;

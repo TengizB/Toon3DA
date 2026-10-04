@@ -65,6 +65,7 @@ public class PlayerController {
     private GameAudio               gameAudio                         = null;
     private Inventory               itemInventory                     = null;
     private Loadout                 loadout                           = null;
+    private Weapon                  switchHintWeapon                  = null; // C4 matchup hint (balance-overhaul order 3)
     private PlayerStats             playerStats                       = null;
     private List<GroundItem>        groundItems                       = Collections.emptyList();
 
@@ -733,12 +734,28 @@ public class PlayerController {
         }
     }
 
+    /**
+     * C4 (balance-overhaul order 3): the carried weapon the next SWITCH tap jumps straight to, or null
+     * to cycle as usual. Set by World each frame from {@code MatchupAdvisor}; read only when a tap is
+     * consumed, so a hint that appears mid-animation changes the NEXT tap and never a past one.
+     */
+    public void setSwitchHintWeapon(Weapon weapon) { this.switchHintWeapon = weapon; }
+
+    /** The current switch-hint weapon, or null. */
+    public Weapon getSwitchHintWeapon() { return switchHintWeapon; }
+
     private void trySwitchWeapon() {
         Weapon currentWeapon = inventory.getEquippedWeapon();
         if (currentWeapon instanceof Railgun) {
             ((Railgun) currentWeapon).resetCharge();
         }
-        Weapon nextWeapon = inventory.switchToNextWeapon();
+        Weapon nextWeapon;
+        if (switchHintWeapon != null && switchHintWeapon != currentWeapon
+                && inventory.selectLoadoutWeapon(switchHintWeapon)) {
+            nextWeapon = switchHintWeapon;   // direct jump to the matchup answer; still one switch
+        } else {
+            nextWeapon = inventory.switchToNextWeapon();
+        }
         if (nextWeapon == null || nextWeapon == currentWeapon) return;
         if (gameAudio != null) gameAudio.playUi(GameSoundId.WEAPON_SWITCH);
         if (weaponSwitchCallback != null) weaponSwitchCallback.run();

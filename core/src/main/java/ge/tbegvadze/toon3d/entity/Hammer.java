@@ -30,6 +30,8 @@ public final class Hammer extends MeleeWeapon {
 
     @Override public ItemType getItemType() { return ItemType.WEAPON_HAMMER; }
 
+    @Override public DamageClass damageClass() { return DamageClass.BLUNT; }
+
     @Override
     protected void onHit(Object target, EnemyHitTarget enemyHitTarget,
                          int targetColumn, int targetRow,

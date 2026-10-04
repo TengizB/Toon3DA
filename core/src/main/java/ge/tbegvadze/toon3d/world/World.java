@@ -174,6 +174,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     // Touch controller — null on desktop (platform-gated to touch screens)
     private TouchInputState         touchInputState;
+    // C4/C6 switch-hint episode tracking (balance-overhaul order 3)
+    private Weapon                  matchupHintEpisodeWeapon;
+    private int                     matchupHintEpisodeFireTurns;
     private TouchControllerRenderer touchControllerRenderer;
     private Viewport                gameViewport;
     private final Vector2           cardTouchPosition = new Vector2();
@@ -552,6 +555,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Route-map subsystem (order-3). bootstrap() is idempotent, so the death->new-run rebuild is
         // safe. The map itself is generated lazily at staging-room exit (see the FADING_OUT branch).
         RouteRegistries.bootstrap();
+        MatchupCatalog.bootstrap();   // balance-overhaul order 3: the class x trait matchup table
         // Tileset art catalog (symbol/sprite-reuse order-1). Idempotent, like RouteRegistries; nothing
         // reads it yet — it registers the complete inventory of today's wall/column/prop/decal art so
         // later orders' allocator + renderers can enumerate it instead of hardcoding a sprite list.
@@ -1493,6 +1497,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         tickEventBus.subscribe(context -> {
             runStats.recordTick();
             runStats.recordBossFloorTurn();
+            // C6 EVIDENCE: a FIRE turn spent with the matchup hint up and the resisted gun still in hand.
+            if (context.getCause() == TickCause.FIRE) countMatchupHintFireTurn();
         });
 
         // Story bark layer (order-2): the turn stream is where "a new enemy family woke up",
@@ -2480,6 +2486,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // THE COMPETENCE MODEL (narrative-rework order-4): its own clock and re-teach requests,
         // gated by the same combat-spike signal for its TACTICAL topics.
         teachingSystem.setCombatSpike(isCombatSpike());
+        updateMatchupHint();
         teachingSystem.update(deltaTime);
         archiveDeliveredStoryLine();
         requestCodexCompletionBarks();
@@ -3331,6 +3338,59 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // death and "checkpoint" for the one after that, so a new player is never handed the
         // machinery of the loop before they have felt it.
         StoryTermCatalog.requestNextIntro(barkSystem, BarkTrigger.RUN_START);
+    }
+
+    /**
+     * C4 SWITCH HINT (balance-overhaul order 3): once per frame, with the player idle, find the awake
+     * enemy in the facing lane and ask {@link MatchupAdvisor} whether a carried weapon answers it
+     * better. The same answer drives the controller's direct-switch weapon and the touch button's
+     * pulse flag. The hint clears itself the moment the target dies, leaves the lane or the player
+     * switches - recomputation finds no target / no resisted weapon. Also feeds C6: the first
+     * RESISTED hit with a hint up teaches MATCHUP, and a hint EPISODE that sees the resisted gun
+     * fired three turns running is one piece of re-teach evidence.
+     */
+    private void updateMatchupHint() {
+        if (playerController == null || !playerController.isIdle()) return;
+        Weapon equipped = inventory.getEquippedWeapon();
+        Weapon hintWeapon = null;
+        Enemy  target     = null;
+        if (equipped != null && enemyManager != null) {
+            int stepColumn = Math.round(player.directionX);
+            int stepRow    = Math.round(player.directionY);
+            int column     = getPlayerTileColumn();
+            int row        = getPlayerTileRow();
+            target = MatchupAdvisor.findTarget(enemyManager.getEnemies(), level, doorManager,
+                    column, row, stepColumn, stepRow, equipped.getEffectiveRange());
+            if (target != null) {
+                int distance = Math.abs(target.tileColumn - column) + Math.abs(target.tileRow - row);
+                hintWeapon = MatchupAdvisor.hintWeapon(equipped, inventory.getLoadout(),
+                        target.type.trait(), distance);
+            }
+        }
+        playerController.setSwitchHintWeapon(hintWeapon);
+        if (touchInputState != null) touchInputState.setSwitchHintActive(hintWeapon != null);
+        if (hintWeapon == null) {
+            matchupHintEpisodeFireTurns = 0;
+            matchupHintEpisodeWeapon    = null;
+            return;
+        }
+        if (matchupHintEpisodeWeapon != equipped) {   // a new episode (or a different resisted gun)
+            matchupHintEpisodeWeapon    = equipped;
+            matchupHintEpisodeFireTurns = 0;
+        }
+        if (target.lastHitMatchup == MatchupOutcome.RESISTED) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, TeachingTopic.MATCHUP.getSubjectKey());
+        }
+    }
+
+    /** One FIRE turn with the hint up; the third in an episode is a single point of MATCHUP re-teach evidence. */
+    private void countMatchupHintFireTurn() {
+        if (matchupHintEpisodeWeapon == null || playerController.getSwitchHintWeapon() == null) return;
+        if (matchupHintEpisodeWeapon != inventory.getEquippedWeapon()) return;
+        matchupHintEpisodeFireTurns++;
+        if (matchupHintEpisodeFireTurns == StoryUiConstants.STORY_MATCHUP_HINT_EPISODE_FIRE_TURNS) {
+            teachingSystem.onMatchupHintIgnored();
+        }
     }
 
     /**

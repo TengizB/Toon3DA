@@ -163,7 +163,12 @@ All in util/GameMath.java. Everything else is derived from these four.
      - Dodge multiplies survivability by 1/(1 - dodge) (a dodged hit deals 0).
      - Flat reduction: each landed hit of size H only removes (H - R).
      Canonical start (130 HP, 75 armour, 0 dodge, 0 R) -> 205 eHP (the reference).
-     RULE: enemies currently have NO dodge/reduction, so enemy eHP == raw HP.
+     RULE: enemies currently have NO dodge/reduction, so NEUTRAL enemy eHP == raw HP
+     (EnemyType.neutralEffectiveHitPoints). Balance-overhaul order 3 (CP2) added the PRICED
+     eHP (EnemyType.effectiveHitPoints) = neutral eHP / (1 + w x (m_BALLISTIC,trait - 1)),
+     w = BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT — TP, XP and the encounter budget read the
+     priced value; the R8 hit bands and R-LADDER read the neutral one. w ships at 0 (a DECISION
+     of order 3 CP7 — w 0.25 / 0.5 put S-SUPPLY at 0.83 / 0.81), so priced == neutral today.
 
 2. DPT — DAMAGE PER TURN
      BURST DPT   = damage of one fire action (one turn).
@@ -186,8 +191,9 @@ All in util/GameMath.java. Everything else is derived from these four.
      TP is the currency the floor encounter budget spends.
 
 DERIVED SCORES:
-  weaponPowerScore = sustainedEffectiveDPT * sqrt(ammoEfficiency / 40)
-                                             GameMath.weaponPowerScore(...)
+  R-ROLE scenario turns-to-clear              GameMath.roleScenarioClear(...)
+    (balance-overhaul order 3 — replaced weaponPowerScore = sustDPT * sqrt(ammoEff/40),
+     deleted with R-WEAPON; see SECTION 4)
   goldenRatio      = turnsToDie / turnsToKill          GameMath.goldenRatio(...)
   depthThreatScale = healthScale^(d-1) * damageScale^(d-1)
                                              GameMath.depthThreatScale(...)
@@ -260,19 +266,27 @@ SECTION 4 — PLAYER OFFENSE: WEAPONS (the player's side of TTK)
 File: BalanceConfig SECTION 4. Each weapon: damage, clip, range, falloff
 (dropCoeff = per-tile damage decay), reload ticks. Melee weapons swing once/turn.
 
-RANGED (current stat blocks; per-shot damage / clip / range / reloadTicks):
-  Shotgun            44 / 1  / 5  / 1   (burst; 1-shell identity)
-  Double-Barrel      32 / 2  / 4  / 1
-  Plasma Rifle       28 / 4  / 8  / 1   (piercing)
-  Chaingun           19 / 24 / 8  / 1   (sustained fire workhorse)
-  Assault Rifle      20 / 30 / 10 / 1   (precision workhorse)
-  Railgun     {0,40,90} / 1 / 16 / 2    (charge-up infinite-pierce sniper)
-  Incinerator   impact 8 + falloff 5, burn DoT / clip 30 / range 3 / reload 1
-  Grenade Launcher  splash 42 / falloff 22 / self 24 / clip 3 / range 6 / reload 2
+RANGED (current stat blocks; per-shot damage / clip / range / reloadTicks; DamageClass —
+balance-overhaul order 3 fitted the numbers under R-ROLE, see below):
+  Shotgun            66 / 1  / 5  / 1   SPREAD    falloff TABLE by tile 1.00/0.85/0.55/0.30/0.15;
+                                                  knockback at 1 tile, stagger at <= 2 (not two
+                                                  turns running; bosses immune; the STUNNED intent)
+  Double-Barrel      59 / 2  / 4  / 1   SPREAD    both barrels in ONE action (built-in BURST_FIRE),
+                                                  table 1.00/0.85/0.55/0.30, same knockback/stagger
+  Plasma Rifle       28 / 4  / 8  / 1   ENERGY    (piercing)
+  Chaingun           19 / 24 / 8  / 1   BALLISTIC (3-round action: 3 hits, 3 bullets per turn)
+  Assault Rifle      20 / 30 / 10 / 1   BALLISTIC (precision workhorse; the R-LADDER reference)
+  Railgun     {0,40,75} / 1 / 16 / 2    RAIL      (charge-up infinite-pierce sniper)
+  Incinerator   impact 12 + edge 8 / clip 30 (3 fuel a spray) / range 3 / reload 1   FIRE
+                BURN STACKS up to 3 per target, each FLAME_BURN_FRACTION (0.6) x the ladder-
+                scaled impact per turn for 4 turns; keeps ticking out of the cone
+  Grenade Launcher  splash 36 / neighbours 32 / self 24 / clip 3 / range 6 / reload 2   EXPLOSIVE
                     (contact fuse at any range; self 24 ONLY when it detonates on an
                      enemy on the adjacent cell)
-  Arc Cannon         28 / 7  / 7  / 2   (chain-lightning: leaps to 3 more targets
-                                         at 0.6^n; the lateral chain is uncredited)
+  Arc Cannon         40 / 7  / 7  / 2   ENERGY    (chain-lightning: leaps to 3 more targets
+                                         at 0.6^n, never below neutral matchup)
+  Every player hit takes the MATCHUP (class x trait, BalanceConfig SECTION 22) after the ladder,
+  before Block; barrels hit as EXPLOSIVE, fire tiles as FIRE.
 
 MELEE (BalanceConfig SECTION 4 / GameBalance):
   Fist 6 | Combat Knife 12 | Chainsaw 18 | Hammer 20
@@ -296,21 +310,45 @@ GLOBAL WEAPON KNOBS (BalanceConfig SECTION 4):
   threat level (Weapon.setFloorThreatLevel) every frame.
   Railgun-specific: RAILGUN_DAMAGE_MIN_MULTIPLIER=0.70, RAILGUN_DROP_COEFF=0.02.
 
-WEAPON POWER BANDS (weaponPowerScore MUST land in the band for its role;
-BalanceConfig SECTION 9; evaluated at LEVEL 1 COMMON — rarity now multiplies damage
-(balance-overhaul order 1) on top of its ability budget, and the ladder multiplies every
-role the same way, so the role SHAPE is level-independent):
-  sidearm 8–14 | workhorse 12–18 | burst/specialist 18–26 | heavy/charge 24–32
-  Current scores (from the living table): Shotgun 23.1, DblSG 19.1, Plasma 18.7,
-  AssaultRifle 13.7, Chaingun 12.6, Railgun(full) 45.0 (OVER — intentional
-  scarcity-gated exception), Grenade 25.8, Arc Cannon 18.2.
+WEAPON ROLES — R-ROLE (balance-overhaul order 3; REPLACED the weaponPowerScore bands
+sidearm 8-14 | workhorse 12-18 | burst 18-26 | heavy 24-32 and the Railgun's scarcity waiver):
+  util/WeaponRoleModel plays eight reference scenarios (trait x group x engagement band, plus a
+  charging bruiser) for the ON-CURVE player at depths 5 and 15 (GameMath.roleScenarioClear /
+  roleScenarioBruiserHitsTaken). Every ranged class but BALLISTIC must be the best answer in at
+  least one scenario by >= 1.2x over the best BALLISTIC gun, no class best in more than two, the
+  generalist within 1.3x of the best on FLESH at range and never best vs SHIELDED/PLATED, every
+  SPREAD weapon's sustained 1-2-tile damage >= 2x the Assault Rifle's at 3, and every class's
+  answer affordable on one average floor's planned ammo. Melee (BLADE/BLUNT) is exempt.
+  Current niches: RAIL S1 (FLESH single at range) + S4 (PLATED tank), EXPLOSIVE S2 (FLESH pack),
+  ENERGY S3 (SHIELDED) + S7 (INFERNAL), FIRE S5 (BURNABLE pack), SPREAD S6 (CHITIN close) + S8
+  (charging bruiser). BALLISTIC is best nowhere and within 1.23x on S1 — the safe generalist.
+  Falloff is now credited over each scenario's engagement band (no longer at the muzzle).
 
-⚠️ Not-good note: the Railgun is DELIBERATELY out of band (power 45 vs cap 32).
-It is "held in check by slug scarcity, not raw damage" — but the scarcity model
-that is supposed to gate it (SECTION 12) is itself unproven and the credit half
-of the economy is not even implemented. So the Railgun is currently just
-over-powered in practice. Falloff is also credited at muzzle numbers, not at each
-weapon's real engagement band — another acknowledged approximation.
+MATCHUPS (balance-overhaul order 3) — damage class x enemy trait:
+  Every Weapon declares damageClass() (BALLISTIC rifle/chaingun, SPREAD shotguns, ENERGY plasma/arc,
+  RAIL, FIRE incinerator, EXPLOSIVE grenade, BLADE knife/chainsaw, BLUNT fist/hammer); every
+  EnemyFamily a trait (ABERRATION FLESH, MACHINE SHIELDED, GOLEM PLATED, UNDEAD BURNABLE, INSECT
+  CHITIN, DEMON INFERNAL; EnemyType.trait() may override, none do; bosses carry their family's).
+  The table (BalanceConfig SECTION 22 MATCHUP_ROW_*, registered by entity/MatchupCatalog):
+                 BALLISTIC SPREAD ENERGY RAIL FIRE EXPLOSIVE BLADE BLUNT
+    FLESH          1.0      1.0    1.0   1.0  1.0   1.0      1.0   1.0
+    SHIELDED       0.65     0.8    1.5   1.0  0.8   1.0      0.8   1.2
+    PLATED         0.55     0.8    0.9   1.4  0.6   1.3      0.6   1.4
+    BURNABLE       1.0      1.0    1.0   1.0  1.8   1.1      1.1   1.0
+    CHITIN         0.75     1.35   1.0   1.1  1.4   1.0      1.2   1.0
+    INFERNAL       1.0      1.1    1.35  1.0  0.3   0.9      1.0   1.0
+  >= 1.3 is EFFECTIVE, <= 0.8 RESISTED (M4). MATCHUP_STRENGTH 1.0 raises every cell to its power
+  (0 flattens all). Applied ONCE in EnemyManager.applyDamageTo, after the ladder and before Block;
+  barrels hit as EXPLOSIVE, fire tiles as FIRE, a weapon burn pre-multiplies its magnitude, and the
+  Arc's chain never drops below neutral. Trait-aware TP exists but is weighted 0 (see SECTION 2).
+  The sim plays it: TACTICAL takes the C4 SWITCH hint (S-SWITCH band, currently red — 0.12 switches
+  per COMBAT floor, an open owner question: the sim's Chaingun + Shotgun kit only answers CHITIN).
+
+⚠️ Not-good note: the Chaingun's three-round action sustains about TWICE the Assault Rifle's
+per-turn damage (it was scored per bullet under the old power score). R-ROLE-4 is measured
+against the Assault Rifle (W1's wording); the Chaingun stays the strongest BALLISTIC answer and
+is what R-ROLE-1's margins are taken against. Shells are thin (~3 per average COMBAT floor) —
+balance-overhaul order 3 CP4 re-fits per-type ammo generosity.
 
 
 ================================================================================
@@ -466,7 +504,10 @@ later tuning pass. That class of bug — content shipped before it is priced —
 recurring failure mode here. Assume other newer content may be un-priced too;
 always re-run BalanceReport's ENEMIES table after adding an archetype. Enemy eHP
 being exactly raw HP (no dodge/reduction) is also a simplification that breaks the
-moment an armoured archetype is added.
+moment an armoured archetype is added. (Balance-overhaul order 3 built the fix:
+TP can price the generalist's MATCHUP against the archetype's trait, so CHITIN / SHIELDED /
+PLATED archetypes would cost more Threat Points than their raw HP alone says — but its weight
+ships at 0 — a CP7 DECISION: any w > 0 pushed S-SUPPLY over its cap.)
 
 
 ================================================================================
@@ -693,7 +734,12 @@ ONE PIPELINE (S1). Every generator: layout + gate + stairs -> SupplySlotSurvey (
 THE PLAN, per floor:
   AMMO (S2)     roster eHP at depth x spec.ammoRatio (+ an ELITE vault share), priced per unit at the
                 on-curve hit growth; SUPPLY_CARRIED_SHARE 0.70 over the ammo types of the weapons the
-                player carries, 0.30 over the rest; whole boxes by largest remainder.
+                player carries, 0.30 over the rest, each share WEIGHTED by its A-1 generosity (bullets
+                0.8, shells 1.3, cells 1.0, rockets 1.0, slugs 0.9) and re-normalised so the total is
+                unchanged (balance-overhaul order 3); whole boxes by largest remainder.
+                SUPPLY_AVOIDANCE_FACTOR re-fit 0.55 -> 0.70 (order 3 CP7): the stronger start kit and
+                hint switching mean a competent player avoids more of a floor (S-SUPPLY 0.80 -> 0.78). Reserve caps bank
+                ~1.0 floor of bullets / slugs and ~1.5 of shells / cells / rockets (caps 25/11/27/21/7).
   HEALS (S3/S4) incoming = the roster's base DPT x the on-curve depth factor x SUPPLY_TURNS_ENGAGED_
                 PER_ENEMY x SUPPLY_AVOIDANCE_FACTOR, as a fraction of expected max HP; planned value =
                 incoming x (1 - spec.drainTarget), never below the HEAL FLOOR (0.45 max HP — one 'H') on
@@ -782,7 +828,9 @@ EffectConstants keeps re-export shims only).
   Rend/BLEED: 2/turn base (+0.5/level, cap 6), 4 turns.
   Incendiary/BURN: base = THE unified BURN_DAMAGE_PER_TURN (4/turn)
   (+0.5/level, cap 7), 3 turns (+1 on Incinerator).
-  Flamethrower burn: FLAME_BURN_DAMAGE_PER_TURN=6, 4 turns.
+  Flamethrower burn: STACKS up to FLAME_BURN_MAX_STACKS=3 per target, each stack
+  FLAME_BURN_FRACTION=0.6 x the ladder-scaled impact per turn (7 at depth 1), 4 turns
+  (shared timer refreshed by each spray; StatusEffectController.applyStacking).
   Stagger/STUN: STAGGER_STUN_DURATION=1.
   Shared: BURN 4/turn, POISON 2/stack (max 5), EMPOWERED +50%
   (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -25%, EXPOSED (ignore Block 1 hit),
@@ -864,7 +912,7 @@ Every balance formula is a pure static method with a Formula/Derivation/Edge-cas
 block. Key methods (never inline any of these — always call GameMath):
   Primitives:    effectiveHitPoints, sustainedDamagePerTurn, ammoEfficiency,
                  turnsToKill, threatPoints.
-  Derived:       weaponPowerScore, goldenRatio, depthThreatScale,
+  Derived:       roleScenarioClear (R-ROLE), goldenRatio, depthThreatScale,
                  ladderScale, levelGapMultiplier, rarityDamageMultiplier, weaponLadderDamage,
                  enemyHealthAtDepth/enemyDamageAtDepth, playerVitalityScale, fractionOfMaximum,
                  expectedPlayer/expectedPlayerAtDepth (util/ExpectedPlayer), expectedHitGrowthAtDepth,
@@ -952,10 +1000,10 @@ ceiling, of what needs refinement.
      applied on top of the depth curve; R-REGION gates it). A "lethal" region is now
      budgeted-ly lethal — it spends measurably more TP at the same depth — while
      per-fight depth-coupling still holds in every lane. (SECTION 16)
- 13. The Railgun is deliberately out of its power band, "gated by scarcity" that is
-     itself unproven — so it is effectively overpowered right now. (SECTION 4)
- 14. Falloff/engagement-band crediting for weapons uses muzzle numbers, not real
-     engagement distances — an acknowledged approximation. (SECTION 2, 4)
+ 13. [RESOLVED by balance-overhaul order 3] The Railgun's over-band waiver is deleted; it
+     is fitted (full charge 75) as the PLATED-tank / ranged-single niche under R-ROLE. (SECTION 4)
+ 14. [RESOLVED by balance-overhaul order 3] R-ROLE credits falloff over each scenario's
+     engagement band, not at the muzzle. (SECTION 2, 4)
 
 BOTTOM LINE: the balance model is a coherent, well-documented SKELETON with a solid
 math contract, but it is provisional throughout, unplaytested, incomplete in its

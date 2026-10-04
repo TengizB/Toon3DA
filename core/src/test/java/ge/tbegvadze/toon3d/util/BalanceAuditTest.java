@@ -37,10 +37,21 @@ class BalanceAuditTest {
                         + String.join("\n", violationLines));
     }
 
-    /** R-WEAPON: every registered ranged weapon's power score lands in its declared role band. */
+    /**
+     * R-ROLE (balance-overhaul order 3 — replaces R-WEAPON's power-score bands and the Railgun's
+     * scarcity waiver): every ranged class is the best answer somewhere and never everywhere, on the
+     * reference scenarios at depths 5 and 15 — niche, generalist bound, no dominance, risk pays, ammo
+     * feasible. Also pins that no WEAPON_ROLE result is ever waived (the Railgun waiver is gone, AS8).
+     */
     @Test
-    void weaponPowerScoresLandInRoleBands() {
-        assertNoViolations(BalanceSchema.weaponPowerResults());
+    void weaponRolesHoldOnTheReferenceScenarios() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.weaponRoleResults();
+        assertNoViolations(results);
+        assertTrue(BalanceSchema.activeWaivers().stream()
+                        .noneMatch(waiver -> waiver.kind == BalanceSchema.RuleKind.WEAPON_ROLE),
+                "R-ROLE carries no waiver");
+        assertTrue(results.stream().anyMatch(result -> result.subject.startsWith("R-ROLE-4")),
+                "R-ROLE-4 is evaluated for the SPREAD class");
     }
 
     /** R-ENEMY: every non-boss archetype's threat points land in its role band. */
@@ -301,8 +312,11 @@ class BalanceAuditTest {
 
     /**
      * Order-5 acceptance criterion (enemy eHP path): every archetype's eHP runs through the shared
-     * GameMath.effectiveHitPoints primitive via EnemyType.effectiveHitPoints() — no raw-HP shortcut. With
-     * today's all-zero mitigation the result still equals raw maxHealth, but through the one formula.
+     * GameMath.effectiveHitPoints primitive via EnemyType.neutralEffectiveHitPoints() — no raw-HP shortcut.
+     * With today's all-zero mitigation the result still equals raw maxHealth, but through the one formula.
+     * Balance-overhaul order 3 (CP2): the PRICED eHP (EnemyType.effectiveHitPoints, what TP/XP read) is
+     * that neutral eHP through GameMath.traitAdjustedEnemyEffectiveHitPoints at the generalist's
+     * weighted matchup — never a second hand-rolled formula.
      */
     @Test
     void enemyEffectiveHitPointsRunThroughTheSharedPrimitive() {
@@ -310,8 +324,15 @@ class BalanceAuditTest {
                 : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
             float viaPrimitive = GameMath.enemyEffectiveHitPoints(type.maxHealth(), type.armorPool(),
                     type.dodgeChance(), type.flatReduction(), BalanceConfig.REFERENCE_PLAYER_DPT);
-            assertTrue(Math.abs(type.effectiveHitPoints() - viaPrimitive) < 1e-3f,
+            assertTrue(Math.abs(type.neutralEffectiveHitPoints() - viaPrimitive) < 1e-3f,
                     () -> type.displayName() + " eHP must come from GameMath.enemyEffectiveHitPoints");
+            float referenceMultiplier = GameMath.matchupReferenceMultiplier(
+                    ge.tbegvadze.toon3d.entity.MatchupCatalog.shared().multiplier(
+                            ge.tbegvadze.toon3d.entity.DamageClass.BALLISTIC, type.trait()),
+                    BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT);
+            float priced = GameMath.traitAdjustedEnemyEffectiveHitPoints(viaPrimitive, referenceMultiplier);
+            assertTrue(Math.abs(type.effectiveHitPoints() - priced) < 1e-3f,
+                    () -> type.displayName() + " priced eHP must be the neutral eHP at the generalist's matchup");
         }
     }
 

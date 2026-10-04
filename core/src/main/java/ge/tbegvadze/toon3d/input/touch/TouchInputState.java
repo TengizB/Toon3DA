@@ -299,4 +299,10 @@ public final class TouchInputState extends InputAdapter implements ActionSource 
         touchWorldCoords.set(screenX, screenY);
         viewport.unproject(touchWorldCoords);
     }
+
+    private boolean switchHintActive;
+
+    public void setSwitchHintActive(boolean active) { this.switchHintActive = active; }
+
+    public boolean isSwitchHintActive() { return switchHintActive; }
 }

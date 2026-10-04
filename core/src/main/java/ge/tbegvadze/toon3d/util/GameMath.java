@@ -2574,7 +2574,7 @@ public final class GameMath {
     // damage-per-turn. That makes every number below exact arithmetic.
     //
     // The reference anchors these formulas compare against (REFERENCE_PLAYER_DPT,
-    // REFERENCE_PLAYER_EHP, REFERENCE_AMMO_EFFICIENCY) and the per-role power / TP
+    // REFERENCE_PLAYER_EHP) and the per-role TP
     // bands all live in BalanceConfig. These methods are pure and unit-free; the
     // caller supplies the numbers (BalanceReport tabulates the whole roster).
     // =========================================================================
@@ -3042,31 +3042,6 @@ public final class GameMath {
             default:
                 return BalanceConfig.ABILITY_PP_UTILITY_NOMINAL;
         }
-    }
-
-    /*
-     * Formula: weaponPowerScore — the weapon contract's single comparable number
-     * Derivation:
-     *   A weapon's power is its sustained output scaled by how ammo-cheap that
-     *   output is, so a high-DPT but ammo-hungry weapon does not out-score a
-     *   leaner one purely on muzzle damage:
-     *       weaponPowerScore = sustainedEffectiveDamagePerTurn * sqrt(ammoEfficiencyNormalized)
-     *   The square root DAMPENS the ammo-efficiency term: doubling efficiency
-     *   only multiplies power by ~1.41, not 2, so per-shot damage cannot dominate
-     *   the score. ammoEfficiencyNormalized is the weapon's raw ammoEfficiency
-     *   divided by BalanceConfig.REFERENCE_AMMO_EFFICIENCY, so a reference-class
-     *   weapon contributes a factor of 1.0.
-     *   A new weapon picks a ROLE, then is tuned until its score lands in that
-     *   role's band (BalanceConfig power-band constants). Higher rarity does NOT
-     *   raise the band — it buys abilities, not raw damage.
-     * Edge cases:
-     *   ammoEfficiencyNormalized <= 0 -> the sqrt term is 0, so the score is 0
-     *     (a weapon with no ammo value scores nothing on the run-budget axis).
-     */
-    public static float weaponPowerScore(float sustainedEffectiveDamagePerTurn,
-                                         float ammoEfficiencyNormalized) {
-        float safeEfficiency = Math.max(0f, ammoEfficiencyNormalized);
-        return sustainedEffectiveDamagePerTurn * (float) Math.sqrt(safeEfficiency);
     }
 
     /*
@@ -3595,6 +3570,29 @@ public final class GameMath {
             return 0f;
         }
         return totalRangedSupplyDamage / totalDemandDamage;
+    }
+
+    /*
+     * Formula: normalisedAmmoShare — A-1 per-type generosity on the planned ammo split
+     * Derivation:
+     *   The SupplyPlanner splits a floor's planned ammo DAMAGE over the ammo types with base shares s_t
+     *   (SUPPLY_CARRIED_SHARE over the carried types, SUPPLY_OFF_TYPE_SHARE over the rest; sum s_t = 1).
+     *   A-1 weights each by its generosity g_t, then re-normalises so the shares still sum to 1:
+     *       W = sum_t s_t x g_t
+     *       share_t = s_t x g_t / W
+     *   so sum_t share_t = 1 and the floor's TOTAL planned ammo damage is unchanged — only the mix moves
+     *   (equal weights reproduce the base split exactly).
+     *   Worked (carried = BULLETS only): bullets 0.70 x 0.8 = 0.56, four off types 0.075 x {1.3, 1.0,
+     *   1.0, 0.9} = 0.315, W = 0.875 -> bullets 0.64, shells 0.111, cells 0.086, rockets 0.086, slugs 0.077.
+     * Edge cases:
+     *   W <= 0 (every weight or share zero) -> the base share is returned unchanged; a negative weight
+     *   is treated as 0 (that type gets no ammo).
+     */
+    public static float normalisedAmmoShare(float baseShare, float generosity, float weightedShareSum) {
+        if (weightedShareSum <= 0f) {
+            return baseShare;
+        }
+        return baseShare * Math.max(0f, generosity) / weightedShareSum;
     }
 
     /*
@@ -5949,4 +5947,370 @@ public final class GameMath {
         float cut = Math.max(0f, Math.min(1f, reductionByDepth[index]));
         return Math.round(originalWalkableTiles * (1f - cut));
     }
+
+    // =====================================================================================
+    // MATCHUPS (balance-overhaul order 3) — damage class x enemy trait
+    // =====================================================================================
+
+    /*
+     * Formula: Matchup multiplier at a global strength
+     * Derivation:
+     *   The matchup table stores a raw multiplier r per (DamageClass, EnemyTrait) cell (M3).
+     *   A single dial s (BalanceConfig.MATCHUP_STRENGTH) scales how pronounced EVERY matchup is
+     *   without editing the table, symmetrically in log space:
+     *       multiplier = r ^ s
+     *   s = 1 -> the table as written; s = 0 -> r^0 = 1 for every cell (all matchups flattened);
+     *   s = 0.5 -> sqrt(r), so 1.5 becomes ~1.22 and 0.65 becomes ~0.81 (bonus and penalty shrink
+     *   by the same factor in log space, which a linear blend would not do).
+     * Edge cases:
+     *   r <= 0 is not a legal table value (it would zero or invert damage); it is treated as the
+     *   neutral 1.0. s <= 0 returns 1.0 exactly (no pow call, no -0/NaN drift). r == 1 returns 1.0.
+     */
+    public static float matchupMultiplier(float rawMultiplier, float strength) {
+        if (rawMultiplier <= 0f || strength <= 0f || rawMultiplier == 1f) {
+            return 1f;
+        }
+        if (strength == 1f) {
+            return rawMultiplier;
+        }
+        return (float) Math.pow(rawMultiplier, strength);
+    }
+
+    /*
+     * Formula: Matchup classification (M4)
+     * Derivation:
+     *   The communication layer (hit words, glyph colour, switch hint, compare card) speaks in three
+     *   words, never numbers. With effective threshold E and resisted threshold R (R < 1 < E):
+     *       multiplier >= E          -> EFFECTIVE  (+1)
+     *       multiplier <= R          -> RESISTED   (-1)
+     *       R < multiplier < E       -> NEUTRAL    ( 0)
+     *   The EFFECTIVE test runs first, so a mis-configured E <= R still yields a defined answer.
+     * Edge cases:
+     *   Pass the STRENGTH-ADJUSTED multiplier, so MATCHUP_STRENGTH = 0 classifies every cell NEUTRAL.
+     *   NaN fails both comparisons and reads NEUTRAL. Boundaries are inclusive (1.3 is EFFECTIVE,
+     *   0.8 is RESISTED) per M4.
+     */
+    public static int classifyMatchup(float multiplier, float effectiveThreshold, float resistedThreshold) {
+        if (multiplier >= effectiveThreshold) {
+            return MATCHUP_CLASS_EFFECTIVE;
+        }
+        if (multiplier <= resistedThreshold) {
+            return MATCHUP_CLASS_RESISTED;
+        }
+        return MATCHUP_CLASS_NEUTRAL;
+    }
+
+    /*
+     * Formula: Matchup reference multiplier (trait-aware TP pricing)
+     * Derivation:
+     *   An archetype's Threat Points price how long the REFERENCE player takes to kill it. The
+     *   reference player's generalist (BALLISTIC) hits a trait at multiplier m, but the on-curve
+     *   player often carries a second gun that is not resisted, so only a weight w in [0, 1] of the
+     *   generalist's matchup is priced — a linear blend toward neutral:
+     *       referenceMultiplier = 1 + w x (m - 1)
+     *   w = 0 -> 1 (trait-blind, the pre-order-3 pricing); w = 1 -> m (rifle-only player).
+     * Edge cases:
+     *   w is clamped to [0, 1]. m <= 0 is not a legal table value and is treated as neutral 1.0, so
+     *   the result is always > 0 and safe to divide by.
+     */
+    public static float matchupReferenceMultiplier(float generalistMultiplier, float referenceWeight) {
+        if (generalistMultiplier <= 0f) {
+            return 1f;
+        }
+        float weight = Math.max(0f, Math.min(1f, referenceWeight));
+        return 1f + weight * (generalistMultiplier - 1f);
+    }
+
+    /*
+     * Formula: Trait-adjusted enemy effective HP (trait-aware TP pricing)
+     * Derivation:
+     *   Damage into the enemy is multiplied by the reference multiplier r (above), so the reference
+     *   player must deal eHP / r of its own nominal damage to kill it — equivalently, the enemy's
+     *   eHP measured in the player's nominal (pre-matchup) damage is
+     *       eHP_priced = eHP / r
+     *   r < 1 (resisted) inflates the priced eHP; r > 1 (effective) deflates it; r = 1 leaves it.
+     * Edge cases:
+     *   r <= 0 returns eHP unchanged (treated as neutral) — never a division by zero or a negative.
+     */
+    public static float traitAdjustedEnemyEffectiveHitPoints(float effectiveHitPoints, float referenceMultiplier) {
+        if (referenceMultiplier <= 0f) {
+            return effectiveHitPoints;
+        }
+        return effectiveHitPoints / referenceMultiplier;
+    }
+
+    /*
+     * Formula: Shotgun falloff by tile (W1/W2)
+     * Derivation:
+     *   A spread weapon's damage fraction is a designer TABLE indexed by tile distance, not a linear
+     *   coefficient, because the role wants a cliff (100% / 85% at 1-2 tiles, then 55 / 30 / 15):
+     *       fraction(d) = table[d - 1]   for 1 <= d <= table.length
+     *       fraction(d) = 0              otherwise (outside the weapon's reach)
+     *   The final hit is base x ladder x fraction(d) x fireCycleMultiplier (Weapon.damageWithFalloff).
+     * Edge cases:
+     *   d <= 0 (the player's own tile) or d > length -> 0. A null or empty table -> 0. Table values are
+     *   used as written (no clamp), so a misconfigured value > 1 surfaces in the audit, not here.
+     */
+    public static float shotgunFalloffAtTile(float[] falloffByTile, int distanceTiles) {
+        if (falloffByTile == null || distanceTiles < 1 || distanceTiles > falloffByTile.length) {
+            return 0f;
+        }
+        return falloffByTile[distanceTiles - 1];
+    }
+
+    /*
+     * Formula: Incinerator burn per stack (W3)
+     * Derivation:
+     *   Each burn stack ticks a fixed FRACTION of the weapon's ladder-scaled impact hit, so the burn
+     *   scales with the weapon level exactly as the impact does:
+     *       perStack = max(1, round(ladderScaledHit x burnFraction))
+     *   Up to FLAME_BURN_MAX_STACKS stacks tick together: per-turn burn = perStack x stacks.
+     * Edge cases:
+     *   The floor of 1 keeps a burn from ever ticking 0 (an applied burn is always felt). A negative or
+     *   zero fraction still returns 1 — a fraction of 0 is not a supported "burn off" switch.
+     */
+    public static int incineratorBurnPerStack(float ladderScaledHit, float burnFraction) {
+        return Math.max(1, Math.round(ladderScaledHit * burnFraction));
+    }
+
+    // =====================================================================================
+    // R-ROLE SCENARIO MODEL (balance-overhaul order 3) — turns to clear a reference scenario
+    // =====================================================================================
+
+    /*
+     * Formula: Role-scenario mean hit over an engagement band
+     * Derivation:
+     *   A scenario engages at every tile of [distanceMin, distanceMax] with equal weight, so the hit one
+     *   action lands on a target is the band MEAN of the weapon's per-tile base hit, times its
+     *   expected-value accuracy, its hits per action, the ladder scale and the matchup:
+     *       hit = (1 / n) x sum_{d = min..max} baseHit(d) x accuracy x hitsPerAction x scale x matchup
+     *   with n = max - min + 1. A tile outside the weapon's reach contributes 0 (it cannot fire there).
+     * Edge cases: an inverted band (max < min) is treated as the single tile min. A weapon with no reach
+     *   anywhere in the band returns 0, which the clear model reads as "cannot clear".
+     */
+    public static float roleScenarioMeanHit(RoleScenarioWeapon weapon, int distanceMin, int distanceMax,
+                                            float damageScale, float matchupMultiplier) {
+        int upper = Math.max(distanceMin, distanceMax);
+        float sum = 0f;
+        for (int distance = distanceMin; distance <= upper; distance++) {
+            sum += weapon.baseHitAt(distance);
+        }
+        float meanBaseHit = sum / (upper - distanceMin + 1);
+        return meanBaseHit * weapon.accuracy * weapon.hitsPerAction * damageScale * matchupMultiplier;
+    }
+
+    /*
+     * Formula: Role-scenario sustained damage per turn over a band (R-ROLE-4)
+     * Derivation:
+     *   One clip cycle is clipActions fire actions (each preceded by chargeTurns charge turns) plus
+     *   reloadTurns reload turns, so the per-turn output a player sustains standing and firing is
+     *       sustained = clipActions x hit / (clipActions x (1 + chargeTurns) + reloadTurns)
+     *   with hit = roleScenarioMeanHit at matchup 1 (R-ROLE-4 compares equal level and rarity vs FLESH).
+     * Edge cases: the cycle is never 0 turns (clipActions >= 1), so there is no division by zero.
+     */
+    public static float roleScenarioSustainedDamagePerTurn(RoleScenarioWeapon weapon, int distanceMin,
+                                                           int distanceMax) {
+        float hit = roleScenarioMeanHit(weapon, distanceMin, distanceMax, 1f, 1f);
+        int cycleTurns = weapon.clipActions * (1 + weapon.chargeTurns) + weapon.reloadTurns;
+        return weapon.clipActions * hit / cycleTurns;
+    }
+
+    /*
+     * Formula: Role-scenario turns to clear (R-ROLE-1/2/3/5)
+     * Derivation:
+     *   A deterministic expected-value walk, one player turn at a time, until every member of the group
+     *   is dead or the turn cap is reached. Every member starts with enemyHitPoints and stands in the
+     *   engagement band (each hit uses the band-mean hit — roleScenarioMeanHit). A turn is exactly one of:
+     *     RELOAD  — the clip is empty: reloadTurns turns pass, then the clip is full again;
+     *     CHARGE  — the weapon must charge chargeTurns turns before each shot (Railgun: 1);
+     *     FIRE    — one action, spread over the living members by the weapon's pattern:
+     *                 SINGLE the first; PIERCE the first laneTargets; CONE all; SPLASH the first at the
+     *                 centre hit and every other member at splashNeighbourHit; CHAIN the first, then up
+     *                 to chainJumps others at primaryHit x chainMultiplier^jump x max(1, matchup).
+     *               A burning weapon adds one stack (cap burnMaxStacks, timer reset to burnTurns) to every
+     *               member it hits that survives.
+     *   At the end of EVERY turn each living member with burn ticks
+     *       stacks x max(1, round(burnImpactHit x scale x burnFraction)) x matchup
+     *   (GameMath.incineratorBurnPerStack, matchup pre-multiplied as in EnemyManager).
+     *   turnsToClear = (turn of the last kill - 1) + before / damage of the killing event, so the last turn
+     *   counts only the fraction it needed — that is what keeps near-equal weapons from tying on integers.
+     * Edge cases: a weapon with no reach in the band, or one that cannot clear inside turnCap, returns
+     *   cleared = false and turnsToClear = turnCap. groupSize < 1 is treated as 1; laneTargets < 1 as 1.
+     */
+    public static RoleScenarioOutcome roleScenarioClear(RoleScenarioWeapon weapon, int groupSize, int laneTargets,
+                                                        int distanceMin, int distanceMax, float enemyHitPoints,
+                                                        float damageScale, float matchupMultiplier, int turnCap) {
+        int members = Math.max(1, groupSize);
+        float[] health = new float[members];
+        int[] burnStacks = new int[members];
+        int[] burnRemaining = new int[members];
+        java.util.Arrays.fill(health, enemyHitPoints);
+        float primaryHit = roleScenarioMeanHit(weapon, distanceMin, distanceMax, damageScale, matchupMultiplier);
+        float neutralPrimaryHit = roleScenarioMeanHit(weapon, distanceMin, distanceMax, damageScale, 1f);
+        float neighbourHit = weapon.splashNeighbourHit * weapon.accuracy * damageScale * matchupMultiplier;
+        float burnPerStack = weapon.burns()
+                ? incineratorBurnPerStack(weapon.burnImpactHit * damageScale, weapon.burnFraction) * matchupMultiplier
+                : 0f;
+        if (primaryHit <= 0f) {
+            return new RoleScenarioOutcome(turnCap, 0, 0, false);
+        }
+        int clip = weapon.clipActions;
+        int reloadRemaining = 0;
+        int charged = 0;
+        int actions = 0;
+        float[] lastKill = {-1f};
+        for (int turn = 1; turn <= turnCap; turn++) {
+            if (reloadRemaining > 0) {
+                reloadRemaining--;
+                if (reloadRemaining == 0) clip = weapon.clipActions;
+            } else if (charged < weapon.chargeTurns) {
+                charged++;
+            } else {
+                charged = 0;
+                fireRoleScenarioAction(weapon, health, burnStacks, burnRemaining, members, laneTargets,
+                        primaryHit, neutralPrimaryHit, neighbourHit, matchupMultiplier, turn, lastKill);
+                actions++;
+                clip--;
+                if (clip == 0) {
+                    if (weapon.reloadTurns == 0) clip = weapon.clipActions;
+                    else reloadRemaining = weapon.reloadTurns;
+                }
+            }
+            if (burnPerStack > 0f) {
+                for (int member = 0; member < members; member++) {
+                    if (health[member] <= 0f || burnRemaining[member] <= 0) continue;
+                    float tick = burnPerStack * burnStacks[member];
+                    applyRoleScenarioDamage(health, member, tick, members, turn, lastKill);
+                    burnRemaining[member]--;
+                }
+            }
+            if (lastKill[0] >= 0f) {
+                return new RoleScenarioOutcome(lastKill[0], actions, actions * weapon.ammoPerAction, true);
+            }
+        }
+        return new RoleScenarioOutcome(turnCap, actions, actions * weapon.ammoPerAction, false);
+    }
+
+    private static void fireRoleScenarioAction(RoleScenarioWeapon weapon, float[] health, int[] burnStacks,
+                                               int[] burnRemaining, int members, int laneTargets,
+                                               float primaryHit, float neutralPrimaryHit, float neighbourHit,
+                                               float matchupMultiplier, int turn, float[] lastKill) {
+        int targetsHit = 0;
+        int lane = Math.max(1, laneTargets);
+        for (int member = 0; member < members; member++) {
+            if (health[member] <= 0f) continue;
+            float hit;
+            switch (weapon.pattern) {
+                case SINGLE:
+                    if (targetsHit >= 1) return;
+                    hit = primaryHit;
+                    break;
+                case PIERCE:
+                    if (targetsHit >= lane) return;
+                    hit = primaryHit;
+                    break;
+                case SPLASH:
+                    hit = targetsHit == 0 ? primaryHit : neighbourHit;
+                    break;
+                case CHAIN:
+                    if (targetsHit > weapon.chainJumps) return;
+                    hit = targetsHit == 0 ? primaryHit
+                            : neutralPrimaryHit * (float) Math.pow(weapon.chainMultiplier, targetsHit)
+                                    * Math.max(1f, matchupMultiplier);
+                    break;
+                case CONE:
+                default:
+                    hit = primaryHit;
+                    break;
+            }
+            applyRoleScenarioDamage(health, member, hit, members, turn, lastKill);
+            if (weapon.burns() && health[member] > 0f) {
+                burnStacks[member]    = Math.min(weapon.burnMaxStacks, burnStacks[member] + 1);
+                burnRemaining[member] = weapon.burnTurns;
+            }
+            targetsHit++;
+        }
+    }
+
+    private static void applyRoleScenarioDamage(float[] health, int member, float damage, int members, int turn,
+                                                float[] lastKill) {
+        float before = health[member];
+        health[member] = before - damage;
+        if (before > 0f && health[member] <= 0f && damage > 0f) {
+            for (int other = 0; other < members; other++) {
+                if (health[other] > 0f) return;
+            }
+            lastKill[0] = (turn - 1) + before / damage;
+        }
+    }
+
+    /*
+     * Formula: Role-scenario S8 — hits a charging bruiser lands before it dies
+     * Derivation:
+     *   The bruiser starts startDistance tiles away; each turn the player acts first (reload / charge /
+     *   fire, exactly as roleScenarioClear), then the bruiser acts: one tile closer while not adjacent,
+     *   one landed hit while adjacent. A fire action hits with baseHit(distance) x accuracy x hits x scale
+     *   x matchup at the CURRENT distance. Crediting the SPREAD payoff (W1): a surviving target hit at
+     *   <= knockbackMaxTiles is pushed one tile back (free tile assumed); one hit at <= staggerMaxTiles
+     *   cancels the bruiser's next action, never twice within staggerMinTurnsBetween turns. A weapon that
+     *   self-damages on an adjacent target counts that shot as a hit taken. Result = hits taken.
+     * Edge cases: returns turnCap when the bruiser survives the cap (the weapon cannot stop it). A weapon
+     *   with no reach at the current distance simply wastes the action — the bruiser keeps closing.
+     */
+    public static int roleScenarioBruiserHitsTaken(RoleScenarioWeapon weapon, int startDistance,
+                                                   float enemyHitPoints, float damageScale, float matchupMultiplier,
+                                                   int staggerMinTurnsBetween, int turnCap) {
+        int distance = Math.max(1, startDistance);
+        float health = enemyHitPoints;
+        int clip = weapon.clipActions;
+        int reloadRemaining = 0;
+        int charged = 0;
+        int hitsTaken = 0;
+        boolean actionCancelled = false;
+        int lastStaggerTurn = -staggerMinTurnsBetween - 1;
+        for (int turn = 1; turn <= turnCap; turn++) {
+            if (reloadRemaining > 0) {
+                reloadRemaining--;
+                if (reloadRemaining == 0) clip = weapon.clipActions;
+            } else if (charged < weapon.chargeTurns) {
+                charged++;
+            } else {
+                charged = 0;
+                float hit = weapon.baseHitAt(distance) * weapon.accuracy * weapon.hitsPerAction
+                        * damageScale * matchupMultiplier;
+                health -= hit;
+                if (weapon.selfDamageWhenAdjacent && distance == 1 && hit > 0f) hitsTaken++;
+                clip--;
+                if (clip == 0) {
+                    if (weapon.reloadTurns == 0) clip = weapon.clipActions;
+                    else reloadRemaining = weapon.reloadTurns;
+                }
+                if (health > 0f && hit > 0f) {
+                    int hitDistance = distance;
+                    if (hitDistance <= weapon.knockbackMaxTiles) distance++;
+                    if (hitDistance <= weapon.staggerMaxTiles && !actionCancelled
+                            && turn - lastStaggerTurn >= staggerMinTurnsBetween) {
+                        actionCancelled = true;
+                        lastStaggerTurn = turn;
+                    }
+                }
+            }
+            if (health <= 0f) return hitsTaken;
+            if (actionCancelled) {
+                actionCancelled = false;
+            } else if (distance > 1) {
+                distance--;
+            } else {
+                hitsTaken++;
+            }
+        }
+        return turnCap;
+    }
+
+    /** {@link #classifyMatchup} result: the multiplier is at or above the effective threshold. */
+    public static final int MATCHUP_CLASS_EFFECTIVE = 1;
+    /** {@link #classifyMatchup} result: the multiplier lies strictly between the thresholds. */
+    public static final int MATCHUP_CLASS_NEUTRAL   = 0;
+    /** {@link #classifyMatchup} result: the multiplier is at or below the resisted threshold. */
+    public static final int MATCHUP_CLASS_RESISTED  = -1;
 }

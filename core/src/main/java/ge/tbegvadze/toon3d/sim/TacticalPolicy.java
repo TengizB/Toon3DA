@@ -75,6 +75,12 @@ public final class TacticalPolicy implements PlayerPolicy {
             if (better != null && better != weapon) return TouchAction.SWITCH_WEAPON;
         }
 
+        // 2b. Matchup (balance-overhaul order 3, C4): the gun in hand is RESISTED by what it faces and the
+        //     bag holds an EFFECTIVE one with ammo — take the SWITCH hint (one turn, straight to that gun).
+        if (view.switchHintWeapon() != null) {
+            return TouchAction.SWITCH_WEAPON;
+        }
+
         // 3. Answer the fight in front of the marine — shoot what is lined up, turn to what is on it.
         //    KILLING the threat beats bracing against it, so this sits above the guard check.
         TouchAction immediate = SimPolicySupport.answerImmediateThreat(view);
@@ -171,6 +177,55 @@ public final class TacticalPolicy implements PlayerPolicy {
             return groundRoll.tier.ordinal() > heldRoll.tier.ordinal();
         }
         return groundRoll.weaponLevel > heldRoll.weaponLevel;
+    }
+
+    /**
+     * KIT DIVERSITY (balance-overhaul order 3, CP7): a found gun of a DamageClass the loadout lacks is worth
+     * a slot — the matchup layer only pays a player who carries more than one answer. Gives up the slot
+     * whose class is REDUNDANT (shared with another carried gun) first, otherwise the gun with the fewest
+     * rounds behind it — but never the last gun that still has ammo. A gun of a class already carried is
+     * left on the floor (-1).
+     */
+    @Override
+    public int slotToReplaceForGroundWeapon(Weapon foundWeapon, ge.tbegvadze.toon3d.entity.Loadout loadout,
+                                            SimView view) {
+        if (foundWeapon == null || loadout == null) return -1;
+        int slotCount = loadout.getSlotCount();
+        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
+            Weapon held = loadout.getSlot(slotIndex);
+            if (held != null && held.damageClass() == foundWeapon.damageClass()) return -1;   // not new
+        }
+        int armedGuns = 0;
+        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
+            Weapon held = loadout.getSlot(slotIndex);
+            if (held != null && view.roundsAvailableFor(held) > 0) armedGuns++;
+        }
+        int chosen = -1;
+        boolean chosenRedundant = false;
+        int chosenRounds = Integer.MAX_VALUE;
+        for (int slotIndex = 0; slotIndex < slotCount; slotIndex++) {
+            if (loadout.isSlotLocked(slotIndex)) continue;
+            Weapon held = loadout.getSlot(slotIndex);
+            if (held == null) continue;
+            int rounds = view.roundsAvailableFor(held);
+            if (rounds > 0 && armedGuns <= 1) continue;   // never the last gun with ammo
+            boolean redundant = false;
+            for (int otherIndex = 0; otherIndex < slotCount; otherIndex++) {
+                Weapon other = loadout.getSlot(otherIndex);
+                if (otherIndex != slotIndex && other != null && other.damageClass() == held.damageClass()) {
+                    redundant = true;
+                }
+            }
+            boolean better = chosen < 0
+                    || (redundant && !chosenRedundant)
+                    || (redundant == chosenRedundant && rounds < chosenRounds);
+            if (better) {
+                chosen = slotIndex;
+                chosenRedundant = redundant;
+                chosenRounds = rounds;
+            }
+        }
+        return chosen;
     }
 
     /**

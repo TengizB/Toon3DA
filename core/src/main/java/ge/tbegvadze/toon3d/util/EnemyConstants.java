@@ -426,6 +426,36 @@ public final class EnemyConstants {
     public static final float   ENEMY_BLOCK_NUMBER_GREEN         = 0.80f;
     public static final float   ENEMY_BLOCK_NUMBER_BLUE          = 1.00f;
 
+    // Matchup communication (balance-overhaul order 3, C1/C2). UI chrome words — NOT story strings.
+    /** Seconds the HP text stays tinted after a player hit (amber EFFECTIVE, grey RESISTED). */
+    public static final float   ENEMY_MATCHUP_TINT_SECONDS       = 0.4f;
+    /** Seconds the first-of-kind word floats above the bar. */
+    public static final float   ENEMY_MATCHUP_WORD_SECONDS       = 0.8f;
+    /** The word floats at full alpha, then fades over this many final seconds. */
+    public static final float   ENEMY_MATCHUP_WORD_FADE_SECONDS  = 0.25f;
+    public static final String  ENEMY_MATCHUP_WORD_EFFECTIVE     = "WEAK POINT";
+    public static final String  ENEMY_MATCHUP_WORD_RESISTED      = "RESISTED";
+    public static final float   ENEMY_MATCHUP_WORD_FONT_SCALE    = 0.8f;
+    /** Gap between the word's baseline-box bottom and the top of whatever sits under it (bar / name tag). */
+    public static final float   ENEMY_MATCHUP_WORD_GAP           = 3f;
+    public static final float   ENEMY_MATCHUP_EFFECTIVE_RED      = 1.00f;
+    public static final float   ENEMY_MATCHUP_EFFECTIVE_GREEN    = 0.75f;
+    public static final float   ENEMY_MATCHUP_EFFECTIVE_BLUE     = 0.15f;
+    public static final float   ENEMY_MATCHUP_RESISTED_RED       = 0.62f;
+    public static final float   ENEMY_MATCHUP_RESISTED_GREEN     = 0.62f;
+    public static final float   ENEMY_MATCHUP_RESISTED_BLUE      = 0.66f;
+
+    // Trait glyph at the health bar's left end (C2). Scales with the bar's height, clamped so it stays legible.
+    public static final float   ENEMY_TRAIT_GLYPH_BAR_HEIGHT_MULTIPLIER = 2.2f;
+    public static final float   ENEMY_TRAIT_GLYPH_MIN_SIZE      = 9f;
+    public static final float   ENEMY_TRAIT_GLYPH_MAX_SIZE      = 16f;
+    public static final float   ENEMY_TRAIT_GLYPH_BAR_GAP       = 3f;
+    public static final float   ENEMY_TRAIT_GLYPH_MAX_DISTANCE_TILES = 8f;
+    /** Colour of a trait glyph when no damage class is EFFECTIVE against that trait. */
+    public static final float   ENEMY_TRAIT_GLYPH_NEUTRAL_RED   = 0.62f;
+    public static final float   ENEMY_TRAIT_GLYPH_NEUTRAL_GREEN = 0.62f;
+    public static final float   ENEMY_TRAIT_GLYPH_NEUTRAL_BLUE  = 0.66f;
+
     // Enemy name tag — shown above health bar only when close enough
     public static final float ENEMY_NAME_TAG_MAX_DISTANCE_TILES = 8f;
     // Name tag font scale applied to the default BitmapFont — sized up for at-a-glance legibility.

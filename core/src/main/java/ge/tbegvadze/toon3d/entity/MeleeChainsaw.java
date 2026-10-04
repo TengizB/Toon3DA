@@ -15,4 +15,6 @@ public final class MeleeChainsaw extends MeleeWeapon {
     }
 
     @Override public ItemType getItemType() { return ItemType.WEAPON_CHAINSAW; }
+
+    @Override public DamageClass damageClass() { return DamageClass.BLADE; }
 }

@@ -556,3 +556,37 @@ tierOrdinal, floorThreatLevel, gapExempt):
     weapon follows the ladder like a gun.
   - World/SimWorld sync every owned weapon's floor threat level (setFloorThreatLevel) —
     a new weapon added to the arsenal is covered automatically.
+
+
+DAMAGE CLASS AND ROLE — REQUIRED FOR EVERY NEW WEAPON (balance-overhaul order 3)
+--------------------------------------------------------------------------------
+Every concrete Weapon subclass declares its entity/DamageClass as DATA — one line beside
+getItemType():
+
+    @Override public DamageClass damageClass() { return DamageClass.ENERGY; }
+
+The eight classes: BALLISTIC (Assault Rifle, Chaingun), SPREAD (Shotgun, Double-Barrel),
+ENERGY (Plasma Rifle, Arc Cannon), RAIL (Railgun), FIRE (Incinerator), EXPLOSIVE (Grenade
+Launcher; barrels count as EXPLOSIVE too), BLADE (Combat Knife, Chainsaw), BLUNT (Fist, Hammer).
+A new class is a new enum constant plus one MATCHUP_ROW_* column in BalanceConfig SECTION 22 and
+its colour in WeaponConstants.DAMAGE_CLASS_COLOR_* — never a switch on the class anywhere.
+
+What the class buys automatically, with no per-weapon code:
+  - the MATCHUP multiplier on every hit (EnemyManager.applyDamageTo, after the ladder, before
+    Block) — Weapon.fire() / MeleeWeapon.fire() arm the class on the EnemyHitTarget;
+  - burn / status magnitudes the weapon applies use its class;
+  - the hit words, the class glyph on the HUD slot strip, STRONG VS / WEAK VS on the compare card,
+    the C4 SWITCH hint (MatchupAdvisor) and the sim's MATCHUP REPORT.
+
+A new RANGED weapon must also add ONE row to util/WeaponRoleModel (only the scenario SHAPE — its
+stats are read from a fresh instance of the weapon) and must pass R-ROLE-1..5 in BalanceAuditTest
+(weaponRolesHoldOnTheReferenceScenarios): its class is the best answer in at least one reference
+scenario by >= 20% over the best BALLISTIC weapon, no class is best in more than two scenarios,
+SPREAD still pays >= 2.0x the Assault Rifle's per-turn damage up close, and its niche clears on one
+average floor's planned ammo. BalanceReport prints the MATCHUP and SCENARIO tables to fit against.
+See docs/game-balance-authority.txt -> R-ROLE. Melee classes are exempt from R-ROLE-1.
+
+Close-range SPREAD behaviour lives in entity/SpreadImpact (knockback at 1 tile, stagger at <= 2,
+no stagger two turns running, never on bosses / MINI_ELITE knockback) — a new spread weapon calls
+SpreadImpact.applyCloseRangeImpact per enemy hit and declares its falloff as a per-tile table
+(SHOTGUN_FALLOFF_BY_TILE idiom), not a drop coefficient.

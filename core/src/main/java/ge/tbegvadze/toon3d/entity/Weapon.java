@@ -401,6 +401,17 @@ public abstract class Weapon implements WeaponProfile {
     }
 
     /**
+     * Arms this weapon's {@link #damageClass()} on the target for the whole fire activation, or clears
+     * it (balance-overhaul order 3, M3). Every applyDamageTo()/applyBurningStatus() call that resolves
+     * synchronously inside fire() then takes this weapon's matchup; damage resolving outside an
+     * activation (DoT ticks already applied, enemy turns) carries no class. No-op on a null target.
+     */
+    protected void armDamageClass(EnemyHitTarget target, boolean arm) {
+        if (target == null) return;
+        target.setActivationDamageClass(arm ? damageClass() : null);
+    }
+
+    /**
      * Arms this weapon's ARMOR_PIERCE Block-pierce on the given target for the whole fire
      * activation, or clears it. All applyDamageTo() calls that resolve synchronously inside
      * fire() (base hit, burst extras, resolver crit/execute/cleave bonuses) then bypass the
@@ -821,6 +832,8 @@ public abstract class Weapon implements WeaponProfile {
 
         // ARMOR_PIERCE: bypass a fraction of the target's Block for every hit this activation.
         armBlockPierce(enemyHitTarget, true);
+        // MATCHUP (balance-overhaul order 3): every hit this activation resolves with this weapon's class.
+        armDamageClass(enemyHitTarget, true);
 
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
@@ -887,6 +900,7 @@ public abstract class Weapon implements WeaponProfile {
 
         // Disarm ARMOR_PIERCE so damage resolving after this activation keeps full Block absorption.
         armBlockPierce(enemyHitTarget, false);
+        armDamageClass(enemyHitTarget, false);
 
         return baseResult;
     }
@@ -1030,6 +1044,13 @@ public abstract class Weapon implements WeaponProfile {
     /** The ItemType entry matching this weapon, used by the inventory UI for display. */
     public abstract ItemType getItemType();
 
+    /**
+     * The DAMAGE CLASS this weapon deals (balance-overhaul order 3, rule M1) — the column of
+     * {@link MatchupTable}. Declared as data by every concrete weapon; damage code never switches on
+     * the weapon's class to find it.
+     */
+    public abstract DamageClass damageClass();
+
     /** Path to the texture shown when the weapon is idle and ready. */
     public abstract String getNormalTexturePath();
     /** Path to the texture shown during the muzzle-flash pose. */
@@ -1046,7 +1067,18 @@ public abstract class Weapon implements WeaponProfile {
     public int damageAtDistance(int distanceTiles) {
         float dropMultiplier = GameMath.damageDropMultiplier(damageDropCoefficient,
                 distanceTiles, WeaponConstants.DAMAGE_MIN_MULTIPLIER);
-        return Math.round(damage * getLadderDamageMultiplier() * dropMultiplier * fireCycleMultiplier);
+        return damageWithFalloff(dropMultiplier);
+    }
+
+    /**
+     * The weapon's hit at a given falloff fraction: base damage x ladder x falloff x the fire-cycle
+     * multiplier, rounded — the single composition every distance rule shares. Weapons with a per-tile
+     * falloff TABLE (Shotgun, Double-Barrel — balance-overhaul order 3) override
+     * {@link #damageAtDistance} and pass their table's fraction here, so the ladder and fire-cycle
+     * terms can never drift between falloff shapes.
+     */
+    protected int damageWithFalloff(float falloffMultiplier) {
+        return Math.round(damage * getLadderDamageMultiplier() * falloffMultiplier * fireCycleMultiplier);
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }

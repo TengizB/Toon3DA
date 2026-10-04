@@ -40,6 +40,11 @@ public final class HudConstants {
     public static final float HUD_XP_BAR_Y                    = 88f;
 
     // Weapon-slot strip — numbered slots with active highlight, below the XP row
+    /** Damage-class glyph in each weapon slot's top row (balance-overhaul order 3, C3). */
+    public static final float HUD_CLASS_GLYPH_SIZE            = 9f;
+    public static final float HUD_CLASS_GLYPH_LEFT_INSET      = 17f;    // right of the slot number
+    public static final float HUD_CLASS_GLYPH_TOP_INSET       = 3f;
+    public static final float HUD_CLASS_GLYPH_INACTIVE_ALPHA  = 0.65f;
     public static final float HUD_SLOT_STRIP_Y                = 42f;
     public static final float HUD_SLOT_STRIP_HEIGHT           = 38f;
     public static final float HUD_SLOT_SIDE_PADDING           = 14f;
@@ -103,9 +108,15 @@ public final class HudConstants {
 
     // Weapon card — single-screen pickup / compare modal (redesigned: large card, high-res text)
     public static final float WEAPON_CARD_WIDTH          = 900f;
-    public static final float WEAPON_CARD_HEIGHT         = 620f;
+    public static final float WEAPON_CARD_HEIGHT         = 680f;   // +60: room for the STRONG VS / WEAK VS rows (order 3, C5)
     public static final float WEAPON_CARD_ORIGIN_X       = 190f;   // (1280 - 900) / 2
-    public static final float WEAPON_CARD_ORIGIN_Y       = 50f;    // (720 - 620) / 2
+    public static final float WEAPON_CARD_ORIGIN_Y       = 20f;    // (720 - 680) / 2
+    /** Matchup rows on the compare card (balance-overhaul order 3, C5): labels are UI chrome, never numbers. */
+    public static final String WEAPON_CARD_STRONG_VS_LABEL   = "STRONG VS";
+    public static final String WEAPON_CARD_WEAK_VS_LABEL     = "WEAK VS";
+    public static final String WEAPON_CARD_NO_MATCHUP_LABEL  = "-";
+    public static final float  WEAPON_CARD_TRAIT_GLYPH_SIZE  = 22f;
+    public static final float  WEAPON_CARD_TRAIT_GLYPH_GAP   = 12f;
     public static final float WEAPON_CARD_PANEL_ALPHA    = 0.96f;
     // Base body font scale; individual text elements scale relative to this (see renderer).
     public static final float WEAPON_CARD_FONT_SCALE     = 1.5f;

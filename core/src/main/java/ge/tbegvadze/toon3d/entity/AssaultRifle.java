@@ -39,6 +39,7 @@ public class AssaultRifle extends Weapon {
 
     @Override public boolean isMelee()    { return false; }
     @Override public ItemType getItemType() { return ItemType.WEAPON_ASSAULT_RIFLE; }
+    @Override public DamageClass damageClass() { return DamageClass.BALLISTIC; }
 
     @Override
     protected FireResult marchShot(int playerTileColumn, int playerTileRow,

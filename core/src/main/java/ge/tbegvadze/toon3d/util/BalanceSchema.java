@@ -74,8 +74,11 @@ public final class BalanceSchema {
     // =====================================================================================
 
     public enum RuleKind {
-        /** R-WEAPON: every ranged weapon declares a ROLE; weaponPowerScore must land in the role band. */
-        WEAPON_POWER,
+        /**
+         * R-ROLE (balance-overhaul order 3; REPLACES R-WEAPON's power-score bands): the reference scenarios —
+         * niche (R-ROLE-1), generalist (2), no dominance (3), risk pays (4), ammo feasible (5).
+         */
+        WEAPON_ROLE,
         /** R-ENEMY (part 1): every archetype declares a ROLE; threatPoints must land in the role TP band. */
         ENEMY_THREAT_POINTS,
         /** R-ENEMY (part 2, balance-overhaul order 1 R8): depth-1 hits-to-kill / hits-to-die land in the role's R8 bands. */
@@ -159,7 +162,12 @@ public final class BalanceSchema {
         /** S-SOFTLOCK (order 9): zero seeds end in a "cannot damage anything" state. */
         SIM_SOFTLOCK,
         /** S-LAG (balance-overhaul order 1): the start-weapon hoarder dies by SIM_LAG_MAX_MEDIAN_DEPTH (median). */
-        SIM_LAG
+        SIM_LAG,
+        /**
+         * S-SWITCH (balance-overhaul order 3, A8 re-stated by D3): the C4 hint works — enough COMBAT floors
+         * show one, TACTICAL takes it, and each hinted COMBAT floor yields a switch. Never waived.
+         */
+        SIM_SWITCH
     }
 
     // =====================================================================================
@@ -236,17 +244,9 @@ public final class BalanceSchema {
     private static final List<Waiver> WAIVERS = new ArrayList<>();
 
     static {
-        // The ONLY waiver shipping with order 1 (acceptance criterion): the Railgun's full-charge
-        // power score (45.0) deliberately exceeds the heavy band (24-32). Nerfing the raw 90 would
-        // make the weapon worthless rather than merely scarce — slug SCARCITY is the gate
-        // (supply ~1.1 slugs/floor, tightest reserve banking ~1.0 floor).
-        waive(RuleKind.WEAPON_POWER, "Railgun (full charge)",
-                "Gated by slug scarcity, not raw damage: the 90-per-slug elite-buster hit is the "
-                        + "heavy role's identity and supply (~1.1 slugs/floor, tightest reserve cap) "
-                        + "is the real limiter.",
-                "Re-checked by balance-overhaul order 2 R-SUPPLY: slugs only ever arrive through the 30% "
-                        + "off-type share of a floor's planned ammo (or the carried share once a railgun is held), "
-                        + "and the slug reserve cap stays the tightest of all ammo types.");
+        // The Railgun's [WEAPON_POWER] "scarcity-gated over-band" waiver was DELETED by balance-overhaul
+        // order 3 (AS8): R-WEAPON is retired and the Railgun is governed by R-ROLE (the PLATED niche plus
+        // its own ammo-feasibility check, R-ROLE-5).
         waiveNavigationLimitedBands();
         // Balance-overhaul order 2 (CP6): the route ledger is now priced on what each floor is BUILT with
         // (its NodeSupplySpec plan). The old ledger credited the bespoke MED-BAY and EVENT rooms with 35% of
@@ -304,114 +304,10 @@ public final class BalanceSchema {
     }
 
     // =====================================================================================
-    // R-WEAPON — the ranged-weapon registry (roles are designer DATA, bands from BalanceConfig).
+    // R-ROLE — the ranged-weapon registry and the reference scenarios live in WeaponRoleModel
+    // (balance-overhaul order 3). R-WEAPON's WeaponRole power bands and RangedWeaponSpec were RETIRED
+    // with it (override record: docs/game-balance-authority.txt R-ROLE).
     // =====================================================================================
-
-    /** Weapon roles with their power-score bands (higher rarity never raises a band — it buys abilities). */
-    public enum WeaponRole {
-        SIDEARM   (BalanceConfig.WEAPON_POWER_SIDEARM_MIN,   BalanceConfig.WEAPON_POWER_SIDEARM_MAX),
-        WORKHORSE (BalanceConfig.WEAPON_POWER_WORKHORSE_MIN, BalanceConfig.WEAPON_POWER_WORKHORSE_MAX),
-        BURST     (BalanceConfig.WEAPON_POWER_BURST_MIN,     BalanceConfig.WEAPON_POWER_BURST_MAX),
-        HEAVY     (BalanceConfig.WEAPON_POWER_HEAVY_MIN,     BalanceConfig.WEAPON_POWER_HEAVY_MAX);
-
-        public final float bandMinimum;
-        public final float bandMaximum;
-
-        WeaponRole(float bandMinimum, float bandMaximum) {
-            this.bandMinimum = bandMinimum;
-            this.bandMaximum = bandMaximum;
-        }
-    }
-
-    /** One registered ranged weapon: its role plus the stat block its power score is computed from. */
-    public static final class RangedWeaponSpec {
-        public final String     displayName;
-        public final ItemType   itemType;
-        public final WeaponRole role;
-        public final int        clipSize;
-        public final int        damagePerShot;
-        public final int        reloadTicks;
-        public final int        ammoPerShot;
-        public final String     creditingNote;
-
-        RangedWeaponSpec(String displayName, ItemType itemType, WeaponRole role,
-                         int clipSize, int damagePerShot, int reloadTicks, int ammoPerShot,
-                         String creditingNote) {
-            this.displayName   = displayName;
-            this.itemType      = itemType;
-            this.role          = role;
-            this.clipSize      = clipSize;
-            this.damagePerShot = damagePerShot;
-            this.reloadTicks   = reloadTicks;
-            this.ammoPerShot   = ammoPerShot;
-            this.creditingNote = creditingNote;
-        }
-
-        public float sustainedDamagePerTurn() {
-            return GameMath.sustainedDamagePerTurn(clipSize, damagePerShot, reloadTicks);
-        }
-
-        public float ammoEfficiency() {
-            return GameMath.ammoEfficiency(damagePerShot, ammoPerShot);
-        }
-
-        public float powerScore() {
-            return GameMath.weaponPowerScore(sustainedDamagePerTurn(),
-                    ammoEfficiency() / BalanceConfig.REFERENCE_AMMO_EFFICIENCY);
-        }
-    }
-
-    private static final List<RangedWeaponSpec> RANGED_WEAPONS = buildRangedWeaponRegistry();
-
-    private static List<RangedWeaponSpec> buildRangedWeaponRegistry() {
-        List<RangedWeaponSpec> registry = new ArrayList<>();
-        registry.add(new RangedWeaponSpec("Shotgun", ItemType.WEAPON_SHOTGUN, WeaponRole.BURST,
-                BalanceConfig.SHOTGUN_CLIP_SIZE, BalanceConfig.SHOTGUN_DAMAGE,
-                BalanceConfig.SHOTGUN_RELOAD_TIME_TICKS, 1, null));
-        registry.add(new RangedWeaponSpec("Double-Barrel Shotgun", ItemType.WEAPON_DOUBLE_BARREL, WeaponRole.BURST,
-                BalanceConfig.DBL_SHOTGUN_CLIP_SIZE, BalanceConfig.DBL_SHOTGUN_DAMAGE,
-                BalanceConfig.DBL_SHOTGUN_RELOAD_TIME_TICKS, 1, null));
-        registry.add(new RangedWeaponSpec("Plasma Rifle", ItemType.WEAPON_PLASMA, WeaponRole.BURST,
-                BalanceConfig.PLASMA_RIFLE_CLIP_SIZE, BalanceConfig.PLASMA_RIFLE_DAMAGE,
-                BalanceConfig.PLASMA_RIFLE_RELOAD_TIME_TICKS, 1, null));
-        registry.add(new RangedWeaponSpec("Assault Rifle", ItemType.WEAPON_ASSAULT_RIFLE, WeaponRole.WORKHORSE,
-                BalanceConfig.ASSAULT_RIFLE_CLIP_SIZE, BalanceConfig.ASSAULT_RIFLE_DAMAGE,
-                BalanceConfig.ASSAULT_RIFLE_RELOAD_TIME_TICKS, 1, null));
-        registry.add(new RangedWeaponSpec("Chaingun", ItemType.WEAPON_CHAINGUN, WeaponRole.WORKHORSE,
-                BalanceConfig.CHAINGUN_CLIP_SIZE, BalanceConfig.CHAINGUN_DAMAGE,
-                BalanceConfig.CHAINGUN_RELOAD_TIME_TICKS, 1, null));
-        // Railgun scored at FULL charge (its intended engagement state). WAIVED over the heavy band.
-        registry.add(new RangedWeaponSpec("Railgun (full charge)", ItemType.WEAPON_RAILGUN, WeaponRole.HEAVY,
-                BalanceConfig.RAILGUN_CLIP_SIZE,
-                BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE[BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE.length - 1],
-                BalanceConfig.RAILGUN_RELOAD_TIME_TICKS, 1,
-                "scored at full charge; power-band exception waived (slug scarcity is the gate)"));
-        // Grenade Launcher scored on its centre splash damage (the lateral falloff ring is uncredited).
-        registry.add(new RangedWeaponSpec("Grenade Launcher", ItemType.WEAPON_ROCKET, WeaponRole.HEAVY,
-                BalanceConfig.GRENADE_CLIP_SIZE, BalanceConfig.GRENADE_SPLASH_DAMAGE,
-                BalanceConfig.GRENADE_RELOAD_TIME_TICKS, 1,
-                "credited on centre splash; neighbour falloff is uncredited bonus AoE"));
-        // Arc Cannon credited on the single-target primary line (the lateral chain is uncredited).
-        registry.add(new RangedWeaponSpec("Arc Cannon", ItemType.WEAPON_ARC_CANNON, WeaponRole.BURST,
-                BalanceConfig.ARC_CANNON_CLIP_SIZE, BalanceConfig.ARC_CANNON_DAMAGE,
-                BalanceConfig.ARC_CANNON_RELOAD_TIME_TICKS, 1,
-                "credited on the primary bolt; the decaying lateral chain is uncredited bonus AoE"));
-        // Incinerator credited per shot as impact + one full burn application (DoT is damage and
-        // counts toward TTK — knowledge doc SECTION 15). Successive shots REFRESH rather than stack
-        // the burn, so this is a muzzle-style over-credit, acknowledged like weapon falloff crediting.
-        registry.add(new RangedWeaponSpec("Incinerator", ItemType.WEAPON_INCINERATOR, WeaponRole.HEAVY,
-                BalanceConfig.FLAME_CLIP_SIZE,
-                BalanceConfig.FLAME_IMPACT_DAMAGE
-                        + BalanceConfig.FLAME_BURN_DAMAGE_PER_TURN * BalanceConfig.FLAME_BURN_TURNS,
-                BalanceConfig.FLAME_RELOAD_TICKS, 1,
-                "credited as impact + one full burn application per shot (DoT counts toward TTK)"));
-        return Collections.unmodifiableList(registry);
-    }
-
-    /** The registered ranged-weapon specs — BalanceReport's WEAPONS table iterates exactly this list. */
-    public static List<RangedWeaponSpec> rangedWeapons() {
-        return RANGED_WEAPONS;
-    }
 
     // Classification of every WEAPON-category ItemType for the coverage rule. A weapon item must be
     // RANGED (registered above), MELEE (no power-score rule — melee swings once per turn and is
@@ -424,8 +320,8 @@ public final class BalanceSchema {
 
     private static Map<ItemType, WeaponItemClassification> buildWeaponItemClassifications() {
         Map<ItemType, WeaponItemClassification> classifications = new EnumMap<>(ItemType.class);
-        for (RangedWeaponSpec spec : RANGED_WEAPONS) {
-            classifications.put(spec.itemType, WeaponItemClassification.RANGED);
+        for (WeaponRoleModel.RoleWeapon weapon : WeaponRoleModel.weapons()) {
+            classifications.put(weapon.itemType, WeaponItemClassification.RANGED);
         }
         classifications.put(ItemType.WEAPON_FIST,     WeaponItemClassification.MELEE);
         classifications.put(ItemType.WEAPON_KNIFE,    WeaponItemClassification.MELEE);
@@ -818,7 +714,7 @@ public final class BalanceSchema {
     /** Evaluates every registered rule. The audit test fails the build on any isViolation() result. */
     public static List<RuleResult> evaluate() {
         List<RuleResult> results = new ArrayList<>();
-        results.addAll(weaponPowerResults());
+        results.addAll(weaponRoleResults());
         results.addAll(enemyThreatPointResults());
         results.addAll(enemyHitResults());
         results.addAll(cardBudgetResults());
@@ -849,23 +745,167 @@ public final class BalanceSchema {
         results.addAll(ladderResults());
         results.addAll(ladderAffordResults());
         results.addAll(supplyPlannerResults());
+        results.addAll(ammoBankingResults());
         results.addAll(supplySweepResults());
         results.addAll(eliteRewardResults());
         results.addAll(densitySweepResults());
         return results;
     }
 
-    /** R-WEAPON: powerScore in the declared role band for every registered ranged weapon. */
-    public static List<RuleResult> weaponPowerResults() {
+    /**
+     * R-ROLE (balance-overhaul order 3) — every weapon is the best answer somewhere and never everywhere,
+     * evaluated on WeaponRoleModel's reference scenarios at every ROLE_SCENARIO_DEPTHS depth:
+     * <ul>
+     *   <li>R-ROLE-1 NICHE: every ranged class but BALLISTIC is best (fewest turns, ammo-feasible) in at
+     *       least one scenario, by >= ROLE_NICHE_MARGIN over the best BALLISTIC weapon there. Melee
+     *       (BLADE / BLUNT) is exempt: no ammo, adjacent only, the fallback (not modelled).</li>
+     *   <li>R-ROLE-2 GENERALIST: BALLISTIC within ROLE_GENERALIST_BOUND of the best in S1, and never best
+     *       in S3 or S4.</li>
+     *   <li>R-ROLE-3 NO DOMINANCE: no class best in more than ROLE_MAX_SCENARIOS_BEST scenarios.</li>
+     *   <li>R-ROLE-4 RISK PAYS: every SPREAD weapon's sustained per-turn damage at 1-2 tiles is >=
+     *       ROLE_RISK_PAYS_RATIO x the Assault Rifle's at 3 tiles (equal level and rarity, vs FLESH).</li>
+     *   <li>R-ROLE-5 AMMO FEASIBLE: every class clears its DECLARED niche (ROLE_DECLARED_NICHE_BY_CLASS) with <= one average
+     *       COMBAT floor's planned supply of its ammo type.</li>
+     * </ul>
+     */
+    public static List<RuleResult> weaponRoleResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (RangedWeaponSpec spec : RANGED_WEAPONS) {
-            float powerScore = spec.powerScore();
-            boolean inBand = powerScore >= spec.role.bandMinimum && powerScore <= spec.role.bandMaximum;
-            results.add(new RuleResult(RuleKind.WEAPON_POWER, spec.displayName, powerScore,
-                    spec.role.bandMinimum, spec.role.bandMaximum, inBand,
-                    "role " + spec.role + (spec.creditingNote == null ? "" : "; " + spec.creditingNote)));
+        List<WeaponRoleModel.RoleScenario> scenarios = WeaponRoleModel.scenarios();
+        List<ge.tbegvadze.toon3d.entity.DamageClass> classes = WeaponRoleModel.rangedClasses();
+        ge.tbegvadze.toon3d.entity.DamageClass ballistic = ge.tbegvadze.toon3d.entity.DamageClass.BALLISTIC;
+        for (int depth : BalanceConfig.ROLE_SCENARIO_DEPTHS) {
+            WeaponRoleModel.Table table = WeaponRoleModel.table(depth);
+            String at = " d" + depth;
+            // R-ROLE-1 + R-ROLE-3 + R-ROLE-5, per class.
+            for (ge.tbegvadze.toon3d.entity.DamageClass damageClass : classes) {
+                int bestCount = 0;
+                float bestMargin = 0f;
+                String nicheScenario = "none";
+                for (int index = 0; index < scenarios.size(); index++) {
+                    float classBest = table.classBest(damageClass, index);
+                    if (!table.isClassBest(damageClass, index)) continue;
+                    bestCount++;
+                    float ballisticBest = table.classBest(ballistic, index);
+                    float margin = roleMargin(ballisticBest, classBest, scenarios.get(index).bruiserCharge);
+                    if (margin > bestMargin) {
+                        bestMargin = margin;
+                        nicheScenario = scenarios.get(index).id;
+                    }
+                }
+                if (damageClass != ballistic) {
+                    results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-1 " + damageClass + " niche" + at,
+                            bestMargin, BalanceConfig.ROLE_NICHE_MARGIN, Float.MAX_VALUE,
+                            bestMargin >= BalanceConfig.ROLE_NICHE_MARGIN,
+                            "best in " + nicheScenario + "; margin = best BALLISTIC / class best"));
+                }
+                results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-3 " + damageClass + " scenarios best" + at,
+                        bestCount, 0, BalanceConfig.ROLE_MAX_SCENARIOS_BEST,
+                        bestCount <= BalanceConfig.ROLE_MAX_SCENARIOS_BEST, "of " + scenarios.size()));
+                String declaredNiche = BalanceConfig.ROLE_DECLARED_NICHE_BY_CLASS[damageClass.ordinal()];
+                if (declaredNiche != null) {
+                    results.add(roleAmmoResult(table, damageClass, scenarioIndex(declaredNiche), at));
+                } else {
+                    results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-5 " + damageClass + " ammo feasible" + at,
+                            0f, 0f, 0f, false, "ranged class has no declared niche (ROLE_DECLARED_NICHE_BY_CLASS)"));
+                }
+            }
+            // A6: the Incinerator clears S2 (three on-curve chaff) in at most ROLE_INCINERATOR_S2_MAX_SPRAYS.
+            int s2 = scenarioIndex("S2");
+            List<WeaponRoleModel.RoleWeapon> roleWeapons = WeaponRoleModel.weapons();
+            for (int weaponIndex = 0; weaponIndex < roleWeapons.size(); weaponIndex++) {
+                if (roleWeapons.get(weaponIndex).itemType != ItemType.WEAPON_INCINERATOR) continue;
+                WeaponRoleModel.Cell cell = table.cells[weaponIndex][s2];
+                results.add(new RuleResult(RuleKind.WEAPON_ROLE, "A6 Incinerator sprays to clear S2" + at,
+                        cell.actions, 1, BalanceConfig.ROLE_INCINERATOR_S2_MAX_SPRAYS,
+                        cell.cleared && cell.actions <= BalanceConfig.ROLE_INCINERATOR_S2_MAX_SPRAYS,
+                        String.format("%.2f turns", cell.score)));
+            }
+            // R-ROLE-2: S1 bound, never best in S3 / S4.
+            int s1 = scenarioIndex("S1");
+            float generalistRatio = table.classBest(ballistic, s1) / table.overallBest(s1);
+            results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-2 BALLISTIC vs best in S1" + at,
+                    generalistRatio, 1f, BalanceConfig.ROLE_GENERALIST_BOUND,
+                    generalistRatio <= BalanceConfig.ROLE_GENERALIST_BOUND, "best BALLISTIC / best overall"));
+            for (String armouredId : new String[]{"S3", "S4"}) {
+                int index = scenarioIndex(armouredId);
+                float lead = table.classBest(ballistic, index) / table.bestExcluding(ballistic, index);
+                results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-2 BALLISTIC not best in " + armouredId + at,
+                        lead, 1f, Float.MAX_VALUE, lead > 1f,
+                        "best BALLISTIC / best other class (must exceed 1)"));
+            }
+        }
+        // R-ROLE-4 (depth-free: equal level and rarity, vs FLESH).
+        WeaponRoleModel.RoleWeapon generalist = null;
+        for (WeaponRoleModel.RoleWeapon weapon : WeaponRoleModel.weapons()) {
+            if (weapon.itemType == ItemType.WEAPON_ASSAULT_RIFLE) generalist = weapon;
+        }
+        float generalistPerTurn = GameMath.roleScenarioSustainedDamagePerTurn(generalist.model,
+                BalanceConfig.ROLE_RISK_GENERALIST_TILES, BalanceConfig.ROLE_RISK_GENERALIST_TILES);
+        for (WeaponRoleModel.RoleWeapon weapon : WeaponRoleModel.weapons()) {
+            if (weapon.damageClass != ge.tbegvadze.toon3d.entity.DamageClass.SPREAD) continue;
+            float perTurn = GameMath.roleScenarioSustainedDamagePerTurn(weapon.model,
+                    BalanceConfig.ROLE_RISK_SPREAD_MIN_TILES, BalanceConfig.ROLE_RISK_SPREAD_MAX_TILES);
+            float ratio = perTurn / generalistPerTurn;
+            results.add(new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-4 " + weapon.displayName + " risk pays",
+                    ratio, BalanceConfig.ROLE_RISK_PAYS_RATIO, Float.MAX_VALUE,
+                    ratio >= BalanceConfig.ROLE_RISK_PAYS_RATIO,
+                    String.format("%.1f/turn at 1-2 tiles vs Assault Rifle %.1f/turn at 3", perTurn, generalistPerTurn)));
         }
         return results;
+    }
+
+    /**
+     * R-ROLE-1's margin: how many times longer the best BALLISTIC takes. S8 is scored in whole hits taken,
+     * where 0 is common, so its ratio is taken on (hits + 1) — 0 hits vs 1 hit reads 2.0.
+     */
+    private static float roleMargin(float ballisticBest, float classBest, boolean hitsTakenScenario) {
+        if (Float.isInfinite(ballisticBest)) return BalanceConfig.ROLE_SCENARIO_TURN_CAP;
+        if (hitsTakenScenario) return (ballisticBest + 1f) / (classBest + 1f);
+        return classBest <= 0f ? 0f : ballisticBest / classBest;
+    }
+
+    /**
+     * R-ROLE-5 for one class: ammo its fastest ammo-feasible weapon (else its fastest) spends in the scenario
+     * vs one average COMBAT floor's planned supply of that ammo type.
+     */
+    private static RuleResult roleAmmoResult(WeaponRoleModel.Table table, ge.tbegvadze.toon3d.entity.DamageClass damageClass,
+                                             int scenarioIndex, String at) {
+        List<WeaponRoleModel.RoleWeapon> weapons = WeaponRoleModel.weapons();
+        int chosen = -1;
+        for (int weaponIndex = 0; weaponIndex < weapons.size(); weaponIndex++) {
+            if (weapons.get(weaponIndex).damageClass != damageClass) continue;
+            WeaponRoleModel.Cell cell = table.cells[weaponIndex][scenarioIndex];
+            if (!cell.cleared) continue;
+            if (chosen < 0) {
+                chosen = weaponIndex;
+                continue;
+            }
+            WeaponRoleModel.Cell current = table.cells[chosen][scenarioIndex];
+            // Prefer a weapon that clears on one floor's supply; among equals, the faster one.
+            boolean better = cell.ammoFeasible != current.ammoFeasible
+                    ? cell.ammoFeasible : cell.score < current.score;
+            if (better) chosen = weaponIndex;
+        }
+        WeaponRoleModel.RoleScenario scenario = WeaponRoleModel.scenarios().get(scenarioIndex);
+        if (chosen < 0) {
+            return new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-5 " + damageClass + " ammo feasible" + at,
+                    0f, 0f, 0f, false, "no weapon of the class clears " + scenario.id);
+        }
+        WeaponRoleModel.RoleWeapon weapon = weapons.get(chosen);
+        WeaponRoleModel.Cell cell = table.cells[chosen][scenarioIndex];
+        float supply = table.supplyPerFloor.getOrDefault(weapon.ammoType, 0f);
+        return new RuleResult(RuleKind.WEAPON_ROLE, "R-ROLE-5 " + damageClass + " ammo feasible" + at,
+                cell.ammoSpent, 0f, supply, cell.ammoSpent <= supply,
+                weapon.displayName + " in " + scenario.id + " (" + weapon.ammoType + " per floor "
+                        + String.format("%.1f", supply) + ")");
+    }
+
+    private static int scenarioIndex(String id) {
+        List<WeaponRoleModel.RoleScenario> scenarios = WeaponRoleModel.scenarios();
+        for (int index = 0; index < scenarios.size(); index++) {
+            if (scenarios.get(index).id.equals(id)) return index;
+        }
+        throw new IllegalStateException("No R-ROLE scenario " + id);
     }
 
     /** R-ENEMY: threatPoints in the role TP band for every non-boss archetype. */
@@ -898,7 +938,7 @@ public final class BalanceSchema {
             results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to kill",
                     hitsToKill, band[0], band[1], hitsToKill >= band[0] && hitsToKill <= band[1],
                     "role " + enemyType.role() + String.format("; eHP %.0f / %.1f per reference hit",
-                            enemyType.effectiveHitPoints(), GameMath.ladderReferenceHitDamage())));
+                            enemyType.neutralEffectiveHitPoints(), GameMath.ladderReferenceHitDamage())));
             results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to die",
                     hitsToDie, band[2], band[3], hitsToDie >= band[2] && hitsToDie <= band[3],
                     "role " + enemyType.role() + "; " + BalanceConfig.REFERENCE_PLAYER_EHP + " eHP / "
@@ -909,7 +949,9 @@ public final class BalanceSchema {
 
     /** Depth-1 hits the R8 reference weapon needs to kill the archetype (shared by the audit and the report). */
     public static int enemyHitsToKill(EnemyType enemyType) {
-        return GameMath.turnsToKill(enemyType.effectiveHitPoints(), GameMath.ladderReferenceHitDamage());
+        // Matchup-NEUTRAL eHP (balance-overhaul order 3 re-statement): R8 boxes the fight with an answer
+        // that is not resisted; the generalist's matchup cost is priced in TP, not in the box.
+        return GameMath.turnsToKill(enemyType.neutralEffectiveHitPoints(), GameMath.ladderReferenceHitDamage());
     }
 
     /** Depth-1 ordinary hits of the archetype the 205-eHP start player survives (shared by the audit and the report). */
@@ -1196,7 +1238,7 @@ public final class BalanceSchema {
     public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
         EnemyType soldier = REGION_REFERENCE_SOLDIER;
         ExpectedPlayer player = GameMath.expectedPlayerAtDepth(depth);
-        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.effectiveHitPoints(), depth);
+        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.neutralEffectiveHitPoints(), depth);
         float soldierDamagePerTurn = GameMath.enemyDamageAtDepth(
                 (float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()), depth);
         // OFFENCE: whole turns shaved off killing the soldier when the card's DPT is added.
@@ -2189,7 +2231,9 @@ public final class BalanceSchema {
 
     /** Continuous hits the given player needs to kill the archetype at a depth (R-LADDER TTK). */
     public static float ladderTurnsToKill(EnemyType enemyType, int depth, ExpectedPlayer player) {
-        float enemyEffectiveHitPoints = GameMath.enemyHealthAtDepth(enemyType.effectiveHitPoints(), depth);
+        // R-LADDER's reference is the Assault Rifle vs a NEUTRAL target (balance-overhaul order 3 keeps
+        // it matchup-free): read the neutral eHP, never the trait-priced one.
+        float enemyEffectiveHitPoints = GameMath.enemyHealthAtDepth(enemyType.neutralEffectiveHitPoints(), depth);
         return GameMath.ladderTurnsToKill(enemyEffectiveHitPoints, player.referenceHitDamage);
     }
 
@@ -2347,6 +2391,27 @@ public final class BalanceSchema {
     /** Walk tiles between consecutive synthetic rooms. */
     private static final int SYNTHETIC_ROOM_SPACING     = 7;
 
+    /**
+     * R-SUPPLY "reserve banks" (balance-overhaul order 3, A-1): every ammo type's FULL reserve banks its
+     * AmmoType.getBankingFloorsTarget() floors of the model floor's demand (GameMath.reserveBankingFloors),
+     * within AMMO_BANKING_FLOORS_TOLERANCE — the generalist's bullets ~1.0, shells and cells ~1.5.
+     */
+    public static List<RuleResult> ammoBankingResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float demand = modelFloorDemand();
+        for (ScarcityRowSpec row : SCARCITY_ROWS) {
+            float banked = GameMath.reserveBankingFloors(row.reserveCap, row.damagePerUnit, demand);
+            float target = row.ammoType.getBankingFloorsTarget();
+            float low  = target - BalanceConfig.AMMO_BANKING_FLOORS_TOLERANCE;
+            float high = target + BalanceConfig.AMMO_BANKING_FLOORS_TOLERANCE;
+            results.add(new RuleResult(RuleKind.SUPPLY, "reserve banks " + row.ammoType.name(), banked, low, high,
+                    banked >= low && banked <= high,
+                    String.format("cap %d x %.0f dmg / %.0f model-floor demand (target %.1f floors)",
+                            row.reserveCap, row.damagePerUnit, demand, target)));
+        }
+        return results;
+    }
+
     /** R-SUPPLY (planner level): every spec x audit depth, worst case over the audit seeds. */
     public static List<RuleResult> supplyPlannerResults() {
         List<RuleResult> results = new ArrayList<>();
@@ -2377,7 +2442,7 @@ public final class BalanceSchema {
     }
 
     /** A roster for the planner-level audit: what the encounter planner fields for this spec and depth. */
-    private static List<EnemyType> syntheticRoster(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth, long seed) {
+    static List<EnemyType> syntheticRoster(ge.tbegvadze.toon3d.route.NodeSupplySpec spec, int depth, long seed) {
         if (spec.encounterKind() == ge.tbegvadze.toon3d.route.NodeSupplySpec.EncounterKind.NONE) {
             return Collections.emptyList();
         }

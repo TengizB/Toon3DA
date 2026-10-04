@@ -35,7 +35,7 @@ public final class WeaponConstants {
     public static final int     SHOTGUN_DAMAGE             = BalanceConfig.SHOTGUN_DAMAGE;
     public static final int     SHOTGUN_CLIP_SIZE          = BalanceConfig.SHOTGUN_CLIP_SIZE;
     public static final int     SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.SHOTGUN_RELOAD_TIME_TICKS;
-    public static final float   SHOTGUN_DAMAGE_DROP_COEFF  = BalanceConfig.SHOTGUN_DAMAGE_DROP_COEFF;
+    public static final float[] SHOTGUN_FALLOFF_BY_TILE    = BalanceConfig.SHOTGUN_FALLOFF_BY_TILE;
     public static final int     SHOTGUN_RANGE_TILES        = BalanceConfig.SHOTGUN_RANGE_TILES;
     // SHOTGUN_PENETRATION: false = stops at first enemy (v1); true = pierces (future)
     public static final boolean SHOTGUN_PENETRATION        = false;
@@ -55,7 +55,7 @@ public final class WeaponConstants {
     public static final int     DBL_SHOTGUN_DAMAGE             = BalanceConfig.DBL_SHOTGUN_DAMAGE;
     public static final int     DBL_SHOTGUN_CLIP_SIZE          = BalanceConfig.DBL_SHOTGUN_CLIP_SIZE;
     public static final int     DBL_SHOTGUN_RELOAD_TIME_TICKS  = BalanceConfig.DBL_SHOTGUN_RELOAD_TIME_TICKS;
-    public static final float   DBL_SHOTGUN_DAMAGE_DROP_COEFF  = BalanceConfig.DBL_SHOTGUN_DAMAGE_DROP_COEFF;
+    public static final float[] DBL_SHOTGUN_FALLOFF_BY_TILE    = BalanceConfig.DOUBLE_BARREL_FALLOFF_BY_TILE;
     public static final int     DBL_SHOTGUN_RANGE_TILES        = BalanceConfig.DBL_SHOTGUN_RANGE_TILES;
     // DBL_SHOTGUN_PENETRATION: false = stops at first enemy (spread dissipates on first target)
     public static final boolean DBL_SHOTGUN_PENETRATION        = false;
@@ -277,12 +277,13 @@ public final class WeaponConstants {
     public static final float WEAPON_FLAME_HEIGHT     = 80f;
     public static final float WEAPON_FLAME_BASE_WIDTH =  160f;
 
-    // Railgun — charge-up infinite-pierce hitscan sniper (SLUGS ammo)
+    // Railgun — charge-up infinite-pierce hitscan sniper (SLUGS ammo). Governed by R-ROLE since
+    // balance-overhaul order 3 (its old power-band waiver is deleted); full charge fitted to 75.
     // Damage table (coefficient 0.02, floor 0.70):
     //   charge 1 (half), distance 1: 40 × 1.00 = 40
     //   charge 1 (half), distance 16: 40 × max(0.70, 1 - 0.02×15) = 40 × 0.70 = 28
-    //   charge 2 (full), distance 1: 90 × 1.00 = 90
-    //   charge 2 (full), distance 16: 90 × 0.70 = 63
+    //   charge 2 (full), distance 1: 75 × 1.00 = 75
+    //   charge 2 (full), distance 16: 75 × 0.70 = 53
     // Balance values (damage, range, falloff, clip, reload, ammo) live in BalanceConfig.
     public static final int[]   RAILGUN_DAMAGE_BY_CHARGE          = BalanceConfig.RAILGUN_DAMAGE_BY_CHARGE;
     public static final int     RAILGUN_MAX_CHARGE                = 2;
@@ -303,17 +304,21 @@ public final class WeaponConstants {
     public static final String  RAILGUN_FIRE_TEXTURE_PATH         = "textures/guns/railgun/railgun_fire.png";
     public static final String  RAILGUN_RELOAD_TEXTURE_PATH       = "textures/guns/railgun/railgun_reload.png";
 
-    // Incinerator — short-range cone flamethrower (FUEL ammo)
+    // Incinerator — short-range cone flamethrower (CELLS ammo; FIRE damage class)
     // Impact damage applied to every enemy in the cone on each spray.
     // Depth-3 (far-edge) tiles use FLAME_FALLOFF instead of FLAME_IMPACT_DAMAGE.
     // FLAME_DAMAGE_DROP_COEFF = 0.0: depth falloff is handled explicitly, not by the drop curve.
-    // Burn DoT constants (FLAME_BURN_*) drive the BURNING status applied to every enemy
-    // the cone hits — Incinerator.marchShot() calls EnemyHitTarget.applyBurningStatus(),
-    // which routes into StatusEffectController (StatusType.BURNING).
+    // Burn DoT constants (FLAME_BURN_*) drive the STACKING BURNING status applied to every enemy
+    // the cone hits — Incinerator.marchShot() calls EnemyHitTarget.applyBurningStack(), which
+    // routes into StatusEffectController.applyStacking (StatusType.BURNING, up to FLAME_BURN_MAX_STACKS).
     // Balance values (impact/falloff/burn/range/clip/ammo) live in BalanceConfig.
     public static final int     FLAME_IMPACT_DAMAGE        = BalanceConfig.FLAME_IMPACT_DAMAGE;
     public static final int     FLAME_FALLOFF              = BalanceConfig.FLAME_FALLOFF;
-    public static final int     FLAME_BURN_DAMAGE_PER_TURN = BalanceConfig.FLAME_BURN_DAMAGE_PER_TURN;
+    public static final float   FLAME_BURN_FRACTION        = BalanceConfig.FLAME_BURN_FRACTION;
+    public static final int     FLAME_BURN_MAX_STACKS      = BalanceConfig.FLAME_BURN_MAX_STACKS;
+    /** Depth-1 burn per stack per turn, for display (the live value is ladder-scaled in Incinerator). */
+    public static final int     FLAME_BURN_DAMAGE_PER_STACK =
+            GameMath.incineratorBurnPerStack(BalanceConfig.FLAME_IMPACT_DAMAGE, BalanceConfig.FLAME_BURN_FRACTION);
     public static final int     FLAME_BURN_TURNS           = BalanceConfig.FLAME_BURN_TURNS;
     public static final float   FLAME_DAMAGE_DROP_COEFF    = BalanceConfig.FLAME_DAMAGE_DROP_COEFF;
     public static final int     FLAME_RANGE_TILES          = BalanceConfig.FLAME_RANGE_TILES;
@@ -481,4 +486,38 @@ public final class WeaponConstants {
     public static final float ASSAULT_RIFLE_BASE_ACCURACY         = 0.88f;
     public static final float ARC_CANNON_BASE_ACCURACY            = 0.88f;
     public static final float MELEE_BASE_ACCURACY                 = 1.00f;
+
+    /**
+     * Drop coefficient handed to the Weapon base by weapons whose falloff is a per-tile TABLE (Shotgun,
+     * Double-Barrel — balance-overhaul order 3, W1/W2). They override damageAtDistance, so the base
+     * coefficient curve is never evaluated for them.
+     */
+    public static final float TABLE_FALLOFF_DROP_COEFFICIENT = 0f;
+
+    // ── Damage-class colours (balance-overhaul order 3, VISUAL DESIGN) ──────
+    // Read by entity/DamageClass; render builds its Colors from these floats (C1-C5). Cosmetic.
+    public static final float DAMAGE_CLASS_COLOR_BALLISTIC_RED   = 0.85f;  // pale brass
+    public static final float DAMAGE_CLASS_COLOR_BALLISTIC_GREEN = 0.75f;
+    public static final float DAMAGE_CLASS_COLOR_BALLISTIC_BLUE  = 0.45f;
+    public static final float DAMAGE_CLASS_COLOR_SPREAD_RED      = 1.00f;  // orange
+    public static final float DAMAGE_CLASS_COLOR_SPREAD_GREEN    = 0.55f;
+    public static final float DAMAGE_CLASS_COLOR_SPREAD_BLUE     = 0.15f;
+    public static final float DAMAGE_CLASS_COLOR_ENERGY_RED      = 0.30f;  // cyan
+    public static final float DAMAGE_CLASS_COLOR_ENERGY_GREEN    = 0.85f;
+    public static final float DAMAGE_CLASS_COLOR_ENERGY_BLUE     = 1.00f;
+    public static final float DAMAGE_CLASS_COLOR_RAIL_RED        = 0.85f;  // white-violet
+    public static final float DAMAGE_CLASS_COLOR_RAIL_GREEN      = 0.75f;
+    public static final float DAMAGE_CLASS_COLOR_RAIL_BLUE       = 1.00f;
+    public static final float DAMAGE_CLASS_COLOR_FIRE_RED        = 1.00f;  // red-orange
+    public static final float DAMAGE_CLASS_COLOR_FIRE_GREEN      = 0.35f;
+    public static final float DAMAGE_CLASS_COLOR_FIRE_BLUE       = 0.10f;
+    public static final float DAMAGE_CLASS_COLOR_EXPLOSIVE_RED   = 1.00f;  // yellow
+    public static final float DAMAGE_CLASS_COLOR_EXPLOSIVE_GREEN = 0.85f;
+    public static final float DAMAGE_CLASS_COLOR_EXPLOSIVE_BLUE  = 0.20f;
+    public static final float DAMAGE_CLASS_COLOR_BLADE_RED       = 0.80f;  // silver
+    public static final float DAMAGE_CLASS_COLOR_BLADE_GREEN     = 0.82f;
+    public static final float DAMAGE_CLASS_COLOR_BLADE_BLUE      = 0.86f;
+    public static final float DAMAGE_CLASS_COLOR_BLUNT_RED       = 0.55f;  // steel grey
+    public static final float DAMAGE_CLASS_COLOR_BLUNT_GREEN     = 0.58f;
+    public static final float DAMAGE_CLASS_COLOR_BLUNT_BLUE      = 0.62f;
 }

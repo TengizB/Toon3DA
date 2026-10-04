@@ -168,6 +168,16 @@ public final class TeachingSystem {
         evidenceCount[TeachingTopic.UNDERGEARED.ordinal()]++;
     }
 
+    /**
+     * EVIDENCE (balance-overhaul-order-3 C6): a switch-hint EPISODE just reached its third fire turn
+     * with the resisted weapon still equipped - one point per episode, so the threshold of three
+     * means "three episodes". Counts only once the first telling has actually been delivered.
+     */
+    public void onMatchupHintIgnored() {
+        if (!taughtTimerStarted[TeachingTopic.MATCHUP.ordinal()]) return;
+        evidenceCount[TeachingTopic.MATCHUP.ordinal()]++;
+    }
+
     /** The player actually switched weapons — the "whole floors without switching" count resets. */
     public void onWeaponSwitched() {
         evidenceCount[TeachingTopic.SWITCH_WEAPON.ordinal()] = 0;

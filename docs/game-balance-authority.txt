@@ -63,7 +63,8 @@ Formula/Derivation/Edge-case blocks. Full walkthrough: knowledge doc SECTION 2.
   TTK  turnsToKill(...)                ceil(target.eHP / attacker.DPT)
   TP   threatPoints(...)               enemyDPT * survivalTurns * positionalMult
 
-  weaponPowerScore(...)  = sustainedDPT * sqrt(ammoEff / 40)
+  roleScenarioClear(...) = fractional turns to clear an R-ROLE scenario (balance-overhaul
+                           order 3; replaced weaponPowerScore, deleted with R-WEAPON)
   goldenRatio(...)       = turnsToDie / turnsToKill (TTK at the SUSTAINED
                            reference DPT — contract decision)
   depthThreatScale(...)  = healthScale^(d-1) * damageScale^(d-1)
@@ -83,21 +84,74 @@ Formula/Derivation/Edge-case blocks. Full walkthrough: knowledge doc SECTION 2.
 --------------------------------------------------------------------------------
 SECTION 3 — THE SCHEMA RULES (kind, band, and WHY the band is shaped so)
 --------------------------------------------------------------------------------
-R-WEAPON (RuleKind.WEAPON_POWER)
-  Every ranged weapon is registered in BalanceSchema.rangedWeapons() with a
-  ROLE; its weaponPowerScore must land in the role band:
-    sidearm 8-14 | workhorse 12-18 | burst/specialist 18-26 | heavy/charge 24-32
-  WHY: the bands overlap deliberately so roles form a ladder, not silos. Role
-  bands are evaluated at LEVEL 1, COMMON (the ladder multiplies every weapon the
-  same way, so a role's SHAPE is level-independent). OVERRIDDEN (balance-overhaul
-  order 1): the old clause "higher rarity never raises a band — rarity buys
-  ABILITIES, not raw DPT" is gone — rarity now MULTIPLIES damage (R5,
-  RARITY_DAMAGE_MULTIPLIER 1.00/1.10/1.20/1.32/1.45) on top of its ability
-  budget, and R-LADDER L5 proves every tier step is felt. Crediting
-  notes (data on each spec): Railgun scored at full charge; Grenade Launcher on
-  centre splash; Arc Cannon on the primary bolt (lateral chain uncredited);
-  Incinerator as impact + one full burn application per shot (DoT is damage and
-  counts toward TTK — an acknowledged muzzle-style over-credit, like falloff).
+R-ROLE (RuleKind.WEAPON_ROLE) — balance-overhaul order 3 — every weapon is the
+best answer SOMEWHERE and never everywhere.
+  The registry is util/WeaponRoleModel: one row per ranged weapon, whose
+  DamageClass, ammo type, clip, reload, range and accuracy are read from a FRESH
+  INSTANCE of the weapon (one source of truth), plus its scenario shape (hits and
+  ammo per action, SINGLE / PIERCE / CONE / SPLASH / CHAIN, charge, burn stacks,
+  knockback / stagger, self-damage). Eight REFERENCE SCENARIOS (archetype = the
+  representative of the trait and role, BalanceConfig SECTION 22 geometry):
+    S1 FLESH single 3-5 (Plague Hulk)       S5 BURNABLE x3 1-3 (Ghoul)
+    S2 FLESH x3 1-3 (Gore Biter, the A6     S6 CHITIN single 1-2 (Shell Brute)
+       "on-curve chaff")                    S7 INFERNAL single 3-5 (Void Shroud)
+    S3 SHIELDED single 3-5 (Acid Drone)     S8 a BRUISER charging from 3 tiles
+    S4 PLATED single 3-6 (Cinderforge          (Shell Brute) — scored in HITS it
+       Colossus, the PLATED tank)              lands before it dies
+  evaluated for the ON-CURVE player (GameMath.expectedPlayerAtDepth; hits scale
+  by its ladder factor, enemies by the NEUTRAL eHP at the depth) at depths 5 and
+  15. GameMath.roleScenarioClear walks the fight turn by turn (reload, Railgun
+  charge, fire, then burn ticks) and reports FRACTIONAL turns to clear (the last
+  turn counts only the share the killing blow needed), actions and ammo;
+  GameMath.roleScenarioBruiserHitsTaken plays S8, crediting the SPREAD knockback
+  (one tile) and stagger (one cancelled action, never two turns running).
+  MODEL ASSUMPTIONS: expected-value accuracy on every hit; no crits, abilities or
+  cards; a group is clustered in the band (a cone or splash reaches all of it, a
+  pierce ROLE_GROUP_TARGETS_IN_LANE = 2 of it, the Arc's chain up to its jumps at
+  never-resisted damage); the Railgun always fires at FULL charge (one charge
+  turn, then the shot). "Best" = fewest turns among ammo-FEASIBLE clears (ties:
+  every tied class is best).
+    R-ROLE-1 NICHE      every ranged class but BALLISTIC is best in >= 1 scenario
+                        by >= 1.20x over the best BALLISTIC weapon (S8: on hits+1).
+                        Melee (BLADE / BLUNT) is EXEMPT: no ammo, adjacent only,
+                        the fallback — not modelled (recorded decision).
+    R-ROLE-2 GENERALIST BALLISTIC within 1.30x of the best in S1; never best in
+                        S3 or S4.
+    R-ROLE-3 NO DOMINANCE no class best in more than 2 scenarios (per depth).
+    R-ROLE-4 RISK PAYS  every SPREAD weapon's SUSTAINED per-turn damage at 1-2
+                        tiles (accuracy-weighted, reload counted) >= 2.0x the
+                        Assault Rifle's at 3 tiles. The reference is the Assault
+                        Rifle — W1's own wording and R-LADDER's generalist — not the
+                        Chaingun (whose three-round action sustains ~2x the rifle).
+    R-ROLE-5 AMMO FEASIBLE every class clears its DECLARED niche scenario
+                        (ROLE_DECLARED_NICHE_BY_CLASS: BALLISTIC S1, SPREAD S6,
+                        ENERGY S3, RAIL S4, FIRE S5, EXPLOSIVE S2 — reviewer fix:
+                        it read the first scenario the class was closest to the best
+                        in, which for RAIL was S1, so AS8's PLATED slug check never
+                        ran) with <= one AVERAGE COMBAT floor's planned supply of its
+                        ammo type (the CURRENT SupplyPlanner over 20 rosters, the
+                        player carrying BULLETS + that type).
+    A6                  the Incinerator clears S2 in <= 2 sprays at both depths.
+  FITTED (CP3b): Shotgun 44 -> 66, Double-Barrel 32 -> 59 (0.9x per barrel,
+  W2), Arc Cannon 28 -> 40, Railgun full charge 90 -> 75, Grenade centre/
+  neighbour 42/22 -> 36/32, Incinerator burn fraction 0.5 -> 0.6 (impact 12 / 8
+  kept), shell box 4 -> 3 and shell cap 17 -> 11 (same damage per box / banked).
+  Assault Rifle and Chaingun unchanged; R-LADDER untouched. Resulting niches:
+  RAIL S1 + S4, EXPLOSIVE S2, ENERGY S3 + S7, FIRE S5, SPREAD S6 + S8; BALLISTIC
+  best nowhere, within 1.23x of S1's best.
+  OVERRIDE RECORD (balance-overhaul order 3 OVERRIDE CLAUSE):
+    R-WEAPON (RuleKind.WEAPON_POWER) — RETIRED. It required every ranged weapon's
+    weaponPowerScore (sustained DPT x sqrt(ammo efficiency / 40)) to land in its
+    role band: sidearm 8-14 | workhorse 12-18 | burst/specialist 18-26 |
+    heavy/charge 24-32, with crediting notes (Railgun at full charge; Grenade on
+    centre splash; Arc on the primary bolt; Incinerator as impact + one burn).
+    It was blind to WHAT a weapon is good against — the reason every gun felt
+    the same and the Chaingun (scored per bullet, not per three-round action)
+    read as a mid-band workhorse. REPLACED by R-ROLE-1..5 above.
+    WAIVER [WEAPON_POWER] Railgun (full charge) 45.0 vs heavy 24-32 — DELETED
+    (AS8): the Railgun is governed by R-ROLE (the PLATED niche + R-ROLE-5).
+    REFERENCE_AMMO_EFFICIENCY, the WEAPON_POWER_* bands and
+    GameMath.weaponPowerScore are deleted with it.
 
 R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-overhaul order 1 (R8)
   Part 2 — THE R8 HIT BANDS (replace the golden-ratio bands): every non-boss
@@ -123,6 +177,27 @@ R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-ove
   16-34 | soldier 36-66 | bruiser 70-120 | mini-elite 160-310) -> the rules above.
   Every archetype's depth-1 HP/damage was rebased (BalanceConfig SECTION 2 note);
   damage sits at the LOW end of each band because the heal economy absorbs it.
+  RE-STATED by balance-overhaul order 3 (CP2) — MATCHUPS. Two eHP readings now exist:
+    NEUTRAL eHP (EnemyType.neutralEffectiveHitPoints) — the matchup-free survivability
+      primitive. Part 2 (the R8 hit bands), R-LADDER and R-CARD-BREAKPOINT read it: the
+      box describes the fight with an answer that is NOT resisted, and R-LADDER's
+      reference stays the Assault Rifle vs a neutral target.
+    PRICED eHP (EnemyType.effectiveHitPoints) — neutral eHP / referenceMultiplier, with
+      referenceMultiplier = 1 + w x (MatchupTable.multiplier(BALLISTIC, trait) - 1) and
+      w = BalanceConfig.MATCHUP_TP_REFERENCE_WEIGHT (GameMath.matchupReferenceMultiplier /
+      traitAdjustedEnemyEffectiveHitPoints). Part 1 (the TP bands), XP and the encounter
+      budget read it: an armoured archetype costs what it takes the reference
+      generalist to kill, blended toward neutral because the on-curve player usually
+      carries a second gun. Every archetype stays inside its role TP band for any
+      w in [0, 0.83] (the Verdant Spiresower, PLATED, is the binding row).
+      w SHIPS AT 0 — a DECISION (balance-overhaul order 3, CP7), so priced eHP ==
+      neutral eHP. Re-fit with TACTICAL switching by matchup and the CP7 planned-heal
+      re-fit: w = 0.25 -> S-SUPPLY 0.83, w = 0.5 -> 0.81, both over the 0.80 cap (w = 0
+      -> 0.78). Pricing the rifle's armour penalty makes the planner trade armoured
+      bodies for unresisted ones, which the sim's two-gun kit beats more easily. Revisit
+      in the order-7 feel pass, with S-SUPPLY, once played kits carry more classes.
+  OVERRIDE RECORD: "enemy eHP == raw HP / no mitigation" in TP pricing -> the priced
+  eHP above; the R8 hit bands' eHP -> explicitly the NEUTRAL eHP (unchanged numbers).
 
 R-CARD (RuleKind.CARD_BUDGET)
   Every level-up card (UpgradeCard.values(), estimatedPowerPoints()) must price
@@ -220,6 +295,24 @@ R-SUPPLY (RuleKind.SUPPLY) — supply tracks demand (balance-overhaul order 2)
                  category's ground pickups (count basis; corridors are not rooms)
     carriers     ~25% (+/-0.08) of the eligible ammo / non-floor heal pickups ride
                  on enemies (S6)
+  RESERVE BANKS (BalanceSchema.ammoBankingResults, balance-overhaul order 3 A-1): every
+    ammo type's full reserve banks AmmoType.getBankingFloorsTarget() floors of the model
+    floor's demand (cap x damage per unit / 502), +/- AMMO_BANKING_FLOORS_TOLERANCE 0.15:
+    BULLETS 1.0, SHELLS 1.5, CELLS 1.5, ROCKETS 1.5, SLUGS 1.0.
+  A-1 AMMO GENEROSITY (balance-overhaul order 3, CP4): the S2 split is WEIGHTED per
+    AmmoType (getSupplyGenerosity — BULLETS 0.8, SHELLS 1.3, CELLS 1.0, ROCKETS 1.0,
+    SLUGS 0.9) and RE-NORMALISED (GameMath.normalisedAmmoShare), so a floor's total
+    planned ammo damage is unchanged and only the mix moves. With only the rifle carried
+    the shares go 70 / 7.5 x4 -> bullets 64%, shells 11.1%, cells 8.6%, rockets 8.6%,
+    slugs 7.7%. MAPPING: the spec's GRENADES are AmmoType.ROCKETS; the spec's FUEL has no
+    type of its own — the Incinerator burns CELLS (shared with the Plasma Rifle and the
+    Arc Cannon), which keep 1.0.
+    OVERRIDE RECORD: the order-2 unweighted 70/30 carried / off-type split -> weighted
+    and normalised as above. RESERVE CAPS re-fitted to the per-type banking targets:
+    BULLETS 38 -> 25 (1.51 -> 1.00 floors), SHELLS 11 (1.45, unchanged since CP3b's
+    17 -> 11), CELLS 27 (1.51, unchanged), ROCKETS 18 -> 21 (1.29 -> 1.51), SLUGS 6 -> 7
+    (0.90 -> 1.05). RESERVE_BANKING_FLOORS_TARGET (1.5, the aggregate R-BOSS-AMMO reads)
+    is unchanged.
   WHY: three generators placed loot with three different codes built from
   independent per-room chances — a rooms floor rolled ~8 medkits and ~10 ammo boxes
   at depth 1, a cave ~0.45 medkits (only inside a MEDICAL_BAY chamber that might not
@@ -274,7 +367,7 @@ R-GEARGATE (RuleKind.GEAR_GATE) — RETIRED by balance-overhaul order 1
   are deleted (GEAR_CURVE_REGION_BAND_SIZE stays: every per-region table indexes by it).
 
 R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2)
-  Rarity NEVER raises a weapon's POWER band (that is a role property, R-WEAPON) —
+  Rarity NEVER raises a weapon's POWER band (that was a role property of the since-retired R-WEAPON) —
   it buys ABILITIES [OVERRIDDEN by balance-overhaul order 1: rarity now ALSO
   multiplies damage — R5 — while keeping this ability budget], and abilities are now PRICED in the SAME power points (PP =
   %-of-reference DPT/eHP) the level-up cards use (GameMath.abilityPowerPoints;
@@ -608,7 +701,7 @@ S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
   HOARDER-START-WEAPON never does.
 
-S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKind.SIM_*, order 9)
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-SOFTLOCK (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
   it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
@@ -628,6 +721,11 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKin
     TACTICAL              keeps range, breaks the cardinal line vs ranged, guards a telegraphed
                           spike (never twice running), manages ammo across weapons, heals early,
                           buys the shop backstop, takes upgrades, routes by the order-7 node EV.
+                          Balance-overhaul order 3 (CP7): takes the C4 SWITCH hint whenever it is up
+                          (SimWorld computes it exactly as World.updateMatchupHint does — the real
+                          MatchupAdvisor + PlayerController jump), and keeps its kit DIVERSE: a found
+                          gun of a DamageClass the loadout lacks replaces the redundant / emptiest
+                          slot (never the last gun with ammo; PlayerPolicy.slotToReplaceForGroundWeapon).
     HOARDER-START-WEAPON  TACTICAL, but NEVER equips a weapon it finds or buys — the user's
                           boss-cheese reproduction, kept as a permanent regression case.
 
@@ -657,6 +755,25 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SOFTLOCK (RuleKin
               HP" was the complaint — a normal floor should cost something; REST and CACHE are
               where HP comes back. NOT waived: it reads exited floors only, so the navigation stall
               shrinks its sample but does not bias it.
+  S-SWITCH    (balance-overhaul order 3, A8, RE-STATED by idea decision D3 under the override
+              clause) — THE C4 HINT WORKS. Three lines, none waived (fight-level, not depth-derived):
+              (1) at least SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS (10) TACTICAL COMBAT floors across the
+              matrix show a hint, so (2) and (3) are never read off an empty sample; (2) TACTICAL's
+              hint TAKE RATE (hint-driven switches / hint episodes) >= SIM_SWITCH_MIN_TAKE_RATE (0.8);
+              (3) hint-driven switches per COMBAT floor THAT SHOWED A HINT >= 1.0. A hint-driven
+              switch is a SWITCH tap taken while the hint was up that equipped the hinted gun.
+              REPLACED RULE: A8 as first written — ">= 1.0 matchup switches per played COMBAT floor".
+              WHY REPLACED: measured 0.13 with a take rate of 1.00; only 21 of 167 COMBAT floors ever
+              showed a hint, because the start kit (Chaingun + Shotgun, two usable slots) can only
+              answer CHITIN and ~85% of sim runs stall on floor 1. That count measures the start
+              kit's class spread, not whether the hint works; changing the start kit would reopen
+              the order-1/2 fitted bands. The overall per-COMBAT-floor count is still printed (info
+              column of line 3 and the MATCHUP REPORT) so a later kit change can be read against it.
+  MATCHUP REPORT (sim/SimReport, OUTPUT not an assertion; balance-overhaul order 3): per policy and
+              depth band — EFFECTIVE / RESISTED hits per floor (EnemyManager's onEnemyMatchupHit seam),
+              hint-driven switches per floor, each DamageClass's share of landed hit damage (the
+              class the activation armed; burn ticks excluded), plus the S-SWITCH alternatives line:
+              switches per COMBAT floor, hint take rate, switches per COMBAT floor that showed a hint.
   S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
               tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
               fighting retreat, not a dead end. The band exists to keep that structural
@@ -678,17 +795,11 @@ and mirror it HERE in the same commit. A waiver must state a real reason and a
 condition under which it expires; BalanceReport prints all active waivers so
 they can never fade into folklore. Never weaken a band to make a test pass.
 
-LIVE WAIVERS (one value waiver + the order-9 navigation-limited bands):
-  [WEAPON_POWER] Railgun (full charge) — power score 45.0 vs heavy band 24-32.
-    reason:  gated by slug scarcity, not raw damage; the 90-per-slug
-             elite-buster hit is the heavy role's identity and supply
-             (~1.1 slugs/floor, tightest reserve banking ~1.0 floor) is the
-             real limiter. Nerfing the raw 90 would make the weapon worthless
-             rather than merely scarce.
-    expires: re-checked by balance-overhaul order 2 R-SUPPLY — slugs only ever arrive
-             through the 30% off-type share of a floor's planned ammo (or the carried
-             share once a railgun is held), and the slug reserve cap stays the tightest
-             of all ammo types; scarcity, not raw damage, is still the limiter.
+LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing below):
+  (DELETED by balance-overhaul order 3, AS8: [WEAPON_POWER] Railgun (full charge)
+   45.0 vs heavy 24-32 — "gated by slug scarcity". R-WEAPON is retired; the Railgun
+   is governed by R-ROLE, its PLATED niche and R-ROLE-5's ammo check. R-ROLE has no
+   waiver and BalanceAuditTest pins that.)
 
   [SIM_FAIR] TACTICAL median death depth, [SIM_FAIR] TACTICAL readable deaths,
   [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
@@ -726,9 +837,12 @@ SECTION 5 — NEW-CONTENT CHECKLIST
    then reference them from the matching *Constants shim if call sites need the
    old name.
 2. Declare the content's role/band in util/BalanceSchema.java:
-     new ranged weapon -> add a RangedWeaponSpec (role + stat block) AND its
-                          ItemType classification; add its attacks to the
-                          telegraph list if any hit can exceed the cap
+     new ranged weapon -> declare its DamageClass on the Weapon subclass, then add
+                          ONE row to util/WeaponRoleModel (its scenario shape —
+                          the class/ammo/clip/reload/range come from the weapon);
+                          R-ROLE must stay green (a niche, no dominance, ammo
+                          feasible); add its attacks to the telegraph list if any
+                          hit can exceed the cap
      new enemy         -> nothing to register: EnemyType.role() is the
                           declaration; the audit picks it up automatically
                           (a new ROLE needs a TP band entry)
@@ -763,49 +877,118 @@ SECTION 6 — THE LIVING TABLES (BalanceReport output; regenerate on any change)
 --------------------------------------------------------------------------------
 ====================================================================================
  toon3D BALANCE AUTHORITY — LIVING TABLE (generated by BalanceReport)
- Reference player DPT = 25.0   eHP = 205.0   ammoEff anchor = 40.0
+ Reference player DPT = 25.0   eHP = 205.0
 ====================================================================================
-WEAPONS (registry: BalanceSchema.rangedWeapons())
-weapon                 role        sustDPT  ammoEff powerScore         band in?   
-------------------------------------------------------------------------------------
-Shotgun                BURST          22.0     44.0       23.1        18-26 OK    
-Double-Barrel Shotgun  BURST          21.3     32.0       19.1        18-26 OK    
-Plasma Rifle           BURST          22.4     28.0       18.7        18-26 OK    
-Assault Rifle          WORKHORSE      19.4     20.0       13.7        12-18 OK    
-Chaingun               WORKHORSE      18.2     19.0       12.6        12-18 OK    
-Railgun (full charge)  HEAVY          30.0     90.0       45.0        24-32 OVER*W
-Grenade Launcher       HEAVY          25.2     42.0       25.8        24-32 OK    
-Arc Cannon             BURST          21.8     28.0       18.2        18-26 OK    
-Incinerator            HEAVY          31.0     32.0       27.7        24-32 OK    
-  *W = out of band under an ACTIVE WAIVER (see the WAIVERS table).
+MATCHUP (registry: MatchupCatalog — multiplier at MATCHUP_STRENGTH 1.0)
+trait       BALLISTIC     SPREAD     ENERGY       RAIL       FIRE  EXPLOSIVE      BLADE      BLUNT
+------------------------------------------------------------------------------------------------
+FLESH           1.00       1.00       1.00       1.00       1.00       1.00       1.00       1.00 
+SHIELDED        0.65R      0.80R      1.50E      1.00       0.80R      1.00       0.80R      1.20 
+PLATED          0.55R      0.80R      0.90       1.40E      0.60R      1.30E      0.60R      1.40E
+BURNABLE        1.00       1.00       1.00       1.00       1.80E      1.10       1.10       1.00 
+CHITIN          0.75R      1.35E      1.00       1.10       1.40E      1.00       1.20       1.00 
+INFERNAL        1.00       1.10       1.35E      1.00       0.30R      0.90       1.00       1.00 
+
+SCENARIO (R-ROLE, depth 5) — turns to clear; S8 = bruiser hits taken
+weapon                 class          S1      S2      S3      S4      S5      S6      S7      S8
+------------------------------------------------------------------------------------------------
+Assault Rifle          BALLISTIC   4.98    5.90    5.74   13.78!   8.04    8.21    4.15    6.00 
+Chaingun               BALLISTIC   2.35    2.83    2.71    6.54!   2.89    3.51    1.96    1.00 
+Shotgun                SPREAD      6.20!   4.62    6.00!  14.58!   4.67    2.35    4.43    0.00*
+Double-Barrel Shotgun  SPREAD      4.24!   4.37!   4.10!  10.31!   4.40!   0.81*   2.70!   0.00*
+Plasma Rifle           ENERGY      3.91    3.39    1.96    7.77    3.49    5.48    2.42    3.00 
+Arc Cannon             ENERGY      2.52    1.97    1.26*   4.21    2.29    3.03    1.56*   1.00 
+Railgun                RAIL        1.91*   5.41    1.68    1.94*   5.44    5.25    1.76    3.00 
+Incinerator            FIRE        3.31!   1.95    3.13!   6.98!   0.84*   2.49!   7.79!   3.00 
+Grenade Launcher       EXPLOSIVE   2.08    1.09*   1.56    2.27    1.06    5.29    1.92    5.00 
+  scenarios: S1 FLESH x1 3-5 (Plague Hulk); S2 FLESH x3 1-3 (Gore Biter); S3 SHIELDED x1 3-5 (Acid Drone); S4 PLATED x1 3-6 (Cinderforge Colossus); S5 BURNABLE x3 1-3 (Ghoul); S6 CHITIN x1 1-2 (Shell Brute); S7 INFERNAL x1 3-5 (Void Shroud); S8 CHITIN charge 3 (Shell Brute);
+  ammo per average COMBAT floor: BULLETS 12.0; SHELLS 3.0; CELLS 7.0; ROCKETS 4.3; SLUGS 2.1;
+
+SCENARIO (R-ROLE, depth 15) — turns to clear; S8 = bruiser hits taken
+weapon                 class          S1      S2      S3      S4      S5      S6      S7      S8
+------------------------------------------------------------------------------------------------
+Assault Rifle          BALLISTIC   4.76    5.82    5.49   13.17    5.95    7.84    3.96    5.00 
+Chaingun               BALLISTIC   2.24    2.79    2.59    6.26!   2.85    3.36    1.87    1.00 
+Shotgun                SPREAD      6.06!   4.60    4.87   14.24!   4.64    2.29    4.32    0.00*
+Double-Barrel Shotgun  SPREAD      4.15!   4.36!   4.01!  10.08!   4.38!   0.77*   2.63!   0.00*
+Plasma Rifle           ENERGY      3.74    3.33    1.87    7.47    3.42    5.28    2.31    3.00 
+Arc Cannon             ENERGY      2.41    1.90    1.20*   4.02    2.01    2.90    1.49*   1.00 
+Railgun                RAIL        1.87*   5.39    1.65    1.90*   5.42    5.19    1.73    3.00 
+Incinerator            FIRE        3.14!   1.82    3.81!   6.59!   0.72*   2.32!   7.33!   3.00 
+Grenade Launcher       EXPLOSIVE   1.99    1.04*   1.49    2.17    1.02    5.15    1.84    5.00 
+  scenarios: S1 FLESH x1 3-5 (Plague Hulk); S2 FLESH x3 1-3 (Gore Biter); S3 SHIELDED x1 3-5 (Acid Drone); S4 PLATED x1 3-6 (Cinderforge Colossus); S5 BURNABLE x3 1-3 (Ghoul); S6 CHITIN x1 1-2 (Shell Brute); S7 INFERNAL x1 3-5 (Void Shroud); S8 CHITIN charge 3 (Shell Brute);
+  ammo per average COMBAT floor: BULLETS 19.5; SHELLS 3.0; CELLS 7.0; ROCKETS 5.8; SLUGS 2.9;
+
+  R-ROLE-3 BALLISTIC scenarios best d5             0.00 OK          of 8
+  R-ROLE-5 BALLISTIC ammo feasible d5              9.00 OK          Chaingun in S1 (BULLETS per floor 12.0)
+  R-ROLE-1 SPREAD niche d5                         4.36 OK          best in S6; margin = best BALLISTIC / class best
+  R-ROLE-3 SPREAD scenarios best d5                2.00 OK          of 8
+  R-ROLE-5 SPREAD ammo feasible d5                 2.00 OK          Double-Barrel Shotgun in S6 (SHELLS per floor 3.0)
+  R-ROLE-1 ENERGY niche d5                         2.15 OK          best in S3; margin = best BALLISTIC / class best
+  R-ROLE-3 ENERGY scenarios best d5                2.00 OK          of 8
+  R-ROLE-5 ENERGY ammo feasible d5                 2.00 OK          Arc Cannon in S3 (CELLS per floor 7.0)
+  R-ROLE-1 RAIL niche d5                          60.00 OK          best in S4; margin = best BALLISTIC / class best
+  R-ROLE-3 RAIL scenarios best d5                  2.00 OK          of 8
+  R-ROLE-5 RAIL ammo feasible d5                   1.00 OK          Railgun in S4 (SLUGS per floor 2.1)
+  R-ROLE-1 FIRE niche d5                           3.44 OK          best in S5; margin = best BALLISTIC / class best
+  R-ROLE-3 FIRE scenarios best d5                  1.00 OK          of 8
+  R-ROLE-5 FIRE ammo feasible d5                   3.00 OK          Incinerator in S5 (CELLS per floor 7.0)
+  R-ROLE-1 EXPLOSIVE niche d5                      2.59 OK          best in S2; margin = best BALLISTIC / class best
+  R-ROLE-3 EXPLOSIVE scenarios best d5             1.00 OK          of 8
+  R-ROLE-5 EXPLOSIVE ammo feasible d5              2.00 OK          Grenade Launcher in S2 (ROCKETS per floor 4.3)
+  A6 Incinerator sprays to clear S2 d5             2.00 OK          1.95 turns
+  R-ROLE-2 BALLISTIC vs best in S1 d5              1.23 OK          best BALLISTIC / best overall
+  R-ROLE-2 BALLISTIC not best in S3 d5             2.15 OK          best BALLISTIC / best other class (must exceed 1)
+  R-ROLE-2 BALLISTIC not best in S4 d5         Infinity OK          best BALLISTIC / best other class (must exceed 1)
+  R-ROLE-3 BALLISTIC scenarios best d15            0.00 OK          of 8
+  R-ROLE-5 BALLISTIC ammo feasible d15             9.00 OK          Chaingun in S1 (BULLETS per floor 19.5)
+  R-ROLE-1 SPREAD niche d15                        4.36 OK          best in S6; margin = best BALLISTIC / class best
+  R-ROLE-3 SPREAD scenarios best d15               2.00 OK          of 8
+  R-ROLE-5 SPREAD ammo feasible d15                2.00 OK          Double-Barrel Shotgun in S6 (SHELLS per floor 3.0)
+  R-ROLE-1 ENERGY niche d15                        2.15 OK          best in S3; margin = best BALLISTIC / class best
+  R-ROLE-3 ENERGY scenarios best d15               2.00 OK          of 8
+  R-ROLE-5 ENERGY ammo feasible d15                2.00 OK          Arc Cannon in S3 (CELLS per floor 7.0)
+  R-ROLE-1 RAIL niche d15                          6.95 OK          best in S4; margin = best BALLISTIC / class best
+  R-ROLE-3 RAIL scenarios best d15                 2.00 OK          of 8
+  R-ROLE-5 RAIL ammo feasible d15                  1.00 OK          Railgun in S4 (SLUGS per floor 2.9)
+  R-ROLE-1 FIRE niche d15                          3.95 OK          best in S5; margin = best BALLISTIC / class best
+  R-ROLE-3 FIRE scenarios best d15                 1.00 OK          of 8
+  R-ROLE-5 FIRE ammo feasible d15                  3.00 OK          Incinerator in S5 (CELLS per floor 7.0)
+  R-ROLE-1 EXPLOSIVE niche d15                     2.68 OK          best in S2; margin = best BALLISTIC / class best
+  R-ROLE-3 EXPLOSIVE scenarios best d15            1.00 OK          of 8
+  R-ROLE-5 EXPLOSIVE ammo feasible d15             2.00 OK          Grenade Launcher in S2 (ROCKETS per floor 5.8)
+  A6 Incinerator sprays to clear S2 d15            2.00 OK          1.82 turns
+  R-ROLE-2 BALLISTIC vs best in S1 d15             1.20 OK          best BALLISTIC / best overall
+  R-ROLE-2 BALLISTIC not best in S3 d15            2.15 OK          best BALLISTIC / best other class (must exceed 1)
+  R-ROLE-2 BALLISTIC not best in S4 d15            6.95 OK          best BALLISTIC / best other class (must exceed 1)
+  R-ROLE-4 Shotgun risk pays                       2.03 OK          25.9/turn at 1-2 tiles vs Assault Rifle 12.8/turn at 3
+  R-ROLE-4 Double-Barrel Shotgun risk pays         3.41 OK          43.6/turn at 1-2 tiles vs Assault Rifle 12.8/turn at 3
 
 ENEMIES (registry: EnemyType.values() through BalanceSchema bands)
   cycleDPT = order-5 cycle-averaged effective DPT (basic + priced specials); trueTP = cycle-averaged Threat Points.
-enemy             role          eHP atkDmg   cad cycleDPT  posMult     trueTP in?     kill|die R8?   
+  eHP = matchup-neutral (R8 / R-LADDER read it); pricedHP = trait-aware eHP TP prices (order 3, CP2).
+enemy             role        trait       eHP pricedHP atkDmg   cad cycleDPT  posMult     trueTP in?     kill|die R8?   
 ------------------------------------------------------------------------------------
-Plague Hulk       SOLDIER        60     23     2    16.39     1.00       39.3 OK        4|9    OK    
-Eye Tyrant        CHAFF          28     11     1    11.55     1.30       16.8 OK        2|19   OK    
-Gore Biter        CHAFF          28     12     1    12.00     1.15       15.5 OK        2|18   OK    
-Shell Brute       BRUISER        95     35     1    35.00     1.00      133.0 OK        7|6    OK    
-Mire Wraith       SOLDIER        52     23     1    17.83     1.30       48.2 OK        4|9    OK    
-Iron Stalker      MINI_ELITE    170     42     1    47.78     1.15      373.6 OK       12|5    OK    
-Acid Drone        SOLDIER        45     24     1    18.50     1.30       43.3 OK        3|9    OK    
-Void Shroud       SOLDIER        50     25     1    25.00     1.15       57.5 OK        4|9    OK    
-Ghoul             CHAFF          30     13     1    13.00     1.00       15.6 OK        2|16   OK    
-Crawler           CHAFF          15     15     1    15.00     1.15       10.3 OK        1|14   OK    
-Revenant          BRUISER        85     35     1    35.00     1.00      119.0 OK        6|6    OK    
-Vortex Eye        CHAFF          24      9     1     9.60     1.30       12.0 OK        2|23   OK    
-Blight Corruptor  SOLDIER        48     26     1    28.86     1.00       55.4 OK        4|8    OK    
-Auric Sentinel    SOLDIER        60     26     2    13.00     1.30       40.6 OK        4|8    OK    
-Cinderforge Colossus BRUISER        85     36     1    36.00     1.00      122.7 OK        6|6    OK    
-Rimeshell Lancer  SOLDIER        60     24     2    12.00     1.30       37.4 OK        4|9    OK    
-Verdant Spiresower SOLDIER        57     24     1    24.00     1.00       54.7 OK        4|9    OK    
+Plague Hulk       SOLDIER     FLESH        60     60.0     23     2    16.39     1.00       39.3 OK        4|9    OK    
+Eye Tyrant        CHAFF       FLESH        28     28.0     11     1    11.55     1.30       16.8 OK        2|19   OK    
+Gore Biter        CHAFF       FLESH        28     28.0     12     1    12.00     1.15       15.5 OK        2|18   OK    
+Shell Brute       BRUISER     CHITIN       95     95.0     35     1    35.00     1.00      133.0 OK        7|6    OK    
+Mire Wraith       SOLDIER     FLESH        52     52.0     23     1    17.83     1.30       48.2 OK        4|9    OK    
+Iron Stalker      MINI_ELITE  CHITIN      170    170.0     42     1    47.78     1.15      373.6 OK       12|5    OK    
+Acid Drone        SOLDIER     SHIELDED     45     45.0     24     1    18.50     1.30       43.3 OK        3|9    OK    
+Void Shroud       SOLDIER     INFERNAL     50     50.0     25     1    25.00     1.15       57.5 OK        4|9    OK    
+Ghoul             CHAFF       BURNABLE     30     30.0     13     1    13.00     1.00       15.6 OK        2|16   OK    
+Crawler           CHAFF       BURNABLE     15     15.0     15     1    15.00     1.15       10.3 OK        1|14   OK    
+Revenant          BRUISER     BURNABLE     85     85.0     35     1    35.00     1.00      119.0 OK        6|6    OK    
+Vortex Eye        CHAFF       BURNABLE     24     24.0      9     1     9.60     1.30       12.0 OK        2|23   OK    
+Blight Corruptor  SOLDIER     BURNABLE     48     48.0     26     1    28.86     1.00       55.4 OK        4|8    OK    
+Auric Sentinel    SOLDIER     PLATED       60     60.0     26     2    13.00     1.30       40.6 OK        4|8    OK    
+Cinderforge Colossus BRUISER     PLATED       85     85.2     36     1    36.00     1.00      122.7 OK        6|6    OK    
+Rimeshell Lancer  SOLDIER     PLATED       60     60.0     24     2    12.00     1.30       37.4 OK        4|9    OK    
+Verdant Spiresower SOLDIER     PLATED       57     57.0     24     1    24.00     1.00       54.7 OK        4|9    OK    
 
 WAIVERS (registry: BalanceSchema.activeWaivers())
 ------------------------------------------------------------------------------------
-  [WEAPON_POWER] Railgun (full charge)
-    reason:  Gated by slug scarcity, not raw damage: the 90-per-slug elite-buster hit is the heavy role's identity and supply (~1.1 slugs/floor, tightest reserve cap) is the real limiter.
-    expires: Re-checked by balance-overhaul order 2 R-SUPPLY: slugs only ever arrive through the 30% off-type share of a floor's planned ammo (or the carried share once a railgun is held), and the slug reserve cap stays the tightest of all ammo types.
   [SIM_FAIR]     TACTICAL median death depth
     reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
     expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
@@ -909,105 +1092,105 @@ depth    expLvl   avail XP     req XP    yield in band?
 14           14       3008       2714    1.108 OK      
 15           15       3758       3391    1.108 OK      
 
-SUPPLY PLAN — model floor example (depth 1, COMBAT): 12 enemies, DEMAND=502 dmg ; planned ammo damage=427 (ammoRatio 0.85, 70% carried types)
+SUPPLY PLAN — model floor example (depth 1, COMBAT): 12 enemies, DEMAND=502 dmg ; planned ammo damage=427 (ammoRatio 0.85, 70% carried types, weighted by A-1 generosity)
 ammoType     boxes  dmg/unit   supply    perWpnS           bankFloors
 ------------------------------------------------------------------------------------
-Bullets          2        20      400       0.80                 1.51
-Shells           0        44        0       0.00                 1.49
+Bullets          1        20      200       0.40                 1.00
+Shells           0        66        0       0.00                 1.45
 Plasma Cells       0        28        0       0.00                 1.51
-Rockets          0        42        0       0.00                 1.51
-Slugs            0        90        0       0.00                 1.08
+Rockets          1        36       72       0.14                 1.51
+Slugs            1        75       75       0.15                 1.05
 ------------------------------------------------------------------------------------
-FLOOR-WIDE  SUPPLY=400  DEMAND=502  S=0.80  (R-SUPPLY tracks the plan, not a band on S)
+FLOOR-WIDE  SUPPLY=347  DEMAND=502  S=0.69  (R-SUPPLY tracks the plan, not a band on S)
 HEALS planned 0.83 max-HP (heal floor 0.45) + armour 0.21 ; incoming 1.29 max-HP
 
 SUPPLY / DENSITY (R-SUPPLY / R-DENSITY) — mean over 30 seeds per row; ammo in damage, heal/armour in max-HP
 generator        node          d bodies groups 1stCon  walk   dens  TP/x ammo plan/put  heal p/put  armr p/put credits
 -----------------------------------------------------------------------------------------------------------------------
-rooms_mst        COMBAT        1   14.2    3.9    9.9   564   2.53  0.90    425/425     0.97/0.96   0.24/0.25       80
-rooms_mst        COMBAT        5   15.9    4.5   13.4   913   1.76  0.94    734/714     1.09/1.09   0.27/0.27       80
-rooms_mst        COMBAT       10   18.1    5.0   12.8   895   2.03  0.94   1580/1582    1.24/1.22   0.31/0.31       80
-rooms_mst        COMBAT       15   20.3    5.9   14.1   880   2.31  0.95   3416/3470    1.46/1.45   0.37/0.36       80
-rooms_mst        COMBAT       20   22.9    6.4   12.3   899   2.56  0.94   7297/7215    1.67/1.66   0.42/0.43       80
-rooms_mst        COMBAT       25   25.1    6.8   12.3   902   2.79  0.94  14656/15100   1.81/1.78   0.45/0.45       80
-rooms_mst        ELITE         1   14.9    4.0    9.7   564   2.65  0.80    655/701     0.86/0.84   0.38/0.38      128
-rooms_mst        ELITE         5   16.6    4.5   12.3   916   1.83  0.93   1104/1192    0.87/0.85   0.38/0.38      128
-rooms_mst        ELITE        10   19.1    5.2   12.9   895   2.14  0.94   2518/2618    1.01/1.02   0.43/0.44      128
-rooms_mst        ELITE        15   21.3    6.0   13.4   880   2.43  0.93   5423/5612    1.22/1.22   0.52/0.52      128
-rooms_mst        ELITE        20   24.0    6.8   13.2   899   2.69  0.94  11459/11844   1.45/1.43   0.62/0.63      128
-rooms_mst        ELITE        25   26.2    7.4   12.7   902   2.92  0.95  23550/23556   1.56/1.57   0.67/0.67      128
-rooms_mst        CACHE         1    5.0    1.1   32.2   564   0.88  0.50    238/245     0.60/0.61   0.39/0.38       96
+rooms_mst        COMBAT        1   14.2    3.9    9.9   564   2.53  0.90    425/395     0.97/0.96   0.24/0.25       80
+rooms_mst        COMBAT        5   15.9    4.5   13.4   913   1.76  0.94    734/661     1.09/1.09   0.27/0.27       80
+rooms_mst        COMBAT       10   18.1    5.0   12.8   895   2.03  0.94   1580/1577    1.24/1.22   0.31/0.31       80
+rooms_mst        COMBAT       15   20.3    5.9   14.1   880   2.31  0.95   3416/3401    1.46/1.45   0.37/0.36       80
+rooms_mst        COMBAT       20   22.9    6.4   12.3   899   2.56  0.94   7297/7196    1.67/1.66   0.42/0.43       80
+rooms_mst        COMBAT       25   25.1    6.8   12.3   902   2.79  0.94  14656/14811   1.81/1.78   0.45/0.45       80
+rooms_mst        ELITE         1   14.9    4.0    9.7   564   2.65  0.80    655/689     0.86/0.84   0.38/0.38      128
+rooms_mst        ELITE         5   16.6    4.5   12.3   916   1.83  0.93   1104/1169    0.87/0.85   0.38/0.38      128
+rooms_mst        ELITE        10   19.1    5.2   12.9   895   2.14  0.94   2518/2550    1.01/1.02   0.43/0.44      128
+rooms_mst        ELITE        15   21.3    6.0   13.4   880   2.43  0.93   5423/5587    1.22/1.22   0.52/0.52      128
+rooms_mst        ELITE        20   24.0    6.8   13.2   899   2.69  0.94  11459/11763   1.45/1.43   0.62/0.63      128
+rooms_mst        ELITE        25   26.2    7.4   12.7   902   2.92  0.95  23550/23564   1.56/1.57   0.67/0.67      128
+rooms_mst        CACHE         1    5.0    1.1   32.2   564   0.88  0.50    238/251     0.60/0.61   0.39/0.38       96
 rooms_mst        CACHE         5    5.4    1.4   36.0   911   0.60  0.55    447/452     0.66/0.64   0.44/0.44       96
-rooms_mst        CACHE        10    6.5    2.0   24.6   895   0.73  0.60   1035/1057    0.75/0.76   0.50/0.50       96
-rooms_mst        CACHE        15    7.1    2.0   29.7   880   0.81  0.57   2184/2190    0.89/0.87   0.59/0.60       96
-rooms_mst        CACHE        20    8.1    2.0   29.1   899   0.91  0.57   4531/4602    1.03/1.01   0.68/0.69       96
-rooms_mst        CACHE        25    8.7    2.3   27.5   902   0.97  0.64   9666/9716    1.14/1.14   0.76/0.76       96
-rooms_mst        SHOP          1    5.0    1.1   31.6   564   0.88  0.44    244/254     0.61/0.64   0.15/0.16      160
-rooms_mst        SHOP          5    5.5    1.5   33.0   913   0.61  0.49    468/462     0.66/0.65   0.16/0.17      160
-rooms_mst        SHOP         10    6.5    2.0   24.6   895   0.73  0.53   1076/1105    0.78/0.78   0.19/0.19      160
-rooms_mst        SHOP         15    7.1    2.0   32.3   880   0.81  0.49   2226/2233    0.92/0.91   0.23/0.23      160
-rooms_mst        SHOP         20    8.1    2.0   29.1   899   0.91  0.48   4538/4615    1.05/1.03   0.26/0.26      160
-rooms_mst        SHOP         25    8.7    2.2   27.7   902   0.97  0.57  10228/10160   1.15/1.13   0.29/0.29      160
-rooms_mst        MYSTERY       1   14.2    3.9   18.5   564   2.53  0.90    425/425     0.97/0.96   0.24/0.25       80
-rooms_mst        MYSTERY       5   15.9    4.5   23.4   913   1.76  0.94    734/714     1.09/1.09   0.27/0.27       80
-rooms_mst        MYSTERY      10   18.1    5.0   19.0   895   2.03  0.94   1580/1582    1.24/1.22   0.31/0.31       80
-rooms_mst        MYSTERY      15   20.3    5.9   17.3   880   2.31  0.95   3416/3470    1.46/1.45   0.37/0.36       80
-rooms_mst        MYSTERY      20   22.9    6.4   19.3   899   2.56  0.94   7297/7215    1.67/1.66   0.42/0.43       80
-rooms_mst        MYSTERY      25   25.1    6.8   15.6   902   2.79  0.94  14656/15100   1.81/1.78   0.45/0.45       80
-linear_corridor  COMBAT        1   14.2    3.9    8.0   338   4.20  0.90    424/430     0.95/0.94   0.24/0.24       80
-linear_corridor  COMBAT        5   15.7    4.3   12.7   554   2.85  0.93    705/688     1.08/1.09   0.27/0.27       80
-linear_corridor  COMBAT       10   18.1    5.0   13.1   552   3.28  0.92   1552/1564    1.25/1.25   0.31/0.31       80
-linear_corridor  COMBAT       15   20.6    5.6   13.6   549   3.76  0.92   3462/3471    1.46/1.44   0.36/0.36       80
-linear_corridor  COMBAT       20   22.7    6.3   12.2   556   4.10  0.93   7195/6883    1.63/1.64   0.41/0.42       80
-linear_corridor  COMBAT       25   25.5    7.1   12.2   552   4.63  0.93  14760/15372   1.84/1.83   0.46/0.46       80
-linear_corridor  ELITE         1   14.9    4.1    8.5   338   4.41  0.83    669/711     0.88/0.85   0.38/0.37      128
-linear_corridor  ELITE         5   16.6    4.6   13.7   554   3.01  0.95   1153/1227    0.86/0.84   0.37/0.37      128
-linear_corridor  ELITE        10   19.0    5.3   12.7   552   3.45  0.94   2483/2569    1.03/1.02   0.44/0.44      128
-linear_corridor  ELITE        15   21.6    6.2   12.2   549   3.94  0.94   5401/5520    1.24/1.23   0.53/0.53      128
-linear_corridor  ELITE        20   23.9    6.8   12.0   556   4.32  0.94  11695/12047   1.44/1.43   0.62/0.61      128
-linear_corridor  ELITE        25   26.8    7.3   12.1   552   4.86  0.94  23946/23889   1.57/1.58   0.67/0.67      128
-linear_corridor  SHOP          1    4.9    1.1   33.4   338   1.44  0.42    242/239     0.56/0.56   0.14/0.14      160
-linear_corridor  SHOP          5    5.6    1.6   32.0   554   1.01  0.48    468/461     0.66/0.65   0.16/0.16      160
-linear_corridor  SHOP         10    6.4    2.0   27.0   552   1.17  0.53   1071/1078    0.80/0.79   0.20/0.20      160
-linear_corridor  SHOP         15    7.1    2.0   26.6   549   1.30  0.49   2216/2243    0.91/0.92   0.23/0.23      160
-linear_corridor  SHOP         20    7.9    2.1   28.9   556   1.43  0.52   4803/4721    1.04/1.04   0.26/0.27      160
-linear_corridor  SHOP         25    9.0    2.3   23.6   552   1.63  0.56   9937/9668    1.26/1.25   0.32/0.32      160
-linear_corridor  MYSTERY       1   14.2    3.9   20.8   338   4.20  0.90    424/430     0.95/0.94   0.24/0.24       80
-linear_corridor  MYSTERY       5   15.7    4.3   18.8   554   2.85  0.93    705/688     1.08/1.09   0.27/0.27       80
-linear_corridor  MYSTERY      10   18.1    5.0   17.5   552   3.28  0.92   1552/1564    1.25/1.25   0.31/0.31       80
-linear_corridor  MYSTERY      15   20.6    5.6   17.3   549   3.76  0.92   3462/3471    1.46/1.44   0.36/0.36       80
-linear_corridor  MYSTERY      20   22.7    6.3   15.8   556   4.10  0.93   7195/6883    1.63/1.64   0.41/0.42       80
-linear_corridor  MYSTERY      25   25.5    7.1   15.4   552   4.63  0.93  14760/15372   1.84/1.83   0.46/0.46       80
-cavern           COMBAT        1   14.3    3.9    9.0  1068   1.34  0.90    424/423     0.99/0.96   0.25/0.25       80
-cavern           COMBAT        5   15.7    4.4   10.0  1741   0.91  0.94    727/730     1.06/1.05   0.27/0.27       80
-cavern           COMBAT       10   18.1    4.9    9.0  1711   1.06  0.93   1548/1555    1.21/1.19   0.30/0.30       80
-cavern           COMBAT       15   19.9    5.5   10.3  1712   1.17  0.92   3331/3260    1.45/1.44   0.36/0.36       80
-cavern           COMBAT       20   22.5    6.1    9.3  1680   1.35  0.92   6981/6810    1.67/1.66   0.42/0.42       80
-cavern           COMBAT       25   24.5    6.8    9.2  1701   1.45  0.94  14558/15203   1.79/1.78   0.45/0.45       80
-cavern           ELITE         1   15.0    4.0    8.3  1068   1.41  0.84    662/703     0.90/0.87   0.39/0.38      128
-cavern           ELITE         5   16.4    4.5    9.4  1741   0.95  0.95   1138/1215    0.86/0.84   0.37/0.37      128
-cavern           ELITE        10   19.1    5.4    9.0  1711   1.12  0.94   2470/2569    1.03/1.05   0.44/0.44      128
-cavern           ELITE        15   20.9    6.1    9.5  1712   1.22  0.94   5391/5624    1.22/1.22   0.52/0.52      128
-cavern           ELITE        20   23.6    6.9    9.8  1680   1.41  0.94  11623/12074   1.45/1.45   0.62/0.62      128
-cavern           ELITE        25   25.7    7.2    9.3  1701   1.51  0.94  23215/22975   1.54/1.55   0.66/0.65      128
-cavern           SHOP          1    5.0    1.1   27.0  1068   0.47  0.44    253/248     0.58/0.59   0.14/0.14      160
-cavern           SHOP          5    5.4    1.4   34.7  1741   0.31  0.47    442/452     0.65/0.67   0.16/0.16      160
-cavern           SHOP         10    6.4    2.0   31.0  1711   0.37  0.51   1026/1041    0.79/0.77   0.20/0.20      160
-cavern           SHOP         15    6.9    2.0   28.7  1712   0.41  0.48   2136/2164    0.88/0.87   0.22/0.21      160
-cavern           SHOP         20    7.9    2.0   31.1  1680   0.47  0.52   4863/4805    0.98/0.97   0.24/0.25      160
-cavern           SHOP         25    8.6    2.2   28.4  1701   0.51  0.54   9734/9712    1.15/1.15   0.29/0.29      160
-cavern           MYSTERY       1   14.3    3.9   17.3  1068   1.34  0.90    424/423     0.99/0.96   0.25/0.25       80
-cavern           MYSTERY       5   15.7    4.4   20.0  1741   0.91  0.94    727/730     1.06/1.05   0.27/0.27       80
-cavern           MYSTERY      10   18.1    4.9   20.6  1711   1.06  0.93   1548/1555    1.21/1.19   0.30/0.30       80
-cavern           MYSTERY      15   19.9    5.5   20.3  1712   1.17  0.92   3331/3260    1.45/1.44   0.36/0.36       80
-cavern           MYSTERY      20   22.5    6.1   14.0  1680   1.35  0.92   6981/6810    1.67/1.66   0.42/0.42       80
-cavern           MYSTERY      25   24.5    6.8   13.6  1701   1.45  0.94  14558/15203   1.79/1.78   0.45/0.45       80
-boss_arena       BOSS          1    0.0    0.0      -   679   0.00  0.00    275/284     0.00/0.00   0.00/0.00       80
-boss_arena       BOSS          5    0.0    0.0      -   685   0.00  0.00    464/479     0.00/0.00   0.00/0.00       80
-boss_arena       BOSS         10    0.0    0.0      -   713   0.00  0.00   1181/1261    0.00/0.00   0.00/0.00       80
-boss_arena       BOSS         15    0.0    0.0      -   701   0.00  0.00   2757/2594    0.00/0.00   0.00/0.00       80
-boss_arena       BOSS         20    0.0    0.0      -   665   0.00  0.00   3351/3460    0.00/0.00   0.00/0.00       80
-boss_arena       BOSS         25    0.0    0.0      -   714   0.00  0.00   7144/7633    0.00/0.00   0.00/0.00       80
+rooms_mst        CACHE        10    6.5    2.0   24.6   895   0.73  0.60   1035/1027    0.75/0.76   0.50/0.50       96
+rooms_mst        CACHE        15    7.1    2.0   29.7   880   0.81  0.57   2184/2099    0.89/0.87   0.59/0.60       96
+rooms_mst        CACHE        20    8.1    2.0   29.1   899   0.91  0.57   4531/4503    1.03/1.01   0.68/0.69       96
+rooms_mst        CACHE        25    8.7    2.3   27.5   902   0.97  0.64   9666/9276    1.14/1.14   0.76/0.76       96
+rooms_mst        SHOP          1    5.0    1.1   31.6   564   0.88  0.44    244/251     0.61/0.64   0.15/0.16      160
+rooms_mst        SHOP          5    5.5    1.5   33.0   913   0.61  0.49    468/473     0.66/0.65   0.16/0.17      160
+rooms_mst        SHOP         10    6.5    2.0   24.6   895   0.73  0.53   1076/1094    0.78/0.78   0.19/0.19      160
+rooms_mst        SHOP         15    7.1    2.0   32.3   880   0.81  0.49   2226/2121    0.92/0.91   0.23/0.23      160
+rooms_mst        SHOP         20    8.1    2.0   29.1   899   0.91  0.48   4538/4421    1.05/1.03   0.26/0.26      160
+rooms_mst        SHOP         25    8.7    2.2   27.7   902   0.97  0.57  10228/9989    1.15/1.13   0.29/0.29      160
+rooms_mst        MYSTERY       1   14.2    3.9   18.5   564   2.53  0.90    425/395     0.97/0.96   0.24/0.25       80
+rooms_mst        MYSTERY       5   15.9    4.5   23.4   913   1.76  0.94    734/661     1.09/1.09   0.27/0.27       80
+rooms_mst        MYSTERY      10   18.1    5.0   19.0   895   2.03  0.94   1580/1577    1.24/1.22   0.31/0.31       80
+rooms_mst        MYSTERY      15   20.3    5.9   17.3   880   2.31  0.95   3416/3401    1.46/1.45   0.37/0.36       80
+rooms_mst        MYSTERY      20   22.9    6.4   19.3   899   2.56  0.94   7297/7196    1.67/1.66   0.42/0.43       80
+rooms_mst        MYSTERY      25   25.1    6.8   15.6   902   2.79  0.94  14656/14811   1.81/1.78   0.45/0.45       80
+linear_corridor  COMBAT        1   14.2    3.9    8.0   338   4.20  0.90    424/419     0.95/0.94   0.24/0.24       80
+linear_corridor  COMBAT        5   15.7    4.3   12.7   554   2.85  0.93    705/632     1.08/1.09   0.27/0.27       80
+linear_corridor  COMBAT       10   18.1    5.0   13.1   552   3.28  0.92   1552/1566    1.25/1.25   0.31/0.31       80
+linear_corridor  COMBAT       15   20.6    5.6   13.6   549   3.76  0.92   3462/3439    1.46/1.44   0.36/0.36       80
+linear_corridor  COMBAT       20   22.7    6.3   12.2   556   4.10  0.93   7195/6714    1.63/1.64   0.41/0.42       80
+linear_corridor  COMBAT       25   25.5    7.1   12.2   552   4.63  0.93  14760/15077   1.84/1.83   0.46/0.46       80
+linear_corridor  ELITE         1   14.9    4.1    8.5   338   4.41  0.83    669/706     0.88/0.85   0.38/0.37      128
+linear_corridor  ELITE         5   16.6    4.6   13.7   554   3.01  0.95   1153/1216    0.86/0.84   0.37/0.37      128
+linear_corridor  ELITE        10   19.0    5.3   12.7   552   3.45  0.94   2483/2509    1.03/1.02   0.44/0.44      128
+linear_corridor  ELITE        15   21.6    6.2   12.2   549   3.94  0.94   5401/5630    1.24/1.23   0.53/0.53      128
+linear_corridor  ELITE        20   23.9    6.8   12.0   556   4.32  0.94  11695/11925   1.44/1.43   0.62/0.61      128
+linear_corridor  ELITE        25   26.8    7.3   12.1   552   4.86  0.94  23946/24021   1.57/1.58   0.67/0.67      128
+linear_corridor  SHOP          1    4.9    1.1   33.4   338   1.44  0.42    242/253     0.56/0.56   0.14/0.14      160
+linear_corridor  SHOP          5    5.6    1.6   32.0   554   1.01  0.48    468/480     0.66/0.65   0.16/0.16      160
+linear_corridor  SHOP         10    6.4    2.0   27.0   552   1.17  0.53   1071/1069    0.80/0.79   0.20/0.20      160
+linear_corridor  SHOP         15    7.1    2.0   26.6   549   1.30  0.49   2216/2104    0.91/0.92   0.23/0.23      160
+linear_corridor  SHOP         20    7.9    2.1   28.9   556   1.43  0.52   4803/4472    1.04/1.04   0.26/0.27      160
+linear_corridor  SHOP         25    9.0    2.3   23.6   552   1.63  0.56   9937/9445    1.26/1.25   0.32/0.32      160
+linear_corridor  MYSTERY       1   14.2    3.9   20.8   338   4.20  0.90    424/419     0.95/0.94   0.24/0.24       80
+linear_corridor  MYSTERY       5   15.7    4.3   18.8   554   2.85  0.93    705/632     1.08/1.09   0.27/0.27       80
+linear_corridor  MYSTERY      10   18.1    5.0   17.5   552   3.28  0.92   1552/1566    1.25/1.25   0.31/0.31       80
+linear_corridor  MYSTERY      15   20.6    5.6   17.3   549   3.76  0.92   3462/3439    1.46/1.44   0.36/0.36       80
+linear_corridor  MYSTERY      20   22.7    6.3   15.8   556   4.10  0.93   7195/6714    1.63/1.64   0.41/0.42       80
+linear_corridor  MYSTERY      25   25.5    7.1   15.4   552   4.63  0.93  14760/15077   1.84/1.83   0.46/0.46       80
+cavern           COMBAT        1   14.3    3.9    9.0  1068   1.34  0.90    424/403     0.99/0.96   0.25/0.25       80
+cavern           COMBAT        5   15.7    4.4   10.0  1741   0.91  0.94    727/665     1.06/1.05   0.27/0.27       80
+cavern           COMBAT       10   18.1    4.9    9.0  1711   1.06  0.93   1548/1543    1.21/1.19   0.30/0.30       80
+cavern           COMBAT       15   19.9    5.5   10.3  1712   1.17  0.92   3331/3288    1.45/1.44   0.36/0.36       80
+cavern           COMBAT       20   22.5    6.1    9.3  1680   1.35  0.92   6981/6703    1.67/1.66   0.42/0.42       80
+cavern           COMBAT       25   24.5    6.8    9.2  1701   1.45  0.94  14558/15077   1.79/1.78   0.45/0.45       80
+cavern           ELITE         1   15.0    4.0    8.3  1068   1.41  0.84    662/699     0.90/0.87   0.39/0.38      128
+cavern           ELITE         5   16.4    4.5    9.4  1741   0.95  0.95   1138/1218    0.86/0.84   0.37/0.37      128
+cavern           ELITE        10   19.1    5.4    9.0  1711   1.12  0.94   2470/2510    1.03/1.05   0.44/0.44      128
+cavern           ELITE        15   20.9    6.1    9.5  1712   1.22  0.94   5391/5610    1.22/1.22   0.52/0.52      128
+cavern           ELITE        20   23.6    6.9    9.8  1680   1.41  0.94  11623/11873   1.45/1.45   0.62/0.62      128
+cavern           ELITE        25   25.7    7.2    9.3  1701   1.51  0.94  23215/23425   1.54/1.55   0.66/0.65      128
+cavern           SHOP          1    5.0    1.1   27.0  1068   0.47  0.44    253/258     0.58/0.59   0.14/0.14      160
+cavern           SHOP          5    5.4    1.4   34.7  1741   0.31  0.47    442/468     0.65/0.67   0.16/0.16      160
+cavern           SHOP         10    6.4    2.0   31.0  1711   0.37  0.51   1026/1027    0.79/0.77   0.20/0.20      160
+cavern           SHOP         15    6.9    2.0   28.7  1712   0.41  0.48   2136/2010    0.88/0.87   0.22/0.21      160
+cavern           SHOP         20    7.9    2.0   31.1  1680   0.47  0.52   4863/4623    0.98/0.97   0.24/0.25      160
+cavern           SHOP         25    8.6    2.2   28.4  1701   0.51  0.54   9734/9394    1.15/1.15   0.29/0.29      160
+cavern           MYSTERY       1   14.3    3.9   17.3  1068   1.34  0.90    424/403     0.99/0.96   0.25/0.25       80
+cavern           MYSTERY       5   15.7    4.4   20.0  1741   0.91  0.94    727/665     1.06/1.05   0.27/0.27       80
+cavern           MYSTERY      10   18.1    4.9   20.6  1711   1.06  0.93   1548/1543    1.21/1.19   0.30/0.30       80
+cavern           MYSTERY      15   19.9    5.5   20.3  1712   1.17  0.92   3331/3288    1.45/1.44   0.36/0.36       80
+cavern           MYSTERY      20   22.5    6.1   14.0  1680   1.35  0.92   6981/6703    1.67/1.66   0.42/0.42       80
+cavern           MYSTERY      25   24.5    6.8   13.6  1701   1.45  0.94  14558/15077   1.79/1.78   0.45/0.45       80
+boss_arena       BOSS          1    0.0    0.0      -   679   0.00  0.00    275/272     0.00/0.00   0.00/0.00       80
+boss_arena       BOSS          5    0.0    0.0      -   685   0.00  0.00    464/459     0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         10    0.0    0.0      -   713   0.00  0.00   1181/1170    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         15    0.0    0.0      -   701   0.00  0.00   2757/2250    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         20    0.0    0.0      -   665   0.00  0.00   3351/3314    0.00/0.00   0.00/0.00       80
+boss_arena       BOSS         25    0.0    0.0      -   714   0.00  0.00   7144/7082    0.00/0.00   0.00/0.00       80
 med_bay          REST          1    0.0    0.0      -   216   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
 med_bay          REST          5    0.0    0.0      -   213   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
 med_bay          REST         10    0.0    0.0      -   214   0.00  0.00      0/0       0.00/0.00   0.00/0.00       80
@@ -1236,18 +1419,18 @@ elite                        1667    -0.95    27.58   106.80    65.97 DANGER    
 cache                         313    10.64     7.80    37.66    30.01 CALM        OK    
 shop                          365    10.40     7.80    38.55    29.62 CALM        OK    
 rest                            0    27.04     0.00    27.04    27.04 CALM        OK    
-mystery                       670     9.07    11.24    52.78    36.36 GAMBLE      OK    
-event                           0    18.34     6.40    34.98    34.98 CALM        OK    
+mystery                       670     9.05    11.24    52.76    36.35 GAMBLE      OK    
+event                           0    18.31     6.40    34.95    34.95 CALM        OK    
 boss                         2084     0.72    23.98   108.11    57.07 SET_PIECE   OK    
 region_gate                     0     1.59     0.00     1.59     1.59 SET_PIECE   OK    
 irradiated                   1042    -0.29    11.99    53.40    27.88 -           -     
-overclocked                  1250     0.99    14.39    65.42    34.80 -           -     
-swarm                        1563    13.69    17.98    94.23    55.95 -           -     
+overclocked                  1250     0.98    14.39    65.41    34.79 -           -     
+swarm                        1563    13.59    17.98    94.13    55.85 -           -     
 fortified                    1042     0.71    11.99    54.40    28.88 -           -     
 volatile                     1042    -0.29    11.99    53.40    27.88 -           -     
-VAULT_JACKPOT                 521    16.73    13.19    62.30    49.54 -           -     
-SECRET_WARREN                1042     8.39    16.19    73.00    47.48 -           -     
-TRAP_GAUNTLET                 292     8.23     3.96    24.83    17.68 -           -     
+VAULT_JACKPOT                 521    16.69    13.19    62.26    49.50 -           -     
+SECRET_WARREN                1042     8.37    16.19    72.98    47.46 -           -     
+TRAP_GAUNTLET                 292     8.21     3.96    24.81    17.66 -           -     
 AMBUSH                       1667    -0.95    27.58   106.80    65.97 -           -     
 LORE_SIGNAL                     0    27.04     0.00    27.04    27.04 -           -     
 MALFUNCTION                   292    -1.35     3.36    13.68     6.53 -           -     
@@ -1286,12 +1469,11 @@ BALANCED depth coupling                         1.45 [   0.80,   1.65] OK
   SAFEST rides the generous edge and DEADLIEST the starved edge — both ENDS must stay fair.
 
 LEGEND: in?/gr?/<0.6?/band = OK inside band, UNDER below, OVER above.
-  sustDPT = (clip*dmg)/(clip+reload).  powerScore = sustDPT*sqrt(ammoEff/anchor).
+  sustDPT = (clip*dmg)/(clip+reload).  SCENARIO: turns to clear (R-ROLE), * best, ! ammo-infeasible.
   TP = (atkDmg/cadence) * (eHP/refDPT) * posMult.  TTD/TTK = golden ratio.
   S = SUPPLY/DEMAND (ranged ammo vs sum of enemy eHP).  perWpnS = that weapon's share.
   bankFloors = full reserve / floor demand (anti-hoard target ~1.5).  netHpDrain = INCOMING - HEAL_SUPPLY.
 Out-of-band rows FAIL BalanceAuditTest unless waived — see docs/game-balance-authority.txt.
-
 
 --------------------------------------------------------------------------------
 SECTION 7 — THE CHANGE PROTOCOL (new-game-balancr order 9) — MANDATORY
@@ -1340,6 +1522,60 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 3 / CP7 — THE SIM PLAYS THE MATCHUP. SimWorld computes the C4 SWITCH hint each
+    turn (MatchupAdvisor, as World does) and TACTICAL takes it; TACTICAL keeps a diverse kit
+    (PlayerPolicy.slotToReplaceForGroundWeapon). New band S-SWITCH (RuleKind.SIM_SWITCH, SECTION 22
+    first written as >= 1.0 switches per COMBAT floor) and the MATCHUP REPORT. PLANNED-HEAL RE-FIT
+    (approved at CP3): SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70 — the stronger start kit (R-ROLE Shotgun,
+    stagger, knockback) plus hint switching let a competent player avoid more of a floor; S-SUPPLY
+    0.80 (at the cap) -> 0.78; the S4 heal floor and every R-SUPPLY line unchanged and green.
+    MATCHUP_TP_REFERENCE_WEIGHT: 0 is now a DECISION (w = 0.25 / 0.5 put S-SUPPLY at 0.83 / 0.81).
+    LevelGeneratorSnapshotTest re-baselined (heal pickups moved). Gates: test green except the
+    pre-existing StoryBarkTest; balanceSim exit 1 on S-SWITCH alone (0.13), then S-SWITCH RE-STATED by
+    decision D3 (owner delegated the call): hinted COMBAT floors >= 10, take rate >= 0.8, switches per
+    hinted COMBAT floor >= 1.0 — see the S-SWITCH band entry.
+
+  balance-overhaul order 3 / CP4 — A-1 AMMO GENEROSITY. SupplyPlanner weights the S2 carried /
+    off-type split per AmmoType (BULLETS 0.8, SHELLS 1.3, CELLS 1.0, ROCKETS 1.0, SLUGS 0.9;
+    GameMath.normalisedAmmoShare keeps the floor's total), reserve caps re-fitted to per-type
+    banking targets (bullets 38 -> 25 ~1.0 floor; rockets 18 -> 21 and slugs 6 -> 7 re-fit after the
+    CP3b damage changes), new R-SUPPLY "reserve banks" lines. R-ROLE unchanged and green (no '!' moved
+    into a niche). LevelGeneratorSnapshotTest re-baselined. Gates: test green except the pre-existing
+    StoryBarkTest; balanceSim exit 0 — S-SUPPLY 0.80, stalls 171/200 (no heal re-fit needed).
+
+  balance-overhaul order 3 / CP3b — R-ROLE REPLACES R-WEAPON. The reference-scenario model
+    (util/WeaponRoleModel, GameMath.roleScenarioClear / roleScenarioBruiserHitsTaken /
+    roleScenarioSustainedDamagePerTurn, SECTION 22 scenario geometry + margins) and RuleKind
+    WEAPON_ROLE (R-ROLE-1..5 + A6) are live; RuleKind WEAPON_POWER, the role bands, the
+    ammo-efficiency anchor, weaponPowerScore and the Railgun waiver are deleted (override record in
+    R-ROLE above). FITTED: Shotgun 44 -> 66, Double-Barrel 32 -> 59, Arc Cannon 28 -> 40, Railgun 90
+    -> 75, Grenade 42/22 -> 36/32, burn fraction 0.5 -> 0.6, shell box 4 -> 3, shell cap 17 -> 11.
+    BalanceReport prints MATCHUP + SCENARIO tables in place of WEAPONS. LevelGeneratorSnapshotTest
+    re-baselined (ammo pickups are priced at the eating weapon's base damage). Gates: test green
+    except the pre-existing StoryBarkTest; balanceSim exit 0 — S-SUPPLY 0.80 (at its cap; no heal
+    re-fit needed), TACTICAL stalls 171/200.
+
+  balance-overhaul order 3 / CP3a — the role BEHAVIOURS: Shotgun / Double-Barrel falloff by tile
+    (SHOTGUN_FALLOFF_BY_TILE / DOUBLE_BARREL_FALLOFF_BY_TILE), knockback at 1 tile and stagger at
+    <= 2 (SpreadImpact; the existing STUNNED intent; never two turns running; bosses immune), and
+    the Incinerator's stacking burn (3 stacks, FLAME_BURN_FRACTION of the ladder-scaled impact).
+
+  balance-overhaul order 3 / CP2 — THE MATCHUP IS LIVE. Player->enemy damage takes
+    MatchupTable.multiplier(weapon class, enemy trait) once, in EnemyManager.applyDamageTo's
+    WEAK/VULNERABLE/BACKSTAB step (after the ladder, before Block). The class rides the activation
+    (EnemyHitTarget.setActivationDamageClass, armed by Weapon.fire()/MeleeWeapon.fire() beside the Block
+    pierce); barrels hit as EXPLOSIVE, fire tiles as FIRE, a weapon-applied burn pre-multiplies its
+    per-turn magnitude by the applying weapon's matchup, and the Arc Cannon's chain leaps never drop
+    below neutral (W5). TP pricing is TRAIT-AWARE IN MECHANISM (R-ENEMY re-statement above) but
+    MATCHUP_TP_REFERENCE_WEIGHT SHIPS AT 0 — a DECISION (CP7; temporary at CP2, decided once measured), so every TP/XP/budget
+    number is unchanged. WHY 0: at any w > 0 (0.1..0.75 tried) the only enforced read that moved was
+    S-SUPPLY's TACTICAL COMBAT exit health (0.82-0.87 vs its 0.80 cap; 0.78 at w = 0), measured on a
+    policy that never switches weapons and stalls ~80% of runs on floor 1 — the planner swaps pricier
+    armoured anchors for unresisted bodies the rifle-only bot handles easily. S-SUPPLY was NOT
+    loosened. CP7 (TACTICAL matchup switching) re-fits w against R-ENEMY (fits any w <= ~0.83) and
+    S-SUPPLY together. R8 / R-LADDER read the neutral eHP and did not move. Gates: test green except
+    the pre-existing StoryBarkTest; balanceSim exit 0 (S-SUPPLY 0.78).
+
   balance-overhaul order 1 / CP6 — communication (R14): the HUD slot strip, inventory rows and the
     weapon compare card show "LV n" coloured against the floor's threat level (amber one behind,
     red + down-chevron two or more behind, green + up-chevron ahead; the Fist always reads on-level),
@@ -1467,7 +1703,7 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 2 matrix
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (CP7) matrix
 (planned supply, group encounters, footprint targets, node specs), with the FLOOR REPORT.
 
   ================================================================================
@@ -1480,50 +1716,65 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 2 m
   POLICIES
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
-  NAIVE                    200     1.0     186     1.00      0.00      0.00    -0.53
-  TACTICAL                 200     1.0     162     1.00      0.00      0.00    -0.65
-  HOARDER-START-WEAPON     200     1.0     161     1.00      0.00      0.00    -0.67
+  NAIVE                    200     1.0     179     1.00      0.00      0.00    -0.52
+  TACTICAL                 200     2.0     159     1.00      0.00      0.00    -0.85
+  HOARDER-START-WEAPON     200     2.0     159     1.00      0.00      0.00    -0.82
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
   policy                 supplyTook  emergency    bossTurns
-  NAIVE                       0.222      0.003        900.0
-  TACTICAL                    0.519      0.028        681.6
-  HOARDER-START-WEAPON        0.508      0.025        715.0
+  NAIVE                       0.255      0.000        900.0
+  TACTICAL                    0.494      0.032        764.3
+  HOARDER-START-WEAPON        0.488      0.032        761.6
 
   FLOOR REPORT (TACTICAL) — means per played floor; heal in max-HP, ammo in units, HP as a health fraction
   --------------------------------------------------------------------------------
   generator        node     depth  floor  spawn killed   grp 1stDmg   heal  <flr ammo p/took  hpIn hpOut  0-heal
-  cavern           COMBAT    1-5      51   14.5    5.9   4.0    8.4   1.25     0    15/6     0.98  0.70       9
-  cavern           ELITE     1-5      20   17.0    2.8   4.7   12.4   1.41     0    23/6     0.91  0.73       3
-  cavern           SHOP      1-5       2    5.0    0.5   1.0    3.0   0.80     0    14/0     0.93  0.86       0
-  event_room       EVENT     1-5       7    0.0    0.0   0.0      -   0.45     0     0/0     0.90  0.96       0
-  linear_corridor  COMBAT    1-5      46   14.2    6.4   4.0   14.7   1.23     0    15/5     0.99  0.75       6
-  linear_corridor  ELITE     1-5      14   16.6    2.9   4.8   15.4   1.40     0    22/4     0.80  0.57       4
-  linear_corridor  SHOP      1-5       2    4.5    0.0   1.0      -   0.58     0    10/0     0.96  0.96       0
-  med_bay          REST      1-5       9    0.0    0.0   0.0      -   0.00     0     0/0     0.81  0.81       0
-  rooms_mst        CACHE     1-5     116    4.9    2.2   1.1   48.6   0.93     0     8/3     0.96  0.98       2
-  rooms_mst        COMBAT    1-5      52   14.4    4.7   3.9   18.1   1.21     0    15/4     0.98  0.82       6
-  rooms_mst        ELITE     1-5      22   17.9    4.5   5.0   18.3   1.49     0    23/6     0.90  0.95       5
-  rooms_mst        SHOP      1-5       7    5.3    2.0   1.3   34.8   0.83     0    10/3     0.96  0.89       0
+  cavern           COMBAT    1-5      56   14.4    5.5   4.0    9.4   0.81     0    13/5     0.97  0.85      10
+  cavern           ELITE     1-5      24   17.1    4.1   4.8   23.1   0.96     0    20/5     0.91  0.75       8
+  cavern           SHOP      1-5       6    5.3    1.8   1.3   51.0   0.54     0     6/3     0.65  0.73       0
+  event_room       EVENT     1-5       8    0.0    0.0   0.0      -   0.45     0     0/0     0.87  0.87       0
+  linear_corridor  COMBAT    1-5      54   14.3    6.5   4.0   18.9   0.81     0    14/6     0.96  0.71       8
+  linear_corridor  ELITE     1-5      15   16.5    6.7   4.7   15.2   0.94     0    20/7     0.89  0.84       3
+  linear_corridor  SHOP      1-5       6    5.0    0.8   1.0   25.0   0.54     0     6/1     0.87  0.88       0
+  med_bay          REST      1-5      16    0.0    0.0   0.0      -   0.00     0     0/0     0.83  0.83       0
+  rooms_mst        CACHE     1-5     131    5.0    2.0   1.1   47.6   0.71     0     6/2     0.93  0.95       0
+  rooms_mst        COMBAT    1-5      57   14.6    4.6   3.9   31.9   0.83     0    14/4     0.97  0.78       6
+  rooms_mst        ELITE     1-5      16   17.2    4.7   4.8   21.4   0.95     0    21/7     0.95  0.75       2
+  rooms_mst        SHOP      1-5       7    5.3    1.7   1.4   43.3   0.57     0     7/2     0.86  0.88       0
 
   A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
-    COMBAT    1-5   cavern 1.25   rooms_mst 1.21   gap    3% OK
-    ELITE     1-5   cavern 1.41   rooms_mst 1.49   gap    5% OK
-    SHOP      1-5   cavern 0.80   rooms_mst 0.83   gap    3% OK
+    COMBAT    1-5   cavern 0.81   rooms_mst 0.83   gap    2% OK
+    ELITE     1-5   cavern 0.96   rooms_mst 0.95   gap    1% OK
+    SHOP      1-5   cavern 0.54   rooms_mst 0.57   gap    7% OK
+
+  MATCHUP REPORT — per played floor; damage share by class (% of landed hit damage)
+  --------------------------------------------------------------------------------
+  policy               depth  floor  eff/f  res/f  swt/f BALLI SPREA ENERG  RAIL  FIRE EXPLO BLADE BLUNT
+  NAIVE                 1-5     318   0.01   1.24   0.00   100     0     0     0     0     0     0     0
+  TACTICAL              1-5     411   0.20   1.11   0.07    33    56     5     2     0     1     0     3
+  HOARDER-START-WEAPON  1-5     403   0.19   1.18   0.06    36    62     0     0     0     0     0     2
+    S-SWITCH alternatives (per policy): switches/COMBAT floor | hint take rate | switches per
+    COMBAT floor that showed a hint | COMBAT floors (hinted)
+    NAIVE                  0.00 |   0.00 |   0.00 | 125 (16)
+    TACTICAL               0.13 |   1.00 |   1.00 | 167 (21)
+    HOARDER-START-WEAPON   0.11 |   1.00 |   1.00 | 167 (18)
 
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
   OK   [SIM_GATE] HOARDER first-boss clears: value=0.00 band=0.00..0.00 OK — 200 seeds; R-BOSS-GATE proves the same thing on paper
-  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=1.00 band=0.00..6.00 OK — 200 seeds; 161 stalled
-  WAIV [SIM_FAIR] TACTICAL median death depth: value=1.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 162 stalled
+  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=2.00 band=0.00..6.00 OK — 200 seeds; 159 stalled
+  WAIV [SIM_FAIR] TACTICAL median death depth: value=2.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 159 stalled
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
-  WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=0.00 band=3.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 1.0 vs NAIVE 1.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.21 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
-  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.52 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
+  WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=1.00 band=3.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 2.0 vs NAIVE 1.0
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.20 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.49 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
   OK   [SIM_ECONOMY] emergency lifeline floors: value=0.03 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
-  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.75 band=0.55..0.80 OK — mean health fraction leaving a COMBAT floor by its exit
+  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.78 band=0.55..0.80 OK — mean health fraction leaving a COMBAT floor by its exit
   OK   [SIM_SUPPLY] floors below the heal floor: value=0.00 band=0.00..0.00 OK — reachable heal value under the S4 floor
+  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=21.00 band=10.00..Infinity OK — of 167 COMBAT floors; keeps the two lines below off an empty sample
+  OK   [SIM_SWITCH] TACTICAL hint take rate: value=1.00 band=0.80..Infinity OK — hint-driven switches / hint episodes
+  OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.13 per COMBAT floor overall (kit-limited, not banded — D3)
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
@@ -1537,32 +1788,35 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 2 m
   One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
   role        depths  onKill lagKill  ratio |   onDie  lagDie
-  CHAFF        1-5      2.55    6.00   2.36 |   53.75   53.00
-  CHAFF        6-10     2.16   11.67   5.40 |   48.88   58.38
-  CHAFF       11-15     2.38   20.38   8.55 |   60.15   42.29
-  CHAFF       16-20     3.49   28.13   8.06 |   65.28   28.63
-  CHAFF       21-25     2.89   55.90  19.35 |   41.53   29.44
-  SOLDIER      1-5      3.98    5.70   1.43 |   21.82   21.50
-  SOLDIER      6-10     2.63   15.00   5.71 |   20.17   18.61
-  SOLDIER     11-15     3.05   28.71   9.43 |   19.05   17.33
-  SOLDIER     16-20     3.01   52.83  17.58 |   20.27   18.33
-  SOLDIER     21-25     3.48   34.71   9.99 |   17.09   15.94
-  BRUISER      1-5      4.72    9.25   1.96 |       -       -
-  BRUISER      6-10     5.60   39.33   7.02 |       -       -
-  BRUISER     11-15     6.54   44.86   6.86 |   33.24       -
-  BRUISER     16-20     4.40   44.60  10.13 |       -       -
-  BRUISER     21-25     5.23       -      - |       -       -
+  CHAFF        1-5      2.94    6.25   2.13 |   56.50   52.50
+  CHAFF        6-10     2.10   12.00   5.70 |   48.33   50.86
+  CHAFF       11-15     2.14   19.00   8.88 |   55.67   42.29
+  CHAFF       16-20     3.49   28.17   8.07 |   43.59   25.69
+  CHAFF       21-25     2.74   55.90  20.41 |   41.13   27.96
+  SOLDIER      1-5      4.19    6.20   1.48 |   21.50   21.50
+  SOLDIER      6-10     2.94   17.00   5.78 |   21.40   18.61
+  SOLDIER     11-15     3.41   31.83   9.33 |   19.05   17.69
+  SOLDIER     16-20     3.57   56.33  15.77 |   20.05   16.34
+  SOLDIER     21-25     4.10   37.61   9.17 |   17.19   15.83
+  BRUISER      1-5      5.73    9.48   1.65 |       -       -
+  BRUISER      6-10     4.86   26.57   5.47 |       -       -
+  BRUISER     11-15     7.48   51.14   6.84 |   33.24   15.69
+  BRUISER     16-20     4.73       -      - |       -       -
+  BRUISER     21-25     5.30       -      - |       -       -
   MINI_ELITE   1-5         -       -      - |       -       -
   MINI_ELITE   6-10        -       -      - |       -       -
   MINI_ELITE  11-15        -       -      - |       -       -
   MINI_ELITE  16-20        -       -      - |       -       -
   MINI_ELITE  21-25        -       -      - |       -       -
-  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 1.99 (target >= 1.5)
+  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.05 (target >= 1.5)
 
-  READING IT (balance-overhaul order 2):
-  - (Re-run after the 2026-10-01 level-size override.) S-SUPPLY holds: TACTICAL leaves COMBAT floors
-    hurt (0.75) and no floor is below its heal floor.
-  - A4: CAVERN heal value present is within 0-6% of ROOMS_MST at the same node type in the band the
-    sim reaches (1-5); deeper bands are proven by R-SUPPLY's generator sweep (heal floor met and
-    tracking within 10% at depths 1..25), because the stalling navigator rarely gets past floor 1.
-  - Stalls ~162/200 (~150 before order 2): the navigator still stops on most floors. Closing the navigation gap still expires the waivers.
+  READING IT (CP7: TACTICAL plays the SWITCH hint, S-SWITCH re-stated by D3, planned-heal re-fit
+  SUPPLY_AVOIDANCE_FACTOR 0.70 -> S-SUPPLY 0.78; earlier: CP3b R-ROLE fit + CP4 A-1 generosity — CP4 moved only the
+  ELITE ammo row and the ladder probes; S-SUPPLY is unchanged at 0.80):
+  - S-SUPPLY holds at its cap: TACTICAL leaves COMBAT floors at 0.80 (0.75 before order 3). The start kit
+    is Chaingun + Shotgun, and the R-ROLE Shotgun (66, falloff table, stagger, knockback) is the
+    stronger half of it; no floor is below its heal floor. Watch it: any further start-kit buff needs
+    a heal re-fit (SECTION 21 SUPPLY_AVOIDANCE_FACTOR / drain target) in the same change.
+  - Stalls ~171/200 (162 before order 3): the navigator still stops on most floors; the navigation
+    waivers stand.
+
