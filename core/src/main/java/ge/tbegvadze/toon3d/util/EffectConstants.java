@@ -64,8 +64,7 @@ public final class EffectConstants {
     public static final float DAMAGE_NUMBER_SCALE_PER_POINT  = 0.04f;
     public static final float DAMAGE_NUMBER_MAX_FONT_SCALE   = 3.0f;
 
-    // Explosive barrel hazard — detonation damage and chain limit (balance: BalanceConfig SECTION 8)
-    public static final int   EXPLOSION_DAMAGE    = BalanceConfig.EXPLOSION_DAMAGE;
+    // Explosive barrel hazard — chain limit (damage is a fraction, BalanceConfig SECTION 23 HAZARD_BARREL_*)
     public static final int   EXPLOSION_CHAIN_MAX = BalanceConfig.EXPLOSION_CHAIN_MAX;
 
     // Event Text — screen-space rising text for game events

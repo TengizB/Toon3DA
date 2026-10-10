@@ -275,6 +275,38 @@ R-DEPTH (RuleKind.DEPTH_COUPLING) — RETIRED by balance-overhaul order 1
   depthCouplingRatio / gearRampAtDepth / expectedAbilityPowerPointsAtDepth /
   playerPowerAtLevelAndDepth and DEPTH_COUPLING_RATIO_* are deleted.
 
+R-HAZARD (RuleKind.HAZARD) — balance-overhaul order 4 (NEW; CP6, H13 / H14)
+  Hazards stay meaningful at every depth because their damage is a FRACTION, and barrels sit where the
+  groups are so the player reads the room before charging in.
+  Numbers (BalanceConfig SECTION 23 unless noted):
+    HAZARD_BARREL_CENTRE_FRACTION 1.2 / HAZARD_BARREL_RING_FRACTION 0.6 — of the floor's REFERENCE SOLDIER
+      max HP at that depth: GameMath.enemyHealthAtDepth(HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth),
+      base = VOID_SHROUD_MAX_HEALTH 50 (the R-LADDER SOLDIER archetype; a rule line asserts they agree).
+      The float HP is NOT rounded before the fraction, so the ring lands exactly on a Ghoul's own HP.
+    HAZARD_BARREL_PLAYER_CENTRE_FRACTION 0.30 / HAZARD_BARREL_PLAYER_RING_FRACTION 0.15 — of the PLAYER's
+      max HP (the existing barrel -> player path, only the number changed).
+    GameMath.barrelBlastDamage(fraction, referenceMaxHealth) = max(1, round(fraction x reference)).
+    HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER (SECTION 12) 1.5 -> 2.5 (x FIRE matchup); HAZARD_TOXIC_ENEMY_STACKS_PER_TURN 2
+      — toxic tiles AND the Plague Hulk cloud poison enemies at the enemy's own max HP.
+    Placement: HAZARD_GROUP_ROOM_SHARE 0.40, HAZARD_GROUP_MIN_SIZE 3, HAZARD_GROUP_BARRELS_MIN 1 / _MAX 2,
+      HAZARD_GROUP_BARREL_RADIUS_TILES 2 (see procedural-level-generation.txt).
+  Rules asserted (BalanceSchema.hazardResults + hazardPlacementResults; BalanceAuditTest
+  barrelsStayMeaningfulAtEveryDepthAndSitBesideGroups):
+    - depths 1..25: a RING blast kills every CHAFF archetype (ring >= its scaled max HP) and never one-shots the
+      reference soldier; the player's centre blast stays <= HEAVY_DAMAGE_FRACTION_MIN (0.40) of on-curve max HP;
+    - the sweep: on every COMBAT / ELITE floor >= ceil(0.40 x hostable group rooms) hold barrels, and no other
+      node type ever gets one.
+  A6 ARITHMETIC (BalanceReport "BARREL BLAST", neutral matchup): at depth 10 the soldier has 161 HP, ring 97,
+  centre 194. One ring hit leaves the soldier at 64 HP = 40%; two overlapping rings (two barrels) kill it
+  (0%); every chaff dies to one ring (Ghoul 97 vs 97 is the tight one). The fractions are depth-flat, so the
+  same 40% / 0% holds at depths 1, 5, 15 and 25. "Leaves a soldier at ~a fifth" is NOT met by the spec's 0.6
+  ring (it would need ~0.8) — reported to the owner, not retuned.
+  OVERRIDE RECORD (order 4, CP6): BalanceConfig.EXPLOSION_DAMAGE (flat 12) and EffectConstants.EXPLOSION_DAMAGE
+  DELETED; HAZARD_THREAT_TURNS_STOOD (2) DELETED — hazard TP (GameMath.hazardTileThreatPoints) now prices a
+  fraction of the on-curve depth-1 max HP over the burn window HAZARD_FIRE_BURN_TURNS (2, same numbers as
+  before); HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 1.5 -> 2.5; enemies on toxic tiles 1 stack/turn -> 2 (the CP4
+  TEMPORARY). LevelGeneratorSnapshotTest re-baselined (barrels now stamped on generated COMBAT / ELITE floors).
+
 R-XP-PACE (RuleKind.XP_PACE) — XP pacing is a RULE, not a hope (order 4; horizon 1..25 since balance-overhaul order 1)
   RE-FIT (balance-overhaul order 1): horizon 1..RUN_FINAL_DEPTH (25), and the
   geometric XP growth follows the NEW threat compound: 1.118 -> 1.2495
@@ -1579,6 +1611,13 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 4 / CP6 — HAZARDS. See R-HAZARD (new + OVERRIDE RECORD). Barrel blasts are fractions
+    (centre 1.2 / ring 0.6 of the reference soldier's HP at the floor's depth; 0.30 / 0.15 of the player's max
+    HP), fire tiles hit enemies x2.5, toxic tiles + the Plague Hulk cloud poison enemies 2 stacks/turn, and the
+    shared FloorPopulator stamps 1-2 explosive barrels beside the groups of >= 40% of the hostable group rooms on
+    COMBAT / ELITE floors (never the start room). Flat EXPLOSION_DAMAGE and HAZARD_THREAT_TURNS_STOOD deleted.
+    New GameMath.barrelBlastDamage / groupBarrelRoomCount. Why: flat 12 damage was a tickle by depth 3 and
+    barrels were scenery. Snapshot re-baselined (ed36edde...). A6's "a fifth of a soldier" owner flag above.
   balance-overhaul order 4 / CP5 — HEAVY ASSIGNMENTS. Revenant: heavyWindUp() CHARGE through the Shell Brute
   charger path, per-type chargeTriggerMin/MaxTiles + chargeCooldownTurns (SECTION 23 REVENANT_LUNGE_TRIGGER_
   MIN_TILES 2 / _MAX_TILES 3 / REVENANT_LUNGE_COOLDOWN_TURNS 3; unpriced, TP 119 unchanged). Cinderforge

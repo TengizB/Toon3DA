@@ -366,7 +366,7 @@ public final class SimWorld implements LevelTransitionListener {
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) meleeWeapon.setAbilityResolver(abilityResolver);
 
-        explosiveBarrelManager = new ExplosiveBarrelManager(level, enemyManager, player);
+        explosiveBarrelManager = new ExplosiveBarrelManager(level, enemyManager, player, currentDepth);
         enemyManager.setKillXpListener(playerProgress::addXp);
         enemyManager.setKillEventListener((nameTag, xpAwarded) -> floorLedger.enemiesKilled++);
         enemyManager.setKillCreditListener((baseReward, dungeonDepth) ->

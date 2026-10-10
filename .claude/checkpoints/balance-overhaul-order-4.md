@@ -74,7 +74,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A4, A5 hold; both gates green.
 - [x] **CP5** — Revenant / Cinderforge heavy assignments; stagger cancels heavy.
       DONE WHEN: A7 holds; both gates green.
-- [ ] **CP6** — hazard fractions; barrel placement near groups.
+- [x] **CP6** — hazard fractions; barrel placement near groups.
       DONE WHEN: A6 holds; both gates green.
 - [ ] **CP7** — sim avoidance/guard + S-HEAVY + HEAVY REPORT; GUARD/READ_INTENT line review; all docs;
       reviewer PASS.
@@ -159,3 +159,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   BRUTE:CHARGE 109, LANCER:LANCE 607, HULK:AREA 263, HULK:SELF_DESTRUCT 28, IRON_STALKER:AREA 8.
   CP7 line review: Cinderforge bark says nothing about the slam (no contradiction).
 - **CP5 gates:** core:test 454, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.75, lifeline 0.03.
+- **CP6 handover:** SECTION 23 `HAZARD_BARREL_{CENTRE,RING}_FRACTION` 1.2/0.6 of the R-LADDER SOLDIER (VOID_SHROUD,
+  `HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH`, unrounded `enemyHealthAtDepth`), player 0.30/0.15; fire-on-enemy x2.5;
+  toxic + Hulk cloud 2 stacks/turn on enemies (resolves the CP4 TEMPORARY). `ExplosiveBarrelManager(Level,
+  EnemyHitTarget, Player, int depth)`. DELETED EXPLOSION_DAMAGE (both), HAZARD_THREAT_TURNS_STOOD (careless window
+  now HAZARD_FIRE_BURN_TURNS). `level/GroupBarrelPlacer` runs in `FloorPopulator.populate` (COMBAT/ELITE only;
+  hostable group>=3 rooms, not the start room, >=5 walk tiles from start, flood-fill keeps reachability; seeded
+  floorSeed ^ 0xBA22E10D; 'E' barrels). `RuleKind.HAZARD`, `hazardResults()`, `hazardPlacementResults()`; test
+  `barrelsStayMeaningfulAtEveryDepthAndSitBesideGroups`. Snapshot `ed36edde...` (stable on rerun).
+- **CP6 DECISION (hub) / OWNER FLAG — A6:** chaff half HOLDS (one ring kills every chaff at d10; Ghoul 97 vs ring 97 is
+  an exact tie, guarded by R-HAZARD). Soldier half: one ring leaves a soldier at a flat 40%; two overlapping rings
+  (the GAMEPLAY LOOP's two-barrel scene) kill it. H13's 0.6 is the rule, A6 the example — kept 0.6, did NOT retune;
+  ~0.8 would satisfy one-barrel A6. Report as PARTIAL; HEAVY/hazard feel pass is order 7.
+- **CP6 gates:** core:test 455, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.73, lifeline 0.02.

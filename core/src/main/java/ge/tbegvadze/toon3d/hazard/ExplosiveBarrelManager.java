@@ -7,16 +7,21 @@ import ge.tbegvadze.toon3d.entity.EnemyHitTarget;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
 import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * Handles explosive barrel ('E') detonation.
  *
  * When a weapon hits an 'E' tile, onExplosiveBarrelHit() is called. The barrel
- * is removed from the level grid, then EXPLOSION_DAMAGE is applied in a cross
- * pattern (center + 4 cardinal neighbours) to the player and any enemies on
- * those tiles. Adjacent 'E' barrels are queued for chain detonation and
+ * is removed from the level grid, then blast damage is applied in a cross
+ * pattern (centre + 4 cardinal neighbours) to the player and any enemies on
+ * those tiles. Damage is a FRACTION (balance-overhaul order 4, H13): enemies take
+ * HAZARD_BARREL_CENTRE_FRACTION / _RING_FRACTION of the reference soldier's HP at
+ * this floor's depth, the player takes HAZARD_BARREL_PLAYER_CENTRE_FRACTION /
+ * _RING_FRACTION of their own max HP. Adjacent 'E' barrels are queued for chain detonation and
  * processed in BFS order — one detonation can cascade through a whole row.
  *
  * Zero allocations per detonation: the chain queue is a pre-allocated int[].
@@ -35,6 +40,9 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     private final Level               level;
     private final EnemyHitTarget      enemyHitTarget;
     private final Player              player;
+    /** Enemy-side blast damage on the barrel's own tile / on each orthogonal neighbour, fixed for the floor's depth. */
+    private final int                 enemyCentreDamage;
+    private final int                 enemyRingDamage;
     private       ImpactEventListener impactEventListener = null;
     private       BarrelDetonationListener detonationListener = null;
 
@@ -43,8 +51,20 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     private final int[] chainRows;
     private int         chainCount;
 
-    public ExplosiveBarrelManager(Level level, EnemyHitTarget enemyHitTarget, Player player) {
+    /**
+     * @param depth the floor's depth (the same one the floor's EnemyManager scales its enemies with): the
+     *              reference soldier's HP, and so the enemy blast damage, follows the enemy HP ladder.
+     */
+    public ExplosiveBarrelManager(Level level, EnemyHitTarget enemyHitTarget, Player player, int depth) {
         this.level          = level;
+        // Unrounded on purpose: the ring (0.6 x soldier) must land exactly on a chaff's own rounded HP, so the
+        // reference stays a float and only the final damage is rounded (BalanceSchema R-HAZARD audits it).
+        float referenceSoldierMaxHealth = GameMath.enemyHealthAtDepth(
+                BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth);
+        this.enemyCentreDamage = GameMath.barrelBlastDamage(
+                BalanceConfig.HAZARD_BARREL_CENTRE_FRACTION, referenceSoldierMaxHealth);
+        this.enemyRingDamage   = GameMath.barrelBlastDamage(
+                BalanceConfig.HAZARD_BARREL_RING_FRACTION, referenceSoldierMaxHealth);
         this.enemyHitTarget = enemyHitTarget;
         this.player         = player;
         this.chainColumns   = new int[EffectConstants.EXPLOSION_CHAIN_MAX];
@@ -91,7 +111,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         if (impactEventListener != null) {
             float worldX = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
             float worldY = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
-            impactEventListener.onEnemyKilled(worldX, worldY, 0.65f, EffectConstants.EXPLOSION_DAMAGE);
+            impactEventListener.onEnemyKilled(worldX, worldY, 0.65f, enemyRingDamage);
         }
 
         int playerTileColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
@@ -104,8 +124,12 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
 
             if (Level.isWall(blastCell)) continue;
 
+            boolean centreTile = blastIndex == 0;
             if (blastColumn == playerTileColumn && blastRow == playerTileRow) {
-                player.applyDamage(EffectConstants.EXPLOSION_DAMAGE);
+                player.applyDamage(GameMath.barrelBlastDamage(centreTile
+                                ? BalanceConfig.HAZARD_BARREL_PLAYER_CENTRE_FRACTION
+                                : BalanceConfig.HAZARD_BARREL_PLAYER_RING_FRACTION,
+                        player.getMaxHealth()));
             }
 
             if (enemyHitTarget != null) {
@@ -117,7 +141,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
                     boolean previousFloorNeutral = enemyHitTarget.isActivationMatchupFloorNeutral();
                     enemyHitTarget.setActivationDamageClass(DamageClass.EXPLOSIVE);
                     enemyHitTarget.setActivationMatchupFloorNeutral(false);
-                    enemyHitTarget.applyDamageTo(enemy, EffectConstants.EXPLOSION_DAMAGE);
+                    enemyHitTarget.applyDamageTo(enemy, centreTile ? enemyCentreDamage : enemyRingDamage);
                     enemyHitTarget.setActivationDamageClass(previousClass);
                     enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
                 }

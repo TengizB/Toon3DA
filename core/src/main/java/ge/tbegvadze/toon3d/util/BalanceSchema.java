@@ -95,6 +95,12 @@ public final class BalanceSchema {
          * player's max HP unguarded, is committed >= 1 turn ahead, and costs <= HEAVY_GUARDED_MAX_FRACTION guarded.
          */
         HEAVY,
+        /**
+         * R-HAZARD (balance-overhaul order 4, H13/H14): barrel blasts are fractions that kill every CHAFF at every
+         * depth and never out-hit a heavy on the player; barrels sit in >= HAZARD_GROUP_ROOM_SHARE of the group
+         * rooms on COMBAT / ELITE floors and nowhere else.
+         */
+        HAZARD,
         /** R-DOT: exactly one definition per status; shim files must re-export BalanceConfig byte-for-byte. */
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
@@ -725,6 +731,7 @@ public final class BalanceSchema {
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
         results.addAll(heavyResults());
+        results.addAll(hazardResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
@@ -754,6 +761,7 @@ public final class BalanceSchema {
         results.addAll(supplySweepResults());
         results.addAll(eliteRewardResults());
         results.addAll(densitySweepResults());
+        results.addAll(hazardPlacementResults());
         return results;
     }
 
@@ -1058,6 +1066,103 @@ public final class BalanceSchema {
             }
         }
         results.addAll(heavyAvoidabilityResults());
+        return results;
+    }
+
+    /** The reference SOLDIER's max HP at a depth, unrounded (the barrel's yardstick, H13). */
+    public static float barrelReferenceSoldierMaxHealth(int depth) {
+        return GameMath.enemyHealthAtDepth(BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth);
+    }
+
+    /** What a barrel's ring / centre blast deals an enemy at a depth (the same call ExplosiveBarrelManager makes). */
+    public static int barrelEnemyDamage(float fraction, int depth) {
+        return GameMath.barrelBlastDamage(fraction, barrelReferenceSoldierMaxHealth(depth));
+    }
+
+    /** An enemy archetype's max HP as the game spawns it at a depth. */
+    public static int scaledEnemyMaxHealth(EnemyType type, int depth) {
+        return Math.max(1, Math.round(GameMath.enemyHealthAtDepth(type.maxHealth(), depth)));
+    }
+
+    /**
+     * R-HAZARD (balance-overhaul order 4, H13/H14), depths 1..25:
+     * (a) the reference soldier named by the constants IS the R-LADDER SOLDIER reference archetype;
+     * (b) a barrel's RING blast kills every CHAFF archetype outright (the pack-clearing promise of A6);
+     * (c) the ring never one-shots the reference soldier (a barrel is a turn-turner, not a kill button);
+     * (d) the player's own centre / ring damage never exceeds the heavy band's floor (HEAVY_DAMAGE_FRACTION_MIN)
+     *     of the on-curve max HP — a hazard must not out-hit a telegraphed heavy.
+     * Placement (H14) is audited from the generator sweep by {@link #hazardPlacementResults()}.
+     */
+    public static List<RuleResult> hazardResults() {
+        List<RuleResult> results = new ArrayList<>();
+        EnemyType soldier = ladderReferenceArchetype(EnemyRole.SOLDIER);
+        results.add(new RuleResult(RuleKind.HAZARD, "reference soldier base HP is the ladder SOLDIER",
+                BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, soldier.maxHealth(), soldier.maxHealth(),
+                BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH == soldier.maxHealth(),
+                soldier.name()));
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+            int ring = barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_RING_FRACTION, depth);
+            int worstChaffHealth = 0;
+            String worstChaff = "none";
+            for (EnemyType type : EnemyType.values()) {
+                if (type.role() != EnemyRole.CHAFF) continue;
+                int health = scaledEnemyMaxHealth(type, depth);
+                if (health > worstChaffHealth) {
+                    worstChaffHealth = health;
+                    worstChaff = type.name();
+                }
+            }
+            results.add(new RuleResult(RuleKind.HAZARD, "d" + depth + " ring kills every chaff", ring,
+                    worstChaffHealth, Float.POSITIVE_INFINITY, ring >= worstChaffHealth,
+                    "ring " + ring + " vs " + worstChaff + " " + worstChaffHealth + " HP"));
+            int soldierHealth = scaledEnemyMaxHealth(soldier, depth);
+            results.add(new RuleResult(RuleKind.HAZARD, "d" + depth + " ring spares the soldier", ring,
+                    0f, soldierHealth - 1f, ring < soldierHealth, "ring " + ring + " vs soldier " + soldierHealth + " HP"));
+            int playerMaxHealth = Math.round(GameMath.expectedPlayerAtDepth(depth).maxHealth);
+            int playerCentre = GameMath.barrelBlastDamage(BalanceConfig.HAZARD_BARREL_PLAYER_CENTRE_FRACTION, playerMaxHealth);
+            float playerCentreFraction = playerCentre / (float) playerMaxHealth;
+            results.add(new RuleResult(RuleKind.HAZARD, "d" + depth + " player centre blast", playerCentreFraction,
+                    0f, BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN,
+                    playerCentreFraction <= BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN,
+                    playerCentre + " of " + playerMaxHealth + " max HP"));
+        }
+        return results;
+    }
+
+    /**
+     * R-HAZARD placement (H14), from the generator sweep: on every COMBAT / ELITE floor at least
+     * ceil(HAZARD_GROUP_ROOM_SHARE x eligible) of the group rooms hold barrels (worst floor per cell), and no
+     * other node type ever gets one.
+     */
+    public static synchronized List<RuleResult> hazardPlacementResults() {
+        List<RuleResult> results = new ArrayList<>();
+        Map<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cells = new java.util.LinkedHashMap<>();
+        for (ge.tbegvadze.toon3d.level.FloorContentReport report : supplySweepReports()) {
+            cells.computeIfAbsent(report.generatorName + " " + report.spec.type() + " d" + report.depth,
+                    key -> new ArrayList<>()).add(report);
+        }
+        for (Map.Entry<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cell : cells.entrySet()) {
+            RouteNodeType type = cell.getValue().get(0).spec.type();
+            boolean gets = type == RouteNodeType.COMBAT || type == RouteNodeType.ELITE;
+            int worstShortfall = 0;
+            int strayBarrels = 0;
+            for (ge.tbegvadze.toon3d.level.FloorContentReport report : cell.getValue()) {
+                if (!gets) {
+                    strayBarrels += report.barrelCount();
+                    continue;
+                }
+                int needed = GameMath.groupBarrelRoomCount(report.barrelEligibleRooms(),
+                        BalanceConfig.HAZARD_GROUP_ROOM_SHARE);
+                worstShortfall = Math.max(worstShortfall, needed - report.barrelRooms());
+            }
+            if (gets) {
+                results.add(new RuleResult(RuleKind.HAZARD, cell.getKey() + " barrel rooms (H14)", worstShortfall,
+                        0f, 0f, worstShortfall <= 0, "worst floor's shortfall vs the 40% rule"));
+            } else {
+                results.add(new RuleResult(RuleKind.HAZARD, cell.getKey() + " no barrels (H14)", strayBarrels,
+                        0f, 0f, strayBarrels == 0, null));
+            }
+        }
         return results;
     }
 

@@ -39,9 +39,12 @@ public final class FloorPopulator {
         public final List<WeaponSpawnPoint> weaponSpawnPoints;
         public final List<CreditSpawnPoint> creditSpawnPoints;
         public final FloorContentReport     report;
+        /** Explosive barrels placed beside groups (order 4, H14); the generated palette must bind their symbol. */
+        public final int                    barrelCount;
 
         Result(List<EnemySpawnPoint> spawnPoints, List<WeaponSpawnPoint> weaponSpawnPoints,
-               List<CreditSpawnPoint> creditSpawnPoints, FloorContentReport report) {
+               List<CreditSpawnPoint> creditSpawnPoints, FloorContentReport report, int barrelCount) {
+            this.barrelCount       = barrelCount;
             this.spawnPoints       = spawnPoints;
             this.weaponSpawnPoints = weaponSpawnPoints;
             this.creditSpawnPoints = creditSpawnPoints;
@@ -189,9 +192,19 @@ public final class FloorPopulator {
             stampedSpawns.set(assignment.spawnIndex, spawn.withCarriedDrop(assignment.pickup.symbol));
         }
 
+        // --- HAZARDS (balance-overhaul order 4, H14): explosive barrels beside groups, on COMBAT / ELITE only,
+        // on tiles no spawn, pickup, weapon or credit owns.
+        Set<Long> reservedTiles = new HashSet<>(occupied);
+        for (WeaponSpawnPoint weapon : weapons) reservedTiles.add(tileKey(weapon.tileColumn, weapon.tileRow));
+        for (CreditSpawnPoint credit : credits) reservedTiles.add(tileKey(credit.tileColumn, credit.tileRow));
+        GroupBarrelPlacer.Outcome barrels =
+                GroupBarrelPlacer.place(grid, survey, stampedSpawns, reservedTiles, spec, seed);
+        int barrelCount = barrels.barrels;
+
         FloorContentReport report = buildReport(generatorName, spec, depth, survey, stampedSpawns, facts,
                 anchorRegion, anchorWalk, plan, placement);
-        return new Result(stampedSpawns, weapons, credits, report);
+        report.attachBarrels(barrels.barrels, barrels.eligibleRooms, barrels.roomsServed);
+        return new Result(stampedSpawns, weapons, credits, report, barrelCount);
     }
 
     private static FloorContentReport buildReport(String generatorName, NodeSupplySpec spec, int depth,

@@ -806,34 +806,80 @@ public final class BalanceReport {
     // this — that is how "a room full of fire raises its effective TP" (idea 4) is quantified.
     // -----------------------------------------------------------------------------------
     private static void printHazardTable() {
-        System.out.println("HAZARDS (idea 4, Pillar 3) — turnsStood=" + BalanceConfig.HAZARD_THREAT_TURNS_STOOD
-                + " (careless-player reference)");
+        System.out.println("HAZARDS (idea 4, Pillar 3; balance-overhaul order 4 H13) — every magnitude is a FRACTION");
         System.out.printf("%-8s %10s %8s %10s %12s%n",
                 "hazard", "dmg/turn", "TP/tile", "lifetime", "TP per 6 tiles");
         System.out.println("------------------------------------------------------------------------------------");
 
-        // Order 4 (H10): fire and toxin are FRACTIONS of the host's max HP. The table prices them at the
-        // PLAYER side at depth 1 — the on-curve depth-1 max HP (GameMath.expectedPlayerAtDepth(1)) — because
-        // a hazard tile hurts the player at the base fraction (enemies add their own multipliers). Toxic
-        // STACKS (POISON_STACKS_PER_TOXIC_TURN a turn, decaying by 1), so its damage/turn is the per-stack
-        // tick times the average damage-bearing stack count over the careless-stand reference.
+        // Fire and toxin are priced at the PLAYER side at depth 1 — the on-curve depth-1 max HP
+        // (GameMath.expectedPlayerAtDepth(1)) — because a hazard tile hurts the player at the base fraction
+        // (enemies add their own multipliers). Toxic STACKS (POISON_STACKS_PER_TOXIC_TURN a turn, decaying by
+        // 1), so its damage/turn is the per-stack tick times the average damage-bearing stack count over the
+        // careless window; that window is the burn window (HAZARD_FIRE_BURN_TURNS), which replaced the flat
+        // HAZARD_THREAT_TURNS_STOOD.
         int   referenceMaxHealth = Math.round(GameMath.expectedPlayerAtDepth(1).maxHealth);
+        int   carelessTurns      = BalanceConfig.HAZARD_FIRE_BURN_TURNS;
         float fireDamagePerTurn  = GameMath.statusTickDamage(EffectConstants.BURN_TICK_FRACTION, referenceMaxHealth, 1);
-        float toxicAverageStacks = GameMath.toxicAverageStacks(BalanceConfig.HAZARD_THREAT_TURNS_STOOD,
+        float toxicAverageStacks = GameMath.toxicAverageStacks(carelessTurns,
                 EffectConstants.POISON_STACKS_PER_TOXIC_TURN, EffectConstants.POISON_MAX_STACKS);
         float toxicDamagePerTurn = GameMath.statusTickDamage(EffectConstants.POISON_TICK_FRACTION,
                 referenceMaxHealth, 1) * toxicAverageStacks;
 
-        printHazardRow("Fire 'i'",  fireDamagePerTurn,  BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS);
-        printHazardRow("Toxic 'q'", toxicDamagePerTurn, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS);
-        System.out.println("  Hazards damage BOTH sides (player AND enemies) via BURNING/POISONED — two-sided by design.");
+        printHazardRow("Fire 'i'",  fireDamagePerTurn,  BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS, carelessTurns);
+        printHazardRow("Toxic 'q'", toxicDamagePerTurn, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS, carelessTurns);
+        int barrelPlayerRing = GameMath.barrelBlastDamage(BalanceConfig.HAZARD_BARREL_PLAYER_RING_FRACTION, referenceMaxHealth);
+        int barrelPlayerCentre = GameMath.barrelBlastDamage(BalanceConfig.HAZARD_BARREL_PLAYER_CENTRE_FRACTION, referenceMaxHealth);
+        printHazardRow("Barrel ring", barrelPlayerRing, 1, 1);
+        printHazardRow("Barrel ctr", barrelPlayerCentre, 1, 1);
+        System.out.println("  Hazards damage BOTH sides (player AND enemies) — two-sided by design. Enemy side: fire x"
+                + BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER + " (x FIRE matchup), toxic "
+                + BalanceConfig.HAZARD_TOXIC_ENEMY_STACKS_PER_TURN + " stacks/turn at the enemy's own max HP.");
+        System.out.println();
+        printBarrelBlastTable();
     }
 
-    private static void printHazardRow(String hazardName, float damagePerTurn, int lifetimeTurns) {
+    private static void printHazardRow(String hazardName, float damagePerTurn, int lifetimeTurns, int carelessTurns) {
         float threatPerTile = GameMath.hazardTileThreatPoints(damagePerTurn,
-                BalanceConfig.HAZARD_THREAT_TURNS_STOOD, BalanceConfig.POSITIONAL_MULT_MELEE);
+                carelessTurns, BalanceConfig.POSITIONAL_MULT_MELEE);
         System.out.printf("%-8s %10.1f %8.1f %10d %12.1f%n",
                 hazardName, damagePerTurn, threatPerTile, lifetimeTurns, threatPerTile * 6f);
+    }
+
+    /**
+     * A6 arithmetic: a barrel's blast against the reference soldier (VOID_SHROUD base, the R-LADDER SOLDIER) and
+     * against every CHAFF archetype, at depths 1 / 10 / 25 — what one ring hit, the centre, and two overlapping
+     * ring hits (two barrels) leave of a soldier. Neutral matchup (no EXPLOSIVE trait multiplier).
+     */
+    private static void printBarrelBlastTable() {
+        System.out.println("BARREL BLAST (H13) — centre " + BalanceConfig.HAZARD_BARREL_CENTRE_FRACTION + " / ring "
+                + BalanceConfig.HAZARD_BARREL_RING_FRACTION + " x reference SOLDIER HP ("
+                + BalanceSchema.ladderReferenceArchetype(ge.tbegvadze.toon3d.enemy.EnemyRole.SOLDIER).name()
+                + " base " + BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH + ")");
+        System.out.printf("%-5s %8s %7s %7s | %-22s | %-22s | %-22s%n", "depth", "soldier", "ring", "centre",
+                "soldier left: 1 ring", "soldier left: 2 rings", "every chaff killed by ring?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (int depth : new int[]{1, 5, 10, 15, 25}) {
+            int soldierHealth = BalanceSchema.scaledEnemyMaxHealth(
+                    BalanceSchema.ladderReferenceArchetype(ge.tbegvadze.toon3d.enemy.EnemyRole.SOLDIER), depth);
+            int ring   = BalanceSchema.barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_RING_FRACTION, depth);
+            int centre = BalanceSchema.barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_CENTRE_FRACTION, depth);
+            int oneRingLeft  = Math.max(0, soldierHealth - ring);
+            int twoRingsLeft = Math.max(0, soldierHealth - 2 * ring);
+            StringBuilder chaff = new StringBuilder();
+            boolean allDie = true;
+            for (ge.tbegvadze.toon3d.enemy.EnemyType type : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
+                if (type.role() != ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF) continue;
+                int health = BalanceSchema.scaledEnemyMaxHealth(type, depth);
+                allDie &= ring >= health;
+                chaff.append(type.name()).append('=').append(health).append(ring >= health ? "(dies) " : "(LIVES) ");
+            }
+            System.out.printf("%-5d %8d %7d %7d | %4d HP = %3.0f%%        | %4d HP = %3.0f%%        | %s %s%n",
+                    depth, soldierHealth, ring, centre,
+                    oneRingLeft, 100f * oneRingLeft / soldierHealth,
+                    twoRingsLeft, 100f * twoRingsLeft / soldierHealth,
+                    allDie ? "YES" : "NO ", chaff.toString().trim());
+        }
+        System.out.println("  Ring tiles are where enemies stand (a barrel is a solid prop, so the centre tile is never occupied).");
     }
 
     // -----------------------------------------------------------------------------------

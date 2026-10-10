@@ -986,9 +986,9 @@ public final class BalanceConfig {
     /** Chance an Acid Drone ranged hit applies POISONED. */
     public static final float ACID_DRONE_POISON_CHANCE  = 0.75f;
 
-    // --- Explosive barrel hazard (moved from EffectConstants; gameplay).
-    /** Damage a detonating explosive barrel deals to hosts in its blast. */
-    public static final int   EXPLOSION_DAMAGE    = 12;
+    // --- Explosive barrel hazard (moved from EffectConstants; gameplay). The flat EXPLOSION_DAMAGE (12) is
+    // GONE (balance-overhaul order 4, H13): blast damage is a fraction of the reference soldier's HP at the
+    // floor's depth / of the player's max HP (SECTION 23, HAZARD_BARREL_*).
     /** Hard ceiling on chained barrel detonations from one trigger. */
     public static final int   EXPLOSION_CHAIN_MAX = 32;
 
@@ -1262,9 +1262,9 @@ public final class BalanceConfig {
      * tile is an enemy rather than the player. Fire still hurts the player at the base rate (the
      * misposition risk stays real), but enemies caught in the flamethrower's spreading fire burn
      * faster — rewarding the player for herding a swarm into the flame instead of just tagging
-     * them directly. Range: 1.0 (symmetric) – 2.0.
+     * them directly. Range: 1.0 (symmetric) – 3.0. (CP6, H13: 1.5 -> 2.5 so a fire is a real weapon against a pack.)
      */
-    public static final float HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER = 1.5f;
+    public static final float HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER = 2.5f;
 
     // Toxic pools apply POISON_STACKS_PER_TOXIC_TURN stacks (SECTION 23) per turn stood; stacks decay by 1 a
     // turn, so a pool is area denial (standing in it escalates to POISON_MAX_STACKS) with no separate duration.
@@ -1286,13 +1286,6 @@ public final class BalanceConfig {
     /** Cardinal radius of the toxic cloud a Plague Hulk leaves where it dies (0 = its tile only). Range: 0–2. */
     public static final int   HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS = 1;
 
-    /**
-     * Turns a careless player is assumed to stand in one hazard tile, used ONLY by
-     * GameMath.hazardTileThreatPoints to fold hazard danger into the Threat-Point contract
-     * (a hazard room raises its effective floor TP — idea 4, Pillar 3). A skilled player leaves
-     * sooner; this is the "you mispositioned" reference, not the spread lifetime. Range: 1–3.
-     */
-    public static final int   HAZARD_THREAT_TURNS_STOOD    = 2;
 
     // =====================================================================================
     // SECTION 13 — TELEGRAPH & COUNTERPLAY (idea 4, Pillar 5) — fairness contract
@@ -2738,4 +2731,34 @@ public final class BalanceConfig {
     public static final int   REVENANT_LUNGE_TRIGGER_MAX_TILES    = 3;
     /** Own turns that must pass after a lunge commit before the Revenant may commit another. */
     public static final int   REVENANT_LUNGE_COOLDOWN_TURNS       = 3;
+
+    // --- HAZARDS as fractions (H13/H14, CP6). Replace the flat EXPLOSION_DAMAGE 12, the 1.5x enemy-fire
+    // multiplier (now HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 2.5, SECTION 12) and HAZARD_THREAT_TURNS_STOOD (the
+    // hazard TP window is now the burn window HAZARD_FIRE_BURN_TURNS).
+    /**
+     * Base HP of the REFERENCE SOLDIER barrels are scaled to: the R-LADDER reference SOLDIER archetype
+     * (BalanceSchema.ladderReferenceArchetype(SOLDIER) = VOID_SHROUD), grown by GameMath.enemyHealthAtDepth.
+     * A barrel's blast is a fraction of THAT, so it never goes stale as enemy HP climbs the ladder.
+     */
+    public static final int   HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH = VOID_SHROUD_MAX_HEALTH;
+    /** H13: the barrel's own tile, as a fraction of the reference soldier's HP at the floor's depth. */
+    public static final float HAZARD_BARREL_CENTRE_FRACTION        = 1.2f;
+    /** H13: each orthogonal neighbour tile, as a fraction of the reference soldier's HP at the floor's depth. */
+    public static final float HAZARD_BARREL_RING_FRACTION          = 0.6f;
+    /** H13: blast damage to the PLAYER on the centre tile, as a fraction of the player's max HP. */
+    public static final float HAZARD_BARREL_PLAYER_CENTRE_FRACTION = 0.30f;
+    /** H13: blast damage to the PLAYER on an orthogonal ring tile, as a fraction of the player's max HP. */
+    public static final float HAZARD_BARREL_PLAYER_RING_FRACTION   = 0.15f;
+    /** H13: stacks a toxic tile / Plague Hulk cloud applies to an ENEMY each turn it stands in it. */
+    public static final int   HAZARD_TOXIC_ENEMY_STACKS_PER_TURN   = 2;
+    /** H14: share of the eligible group rooms (a group of HAZARD_GROUP_MIN_SIZE+) that receive barrels (rounded up). */
+    public static final float HAZARD_GROUP_ROOM_SHARE              = 0.40f;
+    /** H14: smallest group that makes its room eligible for barrels. */
+    public static final int   HAZARD_GROUP_MIN_SIZE                = 3;
+    /** H14: fewest barrels an eligible room receives. */
+    public static final int   HAZARD_GROUP_BARRELS_MIN             = 1;
+    /** H14: most barrels an eligible room receives. */
+    public static final int   HAZARD_GROUP_BARRELS_MAX             = 2;
+    /** H14: barrels sit within this Chebyshev distance (tiles) of the group cluster's centroid. */
+    public static final int   HAZARD_GROUP_BARREL_RADIUS_TILES     = 2;
 }

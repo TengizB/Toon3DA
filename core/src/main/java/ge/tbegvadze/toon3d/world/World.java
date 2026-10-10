@@ -1347,7 +1347,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (meleeWeapon != null) {
             meleeWeapon.setAbilityResolver(abilityResolver);
         }
-        explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player);
+        explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player, currentDepth);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         impactEffectSystem.setGameAudio(gameAudio);
         enemyManager.setImpactEventListener(impactEffectSystem);

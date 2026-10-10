@@ -812,21 +812,34 @@ PLAYED (S-SUPPLY / S-ECONOMY, the sim): TACTICAL leaves COMBAT floors at ~0.79 h
 ================================================================================
 SECTION 13 — TERRAIN HAZARDS (two-sided danger folded into the TP contract)
 ================================================================================
-File: BalanceConfig SECTION 12; hazard/HazardManager.java; GameMath.hazardTileThreatPoints.
+File: BalanceConfig SECTION 12 + SECTION 23 (HAZARD_*); hazard/HazardManager.java, hazard/ExplosiveBarrelManager.java,
+      level/GroupBarrelPlacer.java; GameMath.hazardTileThreatPoints / barrelBlastDamage / groupBarrelRoomCount.
+(balance-overhaul order 4 CP6: hazards are FRACTIONS now — see "ORDER 4 HAZARDS" below; the flat numbers in this
+section's older text are superseded.)
 
 Fire ('i') and toxic ('q') floor tiles tick BURNING/POISONED onto ANY host —
 player AND enemies. That two-sidedness IS the tactic. A hazard tile has no HP, so:
-  hazardTileThreatPoints = hazardDamagePerTurn * HAZARD_THREAT_TURNS_STOOD * posMult
+  hazardTileThreatPoints = hazardDamagePerTurn * HAZARD_FIRE_BURN_TURNS * posMult   (was HAZARD_THREAT_TURNS_STOOD, deleted)
 
 Knobs (BalanceConfig SECTION 12):
   HAZARD_FIRE_LIFETIME_TURNS=3, HAZARD_TOXIC_LIFETIME_TURNS=6.
   HAZARD_FIRE_BURN_TURNS=2, HAZARD_TOXIC_POISON_TURNS=3.
-  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER=1.5 (enemies burn faster — reward herding).
+  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER=2.5 (was 1.5; enemies burn faster — reward herding).
   HAZARD_FIRE_SPREAD_CHANCE=0.18 (sub-critical: 3*0.18 < 1, so fire shrinks & dies),
   HAZARD_TOXIC_SPREAD_CHANCE=0.10.
   HAZARD_EXPLOSION_IGNITE_CHANCE=0.50 (barrel -> fire chain).
-  HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS=1, HAZARD_THREAT_TURNS_STOOD=2.
-Actual per-turn hazard damage comes from EffectConstants BURN/POISON magnitudes.
+  HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS=1.
+Actual per-turn hazard damage comes from the BURN_TICK_FRACTION / POISON_TICK_FRACTION magnitudes (SECTION 23).
+
+ORDER 4 HAZARDS (balance-overhaul order 4, CP6 — H13/H14; contract: authority doc R-HAZARD):
+  Barrel blast: centre 1.2 / orthogonal ring 0.6 x the reference SOLDIER's max HP at the floor's depth
+  (VOID_SHROUD base 50 grown by enemyHealthAtDepth; ExplosiveBarrelManager is told the floor's depth);
+  to the player 0.30 / 0.15 of max HP. Still EXPLOSIVE for matchups. Depth 10: soldier 161, ring 97, centre
+  194 -> one ring leaves a soldier at 40%, two barrels' rings kill it; one ring kills every chaff.
+  Fire tiles burn enemies at BURN_TICK_FRACTION x 2.5 (x FIRE matchup); toxic tiles and the Plague Hulk
+  cloud poison enemies HAZARD_TOXIC_ENEMY_STACKS_PER_TURN 2 stacks a turn at the enemy's own max HP.
+  Placement: COMBAT / ELITE floors only; >= 40% of the rooms (not the start room) holding a group of >= 3
+  get 1-2 'E' barrels within 2 tiles of the group centroid (details in procedural-level-generation.txt).
 
 ⚠️ Not-good note: hazard TP is folded in with a fixed "turns stood = 2" assumption;
 a careful player stands 0 turns and a careless one stands more, so the hazard

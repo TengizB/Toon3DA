@@ -3497,29 +3497,68 @@ public final class GameMath {
     }
 
     /*
-     * Formula: hazardTileThreatPoints — fold terrain danger into the TP contract (idea 4, Pillar 3)
+     * Formula: hazardTileThreatPoints — fold terrain danger into the TP contract (idea 4, Pillar 3; order 4 H13)
      * Derivation:
      *   A hazard tile (fire / toxic) has no health, so the enemy Threat-Point primitive's
      *   "survivalTurns" term (eHP / refDPT) does not apply. Instead a static hazard threatens
-     *   the player for as many turns as the player carelessly stands in it:
-     *       hazardTileThreatPoints = hazardDamagePerTurn * turnsStood * positionalMultiplier
-     *   This is the SAME shape as threatPoints (damagePerTurn * danger-window * positional) so a
-     *   hazard tile is directly comparable to an enemy's TP. A room with N such tiles raises its
-     *   effective floor TP by ~N * this value — that is how "a room full of fire raises its
-     *   effective TP" (idea 4) is made quantitative. turnsStood is a CARELESS-player reference
-     *   (BalanceConfig.HAZARD_THREAT_TURNS_STOOD), not the hazard's spread lifetime: a skilled
-     *   player leaves sooner and pays less, which is exactly the counterplay the hazard sells.
+     *   the player for as many turns as a careless player stays hurt by it:
+     *       hazardDamagePerTurn   = max(1, round(damageFraction x referenceMaxHealth))   (statusTickDamage)
+     *       hazardTileThreatPoints = hazardDamagePerTurn * carelessTurns * positionalMultiplier
+     *   This is the SAME shape as threatPoints (damagePerTurn * danger-window * positional), so a hazard
+     *   tile is directly comparable to an enemy's TP. Since order 4 the damage is a FRACTION of the
+     *   reference max HP (the on-curve player at depth 1 for the player side), and the careless window is the
+     *   hazard's own burn window (BalanceConfig.HAZARD_FIRE_BURN_TURNS: how long standing in it once keeps
+     *   hurting), replacing the flat HAZARD_THREAT_TURNS_STOOD constant.
      * Edge cases:
-     *   turnsStood <= 0 -> returns 0 (a hazard nobody ever stands in threatens nothing).
+     *   carelessTurns <= 0 -> returns 0 (a hazard nobody ever stands in threatens nothing).
      *   hazardDamagePerTurn <= 0 -> returns 0 (no damage, no threat).
      */
-    public static float hazardTileThreatPoints(float hazardDamagePerTurn, int turnsStood,
+    public static float hazardTileThreatPoints(float hazardDamagePerTurn, int carelessTurns,
                                                float positionalMultiplier) {
-        if (turnsStood <= 0 || hazardDamagePerTurn <= 0f) {
+        if (carelessTurns <= 0 || hazardDamagePerTurn <= 0f) {
             return 0f;
         }
-        return hazardDamagePerTurn * turnsStood * positionalMultiplier;
+        return hazardDamagePerTurn * carelessTurns * positionalMultiplier;
     }
+
+    /*
+     * Formula: barrelBlastDamage — a barrel's blast as a FRACTION of a reference max HP (balance-overhaul order 4, H13)
+     * Derivation:
+     *   damage = max(1, round(fraction x referenceMaxHealth))
+     *   Enemy side: referenceMaxHealth = the reference SOLDIER's max HP at the floor's depth
+     *   (enemyHealthAtDepth(HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth)), fraction = centre 1.2 / ring 0.6.
+     *   Player side: referenceMaxHealth = the player's own max HP, fraction = centre 0.30 / ring 0.15.
+     *   Example (depth 10, soldier 161 HP): ring 0.6 -> round(96.6) = 97; centre 1.2 -> round(193.2) = 193.
+     *   Because the reference grows with the enemy HP ladder, a barrel kills the same chaff at every depth.
+     * Edge cases:
+     *   referenceMaxHealth <= 0 or fraction <= 0 -> 1 (an explosion always hurts a little).
+     *   Math.round is half-up; the caller passes the already-rounded integer HP the enemy actually has.
+     */
+    public static int barrelBlastDamage(float fraction, float referenceMaxHealth) {
+        return Math.max(1, Math.round(fraction * referenceMaxHealth));
+    }
+
+    /*
+     * Formula: groupBarrelRoomCount — how many group rooms must hold barrels (balance-overhaul order 4, H14)
+     * Derivation:
+     *   needed = ceil(share x eligibleRooms)   (share = HAZARD_GROUP_ROOM_SHARE, 0.40)
+     *   "At least 40% of the rooms holding a group" rounds UP, so a floor with one eligible room still gets
+     *   a barrel room (ceil(0.4) = 1) and five eligible rooms need two (ceil(2.0) = 2). A float product such
+     *   as 0.4f x 5 = 2.0000000298 would round to 3, so a tiny epsilon is subtracted before the ceiling:
+     *       needed = ceil(share x eligibleRooms - 1e-4)
+     * Edge cases:
+     *   eligibleRooms <= 0 or share <= 0 -> 0. The result never exceeds eligibleRooms (share > 1 is clamped).
+     */
+    public static int groupBarrelRoomCount(int eligibleRooms, float share) {
+        if (eligibleRooms <= 0 || share <= 0f) {
+            return 0;
+        }
+        int needed = (int) Math.ceil((double) share * eligibleRooms - GROUP_BARREL_ROOM_COUNT_EPSILON);
+        return Math.max(0, Math.min(eligibleRooms, needed));
+    }
+
+    /** Guards {@link #groupBarrelRoomCount} against float products that land a hair above a whole number. */
+    private static final double GROUP_BARREL_ROOM_COUNT_EPSILON = 1e-4;
 
     // =========================================================================
     // BOSS BALANCE RULESET — bosses are tuned by formula, not by flat HP (idea 6)

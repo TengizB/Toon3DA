@@ -565,7 +565,9 @@ STATUS MAGNITUDES (balance-overhaul order 4, H10-H12 — CP4):
   per turn, max POISON_MAX_STACKS 6; stacks DECAY by 1 after each tick (turns left == stacks).
   Acid ranged hits (Mire Wraith / Acid Drone, after their chance roll and the armour shield) apply
   POISON_STACKS_PER_ACID_HIT 2 stacks; a toxic tile applies POISON_STACKS_PER_TOXIC_TURN 2 stacks per turn
-  stood to the PLAYER (unshielded; enemies on toxic tiles keep 1 stack/turn until the hazard rework).
+  stood to the PLAYER (unshielded) and HAZARD_TOXIC_ENEMY_STACKS_PER_TURN 2 to an ENEMY (its own max HP; the Plague Hulk death
+  cloud is toxic tiles). Fire tiles burn an enemy at BURN_TICK_FRACTION x HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 2.5 x the
+  FIRE matchup.
   WEAK = -35% outgoing for 3 turns (one percent for both directions). The Rimeshell lance SLOWS the player
   for LANCE_SLOW_DURATION_TURNS 2 on a connecting beam, through armourBlocksStatus. Weapon burns
   (Incendiary, Incinerator) keep their R-ROLE damage (WEAPON_BURN_BASE_PER_TURN).
@@ -579,7 +581,9 @@ system, ticked once per turn by HazardTickSubscriber (before the status tick so 
 same turn you stand in it). Tiles 'i' (fire) and 'q' (toxic) apply the existing BURNING/POISONED
 status to ANY host on them — player AND enemies. Fire spreads along spreadable floor/stain tiles
 and chain-detonates explosive barrels (and a detonation can ignite fire back onto its neighbours);
-toxic is a static area-denial pool. Knobs in BalanceConfig SECTION 12; per-tile Threat-Point cost
+toxic is a static area-denial pool. A barrel's blast (ExplosiveBarrelManager) is a FRACTION: centre 1.2 / ring 0.6
+of the reference soldier's HP at the floor's depth for enemies (still EXPLOSIVE), 0.30 / 0.15 of max HP for the
+player (balance-overhaul order 4 H13). Knobs in BalanceConfig SECTION 12 + SECTION 23; per-tile Threat-Point cost
 (GameMath.hazardTileThreatPoints) is printed by BalanceReport's HAZARDS section so a hazard room's
 contribution to the floor TP is auditable.
 

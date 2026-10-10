@@ -245,8 +245,11 @@ public final class HazardManager implements HazardIgniteTarget {
             statusEffectController.applyFractionBurn(host, BalanceConfig.HAZARD_FIRE_BURN_TURNS, fireMultiplier, null);
         } else if (type == TOXIC) {
             // The PLAYER takes POISON_STACKS_PER_TOXIC_TURN stacks a turn stood (unshielded: the floor is the
-            // counter-play). Enemies keep ONE stack per turn until CP6 re-bases their hazard behaviour.
-            int stacksPerTurn = (host instanceof Enemy) ? 1 : BalanceConfig.POISON_STACKS_PER_TOXIC_TURN;
+            // counter-play). ENEMIES take HAZARD_TOXIC_ENEMY_STACKS_PER_TURN (H13) — the pool and the Plague
+            // Hulk's death cloud are both tools against a pack — as an enemy-max-HP fraction per stack.
+            int stacksPerTurn = (host instanceof Enemy)
+                    ? BalanceConfig.HAZARD_TOXIC_ENEMY_STACKS_PER_TURN
+                    : BalanceConfig.POISON_STACKS_PER_TOXIC_TURN;
             statusEffectController.applyPoisonStacks(host, stacksPerTurn, null);
         }
     }

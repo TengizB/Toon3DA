@@ -129,8 +129,13 @@ class LevelGeneratorSnapshotTest {
     // RE-BASELINE (balance-overhaul order 4, CP5 — HEAVY ASSIGNMENTS): the Cinderforge Colossus gains
     // AREA_STRIKE in its move-set, which re-prices its Threat Points through the cycle average, so the
     // encounter planner rolls a different roster. A deliberate balance change.
+    // RE-BASELINE (balance-overhaul order 4, CP6 — HAZARD PLACEMENT, H14): on COMBAT / ELITE floors the shared
+    // FloorPopulator now stamps 1-2 explosive barrels ('E') within two tiles of the group cluster in at least
+    // 40% of the rooms holding a group of three or more (never the start room), so the generated grids gained
+    // solid 'E' tiles and the palette pins 'E' to the barrel sprite. A deliberate change; confirmed stable
+    // across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "d29f71e4eb7bd778776e3c5c54ceb37f5e22c2527bc76776413728baa2a74c67";
+            "ed36eddefa3b859be6949c2a974ab87f98e2a543b33d792127fbcbad26dc2d03";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
