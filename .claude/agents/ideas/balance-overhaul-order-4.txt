@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Combat
 TITLE: Dodge or Die — heavy attacks, guard, armour, status
 CREATED: 2026-09-30
