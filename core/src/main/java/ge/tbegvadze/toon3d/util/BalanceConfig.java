@@ -1819,8 +1819,8 @@ public final class BalanceConfig {
     public static final float SIM_TACTICAL_RETREAT_FRACTION = 0.35f;
     /** Vitality/ammo/heal fraction below which a turn counts as taken in a RESOURCE CRISIS. */
     public static final float SIM_RESOURCE_CRISIS_FRACTION = 0.25f;
-    /** Telegraphed incoming damage (as a fraction of remaining vitality) that makes TACTICAL guard. */
-    public static final float SIM_TACTICAL_GUARD_DAMAGE_FRACTION = 0.20f;
+    // (SIM_TACTICAL_GUARD_DAMAGE_FRACTION — "guard when a telegraphed hit would take a fifth of what is left" —
+    // was DELETED by balance-overhaul order 4, CP7b: TACTICAL now answers a heavy committed at it, see S-HEAVY.)
 
     // --- C. S-GATE: the boss-cheese regression (the headline guarantee) ------------------
     /**
@@ -1857,9 +1857,14 @@ public final class BalanceConfig {
      */
     public static final float SIM_ECONOMY_SUPPLY_SHARE_MIN = 0.75f;
     public static final float SIM_ECONOMY_SUPPLY_SHARE_MAX = 1.10f;
-    /** S-SUPPLY (balance-overhaul order 2, AS2): TACTICAL's mean health fraction leaving a COMBAT floor. */
+    /**
+     * S-SUPPLY (balance-overhaul order 2, AS2): TACTICAL's mean health fraction leaving a COMBAT floor.
+     * MAX re-based 0.80 -> 0.90 by balance-overhaul order 4 (override clause): the scripted reader now answers
+     * ~0.99 of the heavies that used to be its drain, and a heal re-fit cannot pull exit health back (COMBAT
+     * heal is already floor-bound at the S4 medkit) — see docs/game-balance-authority.txt S-SUPPLY.
+     */
     public static final float SIM_SUPPLY_EXIT_HEALTH_MIN = 0.55f;
-    public static final float SIM_SUPPLY_EXIT_HEALTH_MAX = 0.80f;
+    public static final float SIM_SUPPLY_EXIT_HEALTH_MAX = 0.90f;
     /** Fraction of TACTICAL floors allowed to fire the never-softlock emergency ammo lifeline. */
     public static final float SIM_ECONOMY_EMERGENCY_MAX_FRACTION = 0.05f;
 
@@ -2607,6 +2612,19 @@ public final class BalanceConfig {
     public static final float SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR = 1.0f;
     /** S-SWITCH: at least this many TACTICAL COMBAT floors across the matrix must show a hint (non-vacuous). */
     public static final int   SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS = 10;
+
+    // --- S-HEAVY (balance-overhaul order 4, CP7b, A8) -----------------------------------------------------
+    // Replaces the old "guard at a fifth of what is left" TacticalPolicy trigger. Success = the player answered the
+    // heavy: it was avoided, guarded (front arc), cancelled by a stagger/riposte/stun, or its source was killed
+    // first. Only LANDED (unguarded, or hit from the side/back) is a failure.
+    /** S-HEAVY: TACTICAL's success share of the heavies committed AT it must be at least this. */
+    public static final float SIM_HEAVY_TACTICAL_MIN_SUCCESS = 0.80f;
+    /** S-HEAVY: NAIVE ignores telegraphs, so its success share (by chance alone) must be at most this. */
+    public static final float SIM_HEAVY_NAIVE_MAX_SUCCESS    = 0.30f;
+    /** S-HEAVY: TACTICAL must have had at least this many heavies committed at it (so the share is not vacuous). */
+    public static final int   SIM_HEAVY_MIN_SAMPLE           = 30;
+    /** HEAVY REPORT depth bands: each entry is a band's LAST depth (1-5, 6-10, 11-15); a final band runs to the ceiling. */
+    public static final int[] SIM_HEAVY_REPORT_BAND_LAST_DEPTHS = {5, 10, 15};
 
     // --- R-ROLE — the reference scenarios and margins (replace the R-WEAPON power bands) -----------
     // Each scenario = a target trait x group size x engagement band; its archetype (the representative

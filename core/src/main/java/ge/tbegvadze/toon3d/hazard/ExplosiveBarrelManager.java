@@ -39,6 +39,9 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
 
     private final Level               level;
     private final EnemyHitTarget      enemyHitTarget;
+
+    /** Nominal blast damage this floor's barrels dealt to enemies (observation only — the simulator's HEAVY REPORT). */
+    private int enemyBlastDamageDealt = 0;
     private final Player              player;
     /** Enemy-side blast damage on the barrel's own tile / on each orthogonal neighbour, fixed for the floor's depth. */
     private final int                 enemyCentreDamage;
@@ -78,6 +81,11 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     /** Wires the hazard system so a detonation can chain fire onto the barrel's neighbours. */
     public void setDetonationListener(BarrelDetonationListener listener) {
         this.detonationListener = listener;
+    }
+
+    /** Nominal blast damage this floor's barrels dealt to enemies (observation only). */
+    public int getEnemyBlastDamageDealt() {
+        return enemyBlastDamageDealt;
     }
 
     @Override
@@ -142,6 +150,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
                     enemyHitTarget.setActivationDamageClass(DamageClass.EXPLOSIVE);
                     enemyHitTarget.setActivationMatchupFloorNeutral(false);
                     enemyHitTarget.applyDamageTo(enemy, centreTile ? enemyCentreDamage : enemyRingDamage);
+                    enemyBlastDamageDealt += centreTile ? enemyCentreDamage : enemyRingDamage;
                     enemyHitTarget.setActivationDamageClass(previousClass);
                     enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
                 }

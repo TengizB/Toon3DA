@@ -18,8 +18,8 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
 /**
  * The ceiling of the skill range (new-game-balancr order 9): a player who has read the manual.
  *
- * <p>TACTICAL keeps its range, breaks the cardinal line against ranged enemies, guards a telegraphed
- * spike, manages ammo across weapons instead of dry-firing one, heals before it is desperate, buys
+ * <p>TACTICAL keeps its range, breaks the cardinal line against ranged enemies, reads the red floor of a
+ * committed heavy (stagger / guard / step off), manages ammo across weapons instead of dry-firing one, heals before it is desperate, buys
  * the shop backstop, takes the upgrades it is offered, and routes by the order-7 node economics —
  * calm nodes when it is hurt, elites when it is strong, provisions before a boss.
  *
@@ -44,8 +44,6 @@ public final class TacticalPolicy implements PlayerPolicy {
 
     private final int[]  stepBuffer = new int[2];
     private final TravelPlanner travelPlanner = new TravelPlanner();
-    /** True when the previous turn was spent guarding — a brace covers one turn, never a stalemate. */
-    private boolean guardedPreviousTurn;
     private final java.util.Random tieBreak;
 
     public TacticalPolicy(long seed) {
@@ -59,8 +57,15 @@ public final class TacticalPolicy implements PlayerPolicy {
 
     @Override
     public TouchAction chooseAction(SimView view) {
-        boolean guardedLastTurn = guardedPreviousTurn;
-        guardedPreviousTurn = false;
+        // 0. READ THE RED FLOOR (balance-overhaul order 4, CP7b; replaces the old "guard at a fifth of what is
+        //    left" trigger): a HEAVY is committed and this tile is one of its danger tiles. Answer it before
+        //    anything else — a heavy is half the on-curve health pool, and a heal spent in front of it is a
+        //    heal and a half-pool lost. Step off, else stagger it, else guard it.
+        TouchAction heavyAnswer = answerHeavyThreat(view);
+        if (heavyAnswer != TouchAction.NONE) {
+            travelPlanner.interrupt();   // the walk plan is stale once a fight starts
+            return heavyAnswer;
+        }
 
         // 1. Survive first: heal well before the last hit, not after it.
         if (view.vitalityFraction() < BalanceConfig.SIM_TACTICAL_HEAL_FRACTION && view.medkitCount() > 0) {
@@ -89,17 +94,8 @@ public final class TacticalPolicy implements PlayerPolicy {
             return immediate;
         }
 
-        // 4. Nothing to shoot this turn and a committed intent would take a fifth of what is left:
-        //    brace. Never twice in a row — guard buys ONE turn, and a player who only guards dies
-        //    standing up.
-        int incoming = view.incomingTelegraphedDamage();
-        if (!guardedLastTurn && incoming > 0 && view.telegraphedThreatVisible()) {
-            float remaining = Math.max(1, view.health() + view.armor());
-            if ((float) incoming / remaining >= BalanceConfig.SIM_TACTICAL_GUARD_DAMAGE_FRACTION) {
-                guardedPreviousTurn = true;
-                return TouchAction.GUARD;
-            }
-        }
+        // 4. (The old "guard when a telegraphed hit would take a fifth of what is left" brace is gone: the
+        //    heavy answer at the top of this method is the guard now, and it only fires on a danger tile.)
 
         // 5. Deny the snipers their line — the cardinal-line constraint IS the counterplay.
         if (view.standingOnARangedEnemyLine()) {
@@ -127,6 +123,90 @@ public final class TacticalPolicy implements PlayerPolicy {
 
         return SimPolicySupport.wander(view, tieBreak);
     }
+
+    /**
+     * The HEAVY answer (balance-overhaul order 4, H4/H5/H7): when the marine's tile is a danger tile of a
+     * committed heavy, one action, in this order —
+     * (1) STAGGER: a spread gun that can fire, the source in the facing line inside the stagger range: FIRE
+     *     (a staggered heavy is cancelled, not delayed);
+     * (2) GUARD a heavy that is already FACED (AS4 — the riposte stuns and exposes it and the marine is already
+     *     lined up for the free shots; measured: a marine that sidesteps every heavy it faces never shoots back
+     *     and loops until the turn cap);
+     * (3) STEP or strafe to a walkable, unoccupied, NON-danger neighbour (preferring a tile no ranged enemy can
+     *     shoot, then one that keeps a cardinal line to the source);
+     * (4) else GUARD anyway (cornered) — or, when the source is a primed self-destruct with a turn to spare,
+     *     rotate toward it first.
+     * Returns NONE when the tile is not a danger tile, or when a primed self-destruct still has a turn to spare
+     * and the marine already faces it (the normal fight logic then shoots it; the answer repeats next turn).
+     */
+    private TouchAction answerHeavyThreat(SimView view) {
+        Enemy source = view.heavyThreatOnMyTile();
+        if (source == null) return TouchAction.NONE;
+
+        Weapon weapon = view.equippedWeapon();
+        boolean spreadGun = weapon instanceof ge.tbegvadze.toon3d.entity.Shotgun
+                || weapon instanceof ge.tbegvadze.toon3d.entity.DoubleBarrelShotgun;
+        if (spreadGun && weapon.canFire() && source.isAlerted() && !source.skipNextAction
+                && view.enemyInFacingLine(BalanceConfig.SHOTGUN_STAGGER_MAX_TILES) == source) {
+            return TouchAction.FIRE;
+        }
+
+        boolean turnRemains = source.selfDestructPrimed && source.selfDestructTurnsRemaining > 1;
+        if (view.isInGuardFrontArc(source)) return turnRemains ? TouchAction.NONE : TouchAction.GUARD;
+
+        TouchAction sidestep = stepOffHeavyDanger(view, source);
+        if (sidestep != TouchAction.NONE) return sidestep;
+
+        if (turnRemains) {
+            TouchAction turn = SimNavigator.actionToFace(view.facingStepColumn(), view.facingStepRow(),
+                    Integer.signum(source.tileColumn - view.playerTileColumn()),
+                    Integer.signum(source.tileRow - view.playerTileRow()));
+            if (turn != TouchAction.NONE) return turn;
+        }
+        return TouchAction.GUARD;
+    }
+
+    /**
+     * One MOVE (never a rotation) to a cardinal neighbour that is walkable, unoccupied and not a danger tile of
+     * ANY committed heavy. Best score wins: +2 for a tile no ranged enemy can shoot, +1 for a tile sharing a
+     * row or column with the heavy's source (a firing line stays cheap). NONE when the marine is cornered.
+     */
+    private TouchAction stepOffHeavyDanger(SimView view, Enemy source) {
+        int facingColumn = view.facingStepColumn();
+        int facingRow    = view.facingStepRow();
+        TouchAction bestAction = TouchAction.NONE;
+        int bestScore = -1;
+        for (int direction = 0; direction < HEAVY_STEP_COLUMNS.length; direction++) {
+            int stepColumn   = HEAVY_STEP_COLUMNS[direction];
+            int stepRow      = HEAVY_STEP_ROWS[direction];
+            int targetColumn = view.playerTileColumn() + stepColumn;
+            int targetRow    = view.playerTileRow()    + stepRow;
+            if (view.level().isBlockedAt(targetColumn, targetRow, view.doorManager())) continue;
+            if (view.enemyManager().isTileOccupiedByEnemy(targetColumn, targetRow)) continue;
+            if (view.isHeavyDangerTile(targetColumn, targetRow)) continue;
+            int score = 0;
+            if (!view.rangedEnemyThreatensTile(targetColumn, targetRow)) score += 2;
+            if (targetColumn == source.tileColumn || targetRow == source.tileRow) score += 1;
+            if (score > bestScore) {
+                bestScore  = score;
+                bestAction = moveActionForStep(facingColumn, facingRow, stepColumn, stepRow);
+            }
+        }
+        return bestAction;
+    }
+
+    /** The button that MOVES the marine one tile along a cardinal step (strafe for the sides — no turn spent). */
+    private static TouchAction moveActionForStep(int facingColumn, int facingRow, int stepColumn, int stepRow) {
+        if (stepColumn == facingColumn && stepRow == facingRow)   return TouchAction.FORWARD;
+        if (stepColumn == -facingColumn && stepRow == -facingRow) return TouchAction.BACK;
+        // Strafe left is 90 degrees CCW of the facing: (-facingRow, facingColumn).
+        if (stepColumn == -facingRow && stepRow == facingColumn)  return TouchAction.STRAFE_LEFT;
+        return TouchAction.STRAFE_RIGHT;
+    }
+
+    /** Cardinal steps in a fixed order, so a tie always breaks the same way (determinism). */
+    private static final int[] HEAVY_STEP_COLUMNS = { 1, -1, 0,  0 };
+    private static final int[] HEAVY_STEP_ROWS    = { 0,  0, 1, -1 };
 
     /** The loadout slot with the most rounds behind it, or null when every gun is dry. */
     private Weapon bestArmedAlternative(SimView view) {

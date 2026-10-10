@@ -705,3 +705,22 @@ ARMOUR SHIELD (balance-overhaul order 4, H8/H9 — CP3):
   enemy -> player site, via EnemyManager.armourBlocksStatus: executeDebuffPlayer (the WEAK tip shows only if
   WEAK applied) and applyRangedAttackStatusEffect (acid POISON, after the chance roll). HazardManager's
   fire/toxic applications are NOT routed — the floor is the counter-play there.
+
+HEAVY OUTCOME OBSERVATION (balance-overhaul order 4, CP7b — headless, sim-facing, no gameplay effect):
+  enemy/HeavyOutcomeListener (installed with EnemyManager.setHeavyOutcomeListener, nullable, a null check when
+  absent) reports what became of each heavy committed AT the player — onHeavyCommittedAtPlayer(enemy, kind) fires
+  once per committed instance at the end of phase C when the player's CURRENT tile is in the fresh plan's danger
+  set (Enemy.trackedHeavyKind marks the open instance, so a self-destruct re-telegraphing its countdown every turn
+  is one instance); onHeavyResolved(enemy, kind, HeavyOutcome) fires exactly once for it:
+    STAGGERED     phase B found skipNextAction set (stagger, riposte stun, R6 status stun) before the heavy ran;
+    AVOIDED / GUARDED / LANDED  the heavy executed: the four hit sites call noteHeavyHit(frontGuarded) with
+                  Player.applyDirectionalDamage's return, so a front-arc hit is GUARDED, any other hit LANDED, no
+                  hit AVOIDED (a missed charge, a lane the player left, a slam the player stepped out of). A
+                  self-destruct still counting down is NOT resolved; the detonation resolves it BEFORE the
+                  deferred kill, so it is never also KILLED_FIRST;
+    KILLED_FIRST  killEnemy found the instance still open (the source died before resolving).
+  onArmourBlockedStatus() fires from armourBlocksStatus (H9). Hazard damage dealt to enemies is read from
+  StatusEffectController.getHazardDamageToEnemies() (source-less BURNING / POISONED ticks) and
+  ExplosiveBarrelManager.getEnemyBlastDamageDealt() (nominal barrel damage). The simulator turns all of it into
+  the HEAVY REPORT and the S-HEAVY band (docs/game-balance-authority.txt SECTION 3 / SECTION 8). The killing
+  blow was a heavy = a LANDED/GUARDED heavy resolved with the player dead afterwards.

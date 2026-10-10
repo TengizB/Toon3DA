@@ -103,6 +103,29 @@ public final class FloorLedger {
     /** Damage the player's landed hits dealt, by DamageClass ordinal (status ticks excluded). */
     public final float[] damageByClass = new float[ge.tbegvadze.toon3d.entity.DamageClass.values().length];
 
+    // ---- HEAVY REPORT (balance-overhaul order 4, CP7b) -------------------------------------------------
+    /** Heavies committed while the player's tile was in their danger set (EnemyManager's HeavyOutcomeListener). */
+    public int heavyCommittedAtPlayer;
+    /** Committed-at-player heavies by how they ended — each resolves to exactly one of these five. */
+    public int heavyAvoided;
+    public int heavyGuarded;
+    public int heavyStaggered;
+    public int heavyKilledFirst;
+    public int heavyLanded;
+    /** Committed-at-player heavies by HeavyAttack ordinal (what the floor actually threw at the player). */
+    public final int[] heavyCommittedByKind = new int[ge.tbegvadze.toon3d.enemy.HeavyAttack.values().length];
+    /** Enemy-applied statuses the armour shield held off the player (H9). */
+    public int statusesBlockedByArmour;
+    /** Nominal hazard damage dealt TO ENEMIES: barrel blasts + fire / toxic tile DoT (source-less status ticks). */
+    public int hazardDamageToEnemies;
+    /** True when the player died on this floor to a heavy that resolved (the killing blow was a heavy). */
+    public boolean diedToHeavy;
+
+    /** Heavies answered (everything except LANDED) — S-HEAVY's numerator. */
+    public int heavyAnswered() {
+        return heavyAvoided + heavyGuarded + heavyStaggered + heavyKilledFirst;
+    }
+
     /** True when the player died on this floor holding no medkit at all. */
     public boolean diedWithNoHealsHeld;
 

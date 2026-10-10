@@ -132,6 +132,13 @@ public class Enemy implements StatusHost {
     public boolean skipNextAction = false;
 
     /**
+     * The kind of the committed HEAVY this enemy holds that was committed AT the player (the player's tile was
+     * in its danger set) and has not yet resolved; null when none — the simulator's outcome-tracking instance
+     * marker (CP7b of balance-overhaul order 4). Observation only; nothing in the game reads it.
+     */
+    public HeavyAttack trackedHeavyKind = null;
+
+    /**
      * EnemyManager world-turn index of the last SPREAD stagger on this enemy (balance-overhaul order 3,
      * W1) — the no-chain rule refuses a new stagger within SHOTGUN_STAGGER_MIN_TURNS_BETWEEN turns of it.
      * Starts far in the past so the first stagger is always allowed.

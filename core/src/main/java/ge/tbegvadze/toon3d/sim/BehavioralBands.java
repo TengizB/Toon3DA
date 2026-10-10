@@ -10,7 +10,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind;
 import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
 
 /**
- * The six claims the balance model makes about how the game PLAYS, evaluated against a played matrix
+ * The claims the balance model makes about how the game PLAYS, evaluated against a played matrix
  * (new-game-balancr order 9).
  *
  * <p>Every other rule in the authority is a statement about NUMBERS and can be checked from
@@ -29,6 +29,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-SOFTLOCK — a run may end, but never get stuck unable to damage anything</li>
  *   <li>S-LAG      — a weapon that never climbs the power ladder ends the run early (balance-overhaul order 1)</li>
  *   <li>S-SWITCH   — a competent player switches guns by matchup when the game tells it to (balance-overhaul order 3)</li>
+ *   <li>S-HEAVY    — a player who reads the red floor answers the heavies committed at it; one who ignores it does not (balance-overhaul order 4)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -54,6 +55,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(economyResults(tactical));
         if (tactical != null) results.addAll(supplyResults(tactical));
         if (tactical != null) results.addAll(switchResults(tactical));
+        if (tactical != null) results.addAll(heavyResults(tactical, naive));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
     }
@@ -195,6 +197,38 @@ public final class BehavioralBands {
                 floorMeasured && perHintedFloor >= BalanceConfig.SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR,
                 String.format("info: %.2f per COMBAT floor overall (kit-limited, not banded — D3)",
                         Float.isNaN(perCombatFloor) ? 0f : perCombatFloor)));
+        return results;
+    }
+
+    /**
+     * S-HEAVY (balance-overhaul order 4, A8): of the heavies COMMITTED AT the player, TACTICAL answers (avoids,
+     * guards, staggers or kills first) at least SIM_HEAVY_TACTICAL_MIN_SUCCESS and NAIVE — which ignores
+     * telegraphs — at most SIM_HEAVY_NAIVE_MAX_SUCCESS; and TACTICAL met at least SIM_HEAVY_MIN_SAMPLE of them,
+     * so the share cannot pass vacuously. The NAIVE line is skipped when no NAIVE run is in the matrix.
+     */
+    private static List<RuleResult> heavyResults(PolicySummary tactical, PolicySummary naive) {
+        List<RuleResult> results = new ArrayList<>();
+        int sample = tactical.heavyCommittedAtPlayer();
+        results.add(BalanceSchema.result(RuleKind.SIM_HEAVY, "TACTICAL heavies committed at it",
+                sample, BalanceConfig.SIM_HEAVY_MIN_SAMPLE, Float.POSITIVE_INFINITY,
+                sample >= BalanceConfig.SIM_HEAVY_MIN_SAMPLE,
+                "keeps the share below off an empty sample"));
+        float share = tactical.heavySuccessShare();
+        boolean measured = !Float.isNaN(share);
+        results.add(BalanceSchema.result(RuleKind.SIM_HEAVY, "TACTICAL heavies answered",
+                measured ? share : 0f, BalanceConfig.SIM_HEAVY_TACTICAL_MIN_SUCCESS, 1f,
+                measured && share >= BalanceConfig.SIM_HEAVY_TACTICAL_MIN_SUCCESS,
+                measured ? "(avoided + guarded + staggered + killed first) / committed at the player"
+                         : "no heavy was committed at TACTICAL"));
+        if (naive != null) {
+            float naiveShare = naive.heavySuccessShare();
+            boolean naiveMeasured = !Float.isNaN(naiveShare);
+            results.add(BalanceSchema.result(RuleKind.SIM_HEAVY, "NAIVE heavies answered",
+                    naiveMeasured ? naiveShare : 0f, 0f, BalanceConfig.SIM_HEAVY_NAIVE_MAX_SUCCESS,
+                    !naiveMeasured || naiveShare <= BalanceConfig.SIM_HEAVY_NAIVE_MAX_SUCCESS,
+                    naiveMeasured ? naive.heavyCommittedAtPlayer() + " committed; NAIVE ignores telegraphs"
+                                  : "no heavy was committed at NAIVE"));
+        }
         return results;
     }
 

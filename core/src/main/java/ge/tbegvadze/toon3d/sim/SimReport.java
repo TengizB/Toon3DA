@@ -71,6 +71,7 @@ public final class SimReport {
         PolicySummary tactical = matrix.get(BehavioralBands.TACTICAL_ID);
         if (tactical != null) appendFloorReport(report, tactical);
         appendMatchupReport(report, matrix);
+        appendHeavyReport(report, matrix);
 
         report.append("BEHAVIOURAL BANDS\n");
         report.append("--------------------------------------------------------------------------------\n");
@@ -191,6 +192,69 @@ public final class SimReport {
                     summary.matchupSwitchesPerHintedCombatFloor(), floorCounts[0], floorCounts[1]));
         }
         report.append('\n');
+    }
+
+    /**
+     * The HEAVY REPORT (balance-overhaul order 4, CP7b), per policy and depth band (1-5, 6-10, 11-15, 16-ceiling):
+     * heavies committed AT the player and how each ended (avoided / guarded / staggered / killed first / landed),
+     * the answered share S-HEAVY bands, statuses the armour shield held off, nominal hazard damage dealt to
+     * enemies (barrel blasts + fire/toxic DoT) per floor, and deaths whose killing blow was a heavy. A final
+     * block lists what each heavy kind threw at TACTICAL.
+     */
+    private static void appendHeavyReport(StringBuilder report, Map<String, PolicySummary> matrix) {
+        report.append("HEAVY REPORT — heavies committed AT the player, by how they ended (counts per band)\n");
+        report.append("--------------------------------------------------------------------------------\n");
+        report.append(String.format("%-20s %-6s %6s %6s %6s %6s %6s %6s %7s %6s %7s %6s%n", "policy", "depth",
+                "commit", "avoid", "guard", "stagg", "killd", "landed", "answerd", "armBlk", "hazDmg/f", "heavyD"));
+        int[] lastDepths = BalanceConfig.SIM_HEAVY_REPORT_BAND_LAST_DEPTHS;
+        for (PolicySummary summary : matrix.values()) {
+            int firstDepth = 1;
+            for (int bandIndex = 0; bandIndex <= lastDepths.length; bandIndex++) {
+                boolean lastBand = bandIndex == lastDepths.length;
+                int lastDepth = lastBand ? Integer.MAX_VALUE : lastDepths[bandIndex];
+                int[] totals = summary.heavyTotals(firstDepth, lastDepth);
+                String label = lastBand ? firstDepth + "+" : firstDepth + "-" + lastDepth;
+                int committed = totals[PolicySummary.HEAVY_COMMITTED];
+                int answered = totals[PolicySummary.HEAVY_AVOIDED] + totals[PolicySummary.HEAVY_GUARDED]
+                        + totals[PolicySummary.HEAVY_STAGGERED] + totals[PolicySummary.HEAVY_KILLED_FIRST];
+                int floors = Math.max(1, totals[PolicySummary.HEAVY_FLOORS]);
+                report.append(String.format("%-20s %-6s %6d %6d %6d %6d %6d %6d %7s %6d %7.1f %6d%n",
+                        summary.policyId, label, committed,
+                        totals[PolicySummary.HEAVY_AVOIDED], totals[PolicySummary.HEAVY_GUARDED],
+                        totals[PolicySummary.HEAVY_STAGGERED], totals[PolicySummary.HEAVY_KILLED_FIRST],
+                        totals[PolicySummary.HEAVY_LANDED],
+                        committed == 0 ? "-" : String.format("%.2f", answered / (float) committed),
+                        totals[PolicySummary.HEAVY_BLOCKED_STATUSES],
+                        totals[PolicySummary.HEAVY_HAZARD_DAMAGE] / (float) floors,
+                        totals[PolicySummary.HEAVY_DEATHS]));
+                firstDepth = lastDepth + 1;
+            }
+            int[] everything = summary.heavyTotals(Integer.MIN_VALUE, Integer.MAX_VALUE);
+            int unresolved = everything[PolicySummary.HEAVY_COMMITTED] - everything[PolicySummary.HEAVY_AVOIDED]
+                    - everything[PolicySummary.HEAVY_GUARDED] - everything[PolicySummary.HEAVY_STAGGERED]
+                    - everything[PolicySummary.HEAVY_KILLED_FIRST] - everything[PolicySummary.HEAVY_LANDED];
+            report.append(String.format("%-20s %-6s committed %d, answered share %.2f, unresolved at floor end %d%n",
+                    summary.policyId, "ALL", everything[PolicySummary.HEAVY_COMMITTED], summary.heavySuccessShare(),
+                    unresolved));
+        }
+        report.append("  Heavy kinds committed at each policy (count): ");
+        report.append('\n');
+        ge.tbegvadze.toon3d.enemy.HeavyAttack[] kinds = ge.tbegvadze.toon3d.enemy.HeavyAttack.values();
+        for (PolicySummary summary : matrix.values()) {
+            int[] byKind = new int[kinds.length];
+            for (FloorLedger floor : summary.allFloors()) {
+                for (int kindIndex = 0; kindIndex < kinds.length; kindIndex++) {
+                    byKind[kindIndex] += floor.heavyCommittedByKind[kindIndex];
+                }
+            }
+            StringBuilder row = new StringBuilder(String.format("  %-20s", summary.policyId));
+            for (int kindIndex = 0; kindIndex < kinds.length; kindIndex++) {
+                row.append(String.format(" %s %d |", kinds[kindIndex].name(), byKind[kindIndex]));
+            }
+            report.append(row).append('\n');
+        }
+        report.append("  Outcomes: AVOIDED left the tiles; GUARDED front-arc hit; STAGGERED cancelled by stagger/riposte/stun;\n");
+        report.append("  killd = source died first; landed = unguarded or flanked hit. S-HEAVY bands answered = all but landed.\n\n");
     }
 
     /** One FLOOR REPORT cell's running sums. */

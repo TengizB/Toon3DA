@@ -648,6 +648,65 @@ public final class EnemyManager implements EnemyHitTarget {
         return null;
     }
 
+    /**
+     * Installs the heavy-outcome observer (balance-overhaul order 4, CP7b). Nullable; zero cost when null.
+     * Observation only — used by the balance simulator, never by the played game.
+     */
+    public void setHeavyOutcomeListener(HeavyOutcomeListener listener) {
+        this.heavyOutcomeListener = listener;
+    }
+
+    /** Hit state of the heavy executing right now: none / landed (unguarded or flanked) / front-guarded. */
+    private static final int HEAVY_HIT_NONE    = 0;
+    private static final int HEAVY_HIT_LANDED  = 1;
+    private static final int HEAVY_HIT_GUARDED = 2;
+
+    private HeavyOutcomeListener heavyOutcomeListener;
+    private int heavyHitState = HEAVY_HIT_NONE;
+
+    /** Records how the heavy currently executing hit the player (read by {@link #resolveTrackedHeavy}). */
+    private void noteHeavyHit(boolean frontGuarded) {
+        heavyHitState = frontGuarded ? HEAVY_HIT_GUARDED : HEAVY_HIT_LANDED;
+    }
+
+    /**
+     * Fires onHeavyCommittedAtPlayer once per committed instance when the player's tile is in the freshly
+     * committed heavy's danger set. A re-commit of the SAME instance (the self-destruct countdown) is not
+     * counted again. No allocation.
+     */
+    private void trackHeavyCommit(Enemy enemy, int playerColumn, int playerRow) {
+        if (heavyOutcomeListener == null || enemy.trackedHeavyKind != null) return;
+        PlannedAction plan = enemy.plannedAction;
+        if (plan.heavyAttack == null || plan.verb == IntentVerb.STUNNED) return;
+        for (int tileIndex = 0; tileIndex < plan.dangerTileCount; tileIndex++) {
+            if (plan.dangerTileColumns[tileIndex] == playerColumn && plan.dangerTileRows[tileIndex] == playerRow) {
+                enemy.trackedHeavyKind = plan.heavyAttack;
+                heavyOutcomeListener.onHeavyCommittedAtPlayer(enemy, plan.heavyAttack);
+                return;
+            }
+        }
+    }
+
+    /** Ends the enemy's tracked heavy instance with the given outcome (no-op when none is tracked). */
+    private void finishTrackedHeavy(Enemy enemy, HeavyOutcome outcome) {
+        HeavyAttack kind = enemy.trackedHeavyKind;
+        if (kind == null) return;
+        enemy.trackedHeavyKind = null;
+        if (heavyOutcomeListener != null) heavyOutcomeListener.onHeavyResolved(enemy, kind, outcome);
+    }
+
+    /**
+     * Decides the outcome of a tracked heavy that has just executed: a hit seen by {@link #noteHeavyHit} is
+     * GUARDED (front arc) or LANDED; otherwise AVOIDED. A self-destruct still counting down has not
+     * resolved yet and stays tracked.
+     */
+    private void resolveTrackedHeavy(Enemy enemy) {
+        if (enemy.trackedHeavyKind == HeavyAttack.SELF_DESTRUCT && !enemy.selfDestructed) return;
+        HeavyOutcome outcome = heavyHitState == HEAVY_HIT_GUARDED ? HeavyOutcome.GUARDED
+                : heavyHitState == HEAVY_HIT_LANDED ? HeavyOutcome.LANDED : HeavyOutcome.AVOIDED;
+        finishTrackedHeavy(enemy, outcome);
+    }
+
     /** Injects the telegraphed-hit-landed listener (narrative-rework order-4 READ_INTENT/GUARD evidence). */
     public void setTelegraphedHitLandedListener(java.util.function.Consumer<Boolean> listener) {
         this.telegraphedHitLandedListener = listener;
@@ -994,6 +1053,7 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private boolean armourBlocksStatus(Player player, StatusType type) {
         if (!player.tryArmourShieldStatus(type)) return false;
+        if (heavyOutcomeListener != null) heavyOutcomeListener.onArmourBlockedStatus();
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("ARMOUR HELD", EventTextSystem.COLOR_ARMOUR);
         }
@@ -1181,6 +1241,8 @@ public final class EnemyManager implements EnemyHitTarget {
             // R6: a stun landed during the player turn — cancel the committed action this turn.
             if (enemy.skipNextAction) {
                 enemy.skipNextAction    = false;
+                // CP7b: a tracked heavy cancelled before it resolved (stagger / riposte / status stun).
+                finishTrackedHeavy(enemy, HeavyOutcome.STAGGERED);
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
                 enemy.plannedAction.clearHeavy();
                 // H5: a cancelled self-destruct re-braces from scratch (stays primed, loses its progress).
@@ -1193,7 +1255,9 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.advanceLanceCooldown();
                 continue;
             }
+            heavyHitState = HEAVY_HIT_NONE;
             executePlan(enemy, playerColumn, playerRow, player);
+            if (enemy.trackedHeavyKind != null) resolveTrackedHeavy(enemy);
             enemy.plannedAction.clearHeavy();   // resolved: the markers vanish (phase C recommits if needed)
             advanceShardRegrowth(enemy);
             advanceCrustCooling(enemy);
@@ -1264,6 +1328,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 continue;
             }
             computeNextPlan(enemy, playerColumn, playerRow, player);
+            trackHeavyCommit(enemy, playerColumn, playerRow);
             // Track consecutive DEFENDs so shouldDefend can break an endless turtle loop (design feedback).
             if (enemy.plannedAction.verb == IntentVerb.DEFEND) {
                 enemy.consecutiveDefendTurns++;
@@ -1468,7 +1533,10 @@ public final class EnemyManager implements EnemyHitTarget {
                 // Player still on the committed lane — the shot connects. Use the Lancer's tile as the lane
                 // origin so a guarding player's facing arc is judged against where the beam comes from.
                 boolean wasGuarding = player.isGuarding();
-                if (player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(), enemy.worldCenterY(), true)) {
+                boolean lanceGuarded = player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(),
+                        enemy.worldCenterY(), true);
+                noteHeavyHit(lanceGuarded);
+                if (lanceGuarded) {
                     applyGuardRiposte(enemy);
                 }
                 // EVIDENCE (narrative-rework order-4): a WIND_UP-committed beam down a locked lane is
@@ -1778,8 +1846,10 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= EnemyConstants.AREA_STRIKE_RADIUS_TILES;
         if (inBlast) {
             boolean wasGuarding = player.isGuarding();
-            if (player.applyDirectionalDamage(areaStrikeDamage(enemy),
-                    enemy.worldCenterX(), enemy.worldCenterY(), true)) {
+            boolean strikeGuarded = player.applyDirectionalDamage(areaStrikeDamage(enemy),
+                    enemy.worldCenterX(), enemy.worldCenterY(), true);
+            noteHeavyHit(strikeGuarded);
+            if (strikeGuarded) {
                 applyGuardRiposte(enemy);
             }
             // EVIDENCE (narrative-rework order-4): AREA_STRIKE is telegraphed a full turn ahead.
@@ -1940,6 +2010,7 @@ public final class EnemyManager implements EnemyHitTarget {
         boolean wasGuarding = player.isGuarding();
         boolean riposted = player.applyDirectionalDamage(enemy.heavyDamage(enemy.type.heavyWindUp()),
                 enemy.worldCenterX(), enemy.worldCenterY(), true);
+        noteHeavyHit(riposted);
         if (riposted) applyGuardRiposte(enemy);
         if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
         // EVIDENCE (narrative-rework order-4): the WIND_UP rush was telegraphed a full turn ahead.
@@ -2049,7 +2120,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (playerHit) {
             boolean wasGuarding = player.isGuarding();
             // HEAVY, but no riposte: the detonating source dies this turn, so there is nobody to stun.
-            player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY(), true);
+            noteHeavyHit(player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY(), true));
             // EVIDENCE (narrative-rework order-4): the detonation counted down in full view for turns.
             if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
@@ -2983,6 +3054,9 @@ public final class EnemyManager implements EnemyHitTarget {
 
     private void killEnemy(Enemy enemy) {
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
+        // CP7b: the source died before its committed heavy resolved (a resolved self-destruct cleared its
+        // flag already, so the detonation is never counted as a kill-first).
+        finishTrackedHeavy(enemy, HeavyOutcome.KILLED_FIRST);
         // Every death passes through here, whatever killed it, so the family's death voice is fired
         // here rather than at each of the half-dozen sites that fire the visual death burst.
         if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.DEATH);

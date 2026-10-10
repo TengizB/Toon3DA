@@ -179,7 +179,13 @@ public final class BalanceSchema {
          * S-SWITCH (balance-overhaul order 3, A8 re-stated by D3): the C4 hint works — enough COMBAT floors
          * show one, TACTICAL takes it, and each hinted COMBAT floor yields a switch. Never waived.
          */
-        SIM_SWITCH
+        SIM_SWITCH,
+        /**
+         * S-HEAVY (balance-overhaul order 4, A8): TACTICAL answers (avoids / guards / staggers / kills first) at
+         * least SIM_HEAVY_TACTICAL_MIN_SUCCESS of the heavies committed at it, NAIVE at most
+         * SIM_HEAVY_NAIVE_MAX_SUCCESS, and TACTICAL met at least SIM_HEAVY_MIN_SAMPLE of them. Never waived.
+         */
+        SIM_HEAVY
     }
 
     // =====================================================================================

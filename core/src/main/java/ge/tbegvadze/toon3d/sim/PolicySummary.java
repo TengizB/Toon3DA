@@ -172,6 +172,53 @@ public final class PolicySummary {
         return new int[]{combat, hinted};
     }
 
+    /** Index layout of {@link #heavyTotals}. */
+    public static final int HEAVY_COMMITTED = 0, HEAVY_AVOIDED = 1, HEAVY_GUARDED = 2, HEAVY_STAGGERED = 3,
+            HEAVY_KILLED_FIRST = 4, HEAVY_LANDED = 5, HEAVY_BLOCKED_STATUSES = 6, HEAVY_HAZARD_DAMAGE = 7,
+            HEAVY_DEATHS = 8, HEAVY_FLOORS = 9, HEAVY_TOTAL_FIELDS = 10;
+
+    /**
+     * HEAVY REPORT / S-HEAVY (balance-overhaul order 4, CP7b): the heavy ledger summed over every played floor
+     * whose depth is in [firstDepth, lastDepth] — committed-at-player, the five outcomes, statuses blocked by
+     * armour, nominal hazard damage dealt to enemies, deaths whose killing blow was a heavy, and the floors.
+     */
+    public int[] heavyTotals(int firstDepth, int lastDepth) {
+        int[] totals = new int[HEAVY_TOTAL_FIELDS];
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (floor.depth < firstDepth || floor.depth > lastDepth) continue;
+                totals[HEAVY_COMMITTED]        += floor.heavyCommittedAtPlayer;
+                totals[HEAVY_AVOIDED]          += floor.heavyAvoided;
+                totals[HEAVY_GUARDED]          += floor.heavyGuarded;
+                totals[HEAVY_STAGGERED]        += floor.heavyStaggered;
+                totals[HEAVY_KILLED_FIRST]     += floor.heavyKilledFirst;
+                totals[HEAVY_LANDED]           += floor.heavyLanded;
+                totals[HEAVY_BLOCKED_STATUSES] += floor.statusesBlockedByArmour;
+                totals[HEAVY_HAZARD_DAMAGE]    += floor.hazardDamageToEnemies;
+                if (floor.diedToHeavy) totals[HEAVY_DEATHS]++;
+                totals[HEAVY_FLOORS]++;
+            }
+        }
+        return totals;
+    }
+
+    /** Heavies committed AT the player over every played floor (S-HEAVY's denominator and sample size). */
+    public int heavyCommittedAtPlayer() {
+        return heavyTotals(Integer.MIN_VALUE, Integer.MAX_VALUE)[HEAVY_COMMITTED];
+    }
+
+    /**
+     * S-HEAVY: (avoided + guarded + staggered + killed-first) / committed-at-player over every played floor.
+     * NaN when nothing was committed at the player.
+     */
+    public float heavySuccessShare() {
+        int[] totals = heavyTotals(Integer.MIN_VALUE, Integer.MAX_VALUE);
+        if (totals[HEAVY_COMMITTED] == 0) return Float.NaN;
+        int answered = totals[HEAVY_AVOIDED] + totals[HEAVY_GUARDED] + totals[HEAVY_STAGGERED]
+                + totals[HEAVY_KILLED_FIRST];
+        return answered / (float) totals[HEAVY_COMMITTED];
+    }
+
     /** S-SUPPLY: played floors whose reachable heal value fell short of their S4 heal floor. */
     public int floorsBelowHealFloor() {
         int count = 0;

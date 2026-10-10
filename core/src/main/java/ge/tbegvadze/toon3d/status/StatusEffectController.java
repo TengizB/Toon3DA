@@ -31,6 +31,17 @@ public final class StatusEffectController {
     private final Enemy[] pendingDoTDeaths = new Enemy[MAX_PENDING_DOT_DEATHS];
     private int pendingDoTDeathCount = 0;
 
+    /**
+     * Damage ticked into ENEMIES by effects no one applied — fire and toxic hazard tiles and the Plague Hulk's
+     * cloud carry a null source. Observation only (the balance simulator's HEAVY REPORT reads it).
+     */
+    private int hazardDamageToEnemies = 0;
+
+    /** Running total of hazard DoT damage ticked into enemies (see the field note). */
+    public int getHazardDamageToEnemies() {
+        return hazardDamageToEnemies;
+    }
+
     private EventTextSystem eventTextSystem;
     // Nullable — wired by World. When present, each enemy DoT tick spawns a small colored
     // spark puff so burning/poison/bleed reads as an active, ticking affliction.
@@ -232,6 +243,10 @@ public final class StatusEffectController {
             StatusEffect effect = enemy.getActiveEffects().get(type);
             if (!effect.isActive()) continue;
 
+            if (effect.source == null) {
+                if (type == StatusType.BURNING)       hazardDamageToEnemies += effect.magnitude * Math.max(1, effect.stacks);
+                else if (type == StatusType.POISONED) hazardDamageToEnemies += effect.magnitude * effect.stacks;
+            }
             applyEnemyTickEffect(enemy, effect, type);
 
             if (!enemy.isAlive()) {

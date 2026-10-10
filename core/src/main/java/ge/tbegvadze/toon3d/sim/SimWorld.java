@@ -164,6 +164,8 @@ public final class SimWorld implements LevelTransitionListener {
     private SimNavigator           navigator;
     private SimView                view;
     private FloorLedger            floorLedger;
+    /** The run-long source-less DoT total when this floor began (HEAVY REPORT: hazard damage to enemies). */
+    private int                    hazardDamageBaseline;
     private int[]                  exitTile;
     /**
      * Supply tiles the marine has stood on and could NOT consume (full armour, a full med stash).
@@ -400,6 +402,29 @@ public final class SimWorld implements LevelTransitionListener {
                 }
             });
         }
+        // HEAVY REPORT (balance-overhaul order 4, CP7b): what became of every heavy committed at the player.
+        enemyManager.setHeavyOutcomeListener(new ge.tbegvadze.toon3d.enemy.HeavyOutcomeListener() {
+            @Override public void onHeavyCommittedAtPlayer(Enemy enemy, ge.tbegvadze.toon3d.enemy.HeavyAttack kind) {
+                floorLedger.heavyCommittedAtPlayer++;
+                floorLedger.heavyCommittedByKind[kind.ordinal()]++;
+            }
+            @Override public void onHeavyResolved(Enemy enemy, ge.tbegvadze.toon3d.enemy.HeavyAttack kind,
+                                                  ge.tbegvadze.toon3d.enemy.HeavyOutcome outcome) {
+                switch (outcome) {
+                    case AVOIDED:      floorLedger.heavyAvoided++;     break;
+                    case GUARDED:      floorLedger.heavyGuarded++;     break;
+                    case STAGGERED:    floorLedger.heavyStaggered++;   break;
+                    case KILLED_FIRST: floorLedger.heavyKilledFirst++; break;
+                    case LANDED:       floorLedger.heavyLanded++;      break;
+                }
+                // The killing blow was a heavy: it resolved (hit the player) and the player is dead after it.
+                if ((outcome == ge.tbegvadze.toon3d.enemy.HeavyOutcome.LANDED
+                        || outcome == ge.tbegvadze.toon3d.enemy.HeavyOutcome.GUARDED) && !player.isAlive()) {
+                    floorLedger.diedToHeavy = true;
+                }
+            }
+            @Override public void onArmourBlockedStatus() { floorLedger.statusesBlockedByArmour++; }
+        });
         enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
         enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier() * ladderProbeOffenceLift);
         enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);
@@ -481,6 +506,7 @@ public final class SimWorld implements LevelTransitionListener {
         view      = new SimView(level, doorManager, enemyManager, player, itemInventory, this);
 
         floorLedger                      = new FloorLedger();
+        hazardDamageBaseline             = statusEffectController.getHazardDamageToEnemies();
         switchHintWeapon                 = null;
         floorLedger.depth                = currentDepth;
         floorLedger.bossFloor            = bossFloorController != null;
@@ -625,6 +651,8 @@ public final class SimWorld implements LevelTransitionListener {
             }
             resolvePendingLevelUps();
         }
+        floorLedger.hazardDamageToEnemies = explosiveBarrelManager.getEnemyBlastDamageDealt()
+                + (statusEffectController.getHazardDamageToEnemies() - hazardDamageBaseline);
         floorLedger.enemiesLeftAlive = countLiveEnemies();
         floorLedger.exited           = descentRequested;
         floorLedger.healthFractionOnExit = healthFraction();

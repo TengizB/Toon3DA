@@ -80,7 +80,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       reviewer PASS.
       DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED. Split:
   - [x] **CP7a** — GUARD / READ_INTENT line review (H18). DONE WHEN: strings + defaults + story doc; build green.
-  - [ ] **CP7b** — sim heavy-aware TacticalPolicy, S-HEAVY band, HEAVY REPORT; A9 docs sweep.
+  - [x] **CP7b** — sim heavy-aware TacticalPolicy, S-HEAVY band, HEAVY REPORT; A9 docs sweep.
         DONE WHEN: A1, A8, A9 hold; both gates green.
   - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
@@ -179,3 +179,18 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **CP7a:** four strings rewritten in properties + `BarkStrings` defaults (same ids): read_intent / retaught
   name "red floor"; guard teaches the riposte; retaught.guard = the cornered case. story-ui-system.txt LINE REVIEW
   note. Build: 455, only StoryBarkTest.
+- **CP7b handover:** `enemy/HeavyOutcome {AVOIDED, GUARDED, STAGGERED, KILLED_FIRST, LANDED}` + `HeavyOutcomeListener`
+  (`EnemyManager.setHeavyOutcomeListener`, sim-only; `Enemy.trackedHeavyKind` counts each instance once). Barrel /
+  status counters for hazard damage to enemies. TacticalPolicy (HOARDER inherits): fire a close stagger if lined up
+  -> guard a heavy it faces (riposte) -> step to a safe neighbour -> guard. HUB ACCEPTED this order over the
+  contract's step-first (that looped dodging: stalls 184/200, S-SWITCH red). SIM_TACTICAL_GUARD_DAMAGE_FRACTION
+  DELETED; `SIM_HEAVY_*` constants; `RuleKind.SIM_HEAVY`; test `tacticalAnswersHeavyAttacksAndNaiveDoesNot`; HEAVY
+  REPORT. CLAUDE.md sim row: ten S-* bands.
+- **CP7b DECISION (hub) / OWNER FLAG — S-SUPPLY:** exit health 0.73 -> 0.85 once TACTICAL answers heavies; the
+  prescribed heal re-fit was tried and exhausted (factor 0.80/0.90 -> 0.83; COMBAT heal floor-bound at S4).
+  `SIM_SUPPLY_EXIT_HEALTH_MAX` RE-BASED 0.80 -> 0.90 under the override clause (authority S-SUPPLY entry + change log,
+  knowledge problem 15 resolved). Revisit in order 7 with HEAVY_DAMAGE_SCALE.
+- **CP7b gates:** core:test 455, only StoryBarkTest; balanceSim exit 0 — S-HEAVY 1114 / 0.99 / NAIVE 0.18;
+  readable 1.00; S-SUPPLY 0.85 (0.55..0.90), heal-floor 0; lifeline 0.04 (THIN); S-SWITCH 11 hinted (THIN vs 10).
+  All heavies are depth 1-5 (stalls 177/200) — knowledge problem 16 OPEN: deeper play unmeasured.
+- **CP7c next:** reviewer gate.

@@ -790,7 +790,7 @@ S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
   HOARDER-START-WEAPON never does.
 
-S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-SOFTLOCK (RuleKind.SIM_*, order 9)
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY / S-SOFTLOCK (+ S-LAG above) (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
   it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
@@ -807,15 +807,17 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-SOFTLO
     NAIVE                 attacks the nearest enemy, never guards, ignores hazards and cardinal
                           lines, heals at <30% vitality, never switches weapons, walks the
                           shortest route, picks route nodes at random.
-    TACTICAL              keeps range, breaks the cardinal line vs ranged, guards a telegraphed
-                          spike (never twice running), manages ammo across weapons, heals early,
+    TACTICAL              keeps range, breaks the cardinal line vs ranged, READS THE RED FLOOR (a heavy
+                          committed at it: stagger it with a close spread blast, else GUARD it when
+                          faced, else step off the marked tiles, else guard — balance-overhaul order 4
+                          CP7b, see S-HEAVY), manages ammo across weapons, heals early,
                           buys the shop backstop, takes upgrades, routes by the order-7 node EV.
                           Balance-overhaul order 3 (CP7): takes the C4 SWITCH hint whenever it is up
                           (SimWorld computes it exactly as World.updateMatchupHint does — the real
                           MatchupAdvisor + PlayerController jump), and keeps its kit DIVERSE: a found
                           gun of a DamageClass the loadout lacks replaces the redundant / emptiest
                           slot (never the last gun with ammo; PlayerPolicy.slotToReplaceForGroundWeapon).
-    HOARDER-START-WEAPON  TACTICAL, but NEVER equips a weapon it finds or buys — the user's
+    HOARDER-START-WEAPON  TACTICAL (it delegates chooseAction, so it INHERITS the heavy answer), but NEVER equips a weapon it finds or buys — the user's
                           boss-cheese reproduction, kept as a permanent regression case.
 
   S-GATE      HOARDER-START-WEAPON clears the FIRST boss on 0% of seeds. The headline
@@ -839,11 +841,21 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-SOFTLO
               fires on < 5% of floors. WHY: below the band the planner puts supply where play does
               not reach it; above it, unplanned income is leaking in.
   S-SUPPLY    (balance-overhaul order 2) TACTICAL's mean health fraction leaving a COMBAT floor by
-              its exit sits in [SIM_SUPPLY_EXIT_HEALTH_MIN 0.55, MAX 0.80], and ZERO played floors
+              its exit sits in [SIM_SUPPLY_EXIT_HEALTH_MIN 0.55, MAX 0.90 — RE-BASED from 0.80 by
+              balance-overhaul order 4, see below], and ZERO played floors
               hold less reachable heal value than their S4 heal floor. WHY (AS2): "usually full
               HP" was the complaint — a normal floor should cost something; REST and CACHE are
               where HP comes back. NOT waived: it reads exited floors only, so the navigation stall
               shrinks its sample but does not bias it.
+              OVERRIDE (balance-overhaul order 4 CP7b, hub decision): MAX 0.80 -> 0.90. Old rule: a
+              competent player leaves a COMBAT floor at <= 0.80 HP. New rule: <= 0.90. Why: TACTICAL now
+              answers ~0.99 of heavies (S-HEAVY), which removed the half-pool hits that were the floor's
+              drain (exit 0.73 -> 0.85). The prescribed heal re-fit was tried and is exhausted
+              (SUPPLY_AVOIDANCE_FACTOR 0.80/0.90 moved it only to 0.83; COMBAT heal is floor-bound at the
+              S4 medkit, and lowering S4 breaks the one-medkit guarantee). The scripted reader is a
+              perfect reader; real players will land some heavies. "Usually full HP" (AS2) is still
+              guarded by the band, at a ceiling that reads a near-perfect reader honestly. Re-check in
+              the order-7 feel pass alongside HEAVY_DAMAGE_SCALE.
   S-SWITCH    (balance-overhaul order 3, A8, RE-STATED by idea decision D3 under the override
               clause) — THE C4 HINT WORKS. Three lines, none waived (fight-level, not depth-derived):
               (1) at least SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS (10) TACTICAL COMBAT floors across the
@@ -858,6 +870,47 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-SOFTLO
               kit's class spread, not whether the hint works; changing the start kit would reopen
               the order-1/2 fitted bands. The overall per-COMBAT-floor count is still printed (info
               column of line 3 and the MATCHUP REPORT) so a later kit change can be read against it.
+  S-HEAVY     (balance-overhaul order 4, CP7b, A8) — A PLAYER WHO READS THE RED FLOOR ANSWERS THE
+              HEAVIES THROWN AT IT. Three lines, none waived (fight-level, not depth-derived):
+              (1) TACTICAL had at least SIM_HEAVY_MIN_SAMPLE (30) heavies committed AT it (the player's
+              tile was in the committed heavy's danger set), so (2) cannot pass vacuously; (2) TACTICAL's
+              ANSWERED share = (avoided + guarded + staggered + killed first) / committed-at-player
+              >= SIM_HEAVY_TACTICAL_MIN_SUCCESS (0.80); (3) NAIVE, which ignores telegraphs, answers at
+              most SIM_HEAVY_NAIVE_MAX_SUCCESS (0.30) — by chance alone. Each committed-at-player heavy
+              resolves to EXACTLY ONE outcome (enemy/HeavyOutcome, fired through the observation-only
+              HeavyOutcomeListener that EnemyManager exposes; nothing in enemy/ imports sim/):
+                AVOIDED       resolved, the player was not hit (left the tiles)
+                GUARDED       the hit landed in the guarding player's FRONT arc (riposte)
+                STAGGERED     cancelled before resolving — stagger, riposte stun, R6 status stun
+                KILLED_FIRST  the source died before resolving (a self-destruct that detonates is
+                              resolved first, so it is never counted as killed-first)
+                LANDED        unguarded, or a side/back hit — the only failure
+              A self-destruct that re-telegraphs its countdown every turn is ONE instance; a heavy
+              committed while the player was NOT on a danger tile is not counted (it was not committed
+              at the player). The killing-blow-was-a-heavy flag is "a LANDED/GUARDED heavy resolved and
+              the player was dead afterwards" (SimWorld, no Player damage tagging needed).
+              REPLACED RULE (OVERRIDE CLAUSE): TacticalPolicy's old guard trigger — "GUARD when the
+              committed telegraphed damage is >= SIM_TACTICAL_GUARD_DAMAGE_FRACTION (0.20) of what is
+              left, never twice running" — is DELETED (the constant too). It guarded on the SIZE of
+              any telegraphed hit, facing or not, and it let heavies land. TACTICAL's new answer, in
+              order, whenever its own tile is a heavy danger tile (SimView.heavyThreatOnMyTile):
+              (1) FIRE a close spread blast (Shotgun / Double-Barrel, source in the facing line inside
+              SHOTGUN_STAGGER_MAX_TILES) — a staggered heavy is cancelled (H5); (2) GUARD a heavy it
+              already FACES (AS4: the riposte stuns it and leaves it VULNERABLE, and the marine is
+              lined up for the free shots; a marine that sidestepped every heavy it faced never shot
+              back and looped to the turn cap — measured with the step-first order: 184/200 stalled, S-SWITCH
+              red (9 hinted floors, take rate 0.52), S-SUPPLY 0.90; hub-accepted order below); (3) else STRAFE/step to a
+              walkable, unoccupied, non-danger neighbour (prefers a tile off every ranged lane, then
+              one on a cardinal line with the source); (4) else GUARD anyway (cornered) — a primed
+              self-destruct with a turn to spare is turned toward first, or shot if already faced.
+              NAIVE is unchanged and ignores telegraphs. HOARDER inherits TACTICAL's answer.
+  HEAVY REPORT (sim/SimReport, OUTPUT not an assertion; balance-overhaul order 4, CP7b): per policy and
+              depth band (1-5, 6-10, 11-15, 16+; SIM_HEAVY_REPORT_BAND_LAST_DEPTHS) — heavies committed at
+              the player, the five outcomes, the answered share, statuses the armour shield held off
+              (H9), nominal hazard damage dealt to ENEMIES per floor (barrel blasts + source-less fire /
+              toxic DoT ticks), and runs whose killing blow was a heavy; then the heavy KINDS committed at
+              each policy and an "unresolved at floor end" count (a heavy still pending when the floor
+              ended — it is in the committed count but has no outcome).
   MATCHUP REPORT (sim/SimReport, OUTPUT not an assertion; balance-overhaul order 3): per policy and
               depth band — EFFECTIVE / RESISTED hits per floor (EnemyManager's onEnemyMatchupHit seam),
               hint-driven switches per floor, each DamageClass's share of landed hit damage (the
@@ -1581,7 +1634,7 @@ EVERY change to util/BalanceConfig.java ships with all four of these:
   2. GREEN SIM        `./gradlew balanceSim`
      Slow (whole simulated runs), run on balance changes and nightly in CI.
      BalanceSimTest plays SIM_SEED_COUNT runs per policy through the real systems and
-     checks the six behavioural bands. This is the gatekeeper for the BEHAVIOUR.
+     checks the behavioural bands (S-GATE ... S-HEAVY). This is the gatekeeper for the BEHAVIOUR.
      Its plain-text summary lands in core/build/reports/balance-sim/summary.txt —
      read it even when it is green: "median death depth moved 9 -> 6" is a sentence
      you can act on long before a band breaks.
@@ -1611,6 +1664,22 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 4 / CP7b — THE SIM READS THE RED FLOOR. TacticalPolicy answers a heavy committed at it
+    (stagger / guard-when-faced / step off the danger tiles / guard) and the SIM_TACTICAL_GUARD_DAMAGE_FRACTION
+    trigger is DELETED (OVERRIDE: "guard at a fifth of what is left" -> heavy-aware avoidance). New enemy/
+    HeavyOutcome + HeavyOutcomeListener (observation seam), FloorLedger/PolicySummary heavy counters, the HEAVY
+    REPORT, new band S-HEAVY (RuleKind.SIM_HEAVY: TACTICAL answers >= 0.80, NAIVE <= 0.30, TACTICAL sample >= 30;
+    BalanceConfig SIM_HEAVY_* beside SIM_SWITCH_*), BalanceSimTest.tacticalAnswersHeavyAttacksAndNaiveDoesNot. Measured:
+    TACTICAL 0.99 (1114 heavies), NAIVE 0.18 (170). Why: the sim tanked every heavy, so S-HEAVY could not exist
+    and the avoidability claim was unproven in play. S-SUPPLY MOVED OUT OF BAND (0.73 -> 0.85 against 0.55..0.80) as
+    a consequence — a reading player no longer eats the heavies that used to be the drain; see SECTION 8.
+    OVERRIDE: SIM_SUPPLY_EXIT_HEALTH_MAX 0.80 -> 0.90 (heal re-fit exhausted; see the S-SUPPLY band entry).
+  balance-overhaul order 4 / CP7a — GUARD / READ_INTENT line review (H18): the four strings now name the RED FLOOR
+    and the riposte (see docs/story-ui-system.txt LINE REVIEW). No number moved.
+  balance-overhaul order 4 / CP2 — DANGER TILES. Every committed heavy lists its exact tiles at commit (HeavyAttack.
+    dangerShape LANE / SQUARE / CROSS, GameMath.dangerTilesFor*, PlannedAction.dangerTile*); R-HEAVY gains the H4
+    avoidability lines ("<heavy> avoidable", GameMath.everyDangerTileHasSafeNeighbour). Cosmetic markers, mini-map
+    fill, 1.5x intent and edge pulse are render-only (docs/enemy-system.txt). No balance number moved.
   balance-overhaul order 4 / CP6 — HAZARDS. See R-HAZARD (new + OVERRIDE RECORD). Barrel blasts are fractions
     (centre 1.2 / ring 0.6 of the reference soldier's HP at the floor's depth; 0.30 / 0.15 of the player's max
     HP), fire tiles hit enemies x2.5, toxic tiles + the Plague Hulk cloud poison enemies 2 stacks/turn, and the
@@ -1825,8 +1894,10 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (CP7) matrix
-(planned supply, group encounters, footprint targets, node specs), with the FLOOR REPORT.
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 4 (CP7b) matrix
+(heavies, guard/armour, statuses, hazards, and a TACTICAL that reads the red floor), with the
+FLOOR REPORT, the MATCHUP REPORT and the HEAVY REPORT. The living S-* bands are the BEHAVIOURAL BANDS
+block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWITCH, S-HEAVY, S-SOFTLOCK.
 
   ================================================================================
   BALANCE SIMULATION SUMMARY (new-game-balancr order 9)
@@ -1838,65 +1909,93 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (
   POLICIES
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
-  NAIVE                    200     1.0     179     1.00      0.00      0.00    -0.52
-  TACTICAL                 200     2.0     159     1.00      0.00      0.00    -0.85
-  HOARDER-START-WEAPON     200     2.0     159     1.00      0.00      0.00    -0.82
+  NAIVE                    200     1.0     151     1.00      0.00      0.00    -0.49
+  TACTICAL                 200     2.0     177     1.00      0.00      0.00    -0.79
+  HOARDER-START-WEAPON     200     2.0     181     1.00      0.00      0.00    -0.78
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
   policy                 supplyTook  emergency    bossTurns
-  NAIVE                       0.255      0.000        900.0
-  TACTICAL                    0.494      0.032        764.3
-  HOARDER-START-WEAPON        0.488      0.032        761.6
+  NAIVE                       0.258      0.000        900.0
+  TACTICAL                    0.479      0.037        708.2
+  HOARDER-START-WEAPON        0.477      0.031        757.9
 
   FLOOR REPORT (TACTICAL) — means per played floor; heal in max-HP, ammo in units, HP as a health fraction
   --------------------------------------------------------------------------------
   generator        node     depth  floor  spawn killed   grp 1stDmg   heal  <flr ammo p/took  hpIn hpOut  0-heal
-  cavern           COMBAT    1-5      56   14.4    5.5   4.0    9.4   0.81     0    13/5     0.97  0.85      10
-  cavern           ELITE     1-5      24   17.1    4.1   4.8   23.1   0.96     0    20/5     0.91  0.75       8
-  cavern           SHOP      1-5       6    5.3    1.8   1.3   51.0   0.54     0     6/3     0.65  0.73       0
-  event_room       EVENT     1-5       8    0.0    0.0   0.0      -   0.45     0     0/0     0.87  0.87       0
-  linear_corridor  COMBAT    1-5      54   14.3    6.5   4.0   18.9   0.81     0    14/6     0.96  0.71       8
-  linear_corridor  ELITE     1-5      15   16.5    6.7   4.7   15.2   0.94     0    20/7     0.89  0.84       3
-  linear_corridor  SHOP      1-5       6    5.0    0.8   1.0   25.0   0.54     0     6/1     0.87  0.88       0
-  med_bay          REST      1-5      16    0.0    0.0   0.0      -   0.00     0     0/0     0.83  0.83       0
-  rooms_mst        CACHE     1-5     131    5.0    2.0   1.1   47.6   0.71     0     6/2     0.93  0.95       0
-  rooms_mst        COMBAT    1-5      57   14.6    4.6   3.9   31.9   0.83     0    14/4     0.97  0.78       6
-  rooms_mst        ELITE     1-5      16   17.2    4.7   4.8   21.4   0.95     0    21/7     0.95  0.75       2
-  rooms_mst        SHOP      1-5       7    5.3    1.7   1.4   43.3   0.57     0     7/2     0.86  0.88       0
+  cavern           COMBAT    1-5      53   14.3    5.4   3.9    8.8   0.80     0    13/6     0.99  0.88       3
+  cavern           ELITE     1-5      25   16.5    3.8   4.6   11.6   0.95     0    20/5     0.97  0.97       3
+  cavern           SHOP      1-5       4    5.3    0.8   1.3  103.0   0.54     0     6/2     0.99  0.99       0
+  event_room       EVENT     1-5       6    0.0    0.0   0.0      -   0.45     0     0/0     0.91  0.98       0
+  linear_corridor  COMBAT    1-5      49   14.2    5.6   4.0   22.5   0.80     0    14/5     0.98  0.80       5
+  linear_corridor  ELITE     1-5      14   16.4    5.6   4.6   16.5   0.92     0    20/8     0.88  0.93       2
+  linear_corridor  SHOP      1-5       4    5.3    1.3   1.3   25.0   0.54     0     7/1     0.98  0.98       0
+  med_bay          REST      1-5       9    0.0    0.0   0.0      -   0.00     0     0/0     0.91  0.91       0
+  rooms_mst        CACHE     1-5     129    5.0    2.0   1.1   46.3   0.71     0     6/2     0.96  0.96       0
+  rooms_mst        COMBAT    1-5      56   14.7    4.8   3.9   25.0   0.82     0    14/5     0.99  0.89       4
+  rooms_mst        ELITE     1-5      18   18.1    4.1   5.1   19.9   1.04     0    22/5     0.95  0.95       2
+  rooms_mst        SHOP      1-5       4    5.3    1.0   1.5   51.5   0.60     0     7/0     0.83  0.97       0
 
   A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
-    COMBAT    1-5   cavern 0.81   rooms_mst 0.83   gap    2% OK
-    ELITE     1-5   cavern 0.96   rooms_mst 0.95   gap    1% OK
-    SHOP      1-5   cavern 0.54   rooms_mst 0.57   gap    7% OK
+    COMBAT    1-5   cavern 0.80   rooms_mst 0.82   gap    2% OK
+    ELITE     1-5   cavern 0.95   rooms_mst 1.04   gap    9% OK
+    SHOP      1-5   cavern 0.54   rooms_mst 0.60   gap   11% OUT
 
   MATCHUP REPORT — per played floor; damage share by class (% of landed hit damage)
   --------------------------------------------------------------------------------
   policy               depth  floor  eff/f  res/f  swt/f BALLI SPREA ENERG  RAIL  FIRE EXPLO BLADE BLUNT
-  NAIVE                 1-5     318   0.01   1.24   0.00   100     0     0     0     0     0     0     0
-  TACTICAL              1-5     411   0.20   1.11   0.07    33    56     5     2     0     1     0     3
-  HOARDER-START-WEAPON  1-5     403   0.19   1.18   0.06    36    62     0     0     0     0     0     2
+  NAIVE                 1-5     310   0.01   1.08   0.00    98     0     0     0     0     2     0     0
+  TACTICAL              1-5     382   0.13   0.87   0.05    40    48     4     0     0     5     0     3
+  HOARDER-START-WEAPON  1-5     381   0.11   0.90   0.05    42    53     0     0     0     3     0     2
     S-SWITCH alternatives (per policy): switches/COMBAT floor | hint take rate | switches per
     COMBAT floor that showed a hint | COMBAT floors (hinted)
-    NAIVE                  0.00 |   0.00 |   0.00 | 125 (16)
-    TACTICAL               0.13 |   1.00 |   1.00 | 167 (21)
-    HOARDER-START-WEAPON   0.11 |   1.00 |   1.00 | 167 (18)
+    NAIVE                  0.00 |   0.00 |   0.00 | 124 (7)
+    TACTICAL               0.07 |   1.00 |   1.00 | 158 (11)
+    HOARDER-START-WEAPON   0.06 |   1.00 |   1.00 | 158 (10)
+
+  HEAVY REPORT — heavies committed AT the player, by how they ended (counts per band)
+  --------------------------------------------------------------------------------
+  policy               depth  commit  avoid  guard  stagg  killd landed answerd armBlk hazDmg/f heavyD
+  NAIVE                1-5       170      0      0      0     31    137    0.18     18     1.8     28
+  NAIVE                6-10        0      0      0      0      0      0       -      0     0.0      0
+  NAIVE                11-15       0      0      0      0      0      0       -      0     0.0      0
+  NAIVE                16+         0      0      0      0      0      0       -      0     0.0      0
+  NAIVE                ALL    committed 170, answered share 0.18, unresolved at floor end 2
+  TACTICAL             1-5      1114    832    239      6     28      6    0.99     66     4.6      2
+  TACTICAL             6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL             11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL             16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL             ALL    committed 1114, answered share 0.99, unresolved at floor end 3
+  HOARDER-START-WEAPON 1-5      1103    831    228      7     29      6    0.99     68     4.5      3
+  HOARDER-START-WEAPON 6-10        0      0      0      0      0      0       -      0     0.0      0
+  HOARDER-START-WEAPON 11-15       0      0      0      0      0      0       -      0     0.0      0
+  HOARDER-START-WEAPON 16+         0      0      0      0      0      0       -      0     0.0      0
+  HOARDER-START-WEAPON ALL    committed 1103, answered share 0.99, unresolved at floor end 2
+    Heavy kinds committed at each policy (count): 
+    NAIVE                CHARGE 17 | LANCE 147 | AREA_STRIKE 4 | SELF_DESTRUCT 2 |
+    TACTICAL             CHARGE 441 | LANCE 654 | AREA_STRIKE 15 | SELF_DESTRUCT 4 |
+    HOARDER-START-WEAPON CHARGE 440 | LANCE 649 | AREA_STRIKE 11 | SELF_DESTRUCT 3 |
+    Outcomes: AVOIDED left the tiles; GUARDED front-arc hit; STAGGERED cancelled by stagger/riposte/stun;
+    killd = source died first; landed = unguarded or flanked hit. S-HEAVY bands answered = all but landed.
 
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
   OK   [SIM_GATE] HOARDER first-boss clears: value=0.00 band=0.00..0.00 OK — 200 seeds; R-BOSS-GATE proves the same thing on paper
-  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=2.00 band=0.00..6.00 OK — 200 seeds; 159 stalled
-  WAIV [SIM_FAIR] TACTICAL median death depth: value=2.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 159 stalled
+  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=2.00 band=0.00..6.00 OK — 200 seeds; 181 stalled
+  WAIV [SIM_FAIR] TACTICAL median death depth: value=2.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 177 stalled
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
   WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=1.00 band=3.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 2.0 vs NAIVE 1.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.20 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
-  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.49 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
-  OK   [SIM_ECONOMY] emergency lifeline floors: value=0.03 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
-  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.78 band=0.55..0.80 OK — mean health fraction leaving a COMBAT floor by its exit
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.15 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.48 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
+  OK   [SIM_ECONOMY] emergency lifeline floors: value=0.04 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
+  FAIL [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.85 band=0.55..0.80 OUT-OF-BAND — mean health fraction leaving a COMBAT floor by its exit
   OK   [SIM_SUPPLY] floors below the heal floor: value=0.00 band=0.00..0.00 OK — reachable heal value under the S4 floor
-  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=21.00 band=10.00..Infinity OK — of 167 COMBAT floors; keeps the two lines below off an empty sample
+  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=11.00 band=10.00..Infinity OK — of 158 COMBAT floors; keeps the two lines below off an empty sample
   OK   [SIM_SWITCH] TACTICAL hint take rate: value=1.00 band=0.80..Infinity OK — hint-driven switches / hint episodes
-  OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.13 per COMBAT floor overall (kit-limited, not banded — D3)
+  OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.07 per COMBAT floor overall (kit-limited, not banded — D3)
+  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=1114.00 band=30.00..Infinity OK — keeps the share below off an empty sample
+  OK   [SIM_HEAVY] TACTICAL heavies answered: value=0.99 band=0.80..1.00 OK — (avoided + guarded + staggered + killed first) / committed at the player
+  OK   [SIM_HEAVY] NAIVE heavies answered: value=0.18 band=0.00..0.30 OK — 170 committed; NAIVE ignores telegraphs
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
@@ -1910,35 +2009,52 @@ SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 3 (
   One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
   role        depths  onKill lagKill  ratio |   onDie  lagDie
-  CHAFF        1-5      2.94    6.25   2.13 |   56.50   52.50
-  CHAFF        6-10     2.10   12.00   5.70 |   48.33   50.86
-  CHAFF       11-15     2.14   19.00   8.88 |   55.67   42.29
-  CHAFF       16-20     3.49   28.17   8.07 |   43.59   25.69
-  CHAFF       21-25     2.74   55.90  20.41 |   41.13   27.96
-  SOLDIER      1-5      4.19    6.20   1.48 |   21.50   21.50
-  SOLDIER      6-10     2.94   17.00   5.78 |   21.40   18.61
-  SOLDIER     11-15     3.41   31.83   9.33 |   19.05   17.69
-  SOLDIER     16-20     3.57   56.33  15.77 |   20.05   16.34
-  SOLDIER     21-25     4.10   37.61   9.17 |   17.19   15.83
-  BRUISER      1-5      5.73    9.48   1.65 |       -       -
-  BRUISER      6-10     4.86   26.57   5.47 |       -       -
-  BRUISER     11-15     7.48   51.14   6.84 |   33.24   15.69
-  BRUISER     16-20     4.73       -      - |       -       -
-  BRUISER     21-25     5.30       -      - |       -       -
+  CHAFF        1-5      2.55    4.56   1.79 |  132.50   97.67
+  CHAFF        6-10     2.28   12.00   5.27 |   85.60   66.85
+  CHAFF       11-15     1.98   16.89   8.53 |   73.44   23.61
+  CHAFF       16-20     3.45   28.13   8.15 |   52.04   24.97
+  CHAFF       21-25     2.65   52.71  19.89 |   62.14   22.80
+  SOLDIER      1-5      3.94    5.75   1.46 |   35.06   35.83
+  SOLDIER      6-10     2.90   16.67   5.75 |   30.08   10.61
+  SOLDIER     11-15     3.35   32.71   9.77 |   28.74    9.59
+  SOLDIER     16-20     2.60   42.25  16.24 |   27.88    9.07
+  SOLDIER     21-25     3.79   30.38   8.02 |   25.24   16.46
+  BRUISER      1-5      6.27    6.93   1.10 |       -       -
+  BRUISER      6-10     4.82   19.19   3.98 |       -   23.06
+  BRUISER     11-15     6.33   44.86   7.08 |       -   23.35
+  BRUISER     16-20    10.32       -      - |       -       -
+  BRUISER     21-25    11.78       -      - |   13.68       -
   MINI_ELITE   1-5         -       -      - |       -       -
   MINI_ELITE   6-10        -       -      - |       -       -
   MINI_ELITE  11-15        -       -      - |       -       -
   MINI_ELITE  16-20        -       -      - |       -       -
   MINI_ELITE  21-25        -       -      - |       -       -
-  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.05 (target >= 1.5)
+  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.04 (target >= 1.5)
 
-  READING IT (CP7: TACTICAL plays the SWITCH hint, S-SWITCH re-stated by D3, planned-heal re-fit
-  SUPPLY_AVOIDANCE_FACTOR 0.70 -> S-SUPPLY 0.78; earlier: CP3b R-ROLE fit + CP4 A-1 generosity — CP4 moved only the
-  ELITE ammo row and the ladder probes; S-SUPPLY is unchanged at 0.80):
-  - S-SUPPLY holds at its cap: TACTICAL leaves COMBAT floors at 0.80 (0.75 before order 3). The start kit
-    is Chaingun + Shotgun, and the R-ROLE Shotgun (66, falloff table, stagger, knockback) is the
-    stronger half of it; no floor is below its heal floor. Watch it: any further start-kit buff needs
-    a heal re-fit (SECTION 21 SUPPLY_AVOIDANCE_FACTOR / drain target) in the same change.
-  - Stalls ~171/200 (162 before order 3): the navigator still stops on most floors; the navigation
-    waivers stand.
-
+  READING IT (CP7b: TACTICAL reads the red floor; S-HEAVY added; earlier: CP7a S-SWITCH, CP6 hazards):
+  - S-HEAVY holds with room: TACTICAL answers 0.99 of the 1114 heavies committed at it (832 avoided, 239
+    guarded, 6 staggered, 28 killed first, 6 landed); NAIVE answers 0.18 of 170 (31 killed first, 137
+    landed; 28 NAIVE runs died to a heavy against 2 TACTICAL). Every heavy so far is a depth 1-5 heavy: the
+    sim still stalls on floors 1-3 (177/200 TACTICAL runs), so the 6-10 / 11-15 / 16+ rows are empty. The
+    heavy mix is LANCE 654 / CHARGE 441 / AREA_STRIKE 15 / SELF_DESTRUCT 4 for TACTICAL.
+  - RESOLVED (hub decision, band re-based 0.80 -> 0.90 under the override clause — see the S-SUPPLY entry):
+    S-SUPPLY: TACTICAL's mean COMBAT exit health is 0.85 against the band [0.55, 0.90] (54 exited
+    COMBAT floors of 158 played; CP6 was 0.73). Cause: a player who answers heavies no longer pays the
+    half-pool hits that WERE the per-floor drain. It is a real shift, not noise (the sample's standard error
+    is ~0.02). It is NOT waived and was NOT loosened — the owner/hub decides between re-basing
+    SIM_SUPPLY_EXIT_HEALTH_MAX under the override clause (0.90 would pass with 0.05 of room) and making the
+    sim player fallible. THE HEAL RE-FIT WAS TRIED AND IS EXHAUSTED (hub-directed, CP7b):
+    SUPPLY_AVOIDANCE_FACTOR 0.70 -> 0.80 and 0.90 only moved exit health 0.85 -> 0.83, because the COMBAT
+    floor's planned heal already collapses onto the S4 heal floor (placed heal 0.80 -> 0.54 of max HP, one 'H'
+    0.45 + armour) and the drain is not supply-bound (TACTICAL takes ~0.14 of max HP a floor whatever lies on
+    the ground). The modelled incoming damage never contained the heavies (it reads attackDamage / cadence), so
+    there is no heavy term to discount. Only dropping the S4 heal floor (0.45 -> 0.15, with factor 0.90) got in
+    band (0.79, at the edge) — that breaks the one-medkit-per-floor guarantee, so it was reverted. Numbers
+    unchanged from CP6: SUPPLY_AVOIDANCE_FACTOR 0.70, SUPPLY_HEAL_FLOOR_FRACTION 0.45. Same cause, smaller: S-SWITCH's hinted-floor line sits at 11 against its floor of 10
+    (it was 21 at CP7a): the stall rate rose 159 -> 177 because runs that used to die to a heavy now live to
+    hit the navigator's pre-existing stalls.
+  - Readable deaths stay 1.00; the emergency lifeline fired on 0.04 of floors (band <= 0.05, thin).
+  - LADDER REPORT: TACTICAL's played hits-to-die ("onDie") rose at depths 1-5 (CHAFF 56 -> 133, SOLDIER 22 -> 35)
+    for the same reason — the probe policy dodges heavies now. The kill columns are unchanged in shape.
+  - Stalls 177/200 TACTICAL, 151/200 NAIVE: the navigator still stops on most floors (the pre-existing
+    rotate-in-place dithers); the navigation waivers stand.
