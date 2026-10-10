@@ -538,6 +538,23 @@ labels them:
 All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane, and the
 lance only ever commits down a true row or column and never re-targets after commit.
 
+STATUS MAGNITUDES (balance-overhaul order 4, H10-H12 — CP4):
+  Status damage is a FRACTION of the host's max HP, resolved at application time
+  (GameMath.statusTickDamage = max(1, round(fraction x maxHP)) x stacks; Player/Enemy implement
+  StatusHost.getStatusMaxHealth). BURN (hazard fire) = BURN_TICK_FRACTION 0.03 per turn (enemies add
+  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER and the FIRE matchup). POISON = POISON_TICK_FRACTION 0.015 per stack
+  per turn, max POISON_MAX_STACKS 6; stacks DECAY by 1 after each tick (turns left == stacks).
+  Acid ranged hits (Mire Wraith / Acid Drone, after their chance roll and the armour shield) apply
+  POISON_STACKS_PER_ACID_HIT 2 stacks; a toxic tile applies POISON_STACKS_PER_TOXIC_TURN 2 stacks per turn
+  stood to the PLAYER (unshielded; enemies on toxic tiles keep 1 stack/turn until the hazard rework).
+  WEAK = -35% outgoing for 3 turns (one percent for both directions). The Rimeshell lance SLOWS the player
+  for LANCE_SLOW_DURATION_TURNS 2 on a connecting beam, through armourBlocksStatus. Weapon burns
+  (Incendiary, Incinerator) keep their R-ROLE damage (WEAPON_BURN_BASE_PER_TURN).
+  STIM cleanse (H11): using a STIM ('+', MedicalTier.STIM / the small medkit, from the HEAL button or the
+  inventory) also removes POISONED and WEAK (Player.cleansePoisonAndWeak) and shows "CLEANSED" only when
+  something was removed; a field medkit heals only.
+  HUD (H12): the status row shows each icon's turns left; POISON shows its stacks as "xN".
+
 TERRAIN HAZARDS (Pillar 3) — HazardManager (hazard pkg) owns a two-sided fire/toxic chain-reaction
 system, ticked once per turn by HazardTickSubscriber (before the status tick so a tile bites the
 same turn you stand in it). Tiles 'i' (fire) and 'q' (toxic) apply the existing BURNING/POISONED

@@ -70,7 +70,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
         DONE WHEN: build green; A2 (desktop check owed if no display).
 - [x] **CP3** — GUARD rework with riposte; armour absorb/shred; status shield.
       DONE WHEN: A3, A4 (shield half) hold; both gates green.
-- [ ] **CP4** — status fractions, STIM cleanse, lance SLOW, HUD status turns; R-DOT updated.
+- [x] **CP4** — status fractions, STIM cleanse, lance SLOW, HUD status turns; R-DOT updated.
       DONE WHEN: A4, A5 hold; both gates green.
 - [ ] **CP5** — Revenant / Cinderforge heavy assignments; stagger cancels heavy.
       DONE WHEN: A7 holds; both gates green.
@@ -131,3 +131,19 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `ARMOUR_STATUS_COST_FRACTION`. TacticalPolicy reads only `SIM_TACTICAL_GUARD_DAMAGE_FRACTION` (CP7 replaces it).
 - **CP3 gates:** core:test 454, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.72, TACTICAL
   145/200 stalled. Desktop check owed: RIPOSTE / ARMOUR HELD floaters.
+- **CP4 handover:** `GameMath.statusTickDamage(fraction, hostMaxHealth, stacks)`; `StatusHost.getStatusMaxHealth()`;
+  `StatusEffectController.applyPoisonStacks(host, stacks, source)` (per-stack magnitude from host max HP; POISON
+  decays 1 stack/turn, remainingTurns == stacks) and `applyFractionBurn(host, turns, damageMultiplier, source)`.
+  `Player.cleansePoisonAndWeak()`; `EnemyManager.applyLanceSlow` (through the armour shield). SECTION 23
+  `POISON_TICK_FRACTION`, `BURN_TICK_FRACTION`, `POISON_STACKS_PER_ACID_HIT`, `POISON_STACKS_PER_TOXIC_TURN`,
+  `LANCE_SLOW_DURATION_TURNS`; POISON_MAX_STACKS 6, WEAK 35%, enemy WEAK debuff 3 turns; weapon burn has its own
+  `WEAPON_BURN_BASE_PER_TURN` 4 (R-DOT restated: one status-burn + one weapon-burn definition). DELETED
+  BURN_DAMAGE_PER_TURN, POISON_DAMAGE_PER_STACK, POISON_DURATION, HAZARD_TOXIC_POISON_TURNS. HUD shows "xN" on
+  the POISON icon. Snapshot `a56f924c...`.
+- **CP4 decision:** "STIM ('+')" = `MedicalTier.STIM` (`ItemType.MEDKIT_SMALL`, symbol '+'); `ItemType.STIMPACK` is
+  never consumed. Cleanse wired into the HEAL button and the inventory consume. A5: d1 2/130 = 1.54%, d15 7/434 =
+  1.61% per stack-turn (rounding).
+- **TEMPORARY (CP6 resolves):** enemies on toxic tiles get 1 decaying stack/turn at 1.5% enemy max HP; fire tiles
+  hit enemies at BURN_TICK_FRACTION x HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER (still 1.5; H13 says 2.5).
+- **CP4 gates:** core:test 454, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.70, emergency
+  lifeline 0.04 (band <=0.05 — THIN), TACTICAL 150/200 stalled. Desktop owed: CLEANSED floater, xN text, lance SLOW.

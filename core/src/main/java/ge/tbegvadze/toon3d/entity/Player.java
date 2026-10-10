@@ -422,6 +422,30 @@ public class Player implements Renderable, Disposable, StatusHost {
     @Override
     public boolean isAlive() { return health > 0; }
 
+    @Override
+    public int getStatusMaxHealth() { return maxHealth; }
+
+    /**
+     * H11: a STIM ('+', {@link ge.tbegvadze.toon3d.entity.MedicalTier#STIM}) cleanses POISONED and WEAK.
+     * Burn, slow, blind and the rest are not cleansed.
+     *
+     * @return true when at least one of the two was active and was removed
+     */
+    public boolean cleansePoisonAndWeak() {
+        boolean removedAny = false;
+        StatusEffect poisonEffect = activeStatusEffects.get(StatusType.POISONED);
+        if (poisonEffect.isActive()) {
+            poisonEffect.reset();
+            removedAny = true;
+        }
+        StatusEffect weakEffect = activeStatusEffects.get(StatusType.WEAK);
+        if (weakEffect.isActive()) {
+            weakEffect.reset();
+            removedAny = true;
+        }
+        return removedAny;
+    }
+
     public int getHealth()    { return health; }
     public int getMaxHealth() { return maxHealth; }
 

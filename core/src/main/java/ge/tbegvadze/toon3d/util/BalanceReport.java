@@ -812,11 +812,17 @@ public final class BalanceReport {
                 "hazard", "dmg/turn", "TP/tile", "lifetime", "TP per 6 tiles");
         System.out.println("------------------------------------------------------------------------------------");
 
-        // Fire applies BURNING at a flat per-turn magnitude; toxic STACKS, so a careless stand of
-        // turnsStood turns averages ~turnsStood/2 stacks — model its damage/turn at that average.
-        float fireDamagePerTurn  = EffectConstants.BURN_DAMAGE_PER_TURN;
-        float toxicAverageStacks = Math.max(1f, BalanceConfig.HAZARD_THREAT_TURNS_STOOD / 2f);
-        float toxicDamagePerTurn = EffectConstants.POISON_DAMAGE_PER_STACK * toxicAverageStacks;
+        // Order 4 (H10): fire and toxin are FRACTIONS of the host's max HP. The table prices them at the
+        // PLAYER side at depth 1 — the on-curve depth-1 max HP (GameMath.expectedPlayerAtDepth(1)) — because
+        // a hazard tile hurts the player at the base fraction (enemies add their own multipliers). Toxic
+        // STACKS (POISON_STACKS_PER_TOXIC_TURN a turn, decaying by 1), so its damage/turn is the per-stack
+        // tick times the average damage-bearing stack count over the careless-stand reference.
+        int   referenceMaxHealth = Math.round(GameMath.expectedPlayerAtDepth(1).maxHealth);
+        float fireDamagePerTurn  = GameMath.statusTickDamage(EffectConstants.BURN_TICK_FRACTION, referenceMaxHealth, 1);
+        float toxicAverageStacks = GameMath.toxicAverageStacks(BalanceConfig.HAZARD_THREAT_TURNS_STOOD,
+                EffectConstants.POISON_STACKS_PER_TOXIC_TURN, EffectConstants.POISON_MAX_STACKS);
+        float toxicDamagePerTurn = GameMath.statusTickDamage(EffectConstants.POISON_TICK_FRACTION,
+                referenceMaxHealth, 1) * toxicAverageStacks;
 
         printHazardRow("Fire 'i'",  fireDamagePerTurn,  BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS);
         printHazardRow("Toxic 'q'", toxicDamagePerTurn, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS);

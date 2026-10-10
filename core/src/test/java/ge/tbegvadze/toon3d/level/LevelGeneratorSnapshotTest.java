@@ -122,8 +122,12 @@ class LevelGeneratorSnapshotTest {
     // full hit), which re-prices the Threat Points of the slam-bearing archetypes (Plague Hulk, Iron Stalker,
     // the elite), so the encounter planner rolls a different roster. A deliberate balance change; the new
     // digest was confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 4, CP4 — STATUS MAGNITUDES): the acid casters' WEAK debuff is priced
+    // at the new WEAK_DAMAGE_PERCENT 25 -> 35 for DEBUFF_WEAK_DURATION_TURNS 2 -> 3, which re-prices the Threat
+    // Points of Mire Wraith / Acid Drone, so the encounter planner rolls a different roster. A deliberate
+    // balance change; the new digest was confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "e365b9facda983beb71514b24b9b8e5ac79a1bdebd0009c1eda3c4ac79bc2c92";
+            "a56f924cfdebfd1e031cb2e72c3c4d6ca803bbce0ec8ac28b6a20946db86a0aa";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

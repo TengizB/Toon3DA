@@ -355,17 +355,36 @@ R-SUPPLY (RuleKind.SUPPLY) — supply tracks demand (balance-overhaul order 2)
   exist). "Sometimes too many resources, other times too little; I die in the caves
   because they have no medkits." Supply is now what the fights cost, minus a bite.
 
-R-DOT (RuleKind.DOT_UNIQUENESS)
-  Exactly ONE definition per status: the unified bases are
-  BalanceConfig.BURN_DAMAGE_PER_TURN (4) and POISON_DAMAGE_PER_STACK (2).
-  INCENDIARY_BURN_PER_TURN_BASE must BE the unified burn base (it references
-  it). Structurally, every field in a shim class (GameBalance, EffectConstants,
-  EnemyConstants, WeaponConstants, ItemConstants, LevelGenConstants, Constants)
-  that shares a name with a BalanceConfig field must re-export it byte-for-byte
-  — reflection catches any re-introduced divergent literal.
+R-DOT (RuleKind.DOT_UNIQUENESS) — RESTATED by balance-overhaul order 4 (CP4)
+  Exactly ONE definition per DoT, in TWO families, each defined once and re-exported
+  byte-for-byte:
+    STATUS DoTs (hazard fire, acid / toxic poison) are FRACTIONS of the host's max HP,
+    resolved at application time via GameMath.statusTickDamage(fraction, maxHealth, stacks)
+    = max(1, round(fraction x maxHealth)) x stacks: BalanceConfig.BURN_TICK_FRACTION 0.03,
+    BalanceConfig.POISON_TICK_FRACTION 0.015 (SECTION 23).
+    WEAPON burn (Incendiary, Incinerator) is R-ROLE-fitted damage and keeps ONE base:
+    BalanceConfig.WEAPON_BURN_BASE_PER_TURN (4f, the same value as the old unified base);
+    INCENDIARY_BURN_PER_TURN_BASE must BE it (it references it).
+  The pre-order-4 flat BURN_DAMAGE_PER_TURN (4) and POISON_DAMAGE_PER_STACK (2) are DELETED
+  and must not reappear in BalanceConfig or EffectConstants (the rule checks by reflection).
+  Structurally, every field in a shim class (GameBalance, EffectConstants, EnemyConstants,
+  WeaponConstants, ItemConstants, LevelGenConstants, Constants) that shares a name with a
+  BalanceConfig field must re-export it byte-for-byte — reflection catches any re-introduced
+  divergent literal.
+  OVERRIDE RECORD (order 4, CP4): SECTION 8 status magnitudes replaced — BURN 4/turn flat ->
+  BURN_TICK_FRACTION 0.03 of host max HP; POISON 2/stack flat -> POISON_TICK_FRACTION 0.015 of
+  host max HP per stack; POISON_MAX_STACKS 5 -> 6 (stacks decay by 1 a turn; POISON_DURATION and
+  HAZARD_TOXIC_POISON_TURNS deleted — poison's turns left = its stacks); WEAK_DAMAGE_PERCENT
+  25 -> 35 with EnemyConstants.DEBUFF_WEAK_DURATION_TURNS 2 -> 3 (ONE WEAK percent for both
+  directions); new POISON_STACKS_PER_ACID_HIT 2, POISON_STACKS_PER_TOXIC_TURN 2 (player),
+  LANCE_SLOW_DURATION_TURNS 2 (the Rimeshell lance SLOWS on a connecting hit). Status pricing
+  (specialEquivalentDebuffWeak) reads the new WEAK numbers; the hazard read-out in BalanceReport
+  prices fire/toxin at the PLAYER side at the on-curve depth-1 max HP. Acceptance A5: poison per
+  stack per turn is a constant fraction of max HP at any depth (130 HP -> 2 = 1.54%; 434 HP at
+  depth 15 -> 7 = 1.61%; nominal 1.5%, differing only by rounding).
   HISTORY: two divergent BURN definitions coexisted (ability base 3 vs applied
   4); unification kept the EffectConstants value (4) because it was the one the
-  game actually applied.
+  game actually applied. Order 4 then split status burn (fraction of HP) from weapon burn (4).
 
 R-FLAGS (RuleKind.FLAGS)
   No live test/debug flags: every static boolean whose name contains TEST or
@@ -1560,6 +1579,13 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 4 / CP4 — STATUS MAGNITUDES. See R-DOT (restated + OVERRIDE RECORD). Status DoTs are
+    fractions of host max HP (GameMath.statusTickDamage; toxicAverageStacks for the hazard read-out); POISON
+    stacks decay by 1 a turn (max 6; acid hit 2 stacks, toxic tile 2 stacks/turn on the player); WEAK -35% x 3
+    turns; the Rimeshell lance SLOWS 2 turns through the armour status shield; a STIM ('+', the small medkit)
+    cleanses POISONED + WEAK ("CLEANSED"); the HUD status row shows poison as "xN". Why: statuses were flat
+    numbers that went stale with depth ("not worth curing"). LevelGeneratorSnapshotTest re-baselined (the
+    acid casters' WEAK debuff TP moved). Weapon burns keep their damage (WEAPON_BURN_BASE_PER_TURN 4).
   balance-overhaul order 4 / CP3 — GUARD & ARMOUR. GUARD_FRONT_MULTIPLIER 0.35 DELETED -> GUARD_FRONT_ORDINARY
     0.50 / GUARD_FRONT_HEAVY 0.20 + RIPOSTE on a guarded heavy (stun + VULNERABLE); ARMOUR_ABSORB_FRACTION
     0.50 -> 0.67; ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5; STATUS SHIELD (ARMOUR_STATUS_COST_FRACTION 0.10). New

@@ -769,6 +769,11 @@ public class Enemy implements StatusHost {
         return 1f;
     }
 
+    @Override
+    public int getStatusMaxHealth() {
+        return maxHealth;
+    }
+
     public boolean isAlive() {
         return health > 0;
     }

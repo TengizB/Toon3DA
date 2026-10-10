@@ -4661,6 +4661,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // mirroring the weapon lifesteal procs so a medkit reads as an obvious restore.
             impactEffectSystem.spawnHealParticles();
             hitVignetteRenderer.triggerHeal();
+            // H11: a STIM (the small medkit) also cleanses POISONED and WEAK; a field medkit does not.
+            if (consumed == ItemType.MEDKIT_SMALL && player.cleansePoisonAndWeak()
+                    && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("CLEANSED", EventTextSystem.COLOR_GREEN);
+            }
         }
     }
 

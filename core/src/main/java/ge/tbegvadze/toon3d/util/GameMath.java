@@ -2041,6 +2041,51 @@ public final class GameMath {
     }
 
     /*
+     * Formula: Status Tick Damage (balance-overhaul order 4, H10)
+     * Derivation:
+     *   Every status DoT is a FRACTION of the host's max HP so it never goes stale with depth:
+     *       perStack = max(1, round(fraction x hostMaxHealth))
+     *       damage   = perStack x stacks
+     *   The per-stack value is what the StatusEffect stores at application time; the tick multiplies by the
+     *   live stack count. Example: fraction 0.015, max HP 100 -> perStack round(1.5) = 2; 3 stacks -> 6.
+     *   Burn passes stacks = 1 (fraction 0.03).
+     * Edge cases:
+     *   hostMaxHealth <= 0 or fraction <= 0 -> perStack floors at 1 (a status always hurts a little).
+     *   stacks <= 0 -> 0 (nothing applied). Math.round is half-up, so 1.5 -> 2 (equal fractions can differ by
+     *   up to 0.5 HP of rounding between depths, which is the "up to rounding" of acceptance A5).
+     */
+    public static int statusTickDamage(float fraction, int hostMaxHealth, int stacks) {
+        if (stacks <= 0) return 0;
+        int perStack = Math.max(1, Math.round(fraction * Math.max(0, hostMaxHealth)));
+        return perStack * stacks;
+    }
+
+    /*
+     * Formula: Toxic Average Stacks (balance-overhaul order 4, H10 — hazard pricing read-out)
+     * Derivation:
+     *   A host standing in a toxic tile gains stacksPerTurn each turn (capped at maxStacks); the status
+     *   tick then deals damage on the CURRENT stack count and afterwards the stacks decay by 1:
+     *       stacksBeforeTick(turn n) = min(maxStacks, carried(n) + stacksPerTurn)
+     *       carried(n + 1)           = stacksBeforeTick(n) - 1
+     *   The average damage-bearing stack count over turnsStood turns is the mean of stacksBeforeTick.
+     *   Worked (2 per turn, cap 6, 2 turns): turn 1 -> 2, carry 1; turn 2 -> 3. Mean = 2.5.
+     * Edge cases:
+     *   turnsStood <= 0 or stacksPerTurn <= 0 -> 0. maxStacks < 1 is treated as 1.
+     */
+    public static float toxicAverageStacks(int turnsStood, int stacksPerTurn, int maxStacks) {
+        if (turnsStood <= 0 || stacksPerTurn <= 0) return 0f;
+        int cap = Math.max(1, maxStacks);
+        int carried = 0;
+        float total = 0f;
+        for (int turn = 0; turn < turnsStood; turn++) {
+            int stacksBeforeTick = Math.min(cap, carried + stacksPerTurn);
+            total += stacksBeforeTick;
+            carried = stacksBeforeTick - 1;
+        }
+        return total / turnsStood;
+    }
+
+    /*
      * Formula: radialFalloff
      * Derivation:
      *   Linear falloff from 1 at the centre of a blob to 0 at its edge.

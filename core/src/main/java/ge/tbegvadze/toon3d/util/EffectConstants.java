@@ -118,12 +118,13 @@ public final class EffectConstants {
     // Status effects — RE-EXPORT SHIMS (Balance Authority, order 1): the gameplay magnitudes
     // moved into BalanceConfig SECTION 8 (the single source of truth); only cosmetic status
     // values (vignette alphas, tints, particle counts) remain owned by this file.
-    public static final int   BURN_DAMAGE_PER_TURN           = BalanceConfig.BURN_DAMAGE_PER_TURN;
+    public static final float BURN_TICK_FRACTION             = BalanceConfig.BURN_TICK_FRACTION;
     public static final int   BURN_DURATION_MIN              = BalanceConfig.BURN_DURATION_MIN;
     public static final int   BURN_DURATION_MAX              = BalanceConfig.BURN_DURATION_MAX;
-    public static final int   POISON_DAMAGE_PER_STACK        = BalanceConfig.POISON_DAMAGE_PER_STACK;
+    public static final float POISON_TICK_FRACTION           = BalanceConfig.POISON_TICK_FRACTION;
+    public static final int   POISON_STACKS_PER_ACID_HIT     = BalanceConfig.POISON_STACKS_PER_ACID_HIT;
+    public static final int   POISON_STACKS_PER_TOXIC_TURN   = BalanceConfig.POISON_STACKS_PER_TOXIC_TURN;
     public static final int   POISON_MAX_STACKS              = BalanceConfig.POISON_MAX_STACKS;
-    public static final int   POISON_DURATION               = BalanceConfig.POISON_DURATION;
     public static final int   STUN_DURATION_DEFAULT         = BalanceConfig.STUN_DURATION_DEFAULT;
     public static final int   STUN_DURATION_HEAVY           = BalanceConfig.STUN_DURATION_HEAVY;
     // (BLINDED no longer narrows the raycast FOV — that zoomed/stretched the whole view; it now reads

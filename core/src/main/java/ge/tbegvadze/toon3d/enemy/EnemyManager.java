@@ -1470,6 +1470,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 // (BREAK_LANE).
                 if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
                 if (rangedHitLandedListener != null) rangedHitLandedListener.run();
+                applyLanceSlow(enemy, player);
             }
             Object occupant = enemyAt(column, row);
             if (occupant != null && occupant != enemy) {
@@ -1483,6 +1484,16 @@ public final class EnemyManager implements EnemyHitTarget {
             impactEventListener.onLanceBeam(enemy.tileColumn, enemy.tileRow,
                     stepColumn, stepRow, reachTiles, enemy.type.heightMultiplier());
         }
+    }
+
+    /**
+     * H10: a connecting lance beam SLOWS the player (LANCE_SLOW_DURATION_TURNS). Routed through the same
+     * armour status shield as every other enemy->player status (H9): armour held = no slow, armour pays.
+     */
+    private void applyLanceSlow(Enemy enemy, Player player) {
+        if (statusEffectController == null || !player.isAlive()) return;
+        if (armourBlocksStatus(player, StatusType.SLOWED)) return;
+        statusEffectController.apply(player, StatusType.SLOWED, BalanceConfig.LANCE_SLOW_DURATION_TURNS, 0, enemy);
     }
 
     /**
@@ -2620,10 +2631,7 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         if (effectRandom.nextFloat() < poisonChance) {
             if (armourBlocksStatus(player, StatusType.POISONED)) return;   // H9: armour held the acid out
-            statusEffectController.apply(player, StatusType.POISONED,
-                    EffectConstants.POISON_DURATION,
-                    EffectConstants.POISON_DAMAGE_PER_STACK,
-                    enemy);
+            statusEffectController.applyPoisonStacks(player, EffectConstants.POISON_STACKS_PER_ACID_HIT, enemy);
         }
     }
 

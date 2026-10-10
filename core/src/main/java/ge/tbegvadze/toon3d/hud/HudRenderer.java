@@ -820,7 +820,13 @@ public class HudRenderer implements Renderable, Disposable {
             if (effect == null || !effect.isActive()) continue;
             float drawX = HudConstants.HUD_STATUS_ROW_LOCAL_X + activeCount * (size + gap);
             stringBuilder.setLength(0);
-            stringBuilder.append(effect.getRemainingTurns());
+            if (STATUS_TYPES[typeIndex] == StatusType.POISONED) {
+                // Poison decays one STACK per turn (order 4, H10), so its turns remaining always equal its
+                // stack count: the icon shows the stacks ("x3"), which is also the turns left.
+                stringBuilder.append('x').append(effect.getStacks());
+            } else {
+                stringBuilder.append(effect.getRemainingTurns());
+            }
             font.draw(batch, stringBuilder, drawX + 2f, iconY + size - 2f);
             activeCount++;
         }

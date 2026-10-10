@@ -262,6 +262,11 @@ public class PlayerController {
                     eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
                 }
             }
+            // H11: a STIM also cleanses POISONED and WEAK (a field medkit does not).
+            if (tier == MedicalTier.STIM && amount > 0 && player.cleansePoisonAndWeak()
+                    && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("CLEANSED", EventTextSystem.COLOR_GREEN);
+            }
             finishAction(true, TickCause.HEAL);
         }
     }

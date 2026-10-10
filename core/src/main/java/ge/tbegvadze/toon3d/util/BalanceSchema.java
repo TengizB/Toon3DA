@@ -1342,17 +1342,29 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-DOT: exactly one definition per status. The weapon-ability BURN base must BE the unified
-     * base, and every same-named field in a shim class must re-export BalanceConfig byte-for-byte
-     * (the generalised structural rule; a re-introduced divergent literal fails here).
+     * R-DOT (restated by balance-overhaul order 4): exactly one definition per DoT. There are TWO
+     * families, each defined once and re-exported byte-for-byte: the STATUS DoTs are fractions of the
+     * host's max HP (BURN_TICK_FRACTION, POISON_TICK_FRACTION — hazard/acid/status magnitudes), and the
+     * WEAPON burn base (WEAPON_BURN_BASE_PER_TURN — Incendiary/Incinerator, R-ROLE-fitted damage). The
+     * pre-order-4 flat BURN_DAMAGE_PER_TURN / POISON_DAMAGE_PER_STACK must not exist anywhere, and every
+     * same-named field in a shim class must equal BalanceConfig (a divergent literal fails here).
      */
     public static List<RuleResult> dotUniquenessResults() {
         List<RuleResult> results = new ArrayList<>();
-        boolean unifiedBurn = BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE == BalanceConfig.BURN_DAMAGE_PER_TURN;
-        results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "BURN base unified",
+        boolean unifiedBurn = BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE == BalanceConfig.WEAPON_BURN_BASE_PER_TURN;
+        results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "weapon BURN base unified",
                 BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE,
-                BalanceConfig.BURN_DAMAGE_PER_TURN, BalanceConfig.BURN_DAMAGE_PER_TURN, unifiedBurn,
-                "INCENDIARY_BURN_PER_TURN_BASE must reference the single BURN_DAMAGE_PER_TURN base"));
+                BalanceConfig.WEAPON_BURN_BASE_PER_TURN, BalanceConfig.WEAPON_BURN_BASE_PER_TURN, unifiedBurn,
+                "INCENDIARY_BURN_PER_TURN_BASE must reference the single WEAPON_BURN_BASE_PER_TURN base"));
+        String[] retiredFlatBases = {"BURN_DAMAGE_PER_TURN", "POISON_DAMAGE_PER_STACK"};
+        for (String retiredName : retiredFlatBases) {
+            boolean absent = !declaresField(BalanceConfig.class, retiredName)
+                    && !declaresField(EffectConstants.class, retiredName);
+            results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "retired flat base " + retiredName,
+                    absent ? 0f : 1f, 0f, 0f, absent,
+                    "status DoTs are fractions of max HP (SECTION 23) — a flat per-turn base must not return"));
+        }
+        final int baselineResultCount = results.size();
 
         for (Class<?> shimClass : SHIM_CLASSES) {
             for (Field shimField : shimClass.getDeclaredFields()) {
@@ -1370,11 +1382,18 @@ public final class BalanceSchema {
                 }
             }
         }
-        if (results.size() == 1) {
+        if (results.size() == baselineResultCount) {
             results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "shim integrity",
                     0f, 0f, 0f, true, "every same-named shim field re-exports BalanceConfig"));
         }
         return results;
+    }
+
+    private static boolean declaresField(Class<?> holder, String fieldName) {
+        for (Field field : holder.getDeclaredFields()) {
+            if (field.getName().equals(fieldName)) return true;
+        }
+        return false;
     }
 
     /** R-FLAGS: no live test/debug flags — any TEST/DEBUG boolean must be false. */

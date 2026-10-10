@@ -553,16 +553,18 @@ SPECIAL MOVE-SET CADENCES (EnemyConstants):
 SPECIAL VERBS (EnemyConstants + EffectConstants):
   BUFF_SELF  -> EMPOWERED: BUFF_SELF_EMPOWERED_PERCENT=40, duration 3.
   DEBUFF_PLAYER -> SLOW (DEBUFF_SLOW_DURATION_TURNS=3) / BLIND (2) / WEAK (caster
-                   corrodes player output; WEAK_DAMAGE_PERCENT=25).
+                   corrodes player output; WEAK_DAMAGE_PERCENT=35 for 3 turns — order 4).
   SUMMON     -> hard-capped by SUMMON_PER_ENEMY_CAP + SUMMON_ROOM_LIVE_CAP (NOT a
                soft budget), so spawned TP stays bounded.
   AREA_STRIKE-> the only DAMAGING special; carries a predicted-damage number, dodged
                by stepping out of the cross radius.
 
 STATUS EFFECTS the enemies apply (EffectConstants):
-  BURN_DAMAGE_PER_TURN=4, POISON_DAMAGE_PER_STACK=2 (POISON_MAX_STACKS=5),
+  BURN_TICK_FRACTION=0.03 of host max HP/turn, POISON_TICK_FRACTION=0.015 of host max HP per
+  stack per turn (POISON_MAX_STACKS=6, decays 1 stack/turn; acid hit 2 stacks, toxic tile 2/turn;
+  balance-overhaul order 4 — the old flat 4 / 2 per stack are gone),
   EMPOWERED_DAMAGE_PERCENT=50 (dur 5), VULNERABLE_DAMAGE_PERCENT=50 (max 2 stacks),
-  WEAK_DAMAGE_PERCENT=25, EXPOSED (ignore-Block one hit), BACKSTAB_DAMAGE_PERCENT=30,
+  WEAK_DAMAGE_PERCENT=35, EXPOSED (ignore-Block one hit), BACKSTAB_DAMAGE_PERCENT=30,
   SLOW_FACTOR=2.0 (dur 3), BLIND_DURATION=2.
 
 BOSS AI (Overseer Hunter-Killer brain — GameBalance BOSS_TACTIC_*): tactic-scoring
@@ -854,21 +856,23 @@ SECTION 15 — STATUS EFFECTS / DAMAGE-OVER-TIME (DoT is damage; it counts towar
 Files: BalanceConfig SECTION 8 (ALL status magnitudes, shared + weapon DoT;
 EffectConstants keeps re-export shims only).
   Rend/BLEED: 2/turn base (+0.5/level, cap 6), 4 turns.
-  Incendiary/BURN: base = THE unified BURN_DAMAGE_PER_TURN (4/turn)
+  Incendiary/BURN: base = THE weapon burn base WEAPON_BURN_BASE_PER_TURN (4/turn)
   (+0.5/level, cap 7), 3 turns (+1 on Incinerator).
   Flamethrower burn: STACKS up to FLAME_BURN_MAX_STACKS=3 per target, each stack
   FLAME_BURN_FRACTION=0.6 x the ladder-scaled impact per turn (7 at depth 1), 4 turns
   (shared timer refreshed by each spray; StatusEffectController.applyStacking).
   Stagger/STUN: STAGGER_STUN_DURATION=1.
-  Shared: BURN 4/turn, POISON 2/stack (max 5), EMPOWERED +50%
-  (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -25%, EXPOSED (ignore Block 1 hit),
+  Shared (order 4): BURN 3% of host max HP/turn, POISON 1.5% of host max HP per stack
+  (max 6, -1 stack/turn), EMPOWERED +50%
+  (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -35% (3 turns from enemies), EXPOSED (ignore Block 1 hit),
   BACKSTAB +30%, SLOW x2.0 (3 turns), BLIND (2 turns).
 DoT BYPASSES Block (it is the rock-paper-scissors answer to turtling enemies).
 
 RESOLVED (new-game-balancr order 1): the two divergent DoT definitions were UNIFIED.
-BURN has exactly one base (BalanceConfig.BURN_DAMAGE_PER_TURN = 4 — the value the
-game actually applied); INCENDIARY_BURN_PER_TURN_BASE now REFERENCES it (its old
-divergent literal 3 is gone, so Incendiary level-1 burn ticked up 3 -> 4). The
+BURN had exactly one base (BURN_DAMAGE_PER_TURN = 4 — the value the game actually applied).
+RE-STATED by balance-overhaul order 4: status burn/poison are fractions of host max HP
+(BURN_TICK_FRACTION, POISON_TICK_FRACTION) and the weapon burn has its own single base
+(WEAPON_BURN_BASE_PER_TURN = 4; INCENDIARY_BURN_PER_TURN_BASE references it). The
 R-DOT schema rule + shim-integrity reflection audit fail the build if a second
 definition or a diverged shim ever reappears.
 

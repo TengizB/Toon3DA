@@ -589,9 +589,9 @@ public final class EnemyConstants {
     /**
      * WEAK debuff duration (strategy-combat-order-6): the acid casters (Mire Wraith / Acid Drone)
      * corrode the marine's output so its own HUD damage numbers dim — the symmetric, player-facing
-     * side of the Weak power. Kept short so it softens a couple of hits, not the whole fight.
+     * side of the Weak power. 3 turns (balance-overhaul order 4, H10) at BalanceConfig.WEAK_DAMAGE_PERCENT — one WEAK definition for both directions.
      */
-    public static final int DEBUFF_WEAK_DURATION_TURNS  = 2;
+    public static final int DEBUFF_WEAK_DURATION_TURNS  = 3;
 
     // SUMMON — spawn chaff on empty adjacent tiles. A summoner spawns a BATCH of 2-3 per cast, then is
     // gated by its SPECIAL cadence (the natural cooldown) and the per-room live-enemy ceiling before it

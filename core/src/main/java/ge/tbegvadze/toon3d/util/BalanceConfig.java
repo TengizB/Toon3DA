@@ -935,23 +935,20 @@ public final class BalanceConfig {
     // from EffectConstants (which keeps re-export shims and now holds only cosmetic values).
     // =====================================================================================
 
-    // --- THE UNIFIED DOT BASES. Exactly ONE definition per status — BalanceSchema's R-DOT
-    // rule fails the build if a second base definition appears. Before order 1 two divergent
-    // BURN definitions existed (EffectConstants said 4/turn — the value the game actually
-    // applied via StatusEffectController — while the Incendiary ability base said 3/turn).
-    // The EffectConstants value won; the Incendiary base now REFERENCES the unified base.
-    /** BURNING damage per turn — THE single burn base (hazard fire, enemy burns, Incendiary level 1). */
-    public static final int   BURN_DAMAGE_PER_TURN    = 4;
+    // --- THE DOT DEFINITIONS (R-DOT, restated by balance-overhaul order 4). Exactly ONE definition per
+    // status-side DoT and ONE for the weapon-side burn; BalanceSchema's R-DOT rule fails the build if a
+    // second definition appears. STATUS magnitudes (hazard fire, enemy-applied poison, acid) are FRACTIONS
+    // of the host's max HP defined in SECTION 23 (BURN_TICK_FRACTION, POISON_TICK_FRACTION) and resolved at
+    // application time through GameMath.statusTickDamage, so they never go stale with depth. The
+    // WEAPON-applied burn (Incendiary, Incinerator) is R-ROLE-fitted damage and keeps its own base
+    // (WEAPON_BURN_BASE_PER_TURN, below). The old flat BURN_DAMAGE_PER_TURN (4) and POISON_DAMAGE_PER_STACK
+    // (2) were DELETED by order 4 (override clause).
     /** Minimum BURNING duration (turns) a burn application may roll. */
     public static final int   BURN_DURATION_MIN       = 3;
     /** Maximum BURNING duration (turns) a burn application may roll. */
     public static final int   BURN_DURATION_MAX       = 5;
-    /** POISONED damage per stack per turn — THE single poison base (toxic pools, enemy acid). */
-    public static final int   POISON_DAMAGE_PER_STACK = 2;
-    /** Hard cap on concurrent POISONED stacks on one host. */
-    public static final int   POISON_MAX_STACKS       = 5;
-    /** POISONED duration (turns) per application (re-application refreshes and stacks). */
-    public static final int   POISON_DURATION         = 4;
+    /** Hard cap on concurrent POISONED stacks on one host (order 4: 5 -> 6). Stacks decay by 1 per turn. */
+    public static final int   POISON_MAX_STACKS       = 6;
 
     // --- Shared status-effect magnitudes (moved from EffectConstants; gameplay, not cosmetic).
     /** STUNNED duration (turns) for the standard stun application. */
@@ -975,7 +972,7 @@ public final class BalanceConfig {
     /** Hard cap on VULNERABLE stacks so a build can't multiply a boss into a trivial kill. */
     public static final int   VULNERABLE_MAX_STACKS     = 2;
     /** WEAK outgoing-damage reduction percent on the debuffed host. */
-    public static final int   WEAK_DAMAGE_PERCENT       = 25;
+    public static final int   WEAK_DAMAGE_PERCENT       = 35;
     /** WEAK duration (turns). */
     public static final int   WEAK_DURATION             = 2;
     /** EXPOSED duration (turns): the next hit into the host ignores its Block, then clears. */
@@ -1001,9 +998,12 @@ public final class BalanceConfig {
     public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
     public static final int   REND_DURATION_TURNS            = 4;
 
-    // Incendiary (BURN DoT — on hit). The level-1 base IS the unified burn base above (was a
-    // divergent literal 3f before order 1; the game's applied value 4 won the unification).
-    public static final float INCENDIARY_BURN_PER_TURN_BASE      = BURN_DAMAGE_PER_TURN;
+    // Incendiary (BURN DoT — on hit). The level-1 base IS the ONE weapon-side burn base (R-DOT): order 4
+    // split it from the status burn (now a fraction of max HP) so the R-ROLE-fitted weapon burns keep their
+    // damage; the value 4 is byte-identical to the pre-order-4 unified base.
+    /** THE weapon-side burn base (damage/turn): Incendiary level 1; every weapon burn derives from it. */
+    public static final float WEAPON_BURN_BASE_PER_TURN          = 4f;
+    public static final float INCENDIARY_BURN_PER_TURN_BASE      = WEAPON_BURN_BASE_PER_TURN;
     public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
     public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
     public static final int   INCENDIARY_BURN_DURATION           = 3;
@@ -1253,12 +1253,12 @@ public final class BalanceConfig {
     /**
      * BURNING duration (turns) a fire tile applies to a host on it each turn. Short: standing in
      * fire re-applies (REFRESH_DURATION) so it persists, but leaving stops the burn quickly so
-     * the player can escape — the counterplay. Damage/turn = EffectConstants.BURN_DAMAGE_PER_TURN.
+     * the player can escape — the counterplay. Damage/turn = BURN_TICK_FRACTION of the host's max HP (SECTION 23).
      */
     public static final int   HAZARD_FIRE_BURN_TURNS       = 2;
 
     /**
-     * Multiplier applied to EffectConstants.BURN_DAMAGE_PER_TURN when the host standing in a fire
+     * Multiplier applied to the BURN_TICK_FRACTION damage when the host standing in a fire
      * tile is an enemy rather than the player. Fire still hurts the player at the base rate (the
      * misposition risk stays real), but enemies caught in the flamethrower's spreading fire burn
      * faster — rewarding the player for herding a swarm into the flame instead of just tagging
@@ -1266,11 +1266,8 @@ public final class BalanceConfig {
      */
     public static final float HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER = 1.5f;
 
-    /**
-     * POISONED duration (turns) a toxic pool applies each turn. Toxic STACKS (STACK_MAGNITUDE), so
-     * standing in it escalates — area denial. Damage/turn = stacks * EffectConstants.POISON_DAMAGE_PER_STACK.
-     */
-    public static final int   HAZARD_TOXIC_POISON_TURNS    = 3;
+    // Toxic pools apply POISON_STACKS_PER_TOXIC_TURN stacks (SECTION 23) per turn stood; stacks decay by 1 a
+    // turn, so a pool is area denial (standing in it escalates to POISON_MAX_STACKS) with no separate duration.
 
     /**
      * Per-turn chance a fire tile spreads to ONE eligible cardinal-neighbour floor/stain tile. Range: 0.1–0.6.
@@ -2717,4 +2714,19 @@ public final class BalanceConfig {
     public static final float HEAVY_GUARDED_MAX_FRACTION           = 0.12f;
     /** R-BOSS-VERB-CAP (override): a TELEGRAPHED boss heavy verb costs at most this fraction of eHP. */
     public static final float BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION  = 0.50f;
+
+    // --- STATUS magnitudes as fractions of the host's max HP (H10). Resolved at APPLICATION time via
+    // GameMath.statusTickDamage and stored per stack in the StatusEffect, so they never go stale with depth.
+    // These REPLACE SECTION 8's flat BURN_DAMAGE_PER_TURN (4), POISON_DAMAGE_PER_STACK (2) and, with
+    // POISON_MAX_STACKS 5 -> 6 and WEAK_DAMAGE_PERCENT 25 -> 35 above, are the override of the status numbers.
+    /** H10: POISON damage per stack per turn, as a fraction of the host's max HP. */
+    public static final float POISON_TICK_FRACTION                 = 0.015f;
+    /** H10: stacks an acid ranged hit (Mire Wraith / Acid Drone) applies to the player. */
+    public static final int   POISON_STACKS_PER_ACID_HIT           = 2;
+    /** H10: stacks a toxic hazard tile applies to the PLAYER each turn stood in it. */
+    public static final int   POISON_STACKS_PER_TOXIC_TURN         = 2;
+    /** H10: BURN damage per turn from status/hazard fire, as a fraction of the host's max HP. */
+    public static final float BURN_TICK_FRACTION                   = 0.03f;
+    /** H10: turns of SLOWED a connecting Rimeshell lance beam applies to the player. */
+    public static final int   LANCE_SLOW_DURATION_TURNS            = 2;
 }
