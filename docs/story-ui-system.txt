@@ -612,8 +612,16 @@ topic (`beginFloor()`, called alongside `BarkSystem.beginFloor()`); and a `TACTI
 never lands during a combat spike (`setCombatSpike`), while a `CRITICAL` one still can — a dropped
 critical hint is a stuck player. THE RE-TEACH LINE IS NEVER THE SAME WORDS: verbatim repetition is
 precisely what players report as nagging, so every `.retaught` row in `BarkStrings` / the shipped
-properties file is shorter and more concrete than its first telling ("Guard braces you and ends your
-turn. Saves most of it." -> "That one was telegraphed. Guard would've helped.").
+properties file is shorter and more concrete than its first telling ("Guard braces you. Face a big hit
+and it staggers them." -> "Red floor, nowhere to go? Guard, facing it.").
+
+LINE REVIEW (balance-overhaul order 4, H18): heavies now mark their DANGER TILES as red floor (3D view
+and mini-map), so GUARD and READ_INTENT name "red floor" as the thing to read — no new topic, no
+numbers, same ids and evidence rules. READ_INTENT: "The mark over it is its next move. Red floor is
+where it lands." -> re-teach "Red floor means it's coming. Step off it." GUARD now teaches the
+riposte (a front-guarded heavy staggers its attacker): "Guard braces you. Face a big hit and it
+staggers them." -> re-teach "Red floor, nowhere to go? Guard, facing it." (the cornered case, where
+guarding is the only answer).
 
 Evidence is fed from the gameplay sites that actually observe it: `PlayerController` (an empty-fire
 attempt and a started reload, via `setEmptyFireAttemptListener`/`setWeaponReloadStartedListener`, and

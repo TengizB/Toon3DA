@@ -247,12 +247,12 @@ public final class BarkStrings {
         strings.put("story.bark.control.inventory",  "Open the bag when you get a second. It fills up.");
 
         strings.put("story.bark.control.turn",       "Turn buttons swing you ninety degrees. Strafe doesn't.");
-        strings.put("story.bark.control.read_intent","See the mark over it? That's what it does next turn.");
+        strings.put("story.bark.control.read_intent","The mark over it is its next move. Red floor is where it lands.");
         strings.put("story.bark.control.retaught.read_intent",
-                                                     "The mark means it's committed. You get a free move.");
-        strings.put("story.bark.control.guard",      "Guard braces you and ends your turn. Saves most of it.");
+                                                     "Red floor means it's coming. Step off it.");
+        strings.put("story.bark.control.guard",      "Guard braces you. Face a big hit and it staggers them.");
         strings.put("story.bark.control.retaught.guard",
-                                                     "That one was telegraphed. Guard would've helped.");
+                                                     "Red floor, nowhere to go? Guard, facing it.");
         strings.put("story.bark.control.break_lane", "It only hits straight down a row or column. Step off.");
         strings.put("story.bark.control.retaught.break_lane",
                                                      "You're in its lane again. One step sideways. Any way.");

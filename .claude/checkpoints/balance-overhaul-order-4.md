@@ -78,7 +78,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A6 holds; both gates green.
 - [ ] **CP7** — sim avoidance/guard + S-HEAVY + HEAVY REPORT; GUARD/READ_INTENT line review; all docs;
       reviewer PASS.
-      DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
+      DONE WHEN: A1, A8, A9 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED. Split:
+  - [x] **CP7a** — GUARD / READ_INTENT line review (H18). DONE WHEN: strings + defaults + story doc; build green.
+  - [ ] **CP7b** — sim heavy-aware TacticalPolicy, S-HEAVY band, HEAVY REPORT; A9 docs sweep.
+        DONE WHEN: A1, A8, A9 hold; both gates green.
+  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -172,3 +176,6 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (the GAMEPLAY LOOP's two-barrel scene) kill it. H13's 0.6 is the rule, A6 the example — kept 0.6, did NOT retune;
   ~0.8 would satisfy one-barrel A6. Report as PARTIAL; HEAVY/hazard feel pass is order 7.
 - **CP6 gates:** core:test 455, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.73, lifeline 0.02.
+- **CP7a:** four strings rewritten in properties + `BarkStrings` defaults (same ids): read_intent / retaught
+  name "red floor"; guard teaches the riposte; retaught.guard = the cornered case. story-ui-system.txt LINE REVIEW
+  note. Build: 455, only StoryBarkTest.
