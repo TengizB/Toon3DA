@@ -384,7 +384,7 @@ labels them:
     the brute COMMITS a WIND_UP (IntentVerb.WIND_UP, EnemyState.WINDING_UP, triggerTelegraph(),
     chargeDirectionColumn/Row captured) — a rim-flash telegraph shown for the whole player turn. The
     next turn executeWindUp() rushes straight down the committed lane and, if it ends cardinally
-    adjacent, hits for base * SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER. If the player sidestepped off the
+    adjacent, ALWAYS lands the HEAVY CHARGE (HeavyAttack.CHARGE: 0.50 of the on-curve player's max HP, Enemy.heavyDamage; balance-overhaul order 4 removed the stop-short chance). If the player sidestepped off the
     lane the rush whiffs and the brute is left in a punishable recovery (skipNextAction). Counterplay:
     "sidestep the charge, then punish."
   - VOID_SHROUD — FLANKER (computeFlankerPlan / isBehindPlayerFacing / stepTowardTile). When not

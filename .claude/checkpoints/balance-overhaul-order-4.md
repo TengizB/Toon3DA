@@ -21,7 +21,7 @@ Render / narrative work ships with no new tests.
 **STARTED:** 2026-10-10
 **BASELINE:** branched from `301e72b`. Mirror build: core:test 453 tests, 1 pre-existing failure —
 `StoryBarkTest` ("a joke survived into the deepest strata: bark.depth.core.2", narrative content, not
-ours). balanceSim: see NOTES. Any OTHER red test is ours.
+ours). balanceSim exit 0 (TACTICAL readable deaths 1.00, S-SUPPLY 0.78, 159/200 stalled). Any OTHER red test is ours.
 
 ## HOW TO RESUME AFTER A CUT
 
@@ -59,7 +59,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — HEAVY flags, SECTION 23 heavy numbers, heavy damage from fractions, heavy TP pricing.
+- [x] **CP1** — HEAVY flags, SECTION 23 heavy numbers, heavy damage from fractions, heavy TP pricing.
       DONE WHEN: R-HEAVY (damage band, commit, guard cap) and updated R-TELEGRAPH / R-BOSS-VERB-CAP
       green; both gates green.
 - [ ] **CP2** — danger tiles for every heavy; 3D markers, mini-map fill, heavy intent icon, edge pulse.
@@ -85,3 +85,19 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   container — put `maven { url = "https://maven-central.storage-download.googleapis.com/maven2/" }`
   FIRST in both the subprojects repositories and pluginManagement. Test XML lands in the REAL
   `core/build/test-results/`. balanceSim: `./gradlew :core:balanceSim` from the mirror.
+- **CP1 handover:** `enemy/HeavyAttack` {CHARGE, LANCE, AREA_STRIKE, SELF_DESTRUCT} with `damageFraction()`,
+  `minimumCommitTurns()` (1/1/1/brace 2), `displayName()`. `EnemyType.heavyWindUp()` (SHELL_BRUTE->CHARGE,
+  RIMESHELL_LANCER->LANCE, else null; per-constant override — Revenant gets CHARGE in CP5).
+  `SpecialAbility.heavyAttack()` (ctor field). `Enemy.heavyReferenceMaxHealth` (set in `initScaledEnemy`, cached
+  per depth) + `Enemy.heavyDamage(HeavyAttack)` (x empowered x weak, min 1). `EnemyType.pricedHeavyDamage(kind)`.
+  GameMath `heavyDamageAtDepth`, `heavyExpectedDamageForPricing`; `specialEquivalentAreaStrike` DELETED.
+  `RuleKind.HEAVY` + `BalanceSchema.heavyResults()`; test `heavyAttacksHoldTheDamageBandAndAreGuardCapped`.
+  SECTION 23 holds GUARD_FRONT_ORDINARY/HEAVY as DATA ONLY (TEMPORARY — CP3 wires them; GUARD_FRONT_MULTIPLIER
+  still live). Stop-short charge chance DELETED (a reached charge always lands). Lane geometry for CP2:
+  `enemy.chargeDirectionColumn/Row`, `enemy.lanceDirectionColumn/Row` locked at commit; AREA_STRIKE = Chebyshev
+  square r=1; SELF_DESTRUCT = wall-stopped cross r=2 (`applySelfDestructBlast` walks it).
+- **CP1 decision:** charge / lance are NOT priced as heavies in TP (they were never priced as specials; their
+  discounted heavy value ~26 at d1 ~= the basic attack they are priced at). Only AREA_STRIKE re-priced
+  (Plague Hulk TP ~39.4->34.9, Iron Stalker ~374->309). Snapshot `e365b9fa...`.
+- **CP1 gates:** core:test 455, only StoryBarkTest; balanceSim exit 0 — readable deaths 1.00, S-SUPPLY 0.74,
+  TACTICAL 139/200 stalled. Boss existing derived verbs pass the new 50% telegraphed cap unchanged.

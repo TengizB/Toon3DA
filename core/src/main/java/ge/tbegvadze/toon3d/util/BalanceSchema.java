@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.util;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.HeavyAttack;
 import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
@@ -89,6 +90,11 @@ public final class BalanceSchema {
         HEAL_PRICING,
         /** R-TELEGRAPH: no attack > 25% reference eHP un-telegraphed; boss hard cap 35%. */
         TELEGRAPH,
+        /**
+         * R-HEAVY (balance-overhaul order 4): every HeavyAttack x depth 1..25 deals [MIN, MAX] of the on-curve
+         * player's max HP unguarded, is committed >= 1 turn ahead, and costs <= HEAVY_GUARDED_MAX_FRACTION guarded.
+         */
+        HEAVY,
         /** R-DOT: exactly one definition per status; shim files must re-export BalanceConfig byte-for-byte. */
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
@@ -109,7 +115,7 @@ public final class BalanceSchema {
         BOSS_GATE,
         /** R-BOSS-FAIR (order 6): the EXPECTED loadout gets a real but winnable fight — length + survival ratio in band. */
         BOSS_FAIR,
-        /** R-BOSS-VERB-CAP (order 6): every derived boss verb <= 35% eHP; any verb > 25% must be telegraphed. */
+        /** R-BOSS-VERB-CAP (order 6; telegraphed cap raised to 50% by balance-overhaul order 4): un-telegraphed verbs <= 25% eHP, telegraphed <= 50%. */
         BOSS_VERB_CAP,
         /** R-BOSS-REWARD (order 6): a boss's reward refunds the modelled fight consumption times the risk premium. */
         BOSS_REWARD,
@@ -407,7 +413,7 @@ public final class BalanceSchema {
 
     /** How each enemy SPECIAL verb is priced into cycle-averaged Threat Points (order 5). */
     public enum SpecialVerbPricing {
-        /** Priced as per-cast equivalent DAMAGE folded through the cycle average (GameMath.specialEquivalent{AreaStrike,BuffSelf,Debuff*}). */
+        /** Priced as per-cast equivalent DAMAGE folded through the cycle average (GameMath.specialEquivalent{BuffSelf,Debuff*} and heavyExpectedDamageForPricing). */
         CYCLE_DAMAGE,
         /** Priced as amortised per-turn threat of the summoned bodies (GameMath.specialEquivalentSummon). */
         AMORTISED_SUMMON,
@@ -461,15 +467,11 @@ public final class BalanceSchema {
         List<TelegraphAttackSpec> registry = new ArrayList<>();
         registry.add(new TelegraphAttackSpec("Gore Biter bite",    BalanceConfig.GORE_BITER_ATTACK_DAMAGE,  "NONE", false));
         registry.add(new TelegraphAttackSpec("Plague Hulk smash",  BalanceConfig.PLAGUE_HULK_ATTACK_DAMAGE, "NONE", false));
-        registry.add(new TelegraphAttackSpec("Plague Hulk blast",  BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX, "TELE", false));
         registry.add(new TelegraphAttackSpec("Void Shroud strike", BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Void Shroud flank",
                 Math.round(BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE * BalanceConfig.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER),
                 "FACE", false));
         registry.add(new TelegraphAttackSpec("Shell Brute melee",  BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE, "NONE", false));
-        registry.add(new TelegraphAttackSpec("Shell Brute CHARGE",
-                Math.round(BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE * BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER),
-                "TELE", false));
         registry.add(new TelegraphAttackSpec("Iron Stalker melee", BalanceConfig.IRON_STALKER_MELEE_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Iron Stalker shot",  BalanceConfig.IRON_STALKER_RANGED_DAMAGE, "LANE", false));
         registry.add(new TelegraphAttackSpec("Eye Tyrant beam",    BalanceConfig.EYE_TYRANT_ATTACK_DAMAGE,  "LANE", false));
@@ -482,6 +484,8 @@ public final class BalanceSchema {
         registry.add(new TelegraphAttackSpec("Blight Corr. smash", BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Auric shard launch", BalanceConfig.AURIC_SENTINEL_ATTACK_DAMAGE, "LANE", false));
         registry.add(new TelegraphAttackSpec("Cinderforge slam",   BalanceConfig.CINDERFORGE_COLOSSUS_ATTACK_DAMAGE, "NONE", false));
+        // The Shell Brute CHARGE and the Plague Hulk blast rows were REMOVED by balance-overhaul order 4
+        // (override): heavies are R-HEAVY's domain (heavyResults), sized as a fraction of on-curve max HP.
         // Boss verbs are NOT listed here (order 6): their damage is DERIVED per depth (a fraction of the
         // boss's DPT), not a flat constant scaled by the trash-mob depth curve, so the generic telegraph
         // audit's depth scaling does not apply. Boss verbs get their own single-hit-cap rule instead —
@@ -720,6 +724,7 @@ public final class BalanceSchema {
         results.addAll(cardBudgetResults());
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
+        results.addAll(heavyResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
@@ -1016,6 +1021,41 @@ public final class BalanceSchema {
             results.add(new RuleResult(RuleKind.TELEGRAPH, attack.attackName, attack.baseHit,
                     0f, effectiveCap == Float.MAX_VALUE ? Float.POSITIVE_INFINITY : effectiveCap, satisfied,
                     "readable=" + attack.readableKind + (attack.isBossAttack ? " (boss)" : "")));
+        }
+        return results;
+    }
+
+    /**
+     * R-HEAVY (balance-overhaul order 4, H2/H3/H4): for every {@link HeavyAttack} at every depth 1..25 —
+     * (a) the unguarded, unarmoured hit is [HEAVY_DAMAGE_FRACTION_MIN, MAX] of the on-curve player's max HP;
+     * (b) it is committed at least one full player turn before it resolves; (c) a GUARDING player (front arc,
+     * GUARD_FRONT_HEAVY) takes at most HEAVY_GUARDED_MAX_FRACTION of max HP — the cornered-player cap of H4.
+     * Geometric avoidability (H4's "a safe tile exists") is asserted by the danger-tile checkpoint (CP2).
+     */
+    public static List<RuleResult> heavyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (HeavyAttack heavy : HeavyAttack.values()) {
+            for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+                float expectedMaxHealth = GameMath.expectedPlayerAtDepth(depth).maxHealth;
+                int damage = GameMath.heavyDamageAtDepth(heavy.damageFraction(), expectedMaxHealth,
+                        BalanceConfig.HEAVY_DAMAGE_SCALE);
+                float fraction = damage / expectedMaxHealth;
+                String subject = heavy.displayName() + " d" + depth;
+                results.add(new RuleResult(RuleKind.HEAVY, subject + " damage", fraction,
+                        BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN, BalanceConfig.HEAVY_DAMAGE_FRACTION_MAX,
+                        fraction >= BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN
+                                && fraction <= BalanceConfig.HEAVY_DAMAGE_FRACTION_MAX,
+                        damage + " of " + Math.round(expectedMaxHealth) + " on-curve max HP"));
+                results.add(new RuleResult(RuleKind.HEAVY, subject + " commit", heavy.minimumCommitTurns(),
+                        1f, Float.POSITIVE_INFINITY, heavy.minimumCommitTurns() >= 1,
+                        "committed turns before resolution"));
+                float guardedFraction = fraction * BalanceConfig.GUARD_FRONT_HEAVY;
+                results.add(new RuleResult(RuleKind.HEAVY, subject + " guarded", guardedFraction,
+                        0f, BalanceConfig.HEAVY_GUARDED_MAX_FRACTION,
+                        guardedFraction <= BalanceConfig.HEAVY_GUARDED_MAX_FRACTION,
+                        "unguarded " + String.format("%.0f%%", fraction * 100f) + " x guard "
+                                + BalanceConfig.GUARD_FRONT_HEAVY));
+            }
         }
         return results;
     }
@@ -1630,8 +1670,10 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-BOSS-VERB-CAP: every derived boss verb, evaluated at the boss's canonical depth, respects the
-     * single-hit fairness caps — no hit over 35% of the EXPECTED player's eHP at that depth (balance-overhaul order 1;
+     * R-BOSS-VERB-CAP (OVERRIDDEN by balance-overhaul order 4: the telegraphed cap is now
+     * BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION 50% instead of 35%; un-telegraphed stays 25%): every derived boss
+     * verb, evaluated at the boss's canonical depth, respects the
+     * single-hit fairness caps — no hit over 35% (now 50% when telegraphed) of the EXPECTED player's eHP at that depth (balance-overhaul order 1;
      * was the fixed depth-1 reference eHP) (hard cap, telegraphed or not), and any
      * hit over 25% must be telegraphed a turn ahead. The band max is 25% for an un-telegraphed verb, 35%
      * for a telegraphed one; the value is the verb's fraction of reference eHP.
@@ -1644,7 +1686,7 @@ public final class BalanceSchema {
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
                     damage, BossBalance.expectedPlayerEffectiveHitPoints(verb.archetype.canonicalDepth));
             float bandMax = verb.telegraphed
-                    ? BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION
+                    ? BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
                     : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
             results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName, fraction, 0f, bandMax,
                     fraction <= bandMax,

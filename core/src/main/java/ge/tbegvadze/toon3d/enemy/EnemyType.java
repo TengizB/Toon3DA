@@ -84,6 +84,7 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '4'; }
         @Override public String tacticalVerb()       { return "CHARGER: sidestep its charge, then punish the recovery."; }
+        @Override public HeavyAttack heavyWindUp()   { return HeavyAttack.CHARGE; }
     },
 
     MIRE_WRAITH {
@@ -352,6 +353,7 @@ public enum EnemyType {
         // The cadence term of its TP value: one lance per two turns (charge turn + fire turn).
         @Override public int    attackCadenceTurns()  { return 2; }
         @Override public char   spawnChar()           { return '['; }
+        @Override public HeavyAttack heavyWindUp()    { return HeavyAttack.LANCE; }
         @Override public String tacticalVerb()        { return "LANCER: armoured until it fires — bait the lance, step off the lane, then burst it through the open shell."; }
         /**
          * The TIME-AVERAGED shell, NOT its live value. The live sealed shell is
@@ -558,6 +560,13 @@ public enum EnemyType {
     private static final SpecialAbility[] MOVESET_AREA   = { SpecialAbility.AREA_STRIKE };
     private static final SpecialAbility[] MOVESET_SUMMON = { SpecialAbility.SUMMON };
     private static final SpecialAbility[] MOVESET_ELITE  = { SpecialAbility.BUFF_SELF, SpecialAbility.AREA_STRIKE };
+
+    /**
+     * The HEAVY this archetype commits through its bespoke WIND_UP (balance-overhaul order 4, H1), or null.
+     * Shell Brute = CHARGE, Rimeshell Lancer = LANCE. Heavies delivered by a SpecialAbility are reported by
+     * {@link SpecialAbility#heavyAttack()} instead. The Verdant Spiresower's WIND_UP is a sow, NOT a heavy.
+     */
+    public HeavyAttack heavyWindUp() { return null; }
 
     /** The SPECIAL abilities this archetype may commit (strategy-combat-order-5). Empty = simple chaff. */
     public SpecialAbility[] moveSet() { return MOVESET_NONE; }
@@ -783,8 +792,7 @@ public enum EnemyType {
     private float specialEquivalentDamageOf(SpecialAbility ability, float basicDamagePerTurn) {
         switch (ability) {
             case AREA_STRIKE:
-                return GameMath.specialEquivalentAreaStrike(attackDamage(),
-                        EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER);
+                return pricedHeavyDamage(ability.heavyAttack());
             case BUFF_SELF:
                 return GameMath.specialEquivalentBuffSelf(basicDamagePerTurn,
                         EnemyConstants.BUFF_SELF_EMPOWERED_PERCENT, EnemyConstants.BUFF_SELF_DURATION_TURNS);
@@ -795,6 +803,17 @@ public enum EnemyType {
             default:
                 return 0f;
         }
+    }
+
+    /**
+     * TP price of one HEAVY cast (balance-overhaul order 4): the heavy's depth-1 on-curve damage discounted by
+     * the share a competent player avoids ({@code HEAVY_EXPECTED_AVOIDANCE}). Replaces the old full predicted
+     * slam. Priced at depth 1 because {@link #baseThreatPoints()} is the depth-1 value (scaled by depth later).
+     */
+    public static float pricedHeavyDamage(HeavyAttack heavyAttack) {
+        int heavyDamage = GameMath.heavyDamageAtDepth(heavyAttack.damageFraction(),
+                GameMath.expectedPlayerAtDepth(1).maxHealth, BalanceConfig.HEAVY_DAMAGE_SCALE);
+        return GameMath.heavyExpectedDamageForPricing(heavyDamage, BalanceConfig.HEAVY_EXPECTED_AVOIDANCE);
     }
 
     /** Per-cast equivalent damage of this archetype's DEBUFF_PLAYER, resolved by the control status it applies. */

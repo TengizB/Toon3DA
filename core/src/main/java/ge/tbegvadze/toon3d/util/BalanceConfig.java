@@ -136,24 +136,12 @@ public final class BalanceConfig {
     public static final int SHELL_BRUTE_MAX_HEALTH         = 95;
     public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 35;
     public static final int SHELL_BRUTE_MOVE_EVERY_N_TURNS = 1;
-    /**
-     * Charge rush damage multiplier (Pillar 2). After a one-turn telegraphed wind-up the brute
-     * rushes down a cardinal lane; if it connects it hits for base * this. 20 * 2.4 = 48 dmg —
-     * a meaty, READABLE hit. It is telegraphed, so it is allowed to exceed the 25%-eHP cap that
-     * un-telegraphed attacks must respect (idea 4, Pillar 5). Sidestep it to make the rush whiff.
-     */
-    public static final float SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = 2.4f;
+    // Charge damage is a HEAVY fraction of the on-curve player's max HP (SECTION 23, HeavyAttack.CHARGE);
+    // the old x2.4 multiplier and the 75% stop-short chance are gone (balance-overhaul order 4 override).
     /** Nearest cardinal-lane gap (tiles) that opens a charge; closer than this it just melees. Range: 2–3. */
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = 2;
     /** Farthest cardinal-lane gap (tiles) the brute will start a charge from (<= LOS). Range: 3–6. */
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = 5;
-    /**
-     * Probability that a charge which reaches the player STOPS next to them and does NOT land the hit,
-     * ending its rush adjacent and unwinded so the player gets a guaranteed swing before it attacks
-     * again (design feedback: a charge should usually leave the brute punishable, not just delete HP).
-     * The remaining {@code 1 - this} of reaching charges land the full multiplier hit. Range: 0.5–0.9.
-     */
-    public static final float SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = 0.75f;
 
     // PLAGUE_HULK (spawn '1') — slow tank melee. (was 50 HP / 10 dmg)
     public static final int PLAGUE_HULK_MAX_HEALTH         = 60;
@@ -170,14 +158,8 @@ public final class BalanceConfig {
     public static final int   PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS             = 2;
     /** Cardinal-arm reach (tiles) of the direct blast; an arm stops early at the first wall. */
     public static final int   PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES      = 2;
-    /**
-     * Direct blast damage multiplier on scaledAttackDamage() if the countdown reaches zero. 16 * 3.0 =
-     * 48 (~23% of the 205 reference eHP) — telegraphed for two full turns, so it is allowed to exceed
-     * the 25%-eHP cap for un-telegraphed hits (docs/game-balance-authority.txt TELEGRAPH & COUNTERPLAY).
-     */
-    public static final float PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER = 3.0f;
-    /** Hard cap on the blast hit regardless of depth/EMPOWERED scaling (~33% eHP, under the 35% boss cap). */
-    public static final int   PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX        = 68;
+    // Blast damage is a HEAVY fraction of the on-curve player's max HP (SECTION 23, HeavyAttack.SELF_DESTRUCT);
+    // the old x3.0 multiplier and the 68 cap are gone (balance-overhaul order 4 override).
     /** Massive toxic cross radius left behind if the Hulk survives to detonate. */
     public static final int   PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES      = 3;
     /**
@@ -2698,4 +2680,34 @@ public final class BalanceConfig {
     public static final float[] MATCHUP_ROW_CHITIN   = {0.75f,  1.35f, 1.00f, 1.10f, 1.40f, 1.00f,  1.20f, 1.00f};
     /** M3 row INFERNAL (Demons) — energy bites; fire is almost useless. */
     public static final float[] MATCHUP_ROW_INFERNAL = {1.00f,  1.10f, 1.35f, 1.00f, 0.30f, 0.90f,  1.00f, 1.00f};
+
+    // =========================================================================
+    // SECTION 23 — HEAVIES, GUARD, ARMOUR, STATUS, HAZARDS (balance-overhaul order 4)
+    // CP1 adds the HEAVY numbers and the (data-only) guard split; later checkpoints extend it.
+    // A HEAVY is a committed-then-resolved attack (HeavyAttack): damage = fraction of the ON-CURVE player's
+    // max HP at the enemy's depth (ExpectedPlayer), never a flat number. Overrides: the Shell Brute charge
+    // x2.4 + 75% stop-short, the self-destruct x3.0 capped at 68, AREA_STRIKE_DAMAGE_MULTIPLIER 1.35.
+    // =========================================================================
+
+    /** H2: CHARGE / LANCE damage as a fraction of the on-curve player's max HP. Band [MIN, MAX]. */
+    public static final float HEAVY_DAMAGE_FRACTION                = 0.50f;
+    /** H2: AREA_STRIKE slam fraction (the strike cross is wider, so slightly lighter). */
+    public static final float HEAVY_AREA_STRIKE_DAMAGE_FRACTION    = 0.45f;
+    /** H2: SELF_DESTRUCT blast fraction (the finisher is the heaviest, and defusable by killing it). */
+    public static final float HEAVY_SELF_DESTRUCT_DAMAGE_FRACTION  = 0.55f;
+    /** R-HEAVY band: every heavy's on-curve unguarded hit lies in [MIN, MAX] of expected max HP. */
+    public static final float HEAVY_DAMAGE_FRACTION_MIN            = 0.40f;
+    public static final float HEAVY_DAMAGE_FRACTION_MAX            = 0.60f;
+    /** Ordinary feel knob (order 7): scales every heavy hit; 1.0 = exactly the fractions above. */
+    public static final float HEAVY_DAMAGE_SCALE                   = 1.0f;
+    /** TP pricing: share of a heavy a competent player is expected to dodge or blunt (priced hit = hit x (1 - this)). */
+    public static final float HEAVY_EXPECTED_AVOIDANCE             = 0.6f;
+    /** H7 (wired by CP3): incoming-damage multiplier inside the guard's front arc for an ORDINARY hit. */
+    public static final float GUARD_FRONT_ORDINARY                 = 0.50f;
+    /** H7 (wired by CP3): ... for a HEAVY hit. R-HEAVY reads it for the cornered-guard cap. */
+    public static final float GUARD_FRONT_HEAVY                    = 0.20f;
+    /** R-HEAVY (H4): a guarded heavy costs at most this fraction of the on-curve player's max HP. */
+    public static final float HEAVY_GUARDED_MAX_FRACTION           = 0.12f;
+    /** R-BOSS-VERB-CAP (override): a TELEGRAPHED boss heavy verb costs at most this fraction of eHP. */
+    public static final float BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION  = 0.50f;
 }

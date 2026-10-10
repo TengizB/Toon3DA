@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusHost;
 import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
@@ -76,6 +77,12 @@ public class Enemy implements StatusHost {
      * Floor 1 = 1.0 (no scaling).
      */
     public float      attackDamageMultiplier = 1f;
+    /**
+     * The ON-CURVE player's max HP at this enemy's effective depth (balance-overhaul order 4), stored at spawn.
+     * Every HEAVY hit is a fraction of it ({@link #heavyDamage}). 0 only on an enemy built outside the spawn
+     * path (tests); {@link #heavyDamage} then falls back to the depth-1 on-curve value.
+     */
+    public float      heavyReferenceMaxHealth = 0f;
     public EnemyState state              = EnemyState.DORMANT;
     public int        turnCounter        = 0;
     public int        stuckTurns         = 0;
@@ -700,6 +707,20 @@ public class Enemy implements StatusHost {
     public int scaledAttackDamage() {
         return Math.max(1, Math.round(type.attackDamage() * attackDamageMultiplier
                 * empoweredDamageMultiplier() * weakOutgoingMultiplier()));
+    }
+
+    /**
+     * The damage of one of this enemy's HEAVY attacks (balance-overhaul order 4, H2): the heavy's fraction of the
+     * on-curve player's max HP at this enemy's depth, times the same EMPOWERED and WEAK outgoing multipliers
+     * {@link #scaledAttackDamage} folds in (so the committed predicted number and the executed hit stay one
+     * truthful value), minimum 1. Bosses do not use it (they have their own BossBalance verbs).
+     */
+    public int heavyDamage(HeavyAttack kind) {
+        float reference = heavyReferenceMaxHealth > 0f
+                ? heavyReferenceMaxHealth : GameMath.expectedPlayerAtDepth(1).maxHealth;
+        int baseDamage = GameMath.heavyDamageAtDepth(kind.damageFraction(), reference,
+                BalanceConfig.HEAVY_DAMAGE_SCALE);
+        return Math.max(1, Math.round(baseDamage * empoweredDamageMultiplier() * weakOutgoingMultiplier()));
     }
 
     /**

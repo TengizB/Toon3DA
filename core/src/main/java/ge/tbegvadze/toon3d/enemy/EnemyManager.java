@@ -404,6 +404,27 @@ public final class EnemyManager implements EnemyHitTarget {
         return list;
     }
 
+    /** Depths cached by {@link #onCurveMaxHealthAtDepth}; deeper (endless-route) depths are computed on demand. */
+    private static final int ON_CURVE_HEALTH_CACHE_DEPTHS = 64;
+    private static final float[] ON_CURVE_MAX_HEALTH_BY_DEPTH = new float[ON_CURVE_HEALTH_CACHE_DEPTHS + 1];
+
+    /**
+     * The on-curve player's max HP at {@code depth} (GameMath.expectedPlayerAtDepth), cached per depth so a
+     * spawn — including a mid-turn summon — allocates nothing (balance-overhaul order 4: the HEAVY reference).
+     */
+    private static float onCurveMaxHealthAtDepth(int depth) {
+        int clampedDepth = Math.max(1, depth);
+        if (clampedDepth > ON_CURVE_HEALTH_CACHE_DEPTHS) {
+            return GameMath.expectedPlayerAtDepth(clampedDepth).maxHealth;
+        }
+        float cached = ON_CURVE_MAX_HEALTH_BY_DEPTH[clampedDepth];
+        if (cached <= 0f) {
+            cached = GameMath.expectedPlayerAtDepth(clampedDepth).maxHealth;
+            ON_CURVE_MAX_HEALTH_BY_DEPTH[clampedDepth] = cached;
+        }
+        return cached;
+    }
+
     /** Creates and fully initialises a depth-scaled Enemy instance. */
     private static Enemy initScaledEnemy(EnemyType type, int tileColumn, int tileRow, int effectiveDepth) {
         // Power ladder (balance-overhaul order 1, R7): HP and damage climb the fitted compound curves.
@@ -414,6 +435,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.health                 = scaledHealth;
         enemy.attackDamageMultiplier = damageScale;
         enemy.dungeonLevel           = effectiveDepth;
+        enemy.heavyReferenceMaxHealth = onCurveMaxHealthAtDepth(effectiveDepth);
         enemy.nameTag                = type.displayName() + " LVL " + effectiveDepth;
         enemy.setStatusResistance(buildArchetypeResistance(type));
         return enemy;
@@ -1298,7 +1320,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.triggerAttackAnim();
         int stepColumn = enemy.lanceDirectionColumn;
         int stepRow    = enemy.lanceDirectionRow;
-        int lanceDamage = enemy.scaledAttackDamage();
+        int lanceDamage = enemy.heavyDamage(enemy.type.heavyWindUp());
         int allyDamage  = Math.max(1, Math.round(
                 lanceDamage * EnemyConstants.RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION));
 
@@ -1693,9 +1715,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (canBeginCharge(enemy, playerColumn, playerRow)) {
             enemy.chargeDirectionColumn = Integer.signum(playerColumn - enemy.tileColumn);
             enemy.chargeDirectionRow    = Integer.signum(playerRow - enemy.tileRow);
-            int chargeDamage = Math.max(1, Math.round(
-                    enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
-            plan.setWindUp(playerColumn, playerRow, chargeDamage, 1);
+            plan.setWindUp(playerColumn, playerRow, enemy.heavyDamage(enemy.type.heavyWindUp()), 1);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // rim flash telegraph, visible for the whole player turn
             announceWindUp(enemy);
@@ -1732,10 +1752,10 @@ public final class EnemyManager implements EnemyHitTarget {
      * before this fix, "connected" was decided purely by final Manhattan distance to the player's
      * live tile, which could false-positive when the player stepped exactly one tile perpendicular
      * (ending cardinally adjacent from the side even though they left the charge lane). Returns true
-     * when the rush stayed on the lane and ended adjacent to the player — that "reached" case is NOT a
-     * guaranteed hit: {@code SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE} of the time the brute over-commits and
-     * halts next to them dealing no damage (a punishable opening), otherwise it lands the full charge
-     * multiplier. Returns false only on a true lane whiff, which stuns the brute (executeWindUp).
+     * when the rush stayed on the lane and ended adjacent to the player — a reached heavy charge ALWAYS
+     * lands (balance-overhaul order 4 override: the old stop-short chance is gone; staying unguarded on the
+     * lane costs the heavy fraction). Returns false only on a true lane whiff, which stuns the brute
+     * (executeWindUp).
      */
     private boolean performCharge(Enemy enemy, int playerColumn, int playerRow, Player player) {
         int stepColumn = enemy.chargeDirectionColumn;
@@ -1767,26 +1787,14 @@ public final class EnemyManager implements EnemyHitTarget {
         if (!reachedPlayer) {
             return false; // rushed into an empty lane (player sidestepped) — whiff → punishable recovery
         }
-        // The rush reached the player. Most of the time (SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE) the brute
-        // over-commits and screeches to a halt right next to them WITHOUT landing the blow, handing the
-        // player a guaranteed swing before it can strike again next turn (design feedback: a charge
-        // should usually leave the brute punishable, not just delete HP). The rest of the time it lands
-        // the full telegraphed charge hit. Either way it ends adjacent, so there is NO whiff-recovery —
-        // executeWindUp only stuns the brute when the rush missed the player entirely (returns false above).
-        if (effectRandom.nextFloat() < EnemyConstants.SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE) {
-            enemy.triggerTelegraph(); // brief flinch/flash sells the abrupt stop
-            if (eventTextSystem != null) {
-                eventTextSystem.spawnWithColor("STAGGERED", EventTextSystem.COLOR_GREY);
-            }
-        } else {
-            int chargeDamage = Math.max(1, Math.round(
-                    enemy.scaledAttackDamage() * EnemyConstants.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER));
-            boolean wasGuarding = player.isGuarding();
-            player.applyDirectionalDamage(chargeDamage, enemy.worldCenterX(), enemy.worldCenterY());
-            if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
-            // EVIDENCE (narrative-rework order-4): the WIND_UP rush was telegraphed a full turn ahead.
-            if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
-        }
+        // The rush reached the player: the HEAVY charge always lands (HeavyAttack.CHARGE). The player's
+        // counters are the sidestep (the rush whiffs above) and, from CP3, GUARD facing it.
+        boolean wasGuarding = player.isGuarding();
+        player.applyDirectionalDamage(enemy.heavyDamage(enemy.type.heavyWindUp()),
+                enemy.worldCenterX(), enemy.worldCenterY());
+        if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
+        // EVIDENCE (narrative-rework order-4): the WIND_UP rush was telegraphed a full turn ahead.
+        if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         return true; // reached the player — adjacent now, will commit a normal melee next turn
     }
 
@@ -1859,11 +1867,9 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
-    /** Detonation damage: scaled attack times the blast multiplier, hard-capped, minimum 1. */
+    /** Detonation damage: the SELF_DESTRUCT heavy fraction of the on-curve player's max HP, minimum 1. */
     private static int selfDestructBlastDamage(Enemy enemy) {
-        int scaled = Math.round(enemy.scaledAttackDamage()
-                * EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER);
-        return Math.min(EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX, Math.max(1, scaled));
+        return enemy.heavyDamage(SpecialAbility.SELF_DESTRUCT.heavyAttack());
     }
 
     /**
@@ -2196,7 +2202,7 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.lanceDirectionColumn = Integer.signum(playerColumn - enemy.tileColumn);
             enemy.lanceDirectionRow    = Integer.signum(playerRow    - enemy.tileRow);
             enemy.openShell();          // THE PUNISH WINDOW opens now, for the whole of the coming player turn
-            plan.setWindUp(playerColumn, playerRow, enemy.scaledAttackDamage(), 1);
+            plan.setWindUp(playerColumn, playerRow, enemy.heavyDamage(enemy.type.heavyWindUp()), 1);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // full player turn of warning, drawn in the WIND_UP intent frame
             announceWindUp(enemy);
@@ -2333,10 +2339,9 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.summonTargetCount = count;
     }
 
-    /** AREA_STRIKE slam damage: the enemy's scaled attack times the slam multiplier, minimum 1. */
+    /** AREA_STRIKE slam damage: the AREA_STRIKE heavy fraction of the on-curve player's max HP, minimum 1. */
     private static int areaStrikeDamage(Enemy enemy) {
-        return Math.max(1, Math.round(
-                enemy.scaledAttackDamage() * EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER));
+        return enemy.heavyDamage(SpecialAbility.AREA_STRIKE.heavyAttack());
     }
 
     /** True when at least one cardinal neighbour tile is a legal spawn tile (empty, walkable, not the player). */

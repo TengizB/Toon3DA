@@ -243,9 +243,22 @@ resolves damage in EXACTLY this order — GameMath, docs/game-balance-authority.
   BLOCK sits ABOVE armour ("I braced this turn"); overkill into Block is LOST.
   STATUS DoT (burn/poison/bleed) BYPASSES Block — direct HP loss.
 
+HEAVIES (balance-overhaul order 4, CP1; BalanceConfig SECTION 23; enemy/HeavyAttack):
+  A heavy = a committed-then-resolved attack: Shell Brute CHARGE, Rimeshell LANCE,
+  AREA_STRIKE, Plague Hulk SELF_DESTRUCT. Damage = fraction x on-curve player max HP at the
+  enemy's spawn depth x HEAVY_DAMAGE_SCALE (1.0): CHARGE/LANCE 0.50 (HEAVY_DAMAGE_FRACTION),
+  AREA_STRIKE 0.45, SELF_DESTRUCT 0.55; R-HEAVY band 0.40-0.60; guarded (x GUARD_FRONT_HEAVY
+  0.20, wired in CP3) <= 0.12. At depth 1 (130 max HP): 65 / 59 / 72. DELETED constants:
+  SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER (2.4), SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE (0.75 — a
+  reached charge always lands), PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER (3.0) and
+  _MAX (68), EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER (1.35) and their shims. Boss
+  telegraphed verbs may reach 50% eHP (R-BOSS-VERB-CAP override). See
+  docs/game-balance-authority.txt R-HEAVY.
+
 PLAYER GUARD (directional, conditional eHP) — BalanceConfig SECTION 2 / GUARD_*:
   Tapping GUARD ends the turn and braces the marine.
-  GUARD_FRONT_MULTIPLIER = 0.35 (heavy reduction inside the ±60° facing arc)
+  GUARD_FRONT_MULTIPLIER = 0.35 (heavy reduction inside the ±60° facing arc; order 4 splits it
+  into GUARD_FRONT_ORDINARY 0.50 / GUARD_FRONT_HEAVY 0.20 — data only until CP3 wires them)
   GUARD_SIDE/BACK_MULTIPLIER = 1.0 (flanks land at FULL damage — read & rotate)
   GUARD_FRONT/BACK_HALF_ANGLE_DEGREES = 60
   Priced as a 1-turn opportunity cost; self-limiting vs flanks, so no hard cap.
@@ -470,12 +483,12 @@ the 205-eHP start player. eHP / hit / cadence -> hits to kill | hits the player 
   Acid Drone '$'       45 / 24 / 1  -> 3 | 9      SOLDIER (ranged)
   Void Shroud '^'      50 / 25 / 1  -> 4 | 9      SOLDIER (flank x1.6 from behind)
   Mire Wraith '5'      52 / 23 / 1  -> 4 | 9      SOLDIER (ranged acid)
-  Plague Hulk '1'      60 / 23 / 2  -> 4 | 9      SOLDIER (self-destruct, x3.0 capped 68)
+  Plague Hulk '1'      60 / 23 / 2  -> 4 | 9      SOLDIER (self-destruct HEAVY 0.55 max HP)
   Blight Corruptor '*' 48 / 26 / 1  -> 4 | 8      SOLDIER (summoner)
   Auric Sentinel '('   60 / 26 / 2  -> 4 | 8      SOLDIER (18 HP + 42 shard pool)
   Rimeshell Lancer '[' 60 / 24 / 2  -> 4 | 9      SOLDIER (48 HP, flat 5)
   Verdant Spiresower'}'57 / 24 / 1  -> 4 | 9      SOLDIER (45 HP + 12 regen pool)
-  Shell Brute '4'      95 / 35 / 1  -> 7 | 6      BRUISER (charge x2.4 telegraphed)
+  Shell Brute '4'      95 / 35 / 1  -> 7 | 6      BRUISER (charge HEAVY 0.50 max HP)
   Revenant 'K'         85 / 35 / 1  -> 6 | 6      BRUISER
   Cinderforge '{'      85 / 36 / 1  -> 6 | 6      BRUISER (75 HP, crust ~3 flat)
   Iron Stalker '!'    170 / 42 melee, 30 ranged / 1 -> 12 | 5   MINI_ELITE
@@ -555,7 +568,12 @@ special-ability cadence cycle (GameMath.cycleAveragedDamagePerTurn):
                        + summonAmortisedDpt
 Each verb converts to an equivalent-damage number via a pure GameMath.specialEquivalent*
 formula (one per verb):
-    AREA_STRIKE  -> its predicted slam damage (attackDamage * AREA_STRIKE multiplier)
+    AREA_STRIKE  -> HEAVY pricing (balance-overhaul order 4): the slam's depth-1 on-curve
+                    damage (0.45 x max HP) x (1 - HEAVY_EXPECTED_AVOIDANCE 0.6) =
+                    GameMath.heavyExpectedDamageForPricing (replaced attackDamage x 1.35;
+                    Plague Hulk TP ~39 -> ~35, Iron Stalker ~374 -> ~309). The Shell Brute
+                    charge and Lancer lance are NOT separately priced (basic-attack DPT only,
+                    as before).
     BUFF_SELF    -> extra damage the EMPOWERED buff adds over its duration
     DEBUFF WEAK  -> player DPT lost over duration * DEBUFF_TP_EQUIVALENCE (start 0.6 — a
                     defensive verb priced as offence, worth less than dealt damage)

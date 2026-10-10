@@ -46,10 +46,6 @@ public final class EnemyConstants {
             = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS;
     public static final int     PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES
             = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES;
-    public static final float   PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER
-            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER;
-    public static final int     PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX
-            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX;
     public static final int     PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
             = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES;
     public static final int     PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES
@@ -74,10 +70,8 @@ public final class EnemyConstants {
     public static final int     SHELL_BRUTE_MOVE_EVERY_N_TURNS   = BalanceConfig.SHELL_BRUTE_MOVE_EVERY_N_TURNS;
     public static final float   SHELL_BRUTE_HEIGHT_MULTIPLIER    = 1.05f;
     // Charger AI (Pillar 2) — telegraphed rush after a one-turn wind-up.
-    public static final float   SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
-    public static final float   SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = BalanceConfig.SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE;
 
     // MIRE_WRAITH — slow ground-based ranged acid (spawn '5')
     public static final int     MIRE_WRAITH_MAX_HEALTH           = BalanceConfig.MIRE_WRAITH_MAX_HEALTH;
@@ -631,7 +625,6 @@ public final class EnemyConstants {
 
     // AREA_STRIKE — telegraphed slam hitting every tile within this cross radius of the enemy.
     public static final int   AREA_STRIKE_RADIUS_TILES      = 1;
-    public static final float AREA_STRIKE_DAMAGE_MULTIPLIER = 1.35f;
 
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
     // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims.

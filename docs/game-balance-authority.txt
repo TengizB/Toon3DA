@@ -230,6 +230,35 @@ R-TELEGRAPH (RuleKind.TELEGRAPH)
   kinds: TELE (wind-up), LANE (cardinal-line tell), FACE (positional counter).
   NOTE: any NEW attack path must be added to the registered list — the audit
   only checks attacks it knows about.
+  OVERRIDE RECORD (balance-overhaul order 4, CP1): the "Shell Brute CHARGE" and
+  "Plague Hulk blast" rows are REMOVED from the list — heavies are R-HEAVY's domain
+  (below), sized as a fraction of on-curve max HP, and those rows read constants that
+  no longer exist. Every other row and the 25% un-telegraphed cap are unchanged.
+
+R-HEAVY (RuleKind.HEAVY) — balance-overhaul order 4 (NEW; extends R-TELEGRAPH)
+  Registered data: enemy/HeavyAttack (CHARGE, LANCE, AREA_STRIKE, SELF_DESTRUCT) — the
+  HEAVY flag is per-constant data (damageFraction, minimumCommitTurns, displayName);
+  EnemyType.heavyWindUp() and SpecialAbility.heavyAttack() say which archetype / verb
+  resolves which heavy. BalanceSchema.heavyResults(), every HeavyAttack x depth 1..25:
+    (a) DAMAGE   heavyDamageAtDepth(fraction, expectedPlayerAtDepth(d).maxHealth,
+                 HEAVY_DAMAGE_SCALE) / on-curve max HP in [HEAVY_DAMAGE_FRACTION_MIN 0.40,
+                 HEAVY_DAMAGE_FRACTION_MAX 0.60]. Defaults: CHARGE/LANCE 0.50, AREA_STRIKE
+                 0.45, SELF_DESTRUCT 0.55.
+    (b) COMMIT   minimumCommitTurns() >= 1 (what the code guarantees: 1 for charge/lance/
+                 slam, the brace countdown for the self-destruct).
+    (c) GUARD    fraction x GUARD_FRONT_HEAVY (0.20) <= HEAVY_GUARDED_MAX_FRACTION (0.12).
+                 (GUARD_FRONT_ORDINARY/HEAVY are DATA ONLY in CP1; CP3 wires the guard.)
+  Live damage: Enemy.heavyDamage(kind) = the fraction of the on-curve max HP at the
+  enemy's spawn depth (stored at spawn) x EMPOWERED x WEAK, min 1 — the committed
+  predicted number and the executed hit are the same value. HEAVY_DAMAGE_SCALE (1.0) is
+  the ordinary order-7 feel knob. TP pricing: GameMath.heavyExpectedDamageForPricing(
+  heavy damage at the depth-1 player, HEAVY_EXPECTED_AVOIDANCE 0.6) = 40% of the hit.
+  WHY: nothing in combat was big enough to demand a response; a heavy must be avoided,
+  not tanked (owner). Avoidability geometry (danger tiles) is CP2.
+  OVERRIDE RECORD (CP1): SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER 2.4, SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE
+  0.75 (a reached heavy charge now ALWAYS lands — staying on the lane costs the fraction),
+  PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER 3.0 + _MAX 68, AREA_STRIKE_DAMAGE_MULTIPLIER
+  1.35 and GameMath.specialEquivalentAreaStrike are DELETED -> the heavy fractions above.
 
 R-DEPTH (RuleKind.DEPTH_COUPLING) — RETIRED by balance-overhaul order 1
   OVERRIDE RECORD: the depth-coupling ratio (playerPowerAtDepthV2 / enemy threat
@@ -501,8 +530,10 @@ R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AM
                     (Overseer 2.08x is the tightest; Corruptor 2.56x; Hell Baron 3.04x).
     R-BOSS-FAIR     the EXPECTED loadout gets a fight in [target, 1.5*target] turns with
                     a survival ratio in [0.4, 0.7] (0.50 by construction).
-    R-BOSS-VERB-CAP every DERIVED verb <= 35% eHP; any verb > 25% is telegraphed (checked
-                    at the boss's canonical depth against the same caps as R-TELEGRAPH).
+    R-BOSS-VERB-CAP every DERIVED verb: un-telegraphed <= 25% eHP; TELEGRAPHED <= 50% eHP
+                    (BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION). OVERRIDDEN by balance-overhaul
+                    order 4 (CP1): was every verb <= 35% (BOSS_HARD_SINGLE_HIT_FRACTION,
+                    kept as a constant, no longer the telegraphed cap).
     R-BOSS-REWARD   credit reward >= modelled fight consumption (ammo + heal value in shop
                     units) x BOSS_REWARD_RISK_PREMIUM (1.3) — a boss floor is a net-positive
                     payday, never a loss for progressing. XP flows from boss Threat Points.
@@ -1522,6 +1553,15 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 4 / CP1 — HEAVIES. New enemy/HeavyAttack (CHARGE, LANCE, AREA_STRIKE, SELF_DESTRUCT),
+    BalanceConfig SECTION 23 (HEAVY_* fractions 0.50 / 0.45 / 0.55, band 0.40-0.60, scale 1.0, avoidance 0.6,
+    GUARD_FRONT_ORDINARY 0.50 / _HEAVY 0.20 data-only, HEAVY_GUARDED_MAX_FRACTION 0.12,
+    BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION 0.50), GameMath.heavyDamageAtDepth / heavyExpectedDamageForPricing. Every
+    heavy now hits for a fraction of the ON-CURVE max HP at its spawn depth (Shell Brute charge, Rimeshell lance,
+    AREA_STRIKE, self-destruct); the charge stop-short is gone. New rule R-HEAVY; OVERRIDES: R-TELEGRAPH loses
+    its Brute-charge / Hulk-blast rows, R-BOSS-VERB-CAP telegraphed cap 35% -> 50%; AREA_STRIKE TP priced
+    through the avoidance discount (Plague Hulk TP ~39 -> ~35, Iron Stalker ~374 -> ~309). Why: nothing in combat
+    demanded a response — "a slow drain". LevelGeneratorSnapshotTest re-baselined (rosters re-priced).
   balance-overhaul order 3 / CP7 — THE SIM PLAYS THE MATCHUP. SimWorld computes the C4 SWITCH hint each
     turn (MatchupAdvisor, as World does) and TACTICAL takes it; TACTICAL keeps a diverse kit
     (PlayerPolicy.slotToReplaceForGroundWeapon). New band S-SWITCH (RuleKind.SIM_SWITCH, SECTION 22

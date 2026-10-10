@@ -117,8 +117,13 @@ class LevelGeneratorSnapshotTest {
     // RE-BASELINE (balance-overhaul order 3, CP7 — planned-heal re-fit): SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70
     // shrinks the planned heal on floors above the S4 floor, so the heal pickups (and the RNG stream behind
     // them) moved. The TP weight stays 0 (DECISION), so rosters are unchanged. Stable across two runs.
+    // RE-BASELINE (balance-overhaul order 4, CP1 — HEAVIES): the AREA_STRIKE slam is priced as the heavy
+    // fraction of the depth-1 on-curve max HP discounted by HEAVY_EXPECTED_AVOIDANCE (was attackDamage x 1.35,
+    // full hit), which re-prices the Threat Points of the slam-bearing archetypes (Plague Hulk, Iron Stalker,
+    // the elite), so the encounter planner rolls a different roster. A deliberate balance change; the new
+    // digest was confirmed stable across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "2cf728031b1dc95d8e2cd2119395a8f4fd81c98ca2e64682acee74b0846af7d1";
+            "e365b9facda983beb71514b24b9b8e5ac79a1bdebd0009c1eda3c4ac79bc2c92";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

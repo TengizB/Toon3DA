@@ -2806,19 +2806,36 @@ public final class GameMath {
     }
 
     /*
-     * Formula: specialEquivalentAreaStrike — per-cast equivalent damage of a telegraphed slam (order 5)
+     * Formula: heavyDamageAtDepth — the damage of a HEAVY (committed-then-resolved) attack (balance-overhaul order 4, H2)
      * Derivation:
-     *   AREA_STRIKE carries a predicted-damage number already (the slam hits for scaled attackDamage times
-     *   a multiplier), so its equivalence is simply that predicted damage:
-     *       equivalent = attackDamage * areaStrikeDamageMultiplier
-     *   The player can step out of the marked band to dodge it; the price is the FULL predicted hit (the
-     *   conservative, band-checked assumption that a careless player eats it — the same discipline the
-     *   telegraph audit uses for its worst-case hit).
+     *   A heavy is sized against the player who is SUPPOSED to be there, not against a stat block:
+     *       damage = max(1, round(damageFraction * expectedMaxHealth * scale))
+     *   where expectedMaxHealth is GameMath.expectedPlayerAtDepth(d).maxHealth (the on-curve player at the
+     *   enemy's effective depth) and scale is the ordinary HEAVY_DAMAGE_SCALE feel knob. At scale 1 the
+     *   unguarded, unarmoured hit is exactly damageFraction of an on-curve player's health at every depth,
+     *   so the heavy never goes stale as the ladder climbs.
+     *   Worked: fraction 0.50, expected max HP 130, scale 1 -> round(65) = 65.
      * Edge cases:
-     *   Non-negative inputs by construction; a zero multiplier prices the slam at nothing.
+     *   Non-positive fraction, health or scale floors at 1 (a heavy always does something).
      */
-    public static float specialEquivalentAreaStrike(float attackDamage, float areaStrikeDamageMultiplier) {
-        return attackDamage * areaStrikeDamageMultiplier;
+    public static int heavyDamageAtDepth(float damageFraction, float expectedMaxHealth, float scale) {
+        return Math.max(1, Math.round(damageFraction * expectedMaxHealth * scale));
+    }
+
+    /*
+     * Formula: heavyExpectedDamageForPricing — what a heavy is worth in Threat Points (balance-overhaul order 4)
+     * Derivation:
+     *   A heavy is telegraphed and avoidable, so a competent player eats only a share of it. The price is
+     *       priced = heavyDamage * (1 - clamp01(expectedAvoidance))
+     *   (HEAVY_EXPECTED_AVOIDANCE 0.6 -> 40% of the hit), which stops heavy-bearing archetypes flooding the
+     *   encounter budget. Replaces the old specialEquivalentAreaStrike (full predicted hit).
+     *   Worked: 58 damage, avoidance 0.6 -> 23.2.
+     * Edge cases:
+     *   Avoidance is clamped to [0, 1]: 0 prices the full hit, 1 prices nothing. Negative damage is not expected.
+     */
+    public static float heavyExpectedDamageForPricing(float heavyDamage, float expectedAvoidance) {
+        float clampedAvoidance = Math.max(0f, Math.min(1f, expectedAvoidance));
+        return heavyDamage * (1f - clampedAvoidance);
     }
 
     /*

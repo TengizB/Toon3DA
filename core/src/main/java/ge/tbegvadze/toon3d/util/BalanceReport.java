@@ -64,6 +64,8 @@ public final class BalanceReport {
         System.out.println();
         printTelegraphAudit();
         System.out.println();
+        printHeavyTable();
+        System.out.println();
         printBossRulesetTable();
         System.out.println();
         printRouteEconomicsTable();
@@ -853,6 +855,31 @@ public final class BalanceReport {
         }
     }
 
+    // -----------------------------------------------------------------------------------
+    // HEAVY TABLE (balance-overhaul order 4, R-HEAVY) — every HeavyAttack as a fraction of the on-curve
+    // player's max HP, the guarded fraction (GUARD_FRONT_HEAVY), and the damage at depths 1 / 10 / 25.
+    // -----------------------------------------------------------------------------------
+    private static void printHeavyTable() {
+        System.out.printf("HEAVY ATTACKS (order 4, R-HEAVY) — band %.0f%%-%.0f%% of on-curve max HP, guarded <= %.0f%%, scale %.2f%n",
+                BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN * 100f, BalanceConfig.HEAVY_DAMAGE_FRACTION_MAX * 100f,
+                BalanceConfig.HEAVY_GUARDED_MAX_FRACTION * 100f, BalanceConfig.HEAVY_DAMAGE_SCALE);
+        System.out.printf("%-15s %9s %9s %7s %8s %8s %8s%n",
+                "heavy", "fraction", "guarded", "commit", "dmg@d1", "dmg@d10", "dmg@d25");
+        System.out.println("--------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.enemy.HeavyAttack heavy : ge.tbegvadze.toon3d.enemy.HeavyAttack.values()) {
+            System.out.printf("%-15s %8.0f%% %8.1f%% %7d %8d %8d %8d%n", heavy.displayName(),
+                    heavy.damageFraction() * 100f,
+                    heavy.damageFraction() * BalanceConfig.GUARD_FRONT_HEAVY * 100f,
+                    heavy.minimumCommitTurns(),
+                    heavyDamageAt(heavy, 1), heavyDamageAt(heavy, 10), heavyDamageAt(heavy, 25));
+        }
+    }
+
+    private static int heavyDamageAt(ge.tbegvadze.toon3d.enemy.HeavyAttack heavy, int depth) {
+        return GameMath.heavyDamageAtDepth(heavy.damageFraction(),
+                GameMath.expectedPlayerAtDepth(depth).maxHealth, BalanceConfig.HEAVY_DAMAGE_SCALE);
+    }
+
     private static void printTelegraphRow(String attackName, int baseHit, String readable, float cap) {
         boolean avoidable = !"NONE".equals(readable);
         // Depth at which this hit first crosses the cap, scanning a generous depth range.
@@ -883,7 +910,7 @@ public final class BalanceReport {
                 + " survivalRatio band " + String.format("%.2f-%.2f", BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
                         BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX)
                 + " ; single-hit caps: telegraph >" + String.format("%.0f%%", BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION * 100f)
-                + " eHP, hard " + String.format("%.0f%%", BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION * 100f) + " eHP");
+                + " eHP, telegraphed heavy max " + String.format("%.0f%%", BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION * 100f) + " eHP");
         System.out.printf("%-12s %5s %7s %8s %8s %8s %6s %8s %8s %8s%n",
                 "boss", "depth", "expDPT", "derHP", "bossDPT", "target", "gate", "fairRatio", "reward", "ammoCov");
         System.out.println("------------------------------------------------------------------------------------------");
@@ -936,10 +963,11 @@ public final class BalanceReport {
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
                     damage, BalanceConfig.REFERENCE_PLAYER_EHP);
             String verdict;
-            if (fraction > BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION) {
-                verdict = "BANNED";
+            if (fraction > BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
+                    || (fraction > BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION && !verb.telegraphed)) {
+                verdict = verb.telegraphed ? "BANNED" : "NEEDS-TELE";
             } else if (fraction > BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION) {
-                verdict = verb.telegraphed ? "TELE-OK" : "NEEDS-TELE";
+                verdict = "TELE-OK";
             } else {
                 verdict = "OK";
             }
