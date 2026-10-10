@@ -54,8 +54,11 @@ public final class BalanceConfig {
     public static final int   PLAYER_MAX_HEALTH       = 130;
     /** Player maximum armour pool. Range: 0–120. Armour soaks part of every hit. */
     public static final int   PLAYER_MAX_ARMOR        = 75;
-    /** Fraction of each incoming hit absorbed by armour (depleting armour instead of HP). Range: 0.25–0.75. */
-    public static final float ARMOUR_ABSORB_FRACTION  = 0.50f;
+    /**
+     * Fraction of each incoming hit absorbed by armour (depleting armour instead of HP). Range: 0.25–0.75.
+     * balance-overhaul order 4 (H8): 0.50 -> 0.67, so armour is worth wearing.
+     */
+    public static final float ARMOUR_ABSORB_FRACTION  = 0.67f;
 
     // Heal magnitudes scaled ~1.8x in the economy rescale (idea-A, iteration 2): enemy damage
     // rose, so a floor's INCOMING damage rose, and the heals had to rise with it to keep the
@@ -475,8 +478,8 @@ public final class BalanceConfig {
     // Priced in docs/game-balance-authority.txt (GUARD note).
     // -------------------------------------------------------------------------
 
-    /** Incoming-damage multiplier for a hit inside the front (facing) arc while guarding. Range: 0.25–0.5. */
-    public static final float GUARD_FRONT_MULTIPLIER      = 0.35f;
+    // GUARD_FRONT_MULTIPLIER (0.35) was DELETED by balance-overhaul order 4 (H7): the front arc now has two
+    // multipliers, GUARD_FRONT_ORDINARY / GUARD_FRONT_HEAVY, in SECTION 23.
     /** Multiplier for a hit from the side arcs while guarding — FULL damage by design. Range: 1.0 (do not weaken). */
     public static final float GUARD_SIDE_MULTIPLIER       = 1.0f;
     /** Multiplier for a hit from directly behind while guarding — FULL damage by design (>1.0 = optional backstab). Range: 1.0–1.5. */
@@ -2702,10 +2705,14 @@ public final class BalanceConfig {
     public static final float HEAVY_DAMAGE_SCALE                   = 1.0f;
     /** TP pricing: share of a heavy a competent player is expected to dodge or blunt (priced hit = hit x (1 - this)). */
     public static final float HEAVY_EXPECTED_AVOIDANCE             = 0.6f;
-    /** H7 (wired by CP3): incoming-damage multiplier inside the guard's front arc for an ORDINARY hit. */
+    /** H7: incoming-damage multiplier inside the guard's front arc for an ORDINARY hit (replaced GUARD_FRONT_MULTIPLIER 0.35). */
     public static final float GUARD_FRONT_ORDINARY                 = 0.50f;
-    /** H7 (wired by CP3): ... for a HEAVY hit. R-HEAVY reads it for the cornered-guard cap. */
+    /** H7: ... for a HEAVY hit, which also RIPOSTES. R-HEAVY reads it for the cornered-guard cap. */
     public static final float GUARD_FRONT_HEAVY                    = 0.20f;
+    /** H8: a HEAVY hit costs the armour pool this multiple of the share armour absorbed (HP damage unaffected). */
+    public static final float ARMOUR_HEAVY_SHRED_MULTIPLIER        = 1.5f;
+    /** H9: each enemy status application blocked by armour costs this fraction of MAX armour (min 1). */
+    public static final float ARMOUR_STATUS_COST_FRACTION          = 0.10f;
     /** R-HEAVY (H4): a guarded heavy costs at most this fraction of the on-curve player's max HP. */
     public static final float HEAVY_GUARDED_MAX_FRACTION           = 0.12f;
     /** R-BOSS-VERB-CAP (override): a TELEGRAPHED boss heavy verb costs at most this fraction of eHP. */

@@ -217,7 +217,13 @@ File: BalanceConfig SECTION 1, plus the stat system in SECTION 7.
 Base pools:
   PLAYER_MAX_HEALTH      = 130   (biggest single forgiveness dial; range 80–200)
   PLAYER_MAX_ARMOR       = 75    (armour soaks part of every hit)
-  ARMOUR_ABSORB_FRACTION = 0.50  (fraction of each hit taken from armour, not HP)
+  ARMOUR_ABSORB_FRACTION = 0.67  (fraction of each hit taken from armour, not HP; was 0.50 until
+                                  balance-overhaul order 4 CP3, H8). A HEAVY hit also SHREDS armour:
+                                  the pool loses absorbed x ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5 (capped at
+                                  what is left; HP damage unaffected). STATUS SHIELD (H9): while armour > 0
+                                  an ENEMY's WEAK / SLOWED / BLINDED / POISONED application is blocked and
+                                  costs ARMOUR_STATUS_COST_FRACTION 0.10 x max armour (min 1); armour 0 ->
+                                  applied; hazard tiles are NOT blocked. "ARMOUR HELD" floater.
 
 VITALITY GROWTH (balance-overhaul order 1, R9): max HP AND max armour grow per
 CHARACTER level — PLAYER_MAX_HEALTH * PLAYER_VITALITY_GROWTH^(level-1) (1.09), armour
@@ -248,7 +254,7 @@ HEAVIES (balance-overhaul order 4, CP1; BalanceConfig SECTION 23; enemy/HeavyAtt
   AREA_STRIKE, Plague Hulk SELF_DESTRUCT. Damage = fraction x on-curve player max HP at the
   enemy's spawn depth x HEAVY_DAMAGE_SCALE (1.0): CHARGE/LANCE 0.50 (HEAVY_DAMAGE_FRACTION),
   AREA_STRIKE 0.45, SELF_DESTRUCT 0.55; R-HEAVY band 0.40-0.60; guarded (x GUARD_FRONT_HEAVY
-  0.20, wired in CP3) <= 0.12. At depth 1 (130 max HP): 65 / 59 / 72. DELETED constants:
+  0.20, wired in CP3 — plus the RIPOSTE below) <= 0.12. At depth 1 (130 max HP): 65 / 59 / 72. DELETED constants:
   SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER (2.4), SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE (0.75 — a
   reached charge always lands), PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER (3.0) and
   _MAX (68), EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER (1.35) and their shims. Boss
@@ -257,8 +263,12 @@ HEAVIES (balance-overhaul order 4, CP1; BalanceConfig SECTION 23; enemy/HeavyAtt
 
 PLAYER GUARD (directional, conditional eHP) — BalanceConfig SECTION 2 / GUARD_*:
   Tapping GUARD ends the turn and braces the marine.
-  GUARD_FRONT_MULTIPLIER = 0.35 (heavy reduction inside the ±60° facing arc; order 4 splits it
-  into GUARD_FRONT_ORDINARY 0.50 / GUARD_FRONT_HEAVY 0.20 — data only until CP3 wires them)
+  GUARD_FRONT_MULTIPLIER (0.35) is DELETED (order 4 CP3, H7); the ±60° facing arc is now
+  GUARD_FRONT_ORDINARY 0.50 (ordinary hits) / GUARD_FRONT_HEAVY 0.20 (heavy hits).
+  RIPOSTE: a HEAVY hit that lands in the guarded front arc STUNS its attacker for its next turn
+  (skipNextAction — bypasses resist; the intent reads STUNNED at once) and leaves it VULNERABLE for
+  VULNERABLE_DURATION turns (+50% damage). No riposte vs bosses; none from a self-destruct (the source dies).
+  GUARD has no cooldown.
   GUARD_SIDE/BACK_MULTIPLIER = 1.0 (flanks land at FULL damage — read & rotate)
   GUARD_FRONT/BACK_HALF_ANGLE_DEGREES = 60
   Priced as a 1-turn opportunity cost; self-limiting vs flanks, so no hard cap.

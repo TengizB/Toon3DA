@@ -247,7 +247,14 @@ R-HEAVY (RuleKind.HEAVY) — balance-overhaul order 4 (NEW; extends R-TELEGRAPH)
     (b) COMMIT   minimumCommitTurns() >= 1 (what the code guarantees: 1 for charge/lance/
                  slam, the brace countdown for the self-destruct).
     (c) GUARD    fraction x GUARD_FRONT_HEAVY (0.20) <= HEAVY_GUARDED_MAX_FRACTION (0.12).
-                 (GUARD_FRONT_ORDINARY/HEAVY are DATA ONLY in CP1; CP3 wires the guard.)
+                 (Wired by CP3: Player.applyDirectionalDamage(.., heavy) applies GUARD_FRONT_HEAVY.)
+  GUARD + ARMOUR (CP3 — OVERRIDE RECORD): GUARD_FRONT_MULTIPLIER 0.35 is DELETED (BalanceConfig +
+  GameBalance shim) -> GUARD_FRONT_ORDINARY 0.50 (ordinary front-arc hits) / GUARD_FRONT_HEAVY 0.20
+  (heavy). A heavy front-guarded hit RIPOSTES: attacker stunned next turn + VULNERABLE
+  VULNERABLE_DURATION turns (none vs bosses / the dying self-destruct). ARMOUR_ABSORB_FRACTION 0.50 ->
+  0.67; a heavy costs armour absorbed x ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5 (GameMath.armorShredCost);
+  STATUS SHIELD: armour > 0 blocks enemy WEAK/SLOWED/BLINDED/POISONED at ARMOUR_STATUS_COST_FRACTION
+  0.10 x max armour (GameMath.armorStatusShieldCost); hazard tiles unblocked.
   Live damage: Enemy.heavyDamage(kind) = the fraction of the on-curve max HP at the
   enemy's spawn depth (stored at spawn) x EMPOWERED x WEAK, min 1 — the committed
   predicted number and the executed hit are the same value. HEAVY_DAMAGE_SCALE (1.0) is
@@ -1553,6 +1560,11 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 4 / CP3 — GUARD & ARMOUR. GUARD_FRONT_MULTIPLIER 0.35 DELETED -> GUARD_FRONT_ORDINARY
+    0.50 / GUARD_FRONT_HEAVY 0.20 + RIPOSTE on a guarded heavy (stun + VULNERABLE); ARMOUR_ABSORB_FRACTION
+    0.50 -> 0.67; ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5; STATUS SHIELD (ARMOUR_STATUS_COST_FRACTION 0.10). New
+    GameMath.armorShredCost / armorStatusShieldCost; Player.applyDirectionalDamage(.., heavy) returns
+    front-guarded; Player.tryArmourShieldStatus. Why: guard and armour were not worth using against heavies.
   balance-overhaul order 4 / CP1 — HEAVIES. New enemy/HeavyAttack (CHARGE, LANCE, AREA_STRIKE, SELF_DESTRUCT),
     BalanceConfig SECTION 23 (HEAVY_* fractions 0.50 / 0.45 / 0.55, band 0.40-0.60, scale 1.0, avoidance 0.6,
     GUARD_FRONT_ORDINARY 0.50 / _HEAVY 0.20 data-only, HEAVY_GUARDED_MAX_FRACTION 0.12,

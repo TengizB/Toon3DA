@@ -24,6 +24,10 @@ public final class ItemConstants {
     public static final float ARMOUR_VEST_SPRITE_HEIGHT       = 0.35f;
     // Fraction of each incoming hit that is absorbed by armour (depleting it instead of HP).
     public static final float ARMOUR_ABSORB_FRACTION          = BalanceConfig.ARMOUR_ABSORB_FRACTION;
+    // HEAVY hits cost the armour pool this multiple of the share it absorbed (order 4, H8).
+    public static final float ARMOUR_HEAVY_SHRED_MULTIPLIER   = BalanceConfig.ARMOUR_HEAVY_SHRED_MULTIPLIER;
+    // Each enemy status application the armour blocks costs this fraction of max armour (order 4, H9).
+    public static final float ARMOUR_STATUS_COST_FRACTION     = BalanceConfig.ARMOUR_STATUS_COST_FRACTION;
 
     // Inventory system — slot count and per-type stack caps
     // INVENTORY_SLOT_COUNT: 12 slots (4×3 grid) as redesigned in inventory-menu-order-3.

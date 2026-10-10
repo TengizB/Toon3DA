@@ -965,6 +965,40 @@ public final class EnemyManager implements EnemyHitTarget {
     }
 
     /**
+     * GUARD RIPOSTE (balance-overhaul order 4, H7): a HEAVY hit that landed in the guarding player's front
+     * arc stuns its attacker for its NEXT turn and leaves it VULNERABLE for VULNERABLE_DURATION turns.
+     * The stun is the same {@code skipNextAction} the R6 stun and the stagger use, set directly so it
+     * BYPASSES the status-resist table — a riposte always stuns. Phase C then commits the STUNNED intent
+     * (see {@link #phaseCCommit}), so the icon the player reads on their next turn is already the truth.
+     * Refused for a dead attacker (the self-destruct source never calls this) and for a BOSS (bosses ignore
+     * stagger; their choreography belongs to BossFloorController).
+     */
+    private void applyGuardRiposte(Enemy enemy) {
+        if (!enemy.isAlive()) return;
+        if (enemy instanceof Boss || enemy.type.role() == EnemyRole.BOSS) return;
+        enemy.skipNextAction = true;
+        enemy.plannedAction.clearHeavy();
+        applyVulnerableStatus(enemy, EffectConstants.VULNERABLE_DURATION);
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("RIPOSTE", EventTextSystem.COLOR_GOLD);
+        }
+    }
+
+    /**
+     * STATUS SHIELD (balance-overhaul order 4, H9): true when the player's armour blocked an ENEMY's
+     * application of {@code type} (armour was spent, "ARMOUR HELD" shown) — the caller then skips the
+     * application. False with armour at 0, when the caller applies as before. Every enemy -> player status
+     * site routes through here; hazard tiles deliberately do not.
+     */
+    private boolean armourBlocksStatus(Player player, StatusType type) {
+        if (!player.tryArmourShieldStatus(type)) return false;
+        if (eventTextSystem != null) {
+            eventTextSystem.spawnWithColor("ARMOUR HELD", EventTextSystem.COLOR_ARMOUR);
+        }
+        return true;
+    }
+
+    /**
      * SPREAD KNOCKBACK (balance-overhaul order 3, W1): one tile along (stepColumn, stepRow), away from
      * the player, through the Hammer's {@link #tryPushEnemy} path (bounds, walls, solid props, columns,
      * spires, closed doors and other enemies all refuse it; hazard decal tiles are walkable, so a push
@@ -1214,6 +1248,15 @@ public final class EnemyManager implements EnemyHitTarget {
             Enemy enemy = enemies.get(index);
             if (!enemy.isAlive() || !enemy.isAlerted()) continue;
             if (enemy instanceof Boss) continue;
+            if (enemy.skipNextAction) {
+                // A stun landed DURING phase B (a guard riposte, a missed-charge recovery): its next turn is
+                // already lost, so the intent the player reads is STUNNED — not a plan it will never run.
+                // (A stagger consumes skipNextAction in phase B, so this never fires for it.)
+                enemy.plannedAction.set(IntentVerb.STUNNED, enemy.tileColumn, enemy.tileRow);
+                enemy.consecutiveDefendTurns = 0;
+                enemy.notifyCommitted(IntentVerb.STUNNED);
+                continue;
+            }
             computeNextPlan(enemy, playerColumn, playerRow, player);
             // Track consecutive DEFENDs so shouldDefend can break an endless turtle loop (design feedback).
             if (enemy.plannedAction.verb == IntentVerb.DEFEND) {
@@ -1419,7 +1462,9 @@ public final class EnemyManager implements EnemyHitTarget {
                 // Player still on the committed lane — the shot connects. Use the Lancer's tile as the lane
                 // origin so a guarding player's facing arc is judged against where the beam comes from.
                 boolean wasGuarding = player.isGuarding();
-                player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(), enemy.worldCenterY());
+                if (player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(), enemy.worldCenterY(), true)) {
+                    applyGuardRiposte(enemy);
+                }
                 // EVIDENCE (narrative-rework order-4): a WIND_UP-committed beam down a locked lane is
                 // both a telegraphed hit (READ_INTENT/GUARD) and, by construction, an in-lane one
                 // (BREAK_LANE).
@@ -1622,6 +1667,7 @@ public final class EnemyManager implements EnemyHitTarget {
 
         StatusType debuff = debuffStatusFor(enemy.type);
         int durationTurns = debuffDurationFor(debuff);
+        if (armourBlocksStatus(player, debuff)) return;   // H9: no status, no WEAK tip — armour held
         statusEffectController.apply(player, debuff, durationTurns, 0, enemy);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor(debuffLabelFor(debuff), EventTextSystem.COLOR_GREY);
@@ -1715,8 +1761,10 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= EnemyConstants.AREA_STRIKE_RADIUS_TILES;
         if (inBlast) {
             boolean wasGuarding = player.isGuarding();
-            player.applyDirectionalDamage(areaStrikeDamage(enemy),
-                    enemy.worldCenterX(), enemy.worldCenterY());
+            if (player.applyDirectionalDamage(areaStrikeDamage(enemy),
+                    enemy.worldCenterX(), enemy.worldCenterY(), true)) {
+                applyGuardRiposte(enemy);
+            }
             // EVIDENCE (narrative-rework order-4): AREA_STRIKE is telegraphed a full turn ahead.
             if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
@@ -1870,8 +1918,9 @@ public final class EnemyManager implements EnemyHitTarget {
         // The rush reached the player: the HEAVY charge always lands (HeavyAttack.CHARGE). The player's
         // counters are the sidestep (the rush whiffs above) and, from CP3, GUARD facing it.
         boolean wasGuarding = player.isGuarding();
-        player.applyDirectionalDamage(enemy.heavyDamage(enemy.type.heavyWindUp()),
-                enemy.worldCenterX(), enemy.worldCenterY());
+        boolean riposted = player.applyDirectionalDamage(enemy.heavyDamage(enemy.type.heavyWindUp()),
+                enemy.worldCenterX(), enemy.worldCenterY(), true);
+        if (riposted) applyGuardRiposte(enemy);
         if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
         // EVIDENCE (narrative-rework order-4): the WIND_UP rush was telegraphed a full turn ahead.
         if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
@@ -1979,7 +2028,8 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         if (playerHit) {
             boolean wasGuarding = player.isGuarding();
-            player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY());
+            // HEAVY, but no riposte: the detonating source dies this turn, so there is nobody to stun.
+            player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY(), true);
             // EVIDENCE (narrative-rework order-4): the detonation counted down in full view for turns.
             if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
@@ -2569,6 +2619,7 @@ public final class EnemyManager implements EnemyHitTarget {
             default: return;
         }
         if (effectRandom.nextFloat() < poisonChance) {
+            if (armourBlocksStatus(player, StatusType.POISONED)) return;   // H9: armour held the acid out
             statusEffectController.apply(player, StatusType.POISONED,
                     EffectConstants.POISON_DURATION,
                     EffectConstants.POISON_DAMAGE_PER_STACK,

@@ -640,3 +640,25 @@ HEAVY DANGER TILES (balance-overhaul order 4, H3/H4/H15):
                       pulses on the source's side; a source BEHIND the player pulses BOTH edges.
     Constants: EnemyConstants HEAVY_MARKER_* / HEAVY_MINIMAP_ALPHA / HEAVY_INTENT_*; EffectConstants
     HEAVY_EDGE_PULSE_*.
+
+GUARD RIPOSTE (balance-overhaul order 4, H7 — CP3):
+  Player.applyDirectionalDamage(amount, attackerX, attackerY, heavy) returns TRUE when the hit landed in the
+  GUARDED FRONT arc (+/-60 degrees of facing). Front multiplier = GUARD_FRONT_ORDINARY 0.50 (ordinary) or
+  GUARD_FRONT_HEAVY 0.20 (heavy); side/back x1.0. The heavy sites (EnemyManager.performCharge,
+  executeLanceBeam, executeAreaStrike, applySelfDestructBlast) pass heavy = true. When a heavy is
+  front-guarded, EnemyManager.applyGuardRiposte(enemy): skipNextAction = true (a direct set, so a riposte
+  ALWAYS stuns — it bypasses the status resist table), applyVulnerableStatus(VULNERABLE_DURATION), floater
+  "RIPOSTE". No riposte vs a Boss, and none from SELF_DESTRUCT (the source dies that turn). The STUNNED
+  intent is shown at once: phaseCCommit commits STUNNED (plan.set, danger tiles cleared) for any enemy whose
+  skipNextAction is still set after phase B — which also makes the missed-charge recovery read STUNNED. A
+  stagger consumes skipNextAction in phase B, so its path is unchanged. GUARD has no cooldown.
+
+ARMOUR SHIELD (balance-overhaul order 4, H8/H9 — CP3):
+  ARMOUR_ABSORB_FRACTION 0.67. A HEAVY hit shreds the plate: the pool loses absorbed x
+  ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5 (GameMath.armorShredCost, capped at the pool); HP damage is unchanged.
+  STATUS SHIELD: Player.tryArmourShieldStatus(type) — while armour > 0, an ENEMY's WEAK / SLOWED / BLINDED /
+  POISONED application is blocked, costs max(1, round(ARMOUR_STATUS_COST_FRACTION 0.10 x max armour)) (capped
+  at what is left) and shows "ARMOUR HELD" (armour-bar blue). Armour exactly 0 -> applied. Routed at every
+  enemy -> player site, via EnemyManager.armourBlocksStatus: executeDebuffPlayer (the WEAK tip shows only if
+  WEAK applied) and applyRangedAttackStatusEffect (acid POISON, after the chance roll). HazardManager's
+  fire/toxic applications are NOT routed — the floor is the counter-play there.

@@ -2000,6 +2000,47 @@ public final class GameMath {
     }
 
     /*
+     * Formula: Armour Shred Cost (balance-overhaul order 4, H8)
+     * Derivation:
+     *   Armour soaks a share of every hit (see armorAbsorb). A HEAVY hit also SHREDS the plate: the pool
+     *   loses more than the share it absorbed, while the HP the player takes is unchanged.
+     *       shredCost = ceil(armorAbsorbed × shredMultiplier)
+     *   capped by what is left:
+     *       cost = min(currentArmor, shredCost)
+     *   An ordinary hit passes shredMultiplier = 1.0, which gives cost = armorAbsorbed (the old rule).
+     *   Example (armour 75, heavy of 60, fraction 0.67, shred 1.5): absorbed = 40, cost = 60.
+     * Edge cases:
+     *   armorAbsorbed <= 0 or currentArmor <= 0 -> 0.
+     *   shredMultiplier < 1 is clamped to 1 (a hit never repairs, or under-charges, the plate).
+     *   The result never exceeds currentArmor, so the pool never goes negative.
+     */
+    public static int armorShredCost(int armorAbsorbed, int currentArmor, float shredMultiplier) {
+        if (armorAbsorbed <= 0 || currentArmor <= 0) return 0;
+        float clampedMultiplier = Math.max(1f, shredMultiplier);
+        int shredCost = (int) Math.ceil(armorAbsorbed * clampedMultiplier);
+        return Math.min(currentArmor, shredCost);
+    }
+
+    /*
+     * Formula: Armour Status-Shield Cost (balance-overhaul order 4, H9)
+     * Derivation:
+     *   While armour holds, an enemy status application (WEAK / SLOWED / BLINDED / POISONED) is blocked
+     *   and costs a fraction of the MAXIMUM pool, so the price scales with the player's armour build:
+     *       cost = max(1, round(maxArmor × costFraction))
+     *   capped by what is left (the pool never goes below 0):
+     *       cost = min(currentArmor, cost)
+     *   Example (max 75, fraction 0.10): round(7.5) = 8 per blocked application.
+     * Edge cases:
+     *   currentArmor <= 0 -> 0 (and the caller applies the status — a shield with nothing left is down).
+     *   maxArmor <= 0 -> the minimum of 1 (still capped by currentArmor).
+     */
+    public static int armorStatusShieldCost(int currentArmor, int maxArmor, float costFraction) {
+        if (currentArmor <= 0) return 0;
+        int cost = Math.max(1, Math.round(maxArmor * costFraction));
+        return Math.min(currentArmor, cost);
+    }
+
+    /*
      * Formula: radialFalloff
      * Derivation:
      *   Linear falloff from 1 at the centre of a blob to 0 at its edge.

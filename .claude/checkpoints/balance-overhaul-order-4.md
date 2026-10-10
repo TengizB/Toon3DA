@@ -68,7 +68,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
         DONE WHEN: build green; R-HEAVY avoidable lines hold.
   - [x] **CP2b** — 3D markers, mini-map fill, 1.5x red "!!" heavy intent, off-screen edge pulse.
         DONE WHEN: build green; A2 (desktop check owed if no display).
-- [ ] **CP3** — GUARD rework with riposte; armour absorb/shred; status shield.
+- [x] **CP3** — GUARD rework with riposte; armour absorb/shred; status shield.
       DONE WHEN: A3, A4 (shield half) hold; both gates green.
 - [ ] **CP4** — status fractions, STIM cleanse, lance SLOW, HUD status turns; R-DOT updated.
       DONE WHEN: A4, A5 hold; both gates green.
@@ -120,3 +120,14 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   -> `HitVignetteRenderer.setHeavyEdgeSideMask(mask)` via `GameMath.offscreenSideMask` (behind = both edges).
   Constants `EnemyConstants.HEAVY_MARKER_* / HEAVY_MINIMAP_ALPHA / HEAVY_INTENT_*`, `EffectConstants.HEAVY_EDGE_PULSE_*`.
   DESKTOP CHECK OWED (A2): marker readability 1-5 tiles, icon clearance, mini-map alpha, edge band width.
+- **CP3 handover:** `Player.applyDirectionalDamage(amount, x, y, boolean heavy)` -> true when front-guarded
+  (3-arg form = ordinary); private `applyDamage(int, boolean heavy)`; `Player.tryArmourShieldStatus(StatusType)`
+  (WEAK/SLOWED/BLINDED/POISONED only; cost `GameMath.armorStatusShieldCost`, 75 max armour -> 8). EnemyManager
+  `applyGuardRiposte(Enemy)` (skipNextAction + VULNERABLE 2, "RIPOSTE" gold; not bosses, not the dead hulk) and
+  `armourBlocksStatus(player, type)` at the ONLY two enemy->player status sites (executeDebuffPlayer, acid POISON);
+  hazard tiles untouched. phaseCCommit commits STUNNED when skipNextAction is set (also makes the missed-charge
+  recovery read STUNNED). `GameMath.armorShredCost` (ceil, capped). `EventTextSystem.COLOR_ARMOUR` (0.55,0.85,1.0).
+  GUARD_FRONT_MULTIPLIER DELETED; ARMOUR_ABSORB 0.67; SECTION 23 `ARMOUR_HEAVY_SHRED_MULTIPLIER`,
+  `ARMOUR_STATUS_COST_FRACTION`. TacticalPolicy reads only `SIM_TACTICAL_GUARD_DAMAGE_FRACTION` (CP7 replaces it).
+- **CP3 gates:** core:test 454, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.72, TACTICAL
+  145/200 stalled. Desktop check owed: RIPOSTE / ARMOUR HELD floaters.
