@@ -595,3 +595,28 @@ INCINERATOR BURN STACKS: each cone hit adds one stack (StatusEffectController.ap
 FLAME_BURN_MAX_STACKS (3); stacks share one timer (refreshed to the longer), a tick deals
 per-stack magnitude x stacks, and all expire together. Burn keeps ticking out of the cone, can kill
 (attributed to the player) and vanishes with the enemy.
+
+HEAVY DANGER TILES (balance-overhaul order 4, H3/H4/H15):
+  Every committed heavy (HeavyAttack: CHARGE, LANCE, AREA_STRIKE, SELF_DESTRUCT) lists the exact tiles it
+  will hit at COMMIT time, in PlannedAction.dangerTileColumns/dangerTileRows[0..dangerTileCount) with
+  PlannedAction.heavyAttack set (null otherwise). Buffers are pre-allocated (EnemyConstants.
+  HEAVY_DANGER_TILE_CAPACITY = 32); every PlannedAction.set* resets them.
+  Shapes (HeavyAttack.dangerShape(), built by the per-constant DangerShape.build -> GameMath.dangerTilesFor*):
+    LANE   (CHARGE, LANCE): tiles 1..reach along the locked direction, stopping BEFORE the first blocker.
+           CHARGE reach = SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES + 1 (rush then strike the adjacent tile);
+           LANCE reach = the Lancer's attackRangeTiles (identical to executeLanceBeam).
+    SQUARE (AREA_STRIKE): every open tile within Chebyshev AREA_STRIKE_RADIUS_TILES, caster excluded.
+    CROSS  (SELF_DESTRUCT): caster tile + four arms out to PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES,
+           each arm stopping at the first wall (identical to applySelfDestructBlast).
+  Blockers: LANE and SQUARE use EnemyManager.isLanceBlocked (bounds, wall, closed door, solid prop,
+  column, spire); CROSS uses walls/bounds only.
+  Lifecycle: written at commit (computeChargerPlan, computeLancerPlan, commitSpecial for AREA_STRIKE,
+  commitSelfDestruct every re-commit); rebuilt from the new tile with the same locked direction after a
+  knockback; cleared on stagger, on the R6 skip-turn path and once the plan has executed. A dead or boss
+  enemy is never reported. Each heavy commit calls announceWindUp (existing WIND_UP voice; the
+  self-destruct re-commits stay silent after the first prime).
+  Queries (no allocation): EnemyManager.findHeavyThreatAt(column, row) -> first living non-boss Enemy
+  whose non-STUNNED committed heavy lists the tile, else null; isHeavyDangerTile(column, row).
+  H4: BalanceSchema.heavyResults() builds each shape on an open board with the same GameMath functions
+  and asserts GameMath.everyDangerTileHasSafeNeighbour (subject "<heavy> avoidable"); the cornered case
+  is covered by the guarded-fraction line (<= HEAVY_GUARDED_MAX_FRACTION).

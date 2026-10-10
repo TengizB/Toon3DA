@@ -63,7 +63,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: R-HEAVY (damage band, commit, guard cap) and updated R-TELEGRAPH / R-BOSS-VERB-CAP
       green; both gates green.
 - [ ] **CP2** — danger tiles for every heavy; 3D markers, mini-map fill, heavy intent icon, edge pulse.
-      DONE WHEN: H4 avoidability asserted; A2 holds (build green; desktop check owed if no display).
+      DONE WHEN: H4 avoidability asserted; A2 holds (build green; desktop check owed if no display). Split:
+  - [x] **CP2a** — danger tiles computed at commit, cleared on resolve/stagger/death; queries; H4 lines in R-HEAVY.
+        DONE WHEN: build green; R-HEAVY avoidable lines hold.
+  - [ ] **CP2b** — 3D markers, mini-map fill, 1.5x red "!!" heavy intent, off-screen edge pulse.
+        DONE WHEN: build green; A2 (desktop check owed if no display).
 - [ ] **CP3** — GUARD rework with riposte; armour absorb/shred; status shield.
       DONE WHEN: A3, A4 (shield half) hold; both gates green.
 - [ ] **CP4** — status fractions, STIM cleanse, lance SLOW, HUD status turns; R-DOT updated.
@@ -101,3 +105,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (Plague Hulk TP ~39.4->34.9, Iron Stalker ~374->309). Snapshot `e365b9fa...`.
 - **CP1 gates:** core:test 455, only StoryBarkTest; balanceSim exit 0 — readable deaths 1.00, S-SUPPLY 0.74,
   TACTICAL 139/200 stalled. Boss existing derived verbs pass the new 50% telegraphed cap unchanged.
+- **CP2a handover:** `HeavyAttack.dangerShape()` -> `DangerShape {LANE, SQUARE, CROSS}` with per-constant
+  `build(...)`; `HeavyAttack.dangerReachTiles()` (CHARGE MAX+1=6, LANCE range 6, AREA r1, SELF_DESTRUCT r2).
+  `PlannedAction.dangerTileColumns/Rows` (cap `EnemyConstants.HEAVY_DANGER_TILE_CAPACITY` 32), `dangerTileCount`,
+  `heavyAttack`, `markHeavy/clearHeavy` (every set* resets). Draw guard: `enemy.isAlive() && plan.heavyAttack != null
+  && plan.verb != STUNNED`. CROSS lists the caster tile at index 0 — renderer should skip it. `EnemyManager.
+  findHeavyThreatAt(col,row)` / `isHeavyDangerTile(col,row)`. GameMath `TileBlockedQuery`, `dangerTilesForLane/
+  Square/Cross`, `everyDangerTileHasSafeNeighbour(... [, firstCheckedIndex])`. Tiles cleared after executePlan
+  (phase C recommits same tick), on stagger and on the R6 skip. AREA_STRIKE commit now calls announceWindUp (H17).
+  Test count is 454 (CP1's "455" counted XML testcases, off by one).

@@ -1057,6 +1057,30 @@ public final class BalanceSchema {
                                 + BalanceConfig.GUARD_FRONT_HEAVY));
             }
         }
+        results.addAll(heavyAvoidabilityResults());
+        return results;
+    }
+
+    /**
+     * H4 geometry per heavy: on an open board (nothing blocked) the shape built by the same GameMath
+     * function the manager uses at commit has, for every danger tile, a one-step sidestep out of danger.
+     * LANE is built along step (1, 0) at its real reach; SQUARE / CROSS at their real radii.
+     */
+    private static List<RuleResult> heavyAvoidabilityResults() {
+        List<RuleResult> results = new ArrayList<>();
+        GameMath.TileBlockedQuery openBoard = (tileColumn, tileRow) -> false;
+        int capacity = EnemyConstants.HEAVY_DANGER_TILE_CAPACITY;
+        int[] columns = new int[capacity];
+        int[] rows    = new int[capacity];
+        for (HeavyAttack heavy : HeavyAttack.values()) {
+            int count = heavy.dangerShape().build(0, 0, 1, 0, heavy.dangerReachTiles(), openBoard,
+                    columns, rows, capacity);
+            boolean holds = count > 0
+                    && GameMath.everyDangerTileHasSafeNeighbour(columns, rows, count,
+                            heavy.dangerShape() == HeavyAttack.DangerShape.CROSS ? 1 : 0, openBoard);
+            results.add(new RuleResult(RuleKind.HEAVY, heavy.displayName() + " avoidable", holds ? 1f : 0f,
+                    1f, 1f, holds, heavy.dangerShape() + " " + count + " danger tiles on an open board"));
+        }
         return results;
     }
 

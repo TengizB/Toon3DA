@@ -626,6 +626,9 @@ public final class EnemyConstants {
     // AREA_STRIKE — telegraphed slam hitting every tile within this cross radius of the enemy.
     public static final int   AREA_STRIKE_RADIUS_TILES      = 1;
 
+    /** Capacity of the pre-allocated danger-tile buffers (balance-overhaul order 4, H3). */
+    public static final int   HEAVY_DANGER_TILE_CAPACITY    = 32;
+
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
     // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims.
     public static final int   HELL_BARON_DEPTH                = BalanceConfig.HELL_BARON_DEPTH;

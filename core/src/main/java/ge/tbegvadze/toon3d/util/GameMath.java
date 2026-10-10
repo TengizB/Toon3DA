@@ -1604,6 +1604,137 @@ public final class GameMath {
         return Math.max(Math.abs(toColumn - fromColumn), Math.abs(toRow - fromRow));
     }
 
+    // =========================================================================
+    // HEAVY DANGER TILES (balance-overhaul order 4, H3 / H4) — tile space, cardinal only
+    // =========================================================================
+
+    /** Headless "is this tile solid for the shape being built" query (no LibGDX, no level dependency). */
+    public interface TileBlockedQuery {
+        boolean isBlocked(int tileColumn, int tileRow);
+    }
+
+    /*
+     * Formula: dangerTilesForLane
+     * Derivation:
+     *   For distance k = 1..maxTiles the lane tile is (originColumn + k*stepColumn, originRow + k*stepRow).
+     *   Walking outward, the first blocked tile ends the lane BEFORE being listed (a marker never sits in a
+     *   wall, and nothing is hit past a blocker). The origin (the caster) is never listed.
+     * Edge cases:
+     *   A zero step, maxTiles <= 0 or outCapacity <= 0 returns 0. A lane longer than outCapacity is
+     *   truncated at outCapacity. Does not allocate.
+     */
+    public static int dangerTilesForLane(int originColumn, int originRow, int stepColumn, int stepRow,
+                                         int maxTiles, TileBlockedQuery blocked,
+                                         int[] outColumns, int[] outRows, int outCapacity) {
+        if (stepColumn == 0 && stepRow == 0) return 0;
+        int count = 0;
+        for (int distance = 1; distance <= maxTiles && count < outCapacity; distance++) {
+            int tileColumn = originColumn + stepColumn * distance;
+            int tileRow    = originRow    + stepRow    * distance;
+            if (blocked.isBlocked(tileColumn, tileRow)) break;
+            outColumns[count] = tileColumn;
+            outRows[count]    = tileRow;
+            count++;
+        }
+        return count;
+    }
+
+    /*
+     * Formula: dangerTilesForSquare
+     * Derivation:
+     *   A tile (c, r) is struck when chebyshevDistanceTiles(center, (c, r)) <= radius, i.e.
+     *   |c - centerColumn| <= radius and |r - centerRow| <= radius. The centre is the caster and is
+     *   excluded; blocked tiles are skipped (the player cannot stand there).
+     * Edge cases:
+     *   radius <= 0 returns 0. Truncates at outCapacity. Does not allocate.
+     */
+    public static int dangerTilesForSquare(int centerColumn, int centerRow, int radius,
+                                           TileBlockedQuery blocked,
+                                           int[] outColumns, int[] outRows, int outCapacity) {
+        int count = 0;
+        for (int tileRow = centerRow - radius; tileRow <= centerRow + radius; tileRow++) {
+            for (int tileColumn = centerColumn - radius; tileColumn <= centerColumn + radius; tileColumn++) {
+                if (tileColumn == centerColumn && tileRow == centerRow) continue;
+                if (count >= outCapacity) return count;
+                if (blocked.isBlocked(tileColumn, tileRow)) continue;
+                outColumns[count] = tileColumn;
+                outRows[count]    = tileRow;
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /*
+     * Formula: dangerTilesForCross
+     * Derivation:
+     *   The blast covers the centre tile plus, for each of the four cardinal steps, tiles 1..radius
+     *   along that arm; an arm stops BEFORE its first blocked tile (the blast does not wrap corners).
+     * Edge cases:
+     *   The centre is always listed (count >= 1 when outCapacity >= 1) even if the query calls it blocked.
+     *   radius <= 0 lists only the centre. Truncates at outCapacity. Does not allocate.
+     */
+    public static int dangerTilesForCross(int centerColumn, int centerRow, int radius,
+                                          TileBlockedQuery blocked,
+                                          int[] outColumns, int[] outRows, int outCapacity) {
+        if (outCapacity <= 0) return 0;
+        outColumns[0] = centerColumn;
+        outRows[0]    = centerRow;
+        int count = 1;
+        for (int arm = 0; arm < 4; arm++) {
+            int stepColumn = (arm == 0) ? 1 : (arm == 1) ? -1 : 0;
+            int stepRow    = (arm == 2) ? 1 : (arm == 3) ? -1 : 0;
+            for (int distance = 1; distance <= radius && count < outCapacity; distance++) {
+                int tileColumn = centerColumn + stepColumn * distance;
+                int tileRow    = centerRow    + stepRow    * distance;
+                if (blocked.isBlocked(tileColumn, tileRow)) break;
+                outColumns[count] = tileColumn;
+                outRows[count]    = tileRow;
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /*
+     * Formula: everyDangerTileHasSafeNeighbour
+     * Derivation:
+     *   H4 (avoidable): from each listed tile one single step must reach a tile that is walkable
+     *   (not blocked) and not itself dangerous. For each listed tile test its four cardinal neighbours
+     *   against the blocked query and the list (linear scan, lists are <= a few dozen tiles).
+     * Edge cases:
+     *   An empty list is vacuously true. A tile whose four neighbours are all blocked or dangerous makes
+     *   the whole result false (that player is cornered; the guard cap covers that case). Does not allocate.
+     */
+    public static boolean everyDangerTileHasSafeNeighbour(int[] columns, int[] rows, int count,
+                                                          TileBlockedQuery blocked) {
+        return everyDangerTileHasSafeNeighbour(columns, rows, count, 0, blocked);
+    }
+
+    /**
+     * Same check, but only entries from {@code firstCheckedIndex} on need a sidestep; earlier entries
+     * still count as dangerous for the neighbour test. Used for a CROSS, whose entry 0 is the caster's
+     * own tile (the player can never stand there).
+     */
+    public static boolean everyDangerTileHasSafeNeighbour(int[] columns, int[] rows, int count,
+                                                          int firstCheckedIndex, TileBlockedQuery blocked) {
+        for (int index = firstCheckedIndex; index < count; index++) {
+            boolean hasSafe = false;
+            for (int arm = 0; arm < 4 && !hasSafe; arm++) {
+                int neighbourColumn = columns[index] + ((arm == 0) ? 1 : (arm == 1) ? -1 : 0);
+                int neighbourRow    = rows[index]    + ((arm == 2) ? 1 : (arm == 3) ? -1 : 0);
+                if (blocked.isBlocked(neighbourColumn, neighbourRow)) continue;
+                boolean dangerous = false;
+                for (int other = 0; other < count && !dangerous; other++) {
+                    dangerous = columns[other] == neighbourColumn && rows[other] == neighbourRow;
+                }
+                hasSafe = !dangerous;
+            }
+            if (!hasSafe) return false;
+        }
+        return true;
+    }
+
     /*
      * Formula: manhattanDistanceTiles
      * Derivation:

@@ -572,6 +572,80 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.WIND_UP);
     }
 
+    // -------------------------------------------------------------------------
+    // HEAVY DANGER TILES (balance-overhaul order 4, H3/H15) — exact tiles known at commit
+    // -------------------------------------------------------------------------
+
+    /** Blocker shared by the lance beam, the charge lane and the strike square — created once. */
+    private final GameMath.TileBlockedQuery lanceBlockedQuery = this::isLanceBlocked;
+
+    /** Blocker of the self-destruct cross (walls only, exactly as {@link #applySelfDestructBlast}). */
+    private final GameMath.TileBlockedQuery wallBlockedQuery = this::isWallOrOutOfBounds;
+
+    private boolean isWallOrOutOfBounds(int tileColumn, int tileRow) {
+        if (tileColumn < 0 || tileColumn >= level.getWidth())  return true;
+        if (tileRow    < 0 || tileRow    >= level.getHeight()) return true;
+        return Level.isWall(level.getCell(tileColumn, tileRow));
+    }
+
+    /** Marks the plan as a committed heavy and writes its danger tiles from the enemy's current tile. */
+    private void commitHeavy(Enemy enemy, PlannedAction plan, HeavyAttack kind) {
+        plan.markHeavy(kind);
+        refreshHeavyDangerTiles(enemy);
+    }
+
+    /**
+     * Rebuilds the danger tiles of the enemy's committed heavy from its CURRENT tile and its locked
+     * direction (a knockback relocates the caster mid-heavy). A no-op when no heavy is committed.
+     */
+    private void refreshHeavyDangerTiles(Enemy enemy) {
+        PlannedAction plan = enemy.plannedAction;
+        HeavyAttack kind = plan.heavyAttack;
+        if (kind == null) {
+            plan.dangerTileCount = 0;
+            return;
+        }
+        int stepColumn = 0;
+        int stepRow    = 0;
+        if (kind == HeavyAttack.CHARGE) {
+            stepColumn = enemy.chargeDirectionColumn;
+            stepRow    = enemy.chargeDirectionRow;
+        } else if (kind == HeavyAttack.LANCE) {
+            stepColumn = enemy.lanceDirectionColumn;
+            stepRow    = enemy.lanceDirectionRow;
+        }
+        GameMath.TileBlockedQuery blocked = (kind == HeavyAttack.SELF_DESTRUCT) ? wallBlockedQuery : lanceBlockedQuery;
+        plan.dangerTileCount = kind.dangerShape().build(enemy.tileColumn, enemy.tileRow, stepColumn, stepRow,
+                kind.dangerReachTiles(), blocked, plan.dangerTileColumns, plan.dangerTileRows,
+                EnemyConstants.HEAVY_DANGER_TILE_CAPACITY);
+    }
+
+    /**
+     * True when the tile is a danger tile of any living, non-boss enemy's committed heavy. No allocation.
+     */
+    public boolean isHeavyDangerTile(int tileColumn, int tileRow) {
+        return findHeavyThreatAt(tileColumn, tileRow) != null;
+    }
+
+    /**
+     * The first living, non-boss enemy whose committed heavy (verb not STUNNED) lists the tile, else null.
+     * No allocation.
+     */
+    public Enemy findHeavyThreatAt(int tileColumn, int tileRow) {
+        for (int index = 0; index < enemies.size(); index++) {
+            Enemy enemy = enemies.get(index);
+            if (!enemy.isAlive() || enemy instanceof Boss) continue;
+            PlannedAction plan = enemy.plannedAction;
+            if (plan.heavyAttack == null || plan.verb == IntentVerb.STUNNED) continue;
+            for (int tileIndex = 0; tileIndex < plan.dangerTileCount; tileIndex++) {
+                if (plan.dangerTileColumns[tileIndex] == tileColumn && plan.dangerTileRows[tileIndex] == tileRow) {
+                    return enemy;
+                }
+            }
+        }
+        return null;
+    }
+
     /** Injects the telegraphed-hit-landed listener (narrative-rework order-4 READ_INTENT/GUARD evidence). */
     public void setTelegraphedHitLandedListener(java.util.function.Consumer<Boolean> listener) {
         this.telegraphedHitLandedListener = listener;
@@ -885,6 +959,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.skipNextAction     = true;
         enemy.lastStaggeredTurn  = worldTurnIndex;
         enemy.plannedAction.verb = IntentVerb.STUNNED;
+        enemy.plannedAction.clearHeavy();            // a cancelled heavy shows no danger tiles
         enemy.notifyCommitted(IntentVerb.STUNNED);   // the existing intent pop marks the change
         return true;
     }
@@ -907,7 +982,9 @@ public final class EnemyManager implements EnemyHitTarget {
         int targetColumn = enemy.tileColumn + stepColumn;
         int targetRow    = enemy.tileRow    + stepRow;
         if (Level.isDoor(level.getCell(targetColumn, targetRow))) return false;
-        return tryPushEnemy(enemy, targetColumn, targetRow);
+        boolean pushed = tryPushEnemy(enemy, targetColumn, targetRow);
+        if (pushed) refreshHeavyDangerTiles(enemy);   // a heavy caster relocated mid-commit
+        return pushed;
     }
 
     /**
@@ -1069,6 +1146,7 @@ public final class EnemyManager implements EnemyHitTarget {
             if (enemy.skipNextAction) {
                 enemy.skipNextAction    = false;
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
+                enemy.plannedAction.clearHeavy();
                 advanceShardRegrowth(enemy);
                 advanceCrustCooling(enemy);
                 advanceSowerRegen(enemy);
@@ -1076,6 +1154,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 continue;
             }
             executePlan(enemy, playerColumn, playerRow, player);
+            enemy.plannedAction.clearHeavy();   // resolved: the markers vanish (phase C recommits if needed)
             advanceShardRegrowth(enemy);
             advanceCrustCooling(enemy);
             advanceSowerRegen(enemy);
@@ -1716,6 +1795,7 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.chargeDirectionColumn = Integer.signum(playerColumn - enemy.tileColumn);
             enemy.chargeDirectionRow    = Integer.signum(playerRow - enemy.tileRow);
             plan.setWindUp(playerColumn, playerRow, enemy.heavyDamage(enemy.type.heavyWindUp()), 1);
+            commitHeavy(enemy, plan, HeavyAttack.CHARGE);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // rim flash telegraph, visible for the whole player turn
             announceWindUp(enemy);
@@ -1836,6 +1916,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.triggerTelegraph();
         plan.setSpecial(SpecialAbility.SELF_DESTRUCT, enemy.tileColumn, enemy.tileRow,
                 selfDestructBlastDamage(enemy));
+        commitHeavy(enemy, plan, HeavyAttack.SELF_DESTRUCT);   // re-commits rebuild the same cross, silently
     }
 
     /**
@@ -2203,6 +2284,7 @@ public final class EnemyManager implements EnemyHitTarget {
             enemy.lanceDirectionRow    = Integer.signum(playerRow    - enemy.tileRow);
             enemy.openShell();          // THE PUNISH WINDOW opens now, for the whole of the coming player turn
             plan.setWindUp(playerColumn, playerRow, enemy.heavyDamage(enemy.type.heavyWindUp()), 1);
+            commitHeavy(enemy, plan, HeavyAttack.LANCE);
             enemy.state = EnemyState.WINDING_UP;
             enemy.triggerTelegraph();   // full player turn of warning, drawn in the WIND_UP intent frame
             announceWindUp(enemy);
@@ -2306,6 +2388,10 @@ public final class EnemyManager implements EnemyHitTarget {
         int targetRow    = ability.targetsSelf() ? enemy.tileRow    : playerRow;
         int predictedDamage = ability.dealsDamage() ? areaStrikeDamage(enemy) : 0;
         plan.setSpecial(ability, targetColumn, targetRow, predictedDamage);
+        if (ability.heavyAttack() != null) {
+            commitHeavy(enemy, plan, ability.heavyAttack());
+            announceWindUp(enemy);   // H17: every heavy commit is heard (existing WIND_UP voice row)
+        }
         if (ability == SpecialAbility.SUMMON) {
             // Choose the exact spawn cells NOW so the floor telegraph is honest — the same tiles the
             // player sees marked this turn are the ones executeSummon spawns into next turn.

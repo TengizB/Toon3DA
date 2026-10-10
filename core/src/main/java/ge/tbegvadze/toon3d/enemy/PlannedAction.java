@@ -57,6 +57,30 @@ public final class PlannedAction {
     public SpecialAbility specialAbility = null;
 
     /**
+     * The exact DANGER TILES of the committed heavy (H3), tile space, written at commit by the manager.
+     * Pre-allocated once; only the first {@link #dangerTileCount} entries are meaningful.
+     */
+    public final int[] dangerTileColumns = new int[ge.tbegvadze.toon3d.util.EnemyConstants.HEAVY_DANGER_TILE_CAPACITY];
+    public final int[] dangerTileRows    = new int[ge.tbegvadze.toon3d.util.EnemyConstants.HEAVY_DANGER_TILE_CAPACITY];
+
+    /** Number of valid danger tiles; 0 whenever no heavy is committed. */
+    public int dangerTileCount = 0;
+
+    /** The heavy committed this turn; null unless a heavy is committed (and not cancelled). */
+    public HeavyAttack heavyAttack = null;
+
+    /** Marks the plan as a committed heavy; the caller then fills the danger-tile arrays. */
+    public void markHeavy(HeavyAttack kind) {
+        this.heavyAttack = kind;
+    }
+
+    /** Forgets any danger tiles / heavy marker (a cancelled or replaced heavy). */
+    public void clearHeavy() {
+        this.dangerTileCount = 0;
+        this.heavyAttack     = null;
+    }
+
+    /**
      * Overwrites all fields for a plain (non-attack) verb and marks the plan committed. A MOVE set
      * this way is a live chase toward {@code targetColumn}/{@code targetRow} (the player's tile).
      */
@@ -72,6 +96,8 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
         this.specialAbility       = null;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 
     /**
@@ -90,6 +116,8 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
         this.specialAbility       = null;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 
     /**
@@ -108,6 +136,8 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
         this.specialAbility       = null;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 
     /** Overwrites all fields for an attack verb carrying a predicted-damage number. */
@@ -123,6 +153,8 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
         this.specialAbility       = null;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 
     /**
@@ -142,6 +174,8 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = null;
         this.specialAbility       = null;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 
     /** Overwrites all fields for a WIND_UP telegraph carrying its predicted damage and countdown. */
@@ -157,6 +191,8 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = windUpTurnsRemaining;
         this.abilityRef           = null;
         this.specialAbility       = null;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 
     /**
@@ -178,5 +214,7 @@ public final class PlannedAction {
         this.windUpTurnsRemaining = 0;
         this.abilityRef           = ability;
         this.specialAbility       = ability;
+        this.dangerTileCount      = 0;
+        this.heavyAttack          = null;
     }
 }
