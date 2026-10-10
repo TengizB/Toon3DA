@@ -2729,4 +2729,13 @@ public final class BalanceConfig {
     public static final float BURN_TICK_FRACTION                   = 0.03f;
     /** H10: turns of SLOWED a connecting Rimeshell lance beam applies to the player. */
     public static final int   LANCE_SLOW_DURATION_TURNS            = 2;
+
+    // --- REVENANT LUNGE (H1, CP5): the Revenant's WIND_UP lunge reuses the Shell Brute charge code path with
+    // its own, shorter lane and a cooldown, so it stays a melee bruiser that occasionally lunges.
+    /** Nearest cardinal-lane gap (tiles) that opens a Revenant lunge. A lunge is short. */
+    public static final int   REVENANT_LUNGE_TRIGGER_MIN_TILES    = 2;
+    /** Farthest cardinal-lane gap (tiles) a Revenant will lunge from; its danger lane is this + 1. */
+    public static final int   REVENANT_LUNGE_TRIGGER_MAX_TILES    = 3;
+    /** Own turns that must pass after a lunge commit before the Revenant may commit another. */
+    public static final int   REVENANT_LUNGE_COOLDOWN_TURNS       = 3;
 }

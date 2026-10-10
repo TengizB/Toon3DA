@@ -439,10 +439,29 @@ labels them:
     TP pricing: absorption is priced as an ARMOUR POOL (EnemyType.armorPool -> 70), because absorbing a
     hit IS extra effective HP; see BalanceConfig.AURIC_SHARD_ARMOR_POOL for the derivation and for the
     stated RISK that one averaged pool cannot express a loadout-dependent eHP swing.
+  - HEAVY ASSIGNMENTS (balance-overhaul order 4, CP5 — H1/H5):
+      REVENANT LUNGE: EnemyType.REVENANT.heavyWindUp() = CHARGE, so computeNextPlan routes it through the
+        Shell Brute's computeChargerPlan / canBeginCharge / performCharge (any melee type whose
+        heavyWindUp() == CHARGE). Per-type DATA, no switch: chargeTriggerMinTiles()/chargeTriggerMaxTiles()
+        (Brute 2..5 default; Revenant REVENANT_LUNGE_TRIGGER_MIN/MAX_TILES 2..3 — a lunge is short) and
+        chargeCooldownTurns() (Brute 0; Revenant REVENANT_LUNGE_COOLDOWN_TURNS 3 of its OWN turns,
+        Enemy.lastChargeCommitTurn vs turnCounter). Off cooldown / out of lane it keeps its ordinary melee
+        behaviour (the charger tail is identical to computeMeleePlan). A whiffed lunge stuns it for one
+        turn like the Brute. Not priced in TP (charge/lance are not priced as specials — CP1 decision),
+        so the Revenant stays 119 TP.
+      CINDERFORGE AREA_STRIKE: moveSet() = {AREA_STRIKE} at SPECIAL_CADENCE_SLOW; crust/trail stay passive
+        hooks. Priced through the cycle average (heavy fraction x (1 - HEAVY_EXPECTED_AVOIDANCE)).
+      H5 STAGGER CANCELS A HEAVY: stagger / riposte / R6 stun set skipNextAction; phase B skips execution
+        and clears the heavy, and phase C plans afresh, so a staggered CHARGE, LANCE or AREA_STRIKE never
+        resolves — it fires only if re-committed with a new full-turn telegraph. SELF_DESTRUCT: stagger
+        CAN reach a primed Hulk (tryStaggerEnemy has no exclusion); the cancelled turn RESETS
+        selfDestructTurnsRemaining to PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS (stays primed/sticky, re-braces
+        from scratch) instead of merely pausing the countdown.
   - CINDERFORGE_COLOSSUS — COOLING CRUST + MOLTEN TRAIL
     (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). THE GAME PUNISHES HESITATION: it
     hardens while you hide and burns the ground you would have retreated across. Like the Sentinel it is
-    plain state + two PASSIVE hooks, NOT a SpecialAbility verb, so the SpecialAbility catalogue and
+    plain state + two PASSIVE hooks (CP5 later added the existing AREA_STRIKE to its move-set, see HEAVY
+    ASSIGNMENTS above; the crust/trail themselves add no SpecialAbility), so the SpecialAbility catalogue and
     BalanceSchema.SPECIAL_VERB_PRICING are untouched and the COVERAGE rule stays green. Touch points:
       CRUST   Enemy.crustStacks (0..CINDERFORGE_CRUST_MAX_STACKS). GAIN: at the END of the Colossus's own
               turn (EnemyManager.advanceCrustCooling), if it took NO damage since its previous turn,
@@ -620,7 +639,10 @@ HEAVY DANGER TILES (balance-overhaul order 4, H3/H4/H15):
   HEAVY_DANGER_TILE_CAPACITY = 32); every PlannedAction.set* resets them.
   Shapes (HeavyAttack.dangerShape(), built by the per-constant DangerShape.build -> GameMath.dangerTilesFor*):
     LANE   (CHARGE, LANCE): tiles 1..reach along the locked direction, stopping BEFORE the first blocker.
-           CHARGE reach = SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES + 1 (rush then strike the adjacent tile);
+           CHARGE reach = the ENEMY's type.chargeTriggerMaxTiles() + 1 (rush then strike the adjacent tile):
+           HeavyAttack.CHARGE.dangerReachTiles() stays the Shell Brute's 6 (the BalanceSchema H4 geometry
+           proof), but EnemyManager.refreshHeavyDangerTiles overrides the reach for CHARGE from the enemy,
+           so a Revenant (max 3) marks 4 tiles and its markers match the real lunge;
            LANCE reach = the Lancer's attackRangeTiles (identical to executeLanceBeam).
     SQUARE (AREA_STRIKE): every open tile within Chebyshev AREA_STRIKE_RADIUS_TILES, caster excluded.
     CROSS  (SELF_DESTRUCT): caster tile + four arms out to PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES,

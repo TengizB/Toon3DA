@@ -1579,6 +1579,11 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 4 / CP5 — HEAVY ASSIGNMENTS. Revenant: heavyWindUp() CHARGE through the Shell Brute
+  charger path, per-type chargeTriggerMin/MaxTiles + chargeCooldownTurns (SECTION 23 REVENANT_LUNGE_TRIGGER_
+  MIN_TILES 2 / _MAX_TILES 3 / REVENANT_LUNGE_COOLDOWN_TURNS 3; unpriced, TP 119 unchanged). Cinderforge
+  Colossus: AREA_STRIKE added to its move-set (TP ~122.7 -> 112.2, R-ENEMY bands unchanged and green).
+  H5: a cancelled primed SELF_DESTRUCT re-braces to the full countdown. Snapshot re-baselined (d29f71e4...).
   balance-overhaul order 4 / CP4 — STATUS MAGNITUDES. See R-DOT (restated + OVERRIDE RECORD). Status DoTs are
     fractions of host max HP (GameMath.statusTickDamage; toxicAverageStacks for the hazard read-out); POISON
     stacks decay by 1 a turn (max 6; acid hit 2 stacks, toxic tile 2 stacks/turn on the player); WEAK -35% x 3

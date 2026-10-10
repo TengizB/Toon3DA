@@ -199,6 +199,9 @@ public class Enemy implements StatusHost {
     public int chargeDirectionColumn = 0;
     public int chargeDirectionRow    = 0;
 
+    /** {@link #turnCounter} when this enemy last committed a charge / lunge (cooldown clock); far past = ready. */
+    public int lastChargeCommitTurn = -1_000_000;
+
     // -------------------------------------------------------------------------
     // Rime lance channel (elemental-golem-rimeshell-lancer) — the Lancer's molten beam. The lane is
     // LOCKED when it commits the WIND_UP charge and fired straight down it a turn later regardless of

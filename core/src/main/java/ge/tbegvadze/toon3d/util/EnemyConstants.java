@@ -72,6 +72,10 @@ public final class EnemyConstants {
     // Charger AI (Pillar 2) — telegraphed rush after a one-turn wind-up.
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
+    // Revenant lunge (balance-overhaul order 4, CP5) — the same WIND_UP rush, shorter and on a cooldown.
+    public static final int     REVENANT_LUNGE_TRIGGER_MIN_TILES = BalanceConfig.REVENANT_LUNGE_TRIGGER_MIN_TILES;
+    public static final int     REVENANT_LUNGE_TRIGGER_MAX_TILES = BalanceConfig.REVENANT_LUNGE_TRIGGER_MAX_TILES;
+    public static final int     REVENANT_LUNGE_COOLDOWN_TURNS    = BalanceConfig.REVENANT_LUNGE_COOLDOWN_TURNS;
 
     // MIRE_WRAITH — slow ground-based ranged acid (spawn '5')
     public static final int     MIRE_WRAITH_MAX_HEALTH           = BalanceConfig.MIRE_WRAITH_MAX_HEALTH;

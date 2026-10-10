@@ -224,6 +224,11 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns()  { return 1; }
         @Override public char   spawnChar()           { return 'K'; }
         @Override public String tacticalVerb()        { return "REVENANT: a fast, heavy hitter — stagger or kill it before it reaches melee."; }
+        // CP5 (H1): a short telegraphed lunge through the Shell Brute's charge path, on a cooldown.
+        @Override public HeavyAttack heavyWindUp()    { return HeavyAttack.CHARGE; }
+        @Override public int chargeTriggerMinTiles()  { return EnemyConstants.REVENANT_LUNGE_TRIGGER_MIN_TILES; }
+        @Override public int chargeTriggerMaxTiles()  { return EnemyConstants.REVENANT_LUNGE_TRIGGER_MAX_TILES; }
+        @Override public int chargeCooldownTurns()    { return EnemyConstants.REVENANT_LUNGE_COOLDOWN_TURNS; }
     },
 
     VORTEX_EYE {
@@ -331,11 +336,11 @@ public enum EnemyType {
         @Override public int    crustMaxStacks()      { return EnemyConstants.CINDERFORGE_CRUST_MAX_STACKS; }
         @Override public int    leavesTrailFireTurns() { return EnemyConstants.CINDERFORGE_TRAIL_FIRE_TURNS; }
         @Override public int    minSpawnDepth()       { return EnemyConstants.CINDERFORGE_COLOSSUS_MIN_SPAWN_DEPTH; }
-        // MOVESET_NONE (the default) and NO bespoke plan branch: both of its mechanics are passive and
-        // positional, driven from the EXECUTE phase, so the SpecialAbility catalogue — and
-        // BalanceSchema's SPECIAL_VERB_PRICING coverage rule — are untouched. The Shell Brute and Void
-        // Shroud already own the "clever melee AI" space; the Colossus is dumb, huge and relentless, and
-        // its pressure comes from the board state it creates rather than from outsmarting the player.
+        // Crust and trail stay passive and positional (driven from the EXECUTE phase). CP5 (H1) adds the one
+        // scripted move a heavy needs: a telegraphed AREA_STRIKE slam on the slow cadence, an existing
+        // SpecialAbility (no new verb), so every region has a heavy to read and step out of.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_AREA; }
+        @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
     },
 
     RIMESHELL_LANCER {
@@ -567,6 +572,16 @@ public enum EnemyType {
      * {@link SpecialAbility#heavyAttack()} instead. The Verdant Spiresower's WIND_UP is a sow, NOT a heavy.
      */
     public HeavyAttack heavyWindUp() { return null; }
+
+    /**
+     * Nearest / farthest cardinal-lane gap (tiles) from which a {@link HeavyAttack#CHARGE} archetype may
+     * commit its rush, and the cooldown (own turns) between commits. Per-type DATA read by the shared
+     * charger code path: defaults are the Shell Brute's numbers and a 0 cooldown; the Revenant overrides
+     * all three. The CHARGE danger lane is {@code chargeTriggerMaxTiles() + 1} long.
+     */
+    public int chargeTriggerMinTiles() { return EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES; }
+    public int chargeTriggerMaxTiles() { return EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES; }
+    public int chargeCooldownTurns()   { return 0; }
 
     /** The SPECIAL abilities this archetype may commit (strategy-combat-order-5). Empty = simple chaff. */
     public SpecialAbility[] moveSet() { return MOVESET_NONE; }

@@ -72,7 +72,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A3, A4 (shield half) hold; both gates green.
 - [x] **CP4** — status fractions, STIM cleanse, lance SLOW, HUD status turns; R-DOT updated.
       DONE WHEN: A4, A5 hold; both gates green.
-- [ ] **CP5** — Revenant / Cinderforge heavy assignments; stagger cancels heavy.
+- [x] **CP5** — Revenant / Cinderforge heavy assignments; stagger cancels heavy.
       DONE WHEN: A7 holds; both gates green.
 - [ ] **CP6** — hazard fractions; barrel placement near groups.
       DONE WHEN: A6 holds; both gates green.
@@ -147,3 +147,15 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   hit enemies at BURN_TICK_FRACTION x HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER (still 1.5; H13 says 2.5).
 - **CP4 gates:** core:test 454, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.70, emergency
   lifeline 0.04 (band <=0.05 — THIN), TACTICAL 150/200 stalled. Desktop owed: CLEANSED floater, xN text, lance SLOW.
+- **CP5 handover:** EnemyType `chargeTriggerMinTiles()/chargeTriggerMaxTiles()/chargeCooldownTurns()` (defaults =
+  Shell Brute, 0); REVENANT -> CHARGE, lunge 2..3 tiles, cooldown 3 own turns (`Enemy.lastChargeCommitTurn`);
+  charger branch routes on `heavyWindUp() == CHARGE`. CHARGE danger reach in `refreshHeavyDangerTiles` = type max+1
+  (Revenant 4, Brute 6); `HeavyAttack.CHARGE.dangerReachTiles()` stays 6 for the H4 proof. CINDERFORGE_COLOSSUS
+  moveSet MOVESET_AREA, SPECIAL_CADENCE_SLOW. H5: charge/lance/area already cancelled by the skip path; a cancelled
+  primed Hulk turn resets the countdown to full brace (stays primed). Snapshot `d29f71e4...`.
+- **CP5 numbers / owner flag:** Cinderforge TP ~122.7 -> 112.16 (heavy priced x0.4 displaces a basic hit — the
+  spec's avoidance discount LOWERS heavy-bearer TP; in band). Revenant 119 / Brute 133 unchanged (lunge unpriced).
+  A7 evidence (throwaway counter, removed): sim heavy commits REVENANT:CHARGE 92, CINDERFORGE:AREA_STRIKE 296,
+  BRUTE:CHARGE 109, LANCER:LANCE 607, HULK:AREA 263, HULK:SELF_DESTRUCT 28, IRON_STALKER:AREA 8.
+  CP7 line review: Cinderforge bark says nothing about the slam (no contradiction).
+- **CP5 gates:** core:test 454, only StoryBarkTest; balanceSim exit 0 — readable 1.00, S-SUPPLY 0.75, lifeline 0.03.

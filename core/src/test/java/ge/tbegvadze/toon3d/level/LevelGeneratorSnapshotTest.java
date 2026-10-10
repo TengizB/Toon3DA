@@ -126,8 +126,11 @@ class LevelGeneratorSnapshotTest {
     // at the new WEAK_DAMAGE_PERCENT 25 -> 35 for DEBUFF_WEAK_DURATION_TURNS 2 -> 3, which re-prices the Threat
     // Points of Mire Wraith / Acid Drone, so the encounter planner rolls a different roster. A deliberate
     // balance change; the new digest was confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 4, CP5 — HEAVY ASSIGNMENTS): the Cinderforge Colossus gains
+    // AREA_STRIKE in its move-set, which re-prices its Threat Points through the cycle average, so the
+    // encounter planner rolls a different roster. A deliberate balance change.
     private static final String EXPECTED_DIGEST =
-            "a56f924cfdebfd1e031cb2e72c3c4d6ca803bbce0ec8ac28b6a20946db86a0aa";
+            "d29f71e4eb7bd778776e3c5c54ceb37f5e22c2527bc76776413728baa2a74c67";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

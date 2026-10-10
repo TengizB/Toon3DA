@@ -499,8 +499,10 @@ the 205-eHP start player. eHP / hit / cadence -> hits to kill | hits the player 
   Rimeshell Lancer '[' 60 / 24 / 2  -> 4 | 9      SOLDIER (48 HP, flat 5)
   Verdant Spiresower'}'57 / 24 / 1  -> 4 | 9      SOLDIER (45 HP + 12 regen pool)
   Shell Brute '4'      95 / 35 / 1  -> 7 | 6      BRUISER (charge HEAVY 0.50 max HP)
-  Revenant 'K'         85 / 35 / 1  -> 6 | 6      BRUISER
-  Cinderforge '{'      85 / 36 / 1  -> 6 | 6      BRUISER (75 HP, crust ~3 flat)
+  Revenant 'K'         85 / 35 / 1  -> 6 | 6      BRUISER (lunge HEAVY 0.50 max HP, unpriced; TP 119)
+  Cinderforge '{'      85 / 36 / 1  -> 6 | 6      BRUISER (75 HP, crust ~3 flat; AREA_STRIKE 0.45 heavy
+                                                  priced via the cycle: TP ~122.7 -> 112.2, cycle DPT
+                                                  36 -> 32.9 because the discounted slam < a basic hit)
   Iron Stalker '!'    170 / 42 melee, 30 ranged / 1 -> 12 | 5   MINI_ELITE
 Depth growth: HP x ENEMY_HEALTH_GROWTH^(d-1) (1.139), damage x ENEMY_DAMAGE_GROWTH^(d-1)
 (1.097) — SECTION 10.

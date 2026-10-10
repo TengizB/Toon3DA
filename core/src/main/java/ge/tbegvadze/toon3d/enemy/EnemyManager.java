@@ -607,16 +607,18 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         int stepColumn = 0;
         int stepRow    = 0;
+        int reachTiles = kind.dangerReachTiles();
         if (kind == HeavyAttack.CHARGE) {
             stepColumn = enemy.chargeDirectionColumn;
             stepRow    = enemy.chargeDirectionRow;
+            reachTiles = enemy.type.chargeTriggerMaxTiles() + 1;   // markers match THIS type's real rush
         } else if (kind == HeavyAttack.LANCE) {
             stepColumn = enemy.lanceDirectionColumn;
             stepRow    = enemy.lanceDirectionRow;
         }
         GameMath.TileBlockedQuery blocked = (kind == HeavyAttack.SELF_DESTRUCT) ? wallBlockedQuery : lanceBlockedQuery;
         plan.dangerTileCount = kind.dangerShape().build(enemy.tileColumn, enemy.tileRow, stepColumn, stepRow,
-                kind.dangerReachTiles(), blocked, plan.dangerTileColumns, plan.dangerTileRows,
+                reachTiles, blocked, plan.dangerTileColumns, plan.dangerTileRows,
                 EnemyConstants.HEAVY_DANGER_TILE_CAPACITY);
     }
 
@@ -1181,6 +1183,10 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.skipNextAction    = false;
                 enemy.plannedAction.verb = IntentVerb.STUNNED;
                 enemy.plannedAction.clearHeavy();
+                // H5: a cancelled self-destruct re-braces from scratch (stays primed, loses its progress).
+                if (enemy.selfDestructPrimed) {
+                    enemy.selfDestructTurnsRemaining = EnemyConstants.PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS;
+                }
                 advanceShardRegrowth(enemy);
                 advanceCrustCooling(enemy);
                 advanceSowerRegen(enemy);
@@ -1807,7 +1813,7 @@ public final class EnemyManager implements EnemyHitTarget {
             // Melee archetypes branch to their tactical VERB (balance idea 4, Pillar 2):
             //   SHELL_BRUTE — CHARGER: telegraphed rush; VOID_SHROUD — FLANKER: attack the blind
             //   side; everything else uses the shared greedy melee behaviour.
-            if (enemy.type == EnemyType.SHELL_BRUTE) {
+            if (enemy.type.heavyWindUp() == HeavyAttack.CHARGE) {
                 computeChargerPlan(enemy, plan, playerColumn, playerRow);
             } else if (enemy.type == EnemyType.VOID_SHROUD) {
                 computeFlankerPlan(enemy, plan, playerColumn, playerRow, player);
@@ -1851,6 +1857,7 @@ public final class EnemyManager implements EnemyHitTarget {
             return;
         }
         if (canBeginCharge(enemy, playerColumn, playerRow)) {
+            enemy.lastChargeCommitTurn  = enemy.turnCounter;
             enemy.chargeDirectionColumn = Integer.signum(playerColumn - enemy.tileColumn);
             enemy.chargeDirectionRow    = Integer.signum(playerRow - enemy.tileRow);
             plan.setWindUp(playerColumn, playerRow, enemy.heavyDamage(enemy.type.heavyWindUp()), 1);
@@ -1873,11 +1880,13 @@ public final class EnemyManager implements EnemyHitTarget {
 
     /** True when a clear, unobstructed cardinal lane to the player sits within the charge band. */
     private boolean canBeginCharge(Enemy enemy, int playerColumn, int playerRow) {
+        // Per-type cooldown (0 for the Shell Brute): a lunger commits only every N of its own turns.
+        if (enemy.turnCounter - enemy.lastChargeCommitTurn < enemy.type.chargeCooldownTurns()) return false;
         if (!isSameCardinalLine(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) return false;
         // On a shared cardinal line the Manhattan distance is the straight-line gap.
         int gap = GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
-        if (gap < EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES) return false;
-        if (gap > EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES) return false;
+        if (gap < enemy.type.chargeTriggerMinTiles()) return false;
+        if (gap > enemy.type.chargeTriggerMaxTiles()) return false;
         if (!hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)) return false;
         return !hasEnemyBlockingShot(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
     }
@@ -1904,7 +1913,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
 
-        int maxRushTiles = EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
+        int maxRushTiles = enemy.type.chargeTriggerMaxTiles();
         for (int step = 0; step < maxRushTiles; step++) {
             boolean playerOnLane = (stepRow == 0) ? (playerRow == lockedLaneRow)
                                                    : (playerColumn == lockedLaneColumn);
