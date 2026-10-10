@@ -620,3 +620,23 @@ HEAVY DANGER TILES (balance-overhaul order 4, H3/H4/H15):
   H4: BalanceSchema.heavyResults() builds each shape on an open board with the same GameMath functions
   and asserts GameMath.everyDangerTileHasSafeNeighbour (subject "<heavy> avoidable"); the cornered case
   is covered by the guarded-fraction line (<= HEAVY_GUARDED_MAX_FRACTION).
+
+  Visuals (H15/H16, balance-overhaul order 4 CP2b; all cosmetic, read-only against PlannedAction; draw
+  guard: enemy alive && plan.heavyAttack != null && plan.verb != STUNNED; CROSS skips index 0 = caster):
+    3D floor markers  EnemyRenderer pass 1.65 (after the SUMMON pass, before the boss telegraph pass):
+                      a procedural 32x32 ring+disc texture (built once, disposed) drawn as a floor-flattened
+                      billboard per danger tile; colour (0.95,0.15,0.10), alpha pulses 0.45..0.90 at 3 Hz on
+                      the shared statusAnimationClock; same behind-player cull, 16-tile max distance and
+                      centre-column wall Z occlusion as the summon marker. Plain alpha blend (not additive).
+                      Like the other telegraph passes it ignores no setting: none exists to respect.
+    Mini-map          LevelRenderer: red fill (alpha 0.50) on each danger tile, drawn before the enemy dots.
+    Intent icon       EnemyRenderer intent pass: heavy icons drawn at HEAVY_INTENT_ICON_SCALE (1.5x), frame
+                      tinted the marker red, plus a red "!!" glyph (two bars with dots) BESIDE the icon
+                      (the damage-number band owns the space below). The pass-1 headroom reservation is
+                      scaled by 1.5 for heavies so the cluster still clears the screen top.
+    Edge pulse        World.updateHeavyEdgePulse (update path) -> HitVignetteRenderer.setHeavyEdgeSideMask:
+                      when the player's tile is a danger tile and the source is off-screen
+                      (GameMath.offscreenSideMask), a red band (14% of the width, alpha 0.25..0.70 at 3 Hz)
+                      pulses on the source's side; a source BEHIND the player pulses BOTH edges.
+    Constants: EnemyConstants HEAVY_MARKER_* / HEAVY_MINIMAP_ALPHA / HEAVY_INTENT_*; EffectConstants
+    HEAVY_EDGE_PULSE_*.

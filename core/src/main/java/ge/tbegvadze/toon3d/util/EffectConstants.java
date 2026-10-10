@@ -443,4 +443,14 @@ public final class EffectConstants {
     public static final float AFFLICTION_BLEED_SIZE_FRAC        = 0.16f;
     public static final float AFFLICTION_BLEED_ALPHA            = 0.70f;
     public static final float AFFLICTION_BLEED_R = 0.75f, AFFLICTION_BLEED_G = 0.03f, AFFLICTION_BLEED_B = 0.05f;
+
+    // --- Heavy off-screen edge pulse (balance-overhaul order 4, H16) ---------------------------------
+    /** Width of the red edge band, as a fraction of WORLD_WIDTH. */
+    public static final float HEAVY_EDGE_PULSE_BAND_FRACTION = 0.14f;
+    public static final float HEAVY_EDGE_PULSE_MIN_ALPHA = 0.25f;
+    public static final float HEAVY_EDGE_PULSE_MAX_ALPHA = 0.70f;
+    public static final float HEAVY_EDGE_PULSE_HZ        = 3.0f;
+    public static final float HEAVY_EDGE_PULSE_R = 0.95f;
+    public static final float HEAVY_EDGE_PULSE_G = 0.15f;
+    public static final float HEAVY_EDGE_PULSE_B = 0.10f;
 }

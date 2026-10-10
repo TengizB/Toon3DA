@@ -1272,6 +1272,36 @@ public final class GameMath {
         return (screenWidth / 2f) * (1f - cameraSpaceX / cameraSpaceDepth);
     }
 
+    /** Bit set by {@link #offscreenSideMask} when the source lies off the LEFT screen edge. */
+    public static final int OFFSCREEN_SIDE_LEFT  = 1;
+    /** Bit set by {@link #offscreenSideMask} when the source lies off the RIGHT screen edge. */
+    public static final int OFFSCREEN_SIDE_RIGHT = 2;
+
+    /*
+     * Formula: offscreenSideMask
+     * Derivation: project the source with spriteScreenColumnCenter on a unit-width screen, so the
+     *   visible span is column in [0, 1). column < 0 means the source is past the LEFT edge
+     *   (Y-up convention: small column = left); column >= 1 means past the RIGHT edge. A source at or
+     *   behind the player (cameraSpaceDepth <= epsilon) has no meaningful column — the projection
+     *   divides by ~0 or flips sign — so it is reported on BOTH sides: the player must turn, and
+     *   either way round is a valid turn.
+     *   cameraSpaceDepth is read through spriteDepth (same as the sprite renderers).
+     * Edge cases: returns 0 when the source is in view. Result is a bit mask of OFFSCREEN_SIDE_*.
+     */
+    public static int offscreenSideMask(float differenceX, float differenceY,
+                                        float directionX, float directionY,
+                                        float planeX, float planeY, float behindEpsilon) {
+        float depth = spriteDepth(differenceX, differenceY, directionX, directionY);
+        if (depth <= behindEpsilon) {
+            return OFFSCREEN_SIDE_LEFT | OFFSCREEN_SIDE_RIGHT;
+        }
+        float column = spriteScreenColumnCenter(differenceX, differenceY,
+                directionX, directionY, planeX, planeY, 1);
+        if (column < 0f) return OFFSCREEN_SIDE_LEFT;
+        if (column >= 1f) return OFFSCREEN_SIDE_RIGHT;
+        return 0;
+    }
+
     // =========================================================================
     // SPRITE SCREEN HEIGHT — projected screen height of a billboard sprite
     // =========================================================================

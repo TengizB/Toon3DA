@@ -2504,6 +2504,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         requestBossDefeatedBark();
         requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
+        updateHeavyEdgePulse();
         hitVignetteRenderer.update(deltaTime);
         guardShieldRenderer.update(deltaTime);
         if (bossHudRenderer != null) bossHudRenderer.update(deltaTime);
@@ -4200,6 +4201,34 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
      * at low HP through a fight is one warning, not an alarm.
      */
+    /**
+     * Heavy edge pulse (balance-overhaul order 4, H16): when the player stands on a committed heavy's
+     * danger tile and that heavy is outside the view, tells HitVignetteRenderer which screen edge(s) to
+     * pulse. Sources BEHIND the player pulse BOTH edges (GameMath.offscreenSideMask). Update path only;
+     * no allocation.
+     */
+    private void updateHeavyEdgePulse() {
+        int sideMask = 0;
+        if (!player.isDead()) {
+            int playerColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+            int playerRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+            Enemy threat = enemyManager.findHeavyThreatAt(playerColumn, playerRow);
+            if (threat != null) {
+                float differenceX = ((threat.tileColumn + 0.5f) * Constants.CELL_SIZE - player.positionX)
+                        / Constants.CELL_SIZE;
+                float differenceY = ((threat.tileRow + 0.5f) * Constants.CELL_SIZE - player.positionY)
+                        / Constants.CELL_SIZE;
+                float planeScale = (float) Math.tan(player.getEffectiveFovRadians() / 2.0);
+                sideMask = GameMath.offscreenSideMask(differenceX, differenceY,
+                        player.directionX, player.directionY,
+                        GameMath.cameraPlaneX(player.directionY, planeScale),
+                        GameMath.cameraPlaneY(player.directionX, planeScale),
+                        RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES);
+            }
+        }
+        hitVignetteRenderer.setHeavyEdgeSideMask(sideMask);
+    }
+
     private void updateLowHealthWarningSound() {
         float healthFraction = player.getHealthFraction();
         if (healthAboveLowWarningSound) {

@@ -629,6 +629,39 @@ public final class EnemyConstants {
     /** Capacity of the pre-allocated danger-tile buffers (balance-overhaul order 4, H3). */
     public static final int   HEAVY_DANGER_TILE_CAPACITY    = 32;
 
+    // --- Heavy danger-tile visuals (balance-overhaul order 4, H15/H16) --------------------------------
+    /** Heavy telegraph red, shared by the 3D floor marker, the mini-map fill and the intent frame tint. */
+    public static final float HEAVY_MARKER_R = 0.95f;
+    public static final float HEAVY_MARKER_G = 0.15f;
+    public static final float HEAVY_MARKER_B = 0.10f;
+    /** 3D floor marker pulses between these alphas. */
+    public static final float HEAVY_MARKER_MIN_ALPHA = 0.45f;
+    public static final float HEAVY_MARKER_MAX_ALPHA = 0.90f;
+    public static final float HEAVY_MARKER_PULSE_HZ  = 3.0f;
+    /** Marker width as a fraction of the full wall-stripe height at the tile's depth. */
+    public static final float HEAVY_MARKER_SIZE_FRACTION = 0.75f;
+    /** Vertical squash so the ring reads as lying on the floor plane (height = width * this). */
+    public static final float HEAVY_MARKER_FLOOR_SQUASH  = 0.45f;
+    /** Lift of the marker centre above the floor line, as a fraction of the marker height. */
+    public static final float HEAVY_MARKER_FLOOR_LIFT_FRACTION = 0.50f;
+    public static final float HEAVY_MARKER_MAX_DISTANCE_TILES  = 16f;
+    /** Procedural marker texture edge in pixels (square). */
+    public static final int   HEAVY_MARKER_TEXTURE_SIZE = 32;
+    /** Ring thickness in texture pixels (outer ring); inner chevron X-bars use the same thickness. */
+    public static final int   HEAVY_MARKER_RING_THICKNESS_PIXELS = 3;
+    /** Mini-map fill alpha for a heavy danger tile. */
+    public static final float HEAVY_MINIMAP_ALPHA = 0.50f;
+    /** Heavy intent icon scale over the normal icon size, and the red tint mix into its frame. */
+    public static final float HEAVY_INTENT_ICON_SCALE = 1.5f;
+    /** "!!" sub-glyph under the icon: bar width / height / dot size as fractions of the drawn icon size. */
+    public static final float HEAVY_INTENT_BANG_BAR_WIDTH_FRACTION  = 0.10f;
+    public static final float HEAVY_INTENT_BANG_BAR_HEIGHT_FRACTION = 0.26f;
+    public static final float HEAVY_INTENT_BANG_DOT_SIZE_FRACTION   = 0.10f;
+    /** Horizontal spacing between the two bangs' centres, fraction of drawn icon size. */
+    public static final float HEAVY_INTENT_BANG_SPACING_FRACTION    = 0.22f;
+    /** Gap between the icon bottom and the top of the bang glyph, fraction of drawn icon size. */
+    public static final float HEAVY_INTENT_BANG_GAP_FRACTION        = 0.06f;
+
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
     // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims.
     public static final int   HELL_BARON_DEPTH                = BalanceConfig.HELL_BARON_DEPTH;

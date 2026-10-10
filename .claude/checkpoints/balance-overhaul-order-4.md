@@ -62,11 +62,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP1** — HEAVY flags, SECTION 23 heavy numbers, heavy damage from fractions, heavy TP pricing.
       DONE WHEN: R-HEAVY (damage band, commit, guard cap) and updated R-TELEGRAPH / R-BOSS-VERB-CAP
       green; both gates green.
-- [ ] **CP2** — danger tiles for every heavy; 3D markers, mini-map fill, heavy intent icon, edge pulse.
+- [x] **CP2** — danger tiles for every heavy; 3D markers, mini-map fill, heavy intent icon, edge pulse.
       DONE WHEN: H4 avoidability asserted; A2 holds (build green; desktop check owed if no display). Split:
   - [x] **CP2a** — danger tiles computed at commit, cleared on resolve/stagger/death; queries; H4 lines in R-HEAVY.
         DONE WHEN: build green; R-HEAVY avoidable lines hold.
-  - [ ] **CP2b** — 3D markers, mini-map fill, 1.5x red "!!" heavy intent, off-screen edge pulse.
+  - [x] **CP2b** — 3D markers, mini-map fill, 1.5x red "!!" heavy intent, off-screen edge pulse.
         DONE WHEN: build green; A2 (desktop check owed if no display).
 - [ ] **CP3** — GUARD rework with riposte; armour absorb/shred; status shield.
       DONE WHEN: A3, A4 (shield half) hold; both gates green.
@@ -114,3 +114,9 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Square/Cross`, `everyDangerTileHasSafeNeighbour(... [, firstCheckedIndex])`. Tiles cleared after executePlan
   (phase C recommits same tick), on stagger and on the R6 skip. AREA_STRIKE commit now calls announceWindUp (H17).
   Test count is 454 (CP1's "455" counted XML testcases, off by one).
+- **CP2b handover:** EnemyRenderer Pass 1.65 (heavy floor markers, 32x32 ring texture built once, alpha blend,
+  skips CROSS index 0), heavy intent 1.5x red + "!!" glyph to the RIGHT of the icon (`drawHeavyBangGlyph`; damage
+  band is below). LevelRenderer red fill (enables GL blend before its filled pass). `World.updateHeavyEdgePulse()`
+  -> `HitVignetteRenderer.setHeavyEdgeSideMask(mask)` via `GameMath.offscreenSideMask` (behind = both edges).
+  Constants `EnemyConstants.HEAVY_MARKER_* / HEAVY_MINIMAP_ALPHA / HEAVY_INTENT_*`, `EffectConstants.HEAVY_EDGE_PULSE_*`.
+  DESKTOP CHECK OWED (A2): marker readability 1-5 tiles, icon clearance, mini-map alpha, edge band width.

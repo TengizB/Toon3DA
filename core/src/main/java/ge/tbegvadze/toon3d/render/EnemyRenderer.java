@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.enemy.EnemyTrait;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.HeavyAttack;
 import ge.tbegvadze.toon3d.enemy.IntentVerb;
 import ge.tbegvadze.toon3d.enemy.PlannedAction;
 import ge.tbegvadze.toon3d.enemy.SpecialAbility;
@@ -71,6 +72,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
     // blight-sheet placeholder, so the reworked mobile Overseer renders as its own sprite at boss height).
     private final Texture                       overseerBossTexture;
     private final Texture                       whitePixelTexture;
+    // Heavy danger-tile floor marker (balance-overhaul order 4, H15): procedural ring, built once.
+    private final Texture                       heavyMarkerTexture;
     private final SpriteBatch                   batch;
     private final ShapeRenderer                 shapeRenderer;
 
@@ -235,6 +238,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         textureRegions.put(EnemyType.OVERSEER,         new TextureRegion(overseerBossTexture));
 
         this.whitePixelTexture    = buildWhitePixelTexture();
+        this.heavyMarkerTexture   = buildHeavyMarkerTexture();
         this.nameTagFont          = new BitmapFont();
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout        = new GlyphLayout();
@@ -708,6 +712,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                     + INTENT_ICON_MAX_SIZE * INTENT_NUMBER_BAND_FRACTION
                                     + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR
                                     + INTENT_ICON_MAX_SIZE * (1f + INTENT_POP_SCALE_BONUS)
+                                      * (isHeavyTelegraphing(enemy) ? HEAVY_INTENT_ICON_SCALE : 1f)
                                     + INTENT_ICON_BOB_AMPLITUDE
                                     + labelBand;
                 float clusterHeadroom = barHeight + nameTagBand + intentBand;
@@ -998,6 +1003,33 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
 
         // =====================================================================
+        // Pass 1.65: HEAVY danger tiles (balance-overhaul order 4, H15) — red pulsing floor rings on every
+        // tile a committed heavy will hit. Same projection / cull / centre-column Z occlusion as the summon
+        // marker, but plain alpha blending (additive red washes out on bright floors). No allocation.
+        // =====================================================================
+        boolean anyHeavyTelegraph = false;
+        for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+            if (isHeavyTelegraphing(enemies.get(enemyIndex))) { anyHeavyTelegraph = true; break; }
+        }
+        if (anyHeavyTelegraph) {
+            batch.begin();
+            for (int enemyIndex = 0; enemyIndex < enemyCount; enemyIndex++) {
+                Enemy enemy = enemies.get(enemyIndex);
+                if (!isHeavyTelegraphing(enemy)) continue;
+                PlannedAction heavyPlan = enemy.plannedAction;
+                // CROSS lists the caster's own tile at index 0 — it is not a marker.
+                int firstTileIndex =
+                        (heavyPlan.heavyAttack.dangerShape() == HeavyAttack.DangerShape.CROSS) ? 1 : 0;
+                for (int tileIndex = firstTileIndex; tileIndex < heavyPlan.dangerTileCount; tileIndex++) {
+                    drawHeavyDangerMarker(heavyPlan.dangerTileColumns[tileIndex],
+                                          heavyPlan.dangerTileRows[tileIndex]);
+                }
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+        }
+
+        // =====================================================================
         // Pass 1.7: Boss telegraph floor overlay (boss-fight-mobile-overseer ORDER 8)
         // For every boss with an armed DangerTileSet, draw a flat coloured quad on each danger tile's
         // floor — one COLOUR + SHAPE per threat (Fairness F6) so the player reads what lands where a turn
@@ -1224,7 +1256,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float telegraphStrength = (verb == IntentVerb.WIND_UP) ? enemy.getTelegraphStrength() : 0f;
                 float scale = GameMath.intentIconScale(enemy.getIntentPopStrength(), INTENT_POP_SCALE_BONUS,
                         telegraphStrength, INTENT_WINDUP_PULSE_SCALE_BONUS);
-                float drawnSize = iconSize * scale;
+                boolean heavyIntent = isHeavyTelegraphing(enemy);
+                float drawnSize = iconSize * scale * (heavyIntent ? HEAVY_INTENT_ICON_SCALE : 1f);
 
                 float phaseRadians = (enemy.getId() % 16) / 16f * MathUtils.PI2;
                 float bob = GameMath.intentIconBobOffset(statusAnimationClock, phaseRadians,
@@ -1261,8 +1294,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     intentFrameColor[1] = GameMath.lerp(intentFrameColor[1], 1f, INTENT_PRIORITY_FRAME_BRIGHTEN);
                     intentFrameColor[2] = GameMath.lerp(intentFrameColor[2], 1f, INTENT_PRIORITY_FRAME_BRIGHTEN);
                 }
+                if (heavyIntent) {
+                    // H16: heavies read as the red floor — tint the frame the marker red.
+                    intentFrameColor[0] = HEAVY_MARKER_R;
+                    intentFrameColor[1] = HEAVY_MARKER_G;
+                    intentFrameColor[2] = HEAVY_MARKER_B;
+                }
                 drawIntentFrame(centerX, iconCenterY, drawnSize, intentFrameColor, locked);
                 drawIntentGlyph(verb, enemy, plan, centerX, iconCenterY, drawnSize);
+                if (heavyIntent) {
+                    drawHeavyBangGlyph(centerX, iconCenterY, drawnSize);
+                }
 
                 if (showsNumber && depth <= INTENT_DAMAGE_MAX_DISTANCE_TILES) {
                     boolean isBlock = verb == IntentVerb.DEFEND;
@@ -1329,6 +1371,102 @@ public final class EnemyRenderer implements Renderable, Disposable {
         } else {
             out.set(ENEMY_NAME_TAG_TIER5_R, ENEMY_NAME_TAG_TIER5_G, ENEMY_NAME_TAG_TIER5_B, 1f);
         }
+    }
+
+    /** True when this enemy has a committed, non-stunned heavy whose danger tiles should be drawn. */
+    private static boolean isHeavyTelegraphing(Enemy enemy) {
+        return enemy.isAlive()
+                && enemy.plannedAction.heavyAttack != null
+                && enemy.plannedAction.verb != IntentVerb.STUNNED;
+    }
+
+    /*
+     * Draws one heavy danger-tile ring on the floor (inside an already-open alpha batch). Same projection,
+     * behind-player cull, max distance and centre-column wall Z test as drawSummonTargetMarker; the ring
+     * texture is squashed vertically so it reads as lying flat. Pulses on the shared wall-clock.
+     */
+    private void drawHeavyDangerMarker(int tileColumn, int tileRow) {
+        float worldCenterX = tileColumn * CELL_SIZE + CELL_SIZE / 2f;
+        float worldCenterY = tileRow    * CELL_SIZE + CELL_SIZE / 2f;
+        float tileOffsetX  = (worldCenterX - playerWorldX) / CELL_SIZE;
+        float tileOffsetY  = (worldCenterY - playerWorldY) / CELL_SIZE;
+
+        float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+        if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES)   return;
+        if (depth > HEAVY_MARKER_MAX_DISTANCE_TILES)     return;
+
+        float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                tileOffsetX, tileOffsetY, directionX, directionY, planeX, planeY, projectionColumnCount);
+        int centerColumn = (int) screenCenterColumn;
+        if (centerColumn < 0 || centerColumn >= projectionColumnCount) return;
+        if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) return; // occluded by a nearer wall
+        float markerWorldCenterX = screenCenterColumn * projectionColumnWidth; // column space -> world X
+
+        float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+        float floorY       = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+        float markerWidth  = fullWallLineHeight * HEAVY_MARKER_SIZE_FRACTION;
+        float markerHeight = markerWidth * HEAVY_MARKER_FLOOR_SQUASH;
+        if (markerHeight < 1f) return;
+        float centerY = floorY + markerHeight * HEAVY_MARKER_FLOOR_LIFT_FRACTION;
+
+        float alpha = GameMath.pulseMultiplier(statusAnimationClock, HEAVY_MARKER_PULSE_HZ,
+                HEAVY_MARKER_MIN_ALPHA, HEAVY_MARKER_MAX_ALPHA);
+        batch.setColor(HEAVY_MARKER_R, HEAVY_MARKER_G, HEAVY_MARKER_B, alpha);
+        batch.draw(heavyMarkerTexture, markerWorldCenterX - markerWidth / 2f, centerY - markerHeight / 2f,
+                markerWidth, markerHeight);
+    }
+
+    /*
+     * Draws the "!!" sub-glyph (two bars, each with a dot beneath) to the right of an enlarged heavy
+     * intent icon, from the white pixel. It sits beside the icon, not below, because the damage-number
+     * band already occupies the space under it. Colour is the heavy red.
+     */
+    private void drawHeavyBangGlyph(float iconCenterX, float iconCenterY, float iconSize) {
+        float barWidth  = iconSize * HEAVY_INTENT_BANG_BAR_WIDTH_FRACTION;
+        float barHeight = iconSize * HEAVY_INTENT_BANG_BAR_HEIGHT_FRACTION;
+        float dotSize   = iconSize * HEAVY_INTENT_BANG_DOT_SIZE_FRACTION;
+        float spacing   = iconSize * HEAVY_INTENT_BANG_SPACING_FRACTION;
+        float groupHeight = barHeight + 2f * dotSize; // bar, a one-dot gap, then the dot
+        float dotBottom   = iconCenterY - groupHeight / 2f;
+        float barBottom   = dotBottom + 2f * dotSize;
+        float firstCenterX = iconCenterX + iconSize / 2f + INTENT_FRAME_BORDER_PIXELS
+                + iconSize * HEAVY_INTENT_BANG_GAP_FRACTION + barWidth / 2f;
+        batch.setColor(HEAVY_MARKER_R, HEAVY_MARKER_G, HEAVY_MARKER_B, 1f);
+        for (int bangIndex = 0; bangIndex < 2; bangIndex++) {
+            float bangCenterX = firstCenterX + bangIndex * spacing;
+            drawCenteredQuad(bangCenterX, barBottom + barHeight / 2f, barWidth, barHeight, 0f);
+            drawCenteredQuad(bangCenterX, dotBottom + dotSize / 2f, dotSize, dotSize, 0f);
+        }
+    }
+
+    /**
+     * Heavy floor marker texture: a hollow ring with a soft centre disc, white so the batch tint picks the
+     * red and the pulse alpha. Per-pixel radial distance, built once at construction.
+     */
+    private static Texture buildHeavyMarkerTexture() {
+        int size = HEAVY_MARKER_TEXTURE_SIZE;
+        Pixmap pixmap = new Pixmap(size, size, Pixmap.Format.RGBA8888);
+        pixmap.setBlending(Pixmap.Blending.None);
+        float half        = size / 2f;
+        float outerRadius = half - 0.5f;
+        float innerRadius = outerRadius - HEAVY_MARKER_RING_THICKNESS_PIXELS;
+        float discRadius  = outerRadius * 0.30f;
+        for (int pixelY = 0; pixelY < size; pixelY++) {
+            for (int pixelX = 0; pixelX < size; pixelX++) {
+                float differenceX = pixelX + 0.5f - half;
+                float differenceY = pixelY + 0.5f - half;
+                float distance = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
+                float alpha = 0f;
+                if (distance <= outerRadius && distance >= innerRadius) alpha = 1f;
+                else if (distance <= discRadius) alpha = 0.6f;
+                pixmap.setColor(1f, 1f, 1f, alpha);
+                pixmap.drawPixel(pixelX, pixelY);
+            }
+        }
+        Texture texture = new Texture(pixmap);
+        texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        pixmap.dispose();
+        return texture;
     }
 
     /** True when this enemy is telegraphing a SUMMON (committed SPECIAL/SUMMON with live target cells). */
@@ -1922,6 +2060,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         revenantTexture.dispose();
         overseerBossTexture.dispose();
         whitePixelTexture.dispose();
+        heavyMarkerTexture.dispose();
         nameTagFont.dispose();
     }
 
