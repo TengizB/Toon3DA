@@ -34,6 +34,7 @@ public enum PerkModifier {
                                 stats.spreadKillShellRefundChance = Math.min(1f, stats.spreadKillShellRefundChance + magnitude); } },
     BURN_MAX_STACK        { @Override void apply(BuildStats stats, float magnitude) { stats.burnMaxStackBonus += Math.round(magnitude); } },
     WILDFIRE              { @Override void apply(BuildStats stats, float magnitude) { stats.wildfire = true; } },
+    BURN_TURNS            { @Override void apply(BuildStats stats, float magnitude) { stats.burnTurnBonus += Math.round(magnitude); } },
     FIRE_TILE_IMMUNE      { @Override void apply(BuildStats stats, float magnitude) { stats.fireTileImmune = true; } },
     OWN_EXPLOSION_REDUCTION { @Override void apply(BuildStats stats, float magnitude) {
                                 stats.ownExplosionDamageReduction = Math.min(1f, stats.ownExplosionDamageReduction + magnitude); } },

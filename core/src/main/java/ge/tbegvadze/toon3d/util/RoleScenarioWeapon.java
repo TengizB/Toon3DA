@@ -52,7 +52,7 @@ public final class RoleScenarioWeapon {
     public final float   arcFraction;
     /** Hits and burn ticks on a burning member deal (1 + this) x (PYROMANIAC). */
     public final float   burningDamageBonus;
-    /** A burning member that dies ignites its tile: every other living member gains one burn stack (Wildfire). */
+    /** A burning member that dies ignites its tile: every other living member gains its full burn stacks (Wildfire, D5). */
     public final boolean wildfire;
 
     public RoleScenarioWeapon(String displayName, int clipActions, int reloadTurns, int ammoPerAction,

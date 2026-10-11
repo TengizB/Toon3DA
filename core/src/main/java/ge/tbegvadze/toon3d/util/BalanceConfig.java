@@ -2831,6 +2831,9 @@ public final class BalanceConfig {
     /** Accelerant (decided): FIRE damage (impact and the burn it seeds), total by rank — the burn stack alone is never reached in a reference fight. Range: 0.15-0.25 per rank. */
     public static final float[] PERK_ACCELERANT_FIRE_DAMAGE_BY_RANK       = {0.18f, 0.38f, 0.60f};
 
+    /** Wildfire (owner ruling D5): extra turns every burn the player applies lasts, total by rank. Range: 1 per rank. */
+    public static final float[] PERK_WILDFIRE_BURN_TURNS_BY_RANK          = {1f, 2f, 3f};
+
     // --- DEMOLITION ------------------------------------------------------------------------------
     /** Shaped Charges: EXPLOSIVE damage, total by rank. Spec default +20%/rank; MOVED to 32/68/112% for R-CARRY (DEMOLITION's lift, net of DEMOLITIONIST's HP cost). Range: 0.25-0.40 per rank. */
     public static final float[] PERK_SHAPED_CHARGES_DAMAGE_BY_RANK        = {0.32f, 0.68f, 1.12f};

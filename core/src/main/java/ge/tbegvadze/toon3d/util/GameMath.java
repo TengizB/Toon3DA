@@ -6442,7 +6442,7 @@ public final class GameMath {
      *     PIERCE k-th member         hit x (1 + pierceBonusPerTarget x k)
      *     arc                        one more living member past the pattern takes primaryHit x arcFraction
      *     burning member             hit and tick x (1 + burningDamageBonus)
-     *     Wildfire                   a burning member that dies gives every other living member one stack
+     *     Wildfire                   a burning member that dies gives every other living member its full stacks
      * Edge cases: a weapon with no reach in the band, or one that cannot clear inside turnCap, returns
      *   cleared = false and turnsToClear = turnCap. groupSize < 1 is treated as 1; laneTargets < 1 as 1.
      *   Neutral build terms multiply by exactly 1 / add exactly 0, so the order-3 table is bit-identical.
@@ -6494,7 +6494,7 @@ public final class GameMath {
                     float tick = burnPerStack * burnStacks[member] * (1f + weapon.burningDamageBonus);
                     applyRoleScenarioDamage(health, member, tick, members, turn, lastKill);
                     burnRemaining[member]--;
-                    if (health[member] <= 0f) igniteRoleScenarioNeighbours(weapon, health, burnStacks, burnRemaining, members);
+                    if (health[member] <= 0f) igniteRoleScenarioNeighbours(weapon, health, burnStacks, burnRemaining, members, burnStacks[member]);
                 }
             }
             if (lastKill[0] >= 0f) {
@@ -6567,20 +6567,23 @@ public final class GameMath {
         if (burning) damage *= 1f + weapon.burningDamageBonus;
         applyRoleScenarioDamage(health, member, damage, members, turn, lastKill);
         hitsLanded[member]++;
-        if (burning && health[member] <= 0f) igniteRoleScenarioNeighbours(weapon, health, burnStacks, burnRemaining, members);
+        if (burning && health[member] <= 0f) igniteRoleScenarioNeighbours(weapon, health, burnStacks, burnRemaining, members, burnStacks[member]);
         if (appliesBurn && weapon.burns() && health[member] > 0f) {
             burnStacks[member]    = Math.min(weapon.burnMaxStacks, burnStacks[member] + 1);
             burnRemaining[member] = weapon.burnTurns;
         }
     }
 
-    /** Wildfire: a burning member died — every other living member gains one burn stack (cap) and a fresh timer. */
+    /**
+     * Wildfire (owner ruling D5): a burning member died — every other living member (its neighbours in the
+     * clustered group) gains the dead member's FULL burn stacks (cap burnMaxStacks) and a fresh timer.
+     */
     private static void igniteRoleScenarioNeighbours(RoleScenarioWeapon weapon, float[] health, int[] burnStacks,
-                                                     int[] burnRemaining, int members) {
-        if (!weapon.wildfire || !weapon.burns()) return;
+                                                     int[] burnRemaining, int members, int spreadStacks) {
+        if (!weapon.wildfire || !weapon.burns() || spreadStacks <= 0) return;
         for (int other = 0; other < members; other++) {
             if (health[other] <= 0f) continue;
-            burnStacks[other]    = Math.min(weapon.burnMaxStacks, burnStacks[other] + 1);
+            burnStacks[other]    = Math.min(weapon.burnMaxStacks, burnStacks[other] + spreadStacks);
             burnRemaining[other] = weapon.burnTurns;
         }
     }

@@ -46,8 +46,10 @@ public final class BuildStats {
     float spreadKillShellRefundChance;
     /** Accelerant: extra max burn stacks (FIRE). */
     int   burnMaxStackBonus;
-    /** Wildfire: a burning enemy that dies ignites its tile. */
+    /** Wildfire (D5): a burning enemy that dies spreads its full burn stacks to its neighbours. */
     boolean wildfire;
+    /** Wildfire (D5): extra turns every burn the player applies lasts. */
+    int   burnTurnBonus;
     /** Fireproof (and PYROMANIAC): immune to fire tiles. */
     boolean fireTileImmune;
     /** Blast Shield: fraction of the player's own explosion damage removed (never above 1). */
@@ -150,6 +152,7 @@ public final class BuildStats {
         spreadKillShellRefundChance = 0f;
         burnMaxStackBonus = 0;
         wildfire = false;
+        burnTurnBonus = 0;
         fireTileImmune = false;
         ownExplosionDamageReduction = 0f;
         barrelDamageBonus = 0f;
@@ -205,6 +208,7 @@ public final class BuildStats {
         spreadKillShellRefundChance = other.spreadKillShellRefundChance;
         burnMaxStackBonus = other.burnMaxStackBonus;
         wildfire = other.wildfire;
+        burnTurnBonus = other.burnTurnBonus;
         fireTileImmune = other.fireTileImmune;
         ownExplosionDamageReduction = other.ownExplosionDamageReduction;
         barrelDamageBonus = other.barrelDamageBonus;
@@ -334,6 +338,7 @@ public final class BuildStats {
     public float spreadKillShellRefundChance()     { return spreadKillShellRefundChance; }
     public int   burnMaxStackBonus()               { return burnMaxStackBonus; }
     public boolean wildfire()                      { return wildfire; }
+    public int   burnTurnBonus()                   { return burnTurnBonus; }
     public boolean barrelsOnMinimap()              { return barrelsOnMinimap; }
     public int   arcChainJumpBonus()               { return arcChainJumpBonus; }
     public float arcChainMultiplierBonus()         { return arcChainMultiplierBonus; }
