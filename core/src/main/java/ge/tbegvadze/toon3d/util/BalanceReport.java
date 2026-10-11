@@ -464,13 +464,15 @@ public final class BalanceReport {
             String breakpoint = "-";
             float focus = Float.NaN;
             boolean focusOk = true;
+            boolean waived = false;
             for (BalanceSchema.RuleResult result : results) {
+                if (result.waived && result.subject.startsWith("PK1 " + perk.name() + " ")) waived = true;
                 String prefix1 = "PK1 " + perk.name() + " r";
                 if (result.subject.startsWith(prefix1) && result.subject.contains(" felt d")) {
                     int rank = result.subject.charAt(prefix1.length()) - '1';
                     gains[rank] = Float.isNaN(gains[rank]) ? result.value : Math.min(gains[rank], result.value);
                 } else if (result.subject.startsWith("PK1 " + perk.name() + " breakpoint")) {
-                    breakpoint = (result.satisfied ? "" : "*** NONE: ") + result.detail;
+                    breakpoint = (result.satisfied ? "" : result.waived ? "WAIVED: " : "*** NONE: ") + result.detail;
                 } else if (result.subject.startsWith("PK2 " + perk.name() + " ")) {
                     focus = Float.isNaN(focus) ? result.value : Math.max(focus, result.value);
                     focusOk &= result.satisfied;
@@ -481,7 +483,7 @@ public final class BalanceReport {
                     perk.name(), perk.tag.name(),
                     (BuildValuationModel.hasOverride(perk) ? "*" : " ") + niche.label(),
                     gainCell(gains[0]), gainCell(gains[1]), gainCell(gains[2]), breakpoint,
-                    focus * 100f, focusOk ? "" : " ***");
+                    focus * 100f, (focusOk ? "" : " ***") + (waived ? "  [rows WAIVED, D6]" : ""));
         }
         System.out.println("------------------------------------------------------------------------------------------------------------------------------");
         System.out.println("KEYSTONES (R-KEYSTONE) — niche gain >= " + String.format("%.0f%%", BalanceConfig.KEYSTONE_NICHE_MIN_GAIN * 100f)

@@ -305,6 +305,18 @@ public final class BalanceSchema {
                 "SCAVENGER's value is supply, shop and carrier economy, not reference-fight TTK / TTD; "
                         + "R-CARRY's conversion under-reads it (owner ruling D3, balance-overhaul order 5).",
                 "Expires when order 6 re-derives the economy with SCAVENGER in the expected player.");
+        // Balance-overhaul order 5, owner ruling D6: Wildfire (D5) ranks 2-3 add burn TURNS and its D4
+        // breakpoint reads fuel; no reference group fight outlasts a burn or saves a spray. Exact subjects
+        // only — rank-1 FELT and PK2 stay enforced.
+        String wildfireReason = "every reference group fight ends inside the first spray or two, so burn duration "
+                + "is invisible to the scenario math";
+        String wildfireExpiry = "a long-group reference scenario exists (order 7 feel pass)";
+        for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+            waive(RuleKind.PERK, "PK1 WILDFIRE r2 felt d" + depth, wildfireReason, wildfireExpiry);
+            waive(RuleKind.PERK, "PK1 WILDFIRE r3 felt d" + depth, wildfireReason, wildfireExpiry);
+        }
+        waive(RuleKind.PERK, "PK1 WILDFIRE breakpoint by r3 (D4 resource: SCENARIO_AMMO S5 Incinerator)",
+                wildfireReason, wildfireExpiry);
     }
 
     /** True when a tag's R-CARRY row carries an explicit waiver (excluded from the best / worst spread). */
