@@ -866,6 +866,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventoryOverlayRenderer.setPlayerInventory(inventory);
         inventoryOverlayRenderer.setWeaponHudRenderer(weaponHudRenderer);
         inventoryOverlayRenderer.setPlayerStats(playerStats);
+        inventoryOverlayRenderer.setPlayerBuild(playerBuild);
         hudRenderer          = new HudRenderer(player, hudState);
         hudRenderer.setPlayerInventory(inventory);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
@@ -2562,7 +2563,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     // EDGE: every perk is maxed — the level is still gained, with nothing left to offer.
                     completeLevelUp();
                 } else {
-                    levelUpOverlayRenderer.setOfferedPerks(offeredPerks, offeredPerkCount, playerBuild);
+                    levelUpOverlayRenderer.setOfferedPerks(offeredPerks, offeredPerkCount, playerBuild, carriedBuildTags());
                     runPhase = RunPhase.LEVEL_UP_OVERLAY;
                 }
             }
@@ -2667,6 +2668,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
         levelRenderer.setAnimationClock(facilityTimeSeconds);
+        levelRenderer.setBarrelsHighlighted(playerBuild.stats().barrelsOnMinimap());
         levelRenderer.render(camera);
 
         player.render(camera);

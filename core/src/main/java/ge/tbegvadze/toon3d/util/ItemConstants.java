@@ -121,6 +121,8 @@ public final class ItemConstants {
     public static final float INV_HEADER_CODEX_BUTTON_WIDTH  = 130f;
     public static final float INV_HEADER_CODEX_BUTTON_HEIGHT = 50f;
     public static final float INV_HEADER_CODEX_GAP           = 12f;
+    // BUILD button (balance-overhaul order 5, B8): left of CODEX, same height; toggles the BUILD page.
+    public static final float INV_HEADER_BUILD_BUTTON_WIDTH  = 110f;
     public static final float INV_BASE_DIM_FACTOR         = 0.40f;
     public static final float INV_ITEM_WIN_DIM_FACTOR     = 0.50f;
 

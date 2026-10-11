@@ -42,6 +42,10 @@ public final class RenderConstants {
     public static final float MINIMAP_BARREL_R         = 1.00f;
     public static final float MINIMAP_BARREL_G         = 0.48f;
     public static final float MINIMAP_BARREL_B         = 0.09f;
+    // Sapper r1 (balance-overhaul order 5): the pulsing dot that marks a barrel — brighter than the tile square.
+    public static final float MINIMAP_BARREL_DOT_R     = 1.00f;
+    public static final float MINIMAP_BARREL_DOT_G     = 0.85f;
+    public static final float MINIMAP_BARREL_DOT_B     = 0.25f;
     public static final float MINIMAP_HEALTH_PICKUP_R  = 0.20f;
     public static final float MINIMAP_HEALTH_PICKUP_G  = 0.90f;
     public static final float MINIMAP_HEALTH_PICKUP_B  = 0.20f;

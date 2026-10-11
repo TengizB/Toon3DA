@@ -10,8 +10,12 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.render.BuildTagPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.ProgressionConstants;
+
+import java.util.EnumSet;
 
 /**
  * Renders the full-screen level-up PERK overlay for mobile (balance-overhaul order 5, B3/B8).
@@ -19,8 +23,9 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
  * <p>The overlay shows the {@link BalanceConfig#PERKS_OFFERED} perks {@link PerkDeck} drew for this
  * level-up. World sets the offer via {@link #setOfferedPerks(Perk[], int, PlayerBuild)} before this
  * renders; each plate carries the perk's name, the rank it would reach, its {@link BuildTag} and its
- * one-line effect. (CP5 of order 5 replaces the plain tag label with a tag chip, the SYNERGY ribbon and
- * rank pips.) Tap detection is via {@link #getTappedCardIndex(float, float)} which tests world-space
+ * one-line effect. CP5 of order 5 draws the tag as a colour-coded CHIP, marks SYNERGY plates with an amber
+ * corner ribbon + label, shows RANK PIPS (filled = owned, white = what the pick buys), and gives KEYSTONE
+ * plates a gold double frame. Tap detection is via {@link #getTappedCardIndex(float, float)} which tests world-space
  * (viewport-unprojected) coords.</p>
  *
  * <h2>Visual pipeline</h2>
@@ -54,15 +59,26 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
     // Text Y offsets measured DOWN from the top of the card body.
     private static final float HEADER_TEXT_Y   = 40f;   // card name, centered in header strip
-    private static final float VALUE_Y         = 118f;  // big headline value
-    private static final float LABEL_Y         = 158f;  // effect label
-    private static final float DIVIDER_Y       = 178f;  // hairline separator under the label
-    private static final float DESC_Y          = 206f;  // wrapped description
-    private static final float TAP_Y           = CARD_HEIGHT - 34f; // "TAP TO CHOOSE" hint
+    private static final float CHIP_TOP_OFFSET  = 72f;  // tag chip: top edge below the card top
+    private static final float CHIP_HEIGHT      = 26f;
+    private static final float CHIP_TEXT_RISE   = 19f;  // chip text baseline above the chip bottom
+    private static final float CHIP_TEXT_PAD    = 14f;  // chip side padding around its text
+    private static final float VALUE_Y         = 134f;  // "RANK 2 / 3" / "KEYSTONE"
+    private static final float PIP_CENTER_Y    = 160f;  // rank pip row
+    private static final float PIP_RADIUS      = 8f;
+    private static final float PIP_SPACING     = 30f;
+    private static final float PIP_NEXT_RING   = 3f;    // extra ring radius around the highlighted next pip
+    private static final float DIVIDER_Y       = 178f;  // hairline separator under the pips
+    private static final float DESC_Y          = 200f;  // wrapped description / gain line
+    private static final float TAP_BOTTOM_OFFSET = 22f; // "TAP TO CHOOSE" baseline above the card bottom
     /** Baseline of a keystone's cost line, measured UP from the plate bottom (balance-overhaul order 5). */
-    private static final float COST_LINE_BOTTOM_OFFSET = 52f;
+    private static final float COST_LINE_BOTTOM_OFFSET = 68f;
     /** The value line of a keystone plate. */
     private static final String KEYSTONE_VALUE_TEXT = "KEYSTONE";
+    private static final String SYNERGY_TEXT = "SYNERGY";
+    private static final float SYNERGY_RIBBON_SIZE = 46f;   // right-angle corner triangle legs
+    private static final float KEYSTONE_INNER_FRAME_INSET = 8f;
+    private static final float SCALE_CHIP = 1.0f;
 
     // Title / subtitle above the cards
     private static final float TITLE_Y    = CARD_Y + CARD_HEIGHT + 78f;
@@ -86,7 +102,8 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final Color WHITE       = new Color(0.97f, 0.97f, 0.98f, 1.00f);
     private static final Color GOLD        = new Color(1.00f, 0.88f, 0.20f, 1.00f);
     /** A keystone's cost line (the order-5 spec's cost colour). */
-    private static final Color COST_RED    = new Color(0.95f, 0.30f, 0.25f, 1.00f);
+    private static final Color COST_RED    = new Color(ProgressionConstants.BUILD_COST_RED,
+            ProgressionConstants.BUILD_COST_GREEN, ProgressionConstants.BUILD_COST_BLUE, 1.00f);
     private static final Color DIM_HINT    = new Color(0.62f, 0.62f, 0.66f, 1.00f);
     private static final Color CARD_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.50f);
     private static final Color TEXT_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.72f);
@@ -94,40 +111,39 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final Color INNER_EDGE  = new Color(1.00f, 1.00f, 1.00f, 0.16f);
     private static final Color DIVIDER     = new Color(1.00f, 1.00f, 1.00f, 0.20f);
 
-    // ---- Plate palette. The four historic accents are kept as a small cycle over the BuildTag ordinal so
-    // neighbouring tags read apart; CP5 of balance-overhaul order 5 replaces this with the tag chip colours.
-    private static final Color[] POOL_ACCENT = {
-        new Color(1.00f, 0.52f, 0.22f, 1.00f), // OFFENSE — red-orange
-        new Color(0.20f, 0.86f, 0.98f, 1.00f), // DEFENSE — cyan
-        new Color(0.28f, 1.00f, 0.52f, 1.00f), // SUSTAIN — green
-        new Color(1.00f, 0.83f, 0.28f, 1.00f), // UTILITY — gold
-    };
+    private static final Color SYNERGY_AMBER = new Color(ProgressionConstants.BUILD_SYNERGY_RED,
+            ProgressionConstants.BUILD_SYNERGY_GREEN, ProgressionConstants.BUILD_SYNERGY_BLUE, 1f);
+    private static final Color KEYSTONE_GOLD = new Color(ProgressionConstants.BUILD_KEYSTONE_GOLD_RED,
+            ProgressionConstants.BUILD_KEYSTONE_GOLD_GREEN, ProgressionConstants.BUILD_KEYSTONE_GOLD_BLUE, 1f);
+    private static final Color KEYSTONE_GLOW = new Color(KEYSTONE_GOLD.r, KEYSTONE_GOLD.g, KEYSTONE_GOLD.b, 0.30f);
+    private static final Color CHIP_TEXT_COLOR = new Color(0.04f, 0.04f, 0.06f, 1f);
+    private static final Color PIP_EMPTY_FILL = new Color(0.05f, 0.05f, 0.07f, 1f);
+    private static final Color PIP_EMPTY_RING = new Color(0.55f, 0.55f, 0.60f, 1f);
+
+    // ---- Plate palettes, one entry per BuildTag ordinal, derived from the tag's chip colour (BuildTagPalette).
     // Card body gradient: lighter at the top of the body, deepening toward the bottom.
-    private static final Color[] POOL_BODY_TOP = {
-        new Color(0.22f, 0.09f, 0.05f, 0.98f), // OFFENSE
-        new Color(0.06f, 0.16f, 0.21f, 0.98f), // DEFENSE
-        new Color(0.06f, 0.18f, 0.09f, 0.98f), // SUSTAIN
-        new Color(0.20f, 0.16f, 0.05f, 0.98f), // UTILITY
-    };
-    private static final Color[] POOL_BODY_BOTTOM = new Color[POOL_ACCENT.length];
+    private static final int TAG_COUNT = BuildTag.values().length;
+    private static final Color[] TAG_ACCENT = new Color[TAG_COUNT];
+    private static final Color[] TAG_BODY_TOP = new Color[TAG_COUNT];
+    private static final Color[] TAG_BODY_BOTTOM = new Color[TAG_COUNT];
     // Header strip gradient runs from the bright accent (top) to a deeper accent (bottom).
-    private static final Color[] POOL_STRIP_TOP = {
-        new Color(0.95f, 0.46f, 0.16f, 1.00f), // OFFENSE
-        new Color(0.14f, 0.78f, 0.92f, 1.00f), // DEFENSE
-        new Color(0.20f, 0.86f, 0.42f, 1.00f), // SUSTAIN
-        new Color(0.92f, 0.74f, 0.16f, 1.00f), // UTILITY
-    };
-    private static final Color[] POOL_STRIP_BOTTOM = new Color[POOL_ACCENT.length];
+    private static final Color[] TAG_STRIP_TOP = new Color[TAG_COUNT];
+    private static final Color[] TAG_STRIP_BOTTOM = new Color[TAG_COUNT];
     // Soft outer halo — the accent color at low alpha.
-    private static final Color[] POOL_GLOW = new Color[POOL_ACCENT.length];
+    private static final Color[] TAG_GLOW = new Color[TAG_COUNT];
 
     static {
-        for (int poolIndex = 0; poolIndex < POOL_ACCENT.length; poolIndex++) {
-            POOL_BODY_BOTTOM[poolIndex] = scaleRgb(POOL_BODY_TOP[poolIndex], 0.35f);
-            POOL_STRIP_BOTTOM[poolIndex] = scaleRgb(POOL_STRIP_TOP[poolIndex], 0.62f);
-            Color glow = new Color(POOL_ACCENT[poolIndex]);
+        for (BuildTag tag : BuildTag.values()) {
+            int index = tag.ordinal();
+            Color accent = BuildTagPalette.colorOf(tag);
+            TAG_ACCENT[index]       = accent;
+            TAG_BODY_TOP[index]     = new Color(accent.r * 0.20f, accent.g * 0.20f, accent.b * 0.20f, 0.98f);
+            TAG_BODY_BOTTOM[index]  = scaleRgb(TAG_BODY_TOP[index], 0.35f);
+            TAG_STRIP_TOP[index]    = new Color(accent.r * 0.92f, accent.g * 0.92f, accent.b * 0.92f, 1f);
+            TAG_STRIP_BOTTOM[index] = scaleRgb(TAG_STRIP_TOP[index], 0.62f);
+            Color glow = new Color(accent);
             glow.a = 0.22f;
-            POOL_GLOW[poolIndex] = glow;
+            TAG_GLOW[index] = glow;
         }
     }
 
@@ -157,6 +173,14 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private final String[]   plateDescriptions = new String[MAX_CARDS];
     /** The keystone's COST line (drawn in the cost colour); null for a perk. */
     private final String[]   plateCostLines   = new String[MAX_CARDS];
+    /** Per plate: ranks owned BEFORE the pick (perk) — drives the filled pips; the next pip is highlighted. */
+    private final int[]      plateOwnedRanks  = new int[MAX_CARDS];
+    /** Per plate: the perk's max rank (pip count); 0 for a keystone (no pips). */
+    private final int[]      plateMaxRanks    = new int[MAX_CARDS];
+    /** Per plate: SYNERGY with the carried weapons' tags. */
+    private final boolean[]  plateSynergy     = new boolean[MAX_CARDS];
+    /** Per plate: pixel width of the tag chip (text + padding), measured once per offer. */
+    private final float[]    plateChipWidths  = new float[MAX_CARDS];
     private boolean keystoneMode = false;
     private int offeredCount = 0;
 
@@ -180,10 +204,11 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
     /**
      * Sets the perks to display this level-up. Copies references into the renderer's fixed array and builds
-     * each plate's rank text once (the rank the pick would reach); {@code count} is clamped to the plate
-     * slots available. Call before {@link #render}.
+     * each plate's rank text, chip width and SYNERGY flag once ({@code carriedTags} are the weapon tags the
+     * player carries, as {@link PerkDeck#isSynergy} reads them); {@code count} is clamped to the plate slots
+     * available. Call before {@link #render}.
      */
-    public void setOfferedPerks(Perk[] perks, int count, PlayerBuild build) {
+    public void setOfferedPerks(Perk[] perks, int count, PlayerBuild build, EnumSet<BuildTag> carriedTags) {
         keystoneMode = false;
         offeredCount = Math.min(count, MAX_CARDS);
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
@@ -195,12 +220,16 @@ public final class LevelUpOverlayRenderer implements Disposable {
             plateValueTexts[cardIndex]   = "RANK " + (build.rankOf(perk) + 1) + " / " + perk.maxRank;
             plateDescriptions[cardIndex] = perk.effectLine;
             plateCostLines[cardIndex]    = null;
+            plateOwnedRanks[cardIndex]   = build.rankOf(perk);
+            plateMaxRanks[cardIndex]     = perk.maxRank;
+            plateSynergy[cardIndex]      = PerkDeck.isSynergy(perk, carriedTags);
+            plateChipWidths[cardIndex]   = measureChipWidth(perk.tag);
         }
     }
 
     /**
      * KEYSTONE mode (balance-overhaul order 5, B4): the plates show this keystone level's offer instead of
-     * perks — name, tag, the GAIN line and the COST line (in the cost colour). CP5 adds the gold frame.
+     * perks — name, tag chip, the GAIN line and the COST line (in the cost colour), inside a gold double frame.
      */
     public void setOfferedKeystones(Keystone[] keystones, int count) {
         keystoneMode = true;
@@ -214,7 +243,17 @@ public final class LevelUpOverlayRenderer implements Disposable {
             plateValueTexts[cardIndex]   = KEYSTONE_VALUE_TEXT;
             plateDescriptions[cardIndex] = keystone.gainLine;
             plateCostLines[cardIndex]    = keystone.costLine;
+            plateOwnedRanks[cardIndex]   = 0;
+            plateMaxRanks[cardIndex]     = 0;
+            plateSynergy[cardIndex]      = false;
+            plateChipWidths[cardIndex]   = measureChipWidth(keystone.tag);
         }
+    }
+
+    private float measureChipWidth(BuildTag tag) {
+        font.getData().setScale(SCALE_CHIP);
+        glyphLayout.setText(font, tag.displayName());
+        return glyphLayout.width + CHIP_TEXT_PAD * 2f;
     }
 
     /** True while the overlay offers keystones rather than perks. */
@@ -251,13 +290,14 @@ public final class LevelUpOverlayRenderer implements Disposable {
         return offeredKeystones[cardIndex];
     }
 
-    /** The plate palette index for a build tag (a cycle over its ordinal). */
-    private static int paletteIndexOf(BuildTag tag) {
-        return tag.ordinal() % POOL_ACCENT.length;
-    }
-
     private float cardLeftX(int cardIndex) {
         return CARDS_LEFT_X + cardIndex * (CARD_WIDTH + CARD_GAP);
+    }
+
+    /** X centre of pip {@code pipIndex} in a row of {@code pipCount}, centred on the card. */
+    private static float pipCenterX(float cardX, int pipCount, int pipIndex) {
+        float rowWidth = (pipCount - 1) * PIP_SPACING;
+        return cardX + CARD_WIDTH / 2f - rowWidth / 2f + pipIndex * PIP_SPACING;
     }
 
     /** Y of the top of the card body (below which everything is measured downward). */
@@ -284,11 +324,11 @@ public final class LevelUpOverlayRenderer implements Disposable {
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            int pool = paletteIndexOf(offeredTags[cardIndex]);
+            int pool = offeredTags[cardIndex].ordinal();
             float cardX = cardLeftX(cardIndex);
 
-            // Soft outer glow halo
-            shapes.setColor(POOL_GLOW[pool]);
+            // Soft outer glow halo (gold for a keystone)
+            shapes.setColor(keystoneMode ? KEYSTONE_GLOW : TAG_GLOW[pool]);
             shapes.rect(cardX - GLOW_INSET, CARD_Y - GLOW_INSET,
                     CARD_WIDTH + GLOW_INSET * 2f, CARD_HEIGHT + GLOW_INSET * 2f);
 
@@ -298,40 +338,96 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
             // Card body — vertical gradient (top lighter, bottom darker).
             // rect(x, y, w, h, bottomLeft, bottomRight, topRight, topLeft)
-            Color bodyTop = POOL_BODY_TOP[pool];
-            Color bodyBottom = POOL_BODY_BOTTOM[pool];
+            Color bodyTop = TAG_BODY_TOP[pool];
+            Color bodyBottom = TAG_BODY_BOTTOM[pool];
             shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT,
                     bodyBottom, bodyBottom, bodyTop, bodyTop);
 
             // Header accent strip — gradient bright (top) to deep (bottom).
-            Color stripTop = POOL_STRIP_TOP[pool];
-            Color stripBottom = POOL_STRIP_BOTTOM[pool];
+            Color stripTop = TAG_STRIP_TOP[pool];
+            Color stripBottom = TAG_STRIP_BOTTOM[pool];
             float stripY = cardTopY() - HEADER_STRIP_HEIGHT;
             shapes.rect(cardX, stripY, CARD_WIDTH, HEADER_STRIP_HEIGHT,
                     stripBottom, stripBottom, stripTop, stripTop);
+
+            // Tag chip — a rounded plate (rect + end caps) in the tag's colour
+            float chipWidth = plateChipWidths[cardIndex];
+            float chipLeft = cardX + (CARD_WIDTH - chipWidth) / 2f;
+            float chipBottom = cardTopY() - CHIP_TOP_OFFSET - CHIP_HEIGHT;
+            float capRadius = CHIP_HEIGHT / 2f;
+            shapes.setColor(TAG_ACCENT[pool]);
+            shapes.rect(chipLeft, chipBottom, chipWidth, CHIP_HEIGHT);
+            shapes.circle(chipLeft, chipBottom + capRadius, capRadius);
+            shapes.circle(chipLeft + chipWidth, chipBottom + capRadius, capRadius);
+
+            // SYNERGY corner ribbon — amber right triangle in the top-right corner
+            if (plateSynergy[cardIndex]) {
+                float right = cardX + CARD_WIDTH;
+                shapes.setColor(SYNERGY_AMBER);
+                shapes.triangle(right - SYNERGY_RIBBON_SIZE, cardTopY(), right, cardTopY(),
+                        right, cardTopY() - SYNERGY_RIBBON_SIZE);
+            }
+
+            // Rank pips: owned = accent, the one this pick buys = white, the rest dark (ring in pass B)
+            int pipCount = plateMaxRanks[cardIndex];
+            for (int pipIndex = 0; pipIndex < pipCount; pipIndex++) {
+                int pipRank = pipIndex + 1;
+                if (pipRank <= plateOwnedRanks[cardIndex]) {
+                    shapes.setColor(TAG_ACCENT[pool]);
+                } else if (pipRank == plateOwnedRanks[cardIndex] + 1) {
+                    shapes.setColor(WHITE);
+                } else {
+                    shapes.setColor(PIP_EMPTY_FILL);
+                }
+                shapes.circle(pipCenterX(cardX, pipCount, pipIndex), cardTopY() - PIP_CENTER_Y, PIP_RADIUS);
+            }
         }
 
         shapes.end();
 
-        // ---- Pass B: line work (inner highlight + accent border + divider) ----
+        // ---- Pass B: line work (inner highlight + accent border + divider + pip rings) ----
         shapes.begin(ShapeRenderer.ShapeType.Line);
         com.badlogic.gdx.Gdx.gl.glLineWidth(CARD_BORDER_THICK);
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
             float cardX = cardLeftX(cardIndex);
+            int pool = offeredTags[cardIndex].ordinal();
 
             // Thin inner highlight just inside the body edge
             shapes.setColor(INNER_EDGE);
             shapes.rect(cardX + 3f, CARD_Y + 3f, CARD_WIDTH - 6f, CARD_HEIGHT - 6f);
 
-            // Thick accent outer border
-            shapes.setColor(POOL_ACCENT[paletteIndexOf(offeredTags[cardIndex])]);
-            shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
+            if (keystoneMode) {
+                // Gold DOUBLE border: outer frame + an inset second frame
+                shapes.setColor(KEYSTONE_GOLD);
+                shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
+                shapes.rect(cardX + KEYSTONE_INNER_FRAME_INSET, CARD_Y + KEYSTONE_INNER_FRAME_INSET,
+                        CARD_WIDTH - KEYSTONE_INNER_FRAME_INSET * 2f, CARD_HEIGHT - KEYSTONE_INNER_FRAME_INSET * 2f);
+            } else {
+                // Thick accent outer border
+                shapes.setColor(TAG_ACCENT[pool]);
+                shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
+            }
 
-            // Hairline divider under the effect label
+            // Hairline divider under the pips
             shapes.setColor(DIVIDER);
             float dividerY = cardTopY() - DIVIDER_Y;
             shapes.line(cardX + TEXT_HORIZONTAL_PAD, dividerY,
                     cardX + CARD_WIDTH - TEXT_HORIZONTAL_PAD, dividerY);
+
+            // Pip rings: grey on empty pips, an accent halo around the pip this pick buys
+            int pipCount = plateMaxRanks[cardIndex];
+            for (int pipIndex = 0; pipIndex < pipCount; pipIndex++) {
+                int pipRank = pipIndex + 1;
+                float pipX = pipCenterX(cardX, pipCount, pipIndex);
+                float pipY = cardTopY() - PIP_CENTER_Y;
+                if (pipRank == plateOwnedRanks[cardIndex] + 1) {
+                    shapes.setColor(TAG_ACCENT[pool]);
+                    shapes.circle(pipX, pipY, PIP_RADIUS + PIP_NEXT_RING);
+                } else if (pipRank > plateOwnedRanks[cardIndex]) {
+                    shapes.setColor(PIP_EMPTY_RING);
+                    shapes.circle(pipX, pipY, PIP_RADIUS);
+                }
+            }
         }
         com.badlogic.gdx.Gdx.gl.glLineWidth(1f);
         shapes.end();
@@ -363,19 +459,27 @@ public final class LevelUpOverlayRenderer implements Disposable {
         float cardX = cardLeftX(cardIndex);
         float cardCenterX = cardX + CARD_WIDTH / 2f;
         float top = cardTopY();
-        Color accent = POOL_ACCENT[paletteIndexOf(offeredTags[cardIndex])];
+        Color accent = keystoneMode ? KEYSTONE_GOLD : TAG_ACCENT[offeredTags[cardIndex].ordinal()];
 
         // Perk / keystone name — inside the header strip (white, bold-looking with shadow)
         font.getData().setScale(SCALE_HEADER);
         drawCenteredTextWithShadow(plateNames[cardIndex], cardCenterX, top - HEADER_TEXT_Y, HEADER_TEXT);
 
+        // Tag chip text (dark on the tag colour), plus the SYNERGY label on the right of the same row
+        font.getData().setScale(SCALE_CHIP);
+        float chipBaseline = top - CHIP_TOP_OFFSET - CHIP_HEIGHT + CHIP_TEXT_RISE;
+        font.setColor(CHIP_TEXT_COLOR);
+        glyphLayout.setText(font, offeredTags[cardIndex].displayName());
+        font.draw(batch, offeredTags[cardIndex].displayName(), cardCenterX - glyphLayout.width / 2f, chipBaseline);
+        if (plateSynergy[cardIndex]) {
+            font.setColor(SYNERGY_AMBER);
+            font.draw(batch, SYNERGY_TEXT, cardX + TEXT_HORIZONTAL_PAD, chipBaseline,
+                    CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f + 12f, Align.right, false);
+        }
+
         // The rank this pick reaches ("RANK 2 / 3"), or "KEYSTONE", in accent color
         font.getData().setScale(SCALE_VALUE * RANK_TEXT_SCALE_FRACTION);
         drawCenteredTextWithShadow(plateValueTexts[cardIndex], cardCenterX, top - VALUE_Y, accent);
-
-        // The build tag below (e.g. "CLOSE QUARTERS") — white
-        font.getData().setScale(SCALE_LABEL);
-        drawCenteredTextWithShadow(offeredTags[cardIndex].displayName(), cardCenterX, top - LABEL_Y, WHITE);
 
         // One-line effect (a keystone's GAIN) — smaller, white, word-wrapped inside the card width
         font.getData().setScale(SCALE_DESC);
@@ -388,9 +492,9 @@ public final class LevelUpOverlayRenderer implements Disposable {
                     CARD_Y + COST_LINE_BOTTOM_OFFSET, CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, COST_RED);
         }
 
-        // Tap hint — small, dimmed
+        // Tap hint — small, dimmed, at the plate bottom
         font.getData().setScale(SCALE_TAP);
-        drawCenteredTextWithShadow("TAP TO CHOOSE", cardCenterX, CARD_Y + TAP_Y, DIM_HINT);
+        drawCenteredTextWithShadow("TAP TO CHOOSE", cardCenterX, CARD_Y + TAP_BOTTOM_OFFSET, DIM_HINT);
     }
 
     /** Draws single-line centered text with a dark drop shadow for readability. */

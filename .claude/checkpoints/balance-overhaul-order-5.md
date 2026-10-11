@@ -65,7 +65,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A2 holds; both gates green.
 - [x] **CP4** — ability prune/merge, tier counts, budgets, tags; R-ABILITY updated.
       DONE WHEN: A4 holds; both gates green.
-- [ ] **CP5** — level-up overlay chips / synergy / pips, keystone frame, inventory BUILD page.
+- [x] **CP5** — level-up overlay chips / synergy / pips, keystone frame, inventory BUILD page.
       DONE WHEN: build green; A5 holds (desktop check owed if no display).
 - [ ] **CP6** — sim build-bias variants + S-BUILD + BUILD REPORT; all docs; reviewer PASS.
       DONE WHEN: A3, A6, A7 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
@@ -171,3 +171,15 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   guide catalogue); Double-Barrel EPIC/LEGENDARY can roll BURST_FIRE as its MAJOR redundantly (no per-weapon eligibility);
   shop tier-up price ~doubles (prices on destination budget; R-CREDITS green) — owner awareness; dead leftovers
   BULWARK_TEMP_ARMOR_SLOTS / temp-armor pool / Trigger.ON_RELOAD.
+- **CP5 handover:** `render/BuildTagPalette.colorOf(BuildTag)` (ordinal array; weapon tags = DamageClass palette), `render/
+  BuildPagePanel` (rows flattened in open(), tap paging UP/DOWN when overflowing), `LevelUpOverlayRenderer.setOfferedPerks(...,
+  EnumSet<BuildTag> carriedTags)` (chip, amber SYNERGY corner triangle + label, rank pips with next pip white, gold double frame
+  for keystones, red cost line), inventory BUILD header button left of CODEX (`ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH`),
+  `InventoryOverlayRenderer.setPlayerBuild`, `LevelRenderer.setBarrelsHighlighted` (pulsing dot over barrels). Constants in
+  ProgressionConstants (BUILD_TAG_*, BUILD_SYNERGY_*, BUILD_COST_*, BUILD_KEYSTONE_GOLD_*), RenderConstants MINIMAP_BARREL_DOT_*.
+- **CP5 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles. DESKTOP CHECK OWED (A5 + clearances: plate text vs
+  synergy triangle, 3-line effect vs hint, keystone cost line vs gain text, header BUILD/CODEX/EXIT + SUBLEVEL label vs credits,
+  BUILD page empty state / paging / keystone frame, mini-map Sapper dot).
+- **CP5 DECISION (hub) / OWNER FLAG:** barrels were ALREADY drawn on the mini-map before this order, so Sapper r1 is a
+  highlight (pulsing dot), not a reveal — hiding barrels by default would remove information players have today. Edits via
+  shell (reviewer must read diff).
