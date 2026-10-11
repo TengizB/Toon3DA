@@ -365,6 +365,11 @@ DECISIONS
       a burning enemy that dies spreads its FULL burn stacks to its neighbours (not one stack),
       plus +1 burn turn per rank; 3 ranks. Tuned to pass PK1 / PK2 honestly; D4's resource
       breakpoint metric still applies to it.  (2026-10-11)
+  D6  WILDFIRE PK1 WAIVER (owner, 2026-10-11): D5 Wildfire (3 ranks) is kept. Its rank-2/3 PK1
+      FELT rows and its PK1 breakpoint row are WAIVED — every reference group fight ends inside
+      the first spray or two, so burn duration is invisible to the scenario math. Rank-1 FELT
+      (+200% on S5) stays enforced. The waiver expires when a long-group reference scenario exists
+      (order 7 feel pass).  (2026-10-11)
 
 
 OPEN QUESTIONS
