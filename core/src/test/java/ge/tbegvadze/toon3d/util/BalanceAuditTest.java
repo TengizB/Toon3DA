@@ -158,45 +158,51 @@ class BalanceAuditTest {
     // by R-LADDER L2/L4 (per-floor lag multipliers, level felt), asserted by
     // thePowerLadderHoldsAtEveryDepthToTheRunEnd — a stronger, per-floor version of the same property.
 
-    /** R-ABILITY: every ability is priced and fits the richest tier's ceiling; tier budgets are monotonic. */
+    /**
+     * R-ABILITY (balance-overhaul order 5, B5/B6 — replaces order 2's "priced within the richest tier's
+     * ceiling"): every surviving ability is priced and FELT (>= ABILITY_MIN_FELT_PP at its expected weapon level)
+     * and tagged; each tier's count and budget match B5; budgets rise with rarity; and the cheapest and priciest
+     * draw of every tier's shape lands inside its band at every weapon level, for a gun and a melee weapon.
+     */
     @Test
-    void everyAbilityIsPricedWithinItsTierBudget() {
+    void everySurvivingAbilityIsFeltAndEveryTierShapeFitsItsBand() {
         assertNoViolations(BalanceSchema.abilityBudgetResults());
     }
 
     /**
-     * R-ABILITY (the roll invariant): NO rolled weapon — at any tier, level, melee-ness, or seed —
-     * carries more ability PP than its tier's ceiling. In particular a legendary never exceeds
-     * {@code 30 * 1.2 = 36} (the acceptance criterion). The WeaponRoller enforces this by construction;
-     * this sweep proves it empirically over a grid of rolls.
+     * R-ABILITY roll invariant (A4; replaces order 2's ceiling-only sweep): every real roll carries EXACTLY its
+     * tier's count, its MAJORs and (LEGENDARY) its signature, with a total INSIDE the band — a floor as well as a
+     * ceiling. Asserts the schema's sampled sweep (ABILITY_ROLL_SWEEP_SEEDS x 5 tiers x ABILITY_ROLL_SWEEP_DEPTHS,
+     * gun and melee), then the full level grid (200 seeds x every level) the old ceiling sweep covered.
      */
     @Test
-    void everyBudgetedRollStaysWithinItsTierCeiling() {
-        java.util.List<String> overspends = new java.util.ArrayList<>();
+    void everyRollMeetsItsTierCountAndStaysInsideItsBand() {
+        assertNoViolations(BalanceSchema.abilityRollSweepResults());
+        java.util.List<String> violations = new java.util.ArrayList<>();
         for (long seed = 0; seed < 200; seed++) {
             ge.tbegvadze.toon3d.entity.WeaponRoller roller =
                     new ge.tbegvadze.toon3d.entity.WeaponRoller(seed);
             for (ge.tbegvadze.toon3d.entity.WeaponTier tier
                     : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
-                float ceiling = ge.tbegvadze.toon3d.entity.WeaponRoller.tierAbilityPowerPointBudget(tier)
-                        * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
                 for (boolean isMelee : new boolean[]{false, true}) {
                     for (int level = 1; level <= WeaponConstants.MAX_WEAPON_LEVEL; level++) {
                         ge.tbegvadze.toon3d.entity.AbilityInstance[] abilities =
                                 roller.rollAbilitySet(isMelee, tier, level);
                         float total = ge.tbegvadze.toon3d.entity.WeaponRoller
                                 .totalAbilityPowerPoints(abilities);
-                        if (total > ceiling + 1e-3f) {
-                            overspends.add(String.format(
-                                    "  seed=%d tier=%s melee=%b level=%d total=%.2f > ceiling=%.2f",
-                                    seed, tier, isMelee, level, total, ceiling));
+                        boolean countHolds = abilities.length == tier.totalAbilityCount();
+                        if (!countHolds || !ge.tbegvadze.toon3d.entity.WeaponRoller.isWithinTierBand(tier, total)) {
+                            violations.add(String.format(
+                                    "  seed=%d tier=%s melee=%b level=%d count=%d/%d total=%.2f band=%.2f..%.2f",
+                                    seed, tier, isMelee, level, abilities.length, tier.totalAbilityCount(), total,
+                                    tier.abilityPowerPointFloor(), tier.abilityPowerPointCeiling()));
                         }
                     }
                 }
             }
         }
-        assertTrue(overspends.isEmpty(),
-                () -> "Budgeted ability rolls exceeded their tier ceiling:\n" + String.join("\n", overspends));
+        assertTrue(violations.isEmpty(),
+                () -> "Ability rolls broke their tier's count or band:\n" + String.join("\n", violations));
     }
 
     /**

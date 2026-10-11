@@ -42,7 +42,7 @@ public class PlasmaRifle extends Weapon {
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         boolean hitEnemy = false;
-        // OVERPENETRATION on an already-piercing weapon adds a stacking damage bonus per enemy
+        // ARMOR_PIERCE (merged OVERPENETRATION) on an already-piercing weapon adds a stacking damage bonus per enemy
         // struck beyond the first (see overpenetrationPiercingDamageMultiplier); 1.0 without it.
         int enemiesHit = 0;
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {

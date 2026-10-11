@@ -52,41 +52,23 @@ public final class AbilityFeedback {
         set(WeaponAbility.ARMOR_PIERCE,       EventTextSystem.TIER_TAG,       CYAN_R,      CYAN_G,      CYAN_B,      "PIERCE");
         set(WeaponAbility.EXECUTIONER,        EventTextSystem.TIER_PROC,      ORANGE_R,    ORANGE_G,    ORANGE_B,    "EXECUTE!");
         set(WeaponAbility.REND,               EventTextSystem.TIER_PROC,      CRIMSON_R,   CRIMSON_G,   CRIMSON_B,   "[R] BLEED");
-        set(WeaponAbility.OVERPENETRATION,    EventTextSystem.TIER_TAG,       CYAN_R,      CYAN_G,      CYAN_B,      "PEN");
         set(WeaponAbility.STAGGER_ROUNDS,     EventTextSystem.TIER_PROC,      ORANGE_R,    ORANGE_G,    ORANGE_B,    "[S] STAGGER");
         set(WeaponAbility.KINETIC_SLAM,       EventTextSystem.TIER_PROC,      ORANGE_R,    ORANGE_G,    ORANGE_B,    "SLAM!");
         set(WeaponAbility.CLEAVE,             EventTextSystem.TIER_PROC,      ORANGE_R,    ORANGE_G,    ORANGE_B,    "CLEAVE!");
         set(WeaponAbility.INCENDIARY,         EventTextSystem.TIER_PROC,      EMBER_R,     EMBER_G,     EMBER_B,     "[I] BURN");
         set(WeaponAbility.LIFESTEAL,          EventTextSystem.TIER_PROC,      GREEN_R,     GREEN_G,     GREEN_B,     "LIFESTEAL");
-        set(WeaponAbility.HEMORRHAGE_HARVEST, EventTextSystem.TIER_SLAM,      CRIMSON_R,   CRIMSON_G,   CRIMSON_B,   "HARVEST!");
-        set(WeaponAbility.VAMPIRIC_CRIT,      EventTextSystem.TIER_SLAM,      GREEN_R,     GREEN_G,     GREEN_B,     "VAMP CRIT");
-        set(WeaponAbility.ADRENAL_SURGE,      EventTextSystem.TIER_SLAM,      GREEN_R,     GREEN_G,     GREEN_B,     "SURGE!");
-        set(WeaponAbility.BULWARK_ROUNDS,     EventTextSystem.TIER_PROC,      CYAN_R,      CYAN_G,      CYAN_B,      "BULWARK");
-        set(WeaponAbility.SECOND_WIND,        EventTextSystem.TIER_PROC,      GREEN_R,     GREEN_G,     GREEN_B,     "SECOND WIND");
         set(WeaponAbility.SCAVENGER_ROUNDS,   EventTextSystem.TIER_SLAM,      AMBER_R,     AMBER_G,     AMBER_B,     "SCAVENGE!");
-        set(WeaponAbility.SALVAGE_STRIKE,     EventTextSystem.TIER_PROC,      AMBER_R,     AMBER_G,     AMBER_B,     "SALVAGE!");
-        set(WeaponAbility.SCHOLARS_EDGE,      EventTextSystem.TIER_PROC,      AMBER_R,     AMBER_G,     AMBER_B,     "SCHOLAR'S EDGE");
-        set(WeaponAbility.QUICK_HANDS,        EventTextSystem.TIER_TAG,       WHITE_R,     WHITE_G,     WHITE_B,     "QUICK");
-        set(WeaponAbility.EXTENDED_MAG,       EventTextSystem.TIER_TAG,       WHITE_R,     WHITE_G,     WHITE_B,     "EXT.MAG");
-        set(WeaponAbility.FIELD_MEDIC_ROUNDS, EventTextSystem.TIER_SLAM,      GREEN_R,     GREEN_G,     GREEN_B,     "MEDKIT DROP!");
-        set(WeaponAbility.CREDIT_FANG,        EventTextSystem.TIER_PROC,      AMBER_R,     AMBER_G,     AMBER_B,     "CREDIT FANG");
         set(WeaponAbility.POINT_BLANK,        EventTextSystem.TIER_TAG,       ORANGE_R,    ORANGE_G,    ORANGE_B,    "POINT BLANK");
-        set(WeaponAbility.MARKSMANS_PATIENCE, EventTextSystem.TIER_TAG,       WHITE_R,     WHITE_G,     WHITE_B,     "PATIENCE");
         set(WeaponAbility.OPENING_SALVO,      EventTextSystem.TIER_PROC,      WHITE_R,     WHITE_G,     WHITE_B,     "OPENING!");
         set(WeaponAbility.RHYTHM,             EventTextSystem.TIER_TAG,       WHITE_R,     WHITE_G,     WHITE_B,     "RHYTHM");
         set(WeaponAbility.STATIC_DISCHARGE,   EventTextSystem.TIER_SLAM,      ELECTRIC_R,  ELECTRIC_G,  ELECTRIC_B,  "[~] DISCHARGE");
-        set(WeaponAbility.RESONANT_ROUNDS,    EventTextSystem.TIER_PROC,      ELECTRIC_R,  ELECTRIC_G,  ELECTRIC_B,  "RESONANCE");
         set(WeaponAbility.SOULFORGE,          EventTextSystem.TIER_LEGENDARY, GOLD_R,      GOLD_G,      GOLD_B,      "SOULFORGE");
         set(WeaponAbility.JUDGMENT,           EventTextSystem.TIER_LEGENDARY, GOLD_R,      GOLD_G,      GOLD_B,      "JUDGMENT!");
         set(WeaponAbility.HELLFIRE_NOVA,      EventTextSystem.TIER_LEGENDARY, EMBER_R,     EMBER_G,     EMBER_B,     "HELLFIRE NOVA");
         set(WeaponAbility.BERSERKERS_OATH,    EventTextSystem.TIER_LEGENDARY, CRIMSON_R,   CRIMSON_G,   CRIMSON_B,   "BERSERKER'S OATH");
 
         // Abilities that directly restore player HP — spawn green particles + vignette.
-        // SECOND_WIND boosts damage but does not heal. FIELD_MEDIC_ROUNDS drops a pickup.
         ABILITY_IS_HEAL[WeaponAbility.LIFESTEAL.ordinal()]           = true;
-        ABILITY_IS_HEAL[WeaponAbility.VAMPIRIC_CRIT.ordinal()]       = true;
-        ABILITY_IS_HEAL[WeaponAbility.ADRENAL_SURGE.ordinal()]       = true;
-        ABILITY_IS_HEAL[WeaponAbility.HEMORRHAGE_HARVEST.ordinal()]  = true;
         ABILITY_IS_HEAL[WeaponAbility.SOULFORGE.ordinal()]           = true;
     }
 

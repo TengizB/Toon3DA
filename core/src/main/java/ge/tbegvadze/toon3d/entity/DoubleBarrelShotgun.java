@@ -46,7 +46,8 @@ public class DoubleBarrelShotgun extends Weapon {
         if (!hasBurstFire) {
             AbilityInstance[] extended = new AbilityInstance[weaponAbilities.length + 1];
             System.arraycopy(weaponAbilities, 0, extended, 0, weaponAbilities.length);
-            extended[weaponAbilities.length] = new AbilityInstance(WeaponAbility.BURST_FIRE, 2f, 2);
+            // The built-in two-barrel burst: the same instance a rolled BURST_FIRE carries (BURST_FIRE_ROUND_COUNT).
+            extended[weaponAbilities.length] = WeaponRoller.buildAbilityInstance(WeaponAbility.BURST_FIRE, level);
             weaponAbilities = extended;
         }
         super.configureRoll(level, weaponTier, weaponAbilities);
@@ -66,7 +67,7 @@ public class DoubleBarrelShotgun extends Weapon {
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        // OVERPENETRATION: the blast pierces up to overpenetrationExtraTargets() enemies beyond the
+        // ARMOR_PIERCE (merged OVERPENETRATION): the blast pierces up to overpenetrationExtraTargets() enemies beyond the
         // first before it dissipates. Without the ability extraTargets is 0 and the blast stops on
         // the first enemy exactly as before.
         int enemiesHit      = 0;

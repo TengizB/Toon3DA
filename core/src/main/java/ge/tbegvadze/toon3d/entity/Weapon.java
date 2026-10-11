@@ -140,7 +140,7 @@ public abstract class Weapon implements WeaponProfile {
     /**
      * Transient per-fire-activation damage multiplier set by AbilityResolver.onFire().
      * Reset to 1.0f at the start of every fire() call so stale values never bleed forward.
-     * Used by SECOND_WIND (passive HP-threshold boost) and ADRENAL_SURGE (kill-proc buff).
+     * Used by BERSERKERS_OATH (kill-streak stacks).
      * Applied inside damageAtDistance() so all weapon subclasses pick it up without changes.
      */
     private float fireCycleMultiplier = 1.0f;
@@ -322,26 +322,17 @@ public abstract class Weapon implements WeaponProfile {
         effectiveClipSize    = GameMath.weaponScaledClipSize(clipSize, weaponLevel);
         effectiveReloadTicks = GameMath.weaponScaledReloadTicks(reloadTime, weaponLevel);
         effectiveRange       = GameMath.weaponScaledRange(range, weaponLevel, isMelee());
-        if (hasAbility(WeaponAbility.EXTENDED_MAG)) {
-            int bonus = abilityCount(WeaponAbility.EXTENDED_MAG);
-            effectiveClipSize = Math.min(effectiveClipSize + bonus, WeaponConstants.WEAPON_CLIP_HARD_CAP);
-        }
         // DEADEYE's cost (balance-overhaul order 5): clip sizes x clipSizeMultiplier(), never below one round.
         if (effectiveClipSize > 0) {
             effectiveClipSize = GameMath.buildClipActions(effectiveClipSize, 1, buildStats.clipSizeMultiplier());
         }
         // BURST_FIRE must have a clip large enough to fire a full burst; otherwise the burst is
         // silently truncated by the remaining-clip cap in fire(). Guarantee at least one whole
-        // burst's worth of rounds (e.g. a burst-5 roll on a small-clip weapon lifts the clip to 5).
-        // Applied AFTER the EXTENDED_MAG bonus so both stack, and capped at the hard limit.
+        // burst's worth of rounds (a one-round clip lifts to BURST_FIRE_ROUND_COUNT), capped at the hard limit.
         if (hasAbility(WeaponAbility.BURST_FIRE)) {
             int burstCount = Math.max(1, abilityCount(WeaponAbility.BURST_FIRE));
             effectiveClipSize = Math.min(Math.max(effectiveClipSize, burstCount),
                                          WeaponConstants.WEAPON_CLIP_HARD_CAP);
-        }
-        if (!isMelee() && hasAbility(WeaponAbility.QUICK_HANDS)) {
-            effectiveReloadTicks = Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS,
-                                            effectiveReloadTicks - 1);
         }
     }
 
@@ -385,34 +376,45 @@ public abstract class Weapon implements WeaponProfile {
         return 0;
     }
 
-    // ── Overpenetration helpers ───────────────────────────────────────────────
+    /**
+     * Adds the {@link WeaponAbility#buildTag} of every ability this weapon carries to {@code into}
+     * (balance-overhaul order 5, B6): a carried weapon's abilities count toward B3 perk synergy alongside its
+     * damage class. Allocation-free; the caller owns and clears the set.
+     */
+    public void addAbilityBuildTags(java.util.EnumSet<ge.tbegvadze.toon3d.progression.BuildTag> into) {
+        for (AbilityInstance instance : abilities) {
+            if (instance.ability.buildTag != null) into.add(instance.ability.buildTag);
+        }
+    }
+
+    // ── Overpenetration helpers (ARMOR_PIERCE's merged pierce, balance-overhaul order 5) ──────────
 
     /**
-     * Number of EXTRA enemies a single shot may pierce beyond the first, from OVERPENETRATION.
-     * 0 when the weapon lacks the ability. Non-piercing weapons (Shotgun, Assault Rifle,
+     * Number of EXTRA enemies a single shot may pierce beyond the first, from ARMOR_PIERCE (which absorbed
+     * the cut OVERPENETRATION). 0 when the weapon lacks the ability. Non-piercing weapons (Shotgun, Assault Rifle,
      * Chaingun, Double-Barrel) keep marching through up to this many additional enemies before
      * the shot stops; already-piercing weapons use it to cap the damage-bonus ramp below.
      */
     protected int overpenetrationExtraTargets() {
-        return hasAbility(WeaponAbility.OVERPENETRATION)
-                ? Math.max(0, abilityCount(WeaponAbility.OVERPENETRATION))
+        return hasAbility(WeaponAbility.ARMOR_PIERCE)
+                ? Math.max(0, abilityCount(WeaponAbility.ARMOR_PIERCE))
                 : 0;
     }
 
     /**
      * Damage multiplier for an already-piercing weapon (Plasma Rifle, Railgun) that also carries
-     * OVERPENETRATION. The first enemy struck (index 0) takes normal damage; each subsequent enemy
-     * gains {@link GameBalance#OVERPENETRATION_ALREADY_PIERCING_BONUS}, capped at the ability's
+     * ARMOR_PIERCE. The first enemy struck (index 0) takes normal damage; each subsequent enemy
+     * gains {@link GameBalance#ARMOR_PIERCE_ALREADY_PIERCING_BONUS}, capped at the ability's
      * extra-target count so the ramp is bounded. Returns 1.0 when the weapon lacks the ability.
      *
      * @param enemiesHitBeforeThis how many enemies this shot already struck (0 for the first)
      */
     protected float overpenetrationPiercingDamageMultiplier(int enemiesHitBeforeThis) {
-        if (!hasAbility(WeaponAbility.OVERPENETRATION) || enemiesHitBeforeThis <= 0) {
+        if (!hasAbility(WeaponAbility.ARMOR_PIERCE) || enemiesHitBeforeThis <= 0) {
             return 1f;
         }
         int steps = Math.min(enemiesHitBeforeThis, overpenetrationExtraTargets());
-        return 1f + steps * GameBalance.OVERPENETRATION_ALREADY_PIERCING_BONUS;
+        return 1f + steps * GameBalance.ARMOR_PIERCE_ALREADY_PIERCING_BONUS;
     }
 
     /**
@@ -521,7 +523,7 @@ public abstract class Weapon implements WeaponProfile {
 
     /**
      * Sets the fire-cycle damage multiplier for the current fire activation.
-     * Called by AbilityResolver.onFire() for SECOND_WIND and ADRENAL_SURGE.
+     * Called by AbilityResolver.onFire() for BERSERKERS_OATH.
      * The value is applied inside {@link #damageAtDistance} and reset to 1.0f at the
      * start of the next {@link #fire} call, so it cannot bleed across activations.
      *
@@ -828,11 +830,6 @@ public abstract class Weapon implements WeaponProfile {
             shotsInClip = effectiveClipSize;
             if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
         }
-        // Notify resolver so ON_RELOAD abilities (BULWARK_ROUNDS) can fire.
-        // Only triggers when rounds were actually chambered (shotsInClip > 0).
-        if (abilityResolver != null && shotsInClip > 0) {
-            abilityResolver.onReload(this);
-        }
         visualState = WeaponVisualState.NORMAL;
     }
 
@@ -874,7 +871,7 @@ public abstract class Weapon implements WeaponProfile {
         this.lastPlayerTileColumn    = playerTileColumn;
         this.lastPlayerTileRow       = playerTileRow;
 
-        // ON_FIRE abilities (e.g. BURST_FIRE, SECOND_WIND, ADRENAL_SURGE) run before the
+        // ON_FIRE abilities (e.g. BURST_FIRE, JUDGMENT, BERSERKERS_OATH) run before the
         // accuracy roll so they can set fireCycleMultiplier and pendingBurstExtra first.
         if (abilityResolver != null) {
             abilityResolver.onFire(this);
@@ -1112,7 +1109,7 @@ public abstract class Weapon implements WeaponProfile {
     /**
      * Effective damage at a given tile distance, scaled by the current fire-cycle multiplier.
      * The distance-drop formula is applied first, then fireCycleMultiplier is multiplied in.
-     * fireCycleMultiplier is set by AbilityResolver.onFire() for SECOND_WIND and ADRENAL_SURGE;
+     * fireCycleMultiplier is set by AbilityResolver.onFire() for BERSERKERS_OATH;
      * it defaults to 1.0f and is reset at the start of each fire() call.
      */
     public int damageAtDistance(int distanceTiles) {

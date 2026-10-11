@@ -373,7 +373,6 @@ public final class SimWorld implements LevelTransitionListener {
         doorManager  = new DoorManager(level);
         enemyManager = new EnemyManager(level, doorManager, currentDepth, seed);
         abilityResolver = new AbilityResolver(enemyManager, null, player, runSeed);
-        abilityResolver.setKillXpListener(playerProgress::addXp);
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);
         for (Weapon weapon : arsenal) weapon.setAbilityResolver(abilityResolver);
@@ -828,7 +827,7 @@ public final class SimWorld implements LevelTransitionListener {
         }
     }
 
-    /** Mirrors World.carriedBuildTags: loadout guns' tags plus a chosen (non-Fist) melee weapon's. */
+    /** Mirrors World.carriedBuildTags: loadout guns' and a chosen (non-Fist) melee weapon's tags, plus their abilities' tags. */
     java.util.EnumSet<BuildTag> carriedBuildTags() {
         carriedTagsScratch.clear();
         Loadout loadout = inventory.getLoadout();
@@ -836,11 +835,13 @@ public final class SimWorld implements LevelTransitionListener {
             Weapon weapon = loadout.getSlot(slotIndex);
             BuildTag tag = weapon != null ? BuildTag.forDamageClass(weapon.damageClass()) : null;
             if (tag != null) carriedTagsScratch.add(tag);
+            if (weapon != null) weapon.addAbilityBuildTags(carriedTagsScratch);
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null && !meleeWeapon.isLevelGapExempt()) {
             BuildTag tag = BuildTag.forDamageClass(meleeWeapon.damageClass());
             if (tag != null) carriedTagsScratch.add(tag);
+            meleeWeapon.addAbilityBuildTags(carriedTagsScratch);
         }
         return carriedTagsScratch;
     }

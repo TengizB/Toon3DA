@@ -3220,26 +3220,29 @@ public final class GameMath {
     }
 
     /*
-     * Formula: abilityPowerPoints — price a weapon ABILITY in the level-up-card currency (order 2)
+     * Formula: abilityPowerPoints — price a weapon ABILITY in the build currency (order 2; re-cut by balance-overhaul order 5)
      * Derivation:
      *   Rarity buys ABILITIES, not raw damage (weapon POWER bands are role properties, SECTION 9).
-     *   To make tier an ENFORCEABLE budget, every ability is priced in the SAME power points (PP =
-     *   %-of-reference DPT/eHP) the level-up cards use (damagePerTurnPowerPoints / effectiveHitPoint-
-     *   PowerPoints are the primitives). An ability's value is its live magnitude converted to a
-     *   %-of-reference, DISCOUNTED by a utilisation weight for how often that value actually applies
-     *   (an always-on crit bonus is worth more than a below-30%-HP bonus of the same size). The
-     *   weights are designer DATA in BalanceConfig SECTION 15, so a tuned magnitude re-prices for free:
-     *       damage multiplier  -> magnitude * 100 * util          (fraction of reference DPT gained)
-     *       damage-over-time    -> (magnitude / refDPT) * 100 * util (sustained added DPT as %)
-     *       flat sustain/AoE    -> (magnitude / refEHP or refDPT) * 100 * util
-     *       count utility       -> countValue * PP_PER_COUNT
-     *       pure economy/util   -> a small flat nominal PP
+     *   To make tier an ENFORCEABLE band, every ability is priced in the SAME power points (PP =
+     *   %-of-reference DPT/eHP) the perks use (damagePerTurnPowerPoints / effectiveHitPointPowerPoints
+     *   are the primitives). An ability's value is its live magnitude converted to a %-of-reference,
+     *   DISCOUNTED by a utilisation weight for how often that value actually applies. The weights are
+     *   designer DATA in BalanceConfig SECTION 15, so a tuned magnitude re-prices for free:
+     *       damage multiplier   -> magnitude * 100 * util              (fraction of reference DPT gained)
+     *       damage-over-time    -> (magnitude / refDPT) * 100 * util   (sustained added DPT as %)
+     *       on-kill AoE burst   -> (magnitude / refDPT) * 100 * util
+     *       armour pierce       -> magnitude * 100 * util + extraTargets * PP_PER_COUNT  (merged pierce)
+     *       burst fire          -> (rounds - 1) * PP_PER_EXTRA_BURST_ROUND
+     *       ammo refund         -> chance * rounds * PP_PER_EXPECTED_REFUND_ROUND
      *       legendary signature -> a fixed marquee PP
-     *   The tier budgets (TIER_ABILITY_PP_BUDGET_*) cap the SUM of an rolled weapon's ability PP; the
-     *   WeaponRoller fills abilities greedily until the next would exceed the tier ceiling.
+     *   balance-overhaul order 5 (B5/B6): the tier BAND (TIER_ABILITY_PP_BUDGET_* +/- tolerance, SECTION 24)
+     *   bounds the SUM of a roll from BELOW and ABOVE; ABILITY_MIN_FELT_PP bounds each ability from below at
+     *   its expected weapon level. The sub-threshold economy/sustain abilities that used the old flat
+     *   "utility nominal" price were CUT, so every surviving ability is priced from its own magnitude.
      * Edge cases:
-     *   Every WeaponAbility is classified (a missing case would fall through to the nominal price, and
-     *   BalanceSchema R-ABILITY asserts coverage). Magnitudes are >= 0 by construction, so PP >= 0.
+     *   Every WeaponAbility is classified — an unclassified constant returns NaN rather than a silent
+     *   nominal price, and BalanceSchema R-ABILITY reports it UNPRICED (and asserts every one is felt).
+     *   Magnitudes and counts are >= 0 by construction (count clamped), so PP >= 0.
      */
     public static float abilityPowerPoints(WeaponAbility ability, float magnitude, int countValue) {
         switch (ability) {
@@ -3247,56 +3250,38 @@ public final class GameMath {
             case CRITICAL_STRIKE:
             case RHYTHM:
                 return magnitude * 100f * BalanceConfig.ABILITY_UTIL_ALWAYS_ON;
-            // Conditional damage bonuses (low-HP, close/long range, first shot, on-kill next hit, splash).
+            // Conditional damage bonuses (low-HP target, point-blank range, first shot, splash).
             case EXECUTIONER:
-            case SECOND_WIND:
             case POINT_BLANK:
-            case MARKSMANS_PATIENCE:
             case OPENING_SALVO:
-            case ADRENAL_SURGE:
             case CLEAVE:
                 return magnitude * 100f * BalanceConfig.ABILITY_UTIL_CONDITIONAL;
             // Chance-gated crowd control (defensive value).
             case STAGGER_ROUNDS:
             case KINETIC_SLAM:
                 return magnitude * 100f * BalanceConfig.ABILITY_UTIL_CROWD_CONTROL;
-            // Block-bypass / penetration.
+            // Block-bypass plus the merged over-penetration (extra enemies pierced per shot).
             case ARMOR_PIERCE:
-                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_PENETRATION;
+                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_PENETRATION
+                        + Math.max(0, countValue) * BalanceConfig.ABILITY_PP_PER_COUNT;
             // Damage-over-time: sustained added DPT as a fraction of the reference DPT.
             case REND:
             case INCENDIARY:
                 return (magnitude / BalanceConfig.REFERENCE_PLAYER_DPT) * 100f
                         * BalanceConfig.ABILITY_UTIL_DAMAGE_OVER_TIME;
-            // Lifesteal-style sustain, expressed as a fraction of damage dealt returned as HP.
+            // Lifesteal sustain, expressed as a fraction of damage dealt returned as HP.
             case LIFESTEAL:
                 return magnitude * 100f * BalanceConfig.ABILITY_UTIL_SUSTAIN_FRACTION;
-            // Flat per-event HP/armour sustain — value as a fraction of reference eHP.
-            case HEMORRHAGE_HARVEST:
-            case VAMPIRIC_CRIT:
-            case BULWARK_ROUNDS:
-                return (magnitude / BalanceConfig.REFERENCE_PLAYER_EHP) * 100f
-                        * BalanceConfig.ABILITY_UTIL_FLAT_EVENT;
             // Flat AoE burst on kill — value as a fraction of reference DPT.
             case STATIC_DISCHARGE:
                 return (magnitude / BalanceConfig.REFERENCE_PLAYER_DPT) * 100f
                         * BalanceConfig.ABILITY_UTIL_FLAT_EVENT;
-            // Percent-of-target-max-HP amplifier (conditional on a bleed).
-            case RESONANT_ROUNDS:
-                return magnitude * 100f * BalanceConfig.ABILITY_UTIL_PERCENT_MAX_HP;
-            // Count utilities — priced per extra count (pierce targets, clip step, burst rounds).
-            case OVERPENETRATION:
-            case EXTENDED_MAG:
+            // Extra rounds per attack action — each one is a tempo gain (fewer enemy turns per kill).
             case BURST_FIRE:
-                return Math.max(0, countValue) * BalanceConfig.ABILITY_PP_PER_COUNT;
-            // Pure on-kill / reload economy utilities — small flat nominal combat value.
+                return Math.max(0, countValue - 1) * BalanceConfig.ABILITY_PP_PER_EXTRA_BURST_ROUND;
+            // On-kill ammo refund — expected rounds returned per kill.
             case SCAVENGER_ROUNDS:
-            case SALVAGE_STRIKE:
-            case SCHOLARS_EDGE:
-            case FIELD_MEDIC_ROUNDS:
-            case CREDIT_FANG:
-            case QUICK_HANDS:
-                return BalanceConfig.ABILITY_PP_UTILITY_NOMINAL;
+                return magnitude * Math.max(0, countValue) * BalanceConfig.ABILITY_PP_PER_EXPECTED_REFUND_ROUND;
             // Legendary signatures — fixed marquee price.
             case SOULFORGE:
             case JUDGMENT:
@@ -3304,7 +3289,8 @@ public final class GameMath {
             case BERSERKERS_OATH:
                 return BalanceConfig.ABILITY_PP_LEGENDARY_SIGNATURE;
             default:
-                return BalanceConfig.ABILITY_PP_UTILITY_NOMINAL;
+                // Unclassified: NaN, which R-ABILITY reports as UNPRICED (a red audit row, not a crash).
+                return Float.NaN;
         }
     }
 

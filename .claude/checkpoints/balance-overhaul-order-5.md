@@ -63,7 +63,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: R-LADDER still green; A1 holds; both gates green.
 - [x] **CP3** — keystones at 5/10/15/20 live with gains and costs.
       DONE WHEN: A2 holds; both gates green.
-- [ ] **CP4** — ability prune/merge, tier counts, budgets, tags; R-ABILITY updated.
+- [x] **CP4** — ability prune/merge, tier counts, budgets, tags; R-ABILITY updated.
       DONE WHEN: A4 holds; both gates green.
 - [ ] **CP5** — level-up overlay chips / synergy / pips, keystone frame, inventory BUILD page.
       DONE WHEN: build green; A5 holds (desktop check owed if no display).
@@ -154,3 +154,20 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   BalanceConfig + GameBalance (unverified, likely non-compiling alone). Saved as `balance-overhaul-order-5.cp4-wip.patch` beside
   this file; tree restored to CP3. RESUME: re-dispatch CP4 from the contract; the patch is reference only (apply with
   `git apply` if useful, verify everything).
+- **CP4 handover (resumed builder, WIP patch applied + corrected):** `WeaponTier` {abilityCount, majorCount,
+  abilityPowerPointBudget, rollsSignature; standardCount(), totalAbilityCount(), abilityPowerPointFloor/Ceiling()};
+  `WeaponAbility.Rank {STANDARD, MAJOR, SIGNATURE}`, `buildTag`, `isMajor()`; `Weapon.addAbilityBuildTags(EnumSet)` feeds
+  carriedBuildTags(). Counts/budgets: COMMON 0/0, UNCOMMON 1/12, RARE 2/25, EPIC 3 (1 MAJOR)/40, LEGENDARY 1 MAJOR + 2 std +
+  signature/60, +/-20% both ways. ABILITY_MIN_FELT_PP 8. Expected level = shallowest depth r*5+1 whose region max tier rolls
+  the rank (STANDARD d1/L1, MAJOR d11/L11, SIGNATURE d16/L16). CUT 13 (HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, BULWARK_ROUNDS,
+  ADRENAL_SURGE, SECOND_WIND, SALVAGE_STRIKE, SCHOLARS_EDGE, QUICK_HANDS, FIELD_MEDIC_ROUNDS, CREDIT_FANG, EXTENDED_MAG,
+  MARKSMANS_PATIENCE, RESONANT_ROUNDS); MERGED OVERPENETRATION -> ARMOR_PIERCE. MAJOR = EXECUTIONER, CLEAVE, OPENING_SALVO,
+  BURST_FIRE (fixed 2-round). Standards ~10.5 PP, MAJORs 12->17.4, signatures 18 (near-flat across levels, forced by band).
+  Sweep depths {3,12,22} x 30 seeds. Audit methods renamed `everySurvivingAbilityIsFeltAndEveryTierShapeFitsItsBand`,
+  `everyRollMeetsItsTierCountAndStaysInsideItsBand`. Report: scratchpad cp4/report_cp4.txt.
+- **CP4 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0 — S-HEAVY 1112->1110 (0.99), TACTICAL
+  stalled 176->175, S-ROUTE 0.15->0.16, NAIVE stalled 150->151; LADDER REPORT d16-25 shifted. All bands unchanged.
+- **CP4 FLAGS:** edits via shell (reviewer must read diff); docs owed in CP6 (authority R-ABILITY override, knowledge, weapon
+  guide catalogue); Double-Barrel EPIC/LEGENDARY can roll BURST_FIRE as its MAJOR redundantly (no per-weapon eligibility);
+  shop tier-up price ~doubles (prices on destination budget; R-CREDITS green) — owner awareness; dead leftovers
+  BULWARK_TEMP_ARMOR_SLOTS / temp-armor pool / Trigger.ON_RELOAD.

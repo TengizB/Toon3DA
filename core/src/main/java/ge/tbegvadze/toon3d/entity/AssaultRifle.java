@@ -46,7 +46,7 @@ public class AssaultRifle extends Weapon {
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        // OVERPENETRATION: the bullet pierces up to overpenetrationExtraTargets() enemies beyond the
+        // ARMOR_PIERCE (merged OVERPENETRATION): the bullet pierces up to overpenetrationExtraTargets() enemies beyond the
         // first before it stops. Without the ability extraTargets is 0 and the bullet stops on the
         // first enemy exactly as before.
         int enemiesHit      = 0;

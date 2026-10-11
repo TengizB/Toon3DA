@@ -115,7 +115,7 @@ public class Railgun extends Weapon {
         chargeLevel = 0;
 
         boolean hitAnyEnemy = false;
-        // OVERPENETRATION on the infinite-pierce slug adds a stacking damage bonus per enemy struck
+        // ARMOR_PIERCE (merged OVERPENETRATION) on the infinite-pierce slug adds a stacking damage bonus per enemy struck
         // beyond the first (see overpenetrationPiercingDamageMultiplier); 1.0 without the ability.
         int enemiesHit = 0;
 

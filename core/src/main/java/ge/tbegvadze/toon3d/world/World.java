@@ -1358,7 +1358,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                                                   GameMath.floorSeed(runSeed, currentDepth));
         levelRenderer.setEnemies(enemyManager.getEnemies());
         abilityResolver        = new AbilityResolver(enemyManager, eventTextSystem, player, runSeed);
-        abilityResolver.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);
         abilityResolver.setAbilityFeedback(abilityFeedback);
@@ -5144,8 +5143,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     /**
      * The tags of the weapons the player carries (balance-overhaul order 5, B3's SYNERGY test): every loadout
      * gun's damage class through {@link BuildTag#forDamageClass}, plus the melee weapon's when it is a chosen
-     * one (the always-carried Fist is not a build choice, so it never makes BLADE a synergy). The single
-     * method CP4 extends with the carried weapons' ability tags. Refills a scratch set (no allocation).
+     * one (the always-carried Fist is not a build choice, so it never makes BLADE a synergy), plus — since CP4
+     * (B6) — the {@link ge.tbegvadze.toon3d.entity.WeaponAbility#buildTag} of every ability those weapons
+     * carry, so a PYRO-tagged Incendiary on a rifle makes PYRO perks synergy. Refills a scratch set (no
+     * allocation).
      */
     private java.util.EnumSet<BuildTag> carriedBuildTags() {
         carriedTagsScratch.clear();
@@ -5155,12 +5156,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 Weapon weapon = loadout.getSlot(slotIndex);
                 BuildTag tag = weapon != null ? BuildTag.forDamageClass(weapon.damageClass()) : null;
                 if (tag != null) carriedTagsScratch.add(tag);
+                if (weapon != null) weapon.addAbilityBuildTags(carriedTagsScratch);
             }
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null && !meleeWeapon.isLevelGapExempt()) {
             BuildTag tag = BuildTag.forDamageClass(meleeWeapon.damageClass());
             if (tag != null) carriedTagsScratch.add(tag);
+            meleeWeapon.addAbilityBuildTags(carriedTagsScratch);
         }
         return carriedTagsScratch;
     }

@@ -641,33 +641,67 @@ public final class BalanceReport {
     }
 
     // -----------------------------------------------------------------------------------
-    // ABILITY PRICING — every weapon ability's PP price at level 1 and level 10, plus the per-tier
-    // ability-PP budgets (new-game-balancr order 2). Rarity buys abilities within these budgets;
-    // the WeaponRoller never overspends a tier's ceiling. Iterated straight from GameMath so the
-    // table cannot drift from the roller.
+    // ABILITY PRICING — REAL RARITY (balance-overhaul order 5, B5/B6). One row per surviving ability: its
+    // rank (MAJOR flag), BuildTag, the drop depth + expected weapon level it is valued at, the PP there, the
+    // PP at level 1 and at MAX_WEAPON_LEVEL, and KEPT / CUT against ABILITY_MIN_FELT_PP. Then one row per
+    // tier: its guaranteed shape, its band, and the sampled min..max PP of the A4 roll sweep. Every number
+    // is read from BalanceSchema / GameMath, so the table cannot drift from the rule or the roller.
     // -----------------------------------------------------------------------------------
     private static void printAbilityPricingTable() {
-        System.out.println("ABILITY PRICING — PP cost per ability (budget = PP a tier may spend on abilities)");
-        System.out.print("  tier budgets: ");
-        for (ge.tbegvadze.toon3d.entity.WeaponTier tier : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
-            System.out.printf("%s=%.0f  ", tier.displayName,
-                    ge.tbegvadze.toon3d.entity.WeaponRoller.tierAbilityPowerPointBudget(tier));
-        }
-        System.out.printf("(±%.0f%%)%n", BalanceConfig.TIER_ABILITY_PP_TOLERANCE * 100f);
-        System.out.printf("%-22s %8s %8s%n", "ability", "PP@L1", "PP@L10");
+        System.out.printf("ABILITY PRICING — every ability priced at its expected level (felt >= %.0f PP, B6)%n",
+                BalanceConfig.ABILITY_MIN_FELT_PP);
+        System.out.printf("%-20s %-9s %-15s %5s %5s %8s %7s %7s  %s%n", "ability", "rank", "tag", "depth",
+                "expLv", "PP@exp", "PP@L1", "PP@max", "status");
         System.out.println("------------------------------------------------------------------------------------");
         for (ge.tbegvadze.toon3d.entity.WeaponAbility ability
                 : ge.tbegvadze.toon3d.entity.WeaponAbility.values()) {
-            float ppLevel1  = abilityPowerPointsAt(ability, 1);
-            float ppLevel10 = abilityPowerPointsAt(ability, WeaponConstants.MAX_WEAPON_LEVEL);
-            System.out.printf("%-22s %8.2f %8.2f%n", ability.name(), ppLevel1, ppLevel10);
+            int   expectedLevel = BalanceSchema.expectedAbilityLevel(ability);
+            float ppExpected    = BalanceSchema.abilityPowerPointsAt(ability, expectedLevel);
+            float ppLevel1      = BalanceSchema.abilityPowerPointsAt(ability, 1);
+            float ppMaximum     = BalanceSchema.abilityPowerPointsAt(ability, WeaponConstants.MAX_WEAPON_LEVEL);
+            String status = ppExpected >= BalanceConfig.ABILITY_MIN_FELT_PP ? "KEPT" : "CUT (below felt)";
+            System.out.printf("%-20s %-9s %-15s %5d %5d %8.2f %7.2f %7.2f  %s%n", ability.name(),
+                    ability.isMajor() ? "MAJOR" : ability.rank.name(),
+                    ability.buildTag != null ? ability.buildTag.name() : "-",
+                    BalanceSchema.expectedAbilityDepth(ability), expectedLevel, ppExpected, ppLevel1, ppMaximum,
+                    status);
         }
-    }
-
-    private static float abilityPowerPointsAt(ge.tbegvadze.toon3d.entity.WeaponAbility ability, int level) {
-        ge.tbegvadze.toon3d.entity.AbilityInstance instance =
-                ge.tbegvadze.toon3d.entity.WeaponRoller.buildAbilityInstance(ability, level);
-        return GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+        System.out.println("  (cut by order 5: HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, ADRENAL_SURGE, BULWARK_ROUNDS, SECOND_WIND,");
+        System.out.println("   SALVAGE_STRIKE, SCHOLARS_EDGE, QUICK_HANDS, EXTENDED_MAG, FIELD_MEDIC_ROUNDS, CREDIT_FANG,");
+        System.out.println("   MARKSMANS_PATIENCE, RESONANT_ROUNDS; merged: OVERPENETRATION -> ARMOR_PIERCE)");
+        System.out.println();
+        System.out.printf("TIERS — guaranteed shape and priced band (budget ±%.0f%%), A4 roll sweep at depths %s%n",
+                BalanceConfig.TIER_ABILITY_PP_TOLERANCE * 100f,
+                java.util.Arrays.toString(BalanceConfig.ABILITY_ROLL_SWEEP_DEPTHS));
+        System.out.printf("%-10s %5s %5s %4s %7s %13s %15s%n", "tier", "count", "MAJOR", "sig", "budget",
+                "band", "sampled PP");
+        System.out.println("------------------------------------------------------------------------------------");
+        java.util.List<BalanceSchema.RuleResult> sweep = BalanceSchema.abilityRollSweepResults();
+        for (ge.tbegvadze.toon3d.entity.WeaponTier tier : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
+            float sampledMinimum = Float.MAX_VALUE;
+            float sampledMaximum = 0f;
+            for (int depth : BalanceConfig.ABILITY_ROLL_SWEEP_DEPTHS) {
+                int weaponLevel = GameMath.expectedPlayerAtDepth(depth).weaponLevel;
+                for (long seed = 0; seed < BalanceConfig.ABILITY_ROLL_SWEEP_SEEDS; seed++) {
+                    ge.tbegvadze.toon3d.entity.WeaponRoller roller =
+                            new ge.tbegvadze.toon3d.entity.WeaponRoller(seed * 7919L + depth);
+                    for (boolean isMelee : new boolean[]{false, true}) {
+                        float total = ge.tbegvadze.toon3d.entity.WeaponRoller.totalAbilityPowerPoints(
+                                roller.rollAbilitySet(isMelee, tier, weaponLevel));
+                        sampledMinimum = Math.min(sampledMinimum, total);
+                        sampledMaximum = Math.max(sampledMaximum, total);
+                    }
+                }
+            }
+            int violations = 0;
+            for (BalanceSchema.RuleResult row : sweep) {
+                if (row.subject.startsWith("roll sweep " + tier.name() + " ")) violations += Math.round(row.value);
+            }
+            System.out.printf("%-10s %5d %5d %4s %7.0f %6.1f..%-6.1f %6.1f..%-6.1f %s%n", tier.name(),
+                    tier.abilityCount, tier.majorCount, tier.rollsSignature ? "yes" : "-",
+                    tier.abilityPowerPointBudget, tier.abilityPowerPointFloor(), tier.abilityPowerPointCeiling(),
+                    sampledMinimum, sampledMaximum, violations == 0 ? "OK" : violations + " OUT");
+        }
     }
 
     // -----------------------------------------------------------------------------------
@@ -833,8 +867,10 @@ public final class BalanceReport {
         printShopPriceRow("Field medkit (" + BalanceSchema.modelFullMedkitHeal() + " HP)",
                 BalanceSchema.modelFullMedkitHeal() / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
         printShopPriceRow("Weapon level-up", BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS, depths);
-        printShopPriceRow("Tier up (RARE, 12 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
-        printShopPriceRow("Tier up (EPIC, 20 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
+        printShopPriceRow(String.format("Tier up (RARE, %.0f PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE),
+                BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
+        printShopPriceRow(String.format("Tier up (EPIC, %.0f PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC),
+                BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
         printShopPriceRow("Player ability: 1 perk rank", BalanceConfig.SHOP_PERK_RANK_POWER_POINTS, depths);
     }
 

@@ -786,6 +786,7 @@ public final class BalanceSchema {
         results.addAll(flagResults());
         results.addAll(coverageResults());
         results.addAll(abilityBudgetResults());
+        results.addAll(abilityRollSweepResults());
         results.addAll(creditResults());
         results.addAll(xpPaceResults());
         results.addAll(perkResults());
@@ -1828,49 +1829,237 @@ public final class BalanceSchema {
     }
 
     // =====================================================================================
-    // R-ABILITY (new-game-balancr order 2) — TIER = a priced ABILITY BUDGET. Two guarantees:
-    //   (a) COVERAGE — every catalogued ability (standard and legendary signature) has a registered,
-    //       finite, non-negative PP price at every weapon level.
-    //   (b) BUDGET — no ROLLABLE ability alone exceeds the ceiling of the CHEAPEST tier that can roll
-    //       it, and the full roll never exceeds its tier ceiling (the WeaponRoller enforces the sum by
-    //       construction; BalanceAuditTest exercises real rolls across seeds/levels for the sum).
-    // The tier budgets (COMMON 0 | UNCOMMON 6 | RARE 12 | EPIC 20 | LEGENDARY 30, ±20%) live in
-    // BalanceConfig SECTION 15. Magnitudes may be tuned freely — the price recomputes from them.
+    // R-ABILITY — REAL RARITY (balance-overhaul order 5, B5/B6; replaces new-game-balancr order 2's
+    // "tier = a priced ability CEILING", OVERRIDE CLAUSE). Every guarantee is now two-sided:
+    //   (a) FELT (B6)      — every catalogued ability is priced (finite, >= 0) at every weapon level AND prices
+    //                        at least ABILITY_MIN_FELT_PP at its EXPECTED weapon level (expectedAbilityLevel).
+    //   (b) TAGGED (B6)    — every ability carries a BuildTag (B3 synergy reads it).
+    //   (c) SHAPE (B5)     — each tier's count / MAJOR count equals the B5 table, and the catalogue holds enough
+    //                        eligible abilities of each rank for a gun AND a melee weapon to roll that shape.
+    //   (d) BUDGET (B5)    — the tier budgets equal the B5 table (UNCOMMON 12 / RARE 25 / EPIC 40 / LEGENDARY 60)
+    //                        and rise monotonically with rarity.
+    //   (e) BAND, PROVEN   — at EVERY weapon level 1..MAX, the cheapest and the priciest draw of each tier's shape
+    //                        (for a gun and for a melee weapon) both land inside budget × (1 ± tolerance): no seed
+    //                        can roll outside the band, by construction.
+    //   (f) BAND, SAMPLED (A4) — abilityRollSweepResults(): real seeded rolls, ABILITY_ROLL_SWEEP_SEEDS seeds ×
+    //                        5 tiers × ABILITY_ROLL_SWEEP_DEPTHS, gun and melee, each with exactly the tier's
+    //                        count, its MAJORs, its signature, and a total inside the band.
     // =====================================================================================
 
-    /** R-ABILITY: every ability is priced (coverage) and prices are finite/non-negative at all levels. */
+    /** B5 as written in the spec: abilities per tier (signature not counted), indexed by WeaponTier ordinal. */
+    private static final int[]   B5_TIER_ABILITY_COUNTS  = {0, 1, 2, 3, 3};
+    /** B5 as written in the spec: ability-PP budget per tier, indexed by WeaponTier ordinal. */
+    private static final float[] B5_TIER_ABILITY_BUDGETS = {0f, 12f, 25f, 40f, 60f};
+
+    /**
+     * The EXPECTED weapon level an ability is valued at (B6): the on-curve weapon level
+     * ({@code expectedPlayerAtDepth(d).weaponLevel}) at the shallowest depth {@code d} whose region can DROP the
+     * lowest tier that may roll the ability — UNCOMMON for a STANDARD ability (the first tier with a standard
+     * slot), the first tier with a MAJOR slot for a MAJOR (EPIC), LEGENDARY for a signature. "Can drop" reads
+     * the region drop band {@code WEAPON_DROP_TIER_MAX_BY_REGION}; region r starts at depth r × band + 1.
+     */
+    public static int expectedAbilityLevel(WeaponAbility ability) {
+        int lowestTierOrdinal = lowestTierOrdinalThatRolls(ability.rank);
+        int[] regionMaximumTier = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int bandSize = Math.max(1, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        int region = regionMaximumTier.length - 1;
+        for (int regionIndex = 0; regionIndex < regionMaximumTier.length; regionIndex++) {
+            if (regionMaximumTier[regionIndex] >= lowestTierOrdinal) { region = regionIndex; break; }
+        }
+        return GameMath.expectedPlayerAtDepth(region * bandSize + 1).weaponLevel;
+    }
+
+    /** The drop depth {@link #expectedAbilityLevel} values an ability at (report helper). */
+    public static int expectedAbilityDepth(WeaponAbility ability) {
+        int lowestTierOrdinal = lowestTierOrdinalThatRolls(ability.rank);
+        int[] regionMaximumTier = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int bandSize = Math.max(1, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        for (int regionIndex = 0; regionIndex < regionMaximumTier.length; regionIndex++) {
+            if (regionMaximumTier[regionIndex] >= lowestTierOrdinal) return regionIndex * bandSize + 1;
+        }
+        return (regionMaximumTier.length - 1) * bandSize + 1;
+    }
+
+    /** Lowest WeaponTier ordinal whose shape draws an ability of this rank (data-driven from WeaponTier). */
+    private static int lowestTierOrdinalThatRolls(WeaponAbility.Rank rank) {
+        for (WeaponTier tier : WeaponTier.values()) {
+            boolean rolls = rank == WeaponAbility.Rank.SIGNATURE ? tier.rollsSignature
+                          : rank == WeaponAbility.Rank.MAJOR     ? tier.majorCount > 0
+                          :                                        tier.standardCount() > 0;
+            if (rolls) return tier.ordinal();
+        }
+        return WeaponTier.LEGENDARY.ordinal();
+    }
+
+    /** Priced PP of an ability at a weapon level (the one pricing path the rule, roller and report share). */
+    public static float abilityPowerPointsAt(WeaponAbility ability, int weaponLevel) {
+        AbilityInstance instance = WeaponRoller.buildAbilityInstance(ability, weaponLevel);
+        return GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+    }
+
+    /** R-ABILITY (a)-(e): felt, tagged, shape, budgets, and the band proven at every level. */
     public static List<RuleResult> abilityBudgetResults() {
         List<RuleResult> results = new ArrayList<>();
-        float legendaryCeiling = BalanceConfig.TIER_ABILITY_PP_BUDGET_LEGENDARY
-                * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
+        // (a) FELT + (b) TAGGED, per ability.
         for (WeaponAbility ability : WeaponAbility.values()) {
-            float maxPriceAcrossLevels = 0f;
             boolean priced = true;
             for (int weaponLevel = 1; weaponLevel <= WeaponConstants.MAX_WEAPON_LEVEL; weaponLevel++) {
-                AbilityInstance instance = WeaponRoller.buildAbilityInstance(ability, weaponLevel);
-                float price = GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+                float price = abilityPowerPointsAt(ability, weaponLevel);
                 if (Float.isNaN(price) || Float.isInfinite(price) || price < 0f) priced = false;
-                maxPriceAcrossLevels = Math.max(maxPriceAcrossLevels, price);
             }
-            // No single ability may exceed the richest tier's ceiling — otherwise it could never roll.
-            boolean fitsSomewhere = maxPriceAcrossLevels <= legendaryCeiling;
-            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name(),
-                    maxPriceAcrossLevels, 0f, legendaryCeiling, priced && fitsSomewhere,
-                    priced ? (fitsSomewhere ? "priced; max-level PP fits the legendary ceiling"
-                                            : "max-level PP EXCEEDS the legendary ceiling — no tier can roll it")
-                           : "UNPRICED — GameMath.abilityPowerPoints returned a non-finite/negative value"));
+            int expectedLevel = expectedAbilityLevel(ability);
+            float expectedPrice = abilityPowerPointsAt(ability, expectedLevel);
+            boolean felt = priced && expectedPrice >= BalanceConfig.ABILITY_MIN_FELT_PP;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name() + " felt",
+                    expectedPrice, BalanceConfig.ABILITY_MIN_FELT_PP, Float.MAX_VALUE, felt,
+                    !priced ? "UNPRICED — GameMath.abilityPowerPoints returned a non-finite/negative value"
+                            : String.format("%.1f PP at expected weapon level %d (%s, depth %d)%s", expectedPrice,
+                                    expectedLevel, ability.rank, expectedAbilityDepth(ability),
+                                    felt ? "" : " — BELOW ABILITY_MIN_FELT_PP: cut or merge it (B6)")));
+            boolean tagged = ability.buildTag != null;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name() + " tagged",
+                    tagged ? 1f : 0f, 1f, 1f, tagged,
+                    tagged ? "counts toward " + ability.buildTag.name() + " synergy"
+                           : "NO BuildTag — every ability must count toward a build (B6)"));
         }
-        // Tier budgets must be monotonic non-decreasing with rarity (a richer tier is never poorer).
+        // (c) SHAPE + (d) BUDGET, per tier.
         float previousBudget = -1f;
         boolean monotonic = true;
         for (WeaponTier tier : WeaponTier.values()) {
-            float budget = WeaponRoller.tierAbilityPowerPointBudget(tier);
-            if (budget < previousBudget) monotonic = false;
-            previousBudget = budget;
+            int ordinal = tier.ordinal();
+            boolean countMatches = tier.abilityCount == B5_TIER_ABILITY_COUNTS[ordinal];
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier " + tier.name() + " count",
+                    tier.abilityCount, B5_TIER_ABILITY_COUNTS[ordinal], B5_TIER_ABILITY_COUNTS[ordinal], countMatches,
+                    tier.abilityCount + " abilities (" + tier.majorCount + " MAJOR)"
+                            + (tier.rollsSignature ? " + signature" : "") + (countMatches ? "" : " — B5 says "
+                            + B5_TIER_ABILITY_COUNTS[ordinal])));
+            boolean budgetMatches = Math.abs(tier.abilityPowerPointBudget - B5_TIER_ABILITY_BUDGETS[ordinal]) < 1e-3f;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier " + tier.name() + " budget",
+                    tier.abilityPowerPointBudget, B5_TIER_ABILITY_BUDGETS[ordinal], B5_TIER_ABILITY_BUDGETS[ordinal],
+                    budgetMatches, String.format("band %.1f..%.1f PP", tier.abilityPowerPointFloor(),
+                            tier.abilityPowerPointCeiling())));
+            if (tier.abilityPowerPointBudget < previousBudget) monotonic = false;
+            previousBudget = tier.abilityPowerPointBudget;
+            for (boolean isMelee : new boolean[]{false, true}) {
+                int standardPool  = eligibleCount(WeaponAbility.Rank.STANDARD, isMelee);
+                int majorPool     = eligibleCount(WeaponAbility.Rank.MAJOR, isMelee);
+                int signaturePool = eligibleCount(WeaponAbility.Rank.SIGNATURE, isMelee);
+                boolean enough = standardPool >= tier.standardCount() && majorPool >= tier.majorCount
+                        && (!tier.rollsSignature || signaturePool >= 1);
+                results.add(new RuleResult(RuleKind.ABILITY_BUDGET,
+                        "tier " + tier.name() + " pool " + (isMelee ? "melee" : "gun"),
+                        enough ? 1f : 0f, 1f, 1f, enough,
+                        String.format("eligible: %d standard, %d MAJOR, %d signature", standardPool, majorPool,
+                                signaturePool)));
+                // (e) BAND, PROVEN — the extreme draws of the shape at every level.
+                float lowestTotal  = Float.MAX_VALUE;
+                float highestTotal = 0f;
+                for (int weaponLevel = 1; weaponLevel <= WeaponConstants.MAX_WEAPON_LEVEL; weaponLevel++) {
+                    float cheapest  = extremeShapeTotal(tier, isMelee, weaponLevel, false);
+                    float priciest  = extremeShapeTotal(tier, isMelee, weaponLevel, true);
+                    lowestTotal  = Math.min(lowestTotal, cheapest);
+                    highestTotal = Math.max(highestTotal, priciest);
+                }
+                boolean inBand = WeaponRoller.isWithinTierBand(tier, lowestTotal)
+                        && WeaponRoller.isWithinTierBand(tier, highestTotal);
+                results.add(new RuleResult(RuleKind.ABILITY_BUDGET,
+                        "tier " + tier.name() + " band " + (isMelee ? "melee" : "gun"),
+                        highestTotal, tier.abilityPowerPointFloor(), tier.abilityPowerPointCeiling(), inBand,
+                        String.format("any draw at any level prices %.1f..%.1f PP", lowestTotal, highestTotal)));
+            }
         }
         results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier budgets monotonic",
                 monotonic ? 1f : 0f, 1f, 1f, monotonic,
                 "TIER_ABILITY_PP_BUDGET_* must not decrease as rarity rises"));
+        return results;
+    }
+
+    /** Eligible abilities of one rank for a gun or a melee weapon. */
+    private static int eligibleCount(WeaponAbility.Rank rank, boolean isMelee) {
+        int count = 0;
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (ability.rank == rank && ability.eligibleFor(isMelee)) count++;
+        }
+        return count;
+    }
+
+    /**
+     * The cheapest ({@code priciest == false}) or priciest priced total any draw of a tier's shape can carry at
+     * one weapon level: the k cheapest / dearest eligible abilities of each rank, summed. Allocation is fine —
+     * this is audit code, run once.
+     */
+    private static float extremeShapeTotal(WeaponTier tier, boolean isMelee, int weaponLevel, boolean priciest) {
+        return extremeRankTotal(WeaponAbility.Rank.STANDARD, tier.standardCount(), isMelee, weaponLevel, priciest)
+             + extremeRankTotal(WeaponAbility.Rank.MAJOR, tier.majorCount, isMelee, weaponLevel, priciest)
+             + extremeRankTotal(WeaponAbility.Rank.SIGNATURE, tier.rollsSignature ? 1 : 0, isMelee, weaponLevel,
+                                priciest);
+    }
+
+    private static float extremeRankTotal(WeaponAbility.Rank rank, int count, boolean isMelee, int weaponLevel,
+                                          boolean priciest) {
+        if (count <= 0) return 0f;
+        List<Float> prices = new ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (ability.rank == rank && ability.eligibleFor(isMelee)) prices.add(abilityPowerPointsAt(ability, weaponLevel));
+        }
+        prices.sort(priciest ? java.util.Collections.reverseOrder() : java.util.Comparator.naturalOrder());
+        float total = 0f;
+        for (int index = 0; index < Math.min(count, prices.size()); index++) total += prices.get(index);
+        return total;
+    }
+
+    /**
+     * R-ABILITY (f) — A4's SAMPLED roll sweep: for every tier and every ABILITY_ROLL_SWEEP_DEPTHS depth, real
+     * {@link WeaponRoller#rollAbilitySet} rolls over ABILITY_ROLL_SWEEP_SEEDS seeds, for a gun and for a melee
+     * weapon, at the on-curve weapon level for that depth. One row per (tier, depth): its value is the number
+     * of rolls that broke the shape (wrong count, wrong MAJOR count, missing signature) or the band; the detail
+     * carries the sampled min..max PP. The band is independent of the region drop table on purpose — a shop
+     * tier upgrade can put any tier at any depth.
+     */
+    public static List<RuleResult> abilityRollSweepResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (WeaponTier tier : WeaponTier.values()) {
+            for (int depth : BalanceConfig.ABILITY_ROLL_SWEEP_DEPTHS) {
+                int weaponLevel = GameMath.expectedPlayerAtDepth(depth).weaponLevel;
+                int violations = 0;
+                int rolls = 0;
+                float sampledMinimum = Float.MAX_VALUE;
+                float sampledMaximum = 0f;
+                String firstViolation = "";
+                for (long seed = 0; seed < BalanceConfig.ABILITY_ROLL_SWEEP_SEEDS; seed++) {
+                    WeaponRoller roller = new WeaponRoller(seed * 7919L + depth);
+                    for (boolean isMelee : new boolean[]{false, true}) {
+                        AbilityInstance[] abilities = roller.rollAbilitySet(isMelee, tier, weaponLevel);
+                        rolls++;
+                        int majors = 0;
+                        int signatures = 0;
+                        for (AbilityInstance instance : abilities) {
+                            if (instance.ability.isMajor()) majors++;
+                            if (instance.ability.legendaryOnly) signatures++;
+                        }
+                        float total = WeaponRoller.totalAbilityPowerPoints(abilities);
+                        sampledMinimum = Math.min(sampledMinimum, total);
+                        sampledMaximum = Math.max(sampledMaximum, total);
+                        boolean shapeHolds = abilities.length == tier.totalAbilityCount()
+                                && majors == tier.majorCount
+                                && signatures == (tier.rollsSignature ? 1 : 0);
+                        if (!shapeHolds || !WeaponRoller.isWithinTierBand(tier, total)) {
+                            if (violations == 0) {
+                                firstViolation = String.format("; first: seed %d %s %d abilities, %d MAJOR, %.1f PP",
+                                        seed, isMelee ? "melee" : "gun", abilities.length, majors, total);
+                            }
+                            violations++;
+                        }
+                    }
+                }
+                results.add(new RuleResult(RuleKind.ABILITY_BUDGET,
+                        "roll sweep " + tier.name() + " depth " + depth,
+                        violations, 0f, 0f, violations == 0,
+                        String.format("%d rolls at weapon level %d: %.1f..%.1f PP (band %.1f..%.1f)%s", rolls,
+                                weaponLevel, sampledMinimum, sampledMaximum, tier.abilityPowerPointFloor(),
+                                tier.abilityPowerPointCeiling(), firstViolation)));
+            }
+        }
         return results;
     }
 

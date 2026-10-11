@@ -932,10 +932,11 @@ public final class BalanceConfig {
     /** Hard ceiling on chained barrel detonations from one trigger. */
     public static final int   EXPLOSION_CHAIN_MAX = 32;
 
-    // Rend (BLEED DoT — on hit).
-    public static final float REND_DAMAGE_PER_TURN_BASE      = 2f;
-    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.5f;
-    public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
+    // Rend (BLEED DoT — on hit). STANDARD, BLADE. MOVED 2/.5/6 -> 4/.15/5.35 by balance-overhaul order 5
+    // (B6, CP4): 4.8 -> 10.4..13.9 PP, so it is felt at level 1 and a guaranteed count stays in its tier band.
+    public static final float REND_DAMAGE_PER_TURN_BASE      = 4f;
+    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.15f;
+    public static final float REND_DAMAGE_PER_TURN_CAP       = 5.35f;
     public static final int   REND_DURATION_TURNS            = 4;
 
     // Incendiary (BURN DoT — on hit). The level-1 base IS the ONE weapon-side burn base (R-DOT): order 4
@@ -944,8 +945,10 @@ public final class BalanceConfig {
     /** THE weapon-side burn base (damage/turn): Incendiary level 1; every weapon burn derives from it. */
     public static final float WEAPON_BURN_BASE_PER_TURN          = 4f;
     public static final float INCENDIARY_BURN_PER_TURN_BASE      = WEAPON_BURN_BASE_PER_TURN;
-    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
-    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
+    // STANDARD, PYRO. MOVED per-level .5 -> .15 and cap 7 -> 5.35 by balance-overhaul order 5 (B5/B6, CP4):
+    // 10.4 PP at level 1 -> 13.9 PP at MAX_WEAPON_LEVEL, inside the single-ability UNCOMMON band at every level.
+    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.15f;
+    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 5.35f;
     public static final int   INCENDIARY_BURN_DURATION           = 3;
     public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS = 1;
 
@@ -1418,148 +1421,106 @@ public final class BalanceConfig {
     // =====================================================================================
     // SECTION 15 — WEAPON ABILITY MAGNITUDES (the ability catalogue)
     // CONSOLIDATED from GameBalance (Balance Authority, order 1). BASE / PER_LEVEL / CAP for
-    // every rollable weapon ability. All values remain PLAYTESTING PLACEHOLDERS — order 1
-    // moves them into the single source of truth; pricing them against the contract is a
-    // later order in this series. GameBalance keeps re-export shims.
+    // every rollable weapon ability. GameBalance keeps re-export shims.
+    //
+    // RE-TUNED by balance-overhaul order 5 (B5/B6, CP4). Fourteen sub-threshold abilities were CUT or
+    // MERGED (ABILITY_MIN_FELT_PP, SECTION 24) and the fifteen survivors re-tuned so every one is FELT at
+    // its expected weapon level and the B5 counts land inside the B5 tier bands at EVERY level:
+    //   STANDARD abilities  price ~10.5 PP at level 1 -> ~14 PP at MAX_WEAPON_LEVEL (cap = base + 9 x per-level,
+    //                       reached at the top of the respanned 1..10 legacy curve);
+    //   MAJOR abilities     price ~12 PP -> ~17.4 PP (rolled on EPIC and LEGENDARY only).
+    // Any 1 standard fits UNCOMMON 12 +/-20%; any 2 fit RARE 25; any 2 + a MAJOR fit EPIC 40; any 2 + a MAJOR +
+    // the signature (18 PP) fit LEGENDARY 60 — so a guaranteed count can never be forced out of its band. Each
+    // MOVED value carries the PP it prices to (GameMath.abilityPowerPoints). REND and INCENDIARY live with the
+    // DoT rules in SECTION 8 (re-tuned there, same shape).
     // =====================================================================================
 
-    // ── Critical Strike ──
-    public static final float CRIT_CHANCE_BASE            = 0.05f;
-    public static final float CRIT_CHANCE_PER_LEVEL       = 0.015f;
-    public static final float CRIT_CHANCE_CAP             = 0.30f;
+    // ── Critical Strike (STANDARD, MARKSMAN) — MOVED .05/.015/.30 -> .105/.0039/.14 (10.5 -> 14.0 PP) ──
+    public static final float CRIT_CHANCE_BASE            = 0.105f;
+    public static final float CRIT_CHANCE_PER_LEVEL       = 0.0039f;
+    public static final float CRIT_CHANCE_CAP             = 0.14f;
 
-    // ── Armor Pierce (bypasses a fraction of the target's Block) ──
-    public static final float ARMOR_PIERCE_BASE           = 0.20f;
-    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.05f;
-    public static final float ARMOR_PIERCE_CAP            = 0.60f;
+    // ── Armor Pierce (STANDARD, DEMOLITION) — bypasses a fraction of the target's Block AND (merged from the
+    // cut OVERPENETRATION) every shot pierces ARMOR_PIERCE_EXTRA_TARGETS more enemies in line.
+    // MOVED .20/.05/.60 -> .285/.013/.40 (8.55 + 2 = 10.55 -> 12 + 2 = 14.0 PP) ──
+    public static final float ARMOR_PIERCE_BASE           = 0.285f;
+    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.013f;
+    public static final float ARMOR_PIERCE_CAP            = 0.40f;
+    /** Extra enemies a shot pierces beyond the first (merged from OVERPENETRATION's level-1 count). Range: 1. */
+    public static final int   ARMOR_PIERCE_EXTRA_TARGETS              = 1;
+    /** On an already-piercing weapon (Plasma, Railgun): damage bonus per enemy struck past the first. */
+    public static final float ARMOR_PIERCE_ALREADY_PIERCING_BONUS     = 0.25f;
 
-    // ── Executioner (bonus vs low-HP targets) ──
+    // ── Executioner (MAJOR, BLADE) — bonus vs low-HP targets. MOVED .30/.06/.80 -> .40/.02/.58 (12 -> 17.4 PP) ──
     public static final float EXECUTIONER_THRESHOLD       = 0.25f;
-    public static final float EXECUTIONER_BONUS_BASE      = 0.30f;
-    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.06f;
-    public static final float EXECUTIONER_BONUS_CAP       = 0.80f;
+    public static final float EXECUTIONER_BONUS_BASE      = 0.40f;
+    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.02f;
+    public static final float EXECUTIONER_BONUS_CAP       = 0.58f;
 
-    // ── Stagger Rounds (stun on hit) ──
-    public static final float STAGGER_CHANCE_BASE         = 0.08f;
-    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.02f;
-    public static final float STAGGER_CHANCE_CAP          = 0.35f;
+    // ── Stagger Rounds (STANDARD, CLOSE_QUARTERS) — stun on hit. MOVED .08/.02/.35 -> .235/.0083/.31 (10.6 -> 13.95 PP) ──
+    public static final float STAGGER_CHANCE_BASE         = 0.235f;
+    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.0083f;
+    public static final float STAGGER_CHANCE_CAP          = 0.31f;
 
-    // ── Overpenetration ──
-    public static final int   OVERPENETRATION_BASE_COUNT              = 1;
-    public static final int   OVERPENETRATION_LEVELS_PER_STEP         = 3;
-    public static final int   OVERPENETRATION_MAX_COUNT               = 3;
-    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS  = 0.25f;
+    // ── Lifesteal (STANDARD, VITALITY). MOVED .06/.015/.20 -> .21/.0078/.28 (10.5 -> 14.0 PP) ──
+    public static final float LIFESTEAL_BASE              = 0.21f;
+    public static final float LIFESTEAL_PER_LEVEL         = 0.0078f;
+    public static final float LIFESTEAL_CAP               = 0.28f;
 
-    // ── Lifesteal ──
-    public static final float LIFESTEAL_BASE              = 0.06f;
-    public static final float LIFESTEAL_PER_LEVEL         = 0.015f;
-    public static final float LIFESTEAL_CAP               = 0.20f;
-
-    // ── Hemorrhage Harvest (on-kill HP) ──
-    public static final float HEMORRHAGE_HP_BASE          = 3f;
-    public static final float HEMORRHAGE_HP_PER_LEVEL     = 0.7f;
-    public static final int   HEMORRHAGE_HP_CAP           = 12;
-
-    // ── Vampiric Crit ──
-    public static final float VAMPIRIC_CRIT_HP_BASE       = 4f;
-    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL  = 1.0f;
-    public static final int   VAMPIRIC_CRIT_HP_CAP        = 14;
-
-    // ── Adrenal Surge ──
-    public static final float ADRENAL_SURGE_CHANCE_BASE      = 0.10f;
-    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = 0.03f;
-    public static final float ADRENAL_SURGE_CHANCE_CAP       = 0.40f;
-    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = 0.30f;
-
-    // ── Bulwark Rounds (temp armour on reload) ──
-    public static final float BULWARK_ARMOR_BASE          = 2f;
-    public static final float BULWARK_ARMOR_PER_LEVEL     = 0.5f;
-    public static final int   BULWARK_ARMOR_CAP           = 8;
-    public static final int   BULWARK_ARMOR_DURATION      = 3;
-
-    // ── Second Wind (low-HP damage bonus) ──
-    public static final float SECOND_WIND_HP_THRESHOLD    = 0.30f;
-    public static final float SECOND_WIND_BONUS_BASE      = 0.25f;
-    public static final float SECOND_WIND_BONUS_PER_LEVEL = 0.05f;
-    public static final float SECOND_WIND_BONUS_CAP       = 0.75f;
-
-    // ── Kinetic Slam (melee) ──
-    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.20f;
-    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.04f;
-    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.60f;
+    // ── Kinetic Slam (STANDARD, BULWARK, melee). MOVED .20/.04/.60 -> .235/.0083/.31 (10.6 -> 13.95 PP) ──
+    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.235f;
+    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.0083f;
+    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.31f;
     public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = 3;
 
-    // ── Cleave (melee) ──
+    // ── Cleave (MAJOR, BLADE, melee). MOVED .40/.05/.80 -> .40/.02/.58 (12 -> 17.4 PP) ──
     public static final float CLEAVE_FRACTION_BASE      = 0.40f;
-    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.05f;
-    public static final float CLEAVE_FRACTION_CAP       = 0.80f;
-
-    // ── Salvage Strike (melee, on-kill ammo) ──
-    public static final float SALVAGE_CHANCE_BASE      = 0.50f;
-    public static final float SALVAGE_CHANCE_PER_LEVEL = 0.06f;
-    public static final float SALVAGE_CHANCE_CAP       = 1.00f;
-
-    // ── Scholar's Edge (melee, on-kill XP) ──
-    public static final float SCHOLARS_XP_BONUS_BASE      = 0.15f;
-    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = 0.05f;
-    public static final float SCHOLARS_XP_BONUS_CAP       = 0.75f;
+    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.02f;
+    public static final float CLEAVE_FRACTION_CAP       = 0.58f;
 
     // ── Berserker's Oath (legendary, melee) ──
     public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;
     public static final int   BERSERKER_HP_TICK_PER_STACK = 1;
     public static final int   BERSERKER_MAX_STACKS        = 5;
 
-    // ── Scavenger Rounds (gun, on-kill ammo refund) ──
-    public static final float SCAVENGER_CHANCE_BASE          = 0.15f;
-    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.03f;
-    public static final float SCAVENGER_CHANCE_CAP           = 0.50f;
-    public static final int   SCAVENGER_REFUND_BASE          = 1;
-    public static final int   SCAVENGER_REFUND_HIGH_LEVEL    = 2;
-    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = 7;
+    // ── Scavenger Rounds (STANDARD, SCAVENGER, gun) — on kill, a chance to refund SCAVENGER_REFUND_ROUNDS
+    // rounds to the reserve. MOVED chance .15/.03/.50 -> .30/.0112/.40 and refund 1 (2 at Lv.7+) -> 3 flat
+    // (0.30 x 3 x 11.67 = 10.5 -> 0.40 x 3 x 11.67 = 14.0 PP). The old Lv.7 refund step is gone: the refund
+    // is the ability's countValue now, so the price reads it. ──
+    public static final float SCAVENGER_CHANCE_BASE          = 0.30f;
+    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.0112f;
+    public static final float SCAVENGER_CHANCE_CAP           = 0.40f;
+    /** Rounds refunded to the reserve on a Scavenger proc (the instance's countValue). Range: 2-4. */
+    public static final int   SCAVENGER_REFUND_ROUNDS        = 3;
 
-    // ── Field Medic Rounds (on-kill medkit drop) ──
-    public static final float FIELD_MEDIC_CHANCE_BASE        = 0.05f;
-    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL   = 0.02f;
-    public static final float FIELD_MEDIC_CHANCE_CAP         = 0.25f;
-
-    // ── Credit Fang (on-kill credits) ──
-    public static final float CREDIT_FANG_BASE               = 2f;
-    public static final float CREDIT_FANG_PER_LEVEL          = 1f;
-    public static final int   CREDIT_FANG_CAP                = 12;
-
-    // ── Point Blank ──
-    public static final float POINT_BLANK_BONUS_BASE      = 0.20f;
-    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.05f;
-    public static final float POINT_BLANK_BONUS_CAP       = 0.70f;
+    // ── Point Blank (STANDARD, CLOSE_QUARTERS). MOVED .20/.05/.70 -> .35/.0125/.46 (10.5 -> 13.8 PP) ──
+    public static final float POINT_BLANK_BONUS_BASE      = 0.35f;
+    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.0125f;
+    public static final float POINT_BLANK_BONUS_CAP       = 0.46f;
     public static final int   POINT_BLANK_MAX_DISTANCE    = 1;
 
-    // ── Marksman's Patience ──
-    public static final float MARKSMAN_PER_TILE_BASE      = 0.05f;
-    public static final float MARKSMAN_PER_TILE_PER_LEVEL = 0.01f;
-    public static final float MARKSMAN_PER_TILE_CAP       = 0.12f;
-    public static final int   MARKSMAN_MIN_DISTANCE       = 2;
-    public static final float MARKSMAN_TOTAL_BONUS_CAP    = 0.60f;
+    // ── Opening Salvo (MAJOR, MARKSMAN). MOVED .30/.07/.90 -> .40/.02/.58 (12 -> 17.4 PP) ──
+    public static final float OPENING_SALVO_BONUS_BASE      = 0.40f;
+    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.02f;
+    public static final float OPENING_SALVO_BONUS_CAP       = 0.58f;
 
-    // ── Opening Salvo ──
-    public static final float OPENING_SALVO_BONUS_BASE      = 0.30f;
-    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.07f;
-    public static final float OPENING_SALVO_BONUS_CAP       = 0.90f;
-
-    // ── Rhythm / Heat-Up ──
-    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.06f;
-    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.01f;
-    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.15f;
+    // ── Rhythm / Heat-Up (STANDARD, ENERGY). MOVED .06/.01/.15 -> .105/.0039/.14 (10.5 -> 14.0 PP) ──
+    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.105f;
+    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.0039f;
+    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.14f;
     public static final int   RHYTHM_MAX_STACKS             = 5;
 
-    // ── Static Discharge ──
-    public static final float STATIC_SPLASH_BASE      = 4f;
-    public static final float STATIC_SPLASH_PER_LEVEL = 1f;
-    public static final int   STATIC_SPLASH_CAP       = 14;
+    // ── Static Discharge (STANDARD, ENERGY). MOVED 4/1/14 -> 7.5/0.28/10 (10.5 -> 14.0 PP) ──
+    public static final float STATIC_SPLASH_BASE      = 7.5f;
+    public static final float STATIC_SPLASH_PER_LEVEL = 0.28f;
+    public static final int   STATIC_SPLASH_CAP       = 10;
 
-    // ── Resonant Rounds (% of target max HP) ──
-    public static final float RESONANT_PCT_BASE      = 0.04f;
-    public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
-    public static final float RESONANT_PCT_CAP       = 0.10f;
+    // ── Burst Fire (MAJOR, CLOSE_QUARTERS, gun) — rounds fired per attack action. MOVED from a count that
+    // stepped 2 -> 5 with level (4 -> 10 PP at 2 PP per count) to a FIXED two-round burst priced on its own
+    // weight (ABILITY_PP_PER_EXTRA_BURST_ROUND = 16 PP for the one extra round). The Double-Barrel's
+    // built-in burst reads the same count. ──
+    /** Rounds fired per attack action by BURST_FIRE (the base shot plus the extras). Range: 2. */
+    public static final int   BURST_FIRE_ROUND_COUNT = 2;
 
     // ── Legendary signatures ──
     public static final int   SOULFORGE_KILLS_PER_LEVEL_UP  = 5;
@@ -1569,33 +1530,21 @@ public final class BalanceConfig {
     public static final int   HELLFIRE_NOVA_RADIUS          = 2;
     public static final float HELLFIRE_NOVA_DAMAGE_FRACTION = 0.75f;
 
-    // ── Extended Mag ──
-    public static final int   EXTENDED_MAG_BASE_COUNT      = 1;
-    public static final int   EXTENDED_MAG_LEVELS_PER_STEP = 3;
-    public static final int   EXTENDED_MAG_MAX_COUNT       = 4;
+    // CUT by balance-overhaul order 5 (B6, priced below ABILITY_MIN_FELT_PP at level 1, PP in brackets):
+    // HEMORRHAGE_HARVEST (0.5), VAMPIRIC_CRIT (0.7), BULWARK_ROUNDS (0.3), ADRENAL_SURGE (3.0),
+    // SECOND_WIND (7.5; also collided with the VITALITY perk of the same name), SALVAGE_STRIKE / SCHOLARS_EDGE /
+    // FIELD_MEDIC_ROUNDS / CREDIT_FANG / QUICK_HANDS (3.0 nominal each), EXTENDED_MAG (2.0), MARKSMANS_PATIENCE
+    // (1.5), RESONANT_ROUNDS (1.2). MERGED: OVERPENETRATION (2.0) -> ARMOR_PIERCE (its pierce rides
+    // ARMOR_PIERCE_EXTRA_TARGETS). Their magnitudes are deleted with them.
 
     // -------------------------------------------------------------------------------------
     // TIER = PRICED ABILITY BUDGET (new-game-balancr order 2). Rarity NEVER raises a weapon's
-    // POWER band (that stays a role property, SECTION 9) — it buys ABILITIES, and now abilities
-    // are PRICED in power points (PP = %-of-reference-DPT/eHP, the SAME currency the level-up
-    // cards use; see GameMath.abilityPowerPoints). Each tier gets an ability-PP BUDGET; the
-    // WeaponRoller rolls abilities until the budget is spent — never past. This converts the whole
-    // "PLACEHOLDER — flag for playtesting" ability catalogue above into priced content: magnitudes
-    // may be tuned freely, the price recomputes from the magnitude. BalanceSchema R-ABILITY asserts
-    // every rollable tier/level roll fits its tier budget. See docs/game-balance-authority.txt.
+    // POWER band (that stays a role property, SECTION 9) — it buys ABILITIES, priced in power points
+    // (PP = %-of-reference-DPT/eHP; see GameMath.abilityPowerPoints). The tier budgets themselves —
+    // the order-2 UNCOMMON 6 / RARE 12 / EPIC 20 / LEGENDARY 30 ceilings — were REPLACED by balance-
+    // overhaul order 5 (B5, OVERRIDE CLAUSE) with GUARANTEED COUNTS and a BAND (floor AND ceiling):
+    // TIER_ABILITY_COUNT_* / TIER_ABILITY_PP_BUDGET_* / TIER_ABILITY_PP_TOLERANCE live in SECTION 24.
     // -------------------------------------------------------------------------------------
-    /** Ability-PP budget a COMMON weapon may spend on abilities (none — commons are vanilla). */
-    public static final float TIER_ABILITY_PP_BUDGET_COMMON    = 0f;
-    /** Ability-PP budget an UNCOMMON weapon may spend (~one modest ability). */
-    public static final float TIER_ABILITY_PP_BUDGET_UNCOMMON  = 6f;
-    /** Ability-PP budget a RARE weapon may spend (~two abilities). */
-    public static final float TIER_ABILITY_PP_BUDGET_RARE      = 12f;
-    /** Ability-PP budget an EPIC weapon may spend (~three abilities). */
-    public static final float TIER_ABILITY_PP_BUDGET_EPIC      = 20f;
-    /** Ability-PP budget a LEGENDARY weapon may spend (~four abilities + a signature). */
-    public static final float TIER_ABILITY_PP_BUDGET_LEGENDARY = 30f;
-    /** Fractional slack the roller may overspend a tier budget by before an ability is rejected (±20%). */
-    public static final float TIER_ABILITY_PP_TOLERANCE        = 0.20f;
 
     // ── ABILITY PRICING UTILISATION WEIGHTS ──────────────────────────────────────────────
     // An ability's PP is its magnitude converted to a %-of-reference value, DISCOUNTED by how often
@@ -1609,22 +1558,40 @@ public final class BalanceConfig {
     public static final float ABILITY_UTIL_CROWD_CONTROL    = 0.45f;
     /** Bypass/penetration value (armor pierce) — only pays off vs shielding enemies. */
     public static final float ABILITY_UTIL_PENETRATION      = 0.30f;
-    /** Damage-over-time (rend, incendiary) — refreshes not stacks, and overkills dying targets. */
-    public static final float ABILITY_UTIL_DAMAGE_OVER_TIME = 0.60f;
+    /**
+     * Damage-over-time (rend, incendiary) — refreshes not stacks, and overkills dying targets. MOVED .60 -> .65
+     * (balance-overhaul order 5): the Incendiary level-1 base is pinned to WEAPON_BURN_BASE_PER_TURN (R-DOT), and
+     * at .60 it priced to exactly the UNCOMMON band floor (9.6 PP); .65 prices it at 10.4, clear of the edge.
+     */
+    public static final float ABILITY_UTIL_DAMAGE_OVER_TIME = 0.65f;
     /** Close-range / long-range / first-shot / low-HP conditional damage bonuses. */
     public static final float ABILITY_UTIL_CONDITIONAL      = 0.30f;
     /** Lifesteal-style sustain expressed as a fraction of damage dealt. */
     public static final float ABILITY_UTIL_SUSTAIN_FRACTION = 0.50f;
-    /** Flat per-event HP/armour sustain and flat AoE burst — small, situational. */
+    /** Flat on-kill AoE burst (static discharge) — small, situational. */
     public static final float ABILITY_UTIL_FLAT_EVENT       = 0.35f;
-    /** Percent-of-target-max-HP amplifiers (resonant) — strong but conditional on a bleed. */
-    public static final float ABILITY_UTIL_PERCENT_MAX_HP   = 0.30f;
-    /** PP per extra count for count utilities (extra pierce, +clip step, extra burst round). */
+    /** PP per extra pierced enemy (armor pierce's merged over-penetration). */
     public static final float ABILITY_PP_PER_COUNT          = 2.0f;
-    /** Flat nominal PP for pure-utility on-kill economy abilities (scavenger, salvage, credits, medic, XP). */
-    public static final float ABILITY_PP_UTILITY_NOMINAL    = 3.0f;
-    /** Flat nominal PP for a legendary SIGNATURE ability (priced as a fixed marquee effect). */
-    public static final float ABILITY_PP_LEGENDARY_SIGNATURE = 10.0f;
+    /**
+     * PP for each round BURST_FIRE adds to an attack action (balance-overhaul order 5; was ABILITY_PP_PER_COUNT
+     * = 2, which priced a doubled attack below a crit chance). An extra round doubles a turn's damage but
+     * spends the reserve twice as fast, so a floor's damage SUPPLY is unchanged — the gain is TEMPO (fewer
+     * enemy turns per kill), valued as a major conditional bonus. Range: 12-18.
+     */
+    public static final float ABILITY_PP_PER_EXTRA_BURST_ROUND = 16.0f;
+    /**
+     * PP per round of ammo SCAVENGER_ROUNDS is expected to refund per kill (chance x rounds), balance-
+     * overhaul order 5; replaces the flat 3 PP economy nominal. One refunded round per kill is roughly a
+     * quarter of a gun's per-kill ammo cost. Range: 9-14.
+     */
+    public static final float ABILITY_PP_PER_EXPECTED_REFUND_ROUND = 11.67f;
+    /**
+     * Flat marquee PP for a legendary SIGNATURE ability. MOVED 10 -> 18 (balance-overhaul order 5): a
+     * signature is the run-defining rule of a LEGENDARY (a 3x lance every 5 fires, a crit nova, a weapon
+     * that levels itself), worth more than any MAJOR; 18 is also what puts signature + 3 standards inside
+     * the LEGENDARY 60 PP band at level 1. Range: 16-24.
+     */
+    public static final float ABILITY_PP_LEGENDARY_SIGNATURE = 18.0f;
 
     // -------------------------------------------------------------------------------------
     // DEPTH-GATED LOOT TIERS + THE PITY RULE (new-game-balancr order 2). The game must actually
@@ -2943,4 +2910,61 @@ public final class BalanceConfig {
     public static final float   BUILD_BLADE_LOW_HEALTH_TURN_SHARE = 0.25f;
     /** Seeds the valuation averages one COMBAT floor's planned supply over. Range: 10-30. */
     public static final int     BUILD_SUPPLY_SEED_COUNT         = 20;
+
+    // --- REAL RARITY (B5) + ABILITY PRUNE (B6) ------------------------------------------------
+    // OVERRIDES (OVERRIDE CLAUSE): the order-2 R-ABILITY tier CEILINGS (UNCOMMON 6 / RARE 12 / EPIC 20 /
+    // LEGENDARY 30, +20% overspend, abilities added greedily while they fit) and WeaponTier's slot counts
+    // (0/1/2/3/5, "4 standard + 1 signature") are REPLACED by: a GUARANTEED ability count per tier, rolled
+    // in full every time, whose priced total must land inside a BAND around the tier budget (a floor AND a
+    // ceiling — a RARE that rolls 3 PP is now a violation). EPIC draws exactly one MAJOR; LEGENDARY draws one
+    // MAJOR too and rolls its signature on top of its count. WeaponTier reads these; R-ABILITY asserts them (count, MAJOR,
+    // signature, band) over a seeded roll sweep, and asserts every surviving ability is FELT
+    // (>= ABILITY_MIN_FELT_PP) at its expected weapon level.
+    /** B5: abilities a COMMON weapon rolls (vanilla). Range: 0. */
+    public static final int     TIER_ABILITY_COUNT_COMMON        = 0;
+    /** B5: abilities an UNCOMMON weapon rolls. Range: 1. */
+    public static final int     TIER_ABILITY_COUNT_UNCOMMON      = 1;
+    /** B5: abilities a RARE weapon rolls. Range: 2. */
+    public static final int     TIER_ABILITY_COUNT_RARE          = 2;
+    /** B5: abilities an EPIC weapon rolls (TIER_MAJOR_COUNT_EPIC of them MAJOR). Range: 3. */
+    public static final int     TIER_ABILITY_COUNT_EPIC          = 3;
+    /** B5: abilities a LEGENDARY weapon rolls IN ADDITION to its signature. Range: 3. */
+    public static final int     TIER_ABILITY_COUNT_LEGENDARY     = 3;
+    /** B5: MAJOR abilities a COMMON roll draws (none). */
+    public static final int     TIER_MAJOR_COUNT_COMMON          = 0;
+    /** B5: MAJOR abilities an UNCOMMON roll draws (MAJORs start at EPIC). */
+    public static final int     TIER_MAJOR_COUNT_UNCOMMON        = 0;
+    /** B5: MAJOR abilities a RARE roll draws (MAJORs start at EPIC). */
+    public static final int     TIER_MAJOR_COUNT_RARE            = 0;
+    /**
+     * B5: MAJOR abilities an EPIC roll draws — exactly one ("EPIC 3, one of them from the MAJOR list"). Exactly,
+     * not "at least": two MAJORs + one standard at MAX_WEAPON_LEVEL prices 48.8 PP, past the EPIC ceiling. Range: 1.
+     */
+    public static final int     TIER_MAJOR_COUNT_EPIC            = 1;
+    /**
+     * B5: MAJOR abilities a LEGENDARY roll draws besides its signature. DECIDED (CP4; B5 leaves it open): one, so a
+     * LEGENDARY is an EPIC's shape PLUS a signature — rarity never loses a MAJOR on the way up. Range: 0-1.
+     */
+    public static final int     TIER_MAJOR_COUNT_LEGENDARY       = 1;
+    /** B5: ability-PP budget of a COMMON weapon (none). */
+    public static final float   TIER_ABILITY_PP_BUDGET_COMMON    = 0f;
+    /** B5: ability-PP budget of an UNCOMMON weapon (one standard ability). Was 6 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_UNCOMMON  = 12f;
+    /** B5: ability-PP budget of a RARE weapon (two standard abilities). Was 12 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_RARE      = 25f;
+    /** B5: ability-PP budget of an EPIC weapon (two standard + one MAJOR). Was 20 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_EPIC      = 40f;
+    /** B5: ability-PP budget of a LEGENDARY weapon (two standard + one MAJOR + the signature). Was 30 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_LEGENDARY = 60f;
+    /** B5: a roll's total PP must lie within budget x (1 -/+ this) — a floor AND a ceiling. Range: 0.20. */
+    public static final float   TIER_ABILITY_PP_TOLERANCE        = 0.20f;
+    /**
+     * B6: the smallest priced PP (GameMath.abilityPowerPoints) an ability may carry at its EXPECTED weapon
+     * level and still exist — below it the ability is not felt, and is cut or merged. Range: 8.
+     */
+    public static final float   ABILITY_MIN_FELT_PP              = 8f;
+    /** A4: the R-ABILITY roll sweep's depths, one per early / mid / deep region. Range: one depth per region band. */
+    public static final int[]   ABILITY_ROLL_SWEEP_DEPTHS        = {3, 12, 22};
+    /** A4: seeds the R-ABILITY roll sweep rolls at every (tier, depth, melee-ness). Range: 30. */
+    public static final int     ABILITY_ROLL_SWEEP_SEEDS         = 30;
 }

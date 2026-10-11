@@ -45,7 +45,7 @@ public enum ItemType {
             'P',
             1.00f, 0.75f, 0.10f,
             "Standard UAC sidearm. Reliable and accurate with limited stopping power.",
-            new WeaponAbility[]{WeaponAbility.CRITICAL_STRIKE, WeaponAbility.MARKSMANS_PATIENCE}
+            new WeaponAbility[]{WeaponAbility.CRITICAL_STRIKE, WeaponAbility.OPENING_SALVO}
     ),
 
     WEAPON_SHOTGUN(
@@ -100,7 +100,7 @@ public enum ItemType {
             'G',
             1.00f, 0.75f, 0.10f,
             "UAC Chaingun. Sustained suppressing fire at high ammo consumption.",
-            new WeaponAbility[]{WeaponAbility.BURST_FIRE, WeaponAbility.EXTENDED_MAG}
+            new WeaponAbility[]{WeaponAbility.BURST_FIRE, WeaponAbility.SCAVENGER_ROUNDS}
     ),
 
     WEAPON_ASSAULT_RIFLE(
@@ -111,7 +111,7 @@ public enum ItemType {
             'A',
             1.00f, 0.75f, 0.10f,
             "UAC service rifle. Accurate single-round fire at sustained mid-range.",
-            new WeaponAbility[]{WeaponAbility.MARKSMANS_PATIENCE, WeaponAbility.EXTENDED_MAG}
+            new WeaponAbility[]{WeaponAbility.CRITICAL_STRIKE, WeaponAbility.SCAVENGER_ROUNDS}
     ),
 
     WEAPON_RAILGUN(
@@ -122,7 +122,7 @@ public enum ItemType {
             'N',
             1.00f, 0.75f, 0.10f,
             "Accelerates a ferromagnetic slug at hypersonic velocity. Punches through walls.",
-            new WeaponAbility[]{WeaponAbility.OVERPENETRATION, WeaponAbility.MARKSMANS_PATIENCE}
+            new WeaponAbility[]{WeaponAbility.ARMOR_PIERCE, WeaponAbility.OPENING_SALVO}
     ),
 
     WEAPON_INCINERATOR(
@@ -155,7 +155,7 @@ public enum ItemType {
             'X',
             1.00f, 0.75f, 0.10f,
             "Your bare hands. No ammo needed. Brutal at point-blank range.",
-            new WeaponAbility[]{WeaponAbility.SECOND_WIND, WeaponAbility.CLEAVE}
+            new WeaponAbility[]{WeaponAbility.LIFESTEAL, WeaponAbility.CLEAVE}
     ),
 
     WEAPON_KNIFE(

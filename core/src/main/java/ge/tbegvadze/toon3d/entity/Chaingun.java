@@ -151,7 +151,7 @@ public class Chaingun extends Weapon {
             if (hasAbility(WeaponAbility.RHYTHM)) resetRhythm();
             return FireResult.MISSED;
         }
-        // OVERPENETRATION: each bullet pierces up to overpenetrationExtraTargets() enemies beyond
+        // ARMOR_PIERCE (merged OVERPENETRATION): each bullet pierces up to overpenetrationExtraTargets() enemies beyond
         // the first before it stops. Ability callbacks are dispatched inline per enemy so every
         // pierced target (not just the last) receives on-hit effects; the caller's dispatch is then
         // a no-op after clearLastHit(). Without the ability extraTargets is 0 and the bullet stops
