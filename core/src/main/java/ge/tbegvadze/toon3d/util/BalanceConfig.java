@@ -561,7 +561,7 @@ public final class BalanceConfig {
     /**
      * Levels the average player is expected to gain per floor descended (~1 level/floor). This is the
      * player-side input to the depth-coupling invariant (SECTION 9): GameMath.playerPowerAtDepth lifts
-     * the player's power multiplier by LEVEL_UP_BUDGET_PP power points per level gained. The boss
+     * the player's power multiplier by EXPECTED_PERK_POWER_PP_PER_PICK power points per level gained. The boss
      * ruleset (SECTION 14) mirrors this as BOSS_EXPECTED_LEVELS_PER_DEPTH. Range: 0.7–1.3.
      */
     public static final float EXPECTED_LEVELS_PER_DEPTH    = 1.0f;
@@ -819,69 +819,9 @@ public final class BalanceConfig {
      */
     public static final float XP_CATCHUP_MULTIPLIER    = 1.5f;
 
-    // ---------------------------------------------------------------------------------
-    // LEVEL-UP CARD SYSTEM — power budget & re-priced boons (idea 5: build diversity)
-    //
-    // Every level-up offers LEVEL_UP_CARDS_OFFERED cards drawn from four pools. Each card
-    // costs the SAME power budget (LEVEL_UP_BUDGET_PP, in "power points" = %-gain to the
-    // reference DPT or eHP from SECTION 9), so no card is a strict upgrade over another —
-    // they differ in KIND, not amount. Because each pick is budget-equal, the player's
-    // TOTAL power at level L is L * LEVEL_UP_BUDGET_PP regardless of which cards were taken;
-    // only its SHAPE differs. That is how build diversity stays inside the depth-coupling
-    // band (SECTION 9) for every build. See docs/game-balance-authority.txt (section [D]).
-    //
-    // The three OLD flat boons (HP / armour / damage) survive as ONE card each, RE-PRICED
-    // from their legacy magnitudes to ~LEVEL_UP_BUDGET_PP so they sit on the same curve as
-    // every attribute card. Run BalanceReport to see each card's computed PP and band verdict.
-    // ---------------------------------------------------------------------------------
-
-    /** The fixed power budget every level-up card costs, in power points (% of reference DPT/eHP). Range: 8–16. */
-    public static final float LEVEL_UP_BUDGET_PP        = 12f;
-    /** Allowed fractional spread around the budget a single card may cost (±15%). A card outside this is rejected. */
-    public static final float LEVEL_UP_BUDGET_TOLERANCE = 0.15f;
-    /** How many cards are drawn and shown on each level-up. The overlay renders exactly this many. Range: 2–4. */
-    public static final int   LEVEL_UP_CARDS_OFFERED    = 3;
-    /** Per-prior-pick draw-weight bonus that biases new offers toward the player's emerging build. Range: 0.0–1.0. */
-    public static final float LEVEL_UP_DRAW_BIAS_PER_PICK = 0.6f;
-
-    // --- PP-PRICING REFERENCES (used only to COMPUTE each card's power-point value; see GameMath).
-    /** Fraction of a flat per-shot damage bonus that lands as sustained DPT at the reference weapon (shotgun, clip 1 / reload 1 → 0.5). */
-    public static final float CARD_FLAT_DAMAGE_DPT_FRACTION = 0.5f;
-    /** Average fraction of attacks made with a MELEE weapon — discounts STRENGTH cards, whose damage only applies to melee. Range: 0.5–1.0. */
-    public static final float CARD_MELEE_UTILIZATION        = 0.8f;
-    /** Reference incoming hit (HP-bound) used when pricing TOUGHNESS flat-reduction into eHP. Matches the doc's tough-build example. */
-    public static final int   CARD_PRICING_AVERAGE_HIT      = 12;
-
-    // --- CARD MAGNITUDES (sized so each card's PP lands inside the budget band). Attribute steps:
-    /** STRENGTH points granted by the Brutal Strength card (+15% melee dmg before the melee-utilization discount). */
-    public static final int CARD_STRENGTH_STEP     = 3;
-    /** MARKSMANSHIP points granted by the Marksman Training card (+12% ranged dmg, +9% accuracy). */
-    public static final int CARD_MARKSMANSHIP_STEP = 3;
-    /** AGILITY points granted by the Evasion Training card (+10% dodge, +15% faster actions). */
-    public static final int CARD_AGILITY_STEP      = 5;
-    /** TOUGHNESS points granted by the Toughened Hide card (+5 Max HP, +1 flat damage reduction). One point is potent. */
-    public static final int CARD_TOUGHNESS_STEP    = 1;
-
-    // --- TRADE-OFF CARD MAGNITUDES (net PP ≈ budget, but high variance: a big gain on one axis paid for on another).
-    /** Glass Cannon: flat per-shot damage gained. Paired with a Max-HP cost. */
-    public static final int CARD_GLASS_CANNON_DAMAGE      = 10;
-    /** Glass Cannon: Max-HP sacrificed for the damage. */
-    public static final int CARD_GLASS_CANNON_HP_COST     = 18;
-    /** Iron Constitution: Max-HP gained. Paired with a Max-armour cost. */
-    public static final int CARD_IRON_CONSTITUTION_HP     = 45;
-    /** Iron Constitution: Max-armour sacrificed for the health. */
-    public static final int CARD_IRON_CONSTITUTION_ARMOR  = 22;
-    /** Reckless Charge: AGILITY gained (dodge + speed). Paired with a Max-armour cost. */
-    public static final int CARD_RECKLESS_CHARGE_AGILITY  = 8;
-    /** Reckless Charge: Max-armour sacrificed for the mobility. */
-    public static final int CARD_RECKLESS_CHARGE_ARMOR    = 12;
-
-    /** Flat max-HP gained when the Vitality (legacy HP_BOOST) card is chosen. Re-priced to ~budget PP. Range: 15–40. */
-    public static final int LEVEL_UP_HP_BONUS     = 25;
-    /** Flat max-armour gained when the Combat Armour (legacy ARMOR_BOOST) card is chosen. Re-priced 18→24 to ~budget PP. Range: 10–30. */
-    public static final int LEVEL_UP_ARMOR_BONUS  = 24;
-    /** Flat per-shot damage gained when the Hollow Points (legacy DAMAGE_BOOST) card is chosen. Re-priced 8→6 to ~budget PP. Range: 4–15. */
-    public static final int LEVEL_UP_DAMAGE_BONUS = 6;
+    // The LEVEL-UP CARD SYSTEM (idea 5: LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_TOLERANCE, the card pricing
+    // references and the ten card magnitudes) was RETIRED by balance-overhaul order 5 (CP2): level-ups
+    // offer tagged perks and keystones (SECTION 24). The draw bias survives there as PERK_DRAW_BIAS_PER_PICK.
 
     // ---------------------------------------------------------------------------------
     // THE CANONICAL STARTING ATTRIBUTE BLOCK — ONE DIFFICULTY (new-game-balancr order 8)
@@ -1350,7 +1290,7 @@ public final class BalanceConfig {
     // --- RULE 1/5 (build check): expected-player-DPT-at-depth inputs. bossEffectiveHitPoints is
     // tied to expectedPlayerSustainedDamagePerTurn(depth) so an under-powered player cannot out-DPS
     // the fight window. Expected OFFENCE power points by a boss depth =
-    //   BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION * LEVEL_UP_BUDGET_PP * (BOSS_EXPECTED_LEVELS_PER_DEPTH * depth).
+    //   BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION * EXPECTED_PERK_POWER_PP_PER_PICK * (BOSS_EXPECTED_LEVELS_PER_DEPTH * depth).
     /** Levels the average player is expected to gain per floor descended (~1 level/floor). Mirrors the
      *  depth-coupling input EXPECTED_LEVELS_PER_DEPTH (SECTION 3) — single source of truth. Range: 0.7–1.3. */
     public static final float BOSS_EXPECTED_LEVELS_PER_DEPTH        = EXPECTED_LEVELS_PER_DEPTH;
@@ -1744,9 +1684,10 @@ public final class BalanceConfig {
     public static final float SHOP_HEAL_HP_PER_POWER_POINT     = 11f;
     // A weapon TIER-UPGRADE prices on the ABILITY-PP budget its destination tier unlocks
     // (TIER_ABILITY_PP_BUDGET_*, SECTION 15) — the marquee value is the ability slot the tier buys.
-    // A PLAYER-ABILITY boon prices on the level-up card's own PP (LEVEL_UP_BUDGET_PP), since a shop
-    // boon is a paid acquisition of the same budget-equal card. Both are read directly from those
-    // sections in DefaultShopOfferSource — no separate price constants here.
+    // A PLAYER-ABILITY offer sells ONE PERK RANK priced on SHOP_PERK_RANK_POWER_POINTS (SECTION 24;
+    // balance-overhaul order 5 replaced the budget-equal boon card): a paid rank of the same perks the
+    // level-up screen offers. Both are read directly from those sections in DefaultShopOfferSource —
+    // no separate price constants here.
     /** Ammo "large box" multiplier over the standard box size. */
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER = 2;
 
@@ -2227,10 +2168,10 @@ public final class BalanceConfig {
      */
     public static final float PLAYER_VITALITY_GROWTH = 1.09f;
 
-    /** Expected fraction of each level's LEVEL_UP_BUDGET_PP spent on OFFENCE by the on-curve player (the boss derivation's 0.5). Range: 0.3–0.6. */
+    /** Expected fraction of each level's EXPECTED_PERK_POWER_PP_PER_PICK spent on OFFENCE by the on-curve player (the boss derivation's 0.5). Range: 0.3–0.6. */
     public static final float LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION = 0.50f;
     /**
-     * Expected fraction of each level's LEVEL_UP_BUDGET_PP bought as FLAT max-HP/armour eHP (R9). A quarter:
+     * Expected fraction of each level's EXPECTED_PERK_POWER_PP_PER_PICK bought as FLAT max-HP/armour eHP (R9). A quarter:
      * the defensive half of the deck (DEFENSE / SUSTAIN / UTILITY pools) is split between flat pools and
      * unhealable mitigation (dodge, flat reduction, speed), and only the flat pools stack on the vitality
      * curve. It also keeps the fitted turns-to-die drift within +/-7% (a larger flat share bends the
@@ -2787,8 +2728,8 @@ public final class BalanceConfig {
     // to be EQUAL, it is priced to be FELT inside its style (R-PERK PK1), to stay FOCUSED on that style
     // (PK2), a keystone trades a real niche for a real cost (R-KEYSTONE), and no style is a trap or
     // dominant at depth 15 (R-CARRY — a bounded spread replaces the invariant). The R-CARD constants
-    // themselves (LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_TOLERANCE, the ten card magnitudes) are deleted in
-    // CP2, when the level-up runtime switches to the perk deck. Valued by util/BuildValuationModel on the
+    // themselves (LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_TOLERANCE, the ten card magnitudes) were deleted in
+    // CP2, when the level-up runtime switched to the perk deck. Valued by util/BuildValuationModel on the
     // order-3 reference scenarios; see docs/game-balance-authority.txt R-PERK / R-KEYSTONE / R-CARRY.
     // Every per-rank array holds the TOTAL magnitude at rank 1, 2, 3 (index 0 = rank 1).
     // =========================================================================
@@ -2802,6 +2743,33 @@ public final class BalanceConfig {
     public static final int[]   KEYSTONE_CHARACTER_LEVELS  = {5, 10, 15, 20};
     /** B4: keystones offered on a keystone level. Range: 3. */
     public static final int     KEYSTONES_OFFERED          = 3;
+    /**
+     * B3: per-prior-pick draw-weight bonus toward a perk's TAG — the old LEVEL_UP_DRAW_BIAS_PER_PICK (0.6, idea 5),
+     * kept as the weight behind the synergy + pivot slots so a run's identity deepens as it goes. A perk's
+     * weight is 1 + ranks already held in its tag x this. Range: 0.0-1.0.
+     */
+    public static final float   PERK_DRAW_BIAS_PER_PICK    = 0.6f;
+    /**
+     * THE EXPECTED PLAYER'S PERK TERM (balance-overhaul order 5, CP2; replaces LEVEL_UP_BUDGET_PP in
+     * GameMath.expectedPlayer, the boss derivation, the route ledger's XP pricing and the LADDER probe kit):
+     * the power points one level-up is expected to buy, so the on-curve player's card-power term becomes
+     * "expected perk power at the expected rank count" = this x (characterLevel - 1). A keystone level counts
+     * as a pick at the same average (keystones trade a niche for a cost; their net is priced by R-KEYSTONE,
+     * not added here). 12 reproduces the retired budget-equal deck exactly, which keeps R-LADDER and every
+     * boss / route rule that reads the expected player on its fitted values. The catalog's MEASURED average
+     * gain per rank (the PERKS table in BalanceReport) sits on its tag's niche and is far larger than 12 PP
+     * there by design (PK1 wants >= 10% per rank on the NICHE, PK2 keeps it off the other scenarios), so a
+     * perk is not 12 PP of general power: 12 is the expected player's whole-roster average, and order 6
+     * re-derives it with the economy. Range: 8-16.
+     */
+    public static final float   EXPECTED_PERK_POWER_PP_PER_PICK = 12f;
+    /**
+     * The power points ONE perk rank sold by a UAC Fabricator's PLAYER-ABILITY offer is priced on (replaces
+     * LEVEL_UP_BUDGET_PP for that offer; balance-overhaul order 5 CP2). Equal to the expected perk power of a
+     * pick, so a bought rank costs what a level-up is worth to the expected player. Order 6 re-prices it.
+     * Range: 8-16.
+     */
+    public static final float   SHOP_PERK_RANK_POWER_POINTS = EXPECTED_PERK_POWER_PP_PER_PICK;
 
     // --- PERK MAGNITUDES (B2) — CLOSE QUARTERS --------------------------------------------------
     /** Buckshot Discipline: SPREAD damage, total by rank. Spec default +15%/rank; MOVED (escalating) for PK1: the Shotgun's S6 kill is shot-reload-shot, so a flat +15% shortens it only 8% a rank. Range: 0.15-0.35 per rank. */

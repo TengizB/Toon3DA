@@ -6000,7 +6000,8 @@ public final class GameMath {
      * Derivation:
      *   Weapon side (per-hit, relative to depth 1):
      *       weaponFactor = LADDER_GROWTH^(wL-1) * rarity * levelGapMultiplier(wL - d)
-     *       offenceLift  = 1 + OFFENCE_FRACTION * LEVEL_UP_BUDGET_PP * (cL - 1) / 100   (PP = % DPT)
+     *       offenceLift  = 1 + OFFENCE_FRACTION * EXPECTED_PERK_POWER_PP_PER_PICK * (cL - 1) / 100   (PP = % DPT; the
+     *                    expected perk power at the expected rank count — balance-overhaul order 5)
      *       relative     = weaponFactor * offenceLift / expectedRarity(1)
      *   so the depth-1 ON-CURVE player (wL 1, cL 1, rarity = expectedRarity(1)) reads exactly 1.0:
      *       damagePerTurn      = REFERENCE_PLAYER_DPT      * relative   (the fixed depth-1 anchor)
@@ -6022,19 +6023,19 @@ public final class GameMath {
         float weaponFactor = ladderScale(BalanceConfig.LADDER_GROWTH, clampedWeaponLevel)
                 * Math.max(0f, rarityMultiplier) * gapMultiplier;
         float offenceLift = 1f + BalanceConfig.LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION
-                * BalanceConfig.LEVEL_UP_BUDGET_PP * (clampedCharacterLevel - 1) / 100f;
+                * BalanceConfig.EXPECTED_PERK_POWER_PP_PER_PICK * (clampedCharacterLevel - 1) / 100f;
         float relative = weaponFactor * offenceLift / expectedRarityMultiplierAtDepth(1);
 
         float vitality = playerVitalityScale(clampedCharacterLevel);
         float maxHealth = BalanceConfig.PLAYER_MAX_HEALTH * vitality;
         float maxArmor = BalanceConfig.PLAYER_MAX_ARMOR * vitality;
-        float cardEffectiveHitPoints = BalanceConfig.REFERENCE_PLAYER_EHP
+        float perkEffectiveHitPoints = BalanceConfig.REFERENCE_PLAYER_EHP
                 * BalanceConfig.LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION
-                * BalanceConfig.LEVEL_UP_BUDGET_PP * (clampedCharacterLevel - 1) / 100f;
+                * BalanceConfig.EXPECTED_PERK_POWER_PP_PER_PICK * (clampedCharacterLevel - 1) / 100f;
         return new ExpectedPlayer(clampedDepth, clampedWeaponLevel, rarityMultiplier, gapMultiplier,
                 clampedCharacterLevel, BalanceConfig.REFERENCE_PLAYER_DPT * relative,
                 ladderReferenceHitDamage() * relative, maxHealth, maxArmor,
-                maxHealth + maxArmor + cardEffectiveHitPoints);
+                maxHealth + maxArmor + perkEffectiveHitPoints);
     }
 
     /*
@@ -6735,6 +6736,91 @@ public final class GameMath {
         if (hitAtDistance >= undroppedHit) return hitAtDistance;
         float clamped = Math.max(0f, Math.min(1f, reduction));
         return undroppedHit - (undroppedHit - hitAtDistance) * (1f - clamped);
+    }
+
+    /*
+     * Formula: buildHitDamageMultiplier — every perk / keystone term on one player hit (balance-overhaul order 5)
+     * Derivation:
+     *   The build's terms are independent multipliers on the same hit (util/BuildValuationModel composes them
+     *   the same way on the reference scenarios):
+     *       multiplier = class x (1 + rangeBand) x (1 + firstHit) x (1 + burningTarget)
+     *                          x (1 + meleeLowHealth) x (1 + riposteWindow)
+     *   class          = (1 + summed perk class bonuses) x keystone class costs (BuildStats.damageMultiplierFor)
+     *   rangeBand      = Point Man (SPREAD, point-blank) or Lane Discipline (BALLISTIC / RAIL, long range)
+     *   firstHit       = combinedFirstHitBonus (First Blood x DEADEYE's critical)
+     *   burningTarget  = PYROMANIAC's bonus vs a BURNING enemy
+     *   meleeLowHealth = BERSERKER's low-HP melee bonus
+     *   riposteWindow  = Riposte Drill's bonus while the riposte's VULNERABLE window is open
+     *   Worked: SPREAD with Buckshot r1 (+0.20) and Point Man r1 (+0.20) at 1 tile: 1.2 x 1.2 = 1.44.
+     * Edge cases: a negative class multiplier reads as 0; each bonus below -1 is floored so no term is negative.
+     */
+    public static float buildHitDamageMultiplier(float classMultiplier, float rangeBandBonus, float firstHitBonus,
+                                                 float burningTargetBonus, float meleeLowHealthBonus,
+                                                 float riposteWindowBonus) {
+        return Math.max(0f, classMultiplier)
+                * Math.max(0f, 1f + rangeBandBonus)
+                * Math.max(0f, 1f + firstHitBonus)
+                * Math.max(0f, 1f + burningTargetBonus)
+                * Math.max(0f, 1f + meleeLowHealthBonus)
+                * Math.max(0f, 1f + riposteWindowBonus);
+    }
+
+    /*
+     * Formula: buildMaxPoolBonus — the build's flat share of a vitality-grown max pool (balance-overhaul order 5)
+     * Derivation:
+     *   Hardy / Plate Carrier (additive) and the keystone pool terms (multiplicative after) fold into one
+     *   multiplier m on the pool the vitality ladder grants at the character level (R9):
+     *       ladderPool = basePool x vitalityScale(level)
+     *       bonus      = round(ladderPool x (m - 1))
+     *   The caller applies the CHANGE in this bonus since it last applied it, so a level-up (which grows the
+     *   ladder pool) and a pick (which moves m) both land as one signed delta on Player.adjustMax*.
+     *   Worked: 100 HP, vitality 1.09 at level 2, Hardy r1 (m 1.147) -> round(109 x 0.147) = 16.
+     * Edge cases: m < 0 reads as 0 (bonus = -ladderPool); a non-positive base pool returns 0.
+     */
+    public static int buildMaxPoolBonus(int basePool, float vitalityScale, float multiplier) {
+        if (basePool <= 0) return 0;
+        float ladderPool = basePool * Math.max(0f, vitalityScale);
+        return Math.round(ladderPool * (Math.max(0f, multiplier) - 1f));
+    }
+
+    /*
+     * Formula: buildScaledAmount — a heal, an ammo pickup or a price under a build multiplier
+     * Derivation:
+     *   scaled = round(base x multiplier); a positive base under a positive multiplier keeps at least
+     *   minimumWhenPositive (a heal of 0 or a free item is never the intent of a percentage).
+     *   Worked: STIM 18 HP x Field Medic 1.105 -> 20; a 10-shell box x Pack Rat 1.15 -> 12 (11.5 rounds up).
+     * Edge cases: base <= 0 returns base unchanged; multiplier <= 0 returns 0.
+     */
+    public static int buildScaledAmount(int base, float multiplier, int minimumWhenPositive) {
+        if (base <= 0) return base;
+        if (multiplier <= 0f) return 0;
+        return Math.max(minimumWhenPositive, Math.round(base * multiplier));
+    }
+
+    /*
+     * Formula: pierceOverchargeMultiplier — Overcharge on a piercing bolt (balance-overhaul order 5)
+     * Derivation:
+     *   The k-th body a bolt pierces (k = bodies already pierced by the same bolt, 0 for the first) takes
+     *       multiplier = 1 + bonusPerEnemy x k
+     *   (the PIERCE term of util/BuildValuationModel's scenario walk).
+     *   Worked: o = 0.40, third body (k 2) -> 1.8.
+     * Edge cases: k < 0 reads as 0; a negative bonus is floored at 0.
+     */
+    public static float pierceOverchargeMultiplier(float bonusPerEnemy, int enemiesAlreadyPierced) {
+        return 1f + Math.max(0f, bonusPerEnemy) * Math.max(0, enemiesAlreadyPierced);
+    }
+
+    /*
+     * Formula: wildfireSpreadStacks — the burn a neighbour holds after Wildfire passes a dead enemy's fire (D5)
+     * Derivation:
+     *   A BURNING enemy that dies passes its FULL current stack count to each living orthogonal neighbour:
+     *       stacksAfter = min(cap, neighbourStacks + deadEnemyStacks)
+     *   cap = FLAME_BURN_MAX_STACKS + Accelerant's bonus.
+     *   Worked: dead 3 stacks, neighbour 1, cap 3 -> 3.
+     * Edge cases: negative inputs read as 0; cap below 1 reads as 1 (a spread always lights at least one stack).
+     */
+    public static int wildfireSpreadStacks(int neighbourStacks, int deadEnemyStacks, int cap) {
+        return Math.min(Math.max(1, cap), Math.max(0, neighbourStacks) + Math.max(0, deadEnemyStacks));
     }
 
     /*

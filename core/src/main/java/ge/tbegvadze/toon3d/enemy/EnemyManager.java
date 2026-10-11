@@ -16,10 +16,12 @@ import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.level.EnemySpawnPoint;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.BuildStats;
 import ge.tbegvadze.toon3d.progression.KillCreditListener;
 import ge.tbegvadze.toon3d.progression.KillEventListener;
 import ge.tbegvadze.toon3d.progression.KillXpListener;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
+import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
@@ -125,6 +127,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private final int[]        wiggleLegalRows;
     private final Random       wiggleRandom;
     private final Random       effectRandom;
+    private final Random       buildRandom;
 
     /**
      * Enemies that killed THEMSELVES mid-phaseBExecute (currently only a detonating Plague Hulk —
@@ -154,6 +157,13 @@ public final class EnemyManager implements EnemyHitTarget {
     private DamageClass activationDamageClass = null;
     // W5: while true, a matchup below 1.0 is raised to neutral (the Arc Cannon's chain leaps).
     private boolean activationMatchupFloorNeutral = false;
+    // Balance-overhaul order 5: the tile the current activation was fired from (range-band build terms), and
+    // whether the hit is a hazard blast (a barrel — no weapon build terms, no "first hit" spent).
+    private int     activationOriginColumn = -1;
+    private int     activationOriginRow    = -1;
+    private boolean activationHazardBlast  = false;
+    /** The run's build aggregate (balance-overhaul order 5); read live. Never null. */
+    private BuildStats buildStats = BuildStats.NONE;
     // World turns taken by this manager (incremented at the top of takeTurn). The SPREAD stagger's
     // no-chain rule compares it against Enemy.lastStaggeredTurn (balance-overhaul order 3, W1).
     private int worldTurnIndex = 0;
@@ -222,6 +232,9 @@ public final class EnemyManager implements EnemyHitTarget {
     private static final long SPAWN_STREAM_SALT  = 0x5DEECE66DL;
     private static final long WIGGLE_STREAM_SALT = 0x1D2B7A3CL;
     private static final long EFFECT_STREAM_SALT = 0x27D4EB2FL;
+    /** Balance-overhaul order 5: the build's own chance rolls (Breacher, Salvager) ride a separate stream so a
+     *  run without those perks replays every other stream exactly as before. */
+    private static final long BUILD_STREAM_SALT  = 0x3C6EF372L;
 
     /** Seed used by the legacy (unseeded-looking) constructor so tests and tools stay reproducible. */
     private static final long DEFAULT_RANDOM_SEED = 12345L;
@@ -258,6 +271,25 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleLegalRows    = new int[4];
         this.wiggleRandom       = new Random(randomSeed ^ WIGGLE_STREAM_SALT);
         this.effectRandom       = new Random(randomSeed ^ EFFECT_STREAM_SALT);
+        this.buildRandom        = new Random(randomSeed ^ BUILD_STREAM_SALT);
+    }
+
+    /**
+     * Wires the run's build aggregate (balance-overhaul order 5) — {@code PlayerBuild.stats()}, the same
+     * instance for the whole run, so it is read LIVE at every seam below and a fresh per-floor manager only
+     * needs this one call. Null resets to {@link BuildStats#NONE}.
+     */
+    public void setBuildStats(BuildStats stats) {
+        this.buildStats = stats != null ? stats : BuildStats.NONE;
+    }
+
+    /**
+     * Gives the manager the player before its first world turn (balance-overhaul order 5), so the very first
+     * shot of a floor can already pay the build's player-side terms (BERSERKER's low-HP read, Bloodletting's
+     * heal). {@link #takeTurn} keeps refreshing the same cache every turn.
+     */
+    public void setPlayerReference(Player player) {
+        if (player != null) this.cachedPlayer = player;
     }
 
     /** Injects the status effect controller so ranged enemies can inflict DoT on the player. */
@@ -844,8 +876,22 @@ public final class EnemyManager implements EnemyHitTarget {
                 matchupOutcome    = MatchupOutcome.NEUTRAL;
             }
         }
+        // THE BUILD (balance-overhaul order 5): every perk / keystone term on this hit, in ONE typed query —
+        // class bonuses and keystone costs, Point Man / Lane Discipline by the real shot distance, First Blood
+        // and DEADEYE on the first player hit this enemy takes, PYROMANIAC on a burning target, BERSERKER on a
+        // low-HP melee swing, Riposte Drill inside a riposte window. A hazard blast (a barrel) is exempt: it
+        // carries its own Sapper / DEMOLITIONIST multiplier.
+        float buildMultiplier = 1f;
+        if (!activationHazardBlast && activationDamageClass != null) {
+            boolean firstHitOnTarget = !enemy.playerHitTaken;
+            buildMultiplier = buildStats.hitDamageMultiplier(activationDamageClass,
+                    activationDistanceTo(enemy), firstHitOnTarget, enemy.health >= enemy.maxHealth,
+                    enemy.getActiveEffects().get(StatusType.BURNING).isActive(), thisKillWasMelee,
+                    isPlayerBelowBerserkThreshold(), worldTurnIndex <= enemy.riposteWindowLastTurn);
+            enemy.playerHitTaken = true;
+        }
         totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier
-                * matchupMultiplier);
+                * matchupMultiplier * buildMultiplier);
         if (playerHitListener != null && totalDamage > 0) {
             playerHitListener.onPlayerHitEnemy(enemy.type, enemy.maxHealth, totalDamage);
         }
@@ -892,6 +938,8 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.triggerHitFlash();
 
         if (!enemy.isAlive()) {
+            // THE BUILD's kill terms (balance-overhaul order 5) — a weapon kill only (a barrel is not one).
+            if (!activationHazardBlast) applyBuildKillTerms(thisKillWasMelee);
             int xpAwarded = depthScaledXpReward(enemy.type);
             if (killXpListener != null) {
                 killXpListener.onEnemyKilledForXp(xpAwarded);
@@ -941,9 +989,70 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
+    /**
+     * Tiles from the activation's origin (else the cached player tile) to the enemy, along the shot: shots are
+     * cardinal, so the Manhattan distance IS the shot distance. 1 when neither is known (adjacent, the
+     * conservative read for a point-blank term).
+     */
+    private int activationDistanceTo(Enemy enemy) {
+        int originColumn = activationOriginColumn >= 0 ? activationOriginColumn : cachedPlayerColumn;
+        int originRow    = activationOriginColumn >= 0 ? activationOriginRow    : cachedPlayerRow;
+        if (originColumn < 0) return 1;
+        return Math.max(1, Math.abs(enemy.tileColumn - originColumn) + Math.abs(enemy.tileRow - originRow));
+    }
+
+    /** BERSERKER's read: the player is below BUILD_BERSERK_LOW_HEALTH_FRACTION of max HP. False with no player. */
+    private boolean isPlayerBelowBerserkThreshold() {
+        return cachedPlayer != null
+                && cachedPlayer.getHealthFraction() < BalanceConfig.BUILD_BERSERK_LOW_HEALTH_FRACTION;
+    }
+
+    /**
+     * The build's on-kill terms for a weapon kill (balance-overhaul order 5): BREACHER — a SPREAD kill refunds
+     * one shell to the active gun's reserve on a {@link BuildStats#spreadKillShellRefundChance()} roll;
+     * BLOODLETTING (+ BERSERKER) — a melee kill heals {@link BuildStats#meleeKillHealTotalFraction()} of max HP.
+     * The rolls ride {@code buildRandom}, so a run without these perks draws nothing from it.
+     */
+    private void applyBuildKillTerms(boolean meleeKill) {
+        float refundChance = buildStats.spreadKillShellRefundChance();
+        if (activationDamageClass == DamageClass.SPREAD && refundChance > 0f && loadout != null
+                && buildRandom.nextFloat() < refundChance) {
+            Weapon activeWeapon = loadout.active();
+            if (activeWeapon != null && activeWeapon.damageClass() == DamageClass.SPREAD) {
+                activeWeapon.refundReserveRounds(1);
+                if (eventTextSystem != null) eventTextSystem.spawnWithColor("+1 SHELL", EventTextSystem.COLOR_GREEN);
+            }
+        }
+        float healFraction = buildStats.meleeKillHealTotalFraction();
+        if (meleeKill && healFraction > 0f && cachedPlayer != null && cachedPlayer.isAlive()) {
+            cachedPlayer.applyHealing(GameMath.fractionOfMaximum(cachedPlayer.getMaxHealth(), healFraction));
+        }
+    }
+
+    @Override
+    public void setActivationOrigin(int tileColumn, int tileRow) {
+        activationOriginColumn = tileColumn;
+        activationOriginRow    = tileRow;
+    }
+
+    @Override
+    public void setActivationHazardBlast(boolean hazardBlast) {
+        activationHazardBlast = hazardBlast;
+    }
+
+    @Override
+    public boolean isActivationHazardBlast() {
+        return activationHazardBlast;
+    }
+
     @Override
     public void setActivationDamageClass(DamageClass damageClass) {
         activationDamageClass = damageClass;
+        // Disarm (null) also forgets the origin, so damage outside an activation reads the cached player tile.
+        if (damageClass == null) {
+            activationOriginColumn = -1;
+            activationOriginRow    = -1;
+        }
     }
 
     @Override
@@ -971,7 +1080,8 @@ public final class EnemyManager implements EnemyHitTarget {
     public void applyBurningStatus(Object enemyObject, int turns, int magnitudePerTurn) {
         if (statusEffectController == null) return;
         Enemy enemy = (Enemy) enemyObject;
-        statusEffectController.apply(enemy, StatusType.BURNING, turns,
+        // WILDFIRE (balance-overhaul order 5): every burn the player applies lasts burnTurnBonus() longer.
+        statusEffectController.apply(enemy, StatusType.BURNING, turns + buildStats.burnTurnBonus(),
                 matchedStatusMagnitude(enemy, magnitudePerTurn), this);
     }
 
@@ -985,8 +1095,9 @@ public final class EnemyManager implements EnemyHitTarget {
     public void applyBurningStack(Object enemyObject, int turns, int magnitudePerStack, int maxStacks) {
         if (statusEffectController == null) return;
         Enemy enemy = (Enemy) enemyObject;
-        statusEffectController.applyStacking(enemy, StatusType.BURNING, turns,
-                matchedStatusMagnitude(enemy, magnitudePerStack), maxStacks, this);
+        // WILDFIRE: +burnTurnBonus() turns; ACCELERANT: +burnMaxStackBonus() stacks (balance-overhaul order 5).
+        statusEffectController.applyStacking(enemy, StatusType.BURNING, turns + buildStats.burnTurnBonus(),
+                matchedStatusMagnitude(enemy, magnitudePerStack), maxStacks + buildStats.burnMaxStackBonus(), this);
     }
 
     /**
@@ -997,7 +1108,10 @@ public final class EnemyManager implements EnemyHitTarget {
         if (activationDamageClass == null) return magnitudePerTurn;
         float matchupMultiplier = MatchupCatalog.shared().multiplier(activationDamageClass, enemy.type.trait());
         if (activationMatchupFloorNeutral) matchupMultiplier = Math.max(1f, matchupMultiplier);
-        return Math.max(1, Math.round(magnitudePerTurn * matchupMultiplier));
+        // The build's CLASS multiplier rides the weapon's status damage too (Accelerant's FIRE bonus on the burn,
+        // a keystone class cost) — balance-overhaul order 5, as util/BuildValuationModel scales the whole clear.
+        float classMultiplier = buildStats.damageMultiplierFor(activationDamageClass);
+        return Math.max(1, Math.round(magnitudePerTurn * matchupMultiplier * classMultiplier));
     }
 
     /**
@@ -1039,7 +1153,11 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemy instanceof Boss || enemy.type.role() == EnemyRole.BOSS) return;
         enemy.skipNextAction = true;
         enemy.plannedAction.clearHeavy();
-        applyVulnerableStatus(enemy, EffectConstants.VULNERABLE_DURATION);
+        // RIPOSTE DRILL (balance-overhaul order 5): the VULNERABLE lasts riposteVulnerableBonusTurns() longer and,
+        // for that window, the player's hits on this enemy take riposteDamageBonus() (applyDamageTo).
+        int vulnerableTurns = EffectConstants.VULNERABLE_DURATION + buildStats.riposteVulnerableBonusTurns();
+        applyVulnerableStatus(enemy, vulnerableTurns);
+        enemy.riposteWindowLastTurn = worldTurnIndex + vulnerableTurns;
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("RIPOSTE", EventTextSystem.COLOR_GOLD);
         }
@@ -3125,12 +3243,51 @@ public final class EnemyManager implements EnemyHitTarget {
             // keycard or the stairs already there must not swallow a planned drop).
             int[] tile = findFreeDropTile(enemy.tileColumn, enemy.tileRow);
             if (tile != null) placeDeathDrop(tile[0], tile[1], drop);
+            // SALVAGER (balance-overhaul order 5): a carrier drops one more of what it carried, on a chance roll.
+            float extraDropChance = buildStats.carrierExtraDropChance();
+            if (drop == carried && extraDropChance > 0f && buildRandom.nextFloat() < extraDropChance) {
+                int[] extraTile = findFreeDropTile(enemy.tileColumn, enemy.tileRow);
+                if (extraTile != null) placeDeathDrop(extraTile[0], extraTile[1], drop);
+            }
         }
+        // WILDFIRE (balance-overhaul order 5, D5): a BURNING enemy that dies, whatever killed it, passes its
+        // whole burn to every living orthogonal neighbour and sets its own tile alight.
+        if (buildStats.wildfire()) spreadWildfire(enemy);
         // Area-denial death hook (Pillar 2/3): e.g. a Plague Hulk leaves a toxic cloud here.
         if (enemyDeathHazardListener != null) {
             enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow, enemy.selfDestructed);
         }
         enemies.remove(enemy);
+    }
+
+    /** The four orthogonal neighbour offsets Wildfire spreads to. */
+    private static final int[] WILDFIRE_STEP_COLUMNS = { 1, -1, 0,  0 };
+    private static final int[] WILDFIRE_STEP_ROWS    = { 0,  0, 1, -1 };
+
+    /**
+     * WILDFIRE (balance-overhaul order 5, D5): when {@code dying} is BURNING, each living orthogonal neighbour
+     * gains its full current burn stack count (capped at FLAME_BURN_MAX_STACKS + Accelerant), the timer reset
+     * to a full player burn (FLAME_BURN_TURNS + the Wildfire turn bonus), attributed to the player; the dead
+     * enemy's tile ignites through the fire-hazard seam. No-op when the enemy is not burning.
+     */
+    private void spreadWildfire(Enemy dying) {
+        StatusEffect burn = dying.getActiveEffects().get(StatusType.BURNING);
+        if (!burn.isActive() || statusEffectController == null) return;
+        int stacks    = Math.max(1, burn.getStacks());
+        int magnitude = burn.getMagnitude();
+        int turns     = BalanceConfig.FLAME_BURN_TURNS + buildStats.burnTurnBonus();
+        int cap       = BalanceConfig.FLAME_BURN_MAX_STACKS + buildStats.burnMaxStackBonus();
+        for (int direction = 0; direction < WILDFIRE_STEP_COLUMNS.length; direction++) {
+            int neighbourColumn = dying.tileColumn + WILDFIRE_STEP_COLUMNS[direction];
+            int neighbourRow    = dying.tileRow    + WILDFIRE_STEP_ROWS[direction];
+            for (int index = 0; index < enemies.size(); index++) {
+                Enemy neighbour = enemies.get(index);
+                if (neighbour == dying || !neighbour.isAlive()) continue;
+                if (neighbour.tileColumn != neighbourColumn || neighbour.tileRow != neighbourRow) continue;
+                statusEffectController.spreadBurnStacks(neighbour, stacks, magnitude, turns, cap, this);
+            }
+        }
+        if (hazardIgniteTarget != null) hazardIgniteTarget.igniteFire(dying.tileColumn, dying.tileRow);
     }
 
     /**

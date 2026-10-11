@@ -146,6 +146,23 @@ public interface EnemyHitTarget {
     default boolean isActivationMatchupFloorNeutral() { return false; }
 
     /**
+     * Arms the tile the activation was fired FROM (balance-overhaul order 5), so the build's range-band terms
+     * (Point Man at point-blank, Lane Discipline at long range) measure the real shot distance to each target.
+     * Set by Weapon.fire() / MeleeWeapon.fire() beside the damage class. Default: no-op.
+     */
+    default void setActivationOrigin(int tileColumn, int tileRow) {}
+
+    /**
+     * While armed, the hit is a HAZARD blast (a barrel) rather than a weapon hit: the build's weapon terms do
+     * not apply (a barrel carries its own Sapper / DEMOLITIONIST multiplier) and it never spends an enemy's
+     * "first hit". Armed by ExplosiveBarrelManager around its blast and restored after. Default: no-op.
+     */
+    default void setActivationHazardBlast(boolean hazardBlast) {}
+
+    /** Whether {@link #setActivationHazardBlast} is currently armed. Default false. */
+    default boolean isActivationHazardBlast() { return false; }
+
+    /**
      * True when a live CRYSTAL SPIRE (grown by a Verdant Spiresower) occupies the given tile
      * (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt). A spire is SOLID terrain, not an
      * enemy — it has no health bar, no AI, no XP — so it is reached through this shot seam rather than

@@ -103,7 +103,8 @@ public class DoubleBarrelShotgun extends Weapon {
                     // stagger at <= 2 tiles. Resolved before the ability callbacks so a resolver bonus
                     // reads the post-knockback position.
                     SpreadImpact.applyCloseRangeImpact(enemyHitTarget, hitEnemy, distanceTiles,
-                            facingStepColumn, facingStepRow);
+                            facingStepColumn, facingStepRow,
+                            buildStats().knockbackBonusTiles(), buildStats().staggerBonusTiles());
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     enemiesHit++;

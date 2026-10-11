@@ -38,8 +38,6 @@ public final class BalanceReport {
         System.out.println();
         printMoveSetTable();
         System.out.println();
-        printUpgradeCardTable();
-        System.out.println();
         printPerkTable();
         System.out.println();
         printBuildTable();
@@ -400,48 +398,6 @@ public final class BalanceReport {
         }
         System.out.println("------------------------------------------------------------------------------------");
         System.out.println("cadence = enemy turns between specials; every damaging special is telegraphed 1 turn ahead.");
-    }
-
-    // -----------------------------------------------------------------------------------
-    // UPGRADE CARDS (idea 5) — every level-up card priced in power points (PP) vs the budget.
-    // PP = %-gain to reference DPT (offence) or reference eHP (survivability), computed straight
-    // from the card's stat deltas through GameMath. Each card MUST land in the budget band, so the
-    // total PP at level L is build-independent (= L * budget). Trade-off cards net to ~budget.
-    // -----------------------------------------------------------------------------------
-    private static void printUpgradeCardTable() {
-        float budget    = GameBalance.LEVEL_UP_BUDGET_PP;
-        float tolerance = GameBalance.LEVEL_UP_BUDGET_TOLERANCE;
-        float bandMinimum = budget * (1f - tolerance);
-        float bandMaximum = budget * (1f + tolerance);
-
-        System.out.println("UPGRADE CARDS (idea 5) — budget = " + String.format("%.0f", budget)
-                + " PP   band = " + String.format("%.1f-%.1f", bandMinimum, bandMaximum)
-                + " PP   (offered " + GameBalance.LEVEL_UP_CARDS_OFFERED + "/level)");
-        System.out.printf("%-20s %-9s %-13s %8s %-8s %-6s %-8s%n",
-                "card", "pool", "lever", "PP", "tradeoff", "in?", "maxBP");
-        System.out.println("------------------------------------------------------------------------------------");
-
-        boolean allInBand = true;
-        boolean allCross  = true;
-        for (ge.tbegvadze.toon3d.progression.UpgradeCard card
-                : ge.tbegvadze.toon3d.progression.UpgradeCard.values()) {
-            float powerPoints = card.estimatedPowerPoints();
-            boolean inBand = powerPoints >= bandMinimum && powerPoints <= bandMaximum;
-            allInBand &= inBand;
-            // R-CARD-BREAKPOINT: the deepest integer TTK/TTD breakpoint the card crosses vs the region soldier.
-            int bestBreakpoint = ge.tbegvadze.toon3d.util.BalanceSchema.cardBestBreakpoint(card);
-            allCross &= bestBreakpoint >= 1;
-            System.out.printf("%-20s %-9s %-13s %8.1f %-8s %-6s %-8s%n",
-                    card.displayName, card.pool.name(), card.lever.name(), powerPoints,
-                    card.isTradeOff() ? "YES" : "no",
-                    bandVerdict(inBand, powerPoints, bandMinimum),
-                    bestBreakpoint >= 1 ? ("+" + bestBreakpoint) : "NONE");
-        }
-        System.out.println("------------------------------------------------------------------------------------");
-        System.out.println("INVARIANT: every card in band => total PP at level L = L * budget (build-independent).  "
-                + (allInBand ? "ALL CARDS IN BAND" : "*** OUT-OF-BAND CARD(S) — RE-PRICE ***"));
-        System.out.println("R-CARD-BREAKPOINT (order 4): each card crosses >= 1 TTK/TTD breakpoint vs the region soldier.  "
-                + (allCross ? "ALL CROSS" : "*** CARD CROSSES NO BREAKPOINT — RE-PRICE ***"));
     }
 
     // -----------------------------------------------------------------------------------
@@ -879,7 +835,7 @@ public final class BalanceReport {
         printShopPriceRow("Weapon level-up", BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS, depths);
         printShopPriceRow("Tier up (RARE, 12 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
         printShopPriceRow("Tier up (EPIC, 20 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
-        printShopPriceRow("Player ability boon (~12 PP)", BalanceConfig.LEVEL_UP_BUDGET_PP, depths);
+        printShopPriceRow("Player ability: 1 perk rank", BalanceConfig.SHOP_PERK_RANK_POWER_POINTS, depths);
     }
 
     private static void printShopPriceRow(String label, float valuePowerPoints, int[] depths) {

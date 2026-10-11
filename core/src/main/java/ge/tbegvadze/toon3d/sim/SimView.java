@@ -58,6 +58,10 @@ public final class SimView {
     public List<Enemy> enemies() { return enemyManager.getEnemies(); }
 
     public int  depth()            { return world.getCurrentDepth(); }
+    /** The run's build — perk ranks held (balance-overhaul order 5). Read only. */
+    public ge.tbegvadze.toon3d.progression.PlayerBuild playerBuild() { return world.playerBuild(); }
+    /** The tags of the weapons carried right now (the level-up offer's SYNERGY test). Read only. */
+    public java.util.EnumSet<ge.tbegvadze.toon3d.progression.BuildTag> carriedBuildTags() { return world.carriedBuildTags(); }
     public boolean isBossFloor()   { return world.isBossFloor(); }
     /** Player actions spent on this floor so far — a policy's clock for "am I lost?". */
     public int  turnsOnFloor()     { return world.getTurnsOnFloor(); }

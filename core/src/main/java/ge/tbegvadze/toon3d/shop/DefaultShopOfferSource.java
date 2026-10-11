@@ -5,7 +5,8 @@ import ge.tbegvadze.toon3d.entity.WeaponRoller;
 import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
+import ge.tbegvadze.toon3d.progression.Perk;
+import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BalanceSchema;
 import ge.tbegvadze.toon3d.util.GameBalance;
@@ -34,9 +35,17 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
 
     /** Credit price of an offer worth {@code valuePowerPoints}, at the context's depth. */
     private static int priceOf(float valuePowerPoints, ShopContext context) {
-        return GameMath.shopPrice(valuePowerPoints, GameBalance.SHOP_CREDITS_PER_POWER_POINT,
-                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE);
+        return discounted(GameMath.shopPrice(valuePowerPoints, GameBalance.SHOP_CREDITS_PER_POWER_POINT,
+                context.depth, GameBalance.SHOP_DEPTH_PRICE_SCALE), context);
     }
+
+    /** The build's price multiplier on a rolled price (Haggler / QUARTERMASTER — balance-overhaul order 5). */
+    private static int discounted(int price, ShopContext context) {
+        return GameMath.buildScaledAmount(price, context.priceMultiplier, 1);
+    }
+
+    /** Every perk, in catalog order (the ability offer's candidate list; never mutated). */
+    private static final Perk[] ALL_PERKS = Perk.values();
 
     @Override
     public ShopEntry rollTierUpgradeOffer(ShopContext context, Random random) {
@@ -67,7 +76,7 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
 
     /** One level-up offer for {@code target}; every weapon level-up costs the same ladder price. */
     private static ShopEntry buildLevelUpOffer(WeaponProfile target, ShopContext context) {
-        int price = BalanceSchema.ladderLevelUpPrice(context.depth);
+        int price = discounted(BalanceSchema.ladderLevelUpPrice(context.depth), context);
         String name = "Level Up: " + target.getDisplayName()
                 + " (Lv" + target.getWeaponLevel() + " -> Lv" + (target.getWeaponLevel() + 1) + ")";
         return new ShopEntry(OfferCategory.WEAPON_LEVEL_UP, OfferRarity.COMMON, name,
@@ -101,18 +110,30 @@ public final class DefaultShopOfferSource implements ShopOfferSource {
 
     @Override
     public ShopEntry rollAbilityOffer(ShopContext context, Random random) {
-        // shop_order_4: a PLAYER_ABILITY is a paid, alternate acquisition of the SAME boons the
-        // level-up screen hands out — the budget-equal UpgradeCards. Priced on the card's OWN power
-        // points (each card ~= LEVEL_UP_BUDGET_PP), so a boon and a level-up card cost the same value.
-        UpgradeCard[] boons = UpgradeCard.values();
-        if (boons.length == 0) return null;
-        UpgradeCard boon = boons[random.nextInt(boons.length)];
-
-        // Trade-off boons read as EPIC, plain budget boons as RARE — purely a UI/card tint now.
-        OfferRarity rarity = boon.isTradeOff() ? OfferRarity.EPIC : OfferRarity.RARE;
-        int price = priceOf(boon.estimatedPowerPoints(), context);
-        return new ShopEntry(OfferCategory.PLAYER_ABILITY, rarity, "Boon: " + boon.displayName,
-                boon.description, price, 0, boon, "ABILITY:" + boon.name());
+        // balance-overhaul order 5: a PLAYER_ABILITY sells ONE RANK of a random perk the player has not maxed —
+        // a paid, alternate acquisition of the same perks the level-up screen offers — priced on
+        // SHOP_PERK_RANK_POWER_POINTS (order 6 re-prices it). No build in the context: no offer.
+        PlayerBuild build = context.playerBuild;
+        if (build == null) return null;
+        int unmaxedCount = 0;
+        for (Perk perk : ALL_PERKS) {
+            if (!build.isMaxed(perk)) unmaxedCount++;
+        }
+        if (unmaxedCount == 0) return null;
+        int pick = random.nextInt(unmaxedCount);
+        Perk perk = null;
+        for (Perk candidate : ALL_PERKS) {
+            if (build.isMaxed(candidate)) continue;
+            if (pick-- == 0) {
+                perk = candidate;
+                break;
+            }
+        }
+        int nextRank = build.rankOf(perk) + 1;
+        int price = priceOf(BalanceConfig.SHOP_PERK_RANK_POWER_POINTS, context);
+        return new ShopEntry(OfferCategory.PLAYER_ABILITY, OfferRarity.RARE,
+                "Perk: " + perk.displayName + " (rank " + nextRank + "/" + perk.maxRank + ")",
+                perk.tag.displayName() + " — " + perk.effectLine, price, 0, perk, "PERK:" + perk.name());
     }
 
     @Override

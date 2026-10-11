@@ -6,7 +6,8 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponRoll;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
+import ge.tbegvadze.toon3d.progression.Perk;
+import ge.tbegvadze.toon3d.progression.PerkDeck;
 import ge.tbegvadze.toon3d.route.NodeEconomics;
 import ge.tbegvadze.toon3d.route.RouteEconomicsModel;
 import ge.tbegvadze.toon3d.route.RouteNode;
@@ -41,6 +42,8 @@ public final class TacticalPolicy implements PlayerPolicy {
     private static final float SHOP_NODE_RELIEF_BONUS   = 2f;
     /** Scales hit-point and credit terms into the same range as the ammo-box/upgrade terms. */
     private static final float PER_POINT_TERM_WEIGHT    = 0.01f;
+    /** A SYNERGY perk outranks any rank count (no tag holds this many ranks). */
+    private static final int   SYNERGY_PICK_WEIGHT      = 1000;
 
     private final int[]  stepBuffer = new int[2];
     private final TravelPlanner travelPlanner = new TravelPlanner();
@@ -227,21 +230,22 @@ public final class TacticalPolicy implements PlayerPolicy {
     }
 
     /**
-     * Takes the card with the largest priced power gain, breaking ties toward survivability. Cards
-     * are budget-equal by contract (R-CARD), so this is a shape preference, not a power grab.
+     * Leans into the build (balance-overhaul order 5 — the default CP6 adds build-bias variants to): prefers a
+     * SYNERGY perk (its tag is a carried weapon's), then the perk whose tag already holds the most ranks, then
+     * the first offered. Deterministic: ties keep the earlier plate.
      */
     @Override
-    public UpgradeCard chooseCard(UpgradeCard[] offeredCards, int count, SimView view) {
-        UpgradeCard best = null;
-        float bestScore  = Float.NEGATIVE_INFINITY;
+    public Perk choosePerk(Perk[] offeredPerks, int count, SimView view) {
+        Perk best = null;
+        int bestScore = Integer.MIN_VALUE;
         for (int index = 0; index < count; index++) {
-            UpgradeCard card = offeredCards[index];
-            if (card == null) continue;
-            float score = card.estimatedPowerPoints()
-                          + card.effectiveHitPointGain() * PER_POINT_TERM_WEIGHT;
+            Perk perk = offeredPerks[index];
+            if (perk == null) continue;
+            int score = (PerkDeck.isSynergy(perk, view.carriedBuildTags()) ? SYNERGY_PICK_WEIGHT : 0)
+                      + view.playerBuild().ranksInTag(perk.tag);
             if (score > bestScore) {
                 bestScore = score;
-                best      = card;
+                best      = perk;
             }
         }
         return best;

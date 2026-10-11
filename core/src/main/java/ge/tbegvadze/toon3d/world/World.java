@@ -81,8 +81,10 @@ import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
-import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
+import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.Perk;
+import ge.tbegvadze.toon3d.progression.PerkDeck;
+import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
@@ -166,11 +168,25 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final AbilityFeedback        abilityFeedback;
     private final PlayerProgress         playerProgress;
     private final LevelUpOverlayRenderer levelUpOverlayRenderer;
-    /** Draws the budget-equal upgrade cards offered on each level-up (idea 5: build diversity). */
-    private final UpgradeCardDeck        upgradeCardDeck;
-    /** The cards currently on offer; refilled by the deck when a level-up begins. */
-    private final UpgradeCard[]          offeredCards = new UpgradeCard[GameBalance.LEVEL_UP_CARDS_OFFERED];
-    private int                          offeredCardCount = 0;
+    /** Draws the tagged perks offered on each level-up (balance-overhaul order 5, B3). */
+    private final PerkDeck               perkDeck;
+    /** The perks currently on offer; refilled by the deck when a level-up begins. */
+    private final Perk[]                 offeredPerks = new Perk[BalanceConfig.PERKS_OFFERED];
+    private int                          offeredPerkCount = 0;
+    /**
+     * THE RUN'S BUILD (balance-overhaul order 5): the perk ranks (and, from CP3, keystones) picked this run. Its
+     * {@link PlayerBuild#stats()} aggregate is wired once into the Player, every weapon and each floor's
+     * EnemyManager, which read it live; {@link #applyBuildEffects()} pushes the parts that are applied as
+     * deltas (attribute grants, the max HP / armour multipliers). Dies with the run.
+     */
+    private final PlayerBuild            playerBuild = new PlayerBuild();
+    /** Carried weapon tags, refilled by {@link #carriedBuildTags()} (scratch — never allocated per offer). */
+    private final java.util.EnumSet<BuildTag> carriedTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
+    /** The build's max-HP / max-armour bonus already applied to the Player (applyBuildEffects deltas). */
+    private int                          appliedBuildMaxHealthBonus = 0;
+    private int                          appliedBuildMaxArmorBonus  = 0;
+    /** Attribute points the build's perks already granted into PlayerStats, by Attribute ordinal. */
+    private final int[]                  appliedBuildAttributeGrants = new int[Attribute.values().length];
 
     // Touch controller — null on desktop (platform-gated to touch screens)
     private TouchInputState         touchInputState;
@@ -591,8 +607,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerProgress         = new PlayerProgress();
         levelUpOverlayRenderer = new LevelUpOverlayRenderer(playerProgress);
         eventChoiceOverlayRenderer = new EventChoiceOverlayRenderer();
-        // Card deck seeded off the run seed so a given run's level-up offers are reproducible.
-        upgradeCardDeck        = new UpgradeCardDeck(runSeed ^ 0xCA12D00D5EED1234L);
+        // Perk deck seeded off the run seed (the retired card deck's salt) so a run's offers are reproducible.
+        perkDeck               = new PerkDeck(runSeed ^ 0xCA12D00D5EED1234L);
 
         // Story UI bark layer (order-2) — run-persistent, but its NARRATIVE state is cross-run:
         // StoryProgress reads/writes the deepest story region reached and the one-shot beat flags
@@ -708,6 +724,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // no selection step, so a run starts straight into the first floor.
         playerStats = new PlayerStats();
         player.setPlayerStats(playerStats);
+        player.setBuildStats(playerBuild.stats());   // the build's player-side seams (balance-overhaul order 5)
         player.setRandomSeed(runSeed ^ 0xD0D6E5EEDL);   // AGILITY dodge rolls join the seeded run
         // TOUGHNESS increases maxHealth without auto-healing; heal to full once at run
         // start so the player always begins with a full HP bar.
@@ -804,6 +821,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
             weapon.setPlayerAccuracyMultiplier(accuracyMultiplier);
+            weapon.setBuildStats(playerBuild.stats());
             weaponRoller.configureRunStart(weapon);
         }
 
@@ -812,6 +830,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         fist.setRandomSeed(runSeed + (weaponSeedOffset++ * 0x9E3779B97F4A7C15L));
         fist.setEventTextSystem(eventTextSystem);
         fist.setPlayerAccuracyMultiplier(accuracyMultiplier);
+        fist.setBuildStats(playerBuild.stats());
         weaponRoller.configureRunStart(fist);
         inventory.setMeleeWeapon(fist);
 
@@ -1379,6 +1398,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Carry the run's accumulated STRENGTH/MARKSMANSHIP damage multipliers onto the fresh manager.
         refreshPlayerDamageMultipliers();
         enemyManager.setLoadout(inventory.getLoadout());
+        // THE BUILD (balance-overhaul order 5): the fresh manager reads the run's build live; Second Wind's
+        // once-per-floor save is available again on every floor arrival.
+        enemyManager.setBuildStats(playerBuild.stats());
+        enemyManager.setPlayerReference(player);
+        player.resetFloorBuildState();
         enemyManager.setDropPlacedListener((tileColumn, tileRow, dropChar) ->
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
@@ -1809,7 +1833,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon());
+        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild);
     }
 
     /**
@@ -2355,16 +2379,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // LEVEL_UP_OVERLAY — game paused while player picks an upgrade card
+        // LEVEL_UP_OVERLAY — game paused while player picks a perk (balance-overhaul order 5)
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             if (gameViewport != null && Gdx.input.justTouched()) {
                 cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
                 gameViewport.unproject(cardTouchPosition);
                 int tappedIndex = levelUpOverlayRenderer.getTappedCardIndex(cardTouchPosition.x, cardTouchPosition.y);
-                UpgradeCard tappedCard = levelUpOverlayRenderer.getOfferedCard(tappedIndex);
-                if (tappedCard != null) {
+                Perk tappedPerk = levelUpOverlayRenderer.getOfferedPerk(tappedIndex);
+                if (tappedPerk != null) {
                     gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
-                    applyUpgradeCard(tappedCard);
+                    applyPerkPick(tappedPerk);
                 }
             }
             return;
@@ -2514,13 +2538,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (touchInputState != null) {
                 touchInputState.resetAllButtonStates();
             }
-            // Draw a fresh set of budget-equal cards ONCE as the overlay opens.
-            offeredCardCount = upgradeCardDeck.draw(offeredCards, GameBalance.LEVEL_UP_CARDS_OFFERED);
-            levelUpOverlayRenderer.setOfferedCards(offeredCards, offeredCardCount);
+            // Draw the B3 perk offer ONCE as the overlay opens (synergy with what is carried + a pivot).
+            offeredPerkCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
             // Played BEFORE the phase change: the next update suppresses gameplay sound for the
             // overlay, and this is the one sound that belongs to it.
             gameAudio.playUi(GameSoundId.LEVEL_UP);
-            runPhase = RunPhase.LEVEL_UP_OVERLAY;
+            if (offeredPerkCount == 0) {
+                // EDGE: every perk is maxed — the level is still gained, with nothing left to offer.
+                completeLevelUp();
+            } else {
+                levelUpOverlayRenderer.setOfferedPerks(offeredPerks, offeredPerkCount, playerBuild);
+                runPhase = RunPhase.LEVEL_UP_OVERLAY;
+            }
         }
     }
 
@@ -2905,9 +2934,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /** Applies the auto-doc's one-shot heal, mirroring the medkit restore feedback. */
     private void triggerAutoDocHeal() {
-        int healAmount = Math.round(player.getMaxHealth() * RouteMapConstants.REST_HEAL_FRACTION);
-        if (healAmount <= 0) return;
-        player.applyHealing(healAmount);
+        int baseHealAmount = Math.round(player.getMaxHealth() * RouteMapConstants.REST_HEAL_FRACTION);
+        if (baseHealAmount <= 0) return;
+        // The heal station is a TREATMENT: the build's heal multiplier rides it (balance-overhaul order 5).
+        int healAmount = player.applyTreatment(baseHealAmount);
         gameAudio.playUi(GameSoundId.HEAL_STATION);   // the charger (order 6); was silent
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("AUTO-DOC +" + healAmount + " HP", EventTextSystem.COLOR_GREEN);
@@ -2973,7 +3003,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (effect.healFraction() > 0f && player != null) {
                 int healAmount = Math.round(player.getMaxHealth() * effect.healFraction());
                 if (healAmount > 0) {
-                    player.applyHealing(healAmount);
+                    player.applyTreatment(healAmount);   // a treatment: the build's heal multiplier (order 5)
                     if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
                     if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
                 }
@@ -4649,7 +4679,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             healAmount = MedicalTier.FIELD_MEDKIT.healAmountFor(player.getMaxHealth());
         }
         if (healAmount > 0) {
-            player.applyHealing(healAmount);
+            // A medkit / STIM is a TREATMENT: the build's heal multiplier rides it (balance-overhaul order 5).
+            healAmount = player.applyTreatment(healAmount);
             runStats.recordHealUsed(); // resource-economy telemetry (order 3)
             // The same heal the HEAL button plays (procedural-sound-effects order 6): a medkit used
             // from the inventory used to restore HP in silence.
@@ -5018,24 +5049,23 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     /**
-     * Applies the chosen upgrade card's stat deltas, advances the level, refreshes every derived
-     * combat value, and returns the game to PLAYING state (idea 5: build diversity).
-     *
-     * <p>Each card is budget-equal, so whichever card the player picks their TOTAL power advances
-     * by the same amount — only its SHAPE changes. Attribute deltas flow into {@link PlayerStats}
-     * (read live for dodge / speed / reduction / accuracy); HP / armour / flat-damage deltas are
-     * pushed to the Player and EnemyManager so they take effect immediately.</p>
+     * The level-up pick (balance-overhaul order 5): adds one rank of the tapped perk to the run's build, then
+     * the level-up ceremony ({@link #completeLevelUp}) — advance the level, vitality growth, re-derive the
+     * build — and returns to PLAYING.
      */
-    private void applyUpgradeCard(UpgradeCard card) {
-        // The boon's stat effects (shared with the shop's paid path, shop_order_4).
-        applyUpgradeCardEffects(card);
+    private void applyPerkPick(Perk perk) {
+        playerBuild.addPerkRank(perk);
+        completeLevelUp();
+    }
 
-        // Level-up ceremony: advance the level and record the pick so future offers lean into this
-        // build. (The shop path deliberately does NOT do this — a purchase is not a level-up.)
+    /**
+     * The level-up ceremony shared by every pick: advance the level, apply the vitality-ladder growth for the
+     * level reached, then {@link #applyBuildEffects()} (which reads that level), and resume play.
+     */
+    private void completeLevelUp() {
         playerProgress.advanceLevel();
         applyVitalityGrowth();
-        upgradeCardDeck.registerPick(card);
-
+        applyBuildEffects();
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
         }
@@ -5050,47 +5080,70 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * Applies one boon's permanent-for-run stat effects and refreshes every derived combat value —
-     * the single source of truth for "what a boon does". Shared by the level-up screen
-     * ({@link #applyUpgradeCard}) and the UAC Fabricator's paid PLAYER_ABILITY path
-     * ({@link #grantShopAbility}, shop_order_4), so a bought boon is identical to a level-up pick.
-     *
-     * <p>Attribute deltas flow into {@link PlayerStats} (read live for dodge / speed / reduction /
-     * accuracy); HP / armour / flat-damage deltas are pushed to the Player and EnemyManager so they
-     * take effect immediately. This method changes NO run/level/UI state — only the boon's effects.
+     * Re-derives every build-dependent value that is APPLIED rather than read live (balance-overhaul order 5)
+     * — the single source of truth for "what the build does to the marine", called after every pick (level-up
+     * or shop) and after a level's vitality growth:
+     * <ol>
+     *   <li>ATTRIBUTE GRANTS (Butcher's STRENGTH): the delta since the last call goes into PlayerStats.</li>
+     *   <li>MAX HP / MAX ARMOUR: the build's multiplier on the vitality-ladder pool
+     *       ({@link GameMath#buildMaxPoolBonus}) — perk bonuses add, keystone terms multiply after — applied
+     *       as the CHANGE since the last call through Player.adjustMax*, the same path vitality growth uses
+     *       (a raise also grants the new HP / armour; a cut clamps, never below 1 HP).</li>
+     *   <li>The STRENGTH / MARKSMANSHIP damage multipliers are re-pushed to the EnemyManager.</li>
+     * </ol>
+     * Every other seam (class damage, range bands, first hit, guard, heals, burns, barrels, shop prices,
+     * ammo pickups, Second Wind) reads {@code playerBuild.stats()} live where it resolves.
      */
-    private void applyUpgradeCardEffects(UpgradeCard card) {
-        // 1. Permanent attribute deltas — read live by PlayerStats-backed systems.
-        if (card.strengthDelta != 0)     playerStats.addPermanent(Attribute.STRENGTH,     card.strengthDelta);
-        if (card.agilityDelta != 0)      playerStats.addPermanent(Attribute.AGILITY,      card.agilityDelta);
-        if (card.toughnessDelta != 0)    playerStats.addPermanent(Attribute.TOUGHNESS,    card.toughnessDelta);
-        if (card.marksmanshipDelta != 0) playerStats.addPermanent(Attribute.MARKSMANSHIP, card.marksmanshipDelta);
-
-        // 2. Health: a TOUGHNESS point also raises the max-HP pool (its flat reduction is read live).
-        int maxHealthDelta = card.maxHealthDelta + card.toughnessDelta * GameBalance.TGH_HP_PER_POINT;
-        if (maxHealthDelta != 0) player.adjustMaxHealth(maxHealthDelta);
-
-        // 3. Armour.
-        if (card.maxArmorDelta != 0) player.adjustMaxArmor(card.maxArmorDelta);
-
-        // 4. Flat per-shot damage — accumulated in progression, pushed to the damage pipeline.
-        if (card.flatDamageDelta != 0) {
-            playerProgress.addFlatDamageBonus(card.flatDamageDelta);
-            enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
+    private void applyBuildEffects() {
+        for (Attribute attribute : Attribute.values()) {
+            int granted = playerBuild.attributeGrantTotal(attribute);
+            int delta = granted - appliedBuildAttributeGrants[attribute.ordinal()];
+            if (delta != 0) playerStats.addPermanent(attribute, delta);
+            appliedBuildAttributeGrants[attribute.ordinal()] = granted;
         }
-
-        // 5. Re-push the STRENGTH/MARKSMANSHIP damage multipliers so they take effect immediately.
+        float vitalityScale = GameMath.playerVitalityScale(playerProgress.getPlayerLevel());
+        int healthBonus = GameMath.buildMaxPoolBonus(BalanceConfig.PLAYER_MAX_HEALTH, vitalityScale,
+                playerBuild.stats().maxHealthMultiplier());
+        int armorBonus  = GameMath.buildMaxPoolBonus(BalanceConfig.PLAYER_MAX_ARMOR, vitalityScale,
+                playerBuild.stats().maxArmorMultiplier());
+        if (healthBonus != appliedBuildMaxHealthBonus) player.adjustMaxHealth(healthBonus - appliedBuildMaxHealthBonus);
+        if (armorBonus  != appliedBuildMaxArmorBonus)  player.adjustMaxArmor(armorBonus - appliedBuildMaxArmorBonus);
+        appliedBuildMaxHealthBonus = healthBonus;
+        appliedBuildMaxArmorBonus  = armorBonus;
         refreshPlayerDamageMultipliers();
     }
 
     /**
-     * Grants a boon bought at a UAC Fabricator (shop_order_4). Reuses the level-up effect path
-     * ({@link #applyUpgradeCardEffects}) so a paid boon matches the free one exactly, but spends NO
-     * XP level and records no level-up pick — buying is not levelling. This is the
-     * {@link ge.tbegvadze.toon3d.shop.ShopAbilityGrantor} the shop's ability service calls on purchase.
+     * The tags of the weapons the player carries (balance-overhaul order 5, B3's SYNERGY test): every loadout
+     * gun's damage class through {@link BuildTag#forDamageClass}, plus the melee weapon's when it is a chosen
+     * one (the always-carried Fist is not a build choice, so it never makes BLADE a synergy). The single
+     * method CP4 extends with the carried weapons' ability tags. Refills a scratch set (no allocation).
      */
-    private void grantShopAbility(UpgradeCard boon) {
-        applyUpgradeCardEffects(boon);
+    private java.util.EnumSet<BuildTag> carriedBuildTags() {
+        carriedTagsScratch.clear();
+        Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                BuildTag tag = weapon != null ? BuildTag.forDamageClass(weapon.damageClass()) : null;
+                if (tag != null) carriedTagsScratch.add(tag);
+            }
+        }
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null && !meleeWeapon.isLevelGapExempt()) {
+            BuildTag tag = BuildTag.forDamageClass(meleeWeapon.damageClass());
+            if (tag != null) carriedTagsScratch.add(tag);
+        }
+        return carriedTagsScratch;
+    }
+
+    /**
+     * Grants a perk rank bought at a UAC Fabricator (balance-overhaul order 5; was a boon card). The same
+     * build path as a level-up pick ({@link #applyBuildEffects}), but spends NO XP level — buying is not
+     * levelling. This is the {@link ge.tbegvadze.toon3d.shop.ShopAbilityGrantor} the shop's ability service calls.
+     */
+    private void grantShopAbility(Perk perk) {
+        if (playerBuild.addPerkRank(perk)) applyBuildEffects();
     }
 
     /**
@@ -5347,6 +5400,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         else return null;
         melee.setEventTextSystem(eventTextSystem);
         melee.setPlayerAccuracyMultiplier(playerStats.getAccuracyMultiplier());
+        melee.setBuildStats(playerBuild.stats());
         weaponRoller.configureRunStart(melee);
         return melee;
     }

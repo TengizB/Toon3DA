@@ -11,16 +11,17 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
-import ge.tbegvadze.toon3d.util.GameBalance;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 
 /**
- * Renders the full-screen level-up CARD overlay for mobile (idea 5: build diversity).
+ * Renders the full-screen level-up PERK overlay for mobile (balance-overhaul order 5, B3/B8).
  *
- * <p>Instead of three fixed boons, the overlay shows {@link GameBalance#LEVEL_UP_CARDS_OFFERED}
- * cards DRAWN per level-up by {@link UpgradeCardDeck}. World sets the current offer via
- * {@link #setOfferedCards(UpgradeCard[], int)} before this renders. Each card is coloured by its
- * {@link UpgradeCardPool} and tagged "TRADE-OFF" when it carries a downside. Tap detection is via
- * {@link #getTappedCardIndex(float, float)} which tests world-space (viewport-unprojected) coords.</p>
+ * <p>The overlay shows the {@link BalanceConfig#PERKS_OFFERED} perks {@link PerkDeck} drew for this
+ * level-up. World sets the offer via {@link #setOfferedPerks(Perk[], int, PlayerBuild)} before this
+ * renders; each plate carries the perk's name, the rank it would reach, its {@link BuildTag} and its
+ * one-line effect. (CP5 of order 5 replaces the plain tag label with a tag chip, the SYNERGY ribbon and
+ * rank pips.) Tap detection is via {@link #getTappedCardIndex(float, float)} which tests world-space
+ * (viewport-unprojected) coords.</p>
  *
  * <h2>Visual pipeline</h2>
  * <p>Each card is layered back-to-front for a high-resolution, readable look:</p>
@@ -41,7 +42,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final float CARD_GAP     = 20f;
     private static final float CARD_Y       = (Constants.WORLD_HEIGHT - CARD_HEIGHT) / 2f - 30f;
 
-    private static final int   MAX_CARDS    = GameBalance.LEVEL_UP_CARDS_OFFERED;
+    private static final int   MAX_CARDS    = BalanceConfig.PERKS_OFFERED;
     private static final float TOTAL_CARDS_WIDTH = MAX_CARDS * CARD_WIDTH + (MAX_CARDS - 1) * CARD_GAP;
     private static final float CARDS_LEFT_X      = (Constants.WORLD_WIDTH - TOTAL_CARDS_WIDTH) / 2f;
 
@@ -57,7 +58,6 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final float LABEL_Y         = 158f;  // effect label
     private static final float DIVIDER_Y       = 178f;  // hairline separator under the label
     private static final float DESC_Y          = 206f;  // wrapped description
-    private static final float TRADEOFF_Y      = CARD_HEIGHT - 70f; // "TRADE-OFF" tag (from card bottom-up)
     private static final float TAP_Y           = CARD_HEIGHT - 34f; // "TAP TO CHOOSE" hint
 
     // Title / subtitle above the cards
@@ -69,9 +69,10 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final float SCALE_SUBTITLE = 1.35f;
     private static final float SCALE_HEADER   = 1.55f;
     private static final float SCALE_VALUE    = 3.1f;
+    /** The rank line ("RANK 2 / 3") is longer than the old card value, so it draws at this share of SCALE_VALUE. */
+    private static final float RANK_TEXT_SCALE_FRACTION = 0.6f;
     private static final float SCALE_LABEL    = 1.35f;
     private static final float SCALE_DESC     = 1.02f;
-    private static final float SCALE_TRADEOFF = 1.05f;
     private static final float SCALE_TAP      = 0.95f;
 
     private static final float SHADOW_OFFSET = 2.5f;
@@ -81,14 +82,14 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final Color WHITE       = new Color(0.97f, 0.97f, 0.98f, 1.00f);
     private static final Color GOLD        = new Color(1.00f, 0.88f, 0.20f, 1.00f);
     private static final Color DIM_HINT    = new Color(0.62f, 0.62f, 0.66f, 1.00f);
-    private static final Color RISK        = new Color(1.00f, 0.42f, 0.36f, 1.00f);
     private static final Color CARD_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.50f);
     private static final Color TEXT_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.72f);
     private static final Color HEADER_TEXT = new Color(1.00f, 1.00f, 1.00f, 1.00f);
     private static final Color INNER_EDGE  = new Color(1.00f, 1.00f, 1.00f, 0.16f);
     private static final Color DIVIDER     = new Color(1.00f, 1.00f, 1.00f, 0.20f);
 
-    // ---- Per-pool palette, indexed by UpgradeCardPool.ordinal() -------------
+    // ---- Plate palette. The four historic accents are kept as a small cycle over the BuildTag ordinal so
+    // neighbouring tags read apart; CP5 of balance-overhaul order 5 replaces this with the tag chip colours.
     private static final Color[] POOL_ACCENT = {
         new Color(1.00f, 0.52f, 0.22f, 1.00f), // OFFENSE — red-orange
         new Color(0.20f, 0.86f, 0.98f, 1.00f), // DEFENSE — cyan
@@ -137,8 +138,10 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
     private final StringBuilder stringBuilder = new StringBuilder(64);
 
-    // The currently-offered cards (set by World before each render). Never held across level-ups.
-    private final UpgradeCard[] offeredCards = new UpgradeCard[MAX_CARDS];
+    // The currently-offered perks (set by World before each render). Never held across level-ups.
+    private final Perk[]   offeredPerks     = new Perk[MAX_CARDS];
+    /** "RANK n / max" per plate, built once per offer (never in render). */
+    private final String[] offeredRankTexts = new String[MAX_CARDS];
     private int offeredCount = 0;
 
     public LevelUpOverlayRenderer(PlayerProgress progress) {
@@ -160,13 +163,16 @@ public final class LevelUpOverlayRenderer implements Disposable {
     // -------------------------------------------------------------------------
 
     /**
-     * Sets the cards to display this level-up. Copies references into the renderer's fixed array;
-     * {@code count} is clamped to the card slots available. Call before {@link #render}.
+     * Sets the perks to display this level-up. Copies references into the renderer's fixed array and builds
+     * each plate's rank text once (the rank the pick would reach); {@code count} is clamped to the plate
+     * slots available. Call before {@link #render}.
      */
-    public void setOfferedCards(UpgradeCard[] cards, int count) {
+    public void setOfferedPerks(Perk[] perks, int count, PlayerBuild build) {
         offeredCount = Math.min(count, MAX_CARDS);
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            offeredCards[cardIndex] = cards[cardIndex];
+            Perk perk = perks[cardIndex];
+            offeredPerks[cardIndex] = perk;
+            offeredRankTexts[cardIndex] = "RANK " + (build.rankOf(perk) + 1) + " / " + perk.maxRank;
         }
     }
 
@@ -187,10 +193,15 @@ public final class LevelUpOverlayRenderer implements Disposable {
         return -1;
     }
 
-    /** Returns the offered card at the given slot, or {@code null} if out of range. */
-    public UpgradeCard getOfferedCard(int cardIndex) {
+    /** Returns the offered perk at the given slot, or {@code null} if out of range. */
+    public Perk getOfferedPerk(int cardIndex) {
         if (cardIndex < 0 || cardIndex >= offeredCount) return null;
-        return offeredCards[cardIndex];
+        return offeredPerks[cardIndex];
+    }
+
+    /** The plate palette index for a perk (a cycle over its tag ordinal). */
+    private static int paletteIndexOf(Perk perk) {
+        return perk.tag.ordinal() % POOL_ACCENT.length;
     }
 
     private float cardLeftX(int cardIndex) {
@@ -221,8 +232,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            UpgradeCard card = offeredCards[cardIndex];
-            int pool = card.pool.ordinal();
+            int pool = paletteIndexOf(offeredPerks[cardIndex]);
             float cardX = cardLeftX(cardIndex);
 
             // Soft outer glow halo
@@ -255,7 +265,6 @@ public final class LevelUpOverlayRenderer implements Disposable {
         shapes.begin(ShapeRenderer.ShapeType.Line);
         com.badlogic.gdx.Gdx.gl.glLineWidth(CARD_BORDER_THICK);
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            UpgradeCard card = offeredCards[cardIndex];
             float cardX = cardLeftX(cardIndex);
 
             // Thin inner highlight just inside the body edge
@@ -263,7 +272,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
             shapes.rect(cardX + 3f, CARD_Y + 3f, CARD_WIDTH - 6f, CARD_HEIGHT - 6f);
 
             // Thick accent outer border
-            shapes.setColor(POOL_ACCENT[card.pool.ordinal()]);
+            shapes.setColor(POOL_ACCENT[paletteIndexOf(offeredPerks[cardIndex])]);
             shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
 
             // Hairline divider under the effect label
@@ -291,40 +300,34 @@ public final class LevelUpOverlayRenderer implements Disposable {
         drawCenteredTextWithShadow(stringBuilder.toString(), Constants.WORLD_WIDTH / 2f, SUBTITLE_Y, WHITE);
 
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            drawCardText(cardIndex, offeredCards[cardIndex]);
+            drawCardText(cardIndex, offeredPerks[cardIndex]);
         }
 
         batch.end();
     }
 
-    private void drawCardText(int cardIndex, UpgradeCard card) {
+    private void drawCardText(int cardIndex, Perk perk) {
         float cardX = cardLeftX(cardIndex);
         float cardCenterX = cardX + CARD_WIDTH / 2f;
         float top = cardTopY();
-        Color accent = POOL_ACCENT[card.pool.ordinal()];
+        Color accent = POOL_ACCENT[paletteIndexOf(perk)];
 
-        // Card name — inside the header strip (white, bold-looking with shadow)
+        // Perk name — inside the header strip (white, bold-looking with shadow)
         font.getData().setScale(SCALE_HEADER);
-        drawCenteredTextWithShadow(card.displayName, cardCenterX, top - HEADER_TEXT_Y, HEADER_TEXT);
+        drawCenteredTextWithShadow(perk.displayName, cardCenterX, top - HEADER_TEXT_Y, HEADER_TEXT);
 
-        // Big headline value (e.g. "+3", "+10 / -18") in accent color
-        font.getData().setScale(SCALE_VALUE);
-        drawCenteredTextWithShadow(card.valueText, cardCenterX, top - VALUE_Y, accent);
+        // The rank this pick reaches ("RANK 2 / 3") in accent color
+        font.getData().setScale(SCALE_VALUE * RANK_TEXT_SCALE_FRACTION);
+        drawCenteredTextWithShadow(offeredRankTexts[cardIndex], cardCenterX, top - VALUE_Y, accent);
 
-        // Effect label below the value (e.g. "MARKSMANSHIP") — white
+        // The build tag below the rank (e.g. "CLOSE QUARTERS") — white
         font.getData().setScale(SCALE_LABEL);
-        drawCenteredTextWithShadow(card.effectLabel, cardCenterX, top - LABEL_Y, WHITE);
+        drawCenteredTextWithShadow(perk.tag.displayName(), cardCenterX, top - LABEL_Y, WHITE);
 
-        // Description — smaller, white, word-wrapped inside the card width
+        // One-line effect — smaller, white, word-wrapped inside the card width
         font.getData().setScale(SCALE_DESC);
-        drawWrappedTextWithShadow(card.description, cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
+        drawWrappedTextWithShadow(perk.effectLine, cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
                 CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, WHITE);
-
-        // Trade-off tag — risk color, only for trade-off cards
-        if (card.isTradeOff()) {
-            font.getData().setScale(SCALE_TRADEOFF);
-            drawCenteredTextWithShadow("TRADE-OFF", cardCenterX, CARD_Y + TRADEOFF_Y, RISK);
-        }
 
         // Tap hint — small, dimmed
         font.getData().setScale(SCALE_TAP);

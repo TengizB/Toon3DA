@@ -159,7 +159,7 @@ public class Chaingun extends Weapon {
         int enemiesHit      = 0;
         int extraTargets    = overpenetrationExtraTargets();
         int lastHitDistance = 0;
-        for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
+        for (int distanceTiles = 1; distanceTiles <= range + buildRangeBonusTiles(); distanceTiles++) {
             int targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
             int targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
             char targetCell  = level.getCell(targetColumn, targetRow);

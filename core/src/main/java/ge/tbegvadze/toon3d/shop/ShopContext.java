@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.shop;
 
 import ge.tbegvadze.toon3d.entity.WeaponProfile;
+import ge.tbegvadze.toon3d.progression.PlayerBuild;
 
 import java.util.Collections;
 import java.util.List;
@@ -27,11 +28,31 @@ public final class ShopContext {
         this(depth, ownedWeapons, null);
     }
 
+    /**
+     * The run's build (balance-overhaul order 5), nullable: the PLAYER-ABILITY offer sells one rank of one of
+     * its unmaxed perks, and its {@link #priceMultiplier} prices every offer.
+     */
+    public final PlayerBuild playerBuild;
+
+    /**
+     * Multiplier on every price this machine rolls — the build's shop price multiplier (Haggler's discount,
+     * QUARTERMASTER's cut; balance-overhaul order 5). 1.0 without a build. Prices are fixed at roll time, so
+     * this is the price seam.
+     */
+    public final float priceMultiplier;
+
     public ShopContext(int depth, List<WeaponProfile> ownedWeapons, WeaponProfile equippedWeapon) {
+        this(depth, ownedWeapons, equippedWeapon, null);
+    }
+
+    public ShopContext(int depth, List<WeaponProfile> ownedWeapons, WeaponProfile equippedWeapon,
+                       PlayerBuild playerBuild) {
         this.depth          = depth;
         this.equippedWeapon = equippedWeapon;
         this.ownedWeapons = (ownedWeapons != null)
                 ? Collections.unmodifiableList(ownedWeapons)
                 : Collections.emptyList();
+        this.playerBuild     = playerBuild;
+        this.priceMultiplier = playerBuild != null ? playerBuild.stats().shopPriceMultiplier() : 1f;
     }
 }

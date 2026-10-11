@@ -47,8 +47,10 @@ import ge.tbegvadze.toon3d.level.WeaponSpawnPoint;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
-import ge.tbegvadze.toon3d.progression.UpgradeCardDeck;
+import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.Perk;
+import ge.tbegvadze.toon3d.progression.PerkDeck;
+import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.LevelPlan;
@@ -123,12 +125,18 @@ public final class SimWorld implements LevelTransitionListener {
     private final Inventory           itemInventory;
     private final PlayerStats         playerStats;
     private final PlayerProgress      playerProgress;
-    private final UpgradeCardDeck     upgradeCardDeck;
+    private final PerkDeck            perkDeck;
+    /** The run's build (balance-overhaul order 5) — mirrors World.playerBuild. */
+    private final PlayerBuild         playerBuild = new PlayerBuild();
+    private final java.util.EnumSet<BuildTag> carriedTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
+    private int                       appliedBuildMaxHealthBonus = 0;
+    private int                       appliedBuildMaxArmorBonus  = 0;
+    private final int[]               appliedBuildAttributeGrants = new int[Attribute.values().length];
     private final WeaponRoller        weaponRoller;
     private final StatusEffectController statusEffectController;
     private final GameState           gameState = new GameState();
     private final ScriptedActionSource actionSource = new ScriptedActionSource();
-    private final UpgradeCard[]       offeredCards = new UpgradeCard[GameBalance.LEVEL_UP_CARDS_OFFERED];
+    private final Perk[]              offeredPerks = new Perk[BalanceConfig.PERKS_OFFERED];
     private final List<Weapon>        arsenal = new ArrayList<>();
     private final ShopRoller          shopRoller = new ShopRoller(new DefaultShopOfferSource());
     private final ShopEffectApplier   shopEffectApplier;
@@ -199,13 +207,14 @@ public final class SimWorld implements LevelTransitionListener {
         weaponRoller   = new WeaponRoller(runSeed);
         playerStats    = new PlayerStats();
         playerProgress = new PlayerProgress();
-        upgradeCardDeck = new UpgradeCardDeck(runSeed ^ 0xCA12D00D5EED1234L);
+        perkDeck       = new PerkDeck(runSeed ^ 0xCA12D00D5EED1234L);
         itemInventory  = new Inventory();
         inventory      = new PlayerInventory();
         statusEffectController = new StatusEffectController();
 
         player = new Player(0f, 0f, 1f, 0f);
         player.setPlayerStats(playerStats);
+        player.setBuildStats(playerBuild.stats());
         player.setRandomSeed(runSeed ^ 0xD0D6E5EEDL);
         player.applyHealing(player.getMaxHealth());
         player.setPlayerDamageListener(this::onPlayerDamaged);
@@ -213,7 +222,7 @@ public final class SimWorld implements LevelTransitionListener {
         shopEffectApplier = new ShopEffectRouter(
                 new ShopWeaponService(weaponRoller),
                 new ShopSupplyService(itemInventory),
-                new ShopAbilityService(this::applyUpgradeCardEffects));
+                new ShopAbilityService(this::grantShopAbility));
 
         buildStartingLoadout();
         if (settings.isLadderProbe()) {
@@ -246,12 +255,13 @@ public final class SimWorld implements LevelTransitionListener {
             player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, level));
             player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, level));
         }
-        // The expected level-up CARDS of that character, exactly as the ExpectedPlayer model prices them: the
-        // offence share as a %-lift on every hit, the flat-defence share as extra max HP.
-        float cardBudgetLevels = (characterLevel - 1) * BalanceConfig.LEVEL_UP_BUDGET_PP / 100f;
-        ladderProbeOffenceLift = 1f + BalanceConfig.LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION * cardBudgetLevels;
+        // The expected level-up PERK power of that character, exactly as the ExpectedPlayer model prices it
+        // (EXPECTED_PERK_POWER_PP_PER_PICK per level — balance-overhaul order 5): the offence share as a %-lift
+        // on every hit, the flat-defence share as extra max HP.
+        float perkBudgetLevels = (characterLevel - 1) * BalanceConfig.EXPECTED_PERK_POWER_PP_PER_PICK / 100f;
+        ladderProbeOffenceLift = 1f + BalanceConfig.LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION * perkBudgetLevels;
         player.adjustMaxHealth(Math.round(BalanceConfig.REFERENCE_PLAYER_EHP
-                * BalanceConfig.LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION * cardBudgetLevels));
+                * BalanceConfig.LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION * perkBudgetLevels));
         player.applyHealing(player.getMaxHealth());
         player.applyArmor(player.getMaxArmor());
         for (AmmoType ammoType : AmmoType.values()) {
@@ -430,6 +440,10 @@ public final class SimWorld implements LevelTransitionListener {
         enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);
         enemyManager.setLoadout(inventory.getLoadout());
         enemyManager.setStatusEffectController(statusEffectController);
+        // THE BUILD (balance-overhaul order 5) — mirrors World.buildLevelDependentResources.
+        enemyManager.setBuildStats(playerBuild.stats());
+        enemyManager.setPlayerReference(player);
+        player.resetFloorBuildState();
 
         hazardManager = new HazardManager(level, enemyManager, statusEffectController,
                                           seed ^ 0x4A2A5D9BL);
@@ -757,38 +771,72 @@ public final class SimWorld implements LevelTransitionListener {
         inventory.syncFloorThreatLevel(Math.max(1, currentDepth));
     }
 
-    /** Draws and applies level-up cards until the pending queue is empty (mirrors World). */
+    /** Draws the perk offer and applies the policy's pick until the pending queue is empty (mirrors World). */
     private void resolvePendingLevelUps() {
         int guard = 0;
         while (playerProgress.hasPendingLevelUp() && player.isAlive() && guard++ < 16) {
-            int offeredCount = upgradeCardDeck.draw(offeredCards, GameBalance.LEVEL_UP_CARDS_OFFERED);
-            UpgradeCard chosen = policy.chooseCard(offeredCards, offeredCount, view);
-            if (chosen == null && offeredCount > 0) chosen = offeredCards[0];
-            if (chosen == null) break;
-            applyUpgradeCardEffects(chosen);
+            int offeredCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
+            if (offeredCount > 0) {
+                Perk chosen = policy.choosePerk(offeredPerks, offeredCount, view);
+                if (chosen == null) chosen = offeredPerks[0];
+                playerBuild.addPerkRank(chosen);
+            }
             playerProgress.advanceLevel();
             int newLevel = playerProgress.getPlayerLevel();
             player.adjustMaxHealth(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_HEALTH, newLevel));
             player.adjustMaxArmor(PlayerStats.vitalityGrowthDelta(BalanceConfig.PLAYER_MAX_ARMOR, newLevel));
-            upgradeCardDeck.registerPick(chosen);
+            applyBuildEffects();
         }
     }
 
-    /** The boon effect path shared by level-up picks and shop-bought abilities (mirrors World). */
-    private void applyUpgradeCardEffects(UpgradeCard card) {
-        if (card.strengthDelta != 0)     playerStats.addPermanent(Attribute.STRENGTH,     card.strengthDelta);
-        if (card.agilityDelta != 0)      playerStats.addPermanent(Attribute.AGILITY,      card.agilityDelta);
-        if (card.toughnessDelta != 0)    playerStats.addPermanent(Attribute.TOUGHNESS,    card.toughnessDelta);
-        if (card.marksmanshipDelta != 0) playerStats.addPermanent(Attribute.MARKSMANSHIP, card.marksmanshipDelta);
-        int maxHealthDelta = card.maxHealthDelta + card.toughnessDelta * GameBalance.TGH_HP_PER_POINT;
-        if (maxHealthDelta != 0) player.adjustMaxHealth(maxHealthDelta);
-        if (card.maxArmorDelta != 0) player.adjustMaxArmor(card.maxArmorDelta);
-        if (card.flatDamageDelta != 0) {
-            playerProgress.addFlatDamageBonus(card.flatDamageDelta);
-            enemyManager.setPlayerFlatDamageBonus(playerProgress.getFlatDamageBonus());
+    /** Mirrors World.applyBuildEffects: attribute grants, the max HP / armour deltas, the damage multipliers. */
+    private void applyBuildEffects() {
+        for (Attribute attribute : Attribute.values()) {
+            int granted = playerBuild.attributeGrantTotal(attribute);
+            int delta = granted - appliedBuildAttributeGrants[attribute.ordinal()];
+            if (delta != 0) playerStats.addPermanent(attribute, delta);
+            appliedBuildAttributeGrants[attribute.ordinal()] = granted;
         }
-        enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier() * ladderProbeOffenceLift);
-        enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);
+        float vitalityScale = GameMath.playerVitalityScale(playerProgress.getPlayerLevel());
+        int healthBonus = GameMath.buildMaxPoolBonus(BalanceConfig.PLAYER_MAX_HEALTH, vitalityScale,
+                playerBuild.stats().maxHealthMultiplier());
+        int armorBonus  = GameMath.buildMaxPoolBonus(BalanceConfig.PLAYER_MAX_ARMOR, vitalityScale,
+                playerBuild.stats().maxArmorMultiplier());
+        if (healthBonus != appliedBuildMaxHealthBonus) player.adjustMaxHealth(healthBonus - appliedBuildMaxHealthBonus);
+        if (armorBonus  != appliedBuildMaxArmorBonus)  player.adjustMaxArmor(armorBonus - appliedBuildMaxArmorBonus);
+        appliedBuildMaxHealthBonus = healthBonus;
+        appliedBuildMaxArmorBonus  = armorBonus;
+        if (enemyManager != null) {
+            enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier() * ladderProbeOffenceLift);
+            enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);
+        }
+    }
+
+    /** Mirrors World.carriedBuildTags: loadout guns' tags plus a chosen (non-Fist) melee weapon's. */
+    java.util.EnumSet<BuildTag> carriedBuildTags() {
+        carriedTagsScratch.clear();
+        Loadout loadout = inventory.getLoadout();
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            Weapon weapon = loadout.getSlot(slotIndex);
+            BuildTag tag = weapon != null ? BuildTag.forDamageClass(weapon.damageClass()) : null;
+            if (tag != null) carriedTagsScratch.add(tag);
+        }
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null && !meleeWeapon.isLevelGapExempt()) {
+            BuildTag tag = BuildTag.forDamageClass(meleeWeapon.damageClass());
+            if (tag != null) carriedTagsScratch.add(tag);
+        }
+        return carriedTagsScratch;
+    }
+
+    /** The run's build (read-only by convention) — SimView exposes it to the policies. */
+    PlayerBuild playerBuild() {
+        return playerBuild;
+    }
+
+    /** A perk rank bought at the Fabricator (mirrors World.grantShopAbility): no level spent. */
+    private void grantShopAbility(Perk perk) {
+        if (playerBuild.addPerkRank(perk)) applyBuildEffects();
     }
 
     /**
@@ -871,7 +919,7 @@ public final class SimWorld implements LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(currentDepth, ownedWeapons, inventory.getEquippedWeapon());
+        return new ShopContext(currentDepth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild);
     }
 
     // =====================================================================================
@@ -1002,12 +1050,14 @@ public final class SimWorld implements LevelTransitionListener {
             weapon.setAmmoInventory(itemInventory);
             weapon.setRangedDamageMultiplier(rangedMultiplier);
             weapon.setPlayerAccuracyMultiplier(accuracyMultiplier);
+            weapon.setBuildStats(playerBuild.stats());
             weaponRoller.configureRunStart(weapon);
             arsenal.add(weapon);
         }
         Fist fist = new Fist();
         fist.setRandomSeed(runSeed + (weaponSeedOffset * 0x9E3779B97F4A7C15L));
         fist.setPlayerAccuracyMultiplier(accuracyMultiplier);
+        fist.setBuildStats(playerBuild.stats());
         weaponRoller.configureRunStart(fist);
         inventory.setMeleeWeapon(fist);
 

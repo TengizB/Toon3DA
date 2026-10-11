@@ -27,11 +27,22 @@ public final class SpreadImpact {
      */
     public static void applyCloseRangeImpact(EnemyHitTarget enemyHitTarget, Object hitEnemy, int distanceTiles,
                                              int facingStepColumn, int facingStepRow) {
+        applyCloseRangeImpact(enemyHitTarget, hitEnemy, distanceTiles, facingStepColumn, facingStepRow, 0, 0);
+    }
+
+    /**
+     * The same payoff with POINT MAN's extra reach (balance-overhaul order 5): knockback reaches
+     * {@code knockbackBonusTiles} farther (r2) and the stagger {@code staggerBonusTiles} farther (r3, to 3
+     * tiles). The push itself stays one tile.
+     */
+    public static void applyCloseRangeImpact(EnemyHitTarget enemyHitTarget, Object hitEnemy, int distanceTiles,
+                                             int facingStepColumn, int facingStepRow,
+                                             int knockbackBonusTiles, int staggerBonusTiles) {
         if (enemyHitTarget == null || hitEnemy == null) return;
-        if (distanceTiles <= BalanceConfig.SHOTGUN_KNOCKBACK_MAX_TILES) {
+        if (distanceTiles <= BalanceConfig.SHOTGUN_KNOCKBACK_MAX_TILES + Math.max(0, knockbackBonusTiles)) {
             enemyHitTarget.tryKnockbackEnemy(hitEnemy, facingStepColumn, facingStepRow);
         }
-        if (distanceTiles <= BalanceConfig.SHOTGUN_STAGGER_MAX_TILES) {
+        if (distanceTiles <= BalanceConfig.SHOTGUN_STAGGER_MAX_TILES + Math.max(0, staggerBonusTiles)) {
             enemyHitTarget.tryStaggerEnemy(hitEnemy);
         }
     }

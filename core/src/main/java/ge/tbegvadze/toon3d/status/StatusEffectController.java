@@ -145,6 +145,29 @@ public final class StatusEffectController {
     }
 
     /**
+     * WILDFIRE's spread (balance-overhaul order 5, D5): adds a dead burning enemy's {@code stacks} to the host's
+     * BURNING ({@link GameMath#wildfireSpreadStacks}, capped at {@code maxStacks}), resets the shared timer to
+     * {@code turns} (a full player burn) and keeps the larger per-stack magnitude, re-attributed to
+     * {@code source}. Immunity blocks it; resistance scales duration and magnitude exactly as
+     * {@link #applyStacking} does.
+     */
+    public void spreadBurnStacks(StatusHost host, int stacks, int magnitudePerStack, int turns, int maxStacks,
+                                 Object source) {
+        StatusResistance resistance = host.getStatusResistance();
+        if (resistance.isImmune(StatusType.BURNING) || stacks <= 0) {
+            return;
+        }
+        int effectiveDuration  = Math.max(1, Math.round(turns * resistance.durationMultiplier(StatusType.BURNING)));
+        int effectiveMagnitude = Math.round(magnitudePerStack * resistance.damageMultiplier(StatusType.BURNING));
+        StatusEffect existing  = host.getActiveEffects().get(StatusType.BURNING);
+        int previousStacks     = existing.isActive() ? Math.max(1, existing.stacks) : 0;
+        existing.stacks         = GameMath.wildfireSpreadStacks(previousStacks, stacks, maxStacks);
+        existing.remainingTurns = effectiveDuration;
+        existing.magnitude      = previousStacks == 0 ? effectiveMagnitude : Math.max(existing.magnitude, effectiveMagnitude);
+        existing.source         = source;
+    }
+
+    /**
      * Applies {@code stacksToAdd} POISON stacks (balance-overhaul order 4, H10). The per-stack magnitude is
      * resolved HERE from the host's max HP ({@link GameMath#statusTickDamage}, POISON_TICK_FRACTION) so it
      * never goes stale with depth, and stored in the effect so the tick and the HUD keep reading
@@ -233,7 +256,11 @@ public final class StatusEffectController {
         }
 
         for (int deathIndex = 0; deathIndex < pendingDoTDeathCount; deathIndex++) {
-            enemyManager.processDoTKill(pendingDoTDeaths[deathIndex]);
+            Enemy dead = pendingDoTDeaths[deathIndex];
+            enemyManager.processDoTKill(dead);
+            // Cleared only AFTER the kill is processed, so the death sees the burn that killed it (WILDFIRE
+            // spreads a dying enemy's stacks — balance-overhaul order 5).
+            clearAllEffects(dead);
             pendingDoTDeaths[deathIndex] = null;
         }
     }
@@ -254,8 +281,9 @@ public final class StatusEffectController {
                 // so no tick puff is spawned at the corpse.
                 if (pendingDoTDeathCount < MAX_PENDING_DOT_DEATHS) {
                     pendingDoTDeaths[pendingDoTDeathCount++] = enemy;
+                } else {
+                    clearAllEffects(enemy);   // overflow: never processed as a kill, so clear it here as before
                 }
-                clearAllEffects(enemy);
                 return;
             }
 

@@ -199,12 +199,17 @@ R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-ove
   OVERRIDE RECORD: "enemy eHP == raw HP / no mitigation" in TP pricing -> the priced
   eHP above; the R8 hit bands' eHP -> explicitly the NEUTRAL eHP (unchanged numbers).
 
-R-CARD (RuleKind.CARD_BUDGET)
-  Every level-up card (UpgradeCard.values(), estimatedPowerPoints()) must price
-  into LEVEL_UP_BUDGET_PP (12) ± LEVEL_UP_BUDGET_TOLERANCE (15%) => [10.2,13.8].
-  WHY: budget-equal cards make total player power build-independent
-  (L * 12 PP at level L), which is what keeps every build on the
-  depth-coupling curve.
+R-CARD (RuleKind.CARD_BUDGET) — RETIRED by balance-overhaul order 5 (CP2)
+  OVERRIDE RECORD: "every level-up card prices into LEVEL_UP_BUDGET_PP (12) +/- 15%"
+  and the TOTAL-PP INVARIANT ("total power at level L = L x 12 PP for every build")
+  -> REPLACED by R-PERK PK1 FELT / PK2 FOCUSED (a perk rank must be felt on its tag's
+  niche, and stay focused there) plus R-CARRY (a bounded spread between builds).
+  UpgradeCard / UpgradeCardDeck / UpgradeCardPool, RuleKind.CARD_BUDGET and the
+  card constants are deleted; level-ups draw tagged perks from progression/PerkDeck.
+  The expected player's card term is now EXPECTED_PERK_POWER_PP_PER_PICK (12, SECTION
+  24) x (characterLevel - 1) — the same number, so R-LADDER and every boss / route
+  rule reading the expected player are unchanged. BalanceAuditTest's card-budget test
+  asserts BalanceSchema.perkFeltResults(). (Full R-PERK text: balance-overhaul order 5 CP6.)
 
 R-HEAL (RuleKind.HEAL_PRICING) — RE-STATED by balance-overhaul order 1 (R10)
   Every heal/armour pickup restores a FRACTION of the max it refills, resolved at
@@ -321,7 +326,11 @@ R-XP-PACE (RuleKind.XP_PACE) — XP pacing is a RULE, not a hope (order 4; horiz
   forward-only. WHY: leveling must be FELT and PACED — a floor reliably buys ~1
   level at every depth, and a fallen-behind run can recover.
 
-R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the fight (order 4)
+R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — RETIRED by balance-overhaul order 5 (CP2)
+  OVERRIDE RECORD: folded into R-PERK PK1 (every perk's max rank crosses >= 1 whole
+  TTK / TTD step on its niche, or its D4 resource step). RuleKind.CARD_BREAKPOINT and
+  the card breakpoint helpers are deleted; BalanceAuditTest's card-breakpoint test
+  asserts BalanceSchema.perkBreakpointResults(). The retired rule, for the record:
   Every level-up card must cross >= 1 INTEGER combat breakpoint vs the region
   soldier in some region: an OFFENCE card shaves a whole turn off the kill
   (GameMath.turnsToKillBreakpointGain), a DEFENCE card survives a whole extra hit
@@ -618,7 +627,7 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
   models (supply/demand, heal economy, credit income, derived XP) in the shared POWER POINT currency:
       threatCost    = regionScaledFloorBudget(depth) * budgetScale * affixMultiplier   (GameMath.nodeThreatCost)
       resourceDelta = (supply - demand)/ammoPP + (heal - incoming)/healPP + credits/creditPP
-      progress      = XP-as-levels * LEVEL_UP_BUDGET_PP + upgradeOpportunity * significant-buy PP
+      progress      = XP-as-levels * EXPECTED_PERK_POWER_PP_PER_PICK + upgradeOpportunity * significant-buy PP
       EV            = resourceDelta + PERMANENT_POWER_WEIGHT * progress
                       - RISK_PP_PER_STANDARD_FLOOR * threatRatio                (GameMath.nodeExpectedValue)
   PERMANENT_POWER_WEIGHT (2.6) exists because a level or a gun applies to EVERY remaining floor while an
@@ -988,7 +997,8 @@ SECTION 5 — NEW-CONTENT CHECKLIST
      new enemy         -> nothing to register: EnemyType.role() is the
                           declaration; the audit picks it up automatically
                           (a new ROLE needs a TP band entry)
-     new card          -> nothing: UpgradeCard.values() is iterated
+     new perk          -> nothing to register: Perk.values() is iterated by R-PERK
+                          (PK1 / PK2) and R-CARRY (balance-overhaul order 5)
      new heal/pickup   -> add a HealPickupSpec + consumable classification
      new ammo type     -> add a ScarcityRowSpec
      new weapon ability-> add its magnitude to BalanceConfig SECTION 15 AND a

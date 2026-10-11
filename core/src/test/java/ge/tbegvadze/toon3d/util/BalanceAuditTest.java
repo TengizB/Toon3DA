@@ -70,10 +70,14 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.enemyHitResults());
     }
 
-    /** R-CARD: every level-up card prices into the power-point budget band. */
+    /**
+     * R-PERK PK1 FELT (balance-overhaul order 5) — REPLACES R-CARD (every level-up card priced into the
+     * LEVEL_UP_BUDGET_PP band; OVERRIDE CLAUSE): a level-up is no longer priced to be EQUAL, every perk rank
+     * must be FELT on its tag's niche at every reference depth.
+     */
     @Test
-    void upgradeCardsPriceIntoTheBudgetBand() {
-        assertNoViolations(BalanceSchema.cardBudgetResults());
+    void everyPerkRankIsFeltOnItsNicheReplacingTheCardBudget() {
+        assertNoViolations(BalanceSchema.perkFeltResults());
     }
 
     /** R-HEAL: every heal/armour pickup buys a survival-turn count inside its size band. */
@@ -256,10 +260,13 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.xpPaceResults());
     }
 
-    /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 combat breakpoint in some region. */
+    /**
+     * R-PERK PK1 BREAKPOINT (balance-overhaul order 5) — R-CARD-BREAKPOINT folded in (OVERRIDE CLAUSE): every
+     * perk's max rank crosses >= 1 whole TTK / TTD step (or its D4 resource step) on its niche.
+     */
     @Test
-    void everyUpgradeCardCrossesABreakpoint() {
-        assertNoViolations(BalanceSchema.cardBreakpointResults());
+    void everyPerkCrossesABreakpointByItsMaxRank() {
+        assertNoViolations(BalanceSchema.perkBreakpointResults());
     }
 
     /**

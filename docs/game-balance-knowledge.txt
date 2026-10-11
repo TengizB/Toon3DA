@@ -443,7 +443,13 @@ CATCH-UP (rubber band, forward-only, order 4): a player > 1 level below the expe
   level for their depth gets XP * XP_CATCHUP_MULTIPLIER(1.5); never slows an
   at-or-ahead player.  GameMath.catchUpScaledXp; applied in PlayerProgress.addXp.
 
-LEVEL-UP CARD SYSTEM (the build-diversity engine, idea 5):
+LEVEL-UP CARD SYSTEM — RETIRED by balance-overhaul order 5 (CP2). Level-ups now offer
+  three tagged PERKS from progression/PerkDeck (B3: a synergy perk + a pivot perk,
+  weighted by PERK_DRAW_BIAS_PER_PICK 0.6); R-CARD / R-CARD-BREAKPOINT / the total-PP
+  invariant are replaced by R-PERK + R-CARRY. The expected player's card term became
+  EXPECTED_PERK_POWER_PP_PER_PICK (12). The historical record below is kept until the
+  order-5 CP6 docs pass rewrites this section:
+LEVEL-UP CARD SYSTEM (the build-diversity engine, idea 5) — HISTORICAL:
   On each level-up, LEVEL_UP_CARDS_OFFERED = 3 cards are drawn from four pools.
   Every card costs the SAME power budget:
     LEVEL_UP_BUDGET_PP        = 12   (power points = %-gain to reference DPT or eHP)
@@ -1131,7 +1137,7 @@ remain accurate as the DETAIL of step 1-2; read the protocol first.
        - new weapon  -> RangedWeaponSpec + item classification (role band)
        - new enemy   -> EnemyType.role() is the declaration (TP + golden bands)
        - new heal    -> HealPickupSpec (survival-turns-bought band)
-       - new card    -> automatic (UpgradeCard.values() is iterated)
+       - new perk    -> automatic (Perk.values() is iterated by R-PERK / R-CARRY)
        - new boss    -> the six-rule checklist (SECTION 9)
   3. Run `./gradlew test` — BalanceAuditTest fails the build on any unwaived
      out-of-band value, live test flag, or unpriced content. A deliberate

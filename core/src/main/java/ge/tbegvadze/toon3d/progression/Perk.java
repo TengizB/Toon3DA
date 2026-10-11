@@ -7,7 +7,7 @@ import ge.tbegvadze.toon3d.util.BalanceConfig;
  * budget-equal upgrade cards. A row is pure data: its {@link BuildTag}, its rank count, its typed effects
  * ({@link PerkEffect} — a {@link PerkModifier} kind with the TOTAL magnitude per rank, every number read
  * from BalanceConfig SECTION 24), an optional attribute grant, and its UI text (held on the enum exactly
- * as {@code UpgradeCard} holds its card text — UI text, not story string ids).
+ * as the retired upgrade card held its card text — UI text, not story string ids).
  *
  * <p>Adding a perk is one row plus its SECTION 24 magnitudes; R-PERK (felt per rank on the tag's niche,
  * focused on that niche) is what it must pass. Nothing switches on a perk.

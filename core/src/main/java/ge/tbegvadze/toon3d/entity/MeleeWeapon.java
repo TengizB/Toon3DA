@@ -50,7 +50,7 @@ public abstract class MeleeWeapon extends Weapon {
         invokeAbilityOnFire();
         // ARMOR_PIERCE: bypass a fraction of the target's Block for this swing (and any resolver bonuses).
         armBlockPierce(enemyHitTarget, true);
-        armDamageClass(enemyHitTarget, true);
+        armDamageClass(enemyHitTarget, true, playerTileColumn, playerTileRow);
         visualState           = WeaponVisualState.FIRING;
         fireFlashTimerSeconds = WeaponConstants.FIRE_FLASH_DURATION;
         flashCycleCount++;

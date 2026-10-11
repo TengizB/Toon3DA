@@ -4,6 +4,7 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.progression.BuildStats;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.status.StatusEffect;
@@ -67,6 +68,18 @@ public class Player implements Renderable, Disposable, StatusHost {
      * object as if every effective stat value is zero (no bonuses, no dodge).
      */
     private PlayerStats playerStats;
+
+    /**
+     * The run's build aggregate (balance-overhaul order 5) — wired by World / SimWorld to
+     * {@code PlayerBuild.stats()}, the same instance for the whole run (it is recomputed in place on every
+     * pick). Read by the player-side seams: Shield Wall in {@link #applyDirectionalDamage}, Second Wind in the
+     * damage pipeline, Field Medic / BERSERKER / IRONHIDE in {@link #applyTreatment}, Blast Shield /
+     * DEMOLITIONIST in {@link #applyOwnExplosionDamage}, Fireproof / PYROMANIAC in {@link #isFireTileImmune}.
+     */
+    private BuildStats buildStats = BuildStats.NONE;
+
+    /** Second Wind (balance-overhaul order 5): true once this floor's lethal-hit save has been spent. */
+    private boolean secondWindSpentThisFloor = false;
 
     // Status effect storage — pre-allocated at construction, never replaced
     private final EnumMap<StatusType, StatusEffect> activeStatusEffects;
@@ -142,11 +155,8 @@ public class Player implements Renderable, Disposable, StatusHost {
             hpBoundDamage = Math.max(GameBalance.TGH_MIN_DAMAGE, hpBoundDamage - flatReduction);
         }
 
-        // (d) Apply to health.
-        health = Math.max(0, health - hpBoundDamage);
-        if (damageListener != null && hpBoundDamage > 0) {
-            damageListener.onPlayerDamaged(hpBoundDamage);
-        }
+        // (d) Apply to health (Second Wind may hold a lethal tick at 1 HP).
+        loseHealth(hpBoundDamage);
     }
 
     // -------------------------------------------------------------------------
@@ -261,11 +271,15 @@ public class Player implements Renderable, Disposable, StatusHost {
             applyDamage(amount, heavy);
             return false;
         }
-        float frontMultiplier = heavy ? GameBalance.GUARD_FRONT_HEAVY : GameBalance.GUARD_FRONT_ORDINARY;
+        // SHIELD WALL (balance-overhaul order 5): r2 overrides the guarded HEAVY multiplier, r1 widens the
+        // guard to both flanks (the side arc reads as front), r3 covers every side (the back reads as front).
+        float frontMultiplier = heavy ? buildStats.guardHeavyMultiplierOr(GameBalance.GUARD_FRONT_HEAVY)
+                                      : GameBalance.GUARD_FRONT_ORDINARY;
+        float sideMultiplier  = buildStats.wideGuardArc()  ? frontMultiplier : GameBalance.GUARD_SIDE_MULTIPLIER;
+        float backMultiplier  = buildStats.allRoundGuard() ? frontMultiplier : GameBalance.GUARD_BACK_MULTIPLIER;
         float multiplier = GameMath.guardFacingMultiplier(
                 directionX, directionY, positionX, positionY, attackerWorldX, attackerWorldY,
-                frontMultiplier, GameBalance.GUARD_SIDE_MULTIPLIER,
-                GameBalance.GUARD_BACK_MULTIPLIER,
+                frontMultiplier, sideMultiplier, backMultiplier,
                 GameBalance.GUARD_FRONT_HALF_ANGLE_DEGREES, GameBalance.GUARD_BACK_HALF_ANGLE_DEGREES);
         int guardedDamage = Math.max(0, Math.round(amount * multiplier));
         // The front arc is the only arc whose multiplier is the chosen front value (side/back are 1.0).
@@ -377,8 +391,23 @@ public class Player implements Renderable, Disposable, StatusHost {
             hpBoundDamage = Math.max(GameBalance.TGH_MIN_DAMAGE, hpBoundDamage - flatReduction);
         }
 
-        // (e) Apply to health.
-        health = Math.max(0, health - hpBoundDamage);
+        // (e) Apply to health (Second Wind may hold a lethal hit at 1 HP).
+        loseHealth(hpBoundDamage);
+    }
+
+    /**
+     * The last step of every damage path: subtracts the HP-bound damage, unless it is LETHAL and SECOND WIND
+     * (balance-overhaul order 5) is held and unspent this floor — then the player is left at exactly 1 HP and
+     * the save is spent. A status tick counts as a lethal hit (EDGE CASES). The damage listener hears the hit's
+     * HP-bound size, as before the build existed (telemetry and feedback size the hit, not the save).
+     */
+    private void loseHealth(int hpBoundDamage) {
+        int healthAfter = Math.max(0, health - hpBoundDamage);
+        if (healthAfter <= 0 && health > 0 && buildStats.secondWind() && !secondWindSpentThisFloor) {
+            healthAfter = 1;
+            secondWindSpentThisFloor = true;
+        }
+        health = healthAfter;
         if (damageListener != null && hpBoundDamage > 0) {
             damageListener.onPlayerDamaged(hpBoundDamage);
         }
@@ -389,9 +418,53 @@ public class Player implements Renderable, Disposable, StatusHost {
     }
 
     /**
-     * Permanently adjusts the player's maximum HP by a signed delta (level-up upgrade cards).
+     * A TREATMENT heal — a medkit, a STIM, the heal station, an event's restore (every heal path the build's
+     * heal multiplier rides, balance-overhaul order 5): the base amount x {@link BuildStats#healMultiplier()}
+     * (Field Medic adds, BERSERKER / IRONHIDE cut after). Weapon lifesteal and the melee-kill heals are not
+     * treatments and use {@link #applyHealing}.
+     *
+     * @return the HP amount the treatment was worth after the build (before the max-HP clamp)
+     */
+    public int applyTreatment(int baseHealAmount) {
+        int healAmount = GameMath.buildScaledAmount(baseHealAmount, buildStats.healMultiplier(), 1);
+        applyHealing(healAmount);
+        return healAmount;
+    }
+
+    /**
+     * Damage from the player's OWN explosion (a grenade caught point-blank, a barrel the player set off):
+     * x {@link BuildStats#ownExplosionDamageMultiplier()} (Blast Shield; DEMOLITIONIST makes it 0), then the
+     * ordinary damage pipeline.
+     */
+    public void applyOwnExplosionDamage(int amount) {
+        int scaled = Math.round(amount * buildStats.ownExplosionDamageMultiplier());
+        if (scaled > 0) applyDamage(scaled);
+    }
+
+    /** True when fire tiles cannot hurt the player (Fireproof or PYROMANIAC — balance-overhaul order 5). */
+    public boolean isFireTileImmune() {
+        return buildStats.isFireTileImmune();
+    }
+
+    /** Wires the run's build aggregate (never null — null resets to {@link BuildStats#NONE}). */
+    public void setBuildStats(BuildStats stats) {
+        this.buildStats = stats != null ? stats : BuildStats.NONE;
+    }
+
+    /** The run's build aggregate (never null). */
+    public BuildStats getBuildStats() {
+        return buildStats;
+    }
+
+    /** Floor arrival: Second Wind's once-per-floor save is available again. */
+    public void resetFloorBuildState() {
+        secondWindSpentThisFloor = false;
+    }
+
+    /**
+     * Permanently adjusts the player's maximum HP by a signed delta (level-up vitality growth, the build's max-HP multiplier).
      * A positive delta also heals the player by that amount so the bonus HP is not wasted; a
-     * negative delta (a trade-off card's cost) lowers the cap and clamps current HP down to it,
+     * negative delta (a keystone's max-HP cost) lowers the cap and clamps current HP down to it,
      * never below 1 — a max-HP cut must never directly kill the player.
      */
     public void adjustMaxHealth(int delta) {
@@ -404,9 +477,9 @@ public class Player implements Renderable, Disposable, StatusHost {
     }
 
     /**
-     * Permanently adjusts the player's maximum armour pool by a signed delta (upgrade cards).
-     * A positive delta also grants that much armour immediately; a negative delta (a trade-off
-     * card's cost) lowers the cap and clamps the current armour pool down to it (floored at 0).
+     * Permanently adjusts the player's maximum armour pool by a signed delta (vitality growth, the build's max-armour multiplier).
+     * A positive delta also grants that much armour immediately; a negative delta (a keystone's
+     * cost) lowers the cap and clamps the current armour pool down to it (floored at 0).
      */
     public void adjustMaxArmor(int delta) {
         maxArmor = Math.max(0, maxArmor + delta);

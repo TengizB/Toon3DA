@@ -18,7 +18,6 @@ import ge.tbegvadze.toon3d.progression.BuildTag;
 import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
 // The order-7 ROUTE ECONOMICS rules read the (headless, LibGDX-free) route subsystem: the priced
 // node ledger, the pricing/trajectory model, and the real map generator the audit walks.
 import ge.tbegvadze.toon3d.route.DangerTier;
@@ -60,7 +59,7 @@ import java.util.Map;
  * exception. {@link BalanceReport} prints all active waivers in their own table.
  *
  * <p><b>Coverage.</b> The schema iterates the game's own content enumerations
- * ({@link EnemyType}, {@link UpgradeCard}, {@link ItemType}, {@link AmmoType}) so content that
+ * ({@link EnemyType}, {@link Perk}, {@link ItemType}, {@link AmmoType}) so content that
  * skips pricing can no longer ship silently: an unclassified weapon item, an enemy role without a
  * band, or an unpriced heal fails the audit (the anti-"shipped unpriced" rule — the necrotic
  * faction once corrupted every floor budget for weeks this way).
@@ -88,8 +87,6 @@ public final class BalanceSchema {
         ENEMY_THREAT_POINTS,
         /** R-ENEMY (part 2, balance-overhaul order 1 R8): depth-1 hits-to-kill / hits-to-die land in the role's R8 bands. */
         ENEMY_HITS,
-        /** R-CARD: every level-up card prices into LEVEL_UP_BUDGET_PP ± tolerance. */
-        CARD_BUDGET,
         /** R-HEAL: every heal/armour pickup prices into its survival-turns-bought band. */
         HEAL_PRICING,
         /** R-TELEGRAPH: no attack > 25% reference eHP un-telegraphed; boss hard cap 35%. */
@@ -117,10 +114,8 @@ public final class BalanceSchema {
         CREDITS,
         /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
         XP_PACE,
-        /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 TTK/TTD breakpoint vs the region soldier. */
-        CARD_BREAKPOINT,
         /**
-         * R-PERK (balance-overhaul order 5; replaces R-CARD and R-CARD-BREAKPOINT in CP2): PK1 FELT — every perk
+         * R-PERK (balance-overhaul order 5; REPLACED R-CARD and R-CARD-BREAKPOINT in CP2): PK1 FELT — every perk
          * rank improves its niche metric by >= PERK_FELT_MIN_GAIN at every BUILD_PERK_REFERENCE_DEPTHS depth and,
          * by its max rank, crosses >= 1 integer TTK / TTD breakpoint there at some depth; PK2 FOCUSED — no
          * non-VITALITY perk at max rank improves all eight reference scenarios by > PERK_FOCUSED_MAX_GAIN, and
@@ -783,7 +778,6 @@ public final class BalanceSchema {
         results.addAll(weaponRoleResults());
         results.addAll(enemyThreatPointResults());
         results.addAll(enemyHitResults());
-        results.addAll(cardBudgetResults());
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
         results.addAll(heavyResults());
@@ -794,7 +788,6 @@ public final class BalanceSchema {
         results.addAll(abilityBudgetResults());
         results.addAll(creditResults());
         results.addAll(xpPaceResults());
-        results.addAll(cardBreakpointResults());
         results.addAll(perkResults());
         results.addAll(keystoneResults());
         results.addAll(buildCarryResults());
@@ -1029,20 +1022,6 @@ public final class BalanceSchema {
     /** Depth-1 ordinary hits of the archetype the 205-eHP start player survives (shared by the audit and the report). */
     public static int enemyHitsToDie(EnemyType enemyType) {
         return GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyType.attackDamage());
-    }
-
-    /** R-CARD: every level-up card prices into the power-point budget band. */
-    public static List<RuleResult> cardBudgetResults() {
-        float bandMinimum = BalanceConfig.LEVEL_UP_BUDGET_PP * (1f - BalanceConfig.LEVEL_UP_BUDGET_TOLERANCE);
-        float bandMaximum = BalanceConfig.LEVEL_UP_BUDGET_PP * (1f + BalanceConfig.LEVEL_UP_BUDGET_TOLERANCE);
-        List<RuleResult> results = new ArrayList<>();
-        for (UpgradeCard card : UpgradeCard.values()) {
-            float powerPoints = card.estimatedPowerPoints();
-            boolean inBand = powerPoints >= bandMinimum && powerPoints <= bandMaximum;
-            results.add(new RuleResult(RuleKind.CARD_BUDGET, card.displayName, powerPoints,
-                    bandMinimum, bandMaximum, inBand, "pool " + card.pool + ", lever " + card.lever));
-        }
-        return results;
     }
 
     /**
@@ -1451,61 +1430,6 @@ public final class BalanceSchema {
     }
 
     // =====================================================================================
-    // R-CARD-BREAKPOINT (new-game-balancr order 4) — a level-up must FEEL different in the next fight,
-    // not just on a character sheet. Every card must cross at least one INTEGER combat breakpoint vs the
-    // region soldier in some region band: an OFFENCE card shaves a whole turn off the kill (turnsToKill-
-    // BreakpointGain), a DEFENCE card survives a whole extra enemy hit (turnsToDie gain). Cards keep their
-    // equal PP budget (R-CARD); this rule proves the budget is spent where it changes the fight.
-    // =====================================================================================
-
-    /**
-     * Max integer breakpoint a card crosses at a depth: offence turns-shaved OR defence turns-survived, vs the
-     * region soldier, for the ON-CURVE expected player (balance-overhaul order 1: the ExpectedPlayer model
-     * replaces the retired gear-curve DPT and the fixed reference eHP).
-     */
-    public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
-        EnemyType soldier = REGION_REFERENCE_SOLDIER;
-        ExpectedPlayer player = GameMath.expectedPlayerAtDepth(depth);
-        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.neutralEffectiveHitPoints(), depth);
-        float soldierDamagePerTurn = GameMath.enemyDamageAtDepth(
-                (float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()), depth);
-        // OFFENCE: whole turns shaved off killing the soldier when the card's DPT is added.
-        // Offence cards are a PP %-lift on the player's DPT (the ExpectedPlayer convention), so the card's
-        // depth-1 gain is applied as a FRACTION of the on-curve DPT at this depth.
-        float offenceLift = card.damagePerTurnGain() / BalanceConfig.REFERENCE_PLAYER_DPT;
-        int offenceBreakpoint = GameMath.turnsToKillBreakpointGain(soldierEffectiveHitPoints,
-                player.damagePerTurn, player.damagePerTurn * (1f + offenceLift));
-        // DEFENCE: whole extra turns the player survives the soldier when the card's eHP is added.
-        int turnsToDieBefore = GameMath.turnsToKill(player.effectiveHitPoints, soldierDamagePerTurn);
-        int turnsToDieAfter  = GameMath.turnsToKill(player.effectiveHitPoints + card.effectiveHitPointGain(),
-                soldierDamagePerTurn);
-        int defenceBreakpoint = turnsToDieAfter - turnsToDieBefore;
-        return Math.max(offenceBreakpoint, defenceBreakpoint);
-    }
-
-    /** The deepest breakpoint a card crosses anywhere in depths 1..RUN_FINAL_DEPTH (shared by the rule and the report). */
-    public static int cardBestBreakpoint(UpgradeCard card) {
-        int best = 0;
-        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
-            best = Math.max(best, cardBreakpointGainAtDepth(card, depth));
-        }
-        return best;
-    }
-
-    /** R-CARD-BREAKPOINT: every card crosses >= 1 combat breakpoint vs the region soldier in some region. */
-    public static List<RuleResult> cardBreakpointResults() {
-        List<RuleResult> results = new ArrayList<>();
-        for (UpgradeCard card : UpgradeCard.values()) {
-            int best = cardBestBreakpoint(card);
-            boolean crosses = best >= 1;
-            results.add(new RuleResult(RuleKind.CARD_BREAKPOINT, card.displayName, best, 1f, Float.POSITIVE_INFINITY,
-                    crosses, crosses ? "crosses a breakpoint in some region"
-                            : "NEVER crosses a breakpoint — re-price so a level-up changes the next fight"));
-        }
-        return results;
-    }
-
-    // =====================================================================================
     // R-PERK / R-KEYSTONE / R-CARRY (balance-overhaul order 5) — util/BuildValuationModel
     // =====================================================================================
 
@@ -1553,6 +1477,32 @@ public final class BalanceSchema {
             results.addAll(perkFocusResults(perk));
         }
         return results;
+    }
+
+    /**
+     * The PK1 FELT rows of R-PERK alone (every rank's niche gain, at every reference depth) — the rule that
+     * REPLACED R-CARD's budget band (balance-overhaul order 5, OVERRIDE CLAUSE). The audit's re-pointed
+     * card-budget test asserts these.
+     */
+    public static List<RuleResult> perkFeltResults() {
+        List<RuleResult> felt = new ArrayList<>();
+        for (RuleResult result : perkResults()) {
+            if (result.subject.startsWith("PK1 ") && result.subject.contains(" felt d")) felt.add(result);
+        }
+        return felt;
+    }
+
+    /**
+     * The PK1 BREAKPOINT rows of R-PERK alone (each perk's max rank crosses a whole TTK / TTD step, or its D4
+     * resource step) — the rule R-CARD-BREAKPOINT was folded into (balance-overhaul order 5). The audit's
+     * re-pointed card-breakpoint test asserts these.
+     */
+    public static List<RuleResult> perkBreakpointResults() {
+        List<RuleResult> breakpoints = new ArrayList<>();
+        for (RuleResult result : perkResults()) {
+            if (result.subject.startsWith("PK1 ") && result.subject.contains(" breakpoint by r")) breakpoints.add(result);
+        }
+        return breakpoints;
     }
 
     /** PK2 for one perk at every reference depth. */
@@ -1876,14 +1826,6 @@ public final class BalanceSchema {
         }
         return results;
     }
-
-    // The reference SOLDIER the card-breakpoint rule (and BalanceReport) prove a level-up against. It was
-    // the R-GEARGATE reference soldier; R-GEARGATE is retired (balance-overhaul order 1 — replaced by
-    // R-LADDER L2/L4) and the soldier stays as R-CARD-BREAKPOINT's yardstick, which is R-LADDER's SOLDIER.
-    private static final EnemyType REGION_REFERENCE_SOLDIER = EnemyType.VOID_SHROUD;
-
-    /** The reference soldier R-CARD-BREAKPOINT proves a level-up against. */
-    public static EnemyType regionReferenceSoldier() { return REGION_REFERENCE_SOLDIER; }
 
     // =====================================================================================
     // R-ABILITY (new-game-balancr order 2) — TIER = a priced ABILITY BUDGET. Two guarantees:

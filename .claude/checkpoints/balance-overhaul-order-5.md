@@ -58,7 +58,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   - [x] **CP1a** — data, SECTION 24, valuation model, R-PERK/R-KEYSTONE/R-CARRY + 3 audit methods, report tables.
         DELIBERATE TEMPORARY RED: PK1 WILDFIRE breakpoint + R-CARRY (owner rulings B1/B2 below).
   - [x] **CP1b** — owner rulings applied; R-PERK/R-KEYSTONE/R-CARRY green; both gates green.
-- [ ] **CP2** — PerkDeck + PlayerBuild drive level-ups (B3); UpgradeCard / UpgradeCardPool retired;
+- [x] **CP2** — PerkDeck + PlayerBuild drive level-ups (B3); UpgradeCard / UpgradeCardPool retired;
       R-CARD / R-CARD-BREAKPOINT replaced; ExpectedPlayer updated.
       DONE WHEN: R-LADDER still green; A1 holds; both gates green.
 - [ ] **CP3** — keystones at 5/10/15/20 live with gains and costs.
@@ -116,3 +116,23 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   burn stacks (cap FLAME_BURN_MAX_STACKS + Accelerant), timer reset; the dead enemy's tile ignites. Every player-applied burn
   lasts FLAME_BURN_TURNS + PERK_WILDFIRE_BURN_TURNS_BY_RANK[rank-1].
 - **CP2 contract:** scratchpad `cp2-contract.md` (CP2 + CP3 runtime wiring).
+- **CP2 handover:** `PerkDeck(seed)` (salt runSeed ^ 0xCA12D00D5EED1234L), `drawPerks(Perk[], PlayerBuild, EnumSet<BuildTag>)`
+  (slot 1 SYNERGY, slot 2 PIVOT, rest biased by `PERK_DRAW_BIAS_PER_PICK`; private OfferSlot enum), `static isSynergy`.
+  `World/SimWorld.carriedBuildTags()` (CP4 EXTENDS with ability tags). `applyBuildEffects()` re-pushes deltas (attribute
+  grants, max HP/armour via `GameMath.buildMaxPoolBonus`, damage multipliers). Hit seam: `BuildStats.hitDamageMultiplier(...)`
+  in `EnemyManager.applyDamageTo` (class, Point Man, Lane, First Blood, Riposte window, DEADEYE crit, PYROMANIAC, BERSERKER);
+  kill terms `applyBuildKillTerms`; Wildfire `spreadWildfire` in killEnemy; Steady Aim `Weapon.buildFalloff`; Shield Wall in
+  `Player.applyDirectionalDamage`; Second Wind `Player.loseHealth` (reset `resetFloorBuildState`); Field Medic
+  `Player.applyTreatment`; Blast Shield `Player.applyOwnExplosionDamage`; Pack Rat floor ammo tiles only; Haggler via
+  `ShopContext.priceMultiplier`. Shop ability offer = one rank of a random unmaxed perk (`SHOP_PERK_RANK_POWER_POINTS`).
+  `EXPECTED_PERK_POWER_PP_PER_PICK` = 12 replaces LEVEL_UP_BUDGET_PP everywhere (R-LADDER unchanged). UpgradeCard*,
+  LEVEL_UP_BUDGET_*, CARD_* deleted; RuleKind CARD_BUDGET/CARD_BREAKPOINT deleted; audit methods renamed + re-pointed
+  (`everyPerkRankIsFeltOnItsNicheReplacingTheCardBudget`, `everyPerkCrossesABreakpointByItsMaxRank`). Build RNG on its own
+  EnemyManager stream (`BUILD_STREAM_SALT`). Docs: minimal RETIRED marks only (full rewrite CP6).
+- **CP2 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0 — S-HEAVY 1114->1112 committed (0.99
+  answered), TACTICAL stalled 177->176, all else identical. A1 verified (throwaway main, 200 seeds x 20 offers, 0 violations).
+- **CP3 TODO (already wired, inert until addKeystone):** DEADEYE crit, PYROMANIAC burning bonus + fire-tile immunity, BERSERKER
+  melee + heal, DEMOLITIONIST immunity + x2 barrels, class costs, heal costs. STILL TO BUILD: SCATTERGUN free reload + point-
+  blank refund, DEADEYE clip cut, STORM CONDUIT arc, IRON BULWARK reflect, QUARTERMASTER slot, IRONHIDE no-cleanse, PYROMANIAC
+  DoT-tick bonus + fire-attack immunity, drawKeystones, overlay keystone mode, chooseKeystone.
+- **REVIEW FLAG:** CP2 edits made via shell scripts, so the per-file code-reviewer hook did not run — reviewer must read them.

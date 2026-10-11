@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.progression;
 
 import ge.tbegvadze.toon3d.entity.DamageClass;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * THE BUILD AGGREGATE (balance-overhaul order 5) — everything the picked {@link Perk} ranks and
@@ -18,6 +20,13 @@ import ge.tbegvadze.toon3d.entity.DamageClass;
  * headless, no LibGDX imports.
  */
 public final class BuildStats {
+
+    /**
+     * The no-build aggregate every runtime seam starts from before World / SimWorld hands it the run's
+     * {@link PlayerBuild#stats()} (a headless test, a weapon built before the build is wired). Never passed to
+     * {@link PerkModifier#apply} or {@link #reset()}-then-mutated: it must stay the identity build.
+     */
+    public static final BuildStats NONE = new BuildStats();
 
     private static final int DAMAGE_CLASS_COUNT = DamageClass.values().length;
     private static final int ATTRIBUTE_COUNT    = Attribute.values().length;
@@ -318,6 +327,62 @@ public final class BuildStats {
         return Float.isNaN(heavyGuardMultiplier) ? defaultMultiplier : heavyGuardMultiplier;
     }
 
+
+    /**
+     * Every perk / keystone term on ONE player hit, composed by {@link GameMath#buildHitDamageMultiplier}
+     * (balance-overhaul order 5, CP2) — the single typed query {@code EnemyManager.applyDamageTo} makes:
+     * the class multiplier ({@link #damageMultiplierFor}: Buckshot / Shaped Charges / Capacitor / Accelerant /
+     * Butcher, then the keystone costs), the range band (Point Man at point-blank on SPREAD, Lane Discipline
+     * at long range on BALLISTIC / RAIL — mutually exclusive by class), the first hit on this enemy (First
+     * Blood on a full-HP target for BALLISTIC / RAIL, DEADEYE's guaranteed critical on any class), a burning
+     * target (PYROMANIAC), a low-HP melee swing (BERSERKER) and a target inside a riposte window (Riposte
+     * Drill). Mirrors util/BuildValuationModel.buildWeapon term for term.
+     *
+     * @param damageClass          the activation's class (null -> 1, no build term applies)
+     * @param distanceTiles        tiles from the shooter to the target along the shot (1 = adjacent)
+     * @param firstHitOnTarget     this is the first player hit this enemy has taken
+     * @param targetAtFullHealth   the target was at full HP before the hit
+     * @param targetBurning        the target is BURNING
+     * @param meleeSwing           the hit is a melee swing
+     * @param wielderLowHealth     the player is below BUILD_BERSERK_LOW_HEALTH_FRACTION of max HP
+     * @param targetInRiposteWindow the target is inside a riposte's VULNERABLE window
+     */
+    public float hitDamageMultiplier(DamageClass damageClass, int distanceTiles, boolean firstHitOnTarget,
+                                     boolean targetAtFullHealth, boolean targetBurning, boolean meleeSwing,
+                                     boolean wielderLowHealth, boolean targetInRiposteWindow) {
+        if (damageClass == null) return 1f;
+        boolean marksman = BuildTag.MARKSMAN.ownsDamageClass(damageClass);
+        boolean spread   = BuildTag.CLOSE_QUARTERS.ownsDamageClass(damageClass);
+        float rangeBandBonus = 0f;
+        if (marksman && distanceTiles >= BalanceConfig.BUILD_LONG_RANGE_MIN_TILES) rangeBandBonus = longRangeDamageBonus;
+        if (spread && distanceTiles <= BalanceConfig.BUILD_POINT_BLANK_MAX_TILES) rangeBandBonus = spreadPointBlankDamageBonus;
+        float firstHitBonus = firstHitOnTarget
+                ? GameMath.combinedFirstHitBonus(marksman && targetAtFullHealth ? fullHealthTargetDamageBonus : 0f,
+                        firstHitGuaranteedCritical, BalanceConfig.CRIT_DAMAGE_MULTIPLIER)
+                : 0f;
+        return GameMath.buildHitDamageMultiplier(damageMultiplierFor(damageClass), rangeBandBonus, firstHitBonus,
+                targetBurning ? burningTargetDamageBonus : 0f,
+                meleeSwing && wielderLowHealth ? berserkLowHealthMeleeBonus : 0f,
+                targetInRiposteWindow ? riposteDamageBonus : 0f);
+    }
+
+    /** Steady Aim's falloff reduction for a weapon of this class (BALLISTIC / RAIL only; 0 otherwise). */
+    public float falloffReductionFor(DamageClass damageClass) {
+        return BuildTag.MARKSMAN.ownsDamageClass(damageClass) ? ballisticRailFalloffReduction : 0f;
+    }
+
+    /** Lane Discipline's extra reach for a weapon of this class (BALLISTIC / RAIL only; 0 otherwise). */
+    public int rangeBonusTilesFor(DamageClass damageClass) {
+        return BuildTag.MARKSMAN.ownsDamageClass(damageClass) ? rangeBonusTiles : 0;
+    }
+
+    /**
+     * Multiplier on a barrel blast: Sapper on every barrel, DEMOLITIONIST's x2 only on a barrel the PLAYER
+     * set off (a shot, a grenade, or a chain from one). {@link #barrelDamageMultiplier()} is the player-set-off case.
+     */
+    public float barrelDamageMultiplier(boolean detonatedByPlayer) {
+        return (1f + barrelDamageBonus) * (detonatedByPlayer ? detonatedBarrelMultiplier : 1f);
+    }
 
     // =====================================================================================
     // RAW ACCESSORS

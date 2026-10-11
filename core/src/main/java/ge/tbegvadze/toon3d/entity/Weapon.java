@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.BuildStats;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -143,6 +144,16 @@ public abstract class Weapon implements WeaponProfile {
      * Applied inside damageAtDistance() so all weapon subclasses pick it up without changes.
      */
     private float fireCycleMultiplier = 1.0f;
+
+    /**
+     * The run's build aggregate (balance-overhaul order 5), wired by World / SimWorld to
+     * {@code PlayerBuild.stats()}; {@link BuildStats#NONE} until then. Read by the weapon-side perk seams only:
+     * Steady Aim ({@link #damageWithFalloff}, {@link #buildFalloff}), Lane Discipline's reach
+     * ({@link #buildRangeBonusTiles}), Point Man's knockback / stagger reach (Shotgun, Double-Barrel),
+     * Arc Jump (ArcCannon) and Overcharge (PlasmaRifle). Every other build term resolves where the hit lands
+     * ({@code EnemyManager.applyDamageTo}).
+     */
+    private BuildStats buildStats = BuildStats.NONE;
 
     // Facing direction stored at fire() entry; forwarded to onHit() for melee AoE abilities.
     private int lastFacingStepColumn = 0;
@@ -409,6 +420,15 @@ public abstract class Weapon implements WeaponProfile {
     protected void armDamageClass(EnemyHitTarget target, boolean arm) {
         if (target == null) return;
         target.setActivationDamageClass(arm ? damageClass() : null);
+    }
+
+    /**
+     * Arms the activation's damage class AND the tile it was fired from (balance-overhaul order 5: the build's
+     * range-band terms measure each target's distance from here). Disarming clears the class only.
+     */
+    protected void armDamageClass(EnemyHitTarget target, boolean arm, int originTileColumn, int originTileRow) {
+        armDamageClass(target, arm);
+        if (target != null && arm) target.setActivationOrigin(originTileColumn, originTileRow);
     }
 
     /**
@@ -832,8 +852,9 @@ public abstract class Weapon implements WeaponProfile {
 
         // ARMOR_PIERCE: bypass a fraction of the target's Block for every hit this activation.
         armBlockPierce(enemyHitTarget, true);
-        // MATCHUP (balance-overhaul order 3): every hit this activation resolves with this weapon's class.
-        armDamageClass(enemyHitTarget, true);
+        // MATCHUP (balance-overhaul order 3): every hit this activation resolves with this weapon's class
+        // (and, balance-overhaul order 5, measures its range band from the player's tile).
+        armDamageClass(enemyHitTarget, true, playerTileColumn, playerTileRow);
 
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
@@ -1078,7 +1099,42 @@ public abstract class Weapon implements WeaponProfile {
      * terms can never drift between falloff shapes.
      */
     protected int damageWithFalloff(float falloffMultiplier) {
-        return Math.round(damage * getLadderDamageMultiplier() * falloffMultiplier * fireCycleMultiplier);
+        return Math.round(damage * getLadderDamageMultiplier() * buildFalloff(falloffMultiplier) * fireCycleMultiplier);
+    }
+
+    /**
+     * STEADY AIM (balance-overhaul order 5): closes {@link BuildStats#falloffReductionFor} of the falloff loss
+     * for a BALLISTIC / RAIL weapon ({@link GameMath#falloffReducedHit} on the undropped 1.0); any other class
+     * — or no Steady Aim — returns the falloff unchanged. The Railgun, which computes its own falloff, calls it too.
+     */
+    protected float buildFalloff(float falloffMultiplier) {
+        float reduction = buildStats.falloffReductionFor(damageClass());
+        if (reduction <= 0f) return falloffMultiplier;
+        return GameMath.falloffReducedHit(falloffMultiplier, 1f, reduction);
+    }
+
+    /** LANE DISCIPLINE (balance-overhaul order 5): extra tiles of reach for a BALLISTIC / RAIL weapon (0 otherwise). */
+    protected int buildRangeBonusTiles() {
+        return buildStats.rangeBonusTilesFor(damageClass());
+    }
+
+    /** Wires the run's build aggregate (null resets to {@link BuildStats#NONE}). */
+    public void setBuildStats(BuildStats stats) {
+        this.buildStats = stats != null ? stats : BuildStats.NONE;
+    }
+
+    /** The run's build aggregate (never null) — read by the weapon-side perk seams of subclasses. */
+    protected BuildStats buildStats() {
+        return buildStats;
+    }
+
+    /**
+     * Returns {@code rounds} of this weapon's ammo to the reserve (Breacher's shell refund — balance-overhaul
+     * order 5). No-op for a weapon without a tracked reserve; the inventory's own stack cap applies.
+     */
+    public void refundReserveRounds(int rounds) {
+        if (rounds <= 0 || ammoInventory == null || ammoType == null) return;
+        ammoInventory.tryAdd(ammoType.getItemType(), rounds);
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }

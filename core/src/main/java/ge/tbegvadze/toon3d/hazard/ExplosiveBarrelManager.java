@@ -94,9 +94,18 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         return cell == 'E' || cell == 'g';
     }
 
+    /**
+     * True while the detonation being resolved was set off by the PLAYER (balance-overhaul order 5): a weapon
+     * activation is armed on the hit target (a shot, a grenade, or a chain from one). A barrel lit by spreading
+     * fire or an enemy is not the player's. Read once per detonation chain.
+     */
+    private boolean detonatedByPlayer = false;
+
     @Override
     public void onExplosiveBarrelHit(int tileColumn, int tileRow) {
         chainCount = 0;
+        detonatedByPlayer = enemyHitTarget != null && enemyHitTarget.getActivationDamageClass() != null
+                && !enemyHitTarget.isActivationHazardBlast();
         detonateBarrel(tileColumn, tileRow);
         // BFS: chainCount grows as detonateBarrel() enqueues adjacent barrels.
         for (int queueHead = 0; queueHead < chainCount; queueHead++) {
@@ -134,10 +143,14 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
 
             boolean centreTile = blastIndex == 0;
             if (blastColumn == playerTileColumn && blastRow == playerTileRow) {
-                player.applyDamage(GameMath.barrelBlastDamage(centreTile
+                int playerBlast = GameMath.barrelBlastDamage(centreTile
                                 ? BalanceConfig.HAZARD_BARREL_PLAYER_CENTRE_FRACTION
                                 : BalanceConfig.HAZARD_BARREL_PLAYER_RING_FRACTION,
-                        player.getMaxHealth()));
+                        player.getMaxHealth());
+                // A barrel the player set off is the player's OWN explosion (Blast Shield / DEMOLITIONIST —
+                // balance-overhaul order 5); any other barrel hurts at full.
+                if (detonatedByPlayer) player.applyOwnExplosionDamage(playerBlast);
+                else                   player.applyDamage(playerBlast);
             }
 
             if (enemyHitTarget != null) {
@@ -147,10 +160,17 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
                     // can detonate mid-activation (a shot into it), so restore whatever was armed.
                     DamageClass previousClass = enemyHitTarget.getActivationDamageClass();
                     boolean previousFloorNeutral = enemyHitTarget.isActivationMatchupFloorNeutral();
+                    boolean previousHazardBlast  = enemyHitTarget.isActivationHazardBlast();
                     enemyHitTarget.setActivationDamageClass(DamageClass.EXPLOSIVE);
                     enemyHitTarget.setActivationMatchupFloorNeutral(false);
-                    enemyHitTarget.applyDamageTo(enemy, centreTile ? enemyCentreDamage : enemyRingDamage);
-                    enemyBlastDamageDealt += centreTile ? enemyCentreDamage : enemyRingDamage;
+                    // A barrel is a HAZARD blast: no weapon build terms; its own Sapper / DEMOLITIONIST
+                    // multiplier (balance-overhaul order 5) scales it instead.
+                    enemyHitTarget.setActivationHazardBlast(true);
+                    int blastDamage = Math.round((centreTile ? enemyCentreDamage : enemyRingDamage)
+                            * player.getBuildStats().barrelDamageMultiplier(detonatedByPlayer));
+                    enemyHitTarget.applyDamageTo(enemy, blastDamage);
+                    enemyBlastDamageDealt += blastDamage;
+                    enemyHitTarget.setActivationHazardBlast(previousHazardBlast);
                     enemyHitTarget.setActivationDamageClass(previousClass);
                     enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
                 }
