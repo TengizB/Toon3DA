@@ -192,3 +192,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (2) PerkDeck seeding artefact: `new Random(runSeed ^ salt)` with sequential sim seeds -> first nextFloat in the top 10% on
   200/200 seeds -> LANE_DISCIPLINE 16/20. HUB DECISION: fix PerkDeck seeding (SplitMix64 finaliser) — a CP2 bug; raise the
   dominant-tag SAMPLE (more plain-TACTICAL seeds for the build band), never the bar. Part B docs not started.
+- **CP6b (WIP, balanceSim RED on S-BUILD dominant share only):** seeding fixed — `PerkDeck` = `new Random(GameMath.splitMix64(seed))`;
+  `EnemyManager.buildRandom` same artefact, fixed (`splitMix64(randomSeed ^ BUILD_STREAM_SALT)`). Flagged, not touched (pre-existing):
+  EnemyManager spawn/wiggle/effect streams depth-adjacent; TacticalPolicy tieBreak `new Random(seed)` fully correlated. Sample:
+  `SIM_BUILD_SAMPLE_SEED_COUNT` 600, row `TACTICAL-BUILD-SAMPLE` (plain TACTICAL; main 200-seed rows untouched); 49 ranked runs
+  (>= 30). Dominant share 0.47 (MARKSMAN 23, CQ 17, ENERGY 6, PYRO/DEMO/VIT 1) vs cap 0.40: every ranked run holds EXACTLY one rank
+  (mean level 1.08), so "dominant tag" = first synergy pick from the Chaingun+Shotgun start kit. No keystone ever offered.
+  Moves: S-SUPPLY 0.85->0.86, S-HEAVY 1110->1108. Slow gate 49.7s. Part B docs NOT started. OWNER RULING NEEDED (B4).

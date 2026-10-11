@@ -40,6 +40,8 @@ public final class BehavioralBands {
     public static final String NAIVE_ID    = "NAIVE";
     public static final String TACTICAL_ID = "TACTICAL";
     public static final String HOARDER_ID  = "HOARDER-START-WEAPON";
+    /** Plain TACTICAL over SIM_BUILD_SAMPLE_SEED_COUNT seeds — the S-BUILD dominant-tag run set. */
+    public static final String TACTICAL_BUILD_SAMPLE_ID = "TACTICAL-BUILD-SAMPLE";
 
     /** Evaluates every band the supplied matrix has the data for. Missing policies are skipped. */
     public static List<RuleResult> evaluate(Map<String, PolicySummary> matrix) {
@@ -57,7 +59,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(supplyResults(tactical));
         if (tactical != null) results.addAll(switchResults(tactical));
         if (tactical != null) results.addAll(heavyResults(tactical, naive));
-        results.addAll(buildResults(matrix, tactical));
+        results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
     }
@@ -75,9 +77,10 @@ public final class BehavioralBands {
      * S-BUILD (balance-overhaul order 5, A6). DEPTH part: the build-biased variants' median death depths satisfy
      * max / min <= 1 + SIM_BUILD_DEPTH_SPREAD (no trap bias, no must-pick bias) — depth-derived, so it carries the
      * navigation waiver SIM_FAIR's median depth carries; skipped unless all four variants are in the matrix.
-     * DOMINANT-TAG part (enforced): over plain TACTICAL's runs that held a perk rank at the end (at least
-     * SIM_BUILD_MIN_SAMPLE of them), no single BuildTag is the end-of-run highest-rank tag on more than
-     * SIM_BUILD_MAX_DOMINANT_TAG_SHARE of them. Runs with no rank are excluded and counted in the detail.
+     * DOMINANT-TAG part (enforced): over the plain-TACTICAL BUILD SAMPLE row's runs that held a perk rank at the
+     * end (at least SIM_BUILD_MIN_SAMPLE of them), no single BuildTag is the end-of-run highest-rank tag on more
+     * than SIM_BUILD_MAX_DOMINANT_TAG_SHARE of them. Runs with no rank are excluded and counted in the detail;
+     * skipped when the sample row is not in the matrix.
      */
     private static List<RuleResult> buildResults(Map<String, PolicySummary> matrix, PolicySummary tactical) {
         List<RuleResult> results = new ArrayList<>();
@@ -112,7 +115,8 @@ public final class BehavioralBands {
         results.add(BalanceSchema.result(RuleKind.SIM_BUILD, "TACTICAL runs holding a perk rank",
                 sample, BalanceConfig.SIM_BUILD_MIN_SAMPLE, Float.POSITIVE_INFINITY,
                 sample >= BalanceConfig.SIM_BUILD_MIN_SAMPLE,
-                excluded + " runs with no perk rank excluded; keeps the share below off an empty sample"));
+                "of " + tactical.runCount() + " " + tactical.policyId + " runs; " + excluded
+                        + " with no perk rank excluded; keeps the share below off an empty sample"));
         int topCount = 0;
         ge.tbegvadze.toon3d.progression.BuildTag topTag = null;
         StringBuilder distribution = new StringBuilder();

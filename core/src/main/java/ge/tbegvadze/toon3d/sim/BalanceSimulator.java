@@ -89,7 +89,19 @@ public final class BalanceSimulator {
                 DEFAULT_SEED_OFFSET, SimSettings.standard());
         summaries.putAll(runMatrix(buildBiasPolicies(), BalanceConfig.SIM_BUILD_SEED_COUNT,
                 DEFAULT_SEED_OFFSET, SimSettings.standard()));
+        PolicyFactory sample = buildSamplePolicy();
+        summaries.put(sample.id(), runPolicy(sample, BalanceConfig.SIM_BUILD_SAMPLE_SEED_COUNT,
+                DEFAULT_SEED_OFFSET, SimSettings.standard()));
         return summaries;
+    }
+
+    /**
+     * Plain TACTICAL under its own row id, played over SIM_BUILD_SAMPLE_SEED_COUNT seeds — the run set S-BUILD's
+     * dominant-tag share is read from (balance-overhaul order 5, CP6), so the share has enough runs that held a
+     * perk rank without widening the 200-seed rows every other band reads.
+     */
+    public static PolicyFactory buildSamplePolicy() {
+        return factory(BehavioralBands.TACTICAL_BUILD_SAMPLE_ID, seed -> new TacticalPolicy(seed));
     }
 
     /** Plays an arbitrary matrix. Keyed by policy id, in the order the factories were listed. */

@@ -4710,6 +4710,11 @@ public final class GameMath {
      *   increment (0x9E3779B97F4A7C15) between draws and passes each new state
      *   through this finalizer, giving an equidistributed, reproducible stream of
      *   random longs from a single seed.
+     *   It is also the SEED FINALISER for java.util.Random streams whose seeds can be
+     *   adjacent (PerkDeck, EnemyManager's build stream — balance-overhaul order 5):
+     *   Random scrambles a seed with one XOR and one LCG step, so its first nextFloat()
+     *   for seeds s, s+1, s+2 ... lands in the same narrow band; splitMix64(seed) first
+     *   spreads adjacent seeds across the whole 64-bit space.
      * Edge cases:
      *   state = 0 still produces a non-zero, well-mixed output (the added golden
      *   increment upstream guarantees the state is stepped before finalizing).

@@ -1813,6 +1813,13 @@ public final class BalanceConfig {
     public static final float SIM_BUILD_MAX_DOMINANT_TAG_SHARE = 0.40f;
     /** S-BUILD: plain TACTICAL runs that held a perk rank at the end must number at least this (non-vacuous share). */
     public static final int   SIM_BUILD_MIN_SAMPLE             = 30;
+    /**
+     * Seeds of the dedicated plain-TACTICAL BUILD SAMPLE row (TACTICAL-BUILD-SAMPLE) the dominant-tag share is
+     * read from. Only ~10% of TACTICAL runs level up while the navigation waiver stands (CP6 measured 20 of
+     * 200), so 600 seeds give ~60 ranked runs — twice SIM_BUILD_MIN_SAMPLE. The main 200-seed rows every other
+     * band reads are untouched; the sample's first 200 seeds replay plain TACTICAL's runs exactly.
+     */
+    public static final int   SIM_BUILD_SAMPLE_SEED_COUNT      = 600;
 
     // =====================================================================================
     // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract

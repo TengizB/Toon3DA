@@ -1,6 +1,7 @@
 package ge.tbegvadze.toon3d.progression;
 
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.EnumSet;
 import java.util.Random;
@@ -75,8 +76,14 @@ public final class PerkDeck {
     private final float[]   keystoneWeights = new float[ALL_KEYSTONES.length];
     private final boolean[] keystoneTaken   = new boolean[ALL_KEYSTONES.length];
 
+    /**
+     * The seed is passed through {@link GameMath#splitMix64(long)} before it reaches {@code java.util.Random}
+     * (balance-overhaul order 5, CP6 fix): Random's first {@code nextFloat()} is strongly correlated across
+     * adjacent seeds, so sequential run seeds (the balance simulator's, or any two runs whose seeds differ in
+     * the low bits) drew the SAME first synergy perk every run. The finaliser decorrelates them.
+     */
     public PerkDeck(long seed) {
-        this.random = new Random(seed);
+        this.random = new Random(GameMath.splitMix64(seed));
     }
 
     /**

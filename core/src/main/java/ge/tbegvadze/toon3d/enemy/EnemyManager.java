@@ -273,7 +273,9 @@ public final class EnemyManager implements EnemyHitTarget {
         this.wiggleLegalRows    = new int[4];
         this.wiggleRandom       = new Random(randomSeed ^ WIGGLE_STREAM_SALT);
         this.effectRandom       = new Random(randomSeed ^ EFFECT_STREAM_SALT);
-        this.buildRandom        = new Random(randomSeed ^ BUILD_STREAM_SALT);
+        // splitMix64 (CP6 fix): floor seeds of one run differ by 1 per depth, and Random's first draw is
+        // correlated across adjacent seeds — unmixed, every floor's first Breacher / Salvager roll was the same.
+        this.buildRandom        = new Random(GameMath.splitMix64(randomSeed ^ BUILD_STREAM_SALT));
     }
 
     /**

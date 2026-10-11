@@ -272,6 +272,12 @@ public final class SimReport {
         java.util.List<PolicySummary> rows = new java.util.ArrayList<>();
         PolicySummary plain = matrix.get(BehavioralBands.TACTICAL_ID);
         if (plain != null) rows.add(plain);
+        // The pick-rate columns read the larger plain-TACTICAL BUILD SAMPLE when it was played (S-BUILD's run set).
+        PolicySummary sample = matrix.get(BehavioralBands.TACTICAL_BUILD_SAMPLE_ID);
+        if (sample != null) {
+            rows.add(sample);
+            plain = sample;
+        }
         java.util.List<PolicySummary> biased = new java.util.ArrayList<>();
         for (String id : BehavioralBands.buildBiasIds()) {
             PolicySummary variant = matrix.get(id);
@@ -351,7 +357,9 @@ public final class SimReport {
                     biasedKeyOffered[index], biasedKeyPicked[index],
                     rate(biasedKeyPicked[index], biasedKeyOffered[index])));
         }
-        report.append("  B- columns: the four build-biased variants together. noRank = runs that ended with no perk rank\n");
+        report.append("  Unprefixed columns: ").append(plain == null ? "-" : plain.policyId)
+              .append(". B- columns: the four build-biased variants together.\n");
+        report.append("  noRank = runs that ended with no perk rank\n");
         report.append("  (excluded from S-BUILD's share); ties = dominant tag decided by a tie (earliest BuildTag wins).\n\n");
     }
 
