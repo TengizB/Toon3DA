@@ -353,6 +353,13 @@ DECISIONS
       keystones, synergy/pivot offers.  (2026-09-30)
   D2  Rarity and abilities must be meaningful (owner, H4) -> guaranteed ability
       counts, raised budgets, pruned catalog, legendary signature.  (2026-09-30)
+  D3  R-CARRY: SCAVENGER is WAIVED (owner, 2026-10-11) — an economy tag the depth-15 combat model
+      cannot see (best honest carry 1.09 vs VITALITY's rule-pinned ~2.13). The waiver expires when
+      order 6 re-derives the economy with SCAVENGER in the expected player. The other eight tags
+      must hold +/-BUILD_CARRY_TOLERANCE pairwise.  (2026-10-11)
+  D4  PK1 breakpoint for WILDFIRE is measured on an integer resource metric — fuel / sprays spent to
+      clear its group scenario (owner, 2026-10-11) — because its fights end inside one turn and a TTK
+      breakpoint can never move. Its >= 10% felt gain stays on its TTK niche.  (2026-10-11)
 
 
 OPEN QUESTIONS
