@@ -149,3 +149,8 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **REVIEW / OWNER FLAGS:** IRON BULWARK reflects ORDINARY guarded hits too (spec text "a guarded hit"); valuation prices heavies
   only -> stronger in play than modelled (order 6/7 re-fit). Pre-existing: both reload start paths set ticksRemaining = base
   reloadTime, not effectiveReloadTicks — left alone (changes the sim; out of scope).
+- **CP4 INTERRUPTED (2026-10-11):** the CP4 builder (contract: scratchpad `cp4-contract.md`, copied below as the source of
+  truth if the scratchpad is gone) hit the account usage limit mid-edit. Its only work was a SECTION 15/24 constants rewrite in
+  BalanceConfig + GameBalance (unverified, likely non-compiling alone). Saved as `balance-overhaul-order-5.cp4-wip.patch` beside
+  this file; tree restored to CP3. RESUME: re-dispatch CP4 from the contract; the patch is reference only (apply with
+  `git apply` if useful, verify everything).
