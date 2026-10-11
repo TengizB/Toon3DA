@@ -370,6 +370,12 @@ DECISIONS
       the first spray or two, so burn duration is invisible to the scenario math. Rank-1 FELT
       (+200% on S5) stays enforced. The waiver expires when a long-group reference scenario exists
       (order 7 feel pass).  (2026-10-11)
+  D7  S-BUILD DOMINANT-TAG WAIVER (owner, 2026-10-11): A6's dominant-tag part is WAIVED under
+      the same navigation waiver (and expiry) as SIM_FAIR's median depth, reported every run.
+      Measured 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 / ENERGY 6 of 49 ranked runs, 600-seed
+      sample) because 91% of sim runs never level up and every ranked run holds exactly one
+      rank, so "dominant tag" = the first synergy pick from the Chaingun + Shotgun start kit.
+      Enforced again when the navigation waiver expires.  (2026-10-11)
 
 
 OPEN QUESTIONS
