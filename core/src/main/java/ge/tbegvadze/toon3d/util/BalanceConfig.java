@@ -2779,4 +2779,197 @@ public final class BalanceConfig {
     public static final int   HAZARD_GROUP_BARRELS_MAX             = 2;
     /** H14: barrels sit within this Chebyshev distance (tiles) of the group cluster's centroid. */
     public static final int   HAZARD_GROUP_BARREL_RADIUS_TILES     = 2;
+
+    // =========================================================================
+    // SECTION 24 — BUILDS (balance-overhaul order 5): perks, keystones, the build valuation
+    // REPLACES R-CARD (every card priced at LEVEL_UP_BUDGET_PP +/- tolerance), R-CARD-BREAKPOINT and the
+    // TOTAL-PP INVARIANT ("total power at level L = L x 12 PP for every build"): a perk is no longer priced
+    // to be EQUAL, it is priced to be FELT inside its style (R-PERK PK1), to stay FOCUSED on that style
+    // (PK2), a keystone trades a real niche for a real cost (R-KEYSTONE), and no style is a trap or
+    // dominant at depth 15 (R-CARRY — a bounded spread replaces the invariant). The R-CARD constants
+    // themselves (LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_TOLERANCE, the ten card magnitudes) are deleted in
+    // CP2, when the level-up runtime switches to the perk deck. Valued by util/BuildValuationModel on the
+    // order-3 reference scenarios; see docs/game-balance-authority.txt R-PERK / R-KEYSTONE / R-CARRY.
+    // Every per-rank array holds the TOTAL magnitude at rank 1, 2, 3 (index 0 = rank 1).
+    // =========================================================================
+
+    // --- OFFER SHAPE (B3 / B4) ----------------------------------------------------------------
+    /** B3: perks offered per level-up. Range: 3 (fixed by the offer rules: synergy + pivot + one more). */
+    public static final int     PERKS_OFFERED              = 3;
+    /** B2: the most ranks any perk has (one-rank perks declare 1). Range: 3. */
+    public static final int     PERK_MAX_RANK              = 3;
+    /** B4: character levels whose level-up offers keystones instead of perks. Range: four distinct levels. */
+    public static final int[]   KEYSTONE_CHARACTER_LEVELS  = {5, 10, 15, 20};
+    /** B4: keystones offered on a keystone level. Range: 3. */
+    public static final int     KEYSTONES_OFFERED          = 3;
+
+    // --- PERK MAGNITUDES (B2) — CLOSE QUARTERS --------------------------------------------------
+    /** Buckshot Discipline: SPREAD damage, total by rank. Spec default +15%/rank; MOVED (escalating) for PK1: the Shotgun's S6 kill is shot-reload-shot, so a flat +15% shortens it only 8% a rank. Range: 0.15-0.35 per rank. */
+    public static final float[] PERK_BUCKSHOT_SPREAD_DAMAGE_BY_RANK      = {0.20f, 0.46f, 0.80f};
+    /** Point Man (decided r1): SPREAD damage at point-blank (<= BUILD_POINT_BLANK_MAX_TILES), total by rank — the same ladder as Buckshot for the same reason (S6 reload). Range: 0.15-0.35 per rank. */
+    public static final float[] PERK_POINT_MAN_POINT_BLANK_DAMAGE_BY_RANK = {0.20f, 0.46f, 0.80f};
+    /** Point Man r2: extra knockback reach (tiles). Range: 1. */
+    public static final int     PERK_POINT_MAN_KNOCKBACK_BONUS_TILES     = 1;
+    /** Point Man r3: stagger reaches this many tiles (spec: "stagger also at 3 tiles"). Range: 3. */
+    public static final int     PERK_POINT_MAN_STAGGER_REACH_TILES       = 3;
+    /** Breacher: chance a SPREAD kill refunds one shell, total by rank. Range: 0.25-0.40 per rank (<= 1.0). */
+    public static final float[] PERK_BREACHER_REFUND_CHANCE_BY_RANK      = {0.33f, 0.66f, 1.00f};
+
+    // --- MARKSMAN --------------------------------------------------------------------------------
+    /** Steady Aim: fraction of the BALLISTIC / RAIL falloff coefficient removed, total by rank. Range: 0.25-0.33 per rank (<= 1.0). */
+    public static final float[] PERK_STEADY_AIM_FALLOFF_REDUCTION_BY_RANK = {0.30f, 0.60f, 0.90f};
+    /** First Blood: BALLISTIC / RAIL damage on a hit against a full-HP enemy, total by rank. Spec default +25%/rank; MOVED: only one hit of the five an S1 kill takes is a first hit, so a rank is felt (PK1) only at about +80%. Range: 0.6-1.0 per rank. */
+    public static final float[] PERK_FIRST_BLOOD_DAMAGE_BY_RANK           = {0.80f, 1.60f, 2.40f};
+    /** Lane Discipline: extra BALLISTIC / RAIL reach (tiles), total by rank. Range: 1 per rank. */
+    public static final float[] PERK_LANE_DISCIPLINE_RANGE_BY_RANK        = {1f, 2f, 3f};
+    /** Lane Discipline: BALLISTIC / RAIL damage at BUILD_LONG_RANGE_MIN_TILES or farther, total by rank. Spec default +10%/rank; MOVED: two of S1's three tiles are long range, so +10% reads ~6%. Range: 0.18-0.30 per rank. */
+    public static final float[] PERK_LANE_DISCIPLINE_DAMAGE_BY_RANK       = {0.20f, 0.42f, 0.68f};
+
+    // --- PYRO ------------------------------------------------------------------------------------
+    /** Accelerant: extra max burn stacks (FIRE), total by rank. Range: 1 per rank. */
+    public static final float[] PERK_ACCELERANT_BURN_STACKS_BY_RANK       = {1f, 2f, 3f};
+    /** Accelerant (decided): FIRE damage (impact and the burn it seeds), total by rank — the burn stack alone is never reached in a reference fight. Range: 0.15-0.25 per rank. */
+    public static final float[] PERK_ACCELERANT_FIRE_DAMAGE_BY_RANK       = {0.18f, 0.38f, 0.60f};
+
+    // --- DEMOLITION ------------------------------------------------------------------------------
+    /** Shaped Charges: EXPLOSIVE damage, total by rank. Spec default +20%/rank; MOVED up for R-CARRY (DEMOLITION's lift). Range: 0.20-0.40 per rank. */
+    public static final float[] PERK_SHAPED_CHARGES_DAMAGE_BY_RANK        = {0.30f, 0.64f, 1.05f};
+    /** Blast Shield: own explosion damage removed, total by rank (never above 1.0). Spec default -50%; r3 reaches full immunity so the last rank is felt (PK1). Range: ladder ending at <= 1.0. */
+    public static final float[] PERK_BLAST_SHIELD_REDUCTION_BY_RANK       = {0.50f, 0.75f, 1.00f};
+    /** Sapper: barrel blast bonus, total by rank. Range: 0.30-0.60 per rank. */
+    public static final float[] PERK_SAPPER_BARREL_DAMAGE_BY_RANK         = {0.50f, 1.00f, 1.50f};
+
+    // --- ENERGY ----------------------------------------------------------------------------------
+    /** Capacitor: ENERGY damage, total by rank. Spec default +15%/rank; MOVED up for R-CARRY (ENERGY's lift). Range: 0.15-0.35 per rank. */
+    public static final float[] PERK_CAPACITOR_ENERGY_DAMAGE_BY_RANK      = {0.27f, 0.56f, 0.92f};
+    /** Arc Jump: extra Arc Cannon chain jumps, total by rank. Range: 1 per rank. */
+    public static final float[] PERK_ARC_JUMP_CHAIN_JUMPS_BY_RANK         = {1f, 2f, 3f};
+    /** Arc Jump (decided): raise of the per-jump chain multiplier, total by rank — a fourth jump at 0.6^4 is not felt, so the jumps also lose less. Range: 0.08-0.15 per rank (multiplier <= 1). */
+    public static final float[] PERK_ARC_JUMP_CHAIN_MULTIPLIER_BY_RANK    = {0.12f, 0.25f, 0.38f};
+    /** Overcharge: Plasma pierce bonus per enemy already pierced, total by rank. Spec default +15%/rank; MOVED: in a two-wide lane only the second body gains, and the clear waits on the first. Range: 0.35-0.50 per rank. */
+    public static final float[] PERK_OVERCHARGE_PIERCE_BONUS_BY_RANK      = {0.40f, 0.80f, 1.35f};
+
+    // --- BULWARK ---------------------------------------------------------------------------------
+    /** Shield Wall r2: the guarded HEAVY multiplier (was GUARD_FRONT_HEAVY 0.20). Spec default x0.10; MOVED to x0.0 — at x0.10 the rank removes ~7% of a floor's incoming (PK1 needs 10%). Range: 0.0-0.10. */
+    public static final float   PERK_SHIELD_WALL_HEAVY_GUARD_MULTIPLIER   = 0.0f;
+    /** Riposte Drill: extra VULNERABLE turns a riposte applies, total by rank. Range: 1 per rank. */
+    public static final float[] PERK_RIPOSTE_DRILL_TURNS_BY_RANK          = {1f, 2f, 3f};
+    /** Riposte Drill: extra damage the riposted enemy takes, total by rank. Range: 0.20-0.40 per rank. */
+    public static final float[] PERK_RIPOSTE_DRILL_DAMAGE_BY_RANK         = {0.25f, 0.50f, 0.75f};
+    /** Plate Carrier: max armour, total by rank. Spec default +20%/rank; MOVED: armour is ~30% of a floor's sustain, so +20% reads ~6%. Range: 0.35-0.55 per rank. */
+    public static final float[] PERK_PLATE_CARRIER_ARMOR_BY_RANK          = {0.42f, 0.90f, 1.48f};
+
+    // --- BLADE -----------------------------------------------------------------------------------
+    /** Butcher: melee damage (BLADE and BLUNT), total by rank. Range: 0.15-0.30 per rank. */
+    public static final float[] PERK_BUTCHER_MELEE_DAMAGE_BY_RANK         = {0.25f, 0.50f, 0.75f};
+    /** Bloodletting: max HP a melee kill heals, total by rank. Spec default 3%/rank; MOVED up for PK1 at depth 5 (fewer bodies a floor). Range: 0.03-0.05 per rank. */
+    public static final float[] PERK_BLOODLETTING_HEAL_BY_RANK            = {0.04f, 0.085f, 0.135f};
+
+    // --- SCAVENGER -------------------------------------------------------------------------------
+    /** Pack Rat: ammo pickups, total by rank. Range: 0.10-0.25 per rank. */
+    public static final float[] PERK_PACK_RAT_AMMO_BY_RANK                = {0.15f, 0.30f, 0.45f};
+    /** Haggler: shop discount, total by rank. Range: 0.08-0.12 per rank. */
+    public static final float[] PERK_HAGGLER_DISCOUNT_BY_RANK             = {0.10f, 0.20f, 0.30f};
+    /** Salvager: chance a carrier drops one extra item, total by rank. Range: 0.25-0.40 per rank (<= 1.0). */
+    public static final float[] PERK_SALVAGER_EXTRA_DROP_BY_RANK          = {0.25f, 0.50f, 0.75f};
+
+    // --- VITALITY --------------------------------------------------------------------------------
+    /** Hardy: max HP, total by rank. Spec default +10%/rank; MOVED into the PK1/PK2 window: each rank must lift the floor (pool + heals) >= 10% while lifting one fight's pool <= 10% — increments 0.151 / 0.166 / 0.183 sit mid-window at depths 5 and 15. Range: the window, recomputed when the heal plan moves. */
+    public static final float[] PERK_HARDY_MAX_HEALTH_BY_RANK             = {0.151f, 0.317f, 0.500f};
+    /** Field Medic: heals, total by rank (valued on a floor's heal supply). Spec default +15%/rank. Range: 0.11-0.15 per rank. */
+    public static final float[] PERK_FIELD_MEDIC_HEAL_BY_RANK             = {0.115f, 0.24f, 0.37f};
+
+    // --- KEYSTONE MAGNITUDES (B4) — gains, then costs (a cost is the MULTIPLIER, 0.85 = -15%) ----
+    /** SCATTERGUN DOCTRINE cost: non-SPREAD damage multiplier. Range: 0.75-0.90. */
+    public static final float   KEYSTONE_SCATTERGUN_NON_SPREAD_MULTIPLIER = 0.85f;
+    /** DEADEYE cost: clip-size multiplier. Range: 0.60-0.80. */
+    public static final float   KEYSTONE_DEADEYE_CLIP_MULTIPLIER          = 0.70f;
+    /** PYROMANIAC gain: extra damage burning enemies take from every source. Range: 0.30-0.60. */
+    public static final float   KEYSTONE_PYROMANIAC_BURNING_DAMAGE        = 0.50f;
+    /** PYROMANIAC cost: max-armour multiplier. Spec default 0.75; MOVED to 0.70 so the cost reads >= 10% somewhere (R-KEYSTONE). Range: 0.60-0.72. */
+    public static final float   KEYSTONE_PYROMANIAC_ARMOR_MULTIPLIER      = 0.70f;
+    /** DEMOLITIONIST gain: multiplier on barrels the player detonates. Range: 1.5-2.5. */
+    public static final float   KEYSTONE_DEMOLITIONIST_BARREL_MULTIPLIER  = 2.0f;
+    /** DEMOLITIONIST cost: max-HP multiplier. Spec default 0.80; 0.84 still costs > 10% of a floor's survival. Range: 0.75-0.86. */
+    public static final float   KEYSTONE_DEMOLITIONIST_HEALTH_MULTIPLIER  = 0.84f;
+    /** STORM CONDUIT gain: fraction of an ENERGY hit that arcs to one adjacent enemy. Spec default 0.50; MOVED up for R-CARRY. Range: 0.45-0.70. */
+    public static final float   KEYSTONE_STORM_CONDUIT_ARC_FRACTION       = 0.60f;
+    /** STORM CONDUIT cost: BALLISTIC damage multiplier. Range: 0.65-0.85. */
+    public static final float   KEYSTONE_STORM_CONDUIT_BALLISTIC_MULTIPLIER = 0.75f;
+    /** IRON BULWARK gain: fraction of the blocked damage a guarded hit reflects. Spec default 0.50; MOVED to 1.4 — heavies are a minority of a melee duel's turns, so 0.5 buys ~13% (R-KEYSTONE needs 30% at depth 15). Range: 1.2-1.6. */
+    public static final float   KEYSTONE_IRON_BULWARK_REFLECT_FRACTION    = 1.4f;
+    /** IRON BULWARK cost: all weapon damage multiplier. Spec default 0.85; 0.90 still costs 11% everywhere. Range: 0.85-0.90. */
+    public static final float   KEYSTONE_IRON_BULWARK_DAMAGE_MULTIPLIER   = 0.90f;
+    /** BERSERKER gain: max HP a melee kill restores. Spec default 0.08; MOVED to 0.14 — net of its own heal cost, 0.08 lifts the floor ~15% (R-KEYSTONE needs 30%). Range: 0.12-0.16. */
+    public static final float   KEYSTONE_BERSERKER_KILL_HEAL              = 0.14f;
+    /** BERSERKER gain: melee damage while below BUILD_BERSERK_LOW_HEALTH_FRACTION of max HP. Range: 0.30-0.60. */
+    public static final float   KEYSTONE_BERSERKER_LOW_HEALTH_MELEE       = 0.50f;
+    /** BERSERKER cost: heal multiplier. Range: 0.60-0.80. */
+    public static final float   KEYSTONE_BERSERKER_HEAL_MULTIPLIER        = 0.70f;
+    /** QUARTERMASTER gain: extra weapon loadout slots. Range: 1. */
+    public static final int     KEYSTONE_QUARTERMASTER_EXTRA_SLOTS        = 1;
+    /** QUARTERMASTER gain: shop price multiplier. Range: 0.70-0.80. */
+    public static final float   KEYSTONE_QUARTERMASTER_PRICE_MULTIPLIER   = 0.75f;
+    /** QUARTERMASTER cost: max-HP multiplier. Spec default 0.90; MOVED to 0.85 — -10% HP costs only ~7% of a floor's survival. Range: 0.80-0.86. */
+    public static final float   KEYSTONE_QUARTERMASTER_HEALTH_MULTIPLIER  = 0.85f;
+    /** IRONHIDE gain: max-HP multiplier. Spec default 1.40; MOVED to 1.50 — +40% HP is +25% to the pool's hits to die (R-KEYSTONE needs 30%). Range: 1.47-1.60. */
+    public static final float   KEYSTONE_IRONHIDE_HEALTH_MULTIPLIER       = 1.50f;
+    /** IRONHIDE cost: heal multiplier. Range: 0.70-0.85. */
+    public static final float   KEYSTONE_IRONHIDE_HEAL_MULTIPLIER         = 0.80f;
+
+    // --- RUNTIME GEOMETRY the perks read (CP2/CP3 seams honour these exactly) ------------------
+    /** Point Man: "point-blank" means at most this many tiles. Range: 1-2. */
+    public static final int     BUILD_POINT_BLANK_MAX_TILES  = 2;
+    /** Lane Discipline: the long-range bonus applies at this many tiles or farther. Range: 4-5. */
+    public static final int     BUILD_LONG_RANGE_MIN_TILES   = 4;
+    /** BERSERKER: the low-health melee bonus applies below this fraction of max HP. Range: 0.25-0.35. */
+    public static final float   BUILD_BERSERK_LOW_HEALTH_FRACTION = 0.30f;
+
+    // --- R-PERK / R-KEYSTONE / R-CARRY THRESHOLDS (B7) -----------------------------------------
+    /** PK1 FELT: every rank improves its niche metric by at least this fraction. Range: 0.10. */
+    public static final float   PERK_FELT_MIN_GAIN              = 0.10f;
+    /** PK2 FOCUSED: no non-VITALITY perk at max rank improves EVERY reference scenario by more than this. Range: 0.10. */
+    public static final float   PERK_FOCUSED_MAX_GAIN           = 0.10f;
+    /** PK2: a VITALITY perk rank improves no reference scenario by more than this. Range: 0.10. */
+    public static final float   PERK_VITALITY_MAX_GAIN_PER_RANK = 0.10f;
+    /** R-PERK: the depths every niche is measured at (PK1 holds at each; the breakpoint at any one). Range: R-ROLE depths. */
+    public static final int[]   BUILD_PERK_REFERENCE_DEPTHS     = {5, 15};
+    /** R-KEYSTONE: a keystone's niche gain is at least this. Range: 0.30. */
+    public static final float   KEYSTONE_NICHE_MIN_GAIN         = 0.30f;
+    /** R-KEYSTONE: at least one other scenario or metric worsens by at least this. Range: 0.10. */
+    public static final float   KEYSTONE_COST_MIN_LOSS          = 0.10f;
+    /** R-CARRY: the depth the tag builds are compared at. Range: 15. */
+    public static final int     BUILD_CARRY_DEPTH               = 15;
+    /** R-CARRY: best / worst tag carry score is at most 1 + this. Range: 0.20. */
+    public static final float   BUILD_CARRY_TOLERANCE           = 0.20f;
+    /** R-CARRY: guns a build's loadout carries (the Loadout's usable gun slots; QUARTERMASTER adds to it). Range: 2. */
+    public static final int     BUILD_KIT_GUN_SLOTS             = 2;
+    /** R-CARRY: a reference fight costs at least this many turns (sub-turn clears are floored here). Range: 1. */
+    public static final float   BUILD_CARRY_MIN_TURNS           = 1f;
+    /**
+     * R-CARRY: share of the expected player's perk picks spent in its build's own tag (the rest pivot), so
+     * the expected rank count at a depth is round(this x perk picks), capped at the tag's rank capacity.
+     * Range: 0.5-0.7.
+     */
+    public static final float   BUILD_EXPECTED_FOCUS_SHARE      = 0.60f;
+
+    // --- VALUATION MODEL INPUTS (util/BuildValuationModel; each one a stated assumption) -------
+    /** Turns between two heavies from one heavy-capable enemy in an attrition fight (commit + recover + melee). Range: 3-5. */
+    public static final int     BUILD_HEAVY_PERIOD_TURNS        = 4;
+    /** Cardinal lanes a heavy can arrive from (the guard-arc model). Range: 4. */
+    public static final int     BUILD_GUARD_LANES               = 4;
+    /** Unfaced lanes the Shield Wall +/-90 arc adds to the guard (both sides). Range: 2. */
+    public static final int     BUILD_WIDE_GUARD_EXTRA_LANES    = 2;
+    /** Seed salt of the valuation's average COMBAT floor (distinct from the R-ROLE supply salt). Range: any long. */
+    public static final long    BUILD_SUPPLY_SEED_SALT          = 0xB01D5L;
+    /** Share of a floor's incoming damage that arrives as HEAVY hits (the guardable part). Range: 0.25-0.45. */
+    public static final float   BUILD_FLOOR_HEAVY_DAMAGE_SHARE  = 0.35f;
+    /** Turns per floor a PYRO build stands in fire (its own cone ignites the lanes it fights in — Incinerator.marchShot -> HazardManager.igniteFire). Unverified model input; the sim can measure it. Range: 3-6. */
+    public static final float   BUILD_PYRO_FIRE_TURNS_PER_FLOOR = 5f;
+    /** Share of a floor's bodies a BLADE build kills in melee. Range: 0.3-0.6. */
+    public static final float   BUILD_BLADE_MELEE_KILL_SHARE    = 0.45f;
+    /** Share of a BLADE build's melee turns fought below BUILD_BERSERK_LOW_HEALTH_FRACTION. Range: 0.15-0.35. */
+    public static final float   BUILD_BLADE_LOW_HEALTH_TURN_SHARE = 0.25f;
+    /** Seeds the valuation averages one COMBAT floor's planned supply over. Range: 10-30. */
+    public static final int     BUILD_SUPPLY_SEED_COUNT         = 20;
 }

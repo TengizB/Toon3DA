@@ -6437,8 +6437,15 @@ public final class GameMath {
      *   (GameMath.incineratorBurnPerStack, matchup pre-multiplied as in EnemyManager).
      *   turnsToClear = (turn of the last kill - 1) + before / damage of the killing event, so the last turn
      *   counts only the fraction it needed — that is what keeps near-equal weapons from tying on integers.
+     *   BUILD TERMS (balance-overhaul order 5; all neutral on the order-3 rows, so R-ROLE is unchanged):
+     *     first hit on a member      hit + (hit / hitsPerAction) x firstHitBonus  (one bullet of a burst)
+     *     PIERCE k-th member         hit x (1 + pierceBonusPerTarget x k)
+     *     arc                        one more living member past the pattern takes primaryHit x arcFraction
+     *     burning member             hit and tick x (1 + burningDamageBonus)
+     *     Wildfire                   a burning member that dies gives every other living member one stack
      * Edge cases: a weapon with no reach in the band, or one that cannot clear inside turnCap, returns
      *   cleared = false and turnsToClear = turnCap. groupSize < 1 is treated as 1; laneTargets < 1 as 1.
+     *   Neutral build terms multiply by exactly 1 / add exactly 0, so the order-3 table is bit-identical.
      */
     public static RoleScenarioOutcome roleScenarioClear(RoleScenarioWeapon weapon, int groupSize, int laneTargets,
                                                         int distanceMin, int distanceMax, float enemyHitPoints,
@@ -6447,6 +6454,7 @@ public final class GameMath {
         float[] health = new float[members];
         int[] burnStacks = new int[members];
         int[] burnRemaining = new int[members];
+        int[] hitsLanded = new int[members];
         java.util.Arrays.fill(health, enemyHitPoints);
         float primaryHit = roleScenarioMeanHit(weapon, distanceMin, distanceMax, damageScale, matchupMultiplier);
         float neutralPrimaryHit = roleScenarioMeanHit(weapon, distanceMin, distanceMax, damageScale, 1f);
@@ -6470,7 +6478,7 @@ public final class GameMath {
                 charged++;
             } else {
                 charged = 0;
-                fireRoleScenarioAction(weapon, health, burnStacks, burnRemaining, members, laneTargets,
+                fireRoleScenarioAction(weapon, health, burnStacks, burnRemaining, hitsLanded, members, laneTargets,
                         primaryHit, neutralPrimaryHit, neighbourHit, matchupMultiplier, turn, lastKill);
                 actions++;
                 clip--;
@@ -6482,9 +6490,11 @@ public final class GameMath {
             if (burnPerStack > 0f) {
                 for (int member = 0; member < members; member++) {
                     if (health[member] <= 0f || burnRemaining[member] <= 0) continue;
-                    float tick = burnPerStack * burnStacks[member];
+                    // A ticking member is burning by definition: the PYROMANIAC bonus rides every tick.
+                    float tick = burnPerStack * burnStacks[member] * (1f + weapon.burningDamageBonus);
                     applyRoleScenarioDamage(health, member, tick, members, turn, lastKill);
                     burnRemaining[member]--;
+                    if (health[member] <= 0f) igniteRoleScenarioNeighbours(weapon, health, burnStacks, burnRemaining, members);
                 }
             }
             if (lastKill[0] >= 0f) {
@@ -6495,28 +6505,30 @@ public final class GameMath {
     }
 
     private static void fireRoleScenarioAction(RoleScenarioWeapon weapon, float[] health, int[] burnStacks,
-                                               int[] burnRemaining, int members, int laneTargets,
+                                               int[] burnRemaining, int[] hitsLanded, int members, int laneTargets,
                                                float primaryHit, float neutralPrimaryHit, float neighbourHit,
                                                float matchupMultiplier, int turn, float[] lastKill) {
         int targetsHit = 0;
         int lane = Math.max(1, laneTargets);
-        for (int member = 0; member < members; member++) {
+        int member = 0;
+        for (; member < members; member++) {
             if (health[member] <= 0f) continue;
             float hit;
+            boolean patternDone = false;
             switch (weapon.pattern) {
                 case SINGLE:
-                    if (targetsHit >= 1) return;
+                    patternDone = targetsHit >= 1;
                     hit = primaryHit;
                     break;
                 case PIERCE:
-                    if (targetsHit >= lane) return;
-                    hit = primaryHit;
+                    patternDone = targetsHit >= lane;
+                    hit = primaryHit * (1f + weapon.pierceBonusPerTarget * targetsHit);
                     break;
                 case SPLASH:
                     hit = targetsHit == 0 ? primaryHit : neighbourHit;
                     break;
                 case CHAIN:
-                    if (targetsHit > weapon.chainJumps) return;
+                    patternDone = targetsHit > weapon.chainJumps;
                     hit = targetsHit == 0 ? primaryHit
                             : neutralPrimaryHit * (float) Math.pow(weapon.chainMultiplier, targetsHit)
                                     * Math.max(1f, matchupMultiplier);
@@ -6526,12 +6538,50 @@ public final class GameMath {
                     hit = primaryHit;
                     break;
             }
-            applyRoleScenarioDamage(health, member, hit, members, turn, lastKill);
-            if (weapon.burns() && health[member] > 0f) {
-                burnStacks[member]    = Math.min(weapon.burnMaxStacks, burnStacks[member] + 1);
-                burnRemaining[member] = weapon.burnTurns;
-            }
+            if (patternDone) break;
+            landRoleScenarioHit(weapon, health, burnStacks, burnRemaining, hitsLanded, members, member, hit,
+                    turn, lastKill, true);
             targetsHit++;
+        }
+        // STORM CONDUIT: one more living member past the pattern takes a fraction of the primary hit.
+        if (weapon.arcFraction > 0f) {
+            for (int other = member; other < members; other++) {
+                if (health[other] <= 0f) continue;
+                landRoleScenarioHit(weapon, health, burnStacks, burnRemaining, hitsLanded, members, other,
+                        primaryHit * weapon.arcFraction, turn, lastKill, false);
+                break;
+            }
+        }
+    }
+
+    /**
+     * One hit on one member: the build's first-hit and burning-target terms, the damage, Wildfire on a
+     * burning kill, and (for the weapon's own pattern hits) the burn stack it applies to a survivor.
+     */
+    private static void landRoleScenarioHit(RoleScenarioWeapon weapon, float[] health, int[] burnStacks,
+                                            int[] burnRemaining, int[] hitsLanded, int members, int member,
+                                            float hit, int turn, float[] lastKill, boolean appliesBurn) {
+        float damage = hit;
+        if (hitsLanded[member] == 0) damage += hit / weapon.hitsPerAction * weapon.firstHitBonus;
+        boolean burning = burnRemaining[member] > 0 && burnStacks[member] > 0;
+        if (burning) damage *= 1f + weapon.burningDamageBonus;
+        applyRoleScenarioDamage(health, member, damage, members, turn, lastKill);
+        hitsLanded[member]++;
+        if (burning && health[member] <= 0f) igniteRoleScenarioNeighbours(weapon, health, burnStacks, burnRemaining, members);
+        if (appliesBurn && weapon.burns() && health[member] > 0f) {
+            burnStacks[member]    = Math.min(weapon.burnMaxStacks, burnStacks[member] + 1);
+            burnRemaining[member] = weapon.burnTurns;
+        }
+    }
+
+    /** Wildfire: a burning member died — every other living member gains one burn stack (cap) and a fresh timer. */
+    private static void igniteRoleScenarioNeighbours(RoleScenarioWeapon weapon, float[] health, int[] burnStacks,
+                                                     int[] burnRemaining, int members) {
+        if (!weapon.wildfire || !weapon.burns()) return;
+        for (int other = 0; other < members; other++) {
+            if (health[other] <= 0f) continue;
+            burnStacks[other]    = Math.min(weapon.burnMaxStacks, burnStacks[other] + 1);
+            burnRemaining[other] = weapon.burnTurns;
         }
     }
 
@@ -6563,12 +6613,31 @@ public final class GameMath {
     public static int roleScenarioBruiserHitsTaken(RoleScenarioWeapon weapon, int startDistance,
                                                    float enemyHitPoints, float damageScale, float matchupMultiplier,
                                                    int staggerMinTurnsBetween, int turnCap) {
+        return Math.round(roleScenarioBruiserWeightedHitsTaken(weapon, startDistance, enemyHitPoints, damageScale,
+                matchupMultiplier, staggerMinTurnsBetween, turnCap, 1f));
+    }
+
+    /*
+     * Formula: Role-scenario S8 with a weighted self-hit (balance-overhaul order 5)
+     * Derivation:
+     *   The same walk as roleScenarioBruiserHitsTaken, except a self-damage shot (a contact-fuse hit on an
+     *   adjacent target) counts selfHitWeight hits instead of one — the share of the player's OWN explosion
+     *   damage that still lands (Blast Shield: 1 - reduction; DEMOLITIONIST: 0):
+     *       hitsTaken = bruiserHitsLanded + selfHitWeight x selfDamageShots
+     *   selfHitWeight = 1 reproduces the integer S8 score exactly (the int method delegates here).
+     * Edge cases: selfHitWeight is clamped to [0, 1]; returns turnCap when the bruiser survives the cap.
+     */
+    public static float roleScenarioBruiserWeightedHitsTaken(RoleScenarioWeapon weapon, int startDistance,
+                                                             float enemyHitPoints, float damageScale,
+                                                             float matchupMultiplier, int staggerMinTurnsBetween,
+                                                             int turnCap, float selfHitWeight) {
+        float selfWeight = Math.max(0f, Math.min(1f, selfHitWeight));
         int distance = Math.max(1, startDistance);
         float health = enemyHitPoints;
         int clip = weapon.clipActions;
         int reloadRemaining = 0;
         int charged = 0;
-        int hitsTaken = 0;
+        float hitsTaken = 0f;
         boolean actionCancelled = false;
         int lastStaggerTurn = -staggerMinTurnsBetween - 1;
         for (int turn = 1; turn <= turnCap; turn++) {
@@ -6581,8 +6650,9 @@ public final class GameMath {
                 charged = 0;
                 float hit = weapon.baseHitAt(distance) * weapon.accuracy * weapon.hitsPerAction
                         * damageScale * matchupMultiplier;
+                if (hit > 0f) hit += hit / weapon.hitsPerAction * (turnHitsLanded(health, enemyHitPoints) ? 0f : weapon.firstHitBonus);
                 health -= hit;
-                if (weapon.selfDamageWhenAdjacent && distance == 1 && hit > 0f) hitsTaken++;
+                if (weapon.selfDamageWhenAdjacent && distance == 1 && hit > 0f) hitsTaken += selfWeight;
                 clip--;
                 if (clip == 0) {
                     if (weapon.reloadTurns == 0) clip = weapon.clipActions;
@@ -6604,10 +6674,472 @@ public final class GameMath {
             } else if (distance > 1) {
                 distance--;
             } else {
-                hitsTaken++;
+                hitsTaken += 1f;
             }
         }
         return turnCap;
+    }
+
+    /** True once the bruiser has taken any damage (the first-hit bonus is spent). */
+    private static boolean turnHitsLanded(float health, float startHealth) {
+        return health < startHealth;
+    }
+
+    // =====================================================================================
+    // BUILD VALUATION (balance-overhaul order 5) — perks, keystones, R-PERK / R-KEYSTONE / R-CARRY.
+    // util/BuildValuationModel orchestrates these over the order-3 scenario walk; every number it
+    // compares is produced by one of the formulas below.
+    // =====================================================================================
+
+    /*
+     * Formula: buildNicheGain — how much a build change improves a niche metric (R-PERK PK1/PK2, R-KEYSTONE)
+     * Derivation:
+     *   A gain is the RELATIVE improvement, always positive when the metric got better:
+     *       lower is better  (turns, ammo, hits taken):  gain = before / after - 1
+     *       higher is better (survivals, supply):         gain = after / before - 1
+     *   so a 15% damage bonus on a smooth single-target kill reads 0.15 (turns x 1/1.15), and a 15% larger
+     *   pool reads 0.15. A worse metric gives a negative gain; R-KEYSTONE's LOSS is -gain.
+     * Edge cases:
+     *   before == after (including both infinite) -> 0. A lower-better after <= 0 -> before > 0 ? +infinity : 0;
+     *   a higher-better before <= 0 -> after > 0 ? +infinity : 0. Infinity on either side otherwise returns
+     *   +infinity or -1 in the direction of the change, never NaN.
+     */
+    public static float buildNicheGain(float before, float after, boolean higherIsBetter) {
+        if (before == after) return 0f;
+        if (higherIsBetter) {
+            if (Float.isInfinite(after)) return Float.POSITIVE_INFINITY;
+            if (Float.isInfinite(before)) return -1f;
+            if (before <= 0f) return after > 0f ? Float.POSITIVE_INFINITY : 0f;
+            return after / before - 1f;
+        }
+        if (Float.isInfinite(before)) return Float.POSITIVE_INFINITY;
+        if (Float.isInfinite(after)) return -1f;
+        if (after <= 0f) return before > 0f ? Float.POSITIVE_INFINITY : 0f;
+        return before / after - 1f;
+    }
+
+    /*
+     * Formula: falloffReducedHit — Steady Aim closes the distance falloff (balance-overhaul order 5)
+     * Derivation:
+     *   A falloff weapon loses (undropped - hit) of its hit at a distance. Steady Aim removes a fraction r
+     *   of that loss — equivalently it scales the drop coefficient by (1 - r) while the clamp is not hit:
+     *       hit' = undropped - (undropped - hit) x (1 - r)
+     *   Worked: Assault Rifle 20 undropped, 15.2 at 3 tiles, r = 0.30 -> 20 - 4.8 x 0.7 = 16.64.
+     * Edge cases: r clamped to [0, 1] (r = 1 removes all falloff); a hit above the undropped value (a
+     *   weapon whose undropped hit is not its maximum) is returned unchanged.
+     */
+    public static float falloffReducedHit(float hitAtDistance, float undroppedHit, float reduction) {
+        if (hitAtDistance >= undroppedHit) return hitAtDistance;
+        float clamped = Math.max(0f, Math.min(1f, reduction));
+        return undroppedHit - (undroppedHit - hitAtDistance) * (1f - clamped);
+    }
+
+    /*
+     * Formula: combinedFirstHitBonus — First Blood and DEADEYE on the same opening hit
+     * Derivation:
+     *   First Blood multiplies a hit on a full-HP enemy by (1 + b); DEADEYE makes that same first hit a
+     *   critical (x critMultiplier). Both are multipliers on one hit, so they compose:
+     *       firstHitMultiplier = (1 + b) x (critical ? critMultiplier : 1)
+     *       bonus              = firstHitMultiplier - 1
+     *   Worked: b = 0.25, critical x2 -> 1.25 x 2 - 1 = 1.5.
+     * Edge cases: negative b is floored at 0; critMultiplier < 1 is floored at 1 (a crit never weakens).
+     */
+    public static float combinedFirstHitBonus(float fullHealthBonus, boolean critical, float critMultiplier) {
+        float multiplier = (1f + Math.max(0f, fullHealthBonus)) * (critical ? Math.max(1f, critMultiplier) : 1f);
+        return multiplier - 1f;
+    }
+
+    /*
+     * Formula: buildClipActions — fire actions per clip after DEADEYE's clip cut
+     * Derivation:
+     *   A clip holds clipActions x ammoPerAction rounds; the cut keeps floor(rounds x multiplier) of them,
+     *   and an action still needs a whole ammoPerAction:
+     *       actions = max(1, floor(clipActions x ammoPerAction x multiplier) / ammoPerAction)
+     *   Worked: Chaingun 8 actions x 3 rounds x 0.7 = 16 rounds -> 5 actions; Railgun 1 x 0.7 -> 1 (never 0).
+     * Edge cases: multiplier >= 1 returns clipActions unchanged (the cut never grows a clip); every clip
+     *   keeps at least one action.
+     */
+    public static int buildClipActions(int clipActions, int ammoPerAction, float multiplier) {
+        if (multiplier >= 1f) return clipActions;
+        int perAction = Math.max(1, ammoPerAction);
+        int rounds = (int) Math.floor(clipActions * perAction * Math.max(0f, multiplier) + 1e-4f);
+        return Math.max(1, rounds / perAction);
+    }
+
+    /*
+     * Formula: guardedHeavyShare — the share of committed heavies the player meets inside the guard arc
+     * Derivation:
+     *   A competent player faces fs of the heavies committed at them (HEAVY_EXPECTED_AVOIDANCE, the order-4
+     *   pricing share). The (1 - fs) they did not face arrive from the other lanes, spread evenly over the
+     *   (lanes - 1) unfaced cardinal lanes. A wider arc that covers extraLanes of those lanes guards that
+     *   share of the misses too:
+     *       share = fs + (1 - fs) x extraLanes / (lanes - 1)
+     *   Worked: fs 0.6, the +/-90 arc covers both sides (2 of 3 unfaced lanes) -> 0.6 + 0.4 x 2/3 = 0.867.
+     * Edge cases: lanes <= 1 -> fs; extraLanes clamped to [0, lanes - 1]; fs clamped to [0, 1].
+     */
+    public static float guardedHeavyShare(float facedShare, int extraLanes, int lanes) {
+        float faced = Math.max(0f, Math.min(1f, facedShare));
+        if (lanes <= 1) return faced;
+        int extra = Math.max(0, Math.min(lanes - 1, extraLanes));
+        return faced + (1f - faced) * extra / (lanes - 1);
+    }
+
+    /*
+     * Formula: heavyTakenFactor — the share of a heavy's damage that lands, guard included
+     * Derivation:
+     *   A guarded heavy lands x guardMultiplier (GUARD_FRONT_HEAVY 0.20; Shield Wall r2 0.10), an unguarded
+     *   one in full:
+     *       factor = share x guardMultiplier + (1 - share)
+     *   Worked: share 0.6, x0.20 -> 0.12 + 0.40 = 0.52.
+     * Edge cases: share and guardMultiplier clamped to [0, 1].
+     */
+    public static float heavyTakenFactor(float guardedShare, float guardMultiplier) {
+        float share = Math.max(0f, Math.min(1f, guardedShare));
+        float multiplier = Math.max(0f, Math.min(1f, guardMultiplier));
+        return share * multiplier + (1f - share);
+    }
+
+    /*
+     * Formula: riposteDamageMultiplier — a riposte's VULNERABLE window as a fight-long damage multiplier
+     * Derivation:
+     *   Against a heavy-capable enemy, a heavy comes every P turns and the player guards (and so ripostes)
+     *   a share g of them; each riposte leaves the enemy VULNERABLE for v turns at +x damage. Over a fight
+     *   of T turns that is g x T / P ripostes covering g x T x v / P turns — a share of the fight
+     *       coverage = min(1, g x v / P)                         (independent of T: self-consistent)
+     *   during which every hit deals (1 + x), so the fight-long multiplier on the player's damage is
+     *       multiplier = 1 + x x coverage
+     *   Worked: base g 0.6, v 2, x 0.5, P 4 -> 1 + 0.5 x 0.3 = 1.15; Riposte Drill r2 + the wide arc
+     *   (g 0.867, v 4, x 1.0) -> 1 + 1.0 x 0.867 = 1.867.
+     * Edge cases: P <= 0 -> 1 (no heavies, no riposte); negative inputs read as 0; coverage capped at 1
+     *   (windows cannot overlap into more than the whole fight).
+     */
+    public static float riposteDamageMultiplier(float guardedShare, float vulnerableTurns, float vulnerableBonus,
+                                                float heavyPeriodTurns) {
+        if (heavyPeriodTurns <= 0f) return 1f;
+        float coverage = Math.min(1f, Math.max(0f, guardedShare) * Math.max(0f, vulnerableTurns) / heavyPeriodTurns);
+        return 1f + Math.max(0f, vulnerableBonus) * coverage;
+    }
+
+    /*
+     * Formula: guardReflectDamagePerTurn — IRON BULWARK's reflection as damage per turn
+     * Derivation:
+     *   A heavy of size h comes every P turns; a share g is guarded, blocking (1 - m) x h; the keystone
+     *   returns a fraction r of the blocked part to the attacker. Per turn of the fight:
+     *       reflected = g x r x h x (1 - m) / P
+     *   It ADDS to the player's own damage per turn on that attacker, so the fight against it shortens.
+     *   Worked: g 0.6, r 0.5, h 217, m 0.2, P 4 -> 13.0 a turn.
+     * Edge cases: P <= 0 -> 0; negative inputs read as 0; m clamped to [0, 1].
+     */
+    public static float guardReflectDamagePerTurn(float guardedShare, float reflectFraction, float heavyHit,
+                                                  float guardMultiplier, float heavyPeriodTurns) {
+        if (heavyPeriodTurns <= 0f) return 0f;
+        float blockedShare = 1f - Math.max(0f, Math.min(1f, guardMultiplier));
+        return Math.max(0f, guardedShare) * Math.max(0f, reflectFraction) * Math.max(0f, heavyHit) * blockedShare
+                / heavyPeriodTurns;
+    }
+
+    /*
+     * Formula: attritionDamageTaken — what one fight costs the player (the BULWARK duel, PK2 survivals)
+     * Derivation:
+     *   An enemy acts every turn it lives: an ORDINARY hit on an ordinary turn, a HEAVY on a heavy turn,
+     *   nothing on a turn a riposte stunned it. With ordinaryTurns ordinary hits of o and heavies of h
+     *   landing heavyFactor of their size (heavyTakenFactor):
+     *       damage = ordinaryTurns x o + heavies x h x heavyFactor
+     * Edge cases: negative inputs read as 0.
+     */
+    public static float attritionDamageTaken(float ordinaryTurns, float ordinaryHit, float heavies, float heavyHit,
+                                             float heavyFactor) {
+        return Math.max(0f, ordinaryTurns) * Math.max(0f, ordinaryHit)
+                + Math.max(0f, heavies) * Math.max(0f, heavyHit) * Math.max(0f, heavyFactor);
+    }
+
+    /*
+     * Formula: fightsSurvived — TTD measured in fights of a given cost
+     * Derivation:
+     *   With an effective pool P and a fight that costs D, the player survives P / D such fights back to
+     *   back (no healing between them) — turns-to-die divided by the fight's length, so a perk that makes
+     *   the fight SHORTER (riposte, reflect) and one that makes the pool BIGGER (armour) move the same number:
+     *       survivals = P / D
+     * Edge cases: D <= 0 -> +infinity (the fight costs nothing); P <= 0 -> 0.
+     */
+    public static float fightsSurvived(float pool, float damagePerFight) {
+        if (damagePerFight <= 0f) return Float.POSITIVE_INFINITY;
+        return Math.max(0f, pool) / damagePerFight;
+    }
+
+    /*
+     * Formula: floorSustain — everything that keeps the player standing through one COMBAT floor
+     * Derivation (all in fractions of the ON-CURVE player's max HP, so builds compare on one scale):
+     *   pool        = hpMult + armourRatio x arMult          (armourRatio = max armour / max HP)
+     *   heals       = healFraction x healMult x hpMult       (heals are fractions of the BUILD's max HP, R10)
+     *   armour      = armourPickupFraction x arMult          (armour pickups are fractions of max armour)
+     *   sustain     = pool + heals + armour + meleeKillHeal + secondWindHit
+     *   meleeKillHeal is kills x heal fraction x hpMult; secondWindHit is the lethal hit Second Wind absorbs
+     *   (a heavy, the canonical killer — a fraction of the on-curve max HP).
+     * Edge cases: negative terms read as 0.
+     */
+    public static float floorSustain(float healthMultiplier, float armourRatio, float armourMultiplier,
+                                     float healFraction, float healMultiplier, float armourPickupFraction,
+                                     float meleeKillHeal, float secondWindHit) {
+        float health = Math.max(0f, healthMultiplier);
+        return health + Math.max(0f, armourRatio) * Math.max(0f, armourMultiplier)
+                + Math.max(0f, healFraction) * Math.max(0f, healMultiplier) * health
+                + Math.max(0f, armourPickupFraction) * Math.max(0f, armourMultiplier)
+                + Math.max(0f, meleeKillHeal) + Math.max(0f, secondWindHit);
+    }
+
+    /*
+     * Formula: floorIncoming — one COMBAT floor's incoming damage under a build
+     * Derivation (fractions of the on-curve max HP):
+     *   The SupplyPlanner's modelled incoming I (floorExpectedIncomingDamage) splits into an ordinary part
+     *   and a HEAVY part of share s. A build that guards heavies better scales only the heavy part, by its
+     *   heavyTakenFactor over the base one; standing in fire adds its ticks:
+     *       incoming = I x ((1 - s) + s x factorBuild / factorBase) + fireDamage
+     * Edge cases: factorBase <= 0 -> the heavy part is left unscaled; negative inputs read as 0.
+     */
+    public static float floorIncoming(float baseIncoming, float heavyShare, float heavyFactorBuild,
+                                      float heavyFactorBase, float fireDamage) {
+        float share = Math.max(0f, Math.min(1f, heavyShare));
+        float ratio = heavyFactorBase > 0f ? Math.max(0f, heavyFactorBuild) / heavyFactorBase : 1f;
+        return Math.max(0f, baseIncoming) * ((1f - share) + share * ratio) + Math.max(0f, fireDamage);
+    }
+
+    /*
+     * Formula: barrelOpenerTurns — a fight that opens on a barrel (Sapper, DEMOLITIONIST)
+     * Derivation:
+     *   The first turn shoots the barrel; its blast b (the ring hit, x the build's barrel multiplier and the
+     *   EXPLOSIVE matchup) lands on every member standing beside it. If b kills them the fight ends inside
+     *   that first turn at the fraction the blast needed (the order-3 last-turn rule); otherwise the weapon
+     *   finishes the survivors from health - b:
+     *       turns = b >= health ? health / b : 1 + followUpTurns(health - b)
+     *   Worked: hulk 60, blast 30 -> 1 + turns(30); blast 75 -> 0.8.
+     * Edge cases: b <= 0 -> 1 + followUpTurns (a wasted shot); health <= 0 -> 0.
+     */
+    public static float barrelOpenerTurns(float enemyHealth, float blast, float followUpTurns) {
+        if (enemyHealth <= 0f) return 0f;
+        if (blast >= enemyHealth) return enemyHealth / blast;
+        return 1f + Math.max(0f, followUpTurns);
+    }
+
+    /*
+     * Formula: netAmmoAfterRefunds — ammo a clear costs once kills refund shells (Breacher, SCATTERGUN)
+     * Derivation:
+     *   Each kill refunds one unit with probability p (Breacher, plus SCATTERGUN's point-blank refund), so
+     *   in expectation:
+     *       net = max(0, spent - kills x min(1, p))
+     *   Worked: Shotgun 4 shells for 3 kills, p 0.33 -> 3.01.
+     * Edge cases: kills < 0 or p < 0 read as 0.
+     */
+    public static float netAmmoAfterRefunds(float ammoSpent, int kills, float refundChancePerKill) {
+        float refunds = Math.max(0, kills) * Math.max(0f, Math.min(1f, refundChancePerKill));
+        return Math.max(0f, ammoSpent - refunds);
+    }
+
+    /*
+     * Formula: supplyPowerPoints — a floor's supply in depth-1 power points (the SCAVENGER niche)
+     * Derivation (the shop's own exchange rates, so every component reads in the same currency):
+     *   ammo     = ammoDamageAtDepth / hitGrowth(d) / SHOP_AMMO_DAMAGE_PER_POWER_POINT
+     *   heals    = healFraction x PLAYER_MAX_HEALTH / SHOP_HEAL_HP_PER_POWER_POINT     (depth-1 HP basis)
+     *   credits  = credits / (SHOP_CREDITS_PER_POWER_POINT x depthFactor(d) x priceMultiplier)
+     *   A cheaper shop (Haggler, QUARTERMASTER) makes the same credits buy more points.
+     * Edge cases: a non-positive divisor returns 0 for that component.
+     */
+    public static float ammoPowerPoints(float ammoDamageAtDepth, float hitGrowth, float damagePerPowerPoint) {
+        if (hitGrowth <= 0f || damagePerPowerPoint <= 0f) return 0f;
+        return Math.max(0f, ammoDamageAtDepth) / hitGrowth / damagePerPowerPoint;
+    }
+
+    /*
+     * Formula: healPowerPoints — heal / armour supply in depth-1 power points (supplyPowerPoints, heals)
+     * Derivation: heals = healFraction x depthOneMaxHealth / healthPerPowerPoint — the shop's medkit price
+     *   basis (SHOP_HEAL_HP_PER_POWER_POINT HP of a depth-1 player buys one point).
+     *   Worked: 0.45 x 130 / 11 = 5.3 points (one field medkit).
+     * Edge cases: healthPerPowerPoint <= 0 -> 0; negative inputs read as 0.
+     */
+    public static float healPowerPoints(float healFraction, float depthOneMaxHealth, float healthPerPowerPoint) {
+        if (healthPerPowerPoint <= 0f) return 0f;
+        return Math.max(0f, healFraction) * Math.max(0f, depthOneMaxHealth) / healthPerPowerPoint;
+    }
+
+    /*
+     * Formula: creditPowerPoints — credits in depth-1 power points at the build's shop prices
+     * Derivation: credits = credits / (creditsPerPowerPoint x depthFactor(d) x priceMultiplier), the inverse
+     *   of shopPrice: what those credits buy at the Fabricator, so a cheaper shop buys more points.
+     *   Worked: 465 credits at d15 (factor 2.4), 36 cr/PP, x1 -> 5.4 points; x0.75 -> 7.2.
+     * Edge cases: a non-positive divisor -> 0; negative credits read as 0.
+     */
+    public static float creditPowerPoints(float credits, float creditsPerPowerPoint, int depth, float depthPriceScale,
+                                          float priceMultiplier) {
+        float divisor = creditsPerPowerPoint * shopDepthPriceFactor(depth, depthPriceScale) * priceMultiplier;
+        if (divisor <= 0f) return 0f;
+        return Math.max(0f, credits) / divisor;
+    }
+
+    /*
+     * Formula: expectedPerkPicks / expectedTagRankCount — the on-curve player's build size (R-CARRY)
+     * Derivation:
+     *   Every character level after the first is one pick; the keystone levels (B4) pick a keystone
+     *   instead of a perk:
+     *       perkPicks(L) = (L - 1) - #{k in KEYSTONE_LEVELS : k <= L}
+     *   A build spends a focus share f of them in its own tag (the rest pivot) and cannot exceed the tag's
+     *   rank capacity C (the sum of its perks' max ranks):
+     *       ranks = min(C, round(f x perkPicks))
+     *   Worked: L 15, keystones {5,10,15} -> 14 - 3 = 11 picks; f 0.6 -> 7 ranks (PYRO caps at 5).
+     * Edge cases: L < 1 -> 0 picks; f clamped to [0, 1].
+     */
+    public static int expectedPerkPicks(int characterLevel, int[] keystoneLevels) {
+        int level = Math.max(1, characterLevel);
+        int keystones = 0;
+        if (keystoneLevels != null) {
+            for (int keystoneLevel : keystoneLevels) {
+                if (keystoneLevel > 1 && keystoneLevel <= level) keystones++;
+            }
+        }
+        return Math.max(0, level - 1 - keystones);
+    }
+
+    /*
+     * Formula: expectedTagRankCount — the ranks the expected build holds in its own tag (R-CARRY)
+     * Derivation: ranks = min(C, round(f x perkPicks)) — a focus share f of the picks, capped at the tag's
+     *   rank capacity C (see expectedPerkPicks).
+     *   Worked: 11 picks, f 0.6 -> 7; PYRO (C = 5) -> 5.
+     * Edge cases: f clamped to [0, 1]; negative picks read as 0.
+     */
+    public static int expectedTagRankCount(int perkPicks, float focusShare, int tagCapacity) {
+        float share = Math.max(0f, Math.min(1f, focusShare));
+        return Math.max(0, Math.min(tagCapacity, Math.round(share * Math.max(0, perkPicks))));
+    }
+
+    /*
+     * Formula: scenarioLift — how much faster (or safer) one reference fight got (R-CARRY)
+     * Derivation:
+     *   Turns-to-clear scenarios: the order-3 walk scores the last turn by the FRACTION the killing event
+     *   needed, so a fight that ends inside its first turn can read 0.72 or 0.01 depending on how much a
+     *   burn tick overkilled — a 70x "lift" for a fight that took one turn either way. A fight costs the
+     *   player at least minimumTurns, so both sides are floored there:
+     *       lift = max(m, before) / max(m, after)
+     *   S8 is scored in bruiser hits taken, where 0 is common; it compares hits + 1 (0 vs 1 hit = 2x):
+     *       lift = (before + 1) / (after + 1)
+     * Edge cases: an infinite before (no eligible answer) with a finite after -> the after's own floor
+     *   ratio is meaningless, so it returns 1 + (the cap is the R-ROLE turn cap's job); both infinite -> 1.
+     */
+    public static float scenarioLift(float before, float after, boolean hitsTaken, float minimumTurns) {
+        if (Float.isInfinite(before) || Float.isInfinite(after)) {
+            return Float.isInfinite(before) == Float.isInfinite(after) ? 1f
+                    : (Float.isInfinite(before) ? BalanceConfig.ROLE_SCENARIO_TURN_CAP / Math.max(minimumTurns, after)
+                                                : Math.max(minimumTurns, before) / BalanceConfig.ROLE_SCENARIO_TURN_CAP);
+        }
+        if (hitsTaken) return (before + 1f) / (after + 1f);
+        return Math.max(minimumTurns, before) / Math.max(minimumTurns, after);
+    }
+
+    /*
+     * Formula: averageAliveMembers — how many of a group stand, on average, through its clear
+     * Derivation:
+     *   A group of n is killed down one by one over the clear, so the count alive falls linearly from n to
+     *   1 (the last member dies at the end); the time average of that count is
+     *       alive = (n + 1) / 2
+     *   Worked: a pack of 3 -> 2 alive on average; a single -> 1.
+     * Edge cases: n < 1 is treated as 1.
+     */
+    public static float averageAliveMembers(int groupSize) {
+        return (Math.max(1, groupSize) + 1) / 2f;
+    }
+
+    /*
+     * Formula: bandShareWithin — the share of an engagement band at or inside a reach
+     * Derivation:
+     *   A scenario engages at every tile of [min, max] with equal weight (roleScenarioMeanHit), so the share
+     *   of its fight that happens within maxTiles is
+     *       share = #{d in [min, max] : d <= maxTiles} / (max - min + 1)
+     *   Worked: S2 (1-3) within 2 tiles -> 2/3.
+     * Edge cases: an inverted band (max < min) is the single tile min.
+     */
+    public static float bandShareWithin(int distanceMin, int distanceMax, int maxTiles) {
+        int upper = Math.max(distanceMin, distanceMax);
+        int inside = 0;
+        for (int distance = distanceMin; distance <= upper; distance++) {
+            if (distance <= maxTiles) inside++;
+        }
+        return (float) inside / (upper - distanceMin + 1);
+    }
+
+    /*
+     * Formula: powerPointsToHealFraction — what supply power points buy as heals (SCAVENGER's carry)
+     * Derivation:
+     *   The Fabricator prices a medkit at heal x depthOneMaxHealth / healthPerPowerPoint points
+     *   (healPowerPoints), and a medkit restores a FRACTION of max HP at any depth (R10), so one point buys
+     *       fraction = healthPerPowerPoint / depthOneMaxHealth   of max HP
+     *   and points buy points x that.
+     *   Worked: 11 HP / 130 -> 0.085 of max HP per point; 10 points -> 0.85.
+     * Edge cases: depthOneMaxHealth <= 0 -> 0; negative points read as 0.
+     */
+    public static float powerPointsToHealFraction(float powerPoints, float healthPerPowerPoint, float depthOneMaxHealth) {
+        if (depthOneMaxHealth <= 0f) return 0f;
+        return Math.max(0f, powerPoints) * Math.max(0f, healthPerPowerPoint) / depthOneMaxHealth;
+    }
+
+    /*
+     * Formula: duelOrdinaryTurns — the enemy turns of a duel that land an ORDINARY hit
+     * Derivation:
+     *   The enemy acts once per duel turn. On a heavy turn it throws the heavy; on the turn after a riposte
+     *   it is stunned and does nothing; every other turn it lands an ordinary hit:
+     *       ordinary = max(0, totalTurns - heavies - stunnedTurns)
+     *   With totalTurns = fireTurns + guardTurns and one stun per guarded heavy, this is fireTurns - heavies.
+     * Edge cases: never negative.
+     */
+    public static float duelOrdinaryTurns(float totalTurns, float heavies, float stunnedTurns) {
+        return Math.max(0f, totalTurns - Math.max(0f, heavies) - Math.max(0f, stunnedTurns));
+    }
+
+    /*
+     * Formula: survivalLift — a TTD ratio that never reads NaN (R-CARRY)
+     * Derivation: lift = after / before for a higher-is-better survival measure.
+     * Edge cases: before infinite (nothing hurts the player) -> 1 when after is infinite too, else 0;
+     *   after infinite with a finite before -> +infinity is not a lift, it is clamped to the turn cap
+     *   (ROLE_SCENARIO_TURN_CAP); before <= 0 -> 1 (no information).
+     */
+    public static float survivalLift(float before, float after) {
+        if (Float.isInfinite(before)) return Float.isInfinite(after) ? 1f : 0f;
+        if (Float.isInfinite(after)) return BalanceConfig.ROLE_SCENARIO_TURN_CAP;
+        if (before <= 0f) return 1f;
+        return after / before;
+    }
+
+    /*
+     * Formula: geometricMeanLift — a build's lift over a roster of fights (R-CARRY)
+     * Derivation:
+     *   A lift is a ratio (> 1 = better). Averaging ratios arithmetically lets one huge niche hide seven
+     *   untouched fights; the geometric mean is the per-fight lift that, applied to every fight, gives the
+     *   same product:
+     *       lift = (prod_i lift_i) ^ (1 / n)  = exp(mean(ln lift_i))
+     * Edge cases: an empty roster -> 1; a non-positive or non-finite lift is skipped (it carries no
+     *   information about the build).
+     */
+    public static float geometricMeanLift(float[] lifts) {
+        if (lifts == null || lifts.length == 0) return 1f;
+        double logSum = 0.0;
+        int count = 0;
+        for (float lift : lifts) {
+            if (!(lift > 0f) || Float.isInfinite(lift)) continue;
+            logSum += Math.log(lift);
+            count++;
+        }
+        return count == 0 ? 1f : (float) Math.exp(logSum / count);
+    }
+
+    /*
+     * Formula: buildCarryScore — one number for a build's total lift (R-CARRY)
+     * Derivation:
+     *   The codebase measures total power as damage-per-turn x effective HP (ladderCouplingAtCharacterLevel,
+     *   the boss derivation). A turns-to-kill lift is a DPT ratio and a turns-to-die lift is an eHP ratio,
+     *   so the build's power lift over the same player without it is their PRODUCT:
+     *       carry = ttkLift x ttdLift
+     *   An offence build lifts the first factor, a defence build the second; both land on one scale.
+     * Edge cases: non-positive inputs read as 0 (a build that cannot clear or cannot survive carries nothing).
+     */
+    public static float buildCarryScore(float turnsToKillLift, float turnsToDieLift) {
+        return Math.max(0f, turnsToKillLift) * Math.max(0f, turnsToDieLift);
     }
 
     /** {@link #classifyMatchup} result: the multiplier is at or above the effective threshold. */

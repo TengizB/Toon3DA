@@ -263,6 +263,31 @@ class BalanceAuditTest {
     }
 
     /**
+     * R-PERK (balance-overhaul order 5): PK1 FELT — every perk rank improves its niche by at least
+     * PERK_FELT_MIN_GAIN at every reference depth and its max rank crosses a whole TTK / TTD step; PK2
+     * FOCUSED — no non-VITALITY perk improves all eight scenarios past the bound, no VITALITY rank any one.
+     */
+    @Test
+    void everyPerkRankIsFeltAndFocused() {
+        assertNoViolations(BalanceSchema.perkResults());
+    }
+
+    /** R-KEYSTONE (balance-overhaul order 5): every keystone buys its niche and pays a real cost elsewhere. */
+    @Test
+    void everyKeystoneTradesANicheForACost() {
+        assertNoViolations(BalanceSchema.keystoneResults());
+    }
+
+    /**
+     * R-CARRY (balance-overhaul order 5): every tag's expected depth-15 build lifts the player within
+     * 1 + BUILD_CARRY_TOLERANCE of every other tag's — no trap build, no dominant build.
+     */
+    @Test
+    void noBuildIsATrapOrDominant() {
+        assertNoViolations(BalanceSchema.buildCarryResults());
+    }
+
+    /**
      * R-REGION (order 5): the region danger dial is bounded and monotonic, the lethal regions (C/D)
      * out-dial region A measurably, and the per-fight depth-coupling holds in every region lane.
      */

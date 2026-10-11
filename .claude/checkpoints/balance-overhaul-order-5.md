@@ -54,7 +54,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [ ] **CP1** — BuildTag, Perk, PerkModifier, Keystone, SECTION 24, GameMath valuations.
       DONE WHEN: R-PERK / R-KEYSTONE / R-CARRY asserted on the data and green; UpgradeCard still live;
-      both gates green.
+      both gates green. Split:
+  - [x] **CP1a** — data, SECTION 24, valuation model, R-PERK/R-KEYSTONE/R-CARRY + 3 audit methods, report tables.
+        DELIBERATE TEMPORARY RED: PK1 WILDFIRE breakpoint + R-CARRY (owner rulings B1/B2 below).
+  - [ ] **CP1b** — owner rulings applied; R-PERK/R-KEYSTONE/R-CARRY green; both gates green.
 - [ ] **CP2** — PerkDeck + PlayerBuild drive level-ups (B3); UpgradeCard / UpgradeCardPool retired;
       R-CARD / R-CARD-BREAKPOINT replaced; ExpectedPlayer updated.
       DONE WHEN: R-LADDER still green; A1 holds; both gates green.
@@ -73,3 +76,28 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   desktop-only MIRROR build in the session scratchpad (`mirror/`): symlinks to core/lwjgl3/assets/
   gradle*/docs/story, `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle` without the
   `buildscript{}` block. Maven Central may 429 — put the googleapis maven mirror first.
+- **BASELINE (2026-10-11):** core:test 455, only StoryBarkTest red; balanceSim exit 0 (TACTICAL median depth 2,
+  177/200 stalled — navigation waiver; readable 1.00).
+- **CP1a handover (builder, Opus):** `progression/` BuildTag, BuildStats (perk bonuses add, keystone costs multiply after;
+  `damageMultiplierFor(DamageClass)`, `maxHealthMultiplier()`, `maxArmorMultiplier()`, `healMultiplier()`,
+  `shopPriceMultiplier()`, `ammoPickupMultiplier()`, `clipSizeMultiplier()`, `ownExplosionDamageMultiplier()`,
+  `barrelDamageMultiplier()`, `meleeKillHealTotalFraction()`, `isFireTileImmune()`, `guardHeavyMultiplierOr(float)`,
+  `attributeGrant(Attribute)` + one raw getter per field), PerkModifier, PerkEffect (TOTAL magnitude per rank), Perk (26),
+  Keystone (9; applyGains/applyCosts), PlayerBuild (addPerkRank, addKeystone, rankOf, isMaxed, hasKeystone, ranksInTag,
+  highestRankTag, attributeGrantTotal, stats, reset). `util/` BuildValuationModel + BuildNicheMetric; RuleKinds PERK /
+  KEYSTONE / BUILD_CARRY. Harness: scratchpad `harness/run.sh` (MAIN=CarryDebug for the carry breakdown).
+- **CP1a decisions:** Point Man every rank +X% SPREAD at <=2 tiles (r2 +1 knockback, r3 stagger at 3); Shield Wall r2 guarded
+  heavy x0.0, r3 all-round guard; First Blood / Steady Aim / Lane Discipline BALLISTIC+RAIL only, Lane >= 4 tiles; DEADEYE crit
+  any weapon; Accelerant +FIRE dmg, Arc Jump +chain multiplier as second effects; Butcher +1 STR/rank; carry = kill-speed lift x
+  survival lift (geo-mean S1-S8, two-gun loadout); expected ranks = min(capacity, round(0.6 x picks)), picks = (cL-1) - keystone
+  levels (11 at d15). Magnitudes moved far from defaults (e.g. First Blood .80/1.6/2.4, Plate Carrier .42/.90/1.48) — every
+  move has a "MOVED" javadoc. Unverified model inputs (sim could measure): heavy every 4 turns, heavies 35% of floor damage,
+  PYRO stands 5 turns/floor in fire, BLADE melee-kills 45% of bodies.
+- **RUNTIME MUST HONOUR (CP2/CP3):** class bonuses add / keystone costs multiply; Steady Aim closes falloff loss by (1-r) on
+  BALLISTIC/RAIL; First Blood once per enemy, first bullet only, multiplies with DEADEYE crit; Point Man <=2 tiles, Lane >=4;
+  Overcharge k-th pierced body x(1+o*k); STORM CONDUIT arcs to one extra living enemy; PYROMANIAC bonus on every hit and tick
+  vs a burning enemy; Wildfire gives other living group members one burn stack; guarded heavy ripostes + reflects 1.4x
+  blocked; Second Wind one lethal hit per floor; QUARTERMASTER unlocks gun slot 2; Breacher / SCATTERGUN refunds per kill.
+- **OPEN — OWNER (blocks CP1b):** B1 R-CARRY unreachable: VITALITY floor ~2.13 (PK1 + R-KEYSTONE pin it), SCAVENGER tops at
+  1.09 (economy tag, not measured in fights), MARKSMAN ~1.72; spread 1.96 (1.24 without SCAVENGER). B2 Wildfire PK1
+  breakpoint unreachable: S5 clears in <1 turn at every depth; S2 enemies die to the same spray.

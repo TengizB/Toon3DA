@@ -69,14 +69,20 @@ public final class WeaponRoleModel {
         public final DamageClass        damageClass;
         public final AmmoType           ammoType;
         public final RoleScenarioWeapon model;
+        /**
+         * The weapon's per-hit damage before any distance falloff (depth-1 base): what the build valuation's
+         * falloff reduction (Steady Aim) closes the per-tile hit toward (balance-overhaul order 5).
+         */
+        public final float              undroppedHit;
 
         RoleWeapon(String displayName, ItemType itemType, DamageClass damageClass, AmmoType ammoType,
-                   RoleScenarioWeapon model) {
-            this.displayName = displayName;
-            this.itemType    = itemType;
-            this.damageClass = damageClass;
-            this.ammoType    = ammoType;
-            this.model       = model;
+                   RoleScenarioWeapon model, float undroppedHit) {
+            this.displayName  = displayName;
+            this.itemType     = itemType;
+            this.damageClass  = damageClass;
+            this.ammoType     = ammoType;
+            this.model        = model;
+            this.undroppedHit = undroppedHit;
         }
     }
 
@@ -115,7 +121,12 @@ public final class WeaponRoleModel {
     }
 
     private static RoleWeapon row(String name, Weapon weapon, RoleScenarioWeapon model) {
-        return new RoleWeapon(name, weapon.getItemType(), weapon.damageClass(), weapon.getAmmoType(), model);
+        return row(name, weapon, model, weapon.getBaseDamage());
+    }
+
+    private static RoleWeapon row(String name, Weapon weapon, RoleScenarioWeapon model, float undroppedHit) {
+        return new RoleWeapon(name, weapon.getItemType(), weapon.damageClass(), weapon.getAmmoType(), model,
+                undroppedHit);
     }
 
     private static RoleWeapon single(String name, Weapon weapon, int hitsPerAction, int ammoPerAction) {
@@ -158,7 +169,7 @@ public final class WeaponRoleModel {
         return row("Railgun", weapon, new RoleScenarioWeapon("Railgun",
                 weapon.getBaseClipSize(), weapon.getBaseReloadTicks(), 1, 1, weapon.getBaseAccuracy(), hits,
                 RoleScenarioPattern.PIERCE, 0f, 0, 0f, WeaponConstants.RAILGUN_MAX_CHARGE - 1,
-                0f, 0f, 0, 0, 0, 0, false));
+                0f, 0f, 0, 0, 0, 0, false), fullCharge);
     }
 
     private static RoleWeapon incinerator(Weapon weapon) {

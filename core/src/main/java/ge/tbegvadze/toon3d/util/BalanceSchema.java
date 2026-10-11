@@ -13,6 +13,10 @@ import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.progression.Attribute;
+import ge.tbegvadze.toon3d.progression.BuildStats;
+import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.Keystone;
+import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.progression.UpgradeCard;
 // The order-7 ROUTE ECONOMICS rules read the (headless, LibGDX-free) route subsystem: the priced
@@ -115,6 +119,22 @@ public final class BalanceSchema {
         XP_PACE,
         /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 TTK/TTD breakpoint vs the region soldier. */
         CARD_BREAKPOINT,
+        /**
+         * R-PERK (balance-overhaul order 5; replaces R-CARD and R-CARD-BREAKPOINT in CP2): PK1 FELT — every perk
+         * rank improves its niche metric by >= PERK_FELT_MIN_GAIN at every BUILD_PERK_REFERENCE_DEPTHS depth and,
+         * by its max rank, crosses >= 1 integer TTK / TTD breakpoint there at some depth; PK2 FOCUSED — no
+         * non-VITALITY perk at max rank improves all eight reference scenarios by > PERK_FOCUSED_MAX_GAIN, and
+         * no VITALITY rank improves any scenario by > PERK_VITALITY_MAX_GAIN_PER_RANK.
+         */
+        PERK,
+        /** R-KEYSTONE (balance-overhaul order 5): niche gain >= KEYSTONE_NICHE_MIN_GAIN and some other probe worse by >= KEYSTONE_COST_MIN_LOSS. */
+        KEYSTONE,
+        /**
+         * R-CARRY (balance-overhaul order 5; replaces the total-PP invariant): every tag's expected depth-15
+         * build (perks at the expected rank count + its keystone) lifts the player's TTK x TTD within
+         * 1 + BUILD_CARRY_TOLERANCE of every other tag's (best / worst).
+         */
+        BUILD_CARRY,
         /** R-REGION (order 5): region TP dial is monotonic + bounded; C/D spend more than A; coupling holds per lane. */
         REGION_DANGER,
         /** R-BOSS-GATE (order 6): the DEPTH-1 starting loadout cannot win — turnsToKill >= 2x survivableTurns (with max heals). */
@@ -745,6 +765,9 @@ public final class BalanceSchema {
         results.addAll(creditResults());
         results.addAll(xpPaceResults());
         results.addAll(cardBreakpointResults());
+        results.addAll(perkResults());
+        results.addAll(keystoneResults());
+        results.addAll(buildCarryResults());
         results.addAll(regionResults());
         results.addAll(bossGateResults());
         results.addAll(bossFairResults());
@@ -1449,6 +1472,174 @@ public final class BalanceSchema {
                     crosses, crosses ? "crosses a breakpoint in some region"
                             : "NEVER crosses a breakpoint — re-price so a level-up changes the next fight"));
         }
+        return results;
+    }
+
+    // =====================================================================================
+    // R-PERK / R-KEYSTONE / R-CARRY (balance-overhaul order 5) — util/BuildValuationModel
+    // =====================================================================================
+
+    /**
+     * R-PERK: PK1 FELT (every rank vs the previous, at every reference depth, on the perk's niche) plus the
+     * PK1 breakpoint (max rank vs none crosses a whole TTK or TTD step at some reference depth), and PK2
+     * FOCUSED (non-VITALITY: max rank does not improve all eight scenarios by more than the bound;
+     * VITALITY: no rank improves any scenario by more than the per-rank cap).
+     */
+    public static List<RuleResult> perkResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (Perk perk : Perk.values()) {
+            BuildValuationModel.Niche niche = BuildValuationModel.nicheOf(perk);
+            if (niche == null) {
+                results.add(new RuleResult(RuleKind.PERK, "PK1 " + perk.name() + " niche", 0f, 1f, 1f, false,
+                        "no niche registered for tag " + perk.tag));
+                continue;
+            }
+            boolean higher = niche.metric.higherIsBetter();
+            boolean crossed = false;
+            String crossedAt = "never";
+            for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+                float previous = BuildValuationModel.measure(niche, new BuildStats(), depth);
+                for (int rank = 1; rank <= perk.maxRank; rank++) {
+                    float value = BuildValuationModel.measure(niche, BuildValuationModel.statsWithPerk(perk, rank), depth);
+                    float gain = GameMath.buildNicheGain(previous, value, higher);
+                    results.add(new RuleResult(RuleKind.PERK, "PK1 " + perk.name() + " r" + rank + " felt d" + depth,
+                            gain, BalanceConfig.PERK_FELT_MIN_GAIN, Float.MAX_VALUE,
+                            gain >= BalanceConfig.PERK_FELT_MIN_GAIN,
+                            String.format("%s %.3f -> %.3f", niche.label(), previous, value)));
+                    previous = value;
+                }
+                int[] before = BuildValuationModel.integers(niche, new BuildStats(), depth);
+                int[] after = BuildValuationModel.integers(niche, BuildValuationModel.statsWithPerk(perk, perk.maxRank), depth);
+                if (!crossed && (after[0] < before[0] || after[1] > before[1])) {
+                    crossed = true;
+                    crossedAt = String.format("d%d TTK %d->%d TTD %d->%d", depth, before[0], after[0], before[1], after[1]);
+                }
+            }
+            results.add(new RuleResult(RuleKind.PERK, "PK1 " + perk.name() + " breakpoint by r" + perk.maxRank,
+                    crossed ? 1f : 0f, 1f, 1f, crossed, crossedAt));
+            results.addAll(perkFocusResults(perk));
+        }
+        return results;
+    }
+
+    /** PK2 for one perk at every reference depth. */
+    private static List<RuleResult> perkFocusResults(Perk perk) {
+        List<RuleResult> results = new ArrayList<>();
+        boolean vitality = perk.tag == BuildTag.VITALITY;
+        for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+            BuildValuationModel.Context context = BuildValuationModel.context(depth);
+            if (vitality) {
+                for (int rank = 1; rank <= perk.maxRank; rank++) {
+                    float[] gains = perkScenarioGains(context, BuildValuationModel.statsWithPerk(perk, rank - 1),
+                            BuildValuationModel.statsWithPerk(perk, rank));
+                    int worst = indexOfMax(gains);
+                    results.add(new RuleResult(RuleKind.PERK, "PK2 " + perk.name() + " r" + rank + " capped d" + depth,
+                            gains[worst], 0f, BalanceConfig.PERK_VITALITY_MAX_GAIN_PER_RANK,
+                            gains[worst] <= BalanceConfig.PERK_VITALITY_MAX_GAIN_PER_RANK,
+                            "largest scenario gain in " + WeaponRoleModel.scenarios().get(worst).id));
+                }
+            } else {
+                float[] gains = perkScenarioGains(context, new BuildStats(),
+                        BuildValuationModel.statsWithPerk(perk, perk.maxRank));
+                int least = indexOfMin(gains);
+                results.add(new RuleResult(RuleKind.PERK, "PK2 " + perk.name() + " focused d" + depth,
+                        gains[least], 0f, BalanceConfig.PERK_FOCUSED_MAX_GAIN,
+                        gains[least] <= BalanceConfig.PERK_FOCUSED_MAX_GAIN,
+                        "least-improved scenario " + WeaponRoleModel.scenarios().get(least).id
+                                + " (all eight above the bound = not focused)"));
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Per-scenario improvement of the player's best answer from one build to another: the larger of the
+     * offence gain (best eligible weapon's score) and the defence gain (scenario survivals).
+     */
+    public static float[] perkScenarioGains(BuildValuationModel.Context context, BuildStats before, BuildStats after) {
+        float[] answersBefore = BuildValuationModel.bestAnswers(context, before);
+        float[] answersAfter = BuildValuationModel.bestAnswers(context, after);
+        float[] survivalsBefore = BuildValuationModel.scenarioSurvivals(context, before);
+        float[] survivalsAfter = BuildValuationModel.scenarioSurvivals(context, after);
+        List<WeaponRoleModel.RoleScenario> scenarios = WeaponRoleModel.scenarios();
+        float[] gains = new float[answersBefore.length];
+        for (int index = 0; index < gains.length; index++) {
+            boolean hitsTaken = scenarios.get(index).bruiserCharge;
+            float offence = hitsTaken
+                    ? GameMath.buildNicheGain(answersBefore[index] + 1f, answersAfter[index] + 1f, false)
+                    : GameMath.buildNicheGain(answersBefore[index], answersAfter[index], false);
+            float defence = Float.isInfinite(survivalsBefore[index]) || survivalsBefore[index] <= 0f ? 0f
+                    : GameMath.buildNicheGain(survivalsBefore[index], survivalsAfter[index], true);
+            gains[index] = Math.max(offence, defence);
+        }
+        return gains;
+    }
+
+    private static int indexOfMax(float[] values) {
+        int best = 0;
+        for (int index = 1; index < values.length; index++) if (values[index] > values[best]) best = index;
+        return best;
+    }
+
+    private static int indexOfMin(float[] values) {
+        int best = 0;
+        for (int index = 1; index < values.length; index++) if (values[index] < values[best]) best = index;
+        return best;
+    }
+
+    /** R-KEYSTONE: niche gain at every reference depth, and the worst other probe's loss at some depth. */
+    public static List<RuleResult> keystoneResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (Keystone keystone : Keystone.values()) {
+            BuildValuationModel.Niche niche = BuildValuationModel.nicheOf(keystone);
+            BuildStats stats = BuildValuationModel.statsWithKeystone(keystone);
+            BuildValuationModel.Loss worst = null;
+            int worstDepth = 0;
+            for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+                float before = BuildValuationModel.measure(niche, new BuildStats(), depth);
+                float after = BuildValuationModel.measure(niche, stats, depth);
+                float gain = GameMath.buildNicheGain(before, after, niche.metric.higherIsBetter());
+                results.add(new RuleResult(RuleKind.KEYSTONE, "R-KEYSTONE " + keystone.name() + " niche d" + depth,
+                        gain, BalanceConfig.KEYSTONE_NICHE_MIN_GAIN, Float.MAX_VALUE,
+                        gain >= BalanceConfig.KEYSTONE_NICHE_MIN_GAIN,
+                        String.format("%s %.3f -> %.3f", niche.label(), before, after)));
+                BuildValuationModel.Loss loss = BuildValuationModel.worstLoss(stats, niche, depth);
+                if (worst == null || loss.loss > worst.loss) {
+                    worst = loss;
+                    worstDepth = depth;
+                }
+            }
+            results.add(new RuleResult(RuleKind.KEYSTONE, "R-KEYSTONE " + keystone.name() + " cost",
+                    worst.loss, BalanceConfig.KEYSTONE_COST_MIN_LOSS, Float.MAX_VALUE,
+                    worst.loss >= BalanceConfig.KEYSTONE_COST_MIN_LOSS,
+                    "worst: " + worst.probe + " at d" + worstDepth));
+        }
+        return results;
+    }
+
+    /** R-CARRY: every tag's expected build score within 1 + BUILD_CARRY_TOLERANCE of every other's. */
+    public static List<RuleResult> buildCarryResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float best = 0f;
+        float worst = Float.MAX_VALUE;
+        for (BuildTag tag : BuildTag.values()) {
+            float score = BuildValuationModel.carry(tag).score;
+            best = Math.max(best, score);
+            worst = Math.min(worst, score);
+        }
+        float ceiling = worst * (1f + BalanceConfig.BUILD_CARRY_TOLERANCE);
+        float floor = best / (1f + BalanceConfig.BUILD_CARRY_TOLERANCE);
+        for (BuildTag tag : BuildTag.values()) {
+            BuildValuationModel.Carry carry = BuildValuationModel.carry(tag);
+            results.add(new RuleResult(RuleKind.BUILD_CARRY, "R-CARRY " + tag.name(), carry.score, floor, ceiling,
+                    carry.score >= floor - 1e-6f && carry.score <= ceiling + 1e-6f,
+                    String.format("TTK x%.3f TTD x%.3f (%d ranks + %s)", carry.turnsToKillLift, carry.turnsToDieLift,
+                            carry.ranks, carry.keystone == null ? "no keystone" : carry.keystone.name())));
+        }
+        float spread = worst > 0f ? best / worst : Float.POSITIVE_INFINITY;
+        results.add(new RuleResult(RuleKind.BUILD_CARRY, "R-CARRY spread best / worst", spread, 1f,
+                1f + BalanceConfig.BUILD_CARRY_TOLERANCE, spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE + 1e-6f,
+                "no trap build, no dominant build"));
         return results;
     }
 

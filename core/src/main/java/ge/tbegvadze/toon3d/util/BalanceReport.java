@@ -40,6 +40,10 @@ public final class BalanceReport {
         System.out.println();
         printUpgradeCardTable();
         System.out.println();
+        printPerkTable();
+        System.out.println();
+        printBuildTable();
+        System.out.println();
         printXpPacingTable();
         System.out.println();
         printScarcityTable();
@@ -438,6 +442,92 @@ public final class BalanceReport {
                 + (allInBand ? "ALL CARDS IN BAND" : "*** OUT-OF-BAND CARD(S) — RE-PRICE ***"));
         System.out.println("R-CARD-BREAKPOINT (order 4): each card crosses >= 1 TTK/TTD breakpoint vs the region soldier.  "
                 + (allCross ? "ALL CROSS" : "*** CARD CROSSES NO BREAKPOINT — RE-PRICE ***"));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // PERKS (balance-overhaul order 5, R-PERK) — every perk's niche, the gain each rank buys on it (the
+    // smallest over BUILD_PERK_REFERENCE_DEPTHS; PK1 wants >= PERK_FELT_MIN_GAIN), the whole-step breakpoint
+    // its max rank crosses, and PK2: a non-VITALITY perk's LEAST-improved scenario at max rank (must be
+    // <= PERK_FOCUSED_MAX_GAIN, else it improves all eight), a VITALITY perk's largest per-rank scenario gain.
+    // -----------------------------------------------------------------------------------
+    private static void printPerkTable() {
+        System.out.println("PERKS (R-PERK) — niche gain per rank (min over depths "
+                + java.util.Arrays.toString(BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) + "), felt >= "
+                + String.format("%.0f%%", BalanceConfig.PERK_FELT_MIN_GAIN * 100f) + "; PK2 focused <= "
+                + String.format("%.0f%%", BalanceConfig.PERK_FOCUSED_MAX_GAIN * 100f) + "  (* = niche override)");
+        System.out.printf("%-20s %-15s %-34s %7s %7s %7s  %-30s %8s%n",
+                "perk", "tag", "niche", "r1", "r2", "r3", "breakpoint by max rank", "PK2");
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.perkResults();
+        for (ge.tbegvadze.toon3d.progression.Perk perk : ge.tbegvadze.toon3d.progression.Perk.values()) {
+            float[] gains = {Float.NaN, Float.NaN, Float.NaN};
+            String breakpoint = "-";
+            float focus = Float.NaN;
+            boolean focusOk = true;
+            for (BalanceSchema.RuleResult result : results) {
+                String prefix1 = "PK1 " + perk.name() + " r";
+                if (result.subject.startsWith(prefix1) && result.subject.contains(" felt d")) {
+                    int rank = result.subject.charAt(prefix1.length()) - '1';
+                    gains[rank] = Float.isNaN(gains[rank]) ? result.value : Math.min(gains[rank], result.value);
+                } else if (result.subject.startsWith("PK1 " + perk.name() + " breakpoint")) {
+                    breakpoint = (result.satisfied ? "" : "*** NONE: ") + result.detail;
+                } else if (result.subject.startsWith("PK2 " + perk.name() + " ")) {
+                    focus = Float.isNaN(focus) ? result.value : Math.max(focus, result.value);
+                    focusOk &= result.satisfied;
+                }
+            }
+            BuildValuationModel.Niche niche = BuildValuationModel.nicheOf(perk);
+            System.out.printf("%-20s %-15s %-34s %7s %7s %7s  %-30s %7.1f%%%s%n",
+                    perk.name(), perk.tag.name(),
+                    (BuildValuationModel.hasOverride(perk) ? "*" : " ") + niche.label(),
+                    gainCell(gains[0]), gainCell(gains[1]), gainCell(gains[2]), breakpoint,
+                    focus * 100f, focusOk ? "" : " ***");
+        }
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        System.out.println("KEYSTONES (R-KEYSTONE) — niche gain >= " + String.format("%.0f%%", BalanceConfig.KEYSTONE_NICHE_MIN_GAIN * 100f)
+                + " at every depth, and some other probe worse by >= " + String.format("%.0f%%", BalanceConfig.KEYSTONE_COST_MIN_LOSS * 100f));
+        for (BalanceSchema.RuleResult result : BalanceSchema.keystoneResults()) {
+            System.out.printf("  %-44s %7.1f%% %-11s %s%n", result.subject, result.value * 100f,
+                    result.satisfied ? "OK" : "OUT-OF-BAND", result.detail);
+        }
+    }
+
+    private static String gainCell(float gain) {
+        if (Float.isNaN(gain)) return "-";
+        if (Float.isInfinite(gain)) return "inf";
+        return String.format("%.1f%%", gain * 100f) + (gain < BalanceConfig.PERK_FELT_MIN_GAIN ? "!" : "");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // BUILDS (balance-overhaul order 5, R-CARRY) — each tag's expected build at BUILD_CARRY_DEPTH (perks at
+    // the expected rank count + its keystone) against the same player without it: the roster TTK lift, the
+    // floor TTD lift, their product, and each tag's ratio to the best and the worst.
+    // -----------------------------------------------------------------------------------
+    private static void printBuildTable() {
+        System.out.println("BUILDS (R-CARRY, depth " + BalanceConfig.BUILD_CARRY_DEPTH + ") — best / worst <= "
+                + String.format("%.2f", 1f + BalanceConfig.BUILD_CARRY_TOLERANCE) + "; focus share "
+                + BalanceConfig.BUILD_EXPECTED_FOCUS_SHARE + " of the perk picks");
+        System.out.printf("%-15s %-20s %5s %8s %8s %8s %8s %8s  %s%n",
+                "tag", "keystone", "ranks", "TTK x", "TTD x", "carry", "/best", "/worst", "ranks held");
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        float best = 0f;
+        float worst = Float.MAX_VALUE;
+        for (ge.tbegvadze.toon3d.progression.BuildTag tag : ge.tbegvadze.toon3d.progression.BuildTag.values()) {
+            float score = BuildValuationModel.carry(tag).score;
+            best = Math.max(best, score);
+            worst = Math.min(worst, score);
+        }
+        for (ge.tbegvadze.toon3d.progression.BuildTag tag : ge.tbegvadze.toon3d.progression.BuildTag.values()) {
+            BuildValuationModel.Carry carry = BuildValuationModel.carry(tag);
+            System.out.printf("%-15s %-20s %5d %8.3f %8.3f %8.3f %8.3f %8.3f  %s%n",
+                    tag.name(), carry.keystone == null ? "-" : carry.keystone.name(), carry.ranks,
+                    carry.turnsToKillLift, carry.turnsToDieLift, carry.score, carry.score / best, carry.score / worst,
+                    carry.ranksSummary);
+        }
+        float spread = best / worst;
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        System.out.println(String.format("SPREAD best / worst = %.3f  ", spread)
+                + (spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE ? "IN BAND" : "*** OUT OF BAND — a trap or a dominant build ***"));
     }
 
     // -----------------------------------------------------------------------------------
