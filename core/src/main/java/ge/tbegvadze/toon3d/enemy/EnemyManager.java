@@ -2975,6 +2975,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.tileColumn = targetColumn;
         enemy.tileRow    = targetRow;
         occupancy[targetColumn][targetRow] = true;
+        refreshHeavyDangerTiles(enemy);   // a pushed heavy re-marks its tiles from the new tile (order 4)
         return true;
     }
 

@@ -432,6 +432,7 @@ public class Player implements Renderable, Disposable, StatusHost {
      * @return true when at least one of the two was active and was removed
      */
     public boolean cleansePoisonAndWeak() {
+        if (!hasCleansableStatus()) return false;
         boolean removedAny = false;
         StatusEffect poisonEffect = activeStatusEffects.get(StatusType.POISONED);
         if (poisonEffect.isActive()) {
@@ -444,6 +445,12 @@ public class Player implements Renderable, Disposable, StatusHost {
             removedAny = true;
         }
         return removedAny;
+    }
+
+    /** True while POISONED or WEAK is active — the statuses a STIM cleanses (balance-overhaul order 4, H11). */
+    public boolean hasCleansableStatus() {
+        return activeStatusEffects.get(StatusType.POISONED).isActive()
+                || activeStatusEffects.get(StatusType.WEAK).isActive();
     }
 
     public int getHealth()    { return health; }

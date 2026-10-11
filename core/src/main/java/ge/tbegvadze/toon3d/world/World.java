@@ -4197,11 +4197,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
-     * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
-     * at low HP through a fight is one warning, not an alarm.
-     */
-    /**
      * Heavy edge pulse (balance-overhaul order 4, H16): when the player stands on a committed heavy's
      * danger tile and that heavy is outside the view, tells HitVignetteRenderer which screen edge(s) to
      * pulse. Sources BEHIND the player pulse BOTH edges (GameMath.offscreenSideMask). Update path only;
@@ -4229,6 +4224,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.setHeavyEdgeSideMask(sideMask);
     }
 
+    /**
+     * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
+     * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
+     * at low HP through a fight is one warning, not an alarm.
+     */
     private void updateLowHealthWarningSound() {
         float healthFraction = player.getHealthFraction();
         if (healthAboveLowWarningSound) {

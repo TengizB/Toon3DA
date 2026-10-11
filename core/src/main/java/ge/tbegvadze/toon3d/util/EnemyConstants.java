@@ -649,6 +649,9 @@ public final class EnemyConstants {
     /** Lift of the marker centre above the floor line, as a fraction of the marker height. */
     public static final float HEAVY_MARKER_FLOOR_LIFT_FRACTION = 0.50f;
     public static final float HEAVY_MARKER_MAX_DISTANCE_TILES  = 16f;
+    /** Marker texture: centre-disc radius as a fraction of the ring's outer radius, and the disc's alpha. */
+    public static final float HEAVY_MARKER_DISC_RADIUS_FRACTION = 0.30f;
+    public static final float HEAVY_MARKER_DISC_ALPHA           = 0.6f;
     /** Procedural marker texture edge in pixels (square). */
     public static final int   HEAVY_MARKER_TEXTURE_SIZE = 32;
     /** Ring thickness in texture pixels (outer ring); inner chevron X-bars use the same thickness. */

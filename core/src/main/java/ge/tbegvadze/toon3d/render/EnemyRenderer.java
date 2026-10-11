@@ -1450,7 +1450,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         float half        = size / 2f;
         float outerRadius = half - 0.5f;
         float innerRadius = outerRadius - HEAVY_MARKER_RING_THICKNESS_PIXELS;
-        float discRadius  = outerRadius * 0.30f;
+        float discRadius  = outerRadius * HEAVY_MARKER_DISC_RADIUS_FRACTION;
         for (int pixelY = 0; pixelY < size; pixelY++) {
             for (int pixelX = 0; pixelX < size; pixelX++) {
                 float differenceX = pixelX + 0.5f - half;
@@ -1458,7 +1458,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float distance = (float) Math.sqrt(differenceX * differenceX + differenceY * differenceY);
                 float alpha = 0f;
                 if (distance <= outerRadius && distance >= innerRadius) alpha = 1f;
-                else if (distance <= discRadius) alpha = 0.6f;
+                else if (distance <= discRadius) alpha = HEAVY_MARKER_DISC_ALPHA;
                 pixmap.setColor(1f, 1f, 1f, alpha);
                 pixmap.drawPixel(pixelX, pixelY);
             }

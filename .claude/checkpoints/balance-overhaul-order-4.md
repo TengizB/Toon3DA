@@ -82,7 +82,8 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   - [x] **CP7a** — GUARD / READ_INTENT line review (H18). DONE WHEN: strings + defaults + story doc; build green.
   - [x] **CP7b** — sim heavy-aware TacticalPolicy, S-HEAVY band, HEAVY REPORT; A9 docs sweep.
         DONE WHEN: A1, A8, A9 hold; both gates green.
-  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
+  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED. Reviewer round 1 = PASS WITH FIXES; code fixes done;
+        BLOCKED on B1 (owner ruling on A6) and B2 (desktop check of A2/A3/A4 visuals + AS3).
 
 ## NOTES CARRIED FORWARD
 
@@ -194,3 +195,20 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   readable 1.00; S-SUPPLY 0.85 (0.55..0.90), heal-floor 0; lifeline 0.04 (THIN); S-SWITCH 11 hinted (THIN vs 10).
   All heavies are depth 1-5 (stalls 177/200) — knowledge problem 16 OPEN: deeper play unmeasured.
 - **CP7c next:** reviewer gate.
+- **CP7c reviewer round 1: PASS WITH FIXES** (scratchpad reviewer-verdict-r1.md). Code sound; A1-A5, A7-A9 met
+  (A2/A3/A4 visuals desktop-owed), A6 PARTIAL. Fixed in this commit: N1 (HEAL at full HP proceeds when a STIM can
+  cleanse; `chooseHealTier` prefers the STIM while POISONED/WEAK — `Player.hasCleansableStatus()`), orphaned
+  `updateLowHealthWarningSound` javadoc, marker-texture literals -> `EnemyConstants.HEAVY_MARKER_DISC_*`,
+  `tryPushEnemy` refreshes danger tiles. Gates after fixes: core:test 455 only StoryBarkTest; balanceSim exit 0
+  (S-HEAVY 0.99/0.18, readable 1.00, S-SUPPLY 0.85, lifeline 0.04).
+- **OPEN — needs the OWNER before STATUS IMPLEMENTED:**
+  B1 A6: H13's 1.2 centre can never hit an enemy (the centre tile IS the solid barrel), so one-barrel A6 is
+     unreachable under H13 by construction. Owner: amend A6 to "two barrels / a chain", or raise
+     HAZARD_BARREL_RING_FRACTION to ~0.8. Record under the idea's DECISIONS.
+  B2 desktop: `./gradlew lwjgl3:run` — markers read as on-the-floor at 1-5 tiles (AS3), 1.5x "!!" clearance,
+     mini-map fill, edge pulse, RIPOSTE / ARMOUR HELD / CLEANSED floaters, xN text. No display in this container.
+  Owner awareness (non-blocking): N2 SLOWED only lengthens the player's animation — enemies never get an extra
+     turn, so the lance SLOW (and DEBUFF SLOW TP pricing) does little (pre-existing). N3 accept the S-SUPPLY
+     re-base 0.80->0.90 (order 7 owns it with HEAVY_DAMAGE_SCALE). N4 Revenant gained a 50% lunge with TP
+     unchanged (119) — re-check in order 7. N5 barrel quota counts only rooms that can safely host a barrel
+     (deliberate reading of H14). Nit left: `Player.tryArmourShieldStatus` switches on StatusType.
