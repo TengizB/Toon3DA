@@ -2816,14 +2816,14 @@ public final class BalanceConfig {
     public static final float[] PERK_BREACHER_REFUND_CHANCE_BY_RANK      = {0.33f, 0.66f, 1.00f};
 
     // --- MARKSMAN --------------------------------------------------------------------------------
-    /** Steady Aim: fraction of the BALLISTIC / RAIL falloff coefficient removed, total by rank. Range: 0.25-0.33 per rank (<= 1.0). */
-    public static final float[] PERK_STEADY_AIM_FALLOFF_REDUCTION_BY_RANK = {0.30f, 0.60f, 0.90f};
-    /** First Blood: BALLISTIC / RAIL damage on a hit against a full-HP enemy, total by rank. Spec default +25%/rank; MOVED: only one hit of the five an S1 kill takes is a first hit, so a rank is felt (PK1) only at about +80%. Range: 0.6-1.0 per rank. */
-    public static final float[] PERK_FIRST_BLOOD_DAMAGE_BY_RANK           = {0.80f, 1.60f, 2.40f};
+    /** Steady Aim: fraction of the BALLISTIC / RAIL falloff coefficient removed, total by rank. Spec default -30%/rank; MOVED to 33/66/100% (CP1b, D3) — r3 removes falloff entirely to lift MARKSMAN's R-CARRY. Range: 0.30-0.34 per rank (total <= 1.0). */
+    public static final float[] PERK_STEADY_AIM_FALLOFF_REDUCTION_BY_RANK = {0.33f, 0.66f, 1.00f};
+    /** First Blood: BALLISTIC / RAIL damage on a hit against a full-HP enemy, total by rank. Spec default +25%/rank; MOVED to +90%/rank: only one hit of the five an S1 kill takes is a first hit (PK1), and MARKSMAN's R-CARRY needed the rest (CP1b). Range: 0.8-1.0 per rank. */
+    public static final float[] PERK_FIRST_BLOOD_DAMAGE_BY_RANK           = {0.90f, 1.80f, 2.70f};
     /** Lane Discipline: extra BALLISTIC / RAIL reach (tiles), total by rank. Range: 1 per rank. */
     public static final float[] PERK_LANE_DISCIPLINE_RANGE_BY_RANK        = {1f, 2f, 3f};
-    /** Lane Discipline: BALLISTIC / RAIL damage at BUILD_LONG_RANGE_MIN_TILES or farther, total by rank. Spec default +10%/rank; MOVED: two of S1's three tiles are long range, so +10% reads ~6%. Range: 0.18-0.30 per rank. */
-    public static final float[] PERK_LANE_DISCIPLINE_DAMAGE_BY_RANK       = {0.20f, 0.42f, 0.68f};
+    /** Lane Discipline: BALLISTIC / RAIL damage at BUILD_LONG_RANGE_MIN_TILES or farther, total by rank. Spec default +10%/rank; MOVED to 24/50/80% — two of S1's three tiles are long range (PK1) and MARKSMAN's R-CARRY (CP1b). Range: 0.20-0.30 per rank. */
+    public static final float[] PERK_LANE_DISCIPLINE_DAMAGE_BY_RANK       = {0.24f, 0.50f, 0.80f};
 
     // --- PYRO ------------------------------------------------------------------------------------
     /** Accelerant: extra max burn stacks (FIRE), total by rank. Range: 1 per rank. */
@@ -2832,8 +2832,8 @@ public final class BalanceConfig {
     public static final float[] PERK_ACCELERANT_FIRE_DAMAGE_BY_RANK       = {0.18f, 0.38f, 0.60f};
 
     // --- DEMOLITION ------------------------------------------------------------------------------
-    /** Shaped Charges: EXPLOSIVE damage, total by rank. Spec default +20%/rank; MOVED up for R-CARRY (DEMOLITION's lift). Range: 0.20-0.40 per rank. */
-    public static final float[] PERK_SHAPED_CHARGES_DAMAGE_BY_RANK        = {0.30f, 0.64f, 1.05f};
+    /** Shaped Charges: EXPLOSIVE damage, total by rank. Spec default +20%/rank; MOVED to 32/68/112% for R-CARRY (DEMOLITION's lift, net of DEMOLITIONIST's HP cost). Range: 0.25-0.40 per rank. */
+    public static final float[] PERK_SHAPED_CHARGES_DAMAGE_BY_RANK        = {0.32f, 0.68f, 1.12f};
     /** Blast Shield: own explosion damage removed, total by rank (never above 1.0). Spec default -50%; r3 reaches full immunity so the last rank is felt (PK1). Range: ladder ending at <= 1.0. */
     public static final float[] PERK_BLAST_SHIELD_REDUCTION_BY_RANK       = {0.50f, 0.75f, 1.00f};
     /** Sapper: barrel blast bonus, total by rank. Range: 0.30-0.60 per rank. */
@@ -2874,16 +2874,16 @@ public final class BalanceConfig {
     public static final float[] PERK_SALVAGER_EXTRA_DROP_BY_RANK          = {0.25f, 0.50f, 0.75f};
 
     // --- VITALITY --------------------------------------------------------------------------------
-    /** Hardy: max HP, total by rank. Spec default +10%/rank; MOVED into the PK1/PK2 window: each rank must lift the floor (pool + heals) >= 10% while lifting one fight's pool <= 10% — increments 0.151 / 0.166 / 0.183 sit mid-window at depths 5 and 15. Range: the window, recomputed when the heal plan moves. */
-    public static final float[] PERK_HARDY_MAX_HEALTH_BY_RANK             = {0.151f, 0.317f, 0.500f};
-    /** Field Medic: heals, total by rank (valued on a floor's heal supply). Spec default +15%/rank. Range: 0.11-0.15 per rank. */
-    public static final float[] PERK_FIELD_MEDIC_HEAL_BY_RANK             = {0.115f, 0.24f, 0.37f};
+    /** Hardy: max HP, total by rank. Spec default +10%/rank; MOVED into the PK1/PK2 window: each rank must lift the floor (pool + heals) >= 10% while lifting one fight's pool <= 10%. CP1b (D3) sits each increment (0.147 / 0.162 / 0.179) at the LOW edge of the window at depths 5 and 15 to bring VITALITY's R-CARRY down. Range: the window, recomputed when the heal plan moves. */
+    public static final float[] PERK_HARDY_MAX_HEALTH_BY_RANK             = {0.147f, 0.309f, 0.488f};
+    /** Field Medic: heals, total by rank (valued on a floor's heal supply — nominal, so each total is >= 1.1 x the previous). Spec default +15%/rank; MOVED to the PK1 floor 10.5/22/34.5% (CP1b, D3) to bring VITALITY's R-CARRY down. Range: the PK1 floor up to 0.15 per rank. */
+    public static final float[] PERK_FIELD_MEDIC_HEAL_BY_RANK             = {0.105f, 0.22f, 0.345f};
 
     // --- KEYSTONE MAGNITUDES (B4) — gains, then costs (a cost is the MULTIPLIER, 0.85 = -15%) ----
     /** SCATTERGUN DOCTRINE cost: non-SPREAD damage multiplier. Range: 0.75-0.90. */
     public static final float   KEYSTONE_SCATTERGUN_NON_SPREAD_MULTIPLIER = 0.85f;
-    /** DEADEYE cost: clip-size multiplier. Range: 0.60-0.80. */
-    public static final float   KEYSTONE_DEADEYE_CLIP_MULTIPLIER          = 0.70f;
+    /** DEADEYE cost: clip-size multiplier. Spec default 0.70; MOVED to 0.75 (CP1b, D3) — the Chaingun keeps one more burst a clip (MARKSMAN's R-CARRY); the cost still reads 13% (the Incinerator in S6). Range: 0.70-0.78. */
+    public static final float   KEYSTONE_DEADEYE_CLIP_MULTIPLIER          = 0.75f;
     /** PYROMANIAC gain: extra damage burning enemies take from every source. Range: 0.30-0.60. */
     public static final float   KEYSTONE_PYROMANIAC_BURNING_DAMAGE        = 0.50f;
     /** PYROMANIAC cost: max-armour multiplier. Spec default 0.75; MOVED to 0.70 so the cost reads >= 10% somewhere (R-KEYSTONE). Range: 0.60-0.72. */
@@ -2912,8 +2912,8 @@ public final class BalanceConfig {
     public static final float   KEYSTONE_QUARTERMASTER_PRICE_MULTIPLIER   = 0.75f;
     /** QUARTERMASTER cost: max-HP multiplier. Spec default 0.90; MOVED to 0.85 — -10% HP costs only ~7% of a floor's survival. Range: 0.80-0.86. */
     public static final float   KEYSTONE_QUARTERMASTER_HEALTH_MULTIPLIER  = 0.85f;
-    /** IRONHIDE gain: max-HP multiplier. Spec default 1.40; MOVED to 1.50 — +40% HP is +25% to the pool's hits to die (R-KEYSTONE needs 30%). Range: 1.47-1.60. */
-    public static final float   KEYSTONE_IRONHIDE_HEALTH_MULTIPLIER       = 1.50f;
+    /** IRONHIDE gain: max-HP multiplier. Spec default 1.40; MOVED to 1.475 — +40% HP is +25% to the pool's hits to die and R-KEYSTONE needs 30%; 1.475 is the lowest value that clears it (CP1b, D3: VITALITY's R-CARRY down). Range: 1.475-1.60. */
+    public static final float   KEYSTONE_IRONHIDE_HEALTH_MULTIPLIER       = 1.475f;
     /** IRONHIDE cost: heal multiplier. Range: 0.70-0.85. */
     public static final float   KEYSTONE_IRONHIDE_HEAL_MULTIPLIER         = 0.80f;
 

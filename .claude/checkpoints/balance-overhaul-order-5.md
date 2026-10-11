@@ -101,3 +101,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **OPEN — OWNER (blocks CP1b):** B1 R-CARRY unreachable: VITALITY floor ~2.13 (PK1 + R-KEYSTONE pin it), SCAVENGER tops at
   1.09 (economy tag, not measured in fights), MARKSMAN ~1.72; spread 1.96 (1.24 without SCAVENGER). B2 Wildfire PK1
   breakpoint unreachable: S5 clears in <1 turn at every depth; S2 enemies die to the same spray.
+- **CP1b progress (D3 applied):** SCAVENGER waived on R-CARRY (`BalanceSchema.isCarryWaived(BuildTag)`, waiver block, expiry
+  "order 6 re-derives the economy"); MARKSMAN up (Steady Aim .33/.66/1.0, First Blood .9/1.8/2.7, Lane .24/.50/.80, DEADEYE clip
+  0.75), Shaped Charges .32/.68/1.12, VITALITY down to its own rule floor (Hardy .147/.309/.488, Field Medic .105/.22/.345,
+  IRONHIDE 1.475). Eight-tag spread 1.189 (limit 1.20) — GREEN, ~1% headroom. D4 built as data (`PERK_BREAKPOINT_OVERRIDES`,
+  `breakpointNicheOf(Perk)`): Wildfire = Incinerator fuel to clear S5 — STILL RED: fuel 3->3 (d1..d20), 6->6 at d25; S2 6->6.
+  Gates: core:test 458, red = StoryBarkTest + the Wildfire row (2 audit methods); balanceSim exit 0.
+- **OPEN — OWNER (blocks CP1b):** B3 Wildfire changes no integer in any reference fight (the spray + first tick already clears).

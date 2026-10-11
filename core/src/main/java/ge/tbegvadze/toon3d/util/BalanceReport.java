@@ -513,6 +513,7 @@ public final class BalanceReport {
         float best = 0f;
         float worst = Float.MAX_VALUE;
         for (ge.tbegvadze.toon3d.progression.BuildTag tag : ge.tbegvadze.toon3d.progression.BuildTag.values()) {
+            if (BalanceSchema.isCarryWaived(tag)) continue;
             float score = BuildValuationModel.carry(tag).score;
             best = Math.max(best, score);
             worst = Math.min(worst, score);
@@ -522,11 +523,11 @@ public final class BalanceReport {
             System.out.printf("%-15s %-20s %5d %8.3f %8.3f %8.3f %8.3f %8.3f  %s%n",
                     tag.name(), carry.keystone == null ? "-" : carry.keystone.name(), carry.ranks,
                     carry.turnsToKillLift, carry.turnsToDieLift, carry.score, carry.score / best, carry.score / worst,
-                    carry.ranksSummary);
+                    carry.ranksSummary + (BalanceSchema.isCarryWaived(tag) ? "  [WAIVED, D3 — not in the spread]" : ""));
         }
         float spread = best / worst;
         System.out.println("------------------------------------------------------------------------------------------------------------------------------");
-        System.out.println(String.format("SPREAD best / worst = %.3f  ", spread)
+        System.out.println(String.format("SPREAD best / worst (waived tags excluded) = %.3f  ", spread)
                 + (spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE ? "IN BAND" : "*** OUT OF BAND — a trap or a dominant build ***"));
     }
 

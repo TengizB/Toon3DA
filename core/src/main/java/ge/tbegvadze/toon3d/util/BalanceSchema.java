@@ -296,6 +296,24 @@ public final class BalanceSchema {
         String bespokeExpiry = "Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).";
         waive(RuleKind.CALM_COST, "rest EV discount",  bespokeReason, bespokeExpiry);
         waive(RuleKind.CALM_COST, "event EV discount", bespokeReason, bespokeExpiry);
+        // Balance-overhaul order 5, owner ruling D3: SCAVENGER is an ECONOMY tag. Its perks change supply,
+        // shop prices and carrier drops — none of which is a turn to kill or a hit to die in a reference
+        // fight — so R-CARRY's TTK x TTD reads it through a heal-at-shop-price conversion that cannot reach
+        // the band at any sane magnitude (1.09 against the combat tags' ~1.75-2.1). Its row is still
+        // computed and printed; it is excluded from the eight-tag best / worst and flagged WAIVED.
+        waive(RuleKind.BUILD_CARRY, "R-CARRY " + BuildTag.SCAVENGER.name(),
+                "SCAVENGER's value is supply, shop and carrier economy, not reference-fight TTK / TTD; "
+                        + "R-CARRY's conversion under-reads it (owner ruling D3, balance-overhaul order 5).",
+                "Expires when order 6 re-derives the economy with SCAVENGER in the expected player.");
+    }
+
+    /** True when a tag's R-CARRY row carries an explicit waiver (excluded from the best / worst spread). */
+    public static boolean isCarryWaived(BuildTag tag) {
+        return findWaiver(RuleKind.BUILD_CARRY, carrySubject(tag)) != null;
+    }
+
+    private static String carrySubject(BuildTag tag) {
+        return "R-CARRY " + tag.name();
     }
 
     /**
@@ -1508,15 +1526,18 @@ public final class BalanceSchema {
                             String.format("%s %.3f -> %.3f", niche.label(), previous, value)));
                     previous = value;
                 }
-                int[] before = BuildValuationModel.integers(niche, new BuildStats(), depth);
-                int[] after = BuildValuationModel.integers(niche, BuildValuationModel.statsWithPerk(perk, perk.maxRank), depth);
+                BuildValuationModel.Niche breakpointNiche = BuildValuationModel.breakpointNicheOf(perk);
+                int[] before = BuildValuationModel.integers(breakpointNiche, new BuildStats(), depth);
+                int[] after = BuildValuationModel.integers(breakpointNiche, BuildValuationModel.statsWithPerk(perk, perk.maxRank), depth);
                 if (!crossed && (after[0] < before[0] || after[1] > before[1])) {
                     crossed = true;
                     crossedAt = String.format("d%d TTK %d->%d TTD %d->%d", depth, before[0], after[0], before[1], after[1]);
                 }
             }
-            results.add(new RuleResult(RuleKind.PERK, "PK1 " + perk.name() + " breakpoint by r" + perk.maxRank,
-                    crossed ? 1f : 0f, 1f, 1f, crossed, crossedAt));
+            String breakpointSubject = "PK1 " + perk.name() + " breakpoint by r" + perk.maxRank
+                    + (BuildValuationModel.hasBreakpointOverride(perk)
+                            ? " (D4 resource: " + BuildValuationModel.breakpointNicheOf(perk).label() + ")" : "");
+            results.add(new RuleResult(RuleKind.PERK, breakpointSubject, crossed ? 1f : 0f, 1f, 1f, crossed, crossedAt));
             results.addAll(perkFocusResults(perk));
         }
         return results;
@@ -1623,6 +1644,7 @@ public final class BalanceSchema {
         float best = 0f;
         float worst = Float.MAX_VALUE;
         for (BuildTag tag : BuildTag.values()) {
+            if (isCarryWaived(tag)) continue; // a waived tag stays visible but never sets the band
             float score = BuildValuationModel.carry(tag).score;
             best = Math.max(best, score);
             worst = Math.min(worst, score);
@@ -1631,7 +1653,7 @@ public final class BalanceSchema {
         float floor = best / (1f + BalanceConfig.BUILD_CARRY_TOLERANCE);
         for (BuildTag tag : BuildTag.values()) {
             BuildValuationModel.Carry carry = BuildValuationModel.carry(tag);
-            results.add(new RuleResult(RuleKind.BUILD_CARRY, "R-CARRY " + tag.name(), carry.score, floor, ceiling,
+            results.add(new RuleResult(RuleKind.BUILD_CARRY, carrySubject(tag), carry.score, floor, ceiling,
                     carry.score >= floor - 1e-6f && carry.score <= ceiling + 1e-6f,
                     String.format("TTK x%.3f TTD x%.3f (%d ranks + %s)", carry.turnsToKillLift, carry.turnsToDieLift,
                             carry.ranks, carry.keystone == null ? "no keystone" : carry.keystone.name())));
@@ -1639,7 +1661,7 @@ public final class BalanceSchema {
         float spread = worst > 0f ? best / worst : Float.POSITIVE_INFINITY;
         results.add(new RuleResult(RuleKind.BUILD_CARRY, "R-CARRY spread best / worst", spread, 1f,
                 1f + BalanceConfig.BUILD_CARRY_TOLERANCE, spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE + 1e-6f,
-                "no trap build, no dominant build"));
+                "no trap build, no dominant build (waived tags excluded)"));
         return results;
     }
 

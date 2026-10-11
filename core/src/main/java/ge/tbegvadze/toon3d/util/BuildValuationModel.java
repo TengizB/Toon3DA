@@ -110,6 +110,31 @@ public final class BuildValuationModel {
     private static final Map<BuildTag, Niche> TAG_NICHES      = buildTagNiches();
     private static final Map<Perk, Niche>     PERK_OVERRIDES  = buildPerkOverrides();
     private static final Map<Keystone, Niche> KEYSTONE_OVERRIDES = buildKeystoneOverrides();
+    private static final Map<Perk, Niche>     PERK_BREAKPOINT_OVERRIDES = buildPerkBreakpointOverrides();
+
+    /**
+     * Per-row PK1 BREAKPOINT metrics (owner ruling D4): a perk whose felt niche can never cross a whole
+     * turn (its scenario clears inside the first turn) declares the INTEGER RESOURCE its breakpoint is read
+     * on instead. Its PK1 felt gain stays on its own niche.
+     */
+    private static Map<Perk, Niche> buildPerkBreakpointOverrides() {
+        Map<Perk, Niche> overrides = new EnumMap<>(Perk.class);
+        // D4: Wildfire's breakpoint = fuel (Incinerator ammo = sprays x FUEL_PER_SHOT) spent clearing its
+        // group scenario S5.
+        overrides.put(Perk.WILDFIRE, new Niche(BuildNicheMetric.SCENARIO_AMMO, "S5", ItemType.WEAPON_INCINERATOR, BuildTag.PYRO));
+        return Collections.unmodifiableMap(overrides);
+    }
+
+    /** The niche a perk's PK1 breakpoint is read on: its D4 breakpoint metric if declared, else its niche. */
+    public static Niche breakpointNicheOf(Perk perk) {
+        Niche override = PERK_BREAKPOINT_OVERRIDES.get(perk);
+        return override != null ? override : nicheOf(perk);
+    }
+
+    /** True when the perk's breakpoint is read on a declared D4 resource metric. */
+    public static boolean hasBreakpointOverride(Perk perk) {
+        return PERK_BREAKPOINT_OVERRIDES.containsKey(perk);
+    }
 
     private static Map<BuildTag, Niche> buildTagNiches() {
         Map<BuildTag, Niche> niches = new EnumMap<>(BuildTag.class);
