@@ -34,7 +34,9 @@ public final class SimReport {
         report.append("BALANCE SIMULATION SUMMARY (new-game-balancr order 9)\n");
         report.append("================================================================================\n");
         report.append("Seeds per policy : ").append(BalanceConfig.SIM_SEED_COUNT)
-              .append(" (build-bias variants: ").append(BalanceConfig.SIM_BUILD_SEED_COUNT).append(")\n");
+              .append(" (build-bias variants: ").append(BalanceConfig.SIM_BUILD_SEED_COUNT)
+              .append("; ").append(BehavioralBands.TACTICAL_BUILD_SAMPLE_ID).append(": ")
+              .append(BalanceConfig.SIM_BUILD_SAMPLE_SEED_COUNT).append(")\n");
         report.append("Depth ceiling    : ").append(BalanceConfig.SIM_DEPTH_CEILING).append('\n');
         report.append("Turn cap / floor : ").append(BalanceConfig.SIM_TURNS_PER_FLOOR_CAP).append('\n');
         report.append('\n');

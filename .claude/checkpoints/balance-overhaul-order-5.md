@@ -199,3 +199,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (>= 30). Dominant share 0.47 (MARKSMAN 23, CQ 17, ENERGY 6, PYRO/DEMO/VIT 1) vs cap 0.40: every ranked run holds EXACTLY one rank
   (mean level 1.08), so "dominant tag" = first synergy pick from the Chaingun+Shotgun start kit. No keystone ever offered.
   Moves: S-SUPPLY 0.85->0.86, S-HEAVY 1110->1108. Slow gate 49.7s. Part B docs NOT started. OWNER RULING NEEDED (B4).
+- **CP6c (D7 applied + Part B docs):** dominant-tag line waived in `waiveNavigationLimitedBands()` (navigation reason/expiry);
+  sample line enforced; `buildBiasesStayCloseAndNoTagDominates` allows exactly the two named waived lines. Docs: authority (R-PERK,
+  R-KEYSTONE, R-CARRY, R-ABILITY override, S-BUILD + D7 + caveat + seeding, waivers D3/D6/D7, PERKS/KEYSTONES/BUILDS/ABILITY/TIERS
+  tables, changelog), knowledge (SECTIONS 5/6, problems 17-24), xp-level-progression (rewritten), weapon guide (ability ranks/tags/
+  tiers). CLAUDE.md (hub): progression/ structure lines, sim row (eleven S-* bands, S-BUILD), docs row.
+- **CP6 gates (hub-verified):** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0 (S-BUILD spread OK, sample
+  49 OK, dominant 0.47 WAIV). NEXT: reviewer gate.

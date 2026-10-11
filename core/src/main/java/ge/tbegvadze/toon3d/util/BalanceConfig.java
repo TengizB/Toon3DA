@@ -1801,7 +1801,8 @@ public final class BalanceConfig {
     // Four build-biased TACTICAL variants (sim/BuildBias: CLOSE, MARKSMAN, PYRO-DEMOLITION, BULWARK) play
     // as extra matrix rows. Two claims: no bias is a trap or a must-pick in PLAY (depth spread — depth-
     // derived, so it rides the navigation waiver that SIM_FAIR's median depth carries), and plain TACTICAL
-    // does not end every run as the same character (dominant-tag share — enforced).
+    // does not end every run as the same character (dominant-tag share — waived with the navigation waiver by
+    // owner ruling D7 while ~91% of sim runs never level up; its >= SIM_BUILD_MIN_SAMPLE sample line is enforced).
     /**
      * Seeds per build-biased variant. Equal to SIM_SEED_COUNT: the whole seven-row matrix plays in well under
      * a minute on a 4-core machine (CP6 measured), so the variants get the headline sample rather than a cut.

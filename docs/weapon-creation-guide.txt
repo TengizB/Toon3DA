@@ -590,3 +590,56 @@ Close-range SPREAD behaviour lives in entity/SpreadImpact (knockback at 1 tile, 
 no stagger two turns running, never on bosses / MINI_ELITE knockback) — a new spread weapon calls
 SpreadImpact.applyCloseRangeImpact per enemy hit and declares its falloff as a per-tile table
 (SHOTGUN_FALLOFF_BY_TILE idiom), not a drop coefficient.
+
+
+WEAPON ABILITIES — RANKS, TAGS, TIERS (balance-overhaul order 5)
+---------------------------------------------------------------
+A found weapon's rarity buys ABILITIES (and order 1's rarity damage multiplier). Since order 5
+rarity is guaranteed and felt: every roll gets its tier's ability count IN FULL, and the priced
+total must land inside a band around the tier's budget. Rule: R-ABILITY (docs/game-balance-
+authority.txt, RE-STATED by order 5); numbers: BalanceConfig SECTION 24 (counts, budgets, the
+felt floor) and SECTION 15 (each ability's magnitude, re-exported by GameBalance).
+
+TIER COUNTS AND BUDGETS (WeaponTier reads them; WeaponRoller rolls them):
+    tier        abilities                          ability-PP budget   allowed band (+/-20%)
+    COMMON      0                                   0                  0
+    UNCOMMON    1 STANDARD                         12                  9.6 - 14.4
+    RARE        2 STANDARD                         25                  20 - 30
+    EPIC        3, exactly 1 of them MAJOR         40                  32 - 48
+    LEGENDARY   3 (1 MAJOR) + its SIGNATURE        60                  48 - 72
+  A roll that prices below the band floor is as much a violation as one above the ceiling.
+
+RANKS (WeaponAbility.Rank) — the rank decides WHEN an ability can appear and what it must be worth:
+    STANDARD    UNCOMMON and up. Expected weapon level 1. ~10.5 PP.
+    MAJOR       EPIC and up (the "big felt" list: EXECUTIONER, CLEAVE, OPENING_SALVO, BURST_FIRE).
+                Expected weapon level 11. 12 PP at L1 -> 17.4 at max.
+    SIGNATURE   LEGENDARY only, rolled on top of its count (SOULFORGE, JUDGMENT, HELLFIRE_NOVA,
+                BERSERKERS_OATH). Expected weapon level 16. ~18 PP, near-flat across levels.
+  A rank's expected level is the shallowest depth r x 5 + 1 whose region max tier rolls that rank.
+
+ABILITY_MIN_FELT_PP (8): every ability must price at least 8 PP (GameMath.abilityPowerPoints) at its
+  rank's expected level. Below that it is not felt and does not ship — order 5 CUT 13 abilities and
+  merged OVERPENETRATION into ARMOR_PIERCE on exactly this test.
+
+BUILD TAG: every ability carries a progression/BuildTag (never null), e.g. INCENDIARY -> PYRO,
+  STAGGER_ROUNDS -> CLOSE_QUARTERS, SCAVENGER_ROUNDS -> SCAVENGER, LIFESTEAL -> VITALITY. The tag is
+  added to the player's CARRIED tags (Weapon.addAbilityBuildTags -> World.carriedBuildTags), so a gun's
+  abilities make perks of that tag show up as SYNERGY on the level-up screen.
+
+HOW TO ADD AN ABILITY NOW:
+  1. One WeaponAbility row: Family (GUN / MELEE / UNIVERSAL), Trigger, Rank, BuildTag, display name,
+     HUD glyph, short hint, full description, AFFECTS lines; plus its cases in buildDescription /
+     the affects-line builder beside the others.
+  2. Its magnitudes (BASE / PER_LEVEL / CAP, or a count) in BalanceConfig SECTION 15, exported
+     through GameBalance; its magnitude case in WeaponRoller.
+  3. Its behaviour in entity/AbilityResolver at its trigger (ON_HIT, ON_KILL, ON_FIRE, PASSIVE ...).
+     Damage it adds stays OFF the power ladder only if it is a flat priced magnitude (see THE LADDER
+     DAMAGE PATH above).
+  4. Its pricing case in GameMath.abilityPowerPoints — R-ABILITY fails the build on an unpriced
+     ability.
+  5. Run `./gradlew test`: the ability must price >= ABILITY_MIN_FELT_PP at its expected level, and the
+     roll sweep (30 seeds x every tier x depths 3 / 12 / 22, melee and ranged) must keep every tier in
+     its band — a strong new STANDARD can push RARE over 30. Run BalanceReport and paste ABILITY
+     PRICING + TIERS into the authority doc's SECTION 6; run `./gradlew balanceSim` too (balance change).
+  KNOWN GAP: there is no per-weapon eligibility list — a Double-Barrel EPIC can roll BURST_FIRE as its
+  MAJOR, which is redundant on that gun (docs/game-balance-knowledge.txt problem 19).

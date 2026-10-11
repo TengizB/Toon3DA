@@ -75,7 +75,7 @@ THE SINGLE SOURCE OF TRUTH:
      4  Weapon output (per-weapon damage/clip/range/falloff/reload; global knobs)
      5  Resource supply (ammo box sizes, reserve caps, drop frequencies) — scarcity
      6  Loot / pickup spawn chances (prop + enemy density, per-room-type budgets)
-     7  Progression (XP curve, level-up card budget, stat per-point rates)
+     7  Progression (XP curve, stat per-point rates; the level-up cards are gone — SECTION 24 builds)
      8  Status / DoT magnitudes (bleed/burn/stun per-turn + durations)
      9  Balance-rule anchors & bands (reference DPT/eHP, weapon power bands,
         enemy TP bands (derived from R8), R8 hit bands, SECTION 20 power ladder)
@@ -381,49 +381,64 @@ balance-overhaul order 3 CP4 re-fits per-type ammo generosity.
 
 
 ================================================================================
-SECTION 5 — WEAPON ABILITIES (rarity buys power here, not raw DPT)
+SECTION 5 — WEAPON ABILITIES (rarity = more and bigger abilities; REWRITTEN by balance-overhaul order 5)
 ================================================================================
-File: util/GameBalance.java (the ABILITY CATALOGUE — huge block of BASE/PER_LEVEL/
-CAP constants). These are almost ALL explicitly marked "PLACEHOLDER — flag for
-playtesting". Weapons roll abilities by tier (WeaponRoller); magnitudes scale with
-weapon level. This is a major, largely-unbalanced surface.
+Files: entity/WeaponAbility (the catalogue — family, trigger, Rank, BuildTag, UI text), entity/
+AbilityResolver (the behaviour), entity/WeaponRoller + WeaponTier (the rolls), BalanceConfig SECTION 15
+(magnitudes, re-exported by GameBalance) and SECTION 24 (counts, budgets, ABILITY_MIN_FELT_PP),
+GameMath.abilityPowerPoints (the price). Rule: R-ABILITY (authority doc), RE-STATED by order 5.
 
-Combat/offense:  Critical Strike, Armor Pierce (bypasses Block), Executioner
-                 (<25% HP), Stagger Rounds (stun), Overpenetration.
-Sustain:         Lifesteal, Hemorrhage Harvest (on-kill HP), Vampiric Crit,
-                 Adrenal Surge (+30% next hit), Bulwark Rounds (temp armour on
-                 reload), Second Wind (<30% HP damage bonus).
-Melee-only:      Kinetic Slam, Cleave, Salvage Strike (ammo drop), Scholar's Edge
-                 (XP bonus), Berserker's Oath (stacking legendary).
-Utility/economy: Scavenger Rounds (ammo refund), Field Medic Rounds (drops '+'),
-                 Credit Fang (credits on kill), Extended Mag.
-DoT/status:      Rend (BLEED), Incendiary (BURN), Stagger (STUN). Magnitudes for
-                 these three ARE in BalanceConfig SECTION 8 (they count toward TTK).
-Positional:      Point Blank, Marksman's Patience, Opening Salvo, Rhythm/Heat-Up,
-                 Static Discharge, Resonant Rounds (% max-HP).
-Legendary:       Soulforge (self-leveling), Judgment (periodic lance x3.0),
-                 Hellfire Nova (crit AoE).
+PRICED, PRUNED, TAGGED (order 5 B5 / B6). Every ability is priced in power points at the weapon level
+its RANK first rolls at (the shallowest depth r x 5 + 1 whose region max tier rolls it): STANDARD L1,
+MAJOR L11, SIGNATURE L16. Below ABILITY_MIN_FELT_PP (8) an ability is not felt and does not exist:
+  CUT (13):    HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, BULWARK_ROUNDS, ADRENAL_SURGE, SECOND_WIND,
+               SALVAGE_STRIKE, SCHOLARS_EDGE, QUICK_HANDS, FIELD_MEDIC_ROUNDS, CREDIT_FANG,
+               EXTENDED_MAG, MARKSMANS_PATIENCE, RESONANT_ROUNDS.
+  MERGED:      OVERPENETRATION -> ARMOR_PIERCE (also pierces ARMOR_PIERCE_EXTRA_TARGETS more enemies).
+  SURVIVORS (19; rank / tag; PP at expected level):
+    STANDARD   CRITICAL_STRIKE MARKSMAN 10.5, ARMOR_PIERCE DEMOLITION 10.6, REND BLADE 10.4,
+               STAGGER_ROUNDS CLOSE_QUARTERS 10.6, KINETIC_SLAM BULWARK 10.6, INCENDIARY PYRO 10.4,
+               LIFESTEAL VITALITY 10.5, SCAVENGER_ROUNDS SCAVENGER 10.5, POINT_BLANK CLOSE_QUARTERS 10.5,
+               RHYTHM ENERGY 10.5, STATIC_DISCHARGE ENERGY 10.5
+    MAJOR      BURST_FIRE CLOSE_QUARTERS 16.0 (fixed 2-round), EXECUTIONER BLADE 14.1, CLEAVE BLADE 14.1,
+               OPENING_SALVO MARKSMAN 14.1 (MAJORs 12 at L1 -> 17.4 at max)
+    SIGNATURE  SOULFORGE SCAVENGER, JUDGMENT MARKSMAN, HELLFIRE_NOVA PYRO, BERSERKERS_OATH BLADE — 18 PP,
+               near-flat across levels (the LEGENDARY band forces it)
+  Every ability carries a BuildTag; Weapon.addAbilityBuildTags feeds World / SimWorld.carriedBuildTags(),
+  so a carried weapon's ABILITIES count toward the level-up SYNERGY slot as well as its damage class.
+
+REAL RARITY (B5). A roll gets its tier's count IN FULL, and the priced total must land inside
+budget x (1 -/+ 0.20) — a floor and a ceiling:
+    tier        abilities           budget PP   band         sampled (A4 sweep, depths 3/12/22 x 30 seeds)
+    COMMON      0                    0          0            0
+    UNCOMMON    1                   12          9.6-14.4     10.7-13.4
+    RARE        2                   25          20-30        21.3-26.7
+    EPIC        3 (exactly 1 MAJOR) 40          32-48        33.8-43.1
+    LEGENDARY   3 (1 MAJOR) + sig   60          48-72        51.8-61.1
+  Order 1's rarity DAMAGE multiplier stays on top. Was (order 2): ceilings 6 / 12 / 20 / 30, greedy fill,
+  slot counts 0/1/2/3/5 — replaced under the override clause.
 
 Weapon tiers / roll config (GameBalance, weapon-system-order-11):
   RUN_START_WEAPON_TIER = COMMON, LEVEL 1.
-  START_ROOM_OFFER_MIN/MAX_TIER = COMMON..UNCOMMON (START_ROOM_ANY_TIER_ENABLED is
-  FALSE — the old any-tier TEST leak was closed by new-game-balancr order 1, and the
-  R-FLAGS schema rule fails the build if any TEST/DEBUG flag ships true).
+  START_ROOM_OFFER_MIN/MAX_TIER = COMMON..UNCOMMON (START_ROOM_ANY_TIER_ENABLED is FALSE and enforced
+  false by R-FLAGS).
 
-⚠️ Not-good note: this entire catalogue is unpriced against the contract. The
-authority schema prices LEVEL-UP CARDS in power points, but weapon ABILITIES
-have NO equivalent power-budget check — a legendary with several stacked abilities
-can push a weapon's EFFECTIVE power far past its band, silently. (The catalogue's
-VALUES were consolidated into BalanceConfig SECTION 15 by new-game-balancr order 1,
-and START_ROOM_ANY_TIER_ENABLED is now FALSE and enforced false by the R-FLAGS
-audit rule — but pricing the abilities themselves is still open.) These are among
-the least-balanced numbers in the game and are self-labelled placeholders.
+⚠️ Not-good notes (order 5):
+  - The ability PRICE is a model (utilisation weights per trigger), never played: whether a 10.5-PP
+    standard is FELT in a fight is unverified (problem 3).
+  - Double-Barrel EPIC / LEGENDARY can roll BURST_FIRE as its MAJOR, which is redundant on a weapon that
+    already fires both barrels — there is no per-weapon eligibility list (problem 19).
+  - Shop tier-up prices about DOUBLE, because the shop prices a tier-up on the destination tier's ability
+    budget, which order 5 roughly doubled (R-CREDITS still green; problem 20).
+  - Dead leftovers: BULWARK_TEMP_ARMOR_SLOTS, the temp-armour pool and Trigger.ON_RELOAD have no ability
+    using them since BULWARK_ROUNDS / QUICK_HANDS were cut (problem 23).
 
 
 ================================================================================
-SECTION 6 — PLAYER PROGRESSION (XP curve, level-up cards, attributes)
+SECTION 6 — PLAYER PROGRESSION (XP curve, PERKS, KEYSTONES, attributes — REWRITTEN by balance-overhaul order 5)
 ================================================================================
-File: BalanceConfig SECTION 7; docs/xp-level-progression.txt; progression/*.
+File: BalanceConfig SECTION 7 (XP, attributes) + SECTION 24 (builds); docs/xp-level-progression.txt;
+progression/* (BuildTag, Perk, PerkEffect, PerkModifier, Keystone, PerkDeck, PlayerBuild, BuildStats).
 
 XP CURVE (GEOMETRIC — re-shaped for pacing, new-game-balancr order 4):
   xpRequired(level) = XP_BASE_REQUIREMENT * XP_CURVE_GROWTH_PER_LEVEL ^ (level-1)
@@ -443,27 +458,41 @@ CATCH-UP (rubber band, forward-only, order 4): a player > 1 level below the expe
   level for their depth gets XP * XP_CATCHUP_MULTIPLIER(1.5); never slows an
   at-or-ahead player.  GameMath.catchUpScaledXp; applied in PlayerProgress.addXp.
 
-LEVEL-UP CARD SYSTEM — RETIRED by balance-overhaul order 5 (CP2). Level-ups now offer
-  three tagged PERKS from progression/PerkDeck (B3: a synergy perk + a pivot perk,
-  weighted by PERK_DRAW_BIAS_PER_PICK 0.6); R-CARD / R-CARD-BREAKPOINT / the total-PP
-  invariant are replaced by R-PERK + R-CARRY. The expected player's card term became
-  EXPECTED_PERK_POWER_PP_PER_PICK (12). The historical record below is kept until the
-  order-5 CP6 docs pass rewrites this section:
-LEVEL-UP CARD SYSTEM (the build-diversity engine, idea 5) — HISTORICAL:
-  On each level-up, LEVEL_UP_CARDS_OFFERED = 3 cards are drawn from four pools.
-  Every card costs the SAME power budget:
-    LEVEL_UP_BUDGET_PP        = 12   (power points = %-gain to reference DPT or eHP)
-    LEVEL_UP_BUDGET_TOLERANCE = 0.15 (a card must price into [10.2, 13.8] PP)
-    LEVEL_UP_DRAW_BIAS_PER_PICK = 0.6 (biases offers toward the emerging build)
-  THE TOTAL-PP INVARIANT: because every card is budget-equal, total player power
-  at level L = L * 12 PP for EVERY build; only the SHAPE differs. This is what
-  keeps all builds on the depth-coupling curve (SECTION 11).
-  Card PP is computed from stat deltas via GameMath (damagePerTurnPowerPoints /
-  effectiveHitPointPowerPoints), so it "cannot lie". Cards + magnitudes:
-    Hollow Points (+6 dmg), Marksman Training (+3 MRK), Brutal Strength (+3 STR),
-    Glass Cannon (+10 dmg / -18 HP), Combat Armor (+24 armour), Toughened Hide
-    (+1 TGH), Vitality (+25 HP), Iron Constitution (+45 HP / -22 armour), Evasion
-    Training (+5 AGI), Reckless Charge (+8 AGI / -12 armour).
+LEVEL-UPS = TAGGED PERKS (order 5; REPLACED the budget-equal upgrade cards). OVERRIDE RECORD: R-CARD
+  (every card 12 PP +/- 15%), R-CARD-BREAKPOINT and the TOTAL-PP INVARIANT ("power at level L = L x 12 PP
+  for every build") are REPLACED by R-PERK (PK1 felt in the niche, PK2 focused) + R-KEYSTONE + R-CARRY (a
+  bounded spread between builds). UpgradeCard / UpgradeCardDeck / UpgradeCardPool are deleted.
+  NINE TAGS (BuildTag): CLOSE_QUARTERS (SPREAD), MARKSMAN (BALLISTIC, RAIL), PYRO (FIRE), DEMOLITION
+    (EXPLOSIVE), ENERGY, BLADE (BLADE, BLUNT), and three weapon-less tags BULWARK, SCAVENGER, VITALITY.
+  26 PERKS, up to 3 ranks (FIREPROOF and SECOND_WIND 1): three per tag except BLADE (2) — every per-rank
+    magnitude in SECTION 24 (TOTAL at rank 1/2/3), effects are PerkEffect data interpreted by PerkModifier's
+    per-constant bodies (no switch). Only BUTCHER grants an attribute (+1 STRENGTH per rank).
+  OFFER (B3, PerkDeck): 3 perks — slot 1 SYNERGY (its tag is a carried weapon's or a carried ability's),
+    slot 2 PIVOT (a tag with no ranks and not carried), slot 3 weighted toward held tags by
+    PERK_DRAW_BIAS_PER_PICK 0.6; a maxed perk is never offered. The deck is seeded from the run seed through
+    GameMath.splitMix64 (CP6 fix — unmixed, adjacent seeds drew the same first perk).
+  KEYSTONES (B4) at character levels 5 / 10 / 15 / 20, INSTEAD of that level's perks: 3 offered, at least
+    one matching the highest-rank tag and one not; each taken once. Gains and costs are data (costs
+    multiply AFTER perk bonuses):
+      SCATTERGUN DOCTRINE (CQ)    SPREAD reloads cost no turn; point-blank kills refund a shell / non-SPREAD -15%
+      DEADEYE (MARKSMAN)          first hit on each enemy is a guaranteed critical / clip sizes -25%
+      PYROMANIAC (PYRO)           immune to fire; burning enemies take +50% / max armour -30%
+      DEMOLITIONIST (DEMOLITION)  immune to own explosions; detonated barrels x2 / max HP -16%
+      STORM CONDUIT (ENERGY)      ENERGY hits arc to one adjacent enemy at 60% / BALLISTIC -25%
+      IRON BULWARK (BULWARK)      a guarded hit reflects 140% of the blocked damage / all weapon damage -10%
+      BERSERKER (BLADE)           melee kills heal 14% max HP; melee +50% below 30% HP / heals -30%
+      QUARTERMASTER (SCAVENGER)   +1 loadout slot; shop prices -25% / max HP -15%
+      IRONHIDE (VITALITY)         max HP +47.5% / heals -20%; STIMs no longer cleanse
+    (The live numbers are BalanceConfig KEYSTONE_*; the gain / cost lines on the keystone screen are built
+    from them. CP1 moved most of them off the spec's defaults to pass R-KEYSTONE / R-CARRY — see the SECTION 24
+    javadocs.)
+  THE BUILD PAGE (inventory header BUILD button) lists picked perks by tag and the keystones.
+  SHOP: a Fabricator PLAYER-ABILITY offer sells ONE rank of a random unmaxed perk, priced on
+    SHOP_PERK_RANK_POWER_POINTS (= 12; order 6 re-prices it).
+  VALUATION (util/BuildValuationModel; live in the authority doc's PERKS / KEYSTONES / BUILDS tables):
+    every perk rank is >= 10% on its niche at depths 5 and 15; keystones 30-101% niche, 10.6-62.7% cost;
+    R-CARRY eight-tag spread 1.189 against 1.20 (SCAVENGER waived, D3; WILDFIRE r2/r3 + breakpoint
+    waived, D6).
 
 ATTRIBUTE (STAT) SYSTEM (BalanceConfig SECTION 7 + GameBalance caps/bases):
   STRENGTH    -> +melee dmg     STR_MELEE_PER_POINT   = 0.05, cap 12
@@ -476,17 +505,17 @@ ATTRIBUTE (STAT) SYSTEM (BalanceConfig SECTION 7 + GameBalance caps/bases):
   The ONE canonical starting stat block lives in BalanceConfig SECTION 7
   (PLAYER_START_* = 2/2/2/2); there are no difficulty modes: see SECTION 17.
 
-EXPECTED CARDS in the one expected-player model (GameMath.expectedPlayerAtDepth):
-  LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION 0.5 of each level's 12 PP as a %-lift on DPT,
-  LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION 0.25 as FLAT eHP (the rest is unhealable
-  mitigation / utility). Character level on-curve = 1 + (depth - 1).
+EXPECTED PERKS in the one expected-player model (GameMath.expectedPlayerAtDepth):
+  EXPECTED_PERK_POWER_PP_PER_PICK (12, SECTION 24) per level — the same number the retired card budget
+  used, so R-LADDER and every boss / route rule are unchanged. LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION 0.5
+  of it as a %-lift on DPT, LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION 0.25 as FLAT eHP. Character level
+  on-curve = 1 + (depth - 1). A perk is NOT 12 PP of general power: it is far more than that on its niche
+  and ~0 off it; 12 is the whole-roster average the expected player carries (order 6 re-derives it).
 
-⚠️ Not-good note (partly superseded by the power ladder): the total-PP invariant is elegant on paper but assumes the
-player only gains power from level-up cards. In reality found weapons, weapon
-abilities (SECTION 5, unpriced), crits, and consumables all add uncounted power.
-So "every build sits on the curve" is true only for the CARD contribution, not
-for real total power. The curve the depth-coupling invariant defends is therefore
-optimistic. Needs re-derivation once weapon power is priced in.
+⚠️ Not-good notes: the build model is VALUED, never PLAYED deep — the sim levels up on only ~8-10% of runs
+  and never reaches a keystone (problem 17); VITALITY sits ~1% under the R-CARRY ceiling (problem 22);
+  several valuation inputs are unverified assumptions (problem 21); IRON BULWARK reflects ordinary guarded
+  hits too while it is valued on heavies only (problem 18).
 
 
 ================================================================================
@@ -1019,7 +1048,8 @@ block. Key methods (never inline any of these — always call GameMath):
 SECTION 19 — THE LIVING TABLE / AUDITOR (util/BalanceReport.java)
 ================================================================================
 DEV-ONLY main; touches no render state (pure GameMath + BalanceConfig). It
-regenerates every living table (WEAPONS, ENEMIES, BLOCK & DEFEND, UPGRADE CARDS,
+regenerates every living table (WEAPONS, ENEMIES, BLOCK & DEFEND, PERKS / KEYSTONES / BUILDS,
+ABILITY PRICING / TIERS,
 DEPTH COUPLING, SCARCITY, ENCOUNTER, HAZARDS, TELEGRAPH AUDIT, MODIFIERS, BOSS
 RULESET) from the CURRENT constants — so the tables "cannot lie" about the numbers.
 Run it and paste its output over the matching sections of docs/game-balance-authority.txt
@@ -1045,11 +1075,9 @@ ceiling, of what needs refinement.
      only. "In band" ≠ "feels right". (SECTION 19)
   2. The CREDIT economy has no proven sink — the shop is deferred/unverified, so
      credits, shop weights, and shop prices are meaningless placeholders. (SECTION 12)
-  3. WEAPON ABILITIES (crit/pierce/lifesteal/legendaries) are entirely UN-priced
-     against the contract and self-labelled "PLACEHOLDER — flag for playtesting".
-     [PARTLY RESOLVED by order 1: the values now live in BalanceConfig SECTION 15,
-     and START_ROOM_ANY_TIER_ENABLED is false + enforced by R-FLAGS. The pricing
-     itself is still open.] (SECTION 5)
+  3. [RESOLVED by balance-overhaul order 5, on paper] WEAPON ABILITIES are priced (R-ABILITY), pruned to
+     the ones that price >= 8 PP at their expected level, tagged, and rolled in full per tier inside banded
+     budgets. Still MODELLED, not played. (SECTION 5)
   4. All THREE bosses are flat placeholder HP walls, reading UNDER their derived
      bands; boss rewards are arbitrary. Boss fights are effectively unimplemented. (SECTION 9)
   5. [RESOLVED by order 1] The "single source of truth" is now complete: status
@@ -1099,6 +1127,33 @@ ceiling, of what needs refinement.
     now survive long enough to hit the navigator's pre-existing stalls (177/200). (authority doc SECTION 8)
 16. [OPEN — order 4] Every heavy in the sim is a depth 1-5 heavy (the policies stall on floors 1-3), so S-HEAVY and the
     HEAVY REPORT say nothing yet about depth 6-25; the R-HEAVY audit (arithmetic) covers 1..25, the play does not.
+17. [OPEN — order 5] S-BUILD measures the FIRST PERK PICK only. While the navigation waiver stands, only ~8-10% of
+    sim runs level up at all (49 of 600 in the TACTICAL-BUILD-SAMPLE row, SIM_BUILD_SAMPLE_SEED_COUNT), every ranked
+    run holds exactly ONE rank, and NO keystone is ever offered (no run reaches level 5). The dominant-tag share
+    reads 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 / ENERGY 6 of 49) — just the first synergy pick off the Chaingun +
+    Shotgun start kit — and is WAIVED by owner ruling D7 under the navigation waiver; the four build-biased rows
+    play identical depths. Perks / keystones / R-CARRY are proven on paper only. (authority doc S-BUILD)
+18. [OPEN — order 5] IRON BULWARK reflects ORDINARY guarded hits as well as heavies (the spec says "a guarded hit"),
+    but BuildValuationModel values the reflect on heavies only — the keystone is stronger in play than modelled.
+    Order 6 / 7 re-fit. (SECTION 6)
+19. [OPEN — order 5] Double-Barrel EPIC / LEGENDARY rolls can take BURST_FIRE as their MAJOR, redundant on a gun
+    that already fires both barrels; there is no per-weapon ability eligibility. (SECTION 5)
+20. [OWNER AWARENESS — order 5] Shop tier-up prices roughly DOUBLED: the tier-up is priced on the destination
+    tier's ability budget, which B5 raised (6/12/20/30 -> 12/25/40/60). R-CREDITS stays green; order 6 re-derives
+    the economy. (SECTION 5)
+21. [OPEN — order 5] Unverified valuation-model inputs that R-PERK / R-KEYSTONE / R-CARRY rest on (the sim could
+    measure them once it plays deeper): a heavy every BUILD_HEAVY_PERIOD_TURNS (4) turns, heavies
+    BUILD_FLOOR_HEAVY_DAMAGE_SHARE (35%) of floor damage, a PYRO build standing BUILD_PYRO_FIRE_TURNS_PER_FLOOR
+    (5) turns a floor in fire, BLADE melee-killing BUILD_BLADE_MELEE_KILL_SHARE (45%) of bodies. (SECTION 6)
+22. [OPEN — order 5] R-CARRY has ~1% headroom: the eight-tag spread is 1.189 against 1.20, with VITALITY (2.081)
+    the best — pinned near its own PK1 / PK2 floor — and MARKSMAN (1.751) the worst. Almost any VITALITY or
+    MARKSMAN retune will need the other side moved too. (SECTION 6)
+23. [CLEANUP — order 5] Dead leftovers from the ability prune: BULWARK_TEMP_ARMOR_SLOTS and the temp-armour pool,
+    and Trigger.ON_RELOAD, have no live ability since BULWARK_ROUNDS / QUICK_HANDS were cut. (SECTION 5)
+24. [NOTE — order 5 CP6] java.util.Random seeded from ADJACENT seeds correlates on its first draw. Fixed for the
+    perk deck and the build roll stream (GameMath.splitMix64). NOT changed (pre-existing, outside this order):
+    EnemyManager's spawn / wiggle / effect streams (floor seeds differ by 1 per depth within a run) and the sim's
+    TacticalPolicy tie-break Random (sequential run seeds; only affects wandering).
 
 BOTTOM LINE: the balance model is a coherent, well-documented SKELETON with a solid
 math contract, but it is provisional throughout, unplaytested, incomplete in its

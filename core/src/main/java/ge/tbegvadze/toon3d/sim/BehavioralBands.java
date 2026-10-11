@@ -77,7 +77,7 @@ public final class BehavioralBands {
      * S-BUILD (balance-overhaul order 5, A6). DEPTH part: the build-biased variants' median death depths satisfy
      * max / min <= 1 + SIM_BUILD_DEPTH_SPREAD (no trap bias, no must-pick bias) — depth-derived, so it carries the
      * navigation waiver SIM_FAIR's median depth carries; skipped unless all four variants are in the matrix.
-     * DOMINANT-TAG part (enforced): over the plain-TACTICAL BUILD SAMPLE row's runs that held a perk rank at the
+     * DOMINANT-TAG part (waived with the navigation waiver by owner ruling D7; its sample line is enforced): over the plain-TACTICAL BUILD SAMPLE row's runs that held a perk rank at the
      * end (at least SIM_BUILD_MIN_SAMPLE of them), no single BuildTag is the end-of-run highest-rank tag on more
      * than SIM_BUILD_MAX_DOMINANT_TAG_SHARE of them. Runs with no rank are excluded and counted in the detail;
      * skipped when the sample row is not in the matrix.
