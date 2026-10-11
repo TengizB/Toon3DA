@@ -7,6 +7,7 @@ import java.util.List;
 
 import ge.tbegvadze.toon3d.entity.WeaponRoll;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
+import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.route.RouteNode;
 import ge.tbegvadze.toon3d.shop.ShopEntry;
@@ -38,6 +39,20 @@ public interface PlayerPolicy {
     /** Picks one of the {@code count} offered level-up perks (balance-overhaul order 5). Default: the first offered. */
     default Perk choosePerk(Perk[] offeredPerks, int count, SimView view) {
         return count > 0 ? offeredPerks[0] : null;
+    }
+
+    /**
+     * Picks one of the {@code count} offered keystones on a keystone level (balance-overhaul order 5, B4).
+     * Default: the keystone matching the build's highest-rank tag (the deck always offers one when it is
+     * still untaken), else the first offered. CP6 adds build-bias variants.
+     */
+    default Keystone chooseKeystone(Keystone[] offeredKeystones, int count, SimView view) {
+        if (count <= 0) return null;
+        ge.tbegvadze.toon3d.progression.BuildTag leading = view != null ? view.playerBuild().highestRankTag() : null;
+        for (int index = 0; index < count; index++) {
+            if (offeredKeystones[index] != null && offeredKeystones[index].tag == leading) return offeredKeystones[index];
+        }
+        return offeredKeystones[0];
     }
 
     /**

@@ -59,6 +59,10 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final float DIVIDER_Y       = 178f;  // hairline separator under the label
     private static final float DESC_Y          = 206f;  // wrapped description
     private static final float TAP_Y           = CARD_HEIGHT - 34f; // "TAP TO CHOOSE" hint
+    /** Baseline of a keystone's cost line, measured UP from the plate bottom (balance-overhaul order 5). */
+    private static final float COST_LINE_BOTTOM_OFFSET = 52f;
+    /** The value line of a keystone plate. */
+    private static final String KEYSTONE_VALUE_TEXT = "KEYSTONE";
 
     // Title / subtitle above the cards
     private static final float TITLE_Y    = CARD_Y + CARD_HEIGHT + 78f;
@@ -81,6 +85,8 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final Color DIM_OVERLAY = new Color(0.02f, 0.02f, 0.04f, 0.84f);
     private static final Color WHITE       = new Color(0.97f, 0.97f, 0.98f, 1.00f);
     private static final Color GOLD        = new Color(1.00f, 0.88f, 0.20f, 1.00f);
+    /** A keystone's cost line (the order-5 spec's cost colour). */
+    private static final Color COST_RED    = new Color(0.95f, 0.30f, 0.25f, 1.00f);
     private static final Color DIM_HINT    = new Color(0.62f, 0.62f, 0.66f, 1.00f);
     private static final Color CARD_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.50f);
     private static final Color TEXT_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.72f);
@@ -138,10 +144,20 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
     private final StringBuilder stringBuilder = new StringBuilder(64);
 
-    // The currently-offered perks (set by World before each render). Never held across level-ups.
-    private final Perk[]   offeredPerks     = new Perk[MAX_CARDS];
-    /** "RANK n / max" per plate, built once per offer (never in render). */
-    private final String[] offeredRankTexts = new String[MAX_CARDS];
+    // The current offer (set by World before each render). Never held across level-ups. In KEYSTONE mode
+    // (balance-overhaul order 5, B4) the plates carry keystones instead of perks; the per-plate text arrays are
+    // filled once per offer so render() reads them as-is.
+    private final Perk[]     offeredPerks     = new Perk[MAX_CARDS];
+    private final Keystone[] offeredKeystones = new Keystone[MAX_CARDS];
+    private final BuildTag[] offeredTags      = new BuildTag[MAX_CARDS];
+    private final String[]   plateNames       = new String[MAX_CARDS];
+    /** "RANK n / max" for a perk, "KEYSTONE" for a keystone. */
+    private final String[]   plateValueTexts  = new String[MAX_CARDS];
+    /** The perk's effect line, or the keystone's GAIN line. */
+    private final String[]   plateDescriptions = new String[MAX_CARDS];
+    /** The keystone's COST line (drawn in the cost colour); null for a perk. */
+    private final String[]   plateCostLines   = new String[MAX_CARDS];
+    private boolean keystoneMode = false;
     private int offeredCount = 0;
 
     public LevelUpOverlayRenderer(PlayerProgress progress) {
@@ -168,12 +184,42 @@ public final class LevelUpOverlayRenderer implements Disposable {
      * slots available. Call before {@link #render}.
      */
     public void setOfferedPerks(Perk[] perks, int count, PlayerBuild build) {
+        keystoneMode = false;
         offeredCount = Math.min(count, MAX_CARDS);
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
             Perk perk = perks[cardIndex];
-            offeredPerks[cardIndex] = perk;
-            offeredRankTexts[cardIndex] = "RANK " + (build.rankOf(perk) + 1) + " / " + perk.maxRank;
+            offeredPerks[cardIndex]      = perk;
+            offeredKeystones[cardIndex]  = null;
+            offeredTags[cardIndex]       = perk.tag;
+            plateNames[cardIndex]        = perk.displayName;
+            plateValueTexts[cardIndex]   = "RANK " + (build.rankOf(perk) + 1) + " / " + perk.maxRank;
+            plateDescriptions[cardIndex] = perk.effectLine;
+            plateCostLines[cardIndex]    = null;
         }
+    }
+
+    /**
+     * KEYSTONE mode (balance-overhaul order 5, B4): the plates show this keystone level's offer instead of
+     * perks — name, tag, the GAIN line and the COST line (in the cost colour). CP5 adds the gold frame.
+     */
+    public void setOfferedKeystones(Keystone[] keystones, int count) {
+        keystoneMode = true;
+        offeredCount = Math.min(count, MAX_CARDS);
+        for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
+            Keystone keystone = keystones[cardIndex];
+            offeredPerks[cardIndex]      = null;
+            offeredKeystones[cardIndex]  = keystone;
+            offeredTags[cardIndex]       = keystone.tag;
+            plateNames[cardIndex]        = keystone.displayName;
+            plateValueTexts[cardIndex]   = KEYSTONE_VALUE_TEXT;
+            plateDescriptions[cardIndex] = keystone.gainLine;
+            plateCostLines[cardIndex]    = keystone.costLine;
+        }
+    }
+
+    /** True while the overlay offers keystones rather than perks. */
+    public boolean isKeystoneMode() {
+        return keystoneMode;
     }
 
     // -------------------------------------------------------------------------
@@ -193,15 +239,21 @@ public final class LevelUpOverlayRenderer implements Disposable {
         return -1;
     }
 
-    /** Returns the offered perk at the given slot, or {@code null} if out of range. */
+    /** Returns the offered perk at the given slot, or {@code null} if out of range or in keystone mode. */
     public Perk getOfferedPerk(int cardIndex) {
         if (cardIndex < 0 || cardIndex >= offeredCount) return null;
         return offeredPerks[cardIndex];
     }
 
-    /** The plate palette index for a perk (a cycle over its tag ordinal). */
-    private static int paletteIndexOf(Perk perk) {
-        return perk.tag.ordinal() % POOL_ACCENT.length;
+    /** Returns the offered keystone at the given slot, or {@code null} if out of range or in perk mode. */
+    public Keystone getOfferedKeystone(int cardIndex) {
+        if (cardIndex < 0 || cardIndex >= offeredCount) return null;
+        return offeredKeystones[cardIndex];
+    }
+
+    /** The plate palette index for a build tag (a cycle over its ordinal). */
+    private static int paletteIndexOf(BuildTag tag) {
+        return tag.ordinal() % POOL_ACCENT.length;
     }
 
     private float cardLeftX(int cardIndex) {
@@ -232,7 +284,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            int pool = paletteIndexOf(offeredPerks[cardIndex]);
+            int pool = paletteIndexOf(offeredTags[cardIndex]);
             float cardX = cardLeftX(cardIndex);
 
             // Soft outer glow halo
@@ -272,7 +324,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
             shapes.rect(cardX + 3f, CARD_Y + 3f, CARD_WIDTH - 6f, CARD_HEIGHT - 6f);
 
             // Thick accent outer border
-            shapes.setColor(POOL_ACCENT[paletteIndexOf(offeredPerks[cardIndex])]);
+            shapes.setColor(POOL_ACCENT[paletteIndexOf(offeredTags[cardIndex])]);
             shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
 
             // Hairline divider under the effect label
@@ -291,7 +343,8 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
         // Title
         font.getData().setScale(SCALE_TITLE);
-        drawCenteredTextWithShadow("*** LEVEL UP! ***", Constants.WORLD_WIDTH / 2f, TITLE_Y, GOLD);
+        drawCenteredTextWithShadow(keystoneMode ? "*** KEYSTONE ***" : "*** LEVEL UP! ***",
+                Constants.WORLD_WIDTH / 2f, TITLE_Y, GOLD);
 
         // Subtitle
         font.getData().setScale(SCALE_SUBTITLE);
@@ -300,34 +353,40 @@ public final class LevelUpOverlayRenderer implements Disposable {
         drawCenteredTextWithShadow(stringBuilder.toString(), Constants.WORLD_WIDTH / 2f, SUBTITLE_Y, WHITE);
 
         for (int cardIndex = 0; cardIndex < offeredCount; cardIndex++) {
-            drawCardText(cardIndex, offeredPerks[cardIndex]);
+            drawCardText(cardIndex);
         }
 
         batch.end();
     }
 
-    private void drawCardText(int cardIndex, Perk perk) {
+    private void drawCardText(int cardIndex) {
         float cardX = cardLeftX(cardIndex);
         float cardCenterX = cardX + CARD_WIDTH / 2f;
         float top = cardTopY();
-        Color accent = POOL_ACCENT[paletteIndexOf(perk)];
+        Color accent = POOL_ACCENT[paletteIndexOf(offeredTags[cardIndex])];
 
-        // Perk name — inside the header strip (white, bold-looking with shadow)
+        // Perk / keystone name — inside the header strip (white, bold-looking with shadow)
         font.getData().setScale(SCALE_HEADER);
-        drawCenteredTextWithShadow(perk.displayName, cardCenterX, top - HEADER_TEXT_Y, HEADER_TEXT);
+        drawCenteredTextWithShadow(plateNames[cardIndex], cardCenterX, top - HEADER_TEXT_Y, HEADER_TEXT);
 
-        // The rank this pick reaches ("RANK 2 / 3") in accent color
+        // The rank this pick reaches ("RANK 2 / 3"), or "KEYSTONE", in accent color
         font.getData().setScale(SCALE_VALUE * RANK_TEXT_SCALE_FRACTION);
-        drawCenteredTextWithShadow(offeredRankTexts[cardIndex], cardCenterX, top - VALUE_Y, accent);
+        drawCenteredTextWithShadow(plateValueTexts[cardIndex], cardCenterX, top - VALUE_Y, accent);
 
-        // The build tag below the rank (e.g. "CLOSE QUARTERS") — white
+        // The build tag below (e.g. "CLOSE QUARTERS") — white
         font.getData().setScale(SCALE_LABEL);
-        drawCenteredTextWithShadow(perk.tag.displayName(), cardCenterX, top - LABEL_Y, WHITE);
+        drawCenteredTextWithShadow(offeredTags[cardIndex].displayName(), cardCenterX, top - LABEL_Y, WHITE);
 
-        // One-line effect — smaller, white, word-wrapped inside the card width
+        // One-line effect (a keystone's GAIN) — smaller, white, word-wrapped inside the card width
         font.getData().setScale(SCALE_DESC);
-        drawWrappedTextWithShadow(perk.effectLine, cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
+        drawWrappedTextWithShadow(plateDescriptions[cardIndex], cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
                 CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, WHITE);
+
+        // A keystone's COST line — near the plate bottom, in the cost colour
+        if (plateCostLines[cardIndex] != null) {
+            drawWrappedTextWithShadow(plateCostLines[cardIndex], cardX + TEXT_HORIZONTAL_PAD,
+                    CARD_Y + COST_LINE_BOTTOM_OFFSET, CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, COST_RED);
+        }
 
         // Tap hint — small, dimmed
         font.getData().setScale(SCALE_TAP);

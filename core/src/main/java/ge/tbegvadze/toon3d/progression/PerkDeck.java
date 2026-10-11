@@ -7,7 +7,8 @@ import java.util.Random;
 
 /**
  * Draws the level-up PERK offers (balance-overhaul order 5, rule B3) — the replacement for the retired
- * budget-equal card deck.
+ * budget-equal card deck — and, on a keystone level, the KEYSTONE offer instead (rule B4,
+ * {@link #drawKeystones}).
  *
  * <h2>What every draw guarantees</h2>
  * <ul>
@@ -69,6 +70,11 @@ public final class PerkDeck {
     private final float[]   perkWeights = new float[ALL_PERKS.length];
     private final boolean[] perkTaken   = new boolean[ALL_PERKS.length];
 
+    // Keystone offer (B4) scratch — sized once.
+    private static final Keystone[] ALL_KEYSTONES = Keystone.values();
+    private final float[]   keystoneWeights = new float[ALL_KEYSTONES.length];
+    private final boolean[] keystoneTaken   = new boolean[ALL_KEYSTONES.length];
+
     public PerkDeck(long seed) {
         this.random = new Random(seed);
     }
@@ -94,6 +100,86 @@ public final class PerkDeck {
         }
         shuffle(out, drawn);
         return drawn;
+    }
+
+    /**
+     * Fills {@code out[0..n-1]} with the B4 keystone offer and returns n (at most
+     * {@link BalanceConfig#KEYSTONES_OFFERED}; fewer only if fewer untaken keystones remain — never with the
+     * shipped 9 keystones over 4 keystone levels):
+     * <ul>
+     *   <li>never a keystone already taken;</li>
+     *   <li>at least one MATCHING the build's {@link PlayerBuild#highestRankTag()}. FALLBACK (decided): when that
+     *       keystone is taken, or the build holds no ranks, the matching slot goes to the untaken keystone whose
+     *       tag holds the most ranks (ties: catalog order) — the closest thing to "your build" still on offer;</li>
+     *   <li>at least one NOT matching that tag (any other untaken keystone);</li>
+     *   <li>the rest weighted like the perks: 1 + ranks in the keystone's tag x PERK_DRAW_BIAS_PER_PICK.</li>
+     * </ul>
+     * Shuffled for presentation. Allocation-free.
+     */
+    public int drawKeystones(Keystone[] out, PlayerBuild build) {
+        java.util.Arrays.fill(keystoneTaken, false);
+        int wanted = Math.min(out.length, BalanceConfig.KEYSTONES_OFFERED);
+        int drawn = 0;
+        BuildTag leading = build.highestRankTag();
+        int matching = -1;
+        int bestRanks = -1;
+        for (int index = 0; index < ALL_KEYSTONES.length; index++) {
+            Keystone keystone = ALL_KEYSTONES[index];
+            if (build.hasKeystone(keystone)) continue;
+            int ranks = keystone.tag == leading ? Integer.MAX_VALUE : build.ranksInTag(keystone.tag);
+            if (ranks > bestRanks) {
+                bestRanks = ranks;
+                matching = index;
+            }
+        }
+        if (matching >= 0 && drawn < wanted) {
+            keystoneTaken[matching] = true;
+            out[drawn++] = ALL_KEYSTONES[matching];
+        }
+        BuildTag matchedTag = matching >= 0 ? ALL_KEYSTONES[matching].tag : null;
+        while (drawn < wanted) {
+            int picked = pickWeightedKeystone(build, matchedTag, drawn == 1);
+            if (picked < 0) picked = pickWeightedKeystone(build, matchedTag, false);
+            if (picked < 0) break;
+            keystoneTaken[picked] = true;
+            out[drawn++] = ALL_KEYSTONES[picked];
+        }
+        shuffle(out, drawn);
+        return drawn;
+    }
+
+    /** True when reaching {@code characterLevel} offers keystones instead of perks (B4, AS2). */
+    public static boolean isKeystoneLevel(int characterLevel) {
+        for (int level : BalanceConfig.KEYSTONE_CHARACTER_LEVELS) {
+            if (level == characterLevel) return true;
+        }
+        return false;
+    }
+
+    /** Weighted pick among untaken, unoffered keystones; {@code otherTagOnly} excludes the matched tag. */
+    private int pickWeightedKeystone(PlayerBuild build, BuildTag matchedTag, boolean otherTagOnly) {
+        float totalWeight = 0f;
+        for (int index = 0; index < ALL_KEYSTONES.length; index++) {
+            Keystone keystone = ALL_KEYSTONES[index];
+            float weight = 0f;
+            if (!keystoneTaken[index] && !build.hasKeystone(keystone)
+                    && !(otherTagOnly && keystone.tag == matchedTag)) {
+                weight = 1f + build.ranksInTag(keystone.tag) * BalanceConfig.PERK_DRAW_BIAS_PER_PICK;
+            }
+            keystoneWeights[index] = weight;
+            totalWeight += weight;
+        }
+        if (totalWeight <= 0f) return -1;
+        float roll = random.nextFloat() * totalWeight;
+        float cumulative = 0f;
+        for (int index = 0; index < ALL_KEYSTONES.length; index++) {
+            cumulative += keystoneWeights[index];
+            if (roll < cumulative && keystoneWeights[index] > 0f) return index;
+        }
+        for (int index = ALL_KEYSTONES.length - 1; index >= 0; index--) {
+            if (keystoneWeights[index] > 0f) return index;
+        }
+        return -1;
     }
 
     /** True when the perk's tag is one a carried weapon belongs to (the level-up plate's SYNERGY marker). */

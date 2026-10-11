@@ -48,6 +48,7 @@ import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PerkDeck;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
@@ -137,6 +138,7 @@ public final class SimWorld implements LevelTransitionListener {
     private final GameState           gameState = new GameState();
     private final ScriptedActionSource actionSource = new ScriptedActionSource();
     private final Perk[]              offeredPerks = new Perk[BalanceConfig.PERKS_OFFERED];
+    private final Keystone[]          offeredKeystones = new Keystone[BalanceConfig.KEYSTONES_OFFERED];
     private final List<Weapon>        arsenal = new ArrayList<>();
     private final ShopRoller          shopRoller = new ShopRoller(new DefaultShopOfferSource());
     private final ShopEffectApplier   shopEffectApplier;
@@ -211,6 +213,7 @@ public final class SimWorld implements LevelTransitionListener {
         itemInventory  = new Inventory();
         inventory      = new PlayerInventory();
         statusEffectController = new StatusEffectController();
+        statusEffectController.setBuildStats(playerBuild.stats());
 
         player = new Player(0f, 0f, 1f, 0f);
         player.setPlayerStats(playerStats);
@@ -775,11 +778,20 @@ public final class SimWorld implements LevelTransitionListener {
     private void resolvePendingLevelUps() {
         int guard = 0;
         while (playerProgress.hasPendingLevelUp() && player.isAlive() && guard++ < 16) {
-            int offeredCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
-            if (offeredCount > 0) {
-                Perk chosen = policy.choosePerk(offeredPerks, offeredCount, view);
-                if (chosen == null) chosen = offeredPerks[0];
-                playerBuild.addPerkRank(chosen);
+            // B4 / AS2: a keystone level offers keystones INSTEAD of perks (mirrors World).
+            int keystoneCount = PerkDeck.isKeystoneLevel(playerProgress.getPlayerLevel() + 1)
+                    ? perkDeck.drawKeystones(offeredKeystones, playerBuild) : 0;
+            if (keystoneCount > 0) {
+                Keystone chosenKeystone = policy.chooseKeystone(offeredKeystones, keystoneCount, view);
+                if (chosenKeystone == null) chosenKeystone = offeredKeystones[0];
+                playerBuild.addKeystone(chosenKeystone);
+            } else {
+                int offeredCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
+                if (offeredCount > 0) {
+                    Perk chosen = policy.choosePerk(offeredPerks, offeredCount, view);
+                    if (chosen == null) chosen = offeredPerks[0];
+                    playerBuild.addPerkRank(chosen);
+                }
             }
             playerProgress.advanceLevel();
             int newLevel = playerProgress.getPlayerLevel();
@@ -806,6 +818,10 @@ public final class SimWorld implements LevelTransitionListener {
         if (armorBonus  != appliedBuildMaxArmorBonus)  player.adjustMaxArmor(armorBonus - appliedBuildMaxArmorBonus);
         appliedBuildMaxHealthBonus = healthBonus;
         appliedBuildMaxArmorBonus  = armorBonus;
+        inventory.getLoadout().setUnlockedExtraSlots(playerBuild.stats().extraLoadoutSlots());
+        for (Weapon weapon : arsenal) weapon.onBuildChanged();
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null) meleeWeapon.onBuildChanged();
         if (enemyManager != null) {
             enemyManager.setPlayerMeleeDamageMultiplier(playerStats.getMeleeDamageMultiplier() * ladderProbeOffenceLift);
             enemyManager.setPlayerRangedDamageMultiplier(playerRangedDamageMultiplier() * ladderProbeOffenceLift);

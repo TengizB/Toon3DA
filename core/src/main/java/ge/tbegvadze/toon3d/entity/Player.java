@@ -81,6 +81,17 @@ public class Player implements Renderable, Disposable, StatusHost {
     /** Second Wind (balance-overhaul order 5): true once this floor's lethal-hit save has been spent. */
     private boolean secondWindSpentThisFloor = false;
 
+    /**
+     * Damage the guard BLOCKED on the last {@link #applyDirectionalDamage} call — incoming minus taken for a
+     * front-arc guarded hit, 0 otherwise (balance-overhaul order 5: IRON BULWARK reflects a share of it).
+     */
+    private int lastGuardBlockedDamage = 0;
+
+    /** Damage the guard blocked on the last directional hit (0 when it was not a front-arc guarded hit). */
+    public int getLastGuardBlockedDamage() {
+        return lastGuardBlockedDamage;
+    }
+
     // Status effect storage — pre-allocated at construction, never replaced
     private final EnumMap<StatusType, StatusEffect> activeStatusEffects;
     private final StatusResistance statusResistance = StatusResistance.defaultResistance();
@@ -267,6 +278,7 @@ public class Player implements Renderable, Disposable, StatusHost {
      *         true); false when not guarding, or the hit came from the side/back.
      */
     public boolean applyDirectionalDamage(int amount, float attackerWorldX, float attackerWorldY, boolean heavy) {
+        lastGuardBlockedDamage = 0;
         if (!guarding) {
             applyDamage(amount, heavy);
             return false;
@@ -284,6 +296,8 @@ public class Player implements Renderable, Disposable, StatusHost {
         int guardedDamage = Math.max(0, Math.round(amount * multiplier));
         // The front arc is the only arc whose multiplier is the chosen front value (side/back are 1.0).
         boolean frontArc = multiplier == frontMultiplier && frontMultiplier < GameBalance.GUARD_SIDE_MULTIPLIER;
+        // IRON BULWARK (balance-overhaul order 5) reflects a share of what the guard blocked; record it.
+        lastGuardBlockedDamage = frontArc ? Math.max(0, amount - guardedDamage) : 0;
         if (guardHitListener != null) {
             guardHitListener.onGuardedHit(frontArc, guardedDamage, attackerWorldX, attackerWorldY);
         }
@@ -520,8 +534,13 @@ public class Player implements Renderable, Disposable, StatusHost {
         return removedAny;
     }
 
-    /** True while POISONED or WEAK is active — the statuses a STIM cleanses (balance-overhaul order 4, H11). */
+    /**
+     * True while POISONED or WEAK is active — the statuses a STIM cleanses (balance-overhaul order 4, H11).
+     * Always false under IRONHIDE (balance-overhaul order 5): its STIMs no longer cleanse, so there is nothing a
+     * STIM could remove (and the HEAL button stops preferring a STIM for the cleanse).
+     */
     public boolean hasCleansableStatus() {
+        if (buildStats.stimsDoNotCleanse()) return false;
         return activeStatusEffects.get(StatusType.POISONED).isActive()
                 || activeStatusEffects.get(StatusType.WEAK).isActive();
     }

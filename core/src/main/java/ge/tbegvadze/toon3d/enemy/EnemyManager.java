@@ -164,6 +164,8 @@ public final class EnemyManager implements EnemyHitTarget {
     private boolean activationHazardBlast  = false;
     /** The run's build aggregate (balance-overhaul order 5); read live. Never null. */
     private BuildStats buildStats = BuildStats.NONE;
+    /** True while a STORM CONDUIT arc is resolving, so the arc's own hit never arcs again (order 5). */
+    private boolean resolvingStormArc = false;
     // World turns taken by this manager (incremented at the top of takeTurn). The SPREAD stagger's
     // no-chain rule compares it against Enemy.lastStaggeredTurn (balance-overhaul order 3, W1).
     private int worldTurnIndex = 0;
@@ -883,12 +885,13 @@ public final class EnemyManager implements EnemyHitTarget {
         // carries its own Sapper / DEMOLITIONIST multiplier.
         float buildMultiplier = 1f;
         if (!activationHazardBlast && activationDamageClass != null) {
-            boolean firstHitOnTarget = !enemy.playerHitTaken;
+            // A STORM CONDUIT arc is a side-effect of another hit: it never spends the target's first hit.
+            boolean firstHitOnTarget = !enemy.playerHitTaken && !resolvingStormArc;
             buildMultiplier = buildStats.hitDamageMultiplier(activationDamageClass,
                     activationDistanceTo(enemy), firstHitOnTarget, enemy.health >= enemy.maxHealth,
                     enemy.getActiveEffects().get(StatusType.BURNING).isActive(), thisKillWasMelee,
                     isPlayerBelowBerserkThreshold(), worldTurnIndex <= enemy.riposteWindowLastTurn);
-            enemy.playerHitTaken = true;
+            if (!resolvingStormArc) enemy.playerHitTaken = true;
         }
         totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier
                 * matchupMultiplier * buildMultiplier);
@@ -939,7 +942,7 @@ public final class EnemyManager implements EnemyHitTarget {
 
         if (!enemy.isAlive()) {
             // THE BUILD's kill terms (balance-overhaul order 5) — a weapon kill only (a barrel is not one).
-            if (!activationHazardBlast) applyBuildKillTerms(thisKillWasMelee);
+            if (!activationHazardBlast) applyBuildKillTerms(thisKillWasMelee, enemy);
             int xpAwarded = depthScaledXpReward(enemy.type);
             if (killXpListener != null) {
                 killXpListener.onEnemyKilledForXp(xpAwarded);
@@ -958,6 +961,12 @@ public final class EnemyManager implements EnemyHitTarget {
             if (impactEventListener != null) {
                 impactEventListener.onEnemyHit(worldX, worldY, heightMultiplier, totalDamage);
             }
+        }
+        // STORM CONDUIT (balance-overhaul order 5): an ENERGY weapon hit arcs to one more living neighbour.
+        float arcFraction = buildStats.energyArcFraction();
+        if (arcFraction > 0f && !resolvingStormArc && !activationHazardBlast
+                && activationDamageClass == DamageClass.ENERGY) {
+            dischargeStormArc(enemy.tileColumn, enemy.tileRow, enemy, amount, arcFraction);
         }
     }
 
@@ -1011,9 +1020,19 @@ public final class EnemyManager implements EnemyHitTarget {
      * The build's on-kill terms for a weapon kill (balance-overhaul order 5): BREACHER — a SPREAD kill refunds
      * one shell to the active gun's reserve on a {@link BuildStats#spreadKillShellRefundChance()} roll;
      * BLOODLETTING (+ BERSERKER) — a melee kill heals {@link BuildStats#meleeKillHealTotalFraction()} of max HP.
+     * SCATTERGUN DOCTRINE (CP3) adds a guaranteed shell for a SPREAD kill at point-blank range (on top of
+     * Breacher's roll — the valuation adds the two refund rates the same way).
      * The rolls ride {@code buildRandom}, so a run without these perks draws nothing from it.
      */
-    private void applyBuildKillTerms(boolean meleeKill) {
+    private void applyBuildKillTerms(boolean meleeKill, Enemy killed) {
+        // SCATTERGUN DOCTRINE (CP3): a SPREAD kill at point-blank refunds one shell, always.
+        if (buildStats.pointBlankKillShellRefund() && activationDamageClass == DamageClass.SPREAD && loadout != null
+                && activationDistanceTo(killed) <= BalanceConfig.BUILD_POINT_BLANK_MAX_TILES) {
+            Weapon activeWeapon = loadout.active();
+            if (activeWeapon != null && activeWeapon.damageClass() == DamageClass.SPREAD) {
+                activeWeapon.refundReserveRounds(1);
+            }
+        }
         float refundChance = buildStats.spreadKillShellRefundChance();
         if (activationDamageClass == DamageClass.SPREAD && refundChance > 0f && loadout != null
                 && buildRandom.nextFloat() < refundChance) {
@@ -1535,7 +1554,7 @@ public final class EnemyManager implements EnemyHitTarget {
                     && isBehindPlayerFacing(enemy, playerColumn, playerRow, player)) {
                 damage = Math.max(1, Math.round(damage * EnemyConstants.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER));
             }
-            player.applyDirectionalDamage(damage, enemy.worldCenterX(), enemy.worldCenterY());
+            strikePlayer(player, enemy, damage, enemy.worldCenterX(), enemy.worldCenterY());
             if (enemyAttackListener != null) enemyAttackListener.onMeleeAttack(enemy);
         }
     }
@@ -1578,7 +1597,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (stillValid) {
             // Ranged shot travels down the enemy's cardinal lane — use the enemy tile as the lane
             // origin so a guarding player's facing arc is judged against where the shot comes from.
-            player.applyDirectionalDamage(enemy.scaledAttackDamage(),
+            strikePlayer(player, enemy, enemy.scaledAttackDamage(),
                     enemy.worldCenterX(), enemy.worldCenterY());
             applyRangedAttackStatusEffect(enemy, player);
             // EVIDENCE (narrative-rework order-4, BREAK_LANE): by the cardinal-line rule above, this
@@ -1651,7 +1670,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 // Player still on the committed lane — the shot connects. Use the Lancer's tile as the lane
                 // origin so a guarding player's facing arc is judged against where the beam comes from.
                 boolean wasGuarding = player.isGuarding();
-                boolean lanceGuarded = player.applyDirectionalDamage(lanceDamage, enemy.worldCenterX(),
+                boolean lanceGuarded = strikePlayer(player, enemy, lanceDamage, enemy.worldCenterX(),
                         enemy.worldCenterY(), true);
                 noteHeavyHit(lanceGuarded);
                 if (lanceGuarded) {
@@ -1964,7 +1983,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= EnemyConstants.AREA_STRIKE_RADIUS_TILES;
         if (inBlast) {
             boolean wasGuarding = player.isGuarding();
-            boolean strikeGuarded = player.applyDirectionalDamage(areaStrikeDamage(enemy),
+            boolean strikeGuarded = strikePlayer(player, enemy, areaStrikeDamage(enemy),
                     enemy.worldCenterX(), enemy.worldCenterY(), true);
             noteHeavyHit(strikeGuarded);
             if (strikeGuarded) {
@@ -2126,7 +2145,7 @@ public final class EnemyManager implements EnemyHitTarget {
         // The rush reached the player: the HEAVY charge always lands (HeavyAttack.CHARGE). The player's
         // counters are the sidestep (the rush whiffs above) and, from CP3, GUARD facing it.
         boolean wasGuarding = player.isGuarding();
-        boolean riposted = player.applyDirectionalDamage(enemy.heavyDamage(enemy.type.heavyWindUp()),
+        boolean riposted = strikePlayer(player, enemy, enemy.heavyDamage(enemy.type.heavyWindUp()),
                 enemy.worldCenterX(), enemy.worldCenterY(), true);
         noteHeavyHit(riposted);
         if (riposted) applyGuardRiposte(enemy);
@@ -2238,7 +2257,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (playerHit) {
             boolean wasGuarding = player.isGuarding();
             // HEAVY, but no riposte: the detonating source dies this turn, so there is nobody to stun.
-            noteHeavyHit(player.applyDirectionalDamage(blastDamage, enemy.worldCenterX(), enemy.worldCenterY(), true));
+            noteHeavyHit(strikePlayer(player, enemy, blastDamage, enemy.worldCenterX(), enemy.worldCenterY(), true));
             // EVIDENCE (narrative-rework order-4): the detonation counted down in full view for turns.
             if (telegraphedHitLandedListener != null) telegraphedHitLandedListener.accept(wasGuarding);
         }
@@ -3258,6 +3277,91 @@ public final class EnemyManager implements EnemyHitTarget {
             enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow, enemy.selfDestructed);
         }
         enemies.remove(enemy);
+    }
+
+    /** An ordinary (non-heavy) directional hit on the player from {@code attacker}; see the heavy overload. */
+    private boolean strikePlayer(Player player, Enemy attacker, int amount, float attackerWorldX, float attackerWorldY) {
+        return strikePlayer(player, attacker, amount, attackerWorldX, attackerWorldY, false);
+    }
+
+    /**
+     * Every enemy hit on the player goes through here: {@link Player#applyDirectionalDamage}, then IRON BULWARK
+     * (balance-overhaul order 5) — a front-arc GUARDED hit reflects {@link BuildStats#guardReflectFraction()} of the
+     * damage the guard blocked back into the attacker ({@link GameMath#guardReflectDamage}). A self-destructing
+     * source is gone already and takes nothing back.
+     *
+     * @return true when the hit landed in the guarded front arc (the caller ripostes a heavy that returns true)
+     */
+    private boolean strikePlayer(Player player, Enemy attacker, int amount, float attackerWorldX, float attackerWorldY,
+                                 boolean heavy) {
+        boolean frontArc = player.applyDirectionalDamage(amount, attackerWorldX, attackerWorldY, heavy);
+        float reflectFraction = buildStats.guardReflectFraction();
+        if (frontArc && reflectFraction > 0f && attacker.isAlive() && !attacker.selfDestructed) {
+            int reflected = GameMath.guardReflectDamage(player.getLastGuardBlockedDamage(), reflectFraction);
+            if (reflected > 0) reflectIntoAttacker(attacker, reflected);
+        }
+        return frontArc;
+    }
+
+    /**
+     * IRON BULWARK's reflected damage on the attacker. It resolves inside the enemy turn, so a kill is credited
+     * (XP, kill event, credits — the player's guard landed it) and the body is queued for removal after the
+     * phase loop ({@link #pendingExecuteDeaths}) rather than removed mid-iteration.
+     */
+    private void reflectIntoAttacker(Enemy attacker, int reflected) {
+        attacker.applyDamage(reflected);
+        attacker.triggerHitFlash();
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyHit(attacker.worldCenterX(), attacker.worldCenterY(),
+                    attacker.type.heightMultiplier(), reflected);
+        }
+        if (attacker.isAlive()) return;
+        int xpAwarded = depthScaledXpReward(attacker.type);
+        if (killXpListener != null) killXpListener.onEnemyKilledForXp(xpAwarded);
+        if (killEventListener != null) killEventListener.onEnemyKilled(attacker.nameTag, xpAwarded);
+        if (killCreditListener != null) {
+            killCreditListener.onEnemyKilledForCredits(depthScaledCreditReward(attacker.type), currentDepth);
+        }
+        if (impactEventListener != null) {
+            impactEventListener.onEnemyKilled(attacker.worldCenterX(), attacker.worldCenterY(),
+                    attacker.type.heightMultiplier(), reflected);
+        }
+        for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
+            if (pendingExecuteDeaths[deathIndex] == attacker) return;
+        }
+        if (pendingExecuteDeathCount < MAX_PENDING_EXECUTE_DEATHS) {
+            pendingExecuteDeaths[pendingExecuteDeathCount++] = attacker;
+        }
+    }
+
+    /**
+     * STORM CONDUIT (balance-overhaul order 5): an ENERGY hit on {@code struck} arcs to ONE living orthogonal
+     * neighbour (east, west, north, south — the first found) for {@code arcFraction} of the hit's raw damage.
+     * The arc is itself an ENERGY hit (the build's class terms apply), but it never arcs again.
+     */
+    private void dischargeStormArc(int struckColumn, int struckRow, Enemy struck, int rawDamage, float arcFraction) {
+        Enemy target = null;
+        for (int direction = 0; direction < WILDFIRE_STEP_COLUMNS.length && target == null; direction++) {
+            int neighbourColumn = struckColumn + WILDFIRE_STEP_COLUMNS[direction];
+            int neighbourRow    = struckRow    + WILDFIRE_STEP_ROWS[direction];
+            for (int index = 0; index < enemies.size(); index++) {
+                Enemy candidate = enemies.get(index);
+                if (candidate == struck || !candidate.isAlive()) continue;
+                if (candidate.tileColumn == neighbourColumn && candidate.tileRow == neighbourRow) {
+                    target = candidate;
+                    break;
+                }
+            }
+        }
+        if (target == null) return;
+        // The raw weapon damage scaled by the fraction: applyDamageTo then applies the player's multipliers once.
+        int arcDamage = GameMath.buildScaledAmount(rawDamage, arcFraction, 1);
+        resolvingStormArc = true;
+        try {
+            applyDamageTo(target, arcDamage);
+        } finally {
+            resolvingStormArc = false;
+        }
     }
 
     /** The four orthogonal neighbour offsets Wildfire spreads to. */

@@ -857,6 +857,9 @@ public class PlayerController {
         if (!weapon.requestManualReload()) return;  // already reloading or firing — silent
         if (gameAudio != null) gameAudio.playUi(GameSoundId.WEAPON_RELOAD_START);
         if (weaponReloadStartedListener != null) weaponReloadStartedListener.run();
+        // SCATTERGUN DOCTRINE (balance-overhaul order 5): the reload was chambered at once and costs no world
+        // turn — no action is started, so no tick fires and the player stays IDLE.
+        if (weapon.reloadCostsNoTurn()) return;
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }

@@ -326,6 +326,10 @@ public abstract class Weapon implements WeaponProfile {
             int bonus = abilityCount(WeaponAbility.EXTENDED_MAG);
             effectiveClipSize = Math.min(effectiveClipSize + bonus, WeaponConstants.WEAPON_CLIP_HARD_CAP);
         }
+        // DEADEYE's cost (balance-overhaul order 5): clip sizes x clipSizeMultiplier(), never below one round.
+        if (effectiveClipSize > 0) {
+            effectiveClipSize = GameMath.buildClipActions(effectiveClipSize, 1, buildStats.clipSizeMultiplier());
+        }
         // BURST_FIRE must have a clip large enough to fire a full burst; otherwise the burst is
         // silently truncated by the remaining-clip cap in fire(). Guarantee at least one whole
         // burst's worth of rounds (e.g. a burst-5 roll on a small-clip weapon lifts the clip to 5).
@@ -733,6 +737,10 @@ public abstract class Weapon implements WeaponProfile {
                 && ammoInventory.countOf(ammoType.getItemType()) == 0) return false;
         visualState    = WeaponVisualState.RELOADING;
         ticksRemaining = reloadTime;
+        if (reloadCostsNoTurn()) {
+            completeReload();   // SCATTERGUN DOCTRINE: chambered at once, no world turn
+            return true;
+        }
         if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
         return true;
     }
@@ -766,7 +774,11 @@ public abstract class Weapon implements WeaponProfile {
                 normalToReloadTimerSeconds = 0f;
                 visualState                = WeaponVisualState.RELOADING;
                 ticksRemaining             = reloadTime;
-                if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
+                if (reloadCostsNoTurn()) {
+                    completeReload();   // SCATTERGUN DOCTRINE: the automatic reload is free too
+                } else if (eventTextSystem != null) {
+                    eventTextSystem.spawn("Reloading...");
+                }
             }
         }
     }
@@ -782,28 +794,46 @@ public abstract class Weapon implements WeaponProfile {
         if (visualState == WeaponVisualState.RELOADING) {
             ticksRemaining--;
             if (ticksRemaining <= 0) {
-                if (ammoInventory != null && ammoType != null) {
-                    int bulletsNeeded = getEffectiveClipSize() - shotsInClip;
-                    int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
-                    shotsInClip += roundsLoaded;
-                    if (shotsInClip == 0) {
-                        if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");
-                    } else {
-                        if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
-                    }
-                } else {
-                    // ammoInventory not yet injected — infinite ammo fallback for tests.
-                    shotsInClip = effectiveClipSize;
-                    if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
-                }
-                // Notify resolver so ON_RELOAD abilities (BULWARK_ROUNDS) can fire.
-                // Only triggers when rounds were actually chambered (shotsInClip > 0).
-                if (abilityResolver != null && shotsInClip > 0) {
-                    abilityResolver.onReload(this);
-                }
-                visualState = WeaponVisualState.NORMAL;
+                completeReload();
             }
         }
+    }
+
+    /**
+     * SCATTERGUN DOCTRINE (balance-overhaul order 5, CP3): true when this weapon's reload costs no world turn —
+     * a SPREAD weapon under the keystone. Such a reload completes the moment it starts (manual or automatic),
+     * and PlayerController takes no turn for it.
+     */
+    public boolean reloadCostsNoTurn() {
+        return buildStats.spreadReloadFree() && damageClass() == DamageClass.SPREAD;
+    }
+
+    /**
+     * Chambers the reload: spends rounds from the reserve into the clip, fires the ON_RELOAD abilities when
+     * rounds were chambered, and returns the weapon to NORMAL. Called when a reload's ticks run out, or at
+     * once for a reload that costs no turn ({@link #reloadCostsNoTurn}).
+     */
+    private void completeReload() {
+        if (ammoInventory != null && ammoType != null) {
+            int bulletsNeeded = getEffectiveClipSize() - shotsInClip;
+            int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
+            shotsInClip += roundsLoaded;
+            if (shotsInClip == 0) {
+                if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");
+            } else {
+                if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
+            }
+        } else {
+            // ammoInventory not yet injected — infinite ammo fallback for tests.
+            shotsInClip = effectiveClipSize;
+            if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
+        }
+        // Notify resolver so ON_RELOAD abilities (BULWARK_ROUNDS) can fire.
+        // Only triggers when rounds were actually chambered (shotsInClip > 0).
+        if (abilityResolver != null && shotsInClip > 0) {
+            abilityResolver.onReload(this);
+        }
+        visualState = WeaponVisualState.NORMAL;
     }
 
     /**
@@ -1121,6 +1151,17 @@ public abstract class Weapon implements WeaponProfile {
     /** Wires the run's build aggregate (null resets to {@link BuildStats#NONE}). */
     public void setBuildStats(BuildStats stats) {
         this.buildStats = stats != null ? stats : BuildStats.NONE;
+        onBuildChanged();
+    }
+
+    /**
+     * Re-derives the build-dependent effective stats after a pick (DEADEYE's clip cut — balance-overhaul
+     * order 5) and clamps a now-oversized clip down to the new size. Called by World / SimWorld
+     * applyBuildEffects on every owned weapon. Never per frame.
+     */
+    public void onBuildChanged() {
+        recomputeEffectiveStats();
+        if (shotsInClip > effectiveClipSize) shotsInClip = effectiveClipSize;
     }
 
     /** The run's build aggregate (never null) — read by the weapon-side perk seams of subclasses. */

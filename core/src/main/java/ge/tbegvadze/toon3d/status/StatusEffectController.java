@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.status;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
 import ge.tbegvadze.toon3d.entity.Player;
+import ge.tbegvadze.toon3d.progression.BuildStats;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.render.ImpactEffectSystem;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -55,6 +56,22 @@ public final class StatusEffectController {
         this.impactEffectSystem = system;
     }
 
+    /**
+     * The run's build aggregate (balance-overhaul order 5), read live: PYROMANIAC's bonus on every DoT tick an
+     * enemy takes while BURNING, and its immunity to burning on the player. {@link BuildStats#NONE} until wired.
+     */
+    private BuildStats buildStats = BuildStats.NONE;
+
+    /** Wires the run's build aggregate (null resets to {@link BuildStats#NONE}). */
+    public void setBuildStats(BuildStats stats) {
+        this.buildStats = stats != null ? stats : BuildStats.NONE;
+    }
+
+    /** PYROMANIAC (balance-overhaul order 5): the player is immune to BURNING from every source. */
+    private boolean isBurnImmunePlayer(StatusHost host, StatusType type) {
+        return type == StatusType.BURNING && host instanceof Player && buildStats.fireImmune();
+    }
+
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
@@ -75,7 +92,7 @@ public final class StatusEffectController {
             return;
         }
         StatusResistance resistance = host.getStatusResistance();
-        if (resistance.isImmune(type)) {
+        if (resistance.isImmune(type) || isBurnImmunePlayer(host, type)) {
             return;
         }
 
@@ -126,7 +143,7 @@ public final class StatusEffectController {
     public void applyStacking(StatusHost host, StatusType type, int turns, int magnitudePerStack,
                               int maxStacks, Object source) {
         StatusResistance resistance = host.getStatusResistance();
-        if (resistance.isImmune(type)) {
+        if (resistance.isImmune(type) || isBurnImmunePlayer(host, type)) {
             return;
         }
         int effectiveDuration  = Math.max(1, Math.round(turns * resistance.durationMultiplier(type)));
@@ -274,7 +291,10 @@ public final class StatusEffectController {
                 if (type == StatusType.BURNING)       hazardDamageToEnemies += effect.magnitude * Math.max(1, effect.stacks);
                 else if (type == StatusType.POISONED) hazardDamageToEnemies += effect.magnitude * effect.stacks;
             }
-            applyEnemyTickEffect(enemy, effect, type);
+            // PYROMANIAC (balance-overhaul order 5): every DoT tick on a BURNING enemy takes the burning bonus.
+            float tickMultiplier = enemy.getActiveEffects().get(StatusType.BURNING).isActive()
+                    ? 1f + buildStats.burningTargetDamageBonus() : 1f;
+            applyEnemyTickEffect(enemy, effect, type, tickMultiplier);
 
             if (!enemy.isAlive()) {
                 // Killing tick: the death burst (fired by processDoTKill) carries the feedback,
@@ -363,17 +383,17 @@ public final class StatusEffectController {
         }
     }
 
-    private static void applyEnemyTickEffect(Enemy enemy, StatusEffect effect, StatusType type) {
+    private static void applyEnemyTickEffect(Enemy enemy, StatusEffect effect, StatusType type, float tickMultiplier) {
         switch (type) {
             case BURNING:
                 // Stacked burns (Incinerator, order 3 W3) tick magnitude x stacks; any other burn has 1.
-                enemy.applyDoTDamage(effect.magnitude * Math.max(1, effect.stacks));
+                enemy.applyDoTDamage(GameMath.buildScaledAmount(effect.magnitude * Math.max(1, effect.stacks), tickMultiplier, 1));
                 break;
             case POISONED:
-                enemy.applyDoTDamage(effect.magnitude * effect.stacks);
+                enemy.applyDoTDamage(GameMath.buildScaledAmount(effect.magnitude * effect.stacks, tickMultiplier, 1));
                 break;
             case BLEED:
-                enemy.applyDoTDamage(effect.magnitude);
+                enemy.applyDoTDamage(GameMath.buildScaledAmount(effect.magnitude, tickMultiplier, 1));
                 break;
             case STUNNED:
                 enemy.skipNextAction = true;

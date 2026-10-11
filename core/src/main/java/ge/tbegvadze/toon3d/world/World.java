@@ -82,6 +82,7 @@ import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PerkDeck;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
@@ -172,6 +173,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final PerkDeck               perkDeck;
     /** The perks currently on offer; refilled by the deck when a level-up begins. */
     private final Perk[]                 offeredPerks = new Perk[BalanceConfig.PERKS_OFFERED];
+    /** The keystones currently on offer on a keystone level (B4). */
+    private final Keystone[]             offeredKeystones = new Keystone[BalanceConfig.KEYSTONES_OFFERED];
     private int                          offeredPerkCount = 0;
     /**
      * THE RUN'S BUILD (balance-overhaul order 5): the perk ranks (and, from CP3, keystones) picked this run. Its
@@ -870,6 +873,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Status effect system — run-persistent; controller keeps player state across floors
         statusEffectController       = new StatusEffectController();
+        statusEffectController.setBuildStats(playerBuild.stats());   // PYROMANIAC (balance-overhaul order 5)
         statusEffectController.setEventTextSystem(eventTextSystem);
         statusEffectController.setImpactEffectSystem(impactEffectSystem);
         statusEffectVignetteRenderer = new StatusEffectVignetteRenderer();
@@ -2386,9 +2390,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 gameViewport.unproject(cardTouchPosition);
                 int tappedIndex = levelUpOverlayRenderer.getTappedCardIndex(cardTouchPosition.x, cardTouchPosition.y);
                 Perk tappedPerk = levelUpOverlayRenderer.getOfferedPerk(tappedIndex);
+                Keystone tappedKeystone = levelUpOverlayRenderer.getOfferedKeystone(tappedIndex);
                 if (tappedPerk != null) {
                     gameAudio.playMenu(GameSoundId.UI_CONFIRM);   // order 7
                     applyPerkPick(tappedPerk);
+                } else if (tappedKeystone != null) {
+                    gameAudio.playMenu(GameSoundId.UI_CONFIRM);
+                    applyKeystonePick(tappedKeystone);
                 }
             }
             return;
@@ -2538,17 +2546,26 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             if (touchInputState != null) {
                 touchInputState.resetAllButtonStates();
             }
-            // Draw the B3 perk offer ONCE as the overlay opens (synergy with what is carried + a pivot).
-            offeredPerkCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
             // Played BEFORE the phase change: the next update suppresses gameplay sound for the
             // overlay, and this is the one sound that belongs to it.
             gameAudio.playUi(GameSoundId.LEVEL_UP);
-            if (offeredPerkCount == 0) {
-                // EDGE: every perk is maxed — the level is still gained, with nothing left to offer.
-                completeLevelUp();
-            } else {
-                levelUpOverlayRenderer.setOfferedPerks(offeredPerks, offeredPerkCount, playerBuild);
+            // B4 / AS2: a KEYSTONE level offers three keystones INSTEAD of perks (no double reward). The
+            // overlay is the same hard-pause screen, so a keystone level reached mid-fight behaves as today.
+            int offeredKeystoneCount = PerkDeck.isKeystoneLevel(playerProgress.getPlayerLevel() + 1)
+                    ? perkDeck.drawKeystones(offeredKeystones, playerBuild) : 0;
+            if (offeredKeystoneCount > 0) {
+                levelUpOverlayRenderer.setOfferedKeystones(offeredKeystones, offeredKeystoneCount);
                 runPhase = RunPhase.LEVEL_UP_OVERLAY;
+            } else {
+                // Draw the B3 perk offer ONCE as the overlay opens (synergy with what is carried + a pivot).
+                offeredPerkCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
+                if (offeredPerkCount == 0) {
+                    // EDGE: every perk is maxed — the level is still gained, with nothing left to offer.
+                    completeLevelUp();
+                } else {
+                    levelUpOverlayRenderer.setOfferedPerks(offeredPerks, offeredPerkCount, playerBuild);
+                    runPhase = RunPhase.LEVEL_UP_OVERLAY;
+                }
             }
         }
     }
@@ -5058,6 +5075,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         completeLevelUp();
     }
 
+    /** The keystone pick (balance-overhaul order 5, B4): the same ceremony as a perk pick. */
+    private void applyKeystonePick(Keystone keystone) {
+        playerBuild.addKeystone(keystone);
+        completeLevelUp();
+    }
+
     /**
      * The level-up ceremony shared by every pick: advance the level, apply the vitality-ladder growth for the
      * level reached, then {@link #applyBuildEffects()} (which reads that level), and resume play.
@@ -5110,6 +5133,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (armorBonus  != appliedBuildMaxArmorBonus)  player.adjustMaxArmor(armorBonus - appliedBuildMaxArmorBonus);
         appliedBuildMaxHealthBonus = healthBonus;
         appliedBuildMaxArmorBonus  = armorBonus;
+        // QUARTERMASTER opens the locked gun slot; DEADEYE's clip cut re-derives every owned weapon's clip.
+        inventory.getLoadout().setUnlockedExtraSlots(playerBuild.stats().extraLoadoutSlots());
+        for (Weapon weapon : inventory.getArsenal()) weapon.onBuildChanged();
+        MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
+        if (meleeWeapon != null) meleeWeapon.onBuildChanged();
         refreshPlayerDamageMultipliers();
     }
 

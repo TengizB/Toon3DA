@@ -6798,6 +6798,20 @@ public final class GameMath {
     }
 
     /*
+     * Formula: guardReflectDamage — IRON BULWARK's reflection of one guarded hit (balance-overhaul order 5)
+     * Derivation:
+     *   The guard blocked (incoming - taken) of a front-arc hit; the keystone sends a fraction f of THAT back:
+     *       reflected = round(blocked x f)        (f may exceed 1 — the shipped 1.4 does)
+     *   This is the per-hit form of guardReflectDamagePerTurn (the valuation's per-turn rate).
+     *   Worked: a 30 heavy guarded to 9 blocks 21; f 1.4 -> 29.
+     * Edge cases: blocked <= 0 or f <= 0 -> 0.
+     */
+    public static int guardReflectDamage(int blockedDamage, float reflectFraction) {
+        if (blockedDamage <= 0 || reflectFraction <= 0f) return 0;
+        return Math.round(blockedDamage * reflectFraction);
+    }
+
+    /*
      * Formula: pierceOverchargeMultiplier — Overcharge on a piercing bolt (balance-overhaul order 5)
      * Derivation:
      *   The k-th body a bolt pierces (k = bodies already pierced by the same bolt, 0 for the first) takes

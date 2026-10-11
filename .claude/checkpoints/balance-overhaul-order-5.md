@@ -61,7 +61,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP2** — PerkDeck + PlayerBuild drive level-ups (B3); UpgradeCard / UpgradeCardPool retired;
       R-CARD / R-CARD-BREAKPOINT replaced; ExpectedPlayer updated.
       DONE WHEN: R-LADDER still green; A1 holds; both gates green.
-- [ ] **CP3** — keystones at 5/10/15/20 live with gains and costs.
+- [x] **CP3** — keystones at 5/10/15/20 live with gains and costs.
       DONE WHEN: A2 holds; both gates green.
 - [ ] **CP4** — ability prune/merge, tier counts, budgets, tags; R-ABILITY updated.
       DONE WHEN: A4 holds; both gates green.
@@ -136,3 +136,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   blank refund, DEADEYE clip cut, STORM CONDUIT arc, IRON BULWARK reflect, QUARTERMASTER slot, IRONHIDE no-cleanse, PYROMANIAC
   DoT-tick bonus + fire-attack immunity, drawKeystones, overlay keystone mode, chooseKeystone.
 - **REVIEW FLAG:** CP2 edits made via shell scripts, so the per-file code-reviewer hook did not run — reviewer must read them.
+- **CP3 handover:** `PerkDeck.drawKeystones(Keystone[], PlayerBuild)` (B4; fallback = untaken keystone of the most-ranked tag),
+  `PerkDeck.isKeystoneLevel(int)`; overlay `setOfferedKeystones/getOfferedKeystone/isKeystoneMode` (cost line red already);
+  `PlayerPolicy.chooseKeystone` default = highest-rank tag. Seams: SCATTERGUN `Weapon.reloadCostsNoTurn()` + `completeReload()`,
+  `PlayerController.tryReload` returns before the turn; DEADEYE clip via `Weapon.recomputeEffectiveStats` / `onBuildChanged()`;
+  PYROMANIAC DoT ticks in `StatusEffectController.tickEnemy`, player BURNING refused; STORM CONDUIT `dischargeStormArc` at end of
+  applyDamageTo; IRON BULWARK `strikePlayer` at all six enemy->player hit sites + `reflectIntoAttacker` (deaths queued in
+  pendingExecuteDeaths); QUARTERMASTER `Loadout.setUnlockedExtraSlots`; IRONHIDE `Player.hasCleansableStatus()` false.
+  A2 verified (throwaway main): shotgun reload with 0 world ticks; AR hit 103 -> 87 (x0.845).
+- **CP3 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, no S-* moved vs CP2 (LADDER REPORT d11-25
+  shifts: probes past level 15/20 now take keystones).
+- **REVIEW / OWNER FLAGS:** IRON BULWARK reflects ORDINARY guarded hits too (spec text "a guarded hit"); valuation prices heavies
+  only -> stronger in play than modelled (order 6/7 re-fit). Pre-existing: both reload start paths set ticksRemaining = base
+  reloadTime, not effectiveReloadTicks — left alone (changes the sim; out of scope).
