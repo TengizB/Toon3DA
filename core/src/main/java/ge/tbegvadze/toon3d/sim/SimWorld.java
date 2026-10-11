@@ -335,6 +335,8 @@ public final class SimWorld implements LevelTransitionListener {
         }
 
         ledger.finalPlayerLevel        = playerProgress.getPlayerLevel();
+        for (BuildTag tag : BuildTag.values()) ledger.ranksByTagAtEnd[tag.ordinal()] = playerBuild.ranksInTag(tag);
+        ledger.dominantTagAtEnd        = playerBuild.highestRankTag();
         ledger.emergencySupplyTriggers = ledger.total(floor -> floor.emergencySupplyFired ? 1 : 0);
         return ledger;
     }
@@ -783,12 +785,16 @@ public final class SimWorld implements LevelTransitionListener {
             if (keystoneCount > 0) {
                 Keystone chosenKeystone = policy.chooseKeystone(offeredKeystones, keystoneCount, view);
                 if (chosenKeystone == null) chosenKeystone = offeredKeystones[0];
+                for (int index = 0; index < keystoneCount; index++) ledger.keystoneOffered[offeredKeystones[index].ordinal()]++;
+                ledger.keystonePicked[chosenKeystone.ordinal()]++;
                 playerBuild.addKeystone(chosenKeystone);
             } else {
                 int offeredCount = perkDeck.drawPerks(offeredPerks, playerBuild, carriedBuildTags());
                 if (offeredCount > 0) {
                     Perk chosen = policy.choosePerk(offeredPerks, offeredCount, view);
                     if (chosen == null) chosen = offeredPerks[0];
+                    for (int index = 0; index < offeredCount; index++) ledger.perkOffered[offeredPerks[index].ordinal()]++;
+                    ledger.perkPicked[chosen.ordinal()]++;
                     playerBuild.addPerkRank(chosen);
                 }
             }

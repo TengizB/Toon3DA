@@ -6,6 +6,7 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.entity.WeaponRoll;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
+import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PerkDeck;
 import ge.tbegvadze.toon3d.route.NodeEconomics;
@@ -44,18 +45,28 @@ public final class TacticalPolicy implements PlayerPolicy {
     private static final float PER_POINT_TERM_WEIGHT    = 0.01f;
     /** A SYNERGY perk outranks any rank count (no tag holds this many ranks). */
     private static final int   SYNERGY_PICK_WEIGHT      = 1000;
+    /** A perk of the BUILD BIAS's tags outranks synergy and rank count (S-BUILD variants, order 5 CP6). */
+    private static final int   BIAS_PICK_WEIGHT         = 1_000_000;
 
     private final int[]  stepBuffer = new int[2];
     private final TravelPlanner travelPlanner = new TravelPlanner();
     private final java.util.Random tieBreak;
+    private final BuildBias buildBias;
 
+    /** Plain TACTICAL ({@link BuildBias#NONE}). */
     public TacticalPolicy(long seed) {
-        this.tieBreak = new java.util.Random(seed);
+        this(seed, BuildBias.NONE);
+    }
+
+    /** A build-biased TACTICAL variant (balance-overhaul order 5, S-BUILD); NONE is plain TACTICAL. */
+    public TacticalPolicy(long seed, BuildBias buildBias) {
+        this.tieBreak  = new java.util.Random(seed);
+        this.buildBias = buildBias == null ? BuildBias.NONE : buildBias;
     }
 
     @Override
     public String id() {
-        return "TACTICAL";
+        return "TACTICAL" + buildBias.policyIdSuffix;
     }
 
     @Override
@@ -230,9 +241,9 @@ public final class TacticalPolicy implements PlayerPolicy {
     }
 
     /**
-     * Leans into the build (balance-overhaul order 5 — the default CP6 adds build-bias variants to): prefers a
-     * SYNERGY perk (its tag is a carried weapon's), then the perk whose tag already holds the most ranks, then
-     * the first offered. Deterministic: ties keep the earlier plate.
+     * Leans into the build (balance-overhaul order 5): prefers a perk of the BUILD BIAS's tags (never, for plain
+     * TACTICAL), then a SYNERGY perk (its tag is a carried weapon's), then the perk whose tag already holds the
+     * most ranks, then the first offered. Deterministic: ties keep the earlier plate.
      */
     @Override
     public Perk choosePerk(Perk[] offeredPerks, int count, SimView view) {
@@ -241,7 +252,8 @@ public final class TacticalPolicy implements PlayerPolicy {
         for (int index = 0; index < count; index++) {
             Perk perk = offeredPerks[index];
             if (perk == null) continue;
-            int score = (PerkDeck.isSynergy(perk, view.carriedBuildTags()) ? SYNERGY_PICK_WEIGHT : 0)
+            int score = (buildBias.prefers(perk.tag) ? BIAS_PICK_WEIGHT : 0)
+                      + (PerkDeck.isSynergy(perk, view.carriedBuildTags()) ? SYNERGY_PICK_WEIGHT : 0)
                       + view.playerBuild().ranksInTag(perk.tag);
             if (score > bestScore) {
                 bestScore = score;
@@ -249,6 +261,17 @@ public final class TacticalPolicy implements PlayerPolicy {
             }
         }
         return best;
+    }
+
+    /**
+     * A biased variant takes its bias tag's keystone when the screen offers it; otherwise (and always for plain
+     * TACTICAL) the {@link PlayerPolicy} default — the keystone of the build's highest-rank tag.
+     */
+    @Override
+    public Keystone chooseKeystone(Keystone[] offeredKeystones, int count, SimView view) {
+        Keystone preferred = buildBias.preferredKeystone(offeredKeystones, count);
+        if (preferred != null) return preferred;
+        return PlayerPolicy.super.chooseKeystone(offeredKeystones, count, view);
     }
 
     /** Upgrades when the ground roll is a genuine improvement on what the slot already holds. */

@@ -76,6 +76,25 @@ public final class RunLedger {
         return lists;
     }
 
+    /**
+     * BUILD REPORT raw counts (balance-overhaul order 5, S-BUILD), indexed by {@code Perk} / {@code Keystone}
+     * ordinal: how often each was on a level-up screen, and how often the policy took it. Shop-bought perk
+     * ranks are not offers and are not counted here (they still count toward {@link #ranksByTagAtEnd}).
+     */
+    public final int[] perkOffered     = new int[ge.tbegvadze.toon3d.progression.Perk.values().length];
+    public final int[] perkPicked      = new int[ge.tbegvadze.toon3d.progression.Perk.values().length];
+    public final int[] keystoneOffered = new int[ge.tbegvadze.toon3d.progression.Keystone.values().length];
+    public final int[] keystonePicked  = new int[ge.tbegvadze.toon3d.progression.Keystone.values().length];
+
+    /** Perk ranks per {@code BuildTag} ordinal when the run ended (level-up picks and shop ranks alike). */
+    public final int[] ranksByTagAtEnd = new int[ge.tbegvadze.toon3d.progression.BuildTag.values().length];
+
+    /**
+     * {@code PlayerBuild.highestRankTag()} when the run ended — the S-BUILD dominant tag; null when the run
+     * never held a perk rank (excluded from the dominant-tag share).
+     */
+    public ge.tbegvadze.toon3d.progression.BuildTag dominantTagAtEnd;
+
     /** Total credits spent at vending machines across the run. */
     public int creditsSpent;
 

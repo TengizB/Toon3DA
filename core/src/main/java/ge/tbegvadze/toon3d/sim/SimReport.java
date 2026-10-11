@@ -33,7 +33,8 @@ public final class SimReport {
         report.append("================================================================================\n");
         report.append("BALANCE SIMULATION SUMMARY (new-game-balancr order 9)\n");
         report.append("================================================================================\n");
-        report.append("Seeds per policy : ").append(BalanceConfig.SIM_SEED_COUNT).append('\n');
+        report.append("Seeds per policy : ").append(BalanceConfig.SIM_SEED_COUNT)
+              .append(" (build-bias variants: ").append(BalanceConfig.SIM_BUILD_SEED_COUNT).append(")\n");
         report.append("Depth ceiling    : ").append(BalanceConfig.SIM_DEPTH_CEILING).append('\n');
         report.append("Turn cap / floor : ").append(BalanceConfig.SIM_TURNS_PER_FLOOR_CAP).append('\n');
         report.append('\n');
@@ -72,6 +73,7 @@ public final class SimReport {
         if (tactical != null) appendFloorReport(report, tactical);
         appendMatchupReport(report, matrix);
         appendHeavyReport(report, matrix);
+        appendBuildReport(report, matrix);
 
         report.append("BEHAVIOURAL BANDS\n");
         report.append("--------------------------------------------------------------------------------\n");
@@ -255,6 +257,107 @@ public final class SimReport {
         }
         report.append("  Outcomes: AVOIDED left the tiles; GUARDED front-arc hit; STAGGERED cancelled by stagger/riposte/stun;\n");
         report.append("  killd = source died first; landed = unguarded or flanked hit. S-HEAVY bands answered = all but landed.\n\n");
+    }
+
+    /**
+     * The BUILD REPORT (balance-overhaul order 5, CP6): per TACTICAL row (plain + the four build biases) — runs,
+     * median death depth, stalled runs, mean character level reached, keystones taken per run, and the end-of-run
+     * dominant-tag distribution; then, per Perk and per Keystone, offers / picks / pick rate for plain TACTICAL
+     * and for the four biased variants together. Shop-bought ranks are not offers and are not in the pick rates.
+     */
+    private static void appendBuildReport(StringBuilder report, Map<String, PolicySummary> matrix) {
+        ge.tbegvadze.toon3d.progression.BuildTag[] tags = ge.tbegvadze.toon3d.progression.BuildTag.values();
+        ge.tbegvadze.toon3d.progression.Perk[] perks = ge.tbegvadze.toon3d.progression.Perk.values();
+        ge.tbegvadze.toon3d.progression.Keystone[] keystones = ge.tbegvadze.toon3d.progression.Keystone.values();
+        java.util.List<PolicySummary> rows = new java.util.ArrayList<>();
+        PolicySummary plain = matrix.get(BehavioralBands.TACTICAL_ID);
+        if (plain != null) rows.add(plain);
+        java.util.List<PolicySummary> biased = new java.util.ArrayList<>();
+        for (String id : BehavioralBands.buildBiasIds()) {
+            PolicySummary variant = matrix.get(id);
+            if (variant != null) {
+                rows.add(variant);
+                biased.add(variant);
+            }
+        }
+        if (rows.isEmpty()) return;
+
+        report.append("BUILD REPORT — per TACTICAL build bias; dominant tag = highest-rank tag at run end\n");
+        report.append("--------------------------------------------------------------------------------\n");
+        report.append(String.format("%-20s %5s %7s %7s %7s %7s %6s %5s%n",
+                "policy", "runs", "medDep", "stalled", "meanLvl", "keys/r", "noRank", "ties"));
+        for (PolicySummary summary : rows) {
+            int[] picked = summary.summedCounts(run -> run.keystonePicked, keystones.length);
+            int keystonesTaken = 0;
+            for (int count : picked) keystonesTaken += count;
+            report.append(String.format("%-20s %5d %7.1f %7d %7.2f %7.2f %6d %5d%n",
+                    summary.policyId, summary.runCount(), summary.medianEndingDepth(), summary.stalledRunCount(),
+                    summary.meanFinalPlayerLevel(),
+                    summary.runCount() == 0 ? 0f : keystonesTaken / (float) summary.runCount(),
+                    summary.runsWithNoPerkRank(), summary.runsWithTiedDominantTag()));
+        }
+        report.append("  Dominant tag at run end (runs; excludes runs with no perk rank):\n");
+        for (PolicySummary summary : rows) {
+            int[] counts = summary.dominantTagCounts();
+            StringBuilder row = new StringBuilder(String.format("  %-20s", summary.policyId));
+            for (ge.tbegvadze.toon3d.progression.BuildTag tag : tags) {
+                row.append(String.format(" %s %d |", tag.name(), counts[tag.ordinal()]));
+            }
+            report.append(row).append('\n');
+        }
+
+        report.append("  Perk pick rate per offer (picked / offered on level-up screens):\n");
+        report.append(String.format("  %-22s %-15s %7s %7s %6s %9s %8s %6s%n", "perk", "tag",
+                "offered", "picked", "rate", "B-offered", "B-picked", "B-rate"));
+        int[] plainPerkOffered = plain == null ? new int[perks.length] : plain.summedCounts(run -> run.perkOffered, perks.length);
+        int[] plainPerkPicked  = plain == null ? new int[perks.length] : plain.summedCounts(run -> run.perkPicked, perks.length);
+        int[] biasedPerkOffered = new int[perks.length];
+        int[] biasedPerkPicked  = new int[perks.length];
+        for (PolicySummary variant : biased) {
+            int[] offered = variant.summedCounts(run -> run.perkOffered, perks.length);
+            int[] picked  = variant.summedCounts(run -> run.perkPicked, perks.length);
+            for (int index = 0; index < perks.length; index++) {
+                biasedPerkOffered[index] += offered[index];
+                biasedPerkPicked[index]  += picked[index];
+            }
+        }
+        for (ge.tbegvadze.toon3d.progression.Perk perk : perks) {
+            int index = perk.ordinal();
+            report.append(String.format("  %-22s %-15s %7d %7d %6s %9d %8d %6s%n", perk.name(), perk.tag.name(),
+                    plainPerkOffered[index], plainPerkPicked[index], rate(plainPerkPicked[index], plainPerkOffered[index]),
+                    biasedPerkOffered[index], biasedPerkPicked[index],
+                    rate(biasedPerkPicked[index], biasedPerkOffered[index])));
+        }
+
+        report.append("  Keystone pick rate (picked / offered on keystone screens):\n");
+        report.append(String.format("  %-22s %-15s %7s %7s %6s %9s %8s %6s%n", "keystone", "tag",
+                "offered", "picked", "rate", "B-offered", "B-picked", "B-rate"));
+        int[] plainKeyOffered = plain == null ? new int[keystones.length] : plain.summedCounts(run -> run.keystoneOffered, keystones.length);
+        int[] plainKeyPicked  = plain == null ? new int[keystones.length] : plain.summedCounts(run -> run.keystonePicked, keystones.length);
+        int[] biasedKeyOffered = new int[keystones.length];
+        int[] biasedKeyPicked  = new int[keystones.length];
+        for (PolicySummary variant : biased) {
+            int[] offered = variant.summedCounts(run -> run.keystoneOffered, keystones.length);
+            int[] picked  = variant.summedCounts(run -> run.keystonePicked, keystones.length);
+            for (int index = 0; index < keystones.length; index++) {
+                biasedKeyOffered[index] += offered[index];
+                biasedKeyPicked[index]  += picked[index];
+            }
+        }
+        for (ge.tbegvadze.toon3d.progression.Keystone keystone : keystones) {
+            int index = keystone.ordinal();
+            report.append(String.format("  %-22s %-15s %7d %7d %6s %9d %8d %6s%n", keystone.name(), keystone.tag.name(),
+                    plainKeyOffered[index], plainKeyPicked[index], rate(plainKeyPicked[index], plainKeyOffered[index]),
+                    biasedKeyOffered[index], biasedKeyPicked[index],
+                    rate(biasedKeyPicked[index], biasedKeyOffered[index])));
+        }
+        report.append("  B- columns: the four build-biased variants together. noRank = runs that ended with no perk rank\n");
+        report.append("  (excluded from S-BUILD's share); ties = dominant tag decided by a tie (earliest BuildTag wins).\n\n");
+    }
+
+    /** "picked/offered" as a two-decimal rate, or "-" when nothing was offered. */
+    private static String rate(int picked, int offered) {
+        return offered == 0 ? "-" : String.format("%.2f", picked / (float) offered);
     }
 
     /** One FLOOR REPORT cell's running sums. */

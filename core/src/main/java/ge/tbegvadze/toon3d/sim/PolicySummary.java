@@ -307,6 +307,57 @@ public final class PolicySummary {
         return stalled;
     }
 
+    // ---- BUILD REPORT / S-BUILD (balance-overhaul order 5) ------------------------------------------
+
+    /** Mean character level the runs ended at. */
+    public float meanFinalPlayerLevel() {
+        int levels = 0;
+        for (RunLedger run : runs) levels += run.finalPlayerLevel;
+        return runs.isEmpty() ? 0f : levels / (float) runs.size();
+    }
+
+    /** Sums one per-ordinal count array across every run (perk / keystone offers and picks). */
+    public int[] summedCounts(java.util.function.Function<RunLedger, int[]> field, int length) {
+        int[] totals = new int[length];
+        for (RunLedger run : runs) {
+            int[] counts = field.apply(run);
+            for (int index = 0; index < length; index++) totals[index] += counts[index];
+        }
+        return totals;
+    }
+
+    /** Runs per {@code BuildTag} ordinal whose dominant tag (highest-rank tag) at the end was that tag. */
+    public int[] dominantTagCounts() {
+        int[] counts = new int[ge.tbegvadze.toon3d.progression.BuildTag.values().length];
+        for (RunLedger run : runs) {
+            if (run.dominantTagAtEnd != null) counts[run.dominantTagAtEnd.ordinal()]++;
+        }
+        return counts;
+    }
+
+    /** Runs that ended without a single perk rank — excluded from the dominant-tag share. */
+    public int runsWithNoPerkRank() {
+        int none = 0;
+        for (RunLedger run : runs) if (run.dominantTagAtEnd == null) none++;
+        return none;
+    }
+
+    /**
+     * Runs whose dominant tag was decided by a TIE (two or more tags shared the highest rank count;
+     * {@code PlayerBuild.highestRankTag()} then keeps the earliest tag in {@code BuildTag} order).
+     */
+    public int runsWithTiedDominantTag() {
+        int tied = 0;
+        for (RunLedger run : runs) {
+            if (run.dominantTagAtEnd == null) continue;
+            int top = run.ranksByTagAtEnd[run.dominantTagAtEnd.ordinal()];
+            int holders = 0;
+            for (int ranks : run.ranksByTagAtEnd) if (ranks == top) holders++;
+            if (holders > 1) tied++;
+        }
+        return tied;
+    }
+
     private static float median(List<Integer> values) {
         if (values.isEmpty()) return 0f;
         List<Integer> sorted = new ArrayList<>(values);

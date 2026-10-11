@@ -183,3 +183,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **CP5 DECISION (hub) / OWNER FLAG:** barrels were ALREADY drawn on the mini-map before this order, so Sapper r1 is a
   highlight (pulsing dot), not a reveal — hiding barrels by default would remove information players have today. Edits via
   shell (reviewer must read diff).
+- **CP6a (Part A sim, WIP — balanceSim RED on S-BUILD):** `sim/BuildBias` {NONE, CLOSE, MARKSMAN, PYRO_DEMOLITION, BULWARK};
+  `TacticalPolicy(long, BuildBias)` (bias does NOT steer weapons — would move S-SWITCH/S-HEAVY); four rows TACTICAL-CLOSE /
+  -MARKSMAN / -PYRO-DEMO / -BULWARK; RunLedger perk/keystone offer+pick counts, dominantTagAtEnd; RuleKind.SIM_BUILD (depth
+  spread waived with SIM_FAIR's navigation waiver; sample >= SIM_BUILD_MIN_SAMPLE 30; dominant share <= 0.40);
+  `buildBiasesStayCloseAndNoTagDominates` in BalanceSimTest; BUILD REPORT. Slow gate 41s.
+  RED because (1) only 20/200 TACTICAL runs level up (navigation stalls; mean level 1.10; no keystone ever offered) and
+  (2) PerkDeck seeding artefact: `new Random(runSeed ^ salt)` with sequential sim seeds -> first nextFloat in the top 10% on
+  200/200 seeds -> LANE_DISCIPLINE 16/20. HUB DECISION: fix PerkDeck seeding (SplitMix64 finaliser) — a CP2 bug; raise the
+  dominant-tag SAMPLE (more plain-TACTICAL seeds for the build band), never the bar. Part B docs not started.

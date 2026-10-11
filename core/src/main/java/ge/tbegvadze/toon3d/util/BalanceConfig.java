@@ -1797,6 +1797,23 @@ public final class BalanceConfig {
     /** Seeds per start depth in the LADDER REPORT probe (one floor each, both kits). */
     public static final int   SIM_LADDER_PROBE_SEEDS_PER_DEPTH = 8;
 
+    // --- S-BUILD + THE BUILD REPORT (balance-overhaul order 5, A6) ----------------------------
+    // Four build-biased TACTICAL variants (sim/BuildBias: CLOSE, MARKSMAN, PYRO-DEMOLITION, BULWARK) play
+    // as extra matrix rows. Two claims: no bias is a trap or a must-pick in PLAY (depth spread — depth-
+    // derived, so it rides the navigation waiver that SIM_FAIR's median depth carries), and plain TACTICAL
+    // does not end every run as the same character (dominant-tag share — enforced).
+    /**
+     * Seeds per build-biased variant. Equal to SIM_SEED_COUNT: the whole seven-row matrix plays in well under
+     * a minute on a 4-core machine (CP6 measured), so the variants get the headline sample rather than a cut.
+     */
+    public static final int   SIM_BUILD_SEED_COUNT             = 200;
+    /** S-BUILD depth part: the four variants' median death depths satisfy max / min <= 1 + this. */
+    public static final float SIM_BUILD_DEPTH_SPREAD           = 0.25f;
+    /** S-BUILD dominant-tag part: no single tag may be plain TACTICAL's end-of-run dominant tag on more than this share. */
+    public static final float SIM_BUILD_MAX_DOMINANT_TAG_SHARE = 0.40f;
+    /** S-BUILD: plain TACTICAL runs that held a perk rank at the end must number at least this (non-vacuous share). */
+    public static final int   SIM_BUILD_MIN_SAMPLE             = 30;
+
     // =====================================================================================
     // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract
     // Orders 1-6 balance FLOORS; the player plays a JOURNEY through the route map's branching

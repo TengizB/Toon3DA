@@ -30,6 +30,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-LAG      — a weapon that never climbs the power ladder ends the run early (balance-overhaul order 1)</li>
  *   <li>S-SWITCH   — a competent player switches guns by matchup when the game tells it to (balance-overhaul order 3)</li>
  *   <li>S-HEAVY    — a player who reads the red floor answers the heavies committed at it; one who ignores it does not (balance-overhaul order 4)</li>
+ *   <li>S-BUILD    — no build bias is a trap or a must-pick, and plain TACTICAL does not end every run as the same character (balance-overhaul order 5)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -56,7 +57,83 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(supplyResults(tactical));
         if (tactical != null) results.addAll(switchResults(tactical));
         if (tactical != null) results.addAll(heavyResults(tactical, naive));
+        results.addAll(buildResults(matrix, tactical));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
+        return results;
+    }
+
+    /** The four build-biased TACTICAL variant ids S-BUILD's depth part compares (sim/BuildBias). */
+    public static List<String> buildBiasIds() {
+        List<String> ids = new ArrayList<>();
+        for (BuildBias bias : BuildBias.values()) {
+            if (bias.isBiased()) ids.add(TACTICAL_ID + bias.policyIdSuffix);
+        }
+        return ids;
+    }
+
+    /**
+     * S-BUILD (balance-overhaul order 5, A6). DEPTH part: the build-biased variants' median death depths satisfy
+     * max / min <= 1 + SIM_BUILD_DEPTH_SPREAD (no trap bias, no must-pick bias) — depth-derived, so it carries the
+     * navigation waiver SIM_FAIR's median depth carries; skipped unless all four variants are in the matrix.
+     * DOMINANT-TAG part (enforced): over plain TACTICAL's runs that held a perk rank at the end (at least
+     * SIM_BUILD_MIN_SAMPLE of them), no single BuildTag is the end-of-run highest-rank tag on more than
+     * SIM_BUILD_MAX_DOMINANT_TAG_SHARE of them. Runs with no rank are excluded and counted in the detail.
+     */
+    private static List<RuleResult> buildResults(Map<String, PolicySummary> matrix, PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        List<String> biasIds = buildBiasIds();
+        float shallowest = Float.POSITIVE_INFINITY;
+        float deepest    = 0f;
+        StringBuilder medians = new StringBuilder();
+        boolean allPresent = true;
+        for (String id : biasIds) {
+            PolicySummary variant = matrix.get(id);
+            if (variant == null) {
+                allPresent = false;
+                continue;
+            }
+            float median = variant.medianEndingDepth();
+            shallowest = Math.min(shallowest, median);
+            deepest    = Math.max(deepest, median);
+            if (medians.length() > 0) medians.append(", ");
+            medians.append(id.substring(TACTICAL_ID.length() + 1)).append(' ').append(String.format("%.1f", median));
+        }
+        if (allPresent && !biasIds.isEmpty()) {
+            float spread = shallowest <= 0f ? Float.POSITIVE_INFINITY : deepest / shallowest;
+            float maximum = 1f + BalanceConfig.SIM_BUILD_DEPTH_SPREAD;
+            results.add(BalanceSchema.result(RuleKind.SIM_BUILD, "build-bias median depth spread",
+                    spread, 1f, maximum, spread <= maximum, "max / min median death depth: " + medians));
+        }
+
+        if (tactical == null) return results;
+        int[] dominantCounts = tactical.dominantTagCounts();
+        int excluded = tactical.runsWithNoPerkRank();
+        int sample = tactical.runCount() - excluded;
+        results.add(BalanceSchema.result(RuleKind.SIM_BUILD, "TACTICAL runs holding a perk rank",
+                sample, BalanceConfig.SIM_BUILD_MIN_SAMPLE, Float.POSITIVE_INFINITY,
+                sample >= BalanceConfig.SIM_BUILD_MIN_SAMPLE,
+                excluded + " runs with no perk rank excluded; keeps the share below off an empty sample"));
+        int topCount = 0;
+        ge.tbegvadze.toon3d.progression.BuildTag topTag = null;
+        StringBuilder distribution = new StringBuilder();
+        for (ge.tbegvadze.toon3d.progression.BuildTag tag : ge.tbegvadze.toon3d.progression.BuildTag.values()) {
+            int count = dominantCounts[tag.ordinal()];
+            if (count > topCount) {
+                topCount = count;
+                topTag = tag;
+            }
+            if (count > 0) {
+                if (distribution.length() > 0) distribution.append(", ");
+                distribution.append(tag.name()).append(' ').append(count);
+            }
+        }
+        boolean measured = sample > 0;
+        float share = measured ? topCount / (float) sample : 0f;
+        results.add(BalanceSchema.result(RuleKind.SIM_BUILD, "TACTICAL dominant-tag share",
+                share, 0f, BalanceConfig.SIM_BUILD_MAX_DOMINANT_TAG_SHARE,
+                measured && share <= BalanceConfig.SIM_BUILD_MAX_DOMINANT_TAG_SHARE,
+                measured ? "top " + topTag + "; " + distribution + "; " + tactical.runsWithTiedDominantTag()
+                        + " decided by a tie (earliest tag wins)" : "no TACTICAL run held a perk rank"));
         return results;
     }
 

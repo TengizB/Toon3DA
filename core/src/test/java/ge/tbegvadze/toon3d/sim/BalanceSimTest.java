@@ -147,6 +147,21 @@ class BalanceSimTest {
         assertBandsHold(results);
     }
 
+    /**
+     * S-BUILD (balance-overhaul order 5, A6) — the four build-biased TACTICAL variants reach median depths within
+     * SIM_BUILD_DEPTH_SPREAD of each other (depth-derived: reported under the navigation waiver until it expires),
+     * and plain TACTICAL's end-of-run dominant tag is no single tag on more than SIM_BUILD_MAX_DOMINANT_TAG_SHARE
+     * of its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank). The tag part is never waived.
+     */
+    @Test
+    void buildBiasesStayCloseAndNoTagDominates() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_BUILD);
+        assertEquals(3, results.size(), "S-BUILD evaluates the depth spread, the TACTICAL sample and the dominant-tag share");
+        assertTrue(results.stream().filter(result -> !result.subject.equals("build-bias median depth spread"))
+                        .noneMatch(result -> result.waived), "S-BUILD's dominant-tag part is never waived");
+        assertBandsHold(results);
+    }
+
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */
     @Test
     void noRunEndsUnableToDamageAnything() {

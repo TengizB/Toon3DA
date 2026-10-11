@@ -200,7 +200,14 @@ public final class BalanceSchema {
          * least SIM_HEAVY_TACTICAL_MIN_SUCCESS of the heavies committed at it, NAIVE at most
          * SIM_HEAVY_NAIVE_MAX_SUCCESS, and TACTICAL met at least SIM_HEAVY_MIN_SAMPLE of them. Never waived.
          */
-        SIM_HEAVY
+        SIM_HEAVY,
+        /**
+         * S-BUILD (balance-overhaul order 5, A6): the four build-biased TACTICAL variants' median death depths
+         * within SIM_BUILD_DEPTH_SPREAD of each other (depth-derived: rides the navigation waiver), and plain
+         * TACTICAL's end-of-run dominant tag is no single tag on more than SIM_BUILD_MAX_DOMINANT_TAG_SHARE of
+         * its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank). The tag part is never waived.
+         */
+        SIM_BUILD
     }
 
     // =====================================================================================
@@ -347,6 +354,9 @@ public final class BalanceSchema {
         // floor 1 reads as "dies early" for navigation reasons, so the band is reported but not yet a
         // statement about the ladder. R-LADDER L2 proves the same property on paper meanwhile.
         waive(RuleKind.SIM_LAG,     "HOARDER-START-WEAPON median death depth", reason, expiry);
+        // S-BUILD's depth part (balance-overhaul order 5, A6) is depth-derived too: it inherits this exact waiver
+        // and expiry, and is enforced the day SIM_FAIR's median depth is. Its dominant-tag part is NOT waived.
+        waive(RuleKind.SIM_BUILD,   "build-bias median depth spread", reason, expiry);
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
