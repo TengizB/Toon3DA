@@ -52,12 +52,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — BuildTag, Perk, PerkModifier, Keystone, SECTION 24, GameMath valuations.
+- [x] **CP1** — BuildTag, Perk, PerkModifier, Keystone, SECTION 24, GameMath valuations.
       DONE WHEN: R-PERK / R-KEYSTONE / R-CARRY asserted on the data and green; UpgradeCard still live;
       both gates green. Split:
   - [x] **CP1a** — data, SECTION 24, valuation model, R-PERK/R-KEYSTONE/R-CARRY + 3 audit methods, report tables.
         DELIBERATE TEMPORARY RED: PK1 WILDFIRE breakpoint + R-CARRY (owner rulings B1/B2 below).
-  - [ ] **CP1b** — owner rulings applied; R-PERK/R-KEYSTONE/R-CARRY green; both gates green.
+  - [x] **CP1b** — owner rulings applied; R-PERK/R-KEYSTONE/R-CARRY green; both gates green.
 - [ ] **CP2** — PerkDeck + PlayerBuild drive level-ups (B3); UpgradeCard / UpgradeCardPool retired;
       R-CARD / R-CARD-BREAKPOINT replaced; ExpectedPlayer updated.
       DONE WHEN: R-LADDER still green; A1 holds; both gates green.
@@ -108,3 +108,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `breakpointNicheOf(Perk)`): Wildfire = Incinerator fuel to clear S5 — STILL RED: fuel 3->3 (d1..d20), 6->6 at d25; S2 6->6.
   Gates: core:test 458, red = StoryBarkTest + the Wildfire row (2 audit methods); balanceSim exit 0.
 - **OPEN — OWNER (blocks CP1b):** B3 Wildfire changes no integer in any reference fight (the spray + first tick already clears).
+- **CP1b CLOSED:** D5 Wildfire (3 ranks; full-stack spread on a burning death, +1 burn turn/rank via `PerkModifier.BURN_TURNS`
+  -> `BuildStats.burnTurnBonus()`; `PERK_WILDFIRE_BURN_TURNS_BY_RANK`). D6 waivers (RuleKind.PERK, exact subjects):
+  `PK1 WILDFIRE r2|r3 felt d5|d15`, `PK1 WILDFIRE breakpoint by r3 (D4 resource: SCENARIO_AMMO S5 Incinerator)`; r1 felt + PK2
+  enforced. Gates: core:test 458, only StoryBarkTest; balanceSim exit 0, every S-* value identical to baseline.
+- **WILDFIRE RUNTIME (CP2):** a BURNING enemy that dies (any cause) gives every living orthogonal neighbour its full current
+  burn stacks (cap FLAME_BURN_MAX_STACKS + Accelerant), timer reset; the dead enemy's tile ignites. Every player-applied burn
+  lasts FLAME_BURN_TURNS + PERK_WILDFIRE_BURN_TURNS_BY_RANK[rank-1].
+- **CP2 contract:** scratchpad `cp2-contract.md` (CP2 + CP3 runtime wiring).
