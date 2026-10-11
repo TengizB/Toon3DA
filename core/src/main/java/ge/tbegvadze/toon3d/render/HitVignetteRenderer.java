@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * Draws a radial-gradient vignette over the full screen.
@@ -28,10 +29,15 @@ public final class HitVignetteRenderer implements Disposable {
     private float             legendaryRed;
     private float             legendaryGreen;
     private float             legendaryBlue;
+    // Heavy off-screen edge pulse (balance-overhaul order 4, H16): side mask set by World each update.
+    private int               heavyEdgeSideMask;
+    private float             heavyEdgeClockSeconds;
+    private final Texture     whitePixelTexture;
 
     public HitVignetteRenderer() {
         batch              = new SpriteBatch();
         vignetteTexture    = buildVignetteTexture();
+        whitePixelTexture  = buildWhitePixelTexture();
         damageIntensity    = 0f;
         levelUpIntensity   = 0f;
         healIntensity      = 0f;
@@ -67,8 +73,17 @@ public final class HitVignetteRenderer implements Disposable {
         legendaryBlue      = blue;
     }
 
+    /**
+     * Sets which screen edges pulse red because an off-screen heavy has the player's tile marked
+     * (GameMath.OFFSCREEN_SIDE_* bit mask; 0 = none). Pushed by World every update.
+     */
+    public void setHeavyEdgeSideMask(int sideMask) {
+        heavyEdgeSideMask = sideMask;
+    }
+
     /** Call once per frame in World.update() to decay all intensities. */
     public void update(float deltaTime) {
+        if (heavyEdgeSideMask != 0) heavyEdgeClockSeconds += deltaTime;
         if (damageIntensity > 0f) {
             damageIntensity = Math.max(0f, damageIntensity - deltaTime / EffectConstants.HIT_VIGNETTE_FADE_SECONDS);
         }
@@ -85,7 +100,7 @@ public final class HitVignetteRenderer implements Disposable {
 
     public void render(OrthographicCamera camera) {
         if (damageIntensity <= 0f && levelUpIntensity <= 0f
-                && healIntensity <= 0f && legendaryIntensity <= 0f) return;
+                && healIntensity <= 0f && legendaryIntensity <= 0f && heavyEdgeSideMask == 0) return;
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         if (damageIntensity > 0f) {
@@ -108,6 +123,20 @@ public final class HitVignetteRenderer implements Disposable {
             batch.setColor(legendaryRed, legendaryGreen, legendaryBlue, alpha);
             batch.draw(vignetteTexture, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         }
+        if (heavyEdgeSideMask != 0) {
+            float alpha = GameMath.pulseMultiplier(heavyEdgeClockSeconds, EffectConstants.HEAVY_EDGE_PULSE_HZ,
+                    EffectConstants.HEAVY_EDGE_PULSE_MIN_ALPHA, EffectConstants.HEAVY_EDGE_PULSE_MAX_ALPHA);
+            batch.setColor(EffectConstants.HEAVY_EDGE_PULSE_R, EffectConstants.HEAVY_EDGE_PULSE_G,
+                    EffectConstants.HEAVY_EDGE_PULSE_B, alpha);
+            float bandWidth = Constants.WORLD_WIDTH * EffectConstants.HEAVY_EDGE_PULSE_BAND_FRACTION;
+            if ((heavyEdgeSideMask & GameMath.OFFSCREEN_SIDE_LEFT) != 0) {
+                batch.draw(whitePixelTexture, 0f, 0f, bandWidth, Constants.WORLD_HEIGHT);
+            }
+            if ((heavyEdgeSideMask & GameMath.OFFSCREEN_SIDE_RIGHT) != 0) {
+                batch.draw(whitePixelTexture, Constants.WORLD_WIDTH - bandWidth, 0f,
+                        bandWidth, Constants.WORLD_HEIGHT);
+            }
+        }
         batch.setColor(1f, 1f, 1f, 1f);
         batch.end();
     }
@@ -116,6 +145,16 @@ public final class HitVignetteRenderer implements Disposable {
     public void dispose() {
         batch.dispose();
         vignetteTexture.dispose();
+        whitePixelTexture.dispose();
+    }
+
+    private static Texture buildWhitePixelTexture() {
+        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pixmap.setColor(1f, 1f, 1f, 1f);
+        pixmap.fill();
+        Texture texture = new Texture(pixmap);
+        pixmap.dispose();
+        return texture;
     }
 
     /*

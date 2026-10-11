@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.util;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.HeavyAttack;
 import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
@@ -89,6 +90,17 @@ public final class BalanceSchema {
         HEAL_PRICING,
         /** R-TELEGRAPH: no attack > 25% reference eHP un-telegraphed; boss hard cap 35%. */
         TELEGRAPH,
+        /**
+         * R-HEAVY (balance-overhaul order 4): every HeavyAttack x depth 1..25 deals [MIN, MAX] of the on-curve
+         * player's max HP unguarded, is committed >= 1 turn ahead, and costs <= HEAVY_GUARDED_MAX_FRACTION guarded.
+         */
+        HEAVY,
+        /**
+         * R-HAZARD (balance-overhaul order 4, H13/H14): barrel blasts are fractions that kill every CHAFF at every
+         * depth and never out-hit a heavy on the player; barrels sit in >= HAZARD_GROUP_ROOM_SHARE of the group
+         * rooms on COMBAT / ELITE floors and nowhere else.
+         */
+        HAZARD,
         /** R-DOT: exactly one definition per status; shim files must re-export BalanceConfig byte-for-byte. */
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
@@ -109,7 +121,7 @@ public final class BalanceSchema {
         BOSS_GATE,
         /** R-BOSS-FAIR (order 6): the EXPECTED loadout gets a real but winnable fight — length + survival ratio in band. */
         BOSS_FAIR,
-        /** R-BOSS-VERB-CAP (order 6): every derived boss verb <= 35% eHP; any verb > 25% must be telegraphed. */
+        /** R-BOSS-VERB-CAP (order 6; telegraphed cap raised to 50% by balance-overhaul order 4): un-telegraphed verbs <= 25% eHP, telegraphed <= 50%. */
         BOSS_VERB_CAP,
         /** R-BOSS-REWARD (order 6): a boss's reward refunds the modelled fight consumption times the risk premium. */
         BOSS_REWARD,
@@ -167,7 +179,13 @@ public final class BalanceSchema {
          * S-SWITCH (balance-overhaul order 3, A8 re-stated by D3): the C4 hint works — enough COMBAT floors
          * show one, TACTICAL takes it, and each hinted COMBAT floor yields a switch. Never waived.
          */
-        SIM_SWITCH
+        SIM_SWITCH,
+        /**
+         * S-HEAVY (balance-overhaul order 4, A8): TACTICAL answers (avoids / guards / staggers / kills first) at
+         * least SIM_HEAVY_TACTICAL_MIN_SUCCESS of the heavies committed at it, NAIVE at most
+         * SIM_HEAVY_NAIVE_MAX_SUCCESS, and TACTICAL met at least SIM_HEAVY_MIN_SAMPLE of them. Never waived.
+         */
+        SIM_HEAVY
     }
 
     // =====================================================================================
@@ -407,7 +425,7 @@ public final class BalanceSchema {
 
     /** How each enemy SPECIAL verb is priced into cycle-averaged Threat Points (order 5). */
     public enum SpecialVerbPricing {
-        /** Priced as per-cast equivalent DAMAGE folded through the cycle average (GameMath.specialEquivalent{AreaStrike,BuffSelf,Debuff*}). */
+        /** Priced as per-cast equivalent DAMAGE folded through the cycle average (GameMath.specialEquivalent{BuffSelf,Debuff*} and heavyExpectedDamageForPricing). */
         CYCLE_DAMAGE,
         /** Priced as amortised per-turn threat of the summoned bodies (GameMath.specialEquivalentSummon). */
         AMORTISED_SUMMON,
@@ -461,15 +479,11 @@ public final class BalanceSchema {
         List<TelegraphAttackSpec> registry = new ArrayList<>();
         registry.add(new TelegraphAttackSpec("Gore Biter bite",    BalanceConfig.GORE_BITER_ATTACK_DAMAGE,  "NONE", false));
         registry.add(new TelegraphAttackSpec("Plague Hulk smash",  BalanceConfig.PLAGUE_HULK_ATTACK_DAMAGE, "NONE", false));
-        registry.add(new TelegraphAttackSpec("Plague Hulk blast",  BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX, "TELE", false));
         registry.add(new TelegraphAttackSpec("Void Shroud strike", BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Void Shroud flank",
                 Math.round(BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE * BalanceConfig.VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER),
                 "FACE", false));
         registry.add(new TelegraphAttackSpec("Shell Brute melee",  BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE, "NONE", false));
-        registry.add(new TelegraphAttackSpec("Shell Brute CHARGE",
-                Math.round(BalanceConfig.SHELL_BRUTE_ATTACK_DAMAGE * BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER),
-                "TELE", false));
         registry.add(new TelegraphAttackSpec("Iron Stalker melee", BalanceConfig.IRON_STALKER_MELEE_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Iron Stalker shot",  BalanceConfig.IRON_STALKER_RANGED_DAMAGE, "LANE", false));
         registry.add(new TelegraphAttackSpec("Eye Tyrant beam",    BalanceConfig.EYE_TYRANT_ATTACK_DAMAGE,  "LANE", false));
@@ -482,6 +496,8 @@ public final class BalanceSchema {
         registry.add(new TelegraphAttackSpec("Blight Corr. smash", BalanceConfig.BLIGHT_CORRUPTOR_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Auric shard launch", BalanceConfig.AURIC_SENTINEL_ATTACK_DAMAGE, "LANE", false));
         registry.add(new TelegraphAttackSpec("Cinderforge slam",   BalanceConfig.CINDERFORGE_COLOSSUS_ATTACK_DAMAGE, "NONE", false));
+        // The Shell Brute CHARGE and the Plague Hulk blast rows were REMOVED by balance-overhaul order 4
+        // (override): heavies are R-HEAVY's domain (heavyResults), sized as a fraction of on-curve max HP.
         // Boss verbs are NOT listed here (order 6): their damage is DERIVED per depth (a fraction of the
         // boss's DPT), not a flat constant scaled by the trash-mob depth curve, so the generic telegraph
         // audit's depth scaling does not apply. Boss verbs get their own single-hit-cap rule instead —
@@ -720,6 +736,8 @@ public final class BalanceSchema {
         results.addAll(cardBudgetResults());
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
+        results.addAll(heavyResults());
+        results.addAll(hazardResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
@@ -749,6 +767,7 @@ public final class BalanceSchema {
         results.addAll(supplySweepResults());
         results.addAll(eliteRewardResults());
         results.addAll(densitySweepResults());
+        results.addAll(hazardPlacementResults());
         return results;
     }
 
@@ -1021,6 +1040,162 @@ public final class BalanceSchema {
     }
 
     /**
+     * R-HEAVY (balance-overhaul order 4, H2/H3/H4): for every {@link HeavyAttack} at every depth 1..25 —
+     * (a) the unguarded, unarmoured hit is [HEAVY_DAMAGE_FRACTION_MIN, MAX] of the on-curve player's max HP;
+     * (b) it is committed at least one full player turn before it resolves; (c) a GUARDING player (front arc,
+     * GUARD_FRONT_HEAVY) takes at most HEAVY_GUARDED_MAX_FRACTION of max HP — the cornered-player cap of H4.
+     * Geometric avoidability (H4's "a safe tile exists") is asserted by the danger-tile checkpoint (CP2).
+     */
+    public static List<RuleResult> heavyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (HeavyAttack heavy : HeavyAttack.values()) {
+            for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+                float expectedMaxHealth = GameMath.expectedPlayerAtDepth(depth).maxHealth;
+                int damage = GameMath.heavyDamageAtDepth(heavy.damageFraction(), expectedMaxHealth,
+                        BalanceConfig.HEAVY_DAMAGE_SCALE);
+                float fraction = damage / expectedMaxHealth;
+                String subject = heavy.displayName() + " d" + depth;
+                results.add(new RuleResult(RuleKind.HEAVY, subject + " damage", fraction,
+                        BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN, BalanceConfig.HEAVY_DAMAGE_FRACTION_MAX,
+                        fraction >= BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN
+                                && fraction <= BalanceConfig.HEAVY_DAMAGE_FRACTION_MAX,
+                        damage + " of " + Math.round(expectedMaxHealth) + " on-curve max HP"));
+                results.add(new RuleResult(RuleKind.HEAVY, subject + " commit", heavy.minimumCommitTurns(),
+                        1f, Float.POSITIVE_INFINITY, heavy.minimumCommitTurns() >= 1,
+                        "committed turns before resolution"));
+                float guardedFraction = fraction * BalanceConfig.GUARD_FRONT_HEAVY;
+                results.add(new RuleResult(RuleKind.HEAVY, subject + " guarded", guardedFraction,
+                        0f, BalanceConfig.HEAVY_GUARDED_MAX_FRACTION,
+                        guardedFraction <= BalanceConfig.HEAVY_GUARDED_MAX_FRACTION,
+                        "unguarded " + String.format("%.0f%%", fraction * 100f) + " x guard "
+                                + BalanceConfig.GUARD_FRONT_HEAVY));
+            }
+        }
+        results.addAll(heavyAvoidabilityResults());
+        return results;
+    }
+
+    /** The reference SOLDIER's max HP at a depth, unrounded (the barrel's yardstick, H13). */
+    public static float barrelReferenceSoldierMaxHealth(int depth) {
+        return GameMath.enemyHealthAtDepth(BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth);
+    }
+
+    /** What a barrel's ring / centre blast deals an enemy at a depth (the same call ExplosiveBarrelManager makes). */
+    public static int barrelEnemyDamage(float fraction, int depth) {
+        return GameMath.barrelBlastDamage(fraction, barrelReferenceSoldierMaxHealth(depth));
+    }
+
+    /** An enemy archetype's max HP as the game spawns it at a depth. */
+    public static int scaledEnemyMaxHealth(EnemyType type, int depth) {
+        return Math.max(1, Math.round(GameMath.enemyHealthAtDepth(type.maxHealth(), depth)));
+    }
+
+    /**
+     * R-HAZARD (balance-overhaul order 4, H13/H14), depths 1..25:
+     * (a) the reference soldier named by the constants IS the R-LADDER SOLDIER reference archetype;
+     * (b) a barrel's RING blast kills every CHAFF archetype outright (the pack-clearing promise of A6);
+     * (c) the ring never one-shots the reference soldier (a barrel is a turn-turner, not a kill button);
+     * (d) the player's own centre / ring damage never exceeds the heavy band's floor (HEAVY_DAMAGE_FRACTION_MIN)
+     *     of the on-curve max HP — a hazard must not out-hit a telegraphed heavy.
+     * Placement (H14) is audited from the generator sweep by {@link #hazardPlacementResults()}.
+     */
+    public static List<RuleResult> hazardResults() {
+        List<RuleResult> results = new ArrayList<>();
+        EnemyType soldier = ladderReferenceArchetype(EnemyRole.SOLDIER);
+        results.add(new RuleResult(RuleKind.HAZARD, "reference soldier base HP is the ladder SOLDIER",
+                BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, soldier.maxHealth(), soldier.maxHealth(),
+                BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH == soldier.maxHealth(),
+                soldier.name()));
+        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+            int ring = barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_RING_FRACTION, depth);
+            int worstChaffHealth = 0;
+            String worstChaff = "none";
+            for (EnemyType type : EnemyType.values()) {
+                if (type.role() != EnemyRole.CHAFF) continue;
+                int health = scaledEnemyMaxHealth(type, depth);
+                if (health > worstChaffHealth) {
+                    worstChaffHealth = health;
+                    worstChaff = type.name();
+                }
+            }
+            results.add(new RuleResult(RuleKind.HAZARD, "d" + depth + " ring kills every chaff", ring,
+                    worstChaffHealth, Float.POSITIVE_INFINITY, ring >= worstChaffHealth,
+                    "ring " + ring + " vs " + worstChaff + " " + worstChaffHealth + " HP"));
+            int soldierHealth = scaledEnemyMaxHealth(soldier, depth);
+            results.add(new RuleResult(RuleKind.HAZARD, "d" + depth + " ring spares the soldier", ring,
+                    0f, soldierHealth - 1f, ring < soldierHealth, "ring " + ring + " vs soldier " + soldierHealth + " HP"));
+            int playerMaxHealth = Math.round(GameMath.expectedPlayerAtDepth(depth).maxHealth);
+            int playerCentre = GameMath.barrelBlastDamage(BalanceConfig.HAZARD_BARREL_PLAYER_CENTRE_FRACTION, playerMaxHealth);
+            float playerCentreFraction = playerCentre / (float) playerMaxHealth;
+            results.add(new RuleResult(RuleKind.HAZARD, "d" + depth + " player centre blast", playerCentreFraction,
+                    0f, BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN,
+                    playerCentreFraction <= BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN,
+                    playerCentre + " of " + playerMaxHealth + " max HP"));
+        }
+        return results;
+    }
+
+    /**
+     * R-HAZARD placement (H14), from the generator sweep: on every COMBAT / ELITE floor at least
+     * ceil(HAZARD_GROUP_ROOM_SHARE x eligible) of the group rooms hold barrels (worst floor per cell), and no
+     * other node type ever gets one.
+     */
+    public static synchronized List<RuleResult> hazardPlacementResults() {
+        List<RuleResult> results = new ArrayList<>();
+        Map<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cells = new java.util.LinkedHashMap<>();
+        for (ge.tbegvadze.toon3d.level.FloorContentReport report : supplySweepReports()) {
+            cells.computeIfAbsent(report.generatorName + " " + report.spec.type() + " d" + report.depth,
+                    key -> new ArrayList<>()).add(report);
+        }
+        for (Map.Entry<String, List<ge.tbegvadze.toon3d.level.FloorContentReport>> cell : cells.entrySet()) {
+            RouteNodeType type = cell.getValue().get(0).spec.type();
+            boolean gets = type == RouteNodeType.COMBAT || type == RouteNodeType.ELITE;
+            int worstShortfall = 0;
+            int strayBarrels = 0;
+            for (ge.tbegvadze.toon3d.level.FloorContentReport report : cell.getValue()) {
+                if (!gets) {
+                    strayBarrels += report.barrelCount();
+                    continue;
+                }
+                int needed = GameMath.groupBarrelRoomCount(report.barrelEligibleRooms(),
+                        BalanceConfig.HAZARD_GROUP_ROOM_SHARE);
+                worstShortfall = Math.max(worstShortfall, needed - report.barrelRooms());
+            }
+            if (gets) {
+                results.add(new RuleResult(RuleKind.HAZARD, cell.getKey() + " barrel rooms (H14)", worstShortfall,
+                        0f, 0f, worstShortfall <= 0, "worst floor's shortfall vs the 40% rule"));
+            } else {
+                results.add(new RuleResult(RuleKind.HAZARD, cell.getKey() + " no barrels (H14)", strayBarrels,
+                        0f, 0f, strayBarrels == 0, null));
+            }
+        }
+        return results;
+    }
+
+    /**
+     * H4 geometry per heavy: on an open board (nothing blocked) the shape built by the same GameMath
+     * function the manager uses at commit has, for every danger tile, a one-step sidestep out of danger.
+     * LANE is built along step (1, 0) at its real reach; SQUARE / CROSS at their real radii.
+     */
+    private static List<RuleResult> heavyAvoidabilityResults() {
+        List<RuleResult> results = new ArrayList<>();
+        GameMath.TileBlockedQuery openBoard = (tileColumn, tileRow) -> false;
+        int capacity = EnemyConstants.HEAVY_DANGER_TILE_CAPACITY;
+        int[] columns = new int[capacity];
+        int[] rows    = new int[capacity];
+        for (HeavyAttack heavy : HeavyAttack.values()) {
+            int count = heavy.dangerShape().build(0, 0, 1, 0, heavy.dangerReachTiles(), openBoard,
+                    columns, rows, capacity);
+            boolean holds = count > 0
+                    && GameMath.everyDangerTileHasSafeNeighbour(columns, rows, count,
+                            heavy.dangerShape() == HeavyAttack.DangerShape.CROSS ? 1 : 0, openBoard);
+            results.add(new RuleResult(RuleKind.HEAVY, heavy.displayName() + " avoidable", holds ? 1f : 0f,
+                    1f, 1f, holds, heavy.dangerShape() + " " + count + " danger tiles on an open board"));
+        }
+        return results;
+    }
+
+    /**
      * R-REGION (new-game-balancr order 5): the REGION DANGER DIAL is a budgeted, provably-fair number, not
      * a vibe. It checks that (1) every region's TP multiplier sits in [MIN, MAX]; (2) the dial is monotonic
      * non-decreasing across regions (a deeper region is never easier); (3) the two lethal regions (C/D)
@@ -1278,17 +1453,29 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-DOT: exactly one definition per status. The weapon-ability BURN base must BE the unified
-     * base, and every same-named field in a shim class must re-export BalanceConfig byte-for-byte
-     * (the generalised structural rule; a re-introduced divergent literal fails here).
+     * R-DOT (restated by balance-overhaul order 4): exactly one definition per DoT. There are TWO
+     * families, each defined once and re-exported byte-for-byte: the STATUS DoTs are fractions of the
+     * host's max HP (BURN_TICK_FRACTION, POISON_TICK_FRACTION — hazard/acid/status magnitudes), and the
+     * WEAPON burn base (WEAPON_BURN_BASE_PER_TURN — Incendiary/Incinerator, R-ROLE-fitted damage). The
+     * pre-order-4 flat BURN_DAMAGE_PER_TURN / POISON_DAMAGE_PER_STACK must not exist anywhere, and every
+     * same-named field in a shim class must equal BalanceConfig (a divergent literal fails here).
      */
     public static List<RuleResult> dotUniquenessResults() {
         List<RuleResult> results = new ArrayList<>();
-        boolean unifiedBurn = BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE == BalanceConfig.BURN_DAMAGE_PER_TURN;
-        results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "BURN base unified",
+        boolean unifiedBurn = BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE == BalanceConfig.WEAPON_BURN_BASE_PER_TURN;
+        results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "weapon BURN base unified",
                 BalanceConfig.INCENDIARY_BURN_PER_TURN_BASE,
-                BalanceConfig.BURN_DAMAGE_PER_TURN, BalanceConfig.BURN_DAMAGE_PER_TURN, unifiedBurn,
-                "INCENDIARY_BURN_PER_TURN_BASE must reference the single BURN_DAMAGE_PER_TURN base"));
+                BalanceConfig.WEAPON_BURN_BASE_PER_TURN, BalanceConfig.WEAPON_BURN_BASE_PER_TURN, unifiedBurn,
+                "INCENDIARY_BURN_PER_TURN_BASE must reference the single WEAPON_BURN_BASE_PER_TURN base"));
+        String[] retiredFlatBases = {"BURN_DAMAGE_PER_TURN", "POISON_DAMAGE_PER_STACK"};
+        for (String retiredName : retiredFlatBases) {
+            boolean absent = !declaresField(BalanceConfig.class, retiredName)
+                    && !declaresField(EffectConstants.class, retiredName);
+            results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "retired flat base " + retiredName,
+                    absent ? 0f : 1f, 0f, 0f, absent,
+                    "status DoTs are fractions of max HP (SECTION 23) — a flat per-turn base must not return"));
+        }
+        final int baselineResultCount = results.size();
 
         for (Class<?> shimClass : SHIM_CLASSES) {
             for (Field shimField : shimClass.getDeclaredFields()) {
@@ -1306,11 +1493,18 @@ public final class BalanceSchema {
                 }
             }
         }
-        if (results.size() == 1) {
+        if (results.size() == baselineResultCount) {
             results.add(new RuleResult(RuleKind.DOT_UNIQUENESS, "shim integrity",
                     0f, 0f, 0f, true, "every same-named shim field re-exports BalanceConfig"));
         }
         return results;
+    }
+
+    private static boolean declaresField(Class<?> holder, String fieldName) {
+        for (Field field : holder.getDeclaredFields()) {
+            if (field.getName().equals(fieldName)) return true;
+        }
+        return false;
     }
 
     /** R-FLAGS: no live test/debug flags — any TEST/DEBUG boolean must be false. */
@@ -1630,8 +1824,10 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-BOSS-VERB-CAP: every derived boss verb, evaluated at the boss's canonical depth, respects the
-     * single-hit fairness caps — no hit over 35% of the EXPECTED player's eHP at that depth (balance-overhaul order 1;
+     * R-BOSS-VERB-CAP (OVERRIDDEN by balance-overhaul order 4: the telegraphed cap is now
+     * BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION 50% instead of 35%; un-telegraphed stays 25%): every derived boss
+     * verb, evaluated at the boss's canonical depth, respects the
+     * single-hit fairness caps — no hit over 35% (now 50% when telegraphed) of the EXPECTED player's eHP at that depth (balance-overhaul order 1;
      * was the fixed depth-1 reference eHP) (hard cap, telegraphed or not), and any
      * hit over 25% must be telegraphed a turn ahead. The band max is 25% for an un-telegraphed verb, 35%
      * for a telegraphed one; the value is the verb's fraction of reference eHP.
@@ -1644,7 +1840,7 @@ public final class BalanceSchema {
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
                     damage, BossBalance.expectedPlayerEffectiveHitPoints(verb.archetype.canonicalDepth));
             float bandMax = verb.telegraphed
-                    ? BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION
+                    ? BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
                     : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
             results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName, fraction, 0f, bandMax,
                     fraction <= bandMax,

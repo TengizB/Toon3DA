@@ -1347,7 +1347,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (meleeWeapon != null) {
             meleeWeapon.setAbilityResolver(abilityResolver);
         }
-        explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player);
+        explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player, currentDepth);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         impactEffectSystem.setGameAudio(gameAudio);
         enemyManager.setImpactEventListener(impactEffectSystem);
@@ -2504,6 +2504,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         requestBossDefeatedBark();
         requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
+        updateHeavyEdgePulse();
         hitVignetteRenderer.update(deltaTime);
         guardShieldRenderer.update(deltaTime);
         if (bossHudRenderer != null) bossHudRenderer.update(deltaTime);
@@ -4196,6 +4197,34 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
+     * Heavy edge pulse (balance-overhaul order 4, H16): when the player stands on a committed heavy's
+     * danger tile and that heavy is outside the view, tells HitVignetteRenderer which screen edge(s) to
+     * pulse. Sources BEHIND the player pulse BOTH edges (GameMath.offscreenSideMask). Update path only;
+     * no allocation.
+     */
+    private void updateHeavyEdgePulse() {
+        int sideMask = 0;
+        if (!player.isDead()) {
+            int playerColumn = MathUtils.floor(player.positionX / Constants.CELL_SIZE);
+            int playerRow    = MathUtils.floor(player.positionY / Constants.CELL_SIZE);
+            Enemy threat = enemyManager.findHeavyThreatAt(playerColumn, playerRow);
+            if (threat != null) {
+                float differenceX = ((threat.tileColumn + 0.5f) * Constants.CELL_SIZE - player.positionX)
+                        / Constants.CELL_SIZE;
+                float differenceY = ((threat.tileRow + 0.5f) * Constants.CELL_SIZE - player.positionY)
+                        / Constants.CELL_SIZE;
+                float planeScale = (float) Math.tan(player.getEffectiveFovRadians() / 2.0);
+                sideMask = GameMath.offscreenSideMask(differenceX, differenceY,
+                        player.directionX, player.directionY,
+                        GameMath.cameraPlaneX(player.directionY, planeScale),
+                        GameMath.cameraPlaneY(player.directionX, planeScale),
+                        RenderConstants.PROP_BEHIND_PLAYER_EPSILON_TILES);
+            }
+        }
+        hitVignetteRenderer.setHeavyEdgeSideMask(sideMask);
+    }
+
+    /**
      * The suit's warning bleeps (procedural-sound-effects order 6): once on the way DOWN through
      * {@code GAME_SFX_LOW_HEALTH_FRACTION}, re-armed only once HP climbs back above it — so hovering
      * at low HP through a fight is one warning, not an alarm.
@@ -4632,6 +4661,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // mirroring the weapon lifesteal procs so a medkit reads as an obvious restore.
             impactEffectSystem.spawnHealParticles();
             hitVignetteRenderer.triggerHeal();
+            // H11: a STIM (the small medkit) also cleanses POISONED and WEAK; a field medkit does not.
+            if (consumed == ItemType.MEDKIT_SMALL && player.cleansePoisonAndWeak()
+                    && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("CLEANSED", EventTextSystem.COLOR_GREEN);
+            }
         }
     }
 

@@ -117,8 +117,25 @@ class LevelGeneratorSnapshotTest {
     // RE-BASELINE (balance-overhaul order 3, CP7 — planned-heal re-fit): SUPPLY_AVOIDANCE_FACTOR 0.55 -> 0.70
     // shrinks the planned heal on floors above the S4 floor, so the heal pickups (and the RNG stream behind
     // them) moved. The TP weight stays 0 (DECISION), so rosters are unchanged. Stable across two runs.
+    // RE-BASELINE (balance-overhaul order 4, CP1 — HEAVIES): the AREA_STRIKE slam is priced as the heavy
+    // fraction of the depth-1 on-curve max HP discounted by HEAVY_EXPECTED_AVOIDANCE (was attackDamage x 1.35,
+    // full hit), which re-prices the Threat Points of the slam-bearing archetypes (Plague Hulk, Iron Stalker,
+    // the elite), so the encounter planner rolls a different roster. A deliberate balance change; the new
+    // digest was confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 4, CP4 — STATUS MAGNITUDES): the acid casters' WEAK debuff is priced
+    // at the new WEAK_DAMAGE_PERCENT 25 -> 35 for DEBUFF_WEAK_DURATION_TURNS 2 -> 3, which re-prices the Threat
+    // Points of Mire Wraith / Acid Drone, so the encounter planner rolls a different roster. A deliberate
+    // balance change; the new digest was confirmed stable across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 4, CP5 — HEAVY ASSIGNMENTS): the Cinderforge Colossus gains
+    // AREA_STRIKE in its move-set, which re-prices its Threat Points through the cycle average, so the
+    // encounter planner rolls a different roster. A deliberate balance change.
+    // RE-BASELINE (balance-overhaul order 4, CP6 — HAZARD PLACEMENT, H14): on COMBAT / ELITE floors the shared
+    // FloorPopulator now stamps 1-2 explosive barrels ('E') within two tiles of the group cluster in at least
+    // 40% of the rooms holding a group of three or more (never the start room), so the generated grids gained
+    // solid 'E' tiles and the palette pins 'E' to the barrel sprite. A deliberate change; confirmed stable
+    // across two separate JVM runs.
     private static final String EXPECTED_DIGEST =
-            "2cf728031b1dc95d8e2cd2119395a8f4fd81c98ca2e64682acee74b0846af7d1";
+            "ed36eddefa3b859be6949c2a974ab87f98e2a543b33d792127fbcbad26dc2d03";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

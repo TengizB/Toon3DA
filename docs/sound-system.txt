@@ -370,7 +370,9 @@ balance simulator and the whole existing test suite working untouched.
       WIND_UP) and the FIRST self-destruct prime (the countdown re-telegraphs every turn; the sound
       must not) -> EnemyVoiceMoment.WIND_UP -> ENEMY_WIND_UP at the enemy, pitched by size. ONE shared
       recipe for every family, for the same reason the ranged launch is shared: "it is about to do
-      something big" must never depend on who.
+      something big" must never depend on who. Since balance-overhaul order 4 (H17) EVERY heavy commit is
+      announced through it, including the AREA_STRIKE slam (Iron Stalker, Plague Hulk, Cinderforge Colossus) and
+      the Rimeshell lance — no catalog row was added or replaced (the 64-row cap is untouched).
     Null-guarded, so `sim/SimWorld` (which wires no listener) is unaffected.
 
 PLAYER_DEATH plays under the fade. The DEATH STROKE screen that follows is SILENT — that silence is

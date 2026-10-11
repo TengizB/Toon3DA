@@ -244,22 +244,60 @@ public class Player implements Renderable, Disposable, StatusHost {
      * @param attackerWorldY  attacker (or ranged lane origin) Y in world units.
      */
     public void applyDirectionalDamage(int amount, float attackerWorldX, float attackerWorldY) {
+        applyDirectionalDamage(amount, attackerWorldX, attackerWorldY, false);
+    }
+
+    /**
+     * Directional damage entry point with the HEAVY flag (balance-overhaul order 4, H7/H8). A guarded
+     * front-arc ORDINARY hit is scaled by {@code GUARD_FRONT_ORDINARY}, a guarded front-arc HEAVY hit by
+     * {@code GUARD_FRONT_HEAVY}; side/back hits pass at full damage. A HEAVY hit additionally shreds armour
+     * (see {@link #applyDamage(int, boolean)}).
+     *
+     * @return true when the hit landed in the GUARDED FRONT arc (the caller ripostes a heavy that returns
+     *         true); false when not guarding, or the hit came from the side/back.
+     */
+    public boolean applyDirectionalDamage(int amount, float attackerWorldX, float attackerWorldY, boolean heavy) {
         if (!guarding) {
-            applyDamage(amount);
-            return;
+            applyDamage(amount, heavy);
+            return false;
         }
+        float frontMultiplier = heavy ? GameBalance.GUARD_FRONT_HEAVY : GameBalance.GUARD_FRONT_ORDINARY;
         float multiplier = GameMath.guardFacingMultiplier(
                 directionX, directionY, positionX, positionY, attackerWorldX, attackerWorldY,
-                GameBalance.GUARD_FRONT_MULTIPLIER, GameBalance.GUARD_SIDE_MULTIPLIER,
+                frontMultiplier, GameBalance.GUARD_SIDE_MULTIPLIER,
                 GameBalance.GUARD_BACK_MULTIPLIER,
                 GameBalance.GUARD_FRONT_HALF_ANGLE_DEGREES, GameBalance.GUARD_BACK_HALF_ANGLE_DEGREES);
         int guardedDamage = Math.max(0, Math.round(amount * multiplier));
-        // A reduced hit means it landed in the protected front arc; side/back hits pass at full damage.
-        boolean frontArc = guardedDamage < amount;
+        // The front arc is the only arc whose multiplier is the chosen front value (side/back are 1.0).
+        boolean frontArc = multiplier == frontMultiplier && frontMultiplier < GameBalance.GUARD_SIDE_MULTIPLIER;
         if (guardHitListener != null) {
             guardHitListener.onGuardedHit(frontArc, guardedDamage, attackerWorldX, attackerWorldY);
         }
-        applyDamage(guardedDamage);
+        applyDamage(guardedDamage, heavy);
+        return frontArc;
+    }
+
+    /**
+     * STATUS SHIELD (balance-overhaul order 4, H9). Called at every ENEMY -> player application of WEAK /
+     * SLOWED / BLINDED / POISONED. While {@code armor > 0} the application is BLOCKED and costs
+     * {@code ARMOUR_STATUS_COST_FRACTION x maxArmor} (min 1, never below 0 — see
+     * {@link GameMath#armorStatusShieldCost}). With armour exactly 0 it returns false and the caller
+     * applies the status. Hazard tiles do NOT call this (the floor is the counter-play there).
+     *
+     * @return true when the status was blocked (armour was spent); false when the caller must apply it.
+     */
+    public boolean tryArmourShieldStatus(StatusType type) {
+        if (armor <= 0) return false;
+        switch (type) {
+            case WEAK:
+            case SLOWED:
+            case BLINDED:
+            case POISONED:
+                armor -= GameMath.armorStatusShieldCost(armor, maxArmor, ItemConstants.ARMOUR_STATUS_COST_FRACTION);
+                return true;
+            default:
+                return false;   // STUNNED / BURNING / buffs are not shielded
+        }
     }
 
     /**
@@ -297,6 +335,16 @@ public class Player implements Renderable, Disposable, StatusHost {
      * Strict pipeline order matches the spec in roguelike_order_6_player_stats_and_attributes.txt.
      */
     public void applyDamage(int amount) {
+        applyDamage(amount, false);
+    }
+
+    /**
+     * The damage pipeline with the HEAVY flag (balance-overhaul order 4, H8): identical to
+     * {@link #applyDamage(int)} except that step (c) charges the armour pool
+     * {@link GameMath#armorShredCost} (absorbed x ARMOUR_HEAVY_SHRED_MULTIPLIER) for a heavy hit. The HP
+     * the player takes is unaffected by the shred.
+     */
+    private void applyDamage(int amount, boolean heavy) {
         if (ProgressionConstants.debug) return;
 
         // (a) AGILITY dodge roll — checked before armour or toughness.
@@ -319,7 +367,8 @@ public class Player implements Renderable, Disposable, StatusHost {
 
         // (c) Regular armour absorption.
         int armorAbsorbed = GameMath.armorAbsorb(remainingDamage, armor, ItemConstants.ARMOUR_ABSORB_FRACTION);
-        armor = Math.max(0, armor - armorAbsorbed);
+        float shredMultiplier = heavy ? ItemConstants.ARMOUR_HEAVY_SHRED_MULTIPLIER : 1f;
+        armor = Math.max(0, armor - GameMath.armorShredCost(armorAbsorbed, armor, shredMultiplier));
         int hpBoundDamage = remainingDamage - armorAbsorbed;
 
         // (d) TOUGHNESS flat reduction applied to the HP-bound remainder.
@@ -372,6 +421,37 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     @Override
     public boolean isAlive() { return health > 0; }
+
+    @Override
+    public int getStatusMaxHealth() { return maxHealth; }
+
+    /**
+     * H11: a STIM ('+', {@link ge.tbegvadze.toon3d.entity.MedicalTier#STIM}) cleanses POISONED and WEAK.
+     * Burn, slow, blind and the rest are not cleansed.
+     *
+     * @return true when at least one of the two was active and was removed
+     */
+    public boolean cleansePoisonAndWeak() {
+        if (!hasCleansableStatus()) return false;
+        boolean removedAny = false;
+        StatusEffect poisonEffect = activeStatusEffects.get(StatusType.POISONED);
+        if (poisonEffect.isActive()) {
+            poisonEffect.reset();
+            removedAny = true;
+        }
+        StatusEffect weakEffect = activeStatusEffects.get(StatusType.WEAK);
+        if (weakEffect.isActive()) {
+            weakEffect.reset();
+            removedAny = true;
+        }
+        return removedAny;
+    }
+
+    /** True while POISONED or WEAK is active — the statuses a STIM cleanses (balance-overhaul order 4, H11). */
+    public boolean hasCleansableStatus() {
+        return activeStatusEffects.get(StatusType.POISONED).isActive()
+                || activeStatusEffects.get(StatusType.WEAK).isActive();
+    }
 
     public int getHealth()    { return health; }
     public int getMaxHealth() { return maxHealth; }

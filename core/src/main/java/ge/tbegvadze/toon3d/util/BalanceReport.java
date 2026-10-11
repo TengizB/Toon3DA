@@ -64,6 +64,8 @@ public final class BalanceReport {
         System.out.println();
         printTelegraphAudit();
         System.out.println();
+        printHeavyTable();
+        System.out.println();
         printBossRulesetTable();
         System.out.println();
         printRouteEconomicsTable();
@@ -804,28 +806,80 @@ public final class BalanceReport {
     // this — that is how "a room full of fire raises its effective TP" (idea 4) is quantified.
     // -----------------------------------------------------------------------------------
     private static void printHazardTable() {
-        System.out.println("HAZARDS (idea 4, Pillar 3) — turnsStood=" + BalanceConfig.HAZARD_THREAT_TURNS_STOOD
-                + " (careless-player reference)");
+        System.out.println("HAZARDS (idea 4, Pillar 3; balance-overhaul order 4 H13) — every magnitude is a FRACTION");
         System.out.printf("%-8s %10s %8s %10s %12s%n",
                 "hazard", "dmg/turn", "TP/tile", "lifetime", "TP per 6 tiles");
         System.out.println("------------------------------------------------------------------------------------");
 
-        // Fire applies BURNING at a flat per-turn magnitude; toxic STACKS, so a careless stand of
-        // turnsStood turns averages ~turnsStood/2 stacks — model its damage/turn at that average.
-        float fireDamagePerTurn  = EffectConstants.BURN_DAMAGE_PER_TURN;
-        float toxicAverageStacks = Math.max(1f, BalanceConfig.HAZARD_THREAT_TURNS_STOOD / 2f);
-        float toxicDamagePerTurn = EffectConstants.POISON_DAMAGE_PER_STACK * toxicAverageStacks;
+        // Fire and toxin are priced at the PLAYER side at depth 1 — the on-curve depth-1 max HP
+        // (GameMath.expectedPlayerAtDepth(1)) — because a hazard tile hurts the player at the base fraction
+        // (enemies add their own multipliers). Toxic STACKS (POISON_STACKS_PER_TOXIC_TURN a turn, decaying by
+        // 1), so its damage/turn is the per-stack tick times the average damage-bearing stack count over the
+        // careless window; that window is the burn window (HAZARD_FIRE_BURN_TURNS), which replaced the flat
+        // HAZARD_THREAT_TURNS_STOOD.
+        int   referenceMaxHealth = Math.round(GameMath.expectedPlayerAtDepth(1).maxHealth);
+        int   carelessTurns      = BalanceConfig.HAZARD_FIRE_BURN_TURNS;
+        float fireDamagePerTurn  = GameMath.statusTickDamage(EffectConstants.BURN_TICK_FRACTION, referenceMaxHealth, 1);
+        float toxicAverageStacks = GameMath.toxicAverageStacks(carelessTurns,
+                EffectConstants.POISON_STACKS_PER_TOXIC_TURN, EffectConstants.POISON_MAX_STACKS);
+        float toxicDamagePerTurn = GameMath.statusTickDamage(EffectConstants.POISON_TICK_FRACTION,
+                referenceMaxHealth, 1) * toxicAverageStacks;
 
-        printHazardRow("Fire 'i'",  fireDamagePerTurn,  BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS);
-        printHazardRow("Toxic 'q'", toxicDamagePerTurn, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS);
-        System.out.println("  Hazards damage BOTH sides (player AND enemies) via BURNING/POISONED — two-sided by design.");
+        printHazardRow("Fire 'i'",  fireDamagePerTurn,  BalanceConfig.HAZARD_FIRE_LIFETIME_TURNS, carelessTurns);
+        printHazardRow("Toxic 'q'", toxicDamagePerTurn, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS, carelessTurns);
+        int barrelPlayerRing = GameMath.barrelBlastDamage(BalanceConfig.HAZARD_BARREL_PLAYER_RING_FRACTION, referenceMaxHealth);
+        int barrelPlayerCentre = GameMath.barrelBlastDamage(BalanceConfig.HAZARD_BARREL_PLAYER_CENTRE_FRACTION, referenceMaxHealth);
+        printHazardRow("Barrel ring", barrelPlayerRing, 1, 1);
+        printHazardRow("Barrel ctr", barrelPlayerCentre, 1, 1);
+        System.out.println("  Hazards damage BOTH sides (player AND enemies) — two-sided by design. Enemy side: fire x"
+                + BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER + " (x FIRE matchup), toxic "
+                + BalanceConfig.HAZARD_TOXIC_ENEMY_STACKS_PER_TURN + " stacks/turn at the enemy's own max HP.");
+        System.out.println();
+        printBarrelBlastTable();
     }
 
-    private static void printHazardRow(String hazardName, float damagePerTurn, int lifetimeTurns) {
+    private static void printHazardRow(String hazardName, float damagePerTurn, int lifetimeTurns, int carelessTurns) {
         float threatPerTile = GameMath.hazardTileThreatPoints(damagePerTurn,
-                BalanceConfig.HAZARD_THREAT_TURNS_STOOD, BalanceConfig.POSITIONAL_MULT_MELEE);
+                carelessTurns, BalanceConfig.POSITIONAL_MULT_MELEE);
         System.out.printf("%-8s %10.1f %8.1f %10d %12.1f%n",
                 hazardName, damagePerTurn, threatPerTile, lifetimeTurns, threatPerTile * 6f);
+    }
+
+    /**
+     * A6 arithmetic: a barrel's blast against the reference soldier (VOID_SHROUD base, the R-LADDER SOLDIER) and
+     * against every CHAFF archetype, at depths 1 / 10 / 25 — what one ring hit, the centre, and two overlapping
+     * ring hits (two barrels) leave of a soldier. Neutral matchup (no EXPLOSIVE trait multiplier).
+     */
+    private static void printBarrelBlastTable() {
+        System.out.println("BARREL BLAST (H13) — centre " + BalanceConfig.HAZARD_BARREL_CENTRE_FRACTION + " / ring "
+                + BalanceConfig.HAZARD_BARREL_RING_FRACTION + " x reference SOLDIER HP ("
+                + BalanceSchema.ladderReferenceArchetype(ge.tbegvadze.toon3d.enemy.EnemyRole.SOLDIER).name()
+                + " base " + BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH + ")");
+        System.out.printf("%-5s %8s %7s %7s | %-22s | %-22s | %-22s%n", "depth", "soldier", "ring", "centre",
+                "soldier left: 1 ring", "soldier left: 2 rings", "every chaff killed by ring?");
+        System.out.println("------------------------------------------------------------------------------------");
+        for (int depth : new int[]{1, 5, 10, 15, 25}) {
+            int soldierHealth = BalanceSchema.scaledEnemyMaxHealth(
+                    BalanceSchema.ladderReferenceArchetype(ge.tbegvadze.toon3d.enemy.EnemyRole.SOLDIER), depth);
+            int ring   = BalanceSchema.barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_RING_FRACTION, depth);
+            int centre = BalanceSchema.barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_CENTRE_FRACTION, depth);
+            int oneRingLeft  = Math.max(0, soldierHealth - ring);
+            int twoRingsLeft = Math.max(0, soldierHealth - 2 * ring);
+            StringBuilder chaff = new StringBuilder();
+            boolean allDie = true;
+            for (ge.tbegvadze.toon3d.enemy.EnemyType type : ge.tbegvadze.toon3d.enemy.EnemyType.values()) {
+                if (type.role() != ge.tbegvadze.toon3d.enemy.EnemyRole.CHAFF) continue;
+                int health = BalanceSchema.scaledEnemyMaxHealth(type, depth);
+                allDie &= ring >= health;
+                chaff.append(type.name()).append('=').append(health).append(ring >= health ? "(dies) " : "(LIVES) ");
+            }
+            System.out.printf("%-5d %8d %7d %7d | %4d HP = %3.0f%%        | %4d HP = %3.0f%%        | %s %s%n",
+                    depth, soldierHealth, ring, centre,
+                    oneRingLeft, 100f * oneRingLeft / soldierHealth,
+                    twoRingsLeft, 100f * twoRingsLeft / soldierHealth,
+                    allDie ? "YES" : "NO ", chaff.toString().trim());
+        }
+        System.out.println("  Ring tiles are where enemies stand (a barrel is a solid prop, so the centre tile is never occupied).");
     }
 
     // -----------------------------------------------------------------------------------
@@ -851,6 +905,31 @@ public final class BalanceReport {
         for (BalanceSchema.TelegraphAttackSpec attack : BalanceSchema.telegraphAttacks()) {
             printTelegraphRow(attack.attackName, attack.baseHit, attack.readableKind, cap);
         }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HEAVY TABLE (balance-overhaul order 4, R-HEAVY) — every HeavyAttack as a fraction of the on-curve
+    // player's max HP, the guarded fraction (GUARD_FRONT_HEAVY), and the damage at depths 1 / 10 / 25.
+    // -----------------------------------------------------------------------------------
+    private static void printHeavyTable() {
+        System.out.printf("HEAVY ATTACKS (order 4, R-HEAVY) — band %.0f%%-%.0f%% of on-curve max HP, guarded <= %.0f%%, scale %.2f%n",
+                BalanceConfig.HEAVY_DAMAGE_FRACTION_MIN * 100f, BalanceConfig.HEAVY_DAMAGE_FRACTION_MAX * 100f,
+                BalanceConfig.HEAVY_GUARDED_MAX_FRACTION * 100f, BalanceConfig.HEAVY_DAMAGE_SCALE);
+        System.out.printf("%-15s %9s %9s %7s %8s %8s %8s%n",
+                "heavy", "fraction", "guarded", "commit", "dmg@d1", "dmg@d10", "dmg@d25");
+        System.out.println("--------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.enemy.HeavyAttack heavy : ge.tbegvadze.toon3d.enemy.HeavyAttack.values()) {
+            System.out.printf("%-15s %8.0f%% %8.1f%% %7d %8d %8d %8d%n", heavy.displayName(),
+                    heavy.damageFraction() * 100f,
+                    heavy.damageFraction() * BalanceConfig.GUARD_FRONT_HEAVY * 100f,
+                    heavy.minimumCommitTurns(),
+                    heavyDamageAt(heavy, 1), heavyDamageAt(heavy, 10), heavyDamageAt(heavy, 25));
+        }
+    }
+
+    private static int heavyDamageAt(ge.tbegvadze.toon3d.enemy.HeavyAttack heavy, int depth) {
+        return GameMath.heavyDamageAtDepth(heavy.damageFraction(),
+                GameMath.expectedPlayerAtDepth(depth).maxHealth, BalanceConfig.HEAVY_DAMAGE_SCALE);
     }
 
     private static void printTelegraphRow(String attackName, int baseHit, String readable, float cap) {
@@ -883,7 +962,7 @@ public final class BalanceReport {
                 + " survivalRatio band " + String.format("%.2f-%.2f", BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
                         BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX)
                 + " ; single-hit caps: telegraph >" + String.format("%.0f%%", BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION * 100f)
-                + " eHP, hard " + String.format("%.0f%%", BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION * 100f) + " eHP");
+                + " eHP, telegraphed heavy max " + String.format("%.0f%%", BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION * 100f) + " eHP");
         System.out.printf("%-12s %5s %7s %8s %8s %8s %6s %8s %8s %8s%n",
                 "boss", "depth", "expDPT", "derHP", "bossDPT", "target", "gate", "fairRatio", "reward", "ammoCov");
         System.out.println("------------------------------------------------------------------------------------------");
@@ -936,10 +1015,11 @@ public final class BalanceReport {
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
                     damage, BalanceConfig.REFERENCE_PLAYER_EHP);
             String verdict;
-            if (fraction > BalanceConfig.BOSS_HARD_SINGLE_HIT_FRACTION) {
-                verdict = "BANNED";
+            if (fraction > BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
+                    || (fraction > BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION && !verb.telegraphed)) {
+                verdict = verb.telegraphed ? "BANNED" : "NEEDS-TELE";
             } else if (fraction > BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION) {
-                verdict = verb.telegraphed ? "TELE-OK" : "NEEDS-TELE";
+                verdict = "TELE-OK";
             } else {
                 verdict = "OK";
             }

@@ -46,10 +46,6 @@ public final class EnemyConstants {
             = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS;
     public static final int     PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES
             = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES;
-    public static final float   PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER
-            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER;
-    public static final int     PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX
-            = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX;
     public static final int     PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
             = BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES;
     public static final int     PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES
@@ -74,10 +70,12 @@ public final class EnemyConstants {
     public static final int     SHELL_BRUTE_MOVE_EVERY_N_TURNS   = BalanceConfig.SHELL_BRUTE_MOVE_EVERY_N_TURNS;
     public static final float   SHELL_BRUTE_HEIGHT_MULTIPLIER    = 1.05f;
     // Charger AI (Pillar 2) — telegraphed rush after a one-turn wind-up.
-    public static final float   SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = BalanceConfig.SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES;
     public static final int     SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = BalanceConfig.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES;
-    public static final float   SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = BalanceConfig.SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE;
+    // Revenant lunge (balance-overhaul order 4, CP5) — the same WIND_UP rush, shorter and on a cooldown.
+    public static final int     REVENANT_LUNGE_TRIGGER_MIN_TILES = BalanceConfig.REVENANT_LUNGE_TRIGGER_MIN_TILES;
+    public static final int     REVENANT_LUNGE_TRIGGER_MAX_TILES = BalanceConfig.REVENANT_LUNGE_TRIGGER_MAX_TILES;
+    public static final int     REVENANT_LUNGE_COOLDOWN_TURNS    = BalanceConfig.REVENANT_LUNGE_COOLDOWN_TURNS;
 
     // MIRE_WRAITH — slow ground-based ranged acid (spawn '5')
     public static final int     MIRE_WRAITH_MAX_HEALTH           = BalanceConfig.MIRE_WRAITH_MAX_HEALTH;
@@ -595,9 +593,9 @@ public final class EnemyConstants {
     /**
      * WEAK debuff duration (strategy-combat-order-6): the acid casters (Mire Wraith / Acid Drone)
      * corrode the marine's output so its own HUD damage numbers dim — the symmetric, player-facing
-     * side of the Weak power. Kept short so it softens a couple of hits, not the whole fight.
+     * side of the Weak power. 3 turns (balance-overhaul order 4, H10) at BalanceConfig.WEAK_DAMAGE_PERCENT — one WEAK definition for both directions.
      */
-    public static final int DEBUFF_WEAK_DURATION_TURNS  = 2;
+    public static final int DEBUFF_WEAK_DURATION_TURNS  = 3;
 
     // SUMMON — spawn chaff on empty adjacent tiles. A summoner spawns a BATCH of 2-3 per cast, then is
     // gated by its SPECIAL cadence (the natural cooldown) and the per-room live-enemy ceiling before it
@@ -631,7 +629,45 @@ public final class EnemyConstants {
 
     // AREA_STRIKE — telegraphed slam hitting every tile within this cross radius of the enemy.
     public static final int   AREA_STRIKE_RADIUS_TILES      = 1;
-    public static final float AREA_STRIKE_DAMAGE_MULTIPLIER = 1.35f;
+
+    /** Capacity of the pre-allocated danger-tile buffers (balance-overhaul order 4, H3). */
+    public static final int   HEAVY_DANGER_TILE_CAPACITY    = 32;
+
+    // --- Heavy danger-tile visuals (balance-overhaul order 4, H15/H16) --------------------------------
+    /** Heavy telegraph red, shared by the 3D floor marker, the mini-map fill and the intent frame tint. */
+    public static final float HEAVY_MARKER_R = 0.95f;
+    public static final float HEAVY_MARKER_G = 0.15f;
+    public static final float HEAVY_MARKER_B = 0.10f;
+    /** 3D floor marker pulses between these alphas. */
+    public static final float HEAVY_MARKER_MIN_ALPHA = 0.45f;
+    public static final float HEAVY_MARKER_MAX_ALPHA = 0.90f;
+    public static final float HEAVY_MARKER_PULSE_HZ  = 3.0f;
+    /** Marker width as a fraction of the full wall-stripe height at the tile's depth. */
+    public static final float HEAVY_MARKER_SIZE_FRACTION = 0.75f;
+    /** Vertical squash so the ring reads as lying on the floor plane (height = width * this). */
+    public static final float HEAVY_MARKER_FLOOR_SQUASH  = 0.45f;
+    /** Lift of the marker centre above the floor line, as a fraction of the marker height. */
+    public static final float HEAVY_MARKER_FLOOR_LIFT_FRACTION = 0.50f;
+    public static final float HEAVY_MARKER_MAX_DISTANCE_TILES  = 16f;
+    /** Marker texture: centre-disc radius as a fraction of the ring's outer radius, and the disc's alpha. */
+    public static final float HEAVY_MARKER_DISC_RADIUS_FRACTION = 0.30f;
+    public static final float HEAVY_MARKER_DISC_ALPHA           = 0.6f;
+    /** Procedural marker texture edge in pixels (square). */
+    public static final int   HEAVY_MARKER_TEXTURE_SIZE = 32;
+    /** Ring thickness in texture pixels (outer ring); inner chevron X-bars use the same thickness. */
+    public static final int   HEAVY_MARKER_RING_THICKNESS_PIXELS = 3;
+    /** Mini-map fill alpha for a heavy danger tile. */
+    public static final float HEAVY_MINIMAP_ALPHA = 0.50f;
+    /** Heavy intent icon scale over the normal icon size, and the red tint mix into its frame. */
+    public static final float HEAVY_INTENT_ICON_SCALE = 1.5f;
+    /** "!!" sub-glyph under the icon: bar width / height / dot size as fractions of the drawn icon size. */
+    public static final float HEAVY_INTENT_BANG_BAR_WIDTH_FRACTION  = 0.10f;
+    public static final float HEAVY_INTENT_BANG_BAR_HEIGHT_FRACTION = 0.26f;
+    public static final float HEAVY_INTENT_BANG_DOT_SIZE_FRACTION   = 0.10f;
+    /** Horizontal spacing between the two bangs' centres, fraction of drawn icon size. */
+    public static final float HEAVY_INTENT_BANG_SPACING_FRACTION    = 0.22f;
+    /** Gap between the icon bottom and the top of the bang glyph, fraction of drawn icon size. */
+    public static final float HEAVY_INTENT_BANG_GAP_FRACTION        = 0.06f;
 
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
     // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims.

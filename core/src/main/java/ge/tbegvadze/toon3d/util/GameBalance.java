@@ -275,8 +275,10 @@ public final class GameBalance {
     public static final int   TGH_MIN_DAMAGE          = 1;
 
     // ---- Player GUARD stance (strategy-combat-order-4) — balance lives in BalanceConfig ----
-    /** Front-arc incoming-damage multiplier while guarding (big reduction). */
-    public static final float GUARD_FRONT_MULTIPLIER         = BalanceConfig.GUARD_FRONT_MULTIPLIER;
+    /** Front-arc incoming-damage multiplier while guarding, ORDINARY hit (order 4 split the old single value). */
+    public static final float GUARD_FRONT_ORDINARY           = BalanceConfig.GUARD_FRONT_ORDINARY;
+    /** Front-arc incoming-damage multiplier while guarding, HEAVY hit (which also ripostes). */
+    public static final float GUARD_FRONT_HEAVY              = BalanceConfig.GUARD_FRONT_HEAVY;
     /** Side-arc multiplier while guarding (full damage by design). */
     public static final float GUARD_SIDE_MULTIPLIER          = BalanceConfig.GUARD_SIDE_MULTIPLIER;
     /** Back-arc multiplier while guarding (full damage by design). */

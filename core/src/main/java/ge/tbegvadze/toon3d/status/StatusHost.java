@@ -23,4 +23,7 @@ public interface StatusHost {
     void applyDoTDamage(int amount);
 
     boolean isAlive();
+
+    /** The host's current maximum HP — the base every status magnitude is a fraction of (order 4, H10). */
+    int getStatusMaxHealth();
 }

@@ -54,8 +54,11 @@ public final class BalanceConfig {
     public static final int   PLAYER_MAX_HEALTH       = 130;
     /** Player maximum armour pool. Range: 0–120. Armour soaks part of every hit. */
     public static final int   PLAYER_MAX_ARMOR        = 75;
-    /** Fraction of each incoming hit absorbed by armour (depleting armour instead of HP). Range: 0.25–0.75. */
-    public static final float ARMOUR_ABSORB_FRACTION  = 0.50f;
+    /**
+     * Fraction of each incoming hit absorbed by armour (depleting armour instead of HP). Range: 0.25–0.75.
+     * balance-overhaul order 4 (H8): 0.50 -> 0.67, so armour is worth wearing.
+     */
+    public static final float ARMOUR_ABSORB_FRACTION  = 0.67f;
 
     // Heal magnitudes scaled ~1.8x in the economy rescale (idea-A, iteration 2): enemy damage
     // rose, so a floor's INCOMING damage rose, and the heals had to rise with it to keep the
@@ -136,24 +139,12 @@ public final class BalanceConfig {
     public static final int SHELL_BRUTE_MAX_HEALTH         = 95;
     public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 35;
     public static final int SHELL_BRUTE_MOVE_EVERY_N_TURNS = 1;
-    /**
-     * Charge rush damage multiplier (Pillar 2). After a one-turn telegraphed wind-up the brute
-     * rushes down a cardinal lane; if it connects it hits for base * this. 20 * 2.4 = 48 dmg —
-     * a meaty, READABLE hit. It is telegraphed, so it is allowed to exceed the 25%-eHP cap that
-     * un-telegraphed attacks must respect (idea 4, Pillar 5). Sidestep it to make the rush whiff.
-     */
-    public static final float SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER = 2.4f;
+    // Charge damage is a HEAVY fraction of the on-curve player's max HP (SECTION 23, HeavyAttack.CHARGE);
+    // the old x2.4 multiplier and the 75% stop-short chance are gone (balance-overhaul order 4 override).
     /** Nearest cardinal-lane gap (tiles) that opens a charge; closer than this it just melees. Range: 2–3. */
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES = 2;
     /** Farthest cardinal-lane gap (tiles) the brute will start a charge from (<= LOS). Range: 3–6. */
     public static final int   SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES = 5;
-    /**
-     * Probability that a charge which reaches the player STOPS next to them and does NOT land the hit,
-     * ending its rush adjacent and unwinded so the player gets a guaranteed swing before it attacks
-     * again (design feedback: a charge should usually leave the brute punishable, not just delete HP).
-     * The remaining {@code 1 - this} of reaching charges land the full multiplier hit. Range: 0.5–0.9.
-     */
-    public static final float SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE = 0.75f;
 
     // PLAGUE_HULK (spawn '1') — slow tank melee. (was 50 HP / 10 dmg)
     public static final int PLAGUE_HULK_MAX_HEALTH         = 60;
@@ -170,14 +161,8 @@ public final class BalanceConfig {
     public static final int   PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS             = 2;
     /** Cardinal-arm reach (tiles) of the direct blast; an arm stops early at the first wall. */
     public static final int   PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES      = 2;
-    /**
-     * Direct blast damage multiplier on scaledAttackDamage() if the countdown reaches zero. 16 * 3.0 =
-     * 48 (~23% of the 205 reference eHP) — telegraphed for two full turns, so it is allowed to exceed
-     * the 25%-eHP cap for un-telegraphed hits (docs/game-balance-authority.txt TELEGRAPH & COUNTERPLAY).
-     */
-    public static final float PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER = 3.0f;
-    /** Hard cap on the blast hit regardless of depth/EMPOWERED scaling (~33% eHP, under the 35% boss cap). */
-    public static final int   PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MAX        = 68;
+    // Blast damage is a HEAVY fraction of the on-curve player's max HP (SECTION 23, HeavyAttack.SELF_DESTRUCT);
+    // the old x3.0 multiplier and the 68 cap are gone (balance-overhaul order 4 override).
     /** Massive toxic cross radius left behind if the Hulk survives to detonate. */
     public static final int   PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES      = 3;
     /**
@@ -493,8 +478,8 @@ public final class BalanceConfig {
     // Priced in docs/game-balance-authority.txt (GUARD note).
     // -------------------------------------------------------------------------
 
-    /** Incoming-damage multiplier for a hit inside the front (facing) arc while guarding. Range: 0.25–0.5. */
-    public static final float GUARD_FRONT_MULTIPLIER      = 0.35f;
+    // GUARD_FRONT_MULTIPLIER (0.35) was DELETED by balance-overhaul order 4 (H7): the front arc now has two
+    // multipliers, GUARD_FRONT_ORDINARY / GUARD_FRONT_HEAVY, in SECTION 23.
     /** Multiplier for a hit from the side arcs while guarding — FULL damage by design. Range: 1.0 (do not weaken). */
     public static final float GUARD_SIDE_MULTIPLIER       = 1.0f;
     /** Multiplier for a hit from directly behind while guarding — FULL damage by design (>1.0 = optional backstab). Range: 1.0–1.5. */
@@ -950,23 +935,20 @@ public final class BalanceConfig {
     // from EffectConstants (which keeps re-export shims and now holds only cosmetic values).
     // =====================================================================================
 
-    // --- THE UNIFIED DOT BASES. Exactly ONE definition per status — BalanceSchema's R-DOT
-    // rule fails the build if a second base definition appears. Before order 1 two divergent
-    // BURN definitions existed (EffectConstants said 4/turn — the value the game actually
-    // applied via StatusEffectController — while the Incendiary ability base said 3/turn).
-    // The EffectConstants value won; the Incendiary base now REFERENCES the unified base.
-    /** BURNING damage per turn — THE single burn base (hazard fire, enemy burns, Incendiary level 1). */
-    public static final int   BURN_DAMAGE_PER_TURN    = 4;
+    // --- THE DOT DEFINITIONS (R-DOT, restated by balance-overhaul order 4). Exactly ONE definition per
+    // status-side DoT and ONE for the weapon-side burn; BalanceSchema's R-DOT rule fails the build if a
+    // second definition appears. STATUS magnitudes (hazard fire, enemy-applied poison, acid) are FRACTIONS
+    // of the host's max HP defined in SECTION 23 (BURN_TICK_FRACTION, POISON_TICK_FRACTION) and resolved at
+    // application time through GameMath.statusTickDamage, so they never go stale with depth. The
+    // WEAPON-applied burn (Incendiary, Incinerator) is R-ROLE-fitted damage and keeps its own base
+    // (WEAPON_BURN_BASE_PER_TURN, below). The old flat BURN_DAMAGE_PER_TURN (4) and POISON_DAMAGE_PER_STACK
+    // (2) were DELETED by order 4 (override clause).
     /** Minimum BURNING duration (turns) a burn application may roll. */
     public static final int   BURN_DURATION_MIN       = 3;
     /** Maximum BURNING duration (turns) a burn application may roll. */
     public static final int   BURN_DURATION_MAX       = 5;
-    /** POISONED damage per stack per turn — THE single poison base (toxic pools, enemy acid). */
-    public static final int   POISON_DAMAGE_PER_STACK = 2;
-    /** Hard cap on concurrent POISONED stacks on one host. */
-    public static final int   POISON_MAX_STACKS       = 5;
-    /** POISONED duration (turns) per application (re-application refreshes and stacks). */
-    public static final int   POISON_DURATION         = 4;
+    /** Hard cap on concurrent POISONED stacks on one host (order 4: 5 -> 6). Stacks decay by 1 per turn. */
+    public static final int   POISON_MAX_STACKS       = 6;
 
     // --- Shared status-effect magnitudes (moved from EffectConstants; gameplay, not cosmetic).
     /** STUNNED duration (turns) for the standard stun application. */
@@ -990,7 +972,7 @@ public final class BalanceConfig {
     /** Hard cap on VULNERABLE stacks so a build can't multiply a boss into a trivial kill. */
     public static final int   VULNERABLE_MAX_STACKS     = 2;
     /** WEAK outgoing-damage reduction percent on the debuffed host. */
-    public static final int   WEAK_DAMAGE_PERCENT       = 25;
+    public static final int   WEAK_DAMAGE_PERCENT       = 35;
     /** WEAK duration (turns). */
     public static final int   WEAK_DURATION             = 2;
     /** EXPOSED duration (turns): the next hit into the host ignores its Block, then clears. */
@@ -1004,9 +986,9 @@ public final class BalanceConfig {
     /** Chance an Acid Drone ranged hit applies POISONED. */
     public static final float ACID_DRONE_POISON_CHANCE  = 0.75f;
 
-    // --- Explosive barrel hazard (moved from EffectConstants; gameplay).
-    /** Damage a detonating explosive barrel deals to hosts in its blast. */
-    public static final int   EXPLOSION_DAMAGE    = 12;
+    // --- Explosive barrel hazard (moved from EffectConstants; gameplay). The flat EXPLOSION_DAMAGE (12) is
+    // GONE (balance-overhaul order 4, H13): blast damage is a fraction of the reference soldier's HP at the
+    // floor's depth / of the player's max HP (SECTION 23, HAZARD_BARREL_*).
     /** Hard ceiling on chained barrel detonations from one trigger. */
     public static final int   EXPLOSION_CHAIN_MAX = 32;
 
@@ -1016,9 +998,12 @@ public final class BalanceConfig {
     public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
     public static final int   REND_DURATION_TURNS            = 4;
 
-    // Incendiary (BURN DoT — on hit). The level-1 base IS the unified burn base above (was a
-    // divergent literal 3f before order 1; the game's applied value 4 won the unification).
-    public static final float INCENDIARY_BURN_PER_TURN_BASE      = BURN_DAMAGE_PER_TURN;
+    // Incendiary (BURN DoT — on hit). The level-1 base IS the ONE weapon-side burn base (R-DOT): order 4
+    // split it from the status burn (now a fraction of max HP) so the R-ROLE-fitted weapon burns keep their
+    // damage; the value 4 is byte-identical to the pre-order-4 unified base.
+    /** THE weapon-side burn base (damage/turn): Incendiary level 1; every weapon burn derives from it. */
+    public static final float WEAPON_BURN_BASE_PER_TURN          = 4f;
+    public static final float INCENDIARY_BURN_PER_TURN_BASE      = WEAPON_BURN_BASE_PER_TURN;
     public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
     public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
     public static final int   INCENDIARY_BURN_DURATION           = 3;
@@ -1268,24 +1253,21 @@ public final class BalanceConfig {
     /**
      * BURNING duration (turns) a fire tile applies to a host on it each turn. Short: standing in
      * fire re-applies (REFRESH_DURATION) so it persists, but leaving stops the burn quickly so
-     * the player can escape — the counterplay. Damage/turn = EffectConstants.BURN_DAMAGE_PER_TURN.
+     * the player can escape — the counterplay. Damage/turn = BURN_TICK_FRACTION of the host's max HP (SECTION 23).
      */
     public static final int   HAZARD_FIRE_BURN_TURNS       = 2;
 
     /**
-     * Multiplier applied to EffectConstants.BURN_DAMAGE_PER_TURN when the host standing in a fire
+     * Multiplier applied to the BURN_TICK_FRACTION damage when the host standing in a fire
      * tile is an enemy rather than the player. Fire still hurts the player at the base rate (the
      * misposition risk stays real), but enemies caught in the flamethrower's spreading fire burn
      * faster — rewarding the player for herding a swarm into the flame instead of just tagging
-     * them directly. Range: 1.0 (symmetric) – 2.0.
+     * them directly. Range: 1.0 (symmetric) – 3.0. (CP6, H13: 1.5 -> 2.5 so a fire is a real weapon against a pack.)
      */
-    public static final float HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER = 1.5f;
+    public static final float HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER = 2.5f;
 
-    /**
-     * POISONED duration (turns) a toxic pool applies each turn. Toxic STACKS (STACK_MAGNITUDE), so
-     * standing in it escalates — area denial. Damage/turn = stacks * EffectConstants.POISON_DAMAGE_PER_STACK.
-     */
-    public static final int   HAZARD_TOXIC_POISON_TURNS    = 3;
+    // Toxic pools apply POISON_STACKS_PER_TOXIC_TURN stacks (SECTION 23) per turn stood; stacks decay by 1 a
+    // turn, so a pool is area denial (standing in it escalates to POISON_MAX_STACKS) with no separate duration.
 
     /**
      * Per-turn chance a fire tile spreads to ONE eligible cardinal-neighbour floor/stain tile. Range: 0.1–0.6.
@@ -1304,13 +1286,6 @@ public final class BalanceConfig {
     /** Cardinal radius of the toxic cloud a Plague Hulk leaves where it dies (0 = its tile only). Range: 0–2. */
     public static final int   HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS = 1;
 
-    /**
-     * Turns a careless player is assumed to stand in one hazard tile, used ONLY by
-     * GameMath.hazardTileThreatPoints to fold hazard danger into the Threat-Point contract
-     * (a hazard room raises its effective floor TP — idea 4, Pillar 3). A skilled player leaves
-     * sooner; this is the "you mispositioned" reference, not the spread lifetime. Range: 1–3.
-     */
-    public static final int   HAZARD_THREAT_TURNS_STOOD    = 2;
 
     // =====================================================================================
     // SECTION 13 — TELEGRAPH & COUNTERPLAY (idea 4, Pillar 5) — fairness contract
@@ -1844,8 +1819,8 @@ public final class BalanceConfig {
     public static final float SIM_TACTICAL_RETREAT_FRACTION = 0.35f;
     /** Vitality/ammo/heal fraction below which a turn counts as taken in a RESOURCE CRISIS. */
     public static final float SIM_RESOURCE_CRISIS_FRACTION = 0.25f;
-    /** Telegraphed incoming damage (as a fraction of remaining vitality) that makes TACTICAL guard. */
-    public static final float SIM_TACTICAL_GUARD_DAMAGE_FRACTION = 0.20f;
+    // (SIM_TACTICAL_GUARD_DAMAGE_FRACTION — "guard when a telegraphed hit would take a fifth of what is left" —
+    // was DELETED by balance-overhaul order 4, CP7b: TACTICAL now answers a heavy committed at it, see S-HEAVY.)
 
     // --- C. S-GATE: the boss-cheese regression (the headline guarantee) ------------------
     /**
@@ -1882,9 +1857,14 @@ public final class BalanceConfig {
      */
     public static final float SIM_ECONOMY_SUPPLY_SHARE_MIN = 0.75f;
     public static final float SIM_ECONOMY_SUPPLY_SHARE_MAX = 1.10f;
-    /** S-SUPPLY (balance-overhaul order 2, AS2): TACTICAL's mean health fraction leaving a COMBAT floor. */
+    /**
+     * S-SUPPLY (balance-overhaul order 2, AS2): TACTICAL's mean health fraction leaving a COMBAT floor.
+     * MAX re-based 0.80 -> 0.90 by balance-overhaul order 4 (override clause): the scripted reader now answers
+     * ~0.99 of the heavies that used to be its drain, and a heal re-fit cannot pull exit health back (COMBAT
+     * heal is already floor-bound at the S4 medkit) — see docs/game-balance-authority.txt S-SUPPLY.
+     */
     public static final float SIM_SUPPLY_EXIT_HEALTH_MIN = 0.55f;
-    public static final float SIM_SUPPLY_EXIT_HEALTH_MAX = 0.80f;
+    public static final float SIM_SUPPLY_EXIT_HEALTH_MAX = 0.90f;
     /** Fraction of TACTICAL floors allowed to fire the never-softlock emergency ammo lifeline. */
     public static final float SIM_ECONOMY_EMERGENCY_MAX_FRACTION = 0.05f;
 
@@ -2633,6 +2613,19 @@ public final class BalanceConfig {
     /** S-SWITCH: at least this many TACTICAL COMBAT floors across the matrix must show a hint (non-vacuous). */
     public static final int   SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS = 10;
 
+    // --- S-HEAVY (balance-overhaul order 4, CP7b, A8) -----------------------------------------------------
+    // Replaces the old "guard at a fifth of what is left" TacticalPolicy trigger. Success = the player answered the
+    // heavy: it was avoided, guarded (front arc), cancelled by a stagger/riposte/stun, or its source was killed
+    // first. Only LANDED (unguarded, or hit from the side/back) is a failure.
+    /** S-HEAVY: TACTICAL's success share of the heavies committed AT it must be at least this. */
+    public static final float SIM_HEAVY_TACTICAL_MIN_SUCCESS = 0.80f;
+    /** S-HEAVY: NAIVE ignores telegraphs, so its success share (by chance alone) must be at most this. */
+    public static final float SIM_HEAVY_NAIVE_MAX_SUCCESS    = 0.30f;
+    /** S-HEAVY: TACTICAL must have had at least this many heavies committed at it (so the share is not vacuous). */
+    public static final int   SIM_HEAVY_MIN_SAMPLE           = 30;
+    /** HEAVY REPORT depth bands: each entry is a band's LAST depth (1-5, 6-10, 11-15); a final band runs to the ceiling. */
+    public static final int[] SIM_HEAVY_REPORT_BAND_LAST_DEPTHS = {5, 10, 15};
+
     // --- R-ROLE — the reference scenarios and margins (replace the R-WEAPON power bands) -----------
     // Each scenario = a target trait x group size x engagement band; its archetype (the representative
     // of that trait and role) is chosen in BalanceSchema's scenario registry. Evaluated for the ON-CURVE
@@ -2698,4 +2691,92 @@ public final class BalanceConfig {
     public static final float[] MATCHUP_ROW_CHITIN   = {0.75f,  1.35f, 1.00f, 1.10f, 1.40f, 1.00f,  1.20f, 1.00f};
     /** M3 row INFERNAL (Demons) — energy bites; fire is almost useless. */
     public static final float[] MATCHUP_ROW_INFERNAL = {1.00f,  1.10f, 1.35f, 1.00f, 0.30f, 0.90f,  1.00f, 1.00f};
+
+    // =========================================================================
+    // SECTION 23 — HEAVIES, GUARD, ARMOUR, STATUS, HAZARDS (balance-overhaul order 4)
+    // CP1 adds the HEAVY numbers and the (data-only) guard split; later checkpoints extend it.
+    // A HEAVY is a committed-then-resolved attack (HeavyAttack): damage = fraction of the ON-CURVE player's
+    // max HP at the enemy's depth (ExpectedPlayer), never a flat number. Overrides: the Shell Brute charge
+    // x2.4 + 75% stop-short, the self-destruct x3.0 capped at 68, AREA_STRIKE_DAMAGE_MULTIPLIER 1.35.
+    // =========================================================================
+
+    /** H2: CHARGE / LANCE damage as a fraction of the on-curve player's max HP. Band [MIN, MAX]. */
+    public static final float HEAVY_DAMAGE_FRACTION                = 0.50f;
+    /** H2: AREA_STRIKE slam fraction (the strike cross is wider, so slightly lighter). */
+    public static final float HEAVY_AREA_STRIKE_DAMAGE_FRACTION    = 0.45f;
+    /** H2: SELF_DESTRUCT blast fraction (the finisher is the heaviest, and defusable by killing it). */
+    public static final float HEAVY_SELF_DESTRUCT_DAMAGE_FRACTION  = 0.55f;
+    /** R-HEAVY band: every heavy's on-curve unguarded hit lies in [MIN, MAX] of expected max HP. */
+    public static final float HEAVY_DAMAGE_FRACTION_MIN            = 0.40f;
+    public static final float HEAVY_DAMAGE_FRACTION_MAX            = 0.60f;
+    /** Ordinary feel knob (order 7): scales every heavy hit; 1.0 = exactly the fractions above. */
+    public static final float HEAVY_DAMAGE_SCALE                   = 1.0f;
+    /** TP pricing: share of a heavy a competent player is expected to dodge or blunt (priced hit = hit x (1 - this)). */
+    public static final float HEAVY_EXPECTED_AVOIDANCE             = 0.6f;
+    /** H7: incoming-damage multiplier inside the guard's front arc for an ORDINARY hit (replaced GUARD_FRONT_MULTIPLIER 0.35). */
+    public static final float GUARD_FRONT_ORDINARY                 = 0.50f;
+    /** H7: ... for a HEAVY hit, which also RIPOSTES. R-HEAVY reads it for the cornered-guard cap. */
+    public static final float GUARD_FRONT_HEAVY                    = 0.20f;
+    /** H8: a HEAVY hit costs the armour pool this multiple of the share armour absorbed (HP damage unaffected). */
+    public static final float ARMOUR_HEAVY_SHRED_MULTIPLIER        = 1.5f;
+    /** H9: each enemy status application blocked by armour costs this fraction of MAX armour (min 1). */
+    public static final float ARMOUR_STATUS_COST_FRACTION          = 0.10f;
+    /** R-HEAVY (H4): a guarded heavy costs at most this fraction of the on-curve player's max HP. */
+    public static final float HEAVY_GUARDED_MAX_FRACTION           = 0.12f;
+    /** R-BOSS-VERB-CAP (override): a TELEGRAPHED boss heavy verb costs at most this fraction of eHP. */
+    public static final float BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION  = 0.50f;
+
+    // --- STATUS magnitudes as fractions of the host's max HP (H10). Resolved at APPLICATION time via
+    // GameMath.statusTickDamage and stored per stack in the StatusEffect, so they never go stale with depth.
+    // These REPLACE SECTION 8's flat BURN_DAMAGE_PER_TURN (4), POISON_DAMAGE_PER_STACK (2) and, with
+    // POISON_MAX_STACKS 5 -> 6 and WEAK_DAMAGE_PERCENT 25 -> 35 above, are the override of the status numbers.
+    /** H10: POISON damage per stack per turn, as a fraction of the host's max HP. */
+    public static final float POISON_TICK_FRACTION                 = 0.015f;
+    /** H10: stacks an acid ranged hit (Mire Wraith / Acid Drone) applies to the player. */
+    public static final int   POISON_STACKS_PER_ACID_HIT           = 2;
+    /** H10: stacks a toxic hazard tile applies to the PLAYER each turn stood in it. */
+    public static final int   POISON_STACKS_PER_TOXIC_TURN         = 2;
+    /** H10: BURN damage per turn from status/hazard fire, as a fraction of the host's max HP. */
+    public static final float BURN_TICK_FRACTION                   = 0.03f;
+    /** H10: turns of SLOWED a connecting Rimeshell lance beam applies to the player. */
+    public static final int   LANCE_SLOW_DURATION_TURNS            = 2;
+
+    // --- REVENANT LUNGE (H1, CP5): the Revenant's WIND_UP lunge reuses the Shell Brute charge code path with
+    // its own, shorter lane and a cooldown, so it stays a melee bruiser that occasionally lunges.
+    /** Nearest cardinal-lane gap (tiles) that opens a Revenant lunge. A lunge is short. */
+    public static final int   REVENANT_LUNGE_TRIGGER_MIN_TILES    = 2;
+    /** Farthest cardinal-lane gap (tiles) a Revenant will lunge from; its danger lane is this + 1. */
+    public static final int   REVENANT_LUNGE_TRIGGER_MAX_TILES    = 3;
+    /** Own turns that must pass after a lunge commit before the Revenant may commit another. */
+    public static final int   REVENANT_LUNGE_COOLDOWN_TURNS       = 3;
+
+    // --- HAZARDS as fractions (H13/H14, CP6). Replace the flat EXPLOSION_DAMAGE 12, the 1.5x enemy-fire
+    // multiplier (now HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 2.5, SECTION 12) and HAZARD_THREAT_TURNS_STOOD (the
+    // hazard TP window is now the burn window HAZARD_FIRE_BURN_TURNS).
+    /**
+     * Base HP of the REFERENCE SOLDIER barrels are scaled to: the R-LADDER reference SOLDIER archetype
+     * (BalanceSchema.ladderReferenceArchetype(SOLDIER) = VOID_SHROUD), grown by GameMath.enemyHealthAtDepth.
+     * A barrel's blast is a fraction of THAT, so it never goes stale as enemy HP climbs the ladder.
+     */
+    public static final int   HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH = VOID_SHROUD_MAX_HEALTH;
+    /** H13: the barrel's own tile, as a fraction of the reference soldier's HP at the floor's depth. */
+    public static final float HAZARD_BARREL_CENTRE_FRACTION        = 1.2f;
+    /** H13: each orthogonal neighbour tile, as a fraction of the reference soldier's HP at the floor's depth. */
+    public static final float HAZARD_BARREL_RING_FRACTION          = 0.6f;
+    /** H13: blast damage to the PLAYER on the centre tile, as a fraction of the player's max HP. */
+    public static final float HAZARD_BARREL_PLAYER_CENTRE_FRACTION = 0.30f;
+    /** H13: blast damage to the PLAYER on an orthogonal ring tile, as a fraction of the player's max HP. */
+    public static final float HAZARD_BARREL_PLAYER_RING_FRACTION   = 0.15f;
+    /** H13: stacks a toxic tile / Plague Hulk cloud applies to an ENEMY each turn it stands in it. */
+    public static final int   HAZARD_TOXIC_ENEMY_STACKS_PER_TURN   = 2;
+    /** H14: share of the eligible group rooms (a group of HAZARD_GROUP_MIN_SIZE+) that receive barrels (rounded up). */
+    public static final float HAZARD_GROUP_ROOM_SHARE              = 0.40f;
+    /** H14: smallest group that makes its room eligible for barrels. */
+    public static final int   HAZARD_GROUP_MIN_SIZE                = 3;
+    /** H14: fewest barrels an eligible room receives. */
+    public static final int   HAZARD_GROUP_BARRELS_MIN             = 1;
+    /** H14: most barrels an eligible room receives. */
+    public static final int   HAZARD_GROUP_BARRELS_MAX             = 2;
+    /** H14: barrels sit within this Chebyshev distance (tiles) of the group cluster's centroid. */
+    public static final int   HAZARD_GROUP_BARREL_RADIUS_TILES     = 2;
 }

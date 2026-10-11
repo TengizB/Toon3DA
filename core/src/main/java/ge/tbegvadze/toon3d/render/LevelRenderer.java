@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.render;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
@@ -8,6 +10,9 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorState;
 import ge.tbegvadze.toon3d.enemy.Enemy;
+import ge.tbegvadze.toon3d.enemy.HeavyAttack;
+import ge.tbegvadze.toon3d.enemy.IntentVerb;
+import ge.tbegvadze.toon3d.enemy.PlannedAction;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
@@ -17,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static ge.tbegvadze.toon3d.util.Constants.*;
+import static ge.tbegvadze.toon3d.util.EnemyConstants.*;
 import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 public class LevelRenderer implements Renderable, Disposable {
@@ -99,6 +105,8 @@ public class LevelRenderer implements Renderable, Disposable {
 
         // Filled pass — tile backgrounds (walls, doors), overlay markers (props, hazards, pickups,
         // exit, enemy threats), and weapon pickup dots, all clipped to mini-map bounds.
+        Gdx.gl.glEnable(GL20.GL_BLEND); // heavy danger fill is translucent
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int deltaRow = -RENDER_TILE_RADIUS; deltaRow <= RENDER_TILE_RADIUS; deltaRow++) {
             for (int deltaColumn = -RENDER_TILE_RADIUS; deltaColumn <= RENDER_TILE_RADIUS; deltaColumn++) {
@@ -160,6 +168,27 @@ public class LevelRenderer implements Renderable, Disposable {
                         drawCircleMarker(markerCenterX, markerCenterY, AMMO_PICKUP_COLOR);
                     }
                 }
+            }
+        }
+
+        // Heavy danger tiles (balance-overhaul order 4, H15): red fill under the enemy markers. Reads the
+        // committed plan only, so it never reveals more than the first-person floor markers do.
+        shapes.setColor(HEAVY_MARKER_R, HEAVY_MARKER_G, HEAVY_MARKER_B, HEAVY_MINIMAP_ALPHA);
+        for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
+            Enemy enemy = enemies.get(enemyIndex);
+            if (!enemy.isAlive()) continue;
+            PlannedAction plan = enemy.plannedAction;
+            if (plan.heavyAttack == null || plan.verb == IntentVerb.STUNNED) continue;
+            int firstTileIndex = (plan.heavyAttack.dangerShape() == HeavyAttack.DangerShape.CROSS) ? 1 : 0;
+            for (int tileIndex = firstTileIndex; tileIndex < plan.dangerTileCount; tileIndex++) {
+                int deltaColumn = plan.dangerTileColumns[tileIndex] - baseTileColumn;
+                int deltaRow    = plan.dangerTileRows[tileIndex]    - baseTileRow;
+                if (deltaColumn < -RENDER_TILE_RADIUS || deltaColumn > RENDER_TILE_RADIUS
+                        || deltaRow < -RENDER_TILE_RADIUS || deltaRow > RENDER_TILE_RADIUS) continue;
+                float tileLeft   = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;
+                float tileBottom = miniMapCenterY - subTileOffsetY + deltaRow    * MINI_MAP_CELL_SIZE;
+                drawClippedRect(tileLeft, tileBottom, MINI_MAP_CELL_SIZE, MINI_MAP_CELL_SIZE,
+                        miniMapLeft, miniMapBottom, miniMapRight, miniMapTop);
             }
         }
 

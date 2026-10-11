@@ -64,8 +64,7 @@ public final class EffectConstants {
     public static final float DAMAGE_NUMBER_SCALE_PER_POINT  = 0.04f;
     public static final float DAMAGE_NUMBER_MAX_FONT_SCALE   = 3.0f;
 
-    // Explosive barrel hazard — detonation damage and chain limit (balance: BalanceConfig SECTION 8)
-    public static final int   EXPLOSION_DAMAGE    = BalanceConfig.EXPLOSION_DAMAGE;
+    // Explosive barrel hazard — chain limit (damage is a fraction, BalanceConfig SECTION 23 HAZARD_BARREL_*)
     public static final int   EXPLOSION_CHAIN_MAX = BalanceConfig.EXPLOSION_CHAIN_MAX;
 
     // Event Text — screen-space rising text for game events
@@ -118,12 +117,13 @@ public final class EffectConstants {
     // Status effects — RE-EXPORT SHIMS (Balance Authority, order 1): the gameplay magnitudes
     // moved into BalanceConfig SECTION 8 (the single source of truth); only cosmetic status
     // values (vignette alphas, tints, particle counts) remain owned by this file.
-    public static final int   BURN_DAMAGE_PER_TURN           = BalanceConfig.BURN_DAMAGE_PER_TURN;
+    public static final float BURN_TICK_FRACTION             = BalanceConfig.BURN_TICK_FRACTION;
     public static final int   BURN_DURATION_MIN              = BalanceConfig.BURN_DURATION_MIN;
     public static final int   BURN_DURATION_MAX              = BalanceConfig.BURN_DURATION_MAX;
-    public static final int   POISON_DAMAGE_PER_STACK        = BalanceConfig.POISON_DAMAGE_PER_STACK;
+    public static final float POISON_TICK_FRACTION           = BalanceConfig.POISON_TICK_FRACTION;
+    public static final int   POISON_STACKS_PER_ACID_HIT     = BalanceConfig.POISON_STACKS_PER_ACID_HIT;
+    public static final int   POISON_STACKS_PER_TOXIC_TURN   = BalanceConfig.POISON_STACKS_PER_TOXIC_TURN;
     public static final int   POISON_MAX_STACKS              = BalanceConfig.POISON_MAX_STACKS;
-    public static final int   POISON_DURATION               = BalanceConfig.POISON_DURATION;
     public static final int   STUN_DURATION_DEFAULT         = BalanceConfig.STUN_DURATION_DEFAULT;
     public static final int   STUN_DURATION_HEAVY           = BalanceConfig.STUN_DURATION_HEAVY;
     // (BLINDED no longer narrows the raycast FOV — that zoomed/stretched the whole view; it now reads
@@ -443,4 +443,14 @@ public final class EffectConstants {
     public static final float AFFLICTION_BLEED_SIZE_FRAC        = 0.16f;
     public static final float AFFLICTION_BLEED_ALPHA            = 0.70f;
     public static final float AFFLICTION_BLEED_R = 0.75f, AFFLICTION_BLEED_G = 0.03f, AFFLICTION_BLEED_B = 0.05f;
+
+    // --- Heavy off-screen edge pulse (balance-overhaul order 4, H16) ---------------------------------
+    /** Width of the red edge band, as a fraction of WORLD_WIDTH. */
+    public static final float HEAVY_EDGE_PULSE_BAND_FRACTION = 0.14f;
+    public static final float HEAVY_EDGE_PULSE_MIN_ALPHA = 0.25f;
+    public static final float HEAVY_EDGE_PULSE_MAX_ALPHA = 0.70f;
+    public static final float HEAVY_EDGE_PULSE_HZ        = 3.0f;
+    public static final float HEAVY_EDGE_PULSE_R = 0.95f;
+    public static final float HEAVY_EDGE_PULSE_G = 0.15f;
+    public static final float HEAVY_EDGE_PULSE_B = 0.10f;
 }

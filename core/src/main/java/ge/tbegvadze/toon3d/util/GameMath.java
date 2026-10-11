@@ -1272,6 +1272,36 @@ public final class GameMath {
         return (screenWidth / 2f) * (1f - cameraSpaceX / cameraSpaceDepth);
     }
 
+    /** Bit set by {@link #offscreenSideMask} when the source lies off the LEFT screen edge. */
+    public static final int OFFSCREEN_SIDE_LEFT  = 1;
+    /** Bit set by {@link #offscreenSideMask} when the source lies off the RIGHT screen edge. */
+    public static final int OFFSCREEN_SIDE_RIGHT = 2;
+
+    /*
+     * Formula: offscreenSideMask
+     * Derivation: project the source with spriteScreenColumnCenter on a unit-width screen, so the
+     *   visible span is column in [0, 1). column < 0 means the source is past the LEFT edge
+     *   (Y-up convention: small column = left); column >= 1 means past the RIGHT edge. A source at or
+     *   behind the player (cameraSpaceDepth <= epsilon) has no meaningful column — the projection
+     *   divides by ~0 or flips sign — so it is reported on BOTH sides: the player must turn, and
+     *   either way round is a valid turn.
+     *   cameraSpaceDepth is read through spriteDepth (same as the sprite renderers).
+     * Edge cases: returns 0 when the source is in view. Result is a bit mask of OFFSCREEN_SIDE_*.
+     */
+    public static int offscreenSideMask(float differenceX, float differenceY,
+                                        float directionX, float directionY,
+                                        float planeX, float planeY, float behindEpsilon) {
+        float depth = spriteDepth(differenceX, differenceY, directionX, directionY);
+        if (depth <= behindEpsilon) {
+            return OFFSCREEN_SIDE_LEFT | OFFSCREEN_SIDE_RIGHT;
+        }
+        float column = spriteScreenColumnCenter(differenceX, differenceY,
+                directionX, directionY, planeX, planeY, 1);
+        if (column < 0f) return OFFSCREEN_SIDE_LEFT;
+        if (column >= 1f) return OFFSCREEN_SIDE_RIGHT;
+        return 0;
+    }
+
     // =========================================================================
     // SPRITE SCREEN HEIGHT — projected screen height of a billboard sprite
     // =========================================================================
@@ -1604,6 +1634,137 @@ public final class GameMath {
         return Math.max(Math.abs(toColumn - fromColumn), Math.abs(toRow - fromRow));
     }
 
+    // =========================================================================
+    // HEAVY DANGER TILES (balance-overhaul order 4, H3 / H4) — tile space, cardinal only
+    // =========================================================================
+
+    /** Headless "is this tile solid for the shape being built" query (no LibGDX, no level dependency). */
+    public interface TileBlockedQuery {
+        boolean isBlocked(int tileColumn, int tileRow);
+    }
+
+    /*
+     * Formula: dangerTilesForLane
+     * Derivation:
+     *   For distance k = 1..maxTiles the lane tile is (originColumn + k*stepColumn, originRow + k*stepRow).
+     *   Walking outward, the first blocked tile ends the lane BEFORE being listed (a marker never sits in a
+     *   wall, and nothing is hit past a blocker). The origin (the caster) is never listed.
+     * Edge cases:
+     *   A zero step, maxTiles <= 0 or outCapacity <= 0 returns 0. A lane longer than outCapacity is
+     *   truncated at outCapacity. Does not allocate.
+     */
+    public static int dangerTilesForLane(int originColumn, int originRow, int stepColumn, int stepRow,
+                                         int maxTiles, TileBlockedQuery blocked,
+                                         int[] outColumns, int[] outRows, int outCapacity) {
+        if (stepColumn == 0 && stepRow == 0) return 0;
+        int count = 0;
+        for (int distance = 1; distance <= maxTiles && count < outCapacity; distance++) {
+            int tileColumn = originColumn + stepColumn * distance;
+            int tileRow    = originRow    + stepRow    * distance;
+            if (blocked.isBlocked(tileColumn, tileRow)) break;
+            outColumns[count] = tileColumn;
+            outRows[count]    = tileRow;
+            count++;
+        }
+        return count;
+    }
+
+    /*
+     * Formula: dangerTilesForSquare
+     * Derivation:
+     *   A tile (c, r) is struck when chebyshevDistanceTiles(center, (c, r)) <= radius, i.e.
+     *   |c - centerColumn| <= radius and |r - centerRow| <= radius. The centre is the caster and is
+     *   excluded; blocked tiles are skipped (the player cannot stand there).
+     * Edge cases:
+     *   radius <= 0 returns 0. Truncates at outCapacity. Does not allocate.
+     */
+    public static int dangerTilesForSquare(int centerColumn, int centerRow, int radius,
+                                           TileBlockedQuery blocked,
+                                           int[] outColumns, int[] outRows, int outCapacity) {
+        int count = 0;
+        for (int tileRow = centerRow - radius; tileRow <= centerRow + radius; tileRow++) {
+            for (int tileColumn = centerColumn - radius; tileColumn <= centerColumn + radius; tileColumn++) {
+                if (tileColumn == centerColumn && tileRow == centerRow) continue;
+                if (count >= outCapacity) return count;
+                if (blocked.isBlocked(tileColumn, tileRow)) continue;
+                outColumns[count] = tileColumn;
+                outRows[count]    = tileRow;
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /*
+     * Formula: dangerTilesForCross
+     * Derivation:
+     *   The blast covers the centre tile plus, for each of the four cardinal steps, tiles 1..radius
+     *   along that arm; an arm stops BEFORE its first blocked tile (the blast does not wrap corners).
+     * Edge cases:
+     *   The centre is always listed (count >= 1 when outCapacity >= 1) even if the query calls it blocked.
+     *   radius <= 0 lists only the centre. Truncates at outCapacity. Does not allocate.
+     */
+    public static int dangerTilesForCross(int centerColumn, int centerRow, int radius,
+                                          TileBlockedQuery blocked,
+                                          int[] outColumns, int[] outRows, int outCapacity) {
+        if (outCapacity <= 0) return 0;
+        outColumns[0] = centerColumn;
+        outRows[0]    = centerRow;
+        int count = 1;
+        for (int arm = 0; arm < 4; arm++) {
+            int stepColumn = (arm == 0) ? 1 : (arm == 1) ? -1 : 0;
+            int stepRow    = (arm == 2) ? 1 : (arm == 3) ? -1 : 0;
+            for (int distance = 1; distance <= radius && count < outCapacity; distance++) {
+                int tileColumn = centerColumn + stepColumn * distance;
+                int tileRow    = centerRow    + stepRow    * distance;
+                if (blocked.isBlocked(tileColumn, tileRow)) break;
+                outColumns[count] = tileColumn;
+                outRows[count]    = tileRow;
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /*
+     * Formula: everyDangerTileHasSafeNeighbour
+     * Derivation:
+     *   H4 (avoidable): from each listed tile one single step must reach a tile that is walkable
+     *   (not blocked) and not itself dangerous. For each listed tile test its four cardinal neighbours
+     *   against the blocked query and the list (linear scan, lists are <= a few dozen tiles).
+     * Edge cases:
+     *   An empty list is vacuously true. A tile whose four neighbours are all blocked or dangerous makes
+     *   the whole result false (that player is cornered; the guard cap covers that case). Does not allocate.
+     */
+    public static boolean everyDangerTileHasSafeNeighbour(int[] columns, int[] rows, int count,
+                                                          TileBlockedQuery blocked) {
+        return everyDangerTileHasSafeNeighbour(columns, rows, count, 0, blocked);
+    }
+
+    /**
+     * Same check, but only entries from {@code firstCheckedIndex} on need a sidestep; earlier entries
+     * still count as dangerous for the neighbour test. Used for a CROSS, whose entry 0 is the caster's
+     * own tile (the player can never stand there).
+     */
+    public static boolean everyDangerTileHasSafeNeighbour(int[] columns, int[] rows, int count,
+                                                          int firstCheckedIndex, TileBlockedQuery blocked) {
+        for (int index = firstCheckedIndex; index < count; index++) {
+            boolean hasSafe = false;
+            for (int arm = 0; arm < 4 && !hasSafe; arm++) {
+                int neighbourColumn = columns[index] + ((arm == 0) ? 1 : (arm == 1) ? -1 : 0);
+                int neighbourRow    = rows[index]    + ((arm == 2) ? 1 : (arm == 3) ? -1 : 0);
+                if (blocked.isBlocked(neighbourColumn, neighbourRow)) continue;
+                boolean dangerous = false;
+                for (int other = 0; other < count && !dangerous; other++) {
+                    dangerous = columns[other] == neighbourColumn && rows[other] == neighbourRow;
+                }
+                hasSafe = !dangerous;
+            }
+            if (!hasSafe) return false;
+        }
+        return true;
+    }
+
     /*
      * Formula: manhattanDistanceTiles
      * Derivation:
@@ -1836,6 +1997,92 @@ public final class GameMath {
      */
     public static int armorAbsorb(int incomingDamage, int currentArmor, float absorptionFraction) {
         return Math.min(currentArmor, (int)(incomingDamage * absorptionFraction));
+    }
+
+    /*
+     * Formula: Armour Shred Cost (balance-overhaul order 4, H8)
+     * Derivation:
+     *   Armour soaks a share of every hit (see armorAbsorb). A HEAVY hit also SHREDS the plate: the pool
+     *   loses more than the share it absorbed, while the HP the player takes is unchanged.
+     *       shredCost = ceil(armorAbsorbed × shredMultiplier)
+     *   capped by what is left:
+     *       cost = min(currentArmor, shredCost)
+     *   An ordinary hit passes shredMultiplier = 1.0, which gives cost = armorAbsorbed (the old rule).
+     *   Example (armour 75, heavy of 60, fraction 0.67, shred 1.5): absorbed = 40, cost = 60.
+     * Edge cases:
+     *   armorAbsorbed <= 0 or currentArmor <= 0 -> 0.
+     *   shredMultiplier < 1 is clamped to 1 (a hit never repairs, or under-charges, the plate).
+     *   The result never exceeds currentArmor, so the pool never goes negative.
+     */
+    public static int armorShredCost(int armorAbsorbed, int currentArmor, float shredMultiplier) {
+        if (armorAbsorbed <= 0 || currentArmor <= 0) return 0;
+        float clampedMultiplier = Math.max(1f, shredMultiplier);
+        int shredCost = (int) Math.ceil(armorAbsorbed * clampedMultiplier);
+        return Math.min(currentArmor, shredCost);
+    }
+
+    /*
+     * Formula: Armour Status-Shield Cost (balance-overhaul order 4, H9)
+     * Derivation:
+     *   While armour holds, an enemy status application (WEAK / SLOWED / BLINDED / POISONED) is blocked
+     *   and costs a fraction of the MAXIMUM pool, so the price scales with the player's armour build:
+     *       cost = max(1, round(maxArmor × costFraction))
+     *   capped by what is left (the pool never goes below 0):
+     *       cost = min(currentArmor, cost)
+     *   Example (max 75, fraction 0.10): round(7.5) = 8 per blocked application.
+     * Edge cases:
+     *   currentArmor <= 0 -> 0 (and the caller applies the status — a shield with nothing left is down).
+     *   maxArmor <= 0 -> the minimum of 1 (still capped by currentArmor).
+     */
+    public static int armorStatusShieldCost(int currentArmor, int maxArmor, float costFraction) {
+        if (currentArmor <= 0) return 0;
+        int cost = Math.max(1, Math.round(maxArmor * costFraction));
+        return Math.min(currentArmor, cost);
+    }
+
+    /*
+     * Formula: Status Tick Damage (balance-overhaul order 4, H10)
+     * Derivation:
+     *   Every status DoT is a FRACTION of the host's max HP so it never goes stale with depth:
+     *       perStack = max(1, round(fraction x hostMaxHealth))
+     *       damage   = perStack x stacks
+     *   The per-stack value is what the StatusEffect stores at application time; the tick multiplies by the
+     *   live stack count. Example: fraction 0.015, max HP 100 -> perStack round(1.5) = 2; 3 stacks -> 6.
+     *   Burn passes stacks = 1 (fraction 0.03).
+     * Edge cases:
+     *   hostMaxHealth <= 0 or fraction <= 0 -> perStack floors at 1 (a status always hurts a little).
+     *   stacks <= 0 -> 0 (nothing applied). Math.round is half-up, so 1.5 -> 2 (equal fractions can differ by
+     *   up to 0.5 HP of rounding between depths, which is the "up to rounding" of acceptance A5).
+     */
+    public static int statusTickDamage(float fraction, int hostMaxHealth, int stacks) {
+        if (stacks <= 0) return 0;
+        int perStack = Math.max(1, Math.round(fraction * Math.max(0, hostMaxHealth)));
+        return perStack * stacks;
+    }
+
+    /*
+     * Formula: Toxic Average Stacks (balance-overhaul order 4, H10 — hazard pricing read-out)
+     * Derivation:
+     *   A host standing in a toxic tile gains stacksPerTurn each turn (capped at maxStacks); the status
+     *   tick then deals damage on the CURRENT stack count and afterwards the stacks decay by 1:
+     *       stacksBeforeTick(turn n) = min(maxStacks, carried(n) + stacksPerTurn)
+     *       carried(n + 1)           = stacksBeforeTick(n) - 1
+     *   The average damage-bearing stack count over turnsStood turns is the mean of stacksBeforeTick.
+     *   Worked (2 per turn, cap 6, 2 turns): turn 1 -> 2, carry 1; turn 2 -> 3. Mean = 2.5.
+     * Edge cases:
+     *   turnsStood <= 0 or stacksPerTurn <= 0 -> 0. maxStacks < 1 is treated as 1.
+     */
+    public static float toxicAverageStacks(int turnsStood, int stacksPerTurn, int maxStacks) {
+        if (turnsStood <= 0 || stacksPerTurn <= 0) return 0f;
+        int cap = Math.max(1, maxStacks);
+        int carried = 0;
+        float total = 0f;
+        for (int turn = 0; turn < turnsStood; turn++) {
+            int stacksBeforeTick = Math.min(cap, carried + stacksPerTurn);
+            total += stacksBeforeTick;
+            carried = stacksBeforeTick - 1;
+        }
+        return total / turnsStood;
     }
 
     /*
@@ -2806,19 +3053,36 @@ public final class GameMath {
     }
 
     /*
-     * Formula: specialEquivalentAreaStrike — per-cast equivalent damage of a telegraphed slam (order 5)
+     * Formula: heavyDamageAtDepth — the damage of a HEAVY (committed-then-resolved) attack (balance-overhaul order 4, H2)
      * Derivation:
-     *   AREA_STRIKE carries a predicted-damage number already (the slam hits for scaled attackDamage times
-     *   a multiplier), so its equivalence is simply that predicted damage:
-     *       equivalent = attackDamage * areaStrikeDamageMultiplier
-     *   The player can step out of the marked band to dodge it; the price is the FULL predicted hit (the
-     *   conservative, band-checked assumption that a careless player eats it — the same discipline the
-     *   telegraph audit uses for its worst-case hit).
+     *   A heavy is sized against the player who is SUPPOSED to be there, not against a stat block:
+     *       damage = max(1, round(damageFraction * expectedMaxHealth * scale))
+     *   where expectedMaxHealth is GameMath.expectedPlayerAtDepth(d).maxHealth (the on-curve player at the
+     *   enemy's effective depth) and scale is the ordinary HEAVY_DAMAGE_SCALE feel knob. At scale 1 the
+     *   unguarded, unarmoured hit is exactly damageFraction of an on-curve player's health at every depth,
+     *   so the heavy never goes stale as the ladder climbs.
+     *   Worked: fraction 0.50, expected max HP 130, scale 1 -> round(65) = 65.
      * Edge cases:
-     *   Non-negative inputs by construction; a zero multiplier prices the slam at nothing.
+     *   Non-positive fraction, health or scale floors at 1 (a heavy always does something).
      */
-    public static float specialEquivalentAreaStrike(float attackDamage, float areaStrikeDamageMultiplier) {
-        return attackDamage * areaStrikeDamageMultiplier;
+    public static int heavyDamageAtDepth(float damageFraction, float expectedMaxHealth, float scale) {
+        return Math.max(1, Math.round(damageFraction * expectedMaxHealth * scale));
+    }
+
+    /*
+     * Formula: heavyExpectedDamageForPricing — what a heavy is worth in Threat Points (balance-overhaul order 4)
+     * Derivation:
+     *   A heavy is telegraphed and avoidable, so a competent player eats only a share of it. The price is
+     *       priced = heavyDamage * (1 - clamp01(expectedAvoidance))
+     *   (HEAVY_EXPECTED_AVOIDANCE 0.6 -> 40% of the hit), which stops heavy-bearing archetypes flooding the
+     *   encounter budget. Replaces the old specialEquivalentAreaStrike (full predicted hit).
+     *   Worked: 58 damage, avoidance 0.6 -> 23.2.
+     * Edge cases:
+     *   Avoidance is clamped to [0, 1]: 0 prices the full hit, 1 prices nothing. Negative damage is not expected.
+     */
+    public static float heavyExpectedDamageForPricing(float heavyDamage, float expectedAvoidance) {
+        float clampedAvoidance = Math.max(0f, Math.min(1f, expectedAvoidance));
+        return heavyDamage * (1f - clampedAvoidance);
     }
 
     /*
@@ -3233,29 +3497,68 @@ public final class GameMath {
     }
 
     /*
-     * Formula: hazardTileThreatPoints — fold terrain danger into the TP contract (idea 4, Pillar 3)
+     * Formula: hazardTileThreatPoints — fold terrain danger into the TP contract (idea 4, Pillar 3; order 4 H13)
      * Derivation:
      *   A hazard tile (fire / toxic) has no health, so the enemy Threat-Point primitive's
      *   "survivalTurns" term (eHP / refDPT) does not apply. Instead a static hazard threatens
-     *   the player for as many turns as the player carelessly stands in it:
-     *       hazardTileThreatPoints = hazardDamagePerTurn * turnsStood * positionalMultiplier
-     *   This is the SAME shape as threatPoints (damagePerTurn * danger-window * positional) so a
-     *   hazard tile is directly comparable to an enemy's TP. A room with N such tiles raises its
-     *   effective floor TP by ~N * this value — that is how "a room full of fire raises its
-     *   effective TP" (idea 4) is made quantitative. turnsStood is a CARELESS-player reference
-     *   (BalanceConfig.HAZARD_THREAT_TURNS_STOOD), not the hazard's spread lifetime: a skilled
-     *   player leaves sooner and pays less, which is exactly the counterplay the hazard sells.
+     *   the player for as many turns as a careless player stays hurt by it:
+     *       hazardDamagePerTurn   = max(1, round(damageFraction x referenceMaxHealth))   (statusTickDamage)
+     *       hazardTileThreatPoints = hazardDamagePerTurn * carelessTurns * positionalMultiplier
+     *   This is the SAME shape as threatPoints (damagePerTurn * danger-window * positional), so a hazard
+     *   tile is directly comparable to an enemy's TP. Since order 4 the damage is a FRACTION of the
+     *   reference max HP (the on-curve player at depth 1 for the player side), and the careless window is the
+     *   hazard's own burn window (BalanceConfig.HAZARD_FIRE_BURN_TURNS: how long standing in it once keeps
+     *   hurting), replacing the flat HAZARD_THREAT_TURNS_STOOD constant.
      * Edge cases:
-     *   turnsStood <= 0 -> returns 0 (a hazard nobody ever stands in threatens nothing).
+     *   carelessTurns <= 0 -> returns 0 (a hazard nobody ever stands in threatens nothing).
      *   hazardDamagePerTurn <= 0 -> returns 0 (no damage, no threat).
      */
-    public static float hazardTileThreatPoints(float hazardDamagePerTurn, int turnsStood,
+    public static float hazardTileThreatPoints(float hazardDamagePerTurn, int carelessTurns,
                                                float positionalMultiplier) {
-        if (turnsStood <= 0 || hazardDamagePerTurn <= 0f) {
+        if (carelessTurns <= 0 || hazardDamagePerTurn <= 0f) {
             return 0f;
         }
-        return hazardDamagePerTurn * turnsStood * positionalMultiplier;
+        return hazardDamagePerTurn * carelessTurns * positionalMultiplier;
     }
+
+    /*
+     * Formula: barrelBlastDamage — a barrel's blast as a FRACTION of a reference max HP (balance-overhaul order 4, H13)
+     * Derivation:
+     *   damage = max(1, round(fraction x referenceMaxHealth))
+     *   Enemy side: referenceMaxHealth = the reference SOLDIER's max HP at the floor's depth
+     *   (enemyHealthAtDepth(HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth)), fraction = centre 1.2 / ring 0.6.
+     *   Player side: referenceMaxHealth = the player's own max HP, fraction = centre 0.30 / ring 0.15.
+     *   Example (depth 10, soldier 161 HP): ring 0.6 -> round(96.6) = 97; centre 1.2 -> round(193.2) = 193.
+     *   Because the reference grows with the enemy HP ladder, a barrel kills the same chaff at every depth.
+     * Edge cases:
+     *   referenceMaxHealth <= 0 or fraction <= 0 -> 1 (an explosion always hurts a little).
+     *   Math.round is half-up; the caller passes the already-rounded integer HP the enemy actually has.
+     */
+    public static int barrelBlastDamage(float fraction, float referenceMaxHealth) {
+        return Math.max(1, Math.round(fraction * referenceMaxHealth));
+    }
+
+    /*
+     * Formula: groupBarrelRoomCount — how many group rooms must hold barrels (balance-overhaul order 4, H14)
+     * Derivation:
+     *   needed = ceil(share x eligibleRooms)   (share = HAZARD_GROUP_ROOM_SHARE, 0.40)
+     *   "At least 40% of the rooms holding a group" rounds UP, so a floor with one eligible room still gets
+     *   a barrel room (ceil(0.4) = 1) and five eligible rooms need two (ceil(2.0) = 2). A float product such
+     *   as 0.4f x 5 = 2.0000000298 would round to 3, so a tiny epsilon is subtracted before the ceiling:
+     *       needed = ceil(share x eligibleRooms - 1e-4)
+     * Edge cases:
+     *   eligibleRooms <= 0 or share <= 0 -> 0. The result never exceeds eligibleRooms (share > 1 is clamped).
+     */
+    public static int groupBarrelRoomCount(int eligibleRooms, float share) {
+        if (eligibleRooms <= 0 || share <= 0f) {
+            return 0;
+        }
+        int needed = (int) Math.ceil((double) share * eligibleRooms - GROUP_BARREL_ROOM_COUNT_EPSILON);
+        return Math.max(0, Math.min(eligibleRooms, needed));
+    }
+
+    /** Guards {@link #groupBarrelRoomCount} against float products that land a hair above a whole number. */
+    private static final double GROUP_BARREL_ROOM_COUNT_EPSILON = 1e-4;
 
     // =========================================================================
     // BOSS BALANCE RULESET — bosses are tuned by formula, not by flat HP (idea 6)

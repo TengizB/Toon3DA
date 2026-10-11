@@ -134,6 +134,19 @@ class BalanceSimTest {
         assertBandsHold(results);
     }
 
+    /**
+     * S-HEAVY (balance-overhaul order 4, A8) — a player who reads the red floor answers the heavies committed at
+     * it: TACTICAL avoids / guards / staggers / kills first at least SIM_HEAVY_TACTICAL_MIN_SUCCESS of them
+     * (over at least SIM_HEAVY_MIN_SAMPLE), NAIVE at most SIM_HEAVY_NAIVE_MAX_SUCCESS. Not waived.
+     */
+    @Test
+    void tacticalAnswersHeavyAttacksAndNaiveDoesNot() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_HEAVY);
+        assertEquals(3, results.size(), "S-HEAVY evaluates the TACTICAL sample, the TACTICAL share and the NAIVE share");
+        assertTrue(results.stream().noneMatch(result -> result.waived), "S-HEAVY is never waived");
+        assertBandsHold(results);
+    }
+
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */
     @Test
     void noRunEndsUnableToDamageAnything() {

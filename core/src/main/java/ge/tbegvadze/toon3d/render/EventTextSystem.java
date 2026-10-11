@@ -25,6 +25,8 @@ public final class EventTextSystem {
     public static final byte COLOR_CREDIT_CYAN  = 5;
     /** Shield blue — used for the "BLOCKED N" floater when an enemy's Block eats a hit (order-3). */
     public static final byte COLOR_BLUE         = 6;
+    /** Armour-bar blue (HudRenderer's AR label colour) — the "ARMOUR HELD" floater (order 4, H9). */
+    public static final byte COLOR_ARMOUR       = 7;
 
     /**
      * Banner tier constants — controls font scale, animation style, and screen anchor.

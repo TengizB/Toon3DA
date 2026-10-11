@@ -63,6 +63,21 @@ shrink a centred layout window (rooms also scale their target room count), LINEA
 length and bend space. The linear entrance room is always small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7)
 so floor 1's first contact can sit within 12 walk tiles.
 
+BARRELS (balance-overhaul order 4, H14). Inside FloorPopulator.populate, after the supply is stamped, level/
+GroupBarrelPlacer runs on COMBAT and ELITE floors only (spec.type(); hand levels never come through):
+  1. Rooms holding a group of >= HAZARD_GROUP_MIN_SIZE (3) enemies, minus the start room, are the candidates;
+     a room counts only when a barrel can safely stand in it (a tile within HAZARD_GROUP_BARREL_RADIUS_TILES 2,
+     Chebyshev, of the group's centroid that is plain floor, in that room, unclaimed by any spawn / pickup /
+     weapon / credit, not beside a door, >= FIRST_CONTACT_MIN_WALK_TILES from the start).
+  2. GameMath.groupBarrelRoomCount picks ceil(HAZARD_GROUP_ROOM_SHARE 0.40 x hostable rooms) of them with a
+     Random seeded from the floor seed; each gets HAZARD_GROUP_BARRELS_MIN..MAX (1-2) 'E' barrels.
+  3. A barrel is SOLID, so every placement is guarded by a flood fill (columns blocking, with and without
+     keycards): every tile that was reachable, and the exit, must stay reachable or the tile is skipped.
+  4. The symbol is the existing 'E' (no new symbol). On ROOMS_MST the generated palette pins 'E' to
+     prop_explosive_barrel (as the atmospheric plant does) so the free variety pool can never repaint a live
+     barrel; the cave / corridor generators use the legacy prop palette where 'E' already is the barrel.
+  The result (barrels, hostable rooms, rooms served) rides on FloorContentReport; R-HAZARD audits it.
+
 The numbers live in BalanceConfig SECTION 21 and are audited by R-SUPPLY / R-DENSITY over a
 30-seed x generator x node type x depth {1,5,10,15,20,25} sweep (BalanceSchema.supplySweepReports);
 BalanceReport prints the SUPPLY / DENSITY table and the ELITE PROMISE. The per-room loot chances, the

@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusHost;
 import ge.tbegvadze.toon3d.status.StatusResistance;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
@@ -76,6 +77,12 @@ public class Enemy implements StatusHost {
      * Floor 1 = 1.0 (no scaling).
      */
     public float      attackDamageMultiplier = 1f;
+    /**
+     * The ON-CURVE player's max HP at this enemy's effective depth (balance-overhaul order 4), stored at spawn.
+     * Every HEAVY hit is a fraction of it ({@link #heavyDamage}). 0 only on an enemy built outside the spawn
+     * path (tests); {@link #heavyDamage} then falls back to the depth-1 on-curve value.
+     */
+    public float      heavyReferenceMaxHealth = 0f;
     public EnemyState state              = EnemyState.DORMANT;
     public int        turnCounter        = 0;
     public int        stuckTurns         = 0;
@@ -123,6 +130,13 @@ public class Enemy implements StatusHost {
 
     /** Set by StatusEffectController when STUNNED ticks; consumed in EnemyManager's EXECUTE phase (R6). */
     public boolean skipNextAction = false;
+
+    /**
+     * The kind of the committed HEAVY this enemy holds that was committed AT the player (the player's tile was
+     * in its danger set) and has not yet resolved; null when none — the simulator's outcome-tracking instance
+     * marker (CP7b of balance-overhaul order 4). Observation only; nothing in the game reads it.
+     */
+    public HeavyAttack trackedHeavyKind = null;
 
     /**
      * EnemyManager world-turn index of the last SPREAD stagger on this enemy (balance-overhaul order 3,
@@ -191,6 +205,9 @@ public class Enemy implements StatusHost {
      */
     public int chargeDirectionColumn = 0;
     public int chargeDirectionRow    = 0;
+
+    /** {@link #turnCounter} when this enemy last committed a charge / lunge (cooldown clock); far past = ready. */
+    public int lastChargeCommitTurn = -1_000_000;
 
     // -------------------------------------------------------------------------
     // Rime lance channel (elemental-golem-rimeshell-lancer) — the Lancer's molten beam. The lane is
@@ -703,6 +720,20 @@ public class Enemy implements StatusHost {
     }
 
     /**
+     * The damage of one of this enemy's HEAVY attacks (balance-overhaul order 4, H2): the heavy's fraction of the
+     * on-curve player's max HP at this enemy's depth, times the same EMPOWERED and WEAK outgoing multipliers
+     * {@link #scaledAttackDamage} folds in (so the committed predicted number and the executed hit stay one
+     * truthful value), minimum 1. Bosses do not use it (they have their own BossBalance verbs).
+     */
+    public int heavyDamage(HeavyAttack kind) {
+        float reference = heavyReferenceMaxHealth > 0f
+                ? heavyReferenceMaxHealth : GameMath.expectedPlayerAtDepth(1).maxHealth;
+        int baseDamage = GameMath.heavyDamageAtDepth(kind.damageFraction(), reference,
+                BalanceConfig.HEAVY_DAMAGE_SCALE);
+        return Math.max(1, Math.round(baseDamage * empoweredDamageMultiplier() * weakOutgoingMultiplier()));
+    }
+
+    /**
      * Returns this enemy's WEAK outgoing-damage multiplier (strategy-combat-order-6): {@code 1 - P/100}
      * while a WEAK debuff is active, else 1.0. Because {@link #scaledAttackDamage} folds it in, a
      * WEAK-ened enemy's telegraphed predicted-damage number AND its executed hit both drop together —
@@ -746,6 +777,11 @@ public class Enemy implements StatusHost {
             return 1f + empoweredEffect.getMagnitude() / 100f;
         }
         return 1f;
+    }
+
+    @Override
+    public int getStatusMaxHealth() {
+        return maxHealth;
     }
 
     public boolean isAlive() {

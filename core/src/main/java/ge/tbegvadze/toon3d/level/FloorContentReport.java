@@ -63,6 +63,24 @@ public final class FloorContentReport {
         this.placement             = placement;
     }
 
+    private int barrelCount;
+    private int barrelEligibleRooms;
+    private int barrelRooms;
+
+    /** Records the hazard placement (order 4, H14): barrels stamped, rooms that qualified, rooms served. */
+    void attachBarrels(int barrels, int eligibleRooms, int roomsServed) {
+        this.barrelCount         = barrels;
+        this.barrelEligibleRooms = eligibleRooms;
+        this.barrelRooms         = roomsServed;
+    }
+
+    /** Explosive barrels placed beside groups on this floor (H14). */
+    public int barrelCount()         { return barrelCount; }
+    /** Rooms holding a group of HAZARD_GROUP_MIN_SIZE+ that are not the start room (H14 eligibility). */
+    public int barrelEligibleRooms() { return barrelEligibleRooms; }
+    /** Eligible rooms that actually received barrels. */
+    public int barrelRooms()         { return barrelRooms; }
+
     /** Enemies per 100 walkable tiles (E7). */
     public float density() {
         return ge.tbegvadze.toon3d.util.GameMath.densityPerHundredTiles(enemyCount, walkableTiles);

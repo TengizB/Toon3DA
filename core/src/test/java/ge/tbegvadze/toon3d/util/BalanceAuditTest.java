@@ -88,6 +88,26 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.telegraphResults());
     }
 
+    /**
+     * R-HEAVY (balance-overhaul order 4): every HEAVY verb deals [0.40, 0.60] of the on-curve player's max HP
+     * at depths 1..25, is committed at least one turn ahead, and a guarding player takes at most 12%.
+     */
+    @Test
+    void heavyAttacksHoldTheDamageBandAndAreGuardCapped() {
+        assertNoViolations(BalanceSchema.heavyResults());
+    }
+
+    /**
+     * R-HAZARD (balance-overhaul order 4, H13/H14): barrel blasts are fractions of the reference soldier / the
+     * player's max HP that kill every chaff at every depth, and barrels sit in >= 40% of the group rooms on
+     * COMBAT / ELITE floors only.
+     */
+    @Test
+    void barrelsStayMeaningfulAtEveryDepthAndSitBesideGroups() {
+        assertNoViolations(BalanceSchema.hazardResults());
+        assertNoViolations(BalanceSchema.hazardPlacementResults());
+    }
+
     // R-DEPTH (depth coupling, 1..15) was RETIRED by balance-overhaul order 1 and REPLACED by R-LADDER L1
     // (on-curve TTK/TTD flat within +/-15% at 1..25), asserted by thePowerLadderHoldsAtEveryDepthToTheRunEnd.
 

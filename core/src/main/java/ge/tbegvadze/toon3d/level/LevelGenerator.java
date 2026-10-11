@@ -252,7 +252,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
         // order-8 STEP B — build this level's varied palette from the rooms actually placed and attach it.
         // The generator only ever wrote SYMBOLS; the palette is what makes those symbols look varied.
         return populated.attachTo(new Level(grid, populated.spawnPoints, populated.weaponSpawnPoints,
-                allocatePalette(rooms)));
+                allocatePalette(rooms, populated.barrelCount > 0)));
     }
 
     // -------------------------------------------------------------------------
@@ -547,7 +547,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
      * fall through to the allocator's free variety pool (the freed-symbol mechanic). The allocator is a
      * pure function of (seed, placed demands), so same seed ⇒ same palette.
      */
-    private LevelPalette allocatePalette(List<Room> rooms) {
+    private LevelPalette allocatePalette(List<Room> rooms, boolean carriesGroupBarrels) {
         TilesetRegistries.bootstrap(); // idempotent — the art catalog must be populated before allocation
         SymbolAllocationRequest.Builder request = SymbolAllocationRequest
                 .builder(seed, SymbolBudget.standard(), TilesetRegistries.sprites())
@@ -557,6 +557,13 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
             RoomSymbolDemand demand = room.blueprint.symbolDemand();
             if (demand.requiredSprites().isEmpty()) continue; // GENERIC rooms reserve nothing
             request.placedRoom(demand);
+        }
+        if (carriesGroupBarrels) {
+            // Order 4 (H14): barrels placed beside groups are the existing 'E' symbol; pin it to the barrel
+            // sprite (exactly what the atmospheric plant reserves) so the free variety pool can never
+            // repaint a live explosive barrel as a crate.
+            request.placedRoom(RoomSymbolDemand.of(java.util.Collections.singletonMap(
+                    GroupBarrelPlacer.BARREL_SYMBOL, GroupBarrelPlacer.BARREL_SPRITE_ID)));
         }
         return SymbolAllocator.allocate(request.build());
     }

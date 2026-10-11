@@ -233,20 +233,24 @@ public final class HazardManager implements HazardIgniteTarget {
     private void applyHazardStatus(StatusHost host, byte type) {
         if (statusEffectController == null) return;
         if (type == FIRE) {
-            // Enemies burn faster than the player in the same fire tile — rewards herding a
-            // swarm into the flame instead of just tagging them directly (see BalanceConfig).
-            // A fire tile is FIRE against the enemy's trait (balance-overhaul order 3): the undead burn
-            // hard, a demon barely notices. The player has no trait and takes the flat burn.
-            int fireDamagePerTurn = (host instanceof Enemy)
-                    ? Math.max(1, Math.round(EffectConstants.BURN_DAMAGE_PER_TURN
-                            * BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER
-                            * MatchupCatalog.shared().multiplier(DamageClass.FIRE, ((Enemy) host).type.trait())))
-                    : EffectConstants.BURN_DAMAGE_PER_TURN;
-            statusEffectController.apply(host, StatusType.BURNING,
-                    BalanceConfig.HAZARD_FIRE_BURN_TURNS, fireDamagePerTurn, null);
+            // Fire burns BURN_TICK_FRACTION of the HOST's max HP per turn (order 4, H10), so it never goes
+            // stale with depth. Enemies burn faster than the player in the same fire tile — rewards herding
+            // a swarm into the flame instead of just tagging them directly (see BalanceConfig) — and a fire
+            // tile is FIRE against the enemy's trait (balance-overhaul order 3): the undead burn hard, a
+            // demon barely notices. The player has no trait and takes the flat fraction.
+            float fireMultiplier = (host instanceof Enemy)
+                    ? BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER
+                            * MatchupCatalog.shared().multiplier(DamageClass.FIRE, ((Enemy) host).type.trait())
+                    : 1f;
+            statusEffectController.applyFractionBurn(host, BalanceConfig.HAZARD_FIRE_BURN_TURNS, fireMultiplier, null);
         } else if (type == TOXIC) {
-            statusEffectController.apply(host, StatusType.POISONED,
-                    BalanceConfig.HAZARD_TOXIC_POISON_TURNS, EffectConstants.POISON_DAMAGE_PER_STACK, null);
+            // The PLAYER takes POISON_STACKS_PER_TOXIC_TURN stacks a turn stood (unshielded: the floor is the
+            // counter-play). ENEMIES take HAZARD_TOXIC_ENEMY_STACKS_PER_TURN (H13) — the pool and the Plague
+            // Hulk's death cloud are both tools against a pack — as an enemy-max-HP fraction per stack.
+            int stacksPerTurn = (host instanceof Enemy)
+                    ? BalanceConfig.HAZARD_TOXIC_ENEMY_STACKS_PER_TURN
+                    : BalanceConfig.POISON_STACKS_PER_TOXIC_TURN;
+            statusEffectController.applyPoisonStacks(host, stacksPerTurn, null);
         }
     }
 

@@ -19,26 +19,26 @@ public enum SpecialAbility {
      * Grants the caster EMPOWERED (a temporary outgoing-damage buff). The classic "priority target"
      * telegraph: kill the buffer before its swing lands. Sub-glyph: up-arrow.
      */
-    BUFF_SELF(SubGlyph.BUFF, false, true),
+    BUFF_SELF(SubGlyph.BUFF, false, true, null),
 
     /**
      * Applies a control debuff (SLOWED / BLINDED, resolved per archetype) to the player down a
      * cardinal line, at range. Counter: break the line or kill it. Sub-glyph: down-arrow.
      */
-    DEBUFF_PLAYER(SubGlyph.DEBUFF, false, false),
+    DEBUFF_PLAYER(SubGlyph.DEBUFF, false, false, null),
 
     /**
      * Spawns 1-2 chaff of an EXISTING type on empty adjacent tiles, bounded by a per-summoner cap and
      * a per-room live-enemy ceiling so the encounter budget stays honest. Sub-glyph: spawn-rune.
      */
-    SUMMON(SubGlyph.SUMMON, false, false),
+    SUMMON(SubGlyph.SUMMON, false, false, null),
 
     /**
      * A telegraphed slam that strikes every tile within a small cross radius of the enemy on its next
      * turn — step out of the marked tiles to dodge it. Carries a predicted-damage number. Sub-glyph:
      * burst.
      */
-    AREA_STRIKE(SubGlyph.AREA, true, false),
+    AREA_STRIKE(SubGlyph.AREA, true, false, HeavyAttack.AREA_STRIKE),
 
     /**
      * Plague Hulk low-HP finisher: braces (targeting itself, no board tile) for a multi-turn countdown,
@@ -46,7 +46,7 @@ public enum SpecialAbility {
      * defuses it — the death hazard hook awards a minimal cloud instead of the massive one. Sub-glyph:
      * bomb/skull.
      */
-    SELF_DESTRUCT(SubGlyph.SELF_DESTRUCT, true, true);
+    SELF_DESTRUCT(SubGlyph.SELF_DESTRUCT, true, true, HeavyAttack.SELF_DESTRUCT);
 
     /** The procedural icon drawn inside the SPECIAL frame so each ability reads distinctly (order-2). */
     public enum SubGlyph { BUFF, DEBUFF, SUMMON, AREA, SELF_DESTRUCT }
@@ -54,11 +54,13 @@ public enum SpecialAbility {
     private final SubGlyph subGlyph;
     private final boolean  dealsDamage;
     private final boolean  targetsSelf;
+    private final HeavyAttack heavyAttack;
 
-    SpecialAbility(SubGlyph subGlyph, boolean dealsDamage, boolean targetsSelf) {
+    SpecialAbility(SubGlyph subGlyph, boolean dealsDamage, boolean targetsSelf, HeavyAttack heavyAttack) {
         this.subGlyph    = subGlyph;
         this.dealsDamage = dealsDamage;
         this.targetsSelf = targetsSelf;
+        this.heavyAttack = heavyAttack;
     }
 
     /** The sub-icon id the intent renderer draws inside the purple SPECIAL frame. */
@@ -69,4 +71,7 @@ public enum SpecialAbility {
 
     /** True when the ability affects the caster rather than the player/board (BUFF_SELF). */
     public boolean targetsSelf() { return targetsSelf; }
+
+    /** The HEAVY this ability resolves as (balance-overhaul order 4, H1), or null when it is not a heavy. */
+    public HeavyAttack heavyAttack() { return heavyAttack; }
 }

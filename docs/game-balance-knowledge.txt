@@ -217,7 +217,13 @@ File: BalanceConfig SECTION 1, plus the stat system in SECTION 7.
 Base pools:
   PLAYER_MAX_HEALTH      = 130   (biggest single forgiveness dial; range 80–200)
   PLAYER_MAX_ARMOR       = 75    (armour soaks part of every hit)
-  ARMOUR_ABSORB_FRACTION = 0.50  (fraction of each hit taken from armour, not HP)
+  ARMOUR_ABSORB_FRACTION = 0.67  (fraction of each hit taken from armour, not HP; was 0.50 until
+                                  balance-overhaul order 4 CP3, H8). A HEAVY hit also SHREDS armour:
+                                  the pool loses absorbed x ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5 (capped at
+                                  what is left; HP damage unaffected). STATUS SHIELD (H9): while armour > 0
+                                  an ENEMY's WEAK / SLOWED / BLINDED / POISONED application is blocked and
+                                  costs ARMOUR_STATUS_COST_FRACTION 0.10 x max armour (min 1); armour 0 ->
+                                  applied; hazard tiles are NOT blocked. "ARMOUR HELD" floater.
 
 VITALITY GROWTH (balance-overhaul order 1, R9): max HP AND max armour grow per
 CHARACTER level — PLAYER_MAX_HEALTH * PLAYER_VITALITY_GROWTH^(level-1) (1.09), armour
@@ -243,12 +249,35 @@ resolves damage in EXACTLY this order — GameMath, docs/game-balance-authority.
   BLOCK sits ABOVE armour ("I braced this turn"); overkill into Block is LOST.
   STATUS DoT (burn/poison/bleed) BYPASSES Block — direct HP loss.
 
+HEAVIES (balance-overhaul order 4, CP1; BalanceConfig SECTION 23; enemy/HeavyAttack):
+  A heavy = a committed-then-resolved attack: Shell Brute CHARGE, Rimeshell LANCE,
+  AREA_STRIKE, Plague Hulk SELF_DESTRUCT. Damage = fraction x on-curve player max HP at the
+  enemy's spawn depth x HEAVY_DAMAGE_SCALE (1.0): CHARGE/LANCE 0.50 (HEAVY_DAMAGE_FRACTION),
+  AREA_STRIKE 0.45, SELF_DESTRUCT 0.55; R-HEAVY band 0.40-0.60; guarded (x GUARD_FRONT_HEAVY
+  0.20, wired in CP3 — plus the RIPOSTE below) <= 0.12. At depth 1 (130 max HP): 65 / 59 / 72. DELETED constants:
+  SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER (2.4), SHELL_BRUTE_CHARGE_STOP_SHORT_CHANCE (0.75 — a
+  reached charge always lands), PLAGUE_HULK_SELF_DESTRUCT_BLAST_DAMAGE_MULTIPLIER (3.0) and
+  _MAX (68), EnemyConstants.AREA_STRIKE_DAMAGE_MULTIPLIER (1.35) and their shims. Boss
+  telegraphed verbs may reach 50% eHP (R-BOSS-VERB-CAP override). See
+  docs/game-balance-authority.txt R-HEAVY.
+
 PLAYER GUARD (directional, conditional eHP) — BalanceConfig SECTION 2 / GUARD_*:
   Tapping GUARD ends the turn and braces the marine.
-  GUARD_FRONT_MULTIPLIER = 0.35 (heavy reduction inside the ±60° facing arc)
+  GUARD_FRONT_MULTIPLIER (0.35) is DELETED (order 4 CP3, H7); the ±60° facing arc is now
+  GUARD_FRONT_ORDINARY 0.50 (ordinary hits) / GUARD_FRONT_HEAVY 0.20 (heavy hits).
+  RIPOSTE: a HEAVY hit that lands in the guarded front arc STUNS its attacker for its next turn
+  (skipNextAction — bypasses resist; the intent reads STUNNED at once) and leaves it VULNERABLE for
+  VULNERABLE_DURATION turns (+50% damage). No riposte vs bosses; none from a self-destruct (the source dies).
+  GUARD has no cooldown.
   GUARD_SIDE/BACK_MULTIPLIER = 1.0 (flanks land at FULL damage — read & rotate)
   GUARD_FRONT/BACK_HALF_ANGLE_DEGREES = 60
   Priced as a 1-turn opportunity cost; self-limiting vs flanks, so no hard cap.
+  HOW A READER ANSWERS A HEAVY (balance-overhaul order 4, CP7b — measured by the sim's TACTICAL policy and
+  banded by S-HEAVY): every committed heavy marks its danger tiles in red; from a marked tile ONE action
+  answers it — a close spread blast STAGGERS it (cancelled, H5), GUARD facing it cuts the hit to <= 12% max HP and
+  ripostes it, or a step/strafe to an unmarked neighbour avoids it (H4). Played: TACTICAL answers 0.99 of the 1114
+  heavies committed at it (NAIVE 0.18). Consequence recorded in the authority doc SECTION 8: a reading player no
+  longer pays the half-pool hits, so S-SUPPLY's COMBAT exit health rose to 0.85 (band 0.55-0.80, OPEN).
 
 STAT-DRIVEN survivability (attribute system, SECTION 7 below):
   TOUGHNESS -> +HP (TGH_HP_PER_POINT=5) and flat reduction (TGH_REDUCTION_PER_POINT=1).
@@ -470,14 +499,16 @@ the 205-eHP start player. eHP / hit / cadence -> hits to kill | hits the player 
   Acid Drone '$'       45 / 24 / 1  -> 3 | 9      SOLDIER (ranged)
   Void Shroud '^'      50 / 25 / 1  -> 4 | 9      SOLDIER (flank x1.6 from behind)
   Mire Wraith '5'      52 / 23 / 1  -> 4 | 9      SOLDIER (ranged acid)
-  Plague Hulk '1'      60 / 23 / 2  -> 4 | 9      SOLDIER (self-destruct, x3.0 capped 68)
+  Plague Hulk '1'      60 / 23 / 2  -> 4 | 9      SOLDIER (self-destruct HEAVY 0.55 max HP)
   Blight Corruptor '*' 48 / 26 / 1  -> 4 | 8      SOLDIER (summoner)
   Auric Sentinel '('   60 / 26 / 2  -> 4 | 8      SOLDIER (18 HP + 42 shard pool)
   Rimeshell Lancer '[' 60 / 24 / 2  -> 4 | 9      SOLDIER (48 HP, flat 5)
   Verdant Spiresower'}'57 / 24 / 1  -> 4 | 9      SOLDIER (45 HP + 12 regen pool)
-  Shell Brute '4'      95 / 35 / 1  -> 7 | 6      BRUISER (charge x2.4 telegraphed)
-  Revenant 'K'         85 / 35 / 1  -> 6 | 6      BRUISER
-  Cinderforge '{'      85 / 36 / 1  -> 6 | 6      BRUISER (75 HP, crust ~3 flat)
+  Shell Brute '4'      95 / 35 / 1  -> 7 | 6      BRUISER (charge HEAVY 0.50 max HP)
+  Revenant 'K'         85 / 35 / 1  -> 6 | 6      BRUISER (lunge HEAVY 0.50 max HP, unpriced; TP 119)
+  Cinderforge '{'      85 / 36 / 1  -> 6 | 6      BRUISER (75 HP, crust ~3 flat; AREA_STRIKE 0.45 heavy
+                                                  priced via the cycle: TP ~122.7 -> 112.2, cycle DPT
+                                                  36 -> 32.9 because the discounted slam < a basic hit)
   Iron Stalker '!'    170 / 42 melee, 30 ranged / 1 -> 12 | 5   MINI_ELITE
 Depth growth: HP x ENEMY_HEALTH_GROWTH^(d-1) (1.139), damage x ENEMY_DAMAGE_GROWTH^(d-1)
 (1.097) — SECTION 10.
@@ -530,17 +561,28 @@ SPECIAL MOVE-SET CADENCES (EnemyConstants):
 SPECIAL VERBS (EnemyConstants + EffectConstants):
   BUFF_SELF  -> EMPOWERED: BUFF_SELF_EMPOWERED_PERCENT=40, duration 3.
   DEBUFF_PLAYER -> SLOW (DEBUFF_SLOW_DURATION_TURNS=3) / BLIND (2) / WEAK (caster
-                   corrodes player output; WEAK_DAMAGE_PERCENT=25).
+                   corrodes player output; WEAK_DAMAGE_PERCENT=35 for 3 turns — order 4).
   SUMMON     -> hard-capped by SUMMON_PER_ENEMY_CAP + SUMMON_ROOM_LIVE_CAP (NOT a
                soft budget), so spawned TP stays bounded.
-  AREA_STRIKE-> the only DAMAGING special; carries a predicted-damage number, dodged
-               by stepping out of the cross radius.
+  AREA_STRIKE-> the only DAMAGING special, and a HEAVY (balance-overhaul order 4): 0.45 of the
+               on-curve player's max HP, committed a full turn ahead with its danger tiles marked
+               (every open tile within Chebyshev AREA_STRIKE_RADIUS_TILES 1 of the caster), dodged by
+               stepping off them, guarded (x0.20 + riposte) or staggered (cancelled).
+HEAVY ASSIGNMENTS (order 4): Shell Brute charge, Rimeshell Lancer lance, Plague Hulk slam + self-destruct,
+  Iron Stalker AREA_STRIKE, and — new in CP5 — the Revenant's WIND_UP lunge (2-3 tiles, 3-turn cooldown) and
+  the Cinderforge Colossus's AREA_STRIKE (move-set at SPECIAL_CADENCE_SLOW), so heavies exist in every region.
+  Priced through the avoidance discount (heavy fraction x (1 - HEAVY_EXPECTED_AVOIDANCE 0.6)); the charge and
+  lance are not priced as specials. Detail: docs/enemy-system.txt (HEAVY DANGER TILES / GUARD RIPOSTE).
 
 STATUS EFFECTS the enemies apply (EffectConstants):
-  BURN_DAMAGE_PER_TURN=4, POISON_DAMAGE_PER_STACK=2 (POISON_MAX_STACKS=5),
+  BURN_TICK_FRACTION=0.03 of host max HP/turn, POISON_TICK_FRACTION=0.015 of host max HP per
+  stack per turn (POISON_MAX_STACKS=6, decays 1 stack/turn; acid hit 2 stacks, toxic tile 2/turn;
+  balance-overhaul order 4 — the old flat 4 / 2 per stack are gone),
   EMPOWERED_DAMAGE_PERCENT=50 (dur 5), VULNERABLE_DAMAGE_PERCENT=50 (max 2 stacks),
-  WEAK_DAMAGE_PERCENT=25, EXPOSED (ignore-Block one hit), BACKSTAB_DAMAGE_PERCENT=30,
-  SLOW_FACTOR=2.0 (dur 3), BLIND_DURATION=2.
+  WEAK_DAMAGE_PERCENT=35, EXPOSED (ignore-Block one hit), BACKSTAB_DAMAGE_PERCENT=30,
+  SLOW_FACTOR=2.0 (dur 3; the Rimeshell lance applies LANCE_SLOW_DURATION_TURNS 2), BLIND_DURATION=2.
+  Every ENEMY-applied WEAK / SLOW / BLIND / POISON is held off the player by armour > 0 (STATUS SHIELD,
+  ARMOUR_STATUS_COST_FRACTION 0.10 of max armour per block, SECTION 3); hazard tiles are not blocked.
 
 BOSS AI (Overseer Hunter-Killer brain — GameBalance BOSS_TACTIC_*): tactic-scoring
 weights (close/far/adds-room/cornered/camping bonuses), per-verb spacing gaps
@@ -555,7 +597,12 @@ special-ability cadence cycle (GameMath.cycleAveragedDamagePerTurn):
                        + summonAmortisedDpt
 Each verb converts to an equivalent-damage number via a pure GameMath.specialEquivalent*
 formula (one per verb):
-    AREA_STRIKE  -> its predicted slam damage (attackDamage * AREA_STRIKE multiplier)
+    AREA_STRIKE  -> HEAVY pricing (balance-overhaul order 4): the slam's depth-1 on-curve
+                    damage (0.45 x max HP) x (1 - HEAVY_EXPECTED_AVOIDANCE 0.6) =
+                    GameMath.heavyExpectedDamageForPricing (replaced attackDamage x 1.35;
+                    Plague Hulk TP ~39 -> ~35, Iron Stalker ~374 -> ~309). The Shell Brute
+                    charge and Lancer lance are NOT separately priced (basic-attack DPT only,
+                    as before).
     BUFF_SELF    -> extra damage the EMPOWERED buff adds over its duration
     DEBUFF WEAK  -> player DPT lost over duration * DEBUFF_TP_EQUIVALENCE (start 0.6 — a
                     defensive verb priced as offence, worth less than dealt damage)
@@ -780,23 +827,41 @@ PLAYED (S-SUPPLY / S-ECONOMY, the sim): TACTICAL leaves COMBAT floors at ~0.79 h
 ================================================================================
 SECTION 13 — TERRAIN HAZARDS (two-sided danger folded into the TP contract)
 ================================================================================
-File: BalanceConfig SECTION 12; hazard/HazardManager.java; GameMath.hazardTileThreatPoints.
+File: BalanceConfig SECTION 12 + SECTION 23 (HAZARD_*); hazard/HazardManager.java, hazard/ExplosiveBarrelManager.java,
+      level/GroupBarrelPlacer.java; GameMath.hazardTileThreatPoints / barrelBlastDamage / groupBarrelRoomCount.
+(balance-overhaul order 4 CP6: hazards are FRACTIONS now — see "ORDER 4 HAZARDS" below; the flat numbers in this
+section's older text are superseded.)
 
 Fire ('i') and toxic ('q') floor tiles tick BURNING/POISONED onto ANY host —
 player AND enemies. That two-sidedness IS the tactic. A hazard tile has no HP, so:
-  hazardTileThreatPoints = hazardDamagePerTurn * HAZARD_THREAT_TURNS_STOOD * posMult
+  hazardTileThreatPoints = hazardDamagePerTurn * HAZARD_FIRE_BURN_TURNS * posMult   (was HAZARD_THREAT_TURNS_STOOD, deleted)
 
 Knobs (BalanceConfig SECTION 12):
   HAZARD_FIRE_LIFETIME_TURNS=3, HAZARD_TOXIC_LIFETIME_TURNS=6.
-  HAZARD_FIRE_BURN_TURNS=2, HAZARD_TOXIC_POISON_TURNS=3.
-  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER=1.5 (enemies burn faster — reward herding).
+  HAZARD_FIRE_BURN_TURNS=2 (HAZARD_TOXIC_POISON_TURNS was DELETED by order 4 CP4 — poison's turns left are its stacks).
+  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER=2.5 (was 1.5; enemies burn faster — reward herding).
   HAZARD_FIRE_SPREAD_CHANCE=0.18 (sub-critical: 3*0.18 < 1, so fire shrinks & dies),
   HAZARD_TOXIC_SPREAD_CHANCE=0.10.
   HAZARD_EXPLOSION_IGNITE_CHANCE=0.50 (barrel -> fire chain).
-  HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS=1, HAZARD_THREAT_TURNS_STOOD=2.
-Actual per-turn hazard damage comes from EffectConstants BURN/POISON magnitudes.
+  HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS=1.
+Actual per-turn hazard damage comes from the BURN_TICK_FRACTION / POISON_TICK_FRACTION magnitudes (SECTION 23).
 
-⚠️ Not-good note: hazard TP is folded in with a fixed "turns stood = 2" assumption;
+ORDER 4 HAZARDS (balance-overhaul order 4, CP6 — H13/H14; contract: authority doc R-HAZARD):
+  Barrel blast: centre 1.2 / orthogonal ring 0.6 x the reference SOLDIER's max HP at the floor's depth
+  (VOID_SHROUD base 50 grown by enemyHealthAtDepth; ExplosiveBarrelManager is told the floor's depth);
+  to the player 0.30 / 0.15 of max HP. Still EXPLOSIVE for matchups. Depth 10: soldier 161, ring 97, centre
+  194 -> one ring leaves a soldier at 40%, two barrels' rings kill it; one ring kills every chaff.
+  Fire tiles burn enemies at BURN_TICK_FRACTION x 2.5 (x FIRE matchup); toxic tiles and the Plague Hulk
+  cloud poison enemies HAZARD_TOXIC_ENEMY_STACKS_PER_TURN 2 stacks a turn at the enemy's own max HP.
+  Placement: COMBAT / ELITE floors only; >= 40% of the rooms (not the start room) holding a group of >= 3
+  get 1-2 'E' barrels within 2 tiles of the group centroid (details in procedural-level-generation.txt).
+
+Played read-out (balance-overhaul order 4 CP7b): the balance simulator's HEAVY REPORT prints the nominal
+hazard damage dealt TO ENEMIES per floor (barrel blasts + source-less fire / toxic DoT ticks) — about 4-5 per
+floor at depths 1-5 for TACTICAL, i.e. the scripted player barely uses hazards yet; the numbers exist so a later
+policy that does can be read against them.
+
+⚠️ Not-good note: hazard TP is folded in with a fixed careless-window assumption (HAZARD_FIRE_BURN_TURNS = 2);
 a careful player stands 0 turns and a careless one stands more, so the hazard
 contribution to a room's real difficulty is a rough average, not a measured value.
 Untested in play.
@@ -812,12 +877,21 @@ damage without warning is banned — a death must feel like "I made a mistake".
 Because the intent system pre-commits every direct attack one turn ahead, this rule
 is satisfied by construction for all committed attacks. Remaining un-telegraphed
 damage is only DoT ticks and environmental hazards.
-Boss hard cap: no single hit > 35% eHP (BalanceConfig SECTION 14).
+Boss verbs (R-BOSS-VERB-CAP, overridden by balance-overhaul order 4): un-telegraphed <= 25% eHP, TELEGRAPHED
+HEAVY verbs up to 50% eHP (BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION); the old flat 35% cap is no longer the telegraphed
+cap (BOSS_HARD_SINGLE_HIT_FRACTION is kept as a constant).
+R-HEAVY EXTENDS THE CONTRACT (order 4): the exception to "keep hits small" is a telegraphed HEAVY — it MUST be
+40-60% of the on-curve max HP (HEAVY_DAMAGE_FRACTION_MIN/MAX), committed >= 1 full player turn ahead, with its exact
+DANGER TILES shown (red floor markers, mini-map fill, 1.5x "!!" intent, off-screen edge pulse), AVOIDABLE from every
+danger tile (H4: a walkable non-danger neighbour exists, else GUARD cuts it to <= HEAVY_GUARDED_MAX_FRACTION 0.12),
+and CANCELLED by a stagger (H5). The 25% cap still binds every ordinary, un-telegraphed hit. The sim's S-HEAVY
+band proves in play that a player who reads the floor answers them (authority doc SECTION 3 / SECTION 8).
 
 ⚠️ Not-good note: the contract is satisfied "by construction" only for attacks that
 go through the intent-commit system. Any new attack path that bypasses it (a new
 special, a scripted boss verb, a hazard burst) can silently violate the cap. The
-BalanceReport TELEGRAPH AUDIT only checks the attacks it knows about.
+BalanceReport TELEGRAPH AUDIT only checks the attacks it knows about. (A new HEAVY must also be a HeavyAttack
+constant, which R-HEAVY iterates, and report its danger tiles — otherwise nothing marks it red.)
 
 
 ================================================================================
@@ -826,21 +900,25 @@ SECTION 15 — STATUS EFFECTS / DAMAGE-OVER-TIME (DoT is damage; it counts towar
 Files: BalanceConfig SECTION 8 (ALL status magnitudes, shared + weapon DoT;
 EffectConstants keeps re-export shims only).
   Rend/BLEED: 2/turn base (+0.5/level, cap 6), 4 turns.
-  Incendiary/BURN: base = THE unified BURN_DAMAGE_PER_TURN (4/turn)
+  Incendiary/BURN: base = THE weapon burn base WEAPON_BURN_BASE_PER_TURN (4/turn)
   (+0.5/level, cap 7), 3 turns (+1 on Incinerator).
   Flamethrower burn: STACKS up to FLAME_BURN_MAX_STACKS=3 per target, each stack
   FLAME_BURN_FRACTION=0.6 x the ladder-scaled impact per turn (7 at depth 1), 4 turns
   (shared timer refreshed by each spray; StatusEffectController.applyStacking).
   Stagger/STUN: STAGGER_STUN_DURATION=1.
-  Shared: BURN 4/turn, POISON 2/stack (max 5), EMPOWERED +50%
-  (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -25%, EXPOSED (ignore Block 1 hit),
+  Shared (order 4): BURN 3% of host max HP/turn, POISON 1.5% of host max HP per stack
+  (max 6, -1 stack/turn), EMPOWERED +50%
+  (5 turns), VULNERABLE +50% (max 2 stacks), WEAK -35% (3 turns from enemies), EXPOSED (ignore Block 1 hit),
   BACKSTAB +30%, SLOW x2.0 (3 turns), BLIND (2 turns).
+  STIM cleanse (order 4 H11): a STIM ('+', the small medkit) also removes POISONED and WEAK ("CLEANSED"); a field
+  medkit only heals. The HUD status row shows each icon's turns left and POISON's stacks ("xN").
 DoT BYPASSES Block (it is the rock-paper-scissors answer to turtling enemies).
 
 RESOLVED (new-game-balancr order 1): the two divergent DoT definitions were UNIFIED.
-BURN has exactly one base (BalanceConfig.BURN_DAMAGE_PER_TURN = 4 — the value the
-game actually applied); INCENDIARY_BURN_PER_TURN_BASE now REFERENCES it (its old
-divergent literal 3 is gone, so Incendiary level-1 burn ticked up 3 -> 4). The
+BURN had exactly one base (BURN_DAMAGE_PER_TURN = 4 — the value the game actually applied).
+RE-STATED by balance-overhaul order 4: status burn/poison are fractions of host max HP
+(BURN_TICK_FRACTION, POISON_TICK_FRACTION) and the weapon burn has its own single base
+(WEAPON_BURN_BASE_PER_TURN = 4; INCENDIARY_BURN_PER_TURN_BASE references it). The
 R-DOT schema rule + shim-integrity reflection audit fail the build if a second
 definition or a diverged shim ever reappears.
 
@@ -1004,6 +1082,17 @@ ceiling, of what needs refinement.
      is fitted (full charge 75) as the PLATED-tank / ranged-single niche under R-ROLE. (SECTION 4)
  14. [RESOLVED by balance-overhaul order 3] R-ROLE credits falloff over each scenario's
      engagement band, not at the muzzle. (SECTION 2, 4)
+
+15. [RESOLVED by decision — balance-overhaul order 4 CP7b] S-SUPPLY was red: TACTICAL's COMBAT exit health is 0.85
+    against the old band [0.55, 0.80] because the scripted player now answers 0.99 of the heavies thrown at it (it
+    used to eat them). Hub decision: SIM_SUPPLY_EXIT_HEALTH_MAX re-based 0.80 -> 0.90 (override clause); re-check
+    in the order-7 feel pass.
+    A heal re-fit does NOT reach it: SUPPLY_AVOIDANCE_FACTOR 0.80/0.90 moved it only 0.85 -> 0.83 (COMBAT heal is
+    already floor-bound at the S4 0.45 'H'); only lowering the S4 floor to 0.15 got to 0.79, reverted.
+    S-SWITCH's hinted-floor sample (11 vs a floor of 10) is thin for the related reason that more TACTICAL runs
+    now survive long enough to hit the navigator's pre-existing stalls (177/200). (authority doc SECTION 8)
+16. [OPEN — order 4] Every heavy in the sim is a depth 1-5 heavy (the policies stall on floors 1-3), so S-HEAVY and the
+    HEAVY REPORT say nothing yet about depth 6-25; the R-HEAVY audit (arithmetic) covers 1..25, the play does not.
 
 BOTTOM LINE: the balance model is a coherent, well-documented SKELETON with a solid
 math contract, but it is provisional throughout, unplaytested, incomplete in its

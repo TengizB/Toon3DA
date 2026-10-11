@@ -6,6 +6,7 @@ import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.render.ImpactEffectSystem;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.List;
 
@@ -29,6 +30,17 @@ public final class StatusEffectController {
 
     private final Enemy[] pendingDoTDeaths = new Enemy[MAX_PENDING_DOT_DEATHS];
     private int pendingDoTDeathCount = 0;
+
+    /**
+     * Damage ticked into ENEMIES by effects no one applied — fire and toxic hazard tiles and the Plague Hulk's
+     * cloud carry a null source. Observation only (the balance simulator's HEAVY REPORT reads it).
+     */
+    private int hazardDamageToEnemies = 0;
+
+    /** Running total of hazard DoT damage ticked into enemies (see the field note). */
+    public int getHazardDamageToEnemies() {
+        return hazardDamageToEnemies;
+    }
 
     private EventTextSystem eventTextSystem;
     // Nullable — wired by World. When present, each enemy DoT tick spawns a small colored
@@ -57,6 +69,11 @@ public final class StatusEffectController {
      * @param source    who inflicted it — used for XP attribution if DoT delivers the kill
      */
     public void apply(StatusHost host, StatusType type, int turns, int magnitude, Object source) {
+        if (type == StatusType.POISONED) {
+            // Poison has no timer of its own: it is a stack count that decays by 1 a turn (order 4, H10).
+            applyPoisonStacks(host, 1, magnitude, source);
+            return;
+        }
         StatusResistance resistance = host.getStatusResistance();
         if (resistance.isImmune(type)) {
             return;
@@ -100,7 +117,8 @@ public final class StatusEffectController {
      *   - first application: stacks = 1, magnitude = the per-stack value, timer = duration;
      *   - each further application: stacks + 1 (capped at {@code maxStacks}), the SHARED timer refreshed to
      *     the longer of the two, the per-stack magnitude the larger of the two, the source re-attributed;
-     *   - a tick deals magnitude x stacks; all stacks expire together.
+     *   - a tick deals magnitude x stacks; all stacks expire together (POISON is the exception: it
+     *     decays by one stack a turn, see {@link #applyPoisonStacks}).
      * Immunity and resistance scale duration and magnitude exactly as {@link #apply} does. A plain
      * {@link #apply} on an already-stacked effect only refreshes it (REFRESH_DURATION) — the stack count
      * grows only through this method.
@@ -124,6 +142,46 @@ public final class StatusEffectController {
             existing.magnitude      = Math.max(existing.magnitude, effectiveMagnitude);
         }
         existing.source = source;
+    }
+
+    /**
+     * Applies {@code stacksToAdd} POISON stacks (balance-overhaul order 4, H10). The per-stack magnitude is
+     * resolved HERE from the host's max HP ({@link GameMath#statusTickDamage}, POISON_TICK_FRACTION) so it
+     * never goes stale with depth, and stored in the effect so the tick and the HUD keep reading
+     * {@code magnitude x stacks}. Stacks add up to POISON_MAX_STACKS and DECAY by 1 after each tick;
+     * {@code remainingTurns} is kept equal to the stack count, which is exactly how many ticks are left
+     * (the HUD's turn count stays truthful). Immunity blocks it; resistance scales the per-stack damage.
+     */
+    public void applyPoisonStacks(StatusHost host, int stacksToAdd, Object source) {
+        applyPoisonStacks(host, stacksToAdd,
+                GameMath.statusTickDamage(EffectConstants.POISON_TICK_FRACTION, host.getStatusMaxHealth(), 1),
+                source);
+    }
+
+    private void applyPoisonStacks(StatusHost host, int stacksToAdd, int magnitudePerStack, Object source) {
+        StatusResistance resistance = host.getStatusResistance();
+        if (resistance.isImmune(StatusType.POISONED) || stacksToAdd <= 0) {
+            return;
+        }
+        int effectiveMagnitude = Math.round(magnitudePerStack * resistance.damageMultiplier(StatusType.POISONED));
+        StatusEffect existing  = host.getActiveEffects().get(StatusType.POISONED);
+        int previousStacks     = existing.isActive() ? Math.max(1, existing.stacks) : 0;
+        existing.stacks         = Math.min(previousStacks + stacksToAdd, EffectConstants.POISON_MAX_STACKS);
+        existing.magnitude      = previousStacks == 0 ? effectiveMagnitude : Math.max(existing.magnitude, effectiveMagnitude);
+        existing.remainingTurns = existing.stacks;
+        existing.source         = source;
+    }
+
+    /**
+     * Applies a BURNING status whose per-turn damage is BURN_TICK_FRACTION of the host's max HP (status /
+     * hazard fire; weapon burns keep their own R-ROLE-fitted magnitudes through {@link #apply}).
+     * {@code damageMultiplier} lets the caller scale it (the enemy-side fire-tile multiplier and matchup).
+     */
+    public void applyFractionBurn(StatusHost host, int turns, float damageMultiplier, Object source) {
+        int perTurn = Math.max(1, Math.round(
+                GameMath.statusTickDamage(EffectConstants.BURN_TICK_FRACTION, host.getStatusMaxHealth(), 1)
+                        * damageMultiplier));
+        apply(host, StatusType.BURNING, turns, perTurn, source);
     }
 
     /**
@@ -153,12 +211,9 @@ public final class StatusEffectController {
 
             applyPlayerTickEffect(player, effect, type);
 
-            effect.remainingTurns--;
-            if (effect.remainingTurns <= 0) {
-                effect.reset();
-                if (eventTextSystem != null && type == StatusType.STUNNED) {
-                    eventTextSystem.spawnWithColor("STUN CLEARED", EventTextSystem.COLOR_WHITE);
-                }
+            if (!advanceEffectTimer(effect)
+                    && eventTextSystem != null && type == StatusType.STUNNED) {
+                eventTextSystem.spawnWithColor("STUN CLEARED", EventTextSystem.COLOR_WHITE);
             }
         }
     }
@@ -188,6 +243,10 @@ public final class StatusEffectController {
             StatusEffect effect = enemy.getActiveEffects().get(type);
             if (!effect.isActive()) continue;
 
+            if (effect.source == null) {
+                if (type == StatusType.BURNING)       hazardDamageToEnemies += effect.magnitude * Math.max(1, effect.stacks);
+                else if (type == StatusType.POISONED) hazardDamageToEnemies += effect.magnitude * effect.stacks;
+            }
             applyEnemyTickEffect(enemy, effect, type);
 
             if (!enemy.isAlive()) {
@@ -202,11 +261,28 @@ public final class StatusEffectController {
 
             spawnDoTTickFeedback(enemy, type);
 
-            effect.remainingTurns--;
-            if (effect.remainingTurns <= 0) {
-                effect.reset();
-            }
+            advanceEffectTimer(effect);
         }
+    }
+
+    /**
+     * Advances one effect's clock after its tick. POISON decays by ONE STACK (order 4, H10) and keeps
+     * remainingTurns equal to the stacks left; everything else loses one turn. Resets the effect at zero.
+     *
+     * @return true while the effect is still active
+     */
+    private static boolean advanceEffectTimer(StatusEffect effect) {
+        if (effect.type == StatusType.POISONED) {
+            effect.stacks--;
+            effect.remainingTurns = effect.stacks;
+        } else {
+            effect.remainingTurns--;
+        }
+        if (effect.remainingTurns <= 0) {
+            effect.reset();
+            return false;
+        }
+        return true;
     }
 
     /**

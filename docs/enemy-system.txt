@@ -384,7 +384,7 @@ labels them:
     the brute COMMITS a WIND_UP (IntentVerb.WIND_UP, EnemyState.WINDING_UP, triggerTelegraph(),
     chargeDirectionColumn/Row captured) — a rim-flash telegraph shown for the whole player turn. The
     next turn executeWindUp() rushes straight down the committed lane and, if it ends cardinally
-    adjacent, hits for base * SHELL_BRUTE_CHARGE_DAMAGE_MULTIPLIER. If the player sidestepped off the
+    adjacent, ALWAYS lands the HEAVY CHARGE (HeavyAttack.CHARGE: 0.50 of the on-curve player's max HP, Enemy.heavyDamage; balance-overhaul order 4 removed the stop-short chance). If the player sidestepped off the
     lane the rush whiffs and the brute is left in a punishable recovery (skipNextAction). Counterplay:
     "sidestep the charge, then punish."
   - VOID_SHROUD — FLANKER (computeFlankerPlan / isBehindPlayerFacing / stepTowardTile). When not
@@ -439,10 +439,29 @@ labels them:
     TP pricing: absorption is priced as an ARMOUR POOL (EnemyType.armorPool -> 70), because absorbing a
     hit IS extra effective HP; see BalanceConfig.AURIC_SHARD_ARMOR_POOL for the derivation and for the
     stated RISK that one averaged pool cannot express a loadout-dependent eHP swing.
+  - HEAVY ASSIGNMENTS (balance-overhaul order 4, CP5 — H1/H5):
+      REVENANT LUNGE: EnemyType.REVENANT.heavyWindUp() = CHARGE, so computeNextPlan routes it through the
+        Shell Brute's computeChargerPlan / canBeginCharge / performCharge (any melee type whose
+        heavyWindUp() == CHARGE). Per-type DATA, no switch: chargeTriggerMinTiles()/chargeTriggerMaxTiles()
+        (Brute 2..5 default; Revenant REVENANT_LUNGE_TRIGGER_MIN/MAX_TILES 2..3 — a lunge is short) and
+        chargeCooldownTurns() (Brute 0; Revenant REVENANT_LUNGE_COOLDOWN_TURNS 3 of its OWN turns,
+        Enemy.lastChargeCommitTurn vs turnCounter). Off cooldown / out of lane it keeps its ordinary melee
+        behaviour (the charger tail is identical to computeMeleePlan). A whiffed lunge stuns it for one
+        turn like the Brute. Not priced in TP (charge/lance are not priced as specials — CP1 decision),
+        so the Revenant stays 119 TP.
+      CINDERFORGE AREA_STRIKE: moveSet() = {AREA_STRIKE} at SPECIAL_CADENCE_SLOW; crust/trail stay passive
+        hooks. Priced through the cycle average (heavy fraction x (1 - HEAVY_EXPECTED_AVOIDANCE)).
+      H5 STAGGER CANCELS A HEAVY: stagger / riposte / R6 stun set skipNextAction; phase B skips execution
+        and clears the heavy, and phase C plans afresh, so a staggered CHARGE, LANCE or AREA_STRIKE never
+        resolves — it fires only if re-committed with a new full-turn telegraph. SELF_DESTRUCT: stagger
+        CAN reach a primed Hulk (tryStaggerEnemy has no exclusion); the cancelled turn RESETS
+        selfDestructTurnsRemaining to PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS (stays primed/sticky, re-braces
+        from scratch) instead of merely pausing the countdown.
   - CINDERFORGE_COLOSSUS — COOLING CRUST + MOLTEN TRAIL
     (.claude/agents/ideas/elemental-golem-cinderforge-colossus.txt). THE GAME PUNISHES HESITATION: it
     hardens while you hide and burns the ground you would have retreated across. Like the Sentinel it is
-    plain state + two PASSIVE hooks, NOT a SpecialAbility verb, so the SpecialAbility catalogue and
+    plain state + two PASSIVE hooks (CP5 later added the existing AREA_STRIKE to its move-set, see HEAVY
+    ASSIGNMENTS above; the crust/trail themselves add no SpecialAbility), so the SpecialAbility catalogue and
     BalanceSchema.SPECIAL_VERB_PRICING are untouched and the COVERAGE rule stays green. Touch points:
       CRUST   Enemy.crustStacks (0..CINDERFORGE_CRUST_MAX_STACKS). GAIN: at the END of the Colossus's own
               turn (EnemyManager.advanceCrustCooling), if it took NO damage since its previous turn,
@@ -538,12 +557,33 @@ labels them:
 All hooks respect the cardinal-line constraint; the charge only fires down a true cardinal lane, and the
 lance only ever commits down a true row or column and never re-targets after commit.
 
+STATUS MAGNITUDES (balance-overhaul order 4, H10-H12 — CP4):
+  Status damage is a FRACTION of the host's max HP, resolved at application time
+  (GameMath.statusTickDamage = max(1, round(fraction x maxHP)) x stacks; Player/Enemy implement
+  StatusHost.getStatusMaxHealth). BURN (hazard fire) = BURN_TICK_FRACTION 0.03 per turn (enemies add
+  HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER and the FIRE matchup). POISON = POISON_TICK_FRACTION 0.015 per stack
+  per turn, max POISON_MAX_STACKS 6; stacks DECAY by 1 after each tick (turns left == stacks).
+  Acid ranged hits (Mire Wraith / Acid Drone, after their chance roll and the armour shield) apply
+  POISON_STACKS_PER_ACID_HIT 2 stacks; a toxic tile applies POISON_STACKS_PER_TOXIC_TURN 2 stacks per turn
+  stood to the PLAYER (unshielded) and HAZARD_TOXIC_ENEMY_STACKS_PER_TURN 2 to an ENEMY (its own max HP; the Plague Hulk death
+  cloud is toxic tiles). Fire tiles burn an enemy at BURN_TICK_FRACTION x HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER 2.5 x the
+  FIRE matchup.
+  WEAK = -35% outgoing for 3 turns (one percent for both directions). The Rimeshell lance SLOWS the player
+  for LANCE_SLOW_DURATION_TURNS 2 on a connecting beam, through armourBlocksStatus. Weapon burns
+  (Incendiary, Incinerator) keep their R-ROLE damage (WEAPON_BURN_BASE_PER_TURN).
+  STIM cleanse (H11): using a STIM ('+', MedicalTier.STIM / the small medkit, from the HEAL button or the
+  inventory) also removes POISONED and WEAK (Player.cleansePoisonAndWeak) and shows "CLEANSED" only when
+  something was removed; a field medkit heals only.
+  HUD (H12): the status row shows each icon's turns left; POISON shows its stacks as "xN".
+
 TERRAIN HAZARDS (Pillar 3) — HazardManager (hazard pkg) owns a two-sided fire/toxic chain-reaction
 system, ticked once per turn by HazardTickSubscriber (before the status tick so a tile bites the
 same turn you stand in it). Tiles 'i' (fire) and 'q' (toxic) apply the existing BURNING/POISONED
 status to ANY host on them — player AND enemies. Fire spreads along spreadable floor/stain tiles
 and chain-detonates explosive barrels (and a detonation can ignite fire back onto its neighbours);
-toxic is a static area-denial pool. Knobs in BalanceConfig SECTION 12; per-tile Threat-Point cost
+toxic is a static area-denial pool. A barrel's blast (ExplosiveBarrelManager) is a FRACTION: centre 1.2 / ring 0.6
+of the reference soldier's HP at the floor's depth for enemies (still EXPLOSIVE), 0.30 / 0.15 of max HP for the
+player (balance-overhaul order 4 H13). Knobs in BalanceConfig SECTION 12 + SECTION 23; per-tile Threat-Point cost
 (GameMath.hazardTileThreatPoints) is printed by BalanceReport's HAZARDS section so a hazard room's
 contribution to the floor TP is auditable.
 
@@ -595,3 +635,92 @@ INCINERATOR BURN STACKS: each cone hit adds one stack (StatusEffectController.ap
 FLAME_BURN_MAX_STACKS (3); stacks share one timer (refreshed to the longer), a tick deals
 per-stack magnitude x stacks, and all expire together. Burn keeps ticking out of the cone, can kill
 (attributed to the player) and vanishes with the enemy.
+
+HEAVY DANGER TILES (balance-overhaul order 4, H3/H4/H15):
+  Every committed heavy (HeavyAttack: CHARGE, LANCE, AREA_STRIKE, SELF_DESTRUCT) lists the exact tiles it
+  will hit at COMMIT time, in PlannedAction.dangerTileColumns/dangerTileRows[0..dangerTileCount) with
+  PlannedAction.heavyAttack set (null otherwise). Buffers are pre-allocated (EnemyConstants.
+  HEAVY_DANGER_TILE_CAPACITY = 32); every PlannedAction.set* resets them.
+  Shapes (HeavyAttack.dangerShape(), built by the per-constant DangerShape.build -> GameMath.dangerTilesFor*):
+    LANE   (CHARGE, LANCE): tiles 1..reach along the locked direction, stopping BEFORE the first blocker.
+           CHARGE reach = the ENEMY's type.chargeTriggerMaxTiles() + 1 (rush then strike the adjacent tile):
+           HeavyAttack.CHARGE.dangerReachTiles() stays the Shell Brute's 6 (the BalanceSchema H4 geometry
+           proof), but EnemyManager.refreshHeavyDangerTiles overrides the reach for CHARGE from the enemy,
+           so a Revenant (max 3) marks 4 tiles and its markers match the real lunge;
+           LANCE reach = the Lancer's attackRangeTiles (identical to executeLanceBeam).
+    SQUARE (AREA_STRIKE): every open tile within Chebyshev AREA_STRIKE_RADIUS_TILES, caster excluded.
+    CROSS  (SELF_DESTRUCT): caster tile + four arms out to PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES,
+           each arm stopping at the first wall (identical to applySelfDestructBlast).
+  Blockers: LANE and SQUARE use EnemyManager.isLanceBlocked (bounds, wall, closed door, solid prop,
+  column, spire); CROSS uses walls/bounds only.
+  Lifecycle: written at commit (computeChargerPlan, computeLancerPlan, commitSpecial for AREA_STRIKE,
+  commitSelfDestruct every re-commit); rebuilt from the new tile with the same locked direction after a
+  knockback; cleared on stagger, on the R6 skip-turn path and once the plan has executed. A dead or boss
+  enemy is never reported. Each heavy commit calls announceWindUp (existing WIND_UP voice; the
+  self-destruct re-commits stay silent after the first prime).
+  Queries (no allocation): EnemyManager.findHeavyThreatAt(column, row) -> first living non-boss Enemy
+  whose non-STUNNED committed heavy lists the tile, else null; isHeavyDangerTile(column, row).
+  H4: BalanceSchema.heavyResults() builds each shape on an open board with the same GameMath functions
+  and asserts GameMath.everyDangerTileHasSafeNeighbour (subject "<heavy> avoidable"); the cornered case
+  is covered by the guarded-fraction line (<= HEAVY_GUARDED_MAX_FRACTION).
+
+  Visuals (H15/H16, balance-overhaul order 4 CP2b; all cosmetic, read-only against PlannedAction; draw
+  guard: enemy alive && plan.heavyAttack != null && plan.verb != STUNNED; CROSS skips index 0 = caster):
+    3D floor markers  EnemyRenderer pass 1.65 (after the SUMMON pass, before the boss telegraph pass):
+                      a procedural 32x32 ring+disc texture (built once, disposed) drawn as a floor-flattened
+                      billboard per danger tile; colour (0.95,0.15,0.10), alpha pulses 0.45..0.90 at 3 Hz on
+                      the shared statusAnimationClock; same behind-player cull, 16-tile max distance and
+                      centre-column wall Z occlusion as the summon marker. Plain alpha blend (not additive).
+                      Like the other telegraph passes it ignores no setting: none exists to respect.
+    Mini-map          LevelRenderer: red fill (alpha 0.50) on each danger tile, drawn before the enemy dots.
+    Intent icon       EnemyRenderer intent pass: heavy icons drawn at HEAVY_INTENT_ICON_SCALE (1.5x), frame
+                      tinted the marker red, plus a red "!!" glyph (two bars with dots) BESIDE the icon
+                      (the damage-number band owns the space below). The pass-1 headroom reservation is
+                      scaled by 1.5 for heavies so the cluster still clears the screen top.
+    Edge pulse        World.updateHeavyEdgePulse (update path) -> HitVignetteRenderer.setHeavyEdgeSideMask:
+                      when the player's tile is a danger tile and the source is off-screen
+                      (GameMath.offscreenSideMask), a red band (14% of the width, alpha 0.25..0.70 at 3 Hz)
+                      pulses on the source's side; a source BEHIND the player pulses BOTH edges.
+    Constants: EnemyConstants HEAVY_MARKER_* / HEAVY_MINIMAP_ALPHA / HEAVY_INTENT_*; EffectConstants
+    HEAVY_EDGE_PULSE_*.
+
+GUARD RIPOSTE (balance-overhaul order 4, H7 — CP3):
+  Player.applyDirectionalDamage(amount, attackerX, attackerY, heavy) returns TRUE when the hit landed in the
+  GUARDED FRONT arc (+/-60 degrees of facing). Front multiplier = GUARD_FRONT_ORDINARY 0.50 (ordinary) or
+  GUARD_FRONT_HEAVY 0.20 (heavy); side/back x1.0. The heavy sites (EnemyManager.performCharge,
+  executeLanceBeam, executeAreaStrike, applySelfDestructBlast) pass heavy = true. When a heavy is
+  front-guarded, EnemyManager.applyGuardRiposte(enemy): skipNextAction = true (a direct set, so a riposte
+  ALWAYS stuns — it bypasses the status resist table), applyVulnerableStatus(VULNERABLE_DURATION), floater
+  "RIPOSTE". No riposte vs a Boss, and none from SELF_DESTRUCT (the source dies that turn). The STUNNED
+  intent is shown at once: phaseCCommit commits STUNNED (plan.set, danger tiles cleared) for any enemy whose
+  skipNextAction is still set after phase B — which also makes the missed-charge recovery read STUNNED. A
+  stagger consumes skipNextAction in phase B, so its path is unchanged. GUARD has no cooldown.
+
+ARMOUR SHIELD (balance-overhaul order 4, H8/H9 — CP3):
+  ARMOUR_ABSORB_FRACTION 0.67. A HEAVY hit shreds the plate: the pool loses absorbed x
+  ARMOUR_HEAVY_SHRED_MULTIPLIER 1.5 (GameMath.armorShredCost, capped at the pool); HP damage is unchanged.
+  STATUS SHIELD: Player.tryArmourShieldStatus(type) — while armour > 0, an ENEMY's WEAK / SLOWED / BLINDED /
+  POISONED application is blocked, costs max(1, round(ARMOUR_STATUS_COST_FRACTION 0.10 x max armour)) (capped
+  at what is left) and shows "ARMOUR HELD" (armour-bar blue). Armour exactly 0 -> applied. Routed at every
+  enemy -> player site, via EnemyManager.armourBlocksStatus: executeDebuffPlayer (the WEAK tip shows only if
+  WEAK applied) and applyRangedAttackStatusEffect (acid POISON, after the chance roll). HazardManager's
+  fire/toxic applications are NOT routed — the floor is the counter-play there.
+
+HEAVY OUTCOME OBSERVATION (balance-overhaul order 4, CP7b — headless, sim-facing, no gameplay effect):
+  enemy/HeavyOutcomeListener (installed with EnemyManager.setHeavyOutcomeListener, nullable, a null check when
+  absent) reports what became of each heavy committed AT the player — onHeavyCommittedAtPlayer(enemy, kind) fires
+  once per committed instance at the end of phase C when the player's CURRENT tile is in the fresh plan's danger
+  set (Enemy.trackedHeavyKind marks the open instance, so a self-destruct re-telegraphing its countdown every turn
+  is one instance); onHeavyResolved(enemy, kind, HeavyOutcome) fires exactly once for it:
+    STAGGERED     phase B found skipNextAction set (stagger, riposte stun, R6 status stun) before the heavy ran;
+    AVOIDED / GUARDED / LANDED  the heavy executed: the four hit sites call noteHeavyHit(frontGuarded) with
+                  Player.applyDirectionalDamage's return, so a front-arc hit is GUARDED, any other hit LANDED, no
+                  hit AVOIDED (a missed charge, a lane the player left, a slam the player stepped out of). A
+                  self-destruct still counting down is NOT resolved; the detonation resolves it BEFORE the
+                  deferred kill, so it is never also KILLED_FIRST;
+    KILLED_FIRST  killEnemy found the instance still open (the source died before resolving).
+  onArmourBlockedStatus() fires from armourBlocksStatus (H9). Hazard damage dealt to enemies is read from
+  StatusEffectController.getHazardDamageToEnemies() (source-less BURNING / POISONED ticks) and
+  ExplosiveBarrelManager.getEnemyBlastDamageDealt() (nominal barrel damage). The simulator turns all of it into
+  the HEAVY REPORT and the S-HEAVY band (docs/game-balance-authority.txt SECTION 3 / SECTION 8). The killing
+  blow was a heavy = a LANDED/GUARDED heavy resolved with the player dead afterwards.

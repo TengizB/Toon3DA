@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
@@ -214,6 +215,34 @@ public final class SimView {
             return true;
         }
         return false;
+    }
+
+    // -------------------------------------------------------------------------
+    // HEAVY telegraphs — the red floor markers the player is shown (balance-overhaul order 4, CP7b)
+    // -------------------------------------------------------------------------
+
+    /** The living enemy whose committed heavy lists the marine's CURRENT tile as a danger tile, or null. */
+    public Enemy heavyThreatOnMyTile() {
+        return enemyManager.findHeavyThreatAt(playerTileColumn(), playerTileRow());
+    }
+
+    /** True when ANY committed heavy lists the tile (the union of every danger set — the red floor). */
+    public boolean isHeavyDangerTile(int tileColumn, int tileRow) {
+        return enemyManager.isHeavyDangerTile(tileColumn, tileRow);
+    }
+
+    /**
+     * True when the enemy sits inside the marine's GUARD front arc — the arc a guarded heavy is cut to the
+     * heavy fraction in (the same {@link GameMath#guardFacingMultiplier} the damage pipeline uses).
+     */
+    public boolean isInGuardFrontArc(Enemy enemy) {
+        float frontMultiplier = GameBalance.GUARD_FRONT_HEAVY;
+        float multiplier = GameMath.guardFacingMultiplier(
+                player.directionX, player.directionY, player.positionX, player.positionY,
+                enemy.worldCenterX(), enemy.worldCenterY(),
+                frontMultiplier, GameBalance.GUARD_SIDE_MULTIPLIER, GameBalance.GUARD_BACK_MULTIPLIER,
+                GameBalance.GUARD_FRONT_HALF_ANGLE_DEGREES, GameBalance.GUARD_BACK_HALF_ANGLE_DEGREES);
+        return multiplier == frontMultiplier && frontMultiplier < GameBalance.GUARD_SIDE_MULTIPLIER;
     }
 
     // -------------------------------------------------------------------------

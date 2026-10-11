@@ -262,6 +262,11 @@ public class PlayerController {
                     eventTextSystem.spawnWithColor("+" + amount + " HP", EventTextSystem.COLOR_GREEN);
                 }
             }
+            // H11: a STIM also cleanses POISONED and WEAK (a field medkit does not).
+            if (tier == MedicalTier.STIM && amount > 0 && player.cleansePoisonAndWeak()
+                    && eventTextSystem != null) {
+                eventTextSystem.spawnWithColor("CLEANSED", EventTextSystem.COLOR_GREEN);
+            }
             finishAction(true, TickCause.HEAL);
         }
     }
@@ -327,6 +332,8 @@ public class PlayerController {
     private MedicalTier chooseHealTier(int currentHealth, int maxHealth) {
         if (itemInventory == null) return MedicalTier.FIELD_MEDKIT;
         int stimCount = itemInventory.countOf(ItemType.MEDKIT_SMALL);
+        // A STIM also cleanses POISON / WEAK (balance-overhaul order 4, H11): prefer it while either is active.
+        if (stimCount > 0 && player.hasCleansableStatus()) return MedicalTier.STIM;
         if (stimCount > 0) {
             int medkitCount     = itemInventory.countOf(ItemType.MEDKIT_LARGE);
             int healthAfterStim = currentHealth + MedicalTier.STIM.healAmountFor(maxHealth);
@@ -529,7 +536,10 @@ public class PlayerController {
             if (gameAudio != null) gameAudio.playUi(GameSoundId.ACTION_DENIED);   // order 7
             return;
         }
-        if (player.getHealth() >= player.getMaxHealth()) {
+        // At full HP the HEAL button still works when a STIM can cleanse POISON / WEAK (H11).
+        boolean canCleanse = player.hasCleansableStatus()
+                && itemInventory != null && itemInventory.countOf(ItemType.MEDKIT_SMALL) > 0;
+        if (player.getHealth() >= player.getMaxHealth() && !canCleanse) {
             if (eventTextSystem != null) eventTextSystem.spawn("ALREADY FULL");
             if (gameAudio != null) gameAudio.playUi(GameSoundId.ACTION_DENIED);   // order 7
             return;
