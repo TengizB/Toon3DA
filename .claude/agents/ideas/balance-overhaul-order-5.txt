@@ -360,6 +360,11 @@ DECISIONS
   D4  PK1 breakpoint for WILDFIRE is measured on an integer resource metric — fuel / sprays spent to
       clear its group scenario (owner, 2026-10-11) — because its fights end inside one turn and a TTK
       breakpoint can never move. Its >= 10% felt gain stays on its TTK niche.  (2026-10-11)
+  D5  WILDFIRE RE-SCOPED (owner, 2026-10-11): under D4 it still changed no integer in any
+      reference fight (spray + first tick already clears S5; fuel 3->3 at depths 1-20). New rule:
+      a burning enemy that dies spreads its FULL burn stacks to its neighbours (not one stack),
+      plus +1 burn turn per rank; 3 ranks. Tuned to pass PK1 / PK2 honestly; D4's resource
+      breakpoint metric still applies to it.  (2026-10-11)
 
 
 OPEN QUESTIONS
