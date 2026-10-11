@@ -212,3 +212,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
      re-base 0.80->0.90 (order 7 owns it with HEAVY_DAMAGE_SCALE). N4 Revenant gained a 50% lunge with TP
      unchanged (119) — re-check in order 7. N5 barrel quota counts only rooms that can safely host a barrel
      (deliberate reading of H14). Nit left: `Player.tryArmourShieldStatus` switches on StatusType.
+- **OWNER RULINGS (2026-10-11):** B1 closed — A6 amended to the two-barrel scene (idea D4). N3 accepted — S-SUPPLY
+  0.90 stays, order 7 revisits (idea D5). IMPLEMENTATION NOTE written. STILL OPEN: B2 desktop check (no display in
+  this container) — reviewer made it blocking, so STATUS stays IN PROGRESS until someone runs `./gradlew lwjgl3:run`
+  and records A2/A3/A4 + AS3 here; then CP7c closes (IMPLEMENTED + date).
