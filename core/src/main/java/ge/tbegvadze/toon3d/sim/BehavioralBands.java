@@ -21,7 +21,8 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *
  * <ul>
  *   <li>S-GATE     — the hoarder can never clear the first boss (the headline guarantee)</li>
- *   <li>S-FAIR     — deaths land in the intended depth window and read as fair</li>
+ *   <li>S-FAIR     — the RUN OUTCOME of the finite 25-floor run (win rates, reach, death depths, the first boss —
+ *                    balance-overhaul order 6, F8) and deaths that read as fair</li>
  *   <li>S-SKILL    — playing well is worth depths; the gap IS the difficulty range</li>
  *   <li>S-ROUTE    — the priced map's drain survives contact with play</li>
  *   <li>S-ECONOMY  — the supply a played floor yields tracks the supply its planner put down</li>
@@ -52,7 +53,7 @@ public final class BehavioralBands {
 
         if (hoarder != null)  results.addAll(gateResults(hoarder));
         if (hoarder != null)  results.add(lagResult(hoarder));
-        if (tactical != null) results.addAll(fairResults(tactical));
+        if (tactical != null) results.addAll(fairResults(tactical, naive));
         if (tactical != null && naive != null) results.add(skillResult(tactical, naive));
         if (tactical != null) results.add(routeResult(tactical));
         if (tactical != null) results.addAll(economyResults(tactical));
@@ -164,15 +165,59 @@ public final class BehavioralBands {
                 hoarder.runCount() + " seeds; " + hoarder.stalledRunCount() + " stalled");
     }
 
-    /** S-FAIR: the intended run length, and deaths the player could see coming. */
-    private static List<RuleResult> fairResults(PolicySummary tactical) {
+    /**
+     * S-FAIR — THE RUN OUTCOME (balance-overhaul order 6, F8; REPLACES the TACTICAL median-death-depth band
+     * [8, 14]) — and deaths the player could see coming. Every depth-derived line rides the navigation waiver.
+     */
+    private static List<RuleResult> fairResults(PolicySummary tactical, PolicySummary naive) {
         List<RuleResult> results = new ArrayList<>();
-        float medianDepth = tactical.medianEndingDepth();
-        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL median death depth",
-                medianDepth, BalanceConfig.SIM_TARGET_DEPTH_MIN, BalanceConfig.SIM_TARGET_DEPTH_MAX,
-                medianDepth >= BalanceConfig.SIM_TARGET_DEPTH_MIN
-                        && medianDepth <= BalanceConfig.SIM_TARGET_DEPTH_MAX,
-                tactical.runCount() + " seeds; " + tactical.stalledRunCount() + " stalled"));
+        String stallNote = tactical.runCount() + " seeds; " + tactical.stalledRunCount() + " stalled";
+
+        float winRate = tactical.winRate();
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL win rate",
+                winRate, BalanceConfig.SIM_TACTICAL_WIN_RATE_MIN, BalanceConfig.SIM_TACTICAL_WIN_RATE_MAX,
+                winRate >= BalanceConfig.SIM_TACTICAL_WIN_RATE_MIN && winRate <= BalanceConfig.SIM_TACTICAL_WIN_RATE_MAX,
+                "clears the depth-" + BalanceConfig.RUN_FINAL_DEPTH + " boss; " + stallNote));
+
+        float reach = tactical.reachedDepthFraction(BalanceConfig.SIM_TACTICAL_REACH_DEPTH);
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH,
+                reach, BalanceConfig.SIM_TACTICAL_REACH_FRACTION_MIN, 1f,
+                reach >= BalanceConfig.SIM_TACTICAL_REACH_FRACTION_MIN, stallNote));
+
+        float lossDepth = tactical.medianLossDepth();
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL median death depth (losses)",
+                lossDepth, BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MIN, BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MAX,
+                lossDepth >= BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MIN
+                        && lossDepth <= BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MAX, stallNote));
+
+        int firstBossDepth = BalanceConfig.BOSS_TABLE_DEPTHS[0];
+        int tacticalReachingBoss = tactical.runsReachingDepth(firstBossDepth);
+        float tacticalBossClear = tacticalReachingBoss == 0 ? 0f
+                : tactical.runsClearingFirstBoss() / (float) tacticalReachingBoss;
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL first-boss clears (of seeds reaching it)",
+                tacticalBossClear, BalanceConfig.SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN, 1f,
+                tacticalReachingBoss > 0 && tacticalBossClear >= BalanceConfig.SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN,
+                tactical.runsClearingFirstBoss() + " of " + tacticalReachingBoss + " seeds that reached depth " + firstBossDepth));
+
+        if (naive != null) {
+            float naiveWin = naive.winRate();
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE win rate",
+                    naiveWin, 0f, BalanceConfig.SIM_NAIVE_WIN_RATE_MAX,
+                    naiveWin <= BalanceConfig.SIM_NAIVE_WIN_RATE_MAX, naive.runCount() + " seeds"));
+            float naiveDepth = naive.medianEndingDepth();
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE median death depth",
+                    naiveDepth, BalanceConfig.SIM_NAIVE_DEPTH_MIN, BalanceConfig.SIM_NAIVE_DEPTH_MAX,
+                    naiveDepth >= BalanceConfig.SIM_NAIVE_DEPTH_MIN && naiveDepth <= BalanceConfig.SIM_NAIVE_DEPTH_MAX,
+                    naive.runCount() + " seeds; " + naive.stalledRunCount() + " stalled"));
+            float naiveReach = naive.reachedDepthFraction(firstBossDepth);
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE reaches the first boss",
+                    naiveReach, BalanceConfig.SIM_FIRST_BOSS_NAIVE_REACH_MIN, 1f,
+                    naiveReach >= BalanceConfig.SIM_FIRST_BOSS_NAIVE_REACH_MIN, "depth " + firstBossDepth));
+            float naiveClear = naive.clearedFirstBossFraction();
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE first-boss clears",
+                    naiveClear, BalanceConfig.SIM_FIRST_BOSS_NAIVE_CLEAR_MIN, 1f,
+                    naiveClear >= BalanceConfig.SIM_FIRST_BOSS_NAIVE_CLEAR_MIN, "of all " + naive.runCount() + " seeds"));
+        }
 
         float readableFraction = tactical.readableDeathFraction();
         results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL readable deaths",

@@ -110,14 +110,16 @@ public final class RouteMapConstants {
 
     // Region A "OUTER FACILITY" — leans safe: more caches, fewer elites (footing for the run).
     public static final float REGION_A_MULTIPLIER_COMBAT  = 1.15f;
-    public static final float REGION_A_MULTIPLIER_ELITE   = 0.50f;
+    // ELITE weights per region — balance-overhaul order 6, F7 (A 0.6, B 1.0, C 1.6, D 1.4, E 1.6): the elite
+    // density peaks with the region dial at REACTOR DEPTHS, dips in THE BREACH, and returns for THE CORE.
+    public static final float REGION_A_MULTIPLIER_ELITE   = 0.60f;
     public static final float REGION_A_MULTIPLIER_CACHE   = 1.35f;
     public static final float REGION_A_MULTIPLIER_MYSTERY = 0.80f;
 
     // Region B "RESEARCH WING" — leans exploratory: more mystery/event signals.
     public static final float REGION_B_MULTIPLIER_MYSTERY = 1.40f;
     public static final float REGION_B_MULTIPLIER_EVENT   = 1.50f;
-    public static final float REGION_B_MULTIPLIER_ELITE   = 1.10f;
+    public static final float REGION_B_MULTIPLIER_ELITE   = 1.00f;
 
     // Region C "REACTOR DEPTHS" — leans lethal: more elites, fewer safe havens.
     public static final float REGION_C_MULTIPLIER_ELITE = 1.60f;
@@ -125,12 +127,12 @@ public final class RouteMapConstants {
     public static final float REGION_C_MULTIPLIER_SHOP  = 0.85f;
 
     // Region D "THE BREACH" — relentless: elites up, relief scarce but never absent.
-    public static final float REGION_D_MULTIPLIER_ELITE = 1.80f;
+    public static final float REGION_D_MULTIPLIER_ELITE = 1.40f;
     public static final float REGION_D_MULTIPLIER_REST  = 0.70f;
     public static final float REGION_D_MULTIPLIER_SHOP  = 0.70f;
 
     // Region E "THE CORE" — the finale: the heaviest elite lean, relief scarce, the run-final boss at 25.
-    public static final float REGION_E_MULTIPLIER_ELITE = 1.80f;
+    public static final float REGION_E_MULTIPLIER_ELITE = 1.60f;
     public static final float REGION_E_MULTIPLIER_REST  = 0.70f;
     public static final float REGION_E_MULTIPLIER_SHOP  = 0.70f;
 

@@ -1162,19 +1162,20 @@ public final class BalanceConfig {
     // 3. THE REGION DANGER DIAL (fixes knowledge-doc problem 12) — route regions stop being frequency-only.
     //    Each region declares a Threat-Point budget multiplier applied ON TOP of the depth curve
     //    (GameMath.regionScaledFloorThreatPointBudget), indexed 0-based by region
-    //    (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); depths past the last entry clamp to it (endless
-    //    "The Breach" keeps its multiplier forever). Node WEIGHT multipliers (RouteMapConstants
+    //    (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); one entry per region of the finite run. Node WEIGHT multipliers (RouteMapConstants
     //    REGION_*_MULTIPLIER_*) stay for FLAVOUR — what kind of rooms; this dial owns HOW HARD. A lethal
     //    region is now EXPLICITLY lethal and budgeted, and the depth-coupling audit reads it per lane so it
-    //    stays provably fair (region danger is extra bodies, not an unfair per-duel spike). Aligned to the
-    //    four route regions: A OUTER FACILITY 0.9 | B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE
-    //    BREACH 1.25 (RouteMapConstants.REGION_A..D_NAME). Range per entry: 0.8–1.3, monotonic non-decreasing.
-    public static final float[] REGION_TP_BUDGET_MULTIPLIER = {0.90f, 1.00f, 1.15f, 1.25f};
+    //    stays provably fair (region danger is extra bodies, not an unfair per-duel spike).
+    //    BALANCE-OVERHAUL ORDER 6 (F7, OVERRIDES {0.90, 1.00, 1.15, 1.25} + "monotonic non-decreasing"): the five
+    //    regions of the finite run, with the PEAK the owner asked for at floors 10-15 — A OUTER FACILITY 0.85 |
+    //    B RESEARCH WING 1.00 | C REACTOR DEPTHS 1.25 | D THE BREACH 1.20 (dips as the build comes online) |
+    //    E THE CORE 1.30 (the finale). Range per entry: 0.8–1.5; shape C >= B >= A and E >= D (R-REGION).
+    public static final float[] REGION_TP_BUDGET_MULTIPLIER = {0.85f, 1.00f, 1.25f, 1.20f, 1.30f};
     /** R-REGION lower bound: no region's TP dial may fall below this (a region never trivialises a floor). */
     public static final float   REGION_TP_BUDGET_MULTIPLIER_MIN = 0.8f;
     /** R-REGION upper bound: no region's TP dial may exceed this (region danger stays an attrition tax, not a wall). */
-    public static final float   REGION_TP_BUDGET_MULTIPLIER_MAX = 1.3f;
-    /** R-REGION: minimum margin by which the two LETHAL regions (C/D) must out-dial region A (measurably harder). */
+    public static final float   REGION_TP_BUDGET_MULTIPLIER_MAX = 1.5f;
+    /** R-REGION: minimum margin by which the LETHAL regions (C/D/E) must out-dial region A (measurably harder). */
     public static final float   REGION_TP_LETHAL_MARGIN         = 0.1f;
 
     // =====================================================================================
@@ -1729,10 +1730,8 @@ public final class BalanceConfig {
      */
     public static final float SIM_GATE_MAX_CLEAR_FRACTION = 0.0f;
 
-    // --- D. S-FAIR: deaths land in the intended window, and read as fair -----------------
-    /** Median death depth the TACTICAL policy should reach — the intended run length. */
-    public static final int   SIM_TARGET_DEPTH_MIN        = 8;
-    public static final int   SIM_TARGET_DEPTH_MAX        = 14;
+    // --- D. S-FAIR: deaths read as fair. The run-outcome bands that REPLACED the TACTICAL median-death-depth
+    // band [SIM_TARGET_DEPTH_MIN 8, MAX 14] live in SECTION 25 (balance-overhaul order 6, F8).
     /**
      * Fraction of TACTICAL deaths that must be READABLE: preceded either by a committed enemy
      * intent (the hit was shown before it landed) or by a resource state under the crisis
@@ -1744,8 +1743,9 @@ public final class BalanceConfig {
     /**
      * Median depth the TACTICAL policy must reach BEYOND the NAIVE one. The game ships one
      * difficulty (order 8); this gap IS its difficulty range, so it may never collapse.
+     * Balance-overhaul order 6 (F8, OVERRIDE): 3 -> 5, against the finite 25-floor run.
      */
-    public static final int   SIM_SKILL_DEPTH_GAP_MIN     = 3;
+    public static final int   SIM_SKILL_DEPTH_GAP_MIN     = 5;
 
     // --- F. S-ECONOMY: the played economy matches the modelled one -----------------------
     /**
@@ -2019,8 +2019,12 @@ public final class BalanceConfig {
      * maximum HP. Measured range across the audited depths: cache 0.12-0.23, shop 0.18-0.23, rest
      * 0.13-0.31, event 0.24-0.32.
      */
+    // OVERRIDE (balance-overhaul order 6, CP4): MAX 0.35 -> 0.40. The audit horizon is now the whole 25-floor run
+    // and the F7 dial puts REACTOR DEPTHS at 1.25 and THE CORE at 1.30, so a COMBAT node's bodies (and their XP /
+    // credits) grow past the 1..15 range this band was sketched on while a calm node's payoff stays capped:
+    // measured cache 0.36 / shop 0.37 at d21. Calm still costs tempo and loot — it just costs more at the peak.
     public static final float ROUTE_CALM_EV_DISCOUNT_MIN = 0.10f;
-    public static final float ROUTE_CALM_EV_DISCOUNT_MAX = 0.35f;
+    public static final float ROUTE_CALM_EV_DISCOUNT_MAX = 0.40f;
     /** R-MYSTERY-EV: the weighted mystery table EV may differ from a combat node's by at most this. */
     public static final float ROUTE_MYSTERY_EV_TOLERANCE = 0.15f;
     /**
@@ -2074,7 +2078,10 @@ public final class BalanceConfig {
      * the ELITEs the upgrade guarantee plants), with ~5% headroom above.
      */
     public static final float ROUTE_TRAJECTORY_XP_PACE_MIN = 0.70f;
-    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 2.95f;
+    // OVERRIDE (balance-overhaul order 6, CP4): MAX 2.95 -> 3.20. The F7 peak (REACTOR DEPTHS 1.25) is more bodies
+    // on the fight-everything route, so DEADLIEST banks more XP (measured 3.07). The fairness end-stop is the
+    // depth-coupling line below, which stays in band — out-levelling the content is what DEADLIEST pays HP for.
+    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 3.20f;
     /**
      * Depth coupling measured at the level the journey's XP ACTUALLY bought (the per-floor band is
      * [0.90, 1.20], which assumes an exactly on-curve player). This is the fairness end-stop of the
@@ -2918,7 +2925,9 @@ public final class BalanceConfig {
     /** Share of a floor's incoming damage that arrives as HEAVY hits (the guardable part). Range: 0.25-0.45. */
     public static final float   BUILD_FLOOR_HEAVY_DAMAGE_SHARE  = 0.35f;
     /** Turns per floor a PYRO build stands in fire (its own cone ignites the lanes it fights in — Incinerator.marchShot -> HazardManager.igniteFire). Unverified model input; the sim can measure it. Range: 3-6. */
-    public static final float   BUILD_PYRO_FIRE_TURNS_PER_FLOOR = 5f;
+    // Balance-overhaul order 6 (CP4): 5 -> 5.5. The F7 dial (REACTOR DEPTHS 1.15 -> 1.25) added bodies at d15,
+    // diluting fire's share of a PYRO floor's incoming until FIREPROOF r1 read +9.8% (PK1 felt floor 10%).
+    public static final float   BUILD_PYRO_FIRE_TURNS_PER_FLOOR = 5.5f;
     /** Share of a floor's bodies a BLADE build kills in melee. Range: 0.3-0.6. */
     public static final float   BUILD_BLADE_MELEE_KILL_SHARE    = 0.45f;
     /** Share of a BLADE build's melee turns fought below BUILD_BERSERK_LOW_HEALTH_FRACTION. Range: 0.15-0.35. */
@@ -3010,4 +3019,28 @@ public final class BalanceConfig {
      * trigger, BOSS_UPPER_FIGHT_TURNS_MULTIPLIER). Range: 0.25.
      */
     public static final float   BOSS_FIGHT_TURNS_TOLERANCE     = 0.25f;
+
+    // --- RUN-OUTCOME BANDS (F8; sim/BehavioralBands S-FAIR + S-SKILL). They REPLACE S-FAIR's TACTICAL median
+    // death depth [8, 14]. Depth-derived, so they ride the navigation waiver until the scripted policies finish
+    // >90% of floors (BalanceSchema.waiveNavigationLimitedBands) — reported every run, enforced the day it expires.
+    /** F8: TACTICAL win rate (clears the depth-RUN_FINAL_DEPTH boss) band. Range: 0.20–0.40. */
+    public static final float SIM_TACTICAL_WIN_RATE_MIN          = 0.20f;
+    public static final float SIM_TACTICAL_WIN_RATE_MAX          = 0.40f;
+    /** F8: the depth TACTICAL must reach on at least SIM_TACTICAL_REACH_FRACTION_MIN of seeds. */
+    public static final int   SIM_TACTICAL_REACH_DEPTH           = 10;
+    public static final float SIM_TACTICAL_REACH_FRACTION_MIN    = 0.60f;
+    /** F8: TACTICAL's median death depth over its LOSSES (non-VICTORY runs). Range: 11–18. */
+    public static final int   SIM_TACTICAL_LOSS_DEPTH_MIN        = 11;
+    public static final int   SIM_TACTICAL_LOSS_DEPTH_MAX        = 18;
+    /** F8: NAIVE win rate ceiling. */
+    public static final float SIM_NAIVE_WIN_RATE_MAX             = 0.03f;
+    /** F8: NAIVE median death depth band. Range: 4–8. */
+    public static final int   SIM_NAIVE_DEPTH_MIN                = 4;
+    public static final int   SIM_NAIVE_DEPTH_MAX                = 8;
+    /** F8 FIRST BOSS: TACTICAL clears it on at least this share of the seeds that REACH it. */
+    public static final float SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN  = 0.75f;
+    /** F8 FIRST BOSS: NAIVE reaches it on at least this share of seeds ... */
+    public static final float SIM_FIRST_BOSS_NAIVE_REACH_MIN     = 0.40f;
+    /** ... and clears it on at least this share of seeds (of all seeds). */
+    public static final float SIM_FIRST_BOSS_NAIVE_CLEAR_MIN     = 0.15f;
 }

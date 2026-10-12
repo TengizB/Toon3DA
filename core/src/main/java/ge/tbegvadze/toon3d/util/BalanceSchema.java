@@ -347,7 +347,16 @@ public final class BalanceSchema {
                 + "so every depth-derived statistic reads low.";
         String expiry = "Expires when the balance simulator's scripted policies reach the exit on >90% "
                 + "of floors (BalanceSimTest reports the stall rate on every run).";
-        waive(RuleKind.SIM_FAIR,    "TACTICAL median death depth", reason, expiry);
+        // Balance-overhaul order 6 (F8): the run-outcome lines that replaced "TACTICAL median death depth" are all
+        // depth-derived and inherit this waiver and expiry (A6: reported until it expires, then enforced).
+        waive(RuleKind.SIM_FAIR,    "TACTICAL win rate",            reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH, reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL median death depth (losses)", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE win rate",               reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE median death depth",     reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL first-boss clears (of seeds reaching it)", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE reaches the first boss", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE first-boss clears",      reason, expiry);
         waive(RuleKind.SIM_FAIR,    "TACTICAL readable deaths",    reason, expiry);
         waive(RuleKind.SIM_SKILL,   "TACTICAL vs NAIVE depth gap", reason, expiry);
         waive(RuleKind.SIM_ROUTE,   "played per-floor net drain",  reason, expiry);
@@ -1247,10 +1256,11 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-REGION (new-game-balancr order 5): the REGION DANGER DIAL is a budgeted, provably-fair number, not
-     * a vibe. It checks that (1) every region's TP multiplier sits in [MIN, MAX]; (2) the dial is monotonic
-     * non-decreasing across regions (a deeper region is never easier); (3) the two lethal regions (C/D)
-     * out-dial region A by a measurable margin — a lethal region is EXPLICITLY, budgeted-ly lethal; and
+     * R-REGION (new-game-balancr order 5; re-shaped by balance-overhaul order 6, F7): the REGION DANGER DIAL
+     * is a budgeted, provably-fair number, not a vibe. It checks that (1) every region's TP multiplier sits in
+     * [MIN, MAX] (0.8–1.5); (2) the dial has the finite run's SHAPE — C >= B >= A and E >= D (OVERRIDES
+     * "monotonic non-decreasing": the peak sits at REACTOR DEPTHS, floors 11-15, and THE BREACH may dip as the
+     * build comes online); (3) the lethal regions (C/D/E) out-dial region A by a measurable margin — a lethal region is EXPLICITLY, budgeted-ly lethal; and
      * (4) the power ladder (R-LADDER L1) still holds in every region lane. Point (4) is the key fairness
      * proof: the region dial scales the BUDGET (how many bodies), not the per-enemy growth, so the on-curve
      * fight length is region-INDEPENDENT in every lane — region danger is an attrition tax of extra bodies,
@@ -1270,17 +1280,17 @@ public final class BalanceSchema {
                     BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MAX, inBand, regionDisplayName(region)));
         }
 
-        // 2. Monotonic non-decreasing across regions (deeper is never easier).
-        boolean monotonic = true;
-        for (int region = 1; region < multipliers.length; region++) {
-            if (multipliers[region] < multipliers[region - 1]) monotonic = false;
-        }
-        results.add(new RuleResult(RuleKind.REGION_DANGER, "region dial monotonic non-decreasing",
-                monotonic ? 1f : 0f, 1f, 1f, monotonic, "A <= B <= C <= D — a deeper region never trivialises"));
+        // 2. The finite run's shape (F7): C >= B >= A and E >= D — the peak at floors 11-15, the finale on top.
+        boolean shaped = multipliers.length == RouteMapConstants.FIXED_REGION_COUNT
+                && multipliers[2] >= multipliers[1] && multipliers[1] >= multipliers[0]
+                && multipliers[4] >= multipliers[3];
+        results.add(new RuleResult(RuleKind.REGION_DANGER, "region dial shape C>=B>=A, E>=D",
+                shaped ? 1f : 0f, 1f, 1f, shaped,
+                "one entry per region of the finite run; the peak at REACTOR DEPTHS, the finale at least THE BREACH"));
 
-        // 3. The lethal regions (C=2, D=3) out-dial region A by a measurable margin.
+        // 3. The lethal regions (C=2, D=3, E=4) out-dial region A by a measurable margin.
         float regionAMultiplier = multipliers.length > 0 ? multipliers[0] : 1f;
-        int[] lethalRegions = {2, 3};
+        int[] lethalRegions = {2, 3, 4};
         for (int region : lethalRegions) {
             if (region >= multipliers.length) continue;
             float threshold = regionAMultiplier + BalanceConfig.REGION_TP_LETHAL_MARGIN;
@@ -2300,8 +2310,11 @@ public final class BalanceSchema {
     // The audited depth range matches every other order-3/4 depth rule: 1..15.
     // =====================================================================================
 
-    /** The audited depth range shared by the order-7 route rules (the order-7 horizon; the ladder-era depth rules run to RUN_FINAL_DEPTH). */
-    private static final int ROUTE_AUDIT_MAX_DEPTH = 15;
+    /**
+     * The audited depth range shared by the order-7 route rules: the whole finite run (balance-overhaul order 6,
+     * A5 — was the order-7 horizon 15, which left regions D and E unaudited).
+     */
+    private static final int ROUTE_AUDIT_MAX_DEPTH = BalanceConfig.RUN_FINAL_DEPTH;
 
     /**
      * The order-3 MODEL FLOOR, handed to the route model so the map is priced against the very same

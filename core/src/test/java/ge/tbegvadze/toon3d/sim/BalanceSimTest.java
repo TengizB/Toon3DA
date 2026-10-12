@@ -80,10 +80,36 @@ class BalanceSimTest {
         assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_GATE));
     }
 
-    /** S-FAIR — the intended run length, and deaths the player could see coming. */
+    /**
+     * S-FAIR — THE RUN OUTCOME of the finite 25-floor run (balance-overhaul order 6, F8: win rates, reach, loss
+     * depths, the first boss; replaces the TACTICAL median-death-depth band) and deaths the player could see coming.
+     * All eight run-outcome lines are reported; only they may ride the navigation waiver — readable deaths may not
+     * be waived for any other reason than the one it already carries. A2(b): no ledger ever holds a floor past the
+     * run-final depth, and every VICTORY ended on it.
+     */
     @Test
     void tacticalRunsEndInTheIntendedWindowAndReadAsFair() {
-        assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_FAIR));
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_FAIR);
+        java.util.Set<String> runOutcome = java.util.Set.of("TACTICAL win rate",
+                "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH,
+                "TACTICAL median death depth (losses)", "TACTICAL first-boss clears (of seeds reaching it)",
+                "NAIVE win rate", "NAIVE median death depth", "NAIVE reaches the first boss", "NAIVE first-boss clears");
+        for (String subject : runOutcome) {
+            assertTrue(results.stream().anyMatch(result -> result.subject.equals(subject)),
+                    () -> "S-FAIR must report the F8 run-outcome line '" + subject + "'");
+        }
+        assertBandsHold(results);
+        for (PolicySummary summary : matrix().values()) {
+            for (RunLedger run : summary.runs) {
+                assertTrue(run.depthReached <= BalanceConfig.RUN_FINAL_DEPTH,
+                        () -> summary.policyId + " seed " + run.runSeed + " reached floor " + run.depthReached
+                                + " — there is no floor past the run-final boss");
+                if (run.ending == RunLedger.Ending.VICTORY) {
+                    assertEquals(BalanceConfig.RUN_FINAL_DEPTH, run.endingDepth,
+                            () -> summary.policyId + " seed " + run.runSeed + " won somewhere other than the final floor");
+                }
+            }
+        }
     }
 
     /** S-SKILL — playing well must be worth depths. */

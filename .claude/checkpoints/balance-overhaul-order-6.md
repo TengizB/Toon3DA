@@ -55,7 +55,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A2, A3 hold; build green.
 - [x] **CP3** — BossTable rows drive bosses; derivation from ExpectedPlayer.
       DONE WHEN: R-BOSS-* green on all five rows; both gates green.
-- [ ] **CP4** — region dial + elite weights (F7); R-REGION updated; F8 run-outcome bands replace S-FAIR's depth band.
+- [x] **CP4** — region dial + elite weights (F7); R-REGION updated; F8 run-outcome bands replace S-FAIR's depth band.
       DONE WHEN: both gates green.
 - [ ] **CP5** — shop economy (F12, F13); R-CREDITS v2 green; S-SHOP reported.
       DONE WHEN: both gates green.
@@ -103,3 +103,15 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   FAIR v2 = target +/- `BOSS_FIGHT_TURNS_TOLERANCE` (0.25) + target in act band + ratio in band. R-SUPPLY S6 carrier share
   skips `spec.bossArenaAmmo()` (domain correction, documented). Authority doc: OVERRIDE RECORD + CHANGELOG lines added.
 - **CP3 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, no S-* moved.
+- **CP4 handover:** REGION_TP_BUDGET_MULTIPLIER {0.85,1.00,1.25,1.20,1.30}, MAX 1.5; R-REGION line "region dial shape
+  C>=B>=A, E>=D" + lethal {2,3,4}; ELITE weights A .60 B 1.00 C 1.60 D 1.40 E 1.60. F8 constants SECTION 25
+  (`SIM_TACTICAL_WIN_RATE_*`, `SIM_TACTICAL_REACH_*`, `SIM_TACTICAL_LOSS_DEPTH_*`, `SIM_NAIVE_*`, `SIM_FIRST_BOSS_*`);
+  SIM_TARGET_DEPTH_* deleted; SIM_SKILL_DEPTH_GAP_MIN 5. `BehavioralBands.fairResults(tactical, naive)` emits 8 F8 lines
+  + readable deaths (all F8 lines navigation-waived); `PolicySummary.winRate/reachedDepthFraction/medianLossDepth/
+  runsReachingDepth/runsClearingFirstBoss`. BalanceSimTest S-FAIR method asserts the 8 subjects + A2(b) (no floor >25,
+  VICTORY ends at 25). ROUTE_AUDIT_MAX_DEPTH = RUN_FINAL_DEPTH (A5). Ripple fixes: BUILD_PYRO_FIRE_TURNS_PER_FLOOR 5.5,
+  ROUTE_CALM_EV_DISCOUNT_MAX 0.40, ROUTE_TRAJECTORY_XP_PACE_MAX 3.20 (named overrides in BalanceConfig + authority doc);
+  LevelGeneratorSnapshotTest digest re-baselined (reproduced on 2 JVM runs).
+- **CP4 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0. Moved: stalls TACTICAL 175->167,
+  11 TACTICAL seeds reach the first boss (0 clear), S-BUILD sample 49->37 (>=30, WATCH), dominant share 0.47->0.59 (WAIV),
+  S-HEAVY sample 1108->733. Summary kept as scratchpad `cp4-summary.txt`.

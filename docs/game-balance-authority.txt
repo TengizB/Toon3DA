@@ -654,6 +654,15 @@ R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AM
   shop's prices, not the ladder-inflated HP number. BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION
   and BOSS_EXPECTED_LEVELS_PER_DEPTH no longer feed the derivation. The text below is the
   order-6 original; its worked numbers pre-date the ladder (see the living table).
+  R-REGION (RuleKind.REGION_DANGER; re-shaped by balance-overhaul order 6, CP4 — F7, OVERRIDE): the region
+  TP dial REGION_TP_BUDGET_MULTIPLIER = {A 0.85, B 1.00, C 1.25, D 1.20, E 1.30} — one entry per region of the
+  finite run (was {0.90, 1.00, 1.15, 1.25}); every entry in [0.8, 1.5] (was [0.8, 1.3]); the shape is
+  C >= B >= A and E >= D (REPLACES "monotonic non-decreasing A<=B<=C<=D": the peak the owner asked for sits at
+  REACTOR DEPTHS, floors 11-15, and THE BREACH dips as the build comes online); C/D/E out-dial A by >= 0.1; the
+  ladder holds in every lane. ELITE node weights by region (RouteMapConstants) A 0.6 / B 1.0 / C 1.6 / D 1.4 /
+  E 1.6. Consequences absorbed in the same checkpoint: BUILD_PYRO_FIRE_TURNS_PER_FLOOR 5 -> 5.5 (more bodies at
+  d15 diluted FIREPROOF r1 to +9.8%), the R-CALM-COST and R-TRAJECTORY XP-pace overrides above, the R-ROUTE-*
+  audit horizon 15 -> RUN_FINAL_DEPTH (A5), the LevelGeneratorSnapshotTest re-baseline.
   OVERRIDE RECORD (balance-overhaul order 6, CP3 — THE BOSS TABLE, F3/F9): the modulo boss
   rotation (BossBalance.archetypeForDepth) and the per-boss OVERSEER/CORRUPTOR/HELL_BARON_DEPTH
   (5/10/15) + *_TARGET_FIGHT_TURNS (22/28/34) constants are DELETED. route/BossTable holds one
@@ -721,7 +730,10 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
                        variant: danger pays, slightly better than fair, never free and never a sucker
                        bet. SWARM/OVERCLOCKED raise threatCost, so they now carry VAULT PREMIUMS
                        (AFFIX_*_VAULT_AMMO_BOXES) that price up with them.
-    R-CALM-COST        a calm node's EV sits [10%, 35%] BELOW a standard combat node's — the route doc's
+    R-CALM-COST        a calm node's EV sits [10%, 40%] BELOW a standard combat node's (OVERRIDE, balance-
+                       overhaul order 6 CP4: MAX 0.35 -> 0.40 — the audit horizon is now 1..25 and the F7
+                       dial puts REACTOR DEPTHS at 1.25 and THE CORE at 1.30, so combat out-grows calm
+                       further at the peak; measured cache 0.36 / shop 0.37 at d21) — the route doc's
                        "costs loot/tempo, never the clock" invariant as a number. The band's top edge is
                        0.35 rather than the idea's 0.30 because the discount necessarily WIDENS with
                        depth (a combat floor's own reward grows with the gear/ability curves while a
@@ -746,7 +758,9 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
                        headlessly and walked under three deterministic policies (SAFEST / DEADLIEST /
                        BALANCED); at every region boundary the cumulative order-3/4 quantities are
                        measured over the nodes ACTUALLY VISITED, each priced by its own row: scarcity S
-                       [0.55, 1.70], per-floor net HP drain [-0.85, +0.65], XP pace [0.70, 2.95], and
+                       [0.55, 1.70], per-floor net HP drain [-0.85, +0.65], XP pace [0.70, 3.20] (OVERRIDE,
+                       balance-overhaul order 6 CP4: MAX 2.95 -> 3.20 — the F7 peak is more bodies on the
+                       fight-everything route; DEADLIEST measured 3.07; coupling stays the end-stop), and
                        depth coupling [0.80, 1.65] AT THE LEVEL THE ROUTE ACTUALLY BOUGHT (a route that
                        skips fights stands below the curve — GameMath.levelForCumulativeXp; coupling
                        is GameMath.ladderCouplingAtCharacterLevel since balance-overhaul order 1). RE-FIT
@@ -924,11 +938,19 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               guarantee: R-BOSS-GATE proves the starting loadout cannot win on paper; this
               proves it in play. WHY zero and not "rarely": the original bug WAS the starting
               shotgun grinding a boss down, and a band with slack invites it back.
-  S-FAIR      TACTICAL median death depth in [SIM_TARGET_DEPTH_MIN, MAX] = [8, 14], and >= 90%
-              of deaths preceded either by a COMMITTED enemy intent (the hit was shown before it
-              landed) or by a sub-25% resource state (the player walked in weak). WHY: a death
-              must feel like "I made a mistake", never a dice roll.
-  S-SKILL     TACTICAL's median depth exceeds NAIVE's by >= SIM_SKILL_DEPTH_GAP_MIN (3). WHY:
+  S-FAIR      THE RUN OUTCOME (balance-overhaul order 6, F8 — OVERRIDES "TACTICAL median death depth
+              in [SIM_TARGET_DEPTH_MIN 8, MAX 14]", constants deleted): TACTICAL win rate (clears the
+              depth-25 boss) in [0.20, 0.40]; TACTICAL reaches depth 10 on >= 0.60 of seeds; TACTICAL
+              median death depth over its LOSSES in [11, 18]; NAIVE win rate <= 0.03; NAIVE median death
+              depth in [4, 8]; FIRST BOSS: TACTICAL clears it on >= 0.75 of the seeds that reach it,
+              NAIVE reaches it on >= 0.40 and clears it on >= 0.15 of all seeds (SECTION 25). All eight
+              are depth-derived and ride the navigation waiver (A6: reported every run, enforced when
+              it expires). Unchanged: >= 90% of deaths preceded either by a COMMITTED enemy intent (the
+              hit was shown before it landed) or by a sub-25% resource state (the player walked in
+              weak). WHY: a death must feel like "I made a mistake", never a dice roll; and a finite
+              run must be WON by a prepared player sometimes, never always.
+  S-SKILL     TACTICAL's median depth exceeds NAIVE's by >= SIM_SKILL_DEPTH_GAP_MIN (5; OVERRIDE,
+              balance-overhaul order 6: was 3, re-set against the 25-floor run). WHY:
               one fixed difficulty (order 8) only works if SKILL decides depth; if this gap
               collapses the game stopped rewarding play and became a wall.
   S-ROUTE     The played per-floor net HP drain sits inside the order-7 modelled trajectory
@@ -1075,7 +1097,10 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
    is governed by R-ROLE, its PLATED niche and R-ROLE-5's ammo check. R-ROLE has no
    waiver and BalanceAuditTest pins that.)
 
-  [SIM_FAIR] TACTICAL median death depth, [SIM_FAIR] TACTICAL readable deaths,
+  [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
+  depth" and inherit its waiver and expiry: TACTICAL win rate / reaches depth 10 / median death depth (losses) /
+  first-boss clears (of seeds reaching it), NAIVE win rate / median death depth / reaches the first boss /
+  first-boss clears), [SIM_FAIR] TACTICAL readable deaths,
   [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
   [SIM_ECONOMY] experienced vs planned supply (re-based, order 2 CP7), [SIM_ECONOMY] emergency lifeline floors,
   [SIM_LAG] HOARDER-START-WEAPON median death depth (balance-overhaul order 1 — inherits
@@ -1874,6 +1899,10 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 6 / CP4 — THE REGION DIAL + RUN OUTCOME. R-REGION re-shaped (F7 dial + elite weights);
+    S-FAIR's depth band replaced by the eight F8 run-outcome lines (navigation-waived); S-SKILL gap 3 -> 5; route
+    audit horizon 15 -> 25; R-CALM-COST max 0.40; R-TRAJECTORY XP pace max 3.20; PYRO fire turns 5.5. Why: D3 — the
+    10-15 peak — and a finite run measured by whether it is won.
   balance-overhaul order 6 / CP3 — THE BOSS TABLE. route/BossTable rows (SECTION 25) replace the modulo rotation and
     the per-boss depth / target constants; R-BOSS-* run on all five rows; R-BOSS-FAIR v2 (target +/- 25%); S6 carrier
     share excludes boss arenas. Corruptor 10 target 28 -> 26, Hell Baron 15 34 -> 30, depth 20/25 bosses now table

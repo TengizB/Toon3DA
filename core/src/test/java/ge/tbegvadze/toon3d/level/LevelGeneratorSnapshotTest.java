@@ -134,8 +134,11 @@ class LevelGeneratorSnapshotTest {
     // 40% of the rooms holding a group of three or more (never the start room), so the generated grids gained
     // solid 'E' tiles and the palette pins 'E' to the barrel sprite. A deliberate change; confirmed stable
     // across two separate JVM runs.
+    // RE-BASELINE (balance-overhaul order 6, CP4 — THE REGION DIAL, F7): REGION_TP_BUDGET_MULTIPLIER moved to
+    // {0.85, 1.00, 1.25, 1.20, 1.30}, so every floor's Threat-Point budget outside region B changed and the
+    // encounter planner rolls different rosters. A deliberate balance change.
     private static final String EXPECTED_DIGEST =
-            "ed36eddefa3b859be6949c2a974ab87f98e2a543b33d792127fbcbad26dc2d03";
+            "412544b093bb229c39ea2812eb4d9b3737d69dd81b2ed20f1125e23bcd3eb29f";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
