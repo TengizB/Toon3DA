@@ -509,7 +509,6 @@ public final class EnemyConstants {
     // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims
     // below; there is no flat OVERSEER_MAX_HP / *_DAMAGE anymore. Only depth, cadence, and choreography
     // numbers stay flat here.
-    public static final int   OVERSEER_DEPTH               = BalanceConfig.OVERSEER_DEPTH;
     /** MELEE (un-telegraphed) damage as a fraction of the derived boss DPT (order 6). */
     public static final float OVERSEER_MELEE_DPT_FRACTION  = BalanceConfig.OVERSEER_MELEE_DPT_FRACTION;
     /** CHARGE (telegraphed line strike) damage as a fraction of the derived boss DPT. */
@@ -554,7 +553,6 @@ public final class EnemyConstants {
 
     // The Corruptor (depth 10) — mutated scientist; summoner + acid burst.
     // HP and ACID damage are DERIVED at spawn (order 6) — see BossBalance / CORRUPTOR_ACID_DPT_FRACTION.
-    public static final int   CORRUPTOR_DEPTH             = BalanceConfig.CORRUPTOR_DEPTH;
     public static final int   CORRUPTOR_SUMMON_COOLDOWN   = BalanceConfig.CORRUPTOR_SUMMON_COOLDOWN;
     public static final int   CORRUPTOR_MINION_CAP        = BalanceConfig.CORRUPTOR_MINION_CAP;
     /** ACID (telegraphed burst) damage as a fraction of the derived boss DPT (order 6). */
@@ -671,7 +669,6 @@ public final class EnemyConstants {
 
     // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
     // HP and per-verb DAMAGE are DERIVED at spawn (order 6) — see BossBalance / the *_DPT_FRACTION shims.
-    public static final int   HELL_BARON_DEPTH                = BalanceConfig.HELL_BARON_DEPTH;
     public static final int   HELL_BARON_FIREWALL_COOLDOWN_P1 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P1;
     public static final int   HELL_BARON_FIREWALL_COOLDOWN_P2 = BalanceConfig.HELL_BARON_FIREWALL_COOLDOWN_P2;
     public static final int   HELL_BARON_FIREWALL_DURATION    = BalanceConfig.HELL_BARON_FIREWALL_DURATION;

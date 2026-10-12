@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.util;
 
+import ge.tbegvadze.toon3d.route.BossTable;
+
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.enemy.HeavyAttack;
@@ -2147,18 +2149,19 @@ public final class BalanceSchema {
     public static List<RuleResult> bossGateResults() {
         List<RuleResult> results = new ArrayList<>();
         float minMargin  = BalanceConfig.BOSS_GATE_MIN_DAMAGE_MARGIN;
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            BossBalance.Archetype archetype = row.archetype;
+            BossStats stats = BossBalance.statsForRow(row);
             // Balance-overhaul order 1: the START weapon (L1 COMMON) on the boss floor, carried by an otherwise
             // on-curve character — the generous reading; the ladder's lag penalty applies to the weapon.
-            ExpectedPlayer startWeapon = ladderStartWeaponPlayer(archetype.canonicalDepth);
+            ExpectedPlayer startWeapon = ladderStartWeaponPlayer(row.depth);
             float maxHeals = startWeapon.effectiveHitPoints * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
             float startTurnsToKill = GameMath.bossFightTurnsForPlayerDamagePerTurn(
                     stats.effectiveHitPoints, startWeapon.damagePerTurn);
             float survivableTurns  = GameMath.bossFightTurnsForPlayerDamagePerTurn(
                     startWeapon.effectiveHitPoints + maxHeals, stats.damagePerTurn);
             float margin = survivableTurns > 0f ? startTurnsToKill / survivableTurns : Float.POSITIVE_INFINITY;
-            results.add(new RuleResult(RuleKind.BOSS_GATE, archetype.displayName + " depth " + archetype.canonicalDepth,
+            results.add(new RuleResult(RuleKind.BOSS_GATE, archetype.displayName + " depth " + row.depth,
                     margin, minMargin, Float.POSITIVE_INFINITY, margin >= minMargin,
                     String.format("start-weapon TTK %.1f vs survivable %.1f turns (with max heals) — must be >= %.1fx",
                             startTurnsToKill, survivableTurns, minMargin)));
@@ -2167,31 +2170,42 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-BOSS-FAIR: the EXPECTED player at each boss depth gets a fight whose LENGTH lands in
-     * [target, 1.5*target] turns and whose SURVIVAL RATIO lands in [0.4, 0.7]. Both hold by construction of
-     * the derivation, so a broken input (a bad target or ratio) surfaces here rather than in a live fight.
+     * R-BOSS-FAIR (v2, balance-overhaul order 6 F9): for EVERY BossTable row, the EXPECTED player at the row's
+     * depth gets a fight whose LENGTH lands in the row's target +/- BOSS_FIGHT_TURNS_TOLERANCE (OVERRIDES the
+     * order-6 band [target, 1.5*target]) and whose SURVIVAL RATIO lands in [0.4, 0.7]; the row's own survival
+     * dial must sit in that band too. All hold by construction of the derivation, so a broken input (a bad
+     * target or ratio on a row) surfaces here rather than in a live fight.
      */
     public static List<RuleResult> bossFairResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats     = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
-            float expectedDpt   = BossBalance.expectedPlayerDamagePerTurn(archetype.canonicalDepth);
+        float tolerance = BalanceConfig.BOSS_FIGHT_TURNS_TOLERANCE;
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            String subject      = row.archetype.displayName + " depth " + row.depth;
+            BossStats stats     = BossBalance.statsForRow(row);
+            float expectedDpt   = BossBalance.expectedPlayerDamagePerTurn(row.depth);
             float fightTurns    = GameMath.bossFightTurnsForPlayerDamagePerTurn(
                     stats.effectiveHitPoints, expectedDpt);
-            float lengthMin     = stats.targetFightTurns;
-            float lengthMax     = stats.upperFightTurnsCap; // == 1.5 * target
-            results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " fight length",
+            float lengthMin     = stats.targetFightTurns * (1f - tolerance);
+            float lengthMax     = stats.targetFightTurns * (1f + tolerance);
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, subject + " fight length",
                     fightTurns, lengthMin, lengthMax, fightTurns >= lengthMin && fightTurns <= lengthMax,
-                    "expected-loadout fight turns must land in [target, 1.5*target]"));
+                    "expected-loadout fight turns must land in target +/- " + Math.round(tolerance * 100f) + "%"));
 
             float survivalRatio = GameMath.bossSurvivalCheckRatio(
-                    BossBalance.expectedPlayerEffectiveHitPoints(archetype.canonicalDepth), stats.damagePerTurn, fightTurns);
-            results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " survival ratio",
+                    BossBalance.expectedPlayerEffectiveHitPoints(row.depth), stats.damagePerTurn, fightTurns);
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, subject + " survival ratio",
                     survivalRatio, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
                     BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
                     survivalRatio >= BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN
                             && survivalRatio <= BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
-                    "a no-heal player survives this fraction of the fight"));
+                    "a no-heal player survives this fraction of the fight (row dial " + row.survivalRatio + ")"));
+
+            boolean targetInActBand = row.targetFightTurns >= BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MIN
+                    && row.targetFightTurns <= BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MAX;
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, subject + " target turns",
+                    row.targetFightTurns, BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MIN,
+                    BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MAX, targetInActBand,
+                    "the row's RULE-1 dial sits inside the act band"));
         }
         return results;
     }
@@ -2208,17 +2222,21 @@ public final class BalanceSchema {
     public static List<RuleResult> bossVerbCapResults() {
         List<RuleResult> results = new ArrayList<>();
         for (BossVerbSpec verb : BOSS_VERBS) {
-            BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
-            int damage = stats.verbDamage(verb.dptFraction);
-            float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
-                    damage, BossBalance.expectedPlayerEffectiveHitPoints(verb.archetype.canonicalDepth));
-            float bandMax = verb.telegraphed
-                    ? BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
-                    : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
-            results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName, fraction, 0f, bandMax,
-                    fraction <= bandMax,
-                    String.format("derived %d dmg = %.0f%% eHP; %s cap %.0f%%", damage, fraction * 100f,
-                            verb.telegraphed ? "telegraphed" : "un-telegraphed", bandMax * 100f)));
+            // Balance-overhaul order 6: every BossTable row the verb's archetype fights on (the Overseer at 5 AND 20).
+            for (BossTable.Row row : BossTable.standard().rows()) {
+                if (row.archetype != verb.archetype) continue;
+                BossStats stats = BossBalance.statsForRow(row);
+                int damage = stats.verbDamage(verb.dptFraction);
+                float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
+                        damage, BossBalance.expectedPlayerEffectiveHitPoints(row.depth));
+                float bandMax = verb.telegraphed
+                        ? BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
+                        : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
+                results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName + " depth " + row.depth, fraction, 0f, bandMax,
+                        fraction <= bandMax,
+                        String.format("derived %d dmg = %.0f%% eHP; %s cap %.0f%%", damage, fraction * 100f,
+                                verb.telegraphed ? "telegraphed" : "un-telegraphed", bandMax * 100f)));
+            }
         }
         return results;
     }
@@ -2231,12 +2249,11 @@ public final class BalanceSchema {
     public static List<RuleResult> bossRewardResults() {
         List<RuleResult> results = new ArrayList<>();
         float premium = BalanceConfig.BOSS_REWARD_RISK_PREMIUM;
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
-            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints,
-                    archetype.canonicalDepth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            BossStats stats = BossBalance.statsForRow(row);
+            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints, row.depth);
             float ratio = consumption > 0f ? stats.creditReward / consumption : Float.POSITIVE_INFINITY;
-            results.add(new RuleResult(RuleKind.BOSS_REWARD, archetype.displayName + " reward/consumption",
+            results.add(new RuleResult(RuleKind.BOSS_REWARD, row.archetype.displayName + " depth " + row.depth + " reward/consumption",
                     ratio, premium - 0.02f, Float.POSITIVE_INFINITY, ratio >= premium - 0.02f,
                     String.format("reward %d credits vs modelled consumption %.0f (>= %.2fx)",
                             stats.creditReward, consumption, premium)));
@@ -2251,15 +2268,15 @@ public final class BalanceSchema {
      */
     public static List<RuleResult> bossAmmoResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            BossStats stats = BossBalance.statsForRow(row);
             float demand       = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);
             float reserveDamage = BalanceConfig.RESERVE_BANKING_FLOORS_TARGET
                     * GameMath.floorDemandAtDepth(modelFloorDemand(),
-                            BalanceConfig.ENEMY_HEALTH_GROWTH, archetype.canonicalDepth);
+                            BalanceConfig.ENEMY_HEALTH_GROWTH, row.depth);
             float arenaDamage  = BossBalance.arenaAmmoBudgetDamage(stats.effectiveHitPoints);
             float coverage     = demand > 0f ? (reserveDamage + arenaDamage) / demand : Float.POSITIVE_INFINITY;
-            results.add(new RuleResult(RuleKind.BOSS_AMMO, archetype.displayName + " ammo coverage",
+            results.add(new RuleResult(RuleKind.BOSS_AMMO, row.archetype.displayName + " depth " + row.depth + " ammo coverage",
                     coverage, 1f, Float.POSITIVE_INFINITY, coverage >= 1f,
                     String.format("reserve %.0f + arena %.0f vs demand %.0f damage", reserveDamage, arenaDamage, demand)));
         }
@@ -3135,7 +3152,11 @@ public final class BalanceSchema {
                     unplaced == 0, null));
             results.add(new RuleResult(RuleKind.SUPPLY, cell + " room-share violations", spreadViolations, 0f, 0f,
                     spreadViolations == 0, "worst multi-pickup room share " + String.format("%.2f", worstRoomShare)));
-            if (carrierEligible >= 4 * floors) {
+            // S6 applies where the floor has a carrier ROSTER. A boss arena has none by design (the planner caps
+            // carriers at the roster size, 0), so it is out of the rule's domain — not a waiver: before the
+            // finite run's 36-turn depth-25 arena its eligible count simply never reached the emit threshold
+            // (balance-overhaul order 6).
+            if (!spec.bossArenaAmmo() && carrierEligible >= 4 * floors) {
                 float share = carried / (float) carrierEligible;
                 results.add(new RuleResult(RuleKind.SUPPLY, cell + " carrier share", share,
                         BalanceConfig.SUPPLY_CARRIER_SHARE - 0.08f, BalanceConfig.SUPPLY_CARRIER_SHARE + 0.08f,

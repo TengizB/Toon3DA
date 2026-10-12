@@ -419,14 +419,14 @@ public enum EnemyType {
     // -------------------------------------------------------------------------
 
     OVERSEER {
-        @Override public int    maxHealth()         { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).effectiveHitPoints; }
-        @Override public int    attackDamage()       { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).verbDamage(EnemyConstants.OVERSEER_LASER_DPT_FRACTION); }
+        @Override public int    maxHealth()         { return BossBalance.canonicalStats(BossBalance.Archetype.OVERSEER).effectiveHitPoints; }
+        @Override public int    attackDamage()       { return BossBalance.canonicalStats(BossBalance.Archetype.OVERSEER).verbDamage(EnemyConstants.OVERSEER_LASER_DPT_FRACTION); }
         @Override public int    attackRangeTiles()   { return 8; }
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return 1.80f; }
-        @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).xpReward; }
-        @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.OVERSEER, EnemyConstants.OVERSEER_DEPTH).creditReward; }
+        @Override public int    baseXpReward()       { return BossBalance.canonicalStats(BossBalance.Archetype.OVERSEER).xpReward; }
+        @Override public int    baseCreditReward()   { return BossBalance.canonicalStats(BossBalance.Archetype.OVERSEER).creditReward; }
         @Override public String displayName()        { return "The Overseer"; }
         @Override public EnemyFamily family()        { return EnemyFamily.MACHINE; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
@@ -437,14 +437,14 @@ public enum EnemyType {
     },
 
     CORRUPTOR {
-        @Override public int    maxHealth()         { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).effectiveHitPoints; }
-        @Override public int    attackDamage()       { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).verbDamage(EnemyConstants.CORRUPTOR_ACID_DPT_FRACTION); }
+        @Override public int    maxHealth()         { return BossBalance.canonicalStats(BossBalance.Archetype.CORRUPTOR).effectiveHitPoints; }
+        @Override public int    attackDamage()       { return BossBalance.canonicalStats(BossBalance.Archetype.CORRUPTOR).verbDamage(EnemyConstants.CORRUPTOR_ACID_DPT_FRACTION); }
         @Override public int    attackRangeTiles()   { return 6; }
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return true; }
         @Override public float  heightMultiplier()   { return 1.60f; }
-        @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).xpReward; }
-        @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.CORRUPTOR, EnemyConstants.CORRUPTOR_DEPTH).creditReward; }
+        @Override public int    baseXpReward()       { return BossBalance.canonicalStats(BossBalance.Archetype.CORRUPTOR).xpReward; }
+        @Override public int    baseCreditReward()   { return BossBalance.canonicalStats(BossBalance.Archetype.CORRUPTOR).creditReward; }
         @Override public String displayName()        { return "The Corruptor"; }
         @Override public EnemyFamily family()        { return EnemyFamily.ABERRATION; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }
@@ -455,14 +455,14 @@ public enum EnemyType {
     },
 
     HELL_BARON {
-        @Override public int    maxHealth()         { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).effectiveHitPoints; }
-        @Override public int    attackDamage()       { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).verbDamage(EnemyConstants.HELL_BARON_CLEAVE_P1_DPT_FRACTION); }
+        @Override public int    maxHealth()         { return BossBalance.canonicalStats(BossBalance.Archetype.HELL_BARON).effectiveHitPoints; }
+        @Override public int    attackDamage()       { return BossBalance.canonicalStats(BossBalance.Archetype.HELL_BARON).verbDamage(EnemyConstants.HELL_BARON_CLEAVE_P1_DPT_FRACTION); }
         @Override public int    attackRangeTiles()   { return 3; }
         @Override public int    moveEveryNTurns()    { return 1; }
         @Override public boolean isRanged()          { return false; }
         @Override public float  heightMultiplier()   { return 2.00f; }
-        @Override public int    baseXpReward()       { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).xpReward; }
-        @Override public int    baseCreditReward()   { return BossBalance.statsForDepth(BossBalance.Archetype.HELL_BARON, EnemyConstants.HELL_BARON_DEPTH).creditReward; }
+        @Override public int    baseXpReward()       { return BossBalance.canonicalStats(BossBalance.Archetype.HELL_BARON).xpReward; }
+        @Override public int    baseCreditReward()   { return BossBalance.canonicalStats(BossBalance.Archetype.HELL_BARON).creditReward; }
         @Override public String displayName()        { return "Hell Baron"; }
         @Override public EnemyFamily family()        { return EnemyFamily.DEMON; }
         @Override public EnemyRole role()            { return EnemyRole.BOSS; }

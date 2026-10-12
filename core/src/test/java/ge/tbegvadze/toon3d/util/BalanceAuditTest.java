@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -475,22 +476,31 @@ class BalanceAuditTest {
     }
 
     /**
-     * Order-6 acceptance criterion (zero flat boss constants): boss HP and every verb's damage are DERIVED
-     * per depth by {@link BossBalance}, so a DEEPER endless-mode boss re-derives strictly MORE HP than its
-     * canonical instance — proof the stats are computed from depth, not read from a flat constant.
+     * Order-6 acceptance criterion (zero flat boss constants), re-pointed at the BOSS TABLE (balance-overhaul
+     * order 6, F3): boss HP and every verb's damage are DERIVED per row by {@link BossBalance}, so an archetype
+     * that fights on two rows (the Overseer at 5 and 20, the Corruptor at 10 and 25) re-derives strictly MORE HP
+     * and XP on the deeper one — proof the stats are computed from the row, not read from a flat constant. Also
+     * pins the table's shape: one row per boss floor of the finite run, the last at RUN_FINAL_DEPTH.
      */
     @Test
     void bossStatsScaleWithDepthNotFlatConstants() {
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats canonical = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
-            // The same archetype re-fought a full boss-rotation deeper (endless mode) must be strictly tankier.
-            int deeperDepth = archetype.canonicalDepth + 3 * Constants.BOSS_FLOOR_INTERVAL;
-            BossStats deeper = BossBalance.statsForDepth(archetype, deeperDepth);
-            assertTrue(deeper.effectiveHitPoints > canonical.effectiveHitPoints,
-                    () -> archetype.displayName + " deeper HP " + deeper.effectiveHitPoints
-                            + " must exceed canonical " + canonical.effectiveHitPoints + " (derived, not flat)");
-            assertTrue(deeper.xpReward > canonical.xpReward,
-                    () -> archetype.displayName + " deeper XP must exceed canonical (reward scales with depth)");
+        java.util.List<ge.tbegvadze.toon3d.route.BossTable.Row> rows =
+                ge.tbegvadze.toon3d.route.BossTable.standard().rows();
+        assertEquals(BalanceConfig.RUN_FINAL_DEPTH / Constants.BOSS_FLOOR_INTERVAL, rows.size(),
+                "one BossTable row per boss floor of the finite run");
+        assertEquals(BalanceConfig.RUN_FINAL_DEPTH, rows.get(rows.size() - 1).depth,
+                "the last BossTable row is the run-final boss");
+        for (ge.tbegvadze.toon3d.route.BossTable.Row shallow : rows) {
+            for (ge.tbegvadze.toon3d.route.BossTable.Row deep : rows) {
+                if (deep.archetype != shallow.archetype || deep.depth <= shallow.depth) continue;
+                BossStats canonical = BossBalance.statsForRow(shallow);
+                BossStats deeper    = BossBalance.statsForRow(deep);
+                assertTrue(deeper.effectiveHitPoints > canonical.effectiveHitPoints,
+                        () -> shallow.archetype.displayName + " depth " + deep.depth + " HP " + deeper.effectiveHitPoints
+                                + " must exceed depth " + shallow.depth + "'s " + canonical.effectiveHitPoints);
+                assertTrue(deeper.xpReward > canonical.xpReward,
+                        () -> shallow.archetype.displayName + " deeper XP must exceed shallower (reward scales with depth)");
+            }
         }
     }
 

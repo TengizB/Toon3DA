@@ -1054,9 +1054,10 @@ public final class BalanceReport {
                 "boss", "depth", "expDPT", "derHP", "bossDPT", "target", "gate", "fairRatio", "reward", "ammoCov");
         System.out.println("------------------------------------------------------------------------------------------");
 
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            int depth = archetype.canonicalDepth;
-            BossStats stats = BossBalance.statsForDepth(archetype, depth);
+        for (ge.tbegvadze.toon3d.route.BossTable.Row row : ge.tbegvadze.toon3d.route.BossTable.standard().rows()) {
+            BossBalance.Archetype archetype = row.archetype;
+            int depth = row.depth;
+            BossStats stats = BossBalance.statsForRow(row);
             float expectedDpt = BossBalance.expectedPlayerDamagePerTurn(depth);
 
             // R-BOSS-GATE margin: start-weapon (L1 COMMON on the ladder) TTK vs survivable turns with max heals.
@@ -1097,7 +1098,7 @@ public final class BalanceReport {
         // Derived verb damages vs the single-hit fairness caps (RULE 3).
         System.out.printf("%-22s %6s %10s %-12s%n", "boss verb", "dmg", "%eHP", "capVerdict");
         for (BalanceSchema.BossVerbSpec verb : BalanceSchema.bossVerbs()) {
-            BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
+            BossStats stats = BossBalance.canonicalStats(verb.archetype);
             int damage = stats.verbDamage(verb.dptFraction);
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
                     damage, BalanceConfig.REFERENCE_PLAYER_EHP);

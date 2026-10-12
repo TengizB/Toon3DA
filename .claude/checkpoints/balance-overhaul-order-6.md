@@ -53,7 +53,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A1, A4 hold; route tests updated; both gates green.
 - [x] **CP2** — depth-25 boss defeat ends the run as VICTORY (report label, win stats); F5/D5 ending behaviour.
       DONE WHEN: A2, A3 hold; build green.
-- [ ] **CP3** — BossTable rows drive bosses; derivation from ExpectedPlayer.
+- [x] **CP3** — BossTable rows drive bosses; derivation from ExpectedPlayer.
       DONE WHEN: R-BOSS-* green on all five rows; both gates green.
 - [ ] **CP4** — region dial + elite weights (F7); R-REGION updated; F8 run-outcome bands replace S-FAIR's depth band.
       DONE WHEN: both gates green.
@@ -95,3 +95,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   an answered one-shot row unless that flag is set (before this, requestById never consulted "seen" at all).
   Sim: `RunLedger.Ending.VICTORY` after clearing the depth-25 floor; `SIM_DEPTH_CEILING` = RUN_FINAL_DEPTH.
 - **CP2 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, S-* identical (header ceiling 25).
+- **CP3 handover:** `route/BossTable` (`standard()`, `rows()`, `rowForDepth(depth)` = exact or deepest row above,
+  `firstRowFor(archetype)`, `register(Row)`; `Row{depth, archetype, targetFightTurns, survivalRatio}`) bootstrapped from
+  SECTION 25 `BOSS_TABLE_DEPTHS / _TARGET_FIGHT_TURNS / _SURVIVAL_RATIO` (archetypes are data in BossTable.bootstrap).
+  `BossBalance.Archetype` keeps positionalMultiplier + displayName only; `statsForDepth(depth)`, `statsForRow(row)`,
+  `canonicalStats(archetype)` (EnemyType reference numbers). R-BOSS-GATE/FAIR/VERB-CAP/REWARD/AMMO iterate rows; R-BOSS-
+  FAIR v2 = target +/- `BOSS_FIGHT_TURNS_TOLERANCE` (0.25) + target in act band + ratio in band. R-SUPPLY S6 carrier share
+  skips `spec.bossArenaAmmo()` (domain correction, documented). Authority doc: OVERRIDE RECORD + CHANGELOG lines added.
+- **CP3 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, no S-* moved.

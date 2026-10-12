@@ -1344,22 +1344,14 @@ public final class BalanceConfig {
     /** Boss phases: one HP bar split into this many equal escalation phases (RULE 4). 2 = phase-2 at 50%. */
     public static final int   BOSS_PHASE_COUNT                     = 2;
 
-    // Per-boss TARGET FIGHT TURNS — the RULE-1 dial. Each sits inside the act band [18, 40] and escalates
-    // by act (a deeper boss is a longer fight). bossHP = expectedPlayerSustainedDpt(depth) * target.
-    /** The Overseer's target fight length (turns), inside the act band. Range: 18–40. */
-    public static final float OVERSEER_TARGET_FIGHT_TURNS          = 22f;
-    /** The Corruptor's target fight length (turns), inside the act band. Range: 18–40. */
-    public static final float CORRUPTOR_TARGET_FIGHT_TURNS         = 28f;
-    /** Hell Baron's target fight length (turns), inside the act band. Range: 18–40. */
-    public static final float HELL_BARON_TARGET_FIGHT_TURNS        = 34f;
+    // Per-boss TARGET FIGHT TURNS and boss DEPTHS moved to the BOSS TABLE, SECTION 25 (balance-overhaul order 6).
 
     // VERB DAMAGE TABLES — each boss verb's single-hit damage as a FRACTION of that boss's derived DPT
     // (order 6, TECHNICAL NOTES). A telegraphed signature hit is a multiple of the sustained per-turn
     // average; an un-telegraphed poke is a small fraction (it must stay under 25% eHP, RULE 3). All are
     // audited against the 35%/25% single-hit caps by R-BOSS-VERB-CAP at the derived values.
 
-    // The Overseer (depth 5) — security core robot; laser lanes + melee charge.
-    public static final int   OVERSEER_DEPTH                = 5;
+    // The Overseer (depths 5 / 20, BOSS TABLE) — security core robot; laser lanes + melee charge.
     /** MELEE (UN-telegraphed poke) as a fraction of boss DPT — must resolve under 25% eHP. Range: 0.5–1.0. */
     public static final float OVERSEER_MELEE_DPT_FRACTION   = 0.75f;
     /** CHARGE (telegraphed line strike) as a fraction of boss DPT — the signature hit. Range: 1.2–2.2. */
@@ -1378,16 +1370,14 @@ public final class BalanceConfig {
     public static final float OVERSEER_HEAL_HP_THRESHOLD    = 0.35f;
     public static final int   OVERSEER_HEAL_TURNS           = 5;
 
-    // The Corruptor (depth 10) — mutated scientist; summoner + acid burst.
-    public static final int   CORRUPTOR_DEPTH               = 10;
+    // The Corruptor (depths 10 / 25, BOSS TABLE) — mutated scientist; summoner + acid burst.
     /** ACID (telegraphed burst) as a fraction of boss DPT. Range: 1.0–1.8. */
     public static final float CORRUPTOR_ACID_DPT_FRACTION   = 1.40f;
     public static final int   CORRUPTOR_SUMMON_COOLDOWN     = 3;
     public static final int   CORRUPTOR_MINION_CAP          = 5;
     public static final int   CORRUPTOR_ACID_POOL_DURATION  = 3;
 
-    // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
-    public static final int   HELL_BARON_DEPTH              = 15;
+    // Hell Baron (depth 15, BOSS TABLE) — armored greater demon; firewall + enrage.
     /** FIRE (telegraphed hazard tick) as a fraction of boss DPT — the DOT seed. Range: 0.3–0.7. */
     public static final float HELL_BARON_FIRE_DPT_FRACTION      = 0.50f;
     /** CLEAVE phase-1 (telegraphed) as a fraction of boss DPT. Range: 1.3–2.0. */
@@ -2992,4 +2982,32 @@ public final class BalanceConfig {
     public static final int[]   ABILITY_ROLL_SWEEP_DEPTHS        = {3, 12, 22};
     /** A4: seeds the R-ABILITY roll sweep rolls at every (tier, depth, melee-ness). Range: 30. */
     public static final int     ABILITY_ROLL_SWEEP_SEEDS         = 30;
+
+    // =====================================================================================
+    // SECTION 25 — RUN SHAPE & ECONOMY (balance-overhaul order 6: the 25-floor run).
+    // The descent is FINITE (RUN_FINAL_DEPTH floors in five regions of five, route/RegionPlan), a boss closes
+    // every region, and the depth-RUN_FINAL_DEPTH boss's death is a VICTORY. Everything the finite run re-derives
+    // lives here: the BOSS TABLE (F3, F9), the region difficulty dial (F7), the shop economy (F12, F13), the
+    // event / mystery currencies (F15) and the run-outcome / S-BOSS / S-SHOP sim bands (F8, F10, F14).
+    // =====================================================================================
+
+    // --- BOSS TABLE (F3). One row per boss floor: route/BossTable registers these (index-aligned) and
+    // util/BossBalance derives HP / DPT / reward from the row against ExpectedPlayer(depth) — there is no
+    // modulo rotation and no per-boss *_DEPTH / *_TARGET_FIGHT_TURNS constant anymore (OVERRIDES the order-6
+    // new-game-balancr constants OVERSEER_DEPTH 5 / CORRUPTOR_DEPTH 10 / HELL_BARON_DEPTH 15 and their target
+    // turns 22 / 28 / 34). The rotation is the old cycle made explicit, so the Core-ending boss is unchanged.
+    /** F3: the boss floors, in descent order. Each must be a boss floor (GameMath.isBossFloor). */
+    public static final int[]   BOSS_TABLE_DEPTHS              = {5, 10, 15, 20, 25};
+    // F3: the ARCHETYPE on each row is data in route/BossTable.bootstrap (OVERSEER, CORRUPTOR, HELL_BARON,
+    // OVERSEER, CORRUPTOR), index-aligned with these arrays.
+    /** F3: each row's RULE-1 target fight length (turns), inside the act band [18, 40]. Range: 18–40. */
+    public static final float[] BOSS_TABLE_TARGET_FIGHT_TURNS  = {22f, 26f, 30f, 32f, 36f};
+    /** F3: each row's RULE-3 survival-ratio target, inside [BOSS_SURVIVAL_CHECK_RATIO_MIN, _MAX]. Range: 0.40–0.70. */
+    public static final float[] BOSS_TABLE_SURVIVAL_RATIO      = {0.50f, 0.50f, 0.50f, 0.50f, 0.50f};
+    /**
+     * F9 (R-BOSS-FAIR v2): the on-curve player's fight must last its row's target +/- this fraction
+     * (OVERRIDES the order-6 band [target, 1.5 * target]; the 1.5x upper cap survives as the soft-enrage
+     * trigger, BOSS_UPPER_FIGHT_TURNS_MULTIPLIER). Range: 0.25.
+     */
+    public static final float   BOSS_FIGHT_TURNS_TOLERANCE     = 0.25f;
 }
