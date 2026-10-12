@@ -100,6 +100,7 @@ import ge.tbegvadze.toon3d.route.FloorEffects;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.GuaranteedContentStamper;
 import ge.tbegvadze.toon3d.route.LevelPlan;
+import ge.tbegvadze.toon3d.route.MysteryOutcome;
 import ge.tbegvadze.toon3d.route.Placement;
 import ge.tbegvadze.toon3d.route.NodeLevelProfile;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
@@ -125,6 +126,8 @@ import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.BalanceSchema;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -261,6 +264,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private RegionPlan              routePlan;
     /** The node the player committed to; the next floor is built from it. Null before the first commit. */
     private RouteNode               pendingNode;
+    /** F15: whether the current MYSTERY floor's ladder payout was already paid (reset on every route commit). */
+    private boolean                 mysteryRewardPaid;
     /**
      * TEMPORARY TESTING ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}): set when a BOSS node was
      * tapped out of turn, so the FADING_OUT completion jumps {@code currentDepth} onto the boss's real
@@ -913,6 +918,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             coreEndingRequested = false;
             return;
         }
+        // F15: leaving a MYSTERY sector pays its outcome's ladder-currency reward (once per floor).
+        payMysteryOutcomeOnce();
 
         // Staging-room exit: generate the route map (once) from the run seed, then present the depth-0 ->
         // depth-1 lanes through the same FACILITY NAV console every later portal uses. The player's first
@@ -1082,6 +1089,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         routeMap.commitTo(next);
         pendingNode = next;
+        mysteryRewardPaid = false;
         recordRouteCommit(next);
         fadeTimerSeconds = 0f;
         runPhase = RunPhase.FADING_OUT;
@@ -3003,8 +3011,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /**
      * Applies one picked {@link EventChoice}'s typed {@link EventEffect} (route-map order-10) through
-     * EXISTING systems — heal, armour, ammo, XP, map reveal, next-floor budget — so there is no bespoke
-     * per-event code path. A GAMBLE choice rolls the floor's own seed: on success the effect applies and
+     * EXISTING systems — in LADDER CURRENCIES since balance-overhaul order 6 (see {@link #applyLadderEffect}) —
+     * so there is no bespoke per-event code path. A GAMBLE choice rolls the floor's own seed: on success the effect applies and
      * the result line shows; on failure a small survivable bite plus the fail line (never a lost run).
      * The picked choice's token is appended to the run's route story.
      */
@@ -3018,35 +3026,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
 
         if (success) {
-            if (effect.healFraction() > 0f && player != null) {
-                int healAmount = Math.round(player.getMaxHealth() * effect.healFraction());
-                if (healAmount > 0) {
-                    player.applyTreatment(healAmount);   // a treatment: the build's heal multiplier (order 5)
-                    if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
-                    if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
-                }
-            }
-            if (effect.armourToFull() && player != null) {
-                player.applyArmor(player.getMaxArmor());
-            }
-            if (effect.ammoBoxes() > 0) {
-                grantAmmoBoxes(effect.ammoBoxes());
-            }
-            if (effect.grantXp() > 0) {
-                // A hand-set XP grant is authored at DEPTH 1 and re-expressed as the same share of a
-                // level at the depth actually played (new-game-balancr order 7) — otherwise the flat
-                // number silently decays to nothing against the geometric level curve and a deep EVENT
-                // node becomes worthless. R-CALM-COST prices the event node on this scaled value.
-                playerProgress.addXp(GameMath.depthScaledRewardXp(effect.grantXp(),
-                        BalanceConfig.XP_BASE_REQUIREMENT, BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL,
-                        BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, currentDepth));
-            }
-            if (effect.revealNextRegion()) {
-                revealNextRegion();
-            }
-            if (effect.nextFloorBudgetBonus() > 0f) {
-                pendingNextFloorBudgetBonus += effect.nextFloorBudgetBonus();
-            }
+            applyLadderEffect(effect, GameMath.floorSeed(runSeed, currentDepth) ^ 0xE7E1D1CEL);
             if (effect.resultText() != null && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor(effect.resultText(), EventTextSystem.COLOR_GREEN);
             }
@@ -3076,39 +3056,90 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * Grants {@code boxCount} ammo boxes spread across the player's OWNED ammo types (route-map
-     * order-10 EVENT reward), reusing each type's {@code amountPerBox}. Falls back to ALL ammo types for
-     * a melee-only run so the reward is never wasted. Directly credits the reserve (an event hands the
-     * ammo over, rather than stamping tiles on the current floor).
+     * Pays (and charges) an {@link EventEffect} in LADDER CURRENCIES (balance-overhaul order 6, F15) through the
+     * systems that already own each currency: weapon levels through the shop's level-up path (capped at the floor's
+     * level + 1, the shop rung's ceiling), a perk rank through the shop's perk grant (a tag the player carries,
+     * else any unmaxed perk), heal through the medkit treatment path, armour through the armour path, credits in
+     * floors of a COMBAT floor's income at this depth through the wallet. Costs: an HP fraction (never lethal),
+     * credits (never below zero), a hotter next floor. Shared by EVENT choices and the MYSTERY payout.
+     *
+     * @param seed the deterministic stream that picks the perk (same seed, same perk)
      */
-    private void grantAmmoBoxes(int boxCount) {
-        java.util.List<AmmoType> ammoTypes = collectOwnedAmmoTypes();
-        if (ammoTypes.isEmpty()) {
-            for (AmmoType ammoType : AmmoType.values()) ammoTypes.add(ammoType);
+    private void applyLadderEffect(EventEffect effect, long seed) {
+        if (effect == null) return;
+        if (effect.weaponLevels() > 0 && inventory.getEquippedWeapon() != null) {
+            Weapon equipped = inventory.getEquippedWeapon();
+            int ceiling = Math.min(WeaponConstants.MAX_WEAPON_LEVEL, Math.max(1, currentDepth) + 1);
+            for (int level = 0; level < effect.weaponLevels(); level++) {
+                if (equipped.isLevelGapExempt() || !equipped.canLevelUp() || equipped.getWeaponLevel() >= ceiling) break;
+                weaponRoller.applyLevelUp(equipped);
+            }
         }
-        int typeCount = ammoTypes.size();
-        // Distribute the boxes as evenly as possible across owned types (first types get any remainder).
-        for (int typeIndex = 0; typeIndex < typeCount; typeIndex++) {
-            int boxesForType = boxCount / typeCount + (typeIndex < boxCount % typeCount ? 1 : 0);
-            if (boxesForType <= 0) continue;
-            AmmoType ammoType = ammoTypes.get(typeIndex);
-            itemInventory.addAmmo(ammoType, boxesForType * ammoType.getAmountPerBox());
+        if (effect.perkRank()) {
+            Perk perk = pickLadderPerk(new java.util.Random(seed));
+            if (perk != null) grantShopAbility(perk);
+        }
+        if (effect.healFraction() > 0f && player != null) {
+            int healAmount = Math.round(player.getMaxHealth() * effect.healFraction());
+            if (healAmount > 0) {
+                player.applyTreatment(healAmount);   // a treatment: the build's heal multiplier (order 5)
+                if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
+                if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
+            }
+        }
+        if (effect.armourFraction() > 0f && player != null) {
+            player.applyArmor(Math.round(player.getMaxArmor() * effect.armourFraction()));
+        }
+        float floorIncome = BalanceSchema.combatFloorCreditIncome(currentDepth);
+        if (effect.creditFloors() > 0f) {
+            int credits = Math.round(effect.creditFloors() * floorIncome);
+            playerStats.addCredits(credits);
+            runStats.recordCreditsEarned(credits);
+        }
+        if (effect.creditCostFloors() > 0f) {
+            int toll = Math.min(playerStats.getCredits(), Math.round(effect.creditCostFloors() * floorIncome));
+            if (toll > 0 && playerStats.spendCredits(toll)) runStats.recordCreditsSpent(toll);
+        }
+        if (effect.healthCostFraction() > 0f && player != null) {
+            int cost = Math.min(player.getHealth() - 1, Math.round(player.getMaxHealth() * effect.healthCostFraction()));
+            if (cost > 0) player.applyDamage(cost);
+        }
+        if (effect.revealNextRegion()) {
+            revealNextRegion();
+        }
+        if (effect.nextFloorBudgetBonus() > 0f) {
+            pendingNextFloorBudgetBonus += effect.nextFloorBudgetBonus();
         }
     }
 
-    /** The distinct ammo types the player's equipped loadout can use (empty for a melee-only run). */
-    private java.util.List<AmmoType> collectOwnedAmmoTypes() {
-        java.util.List<AmmoType> types = new java.util.ArrayList<>();
-        Loadout loadout = inventory.getLoadout();
-        if (loadout != null) {
-            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-                Weapon weapon = loadout.getSlot(slotIndex);
-                if (weapon == null) continue;
-                AmmoType ammoType = weapon.getAmmoType();
-                if (ammoType != null && !types.contains(ammoType)) types.add(ammoType);
-            }
+    /** A perk for a ladder payout: an unmaxed perk of a tag the player carries, else any unmaxed perk. */
+    private Perk pickLadderPerk(java.util.Random random) {
+        java.util.EnumSet<BuildTag> carried = carriedBuildTags();
+        java.util.List<Perk> preferred = new java.util.ArrayList<>();
+        java.util.List<Perk> fallback  = new java.util.ArrayList<>();
+        for (Perk perk : Perk.values()) {
+            if (playerBuild.isMaxed(perk)) continue;
+            fallback.add(perk);
+            if (carried.contains(perk.tag)) preferred.add(perk);
         }
-        return types;
+        java.util.List<Perk> pool = preferred.isEmpty() ? fallback : preferred;
+        return pool.isEmpty() ? null : pool.get(random.nextInt(pool.size()));
+    }
+
+    /**
+     * The MYSTERY payout (balance-overhaul order 6, F15): leaving a mystery sector pays its rolled outcome's
+     * {@link MysteryOutcome#reward()} in ladder currencies — once per floor, whatever the outcome was.
+     */
+    private void payMysteryOutcomeOnce() {
+        if (mysteryRewardPaid || isStartingRoom || pendingNode == null) return;
+        if (pendingNode.type != RouteNodeType.MYSTERY || GameMath.isBossFloor(currentDepth)) return;
+        mysteryRewardPaid = true;
+        MysteryOutcome outcome = MysteryOutcome.rollFor(pendingNode.nodeSeed);
+        applyLadderEffect(outcome.reward(), pendingNode.nodeSeed ^ 0x4D59535445525921L);
+        if (outcome.reward().resultText() != null && eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(outcome.reward().resultText(), EventTextSystem.COLOR_GREEN);
+        }
+        Gdx.app.log("RouteMap", "mystery payout outcome=" + outcome.name());
     }
 
     /**

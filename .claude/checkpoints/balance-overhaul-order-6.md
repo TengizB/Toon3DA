@@ -59,7 +59,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green.
 - [x] **CP5** — shop economy (F12, F13); R-CREDITS v2 green; S-SHOP reported.
       DONE WHEN: both gates green.
-- [ ] **CP6** — event/mystery rewards in ladder currencies (F15); R-MYSTERY-EV / event value green.
+- [x] **CP6** — event/mystery rewards in ladder currencies (F15); R-MYSTERY-EV / event value green.
       DONE WHEN: both gates green.
 - [ ] **CP7** — S-BOSS consistency reported; all docs; reviewer PASS.
       DONE WHEN: A5, A6, A7 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
@@ -128,3 +128,22 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   the credit re-pricing). CP6 must delete that waiver when it re-derives R-MYSTERY-EV (F15).
 - **CP5 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0 (S-SHOP offers 0.64 WAIV, unspent
   0.13 OK). Summary scratchpad `cp5-summary.txt`.
+- **CP6 handover:** `route/EventEffect` is ladder currencies only (`weaponLevels`, `perkRank`, `healFraction`,
+  `armourFraction`, `creditFloors`, `healthCostFraction`, `creditCostFloors`, `revealNextRegion`, `nextFloorBudgetBonus`,
+  gamble; `EventEffect.NONE`); ammoBoxes / grantXp / armourToFull DELETED (+ World.grantAmmoBoxes). `MysteryOutcome.reward()`
+  per row; World `applyLadderEffect(effect, seed)` (shared by events + mystery) + `payMysteryOutcomeOnce()` on the exit
+  portal (flag `mysteryRewardPaid`, reset in commitRouteNode); SimWorld `payMysteryOutcome()` mirrors it. Pricing:
+  `RouteEconomicsModel.ladderRewardPrice / bestChoicePrice / eventCatalogPrice / creditsPerFloorOfIncome /
+  combatFloorSupplyPowerPoints`, `NodeEconomics.ladderReward(...)` / `.eventCatalogReward()`; `GameMath.gambleExpectedValue`.
+  Rules: R-MYSTERY-EV v2 (`weighted table EV / combat EV` in [1.0, 1.30], `outcome spread / combat EV` >= 0.25; worst-loss
+  kept), R-EVENT-VALUE (RuleKind.EVENT_VALUE, `eventValueResults()`, one line per event). EVENT excluded from R-CALM-COST;
+  event + CP5 MYSTERY waivers retired; REST waiver expiry -> order 7. `RouteRegistries.events()` latch-registers.
+  SECTION 25: EVENT_CREDIT_FLOORS_SMALL .75 / LARGE 3.0, EVENT_STASH_CREDIT_FLOORS 2.0, EVENT_GAMBLE_*, EVENT_TECH_ARMOUR,
+  EVENT_SHRINE_HEAL, MYSTERY_REWARD_* (vault .5 + level, trap 1.5, ambush .5, lore .25, malfunction cost .25),
+  ROUTE_WEAPON_LEVEL_POWER_POINTS (= perk pick 12), ROUTE_MYSTERY_EV_PREMIUM_MAX .30 (replaced ROUTE_MYSTERY_EV_TOLERANCE),
+  ROUTE_MYSTERY_MIN_SPREAD_FRACTION .25, EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO 1.0. Tests updated: Order10 beacon reads credits;
+  BalanceAuditTest mystery method asserts both v2 lines + NEW `everyEventOffersAChoiceWorthACombatFloorsSupply`;
+  `safestAndDeadliestRoutesSpanARealDifficultyRange` proves the range on net HP drain + XP at horizon 25 (reason in javadoc).
+- **CP6 NOT BUILT (judgement, say so in the IMPLEMENTATION NOTE):** the "weapon drop at d..d+1" currency has no EventEffect
+  field — no event/outcome in the catalog needs it (VAULT's '=' weapon racks already drop on-curve guns).
+- **CP6 gates:** core:test 459, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0. Summary `cp6-summary.txt`.

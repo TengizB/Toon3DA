@@ -664,12 +664,7 @@ public final class RouteMapConstants {
     public static final float  EVENT_BUDGET_SCALE       = BalanceConfig.EVENT_BUDGET_SCALE;
     /** First-frame sting shown on entering an EVENT floor (before the interactable is reached). */
     public static final String EVENT_STING_TEXT         = "SIGNAL DETECTED";
-    /** XP awarded by an event choice tagged {@code EventEffect.grantXp} at its small tier. */
-    public static final int    EVENT_XP_SMALL           = BalanceConfig.EVENT_XP_SMALL;
-    /** XP awarded by an event choice tagged {@code EventEffect.grantXp} at its large tier. */
-    public static final int    EVENT_XP_LARGE           = BalanceConfig.EVENT_XP_LARGE;
-    /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
-    public static final int    EVENT_AMMO_BOXES         = BalanceConfig.EVENT_AMMO_BOXES;
+    // Event payouts are LADDER CURRENCIES since balance-overhaul order 6 (F15): BalanceConfig SECTION 25 EVENT_*.
     /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
     public static final float  EVENT_NEXT_FLOOR_BUDGET_BONUS = BalanceConfig.EVENT_NEXT_FLOOR_BUDGET_BONUS;
     /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */

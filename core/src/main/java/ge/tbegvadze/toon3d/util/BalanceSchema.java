@@ -150,8 +150,14 @@ public final class BalanceSchema {
         RISK_PREMIUM,
         /** R-CALM-COST (order 7): a calm node's EV sits 10-30% BELOW a standard combat node's. */
         CALM_COST,
-        /** R-MYSTERY-EV (order 7): the weighted mystery table is within ±15% of a combat node; worst case bounded. */
+        /**
+         * R-MYSTERY-EV v2 (balance-overhaul order 6, F15): the weighted mystery table's EV is >= a combat node's (and
+         * <= ROUTE_MYSTERY_EV_PREMIUM_MAX above it), its outcomes SPREAD (higher variance than a combat node's
+         * zero), and the worst outcome stays bounded.
+         */
         MYSTERY_EV,
+        /** R-EVENT-VALUE (balance-overhaul order 6, F15): every EVENT offers a choice worth >= a COMBAT floor's supply. */
+        EVENT_VALUE,
         /** R-PIPS-DERIVED (order 7): the displayed DangerTier equals the tier DERIVED from priced threat. */
         PIPS_DERIVED,
         /** R-HONEST-SAFE (order 7): a safe-looking node IS safe, and scan tones partition by price. */
@@ -304,16 +310,11 @@ public final class BalanceSchema {
         String bespokeReason = "Priced honestly on its NodeSupplySpec plan since balance-overhaul order 2: "
                 + "the bespoke room never placed the ordinary loot the old ledger credited it with, and "
                 + "its contents are balance-overhaul order 6's to retune.";
-        String bespokeExpiry = "Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).";
+        // Balance-overhaul order 6: EVENT contents were re-expressed (F15) and the EVENT node left R-CALM-COST for
+        // R-EVENT-VALUE, so the event waiver is RETIRED. REST is out of order 6's scope (owner: "REST is ok"), so its
+        // waiver's expiry moves to the order-7 feel pass.
+        String bespokeExpiry = "Expires with the balance-overhaul order 7 feel pass (REST contents; order 6 left REST alone).";
         waive(RuleKind.CALM_COST, "rest EV discount",  bespokeReason, bespokeExpiry);
-        // Balance-overhaul order 6 (CP5 -> CP6, a deliberate temporary state): the shop re-fit makes a credit worth
-        // ~2.3x the power, so COMBAT's bounty income out-grows the credit-less mystery outcomes (table 0.82x COMBAT
-        // at d25). CP6 re-expresses every mystery outcome in ladder currencies and re-derives R-MYSTERY-EV (F15:
-        // the table's EV >= COMBAT's, with higher variance), which replaces this rule and retires this waiver.
-        waive(RuleKind.MYSTERY_EV, "weighted table vs combat",
-                "The CP5 shop re-fit re-priced credits; mystery outcomes carry none until CP6 re-expresses them (F15).",
-                "Expires at balance-overhaul order 6 CP6 (R-MYSTERY-EV re-derived in ladder currencies).");
-        waive(RuleKind.CALM_COST, "event EV discount", bespokeReason, bespokeExpiry);
         // Balance-overhaul order 5, owner ruling D3: SCAVENGER is an ECONOMY tag. Its perks change supply,
         // shop prices and carrier drops — none of which is a turn to kill or a hit to die in a reference
         // fight — so R-CARRY's TTK x TTD reads it through a heal-at-shop-price conversion that cannot reach
@@ -847,6 +848,7 @@ public final class BalanceSchema {
         results.addAll(riskPremiumResults());
         results.addAll(calmCostResults());
         results.addAll(mysteryExpectedValueResults());
+        results.addAll(eventValueResults());
         results.addAll(derivedPipResults());
         results.addAll(honestSafeResults());
         results.addAll(trajectoryResults());
@@ -2471,6 +2473,11 @@ public final class BalanceSchema {
             if (node.forced() || nodeTypes.get(node.nodeType()).dangerTier() != DangerTier.CALM) {
                 continue;
             }
+            // OVERRIDE (balance-overhaul order 6, F15): an EVENT's worth is a CHOICE in ladder currencies and must be
+            // at least a COMBAT floor's supply — R-EVENT-VALUE governs it, so it is out of R-CALM-COST's domain.
+            if (node.eventCatalogReward()) {
+                continue;
+            }
             float worstDiscount = Float.NaN;
             int   worstDepth = 1;
             float worstExtremity = -1f;
@@ -2498,34 +2505,59 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-MYSTERY-EV: the WEIGHTED EV of the mystery outcome table must sit within ±15% of a standard
-     * combat node at every audited depth (the order-9 doc ASSERTED this; now it is audited and can no
-     * longer drift when any payoff or upstream re-tune moves), and the worst outcome (MALFUNCTION)
-     * must stay "bad but survivable" as arithmetic: its expected NET resource loss may not exceed one
-     * floor's maximum modelled drain times {@code ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER}.
+     * R-MYSTERY-EV v2 (balance-overhaul order 6, F15 — OVERRIDES "the weighted table within +/-15% of a combat
+     * node"): every mystery outcome now pays in LADDER CURRENCIES (MysteryOutcome.reward), and at every depth
+     * 1..RUN_FINAL_DEPTH (1) the weighted table's EV is AT LEAST a standard combat node's — a gamble is worth
+     * taking — and at most ROUTE_MYSTERY_EV_PREMIUM_MAX above it — never the strictly-better pick; (2) its
+     * outcomes SPREAD: their weighted standard deviation is at least ROUTE_MYSTERY_MIN_SPREAD_FRACTION of the
+     * combat node's EV (a combat node's variance is zero, so this is "higher variance" with teeth); and (3) the
+     * worst outcome (MALFUNCTION) stays "bad but survivable" as arithmetic: its expected NET resource loss may
+     * not exceed one floor's maximum modelled drain times {@code ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER}.
      */
     public static List<RuleResult> mysteryExpectedValueResults() {
         List<RuleResult> results = new ArrayList<>();
         NodeEconomicsRegistry ledger = routeLedger();
         RouteEconomicsModel.ModelFloor floor = routeModelFloor();
         NodeEconomics mystery = ledger.forNodeType(RouteNodeType.MYSTERY);
+        List<NodeEconomics> outcomes = ledger.allOfKind(NodeEconomics.Kind.MYSTERY_OUTCOME);
 
-        float worstDeviation = 0f;
+        float worstRatio = Float.NaN;
+        float worstExtremity = -1f;
         int   worstDepth = 1;
+        float smallestSpread = Float.POSITIVE_INFINITY;
+        int   spreadDepth = 1;
+        float ratioMax = 1f + BalanceConfig.ROUTE_MYSTERY_EV_PREMIUM_MAX;
         for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
             RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
             RouteEconomicsModel.NodePrice table    = RouteEconomicsModel.price(ledger, mystery, floor, depth);
-            float deviation = standard.expectedValue == 0f ? 0f
-                    : Math.abs(table.expectedValue / standard.expectedValue - 1f);
-            if (deviation > worstDeviation) {
-                worstDeviation = deviation;
+            float ratio = standard.expectedValue == 0f ? 1f : table.expectedValue / standard.expectedValue;
+            float extremity = bandExtremity(ratio, 1f, ratioMax);
+            if (extremity > worstExtremity) {
+                worstExtremity = extremity;
+                worstRatio     = ratio;
                 worstDepth     = depth;
             }
+            float totalWeight = 0f, weightedSquares = 0f;
+            for (NodeEconomics outcome : outcomes) {
+                float deviation = RouteEconomicsModel.price(ledger, outcome, floor, depth).expectedValue
+                        - table.expectedValue;
+                totalWeight     += outcome.tableWeight();
+                weightedSquares += outcome.tableWeight() * deviation * deviation;
+            }
+            float spread = totalWeight <= 0f || standard.expectedValue == 0f ? 0f
+                    : (float) Math.sqrt(weightedSquares / totalWeight) / standard.expectedValue;
+            if (spread < smallestSpread) {
+                smallestSpread = spread;
+                spreadDepth    = depth;
+            }
         }
-        results.add(new RuleResult(RuleKind.MYSTERY_EV, "weighted table vs combat", worstDeviation,
-                0f, BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE,
-                worstDeviation <= BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE,
-                "worst depth " + worstDepth + " — |EV(table)/EV(combat) - 1|"));
+        results.add(new RuleResult(RuleKind.MYSTERY_EV, "weighted table EV / combat EV", worstRatio,
+                1f, ratioMax, worstRatio >= 1f && worstRatio <= ratioMax,
+                "worst depth " + worstDepth + " — a gamble worth taking, never the strictly-better pick"));
+        results.add(new RuleResult(RuleKind.MYSTERY_EV, "outcome spread / combat EV", smallestSpread,
+                BalanceConfig.ROUTE_MYSTERY_MIN_SPREAD_FRACTION, Float.POSITIVE_INFINITY,
+                smallestSpread >= BalanceConfig.ROUTE_MYSTERY_MIN_SPREAD_FRACTION,
+                "smallest at depth " + spreadDepth + " — weighted std of outcome EVs (combat's is zero)"));
 
         // Worst-outcome bound, measured at depth 1 where a loss hurts a thin run the most.
         float maximumLoss = oneFloorMaximumResourceLossPowerPoints()
@@ -2545,6 +2577,37 @@ public final class BalanceSchema {
             results.add(new RuleResult(RuleKind.MYSTERY_EV, "worst-case loss " + outcome.id(), worstLoss,
                     0f, maximumLoss, worstLoss <= maximumLoss,
                     "worst depth " + lossDepth + " — net resource loss in power points"));
+        }
+        return results;
+    }
+
+    /**
+     * R-EVENT-VALUE (balance-overhaul order 6, F15): every registered EVENT offers at least one choice whose
+     * ladder-currency value (RouteEconomicsModel.bestChoicePrice — resources + durability-weighted progress, a
+     * gamble at its expectation) is worth at least EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO x what ONE standard COMBAT
+     * floor SUPPLIES (ammo + heal + credits), at every depth 1..RUN_FINAL_DEPTH. An event is never a choice
+     * between two scraps.
+     */
+    public static List<RuleResult> eventValueResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        for (ge.tbegvadze.toon3d.route.FacilityEvent event : RouteRegistries.events().all()) {
+            float worstRatio = Float.POSITIVE_INFINITY;
+            int   worstDepth = 1;
+            for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+                float supply = RouteEconomicsModel.combatFloorSupplyPowerPoints(ledger, floor, depth);
+                float best   = RouteEconomicsModel.bestChoicePrice(event, floor, depth).expectedValue();
+                float ratio  = supply <= 0f ? Float.POSITIVE_INFINITY : best / supply;
+                if (ratio < worstRatio) {
+                    worstRatio = ratio;
+                    worstDepth = depth;
+                }
+            }
+            results.add(new RuleResult(RuleKind.EVENT_VALUE, event.id() + " best choice / combat supply", worstRatio,
+                    BalanceConfig.EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO, Float.POSITIVE_INFINITY,
+                    worstRatio >= BalanceConfig.EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO,
+                    "worst depth " + worstDepth + " — ladder-currency value of its best choice"));
         }
         return results;
     }

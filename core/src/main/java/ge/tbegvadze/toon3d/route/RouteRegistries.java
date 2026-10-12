@@ -38,6 +38,8 @@ public final class RouteRegistries {
     private static boolean nodeEconomicsRegistered = false;
     private static boolean affixesRegistered       = false;
     private static boolean nodeSupplySpecsRegistered = false;
+    // Balance-overhaul order 6 (F15): the EVENT ledger row prices the event CATALOG, so the audit reads it too.
+    private static boolean eventsRegistered        = false;
 
     private RouteRegistries() {}
 
@@ -100,7 +102,11 @@ public final class RouteRegistries {
     }
 
     /** The shared narrative EVENT registry (order-10). */
-    public static FacilityEventRegistry events() {
+    public static synchronized FacilityEventRegistry events() {
+        if (!eventsRegistered) {
+            eventsRegistered = true;
+            registerEvents(EVENTS);
+        }
         return EVENTS;
     }
 
@@ -129,7 +135,7 @@ public final class RouteRegistries {
         nodeEconomics();
         nodeSupplySpecs();
         affixes();
-        registerEvents(EVENTS);
+        events();
         registerRegionAmbience(REGION_AMBIENCE);
         registerLevelProfiles(LEVEL_PROFILES, GENERATORS, AFFIXES, EVENTS);
         bootstrapped = true;

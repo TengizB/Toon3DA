@@ -444,6 +444,13 @@ MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-pr
       AMBUSH        (18) : delegates → "elite_hotzone" (combat-heavy lockdown; keeps its red alert).
       LORE_SIGNAL   (14) : delegates → "rest_medbay" (near-combat-free; EVENT profile order-10 degrade).
       MALFUNCTION   (14) : built — failing sector: hazards, unlit, NO reward (bad-but-survivable).
+  THE PAYOUT (balance-overhaul order 6, F15): every outcome also carries a hidden REWARD in LADDER
+  CURRENCIES (MysteryOutcome.reward(), an EventEffect), paid when the player LEAVES the sector
+  (World.payMysteryOutcomeOnce on the exit portal; SimWorld.payMysteryOutcome mirrors it):
+      VAULT_JACKPOT  +1 weapon level + 0.5 floors of credits      SECRET_WARREN  a perk rank (carried tag)
+      TRAP_GAUNTLET  1.5 floors of credits                        AMBUSH         0.5 floors of credits
+      LORE_SIGNAL    0.25 floors of credits                       MALFUNCTION    COSTS 0.25 floors of credits
+  (SECTION 25 MYSTERY_REWARD_*; "a floor of credits" = one COMBAT floor's modelled income at the depth.)
 
   FAIRNESS RULES (design invariants):
     - Pre-scan the card is ALWAYS '?'. A SCANNER (order-6) reveals only the ScanTone BUCKET
@@ -501,8 +508,13 @@ THE RULES (all in BalanceSchema; full text in docs/game-balance-authority.txt SE
                      — so SWARM / OVERCLOCKED now carry a VAULT PREMIUM that pays for the threat they add.
   R-CALM-COST        a calm node's EV sits 10-35% BELOW a combat node's: safety is bought with tempo
                      and loot, never free income on top.
-  R-MYSTERY-EV       the weighted outcome table is within ±15% of a combat floor, and MALFUNCTION's
-                     expected loss is bounded ("bad but survivable" as arithmetic).
+  R-MYSTERY-EV v2    (balance-overhaul order 6, F15) the weighted outcome table — floors + ladder payouts —
+                     is worth >= a combat floor and <= +30%, its outcomes SPREAD (weighted std >= 25%
+                     of a combat node's EV), and MALFUNCTION's expected loss is bounded.
+  R-EVENT-VALUE      (balance-overhaul order 6, F15) every registered EVENT offers a choice worth >= one
+                     COMBAT floor's supply (ammo + heal + credits) at every depth 1..25. The EVENT node is
+                     priced from the catalog (the weighted mean of each event's BEST choice) and left
+                     R-CALM-COST's domain for this rule.
   R-PIPS-DERIVED     DangerTier is DERIVED from the priced threat ratio (GameMath.derivedDangerTierIndex:
                      forced -> SET_PIECE, hidden table -> GAMBLE, else CALM/STANDARD/DANGER thresholds)
                      and must equal what the overlay displays. The map may tempt; it may never lie.
@@ -754,14 +766,19 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
   THE EVENT REGISTRY (the content system):
     FacilityEvent  = { id, title, weight, narrativeLines[], EventChoice[1..3] }
     EventChoice    = { label, description, EventEffect }
-    EventEffect    = a TYPED bundle (heal / armourToFull / ammoBoxes / grantXp / revealNextRegion /
-                     nextFloorBudgetBonus / gamble{lootChance,failDamage} / result+fail+log text).
+    EventEffect    = a TYPED bundle in LADDER CURRENCIES (balance-overhaul order 6, F15): weaponLevels (on the
+                     equipped gun, capped at depth + 1), perkRank (a tag the player carries), heal / armour
+                     FRACTIONS, credits in floors of income; costs healthCost / creditCost /
+                     nextFloorBudgetBonus; plus revealNextRegion and gamble{lootChance,failDamage} and the
+                     result + fail + log text. (The order-10 ammoBoxes / grantXp / armourToFull are gone.)
   Every choice routes through an EXISTING system, so there is NO bespoke per-event code path — the
   same trick NodeAffix uses. FacilityEventRegistry.rollFor(nodeSeed) draws deterministically
   (weightedChoiceIndex + RouteRng, like MYSTERY). Adding an event is one register() line in
-  FacilityEvents.registerAll. v1 catalog: distress_beacon (reveal vs ammo), abandoned_stash (a
-  gamble locker), surviving_tech (escort: armour + hotter next floor, vs keycard), corrupted_shrine
-  (full heal + hotter next floor, vs XP), data_terminal (pure-lore breather, guaranteed XP).
+  FacilityEvents.registerAll. Catalog (balance-overhaul order 6 payouts): distress_beacon (reveal + 0.75
+  floors of credits, vs a 3-floor credit haul), abandoned_stash (60%: +1 weapon level + 20% heal + 2
+  floors of credits, 40%: a 20% HP bite; vs walk away), surviving_tech (escort: armour to full + a perk
+  rank + 0.75 floors, next floor hotter; vs 0.75 floors), corrupted_shrine (full heal + a weapon level +
+  0.75 floors, next floor hotter; vs a perk rank), data_terminal (a perk rank + 0.75 floors, no risk).
 
   WORLD SIDE (the headless registry can't touch World, by design): EventRoomGenerator marks the
   interactable via Level.markEventStation(); World copies getEventStationTiles() into
@@ -769,9 +786,10 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
   pendingEventId. In the PLAYING update, the first time the player steps ORTHOGONALLY ADJACENT to the
   interactable, World opens RunPhase.EVENT_CHOICE and presents the event on EventChoiceOverlayRenderer
   (a full-screen choice-card overlay REUSING the level-up card UI pattern). A tap resolves the choice:
-  applyEventChoice() applies the EventEffect through existing paths (heal path + particles/vignette,
-  applyArmor, itemInventory.addAmmo across OWNED ammo types, playerProgress.addXp,
-  RouteMap.revealRegion, a one-shot pendingNextFloorBudgetBonus folded into the NEXT floor's budget),
+  applyEventChoice() applies the EventEffect through World.applyLadderEffect (the shop's level-up path
+  via WeaponRoller.applyLevelUp, the shop's perk grant, the heal path + particles/vignette, applyArmor,
+  the credit wallet, RouteMap.revealRegion, a one-shot pendingNextFloorBudgetBonus folded into the NEXT
+  floor's budget),
   a GAMBLE rolls the floor seed (loot on success, a survivable bite + fail sting on failure — never a
   lost run), and the chosen token is appended to the run's route story
   (RunStats.annotateLastRouteNode, e.g. "event:distress_beacon:answered"). Adjacency-trigger + a
@@ -851,8 +869,9 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
      MAP-GEN and stored on the node (RouteNode.chosenGeneratorId), biased by the region's generatorWeight.
   ** MYSTERY outcomes (BalanceConfig SECTION 19 MYSTERY_WEIGHT_*, sum 100): VAULT_JACKPOT 16,
      SECRET_WARREN 18, TRAP_GAUNTLET 18, AMBUSH 18 (->elite_hotzone), LORE_SIGNAL 14 (->rest_medbay),
-     MALFUNCTION 16. The weights are AUDITED (R-MYSTERY-EV): the table's EV must sit within ±15% of a
-     standard combat floor at every audited depth, so re-tuning one outcome's payoff re-tunes the table.
+     MALFUNCTION 16. The weights AND the ladder payouts are AUDITED (R-MYSTERY-EV v2): the table's EV must
+     sit in [1.0, 1.3] x a standard combat floor at every depth 1..25 with a real spread, so re-tuning one
+     outcome's payoff re-tunes the table.
   ELITE affixes (RouteMapConstants.AFFIX_*, rolled at AFFIX_ROLL_CHANCE_ELITE 0.60): IRRADIATED,
      OVERCLOCKED, SWARM, FORTIFIED, VOLATILE (see DANGER / GAMBLE NODES).
 

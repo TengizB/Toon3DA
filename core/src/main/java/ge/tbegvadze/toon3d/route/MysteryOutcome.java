@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
@@ -21,23 +22,34 @@ import ge.tbegvadze.toon3d.util.RouteMapConstants;
  */
 public enum MysteryOutcome {
 
-    /** The dream pull: a lightly-guarded room stuffed with loot (a super-cache). Built directly. */
-    VAULT_JACKPOT(RouteMapConstants.MYSTERY_WEIGHT_VAULT, ScanTone.REWARD_RICH, "VAULT", null),
+    /** The dream pull: a lightly-guarded room stuffed with loot (a super-cache). Built directly. Pays a weapon level + credits. */
+    VAULT_JACKPOT(RouteMapConstants.MYSTERY_WEIGHT_VAULT, ScanTone.REWARD_RICH, "VAULT", null,
+            EventEffect.builder().weaponLevels(1).credits(BalanceConfig.MYSTERY_REWARD_VAULT_CREDIT_FLOORS)
+                    .resultText("VAULT CRACKED — WEAPON UPGRADED, CREDITS BANKED").build()),
 
-    /** The explorer's gamble: server rooms + lock-and-key, rewards those who search. Built directly. */
-    SECRET_WARREN(RouteMapConstants.MYSTERY_WEIGHT_SECRET_WARREN, ScanTone.REWARD_RICH, "WARREN", null),
+    /** The explorer's gamble: server rooms + lock-and-key, rewards those who search. Built directly. Pays a perk rank. */
+    SECRET_WARREN(RouteMapConstants.MYSTERY_WEIGHT_SECRET_WARREN, ScanTone.REWARD_RICH, "WARREN", null,
+            EventEffect.builder().perkRank().resultText("SERVER CORE READ — TECHNIQUE LEARNED").build()),
 
-    /** A skill/patience test: dense hazards (traps degrade to barrels), loot at the end. Built directly. */
-    TRAP_GAUNTLET(RouteMapConstants.MYSTERY_WEIGHT_TRAP_GAUNTLET, ScanTone.HIGH_RISK, "TRAP", null),
+    /** A skill/patience test: dense hazards (traps degrade to barrels), loot at the end. Built directly. Pays credits. */
+    TRAP_GAUNTLET(RouteMapConstants.MYSTERY_WEIGHT_TRAP_GAUNTLET, ScanTone.HIGH_RISK, "TRAP", null,
+            EventEffect.builder().credits(BalanceConfig.MYSTERY_REWARD_TRAP_CREDIT_FLOORS)
+                    .resultText("GAUNTLET SURVIVED — SALVAGE BANKED").build()),
 
-    /** Looks calm, then a combat-heavy fight: delegates to the ELITE hotzone (lockdown degrade). */
-    AMBUSH(RouteMapConstants.MYSTERY_WEIGHT_AMBUSH, ScanTone.HIGH_RISK, "AMBUSH", EliteProfile.PROFILE_ID),
+    /** Looks calm, then a combat-heavy fight: delegates to the ELITE hotzone (lockdown degrade). Pays credits on top. */
+    AMBUSH(RouteMapConstants.MYSTERY_WEIGHT_AMBUSH, ScanTone.HIGH_RISK, "AMBUSH", EliteProfile.PROFILE_ID,
+            EventEffect.builder().credits(BalanceConfig.MYSTERY_REWARD_AMBUSH_CREDIT_FLOORS)
+                    .resultText("AMBUSH BROKEN — BOUNTY BANKED").build()),
 
-    /** The "nothing dangerous, something interesting" pull: delegates to the safe MED-BAY (EVENT degrade). */
-    LORE_SIGNAL(RouteMapConstants.MYSTERY_WEIGHT_LORE_SIGNAL, ScanTone.QUIET, "LORE", RestProfile.PROFILE_ID),
+    /** The "nothing dangerous, something interesting" pull: delegates to the safe MED-BAY (EVENT degrade). Pays credits. */
+    LORE_SIGNAL(RouteMapConstants.MYSTERY_WEIGHT_LORE_SIGNAL, ScanTone.QUIET, "LORE", RestProfile.PROFILE_ID,
+            EventEffect.builder().credits(BalanceConfig.MYSTERY_REWARD_LORE_CREDIT_FLOORS)
+                    .resultText("SIGNAL DECODED — INTEL SOLD").build()),
 
-    /** The bad-but-survivable pull: a failing sector — hazards, unlit, no reward, a shortcut. Built directly. */
-    MALFUNCTION(RouteMapConstants.MYSTERY_WEIGHT_MALFUNCTION, ScanTone.QUIET, "MALFUNCTION", null);
+    /** The bad-but-survivable pull: a failing sector — hazards, unlit, a shortcut. Built directly. Costs credits. */
+    MALFUNCTION(RouteMapConstants.MYSTERY_WEIGHT_MALFUNCTION, ScanTone.QUIET, "MALFUNCTION", null,
+            EventEffect.builder().creditCost(BalanceConfig.MYSTERY_REWARD_MALFUNCTION_CREDIT_COST_FLOORS)
+                    .resultText("SECTOR FAILING — REPAIR TOLL DEDUCTED").build());
 
     /**
      * Scan tone buckets a scanner reveals. Deliberately coarser than the outcome list: multiple
@@ -68,12 +80,23 @@ public enum MysteryOutcome {
     private final ScanTone scanTone;
     private final String   statToken;
     private final String   delegateProfileId;
+    private final EventEffect reward;
 
-    MysteryOutcome(float weight, ScanTone scanTone, String statToken, String delegateProfileId) {
+    MysteryOutcome(float weight, ScanTone scanTone, String statToken, String delegateProfileId, EventEffect reward) {
         this.weight            = weight;
         this.scanTone          = scanTone;
         this.statToken         = statToken;
         this.delegateProfileId = delegateProfileId;
+        this.reward            = reward;
+    }
+
+    /**
+     * The outcome's hidden PAYOUT in ladder currencies (balance-overhaul order 6, F15), paid when the player
+     * LEAVES the sector (World / SimWorld) — the reward for having survived whatever it was. Priced by
+     * RouteEconomicsModel through the outcome's ledger row.
+     */
+    public EventEffect reward() {
+        return reward;
     }
 
     /** The scan tone bucket this outcome falls in. */

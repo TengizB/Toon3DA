@@ -46,6 +46,11 @@ public final class FacilityEventRegistry {
         return id == null ? null : byId.get(id);
     }
 
+    /** Every registered event, in registration order (unmodifiable) — the EVENT ledger row prices the catalog. */
+    public List<FacilityEvent> all() {
+        return java.util.Collections.unmodifiableList(new ArrayList<>(byId.values()));
+    }
+
     /** How many events are registered. */
     public int size() {
         return byId.size();

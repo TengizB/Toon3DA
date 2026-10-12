@@ -81,11 +81,12 @@ class Order10RegistriesTest {
     }
 
     @Test
-    void distressBeaconTradesRevealAgainstAmmo() {
+    void distressBeaconTradesRevealAgainstCredits() {
+        // Balance-overhaul order 6 (F15): the "strip it" choice pays in credits (floors of income), not ammo boxes.
         FacilityEvent beacon = freshEvents().get("distress_beacon");
         assertEquals(2, beacon.choices().size());
         assertTrue(beacon.choices().get(0).effect().revealNextRegion());
-        assertTrue(beacon.choices().get(1).effect().ammoBoxes() > 0);
+        assertTrue(beacon.choices().get(1).effect().creditFloors() > 0f);
     }
 
     @Test

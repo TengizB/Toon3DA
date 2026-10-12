@@ -1921,13 +1921,9 @@ public final class BalanceConfig {
     public static final int MYSTERY_WARREN_AMMO_BOXES = 2;
     public static final int MYSTERY_WARREN_MEDKITS    = 1;
 
-    // --- F. EVENT-NODE PAYOFFS (the average an event choice hands out) -------------------
-    /** XP awarded by an event choice at its small tier. */
-    public static final int   EVENT_XP_SMALL              = 60;
-    /** XP awarded by an event choice at its large tier. */
-    public static final int   EVENT_XP_LARGE              = 200;
-    /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
-    public static final int   EVENT_AMMO_BOXES            = 6;
+    // --- F. EVENT-NODE PAYOFFS. Balance-overhaul order 6 (F15) re-expressed them in LADDER CURRENCIES — the
+    // magnitudes live in SECTION 25 (EVENT_* / MYSTERY_REWARD_*); the order-10 XP and ammo-box payoffs
+    // (EVENT_XP_SMALL 60, EVENT_XP_LARGE 200, EVENT_AMMO_BOXES 6) are deleted.
     /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
     public static final float EVENT_NEXT_FLOOR_BUDGET_BONUS = 0.10f;
     /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */
@@ -2001,8 +1997,8 @@ public final class BalanceConfig {
     public static final float ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS = 45f;
     /** HP a MALFUNCTION sector's failing hazards are expected to cost (the bad-but-survivable pull). */
     public static final float ROUTE_MALFUNCTION_HAZARD_HIT_POINTS   = 55f;
-    /** Share of an EVENT's payoff any single choice delivers, averaged over the v1 choice catalogue. */
-    public static final float ROUTE_EVENT_EXPECTED_CHOICE_SHARE     = 0.40f;
+    // ROUTE_EVENT_EXPECTED_CHOICE_SHARE (0.40) deleted by balance-overhaul order 6: the EVENT ledger row is now
+    // priced from the catalog itself (the mean of each event's best choice, RouteEconomicsModel).
 
     // --- I. THE ROUTE BANDS (what the audit enforces) -------------------------------------
     /** R-RISK-PREMIUM: (reward premium)/(threat premium) — danger pays, slightly better than fair. */
@@ -2023,8 +2019,12 @@ public final class BalanceConfig {
     // measured cache 0.36 / shop 0.37 at d21. Calm still costs tempo and loot — it just costs more at the peak.
     public static final float ROUTE_CALM_EV_DISCOUNT_MIN = 0.10f;
     public static final float ROUTE_CALM_EV_DISCOUNT_MAX = 0.40f;
-    /** R-MYSTERY-EV: the weighted mystery table EV may differ from a combat node's by at most this. */
-    public static final float ROUTE_MYSTERY_EV_TOLERANCE = 0.15f;
+    /**
+     * R-MYSTERY-EV v2 (balance-overhaul order 6, F15 — OVERRIDES "within +/-15% of a combat node"): the weighted
+     * table's EV is AT LEAST a combat node's and at most this premium above it (a gamble pays for its variance,
+     * but must never become the strictly-better pick). Range: 0.20–0.40.
+     */
+    public static final float ROUTE_MYSTERY_EV_PREMIUM_MAX = 0.30f;
     /**
      * R-MYSTERY-EV (worst case): the worst outcome's expected NET resource loss, as a multiple of
      * ONE floor's maximum modelled drain (the order-3 net-drain band max plus the un-covered share
@@ -3065,4 +3065,50 @@ public final class BalanceConfig {
     public static final float SIM_SHOP_MIN_OFFERS_PER_VISIT      = 1.5f;
     /** F14 S-SHOP: TACTICAL's median unspent credits when a lost run ends, in floors of modelled income. */
     public static final float SIM_SHOP_MAX_UNSPENT_FLOORS        = 1.5f;
+
+    // --- EVENTS AND MYSTERIES IN LADDER CURRENCIES (F15). Every reward / cost is a weapon LEVEL (<= d+1), a PERK
+    // RANK of a carried tag, a HEAL / ARMOUR fraction, or CREDITS in floors of a COMBAT floor's income at the depth
+    // (route/EventEffect); route/FacilityEvents and route/MysteryOutcome carry the data, RouteEconomicsModel
+    // prices it in power points, and R-MYSTERY-EV v2 + R-EVENT-VALUE band it.
+    /** F15: credits a small event payout grants (riding a level / perk / heal), in floors of income. */
+    public static final float EVENT_CREDIT_FLOORS_SMALL          = 0.75f;
+    /**
+     * F15: credits the all-credits event payout grants (the beacon "strip it for parts" choice), in floors of
+     * income. An EVENT floor replaces a COMBAT floor, so its best choice must be worth that floor's WHOLE supply
+     * (ammo + heal + credits, R-EVENT-VALUE) — about three floors of credits at depth 1.
+     */
+    public static final float EVENT_CREDIT_FLOORS_LARGE          = 3.00f;
+    /** F15: credits riding the stash gamble's weapon level (paid only when the gamble pays). */
+    public static final float EVENT_STASH_CREDIT_FLOORS          = 2.00f;
+    /** F15: heal fraction riding the stash gamble's weapon level. */
+    public static final float EVENT_GAMBLE_HEAL_FRACTION         = 0.20f;
+    /** F15: HP fraction a lost stash gamble bites. */
+    public static final float EVENT_GAMBLE_FAIL_HEALTH_FRACTION  = 0.20f;
+    /** F15: the surviving tech's armour patch (fraction of max armour). */
+    public static final float EVENT_TECH_ARMOUR_FRACTION         = 1.00f;
+    /** F15: the shrine's surge (fraction of max HP). */
+    public static final float EVENT_SHRINE_HEAL_FRACTION         = 1.00f;
+    /** F15 MYSTERY: VAULT JACKPOT pays a weapon level and this many floors of credits on the way out. */
+    public static final float MYSTERY_REWARD_VAULT_CREDIT_FLOORS = 0.50f;
+    /** F15 MYSTERY: TRAP GAUNTLET pays this many floors of credits for surviving the hazards. */
+    public static final float MYSTERY_REWARD_TRAP_CREDIT_FLOORS  = 1.50f;
+    /** F15 MYSTERY: AMBUSH (an ELITE floor) pays this many floors of credits on top. */
+    public static final float MYSTERY_REWARD_AMBUSH_CREDIT_FLOORS = 0.50f;
+    /** F15 MYSTERY: LORE SIGNAL (a med-bay) pays this many floors of credits (salvaged intel). */
+    public static final float MYSTERY_REWARD_LORE_CREDIT_FLOORS  = 0.25f;
+    /** F15 MYSTERY: MALFUNCTION costs this many floors of credits (a failing sector eats a toll). */
+    public static final float MYSTERY_REWARD_MALFUNCTION_CREDIT_COST_FLOORS = 0.25f;
+    /**
+     * R-MYSTERY-EV v2 (F15): the table's outcome EVs must SPREAD — their weighted standard deviation is at least
+     * this fraction of a standard COMBAT node's EV (a mystery is a gamble, never a safe COMBAT in disguise).
+     */
+    public static final float ROUTE_MYSTERY_MIN_SPREAD_FRACTION  = 0.25f;
+    /**
+     * F15: power points ONE weapon level is worth in the route model (permanent progress). A level is a full
+     * ladder rung (R-LADDER L4: >= 25% DPT on its floor), so it is priced like one perk pick — never at the
+     * shop's deliberately cheap rung price. Range: 8–16.
+     */
+    public static final float ROUTE_WEAPON_LEVEL_POWER_POINTS    = EXPECTED_PERK_POWER_PP_PER_PICK;
+    /** R-EVENT-VALUE (F15): every EVENT's best choice is worth at least this x a COMBAT floor's SUPPLY (PP). */
+    public static final float EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO = 1.00f;
 }

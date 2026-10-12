@@ -535,12 +535,28 @@ class BalanceAuditTest {
     }
 
     /**
-     * R-MYSTERY-EV (order 7): the weighted mystery table really is worth about a combat floor
-     * (±15%), and the worst pull stays "bad but survivable" as arithmetic rather than adjective.
+     * R-MYSTERY-EV v2 (balance-overhaul order 6, F15 — replaced the order-7 "+/-15% of a combat floor"): the
+     * weighted mystery table, paid in ladder currencies, is worth at least a combat floor and at most +30%, its
+     * outcomes spread (a gamble, not a disguised COMBAT), and the worst pull stays "bad but survivable".
      */
     @Test
     void theMysteryTableIsWorthAboutACombatFloor() {
-        assertNoViolations(BalanceSchema.mysteryExpectedValueResults());
+        List<BalanceSchema.RuleResult> results = BalanceSchema.mysteryExpectedValueResults();
+        assertTrue(results.stream().anyMatch(result -> result.subject.equals("weighted table EV / combat EV")));
+        assertTrue(results.stream().anyMatch(result -> result.subject.equals("outcome spread / combat EV")));
+        assertNoViolations(results);
+    }
+
+    /**
+     * R-EVENT-VALUE (balance-overhaul order 6, F15): every registered EVENT offers a choice, priced in ladder
+     * currencies, worth at least one COMBAT floor's supply at every depth of the run — one line per event.
+     */
+    @Test
+    void everyEventOffersAChoiceWorthACombatFloorsSupply() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.eventValueResults();
+        assertEquals(ge.tbegvadze.toon3d.route.RouteRegistries.events().size(), results.size(),
+                "one R-EVENT-VALUE line per registered event");
+        assertNoViolations(results);
     }
 
     /** R-PIPS-DERIVED (order 7): displayed risk pips equal the tier DERIVED from priced threat. */
@@ -579,13 +595,17 @@ class BalanceAuditTest {
      * Order-7 acceptance criterion (the printed difficulty RANGE): the SAFEST and DEADLIEST policies
      * must actually differ — if every policy walked the same numbers the route map would not be a
      * difficulty planner at all. Proven on the two quantities the player feels: the resources banked
-     * (cumulative scarcity) and the levels earned (XP pace).
+     * and the levels earned (XP pace), over the whole finite run (balance-overhaul order 6: horizon 15 -> 25).
+     * The banked resource is HEALTH (per-floor net drain): since balance-overhaul order 2 the SupplyPlanner pins
+     * every floor's ammo to its own demand, so cumulative ammo scarcity is near-identical across policies (0.95
+     * vs 0.93 before order 6), and order 6 (F15) removed the last route-dependent ammo grant (the EVENT ammo
+     * boxes). What a calm route banks, and a hot route spends, is the player's health.
      */
     @Test
     void safestAndDeadliestRoutesSpanARealDifficultyRange() {
         ge.tbegvadze.toon3d.route.NodeEconomicsRegistry ledger = BalanceSchema.routeLedger();
         ge.tbegvadze.toon3d.route.RouteEconomicsModel.ModelFloor floor = BalanceSchema.routeModelFloor();
-        float safestScarcity = 0f, deadliestScarcity = 0f, safestPace = 0f, deadliestPace = 0f;
+        float safestDrain = 0f, deadliestDrain = 0f, safestPace = 0f, deadliestPace = 0f;
         int samples = 0;
         for (long seed = 0; seed < 25; seed++) {
             ge.tbegvadze.toon3d.route.RouteMapGenerator generator =
@@ -597,22 +617,24 @@ class BalanceAuditTest {
                     ge.tbegvadze.toon3d.route.RegionPlan.defaultPlan());
             java.util.List<ge.tbegvadze.toon3d.route.RouteEconomicsModel.TrajectorySample> safest =
                     ge.tbegvadze.toon3d.route.RouteEconomicsModel.walk(map,
-                            ge.tbegvadze.toon3d.route.RouteEconomicsModel.PathPolicy.SAFEST, ledger, floor, 15);
+                            ge.tbegvadze.toon3d.route.RouteEconomicsModel.PathPolicy.SAFEST, ledger, floor,
+                            BalanceConfig.RUN_FINAL_DEPTH);
             java.util.List<ge.tbegvadze.toon3d.route.RouteEconomicsModel.TrajectorySample> deadliest =
                     ge.tbegvadze.toon3d.route.RouteEconomicsModel.walk(map,
-                            ge.tbegvadze.toon3d.route.RouteEconomicsModel.PathPolicy.DEADLIEST, ledger, floor, 15);
+                            ge.tbegvadze.toon3d.route.RouteEconomicsModel.PathPolicy.DEADLIEST, ledger, floor,
+                            BalanceConfig.RUN_FINAL_DEPTH);
             int paired = Math.min(safest.size(), deadliest.size());
             for (int index = 0; index < paired; index++) {
-                safestScarcity    += safest.get(index).scarcityRatio;
-                deadliestScarcity += deadliest.get(index).scarcityRatio;
+                safestDrain       += safest.get(index).netDrainFraction;
+                deadliestDrain    += deadliest.get(index).netDrainFraction;
                 safestPace        += safest.get(index).experiencePace;
                 deadliestPace     += deadliest.get(index).experiencePace;
                 samples++;
             }
         }
         assertTrue(samples > 0, "the trajectory walker must produce region-boundary samples");
-        assertTrue(safestScarcity > deadliestScarcity,
-                "the SAFEST route must bank more ammo than the DEADLIEST one");
+        assertTrue(safestDrain < deadliestDrain,
+                "the SAFEST route must bank more health (a lower net drain) than the DEADLIEST one");
         assertTrue(deadliestPace > safestPace,
                 "the DEADLIEST route must earn more XP than the SAFEST one — that is what it buys");
     }

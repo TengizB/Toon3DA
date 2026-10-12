@@ -113,10 +113,10 @@ public final class BalanceReport {
         }
         System.out.println("------------------------------------------------------------------------------------");
         System.out.printf("  standard COMBAT node EV = %.2f. calm discount band %.0f-%.0f%%; risk premium band %.2f-%.2f;"
-                        + " mystery EV tolerance ±%.0f%%%n",
+                        + " mystery EV premium 0..+%.0f%%%n",
                 combat.expectedValue, BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MIN * 100f,
                 BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MAX * 100f, BalanceConfig.ROUTE_RISK_PREMIUM_MIN,
-                BalanceConfig.ROUTE_RISK_PREMIUM_MAX, BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE * 100f);
+                BalanceConfig.ROUTE_RISK_PREMIUM_MAX, BalanceConfig.ROUTE_MYSTERY_EV_PREMIUM_MAX * 100f);
         System.out.println("  AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.");
         for (BalanceSchema.RuleResult result : BalanceSchema.riskPremiumResults()) {
             System.out.printf("  risk premium %-26s %5.2f  %s%n", result.subject, result.value,

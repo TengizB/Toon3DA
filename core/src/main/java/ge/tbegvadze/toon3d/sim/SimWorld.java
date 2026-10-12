@@ -324,6 +324,7 @@ public final class SimWorld implements LevelTransitionListener {
                                      && inventory.getMeleeWeapon() == null;
                 break;
             }
+            payMysteryOutcome();
             if (currentDepth >= BalanceConfig.RUN_FINAL_DEPTH) {
                 // THE FINITE RUN (balance-overhaul order 6, F4): the run-final boss floor is cleared —
                 // VICTORY, mirroring World.recordFinalClearVictory. No ledger ever holds a floor 26.
@@ -861,6 +862,45 @@ public final class SimWorld implements LevelTransitionListener {
     /** The run's build (read-only by convention) — SimView exposes it to the policies. */
     PlayerBuild playerBuild() {
         return playerBuild;
+    }
+
+    /**
+     * The MYSTERY payout on leaving the sector (balance-overhaul order 6, F15) — mirrors World.payMysteryOutcomeOnce
+     * / applyLadderEffect with the same seeds and currencies, so the played economy sees what device play pays.
+     */
+    private void payMysteryOutcome() {
+        if (pendingNode == null || pendingNode.type != RouteNodeType.MYSTERY || GameMath.isBossFloor(currentDepth)) return;
+        ge.tbegvadze.toon3d.route.EventEffect effect =
+                ge.tbegvadze.toon3d.route.MysteryOutcome.rollFor(pendingNode.nodeSeed).reward();
+        Weapon equipped = inventory.getEquippedWeapon();
+        if (effect.weaponLevels() > 0 && equipped != null) {
+            int ceiling = Math.min(ge.tbegvadze.toon3d.util.WeaponConstants.MAX_WEAPON_LEVEL, Math.max(1, currentDepth) + 1);
+            for (int level = 0; level < effect.weaponLevels(); level++) {
+                if (equipped.isLevelGapExempt() || !equipped.canLevelUp() || equipped.getWeaponLevel() >= ceiling) break;
+                weaponRoller.applyLevelUp(equipped);
+            }
+        }
+        if (effect.perkRank()) {
+            java.util.Random random = new java.util.Random(pendingNode.nodeSeed ^ 0x4D59535445525921L);
+            java.util.EnumSet<BuildTag> carried = carriedBuildTags();
+            List<Perk> preferred = new ArrayList<>();
+            List<Perk> fallback  = new ArrayList<>();
+            for (Perk perk : Perk.values()) {
+                if (playerBuild.isMaxed(perk)) continue;
+                fallback.add(perk);
+                if (carried.contains(perk.tag)) preferred.add(perk);
+            }
+            List<Perk> pool = preferred.isEmpty() ? fallback : preferred;
+            if (!pool.isEmpty()) grantShopAbility(pool.get(random.nextInt(pool.size())));
+        }
+        if (effect.healFraction() > 0f) player.applyTreatment(Math.round(player.getMaxHealth() * effect.healFraction()));
+        if (effect.armourFraction() > 0f) player.applyArmor(Math.round(player.getMaxArmor() * effect.armourFraction()));
+        float floorIncome = ge.tbegvadze.toon3d.util.BalanceSchema.combatFloorCreditIncome(currentDepth);
+        if (effect.creditFloors() > 0f) playerStats.addCredits(Math.round(effect.creditFloors() * floorIncome));
+        if (effect.creditCostFloors() > 0f) {
+            int toll = Math.min(playerStats.getCredits(), Math.round(effect.creditCostFloors() * floorIncome));
+            if (toll > 0) playerStats.spendCredits(toll);
+        }
     }
 
     /** A perk rank bought at the Fabricator (mirrors World.grantShopAbility): no level spent. */

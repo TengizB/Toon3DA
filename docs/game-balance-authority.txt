@@ -749,10 +749,32 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
                        sanctuary payoff is capped by the player's own maxima) and ONE band must cover
                        depths 1..15. This rule is what RE-PRICED the order-8/9 hand-set payoffs: cache
                        supply down, med-bay heal + stock up, elite vault down, event payout up.
-    R-MYSTERY-EV       the weighted outcome table within ±15% of a standard combat node at every audited
-                       depth (order 9 ASSERTED this; it is audited now), and the worst outcome's expected
-                       resource loss bounded by one floor's maximum modelled drain x 1.5 — "bad but
-                       survivable" as arithmetic, not adjective.
+    R-MYSTERY-EV v2    (OVERRIDE, balance-overhaul order 6 CP6, F15 — was "within ±15% of a standard combat
+                       node"): every outcome pays a hidden reward in LADDER CURRENCIES (MysteryOutcome.reward,
+                       paid on leaving the sector), and at every depth 1..25 the weighted table's EV is in
+                       [1.0, 1.0 + ROUTE_MYSTERY_EV_PREMIUM_MAX 0.30] x a standard combat node's (a gamble
+                       worth taking, never the strictly-better pick; measured 1.00..1.29), its outcomes'
+                       weighted std is >= ROUTE_MYSTERY_MIN_SPREAD_FRACTION 0.25 of the combat EV ("higher
+                       variance"; measured >= 0.58), and the worst outcome's expected resource loss stays
+                       bounded by one floor's maximum modelled drain x 1.5 — "bad but survivable".
+    R-EVENT-VALUE      (NEW, balance-overhaul order 6 CP6, F15; RuleKind.EVENT_VALUE) every registered EVENT
+                       offers a choice whose ladder-currency value (RouteEconomicsModel.bestChoicePrice:
+                       resources + 2.6 x progress, a gamble at its expectation) is >= EVENT_BEST_CHOICE_MIN_
+                       SUPPLY_RATIO 1.0 x one standard COMBAT floor's SUPPLY (ammo + heal + credits PP) at
+                       every depth 1..25 (measured 1.08..1.40). LADDER CURRENCIES (EventEffect): a weapon
+                       level (ROUTE_WEAPON_LEVEL_POWER_POINTS = one perk pick, 12 PP of progress), a perk rank
+                       (SHOP_PERK_RANK_POWER_POINTS), heal / armour fractions of the depth-1 maxima, credits
+                       in floors of a COMBAT floor's income at the depth; costs: HP fraction, credits, a hotter
+                       next floor (bonus x ROUTE_RISK_POWER_POINTS_PER_STANDARD_FLOOR). The EVENT ledger row
+                       is priced from the catalog (weighted mean of each event's best choice), and the EVENT
+                       node leaves R-CALM-COST's domain for this rule (OVERRIDE; its "event EV discount"
+                       waiver is RETIRED). The EVENT ammo boxes / XP / ROUTE_EVENT_EXPECTED_CHOICE_SHARE are
+                       deleted; BUILD_* untouched. RouteRegistries.events() now latch-registers like the
+                       other audited registries (the audit prices the catalog without a full bootstrap).
+                       Test UPDATED (same checkpoint): safestAndDeadliestRoutesSpanARealDifficultyRange now
+                       proves the range on banked HEALTH (net drain) + XP pace at horizon 25 — ammo scarcity
+                       has been pinned to demand by the planner since order 2 (0.95 vs 0.93 before this
+                       order) and F15 removed the last route-dependent ammo grant.
     R-PIPS-DERIVED     DangerTier is DERIVED from the priced threat ratio, never hand-assigned
                        (GameMath.derivedDangerTierIndex: forced -> SET_PIECE, hidden outcome table ->
                        GAMBLE, else CALM <= 0.60x <= STANDARD <= 1.25x < DANGER), and must equal what the
@@ -1107,8 +1129,7 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
    waiver and BalanceAuditTest pins that.)
 
   [SIM_SHOP] TACTICAL offers bought per Fabricator visit (balance-overhaul order 6 CP5 — income is the supply a run
-  collects; same waiver and expiry), [MYSTERY_EV] weighted table vs combat (CP5 -> CP6 ONLY: expires when CP6
-  re-derives R-MYSTERY-EV), [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
+  collects; same waiver and expiry), [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
   depth" and inherit its waiver and expiry: TACTICAL win rate / reaches depth 10 / median death depth (losses) /
   first-boss clears (of seeds reaching it), NAIVE win rate / median death depth / reaches the first boss /
   first-boss clears), [SIM_FAIR] TACTICAL readable deaths,
@@ -1136,13 +1157,14 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
              the moment the harness is good enough the waiver must be deleted and
              the bands enforced against the real numbers.
 
-  [CALM_COST] rest EV discount, [CALM_COST] event EV discount (balance-overhaul order 2, CP6)
+  [CALM_COST] rest EV discount (balance-overhaul order 2, CP6; re-pointed by order 6)
     reason:  the route ledger is now priced on each floor's NodeSupplySpec plan. The old
-             ledger credited the bespoke MED-BAY and EVENT rooms with 35% of a combat
-             floor's ordinary loot they never placed; priced honestly REST sits 30-44% and
-             EVENT 9-27% below COMBAT's EV (band 10-35%). Their contents are order 6's to
-             retune (SCOPE OUT of order 2).
-    expires: with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).
+             ledger credited the bespoke MED-BAY room with 35% of a combat floor's ordinary
+             loot it never placed; priced honestly REST sits well below COMBAT's EV (0.58 at
+             d25 against the [0.10, 0.40] band). Order 6 left REST alone (SCOPE OUT: owner
+             "REST is ok"). The EVENT half of this waiver is RETIRED by order 6 CP6: EVENT
+             contents were re-expressed (F15) and EVENT is governed by R-EVENT-VALUE.
+    expires: with the balance-overhaul order 7 feel pass (REST contents).
 
   [BUILD_CARRY] R-CARRY SCAVENGER (balance-overhaul order 5, owner ruling D3)
     reason:  SCAVENGER's value is supply, shop and carrier economy, not reference-fight TTK / TTD;
@@ -1910,6 +1932,11 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 6 / CP6 — EVENTS AND MYSTERIES IN LADDER CURRENCIES (F15). EventEffect re-written (weapon
+    levels, perk rank, heal/armour fractions, credits in floors of income; HP / credit / next-floor costs); the five
+    events and six mystery outcomes re-expressed (SECTION 25 EVENT_* / MYSTERY_REWARD_*); R-MYSTERY-EV v2; new
+    R-EVENT-VALUE; EVENT out of R-CALM-COST (event waiver retired; REST waiver re-pointed to order 7, REST is out
+    of scope); the CP5 MYSTERY_EV waiver retired. Why: F15 — choices read in the run's own currencies.
   balance-overhaul order 6 / CP5 — THE SHOP ECONOMY. R-CREDITS v2 (F12, needed bundle, [1.10, 1.40]); price knobs
     36 -> 15.5 cr/PP and depth scale 0.10 -> 0.0; one Fabricator per floor, two at 0.80x on a SHOP node (F13);
     S-SHOP (F14, offers line navigation-waived, unspent line enforced); cache credits 1.50, overclocked vault 2;

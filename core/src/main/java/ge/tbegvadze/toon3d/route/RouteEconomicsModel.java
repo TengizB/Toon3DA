@@ -123,6 +123,108 @@ public final class RouteEconomicsModel {
     // PRICING
     // =====================================================================================
 
+    // =========================================================================
+    // LADDER CURRENCIES (balance-overhaul order 6, F15) — an EventEffect priced in power points.
+    // =========================================================================
+
+    /** A ladder-currency payout priced in power points: consumable resources and permanent progress. */
+    public static final class LadderRewardPrice {
+        /** Credits, heal, armour, minus HP / credit costs and the next-floor danger charge (in PP). */
+        public final float resourcePowerPoints;
+        /** Weapon levels + perk ranks (in PP, BEFORE the durability weight). */
+        public final float progressPowerPoints;
+
+        LadderRewardPrice(float resourcePowerPoints, float progressPowerPoints) {
+            this.resourcePowerPoints = resourcePowerPoints;
+            this.progressPowerPoints = progressPowerPoints;
+        }
+
+        /** The one comparable number: resources + the durability-weighted progress (GameMath.nodeExpectedValue's terms). */
+        public float expectedValue() {
+            return resourcePowerPoints + BalanceConfig.ROUTE_PERMANENT_POWER_WEIGHT * progressPowerPoints;
+        }
+    }
+
+    /** Credits ONE standard COMBAT floor pays at a depth (planned chips + the depth-scaled kill bounty) — "a floor of income". */
+    public static float creditsPerFloorOfIncome(ModelFloor floor, int depth) {
+        return SupplyPlanner.plannedCreditChips(NodeSupplySpecs.combat()) * Math.round(SupplyPlanner.averageCreditChipValue())
+                + floor.killCredits * (1f + BalanceConfig.CREDIT_DEPTH_SCALE * (Math.max(1, depth) - 1));
+    }
+
+    /**
+     * Prices an {@link EventEffect} at a depth in the SAME conversions {@link #priceDirect} uses: credits at the
+     * depth's shop price level, heal / armour / HP costs in depth-1 HP terms (every heal is a fraction of max), a
+     * weapon level at ROUTE_WEAPON_LEVEL_POWER_POINTS and a perk rank at SHOP_PERK_RANK_POWER_POINTS of progress,
+     * a hotter next floor at its share of a standard floor's risk. A gamble folds through GameMath.gambleExpectedValue.
+     * A revealed region is information and is priced at zero.
+     */
+    public static LadderRewardPrice ladderRewardPrice(EventEffect effect, ModelFloor floor, int depth) {
+        if (effect == null) return new LadderRewardPrice(0f, 0f);
+        ExpectedPlayer depthOnePlayer = GameMath.expectedPlayerAtDepth(1);
+        float creditPowerPoints = (effect.creditFloors() - effect.creditCostFloors()) * creditsPerFloorOfIncome(floor, depth)
+                / (BalanceConfig.SHOP_CREDITS_PER_POWER_POINT
+                   * GameMath.shopDepthPriceFactor(depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE));
+        float healPowerPoints = (effect.healFraction() - effect.healthCostFraction()) * depthOnePlayer.maxHealth
+                / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
+        float armourPowerPoints = effect.armourFraction() * depthOnePlayer.maxArmor / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
+        float dangerPowerPoints = effect.nextFloorBudgetBonus() * BalanceConfig.ROUTE_RISK_POWER_POINTS_PER_STANDARD_FLOOR;
+        float progress = effect.weaponLevels() * BalanceConfig.ROUTE_WEAPON_LEVEL_POWER_POINTS
+                + (effect.perkRank() ? BalanceConfig.SHOP_PERK_RANK_POWER_POINTS : 0f);
+        float resources = creditPowerPoints + healPowerPoints + armourPowerPoints - dangerPowerPoints;
+        if (!effect.isGamble()) return new LadderRewardPrice(resources, progress);
+        // A gamble: the whole payout lands with the loot chance; the bite (an HP fraction) otherwise.
+        float biteCost = effect.gambleFailDamageFraction() * depthOnePlayer.maxHealth / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
+        float chance = effect.gambleLootChance();
+        return new LadderRewardPrice(GameMath.gambleExpectedValue(chance, resources, biteCost),
+                GameMath.gambleExpectedValue(chance, progress, 0f));
+    }
+
+    /** An event's BEST choice by expected value (the choice R-EVENT-VALUE bands and the EVENT row prices). */
+    public static LadderRewardPrice bestChoicePrice(FacilityEvent event, ModelFloor floor, int depth) {
+        LadderRewardPrice best = new LadderRewardPrice(0f, 0f);
+        for (EventChoice choice : event.choices()) {
+            LadderRewardPrice priced = ladderRewardPrice(choice.effect(), floor, depth);
+            if (priced.expectedValue() > best.expectedValue()) best = priced;
+        }
+        return best;
+    }
+
+    /** The EVENT catalog's payout: the weight-averaged best choice over every registered event. */
+    public static LadderRewardPrice eventCatalogPrice(ModelFloor floor, int depth) {
+        float totalWeight = 0f, resources = 0f, progress = 0f;
+        for (FacilityEvent event : RouteRegistries.events().all()) {
+            LadderRewardPrice best = bestChoicePrice(event, floor, depth);
+            totalWeight += event.weight();
+            resources   += event.weight() * best.resourcePowerPoints;
+            progress    += event.weight() * best.progressPowerPoints;
+        }
+        return totalWeight <= 0f ? new LadderRewardPrice(0f, 0f)
+                : new LadderRewardPrice(resources / totalWeight, progress / totalWeight);
+    }
+
+    /** What ONE standard COMBAT floor SUPPLIES (ammo + heal + credits, in PP — its reward minus the progress part). */
+    public static float combatFloorSupplyPowerPoints(NodeEconomicsRegistry ledger, ModelFloor floor, int depth) {
+        NodePrice combat = standardCombat(ledger, floor, depth);
+        return combat.rewardPowerPoints - BalanceConfig.ROUTE_PERMANENT_POWER_WEIGHT * combat.progressPowerPoints;
+    }
+
+    /** Folds a row's ladder-currency payout (a mystery outcome's reward, the event catalog) onto its base price. */
+    private static NodePrice withLadderReward(NodeEconomics row, NodePrice base, ModelFloor floor, int depth) {
+        if (base == null) return null;
+        LadderRewardPrice ladder = null;
+        if (row.ladderReward() != null) ladder = ladderRewardPrice(row.ladderReward(), floor, depth);
+        if (row.eventCatalogReward()) ladder = eventCatalogPrice(floor, depth);
+        if (ladder == null) return base;
+        float rewardGain = Math.max(0f, ladder.resourcePowerPoints)
+                + BalanceConfig.ROUTE_PERMANENT_POWER_WEIGHT * ladder.progressPowerPoints;
+        return new NodePrice(base.id, base.displayName, base.threatCost, base.supplyDamage, base.demandDamage,
+                base.incomingHitPoints, base.healHitPoints, base.experiencePoints,
+                base.resourceDeltaPowerPoints + ladder.resourcePowerPoints,
+                base.progressPowerPoints + ladder.progressPowerPoints,
+                base.rewardPowerPoints + rewardGain,
+                base.expectedValue + ladder.expectedValue());
+    }
+
     /** The reference every route band is measured against: a standard COMBAT node at this depth. */
     public static NodePrice standardCombat(NodeEconomicsRegistry ledger, ModelFloor floor, int depth) {
         NodeEconomics combat = ledger.get(RouteEconomics.STANDARD_COMBAT_ID);
@@ -154,16 +256,16 @@ public final class RouteEconomicsModel {
             NodeEconomics delegate = ledger.get(row.delegateId());
             NodePrice delegated = price(ledger, delegate, affix, floor, depth);
             return delegated == null ? null
-                    : new NodePrice(row.id(), row.displayName(), delegated.threatCost,
+                    : withLadderReward(row, new NodePrice(row.id(), row.displayName(), delegated.threatCost,
                             delegated.supplyDamage, delegated.demandDamage, delegated.incomingHitPoints,
                             delegated.healHitPoints, delegated.experiencePoints,
                             delegated.resourceDeltaPowerPoints, delegated.progressPowerPoints,
-                            delegated.rewardPowerPoints, delegated.expectedValue);
+                            delegated.rewardPowerPoints, delegated.expectedValue), floor, depth);
         }
         if (row.hiddenOutcomeTable()) {
             return weightedOutcomeTablePrice(ledger, row, floor, depth);
         }
-        return priceDirect(ledger, row, affix, floor, depth);
+        return withLadderReward(row, priceDirect(ledger, row, affix, floor, depth), floor, depth);
     }
 
     /** The weighted mean over every registered MYSTERY outcome — the hidden table's honest price. */
