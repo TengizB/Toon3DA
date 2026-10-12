@@ -625,23 +625,32 @@ R-HEALDRAIN-DEPTH (RuleKind.HEALDRAIN_DEPTH) — RETIRED by balance-overhaul ord
   drainTarget), S3/S4) and, played, by the sim band S-SUPPLY (TACTICAL HP fraction at
   COMBAT exit in [0.55, 0.80], CP7). HEAL_SUPPLY_REGION_MULTIPLIER is DELETED (CP6).
 
-R-CREDITS (RuleKind.CREDITS) — the credit sink made real (order 3)
-  Currency without a coupled sink is a score counter. The rule couples income to the
-  shop: expected income per region / price of the expected purchase bundle in [0.9,
-  1.4] for every region across depths 1..RUN_FINAL_DEPTH (25; was 1..15, balance-
-  overhaul order 1 — no value re-fit was needed).
-    income(region)  = sum over the region's floors of (killBounty(d) + chipIncome)
-                      (GameMath.creditIncomePerRegion; killBounty scales linearly)
-    bundle(region)  = 1 significant (weapon-class, 12 PP) + 1.5 small (supply, 3 PP)
-                      buys, priced through GameMath.shopPrice at the region's depth
-  So a region affords roughly one significant purchase plus resupply, banking about
-  one region's worth (CREDIT_BANK_TARGET_FLOORS). PRICING FROM POWER, NOT VIBES:
-  every shop offer's price = valuePowerPoints * SHOP_CREDITS_PER_POWER_POINT *
-  depthFactor(d) (GameMath.shopPrice) — a weapon-class upgrade on its ability/level
-  PP, a consumable on its supply value converted to PP. There are ZERO hand-set per-
-  offer base prices; SHOP_CREDITS_PER_POWER_POINT (36) is the single price-level knob.
-  The shop is purchasable in-game end to end (stock -> price -> buy -> deduct ->
-  deliver); order 3 finished the pricing half.
+R-CREDITS v2 (RuleKind.CREDITS) — the shop is a place to SPEND (balance-overhaul order 6, F12)
+  OVERRIDE RECORD (CP5): the order-3 rule "income per region / one weapon-class buy (12 PP) + 1.5 small
+  buys (3 PP) in [0.9, 1.4]" is REPLACED (CREDIT_INCOME_RATIO_*, SHOP_EXPECTED_*_BUYS_PER_REGION deleted).
+  Owner D4: "shops everywhere are too expensive". For every region A..E:
+    income(d)  = killBounty(d) + chipIncome   (BalanceSchema.combatFloorCreditIncome; bounties linear in d)
+    bundle(d)  = LEVEL UP rung price(d) + 1.5 consumables @ SHOP_SMALL_BUY_POWER_POINTS (3 PP)
+                 + the region's TIER STEP (to WEAPON_DROP_TIER_MAX_BY_REGION, priced on its ability-PP
+                 budget) / REGION_BAND_SIZE                  (GameMath.neededBundlePricePerFloor)
+    mean income(d) / mean bundle(d) over the region's floors in [CREDITS_V2_RATIO_MIN 1.10, MAX 1.40]
+  — a SURPLUS: an on-curve player affords the ladder rung, the consumables and the region's tier step,
+  with change. RE-FIT: SHOP_CREDITS_PER_POWER_POINT 36 -> 15.5 and SHOP_DEPTH_PRICE_SCALE 0.10 -> 0.0
+  (income climbs ~5%/floor while the bundle's value climbs by region tier, so any depth ramp on top
+  starved the deep regions; measured A 1.37 / B 1.33 / C 1.26 / D 1.15 / E 1.33). PRICING FROM POWER,
+  NOT VIBES still holds: price = valuePP * SHOP_CREDITS_PER_POWER_POINT * depthFactor(d)
+  (GameMath.shopPrice), zero hand-set base prices.
+  MACHINES (F13, OVERRIDES SHOP_MIN_PER_FLOOR 1 / SHOP_MAX_PER_FLOOR 2 / SHOP_SECOND_MACHINE_CHANCE 0.40):
+  exactly SHOP_MACHINES_PER_FLOOR (1) Fabricator on every floor; a SHOP node's floor has
+  SHOP_NODE_MACHINE_COUNT (2, upgrade/supply biased) at SHOP_NODE_PRICE_MULTIPLIER (0.80) — through
+  ShopContext's price multiplier, stacking with the build's Haggler. The LEVEL UP rung stays guaranteed.
+  RIPPLE (CP5, same checkpoint): a credit now buys ~2.3x the power in the route model, so credit-light
+  rows fell behind COMBAT — NODE_SUPPLY_CACHE_CREDITS 1.20 -> 1.50 (R-CALM-COST cache 0.40 at d25) and
+  AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES 1 -> 2 (R-RISK-PREMIUM 0.999 at d16). The MYSTERY table (0.82x
+  COMBAT at d25) carries a waiver that expires at CP6, which re-derives R-MYSTERY-EV (F15).
+  S-SHOP (sim, F14; RuleKind.SIM_SHOP): TACTICAL buys >= 1.5 offers per Fabricator visit (navigation-
+  waived: measured 0.64 because a stalling run collects < half its supply) and dies holding <= 1.5
+  floors of income (ENFORCED; measured 0.13 — it spends everything it collects).
 
 R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AMMO) — bosses as BUILD CHECKS (order 6)
   RE-DERIVED (balance-overhaul order 1): BossBalance reads THE one expected-player model —
@@ -1097,7 +1106,9 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
    is governed by R-ROLE, its PLATED niche and R-ROLE-5's ammo check. R-ROLE has no
    waiver and BalanceAuditTest pins that.)
 
-  [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
+  [SIM_SHOP] TACTICAL offers bought per Fabricator visit (balance-overhaul order 6 CP5 — income is the supply a run
+  collects; same waiver and expiry), [MYSTERY_EV] weighted table vs combat (CP5 -> CP6 ONLY: expires when CP6
+  re-derives R-MYSTERY-EV), [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
   depth" and inherit its waiver and expiry: TACTICAL win rate / reaches depth 10 / median death depth (losses) /
   first-boss clears (of seeds reaching it), NAIVE win rate / median death depth / reaches the first boss /
   first-boss clears), [SIM_FAIR] TACTICAL readable deaths,
@@ -1899,6 +1910,11 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 6 / CP5 — THE SHOP ECONOMY. R-CREDITS v2 (F12, needed bundle, [1.10, 1.40]); price knobs
+    36 -> 15.5 cr/PP and depth scale 0.10 -> 0.0; one Fabricator per floor, two at 0.80x on a SHOP node (F13);
+    S-SHOP (F14, offers line navigation-waived, unspent line enforced); cache credits 1.50, overclocked vault 2;
+    MYSTERY_EV waived until CP6. Sim moved only through shop rolls (TACTICAL stalls 167 -> 168, first-boss reach
+    11 -> 13, S-BUILD sample 37 -> 43). Why: owner D4.
   balance-overhaul order 6 / CP4 — THE REGION DIAL + RUN OUTCOME. R-REGION re-shaped (F7 dial + elite weights);
     S-FAIR's depth band replaced by the eight F8 run-outcome lines (navigation-waived); S-SKILL gap 3 -> 5; route
     audit horizon 15 -> 25; R-CALM-COST max 0.40; R-TRAJECTORY XP pace max 3.20; PYRO fire turns 5.5. Why: D3 — the

@@ -32,6 +32,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-SWITCH   — a competent player switches guns by matchup when the game tells it to (balance-overhaul order 3)</li>
  *   <li>S-HEAVY    — a player who reads the red floor answers the heavies committed at it; one who ignores it does not (balance-overhaul order 4)</li>
  *   <li>S-BUILD    — no build bias is a trap or a must-pick, and plain TACTICAL does not end every run as the same character (balance-overhaul order 5)</li>
+ *   <li>S-SHOP     — the shop is a place to spend: TACTICAL buys every visit and dies with little banked (balance-overhaul order 6)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -60,6 +61,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(supplyResults(tactical));
         if (tactical != null) results.addAll(switchResults(tactical));
         if (tactical != null) results.addAll(heavyResults(tactical, naive));
+        if (tactical != null) results.addAll(shopResults(tactical));
         results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
@@ -139,6 +141,26 @@ public final class BehavioralBands {
                 measured && share <= BalanceConfig.SIM_BUILD_MAX_DOMINANT_TAG_SHARE,
                 measured ? "top " + topTag + "; " + distribution + "; " + tactical.runsWithTiedDominantTag()
                         + " decided by a tie (earliest tag wins)" : "no TACTICAL run held a perk rank"));
+        return results;
+    }
+
+    /**
+     * S-SHOP (balance-overhaul order 6, F14): the shop is a place to spend, not to window-shop. TACTICAL buys at
+     * least SIM_SHOP_MIN_OFFERS_PER_VISIT offers per Fabricator visit, and its median credits held when a lost run
+     * ends are at most SIM_SHOP_MAX_UNSPENT_FLOORS floors of the modelled income at that depth.
+     */
+    private static List<RuleResult> shopResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        int visits = tactical.fabricatorVisits();
+        float perVisit = tactical.offersPerFabricatorVisit();
+        results.add(BalanceSchema.result(RuleKind.SIM_SHOP, "TACTICAL offers bought per Fabricator visit",
+                perVisit, BalanceConfig.SIM_SHOP_MIN_OFFERS_PER_VISIT, Float.POSITIVE_INFINITY,
+                visits > 0 && perVisit >= BalanceConfig.SIM_SHOP_MIN_OFFERS_PER_VISIT,
+                visits + " visits over " + tactical.runCount() + " runs"));
+        float unspent = tactical.medianUnspentFloorsOfIncomeAtLoss();
+        results.add(BalanceSchema.result(RuleKind.SIM_SHOP, "TACTICAL median unspent credits at death (floors of income)",
+                unspent, 0f, BalanceConfig.SIM_SHOP_MAX_UNSPENT_FLOORS,
+                unspent <= BalanceConfig.SIM_SHOP_MAX_UNSPENT_FLOORS, "credits held when a lost run ended"));
         return results;
     }
 

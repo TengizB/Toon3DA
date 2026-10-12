@@ -61,6 +61,7 @@ import ge.tbegvadze.toon3d.route.RegionPlan;
 import ge.tbegvadze.toon3d.route.RouteMap;
 import ge.tbegvadze.toon3d.route.RouteMapGenerator;
 import ge.tbegvadze.toon3d.route.RouteNode;
+import ge.tbegvadze.toon3d.route.RouteNodeType;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.shop.ShopContext;
 import ge.tbegvadze.toon3d.shop.ShopEffectApplier;
@@ -342,6 +343,7 @@ public final class SimWorld implements LevelTransitionListener {
         }
 
         ledger.finalPlayerLevel        = playerProgress.getPlayerLevel();
+        ledger.creditsHeldAtEnd        = playerStats.getCredits();
         for (BuildTag tag : BuildTag.values()) ledger.ranksByTagAtEnd[tag.ordinal()] = playerBuild.ranksInTag(tag);
         ledger.dominantTagAtEnd        = playerBuild.highestRankTag();
         ledger.emergencySupplyTriggers = ledger.total(floor -> floor.emergencySupplyFired ? 1 : 0);
@@ -923,21 +925,32 @@ public final class SimWorld implements LevelTransitionListener {
      */
     private void visitFabricator() {
         if (GameMath.isBossFloor(currentDepth)) return;
-        ShopContext context = buildShopContext();
-        ShopStock   stock   = shopRoller.roll(context, GameMath.floorSeed(runSeed, currentDepth)
-                                                       ^ 0x9E3779B97F4A7C15L, ShopRoller.RollBias.NONE);
-        for (int entryIndex = 0; entryIndex < stock.size(); entryIndex++) {
-            ShopEntry entry = stock.get(entryIndex);
-            if (entry.isSoldOut()) continue;
-            if (!policy.buyShopEntry(entry, view)) continue;
-            ShopTransaction.Result result = ShopTransaction.buy(entry, playerStats, shopEffectApplier);
-            if (result == ShopTransaction.Result.PURCHASED) {
-                ledger.creditsSpent += entry.price;
+        // F13 (balance-overhaul order 6), mirroring World.seedVendingMachines / rollMachineStock: one machine,
+        // two on a SHOP node (upgrade / supply biased, at the SHOP-node discount). Same per-machine seeds.
+        boolean shopNode  = pendingNode != null && pendingNode.type == RouteNodeType.SHOP;
+        int machineCount  = shopNode ? GameBalance.SHOP_NODE_MACHINE_COUNT : GameBalance.SHOP_MACHINES_PER_FLOOR;
+        ShopContext context = buildShopContext(shopNode ? GameBalance.SHOP_NODE_PRICE_MULTIPLIER : 1f);
+        long baseSeed = GameMath.floorSeed(runSeed, currentDepth);
+        boolean twoMachineBias = GameBalance.SHOP_TWO_MACHINE_BIAS && machineCount > 1;
+        ledger.fabricatorVisits++;
+        for (int machineIndex = 0; machineIndex < machineCount; machineIndex++) {
+            ShopRoller.RollBias bias = !twoMachineBias ? ShopRoller.RollBias.NONE
+                    : (machineIndex == 0 ? ShopRoller.RollBias.UPGRADE : ShopRoller.RollBias.SUPPLY);
+            ShopStock stock = shopRoller.roll(context, baseSeed ^ (0x9E3779B97F4A7C15L * (machineIndex + 1)), bias);
+            for (int entryIndex = 0; entryIndex < stock.size(); entryIndex++) {
+                ShopEntry entry = stock.get(entryIndex);
+                if (entry.isSoldOut()) continue;
+                if (!policy.buyShopEntry(entry, view)) continue;
+                ShopTransaction.Result result = ShopTransaction.buy(entry, playerStats, shopEffectApplier);
+                if (result == ShopTransaction.Result.PURCHASED) {
+                    ledger.creditsSpent += entry.price;
+                    ledger.shopPurchases++;
+                }
             }
         }
     }
 
-    private ShopContext buildShopContext() {
+    private ShopContext buildShopContext(float nodePriceMultiplier) {
         List<WeaponProfile> ownedWeapons = new ArrayList<>();
         Loadout loadout = inventory.getLoadout();
         for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
@@ -946,7 +959,8 @@ public final class SimWorld implements LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(currentDepth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild);
+        return new ShopContext(currentDepth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild,
+                nodePriceMultiplier);
     }
 
     // =====================================================================================

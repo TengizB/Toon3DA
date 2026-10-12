@@ -1072,22 +1072,15 @@ public final class BalanceConfig {
     // fighting-retreat deaths. Melee (fist, no ammo) is the true backstop. Range: 0.15–0.35.
     public static final float EMERGENCY_SUPPLY_FRACTION = 0.25f;
 
-    // --- CREDIT ECONOMY BAND (order 3, part C): the credit sink is only a real resource if income is
-    // COUPLED to it. R-CREDITS checks expected income per region / price of the expected purchase
-    // bundle (one weapon-class buy + a couple of supplies) lands in [MIN, MAX] — a region affords
-    // roughly one significant purchase plus resupply, banking about one region's worth.
-    public static final float CREDIT_INCOME_RATIO_MIN = 0.9f;
-    public static final float CREDIT_INCOME_RATIO_MAX = 1.4f;
+    // --- CREDIT ECONOMY BAND: R-CREDITS v2 (balance-overhaul order 6, F12) lives in SECTION 25 — it REPLACED the
+    // order-3 band [0.9, 1.4] on "one weapon-class buy + 1.5 supplies per region" (CREDIT_INCOME_RATIO_* and
+    // SHOP_EXPECTED_*_BUYS_PER_REGION deleted).
     /** Target credit banking horizon (floors) — a full purse should bank about one region. Range: 4–7. */
     public static final float CREDIT_BANK_TARGET_FLOORS = 5f;
-    /** PP value of the ONE "significant" (weapon-class) purchase a region's income is expected to afford. */
+    /** PP value of one "significant" (weapon-class) purchase — the route model's upgrade-opportunity unit. */
     public static final float SHOP_SIGNIFICANT_BUY_POWER_POINTS = 12f;
-    /** PP value of a representative small (supply) purchase — ammo box / stim, used in the credit bundle. */
+    /** PP value of a representative small (supply) purchase — ammo box / stim; the NEEDED BUNDLE's consumable (F12). */
     public static final float SHOP_SMALL_BUY_POWER_POINTS        = 3f;
-    /** Significant (weapon-class) purchases a region's income should afford. */
-    public static final int   SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION = 1;
-    /** Small (supply) purchases a region's income should afford on top of the significant buy (1–2). */
-    public static final float SHOP_EXPECTED_SMALL_BUYS_PER_REGION       = 1.5f;
 
     // --- HEAL PRICING BANDS (Balance Authority R-HEAL) — RE-STATED by balance-overhaul order 1 (the
     // OVERRIDE CLAUSE: "flat heal values and R-HEAL's flat survival-turns pricing -> fractional heals").
@@ -1608,12 +1601,8 @@ public final class BalanceConfig {
     // (SHOP_TWO_MACHINE_MIN_SPACING) stays in GameBalance — layout, not economy.
     // =====================================================================================
 
-    /** Minimum UAC Fabricator machines per non-boss floor (guaranteed credit sink). */
-    public static final int   SHOP_MIN_PER_FLOOR            = 1;
-    /** Maximum machines per floor. */
-    public static final int   SHOP_MAX_PER_FLOOR            = 2;
-    /** Probability a floor rolls the second machine. */
-    public static final float SHOP_SECOND_MACHINE_CHANCE    = 0.40f;
+    // Machine counts per floor moved to SECTION 25 (F13: exactly SHOP_MACHINES_PER_FLOOR, SHOP_NODE_MACHINE_COUNT on
+    // a SHOP node) — they REPLACED SHOP_MIN_PER_FLOOR 1 / SHOP_MAX_PER_FLOOR 2 / SHOP_SECOND_MACHINE_CHANCE 0.40.
 
     // Stock roll — offers per machine and weighted category pool for the remainder slots.
     public static final int   SHOP_ENTRY_MIN                 = 9;
@@ -1633,9 +1622,14 @@ public final class BalanceConfig {
     // sets the whole economy's price level, so the credit BAND (R-CREDITS) is tuned by moving a single
     // number. depthFactor = 1 + SHOP_DEPTH_PRICE_SCALE * (depth - 1) keeps prices meaningful as kill
     // bounties grow with depth.
-    public static final float SHOP_DEPTH_PRICE_SCALE       = 0.10f;
-    /** Credits charged per power point of an offer's priced value — the single price-level knob. Range: 24–48. */
-    public static final float SHOP_CREDITS_PER_POWER_POINT = 36f;
+    // RE-FIT (balance-overhaul order 6, F12 — owner D4 "shops everywhere are too expensive"): 0.10 -> 0.0 and
+    // 36 -> 15.5 so R-CREDITS v2 holds in every region. Modelled income per floor climbs ~5% a floor while the
+    // NEEDED BUNDLE's value climbs by region tier, so a depth price ramp on top made the deep regions
+    // unaffordable; the flattest ratio across A..E is no ramp at all (modelled A 1.37, B 1.33, C 1.26, D 1.15,
+    // E 1.33 against [1.10, 1.40]). The depth factor stays in the formula — 0.0 is a tuning, not a deletion.
+    public static final float SHOP_DEPTH_PRICE_SCALE       = 0.0f;
+    /** Credits charged per power point of an offer's priced value — the single price-level knob. Range: 12–48. */
+    public static final float SHOP_CREDITS_PER_POWER_POINT = 15.5f;
     /** Damage supplied per power point when pricing an ammo box (box damage / this = its PP value). Range: 60–120. */
     public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = 90f;
     /** HP restored per power point when pricing a medkit (heal amount / this = its PP value). Range: 8–16. */
@@ -1862,8 +1856,12 @@ public final class BalanceConfig {
     public static final float AFFIX_OVERCLOCKED_BUDGET_MULT = 1.2f;
     /** SWARM: budget multiplier (the crowd-control test — the one fewer-bodies exception). Range: 1.3–1.6. */
     public static final float AFFIX_SWARM_BUDGET_MULT       = 1.5f;
-    /** OVERCLOCKED vault premium: extra owned-ammo boxes that pay for its raised threat. */
-    public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 1;
+    /**
+     * OVERCLOCKED vault premium: extra owned-ammo boxes that pay for its raised threat. Balance-overhaul order 6
+     * (CP5): 1 -> 2 — the re-fit shop makes a credit worth ~2.3x the power it was, so the host ELITE's credit
+     * income out-grew this ammo-only premium (R-RISK-PREMIUM read 0.999 at d16).
+     */
+    public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 2;
     /** SWARM vault premium: extra owned-ammo boxes that pay for its raised threat. */
     public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 9;
     /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
@@ -2414,7 +2412,10 @@ public final class BalanceConfig {
     /** CACHE: negative drain = the heals deliberately exceed the modelled incoming damage (a breather). */
     public static final float NODE_SUPPLY_CACHE_DRAIN_TARGET  = -1.25f;
     public static final float NODE_SUPPLY_CACHE_ARMOUR_SHARE  = 0.40f;
-    public static final float NODE_SUPPLY_CACHE_CREDITS       = 1.20f;
+    // Balance-overhaul order 6 (CP5): 1.20 -> 1.50 — after the shop re-fit a credit buys ~2.3x the power, so
+    // COMBAT's bounties out-grew the depot (R-CALM-COST cache discount read 0.40 at d25); more chips keep it a
+    // breather that still costs loot.
+    public static final float NODE_SUPPLY_CACHE_CREDITS       = 1.50f;
     public static final int   NODE_SUPPLY_CACHE_WEAPONS       = 1;
     public static final float NODE_SUPPLY_CACHE_WEAPON_CHANCE = 0.50f;
 
@@ -3043,4 +3044,25 @@ public final class BalanceConfig {
     public static final float SIM_FIRST_BOSS_NAIVE_REACH_MIN     = 0.40f;
     /** ... and clears it on at least this share of seeds (of all seeds). */
     public static final float SIM_FIRST_BOSS_NAIVE_CLEAR_MIN     = 0.15f;
+
+    // --- SHOP ECONOMY (F12, F13). R-CREDITS v2: for every region, the modelled on-curve credit income per floor
+    // divided by the price of the NEEDED BUNDLE per floor lands in [CREDITS_V2_RATIO_MIN, MAX] — a surplus, so
+    // the shop is a place to spend (owner D4). NEEDED BUNDLE per floor = one LEVEL UP rung (order 1)
+    // + CREDITS_NEEDED_CONSUMABLES_PER_FLOOR consumables at SHOP_SMALL_BUY_POWER_POINTS
+    // + one tier upgrade per region (to the region's top drop tier) amortised over its floors.
+    /** F12: R-CREDITS v2 band on income / needed bundle, per region. Range: 1.10–1.40. */
+    public static final float CREDITS_V2_RATIO_MIN               = 1.10f;
+    public static final float CREDITS_V2_RATIO_MAX               = 1.40f;
+    /** F12: consumables the on-curve player typically needs per floor (the NEEDED BUNDLE's supply part). */
+    public static final float CREDITS_NEEDED_CONSUMABLES_PER_FLOOR = 1.5f;
+    /** F13: UAC Fabricators on every floor that is not a SHOP node (the guaranteed LEVEL UP rung rides it). */
+    public static final int   SHOP_MACHINES_PER_FLOOR            = 1;
+    /** F13: Fabricators on a SHOP node's floor (the two-machine upgrade / supply bias applies). */
+    public static final int   SHOP_NODE_MACHINE_COUNT            = 2;
+    /** F13: price multiplier on every offer a SHOP node's machines roll (stacks with the build's Haggler). Range: 0.80. */
+    public static final float SHOP_NODE_PRICE_MULTIPLIER         = 0.80f;
+    /** F14 S-SHOP: TACTICAL buys at least this many offers per Fabricator visit (per floor visited). */
+    public static final float SIM_SHOP_MIN_OFFERS_PER_VISIT      = 1.5f;
+    /** F14 S-SHOP: TACTICAL's median unspent credits when a lost run ends, in floors of modelled income. */
+    public static final float SIM_SHOP_MAX_UNSPENT_FLOORS        = 1.5f;
 }

@@ -103,6 +103,12 @@ public final class RunLedger {
     /** Total credits spent at vending machines across the run. */
     public int creditsSpent;
 
+    /** S-SHOP (balance-overhaul order 6, F14): Fabricator visits (one per exited non-boss floor) and offers bought. */
+    public int fabricatorVisits;
+    public int shopPurchases;
+    /** Credits the run still held when it ended — the "unspent at death" S-SHOP reads. */
+    public int creditsHeldAtEnd;
+
     /** Times the never-softlock emergency ammo lifeline fired. */
     public int emergencySupplyTriggers;
 

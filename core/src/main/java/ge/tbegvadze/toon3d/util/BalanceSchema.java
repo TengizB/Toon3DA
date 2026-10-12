@@ -112,7 +112,7 @@ public final class BalanceSchema {
         COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
-        /** R-CREDITS (order 3): expected region income / price of the expected purchase bundle in [0.9, 1.4]. */
+        /** R-CREDITS v2 (balance-overhaul order 6): income per floor / NEEDED BUNDLE per floor in [1.10, 1.40], every region. */
         CREDITS,
         /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
         XP_PACE,
@@ -210,7 +210,13 @@ public final class BalanceSchema {
          * its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank). The depth-spread and dominant-tag
          * lines ride the navigation waiver (the latter by owner ruling D7); the sample line is never waived.
          */
-        SIM_BUILD
+        SIM_BUILD,
+        /**
+         * S-SHOP (balance-overhaul order 6, F14): TACTICAL buys at least SIM_SHOP_MIN_OFFERS_PER_VISIT offers per
+         * Fabricator visit (one visit per exited floor; a SHOP node's two machines count as one visit), and its
+         * median credits held when a lost run ends are at most SIM_SHOP_MAX_UNSPENT_FLOORS floors of income.
+         */
+        SIM_SHOP
     }
 
     // =====================================================================================
@@ -300,6 +306,13 @@ public final class BalanceSchema {
                 + "its contents are balance-overhaul order 6's to retune.";
         String bespokeExpiry = "Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).";
         waive(RuleKind.CALM_COST, "rest EV discount",  bespokeReason, bespokeExpiry);
+        // Balance-overhaul order 6 (CP5 -> CP6, a deliberate temporary state): the shop re-fit makes a credit worth
+        // ~2.3x the power, so COMBAT's bounty income out-grows the credit-less mystery outcomes (table 0.82x COMBAT
+        // at d25). CP6 re-expresses every mystery outcome in ladder currencies and re-derives R-MYSTERY-EV (F15:
+        // the table's EV >= COMBAT's, with higher variance), which replaces this rule and retires this waiver.
+        waive(RuleKind.MYSTERY_EV, "weighted table vs combat",
+                "The CP5 shop re-fit re-priced credits; mystery outcomes carry none until CP6 re-expresses them (F15).",
+                "Expires at balance-overhaul order 6 CP6 (R-MYSTERY-EV re-derived in ladder currencies).");
         waive(RuleKind.CALM_COST, "event EV discount", bespokeReason, bespokeExpiry);
         // Balance-overhaul order 5, owner ruling D3: SCAVENGER is an ECONOMY tag. Its perks change supply,
         // shop prices and carrier drops — none of which is a turn to kill or a hit to die in a reference
@@ -374,6 +387,11 @@ public final class BalanceSchema {
         // first synergy pick off the Chaingun + Shotgun start kit (measured 0.47, MARKSMAN 23 of 49). The sample
         // line ("TACTICAL runs holding a perk rank") stays ENFORCED.
         waive(RuleKind.SIM_BUILD,   "TACTICAL dominant-tag share", reason, expiry);
+        // S-SHOP (balance-overhaul order 6, F14): buys per visit are bounded by the credits a run COLLECTS, and the
+        // stalling policy picks up under half its planned supply (S-ECONOMY) — measured 0.64 offers per visit with
+        // a median 0.13 floors of income left unspent at death, i.e. it spends everything it has. Same waiver and
+        // expiry; the unspent-credits line stays ENFORCED.
+        waive(RuleKind.SIM_SHOP,    "TACTICAL offers bought per Fabricator visit", reason, expiry);
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
@@ -1387,42 +1405,55 @@ public final class BalanceSchema {
         return chips * (float) Math.round(ge.tbegvadze.toon3d.level.SupplyPlanner.averageCreditChipValue());
     }
 
-    /** The credit price of the expected per-region purchase BUNDLE (one weapon-class buy + supplies). */
-    public static int regionPurchaseBundlePrice(int representativeDepth) {
-        int significant = GameMath.shopPrice(BalanceConfig.SHOP_SIGNIFICANT_BUY_POWER_POINTS,
-                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, representativeDepth,
-                BalanceConfig.SHOP_DEPTH_PRICE_SCALE) * BalanceConfig.SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION;
-        int small = GameMath.shopPrice(BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS,
-                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, representativeDepth,
-                BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
-        return Math.round(significant + BalanceConfig.SHOP_EXPECTED_SMALL_BUYS_PER_REGION * small);
+    /**
+     * The tier a region's one budgeted TIER UPGRADE buys (F12): the region's top weapon-drop tier, so the bundle
+     * prices the step that takes the on-curve weapon to the top of the region's rarity band.
+     */
+    public static WeaponTier regionTierUpgradeDestination(int region) {
+        int[] maximums = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int tier = maximums[Math.min(Math.max(0, region), maximums.length - 1)];
+        return WeaponTier.values()[Math.min(tier, WeaponTier.values().length - 1)];
+    }
+
+    /** The NEEDED BUNDLE's price per floor at a depth (F12; GameMath.neededBundlePricePerFloor). */
+    public static float neededBundlePricePerFloor(int depth) {
+        int band   = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        int region = GameMath.regionIndexAtDepth(Math.max(1, depth), band);
+        int consumablePrice = GameMath.shopPrice(BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS,
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        int tierPrice = GameMath.shopPrice(WeaponRoller.tierAbilityPowerPointBudget(regionTierUpgradeDestination(region)),
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        return GameMath.neededBundlePricePerFloor(ladderLevelUpPrice(depth),
+                BalanceConfig.CREDITS_NEEDED_CONSUMABLES_PER_FLOOR, consumablePrice, tierPrice, band);
     }
 
     /**
-     * R-CREDITS (order 3): the credit sink is a real lever — expected income per region divided by the
-     * price of the expected purchase bundle (one weapon-class buy + a couple of supplies) lands in
-     * [0.9, 1.4] for every region across depths 1..15. Currency is thus neither a runaway score counter
-     * (income &gt;&gt; sink) nor unaffordable (income &lt;&lt; sink).
+     * R-CREDITS v2 (balance-overhaul order 6, F12 — REPLACES the order-3 rule "income per region / one weapon-class
+     * buy + 1.5 supplies in [0.9, 1.4]"): for every region of the finite run, the modelled on-curve credit income
+     * per floor divided by the NEEDED BUNDLE's price per floor — both averaged over the region's floors — lands in
+     * [CREDITS_V2_RATIO_MIN, MAX] = [1.10, 1.40]. A SURPLUS by design (owner D4: "shops are too expensive"): an
+     * on-curve player can always afford the rung, the consumables and the region's tier step, with change.
      */
     public static List<RuleResult> creditResults() {
         List<RuleResult> results = new ArrayList<>();
         int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        float killCreditBase = modelFloorKillCreditReward();
-        float chipIncome = chipIncomePerFloor();
         int regionCount = (BalanceConfig.RUN_FINAL_DEPTH + band - 1) / band; // regions spanning 1..RUN_FINAL_DEPTH
         for (int region = 0; region < regionCount; region++) {
             int firstDepth = region * band + 1;
-            int representativeDepth = firstDepth + (band - 1) / 2; // region's middle floor
-            float income = GameMath.creditIncomePerRegion(killCreditBase,
-                    BalanceConfig.CREDIT_DEPTH_SCALE, chipIncome, firstDepth, band);
-            int bundlePrice = regionPurchaseBundlePrice(representativeDepth);
-            float ratio = bundlePrice <= 0 ? 0f : income / bundlePrice;
-            boolean inBand = ratio >= BalanceConfig.CREDIT_INCOME_RATIO_MIN
-                    && ratio <= BalanceConfig.CREDIT_INCOME_RATIO_MAX;
-            results.add(new RuleResult(RuleKind.CREDITS, "region " + region + " income/bundle", ratio,
-                    BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX, inBand,
-                    "income " + Math.round(income) + " / bundle " + bundlePrice
-                            + " (rep depth " + representativeDepth + ")"));
+            float income = 0f;
+            float bundle = 0f;
+            for (int depth = firstDepth; depth < firstDepth + band; depth++) {
+                income += combatFloorCreditIncome(depth);
+                bundle += neededBundlePricePerFloor(depth);
+            }
+            income /= band;
+            bundle /= band;
+            float ratio = bundle <= 0f ? 0f : income / bundle;
+            boolean inBand = ratio >= BalanceConfig.CREDITS_V2_RATIO_MIN && ratio <= BalanceConfig.CREDITS_V2_RATIO_MAX;
+            results.add(new RuleResult(RuleKind.CREDITS, "region " + region + " income/needed bundle per floor", ratio,
+                    BalanceConfig.CREDITS_V2_RATIO_MIN, BalanceConfig.CREDITS_V2_RATIO_MAX, inBand,
+                    regionDisplayName(region) + ": income " + Math.round(income) + " / bundle " + Math.round(bundle)
+                            + " per floor (tier step to " + regionTierUpgradeDestination(region) + ")"));
         }
         return results;
     }

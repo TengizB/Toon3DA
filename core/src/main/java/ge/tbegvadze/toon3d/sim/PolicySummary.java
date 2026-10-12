@@ -75,6 +75,40 @@ public final class PolicySummary {
         return cleared;
     }
 
+    // ---- S-SHOP (balance-overhaul order 6, F14) ------------------------------------------------
+
+    /** Fabricator visits summed over every run (one per exited non-boss floor). */
+    public int fabricatorVisits() {
+        int visits = 0;
+        for (RunLedger run : runs) visits += run.fabricatorVisits;
+        return visits;
+    }
+
+    /** Offers bought per Fabricator visit, over every run; 0 when nobody ever reached a machine. */
+    public float offersPerFabricatorVisit() {
+        int visits = fabricatorVisits();
+        int bought = 0;
+        for (RunLedger run : runs) bought += run.shopPurchases;
+        return visits == 0 ? 0f : bought / (float) visits;
+    }
+
+    /**
+     * Median credits held when a LOST run ended, in floors of the modelled COMBAT-floor income at that depth
+     * (BalanceSchema.combatFloorCreditIncome); 0 when there are no losses.
+     */
+    public float medianUnspentFloorsOfIncomeAtLoss() {
+        List<Float> floors = new ArrayList<>();
+        for (RunLedger run : runs) {
+            if (run.ending == RunLedger.Ending.VICTORY) continue;
+            float income = ge.tbegvadze.toon3d.util.BalanceSchema.combatFloorCreditIncome(run.endingDepth);
+            floors.add(income <= 0f ? 0f : run.creditsHeldAtEnd / income);
+        }
+        if (floors.isEmpty()) return 0f;
+        java.util.Collections.sort(floors);
+        int middle = floors.size() / 2;
+        return floors.size() % 2 == 1 ? floors.get(middle) : (floors.get(middle - 1) + floors.get(middle)) / 2f;
+    }
+
     /** Fraction of runs that killed the FIRST boss (the S-GATE subject). */
     public float clearedFirstBossFraction() {
         int cleared = 0;

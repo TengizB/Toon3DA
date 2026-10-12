@@ -381,13 +381,12 @@ public final class GameBalance {
 
     // =========================================================================
     // SHOP — UAC Fabricator vending machine placement (shop_order_1)
-    // Every non-boss floor gets 1 or 2 machines (guaranteed presence, not a chance),
+    // Every floor gets exactly one machine, a SHOP node two at a discount (balance-overhaul order 6, F13),
     // so credits always have a sink. Stock/pricing/effects are shop parts 2-4.
     // =========================================================================
-    public static final int   SHOP_MIN_PER_FLOOR            = BalanceConfig.SHOP_MIN_PER_FLOOR;
-    public static final int   SHOP_MAX_PER_FLOOR            = BalanceConfig.SHOP_MAX_PER_FLOOR;
-    /** Probability a floor rolls the SECOND machine (a two-shop floor is a small treat). */
-    public static final float SHOP_SECOND_MACHINE_CHANCE    = BalanceConfig.SHOP_SECOND_MACHINE_CHANCE;
+    public static final int   SHOP_MACHINES_PER_FLOOR       = BalanceConfig.SHOP_MACHINES_PER_FLOOR;
+    public static final int   SHOP_NODE_MACHINE_COUNT       = BalanceConfig.SHOP_NODE_MACHINE_COUNT;
+    public static final float SHOP_NODE_PRICE_MULTIPLIER    = BalanceConfig.SHOP_NODE_PRICE_MULTIPLIER;
     /** When two machines are placed, keep them at least this many tiles apart (Manhattan). */
     public static final int   SHOP_TWO_MACHINE_MIN_SPACING  = 8;
 

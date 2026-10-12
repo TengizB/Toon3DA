@@ -57,7 +57,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: R-BOSS-* green on all five rows; both gates green.
 - [x] **CP4** — region dial + elite weights (F7); R-REGION updated; F8 run-outcome bands replace S-FAIR's depth band.
       DONE WHEN: both gates green.
-- [ ] **CP5** — shop economy (F12, F13); R-CREDITS v2 green; S-SHOP reported.
+- [x] **CP5** — shop economy (F12, F13); R-CREDITS v2 green; S-SHOP reported.
       DONE WHEN: both gates green.
 - [ ] **CP6** — event/mystery rewards in ladder currencies (F15); R-MYSTERY-EV / event value green.
       DONE WHEN: both gates green.
@@ -115,3 +115,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **CP4 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0. Moved: stalls TACTICAL 175->167,
   11 TACTICAL seeds reach the first boss (0 clear), S-BUILD sample 49->37 (>=30, WATCH), dominant share 0.47->0.59 (WAIV),
   S-HEAVY sample 1108->733. Summary kept as scratchpad `cp4-summary.txt`.
+- **CP5 handover:** R-CREDITS v2 = `BalanceSchema.creditResults()` (one line per region, mean income / mean
+  `neededBundlePricePerFloor(d)`; `regionTierUpgradeDestination(region)`), formula `GameMath.neededBundlePricePerFloor`.
+  SECTION 25: `CREDITS_V2_RATIO_MIN/MAX`, `CREDITS_NEEDED_CONSUMABLES_PER_FLOOR`, `SHOP_MACHINES_PER_FLOOR` 1,
+  `SHOP_NODE_MACHINE_COUNT` 2, `SHOP_NODE_PRICE_MULTIPLIER` 0.80, `SIM_SHOP_*`. Knobs: SHOP_CREDITS_PER_POWER_POINT 15.5,
+  SHOP_DEPTH_PRICE_SCALE 0.0. `ShopContext(…, PlayerBuild, float nodePriceMultiplier)`; World `isShopNodeFloor()` (pendingNode
+  type SHOP, not staging room) drives machine count + discount; SimWorld.visitFabricator mirrors it (two biased rolls,
+  same per-machine seeds). RunLedger `fabricatorVisits / shopPurchases / creditsHeldAtEnd`; PolicySummary
+  `offersPerFabricatorVisit / medianUnspentFloorsOfIncomeAtLoss`; RuleKind.SIM_SHOP + `BehavioralBands.shopResults`;
+  BalanceSimTest `tacticalSpendsAtTheShop`. Ripple: NODE_SUPPLY_CACHE_CREDITS 1.50, AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES 2.
+- **CP5 DELIBERATE TEMPORARY STATE (CP6 resolves):** MYSTERY_EV "weighted table vs combat" WAIVED (0.82x combat at d25 after
+  the credit re-pricing). CP6 must delete that waiver when it re-derives R-MYSTERY-EV (F15).
+- **CP5 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0 (S-SHOP offers 0.64 WAIV, unspent
+  0.13 OK). Summary scratchpad `cp5-summary.txt`.

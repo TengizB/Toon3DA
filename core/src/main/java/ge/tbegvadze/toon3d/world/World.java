@@ -1747,8 +1747,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     /**
-     * Places 1-2 vending machines on the floor (guaranteed presence on EVERY floor, including the
-     * weapon-selection starting room and boss arenas). Each machine occupies a wall-mounted,
+     * Places the floor's vending machines (guaranteed presence on EVERY floor, including the
+     * weapon-selection starting room and boss arenas): exactly one, two on a SHOP node (balance-overhaul
+     * order 6, F13 — whose machines also price at the SHOP-node discount, see buildShopContext). Each machine occupies a wall-mounted,
      * reachable, non-softlocking floor tile that is stamped solid ('@') and registered as a
      * billboard. Runs after enemies exist (so machine tiles dodge enemies) and before
      * ground-item/credit-chip seeding (so those seeders skip the solid tile).
@@ -1760,11 +1761,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // still requires an eligible wall-mounted tile; if a floor has none, no machine is placed.
 
         java.util.Random random = new java.util.Random(GameMath.floorSeed(runSeed, depth) ^ 0x5309CAFED00DL);
-        int machineCount = GameBalance.SHOP_MIN_PER_FLOOR;
-        if (GameBalance.SHOP_MAX_PER_FLOOR > GameBalance.SHOP_MIN_PER_FLOOR
-                && random.nextFloat() < GameBalance.SHOP_SECOND_MACHINE_CHANCE) {
-            machineCount = GameBalance.SHOP_MAX_PER_FLOOR;
-        }
+        int machineCount = isShopNodeFloor() ? GameBalance.SHOP_NODE_MACHINE_COUNT
+                                             : GameBalance.SHOP_MACHINES_PER_FLOOR;
 
         int startColumn = MathUtils.floor(findPlayerStartX(targetLevel) / Constants.CELL_SIZE);
         int startRow    = MathUtils.floor(findPlayerStartY(targetLevel) / Constants.CELL_SIZE);
@@ -1832,7 +1830,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild);
+        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild,
+                isShopNodeFloor() ? GameBalance.SHOP_NODE_PRICE_MULTIPLIER : 1f);
+    }
+
+    /** True while the floor being played was built from a SHOP route node (F13: two machines, discounted). */
+    private boolean isShopNodeFloor() {
+        return !isStartingRoom && pendingNode != null && pendingNode.type == RouteNodeType.SHOP;
     }
 
     /**

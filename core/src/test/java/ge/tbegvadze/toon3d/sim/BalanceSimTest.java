@@ -191,6 +191,20 @@ class BalanceSimTest {
         assertBandsHold(results);
     }
 
+    /**
+     * S-SHOP (balance-overhaul order 6, F14) — the shop is a place to spend: TACTICAL buys at least 1.5 offers per
+     * Fabricator visit (navigation-limited: its income is the supply it collects — reported under the navigation
+     * waiver until it expires) and dies holding at most 1.5 floors of income (never waived).
+     */
+    @Test
+    void tacticalSpendsAtTheShop() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_SHOP);
+        assertEquals(2, results.size(), "S-SHOP evaluates offers per visit and unspent credits at death");
+        assertTrue(results.stream().filter(result -> !result.subject.equals("TACTICAL offers bought per Fabricator visit"))
+                        .noneMatch(result -> result.waived), "only the navigation-limited offers line may be waived");
+        assertBandsHold(results);
+    }
+
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */
     @Test
     void noRunEndsUnableToDamageAnything() {

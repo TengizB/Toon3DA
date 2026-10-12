@@ -827,31 +827,19 @@ public final class BalanceReport {
         }
     }
 
-    /** R-CREDITS: expected income vs the price of the expected purchase bundle, per region. */
+    /** R-CREDITS v2 (balance-overhaul order 6): income per floor vs the NEEDED BUNDLE per floor, per region. */
     private static void printCreditEconomyTable() {
-        System.out.println("CREDIT ECONOMY (R-CREDITS) — income(region) / bundle price, band "
-                + String.format("%.2f-%.2f", BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX)
-                + "  [kill base=" + String.format("%.0f", BalanceSchema.modelFloorKillCreditReward())
-                + "/floor  chips=" + String.format("%.0f", BalanceSchema.chipIncomePerFloor()) + "/floor]");
-        System.out.printf("%-8s %10s %10s %8s %-6s%n", "region", "income", "bundle", "ratio", "in?");
+        System.out.println("CREDIT ECONOMY (R-CREDITS v2) — income per floor / NEEDED BUNDLE per floor, band "
+                + String.format("%.2f-%.2f", BalanceConfig.CREDITS_V2_RATIO_MIN, BalanceConfig.CREDITS_V2_RATIO_MAX)
+                + "  [bundle = LEVEL UP rung + " + BalanceConfig.CREDITS_NEEDED_CONSUMABLES_PER_FLOOR + " consumables @ "
+                + String.format("%.0f", BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS) + "PP + region tier step / "
+                + BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE + " floors]");
+        System.out.printf("%-4s %-60s %8s %-6s%n", "", "region", "ratio", "in?");
         System.out.println("------------------------------------------------------------------------------------");
-        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        int region = 0;
         for (BalanceSchema.RuleResult result : BalanceSchema.creditResults()) {
-            int firstDepth = region * band + 1;
-            int repDepth   = firstDepth + (band - 1) / 2;
-            float income = GameMath.creditIncomePerRegion(BalanceSchema.modelFloorKillCreditReward(),
-                    BalanceConfig.CREDIT_DEPTH_SCALE, BalanceSchema.chipIncomePerFloor(), firstDepth, band);
-            int bundle = BalanceSchema.regionPurchaseBundlePrice(repDepth);
-            System.out.printf("%-8d %10.0f %10d %8.2f %-6s%n",
-                    region, income, bundle, result.value,
+            System.out.printf("%-4s %-60s %8.2f %-6s%n", "", result.detail, result.value,
                     bandVerdict(result.satisfied, result.value, result.bandMinimum));
-            region++;
         }
-        System.out.println("  (bundle = " + BalanceConfig.SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION
-                + " significant @ " + String.format("%.0f", BalanceConfig.SHOP_SIGNIFICANT_BUY_POWER_POINTS)
-                + "PP + " + String.format("%.1f", BalanceConfig.SHOP_EXPECTED_SMALL_BUYS_PER_REGION)
-                + " small @ " + String.format("%.0f", BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS) + "PP each)");
     }
 
     /** Formula-derived shop prices (GameMath.shopPrice) for representative offers at depths 1/5/10/15. */

@@ -225,9 +225,15 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.supplySweepResults("heal floor"));
     }
 
-    /** R-CREDITS (order 3): expected region income / expected purchase-bundle price stays in [0.9, 1.4]. */
+    /**
+     * R-CREDITS v2 (balance-overhaul order 6, F12 — replaced the order-3 band [0.9, 1.4] on one weapon-class buy per
+     * region): for each of the five regions, income per floor / the NEEDED BUNDLE per floor (LEVEL UP rung + 1.5
+     * consumables + the region's tier step amortised) lands in [1.10, 1.40]; one line per region.
+     */
     @Test
     void creditIncomeAffordsTheExpectedBundleEveryRegion() {
+        assertEquals(ge.tbegvadze.toon3d.util.RouteMapConstants.FIXED_REGION_COUNT, BalanceSchema.creditResults().size(),
+                "R-CREDITS v2 reports every region of the finite run");
         assertNoViolations(BalanceSchema.creditResults());
     }
 
