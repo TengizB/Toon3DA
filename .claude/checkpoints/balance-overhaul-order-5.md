@@ -67,7 +67,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A4 holds; both gates green.
 - [x] **CP5** — level-up overlay chips / synergy / pips, keystone frame, inventory BUILD page.
       DONE WHEN: build green; A5 holds (desktop check owed if no display).
-- [ ] **CP6** — sim build-bias variants + S-BUILD + BUILD REPORT; all docs; reviewer PASS.
+- [x] **CP6** — sim build-bias variants + S-BUILD + BUILD REPORT; all docs; reviewer PASS.
       DONE WHEN: A3, A6, A7 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -212,3 +212,5 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   "x2" gain line; render literals -> ProgressionConstants; `ExplosiveBarrelManager.isBarrelCell(char)` single barrel authority.
   Gates (solo run): core:test 458 only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, 0 FAIL, no S-* moved.
   NEXT: focused re-review of the fix diff, then STATUS IMPLEMENTED + IMPLEMENTATION NOTE.
+- **REVIEWER r2: PASS** (`.reviewer-r2.md`). CLOSED 2026-10-12: STATUS IMPLEMENTED + IMPLEMENTATION NOTE. STILL OWED (not
+  blocking): desktop check of A5 / CP5 visuals via `./gradlew lwjgl3:run` (no display in the build container).
