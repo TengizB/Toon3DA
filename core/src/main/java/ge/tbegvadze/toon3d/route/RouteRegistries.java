@@ -301,8 +301,8 @@ public final class RouteRegistries {
     }
 
     /**
-     * Registers the v1 region-ambience / theming catalog (order-10): four acts (OUTER FACILITY,
-     * RESEARCH WING, REACTOR DEPTHS, THE BREACH) keyed by theme id, each carrying its crest, overlay
+     * Registers the region-ambience / theming catalog (order-10; region E by balance-overhaul order 6):
+     * five acts (OUTER FACILITY, RESEARCH WING, REACTOR DEPTHS, THE BREACH, THE CORE) keyed by theme id, each carrying its crest, overlay
      * tint, wall palette, enemy faction, ambience hooks, boss, and gate flavour. NOTHING hard-codes
      * the list — a new region is one row. Exposed (package-private) so tests can populate a fresh
      * registry without touching the shared singleton.
@@ -356,12 +356,25 @@ public final class RouteRegistries {
                 .gateFlavour(RouteMapConstants.REGION_D_GATE_FLAVOUR)
                 .build();
 
+        RegionAmbience theCore = RegionAmbience.builder(RouteMapConstants.REGION_E_THEME)
+                .displayName(RouteMapConstants.REGION_E_NAME)
+                .crestPainterId("crest_the_core")
+                .wallPalette(RouteMapConstants.REGION_E_WALL_PALETTE)
+                .enemyFactionId(RouteMapConstants.REGION_E_FACTION)
+                .lightingMoodId(RouteMapConstants.REGION_E_LIGHTING)
+                .musicId(RouteMapConstants.REGION_E_MUSIC)
+                .redAlertFrequency(RouteMapConstants.REGION_E_RED_ALERT_FREQUENCY)
+                .bossId(RouteMapConstants.REGION_E_BOSS)
+                .gateFlavour(RouteMapConstants.REGION_E_GATE_FLAVOUR)
+                .build();
+
         registry.register(outerFacility);
         registry.register(researchWing);
         registry.register(reactorDepths);
         registry.register(theBreach);
-        // THE BREACH is the endless cycle's identity — fall back to it for any unnamed deeper theme.
-        registry.setFallback(theBreach);
+        registry.register(theCore);
+        // The run is finite (balance-overhaul order 6): an unnamed theme falls back to the final act.
+        registry.setFallback(theCore);
     }
 
     /**

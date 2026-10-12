@@ -1307,13 +1307,14 @@ public final class BalanceSchema {
         return results;
     }
 
-    /** The route region name for a 0-based region index (A/B/C/D, clamped past D — endless "The Breach"). */
+    /** The route region name for a 0-based region index (A..E — the finite run, balance-overhaul order 6). */
     private static String regionDisplayName(int region) {
         switch (region) {
             case 0:  return RouteMapConstants.REGION_A_NAME;
             case 1:  return RouteMapConstants.REGION_B_NAME;
             case 2:  return RouteMapConstants.REGION_C_NAME;
-            default: return RouteMapConstants.REGION_D_NAME;
+            case 3:  return RouteMapConstants.REGION_D_NAME;
+            default: return RouteMapConstants.REGION_E_NAME;
         }
     }
 

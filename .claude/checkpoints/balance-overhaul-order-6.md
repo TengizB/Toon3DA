@@ -49,7 +49,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — finite route map (25 layers, 5 regions, region E spec/ambience/crest, no append path); NAV header F6.
+- [x] **CP1** — finite route map (25 layers, 5 regions, region E spec/ambience/crest, no append path); NAV header F6.
       DONE WHEN: A1, A4 hold; route tests updated; both gates green.
 - [ ] **CP2** — depth-25 boss defeat ends the run as VICTORY (report label, win stats); F5/D5 ending behaviour.
       DONE WHEN: A2, A3 hold; build green.
@@ -70,3 +70,18 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   desktop-only MIRROR build in the session scratchpad (`mirror/`): symlinks to core/lwjgl3/assets/
   gradle*/docs/story, `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle` without the
   `buildscript{}` block. Maven Central may 429 — put the googleapis maven mirror first.
+- **BASELINE (2026-10-12, `e8b211f`):** core:test 458, only StoryBarkTest red (pre-existing); balanceSim exit 0 —
+  TACTICAL median depth 2, 175/200 stalled (navigation waiver), S-FAIR/S-SKILL/S-ECONOMY/S-BUILD-dominant WAIV.
+  Baseline summary kept in scratchpad `baseline-summary.txt`. The sim never reaches a boss (navigation stalls), so
+  every depth-derived band (F8, S-BOSS, S-SHOP sample) is REPORTED/WAIVED under the navigation waiver (A6 says so).
+- **CP1 handover:** `RouteMapConstants.FIXED_REGION_COUNT` = RUN_FINAL_DEPTH / REGION_BAND_SIZE (5); REGION_E_* rows
+  (name "THE CORE" — F2: no StoryTerm row for "Core"); `RegionPlan` constructor refuses finalDepth > RUN_FINAL_DEPTH;
+  deleted: withAppendedBreachBand, RegionSpec.endless, extendWithNextRegion, shouldExtend, RouteMap.appendLayers,
+  EXTENSION_TRIGGER_DISTANCE, World.ensureRouteExtended, SimWorld extension call. Ambience fallback = the_core.
+  `render/routeicons/CoreLatticeCrestPainter`; palette tint `tintTheCore`. NAV header `RouteMapConstants.NAV_FLOOR_HEADER_*`
+  -> "FLOOR n / 25", n = current.depth + 1 (staging room = FLOOR 1). Region dial arrays still 4 entries (clamped) — CP4.
+- **CP1 FIX (generator):** region E exposed a reachability-repair dead end (seed 68: d22 COMBAT -> d23 COMBAT -> d24 ELITE,
+  each its layer's last combat option, so no type rewrite is legal). Added `RouteMapGenerator.connectToReachingNeighbour`
+  — a deterministic extra edge to the next layer's node that still reaches the kind. Route tests updated (finite-run
+  methods replace the two endless ones; RouteEconomicsTest checks 20 seeds; Order10 five regions).
+- **CP1 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, every S-* line identical to baseline.

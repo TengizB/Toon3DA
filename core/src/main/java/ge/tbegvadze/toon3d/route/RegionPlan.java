@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 import java.util.ArrayList;
@@ -11,9 +12,9 @@ import java.util.List;
  * bands the {@link RouteMapGenerator} consumes. Keeping region count and shape as DATA (not code)
  * means new acts are added as rows in {@link #defaultPlan()}, never as new branches in the generator.
  *
- * <p>The plan grows: {@link #defaultPlan()} seeds the fixed acts A/B/C plus the first endless
- * "THE BREACH" band, and {@link #withAppendedBreachBand()} returns a longer plan for endless-mode
- * lazy extension. Instances are immutable — appending yields a new plan.
+ * <p>The plan is FINITE (balance-overhaul order 6, F1): {@link #defaultPlan()} is the five fixed acts
+ * A..E covering depths 1..{@code BalanceConfig.RUN_FINAL_DEPTH}, and the constructor refuses any plan
+ * that reaches deeper — there is no code path that appends a band after the run-final boss.
  *
  * <p>Pure data — no LibGDX, headless-testable.
  */
@@ -24,6 +25,11 @@ public final class RegionPlan {
     public RegionPlan(List<RegionSpec> regions) {
         if (regions.isEmpty()) {
             throw new IllegalArgumentException("A RegionPlan needs at least one region");
+        }
+        int finalDepth = regions.get(regions.size() - 1).lastDepth();
+        if (finalDepth > BalanceConfig.RUN_FINAL_DEPTH) {
+            throw new IllegalArgumentException("A RegionPlan may not reach past the run-final depth "
+                    + BalanceConfig.RUN_FINAL_DEPTH + " (got " + finalDepth + ")");
         }
         this.regions = Collections.unmodifiableList(new ArrayList<>(regions));
     }
@@ -58,21 +64,9 @@ public final class RegionPlan {
     }
 
     /**
-     * Returns a new plan with one more endless "THE BREACH" band appended after the current final
-     * region. Used by {@link RouteMapGenerator} endless extension; the plan itself stays immutable.
-     */
-    public RegionPlan withAppendedBreachBand() {
-        List<RegionSpec> extended = new ArrayList<>(regions);
-        int nextIndex      = regions.size();
-        int nextFirstDepth = finalDepth() + 1;
-        extended.add(breachBand(nextIndex, nextFirstDepth));
-        return new RegionPlan(extended);
-    }
-
-    /**
-     * The default descent: three named acts (OUTER FACILITY, RESEARCH WING, REACTOR DEPTHS) followed
-     * by the first endless "THE BREACH" band. Every band is {@code REGION_BAND_SIZE} deep and ends on
-     * a boss floor. Bias tables come from {@link RouteMapConstants} so no distribution number is
+     * The default (and only) descent: five named acts — OUTER FACILITY, RESEARCH WING, REACTOR DEPTHS,
+     * THE BREACH, THE CORE. Every band is {@code REGION_BAND_SIZE} deep and ends on a boss floor; the
+     * last one ends on the run-final boss at {@code BalanceConfig.RUN_FINAL_DEPTH}. Bias tables come from {@link RouteMapConstants} so no distribution number is
      * hard-coded here.
      */
     public static RegionPlan defaultPlan() {
@@ -108,30 +102,32 @@ public final class RegionPlan {
                 .generatorWeight(GeneratorId.CAVERN,     RouteMapConstants.REGION_C_GENERATOR_WEIGHT_CAVERN)
                 .build();
 
-        List<RegionSpec> plan = new ArrayList<>();
-        plan.add(outerFacility);
-        plan.add(researchWing);
-        plan.add(reactorDepths);
-        plan.add(breachBand(RouteMapConstants.FIXED_REGION_COUNT, 3 * band + 1));
-        return new RegionPlan(plan);
-    }
-
-    /**
-     * Builds one endless "THE BREACH" band. All breach bands share a name/theme and lethal biases;
-     * only their index and depth span advance. Kept package-private-friendly (static) so both
-     * {@link #defaultPlan()} and {@link #withAppendedBreachBand()} produce identical bands.
-     */
-    private static RegionSpec breachBand(int regionIndex, int firstDepth) {
-        int lastDepth = firstDepth + RouteMapConstants.REGION_BAND_SIZE - 1;
-        return RegionSpec.builder(regionIndex)
+        RegionSpec theBreach = RegionSpec.builder(3)
                 .displayName(RouteMapConstants.REGION_D_NAME)
                 .themeId(RouteMapConstants.REGION_D_THEME)
-                .depthSpan(firstDepth, lastDepth)
-                .endless(true)
+                .depthSpan(3 * band + 1, 4 * band)
                 .nodeTypeMultiplier(RouteNodeType.ELITE, RouteMapConstants.REGION_D_MULTIPLIER_ELITE)
                 .nodeTypeMultiplier(RouteNodeType.REST,  RouteMapConstants.REGION_D_MULTIPLIER_REST)
                 .nodeTypeMultiplier(RouteNodeType.SHOP,  RouteMapConstants.REGION_D_MULTIPLIER_SHOP)
                 .generatorWeight(GeneratorId.CAVERN,     RouteMapConstants.REGION_D_GENERATOR_WEIGHT_CAVERN)
                 .build();
+
+        RegionSpec theCore = RegionSpec.builder(4)
+                .displayName(RouteMapConstants.REGION_E_NAME)
+                .themeId(RouteMapConstants.REGION_E_THEME)
+                .depthSpan(4 * band + 1, 5 * band)
+                .nodeTypeMultiplier(RouteNodeType.ELITE, RouteMapConstants.REGION_E_MULTIPLIER_ELITE)
+                .nodeTypeMultiplier(RouteNodeType.REST,  RouteMapConstants.REGION_E_MULTIPLIER_REST)
+                .nodeTypeMultiplier(RouteNodeType.SHOP,  RouteMapConstants.REGION_E_MULTIPLIER_SHOP)
+                .generatorWeight(GeneratorId.ROOMS_MST,  RouteMapConstants.REGION_E_GENERATOR_WEIGHT_ROOMS)
+                .build();
+
+        List<RegionSpec> plan = new ArrayList<>();
+        plan.add(outerFacility);
+        plan.add(researchWing);
+        plan.add(reactorDepths);
+        plan.add(theBreach);
+        plan.add(theCore);
+        return new RegionPlan(plan);
     }
 }

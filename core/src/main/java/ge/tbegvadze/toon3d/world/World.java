@@ -940,13 +940,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // Normal descent: present the next-node choice. Keep the graph ahead of the player first so the
-        // descent never runs out of map (endless lazy extension).
-        ensureRouteExtended();
+        // Normal descent: present the next-node choice. The map is finite (balance-overhaul order 6) and
+        // built whole at run start, so every floor above the run-final boss has a legal next node.
         java.util.List<RouteNode> nextPicks = routeMap.getSelectableNext();
         if (nextPicks.isEmpty()) {
-            // Defensive: no legal move (should not happen once extension has run). Fall back to a
-            // straight descent so the run can never soft-lock at the portal.
+            // Defensive: no legal move (only past the final layer, which the VICTORY path never reaches).
+            // Fall back to a straight descent so the run can never soft-lock at the portal.
             fadeTimerSeconds = 0f;
             runPhase = RunPhase.FADING_OUT;
             return;
@@ -1079,17 +1078,6 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         recordRouteCommit(next);
         fadeTimerSeconds = 0f;
         runPhase = RunPhase.FADING_OUT;
-    }
-
-    /**
-     * Endless-mode safety: extend the map with the next region band once the player nears its final
-     * layer, so {@link RouteMap#getSelectableNext()} always has a legal move to offer.
-     */
-    private void ensureRouteExtended() {
-        if (routeMap != null && routePlan != null
-                && routeMapGenerator.shouldExtend(routeMap, currentDepth)) {
-            routePlan = routeMapGenerator.extendWithNextRegion(routeMap, routePlan);
-        }
     }
 
     /** Appends the committed node to the run's shareable route string and logs the beat. */

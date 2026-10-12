@@ -18,8 +18,9 @@ import java.util.List;
  * <h2>Determinism model</h2>
  * <ul>
  *   <li>Each region band is generated from its own sub-stream {@code mixSeed(runSeed, regionIndex)},
- *       so a band is identical whether it is generated at run start or appended later by endless-mode
- *       extension. STRUCTURAL rolls (layer widths, spread edges) draw from that band stream.</li>
+ *       so a band's structure never depends on any other band. The map is FINITE (balance-overhaul
+ *       order 6): {@link #generate} builds every band of the plan up front, ending on the run-final
+ *       boss at {@code BalanceConfig.RUN_FINAL_DEPTH}; nothing ever appends a layer after it. STRUCTURAL rolls (layer widths, spread edges) draw from that band stream.</li>
  *   <li>Every per-node CONTENT roll (node type, combat generator, affix) draws from an independent
  *       stream derived from the node's fixed {@code nodeSeed} — never from visit order — so the
  *       branch you could have taken is identical to the branch you did take.</li>
@@ -83,7 +84,7 @@ public final class RouteMapGenerator {
 
         // Rollable layers built so far, in order, used as READ-ONLY context so the sliding window
         // guards catch windows straddling a region boundary. Only the current band is ever mutated,
-        // which keeps each band's result independent of later bands (deterministic lazy extension).
+        // which keeps each band's result independent of later bands.
         List<List<RouteNode>> accumulatedRollable = new ArrayList<>();
         List<RouteNode> previousLayer = allLayers.get(0);
         for (RegionSpec region : plan.regions()) {
@@ -104,44 +105,6 @@ public final class RouteMapGenerator {
         }
         map.initializeCursor(startNode);
         return map;
-    }
-
-    /**
-     * Endless-mode lazy extension: appends one more "THE BREACH" band to an existing map and wires it
-     * onto the current final layer. Re-seeded from {@code mixSeed(runSeed, regionIndex)}, and the
-     * window guards see the map's existing rollable layers as read-only context, so the appended band
-     * is byte-identical to the band the same plan would have produced up front.
-     *
-     * @param map  the map to extend in place
-     * @param plan the plan the map was last built from
-     * @return the extended plan (the map now spans one region deeper)
-     */
-    public RegionPlan extendWithNextRegion(RouteMap map, RegionPlan plan) {
-        RegionPlan extended    = plan.withAppendedBreachBand();
-        RegionSpec newRegion   = extended.regions().get(extended.regionCount() - 1);
-        List<RouteNode> prevLast = map.getLayers().get(map.getLayerCount() - 1);
-
-        List<List<RouteNode>> accumulatedRollable = new ArrayList<>();
-        collectRollable(map.getLayers(), accumulatedRollable);
-
-        List<List<RouteNode>> bandLayers = buildBand(map.getRunSeed(), newRegion, prevLast);
-        applyWindowGuards(bandLayers, accumulatedRollable);
-        // Same guarantee pipeline as generate(): an endlessly-appended band must be exactly as fair as
-        // one built up front (and byte-identical to it — every pass is deterministic).
-        repairBandGuarantees(bandLayers, newRegion.lastDepth());
-        finaliseNodes(bandLayers, newRegion);
-        map.appendLayers(bandLayers);
-        map.addRegion(newRegion.toRegion());
-        return extended;
-    }
-
-    /**
-     * Whether the map should be extended now: true once the player's current depth comes within
-     * {@link RouteMapConstants#EXTENSION_TRIGGER_DISTANCE} of the map's final layer.
-     */
-    public boolean shouldExtend(RouteMap map, int currentDepth) {
-        int finalDepth = map.getLayerCount() - 1;
-        return finalDepth - currentDepth <= RouteMapConstants.EXTENSION_TRIGGER_DISTANCE;
     }
 
     // =========================================================================
@@ -261,6 +224,10 @@ public final class RouteMapGenerator {
                     RouteNodeType replacement = upgradeKind ? RouteNodeType.ELITE : RouteNodeType.CACHE;
                     RouteNode target = pickGuaranteeConversionTarget(node, lastDepth, bandLayers, replacement);
                     if (target == null) {
+                        // No node ahead may legally change type (each is its layer's last combat
+                        // option): repair the GRAPH instead — one extra edge to a neighbouring lane
+                        // that still reaches the kind. Deterministic, and it removes no choice.
+                        changed |= connectToReachingNeighbour(node, lastDepth, bandLayers, upgradeKind);
                         break;
                     }
                     target.type = replacement;
@@ -269,6 +236,48 @@ public final class RouteMapGenerator {
             }
         }
         return changed;
+    }
+
+    /**
+     * The structural fallback of the reachability repair (balance-overhaul order 6 — first hit by the
+     * finite run's region E, seed 68): connects {@code source} to the next layer's node that can still
+     * reach the required kind, choosing the lane nearest the source's existing successors (lowest lane on
+     * a tie) so the edge reads like the generator's own spread. No RNG, so the map stays reproducible.
+     *
+     * @return whether an edge was added
+     */
+    private boolean connectToReachingNeighbour(RouteNode source, int lastDepth,
+                                               List<List<RouteNode>> bandLayers, boolean upgradeKind) {
+        List<RouteNode> nextLayer = null;
+        for (List<RouteNode> layer : bandLayers) {
+            if (layer.get(0).depth == source.depth + 1) {
+                nextLayer = layer;
+                break;
+            }
+        }
+        if (nextLayer == null || isForcedLayer(nextLayer)) {
+            return false;
+        }
+        RouteNode best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (RouteNode candidate : nextLayer) {
+            if (source.outgoing.contains(candidate) || !canReachRequiredKind(candidate, lastDepth, upgradeKind)) {
+                continue;
+            }
+            int distance = Integer.MAX_VALUE;
+            for (RouteNode existing : source.outgoing) {
+                distance = Math.min(distance, Math.abs(existing.laneIndex - candidate.laneIndex));
+            }
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+        if (best == null) {
+            return false;
+        }
+        connect(source, best);
+        return true;
     }
 
     /** Whether SOME forward path from this node, inside the region, still meets the requirement. */

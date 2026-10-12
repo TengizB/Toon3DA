@@ -173,15 +173,14 @@ class RouteEconomicsTest {
         }
     }
 
-    /** Endless extension must be repaired exactly like a band built up front. */
+    /** The finite run's last two acts (THE BREACH, THE CORE) are repaired exactly like the first three. */
     @Test
-    void lazilyExtendedBandsCarryTheSameGuarantees() {
-        RouteMapGenerator extendingGenerator = generator();
-        RegionPlan plan = RegionPlan.defaultPlan();
-        RouteMap map = extendingGenerator.generate(4242L, plan);
-        extendingGenerator.extendWithNextRegion(map, plan);
-        assertTrue(RouteEconomicsModel.guaranteeViolations(map).isEmpty(),
-                "an appended THE BREACH band must be as fair as one generated up front");
+    void theFinalRegionsCarryTheSameGuarantees() {
+        for (long seed = 4242L; seed < 4262L; seed++) {
+            RouteMap map = generator().generate(seed, RegionPlan.defaultPlan());
+            assertTrue(RouteEconomicsModel.guaranteeViolations(map).isEmpty(),
+                    "seed " + seed + ": every band through the run-final boss must be as fair as the first");
+        }
     }
 
     private RouteNode node(RouteNodeType type) {

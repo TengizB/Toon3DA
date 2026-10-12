@@ -27,7 +27,6 @@ public final class RegionSpec {
     private final String themeId;
     private final int firstDepth;
     private final int lastDepth;
-    private final boolean endless;
     private final Map<RouteNodeType, Float> nodeTypeMultipliers;
     private final Map<GeneratorId, Float> generatorWeights;
 
@@ -42,7 +41,6 @@ public final class RegionSpec {
         this.themeId             = Objects.requireNonNull(builder.themeId, "themeId");
         this.firstDepth          = builder.firstDepth;
         this.lastDepth           = builder.lastDepth;
-        this.endless             = builder.endless;
         this.nodeTypeMultipliers = new EnumMap<>(builder.nodeTypeMultipliers);
         this.generatorWeights    = new EnumMap<>(builder.generatorWeights);
     }
@@ -67,11 +65,6 @@ public final class RegionSpec {
     /** Last (inclusive) depth — the forced convergence floor (boss or region gate). */
     public int lastDepth() {
         return lastDepth;
-    }
-
-    /** Whether this band belongs to the endless post-game cycle (Region D "THE BREACH"). */
-    public boolean endless() {
-        return endless;
     }
 
     /** Whether the given floor depth falls within this band. */
@@ -113,7 +106,6 @@ public final class RegionSpec {
         private String themeId;
         private int firstDepth;
         private int lastDepth;
-        private boolean endless;
         private final Map<RouteNodeType, Float> nodeTypeMultipliers = new EnumMap<>(RouteNodeType.class);
         private final Map<GeneratorId, Float> generatorWeights      = new EnumMap<>(GeneratorId.class);
 
@@ -134,11 +126,6 @@ public final class RegionSpec {
         public Builder depthSpan(int firstDepth, int lastDepth) {
             this.firstDepth = firstDepth;
             this.lastDepth  = lastDepth;
-            return this;
-        }
-
-        public Builder endless(boolean endless) {
-            this.endless = endless;
             return this;
         }
 

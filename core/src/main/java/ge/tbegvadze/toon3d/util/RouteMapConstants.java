@@ -81,21 +81,26 @@ public final class RouteMapConstants {
     // Region / act bands — the descent's narrated shape
     // -------------------------------------------------------------------------
     // A region spans REGION_BAND_SIZE depths ending in a boss floor (isBossFloor(lastDepth) holds
-    // because REGION_BAND_SIZE == Constants.BOSS_FLOOR_INTERVAL). The first FIXED_REGION_COUNT regions
-    // are hand-named acts; every region beyond that is an endless "THE BREACH" cycle, generated lazily.
+    // because REGION_BAND_SIZE == Constants.BOSS_FLOOR_INTERVAL). The run is FINITE (balance-overhaul
+    // order 6, F1): exactly FIXED_REGION_COUNT hand-named acts covering 1..BalanceConfig.RUN_FINAL_DEPTH,
+    // the last one closing on the run-final boss. No band is ever appended after region E.
 
     public static final int REGION_BAND_SIZE   = 5;
-    public static final int FIXED_REGION_COUNT = 3;
+    /** The five acts A..E — RUN_FINAL_DEPTH / REGION_BAND_SIZE (25 / 5). */
+    public static final int FIXED_REGION_COUNT = BalanceConfig.RUN_FINAL_DEPTH / REGION_BAND_SIZE;
 
     public static final String REGION_A_NAME = "OUTER FACILITY";
     public static final String REGION_B_NAME = "RESEARCH WING";
     public static final String REGION_C_NAME = "REACTOR DEPTHS";
     public static final String REGION_D_NAME = "THE BREACH";
+    // F2: "Core" has no StoryTerm row (vocabulary ladder), so the NAV console may name it plainly.
+    public static final String REGION_E_NAME = "THE CORE";
 
     public static final String REGION_A_THEME = "outer_facility";
     public static final String REGION_B_THEME = "research_wing";
     public static final String REGION_C_THEME = "reactor_depths";
     public static final String REGION_D_THEME = "the_breach";
+    public static final String REGION_E_THEME = "the_core";
 
     // -------------------------------------------------------------------------
     // Per-region node-type weight multipliers (scale the base weights above)
@@ -119,10 +124,15 @@ public final class RouteMapConstants {
     public static final float REGION_C_MULTIPLIER_REST  = 0.75f;
     public static final float REGION_C_MULTIPLIER_SHOP  = 0.85f;
 
-    // Region D "THE BREACH" (endless) — relentless: elites up, relief scarce but never absent.
+    // Region D "THE BREACH" — relentless: elites up, relief scarce but never absent.
     public static final float REGION_D_MULTIPLIER_ELITE = 1.80f;
     public static final float REGION_D_MULTIPLIER_REST  = 0.70f;
     public static final float REGION_D_MULTIPLIER_SHOP  = 0.70f;
+
+    // Region E "THE CORE" — the finale: the heaviest elite lean, relief scarce, the run-final boss at 25.
+    public static final float REGION_E_MULTIPLIER_ELITE = 1.80f;
+    public static final float REGION_E_MULTIPLIER_REST  = 0.70f;
+    public static final float REGION_E_MULTIPLIER_SHOP  = 0.70f;
 
     // -------------------------------------------------------------------------
     // Per-region combat-generator weight multipliers (scale the standard pool)
@@ -134,6 +144,7 @@ public final class RouteMapConstants {
     public static final float REGION_B_GENERATOR_WEIGHT_ROOMS   = 1.75f; // research wing = built rooms
     public static final float REGION_C_GENERATOR_WEIGHT_CAVERN  = 1.90f; // reactor depths = raw caverns
     public static final float REGION_D_GENERATOR_WEIGHT_CAVERN  = 1.60f; // the breach = collapsed caverns
+    public static final float REGION_E_GENERATOR_WEIGHT_ROOMS   = 1.50f; // the core = built machinery
 
     // -------------------------------------------------------------------------
     // Anti-starvation / anti-clump guards (deterministic post-pass over the roll)
@@ -159,16 +170,6 @@ public final class RouteMapConstants {
     public static final float AFFIX_ROLL_CHANCE_ELITE   = BalanceConfig.AFFIX_ROLL_CHANCE_ELITE;
     /** Probability a MYSTERY node rolls an affix, IF an affix catalog has been supplied (else 0). */
     public static final float AFFIX_ROLL_CHANCE_MYSTERY = BalanceConfig.AFFIX_ROLL_CHANCE_MYSTERY;
-
-    // -------------------------------------------------------------------------
-    // Endless-mode lazy extension
-    // -------------------------------------------------------------------------
-
-    /**
-     * When the player's current depth comes within this many layers of the map's final layer, the
-     * generator appends the next region band so the descent never runs out of graph.
-     */
-    public static final int EXTENSION_TRIGGER_DISTANCE = 3;
 
     // -------------------------------------------------------------------------
     // Fog / reveal defaults
@@ -336,6 +337,12 @@ public final class RouteMapConstants {
     // ---- Text scales -------------------------------------------------------
     public static final float TITLE_TEXT_SCALE   = 1.2f;
     public static final float DEPTH_TEXT_SCALE   = 0.95f;
+    /**
+     * NAV header (balance-overhaul order 6, F6): "FLOOR n / 25" — n is the floor the console is about to
+     * send the player to (the staging room reads FLOOR 1), out of BalanceConfig.RUN_FINAL_DEPTH.
+     */
+    public static final String NAV_FLOOR_HEADER_PREFIX    = "FLOOR ";
+    public static final String NAV_FLOOR_HEADER_SEPARATOR = " / ";
     public static final float REGION_TEXT_SCALE  = 1.0f;
     public static final float NODE_LABEL_SCALE   = 0.9f;
     public static final float LEGEND_TEXT_SCALE  = 0.95f;
@@ -683,24 +690,28 @@ public final class RouteMapConstants {
     public static final String REGION_B_WALL_PALETTE = "MNDQ";  // clinical lab white-green
     public static final String REGION_C_WALL_PALETTE = "UhXj";  // amber-hot reactor
     public static final String REGION_D_WALL_PALETTE = "GF";    // gore + force-field corruption
+    public static final String REGION_E_WALL_PALETTE = "wtSZ";  // the machine heart: wires, terminals, cryo
 
     // Enemy faction ids that dominate each region's spawns (descriptive hook for EnemyManager).
     public static final String REGION_A_FACTION = "baseline_demons";
     public static final String REGION_B_FACTION = "lab_horrors";
     public static final String REGION_C_FACTION = "reactor_brutes";
     public static final String REGION_D_FACTION = "necrotic";
+    public static final String REGION_E_FACTION = "core_wardens";
 
     // Lighting mood ids (hook the lighting/red-alert systems can read; no assets added here).
     public static final String REGION_A_LIGHTING = "cool_steel";
     public static final String REGION_B_LIGHTING = "clinical_white";
     public static final String REGION_C_LIGHTING = "amber_hot";
     public static final String REGION_D_LIGHTING = "corrupted_violet";
+    public static final String REGION_E_LIGHTING = "core_white_violet";
 
     // Music ids (placeholders — no audio assets added here; the audio system reads these later).
     public static final String REGION_A_MUSIC = "music_outer_facility";
     public static final String REGION_B_MUSIC = "music_research_wing";
     public static final String REGION_C_MUSIC = "music_reactor_depths";
     public static final String REGION_D_MUSIC = "music_the_breach";
+    public static final String REGION_E_MUSIC = "music_the_core";
 
     // Ambient red-alert frequency per region (0..1): how often the emergency pulse flares. Escalates
     // with depth so the descent FEELS more hostile the deeper the player goes.
@@ -708,16 +719,19 @@ public final class RouteMapConstants {
     public static final float  REGION_B_RED_ALERT_FREQUENCY = 0.10f;
     public static final float  REGION_C_RED_ALERT_FREQUENCY = 0.35f;
     public static final float  REGION_D_RED_ALERT_FREQUENCY = 0.55f;
+    public static final float  REGION_E_RED_ALERT_FREQUENCY = 0.70f;
 
     // Boss ids that close each region (placeholders wired to the boss system as it grows).
     public static final String REGION_A_BOSS = "boss_gatekeeper";
     public static final String REGION_B_BOSS = "boss_prime_specimen";
     public static final String REGION_C_BOSS = "boss_reactor_core";
     public static final String REGION_D_BOSS = "boss_breach_avatar";
+    public static final String REGION_E_BOSS = "boss_core_warden";
 
     // REGION_GATE announce flavour lines (the ceremonial "chapter break" copy per region).
     public static final String REGION_A_GATE_FLAVOUR = "Bulkhead sealed. The facility proper lies ahead.";
     public static final String REGION_B_GATE_FLAVOUR = "Quarantine breached. Research containment ahead.";
     public static final String REGION_C_GATE_FLAVOUR = "Coolant failing. Reactor levels ahead — mind the heat.";
     public static final String REGION_D_GATE_FLAVOUR = "Reality thins. You have gone too deep.";
+    public static final String REGION_E_GATE_FLAVOUR = "The shaft ends here. Nothing lies below.";
 }

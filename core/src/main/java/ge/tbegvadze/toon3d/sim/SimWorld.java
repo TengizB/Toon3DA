@@ -347,9 +347,6 @@ public final class SimWorld implements LevelTransitionListener {
 
     /** Presents the legal next nodes to the policy and commits its pick (mirrors World.commitRouteNode). */
     private void commitNextNode() {
-        if (routeMapGenerator.shouldExtend(routeMap, currentDepth)) {
-            routePlan = routeMapGenerator.extendWithNextRegion(routeMap, routePlan);
-        }
         List<RouteNode> candidates = routeMap.getSelectableNext();
         if (candidates.isEmpty()) {
             pendingNode = null;   // defensive: fall back to the depth-driven generator, like World

@@ -620,23 +620,25 @@ public final class BalanceReport {
                 + "the per-fight power ladder (R-LADDER L1) holds in every region lane.");
     }
 
-    /** Route region letter A..D for a 0-based region index (clamped past D — endless "The Breach"). */
+    /** Route region letter A..E for a 0-based region index (the finite run, balance-overhaul order 6). */
     private static String regionLetter(int region) {
         switch (region) {
             case 0:  return "A";
             case 1:  return "B";
             case 2:  return "C";
-            default: return "D";
+            case 3:  return "D";
+            default: return "E";
         }
     }
 
-    /** Route region name for a 0-based region index (clamped past D). */
+    /** Route region name for a 0-based region index (A..E). */
     private static String regionName(int region) {
         switch (region) {
             case 0:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_A_NAME;
             case 1:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_B_NAME;
             case 2:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_C_NAME;
-            default: return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_D_NAME;
+            case 3:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_D_NAME;
+            default: return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_E_NAME;
         }
     }
 

@@ -87,7 +87,8 @@ CORE DATA TYPES
                           run-state, owned by World (order-3). Cursor API: initializeCursor,
                           getSelectableNext (AVAILABLE outgoing edges), commitTo (VISITED old,
                           BYPASSED siblings, CURRENT next, AVAILABLE its edges), isBossNext,
-                          appendLayers (endless lazy extension), reveal / revealRegion (fog).
+                          reveal / revealRegion (fog). The map is FINITE (balance-overhaul order 6):
+                          built whole at run start, 25 floors, nothing ever appends a layer.
   NodeStatus (enum)     — cursor-relative: LOCKED, AVAILABLE, VISITED, CURRENT, BYPASSED.
   DangerTier (enum)     — CALM < STANDARD < DANGER < GAMBLE < SET_PIECE. Drives overlay colour and the
                           order-2 anti-starvation guards. Ordinal-comparable for tuning.
@@ -108,7 +109,7 @@ World.create()). Each is the ONLY edit-point for its kind of content:
                               (DefaultCombatProfile) so every node stays playable pre-implementation.
   NodeAffixRegistry         — affix id -> NodeAffixDefinition (order-9 ELITE modifiers).
   FacilityEventRegistry     — event id -> FacilityEvent (order-10 narrative beats).
-  RegionAmbienceRegistry    — themeId -> RegionAmbience (order-10 act theming; fallback = THE BREACH).
+  RegionAmbienceRegistry    — themeId -> RegionAmbience (order-10 act theming; fallback = THE CORE).
   IconPainterRegistry / RegionCrestPainterRegistry — the render-layer twins (order-5); populated by
                               RouteIconBootstrap (LibGDX-touching, so it can't live in the route pkg).
   (A NodeLevelProfileRegistry-style "NodeLevelProfileRegistry" fallback + a RouteRng/RouteRegistries
@@ -129,8 +130,7 @@ GameMath; the generator only orchestrates.
 
 DETERMINISM MODEL (three independent streams so nothing correlates or depends on visit order):
   - STRUCTURAL rolls (layer widths, branch spread) draw from a per-BAND stream mixSeed(runSeed,
-    regionIndex), so a band is identical whether generated at run start or appended later by endless
-    extension.
+    regionIndex), so a band's structure never depends on any other band.
   - Per-node CONTENT rolls each draw from an independent sub-stream salted off the node's fixed
     nodeSeed: TYPE_STREAM_SALT (node type), GENERATOR_STREAM_SALT (combat biome), AFFIX_STREAM_SALT
     (ELITE affix). The branch you COULD have taken == the branch you DID take.
@@ -167,9 +167,14 @@ REGION BANDS (RegionPlan / RegionSpec — DATA, not code branches):
   A band is REGION_BAND_SIZE (5) deep and ENDS on its lastDepth, which is a boss floor because
   REGION_BAND_SIZE == Constants.BOSS_FLOOR_INTERVAL (5) — so GameMath.isBossFloor(lastDepth) holds by
   construction. The generator injects a forced BOSS at a boss depth, or a forced REGION_GATE at a band
-  boundary that ISN'T a boss depth. defaultPlan(): FIXED_REGION_COUNT (3) named acts — OUTER FACILITY
-  (1-5), RESEARCH WING (6-10), REACTOR DEPTHS (11-15) — then endless "THE BREACH" bands (16-20, …)
-  appended lazily via withAppendedBreachBand() as the run descends. Each RegionSpec carries per-type
+  boundary that ISN'T a boss depth. defaultPlan() is THE FINITE RUN (balance-overhaul order 6, F1):
+  FIXED_REGION_COUNT (5 = RUN_FINAL_DEPTH / REGION_BAND_SIZE) named acts — OUTER FACILITY (1-5),
+  RESEARCH WING (6-10), REACTOR DEPTHS (11-15), THE BREACH (16-20), THE CORE (21-25) — and nothing
+  else. The RegionPlan constructor REFUSES a plan whose last band reaches past BalanceConfig.
+  RUN_FINAL_DEPTH (25); the old endless path (withAppendedBreachBand, extendWithNextRegion,
+  shouldExtend, RouteMap.appendLayers, EXTENSION_TRIGGER_DISTANCE) is deleted. The depth-25 BOSS is
+  the run-final boss: killing it ends the run as a VICTORY (World; see docs/story-ui-system.txt for the
+  ending exchange at the final clear). Each RegionSpec carries per-type
   and per-generator weight multipliers (see REGION CATALOG). RegionSpec.toRegion() projects to the
   RouteRegion the map stores; RegionAmbience (order-10) adds the visual/audio identity keyed by themeId.
 
@@ -530,8 +535,12 @@ ROUTE GUARANTEES AT MAP-GEN (RouteMapGenerator.repairBandGuarantees — a determ
       promises without collapsing a layer into one node type.
     - REAL CHOICES       : every selectable layer offers >= ROUTE_MIN_NODE_TYPES_PER_LAYER (2) DISTINCT
       node types. A row of identical cards is a choice in name only.
-  Proven over 100 seeds by BalanceAuditTest + RouteEconomicsTest, including endless lazily-appended
-  bands, and the repair is deterministic so seeds stay shareable.
+  Proven over 100 seeds by BalanceAuditTest + RouteEconomicsTest through the run-final band, and the
+    repair is deterministic so seeds stay shareable. STRUCTURAL FALLBACK (balance-overhaul order 6, first
+    hit by region E): when no node ahead may legally change type (each is its layer's last combat
+    option), the reachability repair adds ONE edge from the stranded node to the next layer's node that
+    still reaches the kind, nearest its existing successors' lanes — it repairs the graph, removes no
+    choice, and uses no RNG.
 
 WHAT ORDER-7 RE-PRICED (the payoff numbers below are its output, not the order-8/9/10 hand-set ones)
   CACHE  2 ammo boxes + 1 medkit (was 4 + medkit + stim + armour) — a chained cache route used to sail
@@ -562,7 +571,8 @@ the FitViewport letterbox mid-frame — see WeaponHudRenderer). The bloom is ins
 concentric additive-blended discs (glBlendFunc SRC_ALPHA, ONE) drawn through the one ShapeRenderer.
 
 SCREEN BANDS (world coords, 1280x720, Y-up):
-  TITLE PLATE   y 648..712  — "FACILITY NAV — SELECT VECTOR", region crest (left), "DEPTH n -> n+1" (right)
+  TITLE PLATE   y 648..712  — "FACILITY NAV — SELECT VECTOR", region crest (left), "FLOOR n / 25" (right;
+                            n = the floor the console sends you to — the staging room reads FLOOR 1; F6)
   MAP VIEWPORT  y 150..640  — hologram schematic (bottom->top flow: CURRENT low, candidates high)
   LEGEND STRIP  y  96..150  — focused node's hint line
   CONFIRM BAR   y  12.. 92  — [◀ CANCEL] ......... [ENGAGE ▶] (visual targets; touch is order-6)
@@ -777,7 +787,8 @@ REGION THEMING / ACTS (RegionAmbienceRegistry)
   lightingMoodId, musicId — ids/flags the audio + red-alert systems read LATER; NO audio assets added
   here), bossId, and gateFlavour (the REGION_GATE announce copy). v1 regions: outer_facility (cool
   steel, baseline demons), research_wing (clinical, lab horrors), reactor_depths (amber-hot, reactor
-  brutes, red-alert common), the_breach (corrupted violet, necrotic, endless — also the fallback).
+  brutes, red-alert common), the_breach (corrupted violet, necrotic), the_core (deep violet-white, core
+  wardens, red-alert most common — the finale, and the fallback).
 
   REGION-ENTRY ANNOUNCE (generic, not gate-specific): World tracks lastAnnouncedRegionIndex and, on
   each floor build, computes routePlan.regionForDepth(currentDepth); the first time it crosses into a
@@ -850,8 +861,9 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
 REGION CATALOG (LIVING TABLE) — one row per act band; a new region ADDS a row
 ================================================================================
 Depth ranges assume REGION_BAND_SIZE = 5 (== Constants.BOSS_FLOOR_INTERVAL). The first
-FIXED_REGION_COUNT (3) acts are fixed; THE BREACH repeats endlessly (each band appended lazily) and is
-also the RegionAmbience fallback. Node/generator biases are the RegionSpec multipliers over the base
+FIXED_REGION_COUNT (5) acts are the whole run (balance-overhaul order 6); THE CORE closes it on the
+run-final boss and is also the RegionAmbience fallback. Region E's name obeys the vocabulary ladder
+(F2): "Core" has no narrative/StoryTerm row, so the NAV console names it plainly. Node/generator biases are the RegionSpec multipliers over the base
 pool (unlisted types/generators stay at 1.0, so every registered type/generator still appears).
 
   index themeId            name             depths  crest                   faction (hook)   biases (multipliers)
@@ -859,10 +871,11 @@ pool (unlisted types/generators stay at 1.0, so every registered type/generator 
   0     outer_facility     OUTER FACILITY   1-5     gear ring               baseline demons  COMBAT/ELITE/CACHE/MYSTERY tuned for onboarding
   1     research_wing      RESEARCH WING    6-10    molecule / atom         lab horrors      MYSTERY/EVENT/ELITE up; ROOMS_MST leaned
   2     reactor_depths     REACTOR DEPTHS   11-15   radiation trefoil       reactor brutes   ELITE/REST/SHOP up; CAVERN leaned; red-alert common
-  3+    the_breach         THE BREACH       16-20…  cracked/corrupted sigil necrotic          ELITE/REST/SHOP up; CAVERN leaned; endless (fallback)
+  3     the_breach         THE BREACH       16-20   cracked/corrupted sigil necrotic          ELITE/REST/SHOP up; CAVERN leaned
+  4     the_core           THE CORE         21-25   core lattice            core wardens     ELITE up, REST/SHOP down; ROOMS_MST leaned; run-final boss (fallback)
   Each region also carries (RegionAmbience, order-10): overlayThemeId tint, wallPalette, enemyFactionId,
   redAlertFrequency / lightingMoodId / musicId ambience hooks, bossId, and gateFlavour announce copy.
-  Exact multiplier values live in RouteMapConstants.REGION_{A,B,C,D}_* — tune there, never inline.
+  Exact multiplier values live in RouteMapConstants.REGION_{A,B,C,D,E}_* — tune there, never inline.
 
 
 ================================================================================
