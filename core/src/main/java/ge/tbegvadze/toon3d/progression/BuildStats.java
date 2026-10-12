@@ -366,6 +366,14 @@ public final class BuildStats {
                 targetInRiposteWindow ? riposteDamageBonus : 0f);
     }
 
+    /**
+     * PYROMANIAC's "+X% from every source" alone: the multiplier a BURNING target takes from a source that
+     * carries no other build term (a barrel blast, an IRON BULWARK reflect). 1 when not burning.
+     */
+    public float burningTargetMultiplier(boolean targetBurning) {
+        return targetBurning ? 1f + burningTargetDamageBonus : 1f;
+    }
+
     /** Steady Aim's falloff reduction for a weapon of this class (BALLISTIC / RAIL only; 0 otherwise). */
     public float falloffReductionFor(DamageClass damageClass) {
         return BuildTag.MARKSMAN.ownsDamageClass(damageClass) ? ballisticRailFalloffReduction : 0f;

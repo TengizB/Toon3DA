@@ -59,26 +59,26 @@ public final class LevelUpOverlayRenderer implements Disposable {
 
     // Text Y offsets measured DOWN from the top of the card body.
     private static final float HEADER_TEXT_Y   = 40f;   // card name, centered in header strip
-    private static final float CHIP_TOP_OFFSET  = 72f;  // tag chip: top edge below the card top
-    private static final float CHIP_HEIGHT      = 26f;
-    private static final float CHIP_TEXT_RISE   = 19f;  // chip text baseline above the chip bottom
-    private static final float CHIP_TEXT_PAD    = 14f;  // chip side padding around its text
+    private static final float CHIP_TOP_OFFSET  = ProgressionConstants.LEVEL_UP_CHIP_TOP_OFFSET;  // tag chip: top edge below the card top
+    private static final float CHIP_HEIGHT      = ProgressionConstants.BUILD_CHIP_HEIGHT;
+    private static final float CHIP_TEXT_RISE   = ProgressionConstants.LEVEL_UP_CHIP_TEXT_RISE;  // chip text baseline above the chip bottom
+    private static final float CHIP_TEXT_PAD    = ProgressionConstants.BUILD_CHIP_TEXT_PAD;  // chip side padding around its text
     private static final float VALUE_Y         = 134f;  // "RANK 2 / 3" / "KEYSTONE"
-    private static final float PIP_CENTER_Y    = 160f;  // rank pip row
-    private static final float PIP_RADIUS      = 8f;
-    private static final float PIP_SPACING     = 30f;
-    private static final float PIP_NEXT_RING   = 3f;    // extra ring radius around the highlighted next pip
+    private static final float PIP_CENTER_Y    = ProgressionConstants.LEVEL_UP_PIP_CENTER_Y;  // rank pip row
+    private static final float PIP_RADIUS      = ProgressionConstants.LEVEL_UP_PIP_RADIUS;
+    private static final float PIP_SPACING     = ProgressionConstants.LEVEL_UP_PIP_SPACING;
+    private static final float PIP_NEXT_RING   = ProgressionConstants.LEVEL_UP_PIP_NEXT_RING;    // extra ring radius around the highlighted next pip
     private static final float DIVIDER_Y       = 178f;  // hairline separator under the pips
     private static final float DESC_Y          = 200f;  // wrapped description / gain line
-    private static final float TAP_BOTTOM_OFFSET = 22f; // "TAP TO CHOOSE" baseline above the card bottom
+    private static final float TAP_BOTTOM_OFFSET = ProgressionConstants.LEVEL_UP_TAP_BOTTOM_OFFSET; // "TAP TO CHOOSE" baseline above the card bottom
     /** Baseline of a keystone's cost line, measured UP from the plate bottom (balance-overhaul order 5). */
     private static final float COST_LINE_BOTTOM_OFFSET = 68f;
     /** The value line of a keystone plate. */
     private static final String KEYSTONE_VALUE_TEXT = "KEYSTONE";
     private static final String SYNERGY_TEXT = "SYNERGY";
-    private static final float SYNERGY_RIBBON_SIZE = 46f;   // right-angle corner triangle legs
-    private static final float KEYSTONE_INNER_FRAME_INSET = 8f;
-    private static final float SCALE_CHIP = 1.0f;
+    private static final float SYNERGY_RIBBON_SIZE = ProgressionConstants.LEVEL_UP_SYNERGY_RIBBON_SIZE;   // right-angle corner triangle legs
+    private static final float KEYSTONE_INNER_FRAME_INSET = ProgressionConstants.LEVEL_UP_KEYSTONE_INNER_FRAME_INSET;
+    private static final float SCALE_CHIP = ProgressionConstants.BUILD_CHIP_FONT_SCALE;
 
     // Title / subtitle above the cards
     private static final float TITLE_Y    = CARD_Y + CARD_HEIGHT + 78f;
@@ -115,10 +115,14 @@ public final class LevelUpOverlayRenderer implements Disposable {
             ProgressionConstants.BUILD_SYNERGY_GREEN, ProgressionConstants.BUILD_SYNERGY_BLUE, 1f);
     private static final Color KEYSTONE_GOLD = new Color(ProgressionConstants.BUILD_KEYSTONE_GOLD_RED,
             ProgressionConstants.BUILD_KEYSTONE_GOLD_GREEN, ProgressionConstants.BUILD_KEYSTONE_GOLD_BLUE, 1f);
-    private static final Color KEYSTONE_GLOW = new Color(KEYSTONE_GOLD.r, KEYSTONE_GOLD.g, KEYSTONE_GOLD.b, 0.30f);
-    private static final Color CHIP_TEXT_COLOR = new Color(0.04f, 0.04f, 0.06f, 1f);
-    private static final Color PIP_EMPTY_FILL = new Color(0.05f, 0.05f, 0.07f, 1f);
-    private static final Color PIP_EMPTY_RING = new Color(0.55f, 0.55f, 0.60f, 1f);
+    private static final Color KEYSTONE_GLOW = new Color(KEYSTONE_GOLD.r, KEYSTONE_GOLD.g, KEYSTONE_GOLD.b,
+            ProgressionConstants.LEVEL_UP_KEYSTONE_GLOW_ALPHA);
+    private static final Color CHIP_TEXT_COLOR = new Color(ProgressionConstants.BUILD_CHIP_TEXT_RED,
+            ProgressionConstants.BUILD_CHIP_TEXT_GREEN, ProgressionConstants.BUILD_CHIP_TEXT_BLUE, 1f);
+    private static final Color PIP_EMPTY_FILL = new Color(ProgressionConstants.BUILD_PIP_EMPTY_RED,
+            ProgressionConstants.BUILD_PIP_EMPTY_GREEN, ProgressionConstants.BUILD_PIP_EMPTY_BLUE, 1f);
+    private static final Color PIP_EMPTY_RING = new Color(ProgressionConstants.BUILD_PIP_RING_RED,
+            ProgressionConstants.BUILD_PIP_RING_GREEN, ProgressionConstants.BUILD_PIP_RING_BLUE, 1f);
 
     // ---- Plate palettes, one entry per BuildTag ordinal, derived from the tag's chip colour (BuildTagPalette).
     // Card body gradient: lighter at the top of the body, deepening toward the bottom.
@@ -137,9 +141,13 @@ public final class LevelUpOverlayRenderer implements Disposable {
             int index = tag.ordinal();
             Color accent = BuildTagPalette.colorOf(tag);
             TAG_ACCENT[index]       = accent;
-            TAG_BODY_TOP[index]     = new Color(accent.r * 0.20f, accent.g * 0.20f, accent.b * 0.20f, 0.98f);
+            TAG_BODY_TOP[index]     = new Color(accent.r * ProgressionConstants.LEVEL_UP_TAG_BODY_BRIGHTNESS,
+                    accent.g * ProgressionConstants.LEVEL_UP_TAG_BODY_BRIGHTNESS,
+                    accent.b * ProgressionConstants.LEVEL_UP_TAG_BODY_BRIGHTNESS, ProgressionConstants.LEVEL_UP_TAG_BODY_ALPHA);
             TAG_BODY_BOTTOM[index]  = scaleRgb(TAG_BODY_TOP[index], 0.35f);
-            TAG_STRIP_TOP[index]    = new Color(accent.r * 0.92f, accent.g * 0.92f, accent.b * 0.92f, 1f);
+            TAG_STRIP_TOP[index]    = new Color(accent.r * ProgressionConstants.LEVEL_UP_TAG_STRIP_BRIGHTNESS,
+                    accent.g * ProgressionConstants.LEVEL_UP_TAG_STRIP_BRIGHTNESS,
+                    accent.b * ProgressionConstants.LEVEL_UP_TAG_STRIP_BRIGHTNESS, 1f);
             TAG_STRIP_BOTTOM[index] = scaleRgb(TAG_STRIP_TOP[index], 0.62f);
             Color glow = new Color(accent);
             glow.a = 0.22f;
@@ -474,7 +482,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
         if (plateSynergy[cardIndex]) {
             font.setColor(SYNERGY_AMBER);
             font.draw(batch, SYNERGY_TEXT, cardX + TEXT_HORIZONTAL_PAD, chipBaseline,
-                    CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f + 12f, Align.right, false);
+                    CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f + ProgressionConstants.LEVEL_UP_SYNERGY_LABEL_EXTRA_WIDTH, Align.right, false);
         }
 
         // The rank this pick reaches ("RANK 2 / 3"), or "KEYSTONE", in accent color

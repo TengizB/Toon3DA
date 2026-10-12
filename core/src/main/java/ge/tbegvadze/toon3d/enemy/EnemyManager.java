@@ -894,6 +894,10 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.getActiveEffects().get(StatusType.BURNING).isActive(), thisKillWasMelee,
                     isPlayerBelowBerserkThreshold(), worldTurnIndex <= enemy.riposteWindowLastTurn);
             if (!resolvingStormArc) enemy.playerHitTaken = true;
+        } else if (activationHazardBlast) {
+            // PYROMANIAC is "from every source": a barrel blast takes only the burning-target term.
+            buildMultiplier = buildStats.burningTargetMultiplier(
+                    enemy.getActiveEffects().get(StatusType.BURNING).isActive());
         }
         totalDamage = Math.round(totalDamage * playerWeakMultiplier * vulnerableMultiplier * backstabMultiplier
                 * matchupMultiplier * buildMultiplier);
@@ -3301,6 +3305,9 @@ public final class EnemyManager implements EnemyHitTarget {
      * phase loop ({@link #pendingExecuteDeaths}) rather than removed mid-iteration.
      */
     private void reflectIntoAttacker(Enemy attacker, int reflected) {
+        // PYROMANIAC: "from every source" — a burning attacker takes the burning-target term on the reflect too.
+        reflected = Math.round(reflected * buildStats.burningTargetMultiplier(
+                attacker.getActiveEffects().get(StatusType.BURNING).isActive()));
         attacker.applyDamage(reflected);
         attacker.triggerHitFlash();
         if (impactEventListener != null) {

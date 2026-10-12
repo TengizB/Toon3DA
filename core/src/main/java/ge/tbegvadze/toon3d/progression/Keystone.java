@@ -40,7 +40,7 @@ public enum Keystone {
             new PerkEffect[]{PerkEffect.of(PerkModifier.MAX_ARMOR_COST, BalanceConfig.KEYSTONE_PYROMANIAC_ARMOR_MULTIPLIER)}),
     DEMOLITIONIST(BuildTag.DEMOLITION, "DEMOLITIONIST",
             "Immune to your own explosions; barrels you detonate deal x"
-                    + BalanceConfig.KEYSTONE_DEMOLITIONIST_BARREL_MULTIPLIER,
+                    + Math.round(BalanceConfig.KEYSTONE_DEMOLITIONIST_BARREL_MULTIPLIER),
             "Max HP -" + Perk.percent(1f - BalanceConfig.KEYSTONE_DEMOLITIONIST_HEALTH_MULTIPLIER),
             new PerkEffect[]{
                     PerkEffect.of(PerkModifier.OWN_EXPLOSION_IMMUNE, 1f),

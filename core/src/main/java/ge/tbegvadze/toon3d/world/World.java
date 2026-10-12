@@ -741,7 +741,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         shopEffectApplier = new ShopEffectRouter(
                 new ShopWeaponService(weaponRoller),
                 new ShopSupplyService(itemInventory),
-                new ShopAbilityService(this::grantShopAbility));
+                new ShopAbilityService(this::grantShopAbility, playerBuild::isMaxed));
 
         shopOverlayRenderer = new ShopOverlayRenderer();
 

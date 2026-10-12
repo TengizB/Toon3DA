@@ -37,33 +37,33 @@ final class BuildPagePanel {
             - ItemConstants.INV_LEFT_PANEL_X;
     private static final float PANEL_BOTTOM = ItemConstants.INV_PANEL_Y_BOTTOM;
     private static final float PANEL_TOP    = ItemConstants.INV_PANEL_Y_BOTTOM + ItemConstants.INV_PANEL_HEIGHT;
-    private static final float TOP_PAD      = 10f;
-    private static final float FOOTER_HEIGHT = 62f;
-    private static final float ROW_HEIGHT   = 38f;
-    private static final float ROW_TEXT_RISE = 12f;      // baseline above the row bottom
+    private static final float TOP_PAD      = ProgressionConstants.BUILD_PAGE_TOP_PAD;
+    private static final float FOOTER_HEIGHT = ProgressionConstants.BUILD_PAGE_FOOTER_HEIGHT;
+    private static final float ROW_HEIGHT   = ProgressionConstants.BUILD_PAGE_ROW_HEIGHT;
+    private static final float ROW_TEXT_RISE = ProgressionConstants.BUILD_PAGE_ROW_TEXT_RISE;
     private static final int   VISIBLE_ROWS = (int) ((PANEL_TOP - PANEL_BOTTOM - TOP_PAD - FOOTER_HEIGHT) / ROW_HEIGHT);
 
-    private static final float NAME_X       = PANEL_X + 40f;
-    private static final float PIPS_LEFT_X  = PANEL_X + 330f;
-    private static final float EFFECT_X     = PANEL_X + 440f;
-    private static final float EFFECT_WIDTH = PANEL_X + PANEL_WIDTH - 20f - EFFECT_X;
-    private static final float CHIP_X       = PANEL_X + 20f;
-    private static final float CHIP_HEIGHT  = 26f;
-    private static final float CHIP_PAD     = 14f;
-    private static final float PIP_RADIUS   = 7f;
-    private static final float PIP_SPACING  = 26f;
+    private static final float NAME_X       = PANEL_X + ProgressionConstants.BUILD_PAGE_NAME_OFFSET_X;
+    private static final float PIPS_LEFT_X  = PANEL_X + ProgressionConstants.BUILD_PAGE_PIPS_OFFSET_X;
+    private static final float EFFECT_X     = PANEL_X + ProgressionConstants.BUILD_PAGE_EFFECT_OFFSET_X;
+    private static final float EFFECT_WIDTH = PANEL_X + PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_EFFECT_RIGHT_MARGIN - EFFECT_X;
+    private static final float CHIP_X       = PANEL_X + ProgressionConstants.BUILD_PAGE_CHIP_OFFSET_X;
+    private static final float CHIP_HEIGHT  = ProgressionConstants.BUILD_CHIP_HEIGHT;
+    private static final float CHIP_PAD     = ProgressionConstants.BUILD_CHIP_TEXT_PAD;
+    private static final float PIP_RADIUS   = ProgressionConstants.BUILD_PAGE_PIP_RADIUS;
+    private static final float PIP_SPACING  = ProgressionConstants.BUILD_PAGE_PIP_SPACING;
 
-    private static final float SCALE_NAME   = 1.15f;
-    private static final float SCALE_EFFECT = 0.9f;
-    private static final float SCALE_CHIP   = 1.0f;
-    private static final float SCALE_EMPTY  = 1.5f;
-    private static final float SCALE_PLATE  = 1.2f;
+    private static final float SCALE_NAME   = ProgressionConstants.BUILD_PAGE_SCALE_NAME;
+    private static final float SCALE_EFFECT = ProgressionConstants.BUILD_PAGE_SCALE_EFFECT;
+    private static final float SCALE_CHIP   = ProgressionConstants.BUILD_CHIP_FONT_SCALE;
+    private static final float SCALE_EMPTY  = ProgressionConstants.BUILD_PAGE_SCALE_EMPTY;
+    private static final float SCALE_PLATE  = ProgressionConstants.BUILD_PAGE_SCALE_PLATE;
 
-    private static final float PLATE_WIDTH  = 90f;
-    private static final float PLATE_HEIGHT = 46f;
-    private static final float PLATE_GAP    = 12f;
-    private static final float PLATE_Y      = PANEL_BOTTOM + 8f;
-    private static final float PLATE_DOWN_X = PANEL_X + PANEL_WIDTH - 12f - PLATE_WIDTH;
+    private static final float PLATE_WIDTH  = ProgressionConstants.BUILD_PAGE_PLATE_WIDTH;
+    private static final float PLATE_HEIGHT = ProgressionConstants.BUILD_PAGE_PLATE_HEIGHT;
+    private static final float PLATE_GAP    = ProgressionConstants.BUILD_PAGE_PLATE_GAP;
+    private static final float PLATE_Y      = PANEL_BOTTOM + ProgressionConstants.BUILD_PAGE_PLATE_BOTTOM_MARGIN;
+    private static final float PLATE_DOWN_X = PANEL_X + PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_PLATE_RIGHT_MARGIN - PLATE_WIDTH;
     private static final float PLATE_UP_X   = PLATE_DOWN_X - PLATE_GAP - PLATE_WIDTH;
 
     private static final String EMPTY_TEXT   = "NO PERKS YET - EACH LEVEL-UP ADDS TO YOUR BUILD";
@@ -71,16 +71,26 @@ final class BuildPagePanel {
     private static final String PLATE_UP_TEXT = "UP";
     private static final String PLATE_DOWN_TEXT = "DOWN";
 
-    private static final Color PAGE_BG       = new Color(0.071f, 0.071f, 0.086f, 1f);
-    private static final Color PAGE_BORDER   = new Color(0.22f, 0.22f, 0.30f, 1f);
-    private static final Color ROW_STRIPE    = new Color(1f, 1f, 1f, 0.04f);
-    private static final Color TEXT_MAIN     = new Color(0.95f, 0.95f, 0.97f, 1f);
-    private static final Color TEXT_DIM      = new Color(0.62f, 0.62f, 0.68f, 1f);
-    private static final Color CHIP_TEXT     = new Color(0.04f, 0.04f, 0.06f, 1f);
-    private static final Color PIP_EMPTY     = new Color(0.05f, 0.05f, 0.07f, 1f);
-    private static final Color PIP_RING      = new Color(0.55f, 0.55f, 0.60f, 1f);
-    private static final Color PLATE_BG      = new Color(0.16f, 0.14f, 0.09f, 1f);
-    private static final Color PLATE_TEXT    = new Color(1.00f, 0.75f, 0.10f, 1f);
+    private static final Color PAGE_BG       = new Color(ProgressionConstants.BUILD_PAGE_BG_RED,
+            ProgressionConstants.BUILD_PAGE_BG_GREEN, ProgressionConstants.BUILD_PAGE_BG_BLUE, ProgressionConstants.BUILD_PAGE_BG_ALPHA);
+    private static final Color PAGE_BORDER   = new Color(ProgressionConstants.BUILD_PAGE_BORDER_RED,
+            ProgressionConstants.BUILD_PAGE_BORDER_GREEN, ProgressionConstants.BUILD_PAGE_BORDER_BLUE, ProgressionConstants.BUILD_PAGE_BORDER_ALPHA);
+    private static final Color ROW_STRIPE    = new Color(ProgressionConstants.BUILD_PAGE_STRIPE_RED,
+            ProgressionConstants.BUILD_PAGE_STRIPE_GREEN, ProgressionConstants.BUILD_PAGE_STRIPE_BLUE, ProgressionConstants.BUILD_PAGE_STRIPE_ALPHA);
+    private static final Color TEXT_MAIN     = new Color(ProgressionConstants.BUILD_PAGE_TEXT_MAIN_RED,
+            ProgressionConstants.BUILD_PAGE_TEXT_MAIN_GREEN, ProgressionConstants.BUILD_PAGE_TEXT_MAIN_BLUE, 1f);
+    private static final Color TEXT_DIM      = new Color(ProgressionConstants.BUILD_PAGE_TEXT_DIM_RED,
+            ProgressionConstants.BUILD_PAGE_TEXT_DIM_GREEN, ProgressionConstants.BUILD_PAGE_TEXT_DIM_BLUE, 1f);
+    private static final Color CHIP_TEXT     = new Color(ProgressionConstants.BUILD_CHIP_TEXT_RED,
+            ProgressionConstants.BUILD_CHIP_TEXT_GREEN, ProgressionConstants.BUILD_CHIP_TEXT_BLUE, 1f);
+    private static final Color PIP_EMPTY     = new Color(ProgressionConstants.BUILD_PIP_EMPTY_RED,
+            ProgressionConstants.BUILD_PIP_EMPTY_GREEN, ProgressionConstants.BUILD_PIP_EMPTY_BLUE, 1f);
+    private static final Color PIP_RING      = new Color(ProgressionConstants.BUILD_PIP_RING_RED,
+            ProgressionConstants.BUILD_PIP_RING_GREEN, ProgressionConstants.BUILD_PIP_RING_BLUE, 1f);
+    private static final Color PLATE_BG      = new Color(ProgressionConstants.BUILD_PAGE_PLATE_BG_RED,
+            ProgressionConstants.BUILD_PAGE_PLATE_BG_GREEN, ProgressionConstants.BUILD_PAGE_PLATE_BG_BLUE, 1f);
+    private static final Color PLATE_TEXT    = new Color(ProgressionConstants.BUILD_PAGE_PLATE_TEXT_RED,
+            ProgressionConstants.BUILD_PAGE_PLATE_TEXT_GREEN, ProgressionConstants.BUILD_PAGE_PLATE_TEXT_BLUE, 1f);
     private static final Color COST_RED      = new Color(ProgressionConstants.BUILD_COST_RED,
             ProgressionConstants.BUILD_COST_GREEN, ProgressionConstants.BUILD_COST_BLUE, 1f);
     private static final Color GOLD          = new Color(ProgressionConstants.BUILD_KEYSTONE_GOLD_RED,
@@ -193,7 +203,8 @@ final class BuildPagePanel {
             float bottom = rowBottom(visibleIndex);
             if (rowKinds[rowIndex] == RowKind.PERK && (rowIndex % 2 == 0)) {
                 shapeRenderer.setColor(ROW_STRIPE);
-                shapeRenderer.rect(PANEL_X + 10f, bottom, PANEL_WIDTH - 20f, ROW_HEIGHT);
+                shapeRenderer.rect(PANEL_X + ProgressionConstants.BUILD_PAGE_ROW_INSET, bottom,
+                        PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_ROW_INSET * 2f, ROW_HEIGHT);
             }
             if (rowKinds[rowIndex] == RowKind.TAG_HEADER) {
                 float chipBottom = bottom + (ROW_HEIGHT - CHIP_HEIGHT) / 2f;
@@ -233,7 +244,10 @@ final class BuildPagePanel {
                 // one gold frame around the two-row keystone block (drawn from its gain row)
                 if (rowKinds[rowIndex] == RowKind.KEYSTONE_GAIN && rowIndex + 1 < lastRow) {
                     shapeRenderer.setColor(GOLD);
-                    shapeRenderer.rect(PANEL_X + 10f, bottom - ROW_HEIGHT + 3f, PANEL_WIDTH - 20f, ROW_HEIGHT * 2f - 6f);
+                    shapeRenderer.rect(PANEL_X + ProgressionConstants.BUILD_PAGE_ROW_INSET,
+                            bottom - ROW_HEIGHT + ProgressionConstants.BUILD_PAGE_KEYSTONE_FRAME_INSET,
+                            PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_ROW_INSET * 2f,
+                            ROW_HEIGHT * 2f - ProgressionConstants.BUILD_PAGE_KEYSTONE_FRAME_INSET * 2f);
                 }
             }
         }
@@ -252,12 +266,12 @@ final class BuildPagePanel {
             font.draw(spriteBatch, EMPTY_TEXT, PANEL_X, (PANEL_TOP + PANEL_BOTTOM) / 2f, PANEL_WIDTH, Align.center, false);
         }
         for (int rowIndex = firstRow; rowIndex < lastRow; rowIndex++) {
-            float baseline = rowBottom(rowIndex - firstRow) + ROW_TEXT_RISE + 6f;
+            float baseline = rowBottom(rowIndex - firstRow) + ROW_TEXT_RISE + ProgressionConstants.BUILD_PAGE_ROW_BASELINE_EXTRA;
             RowKind kind = rowKinds[rowIndex];
             if (kind == RowKind.TAG_HEADER) {
                 font.getData().setScale(SCALE_CHIP);
                 font.setColor(CHIP_TEXT);
-                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X + CHIP_PAD, baseline - 2f);
+                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X + CHIP_PAD, baseline - ProgressionConstants.BUILD_PAGE_CHIP_TEXT_DROP);
             } else if (kind == RowKind.PERK) {
                 font.getData().setScale(SCALE_NAME);
                 font.setColor(TEXT_MAIN);
@@ -285,7 +299,7 @@ final class BuildPagePanel {
             textBuilder.append(firstRow + 1).append('-').append(lastRow).append(" / ").append(rowCount);
             font.setColor(TEXT_DIM);
             glyphLayout.setText(font, textBuilder);
-            font.draw(spriteBatch, textBuilder, PLATE_UP_X - 180f, PLATE_Y + (PLATE_HEIGHT + glyphLayout.height) / 2f);
+            font.draw(spriteBatch, textBuilder, PLATE_UP_X - ProgressionConstants.BUILD_PAGE_COUNTER_OFFSET_X, PLATE_Y + (PLATE_HEIGHT + glyphLayout.height) / 2f);
         }
         font.getData().setScale(1f);
         spriteBatch.end();

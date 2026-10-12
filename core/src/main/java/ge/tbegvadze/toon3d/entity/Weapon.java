@@ -1158,7 +1158,12 @@ public abstract class Weapon implements WeaponProfile {
      */
     public void onBuildChanged() {
         recomputeEffectiveStats();
-        if (shotsInClip > effectiveClipSize) shotsInClip = effectiveClipSize;
+        if (shotsInClip > effectiveClipSize) {
+            // DEADEYE's smaller clip: the rounds that no longer fit go back to the reserve, not into the void.
+            int overflowRounds = shotsInClip - effectiveClipSize;
+            shotsInClip = effectiveClipSize;
+            refundReserveRounds(overflowRounds);
+        }
     }
 
     /** The run's build aggregate (never null) — read by the weapon-side perk seams of subclasses. */

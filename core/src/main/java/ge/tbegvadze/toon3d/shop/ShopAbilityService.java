@@ -2,6 +2,8 @@ package ge.tbegvadze.toon3d.shop;
 
 import ge.tbegvadze.toon3d.progression.Perk;
 
+import java.util.function.Predicate;
+
 /**
  * shop_order_4 bridge for the {@code PLAYER_ABILITY} category — since balance-overhaul order 5, the paid,
  * alternate acquisition of ONE RANK of the same tagged perks the level-up screen offers. It is the
@@ -16,14 +18,19 @@ import ge.tbegvadze.toon3d.progression.Perk;
 public final class ShopAbilityService implements ShopEffectApplier {
 
     private final ShopAbilityGrantor grantor;
+    private final Predicate<Perk> perkMaxed;
 
-    public ShopAbilityService(ShopAbilityGrantor grantor) {
+    /** @param perkMaxed true when the build can take no further rank of the perk (the purchase is then refused) */
+    public ShopAbilityService(ShopAbilityGrantor grantor, Predicate<Perk> perkMaxed) {
         this.grantor = grantor;
+        this.perkMaxed = perkMaxed;
     }
 
     @Override
     public boolean canApply(ShopEntry entry) {
-        return grantor != null && resolve(entry) != null;
+        Perk perk = resolve(entry);
+        // A rank that maxed out since the machine was stocked is refused, so credits are never charged for a no-op.
+        return grantor != null && perk != null && (perkMaxed == null || !perkMaxed.test(perk));
     }
 
     @Override
