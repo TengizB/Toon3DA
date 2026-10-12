@@ -2215,12 +2215,17 @@ public final class EnemyManager implements EnemyHitTarget {
             return;
         }
         int blastDamage = selfDestructBlastDamage(enemy);
-        applySelfDestructBlast(enemy, blastDamage, playerColumn, playerRow, player);
+        // Marked BEFORE the blast: strikePlayer's IRON BULWARK reflect skips a selfDestructed source, so the
+        // detonating hulk can never be killed (and credited) a second time by its own blast.
         enemy.selfDestructed = true;
+        applySelfDestructBlast(enemy, blastDamage, playerColumn, playerRow, player);
         enemy.health         = 0; // dead as of this instant — isAlive() must reflect it immediately
         if (impactEventListener != null) {
             impactEventListener.onEnemyKilled(enemy.worldCenterX(), enemy.worldCenterY(),
                     enemy.type.heightMultiplier(), blastDamage);
+        }
+        for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
+            if (pendingExecuteDeaths[deathIndex] == enemy) return;
         }
         if (pendingExecuteDeathCount < MAX_PENDING_EXECUTE_DEATHS) {
             pendingExecuteDeaths[pendingExecuteDeathCount++] = enemy;
