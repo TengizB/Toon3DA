@@ -6,7 +6,8 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  * Manages a fixed-size array of weapon slots for the player's active loadout.
  *
  * Invariants:
- *   - Slot count is always WeaponConstants.WEAPON_SLOT_COUNT (currently 3; slot 2 is permanently locked).
+ *   - Slot count is always WeaponConstants.WEAPON_SLOT_COUNT (currently 3; slot 2 is locked unless a
+ *     QUARTERMASTER build unlocks it — balance-overhaul order 5).
  *   - activeSlotIndex always refers to a slot that is either filled, or the only
  *     candidate when all slots are empty (index 0 in that case).
  *   - No slot can hold two weapons; each weapon occupies exactly one slot.
@@ -20,6 +21,8 @@ public final class Loadout {
 
     private final Weapon[] slots;
     private int activeSlotIndex;
+    /** Extra gun slots a QUARTERMASTER build unlocks (0 = the locked slot stays locked). */
+    private int unlockedExtraSlots = 0;
 
     public Loadout() {
         this.slots           = new Weapon[WeaponConstants.WEAPON_SLOT_COUNT];
@@ -34,7 +37,7 @@ public final class Loadout {
     public boolean tryEquip(Weapon weapon) {
         if (weapon == null) return false;
         for (int slotIndex = 0; slotIndex < slots.length; slotIndex++) {
-            if (slotIndex == WeaponConstants.WEAPON_GUN_SLOT_LOCKED_INDEX) continue;
+            if (isSlotLocked(slotIndex)) continue;
             if (slots[slotIndex] == null) {
                 boolean wasEmpty = (active() == null);
                 slots[slotIndex] = weapon;
@@ -143,7 +146,16 @@ public final class Loadout {
      * (Currently the future ranged slot at WEAPON_GUN_SLOT_LOCKED_INDEX.)
      */
     public boolean isSlotLocked(int slotIndex) {
-        return slotIndex == WeaponConstants.WEAPON_GUN_SLOT_LOCKED_INDEX;
+        return slotIndex == WeaponConstants.WEAPON_GUN_SLOT_LOCKED_INDEX && unlockedExtraSlots <= 0;
+    }
+
+    /**
+     * QUARTERMASTER (balance-overhaul order 5): with at least one extra slot the locked gun slot opens. Set by
+     * World / SimWorld applyBuildEffects from the run's build. Lowering it back to 0 never happens in a run
+     * (a keystone is permanent for the run; the Loadout dies with it), so a weapon in the slot is never orphaned.
+     */
+    public void setUnlockedExtraSlots(int extraSlots) {
+        this.unlockedExtraSlots = Math.max(0, extraSlots);
     }
 
     /**

@@ -146,6 +146,18 @@ public class Enemy implements StatusHost {
     public int lastStaggeredTurn = Integer.MIN_VALUE / 2;
 
     /**
+     * True once a player hit has landed on this enemy (balance-overhaul order 5): First Blood and DEADEYE pay
+     * on the FIRST player hit only, once per enemy. Set by EnemyManager.applyDamageTo; never reset.
+     */
+    public boolean playerHitTaken = false;
+
+    /**
+     * EnemyManager world-turn index through which a guard RIPOSTE's VULNERABLE window is open on this enemy
+     * (balance-overhaul order 5, Riposte Drill's damage bonus). Starts far in the past: no window.
+     */
+    public int riposteWindowLastTurn = Integer.MIN_VALUE / 2;
+
+    /**
      * No-repeat memory for scripted SPECIAL abilities (strategy-combat-order-5). One reused instance;
      * the COMMIT step records each chosen ability so a multi-ability caster rotates its script rather
      * than spamming one move. Never allocated inside the turn loop.

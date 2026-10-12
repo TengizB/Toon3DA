@@ -274,7 +274,7 @@ public final class RouteEconomicsModel {
         // and the depth-scaled kill bounty must not read as free extra power (balance-overhaul order 1).
         float creditPowerPoints   = credits / (BalanceConfig.SHOP_CREDITS_PER_POWER_POINT
                 * GameMath.shopDepthPriceFactor(depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE));
-        float experiencePowerPoints = experiencePoints / levelCost * BalanceConfig.LEVEL_UP_BUDGET_PP;
+        float experiencePowerPoints = experiencePoints / levelCost * BalanceConfig.EXPECTED_PERK_POWER_PP_PER_PICK;
         float upgradePowerPoints    = row.upgradeOpportunity()
                 * BalanceConfig.ROUTE_UPGRADE_OPPORTUNITY_POWER_POINTS;
 

@@ -7,43 +7,60 @@ Related: docs/doom-rpg-reference.txt, docs/roguelike-design-pillars.txt
 OVERVIEW
 --------
 Adds a lightweight roguelike progression layer on top of the existing combat loop.
-Killing enemies earns XP; when the XP threshold is crossed the game pauses and
-offers the player one of three permanent stat upgrades.  Enemy strength scales with
-dungeon depth so each new floor is tougher than the last.
+Killing enemies earns XP; when the XP threshold is crossed the game pauses and offers
+the player THREE TAGGED PERKS (or, on character levels 5 / 10 / 15 / 20, three
+KEYSTONES). Perks pay off inside a STYLE (a BuildTag); keystones change a rule at a
+stated cost and commit the run to a shape. Two runs with different early finds end as
+different characters (balance-overhaul order 5 — replaced the budget-equal upgrade
+cards). Enemy strength scales with dungeon depth so each new floor is tougher.
 
 
 KEY CLASSES
 -----------
 
-GameBalance.java  (util/)
-  - Single config file for ALL balance numbers.  Adjust here for tuning.
-  - Constants: XP_REWARD_*, XP_BASE_REQUIREMENT, XP_CURVE_EXPONENT,
-               LEVEL_UP_HP_BONUS, LEVEL_UP_ARMOR_BONUS, LEVEL_UP_DAMAGE_BONUS,
-               ENEMY_HEALTH_SCALE_PER_DEPTH, ENEMY_DAMAGE_SCALE_PER_DEPTH.
-  - Helper methods: xpRequiredForLevel(level), enemyHealthScaleForDepth(depth),
-                    enemyDamageScaleForDepth(depth).
+BalanceConfig.java  (util/)
+  - SECTION 7: XP curve, per-attribute rates, the starting attribute block.
+  - SECTION 24 (BUILDS): every perk / keystone magnitude, offer shape (PERKS_OFFERED 3,
+    KEYSTONE_CHARACTER_LEVELS {5,10,15,20}, KEYSTONES_OFFERED 3, PERK_DRAW_BIAS_PER_PICK
+    0.6), the R-PERK / R-KEYSTONE / R-CARRY thresholds and the valuation inputs.
+  - GameBalance.java re-exports some of these for older call sites; tune BalanceConfig.
 
 PlayerProgress.java  (progression/)
-  - Tracks playerLevel (starts at 1), currentXp, xpForNextLevel.
-  - addXp(int) — called by KillXpListener; sets pendingLevelUp when threshold crossed.
-  - applyLevelUpReward(LevelUpReward) — advances level, carries over excess XP,
-    increments flatDamageBonus if DAMAGE_BOOST chosen.
+  - Tracks playerLevel (starts at 1), currentXp, xpForNextLevel; addXp(int) sets
+    pendingLevelUp when the threshold is crossed; advanceLevel() carries excess XP over.
   - Owned by World; lives for the entire run (not reset between floors).
 
+BuildTag / Perk / PerkEffect / PerkModifier / Keystone  (progression/)
+  - BuildTag: the nine styles. DamageClass -> tag is DATA on each constant.
+  - Perk: 26 enum rows (tag, max rank, PerkEffects with the TOTAL magnitude per rank,
+    optional attribute grant, UI name + one-line effect).
+  - PerkModifier: the modifier KINDS, each with its own apply body (EnemyType idiom —
+    never a switch). PerkEffect = one kind + its per-rank magnitudes.
+  - Keystone: 9 rows (tag, gain effects, cost effects, gain line, cost line).
+
+PerkDeck.java  (progression/)
+  - Seeded from the run seed (World: runSeed ^ 0xCA12D00D5EED1234L, finalised through
+    GameMath.splitMix64 so adjacent seeds do not draw the same first perk).
+  - drawPerks(out, build, carriedTags) — the B3 offer; drawKeystones(out, build) — B4;
+    isKeystoneLevel(level); static isSynergy(perk, carriedTags).
+
+PlayerBuild.java / BuildStats.java  (progression/)
+  - PlayerBuild: the run's perk ranks + keystones (addPerkRank, addKeystone, rankOf,
+    isMaxed, ranksInTag, highestRankTag, attributeGrantTotal, reset).
+  - BuildStats: the folded aggregate the game reads through TYPED accessors only
+    (damageMultiplierFor(DamageClass), maxHealthMultiplier, healMultiplier,
+    shopPriceMultiplier, clipSizeMultiplier, ...). Perk bonuses ADD; keystone costs
+    MULTIPLY after them (IRONHIDE + Field Medic: (1 + medic) x 0.80).
+
+LevelUpOverlayRenderer.java  (progression/) + render/BuildTagPalette, render/BuildPagePanel
+  - Full-screen hard-pause overlay over the frozen game: three thumb-sized plates, each
+    with its tag chip, an amber SYNERGY corner ribbon when it matches a carried weapon or
+    ability, rank pips (next pip white) and a one-line effect. Keystone mode: gold double
+    frame, gain line, cost line in red. Pure rendering; World does the input.
+  - BuildPagePanel: the inventory BUILD page (header button left of CODEX).
+
 KillXpListener.java  (progression/)
-  - Interface: onEnemyKilledForXp(int xpAwarded).
-  - EnemyManager calls it after every kill; World wires PlayerProgress as the listener
-    via a lambda.
-
-LevelUpReward.java  (progression/)
-  - Enum: HP_BOOST, ARMOR_BOOST, DAMAGE_BOOST.
-  - Describes the three choices presented to the player on level-up.
-
-LevelUpOverlayRenderer.java  (progression/)
-  - Full-screen overlay drawn on top of the frozen game.
-  - Shows LEVEL UP! title, incoming level number, and three labelled choice rows.
-  - Input handling is in World.java — this class is pure rendering.
-  - Dispose() owned by World alongside other run-persistent renderers.
+  - Interface: onEnemyKilledForXp(int xpAwarded). EnemyManager calls it after every kill.
 
 
 XP CURVE
@@ -90,8 +107,9 @@ The player keeps pace through the weapon ladder (SECTION 20 of BalanceConfig; we
 VITALITY GROWTH (balance-overhaul order 1, R9)
 -----------------------------------------------
 Every character level multiplies the BASE max HP and max armour by PLAYER_VITALITY_GROWTH
-(1.09): max = PLAYER_MAX_HEALTH × 1.09^(level-1) (armour likewise), with every flat card
-and stat bonus added on top unscaled. World.applyVitalityGrowth() adds the step
+(1.09): max = PLAYER_MAX_HEALTH × 1.09^(level-1) (armour likewise), with flat stat bonuses
+added on top unscaled and the build's max-pool multipliers (Hardy, Plate Carrier, the
+keystone costs) applied to the grown base through GameMath.buildMaxPoolBonus. World.applyVitalityGrowth() adds the step
 (PlayerStats.vitalityGrowthDelta) at each level-up through Player.adjustMaxHealth /
 adjustMaxArmor, so current HP rises by the same amount. Heals are FRACTIONS of max (medkit
 0.45, stim 0.18, shard 0.15 / vest 0.60 of max armour), so they grow with it.
@@ -99,18 +117,105 @@ XP curve: xpRequired(L) = 150 × 1.2495^(L-1) (= enemy HP growth × enemy damage
 floor still buys ~1.1 levels at every depth — R-XP-PACE, audited to depth 25).
 
 
-PLAYER STAT BONUSES
--------------------
-All bonuses are permanent for the current run (not saved between runs).
+PERKS (the level-up offer)
+--------------------------
+NINE TAGS (BuildTag): CLOSE_QUARTERS (SPREAD), MARKSMAN (BALLISTIC, RAIL), PYRO (FIRE),
+DEMOLITION (EXPLOSIVE), ENERGY, BLADE (BLADE, BLUNT), and BULWARK / SCAVENGER /
+VITALITY, which own no weapon class and are played with any gun.
 
-HP_BOOST:    Player.increaseMaxHealth(LEVEL_UP_HP_BONUS) — increases maxHealth and
-             immediately heals the player by the bonus amount.
-ARMOR_BOOST: Player.increaseMaxArmor(LEVEL_UP_ARMOR_BONUS) — increases maxArmor and
-             immediately grants the bonus armor.
-DAMAGE_BOOST: PlayerProgress.flatDamageBonus += LEVEL_UP_DAMAGE_BONUS.
-             Applied in EnemyManager.applyDamageTo() as an additive damage bonus.
-             Updated in EnemyManager via setPlayerFlatDamageBonus() after each reward
-             and also after each floor rebuild.
+THE CATALOG (26 perks; 3 ranks unless noted; magnitudes are SECTION 24 PERK_* arrays):
+  CLOSE QUARTERS  Buckshot Discipline  SPREAD damage
+                  Point Man            SPREAD damage at point-blank (<= 2 tiles) per rank;
+                                       r2 +1 knockback tile; r3 stagger at 3 tiles
+                  Breacher             SPREAD kills refund a shell (chance per rank)
+  MARKSMAN        Steady Aim           BALLISTIC / RAIL falloff loss closed per rank
+                  First Blood          BALLISTIC / RAIL damage to full-HP enemies
+                  Lane Discipline      +1 range and damage at 4+ tiles (BALLISTIC / RAIL)
+  PYRO            Accelerant           +1 max burn stack and FIRE damage per rank
+                  Wildfire             a burning enemy that dies passes ALL its burn to its
+                                       orthogonal neighbours; your burns last +1 turn/rank
+                  Fireproof (1 rank)   immune to fire tiles
+  DEMOLITION      Shaped Charges       EXPLOSIVE damage
+                  Blast Shield         your own explosions hurt you less
+                  Sapper               barrel damage; r1 highlights barrels on the mini-map
+  ENERGY          Capacitor            ENERGY damage
+                  Arc Jump             Arc Cannon +1 chain jump per rank, each jump loses less
+                  Overcharge           Plasma: + damage per enemy already pierced
+  BULWARK         Shield Wall          r1 guard arc +/-90; r2 a guarded heavy x0.0; r3 the
+                                       guard covers every side
+                  Riposte Drill        riposte +1 VULNERABLE turn and + damage per rank
+                  Plate Carrier        max armour
+  BLADE           Butcher              melee damage and +1 STRENGTH per rank
+                  Bloodletting         melee kills heal a fraction of max HP
+  SCAVENGER       Pack Rat             ammo from floor ammo pickups
+                  Haggler              shop prices
+                  Salvager             carriers drop +1 item (chance per rank)
+  VITALITY        Hardy                max HP
+                  Field Medic          healing
+                  Second Wind (1 rank) once per floor, a lethal hit leaves you at 1 HP
+
+THE OFFER (B3, PerkDeck.drawPerks) — 3 perks every level-up:
+  slot 1 SYNERGY  a perk whose tag is one the player CARRIES: a loadout gun's or a chosen
+                  melee weapon's damage-class tag, or any tag of their rolled abilities
+                  (World.carriedBuildTags) — falls back to any unmaxed perk;
+  slot 2 PIVOT    a perk of a tag the player holds no ranks in and does not carry — the
+                  built-in "change course" (there is no reroll button);
+  slot 3          any unmaxed perk, weighted 1 + ranks-held-in-its-tag x 0.6.
+  A maxed perk is never offered; the three are shuffled for presentation.
+
+THE SHOP: a Fabricator PLAYER-ABILITY offer sells ONE rank of a random unmaxed perk
+(SHOP_PERK_RANK_POWER_POINTS). It does not spend a level.
+
+
+KEYSTONES (levels 5 / 10 / 15 / 20)
+-----------------------------------
+On a keystone level the perk offer is REPLACED (never added to) by three keystones: at
+least one of the player's highest-rank tag and one not (B4; PerkDeck.drawKeystones).
+Each can be taken once a run. Every keystone states its gain and its cost in one line
+each; the cost is drawn in red. Live magnitudes: BalanceConfig KEYSTONE_*.
+  SCATTERGUN DOCTRINE (CQ)  SPREAD reloads cost no turn; point-blank kills refund a shell.
+                            Cost: non-SPREAD damage -15%.
+  DEADEYE (MARKSMAN)        the first hit on each enemy is a guaranteed critical (any
+                            weapon). Cost: clip sizes -25%.
+  PYROMANIAC (PYRO)         immune to fire; burning enemies take +50% from every source.
+                            Cost: max armour -30%.
+  DEMOLITIONIST (DEMO)      immune to your own explosions; barrels you detonate deal x2.
+                            Cost: max HP -16%.
+  STORM CONDUIT (ENERGY)    ENERGY hits arc to one adjacent enemy at 60%. Cost: BALLISTIC
+                            damage -25%.
+  IRON BULWARK (BULWARK)    a guarded hit reflects 140% of the blocked damage to the
+                            attacker. Cost: all weapon damage -10%.
+  BERSERKER (BLADE)         melee kills restore 14% max HP; below 30% HP melee +50%.
+                            Cost: heals -30%.
+  QUARTERMASTER (SCAVENGER) +1 weapon loadout slot; shop prices -25%. Cost: max HP -15%.
+  IRONHIDE (VITALITY)       max HP +47.5%. Cost: heals -20% and STIMs no longer cleanse.
+
+
+THE BUILD PAGE
+--------------
+Inventory header -> BUILD (left of CODEX): every picked perk grouped under its tag chip
+with its rank pips, then the keystones in the gold frame. Tap UP / DOWN pages when it
+overflows. An empty build shows a one-line empty state.
+
+
+ATTRIBUTES
+----------
+STRENGTH / MARKSMANSHIP / AGILITY / TOUGHNESS stay (BalanceConfig SECTION 7); a perk rank
+may grant +1 to one (data — today only Butcher, +1 STRENGTH per rank). World and SimWorld
+push the grant through PlayerStats.addPermanent in applyBuildEffects().
+
+
+BALANCE RULES (docs/game-balance-authority.txt)
+-----------------------------------------------
+  R-PERK     PK1: every rank is >= 10% better on its tag's niche metric at depths 5 and
+             15, and the max rank crosses >= 1 whole TTK / TTD step there. PK2: no
+             non-VITALITY perk improves all eight reference scenarios by > 10%; a
+             VITALITY rank improves none by > 10%.
+  R-KEYSTONE every keystone improves its niche by >= 30% and costs >= 10% somewhere else.
+  R-CARRY    at depth 15, each tag's expected build (its perks at the expected ranks +
+             its keystone) is within 1.20x of every other's (SCAVENGER waived, D3).
+  These REPLACED R-CARD (every card 12 PP), R-CARD-BREAKPOINT and the total-PP invariant.
+  The expected player still counts EXPECTED_PERK_POWER_PP_PER_PICK (12) per level.
 
 
 HUD XP BAR
@@ -132,29 +237,33 @@ These are written by World.render() each frame from PlayerProgress.
 
 WORLD INTEGRATION
 -----------------
-RunPhase gains a fourth state: LEVEL_UP_OVERLAY.
-
-Transition logic (World.update):
-  PLAYING → LEVEL_UP_OVERLAY  when playerProgress.hasPendingLevelUp() && !player.isDead()
-  LEVEL_UP_OVERLAY → PLAYING  when player presses 1, 2 or 3
-
-While in LEVEL_UP_OVERLAY:
-  - Normal game update is skipped (enemies don't act, player can't move).
-  - Keys NUM_1/NUM_2/NUM_3 (number row) and NUMPAD_1/NUMPAD_2/NUMPAD_3 are detected.
-  - applyLevelUpReward(choice) calls: playerProgress.applyLevelUpReward(),
-    player.increaseMaxHealth() or player.increaseMaxArmor() as applicable,
-    and enemyManager.setPlayerFlatDamageBonus() if DAMAGE_BOOST.
-
-World.render():
-  LevelUpOverlayRenderer.render(camera) is called after HudRenderer whenever
-  runPhase == LEVEL_UP_OVERLAY.
+RunPhase.LEVEL_UP_OVERLAY is a hard-pause overlay (barks queue, no exchange opens, the
+thumb clusters are not drawn).
+  PLAYING -> LEVEL_UP_OVERLAY  when playerProgress.hasPendingLevelUp() && the player lives.
+    World draws the offer: on a keystone level PerkDeck.drawKeystones (overlay
+    setOfferedKeystones), otherwise PerkDeck.drawPerks with carriedBuildTags() (overlay
+    setOfferedPerks).
+  LEVEL_UP_OVERLAY -> PLAYING  when the player TAPS a plate (touch only — the tap is
+    unprojected through the game viewport and hit-tested against the plates).
+    applyPerkPick / applyKeystonePick -> PlayerBuild, then completeLevelUp(): advance the
+    level, apply vitality growth, applyBuildEffects() (attribute grants, max HP / armour
+    deltas via GameMath.buildMaxPoolBonus, damage multipliers, extra loadout slots,
+    weapon onBuildChanged), resume. Several pending levels are offered one after another.
+Hot paths read the build only through BuildStats' typed accessors (EnemyManager damage,
+Player guard / heal / lethal-hit, Weapon falloff / clip / reload, shop pricing, supply).
+sim/SimWorld mirrors all of this, with a PlayerPolicy choosing the plate.
 
 
 ADDING / MODIFYING
 ------------------
-To change balance numbers: edit GameBalance.java only.
-To add a new enemy type and its XP reward: add XP_REWARD_<TYPE> to GameBalance,
-  and return it from EnemyType.<TYPE>.baseXpReward().
-To add a fourth level-up choice: add an enum value to LevelUpReward, handle it in
-  PlayerProgress.applyLevelUpReward(), World.applyLevelUpReward(), and add a row
-  in LevelUpOverlayRenderer.drawChoiceRow().
+To change balance numbers: edit BalanceConfig only (SECTION 7 for XP and attributes,
+  SECTION 24 for perks / keystones), then run both balance gates.
+To add an enemy's XP: nothing — per-enemy XP is derived from its Threat Points.
+To add a PERK: one Perk row (tag, max rank, PerkEffects, UI text) + its per-rank arrays
+  in SECTION 24. If it needs a new effect KIND, add a PerkModifier constant with its own
+  apply body and a typed BuildStats accessor read at ONE owning seam. It must pass R-PERK
+  (felt in its niche, focused) and keep R-CARRY in band. No switch, no other registration.
+To add a KEYSTONE: one Keystone row (tag, gains, costs, the two UI lines) + SECTION 24
+  magnitudes; it must pass R-KEYSTONE and keep R-CARRY in band.
+To add a BUILD TAG: a BuildTag constant (its damage classes as data), a chip colour in
+  render/BuildTagPalette, a niche metric for the valuation, and perks + a keystone for it.

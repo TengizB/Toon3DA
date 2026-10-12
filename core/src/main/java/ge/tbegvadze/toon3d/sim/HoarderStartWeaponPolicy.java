@@ -34,9 +34,9 @@ public final class HoarderStartWeaponPolicy implements PlayerPolicy {
     }
 
     @Override
-    public ge.tbegvadze.toon3d.progression.UpgradeCard chooseCard(
-            ge.tbegvadze.toon3d.progression.UpgradeCard[] offeredCards, int count, SimView view) {
-        return tacticalBehaviour.chooseCard(offeredCards, count, view);
+    public ge.tbegvadze.toon3d.progression.Perk choosePerk(
+            ge.tbegvadze.toon3d.progression.Perk[] offeredPerks, int count, SimView view) {
+        return tacticalBehaviour.choosePerk(offeredPerks, count, view);
     }
 
     @Override

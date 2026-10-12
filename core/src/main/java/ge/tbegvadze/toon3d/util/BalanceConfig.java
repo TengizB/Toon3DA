@@ -561,7 +561,7 @@ public final class BalanceConfig {
     /**
      * Levels the average player is expected to gain per floor descended (~1 level/floor). This is the
      * player-side input to the depth-coupling invariant (SECTION 9): GameMath.playerPowerAtDepth lifts
-     * the player's power multiplier by LEVEL_UP_BUDGET_PP power points per level gained. The boss
+     * the player's power multiplier by EXPECTED_PERK_POWER_PP_PER_PICK power points per level gained. The boss
      * ruleset (SECTION 14) mirrors this as BOSS_EXPECTED_LEVELS_PER_DEPTH. Range: 0.7–1.3.
      */
     public static final float EXPECTED_LEVELS_PER_DEPTH    = 1.0f;
@@ -819,69 +819,9 @@ public final class BalanceConfig {
      */
     public static final float XP_CATCHUP_MULTIPLIER    = 1.5f;
 
-    // ---------------------------------------------------------------------------------
-    // LEVEL-UP CARD SYSTEM — power budget & re-priced boons (idea 5: build diversity)
-    //
-    // Every level-up offers LEVEL_UP_CARDS_OFFERED cards drawn from four pools. Each card
-    // costs the SAME power budget (LEVEL_UP_BUDGET_PP, in "power points" = %-gain to the
-    // reference DPT or eHP from SECTION 9), so no card is a strict upgrade over another —
-    // they differ in KIND, not amount. Because each pick is budget-equal, the player's
-    // TOTAL power at level L is L * LEVEL_UP_BUDGET_PP regardless of which cards were taken;
-    // only its SHAPE differs. That is how build diversity stays inside the depth-coupling
-    // band (SECTION 9) for every build. See docs/game-balance-authority.txt (section [D]).
-    //
-    // The three OLD flat boons (HP / armour / damage) survive as ONE card each, RE-PRICED
-    // from their legacy magnitudes to ~LEVEL_UP_BUDGET_PP so they sit on the same curve as
-    // every attribute card. Run BalanceReport to see each card's computed PP and band verdict.
-    // ---------------------------------------------------------------------------------
-
-    /** The fixed power budget every level-up card costs, in power points (% of reference DPT/eHP). Range: 8–16. */
-    public static final float LEVEL_UP_BUDGET_PP        = 12f;
-    /** Allowed fractional spread around the budget a single card may cost (±15%). A card outside this is rejected. */
-    public static final float LEVEL_UP_BUDGET_TOLERANCE = 0.15f;
-    /** How many cards are drawn and shown on each level-up. The overlay renders exactly this many. Range: 2–4. */
-    public static final int   LEVEL_UP_CARDS_OFFERED    = 3;
-    /** Per-prior-pick draw-weight bonus that biases new offers toward the player's emerging build. Range: 0.0–1.0. */
-    public static final float LEVEL_UP_DRAW_BIAS_PER_PICK = 0.6f;
-
-    // --- PP-PRICING REFERENCES (used only to COMPUTE each card's power-point value; see GameMath).
-    /** Fraction of a flat per-shot damage bonus that lands as sustained DPT at the reference weapon (shotgun, clip 1 / reload 1 → 0.5). */
-    public static final float CARD_FLAT_DAMAGE_DPT_FRACTION = 0.5f;
-    /** Average fraction of attacks made with a MELEE weapon — discounts STRENGTH cards, whose damage only applies to melee. Range: 0.5–1.0. */
-    public static final float CARD_MELEE_UTILIZATION        = 0.8f;
-    /** Reference incoming hit (HP-bound) used when pricing TOUGHNESS flat-reduction into eHP. Matches the doc's tough-build example. */
-    public static final int   CARD_PRICING_AVERAGE_HIT      = 12;
-
-    // --- CARD MAGNITUDES (sized so each card's PP lands inside the budget band). Attribute steps:
-    /** STRENGTH points granted by the Brutal Strength card (+15% melee dmg before the melee-utilization discount). */
-    public static final int CARD_STRENGTH_STEP     = 3;
-    /** MARKSMANSHIP points granted by the Marksman Training card (+12% ranged dmg, +9% accuracy). */
-    public static final int CARD_MARKSMANSHIP_STEP = 3;
-    /** AGILITY points granted by the Evasion Training card (+10% dodge, +15% faster actions). */
-    public static final int CARD_AGILITY_STEP      = 5;
-    /** TOUGHNESS points granted by the Toughened Hide card (+5 Max HP, +1 flat damage reduction). One point is potent. */
-    public static final int CARD_TOUGHNESS_STEP    = 1;
-
-    // --- TRADE-OFF CARD MAGNITUDES (net PP ≈ budget, but high variance: a big gain on one axis paid for on another).
-    /** Glass Cannon: flat per-shot damage gained. Paired with a Max-HP cost. */
-    public static final int CARD_GLASS_CANNON_DAMAGE      = 10;
-    /** Glass Cannon: Max-HP sacrificed for the damage. */
-    public static final int CARD_GLASS_CANNON_HP_COST     = 18;
-    /** Iron Constitution: Max-HP gained. Paired with a Max-armour cost. */
-    public static final int CARD_IRON_CONSTITUTION_HP     = 45;
-    /** Iron Constitution: Max-armour sacrificed for the health. */
-    public static final int CARD_IRON_CONSTITUTION_ARMOR  = 22;
-    /** Reckless Charge: AGILITY gained (dodge + speed). Paired with a Max-armour cost. */
-    public static final int CARD_RECKLESS_CHARGE_AGILITY  = 8;
-    /** Reckless Charge: Max-armour sacrificed for the mobility. */
-    public static final int CARD_RECKLESS_CHARGE_ARMOR    = 12;
-
-    /** Flat max-HP gained when the Vitality (legacy HP_BOOST) card is chosen. Re-priced to ~budget PP. Range: 15–40. */
-    public static final int LEVEL_UP_HP_BONUS     = 25;
-    /** Flat max-armour gained when the Combat Armour (legacy ARMOR_BOOST) card is chosen. Re-priced 18→24 to ~budget PP. Range: 10–30. */
-    public static final int LEVEL_UP_ARMOR_BONUS  = 24;
-    /** Flat per-shot damage gained when the Hollow Points (legacy DAMAGE_BOOST) card is chosen. Re-priced 8→6 to ~budget PP. Range: 4–15. */
-    public static final int LEVEL_UP_DAMAGE_BONUS = 6;
+    // The LEVEL-UP CARD SYSTEM (idea 5: LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_TOLERANCE, the card pricing
+    // references and the ten card magnitudes) was RETIRED by balance-overhaul order 5 (CP2): level-ups
+    // offer tagged perks and keystones (SECTION 24). The draw bias survives there as PERK_DRAW_BIAS_PER_PICK.
 
     // ---------------------------------------------------------------------------------
     // THE CANONICAL STARTING ATTRIBUTE BLOCK — ONE DIFFICULTY (new-game-balancr order 8)
@@ -992,10 +932,11 @@ public final class BalanceConfig {
     /** Hard ceiling on chained barrel detonations from one trigger. */
     public static final int   EXPLOSION_CHAIN_MAX = 32;
 
-    // Rend (BLEED DoT — on hit).
-    public static final float REND_DAMAGE_PER_TURN_BASE      = 2f;
-    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.5f;
-    public static final float REND_DAMAGE_PER_TURN_CAP       = 6f;
+    // Rend (BLEED DoT — on hit). STANDARD, BLADE. MOVED 2/.5/6 -> 4/.15/5.35 by balance-overhaul order 5
+    // (B6, CP4): 4.8 -> 10.4..13.9 PP, so it is felt at level 1 and a guaranteed count stays in its tier band.
+    public static final float REND_DAMAGE_PER_TURN_BASE      = 4f;
+    public static final float REND_DAMAGE_PER_TURN_PER_LEVEL = 0.15f;
+    public static final float REND_DAMAGE_PER_TURN_CAP       = 5.35f;
     public static final int   REND_DURATION_TURNS            = 4;
 
     // Incendiary (BURN DoT — on hit). The level-1 base IS the ONE weapon-side burn base (R-DOT): order 4
@@ -1004,8 +945,10 @@ public final class BalanceConfig {
     /** THE weapon-side burn base (damage/turn): Incendiary level 1; every weapon burn derives from it. */
     public static final float WEAPON_BURN_BASE_PER_TURN          = 4f;
     public static final float INCENDIARY_BURN_PER_TURN_BASE      = WEAPON_BURN_BASE_PER_TURN;
-    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.5f;
-    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 7f;
+    // STANDARD, PYRO. MOVED per-level .5 -> .15 and cap 7 -> 5.35 by balance-overhaul order 5 (B5/B6, CP4):
+    // 10.4 PP at level 1 -> 13.9 PP at MAX_WEAPON_LEVEL, inside the single-ability UNCOMMON band at every level.
+    public static final float INCENDIARY_BURN_PER_TURN_PER_LEVEL = 0.15f;
+    public static final float INCENDIARY_BURN_PER_TURN_CAP       = 5.35f;
     public static final int   INCENDIARY_BURN_DURATION           = 3;
     public static final int   INCENDIARY_INCINERATOR_EXTRA_TURNS = 1;
 
@@ -1350,7 +1293,7 @@ public final class BalanceConfig {
     // --- RULE 1/5 (build check): expected-player-DPT-at-depth inputs. bossEffectiveHitPoints is
     // tied to expectedPlayerSustainedDamagePerTurn(depth) so an under-powered player cannot out-DPS
     // the fight window. Expected OFFENCE power points by a boss depth =
-    //   BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION * LEVEL_UP_BUDGET_PP * (BOSS_EXPECTED_LEVELS_PER_DEPTH * depth).
+    //   BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION * EXPECTED_PERK_POWER_PP_PER_PICK * (BOSS_EXPECTED_LEVELS_PER_DEPTH * depth).
     /** Levels the average player is expected to gain per floor descended (~1 level/floor). Mirrors the
      *  depth-coupling input EXPECTED_LEVELS_PER_DEPTH (SECTION 3) — single source of truth. Range: 0.7–1.3. */
     public static final float BOSS_EXPECTED_LEVELS_PER_DEPTH        = EXPECTED_LEVELS_PER_DEPTH;
@@ -1478,148 +1421,106 @@ public final class BalanceConfig {
     // =====================================================================================
     // SECTION 15 — WEAPON ABILITY MAGNITUDES (the ability catalogue)
     // CONSOLIDATED from GameBalance (Balance Authority, order 1). BASE / PER_LEVEL / CAP for
-    // every rollable weapon ability. All values remain PLAYTESTING PLACEHOLDERS — order 1
-    // moves them into the single source of truth; pricing them against the contract is a
-    // later order in this series. GameBalance keeps re-export shims.
+    // every rollable weapon ability. GameBalance keeps re-export shims.
+    //
+    // RE-TUNED by balance-overhaul order 5 (B5/B6, CP4). Fourteen sub-threshold abilities were CUT or
+    // MERGED (ABILITY_MIN_FELT_PP, SECTION 24) and the fifteen survivors re-tuned so every one is FELT at
+    // its expected weapon level and the B5 counts land inside the B5 tier bands at EVERY level:
+    //   STANDARD abilities  price ~10.5 PP at level 1 -> ~14 PP at MAX_WEAPON_LEVEL (cap = base + 9 x per-level,
+    //                       reached at the top of the respanned 1..10 legacy curve);
+    //   MAJOR abilities     price ~12 PP -> ~17.4 PP (rolled on EPIC and LEGENDARY only).
+    // Any 1 standard fits UNCOMMON 12 +/-20%; any 2 fit RARE 25; any 2 + a MAJOR fit EPIC 40; any 2 + a MAJOR +
+    // the signature (18 PP) fit LEGENDARY 60 — so a guaranteed count can never be forced out of its band. Each
+    // MOVED value carries the PP it prices to (GameMath.abilityPowerPoints). REND and INCENDIARY live with the
+    // DoT rules in SECTION 8 (re-tuned there, same shape).
     // =====================================================================================
 
-    // ── Critical Strike ──
-    public static final float CRIT_CHANCE_BASE            = 0.05f;
-    public static final float CRIT_CHANCE_PER_LEVEL       = 0.015f;
-    public static final float CRIT_CHANCE_CAP             = 0.30f;
+    // ── Critical Strike (STANDARD, MARKSMAN) — MOVED .05/.015/.30 -> .105/.0039/.14 (10.5 -> 14.0 PP) ──
+    public static final float CRIT_CHANCE_BASE            = 0.105f;
+    public static final float CRIT_CHANCE_PER_LEVEL       = 0.0039f;
+    public static final float CRIT_CHANCE_CAP             = 0.14f;
 
-    // ── Armor Pierce (bypasses a fraction of the target's Block) ──
-    public static final float ARMOR_PIERCE_BASE           = 0.20f;
-    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.05f;
-    public static final float ARMOR_PIERCE_CAP            = 0.60f;
+    // ── Armor Pierce (STANDARD, DEMOLITION) — bypasses a fraction of the target's Block AND (merged from the
+    // cut OVERPENETRATION) every shot pierces ARMOR_PIERCE_EXTRA_TARGETS more enemies in line.
+    // MOVED .20/.05/.60 -> .285/.013/.40 (8.55 + 2 = 10.55 -> 12 + 2 = 14.0 PP) ──
+    public static final float ARMOR_PIERCE_BASE           = 0.285f;
+    public static final float ARMOR_PIERCE_PER_LEVEL      = 0.013f;
+    public static final float ARMOR_PIERCE_CAP            = 0.40f;
+    /** Extra enemies a shot pierces beyond the first (merged from OVERPENETRATION's level-1 count). Range: 1. */
+    public static final int   ARMOR_PIERCE_EXTRA_TARGETS              = 1;
+    /** On an already-piercing weapon (Plasma, Railgun): damage bonus per enemy struck past the first. */
+    public static final float ARMOR_PIERCE_ALREADY_PIERCING_BONUS     = 0.25f;
 
-    // ── Executioner (bonus vs low-HP targets) ──
+    // ── Executioner (MAJOR, BLADE) — bonus vs low-HP targets. MOVED .30/.06/.80 -> .40/.02/.58 (12 -> 17.4 PP) ──
     public static final float EXECUTIONER_THRESHOLD       = 0.25f;
-    public static final float EXECUTIONER_BONUS_BASE      = 0.30f;
-    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.06f;
-    public static final float EXECUTIONER_BONUS_CAP       = 0.80f;
+    public static final float EXECUTIONER_BONUS_BASE      = 0.40f;
+    public static final float EXECUTIONER_BONUS_PER_LEVEL = 0.02f;
+    public static final float EXECUTIONER_BONUS_CAP       = 0.58f;
 
-    // ── Stagger Rounds (stun on hit) ──
-    public static final float STAGGER_CHANCE_BASE         = 0.08f;
-    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.02f;
-    public static final float STAGGER_CHANCE_CAP          = 0.35f;
+    // ── Stagger Rounds (STANDARD, CLOSE_QUARTERS) — stun on hit. MOVED .08/.02/.35 -> .235/.0083/.31 (10.6 -> 13.95 PP) ──
+    public static final float STAGGER_CHANCE_BASE         = 0.235f;
+    public static final float STAGGER_CHANCE_PER_LEVEL    = 0.0083f;
+    public static final float STAGGER_CHANCE_CAP          = 0.31f;
 
-    // ── Overpenetration ──
-    public static final int   OVERPENETRATION_BASE_COUNT              = 1;
-    public static final int   OVERPENETRATION_LEVELS_PER_STEP         = 3;
-    public static final int   OVERPENETRATION_MAX_COUNT               = 3;
-    public static final float OVERPENETRATION_ALREADY_PIERCING_BONUS  = 0.25f;
+    // ── Lifesteal (STANDARD, VITALITY). MOVED .06/.015/.20 -> .21/.0078/.28 (10.5 -> 14.0 PP) ──
+    public static final float LIFESTEAL_BASE              = 0.21f;
+    public static final float LIFESTEAL_PER_LEVEL         = 0.0078f;
+    public static final float LIFESTEAL_CAP               = 0.28f;
 
-    // ── Lifesteal ──
-    public static final float LIFESTEAL_BASE              = 0.06f;
-    public static final float LIFESTEAL_PER_LEVEL         = 0.015f;
-    public static final float LIFESTEAL_CAP               = 0.20f;
-
-    // ── Hemorrhage Harvest (on-kill HP) ──
-    public static final float HEMORRHAGE_HP_BASE          = 3f;
-    public static final float HEMORRHAGE_HP_PER_LEVEL     = 0.7f;
-    public static final int   HEMORRHAGE_HP_CAP           = 12;
-
-    // ── Vampiric Crit ──
-    public static final float VAMPIRIC_CRIT_HP_BASE       = 4f;
-    public static final float VAMPIRIC_CRIT_HP_PER_LEVEL  = 1.0f;
-    public static final int   VAMPIRIC_CRIT_HP_CAP        = 14;
-
-    // ── Adrenal Surge ──
-    public static final float ADRENAL_SURGE_CHANCE_BASE      = 0.10f;
-    public static final float ADRENAL_SURGE_CHANCE_PER_LEVEL = 0.03f;
-    public static final float ADRENAL_SURGE_CHANCE_CAP       = 0.40f;
-    public static final float ADRENAL_SURGE_DAMAGE_BONUS     = 0.30f;
-
-    // ── Bulwark Rounds (temp armour on reload) ──
-    public static final float BULWARK_ARMOR_BASE          = 2f;
-    public static final float BULWARK_ARMOR_PER_LEVEL     = 0.5f;
-    public static final int   BULWARK_ARMOR_CAP           = 8;
-    public static final int   BULWARK_ARMOR_DURATION      = 3;
-
-    // ── Second Wind (low-HP damage bonus) ──
-    public static final float SECOND_WIND_HP_THRESHOLD    = 0.30f;
-    public static final float SECOND_WIND_BONUS_BASE      = 0.25f;
-    public static final float SECOND_WIND_BONUS_PER_LEVEL = 0.05f;
-    public static final float SECOND_WIND_BONUS_CAP       = 0.75f;
-
-    // ── Kinetic Slam (melee) ──
-    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.20f;
-    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.04f;
-    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.60f;
+    // ── Kinetic Slam (STANDARD, BULWARK, melee). MOVED .20/.04/.60 -> .235/.0083/.31 (10.6 -> 13.95 PP) ──
+    public static final float KINETIC_SLAM_CHANCE_BASE       = 0.235f;
+    public static final float KINETIC_SLAM_CHANCE_PER_LEVEL  = 0.0083f;
+    public static final float KINETIC_SLAM_CHANCE_CAP        = 0.31f;
     public static final int   KINETIC_SLAM_WALL_BONUS_DAMAGE = 3;
 
-    // ── Cleave (melee) ──
+    // ── Cleave (MAJOR, BLADE, melee). MOVED .40/.05/.80 -> .40/.02/.58 (12 -> 17.4 PP) ──
     public static final float CLEAVE_FRACTION_BASE      = 0.40f;
-    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.05f;
-    public static final float CLEAVE_FRACTION_CAP       = 0.80f;
-
-    // ── Salvage Strike (melee, on-kill ammo) ──
-    public static final float SALVAGE_CHANCE_BASE      = 0.50f;
-    public static final float SALVAGE_CHANCE_PER_LEVEL = 0.06f;
-    public static final float SALVAGE_CHANCE_CAP       = 1.00f;
-
-    // ── Scholar's Edge (melee, on-kill XP) ──
-    public static final float SCHOLARS_XP_BONUS_BASE      = 0.15f;
-    public static final float SCHOLARS_XP_BONUS_PER_LEVEL = 0.05f;
-    public static final float SCHOLARS_XP_BONUS_CAP       = 0.75f;
+    public static final float CLEAVE_FRACTION_PER_LEVEL = 0.02f;
+    public static final float CLEAVE_FRACTION_CAP       = 0.58f;
 
     // ── Berserker's Oath (legendary, melee) ──
     public static final float BERSERKER_DAMAGE_PER_STACK  = 0.10f;
     public static final int   BERSERKER_HP_TICK_PER_STACK = 1;
     public static final int   BERSERKER_MAX_STACKS        = 5;
 
-    // ── Scavenger Rounds (gun, on-kill ammo refund) ──
-    public static final float SCAVENGER_CHANCE_BASE          = 0.15f;
-    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.03f;
-    public static final float SCAVENGER_CHANCE_CAP           = 0.50f;
-    public static final int   SCAVENGER_REFUND_BASE          = 1;
-    public static final int   SCAVENGER_REFUND_HIGH_LEVEL    = 2;
-    public static final int   SCAVENGER_HIGH_LEVEL_THRESHOLD = 7;
+    // ── Scavenger Rounds (STANDARD, SCAVENGER, gun) — on kill, a chance to refund SCAVENGER_REFUND_ROUNDS
+    // rounds to the reserve. MOVED chance .15/.03/.50 -> .30/.0112/.40 and refund 1 (2 at Lv.7+) -> 3 flat
+    // (0.30 x 3 x 11.67 = 10.5 -> 0.40 x 3 x 11.67 = 14.0 PP). The old Lv.7 refund step is gone: the refund
+    // is the ability's countValue now, so the price reads it. ──
+    public static final float SCAVENGER_CHANCE_BASE          = 0.30f;
+    public static final float SCAVENGER_CHANCE_PER_LEVEL     = 0.0112f;
+    public static final float SCAVENGER_CHANCE_CAP           = 0.40f;
+    /** Rounds refunded to the reserve on a Scavenger proc (the instance's countValue). Range: 2-4. */
+    public static final int   SCAVENGER_REFUND_ROUNDS        = 3;
 
-    // ── Field Medic Rounds (on-kill medkit drop) ──
-    public static final float FIELD_MEDIC_CHANCE_BASE        = 0.05f;
-    public static final float FIELD_MEDIC_CHANCE_PER_LEVEL   = 0.02f;
-    public static final float FIELD_MEDIC_CHANCE_CAP         = 0.25f;
-
-    // ── Credit Fang (on-kill credits) ──
-    public static final float CREDIT_FANG_BASE               = 2f;
-    public static final float CREDIT_FANG_PER_LEVEL          = 1f;
-    public static final int   CREDIT_FANG_CAP                = 12;
-
-    // ── Point Blank ──
-    public static final float POINT_BLANK_BONUS_BASE      = 0.20f;
-    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.05f;
-    public static final float POINT_BLANK_BONUS_CAP       = 0.70f;
+    // ── Point Blank (STANDARD, CLOSE_QUARTERS). MOVED .20/.05/.70 -> .35/.0125/.46 (10.5 -> 13.8 PP) ──
+    public static final float POINT_BLANK_BONUS_BASE      = 0.35f;
+    public static final float POINT_BLANK_BONUS_PER_LEVEL = 0.0125f;
+    public static final float POINT_BLANK_BONUS_CAP       = 0.46f;
     public static final int   POINT_BLANK_MAX_DISTANCE    = 1;
 
-    // ── Marksman's Patience ──
-    public static final float MARKSMAN_PER_TILE_BASE      = 0.05f;
-    public static final float MARKSMAN_PER_TILE_PER_LEVEL = 0.01f;
-    public static final float MARKSMAN_PER_TILE_CAP       = 0.12f;
-    public static final int   MARKSMAN_MIN_DISTANCE       = 2;
-    public static final float MARKSMAN_TOTAL_BONUS_CAP    = 0.60f;
+    // ── Opening Salvo (MAJOR, MARKSMAN). MOVED .30/.07/.90 -> .40/.02/.58 (12 -> 17.4 PP) ──
+    public static final float OPENING_SALVO_BONUS_BASE      = 0.40f;
+    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.02f;
+    public static final float OPENING_SALVO_BONUS_CAP       = 0.58f;
 
-    // ── Opening Salvo ──
-    public static final float OPENING_SALVO_BONUS_BASE      = 0.30f;
-    public static final float OPENING_SALVO_BONUS_PER_LEVEL = 0.07f;
-    public static final float OPENING_SALVO_BONUS_CAP       = 0.90f;
-
-    // ── Rhythm / Heat-Up ──
-    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.06f;
-    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.01f;
-    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.15f;
+    // ── Rhythm / Heat-Up (STANDARD, ENERGY). MOVED .06/.01/.15 -> .105/.0039/.14 (10.5 -> 14.0 PP) ──
+    public static final float RHYTHM_RAMP_PER_HIT_BASE      = 0.105f;
+    public static final float RHYTHM_RAMP_PER_HIT_PER_LEVEL = 0.0039f;
+    public static final float RHYTHM_RAMP_PER_HIT_CAP       = 0.14f;
     public static final int   RHYTHM_MAX_STACKS             = 5;
 
-    // ── Static Discharge ──
-    public static final float STATIC_SPLASH_BASE      = 4f;
-    public static final float STATIC_SPLASH_PER_LEVEL = 1f;
-    public static final int   STATIC_SPLASH_CAP       = 14;
+    // ── Static Discharge (STANDARD, ENERGY). MOVED 4/1/14 -> 7.5/0.28/10 (10.5 -> 14.0 PP) ──
+    public static final float STATIC_SPLASH_BASE      = 7.5f;
+    public static final float STATIC_SPLASH_PER_LEVEL = 0.28f;
+    public static final int   STATIC_SPLASH_CAP       = 10;
 
-    // ── Resonant Rounds (% of target max HP) ──
-    public static final float RESONANT_PCT_BASE      = 0.04f;
-    public static final float RESONANT_PCT_PER_LEVEL = 0.008f;
-    public static final float RESONANT_PCT_CAP       = 0.10f;
+    // ── Burst Fire (MAJOR, CLOSE_QUARTERS, gun) — rounds fired per attack action. MOVED from a count that
+    // stepped 2 -> 5 with level (4 -> 10 PP at 2 PP per count) to a FIXED two-round burst priced on its own
+    // weight (ABILITY_PP_PER_EXTRA_BURST_ROUND = 16 PP for the one extra round). The Double-Barrel's
+    // built-in burst reads the same count. ──
+    /** Rounds fired per attack action by BURST_FIRE (the base shot plus the extras). Range: 2. */
+    public static final int   BURST_FIRE_ROUND_COUNT = 2;
 
     // ── Legendary signatures ──
     public static final int   SOULFORGE_KILLS_PER_LEVEL_UP  = 5;
@@ -1629,33 +1530,21 @@ public final class BalanceConfig {
     public static final int   HELLFIRE_NOVA_RADIUS          = 2;
     public static final float HELLFIRE_NOVA_DAMAGE_FRACTION = 0.75f;
 
-    // ── Extended Mag ──
-    public static final int   EXTENDED_MAG_BASE_COUNT      = 1;
-    public static final int   EXTENDED_MAG_LEVELS_PER_STEP = 3;
-    public static final int   EXTENDED_MAG_MAX_COUNT       = 4;
+    // CUT by balance-overhaul order 5 (B6, priced below ABILITY_MIN_FELT_PP at level 1, PP in brackets):
+    // HEMORRHAGE_HARVEST (0.5), VAMPIRIC_CRIT (0.7), BULWARK_ROUNDS (0.3), ADRENAL_SURGE (3.0),
+    // SECOND_WIND (7.5; also collided with the VITALITY perk of the same name), SALVAGE_STRIKE / SCHOLARS_EDGE /
+    // FIELD_MEDIC_ROUNDS / CREDIT_FANG / QUICK_HANDS (3.0 nominal each), EXTENDED_MAG (2.0), MARKSMANS_PATIENCE
+    // (1.5), RESONANT_ROUNDS (1.2). MERGED: OVERPENETRATION (2.0) -> ARMOR_PIERCE (its pierce rides
+    // ARMOR_PIERCE_EXTRA_TARGETS). Their magnitudes are deleted with them.
 
     // -------------------------------------------------------------------------------------
     // TIER = PRICED ABILITY BUDGET (new-game-balancr order 2). Rarity NEVER raises a weapon's
-    // POWER band (that stays a role property, SECTION 9) — it buys ABILITIES, and now abilities
-    // are PRICED in power points (PP = %-of-reference-DPT/eHP, the SAME currency the level-up
-    // cards use; see GameMath.abilityPowerPoints). Each tier gets an ability-PP BUDGET; the
-    // WeaponRoller rolls abilities until the budget is spent — never past. This converts the whole
-    // "PLACEHOLDER — flag for playtesting" ability catalogue above into priced content: magnitudes
-    // may be tuned freely, the price recomputes from the magnitude. BalanceSchema R-ABILITY asserts
-    // every rollable tier/level roll fits its tier budget. See docs/game-balance-authority.txt.
+    // POWER band (that stays a role property, SECTION 9) — it buys ABILITIES, priced in power points
+    // (PP = %-of-reference-DPT/eHP; see GameMath.abilityPowerPoints). The tier budgets themselves —
+    // the order-2 UNCOMMON 6 / RARE 12 / EPIC 20 / LEGENDARY 30 ceilings — were REPLACED by balance-
+    // overhaul order 5 (B5, OVERRIDE CLAUSE) with GUARANTEED COUNTS and a BAND (floor AND ceiling):
+    // TIER_ABILITY_COUNT_* / TIER_ABILITY_PP_BUDGET_* / TIER_ABILITY_PP_TOLERANCE live in SECTION 24.
     // -------------------------------------------------------------------------------------
-    /** Ability-PP budget a COMMON weapon may spend on abilities (none — commons are vanilla). */
-    public static final float TIER_ABILITY_PP_BUDGET_COMMON    = 0f;
-    /** Ability-PP budget an UNCOMMON weapon may spend (~one modest ability). */
-    public static final float TIER_ABILITY_PP_BUDGET_UNCOMMON  = 6f;
-    /** Ability-PP budget a RARE weapon may spend (~two abilities). */
-    public static final float TIER_ABILITY_PP_BUDGET_RARE      = 12f;
-    /** Ability-PP budget an EPIC weapon may spend (~three abilities). */
-    public static final float TIER_ABILITY_PP_BUDGET_EPIC      = 20f;
-    /** Ability-PP budget a LEGENDARY weapon may spend (~four abilities + a signature). */
-    public static final float TIER_ABILITY_PP_BUDGET_LEGENDARY = 30f;
-    /** Fractional slack the roller may overspend a tier budget by before an ability is rejected (±20%). */
-    public static final float TIER_ABILITY_PP_TOLERANCE        = 0.20f;
 
     // ── ABILITY PRICING UTILISATION WEIGHTS ──────────────────────────────────────────────
     // An ability's PP is its magnitude converted to a %-of-reference value, DISCOUNTED by how often
@@ -1669,22 +1558,40 @@ public final class BalanceConfig {
     public static final float ABILITY_UTIL_CROWD_CONTROL    = 0.45f;
     /** Bypass/penetration value (armor pierce) — only pays off vs shielding enemies. */
     public static final float ABILITY_UTIL_PENETRATION      = 0.30f;
-    /** Damage-over-time (rend, incendiary) — refreshes not stacks, and overkills dying targets. */
-    public static final float ABILITY_UTIL_DAMAGE_OVER_TIME = 0.60f;
+    /**
+     * Damage-over-time (rend, incendiary) — refreshes not stacks, and overkills dying targets. MOVED .60 -> .65
+     * (balance-overhaul order 5): the Incendiary level-1 base is pinned to WEAPON_BURN_BASE_PER_TURN (R-DOT), and
+     * at .60 it priced to exactly the UNCOMMON band floor (9.6 PP); .65 prices it at 10.4, clear of the edge.
+     */
+    public static final float ABILITY_UTIL_DAMAGE_OVER_TIME = 0.65f;
     /** Close-range / long-range / first-shot / low-HP conditional damage bonuses. */
     public static final float ABILITY_UTIL_CONDITIONAL      = 0.30f;
     /** Lifesteal-style sustain expressed as a fraction of damage dealt. */
     public static final float ABILITY_UTIL_SUSTAIN_FRACTION = 0.50f;
-    /** Flat per-event HP/armour sustain and flat AoE burst — small, situational. */
+    /** Flat on-kill AoE burst (static discharge) — small, situational. */
     public static final float ABILITY_UTIL_FLAT_EVENT       = 0.35f;
-    /** Percent-of-target-max-HP amplifiers (resonant) — strong but conditional on a bleed. */
-    public static final float ABILITY_UTIL_PERCENT_MAX_HP   = 0.30f;
-    /** PP per extra count for count utilities (extra pierce, +clip step, extra burst round). */
+    /** PP per extra pierced enemy (armor pierce's merged over-penetration). */
     public static final float ABILITY_PP_PER_COUNT          = 2.0f;
-    /** Flat nominal PP for pure-utility on-kill economy abilities (scavenger, salvage, credits, medic, XP). */
-    public static final float ABILITY_PP_UTILITY_NOMINAL    = 3.0f;
-    /** Flat nominal PP for a legendary SIGNATURE ability (priced as a fixed marquee effect). */
-    public static final float ABILITY_PP_LEGENDARY_SIGNATURE = 10.0f;
+    /**
+     * PP for each round BURST_FIRE adds to an attack action (balance-overhaul order 5; was ABILITY_PP_PER_COUNT
+     * = 2, which priced a doubled attack below a crit chance). An extra round doubles a turn's damage but
+     * spends the reserve twice as fast, so a floor's damage SUPPLY is unchanged — the gain is TEMPO (fewer
+     * enemy turns per kill), valued as a major conditional bonus. Range: 12-18.
+     */
+    public static final float ABILITY_PP_PER_EXTRA_BURST_ROUND = 16.0f;
+    /**
+     * PP per round of ammo SCAVENGER_ROUNDS is expected to refund per kill (chance x rounds), balance-
+     * overhaul order 5; replaces the flat 3 PP economy nominal. One refunded round per kill is roughly a
+     * quarter of a gun's per-kill ammo cost. Range: 9-14.
+     */
+    public static final float ABILITY_PP_PER_EXPECTED_REFUND_ROUND = 11.67f;
+    /**
+     * Flat marquee PP for a legendary SIGNATURE ability. MOVED 10 -> 18 (balance-overhaul order 5): a
+     * signature is the run-defining rule of a LEGENDARY (a 3x lance every 5 fires, a crit nova, a weapon
+     * that levels itself), worth more than any MAJOR; 18 is also what puts signature + 3 standards inside
+     * the LEGENDARY 60 PP band at level 1. Range: 16-24.
+     */
+    public static final float ABILITY_PP_LEGENDARY_SIGNATURE = 18.0f;
 
     // -------------------------------------------------------------------------------------
     // DEPTH-GATED LOOT TIERS + THE PITY RULE (new-game-balancr order 2). The game must actually
@@ -1744,9 +1651,10 @@ public final class BalanceConfig {
     public static final float SHOP_HEAL_HP_PER_POWER_POINT     = 11f;
     // A weapon TIER-UPGRADE prices on the ABILITY-PP budget its destination tier unlocks
     // (TIER_ABILITY_PP_BUDGET_*, SECTION 15) — the marquee value is the ability slot the tier buys.
-    // A PLAYER-ABILITY boon prices on the level-up card's own PP (LEVEL_UP_BUDGET_PP), since a shop
-    // boon is a paid acquisition of the same budget-equal card. Both are read directly from those
-    // sections in DefaultShopOfferSource — no separate price constants here.
+    // A PLAYER-ABILITY offer sells ONE PERK RANK priced on SHOP_PERK_RANK_POWER_POINTS (SECTION 24;
+    // balance-overhaul order 5 replaced the budget-equal boon card): a paid rank of the same perks the
+    // level-up screen offers. Both are read directly from those sections in DefaultShopOfferSource —
+    // no separate price constants here.
     /** Ammo "large box" multiplier over the standard box size. */
     public static final int   SHOP_AMMO_LARGE_BOX_MULTIPLIER = 2;
 
@@ -1888,6 +1796,31 @@ public final class BalanceConfig {
     public static final float SIM_LAG_MAX_MEDIAN_DEPTH       = 6f;
     /** Seeds per start depth in the LADDER REPORT probe (one floor each, both kits). */
     public static final int   SIM_LADDER_PROBE_SEEDS_PER_DEPTH = 8;
+
+    // --- S-BUILD + THE BUILD REPORT (balance-overhaul order 5, A6) ----------------------------
+    // Four build-biased TACTICAL variants (sim/BuildBias: CLOSE, MARKSMAN, PYRO-DEMOLITION, BULWARK) play
+    // as extra matrix rows. Two claims: no bias is a trap or a must-pick in PLAY (depth spread — depth-
+    // derived, so it rides the navigation waiver that SIM_FAIR's median depth carries), and plain TACTICAL
+    // does not end every run as the same character (dominant-tag share — waived with the navigation waiver by
+    // owner ruling D7 while ~91% of sim runs never level up; its >= SIM_BUILD_MIN_SAMPLE sample line is enforced).
+    /**
+     * Seeds per build-biased variant. Equal to SIM_SEED_COUNT: the whole seven-row matrix plays in well under
+     * a minute on a 4-core machine (CP6 measured), so the variants get the headline sample rather than a cut.
+     */
+    public static final int   SIM_BUILD_SEED_COUNT             = 200;
+    /** S-BUILD depth part: the four variants' median death depths satisfy max / min <= 1 + this. */
+    public static final float SIM_BUILD_DEPTH_SPREAD           = 0.25f;
+    /** S-BUILD dominant-tag part: no single tag may be plain TACTICAL's end-of-run dominant tag on more than this share. */
+    public static final float SIM_BUILD_MAX_DOMINANT_TAG_SHARE = 0.40f;
+    /** S-BUILD: plain TACTICAL runs that held a perk rank at the end must number at least this (non-vacuous share). */
+    public static final int   SIM_BUILD_MIN_SAMPLE             = 30;
+    /**
+     * Seeds of the dedicated plain-TACTICAL BUILD SAMPLE row (TACTICAL-BUILD-SAMPLE) the dominant-tag share is
+     * read from. Only ~10% of TACTICAL runs level up while the navigation waiver stands (CP6 measured 20 of
+     * 200), so 600 seeds give ~60 ranked runs — twice SIM_BUILD_MIN_SAMPLE. The main 200-seed rows every other
+     * band reads are untouched; the sample's first 200 seeds replay plain TACTICAL's runs exactly.
+     */
+    public static final int   SIM_BUILD_SAMPLE_SEED_COUNT      = 600;
 
     // =====================================================================================
     // SECTION 19 — ROUTE ECONOMICS (new-game-balancr order 7) — the MAP joins the contract
@@ -2227,10 +2160,10 @@ public final class BalanceConfig {
      */
     public static final float PLAYER_VITALITY_GROWTH = 1.09f;
 
-    /** Expected fraction of each level's LEVEL_UP_BUDGET_PP spent on OFFENCE by the on-curve player (the boss derivation's 0.5). Range: 0.3–0.6. */
+    /** Expected fraction of each level's EXPECTED_PERK_POWER_PP_PER_PICK spent on OFFENCE by the on-curve player (the boss derivation's 0.5). Range: 0.3–0.6. */
     public static final float LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION = 0.50f;
     /**
-     * Expected fraction of each level's LEVEL_UP_BUDGET_PP bought as FLAT max-HP/armour eHP (R9). A quarter:
+     * Expected fraction of each level's EXPECTED_PERK_POWER_PP_PER_PICK bought as FLAT max-HP/armour eHP (R9). A quarter:
      * the defensive half of the deck (DEFENSE / SUSTAIN / UTILITY pools) is split between flat pools and
      * unhealable mitigation (dodge, flat reduction, speed), and only the flat pools stack on the vitality
      * curve. It also keeps the fitted turns-to-die drift within +/-7% (a larger flat share bends the
@@ -2779,4 +2712,284 @@ public final class BalanceConfig {
     public static final int   HAZARD_GROUP_BARRELS_MAX             = 2;
     /** H14: barrels sit within this Chebyshev distance (tiles) of the group cluster's centroid. */
     public static final int   HAZARD_GROUP_BARREL_RADIUS_TILES     = 2;
+
+    // =========================================================================
+    // SECTION 24 — BUILDS (balance-overhaul order 5): perks, keystones, the build valuation
+    // REPLACES R-CARD (every card priced at LEVEL_UP_BUDGET_PP +/- tolerance), R-CARD-BREAKPOINT and the
+    // TOTAL-PP INVARIANT ("total power at level L = L x 12 PP for every build"): a perk is no longer priced
+    // to be EQUAL, it is priced to be FELT inside its style (R-PERK PK1), to stay FOCUSED on that style
+    // (PK2), a keystone trades a real niche for a real cost (R-KEYSTONE), and no style is a trap or
+    // dominant at depth 15 (R-CARRY — a bounded spread replaces the invariant). The R-CARD constants
+    // themselves (LEVEL_UP_BUDGET_PP, LEVEL_UP_BUDGET_TOLERANCE, the ten card magnitudes) were deleted in
+    // CP2, when the level-up runtime switched to the perk deck. Valued by util/BuildValuationModel on the
+    // order-3 reference scenarios; see docs/game-balance-authority.txt R-PERK / R-KEYSTONE / R-CARRY.
+    // Every per-rank array holds the TOTAL magnitude at rank 1, 2, 3 (index 0 = rank 1).
+    // =========================================================================
+
+    // --- OFFER SHAPE (B3 / B4) ----------------------------------------------------------------
+    /** B3: perks offered per level-up. Range: 3 (fixed by the offer rules: synergy + pivot + one more). */
+    public static final int     PERKS_OFFERED              = 3;
+    /** B2: the most ranks any perk has (one-rank perks declare 1). Range: 3. */
+    public static final int     PERK_MAX_RANK              = 3;
+    /** B4: character levels whose level-up offers keystones instead of perks. Range: four distinct levels. */
+    public static final int[]   KEYSTONE_CHARACTER_LEVELS  = {5, 10, 15, 20};
+    /** B4: keystones offered on a keystone level. Range: 3. */
+    public static final int     KEYSTONES_OFFERED          = 3;
+    /**
+     * B3: per-prior-pick draw-weight bonus toward a perk's TAG — the old LEVEL_UP_DRAW_BIAS_PER_PICK (0.6, idea 5),
+     * kept as the weight behind the synergy + pivot slots so a run's identity deepens as it goes. A perk's
+     * weight is 1 + ranks already held in its tag x this. Range: 0.0-1.0.
+     */
+    public static final float   PERK_DRAW_BIAS_PER_PICK    = 0.6f;
+    /**
+     * THE EXPECTED PLAYER'S PERK TERM (balance-overhaul order 5, CP2; replaces LEVEL_UP_BUDGET_PP in
+     * GameMath.expectedPlayer, the boss derivation, the route ledger's XP pricing and the LADDER probe kit):
+     * the power points one level-up is expected to buy, so the on-curve player's card-power term becomes
+     * "expected perk power at the expected rank count" = this x (characterLevel - 1). A keystone level counts
+     * as a pick at the same average (keystones trade a niche for a cost; their net is priced by R-KEYSTONE,
+     * not added here). 12 reproduces the retired budget-equal deck exactly, which keeps R-LADDER and every
+     * boss / route rule that reads the expected player on its fitted values. The catalog's MEASURED average
+     * gain per rank (the PERKS table in BalanceReport) sits on its tag's niche and is far larger than 12 PP
+     * there by design (PK1 wants >= 10% per rank on the NICHE, PK2 keeps it off the other scenarios), so a
+     * perk is not 12 PP of general power: 12 is the expected player's whole-roster average, and order 6
+     * re-derives it with the economy. Range: 8-16.
+     */
+    public static final float   EXPECTED_PERK_POWER_PP_PER_PICK = 12f;
+    /**
+     * The power points ONE perk rank sold by a UAC Fabricator's PLAYER-ABILITY offer is priced on (replaces
+     * LEVEL_UP_BUDGET_PP for that offer; balance-overhaul order 5 CP2). Equal to the expected perk power of a
+     * pick, so a bought rank costs what a level-up is worth to the expected player. Order 6 re-prices it.
+     * Range: 8-16.
+     */
+    public static final float   SHOP_PERK_RANK_POWER_POINTS = EXPECTED_PERK_POWER_PP_PER_PICK;
+
+    // --- PERK MAGNITUDES (B2) — CLOSE QUARTERS --------------------------------------------------
+    /** Buckshot Discipline: SPREAD damage, total by rank. Spec default +15%/rank; MOVED (escalating) for PK1: the Shotgun's S6 kill is shot-reload-shot, so a flat +15% shortens it only 8% a rank. Range: 0.15-0.35 per rank. */
+    public static final float[] PERK_BUCKSHOT_SPREAD_DAMAGE_BY_RANK      = {0.20f, 0.46f, 0.80f};
+    /** Point Man (decided r1): SPREAD damage at point-blank (<= BUILD_POINT_BLANK_MAX_TILES), total by rank — the same ladder as Buckshot for the same reason (S6 reload). Range: 0.15-0.35 per rank. */
+    public static final float[] PERK_POINT_MAN_POINT_BLANK_DAMAGE_BY_RANK = {0.20f, 0.46f, 0.80f};
+    /** Point Man r2: extra knockback reach (tiles). Range: 1. */
+    public static final int     PERK_POINT_MAN_KNOCKBACK_BONUS_TILES     = 1;
+    /** Point Man r3: stagger reaches this many tiles (spec: "stagger also at 3 tiles"). Range: 3. */
+    public static final int     PERK_POINT_MAN_STAGGER_REACH_TILES       = 3;
+    /** Breacher: chance a SPREAD kill refunds one shell, total by rank. Range: 0.25-0.40 per rank (<= 1.0). */
+    public static final float[] PERK_BREACHER_REFUND_CHANCE_BY_RANK      = {0.33f, 0.66f, 1.00f};
+
+    // --- MARKSMAN --------------------------------------------------------------------------------
+    /** Steady Aim: fraction of the BALLISTIC / RAIL falloff coefficient removed, total by rank. Spec default -30%/rank; MOVED to 33/66/100% (CP1b, D3) — r3 removes falloff entirely to lift MARKSMAN's R-CARRY. Range: 0.30-0.34 per rank (total <= 1.0). */
+    public static final float[] PERK_STEADY_AIM_FALLOFF_REDUCTION_BY_RANK = {0.33f, 0.66f, 1.00f};
+    /** First Blood: BALLISTIC / RAIL damage on a hit against a full-HP enemy, total by rank. Spec default +25%/rank; MOVED to +90%/rank: only one hit of the five an S1 kill takes is a first hit (PK1), and MARKSMAN's R-CARRY needed the rest (CP1b). Range: 0.8-1.0 per rank. */
+    public static final float[] PERK_FIRST_BLOOD_DAMAGE_BY_RANK           = {0.90f, 1.80f, 2.70f};
+    /** Lane Discipline: extra BALLISTIC / RAIL reach (tiles), total by rank. Range: 1 per rank. */
+    public static final float[] PERK_LANE_DISCIPLINE_RANGE_BY_RANK        = {1f, 2f, 3f};
+    /** Lane Discipline: BALLISTIC / RAIL damage at BUILD_LONG_RANGE_MIN_TILES or farther, total by rank. Spec default +10%/rank; MOVED to 24/50/80% — two of S1's three tiles are long range (PK1) and MARKSMAN's R-CARRY (CP1b). Range: 0.20-0.30 per rank. */
+    public static final float[] PERK_LANE_DISCIPLINE_DAMAGE_BY_RANK       = {0.24f, 0.50f, 0.80f};
+
+    // --- PYRO ------------------------------------------------------------------------------------
+    /** Accelerant: extra max burn stacks (FIRE), total by rank. Range: 1 per rank. */
+    public static final float[] PERK_ACCELERANT_BURN_STACKS_BY_RANK       = {1f, 2f, 3f};
+    /** Accelerant (decided): FIRE damage (impact and the burn it seeds), total by rank — the burn stack alone is never reached in a reference fight. Range: 0.15-0.25 per rank. */
+    public static final float[] PERK_ACCELERANT_FIRE_DAMAGE_BY_RANK       = {0.18f, 0.38f, 0.60f};
+
+    /** Wildfire (owner ruling D5): extra turns every burn the player applies lasts, total by rank. Range: 1 per rank. */
+    public static final float[] PERK_WILDFIRE_BURN_TURNS_BY_RANK          = {1f, 2f, 3f};
+
+    // --- DEMOLITION ------------------------------------------------------------------------------
+    /** Shaped Charges: EXPLOSIVE damage, total by rank. Spec default +20%/rank; MOVED to 32/68/112% for R-CARRY (DEMOLITION's lift, net of DEMOLITIONIST's HP cost). Range: 0.25-0.40 per rank. */
+    public static final float[] PERK_SHAPED_CHARGES_DAMAGE_BY_RANK        = {0.32f, 0.68f, 1.12f};
+    /** Blast Shield: own explosion damage removed, total by rank (never above 1.0). Spec default -50%; r3 reaches full immunity so the last rank is felt (PK1). Range: ladder ending at <= 1.0. */
+    public static final float[] PERK_BLAST_SHIELD_REDUCTION_BY_RANK       = {0.50f, 0.75f, 1.00f};
+    /** Sapper: barrel blast bonus, total by rank. Range: 0.30-0.60 per rank. */
+    public static final float[] PERK_SAPPER_BARREL_DAMAGE_BY_RANK         = {0.50f, 1.00f, 1.50f};
+
+    // --- ENERGY ----------------------------------------------------------------------------------
+    /** Capacitor: ENERGY damage, total by rank. Spec default +15%/rank; MOVED up for R-CARRY (ENERGY's lift). Range: 0.15-0.35 per rank. */
+    public static final float[] PERK_CAPACITOR_ENERGY_DAMAGE_BY_RANK      = {0.27f, 0.56f, 0.92f};
+    /** Arc Jump: extra Arc Cannon chain jumps, total by rank. Range: 1 per rank. */
+    public static final float[] PERK_ARC_JUMP_CHAIN_JUMPS_BY_RANK         = {1f, 2f, 3f};
+    /** Arc Jump (decided): raise of the per-jump chain multiplier, total by rank — a fourth jump at 0.6^4 is not felt, so the jumps also lose less. Range: 0.08-0.15 per rank (multiplier <= 1). */
+    public static final float[] PERK_ARC_JUMP_CHAIN_MULTIPLIER_BY_RANK    = {0.12f, 0.25f, 0.38f};
+    /** Overcharge: Plasma pierce bonus per enemy already pierced, total by rank. Spec default +15%/rank; MOVED: in a two-wide lane only the second body gains, and the clear waits on the first. Range: 0.35-0.50 per rank. */
+    public static final float[] PERK_OVERCHARGE_PIERCE_BONUS_BY_RANK      = {0.40f, 0.80f, 1.35f};
+
+    // --- BULWARK ---------------------------------------------------------------------------------
+    /** Shield Wall r2: the guarded HEAVY multiplier (was GUARD_FRONT_HEAVY 0.20). Spec default x0.10; MOVED to x0.0 — at x0.10 the rank removes ~7% of a floor's incoming (PK1 needs 10%). Range: 0.0-0.10. */
+    public static final float   PERK_SHIELD_WALL_HEAVY_GUARD_MULTIPLIER   = 0.0f;
+    /** Riposte Drill: extra VULNERABLE turns a riposte applies, total by rank. Range: 1 per rank. */
+    public static final float[] PERK_RIPOSTE_DRILL_TURNS_BY_RANK          = {1f, 2f, 3f};
+    /** Riposte Drill: extra damage the riposted enemy takes, total by rank. Range: 0.20-0.40 per rank. */
+    public static final float[] PERK_RIPOSTE_DRILL_DAMAGE_BY_RANK         = {0.25f, 0.50f, 0.75f};
+    /** Plate Carrier: max armour, total by rank. Spec default +20%/rank; MOVED: armour is ~30% of a floor's sustain, so +20% reads ~6%. Range: 0.35-0.55 per rank. */
+    public static final float[] PERK_PLATE_CARRIER_ARMOR_BY_RANK          = {0.42f, 0.90f, 1.48f};
+
+    // --- BLADE -----------------------------------------------------------------------------------
+    /** Butcher: melee damage (BLADE and BLUNT), total by rank. Range: 0.15-0.30 per rank. */
+    public static final float[] PERK_BUTCHER_MELEE_DAMAGE_BY_RANK         = {0.25f, 0.50f, 0.75f};
+    /** Bloodletting: max HP a melee kill heals, total by rank. Spec default 3%/rank; MOVED up for PK1 at depth 5 (fewer bodies a floor). Range: 0.03-0.05 per rank. */
+    public static final float[] PERK_BLOODLETTING_HEAL_BY_RANK            = {0.04f, 0.085f, 0.135f};
+
+    // --- SCAVENGER -------------------------------------------------------------------------------
+    /** Pack Rat: ammo pickups, total by rank. Range: 0.10-0.25 per rank. */
+    public static final float[] PERK_PACK_RAT_AMMO_BY_RANK                = {0.15f, 0.30f, 0.45f};
+    /** Haggler: shop discount, total by rank. Range: 0.08-0.12 per rank. */
+    public static final float[] PERK_HAGGLER_DISCOUNT_BY_RANK             = {0.10f, 0.20f, 0.30f};
+    /** Salvager: chance a carrier drops one extra item, total by rank. Range: 0.25-0.40 per rank (<= 1.0). */
+    public static final float[] PERK_SALVAGER_EXTRA_DROP_BY_RANK          = {0.25f, 0.50f, 0.75f};
+
+    // --- VITALITY --------------------------------------------------------------------------------
+    /** Hardy: max HP, total by rank. Spec default +10%/rank; MOVED into the PK1/PK2 window: each rank must lift the floor (pool + heals) >= 10% while lifting one fight's pool <= 10%. CP1b (D3) sits each increment (0.147 / 0.162 / 0.179) at the LOW edge of the window at depths 5 and 15 to bring VITALITY's R-CARRY down. Range: the window, recomputed when the heal plan moves. */
+    public static final float[] PERK_HARDY_MAX_HEALTH_BY_RANK             = {0.147f, 0.309f, 0.488f};
+    /** Field Medic: heals, total by rank (valued on a floor's heal supply — nominal, so each total is >= 1.1 x the previous). Spec default +15%/rank; MOVED to the PK1 floor 10.5/22/34.5% (CP1b, D3) to bring VITALITY's R-CARRY down. Range: the PK1 floor up to 0.15 per rank. */
+    public static final float[] PERK_FIELD_MEDIC_HEAL_BY_RANK             = {0.105f, 0.22f, 0.345f};
+
+    // --- KEYSTONE MAGNITUDES (B4) — gains, then costs (a cost is the MULTIPLIER, 0.85 = -15%) ----
+    /** SCATTERGUN DOCTRINE cost: non-SPREAD damage multiplier. Range: 0.75-0.90. */
+    public static final float   KEYSTONE_SCATTERGUN_NON_SPREAD_MULTIPLIER = 0.85f;
+    /** DEADEYE cost: clip-size multiplier. Spec default 0.70; MOVED to 0.75 (CP1b, D3) — the Chaingun keeps one more burst a clip (MARKSMAN's R-CARRY); the cost still reads 13% (the Incinerator in S6). Range: 0.70-0.78. */
+    public static final float   KEYSTONE_DEADEYE_CLIP_MULTIPLIER          = 0.75f;
+    /** PYROMANIAC gain: extra damage burning enemies take from every source. Range: 0.30-0.60. */
+    public static final float   KEYSTONE_PYROMANIAC_BURNING_DAMAGE        = 0.50f;
+    /** PYROMANIAC cost: max-armour multiplier. Spec default 0.75; MOVED to 0.70 so the cost reads >= 10% somewhere (R-KEYSTONE). Range: 0.60-0.72. */
+    public static final float   KEYSTONE_PYROMANIAC_ARMOR_MULTIPLIER      = 0.70f;
+    /** DEMOLITIONIST gain: multiplier on barrels the player detonates. Range: 1.5-2.5. */
+    public static final float   KEYSTONE_DEMOLITIONIST_BARREL_MULTIPLIER  = 2.0f;
+    /** DEMOLITIONIST cost: max-HP multiplier. Spec default 0.80; 0.84 still costs > 10% of a floor's survival. Range: 0.75-0.86. */
+    public static final float   KEYSTONE_DEMOLITIONIST_HEALTH_MULTIPLIER  = 0.84f;
+    /** STORM CONDUIT gain: fraction of an ENERGY hit that arcs to one adjacent enemy. Spec default 0.50; MOVED up for R-CARRY. Range: 0.45-0.70. */
+    public static final float   KEYSTONE_STORM_CONDUIT_ARC_FRACTION       = 0.60f;
+    /** STORM CONDUIT cost: BALLISTIC damage multiplier. Range: 0.65-0.85. */
+    public static final float   KEYSTONE_STORM_CONDUIT_BALLISTIC_MULTIPLIER = 0.75f;
+    /** IRON BULWARK gain: fraction of the blocked damage a guarded hit reflects. Spec default 0.50; MOVED to 1.4 — heavies are a minority of a melee duel's turns, so 0.5 buys ~13% (R-KEYSTONE needs 30% at depth 15). Range: 1.2-1.6. */
+    public static final float   KEYSTONE_IRON_BULWARK_REFLECT_FRACTION    = 1.4f;
+    /** IRON BULWARK cost: all weapon damage multiplier. Spec default 0.85; 0.90 still costs 11% everywhere. Range: 0.85-0.90. */
+    public static final float   KEYSTONE_IRON_BULWARK_DAMAGE_MULTIPLIER   = 0.90f;
+    /** BERSERKER gain: max HP a melee kill restores. Spec default 0.08; MOVED to 0.14 — net of its own heal cost, 0.08 lifts the floor ~15% (R-KEYSTONE needs 30%). Range: 0.12-0.16. */
+    public static final float   KEYSTONE_BERSERKER_KILL_HEAL              = 0.14f;
+    /** BERSERKER gain: melee damage while below BUILD_BERSERK_LOW_HEALTH_FRACTION of max HP. Range: 0.30-0.60. */
+    public static final float   KEYSTONE_BERSERKER_LOW_HEALTH_MELEE       = 0.50f;
+    /** BERSERKER cost: heal multiplier. Range: 0.60-0.80. */
+    public static final float   KEYSTONE_BERSERKER_HEAL_MULTIPLIER        = 0.70f;
+    /** QUARTERMASTER gain: extra weapon loadout slots. Range: 1. */
+    public static final int     KEYSTONE_QUARTERMASTER_EXTRA_SLOTS        = 1;
+    /** QUARTERMASTER gain: shop price multiplier. Range: 0.70-0.80. */
+    public static final float   KEYSTONE_QUARTERMASTER_PRICE_MULTIPLIER   = 0.75f;
+    /** QUARTERMASTER cost: max-HP multiplier. Spec default 0.90; MOVED to 0.85 — -10% HP costs only ~7% of a floor's survival. Range: 0.80-0.86. */
+    public static final float   KEYSTONE_QUARTERMASTER_HEALTH_MULTIPLIER  = 0.85f;
+    /** IRONHIDE gain: max-HP multiplier. Spec default 1.40; MOVED to 1.475 — +40% HP is +25% to the pool's hits to die and R-KEYSTONE needs 30%; 1.475 is the lowest value that clears it (CP1b, D3: VITALITY's R-CARRY down). Range: 1.475-1.60. */
+    public static final float   KEYSTONE_IRONHIDE_HEALTH_MULTIPLIER       = 1.475f;
+    /** IRONHIDE cost: heal multiplier. Range: 0.70-0.85. */
+    public static final float   KEYSTONE_IRONHIDE_HEAL_MULTIPLIER         = 0.80f;
+
+    // --- RUNTIME GEOMETRY the perks read (CP2/CP3 seams honour these exactly) ------------------
+    /** Point Man: "point-blank" means at most this many tiles. Range: 1-2. */
+    public static final int     BUILD_POINT_BLANK_MAX_TILES  = 2;
+    /** Lane Discipline: the long-range bonus applies at this many tiles or farther. Range: 4-5. */
+    public static final int     BUILD_LONG_RANGE_MIN_TILES   = 4;
+    /** BERSERKER: the low-health melee bonus applies below this fraction of max HP. Range: 0.25-0.35. */
+    public static final float   BUILD_BERSERK_LOW_HEALTH_FRACTION = 0.30f;
+
+    // --- R-PERK / R-KEYSTONE / R-CARRY THRESHOLDS (B7) -----------------------------------------
+    /** PK1 FELT: every rank improves its niche metric by at least this fraction. Range: 0.10. */
+    public static final float   PERK_FELT_MIN_GAIN              = 0.10f;
+    /** PK2 FOCUSED: no non-VITALITY perk at max rank improves EVERY reference scenario by more than this. Range: 0.10. */
+    public static final float   PERK_FOCUSED_MAX_GAIN           = 0.10f;
+    /** PK2: a VITALITY perk rank improves no reference scenario by more than this. Range: 0.10. */
+    public static final float   PERK_VITALITY_MAX_GAIN_PER_RANK = 0.10f;
+    /** R-PERK: the depths every niche is measured at (PK1 holds at each; the breakpoint at any one). Range: R-ROLE depths. */
+    public static final int[]   BUILD_PERK_REFERENCE_DEPTHS     = {5, 15};
+    /** R-KEYSTONE: a keystone's niche gain is at least this. Range: 0.30. */
+    public static final float   KEYSTONE_NICHE_MIN_GAIN         = 0.30f;
+    /** R-KEYSTONE: at least one other scenario or metric worsens by at least this. Range: 0.10. */
+    public static final float   KEYSTONE_COST_MIN_LOSS          = 0.10f;
+    /** R-CARRY: the depth the tag builds are compared at. Range: 15. */
+    public static final int     BUILD_CARRY_DEPTH               = 15;
+    /** R-CARRY: best / worst tag carry score is at most 1 + this. Range: 0.20. */
+    public static final float   BUILD_CARRY_TOLERANCE           = 0.20f;
+    /** R-CARRY: guns a build's loadout carries (the Loadout's usable gun slots; QUARTERMASTER adds to it). Range: 2. */
+    public static final int     BUILD_KIT_GUN_SLOTS             = 2;
+    /** R-CARRY: a reference fight costs at least this many turns (sub-turn clears are floored here). Range: 1. */
+    public static final float   BUILD_CARRY_MIN_TURNS           = 1f;
+    /**
+     * R-CARRY: share of the expected player's perk picks spent in its build's own tag (the rest pivot), so
+     * the expected rank count at a depth is round(this x perk picks), capped at the tag's rank capacity.
+     * Range: 0.5-0.7.
+     */
+    public static final float   BUILD_EXPECTED_FOCUS_SHARE      = 0.60f;
+
+    // --- VALUATION MODEL INPUTS (util/BuildValuationModel; each one a stated assumption) -------
+    /** Turns between two heavies from one heavy-capable enemy in an attrition fight (commit + recover + melee). Range: 3-5. */
+    public static final int     BUILD_HEAVY_PERIOD_TURNS        = 4;
+    /** Cardinal lanes a heavy can arrive from (the guard-arc model). Range: 4. */
+    public static final int     BUILD_GUARD_LANES               = 4;
+    /** Unfaced lanes the Shield Wall +/-90 arc adds to the guard (both sides). Range: 2. */
+    public static final int     BUILD_WIDE_GUARD_EXTRA_LANES    = 2;
+    /** Seed salt of the valuation's average COMBAT floor (distinct from the R-ROLE supply salt). Range: any long. */
+    public static final long    BUILD_SUPPLY_SEED_SALT          = 0xB01D5L;
+    /** Share of a floor's incoming damage that arrives as HEAVY hits (the guardable part). Range: 0.25-0.45. */
+    public static final float   BUILD_FLOOR_HEAVY_DAMAGE_SHARE  = 0.35f;
+    /** Turns per floor a PYRO build stands in fire (its own cone ignites the lanes it fights in — Incinerator.marchShot -> HazardManager.igniteFire). Unverified model input; the sim can measure it. Range: 3-6. */
+    public static final float   BUILD_PYRO_FIRE_TURNS_PER_FLOOR = 5f;
+    /** Share of a floor's bodies a BLADE build kills in melee. Range: 0.3-0.6. */
+    public static final float   BUILD_BLADE_MELEE_KILL_SHARE    = 0.45f;
+    /** Share of a BLADE build's melee turns fought below BUILD_BERSERK_LOW_HEALTH_FRACTION. Range: 0.15-0.35. */
+    public static final float   BUILD_BLADE_LOW_HEALTH_TURN_SHARE = 0.25f;
+    /** Seeds the valuation averages one COMBAT floor's planned supply over. Range: 10-30. */
+    public static final int     BUILD_SUPPLY_SEED_COUNT         = 20;
+
+    // --- REAL RARITY (B5) + ABILITY PRUNE (B6) ------------------------------------------------
+    // OVERRIDES (OVERRIDE CLAUSE): the order-2 R-ABILITY tier CEILINGS (UNCOMMON 6 / RARE 12 / EPIC 20 /
+    // LEGENDARY 30, +20% overspend, abilities added greedily while they fit) and WeaponTier's slot counts
+    // (0/1/2/3/5, "4 standard + 1 signature") are REPLACED by: a GUARANTEED ability count per tier, rolled
+    // in full every time, whose priced total must land inside a BAND around the tier budget (a floor AND a
+    // ceiling — a RARE that rolls 3 PP is now a violation). EPIC draws exactly one MAJOR; LEGENDARY draws one
+    // MAJOR too and rolls its signature on top of its count. WeaponTier reads these; R-ABILITY asserts them (count, MAJOR,
+    // signature, band) over a seeded roll sweep, and asserts every surviving ability is FELT
+    // (>= ABILITY_MIN_FELT_PP) at its expected weapon level.
+    /** B5: abilities a COMMON weapon rolls (vanilla). Range: 0. */
+    public static final int     TIER_ABILITY_COUNT_COMMON        = 0;
+    /** B5: abilities an UNCOMMON weapon rolls. Range: 1. */
+    public static final int     TIER_ABILITY_COUNT_UNCOMMON      = 1;
+    /** B5: abilities a RARE weapon rolls. Range: 2. */
+    public static final int     TIER_ABILITY_COUNT_RARE          = 2;
+    /** B5: abilities an EPIC weapon rolls (TIER_MAJOR_COUNT_EPIC of them MAJOR). Range: 3. */
+    public static final int     TIER_ABILITY_COUNT_EPIC          = 3;
+    /** B5: abilities a LEGENDARY weapon rolls IN ADDITION to its signature. Range: 3. */
+    public static final int     TIER_ABILITY_COUNT_LEGENDARY     = 3;
+    /** B5: MAJOR abilities a COMMON roll draws (none). */
+    public static final int     TIER_MAJOR_COUNT_COMMON          = 0;
+    /** B5: MAJOR abilities an UNCOMMON roll draws (MAJORs start at EPIC). */
+    public static final int     TIER_MAJOR_COUNT_UNCOMMON        = 0;
+    /** B5: MAJOR abilities a RARE roll draws (MAJORs start at EPIC). */
+    public static final int     TIER_MAJOR_COUNT_RARE            = 0;
+    /**
+     * B5: MAJOR abilities an EPIC roll draws — exactly one ("EPIC 3, one of them from the MAJOR list"). Exactly,
+     * not "at least": two MAJORs + one standard at MAX_WEAPON_LEVEL prices 48.8 PP, past the EPIC ceiling. Range: 1.
+     */
+    public static final int     TIER_MAJOR_COUNT_EPIC            = 1;
+    /**
+     * B5: MAJOR abilities a LEGENDARY roll draws besides its signature. DECIDED (CP4; B5 leaves it open): one, so a
+     * LEGENDARY is an EPIC's shape PLUS a signature — rarity never loses a MAJOR on the way up. Range: 0-1.
+     */
+    public static final int     TIER_MAJOR_COUNT_LEGENDARY       = 1;
+    /** B5: ability-PP budget of a COMMON weapon (none). */
+    public static final float   TIER_ABILITY_PP_BUDGET_COMMON    = 0f;
+    /** B5: ability-PP budget of an UNCOMMON weapon (one standard ability). Was 6 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_UNCOMMON  = 12f;
+    /** B5: ability-PP budget of a RARE weapon (two standard abilities). Was 12 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_RARE      = 25f;
+    /** B5: ability-PP budget of an EPIC weapon (two standard + one MAJOR). Was 20 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_EPIC      = 40f;
+    /** B5: ability-PP budget of a LEGENDARY weapon (two standard + one MAJOR + the signature). Was 30 (order 2). */
+    public static final float   TIER_ABILITY_PP_BUDGET_LEGENDARY = 60f;
+    /** B5: a roll's total PP must lie within budget x (1 -/+ this) — a floor AND a ceiling. Range: 0.20. */
+    public static final float   TIER_ABILITY_PP_TOLERANCE        = 0.20f;
+    /**
+     * B6: the smallest priced PP (GameMath.abilityPowerPoints) an ability may carry at its EXPECTED weapon
+     * level and still exist — below it the ability is not felt, and is cut or merged. Range: 8.
+     */
+    public static final float   ABILITY_MIN_FELT_PP              = 8f;
+    /** A4: the R-ABILITY roll sweep's depths, one per early / mid / deep region. Range: one depth per region band. */
+    public static final int[]   ABILITY_ROLL_SWEEP_DEPTHS        = {3, 12, 22};
+    /** A4: seeds the R-ABILITY roll sweep rolls at every (tier, depth, melee-ness). Range: 30. */
+    public static final int     ABILITY_ROLL_SWEEP_SEEDS         = 30;
 }

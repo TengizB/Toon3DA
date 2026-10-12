@@ -60,8 +60,8 @@ public final class PlayerProgress {
 
     /**
      * Advances the player level, recalculates the next XP threshold, and clears
-     * {@link #hasPendingLevelUp()}. Call once after the chosen upgrade card's stat deltas
-     * have been applied (World owns applying the deltas to the Player and stats).
+     * {@link #hasPendingLevelUp()}. Call once after the chosen perk (or keystone) has been added to the build
+     * (World owns applying the build's effects to the Player and stats).
      *
      * <p>Excess XP (beyond the threshold) carries over so fast killers are not
      * penalised for overkill XP.</p>
@@ -74,9 +74,9 @@ public final class PlayerProgress {
     }
 
     /**
-     * Accumulates a flat per-shot damage bonus from an upgrade card (e.g. Hollow Points,
-     * Glass Cannon). The running total is pushed to the EnemyManager by World so every shot
-     * reflects it. Negative deltas are permitted for symmetry but no current card subtracts here.
+     * Accumulates a flat per-shot damage bonus. Its only sources were the retired upgrade cards (Hollow
+     * Points, Glass Cannon — balance-overhaul order 5); no perk grants one, so the total stays 0 and the
+     * plumbing (pushed to the EnemyManager by World) is kept only as a seam.
      */
     public void addFlatDamageBonus(int amount) {
         flatDamageBonus += amount;

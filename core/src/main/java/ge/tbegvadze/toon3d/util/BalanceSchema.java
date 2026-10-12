@@ -13,8 +13,11 @@ import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.progression.Attribute;
+import ge.tbegvadze.toon3d.progression.BuildStats;
+import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.Keystone;
+import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
 // The order-7 ROUTE ECONOMICS rules read the (headless, LibGDX-free) route subsystem: the priced
 // node ledger, the pricing/trajectory model, and the real map generator the audit walks.
 import ge.tbegvadze.toon3d.route.DangerTier;
@@ -56,7 +59,7 @@ import java.util.Map;
  * exception. {@link BalanceReport} prints all active waivers in their own table.
  *
  * <p><b>Coverage.</b> The schema iterates the game's own content enumerations
- * ({@link EnemyType}, {@link UpgradeCard}, {@link ItemType}, {@link AmmoType}) so content that
+ * ({@link EnemyType}, {@link Perk}, {@link ItemType}, {@link AmmoType}) so content that
  * skips pricing can no longer ship silently: an unclassified weapon item, an enemy role without a
  * band, or an unpriced heal fails the audit (the anti-"shipped unpriced" rule — the necrotic
  * faction once corrupted every floor budget for weeks this way).
@@ -84,8 +87,6 @@ public final class BalanceSchema {
         ENEMY_THREAT_POINTS,
         /** R-ENEMY (part 2, balance-overhaul order 1 R8): depth-1 hits-to-kill / hits-to-die land in the role's R8 bands. */
         ENEMY_HITS,
-        /** R-CARD: every level-up card prices into LEVEL_UP_BUDGET_PP ± tolerance. */
-        CARD_BUDGET,
         /** R-HEAL: every heal/armour pickup prices into its survival-turns-bought band. */
         HEAL_PRICING,
         /** R-TELEGRAPH: no attack > 25% reference eHP un-telegraphed; boss hard cap 35%. */
@@ -113,8 +114,22 @@ public final class BalanceSchema {
         CREDITS,
         /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
         XP_PACE,
-        /** R-CARD-BREAKPOINT (order 4): every level-up card crosses >= 1 TTK/TTD breakpoint vs the region soldier. */
-        CARD_BREAKPOINT,
+        /**
+         * R-PERK (balance-overhaul order 5; REPLACED R-CARD and R-CARD-BREAKPOINT in CP2): PK1 FELT — every perk
+         * rank improves its niche metric by >= PERK_FELT_MIN_GAIN at every BUILD_PERK_REFERENCE_DEPTHS depth and,
+         * by its max rank, crosses >= 1 integer TTK / TTD breakpoint there at some depth; PK2 FOCUSED — no
+         * non-VITALITY perk at max rank improves all eight reference scenarios by > PERK_FOCUSED_MAX_GAIN, and
+         * no VITALITY rank improves any scenario by > PERK_VITALITY_MAX_GAIN_PER_RANK.
+         */
+        PERK,
+        /** R-KEYSTONE (balance-overhaul order 5): niche gain >= KEYSTONE_NICHE_MIN_GAIN and some other probe worse by >= KEYSTONE_COST_MIN_LOSS. */
+        KEYSTONE,
+        /**
+         * R-CARRY (balance-overhaul order 5; replaces the total-PP invariant): every tag's expected depth-15
+         * build (perks at the expected rank count + its keystone) lifts the player's TTK x TTD within
+         * 1 + BUILD_CARRY_TOLERANCE of every other tag's (best / worst).
+         */
+        BUILD_CARRY,
         /** R-REGION (order 5): region TP dial is monotonic + bounded; C/D spend more than A; coupling holds per lane. */
         REGION_DANGER,
         /** R-BOSS-GATE (order 6): the DEPTH-1 starting loadout cannot win — turnsToKill >= 2x survivableTurns (with max heals). */
@@ -185,7 +200,15 @@ public final class BalanceSchema {
          * least SIM_HEAVY_TACTICAL_MIN_SUCCESS of the heavies committed at it, NAIVE at most
          * SIM_HEAVY_NAIVE_MAX_SUCCESS, and TACTICAL met at least SIM_HEAVY_MIN_SAMPLE of them. Never waived.
          */
-        SIM_HEAVY
+        SIM_HEAVY,
+        /**
+         * S-BUILD (balance-overhaul order 5, A6): the four build-biased TACTICAL variants' median death depths
+         * within SIM_BUILD_DEPTH_SPREAD of each other (depth-derived: rides the navigation waiver), and plain
+         * TACTICAL's end-of-run dominant tag is no single tag on more than SIM_BUILD_MAX_DOMINANT_TAG_SHARE of
+         * its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank). The depth-spread and dominant-tag
+         * lines ride the navigation waiver (the latter by owner ruling D7); the sample line is never waived.
+         */
+        SIM_BUILD
     }
 
     // =====================================================================================
@@ -276,6 +299,36 @@ public final class BalanceSchema {
         String bespokeExpiry = "Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).";
         waive(RuleKind.CALM_COST, "rest EV discount",  bespokeReason, bespokeExpiry);
         waive(RuleKind.CALM_COST, "event EV discount", bespokeReason, bespokeExpiry);
+        // Balance-overhaul order 5, owner ruling D3: SCAVENGER is an ECONOMY tag. Its perks change supply,
+        // shop prices and carrier drops — none of which is a turn to kill or a hit to die in a reference
+        // fight — so R-CARRY's TTK x TTD reads it through a heal-at-shop-price conversion that cannot reach
+        // the band at any sane magnitude (1.09 against the combat tags' ~1.75-2.1). Its row is still
+        // computed and printed; it is excluded from the eight-tag best / worst and flagged WAIVED.
+        waive(RuleKind.BUILD_CARRY, "R-CARRY " + BuildTag.SCAVENGER.name(),
+                "SCAVENGER's value is supply, shop and carrier economy, not reference-fight TTK / TTD; "
+                        + "R-CARRY's conversion under-reads it (owner ruling D3, balance-overhaul order 5).",
+                "Expires when order 6 re-derives the economy with SCAVENGER in the expected player.");
+        // Balance-overhaul order 5, owner ruling D6: Wildfire (D5) ranks 2-3 add burn TURNS and its D4
+        // breakpoint reads fuel; no reference group fight outlasts a burn or saves a spray. Exact subjects
+        // only — rank-1 FELT and PK2 stay enforced.
+        String wildfireReason = "every reference group fight ends inside the first spray or two, so burn duration "
+                + "is invisible to the scenario math";
+        String wildfireExpiry = "a long-group reference scenario exists (order 7 feel pass)";
+        for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+            waive(RuleKind.PERK, "PK1 WILDFIRE r2 felt d" + depth, wildfireReason, wildfireExpiry);
+            waive(RuleKind.PERK, "PK1 WILDFIRE r3 felt d" + depth, wildfireReason, wildfireExpiry);
+        }
+        waive(RuleKind.PERK, "PK1 WILDFIRE breakpoint by r3 (D4 resource: SCENARIO_AMMO S5 Incinerator)",
+                wildfireReason, wildfireExpiry);
+    }
+
+    /** True when a tag's R-CARRY row carries an explicit waiver (excluded from the best / worst spread). */
+    public static boolean isCarryWaived(BuildTag tag) {
+        return findWaiver(RuleKind.BUILD_CARRY, carrySubject(tag)) != null;
+    }
+
+    private static String carrySubject(BuildTag tag) {
+        return "R-CARRY " + tag.name();
     }
 
     /**
@@ -302,6 +355,14 @@ public final class BalanceSchema {
         // floor 1 reads as "dies early" for navigation reasons, so the band is reported but not yet a
         // statement about the ladder. R-LADDER L2 proves the same property on paper meanwhile.
         waive(RuleKind.SIM_LAG,     "HOARDER-START-WEAPON median death depth", reason, expiry);
+        // S-BUILD's depth part (balance-overhaul order 5, A6) is depth-derived too: it inherits this exact waiver
+        // and expiry, and is enforced the day SIM_FAIR's median depth is.
+        waive(RuleKind.SIM_BUILD,   "build-bias median depth spread", reason, expiry);
+        // Owner ruling D7 (balance-overhaul order 5): the dominant-tag share inherits the same waiver and expiry —
+        // ~91% of sim runs never level up and every ranked run holds exactly one rank, so the "dominant tag" is the
+        // first synergy pick off the Chaingun + Shotgun start kit (measured 0.47, MARKSMAN 23 of 49). The sample
+        // line ("TACTICAL runs holding a perk rank") stays ENFORCED.
+        waive(RuleKind.SIM_BUILD,   "TACTICAL dominant-tag share", reason, expiry);
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
@@ -733,7 +794,6 @@ public final class BalanceSchema {
         results.addAll(weaponRoleResults());
         results.addAll(enemyThreatPointResults());
         results.addAll(enemyHitResults());
-        results.addAll(cardBudgetResults());
         results.addAll(healPricingResults());
         results.addAll(telegraphResults());
         results.addAll(heavyResults());
@@ -742,9 +802,12 @@ public final class BalanceSchema {
         results.addAll(flagResults());
         results.addAll(coverageResults());
         results.addAll(abilityBudgetResults());
+        results.addAll(abilityRollSweepResults());
         results.addAll(creditResults());
         results.addAll(xpPaceResults());
-        results.addAll(cardBreakpointResults());
+        results.addAll(perkResults());
+        results.addAll(keystoneResults());
+        results.addAll(buildCarryResults());
         results.addAll(regionResults());
         results.addAll(bossGateResults());
         results.addAll(bossFairResults());
@@ -976,20 +1039,6 @@ public final class BalanceSchema {
     /** Depth-1 ordinary hits of the archetype the 205-eHP start player survives (shared by the audit and the report). */
     public static int enemyHitsToDie(EnemyType enemyType) {
         return GameMath.turnsToKill(BalanceConfig.REFERENCE_PLAYER_EHP, enemyType.attackDamage());
-    }
-
-    /** R-CARD: every level-up card prices into the power-point budget band. */
-    public static List<RuleResult> cardBudgetResults() {
-        float bandMinimum = BalanceConfig.LEVEL_UP_BUDGET_PP * (1f - BalanceConfig.LEVEL_UP_BUDGET_TOLERANCE);
-        float bandMaximum = BalanceConfig.LEVEL_UP_BUDGET_PP * (1f + BalanceConfig.LEVEL_UP_BUDGET_TOLERANCE);
-        List<RuleResult> results = new ArrayList<>();
-        for (UpgradeCard card : UpgradeCard.values()) {
-            float powerPoints = card.estimatedPowerPoints();
-            boolean inBand = powerPoints >= bandMinimum && powerPoints <= bandMaximum;
-            results.add(new RuleResult(RuleKind.CARD_BUDGET, card.displayName, powerPoints,
-                    bandMinimum, bandMaximum, inBand, "pool " + card.pool + ", lever " + card.lever));
-        }
-        return results;
     }
 
     /**
@@ -1398,57 +1447,200 @@ public final class BalanceSchema {
     }
 
     // =====================================================================================
-    // R-CARD-BREAKPOINT (new-game-balancr order 4) — a level-up must FEEL different in the next fight,
-    // not just on a character sheet. Every card must cross at least one INTEGER combat breakpoint vs the
-    // region soldier in some region band: an OFFENCE card shaves a whole turn off the kill (turnsToKill-
-    // BreakpointGain), a DEFENCE card survives a whole extra enemy hit (turnsToDie gain). Cards keep their
-    // equal PP budget (R-CARD); this rule proves the budget is spent where it changes the fight.
+    // R-PERK / R-KEYSTONE / R-CARRY (balance-overhaul order 5) — util/BuildValuationModel
     // =====================================================================================
 
     /**
-     * Max integer breakpoint a card crosses at a depth: offence turns-shaved OR defence turns-survived, vs the
-     * region soldier, for the ON-CURVE expected player (balance-overhaul order 1: the ExpectedPlayer model
-     * replaces the retired gear-curve DPT and the fixed reference eHP).
+     * R-PERK: PK1 FELT (every rank vs the previous, at every reference depth, on the perk's niche) plus the
+     * PK1 breakpoint (max rank vs none crosses a whole TTK or TTD step at some reference depth), and PK2
+     * FOCUSED (non-VITALITY: max rank does not improve all eight scenarios by more than the bound;
+     * VITALITY: no rank improves any scenario by more than the per-rank cap).
      */
-    public static int cardBreakpointGainAtDepth(UpgradeCard card, int depth) {
-        EnemyType soldier = REGION_REFERENCE_SOLDIER;
-        ExpectedPlayer player = GameMath.expectedPlayerAtDepth(depth);
-        float soldierEffectiveHitPoints = GameMath.enemyHealthAtDepth(soldier.neutralEffectiveHitPoints(), depth);
-        float soldierDamagePerTurn = GameMath.enemyDamageAtDepth(
-                (float) soldier.attackDamage() / Math.max(1, soldier.attackCadenceTurns()), depth);
-        // OFFENCE: whole turns shaved off killing the soldier when the card's DPT is added.
-        // Offence cards are a PP %-lift on the player's DPT (the ExpectedPlayer convention), so the card's
-        // depth-1 gain is applied as a FRACTION of the on-curve DPT at this depth.
-        float offenceLift = card.damagePerTurnGain() / BalanceConfig.REFERENCE_PLAYER_DPT;
-        int offenceBreakpoint = GameMath.turnsToKillBreakpointGain(soldierEffectiveHitPoints,
-                player.damagePerTurn, player.damagePerTurn * (1f + offenceLift));
-        // DEFENCE: whole extra turns the player survives the soldier when the card's eHP is added.
-        int turnsToDieBefore = GameMath.turnsToKill(player.effectiveHitPoints, soldierDamagePerTurn);
-        int turnsToDieAfter  = GameMath.turnsToKill(player.effectiveHitPoints + card.effectiveHitPointGain(),
-                soldierDamagePerTurn);
-        int defenceBreakpoint = turnsToDieAfter - turnsToDieBefore;
-        return Math.max(offenceBreakpoint, defenceBreakpoint);
+    public static List<RuleResult> perkResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (Perk perk : Perk.values()) {
+            BuildValuationModel.Niche niche = BuildValuationModel.nicheOf(perk);
+            if (niche == null) {
+                results.add(new RuleResult(RuleKind.PERK, "PK1 " + perk.name() + " niche", 0f, 1f, 1f, false,
+                        "no niche registered for tag " + perk.tag));
+                continue;
+            }
+            boolean higher = niche.metric.higherIsBetter();
+            boolean crossed = false;
+            String crossedAt = "never";
+            for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+                float previous = BuildValuationModel.measure(niche, new BuildStats(), depth);
+                for (int rank = 1; rank <= perk.maxRank; rank++) {
+                    float value = BuildValuationModel.measure(niche, BuildValuationModel.statsWithPerk(perk, rank), depth);
+                    float gain = GameMath.buildNicheGain(previous, value, higher);
+                    results.add(new RuleResult(RuleKind.PERK, "PK1 " + perk.name() + " r" + rank + " felt d" + depth,
+                            gain, BalanceConfig.PERK_FELT_MIN_GAIN, Float.MAX_VALUE,
+                            gain >= BalanceConfig.PERK_FELT_MIN_GAIN,
+                            String.format("%s %.3f -> %.3f", niche.label(), previous, value)));
+                    previous = value;
+                }
+                BuildValuationModel.Niche breakpointNiche = BuildValuationModel.breakpointNicheOf(perk);
+                int[] before = BuildValuationModel.integers(breakpointNiche, new BuildStats(), depth);
+                int[] after = BuildValuationModel.integers(breakpointNiche, BuildValuationModel.statsWithPerk(perk, perk.maxRank), depth);
+                if (!crossed && (after[0] < before[0] || after[1] > before[1])) {
+                    crossed = true;
+                    crossedAt = String.format("d%d TTK %d->%d TTD %d->%d", depth, before[0], after[0], before[1], after[1]);
+                }
+            }
+            String breakpointSubject = "PK1 " + perk.name() + " breakpoint by r" + perk.maxRank
+                    + (BuildValuationModel.hasBreakpointOverride(perk)
+                            ? " (D4 resource: " + BuildValuationModel.breakpointNicheOf(perk).label() + ")" : "");
+            results.add(new RuleResult(RuleKind.PERK, breakpointSubject, crossed ? 1f : 0f, 1f, 1f, crossed, crossedAt));
+            results.addAll(perkFocusResults(perk));
+        }
+        return results;
     }
 
-    /** The deepest breakpoint a card crosses anywhere in depths 1..RUN_FINAL_DEPTH (shared by the rule and the report). */
-    public static int cardBestBreakpoint(UpgradeCard card) {
-        int best = 0;
-        for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
-            best = Math.max(best, cardBreakpointGainAtDepth(card, depth));
+    /**
+     * The PK1 FELT rows of R-PERK alone (every rank's niche gain, at every reference depth) — the rule that
+     * REPLACED R-CARD's budget band (balance-overhaul order 5, OVERRIDE CLAUSE). The audit's re-pointed
+     * card-budget test asserts these.
+     */
+    public static List<RuleResult> perkFeltResults() {
+        List<RuleResult> felt = new ArrayList<>();
+        for (RuleResult result : perkResults()) {
+            if (result.subject.startsWith("PK1 ") && result.subject.contains(" felt d")) felt.add(result);
         }
+        return felt;
+    }
+
+    /**
+     * The PK1 BREAKPOINT rows of R-PERK alone (each perk's max rank crosses a whole TTK / TTD step, or its D4
+     * resource step) — the rule R-CARD-BREAKPOINT was folded into (balance-overhaul order 5). The audit's
+     * re-pointed card-breakpoint test asserts these.
+     */
+    public static List<RuleResult> perkBreakpointResults() {
+        List<RuleResult> breakpoints = new ArrayList<>();
+        for (RuleResult result : perkResults()) {
+            if (result.subject.startsWith("PK1 ") && result.subject.contains(" breakpoint by r")) breakpoints.add(result);
+        }
+        return breakpoints;
+    }
+
+    /** PK2 for one perk at every reference depth. */
+    private static List<RuleResult> perkFocusResults(Perk perk) {
+        List<RuleResult> results = new ArrayList<>();
+        boolean vitality = perk.tag == BuildTag.VITALITY;
+        for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+            BuildValuationModel.Context context = BuildValuationModel.context(depth);
+            if (vitality) {
+                for (int rank = 1; rank <= perk.maxRank; rank++) {
+                    float[] gains = perkScenarioGains(context, BuildValuationModel.statsWithPerk(perk, rank - 1),
+                            BuildValuationModel.statsWithPerk(perk, rank));
+                    int worst = indexOfMax(gains);
+                    results.add(new RuleResult(RuleKind.PERK, "PK2 " + perk.name() + " r" + rank + " capped d" + depth,
+                            gains[worst], 0f, BalanceConfig.PERK_VITALITY_MAX_GAIN_PER_RANK,
+                            gains[worst] <= BalanceConfig.PERK_VITALITY_MAX_GAIN_PER_RANK,
+                            "largest scenario gain in " + WeaponRoleModel.scenarios().get(worst).id));
+                }
+            } else {
+                float[] gains = perkScenarioGains(context, new BuildStats(),
+                        BuildValuationModel.statsWithPerk(perk, perk.maxRank));
+                int least = indexOfMin(gains);
+                results.add(new RuleResult(RuleKind.PERK, "PK2 " + perk.name() + " focused d" + depth,
+                        gains[least], 0f, BalanceConfig.PERK_FOCUSED_MAX_GAIN,
+                        gains[least] <= BalanceConfig.PERK_FOCUSED_MAX_GAIN,
+                        "least-improved scenario " + WeaponRoleModel.scenarios().get(least).id
+                                + " (all eight above the bound = not focused)"));
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Per-scenario improvement of the player's best answer from one build to another: the larger of the
+     * offence gain (best eligible weapon's score) and the defence gain (scenario survivals).
+     */
+    public static float[] perkScenarioGains(BuildValuationModel.Context context, BuildStats before, BuildStats after) {
+        float[] answersBefore = BuildValuationModel.bestAnswers(context, before);
+        float[] answersAfter = BuildValuationModel.bestAnswers(context, after);
+        float[] survivalsBefore = BuildValuationModel.scenarioSurvivals(context, before);
+        float[] survivalsAfter = BuildValuationModel.scenarioSurvivals(context, after);
+        List<WeaponRoleModel.RoleScenario> scenarios = WeaponRoleModel.scenarios();
+        float[] gains = new float[answersBefore.length];
+        for (int index = 0; index < gains.length; index++) {
+            boolean hitsTaken = scenarios.get(index).bruiserCharge;
+            float offence = hitsTaken
+                    ? GameMath.buildNicheGain(answersBefore[index] + 1f, answersAfter[index] + 1f, false)
+                    : GameMath.buildNicheGain(answersBefore[index], answersAfter[index], false);
+            float defence = Float.isInfinite(survivalsBefore[index]) || survivalsBefore[index] <= 0f ? 0f
+                    : GameMath.buildNicheGain(survivalsBefore[index], survivalsAfter[index], true);
+            gains[index] = Math.max(offence, defence);
+        }
+        return gains;
+    }
+
+    private static int indexOfMax(float[] values) {
+        int best = 0;
+        for (int index = 1; index < values.length; index++) if (values[index] > values[best]) best = index;
         return best;
     }
 
-    /** R-CARD-BREAKPOINT: every card crosses >= 1 combat breakpoint vs the region soldier in some region. */
-    public static List<RuleResult> cardBreakpointResults() {
+    private static int indexOfMin(float[] values) {
+        int best = 0;
+        for (int index = 1; index < values.length; index++) if (values[index] < values[best]) best = index;
+        return best;
+    }
+
+    /** R-KEYSTONE: niche gain at every reference depth, and the worst other probe's loss at some depth. */
+    public static List<RuleResult> keystoneResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (UpgradeCard card : UpgradeCard.values()) {
-            int best = cardBestBreakpoint(card);
-            boolean crosses = best >= 1;
-            results.add(new RuleResult(RuleKind.CARD_BREAKPOINT, card.displayName, best, 1f, Float.POSITIVE_INFINITY,
-                    crosses, crosses ? "crosses a breakpoint in some region"
-                            : "NEVER crosses a breakpoint — re-price so a level-up changes the next fight"));
+        for (Keystone keystone : Keystone.values()) {
+            BuildValuationModel.Niche niche = BuildValuationModel.nicheOf(keystone);
+            BuildStats stats = BuildValuationModel.statsWithKeystone(keystone);
+            BuildValuationModel.Loss worst = null;
+            int worstDepth = 0;
+            for (int depth : BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) {
+                float before = BuildValuationModel.measure(niche, new BuildStats(), depth);
+                float after = BuildValuationModel.measure(niche, stats, depth);
+                float gain = GameMath.buildNicheGain(before, after, niche.metric.higherIsBetter());
+                results.add(new RuleResult(RuleKind.KEYSTONE, "R-KEYSTONE " + keystone.name() + " niche d" + depth,
+                        gain, BalanceConfig.KEYSTONE_NICHE_MIN_GAIN, Float.MAX_VALUE,
+                        gain >= BalanceConfig.KEYSTONE_NICHE_MIN_GAIN,
+                        String.format("%s %.3f -> %.3f", niche.label(), before, after)));
+                BuildValuationModel.Loss loss = BuildValuationModel.worstLoss(stats, niche, depth);
+                if (worst == null || loss.loss > worst.loss) {
+                    worst = loss;
+                    worstDepth = depth;
+                }
+            }
+            results.add(new RuleResult(RuleKind.KEYSTONE, "R-KEYSTONE " + keystone.name() + " cost",
+                    worst.loss, BalanceConfig.KEYSTONE_COST_MIN_LOSS, Float.MAX_VALUE,
+                    worst.loss >= BalanceConfig.KEYSTONE_COST_MIN_LOSS,
+                    "worst: " + worst.probe + " at d" + worstDepth));
         }
+        return results;
+    }
+
+    /** R-CARRY: every tag's expected build score within 1 + BUILD_CARRY_TOLERANCE of every other's. */
+    public static List<RuleResult> buildCarryResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float best = 0f;
+        float worst = Float.MAX_VALUE;
+        for (BuildTag tag : BuildTag.values()) {
+            if (isCarryWaived(tag)) continue; // a waived tag stays visible but never sets the band
+            float score = BuildValuationModel.carry(tag).score;
+            best = Math.max(best, score);
+            worst = Math.min(worst, score);
+        }
+        float ceiling = worst * (1f + BalanceConfig.BUILD_CARRY_TOLERANCE);
+        float floor = best / (1f + BalanceConfig.BUILD_CARRY_TOLERANCE);
+        for (BuildTag tag : BuildTag.values()) {
+            BuildValuationModel.Carry carry = BuildValuationModel.carry(tag);
+            results.add(new RuleResult(RuleKind.BUILD_CARRY, carrySubject(tag), carry.score, floor, ceiling,
+                    carry.score >= floor - 1e-6f && carry.score <= ceiling + 1e-6f,
+                    String.format("TTK x%.3f TTD x%.3f (%d ranks + %s)", carry.turnsToKillLift, carry.turnsToDieLift,
+                            carry.ranks, carry.keystone == null ? "no keystone" : carry.keystone.name())));
+        }
+        float spread = worst > 0f ? best / worst : Float.POSITIVE_INFINITY;
+        results.add(new RuleResult(RuleKind.BUILD_CARRY, "R-CARRY spread best / worst", spread, 1f,
+                1f + BalanceConfig.BUILD_CARRY_TOLERANCE, spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE + 1e-6f,
+                "no trap build, no dominant build (waived tags excluded)"));
         return results;
     }
 
@@ -1652,58 +1844,238 @@ public final class BalanceSchema {
         return results;
     }
 
-    // The reference SOLDIER the card-breakpoint rule (and BalanceReport) prove a level-up against. It was
-    // the R-GEARGATE reference soldier; R-GEARGATE is retired (balance-overhaul order 1 — replaced by
-    // R-LADDER L2/L4) and the soldier stays as R-CARD-BREAKPOINT's yardstick, which is R-LADDER's SOLDIER.
-    private static final EnemyType REGION_REFERENCE_SOLDIER = EnemyType.VOID_SHROUD;
-
-    /** The reference soldier R-CARD-BREAKPOINT proves a level-up against. */
-    public static EnemyType regionReferenceSoldier() { return REGION_REFERENCE_SOLDIER; }
-
     // =====================================================================================
-    // R-ABILITY (new-game-balancr order 2) — TIER = a priced ABILITY BUDGET. Two guarantees:
-    //   (a) COVERAGE — every catalogued ability (standard and legendary signature) has a registered,
-    //       finite, non-negative PP price at every weapon level.
-    //   (b) BUDGET — no ROLLABLE ability alone exceeds the ceiling of the CHEAPEST tier that can roll
-    //       it, and the full roll never exceeds its tier ceiling (the WeaponRoller enforces the sum by
-    //       construction; BalanceAuditTest exercises real rolls across seeds/levels for the sum).
-    // The tier budgets (COMMON 0 | UNCOMMON 6 | RARE 12 | EPIC 20 | LEGENDARY 30, ±20%) live in
-    // BalanceConfig SECTION 15. Magnitudes may be tuned freely — the price recomputes from them.
+    // R-ABILITY — REAL RARITY (balance-overhaul order 5, B5/B6; replaces new-game-balancr order 2's
+    // "tier = a priced ability CEILING", OVERRIDE CLAUSE). Every guarantee is now two-sided:
+    //   (a) FELT (B6)      — every catalogued ability is priced (finite, >= 0) at every weapon level AND prices
+    //                        at least ABILITY_MIN_FELT_PP at its EXPECTED weapon level (expectedAbilityLevel).
+    //   (b) TAGGED (B6)    — every ability carries a BuildTag (B3 synergy reads it).
+    //   (c) SHAPE (B5)     — each tier's count / MAJOR count equals the B5 table, and the catalogue holds enough
+    //                        eligible abilities of each rank for a gun AND a melee weapon to roll that shape.
+    //   (d) BUDGET (B5)    — the tier budgets equal the B5 table (UNCOMMON 12 / RARE 25 / EPIC 40 / LEGENDARY 60)
+    //                        and rise monotonically with rarity.
+    //   (e) BAND, PROVEN   — at EVERY weapon level 1..MAX, the cheapest and the priciest draw of each tier's shape
+    //                        (for a gun and for a melee weapon) both land inside budget × (1 ± tolerance): no seed
+    //                        can roll outside the band, by construction.
+    //   (f) BAND, SAMPLED (A4) — abilityRollSweepResults(): real seeded rolls, ABILITY_ROLL_SWEEP_SEEDS seeds ×
+    //                        5 tiers × ABILITY_ROLL_SWEEP_DEPTHS, gun and melee, each with exactly the tier's
+    //                        count, its MAJORs, its signature, and a total inside the band.
     // =====================================================================================
 
-    /** R-ABILITY: every ability is priced (coverage) and prices are finite/non-negative at all levels. */
+    /** B5 as written in the spec: abilities per tier (signature not counted), indexed by WeaponTier ordinal. */
+    private static final int[]   B5_TIER_ABILITY_COUNTS  = {0, 1, 2, 3, 3};
+    /** B5 as written in the spec: ability-PP budget per tier, indexed by WeaponTier ordinal. */
+    private static final float[] B5_TIER_ABILITY_BUDGETS = {0f, 12f, 25f, 40f, 60f};
+
+    /**
+     * The EXPECTED weapon level an ability is valued at (B6): the on-curve weapon level
+     * ({@code expectedPlayerAtDepth(d).weaponLevel}) at the shallowest depth {@code d} whose region can DROP the
+     * lowest tier that may roll the ability — UNCOMMON for a STANDARD ability (the first tier with a standard
+     * slot), the first tier with a MAJOR slot for a MAJOR (EPIC), LEGENDARY for a signature. "Can drop" reads
+     * the region drop band {@code WEAPON_DROP_TIER_MAX_BY_REGION}; region r starts at depth r × band + 1.
+     */
+    public static int expectedAbilityLevel(WeaponAbility ability) {
+        int lowestTierOrdinal = lowestTierOrdinalThatRolls(ability.rank);
+        int[] regionMaximumTier = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int bandSize = Math.max(1, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        int region = regionMaximumTier.length - 1;
+        for (int regionIndex = 0; regionIndex < regionMaximumTier.length; regionIndex++) {
+            if (regionMaximumTier[regionIndex] >= lowestTierOrdinal) { region = regionIndex; break; }
+        }
+        return GameMath.expectedPlayerAtDepth(region * bandSize + 1).weaponLevel;
+    }
+
+    /** The drop depth {@link #expectedAbilityLevel} values an ability at (report helper). */
+    public static int expectedAbilityDepth(WeaponAbility ability) {
+        int lowestTierOrdinal = lowestTierOrdinalThatRolls(ability.rank);
+        int[] regionMaximumTier = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int bandSize = Math.max(1, BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE);
+        for (int regionIndex = 0; regionIndex < regionMaximumTier.length; regionIndex++) {
+            if (regionMaximumTier[regionIndex] >= lowestTierOrdinal) return regionIndex * bandSize + 1;
+        }
+        return (regionMaximumTier.length - 1) * bandSize + 1;
+    }
+
+    /** Lowest WeaponTier ordinal whose shape draws an ability of this rank (data-driven from WeaponTier). */
+    private static int lowestTierOrdinalThatRolls(WeaponAbility.Rank rank) {
+        for (WeaponTier tier : WeaponTier.values()) {
+            boolean rolls = rank == WeaponAbility.Rank.SIGNATURE ? tier.rollsSignature
+                          : rank == WeaponAbility.Rank.MAJOR     ? tier.majorCount > 0
+                          :                                        tier.standardCount() > 0;
+            if (rolls) return tier.ordinal();
+        }
+        return WeaponTier.LEGENDARY.ordinal();
+    }
+
+    /** Priced PP of an ability at a weapon level (the one pricing path the rule, roller and report share). */
+    public static float abilityPowerPointsAt(WeaponAbility ability, int weaponLevel) {
+        AbilityInstance instance = WeaponRoller.buildAbilityInstance(ability, weaponLevel);
+        return GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+    }
+
+    /** R-ABILITY (a)-(e): felt, tagged, shape, budgets, and the band proven at every level. */
     public static List<RuleResult> abilityBudgetResults() {
         List<RuleResult> results = new ArrayList<>();
-        float legendaryCeiling = BalanceConfig.TIER_ABILITY_PP_BUDGET_LEGENDARY
-                * (1f + BalanceConfig.TIER_ABILITY_PP_TOLERANCE);
+        // (a) FELT + (b) TAGGED, per ability.
         for (WeaponAbility ability : WeaponAbility.values()) {
-            float maxPriceAcrossLevels = 0f;
             boolean priced = true;
             for (int weaponLevel = 1; weaponLevel <= WeaponConstants.MAX_WEAPON_LEVEL; weaponLevel++) {
-                AbilityInstance instance = WeaponRoller.buildAbilityInstance(ability, weaponLevel);
-                float price = GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+                float price = abilityPowerPointsAt(ability, weaponLevel);
                 if (Float.isNaN(price) || Float.isInfinite(price) || price < 0f) priced = false;
-                maxPriceAcrossLevels = Math.max(maxPriceAcrossLevels, price);
             }
-            // No single ability may exceed the richest tier's ceiling — otherwise it could never roll.
-            boolean fitsSomewhere = maxPriceAcrossLevels <= legendaryCeiling;
-            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name(),
-                    maxPriceAcrossLevels, 0f, legendaryCeiling, priced && fitsSomewhere,
-                    priced ? (fitsSomewhere ? "priced; max-level PP fits the legendary ceiling"
-                                            : "max-level PP EXCEEDS the legendary ceiling — no tier can roll it")
-                           : "UNPRICED — GameMath.abilityPowerPoints returned a non-finite/negative value"));
+            int expectedLevel = expectedAbilityLevel(ability);
+            float expectedPrice = abilityPowerPointsAt(ability, expectedLevel);
+            boolean felt = priced && expectedPrice >= BalanceConfig.ABILITY_MIN_FELT_PP;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name() + " felt",
+                    expectedPrice, BalanceConfig.ABILITY_MIN_FELT_PP, Float.MAX_VALUE, felt,
+                    !priced ? "UNPRICED — GameMath.abilityPowerPoints returned a non-finite/negative value"
+                            : String.format("%.1f PP at expected weapon level %d (%s, depth %d)%s", expectedPrice,
+                                    expectedLevel, ability.rank, expectedAbilityDepth(ability),
+                                    felt ? "" : " — BELOW ABILITY_MIN_FELT_PP: cut or merge it (B6)")));
+            boolean tagged = ability.buildTag != null;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "ability " + ability.name() + " tagged",
+                    tagged ? 1f : 0f, 1f, 1f, tagged,
+                    tagged ? "counts toward " + ability.buildTag.name() + " synergy"
+                           : "NO BuildTag — every ability must count toward a build (B6)"));
         }
-        // Tier budgets must be monotonic non-decreasing with rarity (a richer tier is never poorer).
+        // (c) SHAPE + (d) BUDGET, per tier.
         float previousBudget = -1f;
         boolean monotonic = true;
         for (WeaponTier tier : WeaponTier.values()) {
-            float budget = WeaponRoller.tierAbilityPowerPointBudget(tier);
-            if (budget < previousBudget) monotonic = false;
-            previousBudget = budget;
+            int ordinal = tier.ordinal();
+            boolean countMatches = tier.abilityCount == B5_TIER_ABILITY_COUNTS[ordinal];
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier " + tier.name() + " count",
+                    tier.abilityCount, B5_TIER_ABILITY_COUNTS[ordinal], B5_TIER_ABILITY_COUNTS[ordinal], countMatches,
+                    tier.abilityCount + " abilities (" + tier.majorCount + " MAJOR)"
+                            + (tier.rollsSignature ? " + signature" : "") + (countMatches ? "" : " — B5 says "
+                            + B5_TIER_ABILITY_COUNTS[ordinal])));
+            boolean budgetMatches = Math.abs(tier.abilityPowerPointBudget - B5_TIER_ABILITY_BUDGETS[ordinal]) < 1e-3f;
+            results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier " + tier.name() + " budget",
+                    tier.abilityPowerPointBudget, B5_TIER_ABILITY_BUDGETS[ordinal], B5_TIER_ABILITY_BUDGETS[ordinal],
+                    budgetMatches, String.format("band %.1f..%.1f PP", tier.abilityPowerPointFloor(),
+                            tier.abilityPowerPointCeiling())));
+            if (tier.abilityPowerPointBudget < previousBudget) monotonic = false;
+            previousBudget = tier.abilityPowerPointBudget;
+            for (boolean isMelee : new boolean[]{false, true}) {
+                int standardPool  = eligibleCount(WeaponAbility.Rank.STANDARD, isMelee);
+                int majorPool     = eligibleCount(WeaponAbility.Rank.MAJOR, isMelee);
+                int signaturePool = eligibleCount(WeaponAbility.Rank.SIGNATURE, isMelee);
+                boolean enough = standardPool >= tier.standardCount() && majorPool >= tier.majorCount
+                        && (!tier.rollsSignature || signaturePool >= 1);
+                results.add(new RuleResult(RuleKind.ABILITY_BUDGET,
+                        "tier " + tier.name() + " pool " + (isMelee ? "melee" : "gun"),
+                        enough ? 1f : 0f, 1f, 1f, enough,
+                        String.format("eligible: %d standard, %d MAJOR, %d signature", standardPool, majorPool,
+                                signaturePool)));
+                // (e) BAND, PROVEN — the extreme draws of the shape at every level.
+                float lowestTotal  = Float.MAX_VALUE;
+                float highestTotal = 0f;
+                for (int weaponLevel = 1; weaponLevel <= WeaponConstants.MAX_WEAPON_LEVEL; weaponLevel++) {
+                    float cheapest  = extremeShapeTotal(tier, isMelee, weaponLevel, false);
+                    float priciest  = extremeShapeTotal(tier, isMelee, weaponLevel, true);
+                    lowestTotal  = Math.min(lowestTotal, cheapest);
+                    highestTotal = Math.max(highestTotal, priciest);
+                }
+                boolean inBand = WeaponRoller.isWithinTierBand(tier, lowestTotal)
+                        && WeaponRoller.isWithinTierBand(tier, highestTotal);
+                results.add(new RuleResult(RuleKind.ABILITY_BUDGET,
+                        "tier " + tier.name() + " band " + (isMelee ? "melee" : "gun"),
+                        highestTotal, tier.abilityPowerPointFloor(), tier.abilityPowerPointCeiling(), inBand,
+                        String.format("any draw at any level prices %.1f..%.1f PP", lowestTotal, highestTotal)));
+            }
         }
         results.add(new RuleResult(RuleKind.ABILITY_BUDGET, "tier budgets monotonic",
                 monotonic ? 1f : 0f, 1f, 1f, monotonic,
                 "TIER_ABILITY_PP_BUDGET_* must not decrease as rarity rises"));
+        return results;
+    }
+
+    /** Eligible abilities of one rank for a gun or a melee weapon. */
+    private static int eligibleCount(WeaponAbility.Rank rank, boolean isMelee) {
+        int count = 0;
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (ability.rank == rank && ability.eligibleFor(isMelee)) count++;
+        }
+        return count;
+    }
+
+    /**
+     * The cheapest ({@code priciest == false}) or priciest priced total any draw of a tier's shape can carry at
+     * one weapon level: the k cheapest / dearest eligible abilities of each rank, summed. Allocation is fine —
+     * this is audit code, run once.
+     */
+    private static float extremeShapeTotal(WeaponTier tier, boolean isMelee, int weaponLevel, boolean priciest) {
+        return extremeRankTotal(WeaponAbility.Rank.STANDARD, tier.standardCount(), isMelee, weaponLevel, priciest)
+             + extremeRankTotal(WeaponAbility.Rank.MAJOR, tier.majorCount, isMelee, weaponLevel, priciest)
+             + extremeRankTotal(WeaponAbility.Rank.SIGNATURE, tier.rollsSignature ? 1 : 0, isMelee, weaponLevel,
+                                priciest);
+    }
+
+    private static float extremeRankTotal(WeaponAbility.Rank rank, int count, boolean isMelee, int weaponLevel,
+                                          boolean priciest) {
+        if (count <= 0) return 0f;
+        List<Float> prices = new ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            if (ability.rank == rank && ability.eligibleFor(isMelee)) prices.add(abilityPowerPointsAt(ability, weaponLevel));
+        }
+        prices.sort(priciest ? java.util.Collections.reverseOrder() : java.util.Comparator.naturalOrder());
+        float total = 0f;
+        for (int index = 0; index < Math.min(count, prices.size()); index++) total += prices.get(index);
+        return total;
+    }
+
+    /**
+     * R-ABILITY (f) — A4's SAMPLED roll sweep: for every tier and every ABILITY_ROLL_SWEEP_DEPTHS depth, real
+     * {@link WeaponRoller#rollAbilitySet} rolls over ABILITY_ROLL_SWEEP_SEEDS seeds, for a gun and for a melee
+     * weapon, at the on-curve weapon level for that depth. One row per (tier, depth): its value is the number
+     * of rolls that broke the shape (wrong count, wrong MAJOR count, missing signature) or the band; the detail
+     * carries the sampled min..max PP. The band is independent of the region drop table on purpose — a shop
+     * tier upgrade can put any tier at any depth.
+     */
+    public static List<RuleResult> abilityRollSweepResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (WeaponTier tier : WeaponTier.values()) {
+            for (int depth : BalanceConfig.ABILITY_ROLL_SWEEP_DEPTHS) {
+                int weaponLevel = GameMath.expectedPlayerAtDepth(depth).weaponLevel;
+                int violations = 0;
+                int rolls = 0;
+                float sampledMinimum = Float.MAX_VALUE;
+                float sampledMaximum = 0f;
+                String firstViolation = "";
+                for (long seed = 0; seed < BalanceConfig.ABILITY_ROLL_SWEEP_SEEDS; seed++) {
+                    WeaponRoller roller = new WeaponRoller(seed * 7919L + depth);
+                    for (boolean isMelee : new boolean[]{false, true}) {
+                        AbilityInstance[] abilities = roller.rollAbilitySet(isMelee, tier, weaponLevel);
+                        rolls++;
+                        int majors = 0;
+                        int signatures = 0;
+                        for (AbilityInstance instance : abilities) {
+                            if (instance.ability.isMajor()) majors++;
+                            if (instance.ability.legendaryOnly) signatures++;
+                        }
+                        float total = WeaponRoller.totalAbilityPowerPoints(abilities);
+                        sampledMinimum = Math.min(sampledMinimum, total);
+                        sampledMaximum = Math.max(sampledMaximum, total);
+                        boolean shapeHolds = abilities.length == tier.totalAbilityCount()
+                                && majors == tier.majorCount
+                                && signatures == (tier.rollsSignature ? 1 : 0);
+                        if (!shapeHolds || !WeaponRoller.isWithinTierBand(tier, total)) {
+                            if (violations == 0) {
+                                firstViolation = String.format("; first: seed %d %s %d abilities, %d MAJOR, %.1f PP",
+                                        seed, isMelee ? "melee" : "gun", abilities.length, majors, total);
+                            }
+                            violations++;
+                        }
+                    }
+                }
+                results.add(new RuleResult(RuleKind.ABILITY_BUDGET,
+                        "roll sweep " + tier.name() + " depth " + depth,
+                        violations, 0f, 0f, violations == 0,
+                        String.format("%d rolls at weapon level %d: %.1f..%.1f PP (band %.1f..%.1f)%s", rolls,
+                                weaponLevel, sampledMinimum, sampledMaximum, tier.abilityPowerPointFloor(),
+                                tier.abilityPowerPointCeiling(), firstViolation)));
+            }
+        }
         return results;
     }
 

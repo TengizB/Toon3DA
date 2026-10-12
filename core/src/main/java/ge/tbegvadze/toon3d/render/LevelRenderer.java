@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.HeavyAttack;
 import ge.tbegvadze.toon3d.enemy.IntentVerb;
 import ge.tbegvadze.toon3d.enemy.PlannedAction;
+import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
@@ -36,6 +37,7 @@ public class LevelRenderer implements Renderable, Disposable {
     private static final Color EXIT_COLOR          = new Color(MINIMAP_EXIT_R, MINIMAP_EXIT_G, MINIMAP_EXIT_B, 1f);
     private static final Color PROP_COLOR          = new Color(MINIMAP_PROP_R, MINIMAP_PROP_G, MINIMAP_PROP_B, 1f);
     private static final Color BARREL_COLOR        = new Color(MINIMAP_BARREL_R, MINIMAP_BARREL_G, MINIMAP_BARREL_B, 1f);
+    private static final Color BARREL_DOT_COLOR    = new Color(MINIMAP_BARREL_DOT_R, MINIMAP_BARREL_DOT_G, MINIMAP_BARREL_DOT_B, 1f);
     private static final Color SHOP_COLOR          = new Color(MINIMAP_SHOP_R, MINIMAP_SHOP_G, MINIMAP_SHOP_B, 1f);
     private static final Color HEALTH_PICKUP_COLOR = new Color(MINIMAP_HEALTH_PICKUP_R, MINIMAP_HEALTH_PICKUP_G, MINIMAP_HEALTH_PICKUP_B, 1f);
     private static final Color ARMOR_PICKUP_COLOR  = new Color(MINIMAP_ARMOR_PICKUP_R, MINIMAP_ARMOR_PICKUP_G, MINIMAP_ARMOR_PICKUP_B, 1f);
@@ -57,6 +59,8 @@ public class LevelRenderer implements Renderable, Disposable {
     private List<GroundItem> groundItems = Collections.emptyList();
     private List<Enemy> enemies = Collections.emptyList();
     private float animationClockSeconds = 0f;
+    /** Sapper r1 (BuildStats.barrelsOnMinimap): explosive barrels also get a bright pulsing dot. */
+    private boolean barrelsHighlighted = false;
 
     public LevelRenderer(Level level, DoorManager doorManager) {
         this.level       = level;
@@ -76,6 +80,11 @@ public class LevelRenderer implements Renderable, Disposable {
     /** Live enemy list reference (same one EnemyRenderer reads); only alerted, alive enemies draw a threat marker. */
     public void setEnemies(List<Enemy> enemies) {
         this.enemies = (enemies != null) ? enemies : Collections.emptyList();
+    }
+
+    /** Balance-overhaul order 5 (Sapper r1): when true every explosive barrel is marked with a pulsing dot. */
+    public void setBarrelsHighlighted(boolean barrelsHighlighted) {
+        this.barrelsHighlighted = barrelsHighlighted;
     }
 
     /** Monotonically increasing clock used to pulse the exit marker and enemy threat chevrons. */
@@ -158,6 +167,9 @@ public class LevelRenderer implements Renderable, Disposable {
                         drawShopMarker(markerCenterX, markerCenterY, pulseBrightness);
                     } else if (Level.isPropSolid(cell)) {
                         drawPropMarker(markerCenterX, markerCenterY, cell);
+                        if (barrelsHighlighted && ExplosiveBarrelManager.isBarrelCell(cell)) {
+                            drawBarrelDot(markerCenterX, markerCenterY, pulseBrightness);
+                        }
                     } else if (Level.isKeycardPickup(cell)) {
                         drawCircleMarker(markerCenterX, markerCenterY, keycardMarkerColor(Level.keycardColorOfPickup(cell)));
                     } else if (Level.isMedicalPickup(cell)) {
@@ -266,10 +278,17 @@ public class LevelRenderer implements Renderable, Disposable {
 
     /** Generic obstacle (grey) vs. shootable barrel (hazard orange, chars 'g'/'E') — caller guarantees the tile is fully on-map. */
     private void drawPropMarker(float centerX, float centerY, char cell) {
-        boolean isBarrel = cell == 'g' || cell == 'E';
+        boolean isBarrel = ExplosiveBarrelManager.isBarrelCell(cell);
         shapes.setColor(isBarrel ? BARREL_COLOR : PROP_COLOR);
         float half = MINI_MAP_PROP_SIZE / 2f;
         shapes.rect(centerX - half, centerY - half, MINI_MAP_PROP_SIZE, MINI_MAP_PROP_SIZE);
+    }
+
+    /** Pulsing bright dot over a barrel tile (Sapper r1) — caller guarantees the tile is fully on-map. */
+    private void drawBarrelDot(float centerX, float centerY, float pulseBrightness) {
+        shapes.setColor(BARREL_DOT_COLOR.r * pulseBrightness, BARREL_DOT_COLOR.g * pulseBrightness,
+                BARREL_DOT_COLOR.b * pulseBrightness, 1f);
+        shapes.circle(centerX, centerY, MINI_MAP_MARKER_SIZE / 2f);
     }
 
     /**

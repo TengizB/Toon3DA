@@ -199,12 +199,17 @@ R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-ove
   OVERRIDE RECORD: "enemy eHP == raw HP / no mitigation" in TP pricing -> the priced
   eHP above; the R8 hit bands' eHP -> explicitly the NEUTRAL eHP (unchanged numbers).
 
-R-CARD (RuleKind.CARD_BUDGET)
-  Every level-up card (UpgradeCard.values(), estimatedPowerPoints()) must price
-  into LEVEL_UP_BUDGET_PP (12) ± LEVEL_UP_BUDGET_TOLERANCE (15%) => [10.2,13.8].
-  WHY: budget-equal cards make total player power build-independent
-  (L * 12 PP at level L), which is what keeps every build on the
-  depth-coupling curve.
+R-CARD (RuleKind.CARD_BUDGET) — RETIRED by balance-overhaul order 5 (CP2)
+  OVERRIDE RECORD: "every level-up card prices into LEVEL_UP_BUDGET_PP (12) +/- 15%"
+  and the TOTAL-PP INVARIANT ("total power at level L = L x 12 PP for every build")
+  -> REPLACED by R-PERK PK1 FELT / PK2 FOCUSED (a perk rank must be felt on its tag's
+  niche, and stay focused there) plus R-CARRY (a bounded spread between builds).
+  UpgradeCard / UpgradeCardDeck / UpgradeCardPool, RuleKind.CARD_BUDGET and the
+  card constants are deleted; level-ups draw tagged perks from progression/PerkDeck.
+  The expected player's card term is now EXPECTED_PERK_POWER_PP_PER_PICK (12, SECTION
+  24) x (characterLevel - 1) — the same number, so R-LADDER and every boss / route
+  rule reading the expected player are unchanged. BalanceAuditTest's card-budget test
+  asserts BalanceSchema.perkFeltResults(). (Full R-PERK text: the R-PERK entry below.)
 
 R-HEAL (RuleKind.HEAL_PRICING) — RE-STATED by balance-overhaul order 1 (R10)
   Every heal/armour pickup restores a FRACTION of the max it refills, resolved at
@@ -321,7 +326,11 @@ R-XP-PACE (RuleKind.XP_PACE) — XP pacing is a RULE, not a hope (order 4; horiz
   forward-only. WHY: leveling must be FELT and PACED — a floor reliably buys ~1
   level at every depth, and a fallen-behind run can recover.
 
-R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the fight (order 4)
+R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — RETIRED by balance-overhaul order 5 (CP2)
+  OVERRIDE RECORD: folded into R-PERK PK1 (every perk's max rank crosses >= 1 whole
+  TTK / TTD step on its niche, or its D4 resource step). RuleKind.CARD_BREAKPOINT and
+  the card breakpoint helpers are deleted; BalanceAuditTest's card-breakpoint test
+  asserts BalanceSchema.perkBreakpointResults(). The retired rule, for the record:
   Every level-up card must cross >= 1 INTEGER combat breakpoint vs the region
   soldier in some region: an OFFENCE card shaves a whole turn off the kill
   (GameMath.turnsToKillBreakpointGain), a DEFENCE card survives a whole extra hit
@@ -331,6 +340,53 @@ R-CARD-BREAKPOINT (RuleKind.CARD_BREAKPOINT) — a level-up must change the figh
   at every depth 1..25 (was the gear-curve DPT and the fixed 205 eHP, 1..15);
   offence cards apply as a %-lift of the on-curve DPT (the model's convention),
   defence cards as flat eHP. The reference soldier (Void Shroud) is unchanged.
+
+R-PERK (RuleKind.PERK) — balance-overhaul order 5 (REPLACES R-CARD, R-CARD-BREAKPOINT and the
+  TOTAL-PP INVARIANT). OVERRIDE RECORD (2026-10-11): R-CARD ("every level-up card prices into
+  LEVEL_UP_BUDGET_PP 12 +/- 15%"), the invariant ("total power at level L = L x 12 PP for every build")
+  and R-CARD-BREAKPOINT ("every card crosses >= 1 integer breakpoint vs the region soldier") are
+  REPLACED by the rule below plus R-CARRY. A perk is no longer priced to be EQUAL; it is priced to be
+  FELT inside its style and to stay there. Evaluated by util/BuildValuationModel on the order-3
+  reference scenarios at BUILD_PERK_REFERENCE_DEPTHS {5, 15}; every perk's NICHE is its tag's metric
+  (BuildNicheMetric: SCENARIO_TURNS on the tag's reference scenario + weapon, SCENARIO_AMMO,
+  BARREL_OPENER_TURNS, DUEL_SURVIVALS / FLOOR_SURVIVALS for BULWARK and VITALITY, SUPPLY_* / HEAL_SUPPLY
+  for SCAVENGER and Field Medic; a "*" in the PERKS table marks a per-perk niche override).
+    PK1 FELT        every rank improves its niche, vs the rank below, by >= PERK_FELT_MIN_GAIN (10%) at
+                    every reference depth; and by its max rank the perk crosses >= 1 WHOLE TTK or TTD step
+                    on the niche at some reference depth (WILDFIRE, DECISION D4: an integer RESOURCE step —
+                    fuel / sprays spent to clear S5 — because its fights end inside one turn).
+    PK2 FOCUSED     no non-VITALITY perk at max rank improves ALL eight reference scenarios by more than
+                    PERK_FOCUSED_MAX_GAIN (10%); a VITALITY perk improves no scenario by more than
+                    PERK_VITALITY_MAX_GAIN_PER_RANK (10%) per rank (VITALITY is the generic tag, so it is
+                    capped instead of focused).
+  WAIVERS (SECTION 4): DECISION D6 — WILDFIRE's PK1 r2 / r3 FELT rows at d5 and d15 and its D4
+  breakpoint row; every reference group fight ends inside the first spray or two, so burn DURATION (what
+  ranks 2-3 buy, D5) is invisible to the scenario math. Rank-1 FELT (+200% on S5) and PK2 stay enforced.
+  Expires: a long-group reference scenario exists (order 7 feel pass).
+  WHY: equal-value generic cards produced the same build every run (owner, J3). Felt-in-niche,
+  focused-off-niche perks make "lean in or pivot?" a real question. Asserted by BalanceAuditTest
+  (everyPerkRankIsFeltOnItsNicheReplacingTheCardBudget, everyPerkCrossesABreakpointByItsMaxRank, + PK2).
+
+R-KEYSTONE (RuleKind.KEYSTONE) — balance-overhaul order 5
+  Each of the nine keystones (offered at KEYSTONE_CHARACTER_LEVELS 5 / 10 / 15 / 20 instead of that
+  level's perk offer) improves its niche by >= KEYSTONE_NICHE_MIN_GAIN (30%) at every reference depth AND
+  worsens at least one OTHER probe (a scenario, a weapon outside the tag, the duel, the floor, a heal) by
+  >= KEYSTONE_COST_MIN_LOSS (10%) at some depth. WHY: a keystone is a rule-changer with a real cost —
+  without the cost it is just a bigger perk, and the run is not "committed to a shape". Live values: the
+  KEYSTONES table in SECTION 6 (niche 30-101%, cost 10.6-62.7%).
+
+R-CARRY (RuleKind.BUILD_CARRY) — balance-overhaul order 5 (REPLACES the total-PP invariant)
+  For every BuildTag, the expected player at BUILD_CARRY_DEPTH (15) holding that tag's perks at the
+  expected rank count (round(BUILD_EXPECTED_FOCUS_SHARE 0.6 x perk picks), capped at the tag's rank
+  capacity; perk picks = levels - 1 - keystone levels = 11 at d15) plus that tag's keystone has a carry
+  score = kill-speed lift x survival lift (geometric means over S1-S8, a two-gun kit) within
+  1 + BUILD_CARRY_TOLERANCE (best / worst <= 1.20) of every other tag's. WHY: no trap build and no
+  dominant build — a bounded spread is what makes a choice real while keeping all nine viable.
+  WAIVER (DECISION D3): SCAVENGER is an ECONOMY tag (supply, shop prices, carrier drops — no turn to kill
+  or hit to die), so the combat carry under-reads it (1.09 vs the combat tags' ~1.75-2.08). Its row is
+  printed, flagged WAIVED, and excluded from best / worst. Expires when order 6 re-derives the economy with
+  SCAVENGER in the expected player. Live: eight-tag spread 1.189 (limit 1.20) — VITALITY (2.081, pinned
+  near its PK2 floor) is the best, MARKSMAN (1.751) the worst; ~1% headroom (see the knowledge doc).
 
 R-SCARCITY (RuleKind.SCARCITY) — RETIRED by balance-overhaul order 2 (CP3c)
   OVERRIDE RECORD: the model-floor band (floor-wide S in [0.75, 0.95], per-weapon S
@@ -471,6 +527,29 @@ R-ABILITY (RuleKind.ABILITY_BUDGET) — tier is a priced ability budget (order 2
   unpriced "PLACEHOLDER — flag for playtesting" magnitudes; this converts it to
   priced content in one pass. Magnitudes may still be tuned freely — the price
   recomputes from the magnitude, so tuning stays free.
+
+  RE-STATED by balance-overhaul order 5 (CP4) — OVERRIDE RECORD (2026-10-11): the order-2 tier CEILINGS
+  above (UNCOMMON 6 / RARE 12 / EPIC 20 / LEGENDARY 30, filled greedily) and WeaponTier's slot counts
+  (0/1/2/3/5) are REPLACED by B5 / B6:
+    COUNTS     every roll rolls its tier's ability count IN FULL: COMMON 0, UNCOMMON 1, RARE 2,
+               EPIC 3 (exactly one MAJOR), LEGENDARY 3 (one MAJOR) + its SIGNATURE on top
+               (TIER_ABILITY_COUNT_* / TIER_MAJOR_COUNT_*, SECTION 24).
+    BUDGETS    UNCOMMON 12 / RARE 25 / EPIC 40 / LEGENDARY 60 PP, and the roll's priced total must lie in
+               budget x (1 -/+ TIER_ABILITY_PP_TOLERANCE 0.20) — a FLOOR as well as a ceiling (a RARE
+               that rolls 3 PP is now a violation).
+    RANKS      WeaponAbility.Rank STANDARD / MAJOR / SIGNATURE. A rank's expected weapon level is the
+               shallowest depth r x 5 + 1 whose region max tier rolls it: STANDARD L1, MAJOR L11,
+               SIGNATURE L16. MAJOR = EXECUTIONER, CLEAVE, OPENING_SALVO, BURST_FIRE (fixed 2-round).
+    FELT (B6)  every surviving ability prices >= ABILITY_MIN_FELT_PP (8) at its expected level. 13 were
+               CUT (HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, BULWARK_ROUNDS, ADRENAL_SURGE, SECOND_WIND,
+               SALVAGE_STRIKE, SCHOLARS_EDGE, QUICK_HANDS, FIELD_MEDIC_ROUNDS, CREDIT_FANG, EXTENDED_MAG,
+               MARKSMANS_PATIENCE, RESONANT_ROUNDS) and OVERPENETRATION MERGED into ARMOR_PIERCE; the
+               survivors were re-tuned (standards ~10.5 PP, MAJORs 12 -> 17.4, signatures 18) and each
+               carries a BuildTag that counts toward the B3 SYNERGY test (Weapon.addAbilityBuildTags).
+    SWEEP (A4) ABILITY_ROLL_SWEEP_SEEDS (30) x every tier x ABILITY_ROLL_SWEEP_DEPTHS {3, 12, 22} x melee
+               and ranged — every roll meets its count, MAJOR and signature shape and stays in band.
+  Asserted by BalanceAuditTest everySurvivingAbilityIsFeltAndEveryTierShapeFitsItsBand and
+  everyRollMeetsItsTierCountAndStaysInsideItsBand. Live: ABILITY PRICING + TIERS in SECTION 6.
 
 R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
   Read from the SAME generator sweep as R-SUPPLY (every generator x node type x depths
@@ -618,7 +697,7 @@ R-ROUTE-* (RuleKind.ROUTE_PRICED / RISK_PREMIUM / CALM_COST / MYSTERY_EV / PIPS_
   models (supply/demand, heal economy, credit income, derived XP) in the shared POWER POINT currency:
       threatCost    = regionScaledFloorBudget(depth) * budgetScale * affixMultiplier   (GameMath.nodeThreatCost)
       resourceDelta = (supply - demand)/ammoPP + (heal - incoming)/healPP + credits/creditPP
-      progress      = XP-as-levels * LEVEL_UP_BUDGET_PP + upgradeOpportunity * significant-buy PP
+      progress      = XP-as-levels * EXPECTED_PERK_POWER_PP_PER_PICK + upgradeOpportunity * significant-buy PP
       EV            = resourceDelta + PERMANENT_POWER_WEIGHT * progress
                       - RISK_PP_PER_STANDARD_FLOOR * threatRatio                (GameMath.nodeExpectedValue)
   PERMANENT_POWER_WEIGHT (2.6) exists because a level or a gun applies to EVERY remaining floor while an
@@ -790,7 +869,7 @@ S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
   HOARDER-START-WEAPON never does.
 
-S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY / S-SOFTLOCK (+ S-LAG above) (RuleKind.SIM_*, order 9)
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY / S-BUILD / S-SOFTLOCK (+ S-LAG above) (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
   it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
@@ -819,6 +898,16 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
                           slot (never the last gun with ammo; PlayerPolicy.slotToReplaceForGroundWeapon).
     HOARDER-START-WEAPON  TACTICAL (it delegates chooseAction, so it INHERITS the heavy answer), but NEVER equips a weapon it finds or buys — the user's
                           boss-cheese reproduction, kept as a permanent regression case.
+    TACTICAL-CLOSE / -MARKSMAN / -PYRO-DEMO / -BULWARK  (balance-overhaul order 5, S-BUILD) TACTICAL with a
+                          BUILD BIAS (sim/BuildBias): perk picks prefer the bias tags, then synergy, then the
+                          most-ranked tag; keystone picks take the bias tag's keystone when offered. The bias
+                          does NOT steer weapons (TACTICAL's ground-weapon rule is a damage-class diversity
+                          rule; a tag preference there would move S-SWITCH / S-HEAVY). SIM_BUILD_SEED_COUNT
+                          (200) seeds each. Plain TACTICAL's perk pick is synergy first, then most-ranked tag.
+    TACTICAL-BUILD-SAMPLE plain TACTICAL over SIM_BUILD_SAMPLE_SEED_COUNT (600) seeds — S-BUILD's dominant-tag
+                          run set. Only ~8-10% of TACTICAL runs level up while the navigation waiver stands
+                          (20 of 200), so the 200-seed row cannot reach the 30-run sample; this row does (49).
+                          Its first 200 seeds replay plain TACTICAL exactly; no other band reads it.
 
   S-GATE      HOARDER-START-WEAPON clears the FIRST boss on 0% of seeds. The headline
               guarantee: R-BOSS-GATE proves the starting loadout cannot win on paper; this
@@ -904,6 +993,37 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               one on a cardinal line with the source); (4) else GUARD anyway (cornered) — a primed
               self-destruct with a turn to spare is turned toward first, or shot if already faced.
               NAIVE is unchanged and ignores telegraphs. HOARDER inherits TACTICAL's answer.
+  S-BUILD     (balance-overhaul order 5, A6) — BUILDS DIFFER IN PLAY. Three lines:
+              (1) DEPTH SPREAD: the four build-biased variants' median death depths satisfy max / min <=
+              1 + SIM_BUILD_DEPTH_SPREAD (1.25) — no bias is a trap or a must-pick. Depth-derived: it
+              carries the navigation waiver (same reason and expiry as SIM_FAIR's median depth).
+              (2) SAMPLE (ENFORCED, never waived): the TACTICAL-BUILD-SAMPLE row has >= SIM_BUILD_MIN_SAMPLE
+              (30) runs that ended holding a perk rank, so (3) is never read off an empty sample.
+              (3) DOMINANT TAG: over those runs, no single BuildTag is the end-of-run dominant tag
+              (PlayerBuild.highestRankTag; ties keep the earliest tag, counted in the report) on more than
+              SIM_BUILD_MAX_DOMINANT_TAG_SHARE (0.40) of them. WAIVED by owner ruling D7 (2026-10-11) under
+              the same navigation waiver and expiry: measured 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 / ENERGY 6 /
+              PYRO 1 / DEMOLITION 1 / VITALITY 1 of 49 ranked runs, 600 seeds) because ~91% of sim runs never
+              level up and every ranked run holds exactly ONE rank, so "dominant tag" is just the first
+              synergy pick off the Chaingun (MARKSMAN) + Shotgun (CLOSE_QUARTERS) start kit. Enforced again
+              when the navigation waiver expires.
+              HONEST CAVEAT: while the navigation waiver stands, only ~8-10% of runs level up at all, NO
+              keystone is ever offered in the sim (no run reaches level 5), and the four biased variants
+              play identical depths (median 2.0, ~175/200 stalled, mean level 1.10) — S-BUILD measures the
+              first perk pick and nothing deeper. R-PERK / R-KEYSTONE / R-CARRY carry the build claim on
+              paper meanwhile. SEEDING FIX (CP6): PerkDeck and EnemyManager's build stream (Breacher /
+              Salvager rolls) now finalise their seed through GameMath.splitMix64 — java.util.Random's first
+              draw is correlated across adjacent seeds, so the sim's sequential run seeds drew the SAME
+              first synergy perk (LANE_DISCIPLINE) on every run (and one run's floors drew the same first
+              build roll). Before the fix the share read 0.80 (MARKSMAN 16 of 20).
+              Asserted by BalanceSimTest.buildBiasesStayCloseAndNoTagDominates (exactly the depth spread and
+              the dominant-tag share may be waived).
+  BUILD REPORT (sim/SimReport, OUTPUT not an assertion; balance-overhaul order 5, CP6): per TACTICAL row (plain,
+              the 600-seed sample, the four biases) — runs, median depth, stalled, mean character level,
+              keystones per run, runs with no perk rank, tie-decided dominant tags; the dominant-tag
+              distribution per row; then per Perk and per Keystone offered / picked / pick rate on level-up
+              screens for the sample row and for the four biased variants together (shop-bought ranks are
+              not offers).
   HEAVY REPORT (sim/SimReport, OUTPUT not an assertion; balance-overhaul order 4, CP7b): per policy and
               depth band (1-5, 6-10, 11-15, 16+; SIM_HEAVY_REPORT_BAND_LAST_DEPTHS) — heavies committed at
               the player, the five outcomes, the answered share, statuses the armour shield held off
@@ -922,7 +1042,8 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               guarantee from being quietly removed.
 
   DETERMINISM is part of the contract: every stream is seeded from the run seed (level
-  generation, route map, weapon roller, card deck, and — since order 9 — the enemy
+  generation, route map, weapon roller, perk deck (seed finalised through GameMath.splitMix64
+  since balance-overhaul order 5 CP6), and — since order 9 — the enemy
   spawn/drop/effect rolls, weapon accuracy rolls, hazard rolls and the AGILITY dodge roll,
   all of which used to be unseeded). Same seed + same policy => byte-identical ledger;
   BalanceSimTest asserts it. Unseeded randomness in a gameplay path is now a determinism bug.
@@ -948,7 +1069,11 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
   [SIM_ECONOMY] experienced vs planned supply (re-based, order 2 CP7), [SIM_ECONOMY] emergency lifeline floors,
   [SIM_LAG] HOARDER-START-WEAPON median death depth (balance-overhaul order 1 — inherits
   this waiver and its expiry; it reads 1.0 today because hoarder runs STALL on floor 1,
-  which says nothing about the ladder — R-LADDER L2 and the LADDER REPORT carry the claim)
+  which says nothing about the ladder — R-LADDER L2 and the LADDER REPORT carry the claim),
+  [SIM_BUILD] build-bias median depth spread (balance-overhaul order 5 — depth-derived, inherits this
+  waiver and its expiry), [SIM_BUILD] TACTICAL dominant-tag share (balance-overhaul order 5, owner ruling
+  D7 — inherits this waiver and its expiry: measured 0.47 against <= 0.40 because ~91% of sim runs never
+  level up and every ranked run holds one rank; the >= 30-run sample line stays ENFORCED)
     reason:  these read the SCRIPTED PLAYER's floor-completion rate, not the
              game's balance. The order-9 simulator plays the real systems, but its
              navigation heuristic still runs the turn cap out on a large share of
@@ -972,6 +1097,17 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
              retune (SCOPE OUT of order 2).
     expires: with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).
 
+  [BUILD_CARRY] R-CARRY SCAVENGER (balance-overhaul order 5, owner ruling D3)
+    reason:  SCAVENGER's value is supply, shop and carrier economy, not reference-fight TTK / TTD;
+             R-CARRY's conversion under-reads it (1.09 vs the combat tags' ~1.75-2.08). Still printed.
+    expires: when order 6 re-derives the economy with SCAVENGER in the expected player.
+
+  [PERK] PK1 WILDFIRE r2 felt d5 / d15, PK1 WILDFIRE r3 felt d5 / d15, PK1 WILDFIRE breakpoint by r3
+  (D4 resource: SCENARIO_AMMO S5 Incinerator) (balance-overhaul order 5, owner ruling D6)
+    reason:  every reference group fight ends inside the first spray or two, so burn duration is
+             invisible to the scenario math. Rank-1 FELT and PK2 stay enforced.
+    expires: a long-group reference scenario exists (order 7 feel pass).
+
 --------------------------------------------------------------------------------
 SECTION 5 — NEW-CONTENT CHECKLIST
 --------------------------------------------------------------------------------
@@ -988,12 +1124,19 @@ SECTION 5 — NEW-CONTENT CHECKLIST
      new enemy         -> nothing to register: EnemyType.role() is the
                           declaration; the audit picks it up automatically
                           (a new ROLE needs a TP band entry)
-     new card          -> nothing: UpgradeCard.values() is iterated
+     new perk          -> ONE Perk row (tag, ranks, PerkEffects) + its per-rank magnitudes in
+                          SECTION 24; Perk.values() is iterated by R-PERK (PK1 / PK2) and R-CARRY
+                          (balance-overhaul order 5) — it must be felt on its niche and focused
+     new keystone      -> ONE Keystone row (tag, gains, costs) + SECTION 24 magnitudes; R-KEYSTONE
+                          (>= 30% niche, >= 10% cost) and R-CARRY read it automatically
      new heal/pickup   -> add a HealPickupSpec + consumable classification
      new ammo type     -> add a ScarcityRowSpec
      new weapon ability-> add its magnitude to BalanceConfig SECTION 15 AND a
                           pricing case in GameMath.abilityPowerPoints (R-ABILITY
-                          fails the build on an unpriced ability)
+                          fails the build on an unpriced ability); declare its Rank
+                          (STANDARD / MAJOR / SIGNATURE) and BuildTag; it must price
+                          >= ABILITY_MIN_FELT_PP (8) at its rank's expected level and
+                          keep every tier's roll band green (docs/weapon-creation-guide.txt)
      new status        -> ONE base definition in BalanceConfig SECTION 8
      new ROUTE content -> a NodeEconomics row in route/RouteEconomics for every new
                           node type, ELITE affix or MYSTERY outcome, and its numbers
@@ -1197,22 +1340,81 @@ Blight Corruptor SOLDIER     4         SUMMON
 ------------------------------------------------------------------------------------
 cadence = enemy turns between specials; every damaging special is telegraphed 1 turn ahead.
 
-UPGRADE CARDS (idea 5) — budget = 12 PP   band = 10.2-13.8 PP   (offered 3/level)
-card                 pool      lever               PP tradeoff in?    maxBP   
-------------------------------------------------------------------------------------
-HOLLOW POINTS        OFFENSE   DAMAGE            12.0 no       OK     +1      
-MARKSMAN TRAINING    OFFENSE   MARKSMANSHIP      12.0 no       OK     +1      
-BRUTAL STRENGTH      OFFENSE   STRENGTH          12.0 no       OK     +1      
-GLASS CANNON         OFFENSE   DAMAGE            11.2 YES      OK     +1      
-COMBAT ARMOR         DEFENSE   ARMOR             11.7 no       OK     +1      
-TOUGHENED HIDE       DEFENSE   TOUGHNESS         11.8 no       OK     +1      
-VITALITY             SUSTAIN   HEALTH            12.2 no       OK     +1      
-IRON CONSTITUTION    SUSTAIN   HEALTH            11.2 YES      OK     +1      
-EVASION TRAINING     UTILITY   AGILITY           11.1 no       OK     +1      
-RECKLESS CHARGE      UTILITY   AGILITY           12.1 YES      OK     +1      
-------------------------------------------------------------------------------------
-INVARIANT: every card in band => total PP at level L = L * budget (build-independent).  ALL CARDS IN BAND
-R-CARD-BREAKPOINT (order 4): each card crosses >= 1 TTK/TTD breakpoint vs the region soldier.  ALL CROSS
+(UPGRADE CARDS table RETIRED by balance-overhaul order 5 with R-CARD — replaced by PERKS / KEYSTONES / BUILDS.)
+
+PERKS (R-PERK) — niche gain per rank (min over depths [5, 15]), felt >= 10%; PK2 focused <= 10%  (* = niche override)
+perk                 tag             niche                                   r1      r2      r3  breakpoint by max rank              PK2
+------------------------------------------------------------------------------------------------------------------------------
+BUCKSHOT_DISCIPLINE  CLOSE_QUARTERS   SCENARIO_TURNS S6 Shotgun           10.4%  129.5%   23.3%  d5 TTK 3->1 TTD 0->0               0.0%
+POINT_MAN            CLOSE_QUARTERS   SCENARIO_TURNS S6 Shotgun           10.4%  129.5%   23.3%  d5 TTK 3->1 TTD 0->0               0.0%
+BREACHER             CLOSE_QUARTERS  *SCENARIO_AMMO S2 Shotgun            49.3%   97.1%     inf  d5 TTK 3->0 TTD 0->0               0.0%
+STEADY_AIM           MARKSMAN         SCENARIO_TURNS S1 Assault Rifle     15.3%   13.3%   12.1%  d5 TTK 5->4 TTD 0->0               0.0%
+FIRST_BLOOD          MARKSMAN         SCENARIO_TURNS S1 Assault Rifle     22.1%   28.3%   39.5%  d5 TTK 5->3 TTD 0->0               0.0%
+LANE_DISCIPLINE      MARKSMAN         SCENARIO_TURNS S1 Assault Rifle     15.2%   14.3%   14.4%  d5 TTK 5->4 TTD 0->0               0.0%
+ACCELERANT           PYRO             SCENARIO_TURNS S2 Incinerator       25.1%   26.6%   25.7%  d5 TTK 2->1 TTD 0->0             -14.0%
+WILDFIRE             PYRO            *SCENARIO_TURNS S5 Incinerator      200.0%   0.0%!   0.0%!  WAIVED: never                      0.0%  [rows WAIVED, D6]
+FIREPROOF            PYRO            *FLOOR_SURVIVALS                     10.1%       -       -  d5 TTK 0->0 TTD 13->15             0.0%
+SHAPED_CHARGES       DEMOLITION       SCENARIO_TURNS S2 Grenade Launcher   32.0%   27.3%   26.2%  d5 TTK 2->1 TTD 0->0               0.0%
+BLAST_SHIELD         DEMOLITION      *SCENARIO_TURNS S8 Grenade Launcher   25.0%   14.3%   16.7%  d5 TTK 5->3 TTD 0->0               0.0%
+SAPPER               DEMOLITION      *BARREL_OPENER_TURNS S1 Grenade Launcher   33.3%   49.7%   25.0%  d5 TTK 3->1 TTD 0->0               0.0%
+CAPACITOR            ENERGY           SCENARIO_TURNS S3 Arc Cannon        27.0%   22.8%   23.1%  d5 TTK 2->1 TTD 0->0               0.0%
+ARC_JUMP             ENERGY          *SCENARIO_TURNS S5 Arc Cannon        17.5%   26.1%   27.9%  d5 TTK 3->2 TTD 0->0               0.0%
+OVERCHARGE           ENERGY          *SCENARIO_TURNS S2 Plasma Rifle      70.1%   12.1%   11.0%  d5 TTK 4->2 TTD 0->0               0.0%
+SHIELD_WALL          BULWARK          FLOOR_SURVIVALS                     16.8%   15.8%   13.8%  d5 TTK 0->0 TTD 13->20             0.0%
+RIPOSTE_DRILL        BULWARK         *DUEL_SURVIVALS S6 Assault Rifle     16.3%   19.6%   21.1%  d5 TTK 9->5 TTD 7->7               0.0%
+PLATE_CARRIER        BULWARK          FLOOR_SURVIVALS                     12.4%   12.6%   13.5%  d5 TTK 0->0 TTD 13->18             0.0%
+BUTCHER              BLADE            MELEE_TURNS                         31.2%   25.7%   22.0%  d5 TTK 5->3 TTD 0->0               0.0%
+BLOODLETTING         BLADE           *FLOOR_SURVIVALS                     11.6%   11.7%   11.7%  d5 TTK 0->0 TTD 13->18             0.0%
+PACK_RAT             SCAVENGER       *SUPPLY_AMMO                         15.0%   13.0%   11.5%  d5 TTK 0->0 TTD 4->7               0.0%
+HAGGLER              SCAVENGER       *SUPPLY_CREDITS                      11.1%   12.5%   14.3%  d5 TTK 0->0 TTD 4->6               0.0%
+SALVAGER             SCAVENGER       *SUPPLY_CARRIERS                     25.0%   20.0%   16.7%  d5 TTK 0->0 TTD 1->3               0.0%
+HARDY                VITALITY         FLOOR_SURVIVALS                     10.2%   10.2%   10.2%  d5 TTK 0->0 TTD 13->17             9.5%
+FIELD_MEDIC          VITALITY        *HEAL_SUPPLY                         10.5%   10.4%   10.2%  d5 TTK 0->0 TTD 3->4               0.0%
+SECOND_WIND          VITALITY         FLOOR_SURVIVALS                     18.1%       -       -  d5 TTK 0->0 TTD 13->15             0.0%
+------------------------------------------------------------------------------------------------------------------------------
+KEYSTONES (R-KEYSTONE) — niche gain >= 30% at every depth, and some other probe worse by >= 10%
+  R-KEYSTONE SCATTERGUN_DOCTRINE niche d5         73.9% OK          SCENARIO_TURNS S6 Shotgun 2.354 -> 1.354
+  R-KEYSTONE SCATTERGUN_DOCTRINE niche d15        77.3% OK          SCENARIO_TURNS S6 Shotgun 2.294 -> 1.294
+  R-KEYSTONE SCATTERGUN_DOCTRINE cost             62.7% OK          worst: Railgun in S1 at d15
+  R-KEYSTONE DEADEYE niche d5                     31.8% OK          SCENARIO_TURNS S7 Assault Rifle 4.148 -> 3.148
+  R-KEYSTONE DEADEYE niche d15                    33.7% OK          SCENARIO_TURNS S7 Assault Rifle 3.965 -> 2.965
+  R-KEYSTONE DEADEYE cost                         13.2% OK          worst: Incinerator in S6 at d5
+  R-KEYSTONE PYROMANIAC niche d5                  38.2% OK          SCENARIO_TURNS S2 Incinerator 1.952 -> 1.412
+  R-KEYSTONE PYROMANIAC niche d15                 37.9% OK          SCENARIO_TURNS S2 Incinerator 1.824 -> 1.323
+  R-KEYSTONE PYROMANIAC cost                      11.0% OK          worst: duel at d5
+  R-KEYSTONE DEMOLITIONIST niche d5              100.9% OK          BARREL_OPENER_TURNS S1 Grenade Launcher 2.049 -> 1.020
+  R-KEYSTONE DEMOLITIONIST niche d15              99.6% OK          BARREL_OPENER_TURNS S1 Grenade Launcher 1.991 -> 0.998
+  R-KEYSTONE DEMOLITIONIST cost                   11.3% OK          worst: floor (VITALITY) at d15
+  R-KEYSTONE STORM_CONDUIT niche d5               54.8% OK          SCENARIO_TURNS S2 Plasma Rifle 3.390 -> 2.190
+  R-KEYSTONE STORM_CONDUIT niche d15              56.4% OK          SCENARIO_TURNS S2 Plasma Rifle 3.329 -> 2.129
+  R-KEYSTONE STORM_CONDUIT cost                   50.0% OK          worst: Chaingun in S8 at d5
+  R-KEYSTONE IRON_BULWARK niche d5                69.3% OK          DUEL_SURVIVALS S6 Assault Rifle 0.811 -> 1.374
+  R-KEYSTONE IRON_BULWARK niche d15               38.7% OK          DUEL_SURVIVALS S6 Assault Rifle 0.809 -> 1.122
+  R-KEYSTONE IRON_BULWARK cost                    61.8% OK          worst: Railgun in S1 at d5
+  R-KEYSTONE BERSERKER niche d5                   32.2% OK          FLOOR_SURVIVALS 2.264 -> 2.993
+  R-KEYSTONE BERSERKER niche d15                  36.0% OK          FLOOR_SURVIVALS 1.865 -> 2.536
+  R-KEYSTONE BERSERKER cost                       30.0% OK          worst: medkit restores at d5
+  R-KEYSTONE QUARTERMASTER niche d5               33.3% OK          SUPPLY_CREDITS 4.768 -> 6.357
+  R-KEYSTONE QUARTERMASTER niche d15              33.3% OK          SUPPLY_CREDITS 5.386 -> 7.182
+  R-KEYSTONE QUARTERMASTER cost                   10.6% OK          worst: floor (VITALITY) at d15
+  R-KEYSTONE IRONHIDE niche d5                    30.1% OK          HITS_TO_DIE 7.993 -> 10.400
+  R-KEYSTONE IRONHIDE niche d15                   30.1% OK          HITS_TO_DIE 7.497 -> 9.755
+  R-KEYSTONE IRONHIDE cost                        20.0% OK          worst: medkit restores at d5
+
+BUILDS (R-CARRY, depth 15) — best / worst <= 1.20; focus share 0.6 of the perk picks
+tag             keystone             ranks    TTK x    TTD x    carry    /best   /worst  ranks held
+------------------------------------------------------------------------------------------------------------------------------
+CLOSE_QUARTERS  SCATTERGUN_DOCTRINE      7    1.903    1.000    1.903    0.915    1.087  BUCKSHOT_DISCIPLINE=3 POINT_MAN=2 BREACHER=2
+MARKSMAN        DEADEYE                  7    1.751    1.000    1.751    0.841    1.000  STEADY_AIM=3 FIRST_BLOOD=2 LANE_DISCIPLINE=2
+PYRO            PYROMANIAC               7    1.815    1.004    1.823    0.876    1.041  ACCELERANT=3 WILDFIRE=3 FIREPROOF=1
+DEMOLITION      DEMOLITIONIST            7    1.999    0.887    1.773    0.852    1.013  SHAPED_CHARGES=3 BLAST_SHIELD=2 SAPPER=2
+ENERGY          STORM_CONDUIT            7    1.771    1.000    1.771    0.851    1.012  CAPACITOR=3 ARC_JUMP=2 OVERCHARGE=2
+BULWARK         IRON_BULWARK             7    0.924    1.947    1.799    0.864    1.027  SHIELD_WALL=3 RIPOSTE_DRILL=2 PLATE_CARRIER=2
+BLADE           BERSERKER                6    1.000    1.807    1.807    0.868    1.032  BUTCHER=3 BLOODLETTING=3
+SCAVENGER       QUARTERMASTER            7    1.055    1.036    1.092    0.525    0.624  PACK_RAT=3 HAGGLER=2 SALVAGER=2  [WAIVED, D3 — not in the spread]
+VITALITY        IRONHIDE                 7    1.000    2.081    2.081    1.000    1.189  HARDY=3 FIELD_MEDIC=3 SECOND_WIND=1
+------------------------------------------------------------------------------------------------------------------------------
+SPREAD best / worst (waived tags excluded) = 1.189  IN BAND
 
 XP PACING (order 4) — floor XP / xpRequired(expected level)  (band 1.0-1.3 level-ups/floor)
   per-enemy XP = 0.35 * depth-scaled TP ; curve = 150 * 1.2495^(level-1) (geometric, tracks enemy compound)
@@ -1468,43 +1670,40 @@ LADDER (balance-overhaul order 1, R-LADDER) — continuous hits to KILL (TTK) / 
     depth 20: price   157 vs combat-floor income    342
     depth 25: price   184 vs combat-floor income    390
 
-ABILITY PRICING — PP cost per ability (budget = PP a tier may spend on abilities)
-  tier budgets: Common=0  Uncommon=6  Rare=12  Epic=20  Legendary=30  (±20%)
-ability                   PP@L1   PP@L10
+ABILITY PRICING — every ability priced at its expected level (felt >= 8 PP, B6)
+ability              rank      tag             depth expLv   PP@exp   PP@L1  PP@max  status
 ------------------------------------------------------------------------------------
-BURST_FIRE                 4.00    10.00
-CRITICAL_STRIKE            5.00    18.50
-ARMOR_PIERCE               6.00    18.00
-EXECUTIONER                9.00    24.00
-REND                       4.80    14.40
-OVERPENETRATION            2.00     6.00
-STAGGER_ROUNDS             3.60    11.70
-KINETIC_SLAM               9.00    25.20
-CLEAVE                    12.00    24.00
-INCENDIARY                 9.60    16.80
-LIFESTEAL                  3.00     9.75
-HEMORRHAGE_HARVEST         0.51     1.59
-VAMPIRIC_CRIT              0.68     2.22
-ADRENAL_SURGE              3.00    11.10
-BULWARK_ROUNDS             0.34     1.11
-SECOND_WIND                7.50    21.00
-SCAVENGER_ROUNDS           3.00     3.00
-SALVAGE_STRIKE             3.00     3.00
-SCHOLARS_EDGE              3.00     3.00
-QUICK_HANDS                3.00     3.00
-EXTENDED_MAG               2.00     8.00
-FIELD_MEDIC_ROUNDS         3.00     3.00
-CREDIT_FANG                3.00     3.00
-POINT_BLANK                6.00    19.50
-MARKSMANS_PATIENCE         1.50     3.60
-OPENING_SALVO              9.00    27.00
-RHYTHM                     6.00    15.00
-STATIC_DISCHARGE           5.60    18.20
-RESONANT_ROUNDS            1.20     3.00
-SOULFORGE                 10.00    10.00
-JUDGMENT                  10.00    10.00
-HELLFIRE_NOVA             10.00    10.00
-BERSERKERS_OATH           10.00    10.00
+BURST_FIRE           MAJOR     CLOSE_QUARTERS     11    11    16.00   16.00   16.00  KEPT
+CRITICAL_STRIKE      STANDARD  MARKSMAN            1     1    10.50   10.50   14.00  KEPT
+ARMOR_PIERCE         STANDARD  DEMOLITION          1     1    10.55   10.55   14.00  KEPT
+EXECUTIONER          MAJOR     BLADE              11    11    14.08   12.00   17.40  KEPT
+REND                 STANDARD  BLADE               1     1    10.40   10.40   13.91  KEPT
+STAGGER_ROUNDS       STANDARD  CLOSE_QUARTERS      1     1    10.57   10.57   13.94  KEPT
+KINETIC_SLAM         STANDARD  BULWARK             1     1    10.57   10.57   13.94  KEPT
+CLEAVE               MAJOR     BLADE              11    11    14.08   12.00   17.40  KEPT
+INCENDIARY           STANDARD  PYRO                1     1    10.40   10.40   13.91  KEPT
+LIFESTEAL            STANDARD  VITALITY            1     1    10.50   10.50   14.00  KEPT
+SCAVENGER_ROUNDS     STANDARD  SCAVENGER           1     1    10.50   10.50   14.00  KEPT
+POINT_BLANK          STANDARD  CLOSE_QUARTERS      1     1    10.50   10.50   13.80  KEPT
+OPENING_SALVO        MAJOR     MARKSMAN           11    11    14.08   12.00   17.40  KEPT
+RHYTHM               STANDARD  ENERGY              1     1    10.50   10.50   14.00  KEPT
+STATIC_DISCHARGE     STANDARD  ENERGY              1     1    10.50   10.50   14.00  KEPT
+SOULFORGE            SIGNATURE SCAVENGER          16    16    18.00   18.00   18.00  KEPT
+JUDGMENT             SIGNATURE MARKSMAN           16    16    18.00   18.00   18.00  KEPT
+HELLFIRE_NOVA        SIGNATURE PYRO               16    16    18.00   18.00   18.00  KEPT
+BERSERKERS_OATH      SIGNATURE BLADE              16    16    18.00   18.00   18.00  KEPT
+  (cut by order 5: HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, ADRENAL_SURGE, BULWARK_ROUNDS, SECOND_WIND,
+   SALVAGE_STRIKE, SCHOLARS_EDGE, QUICK_HANDS, EXTENDED_MAG, FIELD_MEDIC_ROUNDS, CREDIT_FANG,
+   MARKSMANS_PATIENCE, RESONANT_ROUNDS; merged: OVERPENETRATION -> ARMOR_PIERCE)
+
+TIERS — guaranteed shape and priced band (budget ±20%), A4 roll sweep at depths [3, 12, 22]
+tier       count MAJOR  sig  budget          band      sampled PP
+------------------------------------------------------------------------------------
+COMMON         0     0    -       0    0.0..0.0       0.0..0.0    OK
+UNCOMMON       1     0    -      12    9.6..14.4     10.7..13.4   OK
+RARE           2     0    -      25   20.0..30.0     21.3..26.7   OK
+EPIC           3     1    -      40   32.0..48.0     33.8..43.1   OK
+LEGENDARY      3     1  yes      60   48.0..72.0     51.8..61.1   OK
 
 HAZARDS (idea 4, Pillar 3) — turnsStood=2 (careless-player reference)
 hazard     dmg/turn  TP/tile   lifetime TP per 6 tiles
@@ -1634,7 +1833,7 @@ EVERY change to util/BalanceConfig.java ships with all four of these:
   2. GREEN SIM        `./gradlew balanceSim`
      Slow (whole simulated runs), run on balance changes and nightly in CI.
      BalanceSimTest plays SIM_SEED_COUNT runs per policy through the real systems and
-     checks the behavioural bands (S-GATE ... S-HEAVY). This is the gatekeeper for the BEHAVIOUR.
+     checks the behavioural bands (S-GATE ... S-BUILD). This is the gatekeeper for the BEHAVIOUR.
      Its plain-text summary lands in core/build/reports/balance-sim/summary.txt —
      read it even when it is green: "median death depth moved 9 -> 6" is a sentence
      you can act on long before a band breaks.
@@ -1664,6 +1863,21 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 5 / CP6 — BUILDS IN THE SIM + THE DOCS. sim/BuildBias + TacticalPolicy(seed, bias): four
+    build-biased TACTICAL rows (CLOSE / MARKSMAN / PYRO-DEMO / BULWARK, SIM_BUILD_SEED_COUNT 200) and the 600-seed
+    TACTICAL-BUILD-SAMPLE row (SIM_BUILD_SAMPLE_SEED_COUNT); new band S-BUILD (RuleKind.SIM_BUILD: depth spread
+    <= 1.25 — WAIVED, navigation; ranked-run sample >= 30 — ENFORCED, 49; dominant-tag share <= 0.40 — WAIVED by
+    owner ruling D7, 0.47); the BUILD REPORT; BalanceSimTest.buildBiasesStayCloseAndNoTagDominates. SEEDING FIX:
+    PerkDeck and EnemyManager's build stream seed through GameMath.splitMix64 (Random's first draw correlated
+    across adjacent seeds; every sim run drew LANE_DISCIPLINE first). Slow gate 27s -> ~45-50s. Other S-* lines
+    moved only through the seeding fix (different perk offers / build rolls): S-SUPPLY 0.85 -> 0.86, S-HEAVY sample 1110 -> 1108. Why: A6 — prove in
+    play that builds differ; today the sim can only prove the first perk pick differs (see S-BUILD's caveat).
+  balance-overhaul order 5 / CP1-CP5 — BUILDS THAT DIFFER. R-CARD, R-CARD-BREAKPOINT and the total-PP invariant
+    REPLACED by R-PERK (PK1 felt / PK2 focused), R-KEYSTONE and R-CARRY (SECTION 24; waivers D3 SCAVENGER, D6
+    WILDFIRE); UpgradeCard* deleted, PerkDeck + PlayerBuild drive level-ups (B3 synergy + pivot, keystones at
+    5/10/15/20); EXPECTED_PERK_POWER_PP_PER_PICK 12 keeps R-LADDER unchanged; R-ABILITY RE-STATED (B5 counts and
+    banded budgets 12/25/40/60, MAJOR rank, 13 abilities cut + 1 merged, ABILITY_MIN_FELT_PP 8). Why: every run
+    ended the same (owner J3), and rarity / abilities did not matter (H4).
   balance-overhaul order 4 / CP7b — THE SIM READS THE RED FLOOR. TacticalPolicy answers a heavy committed at it
     (stagger / guard-when-faced / step off the danger tiles / guard) and the SIM_TACTICAL_GUARD_DAMAGE_FRACTION
     trigger is DELETED (OVERRIDE: "guard at a fifth of what is left" -> heavy-aware avoidance). New enemy/
@@ -1894,15 +2108,16 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 4 (CP7b) matrix
-(heavies, guard/armour, statuses, hazards, and a TACTICAL that reads the red floor), with the
-FLOOR REPORT, the MATCHUP REPORT and the HEAVY REPORT. The living S-* bands are the BEHAVIOURAL BANDS
-block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWITCH, S-HEAVY, S-SOFTLOCK.
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 5 (CP6) matrix
+(perks, keystones, real rarity, the build-biased TACTICAL rows and the 600-seed build sample), with the
+FLOOR REPORT, the MATCHUP REPORT, the HEAVY REPORT and the BUILD REPORT. The living S-* bands are the
+BEHAVIOURAL BANDS block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWITCH,
+S-HEAVY, S-BUILD, S-SOFTLOCK.
 
   ================================================================================
   BALANCE SIMULATION SUMMARY (new-game-balancr order 9)
   ================================================================================
-  Seeds per policy : 200
+  Seeds per policy : 200 (build-bias variants: 200; TACTICAL-BUILD-SAMPLE: 600)
   Depth ceiling    : 20
   Turn cap / floor : 900
 
@@ -1910,21 +2125,31 @@ block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWI
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
   NAIVE                    200     1.0     151     1.00      0.00      0.00    -0.49
-  TACTICAL                 200     2.0     177     1.00      0.00      0.00    -0.79
+  TACTICAL                 200     2.0     175     1.00      0.00      0.00    -0.79
   HOARDER-START-WEAPON     200     2.0     181     1.00      0.00      0.00    -0.78
+  TACTICAL-CLOSE           200     2.0     176     1.00      0.00      0.00    -0.79
+  TACTICAL-MARKSMAN        200     2.0     175     1.00      0.00      0.00    -0.79
+  TACTICAL-PYRO-DEMO       200     2.0     175     1.00      0.00      0.00    -0.79
+  TACTICAL-BULWARK         200     2.0     175     1.00      0.00      0.00    -0.79
+  TACTICAL-BUILD-SAMPLE    600     1.0     534     1.00      0.00      0.00    -0.73
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
   policy                 supplyTook  emergency    bossTurns
   NAIVE                       0.258      0.000        900.0
-  TACTICAL                    0.479      0.037        708.2
-  HOARDER-START-WEAPON        0.477      0.031        757.9
+  TACTICAL                    0.481      0.036        724.3
+  HOARDER-START-WEAPON        0.481      0.031        757.9
+  TACTICAL-CLOSE              0.481      0.036        724.3
+  TACTICAL-MARKSMAN           0.481      0.036        724.3
+  TACTICAL-PYRO-DEMO          0.477      0.037        724.3
+  TACTICAL-BULWARK            0.481      0.036        724.3
+  TACTICAL-BUILD-SAMPLE       0.514      0.024        666.2
 
   FLOOR REPORT (TACTICAL) — means per played floor; heal in max-HP, ammo in units, HP as a health fraction
   --------------------------------------------------------------------------------
   generator        node     depth  floor  spawn killed   grp 1stDmg   heal  <flr ammo p/took  hpIn hpOut  0-heal
-  cavern           COMBAT    1-5      53   14.3    5.4   3.9    8.8   0.80     0    13/6     0.99  0.88       3
-  cavern           ELITE     1-5      25   16.5    3.8   4.6   11.6   0.95     0    20/5     0.97  0.97       3
+  cavern           COMBAT    1-5      54   14.3    5.4   3.9    8.8   0.80     0    13/6     0.98  0.88       3
+  cavern           ELITE     1-5      25   16.5    4.1   4.6   11.6   0.95     0    20/6     0.97  0.97       4
   cavern           SHOP      1-5       4    5.3    0.8   1.3  103.0   0.54     0     6/2     0.99  0.99       0
   event_room       EVENT     1-5       6    0.0    0.0   0.0      -   0.45     0     0/0     0.91  0.98       0
   linear_corridor  COMBAT    1-5      49   14.2    5.6   4.0   22.5   0.80     0    14/5     0.98  0.80       5
@@ -1932,8 +2157,8 @@ block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWI
   linear_corridor  SHOP      1-5       4    5.3    1.3   1.3   25.0   0.54     0     7/1     0.98  0.98       0
   med_bay          REST      1-5       9    0.0    0.0   0.0      -   0.00     0     0/0     0.91  0.91       0
   rooms_mst        CACHE     1-5     129    5.0    2.0   1.1   46.3   0.71     0     6/2     0.96  0.96       0
-  rooms_mst        COMBAT    1-5      56   14.7    4.8   3.9   25.0   0.82     0    14/5     0.99  0.89       4
-  rooms_mst        ELITE     1-5      18   18.1    4.1   5.1   19.9   1.04     0    22/5     0.95  0.95       2
+  rooms_mst        COMBAT    1-5      57   14.7    4.8   4.0   24.8   0.82     0    14/5     0.99  0.90       6
+  rooms_mst        ELITE     1-5      18   18.1    4.2   5.1   19.9   1.04     0    22/5     0.95  0.80       1
   rooms_mst        SHOP      1-5       4    5.3    1.0   1.5   51.5   0.60     0     7/0     0.83  0.97       0
 
   A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
@@ -1944,61 +2169,168 @@ block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWI
   MATCHUP REPORT — per played floor; damage share by class (% of landed hit damage)
   --------------------------------------------------------------------------------
   policy               depth  floor  eff/f  res/f  swt/f BALLI SPREA ENERG  RAIL  FIRE EXPLO BLADE BLUNT
-  NAIVE                 1-5     310   0.01   1.08   0.00    98     0     0     0     0     2     0     0
-  TACTICAL              1-5     382   0.13   0.87   0.05    40    48     4     0     0     5     0     3
-  HOARDER-START-WEAPON  1-5     381   0.11   0.90   0.05    42    53     0     0     0     3     0     2
+  NAIVE                 1-5     310   0.01   1.07   0.00    98     0     0     0     0     2     0     0
+  TACTICAL              1-5     385   0.12   0.86   0.05    40    48     5     0     0     5     0     3
+  HOARDER-START-WEAPON  1-5     383   0.10   0.90   0.05    42    54     0     0     0     3     0     2
+  TACTICAL-CLOSE        1-5     385   0.12   0.86   0.05    40    48     5     0     0     5     0     3
+  TACTICAL-MARKSMAN     1-5     385   0.12   0.86   0.05    40    48     5     0     0     5     0     3
+  TACTICAL-PYRO-DEMO    1-5     383   0.12   0.87   0.05    40    48     5     0     0     5     0     3
+  TACTICAL-BULWARK      1-5     385   0.12   0.86   0.05    40    48     5     0     0     5     0     3
+  TACTICAL-BUILD-SAMPLE  1-5    1106   0.13   0.87   0.05    45    42     3     3     1     5     0     2
     S-SWITCH alternatives (per policy): switches/COMBAT floor | hint take rate | switches per
     COMBAT floor that showed a hint | COMBAT floors (hinted)
     NAIVE                  0.00 |   0.00 |   0.00 | 124 (7)
-    TACTICAL               0.07 |   1.00 |   1.00 | 158 (11)
-    HOARDER-START-WEAPON   0.06 |   1.00 |   1.00 | 158 (10)
+    TACTICAL               0.07 |   1.00 |   1.00 | 160 (11)
+    HOARDER-START-WEAPON   0.06 |   1.00 |   1.00 | 160 (10)
+    TACTICAL-CLOSE         0.07 |   1.00 |   1.00 | 160 (11)
+    TACTICAL-MARKSMAN      0.07 |   1.00 |   1.00 | 160 (11)
+    TACTICAL-PYRO-DEMO     0.07 |   1.00 |   1.00 | 158 (11)
+    TACTICAL-BULWARK       0.07 |   1.00 |   1.00 | 160 (11)
+    TACTICAL-BUILD-SAMPLE   0.06 |   0.98 |   0.97 | 491 (32)
 
   HEAVY REPORT — heavies committed AT the player, by how they ended (counts per band)
   --------------------------------------------------------------------------------
   policy               depth  commit  avoid  guard  stagg  killd landed answerd armBlk hazDmg/f heavyD
-  NAIVE                1-5       170      0      0      0     31    137    0.18     18     1.8     28
+  NAIVE                1-5       170      0      0      0     31    136    0.18     19     1.8     28
   NAIVE                6-10        0      0      0      0      0      0       -      0     0.0      0
   NAIVE                11-15       0      0      0      0      0      0       -      0     0.0      0
   NAIVE                16+         0      0      0      0      0      0       -      0     0.0      0
-  NAIVE                ALL    committed 170, answered share 0.18, unresolved at floor end 2
-  TACTICAL             1-5      1114    832    239      6     28      6    0.99     66     4.6      2
+  NAIVE                ALL    committed 170, answered share 0.18, unresolved at floor end 3
+  TACTICAL             1-5      1108    832    235      6     28      6    0.99     67     4.7      5
   TACTICAL             6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL             11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL             16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL             ALL    committed 1114, answered share 0.99, unresolved at floor end 3
-  HOARDER-START-WEAPON 1-5      1103    831    228      7     29      6    0.99     68     4.5      3
+  TACTICAL             ALL    committed 1108, answered share 0.99, unresolved at floor end 1
+  HOARDER-START-WEAPON 1-5      1100    830    228      7     29      5    0.99     68     4.6      4
   HOARDER-START-WEAPON 6-10        0      0      0      0      0      0       -      0     0.0      0
   HOARDER-START-WEAPON 11-15       0      0      0      0      0      0       -      0     0.0      0
   HOARDER-START-WEAPON 16+         0      0      0      0      0      0       -      0     0.0      0
-  HOARDER-START-WEAPON ALL    committed 1103, answered share 0.99, unresolved at floor end 2
+  HOARDER-START-WEAPON ALL    committed 1100, answered share 0.99, unresolved at floor end 1
+  TACTICAL-CLOSE       1-5      1108    831    235      6     28      7    0.99     67     4.7      5
+  TACTICAL-CLOSE       6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-CLOSE       11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-CLOSE       16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-CLOSE       ALL    committed 1108, answered share 0.99, unresolved at floor end 1
+  TACTICAL-MARKSMAN    1-5      1108    832    235      6     28      6    0.99     67     4.7      5
+  TACTICAL-MARKSMAN    6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-MARKSMAN    11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-MARKSMAN    16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-MARKSMAN    ALL    committed 1108, answered share 0.99, unresolved at floor end 1
+  TACTICAL-PYRO-DEMO   1-5      1109    832    235      6     28      6    0.99     67     4.7      5
+  TACTICAL-PYRO-DEMO   6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-PYRO-DEMO   11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-PYRO-DEMO   16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-PYRO-DEMO   ALL    committed 1109, answered share 0.99, unresolved at floor end 2
+  TACTICAL-BULWARK     1-5      1108    832    235      6     28      6    0.99     69     4.7      5
+  TACTICAL-BULWARK     6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BULWARK     11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BULWARK     16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BULWARK     ALL    committed 1108, answered share 0.99, unresolved at floor end 1
+  TACTICAL-BUILD-SAMPLE 1-5      2494   1717    664     10     89     10    0.99    183     4.2     10
+  TACTICAL-BUILD-SAMPLE 6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BUILD-SAMPLE 11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BUILD-SAMPLE 16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BUILD-SAMPLE ALL    committed 2494, answered share 0.99, unresolved at floor end 4
     Heavy kinds committed at each policy (count): 
     NAIVE                CHARGE 17 | LANCE 147 | AREA_STRIKE 4 | SELF_DESTRUCT 2 |
-    TACTICAL             CHARGE 441 | LANCE 654 | AREA_STRIKE 15 | SELF_DESTRUCT 4 |
-    HOARDER-START-WEAPON CHARGE 440 | LANCE 649 | AREA_STRIKE 11 | SELF_DESTRUCT 3 |
+    TACTICAL             CHARGE 441 | LANCE 650 | AREA_STRIKE 13 | SELF_DESTRUCT 4 |
+    HOARDER-START-WEAPON CHARGE 439 | LANCE 648 | AREA_STRIKE 10 | SELF_DESTRUCT 3 |
+    TACTICAL-CLOSE       CHARGE 441 | LANCE 650 | AREA_STRIKE 13 | SELF_DESTRUCT 4 |
+    TACTICAL-MARKSMAN    CHARGE 441 | LANCE 650 | AREA_STRIKE 13 | SELF_DESTRUCT 4 |
+    TACTICAL-PYRO-DEMO   CHARGE 441 | LANCE 650 | AREA_STRIKE 14 | SELF_DESTRUCT 4 |
+    TACTICAL-BULWARK     CHARGE 441 | LANCE 650 | AREA_STRIKE 13 | SELF_DESTRUCT 4 |
+    TACTICAL-BUILD-SAMPLE CHARGE 948 | LANCE 1511 | AREA_STRIKE 27 | SELF_DESTRUCT 8 |
     Outcomes: AVOIDED left the tiles; GUARDED front-arc hit; STAGGERED cancelled by stagger/riposte/stun;
     killd = source died first; landed = unguarded or flanked hit. S-HEAVY bands answered = all but landed.
+
+  BUILD REPORT — per TACTICAL build bias; dominant tag = highest-rank tag at run end
+  --------------------------------------------------------------------------------
+  policy                runs  medDep stalled meanLvl  keys/r noRank  ties
+  TACTICAL               200     2.0     175    1.10    0.00    180     0
+  TACTICAL-BUILD-SAMPLE   600     1.0     534    1.08    0.00    551     0
+  TACTICAL-CLOSE         200     2.0     176    1.10    0.00    180     0
+  TACTICAL-MARKSMAN      200     2.0     175    1.10    0.00    180     0
+  TACTICAL-PYRO-DEMO     200     2.0     175    1.10    0.00    180     0
+  TACTICAL-BULWARK       200     2.0     175    1.10    0.00    180     0
+    Dominant tag at run end (runs; excludes runs with no perk rank):
+    TACTICAL             CLOSE_QUARTERS 9 | MARKSMAN 10 | PYRO 0 | DEMOLITION 0 | ENERGY 1 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL-BUILD-SAMPLE CLOSE_QUARTERS 17 | MARKSMAN 23 | PYRO 1 | DEMOLITION 1 | ENERGY 6 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 1 |
+    TACTICAL-CLOSE       CLOSE_QUARTERS 13 | MARKSMAN 7 | PYRO 0 | DEMOLITION 0 | ENERGY 0 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL-MARKSMAN    CLOSE_QUARTERS 8 | MARKSMAN 11 | PYRO 0 | DEMOLITION 0 | ENERGY 1 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL-PYRO-DEMO   CLOSE_QUARTERS 6 | MARKSMAN 6 | PYRO 6 | DEMOLITION 1 | ENERGY 1 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL-BULWARK     CLOSE_QUARTERS 9 | MARKSMAN 7 | PYRO 0 | DEMOLITION 0 | ENERGY 1 | BULWARK 3 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    Perk pick rate per offer (picked / offered on level-up screens):
+    perk                   tag             offered  picked   rate B-offered B-picked B-rate
+    BUCKSHOT_DISCIPLINE    CLOSE_QUARTERS        6       4   0.67        12        6   0.50
+    POINT_MAN              CLOSE_QUARTERS        9       6   0.67        20       14   0.70
+    BREACHER               CLOSE_QUARTERS       10       7   0.70        24       16   0.67
+    STEADY_AIM             MARKSMAN             10       9   0.90        16       12   0.75
+    FIRST_BLOOD            MARKSMAN             10      10   1.00        20       15   0.75
+    LANE_DISCIPLINE        MARKSMAN              7       4   0.57        12        4   0.33
+    ACCELERANT             PYRO                  4       0   0.00        12        3   0.25
+    WILDFIRE               PYRO                  5       0   0.00         8        2   0.25
+    FIREPROOF              PYRO                  6       1   0.17         4        1   0.25
+    SHAPED_CHARGES         DEMOLITION            5       0   0.00         0        0      -
+    BLAST_SHIELD           DEMOLITION            5       1   0.20         0        0      -
+    SAPPER                 DEMOLITION            8       0   0.00         4        1   0.25
+    CAPACITOR              ENERGY               10       4   0.40        16        3   0.19
+    ARC_JUMP               ENERGY                1       0   0.00         0        0      -
+    OVERCHARGE             ENERGY                5       2   0.40         8        0   0.00
+    SHIELD_WALL            BULWARK               5       0   0.00         4        1   0.25
+    RIPOSTE_DRILL          BULWARK               1       0   0.00         4        1   0.25
+    PLATE_CARRIER          BULWARK               1       0   0.00         4        1   0.25
+    BUTCHER                BLADE                 4       0   0.00         4        0   0.00
+    BLOODLETTING           BLADE                 7       0   0.00        12        0   0.00
+    PACK_RAT               SCAVENGER             3       0   0.00         8        0   0.00
+    HAGGLER                SCAVENGER             6       0   0.00        16        0   0.00
+    SALVAGER               SCAVENGER             4       0   0.00         8        0   0.00
+    HARDY                  VITALITY              4       0   0.00         8        0   0.00
+    FIELD_MEDIC            VITALITY              7       1   0.14         8        0   0.00
+    SECOND_WIND            VITALITY              4       0   0.00         8        0   0.00
+    Keystone pick rate (picked / offered on keystone screens):
+    keystone               tag             offered  picked   rate B-offered B-picked B-rate
+    SCATTERGUN_DOCTRINE    CLOSE_QUARTERS        0       0      -         0        0      -
+    DEADEYE                MARKSMAN              0       0      -         0        0      -
+    PYROMANIAC             PYRO                  0       0      -         0        0      -
+    DEMOLITIONIST          DEMOLITION            0       0      -         0        0      -
+    STORM_CONDUIT          ENERGY                0       0      -         0        0      -
+    IRON_BULWARK           BULWARK               0       0      -         0        0      -
+    BERSERKER              BLADE                 0       0      -         0        0      -
+    QUARTERMASTER          SCAVENGER             0       0      -         0        0      -
+    IRONHIDE               VITALITY              0       0      -         0        0      -
+    Unprefixed columns: TACTICAL-BUILD-SAMPLE. B- columns: the four build-biased variants together.
+    noRank = runs that ended with no perk rank
+    (excluded from S-BUILD's share); ties = dominant tag decided by a tie (earliest BuildTag wins).
 
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
   OK   [SIM_GATE] HOARDER first-boss clears: value=0.00 band=0.00..0.00 OK — 200 seeds; R-BOSS-GATE proves the same thing on paper
   OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=2.00 band=0.00..6.00 OK — 200 seeds; 181 stalled
-  WAIV [SIM_FAIR] TACTICAL median death depth: value=2.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 177 stalled
+  WAIV [SIM_FAIR] TACTICAL median death depth: value=2.00 band=8.00..14.00 OUT-OF-BAND (WAIVED) — 200 seeds; 175 stalled
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
   WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=1.00 band=3.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 2.0 vs NAIVE 1.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.15 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.16 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
   WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.48 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
   OK   [SIM_ECONOMY] emergency lifeline floors: value=0.04 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
-  FAIL [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.85 band=0.55..0.80 OUT-OF-BAND — mean health fraction leaving a COMBAT floor by its exit
+  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.86 band=0.55..0.90 OK — mean health fraction leaving a COMBAT floor by its exit
   OK   [SIM_SUPPLY] floors below the heal floor: value=0.00 band=0.00..0.00 OK — reachable heal value under the S4 floor
-  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=11.00 band=10.00..Infinity OK — of 158 COMBAT floors; keeps the two lines below off an empty sample
+  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=11.00 band=10.00..Infinity OK — of 160 COMBAT floors; keeps the two lines below off an empty sample
   OK   [SIM_SWITCH] TACTICAL hint take rate: value=1.00 band=0.80..Infinity OK — hint-driven switches / hint episodes
   OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.07 per COMBAT floor overall (kit-limited, not banded — D3)
-  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=1114.00 band=30.00..Infinity OK — keeps the share below off an empty sample
+  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=1108.00 band=30.00..Infinity OK — keeps the share below off an empty sample
   OK   [SIM_HEAVY] TACTICAL heavies answered: value=0.99 band=0.80..1.00 OK — (avoided + guarded + staggered + killed first) / committed at the player
   OK   [SIM_HEAVY] NAIVE heavies answered: value=0.18 band=0.00..0.30 OK — 170 committed; NAIVE ignores telegraphs
+  OK   [SIM_BUILD] build-bias median depth spread: value=1.00 band=1.00..1.25 OK — max / min median death depth: CLOSE 2.0, MARKSMAN 2.0, PYRO-DEMO 2.0, BULWARK 2.0
+  OK   [SIM_BUILD] TACTICAL runs holding a perk rank: value=49.00 band=30.00..Infinity OK — of 600 TACTICAL-BUILD-SAMPLE runs; 551 with no perk rank excluded; keeps the share below off an empty sample
+  WAIV [SIM_BUILD] TACTICAL dominant-tag share: value=0.47 band=0.00..0.40 OUT-OF-BAND (WAIVED) — top MARKSMAN; CLOSE_QUARTERS 17, MARKSMAN 23, PYRO 1, DEMOLITION 1, ENERGY 6, VITALITY 1; 0 decided by a tie (earliest tag wins)
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-CLOSE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-MARKSMAN softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-PYRO-DEMO softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-BULWARK softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-BUILD-SAMPLE softlocks: value=0.00 band=0.00..0.00 OK — 600 seeds
 
   A WAIV line is out of band with an explicit, reasoned waiver registered in
   BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails
@@ -2010,20 +2342,20 @@ block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWI
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
   role        depths  onKill lagKill  ratio |   onDie  lagDie
   CHAFF        1-5      2.55    4.56   1.79 |  132.50   97.67
-  CHAFF        6-10     2.28   12.00   5.27 |   85.60   66.85
-  CHAFF       11-15     1.98   16.89   8.53 |   73.44   23.61
-  CHAFF       16-20     3.45   28.13   8.15 |   52.04   24.97
-  CHAFF       21-25     2.65   52.71  19.89 |   62.14   22.80
+  CHAFF        6-10     2.20   12.00   5.45 |   85.60   66.85
+  CHAFF       11-15     1.90   16.71   8.81 |   73.44   23.61
+  CHAFF       16-20     3.45   28.17   8.17 |   32.21   24.97
+  CHAFF       21-25     2.40   52.71  22.00 |   60.38   22.80
   SOLDIER      1-5      3.94    5.75   1.46 |   35.06   35.83
-  SOLDIER      6-10     2.90   16.67   5.75 |   30.08   10.61
-  SOLDIER     11-15     3.35   32.71   9.77 |   28.74    9.59
-  SOLDIER     16-20     2.60   42.25  16.24 |   27.88    9.07
-  SOLDIER     21-25     3.79   30.38   8.02 |   25.24   16.46
+  SOLDIER      6-10     2.92   16.67   5.71 |   28.56   10.61
+  SOLDIER     11-15     3.40   33.00   9.70 |   28.45    9.59
+  SOLDIER     16-20     2.59   42.25  16.31 |   27.43    9.07
+  SOLDIER     21-25     3.31   31.50   9.51 |   25.26   18.41
   BRUISER      1-5      6.27    6.93   1.10 |       -       -
-  BRUISER      6-10     4.82   19.19   3.98 |       -   23.06
-  BRUISER     11-15     6.33   44.86   7.08 |       -   23.35
-  BRUISER     16-20    10.32       -      - |       -       -
-  BRUISER     21-25    11.78       -      - |   13.68       -
+  BRUISER      6-10     4.82   20.38   4.22 |       -   22.25
+  BRUISER     11-15     5.85   44.86   7.66 |       -   23.35
+  BRUISER     16-20     4.28       -      - |       -       -
+  BRUISER     21-25    12.06       -      - |   13.46       -
   MINI_ELITE   1-5         -       -      - |       -       -
   MINI_ELITE   6-10        -       -      - |       -       -
   MINI_ELITE  11-15        -       -      - |       -       -
@@ -2031,30 +2363,17 @@ block below: S-GATE, S-LAG, S-FAIR, S-SKILL, S-ROUTE, S-ECONOMY, S-SUPPLY, S-SWI
   MINI_ELITE  21-25        -       -      - |       -       -
   A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.04 (target >= 1.5)
 
-  READING IT (CP7b: TACTICAL reads the red floor; S-HEAVY added; earlier: CP7a S-SWITCH, CP6 hazards):
-  - S-HEAVY holds with room: TACTICAL answers 0.99 of the 1114 heavies committed at it (832 avoided, 239
-    guarded, 6 staggered, 28 killed first, 6 landed); NAIVE answers 0.18 of 170 (31 killed first, 137
-    landed; 28 NAIVE runs died to a heavy against 2 TACTICAL). Every heavy so far is a depth 1-5 heavy: the
-    sim still stalls on floors 1-3 (177/200 TACTICAL runs), so the 6-10 / 11-15 / 16+ rows are empty. The
-    heavy mix is LANCE 654 / CHARGE 441 / AREA_STRIKE 15 / SELF_DESTRUCT 4 for TACTICAL.
-  - RESOLVED (hub decision, band re-based 0.80 -> 0.90 under the override clause — see the S-SUPPLY entry):
-    S-SUPPLY: TACTICAL's mean COMBAT exit health is 0.85 against the band [0.55, 0.90] (54 exited
-    COMBAT floors of 158 played; CP6 was 0.73). Cause: a player who answers heavies no longer pays the
-    half-pool hits that WERE the per-floor drain. It is a real shift, not noise (the sample's standard error
-    is ~0.02). It is NOT waived and was NOT loosened — the owner/hub decides between re-basing
-    SIM_SUPPLY_EXIT_HEALTH_MAX under the override clause (0.90 would pass with 0.05 of room) and making the
-    sim player fallible. THE HEAL RE-FIT WAS TRIED AND IS EXHAUSTED (hub-directed, CP7b):
-    SUPPLY_AVOIDANCE_FACTOR 0.70 -> 0.80 and 0.90 only moved exit health 0.85 -> 0.83, because the COMBAT
-    floor's planned heal already collapses onto the S4 heal floor (placed heal 0.80 -> 0.54 of max HP, one 'H'
-    0.45 + armour) and the drain is not supply-bound (TACTICAL takes ~0.14 of max HP a floor whatever lies on
-    the ground). The modelled incoming damage never contained the heavies (it reads attackDamage / cadence), so
-    there is no heavy term to discount. Only dropping the S4 heal floor (0.45 -> 0.15, with factor 0.90) got in
-    band (0.79, at the edge) — that breaks the one-medkit-per-floor guarantee, so it was reverted. Numbers
-    unchanged from CP6: SUPPLY_AVOIDANCE_FACTOR 0.70, SUPPLY_HEAL_FLOOR_FRACTION 0.45. Same cause, smaller: S-SWITCH's hinted-floor line sits at 11 against its floor of 10
-    (it was 21 at CP7a): the stall rate rose 159 -> 177 because runs that used to die to a heavy now live to
-    hit the navigator's pre-existing stalls.
-  - Readable deaths stay 1.00; the emergency lifeline fired on 0.04 of floors (band <= 0.05, thin).
-  - LADDER REPORT: TACTICAL's played hits-to-die ("onDie") rose at depths 1-5 (CHAFF 56 -> 133, SOLDIER 22 -> 35)
-    for the same reason — the probe policy dodges heavies now. The kill columns are unchanged in shape.
-  - Stalls 177/200 TACTICAL, 151/200 NAIVE: the navigator still stops on most floors (the pre-existing
-    rotate-in-place dithers); the navigation waivers stand.
+  READING IT (balance-overhaul order 5 CP6: build-biased rows, S-BUILD, BUILD REPORT; earlier: order 4 CP7b
+  S-HEAVY, CP7a S-SWITCH, CP6 hazards):
+  - S-BUILD: the depth spread reads 1.00 (every bias 2.0) and is WAIVED (navigation); 49 of 600 build-sample runs
+    held a perk rank (sample line OK, >= 30); the dominant-tag share reads 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 /
+    ENERGY 6 / PYRO 1 / DEMOLITION 1 / VITALITY 1) and is WAIVED by owner ruling D7. Every ranked run holds ONE
+    rank and no keystone is ever offered (keys/r 0.00): the sim measures the first perk pick only.
+  - The four biased rows play the same depths as plain TACTICAL (one rank cannot change a floor-1 stall); their
+    dominant-tag rows do lean their way (CLOSE 13/20, PYRO-DEMO 7/20 PYRO+DEMOLITION, BULWARK 3/20) — the bias
+    works when a bias perk is offered, which is only via the pivot or the free slot for non-kit tags.
+  - Pick rates (sample row): kit-tag perks are taken 0.57-1.00 of the time they are offered (synergy-first);
+    off-kit perks 0.00-0.40. SCAVENGER, BLADE and BULWARK perks were never taken by plain TACTICAL.
+  - Everything else is as at order 4 CP7b; the only moves came from the seeding fix (different perk offers and build rolls)
+    (S-SUPPLY 0.85 -> 0.86, S-HEAVY sample 1110 -> 1108, COMBAT floors 158 -> 160). Stalls 175/200 TACTICAL,
+    151/200 NAIVE: the navigation waivers stand.

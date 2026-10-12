@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.progression.BuildStats;
 import ge.tbegvadze.toon3d.render.EventTextSystem;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -139,10 +140,20 @@ public abstract class Weapon implements WeaponProfile {
     /**
      * Transient per-fire-activation damage multiplier set by AbilityResolver.onFire().
      * Reset to 1.0f at the start of every fire() call so stale values never bleed forward.
-     * Used by SECOND_WIND (passive HP-threshold boost) and ADRENAL_SURGE (kill-proc buff).
+     * Used by BERSERKERS_OATH (kill-streak stacks).
      * Applied inside damageAtDistance() so all weapon subclasses pick it up without changes.
      */
     private float fireCycleMultiplier = 1.0f;
+
+    /**
+     * The run's build aggregate (balance-overhaul order 5), wired by World / SimWorld to
+     * {@code PlayerBuild.stats()}; {@link BuildStats#NONE} until then. Read by the weapon-side perk seams only:
+     * Steady Aim ({@link #damageWithFalloff}, {@link #buildFalloff}), Lane Discipline's reach
+     * ({@link #buildRangeBonusTiles}), Point Man's knockback / stagger reach (Shotgun, Double-Barrel),
+     * Arc Jump (ArcCannon) and Overcharge (PlasmaRifle). Every other build term resolves where the hit lands
+     * ({@code EnemyManager.applyDamageTo}).
+     */
+    private BuildStats buildStats = BuildStats.NONE;
 
     // Facing direction stored at fire() entry; forwarded to onHit() for melee AoE abilities.
     private int lastFacingStepColumn = 0;
@@ -311,22 +322,17 @@ public abstract class Weapon implements WeaponProfile {
         effectiveClipSize    = GameMath.weaponScaledClipSize(clipSize, weaponLevel);
         effectiveReloadTicks = GameMath.weaponScaledReloadTicks(reloadTime, weaponLevel);
         effectiveRange       = GameMath.weaponScaledRange(range, weaponLevel, isMelee());
-        if (hasAbility(WeaponAbility.EXTENDED_MAG)) {
-            int bonus = abilityCount(WeaponAbility.EXTENDED_MAG);
-            effectiveClipSize = Math.min(effectiveClipSize + bonus, WeaponConstants.WEAPON_CLIP_HARD_CAP);
+        // DEADEYE's cost (balance-overhaul order 5): clip sizes x clipSizeMultiplier(), never below one round.
+        if (effectiveClipSize > 0) {
+            effectiveClipSize = GameMath.buildClipActions(effectiveClipSize, 1, buildStats.clipSizeMultiplier());
         }
         // BURST_FIRE must have a clip large enough to fire a full burst; otherwise the burst is
         // silently truncated by the remaining-clip cap in fire(). Guarantee at least one whole
-        // burst's worth of rounds (e.g. a burst-5 roll on a small-clip weapon lifts the clip to 5).
-        // Applied AFTER the EXTENDED_MAG bonus so both stack, and capped at the hard limit.
+        // burst's worth of rounds (a one-round clip lifts to BURST_FIRE_ROUND_COUNT), capped at the hard limit.
         if (hasAbility(WeaponAbility.BURST_FIRE)) {
             int burstCount = Math.max(1, abilityCount(WeaponAbility.BURST_FIRE));
             effectiveClipSize = Math.min(Math.max(effectiveClipSize, burstCount),
                                          WeaponConstants.WEAPON_CLIP_HARD_CAP);
-        }
-        if (!isMelee() && hasAbility(WeaponAbility.QUICK_HANDS)) {
-            effectiveReloadTicks = Math.max(WeaponConstants.WEAPON_RELOAD_MIN_TICKS,
-                                            effectiveReloadTicks - 1);
         }
     }
 
@@ -370,34 +376,45 @@ public abstract class Weapon implements WeaponProfile {
         return 0;
     }
 
-    // ── Overpenetration helpers ───────────────────────────────────────────────
+    /**
+     * Adds the {@link WeaponAbility#buildTag} of every ability this weapon carries to {@code into}
+     * (balance-overhaul order 5, B6): a carried weapon's abilities count toward B3 perk synergy alongside its
+     * damage class. Allocation-free; the caller owns and clears the set.
+     */
+    public void addAbilityBuildTags(java.util.EnumSet<ge.tbegvadze.toon3d.progression.BuildTag> into) {
+        for (AbilityInstance instance : abilities) {
+            if (instance.ability.buildTag != null) into.add(instance.ability.buildTag);
+        }
+    }
+
+    // ── Overpenetration helpers (ARMOR_PIERCE's merged pierce, balance-overhaul order 5) ──────────
 
     /**
-     * Number of EXTRA enemies a single shot may pierce beyond the first, from OVERPENETRATION.
-     * 0 when the weapon lacks the ability. Non-piercing weapons (Shotgun, Assault Rifle,
+     * Number of EXTRA enemies a single shot may pierce beyond the first, from ARMOR_PIERCE (which absorbed
+     * the cut OVERPENETRATION). 0 when the weapon lacks the ability. Non-piercing weapons (Shotgun, Assault Rifle,
      * Chaingun, Double-Barrel) keep marching through up to this many additional enemies before
      * the shot stops; already-piercing weapons use it to cap the damage-bonus ramp below.
      */
     protected int overpenetrationExtraTargets() {
-        return hasAbility(WeaponAbility.OVERPENETRATION)
-                ? Math.max(0, abilityCount(WeaponAbility.OVERPENETRATION))
+        return hasAbility(WeaponAbility.ARMOR_PIERCE)
+                ? Math.max(0, abilityCount(WeaponAbility.ARMOR_PIERCE))
                 : 0;
     }
 
     /**
      * Damage multiplier for an already-piercing weapon (Plasma Rifle, Railgun) that also carries
-     * OVERPENETRATION. The first enemy struck (index 0) takes normal damage; each subsequent enemy
-     * gains {@link GameBalance#OVERPENETRATION_ALREADY_PIERCING_BONUS}, capped at the ability's
+     * ARMOR_PIERCE. The first enemy struck (index 0) takes normal damage; each subsequent enemy
+     * gains {@link GameBalance#ARMOR_PIERCE_ALREADY_PIERCING_BONUS}, capped at the ability's
      * extra-target count so the ramp is bounded. Returns 1.0 when the weapon lacks the ability.
      *
      * @param enemiesHitBeforeThis how many enemies this shot already struck (0 for the first)
      */
     protected float overpenetrationPiercingDamageMultiplier(int enemiesHitBeforeThis) {
-        if (!hasAbility(WeaponAbility.OVERPENETRATION) || enemiesHitBeforeThis <= 0) {
+        if (!hasAbility(WeaponAbility.ARMOR_PIERCE) || enemiesHitBeforeThis <= 0) {
             return 1f;
         }
         int steps = Math.min(enemiesHitBeforeThis, overpenetrationExtraTargets());
-        return 1f + steps * GameBalance.OVERPENETRATION_ALREADY_PIERCING_BONUS;
+        return 1f + steps * GameBalance.ARMOR_PIERCE_ALREADY_PIERCING_BONUS;
     }
 
     /**
@@ -409,6 +426,15 @@ public abstract class Weapon implements WeaponProfile {
     protected void armDamageClass(EnemyHitTarget target, boolean arm) {
         if (target == null) return;
         target.setActivationDamageClass(arm ? damageClass() : null);
+    }
+
+    /**
+     * Arms the activation's damage class AND the tile it was fired from (balance-overhaul order 5: the build's
+     * range-band terms measure each target's distance from here). Disarming clears the class only.
+     */
+    protected void armDamageClass(EnemyHitTarget target, boolean arm, int originTileColumn, int originTileRow) {
+        armDamageClass(target, arm);
+        if (target != null && arm) target.setActivationOrigin(originTileColumn, originTileRow);
     }
 
     /**
@@ -497,7 +523,7 @@ public abstract class Weapon implements WeaponProfile {
 
     /**
      * Sets the fire-cycle damage multiplier for the current fire activation.
-     * Called by AbilityResolver.onFire() for SECOND_WIND and ADRENAL_SURGE.
+     * Called by AbilityResolver.onFire() for BERSERKERS_OATH.
      * The value is applied inside {@link #damageAtDistance} and reset to 1.0f at the
      * start of the next {@link #fire} call, so it cannot bleed across activations.
      *
@@ -713,6 +739,10 @@ public abstract class Weapon implements WeaponProfile {
                 && ammoInventory.countOf(ammoType.getItemType()) == 0) return false;
         visualState    = WeaponVisualState.RELOADING;
         ticksRemaining = reloadTime;
+        if (reloadCostsNoTurn()) {
+            completeReload();   // SCATTERGUN DOCTRINE: chambered at once, no world turn
+            return true;
+        }
         if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
         return true;
     }
@@ -746,7 +776,11 @@ public abstract class Weapon implements WeaponProfile {
                 normalToReloadTimerSeconds = 0f;
                 visualState                = WeaponVisualState.RELOADING;
                 ticksRemaining             = reloadTime;
-                if (eventTextSystem != null) eventTextSystem.spawn("Reloading...");
+                if (reloadCostsNoTurn()) {
+                    completeReload();   // SCATTERGUN DOCTRINE: the automatic reload is free too
+                } else if (eventTextSystem != null) {
+                    eventTextSystem.spawn("Reloading...");
+                }
             }
         }
     }
@@ -762,28 +796,41 @@ public abstract class Weapon implements WeaponProfile {
         if (visualState == WeaponVisualState.RELOADING) {
             ticksRemaining--;
             if (ticksRemaining <= 0) {
-                if (ammoInventory != null && ammoType != null) {
-                    int bulletsNeeded = getEffectiveClipSize() - shotsInClip;
-                    int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
-                    shotsInClip += roundsLoaded;
-                    if (shotsInClip == 0) {
-                        if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");
-                    } else {
-                        if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
-                    }
-                } else {
-                    // ammoInventory not yet injected — infinite ammo fallback for tests.
-                    shotsInClip = effectiveClipSize;
-                    if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
-                }
-                // Notify resolver so ON_RELOAD abilities (BULWARK_ROUNDS) can fire.
-                // Only triggers when rounds were actually chambered (shotsInClip > 0).
-                if (abilityResolver != null && shotsInClip > 0) {
-                    abilityResolver.onReload(this);
-                }
-                visualState = WeaponVisualState.NORMAL;
+                completeReload();
             }
         }
+    }
+
+    /**
+     * SCATTERGUN DOCTRINE (balance-overhaul order 5, CP3): true when this weapon's reload costs no world turn —
+     * a SPREAD weapon under the keystone. Such a reload completes the moment it starts (manual or automatic),
+     * and PlayerController takes no turn for it.
+     */
+    public boolean reloadCostsNoTurn() {
+        return buildStats.spreadReloadFree() && damageClass() == DamageClass.SPREAD;
+    }
+
+    /**
+     * Chambers the reload: spends rounds from the reserve into the clip, fires the ON_RELOAD abilities when
+     * rounds were chambered, and returns the weapon to NORMAL. Called when a reload's ticks run out, or at
+     * once for a reload that costs no turn ({@link #reloadCostsNoTurn}).
+     */
+    private void completeReload() {
+        if (ammoInventory != null && ammoType != null) {
+            int bulletsNeeded = getEffectiveClipSize() - shotsInClip;
+            int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
+            shotsInClip += roundsLoaded;
+            if (shotsInClip == 0) {
+                if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");
+            } else {
+                if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
+            }
+        } else {
+            // ammoInventory not yet injected — infinite ammo fallback for tests.
+            shotsInClip = effectiveClipSize;
+            if (eventTextSystem != null) eventTextSystem.spawn("Ready!");
+        }
+        visualState = WeaponVisualState.NORMAL;
     }
 
     /**
@@ -824,7 +871,7 @@ public abstract class Weapon implements WeaponProfile {
         this.lastPlayerTileColumn    = playerTileColumn;
         this.lastPlayerTileRow       = playerTileRow;
 
-        // ON_FIRE abilities (e.g. BURST_FIRE, SECOND_WIND, ADRENAL_SURGE) run before the
+        // ON_FIRE abilities (e.g. BURST_FIRE, JUDGMENT, BERSERKERS_OATH) run before the
         // accuracy roll so they can set fireCycleMultiplier and pendingBurstExtra first.
         if (abilityResolver != null) {
             abilityResolver.onFire(this);
@@ -832,8 +879,9 @@ public abstract class Weapon implements WeaponProfile {
 
         // ARMOR_PIERCE: bypass a fraction of the target's Block for every hit this activation.
         armBlockPierce(enemyHitTarget, true);
-        // MATCHUP (balance-overhaul order 3): every hit this activation resolves with this weapon's class.
-        armDamageClass(enemyHitTarget, true);
+        // MATCHUP (balance-overhaul order 3): every hit this activation resolves with this weapon's class
+        // (and, balance-overhaul order 5, measures its range band from the player's tile).
+        armDamageClass(enemyHitTarget, true, playerTileColumn, playerTileRow);
 
         shotsInClip--;
         visualState           = WeaponVisualState.FIRING;
@@ -1061,7 +1109,7 @@ public abstract class Weapon implements WeaponProfile {
     /**
      * Effective damage at a given tile distance, scaled by the current fire-cycle multiplier.
      * The distance-drop formula is applied first, then fireCycleMultiplier is multiplied in.
-     * fireCycleMultiplier is set by AbilityResolver.onFire() for SECOND_WIND and ADRENAL_SURGE;
+     * fireCycleMultiplier is set by AbilityResolver.onFire() for BERSERKERS_OATH;
      * it defaults to 1.0f and is reset at the start of each fire() call.
      */
     public int damageAtDistance(int distanceTiles) {
@@ -1078,7 +1126,58 @@ public abstract class Weapon implements WeaponProfile {
      * terms can never drift between falloff shapes.
      */
     protected int damageWithFalloff(float falloffMultiplier) {
-        return Math.round(damage * getLadderDamageMultiplier() * falloffMultiplier * fireCycleMultiplier);
+        return Math.round(damage * getLadderDamageMultiplier() * buildFalloff(falloffMultiplier) * fireCycleMultiplier);
+    }
+
+    /**
+     * STEADY AIM (balance-overhaul order 5): closes {@link BuildStats#falloffReductionFor} of the falloff loss
+     * for a BALLISTIC / RAIL weapon ({@link GameMath#falloffReducedHit} on the undropped 1.0); any other class
+     * — or no Steady Aim — returns the falloff unchanged. The Railgun, which computes its own falloff, calls it too.
+     */
+    protected float buildFalloff(float falloffMultiplier) {
+        float reduction = buildStats.falloffReductionFor(damageClass());
+        if (reduction <= 0f) return falloffMultiplier;
+        return GameMath.falloffReducedHit(falloffMultiplier, 1f, reduction);
+    }
+
+    /** LANE DISCIPLINE (balance-overhaul order 5): extra tiles of reach for a BALLISTIC / RAIL weapon (0 otherwise). */
+    protected int buildRangeBonusTiles() {
+        return buildStats.rangeBonusTilesFor(damageClass());
+    }
+
+    /** Wires the run's build aggregate (null resets to {@link BuildStats#NONE}). */
+    public void setBuildStats(BuildStats stats) {
+        this.buildStats = stats != null ? stats : BuildStats.NONE;
+        onBuildChanged();
+    }
+
+    /**
+     * Re-derives the build-dependent effective stats after a pick (DEADEYE's clip cut — balance-overhaul
+     * order 5) and clamps a now-oversized clip down to the new size. Called by World / SimWorld
+     * applyBuildEffects on every owned weapon. Never per frame.
+     */
+    public void onBuildChanged() {
+        recomputeEffectiveStats();
+        if (shotsInClip > effectiveClipSize) {
+            // DEADEYE's smaller clip: the rounds that no longer fit go back to the reserve, not into the void.
+            int overflowRounds = shotsInClip - effectiveClipSize;
+            shotsInClip = effectiveClipSize;
+            refundReserveRounds(overflowRounds);
+        }
+    }
+
+    /** The run's build aggregate (never null) — read by the weapon-side perk seams of subclasses. */
+    protected BuildStats buildStats() {
+        return buildStats;
+    }
+
+    /**
+     * Returns {@code rounds} of this weapon's ammo to the reserve (Breacher's shell refund — balance-overhaul
+     * order 5). No-op for a weapon without a tracked reserve; the inventory's own stack cap applies.
+     */
+    public void refundReserveRounds(int rounds) {
+        if (rounds <= 0 || ammoInventory == null || ammoType == null) return;
+        ammoInventory.tryAdd(ammoType.getItemType(), rounds);
     }
 
     public WeaponVisualState getVisualState()             { return visualState; }

@@ -42,12 +42,45 @@ public final class RoleScenarioWeapon {
     /** A hit on an ADJACENT target also hurts the shooter (Grenade Launcher contact fuse). */
     public final boolean selfDamageWhenAdjacent;
 
+    // --- BUILD TERMS (balance-overhaul order 5, util/BuildValuationModel). All neutral (0 / false) on the
+    // order-3 registry rows, so the R-ROLE table is unchanged; a perk or keystone sets them on a copy.
+    /** The FIRST hit landing on each member deals (1 + this) x (First Blood, DEADEYE's critical). */
+    public final float   firstHitBonus;
+    /** PIERCE: the k-th member of one shot (k = 0, 1, ...) takes (1 + this x k) x the hit (Overcharge). */
+    public final float   pierceBonusPerTarget;
+    /** After the pattern resolves, one more living member takes this fraction of the primary hit (STORM CONDUIT). */
+    public final float   arcFraction;
+    /** Hits and burn ticks on a burning member deal (1 + this) x (PYROMANIAC). */
+    public final float   burningDamageBonus;
+    /** A burning member that dies ignites its tile: every other living member gains its full burn stacks (Wildfire, D5). */
+    public final boolean wildfire;
+
     public RoleScenarioWeapon(String displayName, int clipActions, int reloadTurns, int ammoPerAction,
                               int hitsPerAction, float accuracy, float[] baseHitByTile,
                               RoleScenarioPattern pattern, float splashNeighbourHit,
                               int chainJumps, float chainMultiplier, int chargeTurns,
                               float burnFraction, float burnImpactHit, int burnTurns, int burnMaxStacks,
                               int knockbackMaxTiles, int staggerMaxTiles, boolean selfDamageWhenAdjacent) {
+        this(displayName, clipActions, reloadTurns, ammoPerAction, hitsPerAction, accuracy, baseHitByTile,
+                pattern, splashNeighbourHit, chainJumps, chainMultiplier, chargeTurns, burnFraction,
+                burnImpactHit, burnTurns, burnMaxStacks, knockbackMaxTiles, staggerMaxTiles,
+                selfDamageWhenAdjacent, 0f, 0f, 0f, 0f, false);
+    }
+
+    /** The full constructor, build terms included (balance-overhaul order 5). */
+    public RoleScenarioWeapon(String displayName, int clipActions, int reloadTurns, int ammoPerAction,
+                              int hitsPerAction, float accuracy, float[] baseHitByTile,
+                              RoleScenarioPattern pattern, float splashNeighbourHit,
+                              int chainJumps, float chainMultiplier, int chargeTurns,
+                              float burnFraction, float burnImpactHit, int burnTurns, int burnMaxStacks,
+                              int knockbackMaxTiles, int staggerMaxTiles, boolean selfDamageWhenAdjacent,
+                              float firstHitBonus, float pierceBonusPerTarget, float arcFraction,
+                              float burningDamageBonus, boolean wildfire) {
+        this.firstHitBonus          = Math.max(0f, firstHitBonus);
+        this.pierceBonusPerTarget   = Math.max(0f, pierceBonusPerTarget);
+        this.arcFraction            = Math.max(0f, arcFraction);
+        this.burningDamageBonus     = Math.max(0f, burningDamageBonus);
+        this.wildfire               = wildfire;
         this.displayName            = displayName;
         this.clipActions            = Math.max(1, clipActions);
         this.reloadTurns            = Math.max(0, reloadTurns);

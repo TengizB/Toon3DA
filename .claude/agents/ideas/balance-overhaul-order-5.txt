@@ -1,9 +1,35 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Progression
 TITLE: Builds That Differ — perks, keystones, real rarity
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-12
 ---
+IMPLEMENTATION NOTE (2026-10-12): built as specified, with these deliberate divergences
+(full record: .claude/checkpoints/balance-overhaul-order-5.md NOTES, docs/game-balance-authority.txt).
+  - Magnitudes are FITTED, not the B2/B4 defaults (the spec allows it: "math-expert tunes them
+    together"): e.g. First Blood .90/1.8/2.7, Plate Carrier .42/.90/1.48, IRON BULWARK reflects 1.4x
+    at -10% damage, BERSERKER kill heal 14%, STORM CONDUIT arc 60%, IRONHIDE x1.475. Every move is a
+    "MOVED" javadoc in BalanceConfig SECTION 24.
+  - Spec gaps decided by the hub: Point Man r1 = +SPREAD damage at <= 2 tiles; Shield Wall r2 guarded
+    heavy x0.0, r3 all-round guard; First Blood / Steady Aim / Lane Discipline are BALLISTIC+RAIL only
+    and First Blood is first-hit-only; Accelerant (+FIRE damage) and Arc Jump (+chain multiplier) gained
+    a second effect so every rank is felt; Butcher grants +1 STR/rank.
+  - Wildfire re-scoped (D5) and its rank-2/3 PK1 rows waived (D6); SCAVENGER waived from R-CARRY (D3);
+    S-BUILD dominant-tag share waived with the navigation waiver (D7).
+  - Sapper r1 is a mini-map HIGHLIGHT (barrels were already drawn there; hiding them by default would
+    remove information players already had).
+  - IRON BULWARK reflects every front-guarded hit (spec text "a guarded hit"); the valuation prices
+    heavies only, so it plays stronger than modelled. Boss attacks are not reflected.
+  - Abilities (B5/B6): 13 cut, OVERPENETRATION merged into ARMOR_PIERCE; MAJOR rank = EXECUTIONER, CLEAVE,
+    OPENING_SALVO, BURST_FIRE (now a fixed 2-round burst); EPIC = 1 MAJOR + 2 standard; LEGENDARY = 1
+    MAJOR + 2 standard + signature. Shop tier-up prices roughly doubled (priced on destination budget;
+    order 6 re-prices). The Double-Barrel's built-in BURST_FIRE can duplicate a rolled BURST_FIRE MAJOR
+    on an EPIC/LEGENDARY (no per-weapon eligibility rule yet).
+  - Fixed along the way: PerkDeck / build-roll RNG seeds are mixed with GameMath.splitMix64 (sequential
+    seeds made the first perk roll identical across runs).
+  - Desktop visual check of A5 / CP5 (./gradlew lwjgl3:run) is still owed — no display in the build
+    container.
+
 
 Order 5 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on orders 1-4 (especially order 3's damage classes and scenarios and
@@ -353,6 +379,29 @@ DECISIONS
       keystones, synergy/pivot offers.  (2026-09-30)
   D2  Rarity and abilities must be meaningful (owner, H4) -> guaranteed ability
       counts, raised budgets, pruned catalog, legendary signature.  (2026-09-30)
+  D3  R-CARRY: SCAVENGER is WAIVED (owner, 2026-10-11) — an economy tag the depth-15 combat model
+      cannot see (best honest carry 1.09 vs VITALITY's rule-pinned ~2.13). The waiver expires when
+      order 6 re-derives the economy with SCAVENGER in the expected player. The other eight tags
+      must hold +/-BUILD_CARRY_TOLERANCE pairwise.  (2026-10-11)
+  D4  PK1 breakpoint for WILDFIRE is measured on an integer resource metric — fuel / sprays spent to
+      clear its group scenario (owner, 2026-10-11) — because its fights end inside one turn and a TTK
+      breakpoint can never move. Its >= 10% felt gain stays on its TTK niche.  (2026-10-11)
+  D5  WILDFIRE RE-SCOPED (owner, 2026-10-11): under D4 it still changed no integer in any
+      reference fight (spray + first tick already clears S5; fuel 3->3 at depths 1-20). New rule:
+      a burning enemy that dies spreads its FULL burn stacks to its neighbours (not one stack),
+      plus +1 burn turn per rank; 3 ranks. Tuned to pass PK1 / PK2 honestly; D4's resource
+      breakpoint metric still applies to it.  (2026-10-11)
+  D6  WILDFIRE PK1 WAIVER (owner, 2026-10-11): D5 Wildfire (3 ranks) is kept. Its rank-2/3 PK1
+      FELT rows and its PK1 breakpoint row are WAIVED — every reference group fight ends inside
+      the first spray or two, so burn duration is invisible to the scenario math. Rank-1 FELT
+      (+200% on S5) stays enforced. The waiver expires when a long-group reference scenario exists
+      (order 7 feel pass).  (2026-10-11)
+  D7  S-BUILD DOMINANT-TAG WAIVER (owner, 2026-10-11): A6's dominant-tag part is WAIVED under
+      the same navigation waiver (and expiry) as SIM_FAIR's median depth, reported every run.
+      Measured 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 / ENERGY 6 of 49 ranked runs, 600-seed
+      sample) because 91% of sim runs never level up and every ranked run holds exactly one
+      rank, so "dominant tag" = the first synergy pick from the Chaingun + Shotgun start kit.
+      Enforced again when the navigation waiver expires.  (2026-10-11)
 
 
 OPEN QUESTIONS

@@ -48,7 +48,7 @@ public class Shotgun extends Weapon {
                                    int facingStepColumn, int facingStepRow,
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
-        // OVERPENETRATION: the slug pierces up to overpenetrationExtraTargets() enemies beyond the
+        // ARMOR_PIERCE (merged OVERPENETRATION): the slug pierces up to overpenetrationExtraTargets() enemies beyond the
         // first before it stops. Without the ability extraTargets is 0 and the shot stops on the
         // first enemy exactly as before.
         int enemiesHit      = 0;
@@ -84,7 +84,8 @@ public class Shotgun extends Weapon {
                     // stagger at <= 2 tiles. Resolved before the ability callbacks so a resolver bonus
                     // reads the post-knockback position.
                     SpreadImpact.applyCloseRangeImpact(enemyHitTarget, hitEnemy, distanceTiles,
-                            facingStepColumn, facingStepRow);
+                            facingStepColumn, facingStepRow,
+                            buildStats().knockbackBonusTiles(), buildStats().staggerBonusTiles());
                     dispatchHitCallbacks(new FireResult(false, distanceTiles));
                     clearLastHit();
                     enemiesHit++;

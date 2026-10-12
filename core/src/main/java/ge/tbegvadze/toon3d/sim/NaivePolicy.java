@@ -70,11 +70,11 @@ public final class NaivePolicy implements PlayerPolicy {
         return SimPolicySupport.wander(view, tieBreak);
     }
 
-    /** Takes whatever card is offered first — no build planning. */
+    /** Takes whatever perk is offered first — no build planning. */
     @Override
-    public ge.tbegvadze.toon3d.progression.UpgradeCard chooseCard(
-            ge.tbegvadze.toon3d.progression.UpgradeCard[] offeredCards, int count, SimView view) {
-        return count > 0 ? offeredCards[0] : null;
+    public ge.tbegvadze.toon3d.progression.Perk choosePerk(
+            ge.tbegvadze.toon3d.progression.Perk[] offeredPerks, int count, SimView view) {
+        return count > 0 ? offeredPerks[0] : null;
     }
 
     /** Picks a route node at random — the map's pips and prices are ignored entirely. */

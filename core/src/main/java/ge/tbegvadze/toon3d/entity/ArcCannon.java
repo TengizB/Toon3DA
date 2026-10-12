@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.entity;
 import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
@@ -38,8 +39,12 @@ public class ArcCannon extends Weapon {
     // activation so a single enemy is never zapped twice by the same chain.
     private final int[] chainDirectionColumns = new int[4];
     private final int[] chainDirectionRows    = new int[4];
-    private final int[] visitedColumns        = new int[WeaponConstants.ARC_CANNON_CHAIN_JUMPS + 1];
-    private final int[] visitedRows           = new int[WeaponConstants.ARC_CANNON_CHAIN_JUMPS + 1];
+    // Sized for the largest chain any build can reach (ARC JUMP's top rank — balance-overhaul order 5), so a
+    // longer chain never allocates in fire().
+    private static final int MAX_CHAIN_JUMPS = WeaponConstants.ARC_CANNON_CHAIN_JUMPS
+            + Math.round(BalanceConfig.PERK_ARC_JUMP_CHAIN_JUMPS_BY_RANK[BalanceConfig.PERK_ARC_JUMP_CHAIN_JUMPS_BY_RANK.length - 1]);
+    private final int[] visitedColumns        = new int[MAX_CHAIN_JUMPS + 1];
+    private final int[] visitedRows           = new int[MAX_CHAIN_JUMPS + 1];
 
     public ArcCannon() {
         super("ARC CANNON",
@@ -150,7 +155,12 @@ public class ArcCannon extends Weapon {
         int currentRow    = primaryRow;
         float chainDamage = primaryDamage;
 
-        for (int jumpIndex = 1; jumpIndex <= WeaponConstants.ARC_CANNON_CHAIN_JUMPS; jumpIndex++) {
+        // ARC JUMP (balance-overhaul order 5): more leaps, and each leap keeps more of the hit (capped at 1).
+        int chainJumps = Math.min(MAX_CHAIN_JUMPS,
+                WeaponConstants.ARC_CANNON_CHAIN_JUMPS + Math.max(0, buildStats().arcChainJumpBonus()));
+        float chainMultiplier = Math.min(1f,
+                WeaponConstants.ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER + Math.max(0f, buildStats().arcChainMultiplierBonus()));
+        for (int jumpIndex = 1; jumpIndex <= chainJumps; jumpIndex++) {
             int nextColumn = 0;
             int nextRow    = 0;
             Object nextEnemy = null;
@@ -176,7 +186,7 @@ public class ArcCannon extends Weapon {
 
             if (nextEnemy == null) return; // no eligible neighbour — the chain dies here.
 
-            chainDamage *= WeaponConstants.ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER;
+            chainDamage *= chainMultiplier;
             int leapDamage = Math.max(1, Math.round(chainDamage));
             // Dispatch each leap's hit through the standard callback path so abilities (Rhythm,
             // Static Discharge, Lifesteal, etc.) apply to every chained target, mirroring the

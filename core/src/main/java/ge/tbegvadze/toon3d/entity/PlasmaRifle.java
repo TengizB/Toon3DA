@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.item.AmmoType;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 
 /**
@@ -41,7 +42,7 @@ public class PlasmaRifle extends Weapon {
                                    Level level, EnemyHitTarget enemyHitTarget,
                                    BarrelHitTarget barrelHitTarget, DoorBlocksQuery doorBlocksQuery) {
         boolean hitEnemy = false;
-        // OVERPENETRATION on an already-piercing weapon adds a stacking damage bonus per enemy
+        // ARMOR_PIERCE (merged OVERPENETRATION) on an already-piercing weapon adds a stacking damage bonus per enemy
         // struck beyond the first (see overpenetrationPiercingDamageMultiplier); 1.0 without it.
         int enemiesHit = 0;
         for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
@@ -69,8 +70,10 @@ public class PlasmaRifle extends Weapon {
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(targetColumn, targetRow);
                 if (enemy != null) {
+                    // OVERCHARGE (balance-overhaul order 5): the k-th body this bolt pierces takes x(1 + o x k).
                     int damageThisHit = Math.round(damageAtDistance(distanceTiles)
-                            * overpenetrationPiercingDamageMultiplier(enemiesHit));
+                            * overpenetrationPiercingDamageMultiplier(enemiesHit)
+                            * GameMath.pierceOverchargeMultiplier(buildStats().piercePerEnemyBonus(), enemiesHit));
                     setLastHitEnemy(enemy, damageThisHit, enemyHitTarget.isAtFullHp(enemy));
                     enemyHitTarget.applyDamageTo(enemy, damageThisHit);
                     // Shield-shredding bolt (strategy-combat-order-6): piercing plasma leaves the target

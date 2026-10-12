@@ -218,7 +218,8 @@ public final class HazardManager implements HazardIgniteTarget {
             int  tileRow    = snapshotRows[index];
             byte type       = snapshotTypes[index];
 
-            if (player != null && playerColumn == tileColumn && playerRow == tileRow) {
+            if (player != null && playerColumn == tileColumn && playerRow == tileRow
+                    && !(type == FIRE && player.isFireTileImmune())) {   // Fireproof / PYROMANIAC (balance-overhaul order 5)
                 applyHazardStatus(player, type);
             }
             for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {

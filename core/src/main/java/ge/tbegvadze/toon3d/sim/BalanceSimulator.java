@@ -34,6 +34,19 @@ public final class BalanceSimulator {
         return factories;
     }
 
+    /**
+     * The four BUILD-BIASED TACTICAL variants (balance-overhaul order 5, S-BUILD): the same skill ceiling,
+     * leaning into CLOSE / MARKSMAN / PYRO-DEMOLITION / BULWARK perks and keystones. Extra matrix rows.
+     */
+    public static List<PolicyFactory> buildBiasPolicies() {
+        List<PolicyFactory> factories = new ArrayList<>();
+        for (BuildBias bias : BuildBias.values()) {
+            if (!bias.isBiased()) continue;
+            factories.add(factory("TACTICAL" + bias.policyIdSuffix, seed -> new TacticalPolicy(seed, bias)));
+        }
+        return factories;
+    }
+
     /** The single policy the S-GATE band is stated on — the headline guarantee. */
     public static PolicyFactory hoarderPolicy() {
         return factory("HOARDER-START-WEAPON", seed -> new HoarderStartWeaponPolicy(seed));
@@ -66,10 +79,29 @@ public final class BalanceSimulator {
         return new PolicySummary(factory.id(), ledgers);
     }
 
-    /** Plays the full matrix at the shipping sample size — the {@code ./gradlew balanceSim} workload. */
+    /**
+     * Plays the full matrix at the shipping sample size — the {@code ./gradlew balanceSim} workload: the three
+     * standard policies at SIM_SEED_COUNT, then the four build-biased TACTICAL rows at SIM_BUILD_SEED_COUNT
+     * (same seed origin, so every variant plays the same seeds as plain TACTICAL).
+     */
     public static Map<String, PolicySummary> runStandardMatrix() {
-        return runMatrix(standardPolicies(), BalanceConfig.SIM_SEED_COUNT,
-                         DEFAULT_SEED_OFFSET, SimSettings.standard());
+        Map<String, PolicySummary> summaries = runMatrix(standardPolicies(), BalanceConfig.SIM_SEED_COUNT,
+                DEFAULT_SEED_OFFSET, SimSettings.standard());
+        summaries.putAll(runMatrix(buildBiasPolicies(), BalanceConfig.SIM_BUILD_SEED_COUNT,
+                DEFAULT_SEED_OFFSET, SimSettings.standard()));
+        PolicyFactory sample = buildSamplePolicy();
+        summaries.put(sample.id(), runPolicy(sample, BalanceConfig.SIM_BUILD_SAMPLE_SEED_COUNT,
+                DEFAULT_SEED_OFFSET, SimSettings.standard()));
+        return summaries;
+    }
+
+    /**
+     * Plain TACTICAL under its own row id, played over SIM_BUILD_SAMPLE_SEED_COUNT seeds — the run set S-BUILD's
+     * dominant-tag share is read from (balance-overhaul order 5, CP6), so the share has enough runs that held a
+     * perk rank without widening the 200-seed rows every other band reads.
+     */
+    public static PolicyFactory buildSamplePolicy() {
+        return factory(BehavioralBands.TACTICAL_BUILD_SAMPLE_ID, seed -> new TacticalPolicy(seed));
     }
 
     /** Plays an arbitrary matrix. Keyed by policy id, in the order the factories were listed. */

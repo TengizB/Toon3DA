@@ -38,7 +38,9 @@ public final class BalanceReport {
         System.out.println();
         printMoveSetTable();
         System.out.println();
-        printUpgradeCardTable();
+        printPerkTable();
+        System.out.println();
+        printBuildTable();
         System.out.println();
         printXpPacingTable();
         System.out.println();
@@ -399,45 +401,92 @@ public final class BalanceReport {
     }
 
     // -----------------------------------------------------------------------------------
-    // UPGRADE CARDS (idea 5) — every level-up card priced in power points (PP) vs the budget.
-    // PP = %-gain to reference DPT (offence) or reference eHP (survivability), computed straight
-    // from the card's stat deltas through GameMath. Each card MUST land in the budget band, so the
-    // total PP at level L is build-independent (= L * budget). Trade-off cards net to ~budget.
+    // PERKS (balance-overhaul order 5, R-PERK) — every perk's niche, the gain each rank buys on it (the
+    // smallest over BUILD_PERK_REFERENCE_DEPTHS; PK1 wants >= PERK_FELT_MIN_GAIN), the whole-step breakpoint
+    // its max rank crosses, and PK2: a non-VITALITY perk's LEAST-improved scenario at max rank (must be
+    // <= PERK_FOCUSED_MAX_GAIN, else it improves all eight), a VITALITY perk's largest per-rank scenario gain.
     // -----------------------------------------------------------------------------------
-    private static void printUpgradeCardTable() {
-        float budget    = GameBalance.LEVEL_UP_BUDGET_PP;
-        float tolerance = GameBalance.LEVEL_UP_BUDGET_TOLERANCE;
-        float bandMinimum = budget * (1f - tolerance);
-        float bandMaximum = budget * (1f + tolerance);
-
-        System.out.println("UPGRADE CARDS (idea 5) — budget = " + String.format("%.0f", budget)
-                + " PP   band = " + String.format("%.1f-%.1f", bandMinimum, bandMaximum)
-                + " PP   (offered " + GameBalance.LEVEL_UP_CARDS_OFFERED + "/level)");
-        System.out.printf("%-20s %-9s %-13s %8s %-8s %-6s %-8s%n",
-                "card", "pool", "lever", "PP", "tradeoff", "in?", "maxBP");
-        System.out.println("------------------------------------------------------------------------------------");
-
-        boolean allInBand = true;
-        boolean allCross  = true;
-        for (ge.tbegvadze.toon3d.progression.UpgradeCard card
-                : ge.tbegvadze.toon3d.progression.UpgradeCard.values()) {
-            float powerPoints = card.estimatedPowerPoints();
-            boolean inBand = powerPoints >= bandMinimum && powerPoints <= bandMaximum;
-            allInBand &= inBand;
-            // R-CARD-BREAKPOINT: the deepest integer TTK/TTD breakpoint the card crosses vs the region soldier.
-            int bestBreakpoint = ge.tbegvadze.toon3d.util.BalanceSchema.cardBestBreakpoint(card);
-            allCross &= bestBreakpoint >= 1;
-            System.out.printf("%-20s %-9s %-13s %8.1f %-8s %-6s %-8s%n",
-                    card.displayName, card.pool.name(), card.lever.name(), powerPoints,
-                    card.isTradeOff() ? "YES" : "no",
-                    bandVerdict(inBand, powerPoints, bandMinimum),
-                    bestBreakpoint >= 1 ? ("+" + bestBreakpoint) : "NONE");
+    private static void printPerkTable() {
+        System.out.println("PERKS (R-PERK) — niche gain per rank (min over depths "
+                + java.util.Arrays.toString(BalanceConfig.BUILD_PERK_REFERENCE_DEPTHS) + "), felt >= "
+                + String.format("%.0f%%", BalanceConfig.PERK_FELT_MIN_GAIN * 100f) + "; PK2 focused <= "
+                + String.format("%.0f%%", BalanceConfig.PERK_FOCUSED_MAX_GAIN * 100f) + "  (* = niche override)");
+        System.out.printf("%-20s %-15s %-34s %7s %7s %7s  %-30s %8s%n",
+                "perk", "tag", "niche", "r1", "r2", "r3", "breakpoint by max rank", "PK2");
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.perkResults();
+        for (ge.tbegvadze.toon3d.progression.Perk perk : ge.tbegvadze.toon3d.progression.Perk.values()) {
+            float[] gains = {Float.NaN, Float.NaN, Float.NaN};
+            String breakpoint = "-";
+            float focus = Float.NaN;
+            boolean focusOk = true;
+            boolean waived = false;
+            for (BalanceSchema.RuleResult result : results) {
+                if (result.waived && result.subject.startsWith("PK1 " + perk.name() + " ")) waived = true;
+                String prefix1 = "PK1 " + perk.name() + " r";
+                if (result.subject.startsWith(prefix1) && result.subject.contains(" felt d")) {
+                    int rank = result.subject.charAt(prefix1.length()) - '1';
+                    gains[rank] = Float.isNaN(gains[rank]) ? result.value : Math.min(gains[rank], result.value);
+                } else if (result.subject.startsWith("PK1 " + perk.name() + " breakpoint")) {
+                    breakpoint = (result.satisfied ? "" : result.waived ? "WAIVED: " : "*** NONE: ") + result.detail;
+                } else if (result.subject.startsWith("PK2 " + perk.name() + " ")) {
+                    focus = Float.isNaN(focus) ? result.value : Math.max(focus, result.value);
+                    focusOk &= result.satisfied;
+                }
+            }
+            BuildValuationModel.Niche niche = BuildValuationModel.nicheOf(perk);
+            System.out.printf("%-20s %-15s %-34s %7s %7s %7s  %-30s %7.1f%%%s%n",
+                    perk.name(), perk.tag.name(),
+                    (BuildValuationModel.hasOverride(perk) ? "*" : " ") + niche.label(),
+                    gainCell(gains[0]), gainCell(gains[1]), gainCell(gains[2]), breakpoint,
+                    focus * 100f, (focusOk ? "" : " ***") + (waived ? "  [rows WAIVED, D6]" : ""));
         }
-        System.out.println("------------------------------------------------------------------------------------");
-        System.out.println("INVARIANT: every card in band => total PP at level L = L * budget (build-independent).  "
-                + (allInBand ? "ALL CARDS IN BAND" : "*** OUT-OF-BAND CARD(S) — RE-PRICE ***"));
-        System.out.println("R-CARD-BREAKPOINT (order 4): each card crosses >= 1 TTK/TTD breakpoint vs the region soldier.  "
-                + (allCross ? "ALL CROSS" : "*** CARD CROSSES NO BREAKPOINT — RE-PRICE ***"));
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        System.out.println("KEYSTONES (R-KEYSTONE) — niche gain >= " + String.format("%.0f%%", BalanceConfig.KEYSTONE_NICHE_MIN_GAIN * 100f)
+                + " at every depth, and some other probe worse by >= " + String.format("%.0f%%", BalanceConfig.KEYSTONE_COST_MIN_LOSS * 100f));
+        for (BalanceSchema.RuleResult result : BalanceSchema.keystoneResults()) {
+            System.out.printf("  %-44s %7.1f%% %-11s %s%n", result.subject, result.value * 100f,
+                    result.satisfied ? "OK" : "OUT-OF-BAND", result.detail);
+        }
+    }
+
+    private static String gainCell(float gain) {
+        if (Float.isNaN(gain)) return "-";
+        if (Float.isInfinite(gain)) return "inf";
+        return String.format("%.1f%%", gain * 100f) + (gain < BalanceConfig.PERK_FELT_MIN_GAIN ? "!" : "");
+    }
+
+    // -----------------------------------------------------------------------------------
+    // BUILDS (balance-overhaul order 5, R-CARRY) — each tag's expected build at BUILD_CARRY_DEPTH (perks at
+    // the expected rank count + its keystone) against the same player without it: the roster TTK lift, the
+    // floor TTD lift, their product, and each tag's ratio to the best and the worst.
+    // -----------------------------------------------------------------------------------
+    private static void printBuildTable() {
+        System.out.println("BUILDS (R-CARRY, depth " + BalanceConfig.BUILD_CARRY_DEPTH + ") — best / worst <= "
+                + String.format("%.2f", 1f + BalanceConfig.BUILD_CARRY_TOLERANCE) + "; focus share "
+                + BalanceConfig.BUILD_EXPECTED_FOCUS_SHARE + " of the perk picks");
+        System.out.printf("%-15s %-20s %5s %8s %8s %8s %8s %8s  %s%n",
+                "tag", "keystone", "ranks", "TTK x", "TTD x", "carry", "/best", "/worst", "ranks held");
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        float best = 0f;
+        float worst = Float.MAX_VALUE;
+        for (ge.tbegvadze.toon3d.progression.BuildTag tag : ge.tbegvadze.toon3d.progression.BuildTag.values()) {
+            if (BalanceSchema.isCarryWaived(tag)) continue;
+            float score = BuildValuationModel.carry(tag).score;
+            best = Math.max(best, score);
+            worst = Math.min(worst, score);
+        }
+        for (ge.tbegvadze.toon3d.progression.BuildTag tag : ge.tbegvadze.toon3d.progression.BuildTag.values()) {
+            BuildValuationModel.Carry carry = BuildValuationModel.carry(tag);
+            System.out.printf("%-15s %-20s %5d %8.3f %8.3f %8.3f %8.3f %8.3f  %s%n",
+                    tag.name(), carry.keystone == null ? "-" : carry.keystone.name(), carry.ranks,
+                    carry.turnsToKillLift, carry.turnsToDieLift, carry.score, carry.score / best, carry.score / worst,
+                    carry.ranksSummary + (BalanceSchema.isCarryWaived(tag) ? "  [WAIVED, D3 — not in the spread]" : ""));
+        }
+        float spread = best / worst;
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        System.out.println(String.format("SPREAD best / worst (waived tags excluded) = %.3f  ", spread)
+                + (spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE ? "IN BAND" : "*** OUT OF BAND — a trap or a dominant build ***"));
     }
 
     // -----------------------------------------------------------------------------------
@@ -592,33 +641,67 @@ public final class BalanceReport {
     }
 
     // -----------------------------------------------------------------------------------
-    // ABILITY PRICING — every weapon ability's PP price at level 1 and level 10, plus the per-tier
-    // ability-PP budgets (new-game-balancr order 2). Rarity buys abilities within these budgets;
-    // the WeaponRoller never overspends a tier's ceiling. Iterated straight from GameMath so the
-    // table cannot drift from the roller.
+    // ABILITY PRICING — REAL RARITY (balance-overhaul order 5, B5/B6). One row per surviving ability: its
+    // rank (MAJOR flag), BuildTag, the drop depth + expected weapon level it is valued at, the PP there, the
+    // PP at level 1 and at MAX_WEAPON_LEVEL, and KEPT / CUT against ABILITY_MIN_FELT_PP. Then one row per
+    // tier: its guaranteed shape, its band, and the sampled min..max PP of the A4 roll sweep. Every number
+    // is read from BalanceSchema / GameMath, so the table cannot drift from the rule or the roller.
     // -----------------------------------------------------------------------------------
     private static void printAbilityPricingTable() {
-        System.out.println("ABILITY PRICING — PP cost per ability (budget = PP a tier may spend on abilities)");
-        System.out.print("  tier budgets: ");
-        for (ge.tbegvadze.toon3d.entity.WeaponTier tier : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
-            System.out.printf("%s=%.0f  ", tier.displayName,
-                    ge.tbegvadze.toon3d.entity.WeaponRoller.tierAbilityPowerPointBudget(tier));
-        }
-        System.out.printf("(±%.0f%%)%n", BalanceConfig.TIER_ABILITY_PP_TOLERANCE * 100f);
-        System.out.printf("%-22s %8s %8s%n", "ability", "PP@L1", "PP@L10");
+        System.out.printf("ABILITY PRICING — every ability priced at its expected level (felt >= %.0f PP, B6)%n",
+                BalanceConfig.ABILITY_MIN_FELT_PP);
+        System.out.printf("%-20s %-9s %-15s %5s %5s %8s %7s %7s  %s%n", "ability", "rank", "tag", "depth",
+                "expLv", "PP@exp", "PP@L1", "PP@max", "status");
         System.out.println("------------------------------------------------------------------------------------");
         for (ge.tbegvadze.toon3d.entity.WeaponAbility ability
                 : ge.tbegvadze.toon3d.entity.WeaponAbility.values()) {
-            float ppLevel1  = abilityPowerPointsAt(ability, 1);
-            float ppLevel10 = abilityPowerPointsAt(ability, WeaponConstants.MAX_WEAPON_LEVEL);
-            System.out.printf("%-22s %8.2f %8.2f%n", ability.name(), ppLevel1, ppLevel10);
+            int   expectedLevel = BalanceSchema.expectedAbilityLevel(ability);
+            float ppExpected    = BalanceSchema.abilityPowerPointsAt(ability, expectedLevel);
+            float ppLevel1      = BalanceSchema.abilityPowerPointsAt(ability, 1);
+            float ppMaximum     = BalanceSchema.abilityPowerPointsAt(ability, WeaponConstants.MAX_WEAPON_LEVEL);
+            String status = ppExpected >= BalanceConfig.ABILITY_MIN_FELT_PP ? "KEPT" : "CUT (below felt)";
+            System.out.printf("%-20s %-9s %-15s %5d %5d %8.2f %7.2f %7.2f  %s%n", ability.name(),
+                    ability.isMajor() ? "MAJOR" : ability.rank.name(),
+                    ability.buildTag != null ? ability.buildTag.name() : "-",
+                    BalanceSchema.expectedAbilityDepth(ability), expectedLevel, ppExpected, ppLevel1, ppMaximum,
+                    status);
         }
-    }
-
-    private static float abilityPowerPointsAt(ge.tbegvadze.toon3d.entity.WeaponAbility ability, int level) {
-        ge.tbegvadze.toon3d.entity.AbilityInstance instance =
-                ge.tbegvadze.toon3d.entity.WeaponRoller.buildAbilityInstance(ability, level);
-        return GameMath.abilityPowerPoints(ability, instance.magnitude, instance.countValue);
+        System.out.println("  (cut by order 5: HEMORRHAGE_HARVEST, VAMPIRIC_CRIT, ADRENAL_SURGE, BULWARK_ROUNDS, SECOND_WIND,");
+        System.out.println("   SALVAGE_STRIKE, SCHOLARS_EDGE, QUICK_HANDS, EXTENDED_MAG, FIELD_MEDIC_ROUNDS, CREDIT_FANG,");
+        System.out.println("   MARKSMANS_PATIENCE, RESONANT_ROUNDS; merged: OVERPENETRATION -> ARMOR_PIERCE)");
+        System.out.println();
+        System.out.printf("TIERS — guaranteed shape and priced band (budget ±%.0f%%), A4 roll sweep at depths %s%n",
+                BalanceConfig.TIER_ABILITY_PP_TOLERANCE * 100f,
+                java.util.Arrays.toString(BalanceConfig.ABILITY_ROLL_SWEEP_DEPTHS));
+        System.out.printf("%-10s %5s %5s %4s %7s %13s %15s%n", "tier", "count", "MAJOR", "sig", "budget",
+                "band", "sampled PP");
+        System.out.println("------------------------------------------------------------------------------------");
+        java.util.List<BalanceSchema.RuleResult> sweep = BalanceSchema.abilityRollSweepResults();
+        for (ge.tbegvadze.toon3d.entity.WeaponTier tier : ge.tbegvadze.toon3d.entity.WeaponTier.values()) {
+            float sampledMinimum = Float.MAX_VALUE;
+            float sampledMaximum = 0f;
+            for (int depth : BalanceConfig.ABILITY_ROLL_SWEEP_DEPTHS) {
+                int weaponLevel = GameMath.expectedPlayerAtDepth(depth).weaponLevel;
+                for (long seed = 0; seed < BalanceConfig.ABILITY_ROLL_SWEEP_SEEDS; seed++) {
+                    ge.tbegvadze.toon3d.entity.WeaponRoller roller =
+                            new ge.tbegvadze.toon3d.entity.WeaponRoller(seed * 7919L + depth);
+                    for (boolean isMelee : new boolean[]{false, true}) {
+                        float total = ge.tbegvadze.toon3d.entity.WeaponRoller.totalAbilityPowerPoints(
+                                roller.rollAbilitySet(isMelee, tier, weaponLevel));
+                        sampledMinimum = Math.min(sampledMinimum, total);
+                        sampledMaximum = Math.max(sampledMaximum, total);
+                    }
+                }
+            }
+            int violations = 0;
+            for (BalanceSchema.RuleResult row : sweep) {
+                if (row.subject.startsWith("roll sweep " + tier.name() + " ")) violations += Math.round(row.value);
+            }
+            System.out.printf("%-10s %5d %5d %4s %7.0f %6.1f..%-6.1f %6.1f..%-6.1f %s%n", tier.name(),
+                    tier.abilityCount, tier.majorCount, tier.rollsSignature ? "yes" : "-",
+                    tier.abilityPowerPointBudget, tier.abilityPowerPointFloor(), tier.abilityPowerPointCeiling(),
+                    sampledMinimum, sampledMaximum, violations == 0 ? "OK" : violations + " OUT");
+        }
     }
 
     // -----------------------------------------------------------------------------------
@@ -784,9 +867,11 @@ public final class BalanceReport {
         printShopPriceRow("Field medkit (" + BalanceSchema.modelFullMedkitHeal() + " HP)",
                 BalanceSchema.modelFullMedkitHeal() / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT, depths);
         printShopPriceRow("Weapon level-up", BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS, depths);
-        printShopPriceRow("Tier up (RARE, 12 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
-        printShopPriceRow("Tier up (EPIC, 20 PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
-        printShopPriceRow("Player ability boon (~12 PP)", BalanceConfig.LEVEL_UP_BUDGET_PP, depths);
+        printShopPriceRow(String.format("Tier up (RARE, %.0f PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE),
+                BalanceConfig.TIER_ABILITY_PP_BUDGET_RARE, depths);
+        printShopPriceRow(String.format("Tier up (EPIC, %.0f PP)", BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC),
+                BalanceConfig.TIER_ABILITY_PP_BUDGET_EPIC, depths);
+        printShopPriceRow("Player ability: 1 perk rank", BalanceConfig.SHOP_PERK_RANK_POWER_POINTS, depths);
     }
 
     private static void printShopPriceRow(String label, float valuePowerPoints, int[] depths) {

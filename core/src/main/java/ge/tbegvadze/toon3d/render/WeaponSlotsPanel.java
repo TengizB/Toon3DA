@@ -353,7 +353,11 @@ final class WeaponSlotsPanel implements Disposable {
     // -------------------------------------------------------------------------
 
     private SlotState getSlotState(int slotIndex) {
-        if (slotIndex == GUN_SLOT_3_INDEX) return SlotState.LOCKED;
+        // The third gun slot is locked unless a QUARTERMASTER build opened it (balance-overhaul order 5).
+        if (slotIndex == GUN_SLOT_3_INDEX
+                && (playerInventory == null || playerInventory.getLoadout().isSlotLocked(slotIndex))) {
+            return SlotState.LOCKED;
+        }
         Weapon weapon = getWeaponForSlot(slotIndex);
         if (weapon == null) return SlotState.EMPTY;
         return isSlotActive(slotIndex) ? SlotState.ACTIVE : SlotState.FILLED;

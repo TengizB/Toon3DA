@@ -53,16 +53,6 @@ public final class PlayerStats {
     private final int[] tempArmorTurnsLeft = new int[GameBalance.BULWARK_TEMP_ARMOR_SLOTS];
 
     // =========================================================================
-    // Adrenal Surge pending buff — consumed on the very next fire activation
-    // Not turn-counted; "next attack only" semantics via consume-on-read.
-    // =========================================================================
-
-    /** True when an Adrenal Surge bonus is waiting to be applied. */
-    private boolean adrenalSurgePending    = false;
-    /** The multiplier bonus stored by the most recent Adrenal Surge proc (e.g. 0.30). */
-    private float   adrenalSurgeBonus      = 0f;
-
-    // =========================================================================
     // Storage — three layers, indexed by Attribute.ordinal()
     // =========================================================================
 
@@ -357,39 +347,6 @@ public final class PlayerStats {
         if (credits < amount) return false;
         credits -= amount;
         return true;
-    }
-
-    // =========================================================================
-    // Adrenal Surge pending buff — consumed on the very next weapon fire
-    // "Next attack only" semantics: stored on kill, read-and-clear on fire.
-    // =========================================================================
-
-    /**
-     * Stores an Adrenal Surge damage bonus to apply on the player's next attack.
-     * Overwrites any existing pending surge (only one surge is active at a time).
-     *
-     * @param bonusMultiplier the fractional bonus, e.g. 0.30 for +30% damage
-     */
-    public void applyAdrenalSurge(float bonusMultiplier) {
-        adrenalSurgePending = true;
-        adrenalSurgeBonus   = bonusMultiplier;
-    }
-
-    /**
-     * Returns the pending Adrenal Surge multiplier (1.0 + bonus) and clears the buff.
-     * Returns 1.0 if no surge is pending.
-     * Must be called exactly once per fire activation (from AbilityResolver.onFire).
-     *
-     * @return multiplier to apply to the next attack's damage (e.g. 1.30); 1.0 if inactive
-     */
-    public float pollAdrenalSurgeMultiplier() {
-        if (adrenalSurgePending) {
-            adrenalSurgePending = false;
-            float multiplier    = 1.0f + adrenalSurgeBonus;
-            adrenalSurgeBonus   = 0f;
-            return multiplier;
-        }
-        return 1.0f;
     }
 
     /**

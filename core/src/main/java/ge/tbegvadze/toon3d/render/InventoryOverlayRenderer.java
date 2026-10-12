@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
@@ -65,6 +66,10 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         OPEN_CODEX
     }
 
+    /** Header BUILD / ITEMS toggle label (balance-overhaul order 5, B8). */
+    private static final String BUILD_BUTTON_TEXT = "BUILD";
+    private static final String ITEMS_BUTTON_TEXT = "ITEMS";
+
     // -------------------------------------------------------------------------
     // Palette — UAC military CRT amber on steel
     // -------------------------------------------------------------------------
@@ -96,6 +101,14 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             + (ItemConstants.INV_HEADER_HEIGHT - ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT) / 2f;
 
     // -------------------------------------------------------------------------
+    // Header BUILD button — sits immediately left of CODEX (balance-overhaul order 5, B8): toggles the
+    // BUILD page (picked perks by tag + keystones) over the weapon/item panels.
+    // -------------------------------------------------------------------------
+    private static final float HEADER_BUILD_X = HEADER_CODEX_X
+            - ItemConstants.INV_HEADER_CODEX_GAP - ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH;
+    private static final float HEADER_BUILD_Y = HEADER_CODEX_Y;
+
+    // -------------------------------------------------------------------------
     // Owned resources — disposed in dispose()
     // -------------------------------------------------------------------------
     private final ShapeRenderer shapeRenderer;
@@ -112,6 +125,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private final ItemWindow       itemWindow;
     private final AbilityWindow    abilityWindow;
     private final ItemIconTextures iconTextures;
+    private final BuildPagePanel   buildPagePanel;
 
     // -------------------------------------------------------------------------
     // Runtime state
@@ -123,6 +137,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private PlayerInventory playerInventory     = null;
     private PlayerStats     playerStats         = null;
     private ItemType        lastConsumedItemType = null;
+    private boolean         buildPageOpen        = false;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -142,6 +157,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                                                   font, glyphLayout, this::openItemWindowForWeaponSlot);
         itemGridPanel     = new ItemGridPanel(inventory, shapeRenderer, spriteBatch,
                                               font, glyphLayout, this::openItemWindowForSlot, iconTextures);
+        buildPagePanel    = new BuildPagePanel(shapeRenderer, spriteBatch, font, glyphLayout);
         abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, glyphLayout);
         itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, glyphLayout,
                                            instance -> abilityWindow.open(instance), iconTextures);
@@ -153,6 +169,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
 
     /** Reset cursor and popup state when the overlay opens. */
     public void onOpen() {
+        buildPageOpen = false;
         weaponSlotsPanel.clearSelection();
         itemGridPanel.clearSelection();
         if (itemWindow.isOpen())    itemWindow.close();
@@ -168,6 +185,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     /** Provides weapon textures so WeaponSlotsPanel can render thumbnails inside slots. */
     public void setWeaponHudRenderer(WeaponHudRenderer weaponHudRenderer) {
         weaponSlotsPanel.setWeaponHudRenderer(weaponHudRenderer);
+    }
+
+    /** Provides the run's build so the BUILD page can list it. */
+    public void setPlayerBuild(PlayerBuild playerBuild) {
+        buildPagePanel.setPlayerBuild(playerBuild);
     }
 
     /** Pass the facility clock so selection borders can pulse. */
@@ -247,6 +269,16 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
             return CloseAction.NONE;
         }
 
+        // Layer 1 — Header BUILD / ITEMS toggle
+        if (worldX >= HEADER_BUILD_X
+                && worldX <= HEADER_BUILD_X + ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH
+                && worldY >= HEADER_BUILD_Y
+                && worldY <= HEADER_BUILD_Y + ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT) {
+            buildPageOpen = !buildPageOpen;
+            if (buildPageOpen) buildPagePanel.open();
+            return CloseAction.NONE;
+        }
+
         // Layer 1 — Header CODEX button (the archive; order-6)
         if (worldX >= HEADER_CODEX_X
                 && worldX <= HEADER_CODEX_X + ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH
@@ -261,6 +293,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                 && worldY >= HEADER_EXIT_Y
                 && worldY <= HEADER_EXIT_Y + ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE) {
             return CloseAction.CLOSE_FREE;
+        }
+
+        // Layer 1 — BUILD page replaces the sub-panels while open
+        if (buildPageOpen) {
+            buildPagePanel.handleTouch(worldX, worldY);
+            return CloseAction.NONE;
         }
 
         // Layer 1 — Sub-panels
@@ -283,8 +321,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
 
         // Layer 0 + Layer 1 base
         renderBaseLayer(camera);
-        weaponSlotsPanel.render(camera, animationClock);
-        itemGridPanel.render(camera, animationClock);
+        if (buildPageOpen) {
+            buildPagePanel.render(camera);
+        } else {
+            weaponSlotsPanel.render(camera, animationClock);
+            itemGridPanel.render(camera, animationClock);
+        }
         renderHeader(camera);
 
         // Layer 2 — dim base then draw ItemWindow
@@ -340,6 +382,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.setColor(HEADER_BG);
         shapeRenderer.rect(0, ItemConstants.INV_HEADER_Y,
                            Constants.WORLD_WIDTH, ItemConstants.INV_HEADER_HEIGHT);
+
+        // Header BUILD button background (balance-overhaul order 5) — same plate as CODEX
+        shapeRenderer.setColor(CODEX_BTN_BG);
+        shapeRenderer.rect(HEADER_BUILD_X, HEADER_BUILD_Y,
+                           ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH,
+                           ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT);
 
         // Header CODEX button background (order-6) — amber-tinted, so it reads as story chrome
         // rather than as another inventory control.
@@ -399,14 +447,22 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                       ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
         }
 
-        // "SUBLEVEL N" label — just left of the CODEX button
+        // "SUBLEVEL N" label — just left of the BUILD button
         textBuilder.setLength(0);
         textBuilder.append("SUBLEVEL ").append(currentDepth);
         glyphLayout.setText(font, textBuilder);
         font.setColor(TEXT_DIM);
         font.draw(spriteBatch, textBuilder,
-                  HEADER_CODEX_X - glyphLayout.width - 16f,
+                  HEADER_BUILD_X - glyphLayout.width - 16f,
                   ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
+
+        // BUILD / ITEMS toggle label — centered in its rect
+        String buildLabel = buildPageOpen ? ITEMS_BUTTON_TEXT : BUILD_BUTTON_TEXT;
+        font.setColor(AMBER);
+        glyphLayout.setText(font, buildLabel);
+        font.draw(spriteBatch, buildLabel,
+                  HEADER_BUILD_X + (ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH - glyphLayout.width) / 2f,
+                  HEADER_BUILD_Y + (ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT + glyphLayout.height) / 2f);
 
         // CODEX button label — centered in its rect
         font.setColor(AMBER);

@@ -115,11 +115,11 @@ public class Railgun extends Weapon {
         chargeLevel = 0;
 
         boolean hitAnyEnemy = false;
-        // OVERPENETRATION on the infinite-pierce slug adds a stacking damage bonus per enemy struck
+        // ARMOR_PIERCE (merged OVERPENETRATION) on the infinite-pierce slug adds a stacking damage bonus per enemy struck
         // beyond the first (see overpenetrationPiercingDamageMultiplier); 1.0 without the ability.
         int enemiesHit = 0;
 
-        for (int distanceTiles = 1; distanceTiles <= range; distanceTiles++) {
+        for (int distanceTiles = 1; distanceTiles <= range + buildRangeBonusTiles(); distanceTiles++) {
             int  targetColumn = playerTileColumn + facingStepColumn * distanceTiles;
             int  targetRow    = playerTileRow    + facingStepRow    * distanceTiles;
             char targetCell   = level.getCell(targetColumn, targetRow);
@@ -147,9 +147,9 @@ public class Railgun extends Weapon {
                     float baseForCharge = WeaponConstants.RAILGUN_DAMAGE_BY_CHARGE[firedChargeLevel]
                             * getLadderDamageMultiplier();
                     int computedDamage = Math.round(baseForCharge
-                            * GameMath.railgunFalloff(distanceTiles,
+                            * buildFalloff(GameMath.railgunFalloff(distanceTiles,
                                     WeaponConstants.RAILGUN_DROP_COEFF,
-                                    WeaponConstants.RAILGUN_DAMAGE_MIN_MULTIPLIER)
+                                    WeaponConstants.RAILGUN_DAMAGE_MIN_MULTIPLIER))
                             * overpenetrationPiercingDamageMultiplier(enemiesHit));
                     boolean targetWasFullHp = enemyHitTarget.isAtFullHp(hitEnemy);
                     setLastHitEnemy(hitEnemy, computedDamage, targetWasFullHp);

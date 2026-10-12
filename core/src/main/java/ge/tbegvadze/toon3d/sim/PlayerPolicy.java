@@ -7,7 +7,8 @@ import java.util.List;
 
 import ge.tbegvadze.toon3d.entity.WeaponRoll;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
-import ge.tbegvadze.toon3d.progression.UpgradeCard;
+import ge.tbegvadze.toon3d.progression.Keystone;
+import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.route.RouteNode;
 import ge.tbegvadze.toon3d.shop.ShopEntry;
 
@@ -16,7 +17,7 @@ import ge.tbegvadze.toon3d.shop.ShopEntry;
  *
  * <p>The game is strictly turn-based — one action = one turn, no physics, no aim skill — so a whole
  * run is SIMULABLE. A policy answers exactly the questions a human answers: which button to press
- * this turn, which level-up card to take, whether to swap to a weapon found on the floor, and which
+ * this turn, which level-up perk to take, whether to swap to a weapon found on the floor, and which
  * route node to descend into. Everything else (movement legality, damage, drops, XP, enemy AI) is
  * resolved by the REAL systems through {@link SimWorld}; a policy never computes a game rule.
  *
@@ -35,9 +36,23 @@ public interface PlayerPolicy {
      */
     TouchAction chooseAction(SimView view);
 
-    /** Picks one of the {@code count} offered level-up cards. Default: the first offered. */
-    default UpgradeCard chooseCard(UpgradeCard[] offeredCards, int count, SimView view) {
-        return count > 0 ? offeredCards[0] : null;
+    /** Picks one of the {@code count} offered level-up perks (balance-overhaul order 5). Default: the first offered. */
+    default Perk choosePerk(Perk[] offeredPerks, int count, SimView view) {
+        return count > 0 ? offeredPerks[0] : null;
+    }
+
+    /**
+     * Picks one of the {@code count} offered keystones on a keystone level (balance-overhaul order 5, B4).
+     * Default: the keystone matching the build's highest-rank tag (the deck always offers one when it is
+     * still untaken), else the first offered. CP6 adds build-bias variants.
+     */
+    default Keystone chooseKeystone(Keystone[] offeredKeystones, int count, SimView view) {
+        if (count <= 0) return null;
+        ge.tbegvadze.toon3d.progression.BuildTag leading = view != null ? view.playerBuild().highestRankTag() : null;
+        for (int index = 0; index < count; index++) {
+            if (offeredKeystones[index] != null && offeredKeystones[index].tag == leading) return offeredKeystones[index];
+        }
+        return offeredKeystones[0];
     }
 
     /**

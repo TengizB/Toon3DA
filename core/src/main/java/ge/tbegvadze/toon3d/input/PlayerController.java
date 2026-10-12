@@ -253,8 +253,8 @@ public class PlayerController {
         actionProgress = Math.min(1f, actionProgress + deltaTime / ItemConstants.PLAYER_HEAL_DURATION);
         if (actionProgress >= 1f) {
             MedicalTier tier   = chooseHealTier(player.getHealth(), player.getMaxHealth());
-            int         amount = spendHeal(tier);
-            player.applyHealing(amount);
+            // A medkit / STIM is a TREATMENT: the build's heal multiplier rides it (Field Medic — order 5).
+            int         amount = player.applyTreatment(spendHeal(tier));
             if (amount > 0) {
                 if (gameAudio != null) gameAudio.playUi(GameSoundId.PLAYER_HEAL);
                 if (healUsedListener != null) healUsedListener.run();
@@ -381,7 +381,9 @@ public class PlayerController {
         if (itemInventory == null) return;
         AmmoType type = Level.ammoTypeOfPickup(cell);
         if (type == null) return;
-        int amount = type.getAmountPerBox();
+        // PACK RAT (balance-overhaul order 5): ammo pickups x ammoPickupMultiplier().
+        int amount = GameMath.buildScaledAmount(type.getAmountPerBox(),
+                player.getBuildStats().ammoPickupMultiplier(), 1);
         // Always consume the floor tile — anti-hoarding: overflow is silently discarded.
         level.consumePickupAt(tileColumn, tileRow);
         if (gameAudio != null) gameAudio.playUi(GameSoundId.PICKUP_AMMO);
@@ -669,7 +671,8 @@ public class PlayerController {
             int selfDamage = ((GrenadeLauncher) weapon).consumePendingSelfDamage();
             if (selfDamage > 0) {
                 if (eventTextSystem != null) eventTextSystem.spawn("TOO CLOSE!");
-                player.applyDamage(selfDamage);
+                // The player's OWN explosion: Blast Shield / DEMOLITIONIST scale it (balance-overhaul order 5).
+                player.applyOwnExplosionDamage(selfDamage);
             }
         }
         actionState    = ActionState.FIRING;
@@ -854,6 +857,9 @@ public class PlayerController {
         if (!weapon.requestManualReload()) return;  // already reloading or firing — silent
         if (gameAudio != null) gameAudio.playUi(GameSoundId.WEAPON_RELOAD_START);
         if (weaponReloadStartedListener != null) weaponReloadStartedListener.run();
+        // SCATTERGUN DOCTRINE (balance-overhaul order 5): the reload was chambered at once and costs no world
+        // turn — no action is started, so no tick fires and the player stays IDLE.
+        if (weapon.reloadCostsNoTurn()) return;
         actionState    = ActionState.SKIPPING;
         actionProgress = 0f;
     }
