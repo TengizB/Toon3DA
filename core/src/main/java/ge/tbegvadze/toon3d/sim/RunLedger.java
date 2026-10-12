@@ -18,8 +18,13 @@ public final class RunLedger {
     public enum Ending {
         /** The marine was killed. The normal ending. */
         KILLED,
-        /** The run hit the simulator's depth ceiling still alive (a "win" for band purposes). */
+        /** The run hit a SHALLOWER-than-final simulator depth ceiling still alive (smoke/probe settings). */
         SURVIVED_TO_CEILING,
+        /**
+         * The run killed the run-final boss at BalanceConfig.RUN_FINAL_DEPTH (balance-overhaul order 6, F4):
+         * the descent is won and there is no floor after it.
+         */
+        VICTORY,
         /** The run stalled: a floor could not be finished within the turn cap. */
         STALLED
     }

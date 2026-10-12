@@ -1676,10 +1676,10 @@ public final class BalanceConfig {
      */
     public static final int   SIM_SEED_COUNT              = 200;
     /**
-     * Depth the simulator stops at. Above the S-FAIR target band, so a run that survives to the
-     * ceiling is a genuine outlier rather than an artefact of stopping early.
+     * Depth the simulator stops at: the whole finite run (balance-overhaul order 6 — was 20 under the
+     * endless descent). A run that clears the depth-RUN_FINAL_DEPTH boss ends as VICTORY, never deeper.
      */
-    public static final int   SIM_DEPTH_CEILING           = 20;
+    public static final int   SIM_DEPTH_CEILING           = BalanceConfig.RUN_FINAL_DEPTH;
     /** First floor of a simulated run (the staging room is skipped — see SimWorld). */
     public static final int   SIM_STARTING_DEPTH          = 1;
     /**

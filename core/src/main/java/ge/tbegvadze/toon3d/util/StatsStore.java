@@ -12,6 +12,13 @@ public final class StatsStore {
     private StatsStore() {}
 
     /**
+     * Win records (balance-overhaul order 6, F4). Live in the same preferences file as every other
+     * record, so {@link #wipeAllPersistentProgress()} (NEW OPERATOR) clears them with the rest.
+     */
+    private static final String RUNS_WON_KEY       = "runsWon";
+    private static final String BEST_WIN_TURNS_KEY = "bestWinTurns";
+
+    /**
      * Keys written by builds that still had a difficulty-mode system (new-game-balancr order 8
      * removed it). They are never read — {@link #load} asks only for the keys it knows, so a
      * legacy record loads fine whatever type they held — but they are dropped on the next load so
@@ -30,6 +37,8 @@ public final class StatsStore {
         stats.totalDeaths          = prefs.getInteger("totalDeaths",          0);
         stats.longestSurvivalTicks = prefs.getLong("longestSurvivalTicks",    0L);
         stats.fastestClearTicks    = prefs.getLong("fastestClearTicks",       0L);
+        stats.runsWon              = prefs.getInteger(RUNS_WON_KEY,           0);
+        stats.bestWinTurns         = prefs.getLong(BEST_WIN_TURNS_KEY,        0L);
         return stats;
     }
 
@@ -58,6 +67,8 @@ public final class StatsStore {
         prefs.putInteger("totalDeaths",          stats.totalDeaths);
         prefs.putLong("longestSurvivalTicks",    stats.longestSurvivalTicks);
         prefs.putLong("fastestClearTicks",       stats.fastestClearTicks);
+        prefs.putInteger(RUNS_WON_KEY,           stats.runsWon);
+        prefs.putLong(BEST_WIN_TURNS_KEY,        stats.bestWinTurns);
         prefs.flush();
     }
 
@@ -99,7 +110,14 @@ public final class StatsStore {
     /** Updates persistent records from the completed run and saves to disk. */
     public static void updateAndSave(RunStats run, PersistentStats persistent) {
         persistent.totalRuns++;
-        persistent.totalDeaths++;
+        if (run.isVictory()) {
+            // A won run is filed at the run-final boss's death and is never also a death (F4).
+            persistent.runsWon++;
+            if (persistent.bestWinTurns == 0L || run.ticksElapsed < persistent.bestWinTurns)
+                persistent.bestWinTurns = run.ticksElapsed;
+        } else {
+            persistent.totalDeaths++;
+        }
         persistent.lifetimeKills += run.enemiesKilled;
         if (run.floorReached > persistent.bestFloor)
             persistent.bestFloor = run.floorReached;

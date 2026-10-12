@@ -33,6 +33,7 @@ public final class ExchangeDefinition {
     private final StoryRegion          firstRegion;
     private final StoryRegion          lastRegion;
     private final boolean              oneShot;
+    private final boolean              repeatableAtFinalClear;
     private final Stance               stanceAffinity;
     private final List<ExchangeOption> options;
 
@@ -45,6 +46,7 @@ public final class ExchangeDefinition {
         this.firstRegion    = builder.firstRegion;
         this.lastRegion     = builder.lastRegion;
         this.oneShot        = builder.oneShot;
+        this.repeatableAtFinalClear = builder.repeatableAtFinalClear;
         this.stanceAffinity = builder.stanceAffinity;
         this.options        = Collections.unmodifiableList(new ArrayList<>(builder.options));
     }
@@ -74,6 +76,14 @@ public final class ExchangeDefinition {
 
     /** True when this exchange opens exactly once, ever (persistent flag keyed by {@link #getId()}). */
     public boolean isOneShot() { return oneShot; }
+
+    /**
+     * True for the one exchange whose one-shot "seen" flag is NOT consulted when it is asked for by id at
+     * the run's FINAL CLEAR (balance-overhaul order 6, F5 / owner decision D5): the Core ending door. Every
+     * victory gets its climax and the player may choose differently; every other exchange keeps "say it
+     * once". Data, not a switch — the door's catalog row carries the flag.
+     */
+    public boolean isRepeatableAtFinalClear() { return repeatableAtFinalClear; }
 
     /**
      * Optional leaning this exchange is written FOR.  When several rows are eligible for the same
@@ -121,6 +131,7 @@ public final class ExchangeDefinition {
         private StoryRegion     firstRegion    = StoryRegion.HABITATION_RINGS;
         private StoryRegion     lastRegion     = StoryRegion.CORE;
         private boolean         oneShot        = true;   // exchanges are rare BY DEFAULT
+        private boolean         repeatableAtFinalClear = false;
         private Stance          stanceAffinity = null;
         private final List<ExchangeOption> options = new ArrayList<>();
 
@@ -138,6 +149,8 @@ public final class ExchangeDefinition {
         public Builder promptStringId(String value)     { this.promptStringId = value; return this; }
         public Builder trigger(ExchangeTrigger value)   { this.trigger        = value; return this; }
         public Builder oneShot(boolean value)           { this.oneShot        = value; return this; }
+        /** See {@link ExchangeDefinition#isRepeatableAtFinalClear()} — the Core ending door only. */
+        public Builder repeatableAtFinalClear(boolean value) { this.repeatableAtFinalClear = value; return this; }
         public Builder stanceAffinity(Stance value)     { this.stanceAffinity = value; return this; }
 
         public Builder option(ExchangeOption value) {

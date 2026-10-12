@@ -116,9 +116,22 @@ wiped, the planet never forgets you (story/02-player-and-cloning.md, 03-the-plan
 EDGE CASES
   - Branching route: gate strictly by depth; every region's beats are self-contained so any path
     reads correctly.
-  - The Core is many floors (the route map is endless), so the ENDING exchange is guarded twice:
-    deepest region == CORE **and** the Core's boss is down. That convergence is what makes one Core
-    floor final.
+  - THE FINITE RUN (balance-overhaul order 6): the route map is exactly 25 floors in five regions, and
+    the five route regions now ALIGN with the five story regions (route index 4 = THE CORE, floors
+    21-25 = StoryRegion.CORE). The ENDING exchange keeps its two guards — deepest region == CORE **and**
+    the boss down — and that boss is now the RUN-FINAL boss at BalanceConfig.RUN_FINAL_DEPTH (25).
+  - THE FINAL CLEAR (F4/F5, owner decision D5). The run-final boss's death is a VICTORY, filed at the
+    defeat by `World.recordFinalClearVictory` (RunStats.recordVictory, StatsStore runsWon + bestWinTurns,
+    the report page titled DESCENT COMPLETE via `story.report.victory`) — so a death a moment later, or
+    an app killed mid-ending, never takes the win back. There is no floor 26: the exit portal at the
+    final depth only re-asks for the ending. The ending door then opens as the victory's first beat:
+      * a save with NO ending recorded — exactly as before;
+      * a save that HAS reached an ending — the door opens AGAIN (its catalog row is flagged
+        `ExchangeDefinition.repeatableAtFinalClear`, so `ExchangeSystem.requestById` does not consult
+        its one-shot "seen" flag), the player may choose a different ending, and the launch screen
+        prints the LATEST one (recordEndingReached overwrites). This is the second and last deliberate
+        exception to "say it once" — every win gets its climax, and all four endings stay reachable.
+      `requestById` otherwise now HONOURS one-shot: an answered one-shot row asked for by id is refused.
 
 TESTS: `StoryPersistenceTest` (Part A section), `StoryBarkTest`.
 
@@ -379,7 +392,8 @@ D. THE ENDINGS RESOLVE ON THE FRAMING THEY SUBVERT (story/06-endings.md)
                    `STORY_ENDING_MERGE_HOLD_SECONDS`, and then stands down. There is no input,
                    because the interface has stopped being theirs.
    Nothing is scored, ranked or labelled, and NEW OPERATOR / CONTINUE DESCENT both stay available:
-   the descent is endless, and an ending is a thing the save remembers, not a door it closes.
+   a new descent is a new 25-floor run, and an ending is a thing the save remembers, not a door it
+   closes (each later victory reopens the ending door — the FINAL CLEAR rule above).
 
 E. THE WORLD LIFECYCLE SEAM (`world/StartMode`)
    A run is one `World`, so ending one means building the next. `World.isResetRequested()` +
@@ -968,8 +982,9 @@ A. THE THREE-DAY PROBLEM — one line, on the card, only when it is needed
   per region, `BootWakeLine.reEntry(true)`.
 
   It REPLACES the wake line rather than stacking with it, so the card never grows a fourth block, and
-  it is one-shot per RE-ENTRY EVENT rather than per save. That is the ONE deliberate exception to
-  "say it once" in the whole layer, and it is legitimate because the evidence is a real absence.
+  it is one-shot per RE-ENTRY EVENT rather than per save. That is one of the TWO deliberate exceptions
+  to "say it once" in the whole layer (the other is the ending door at a final clear, D5), and it is
+  legitimate because the evidence is a real absence.
 
   How the absence detects itself: a World is rebuilt on every death, so no session flag could
   survive one. `armReEntryIfReturning()` is asked once per World and can only answer yes for the

@@ -51,7 +51,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — finite route map (25 layers, 5 regions, region E spec/ambience/crest, no append path); NAV header F6.
       DONE WHEN: A1, A4 hold; route tests updated; both gates green.
-- [ ] **CP2** — depth-25 boss defeat ends the run as VICTORY (report label, win stats); F5/D5 ending behaviour.
+- [x] **CP2** — depth-25 boss defeat ends the run as VICTORY (report label, win stats); F5/D5 ending behaviour.
       DONE WHEN: A2, A3 hold; build green.
 - [ ] **CP3** — BossTable rows drive bosses; derivation from ExpectedPlayer.
       DONE WHEN: R-BOSS-* green on all five rows; both gates green.
@@ -85,3 +85,13 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   — a deterministic extra edge to the next layer's node that still reaches the kind. Route tests updated (finite-run
   methods replace the two endless ones; RouteEconomicsTest checks 20 seeds; Order10 five regions).
 - **CP1 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, every S-* line identical to baseline.
+- **CP2 handover:** VICTORY = `World.recordFinalClearVictory()` (polled beside requestBossDefeatedBark: depth >=
+  RUN_FINAL_DEPTH + bossFloorController.isBossDefeated()) -> `RunStats.recordVictory()/isVictory()`, report snapshot,
+  `saveRunRecordsOnce()` AT THE DEFEAT. `StatsStore` keys `runsWon` / `bestWinTurns` (PersistentStats fields; a won run
+  is not a death); NEW OPERATOR's prefs.clear() wipes them, `PersistentStats.reset()` zeroes them. Report title id
+  `StoryUiConstants.STORY_REPORT_VICTORY_TITLE_ID` = `story.report.victory` = "DESCENT COMPLETE" (FramingStrings +
+  properties). `onDescentRequested` at depth >= 25 never descends (re-arms coreEndingRequested). F5: data flag
+  `ExchangeDefinition.Builder.repeatableAtFinalClear(true)` on the ending door; `ExchangeSystem.requestById` now refuses
+  an answered one-shot row unless that flag is set (before this, requestById never consulted "seen" at all).
+  Sim: `RunLedger.Ending.VICTORY` after clearing the depth-25 floor; `SIM_DEPTH_CEILING` = RUN_FINAL_DEPTH.
+- **CP2 gates:** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, S-* identical (header ceiling 25).

@@ -168,12 +168,18 @@ public final class ExchangeSystem {
      * Core).  Nothing opens here; {@link #openPending()} does, once the world is ready to stop, which
      * is how a hand-placed beat inherits exactly the same readiness bars as a triggered one.
      *
+     * <p>A one-shot row already answered on this save is refused — except a row flagged
+     * {@link ExchangeDefinition#isRepeatableAtFinalClear()} (the Core ending door, balance-overhaul
+     * order 6 F5 / D5), whose "seen" flag is not consulted: every final clear opens it again.
+     *
      * @return true when the exchange exists and is now waiting to open
      */
     public boolean requestById(String exchangeId) {
         if (activeDefinition != null || pendingDefinition != null) return false;
         ExchangeDefinition definition = registry.getById(exchangeId);
         if (definition == null) return false;
+        if (definition.isOneShot() && !definition.isRepeatableAtFinalClear()
+                && progress.hasSeen(definition.getId())) return false;
         pendingDefinition = definition;
         return true;
     }

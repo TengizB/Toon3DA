@@ -68,6 +68,7 @@ public final class FramingStrings {
 
         // --- The folded reprint report: what the terminated instance managed, in machine voice ---
         strings.put(StoryUiConstants.STORY_REPORT_TITLE_ID,  "PREVIOUS INSTANCE");
+        strings.put(StoryUiConstants.STORY_REPORT_VICTORY_TITLE_ID, "DESCENT COMPLETE");
         strings.put(StoryUiConstants.STORY_REPORT_OPEN_ID,   "REPORT");
         strings.put(StoryUiConstants.STORY_REPORT_BACK_ID,   "BACK");
         strings.put(StoryUiConstants.STORY_REPORT_FLOOR_ID,  "DEPTH REACHED");

@@ -906,6 +906,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase != RunPhase.PLAYING) {
             return;
         }
+        // THE FINITE RUN (balance-overhaul order 6, F4): there is no floor past the run-final depth.
+        // The run-final boss's death already filed the VICTORY; its ending exchange is the way out, so
+        // the portal only re-asks for it (in case something on screen held it back) and never descends.
+        if (!isStartingRoom && currentDepth >= BalanceConfig.RUN_FINAL_DEPTH) {
+            coreEndingRequested = false;
+            return;
+        }
 
         // Staging-room exit: generate the route map (once) from the run seed, then present the depth-0 ->
         // depth-1 lanes through the same FACILITY NAV console every later portal uses. The player's first
@@ -2516,12 +2523,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         updateLowHealthStoryBark();
         updateLowHealthWarningSound();
         // Story MOMENT SCHEDULE (order-5): the cold open once per run, the tutorial lines as each
-        // control becomes useful, and — at the bottom of the descent, with the Core's boss down —
-        // the ending choice. All three only ASK; the narrative layer's one-shot flags mean a veteran
-        // player gets nothing from the first two and reaches the third exactly once.
+        // control becomes useful, and — at the bottom of the descent, with the run-final boss down —
+        // the VICTORY and the ending choice. All only ASK; the narrative layer's one-shot flags mean a
+        // veteran gets nothing from the first two, while the ending door opens on every victory (D5).
         requestColdOpenBarks();
         requestControlHintBarks();
         requestBossDefeatedBark();
+        recordFinalClearVictory();
         requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
         updateHeavyEdgePulse();
@@ -3643,14 +3651,34 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
+     * VICTORY (balance-overhaul order 6, F4): the run-final boss at {@link BalanceConfig#RUN_FINAL_DEPTH}
+     * is down, so the run is WON — filed right here, at the defeat, so a death a moment later or an app
+     * killed mid-ending can never take the win back (the edge cases the idea file names). The report
+     * snapshot is taken first, so "RECORD" still compares against what the save held, and it prints
+     * DESCENT COMPLETE. Polled like the boss-defeat bark: BossFloorController owns the defeat and must
+     * not learn about records.
+     */
+    private void recordFinalClearVictory() {
+        if (runStats.isVictory())                                                   return;
+        if (currentDepth < BalanceConfig.RUN_FINAL_DEPTH)                            return;
+        if (bossFloorController == null || !bossFloorController.isBossDefeated())     return;
+        runStats.recordFloor(currentDepth);
+        runStats.recordVictory();
+        instanceReportRenderer.show(runStats, persistentStats);
+        saveRunRecordsOnce();
+        Gdx.app.log("RunOutcome", "VICTORY depth=" + currentDepth + " turns=" + runStats.ticksElapsed
+                + " route=" + runStats.getRouteString());
+    }
+
+    /**
      * THE ENDING (order-5, story/06-endings.md): opens the one fully consequential choice in the
-     * game, once, at the bottom.
+     * game, at the bottom.
      *
-     * <p>The guard is the edge case order-7 Part A names: the route map is endless, so "the Core"
-     * is a story region many floors can belong to, and the ending must NOT open on just any of them.
-     * It waits for the deepest region ever reached to be the Core AND for the Core's own boss to be
-     * down — a forced convergence the player cannot route around, which is exactly what a final node
-     * needs to be. Everything after that (idle, alive, no bark on screen) is the ordinary exchange
+     * <p>The run is finite (balance-overhaul order 6): the Core is the last region and its boss, at
+     * {@link BalanceConfig#RUN_FINAL_DEPTH}, is the run-final boss. The guard still waits for the deepest
+     * region ever reached to be the Core AND for that boss to be down — a forced convergence the player
+     * cannot route around. The door is flagged repeatable at the final clear (F5 / D5), so a save that
+     * has already reached an ending meets it again on every victory and may choose differently. Everything after that (idle, alive, no bark on screen) is the ordinary exchange
      * readiness check, inherited by holding the beat pending rather than opening it here.
      */
     private void requestCoreEndingExchange() {

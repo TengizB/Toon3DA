@@ -47,6 +47,9 @@ public final class InstanceReportRenderer implements Disposable {
 
     // Resolved once in setStrings() — localisation rule: never a literal in a renderer.
     private String titleLabel  = "";
+    private String victoryTitleLabel = "";
+    /** The title this snapshot prints: the instance report, or DESCENT COMPLETE for a won run. */
+    private String shownTitleLabel   = "";
     private String openLabel   = "";
     private String backLabel   = "";
     private String floorLabel  = "";
@@ -74,6 +77,7 @@ public final class InstanceReportRenderer implements Disposable {
     public void setStrings(StoryStrings strings) {
         if (strings == null) return;
         titleLabel  = strings.get(StoryUiConstants.STORY_REPORT_TITLE_ID);
+        victoryTitleLabel = strings.get(StoryUiConstants.STORY_REPORT_VICTORY_TITLE_ID);
         openLabel   = strings.get(StoryUiConstants.STORY_REPORT_OPEN_ID);
         backLabel   = strings.get(StoryUiConstants.STORY_REPORT_BACK_ID);
         floorLabel  = strings.get(StoryUiConstants.STORY_REPORT_FLOOR_ID);
@@ -90,6 +94,7 @@ public final class InstanceReportRenderer implements Disposable {
     public void show(RunStats run, PersistentStats persistent) {
         lineCount = 0;
         if (run == null) return;
+        shownTitleLabel = run.isVictory() ? victoryTitleLabel : titleLabel;
         boolean firstRunEver = persistent == null || persistent.totalRuns == 0;
         boolean bestFloor    = firstRunEver || run.floorReached  > persistent.bestFloor;
         boolean bestKills    = run.enemiesKilled > 0
@@ -184,7 +189,7 @@ public final class InstanceReportRenderer implements Disposable {
                 + StoryUiConstants.STORY_REPORT_VALUE_INSET_X;
 
         font.getData().setScale(StoryUiConstants.STORY_REPORT_TITLE_TEXT_SIZE);
-        drawText(titleLabel, textLeft,
+        drawText(shownTitleLabel, textLeft,
                  StoryUiConstants.STORY_REPORT_PANEL_TOP_Y - StoryUiConstants.STORY_REPORT_TITLE_INSET_Y,
                  StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
                  StoryUiConstants.STORY_BODY_B);

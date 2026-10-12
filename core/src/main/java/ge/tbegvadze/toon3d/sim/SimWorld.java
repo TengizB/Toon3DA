@@ -323,6 +323,13 @@ public final class SimWorld implements LevelTransitionListener {
                                      && inventory.getMeleeWeapon() == null;
                 break;
             }
+            if (currentDepth >= BalanceConfig.RUN_FINAL_DEPTH) {
+                // THE FINITE RUN (balance-overhaul order 6, F4): the run-final boss floor is cleared —
+                // VICTORY, mirroring World.recordFinalClearVictory. No ledger ever holds a floor 26.
+                ledger.ending      = RunLedger.Ending.VICTORY;
+                ledger.endingDepth = currentDepth;
+                break;
+            }
             visitFabricator();
             descentRequested = false;
             currentDepth++;
