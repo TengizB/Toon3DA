@@ -90,7 +90,11 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
 
     @Override
     public boolean isExplosiveBarrel(int tileColumn, int tileRow) {
-        char cell = level.getCell(tileColumn, tileRow);
+        return isBarrelCell(level.getCell(tileColumn, tileRow));
+    }
+
+    /** The single authority on which tile symbols are explosive barrels ('E' and 'g'). */
+    public static boolean isBarrelCell(char cell) {
         return cell == 'E' || cell == 'g';
     }
 
@@ -178,7 +182,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
 
             // Queue adjacent explosive/toxic barrels for chain detonation.
             // blastCell was read before setCell above, so barrel tiles still read correctly here.
-            if ((blastCell == 'E' || blastCell == 'g') && chainCount < EffectConstants.EXPLOSION_CHAIN_MAX) {
+            if (isBarrelCell(blastCell) && chainCount < EffectConstants.EXPLOSION_CHAIN_MAX) {
                 boolean alreadyQueued = false;
                 for (int checkIndex = 0; checkIndex < chainCount; checkIndex++) {
                     if (chainColumns[checkIndex] == blastColumn && chainRows[checkIndex] == blastRow) {

@@ -206,3 +206,9 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   tiers). CLAUDE.md (hub): progression/ structure lines, sim row (eleven S-* bands, S-BUILD), docs row.
 - **CP6 gates (hub-verified):** core:test 458, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0 (S-BUILD spread OK, sample
   49 OK, dominant 0.47 WAIV). NEXT: reviewer gate.
+- **REVIEWER r1: PASS WITH FIXES** (verdict saved beside this file as `.reviewer-r1.md`). Fixed in CP6c: BLOCKING Plague Hulk
+  double-kill (selfDestructed set before the blast + dedup enqueue); shop refuses a maxed perk (`ShopAbilityService(…, Predicate<Perk>)`);
+  DEADEYE clip clamp refunds overflow; PYROMANIAC burning term on barrel blasts + reflects (`BuildStats.burningTargetMultiplier`);
+  "x2" gain line; render literals -> ProgressionConstants; `ExplosiveBarrelManager.isBarrelCell(char)` single barrel authority.
+  Gates (solo run): core:test 458 only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0, 0 FAIL, no S-* moved.
+  NEXT: focused re-review of the fix diff, then STATUS IMPLEMENTED + IMPLEMENTATION NOTE.

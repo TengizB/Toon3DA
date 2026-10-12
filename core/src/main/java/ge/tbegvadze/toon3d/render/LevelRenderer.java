@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.HeavyAttack;
 import ge.tbegvadze.toon3d.enemy.IntentVerb;
 import ge.tbegvadze.toon3d.enemy.PlannedAction;
+import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
@@ -166,7 +167,7 @@ public class LevelRenderer implements Renderable, Disposable {
                         drawShopMarker(markerCenterX, markerCenterY, pulseBrightness);
                     } else if (Level.isPropSolid(cell)) {
                         drawPropMarker(markerCenterX, markerCenterY, cell);
-                        if (barrelsHighlighted && (cell == 'g' || cell == 'E')) {
+                        if (barrelsHighlighted && ExplosiveBarrelManager.isBarrelCell(cell)) {
                             drawBarrelDot(markerCenterX, markerCenterY, pulseBrightness);
                         }
                     } else if (Level.isKeycardPickup(cell)) {
@@ -277,7 +278,7 @@ public class LevelRenderer implements Renderable, Disposable {
 
     /** Generic obstacle (grey) vs. shootable barrel (hazard orange, chars 'g'/'E') — caller guarantees the tile is fully on-map. */
     private void drawPropMarker(float centerX, float centerY, char cell) {
-        boolean isBarrel = cell == 'g' || cell == 'E';
+        boolean isBarrel = ExplosiveBarrelManager.isBarrelCell(cell);
         shapes.setColor(isBarrel ? BARREL_COLOR : PROP_COLOR);
         float half = MINI_MAP_PROP_SIZE / 2f;
         shapes.rect(centerX - half, centerY - half, MINI_MAP_PROP_SIZE, MINI_MAP_PROP_SIZE);
