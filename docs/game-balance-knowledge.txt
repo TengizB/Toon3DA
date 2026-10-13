@@ -135,7 +135,7 @@ THE DOCS:
   docs/xp-level-progression.txt  Player leveling curve + card system.
   docs/enemy-system.txt          Enemy AI turn logic, attack resolution.
   docs/procedural-level-generation.txt  Generator + room types.
-  docs/route-map-system.txt      Branching endless descent (regions/nodes/events).
+  docs/route-map-system.txt      Branching finite 25-floor descent (regions/nodes/events/boss table).
   docs/tick-system.txt           Turn loop / TickEventBus.
   Idea files: .claude/agents/ideas/balance_order_2..6_*.txt and
               .claude/agents/ideas/balance-ideas-review.txt (design intent).
@@ -745,8 +745,8 @@ level, rarity and cards; abilities are still outside it): the invariant is defen
 ignores found loot and abilities (which only help the player), so the real ratio
 is "at least this favourable" — meaning the deep-floor "graceful hard edge" may
 actually be easier than modelled, or the early game harder, depending on real loot
-luck. Endless runs past depth ~20 are explicitly unbalanced (intentional graceful
-degradation, i.e. it gets unfairly hard and that is currently accepted, not fixed).
+luck. (Endless depth no longer exists: balance-overhaul order 6 made the run 25 floors,
+ending on the depth-25 boss, and the ladder is audited over the whole run.)
 
 
 ================================================================================

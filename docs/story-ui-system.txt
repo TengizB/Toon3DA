@@ -124,7 +124,9 @@ EDGE CASES
     defeat by `World.recordFinalClearVictory` (RunStats.recordVictory, StatsStore runsWon + bestWinTurns,
     the report page titled DESCENT COMPLETE via `story.report.victory`) — so a death a moment later, or
     an app killed mid-ending, never takes the win back. There is no floor 26: the exit portal at the
-    final depth only re-asks for the ending. The ending door then opens as the victory's first beat:
+    final depth only re-asks for the ending. `requestCoreEndingExchange` requires `runStats.isVictory()`, so
+    the door opens ONLY at a final clear, never on an earlier boss of a save that once reached the Core.
+    The ending door then opens as the victory's first beat:
       * a save with NO ending recorded — exactly as before;
       * a save that HAS reached an ending — the door opens AGAIN (its catalog row is flagged
         `ExchangeDefinition.repeatableAtFinalClear`, so `ExchangeSystem.requestById` does not consult

@@ -160,3 +160,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   shop/F15 note), 16 (finite run, dial, outcome bands), problem 8 RESOLVED, problems 25-29 added. CLAUDE.md: sim row (thirteen
   S-* bands), route row + RouteMap section (finite run, BossTable), moment-schedule + engine-backbone ending lines.
   Gate: core:test 459 only StoryBarkTest; lwjgl3 compiles. NEXT: reviewer.
+- **REVIEWER r1: PASS WITH FIXES** (`.reviewer-r1.md`). Fixed in CP7c: B1 — the repeatable ending door opens only at a final
+  clear (`requestCoreEndingExchange` requires `runStats.isVictory()`); N1 — IMPLEMENTATION NOTE in the idea file; NIT 1 — two
+  stale "endless" lines. N2/N3/NIT2/NIT3 recorded as follow-ups. core:test 459 only StoryBarkTest; lwjgl3 compiles.
+  NEXT: focused re-review, then STATUS IMPLEMENTED.

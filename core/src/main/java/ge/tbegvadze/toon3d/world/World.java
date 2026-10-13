@@ -3720,6 +3720,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (coreEndingRequested)                                                        return;
         if (barkSystem.getProgress().getDeepestRegion() != StoryRegion.CORE)             return;
         if (bossFloorController == null || !bossFloorController.isBossDefeated())        return;
+        // Only at a FINAL CLEAR (reviewer r1 B1): the door is repeatable, so without this a save that once reached
+        // the Core would reopen it on ANY boss kill — and an answer there would end a depth-5 run with no VICTORY.
+        if (!runStats.isVictory())                                                       return;
         coreEndingRequested = exchangeSystem.requestById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID);
     }
 
