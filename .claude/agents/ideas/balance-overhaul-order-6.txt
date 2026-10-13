@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: The 25-Floor Run — finite descent, bosses, economy
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-13
 ---
 
 IMPLEMENTATION NOTE (2026-10-13 — where the build differs from the plan; full record in

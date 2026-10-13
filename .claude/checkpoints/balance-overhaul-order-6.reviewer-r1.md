@@ -95,3 +95,25 @@ util), which would keep `util` free of a route dependency in the stat engine.
 
 Assign to: java-architect (B1, N2, N3), orchestrator (N1, NIT 1).
 Re-review: B1 only — a one-line diff; I will re-check it and N1 on request.
+
+---
+
+# REVIEWER r2 — re-review of the r1 fixes (uncommitted working tree on top of cbd3c9d)
+
+```
+VERDICT: PASS
+
+B1   FIXED — World.requestCoreEndingExchange now returns unless runStats.isVictory(). recordFinalClearVictory()
+     runs just before it in the same update (World ~2544), and only sets victory at depth >= RUN_FINAL_DEPTH with the
+     boss down, so the repeatable door can open only at a final clear. A depth-5 boss on a Core-reaching save no
+     longer opens it. A victory followed by a death before the answer builds a fresh World/RunStats, so nothing
+     leaks into the next run. docs/story-ui-system.txt now describes exactly this guard. A3 met.
+N1   FIXED — IMPLEMENTATION NOTE under the idea file's header records (a)-(h) plus the ripple overrides, the waived
+     sim bands, the owed desktop visual check and the follow-ups. STATUS is still IN PROGRESS, which is correct.
+NIT1 FIXED — both stale "endless" lines in docs/game-balance-knowledge.txt reworded.
+N2/N3/NIT2/NIT3 — recorded as follow-ups in the IMPLEMENTATION NOTE; acceptable, non-blocking.
+Build — orchestrator: core:test 459, only the pre-existing StoryBarkTest red; lwjgl3 compiles. Not re-run: the only
+     Java change is one guard line in a non-balance path.
+
+Spec: A1-A7 all met. Commit the fixes as CP7c (with this file if wanted), then STATUS: IMPLEMENTED.
+```

@@ -61,11 +61,11 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green.
 - [x] **CP6** — event/mystery rewards in ladder currencies (F15); R-MYSTERY-EV / event value green.
       DONE WHEN: both gates green.
-- [ ] **CP7** — S-BOSS consistency reported; all docs; reviewer PASS.
+- [x] **CP7** — S-BOSS consistency reported; all docs; reviewer PASS.
       DONE WHEN: A5, A6, A7 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
   - [x] **CP7a** — S-BOSS (RuleKind.SIM_BOSS, 15 lines, navigation-waived), RUN REPORT, authority SECTIONS 6 + 8 regenerated.
   - [x] **CP7b** — remaining docs (authority S-BOSS text, knowledge SECTIONS 9/12/16, CLAUDE.md, route doc boss table).
-  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
+  - [x] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -164,3 +164,5 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   clear (`requestCoreEndingExchange` requires `runStats.isVictory()`); N1 — IMPLEMENTATION NOTE in the idea file; NIT 1 — two
   stale "endless" lines. N2/N3/NIT2/NIT3 recorded as follow-ups. core:test 459 only StoryBarkTest; lwjgl3 compiles.
   NEXT: focused re-review, then STATUS IMPLEMENTED.
+- **REVIEWER r2: PASS** (appended to `.reviewer-r1.md`). CLOSED 2026-10-13: STATUS IMPLEMENTED. STILL OWED (not blocking):
+  desktop check of the region-E crest, FLOOR n / 25 header and DESCENT COMPLETE via `./gradlew lwjgl3:run` (no display here).
