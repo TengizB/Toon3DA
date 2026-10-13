@@ -181,6 +181,10 @@ REGION BANDS (RegionPlan / RegionSpec — DATA, not code branches):
 BOSS CONVERGENCE: GameMath.isBossFloor(depth) is the SINGLE authority. The generator forces a BOSS
 node there and DefaultCombatProfile returns GeneratorId.BOSS_ARENA on the same depths, so map and
 pipeline agree by construction — no independent boss-depth logic anywhere.
+  WHICH boss (balance-overhaul order 6, F3): route/BossTable — one register() row per boss floor (depth,
+  archetype, target fight turns, survival ratio; numbers in BalanceConfig SECTION 25): 5 OVERSEER 22,
+  10 CORRUPTOR 26, 15 HELL_BARON 30, 20 OVERSEER 32, 25 CORRUPTOR 36. BossBalance derives every stat from
+  the row against ExpectedPlayer(depth); the depth-25 row is the run-final boss (its death = VICTORY).
 
 
 WORLD INTEGRATION & THE NODE->FLOOR PIPELINE (order-3)

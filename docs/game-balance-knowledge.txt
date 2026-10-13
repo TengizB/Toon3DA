@@ -112,7 +112,7 @@ THE OTHER BALANCE-BEARING CONSTANT FILES (all re-export from BalanceConfig):
                               SECTION 8 (new-game-balancr order 1).
   util/Constants.java         Core world/grid/FOV/ray constants; a few gameplay
                               knobs re-export from BalanceConfig.
-  util/RouteMapConstants.java Endless-descent structure: region bands, per-region
+  util/RouteMapConstants.java Finite-run structure (5 regions, 25 floors): region bands, per-region
                               node-type/generator weight multipliers, boss cadence.
   util/IntentConstants.java   Enemy intent telegraph timing/display (fairness).
   util/BalanceSchema.java     LAYER 2 of the Balance Authority: the declarative
@@ -665,48 +665,45 @@ TP/TTK/golden-ratio call site.
 
 
 ================================================================================
-SECTION 9 — BOSSES (a separate ruleset; DERIVED, order 6)
+SECTION 9 — BOSSES (a separate ruleset; DERIVED, order 6; THE BOSS TABLE, balance-overhaul order 6)
 ================================================================================
-Files: BossBalance (the derivation engine: statsForDepth -> BossStats), BossStats
-(the derived block), BalanceConfig SECTION 14 (the inputs: per-boss TARGET_FIGHT_TURNS,
-verb DPT-fractions, survival ratio, enrage, gate margin, reward), GameMath (BOSS
-BALANCE RULESET block), BalanceSchema (R-BOSS-* rules), World.createBossForDepth
-(spawn), BossFloorController (soft enrage), docs/game-balance-authority.txt (R-BOSS-*).
+Files: route/BossTable (THE BOSS TABLE — one register() row per boss floor: depth, archetype, target
+fight turns, survival ratio; numbers in BalanceConfig SECTION 25 BOSS_TABLE_*), BossBalance (the
+derivation engine: statsForDepth / statsForRow / canonicalStats -> BossStats), BossStats, BalanceConfig
+SECTION 14 (verb DPT-fractions, enrage, gate margin, reward premium), GameMath (BOSS BALANCE RULESET),
+BalanceSchema (R-BOSS-* on every row), BossFactory (spawn), BossFloorController (soft enrage),
+sim/BehavioralBands S-BOSS (F10), docs/game-balance-authority.txt (R-BOSS-*).
 
-Bosses break the trash-mob math (a single entity meant to survive many turns vs a
-PREPARED player), so the TP/golden-ratio bands do NOT apply. A boss is tuned to a
-FIGHT-LENGTH target + phase-structured threat curve instead — and (order 6) every
-number is DERIVED at spawn, never a flat constant. There are ZERO flat boss
-HP/damage/XP/credit constants anywhere; BossBalance.statsForDepth(depth) computes the
-whole stat block, so endless-mode bosses scale for free.
+Bosses break the trash-mob math (a single entity meant to survive many turns vs a PREPARED player), so
+the TP/golden-ratio bands do NOT apply. A boss is tuned to a FIGHT-LENGTH target + phase-structured
+threat curve, and every number is DERIVED at spawn from its BossTable row against ExpectedPlayer(depth).
+The modulo rotation and the per-boss *_DEPTH / *_TARGET_FIGHT_TURNS constants are DELETED.
 
-Current DERIVED bosses (BossBalance, at their canonical depths):
-  Overseer   (d5)  715 HP  | bossDPT 18.6 | melee 14, charge 34, laser 21 | reward 1244cr
-  Corruptor  (d10) 1120 HP | bossDPT 14.6 | acid 21                       | reward 1455cr
-  Hell Baron (d15) 1615 HP | bossDPT 12.1 | fire 6, cleave 21(P1)/35(P2)  | reward 1712cr
-  (verbs are FRACTIONS of bossDPT; all <= 17% eHP, well under the 25/35% caps)
+THE FINITE RUN'S FIVE BOSSES (balance-overhaul order 6 living table):
+  depth archetype      target  derived HP  bossDPT  gate margin  reward  ammo coverage
+    5   Overseer          22        928      28.5      5.06x       499      1.87x
+   10   Corruptor         26       2192      38.5     14.72x       521      1.61x
+   15   Hell Baron        30       4864      51.4     23.69x       543      1.46x
+   20   Overseer          32       9746      73.2     38.26x       555      1.42x
+   25   Corruptor         36      18369      98.3     56.21x       577      1.43x   <- run-final boss
+  (survival ratio 0.50 on every row; the depth-25 kill is a VICTORY — World.recordFinalClearVictory.)
 
-THE SIX RULES (now LIVE — enforced by BossBalance + R-BOSS-* audit):
-  R1 HP = expectedPlayerSustainedDpt(depth) * targetFightTurns * multiPhaseFactor
-       (act boss 18–40 turns; per-boss target 22/28/34; NEVER a literal HP constant).
-  R2 Cap fight length from above (<=1.5x target); SOFT ENRAGE (+8% DPT/turn past the
-       cap, telegraphed "FURIOUS") enforces it by escalation, not a fail timer.
-  R3 DPT set by survival check: playerEHP/bossDpt = ratio(0.4–0.7) * fightTurns (0.50).
-       Verbs are fractions of bossDPT; no single hit > 35% eHP; > 25% MUST be telegraphed.
-  R4 N equal phases (BOSS_PHASE_COUNT=2), each escalates ONE mechanic; seams via
-       GameMath.bossPhaseHealthThreshold.
-  R5 The boss is a BUILD CHECK: R-BOSS-GATE proves the DEPTH-1 starting loadout CANNOT
-       win — turnsToKill >= 2.0x survivableTurns WITH max heals (margins 2.08/2.56/3.04,
-       tightest at the first boss). R-BOSS-FAIR proves the expected loadout gets a fair
-       fight (length in [target,1.5*target], survival ratio 0.50).
-  R6 Reward = consumption * RISK_PREMIUM (1.3); XP flows from boss Threat Points. The
-       route generator guarantees a reachable SHOP/CACHE the layer before every boss
-       (pre-boss provisioning, 100-seed test). R-BOSS-AMMO proves the demand is coverable
-       by reserve + arena budget (tests the BUILD, not full pockets).
+THE SIX RULES (enforced by BossBalance + R-BOSS-* on EVERY row):
+  R1 HP = expectedPlayerDpt(depth) * row.targetFightTurns (act band 18–40; never a literal HP).
+  R2 Soft enrage past 1.5x target (+8% DPT/turn, telegraphed "FURIOUS") — escalation, not a timer.
+  R3 DPT from the survival check at row.survivalRatio (band 0.4–0.7); verbs are fractions of bossDPT;
+     un-telegraphed <= 25% eHP, telegraphed <= 50% (R-BOSS-VERB-CAP, on every row the verb's boss fights).
+  R4 BOSS_PHASE_COUNT = 2 equal phases, each escalating one mechanic.
+  R5 BUILD CHECK: R-BOSS-GATE (the start weapon cannot win; margins rise with depth, tightest at d5);
+     R-BOSS-FAIR v2 — the on-curve fight lasts target +/- 25% (was [target, 1.5x target]).
+  R6 Reward = consumption x 1.3 (at the depth's shop price level, now flat); XP from boss TP;
+     pre-boss provisioning; R-BOSS-AMMO coverage >= 1.
+  IN PLAY (S-BOSS, F10): per row, over TACTICAL seeds reaching it — clear rate [0.50, 0.90] (first boss
+  >= 0.75), fight-turns CoV <= 0.30, median health at the kill [0.30, 0.60]. Reported under the
+  navigation waiver: today ~12 of 200 seeds reach the first boss and none clears it.
 
-Tune a boss via its *_TARGET_FIGHT_TURNS or the survival ratio (SECTION 14) — semantic
-dials, never a raw HP number. Boss AI CHOREOGRAPHY (the Overseer Hunter-Killer brain) is
-untouched: order 6 prices the fight, not the tactic brain.
+Tune a boss via its BossTable row (target turns, survival ratio) — semantic dials, never raw HP. A
+dedicated final boss is a recommended follow-up (one row + an archetype). Choreography is untouched.
 
 
 ================================================================================
@@ -859,6 +856,17 @@ PLAYED (S-SUPPLY / S-ECONOMY, the sim): TACTICAL leaves COMBAT floors at ~0.79 h
   no played floor is below its heal floor; the share of planned ammo picked up reads 0.57 (waived — the
   navigator stalls with carriers alive). The sim FLOOR REPORT prints the per-generator x node breakdown.
 
+CREDITS AND THE SHOP (balance-overhaul order 6, F12/F13): R-CREDITS v2 — income per floor / the NEEDED
+  BUNDLE per floor (LEVEL UP rung + 1.5 consumables @ 3 PP + the region's tier step / 5 floors) in
+  [1.10, 1.40] for every region (A 1.37, B 1.33, C 1.27, D 1.16, E 1.33). Price knobs re-fit:
+  SHOP_CREDITS_PER_POWER_POINT 36 -> 15.5, SHOP_DEPTH_PRICE_SCALE 0.10 -> 0.0 (a credit is worth the same
+  at every depth). Exactly ONE Fabricator per floor; a SHOP node has TWO (upgrade / supply biased) at
+  x0.80 prices. S-SHOP (sim): offers per visit >= 1.5 (navigation-waived, 0.70) and unspent credits at
+  death <= 1.5 floors of income (enforced, 0.13). Ripple: NODE_SUPPLY_CACHE_CREDITS 1.50.
+EVENTS AND MYSTERIES (F15) pay in ladder currencies — weapon levels, perk ranks, heal / armour fractions,
+  credits in floors of income — never ammo boxes or flat XP; see docs/route-map-system.txt.
+
+
 ================================================================================
 SECTION 13 — TERRAIN HAZARDS (two-sided danger folded into the TP contract)
 ================================================================================
@@ -959,35 +967,24 @@ definition or a diverged shim ever reappears.
 
 
 ================================================================================
-SECTION 16 — ROUTE MAP / ENDLESS DESCENT PACING (macro difficulty)
+SECTION 16 — ROUTE MAP / THE FINITE 25-FLOOR RUN (macro difficulty; rewritten by balance-overhaul order 6)
 ================================================================================
 File: util/RouteMapConstants.java; route/*; docs/route-map-system.txt.
-The run is an ENDLESS forward branching DAG. Difficulty pacing at the macro scale:
-  REGION_BAND_SIZE = 5 (a region spans 5 depths, ending in a boss floor;
-  == Constants.BOSS_FLOOR_INTERVAL, so bosses appear every 5 floors).
-  First FIXED_REGION_COUNT regions are hand-named acts; beyond that every region is
-  an endless "THE BREACH" cycle generated lazily.
+The run is a FINITE forward branching DAG: RUN_FINAL_DEPTH (25) floors in FIXED_REGION_COUNT (5) regions of
+REGION_BAND_SIZE (5), each ending on a boss (BossTable). RegionPlan refuses a band past 25; there is no
+append path. Killing the depth-25 boss ends the run as a VICTORY (runs won / best win in StatsStore).
+  A OUTER FACILITY 1-5 | B RESEARCH WING 6-10 | C REACTOR DEPTHS 11-15 | D THE BREACH 16-20 | E THE CORE 21-25
+  (the five route regions align one-to-one with the five story regions).
   Branch shape: BRANCH_WIDTH 2–4, BRANCH_SPREAD_CHANCE 0.55.
-  Per-region node-type weight multipliers tilt each act's feel WITHOUT hard-coding
-  node lists:
-    A "Outer Facility" — safe: +cache, -elite (footing).
-    B "Research Wing"  — exploratory: +mystery/event.
-    C "Reactor Depths" — lethal: +elite (1.6x), -rest/shop.
-    D "The Breach" (endless) — relentless: +elite (1.8x), -rest/shop (relief scarce).
-  Per-region combat-generator biases (rooms/caverns) also shift the biome.
-
-✅ FIXED (new-game-balancr order 5) — THE REGION DANGER DIAL unifies macro pacing
-with the micro TP contract. Each region now declares REGION_TP_BUDGET_MULTIPLIER
-(A 0.9 | B 1.0 | C 1.15 | D 1.25) applied ON TOP of the depth curve
-(GameMath.regionScaledFloorThreatPointBudget, spent by EncounterBudgetPlanner), so a
-"lethal" region is budgeted-ly lethal — it spends measurably more Threat Points (more
-bodies) at the same depth, not merely rolls dangerous nodes more often. The node-type
-WEIGHT multipliers above stay for FLAVOUR (what kind of rooms); the TP dial owns HOW
-HARD. R-REGION gates it (bounded [0.8,1.3], monotonic non-decreasing A<=B<=C<=D, C/D
-out-dial A by >= REGION_TP_LETHAL_MARGIN). Per-fight fairness is preserved: the dial
-scales body COUNT, not per-enemy threat, so the per-fight ladder (R-LADDER L1) holds in
-every region lane. (The ladder is audited to RUN_FINAL_DEPTH 25; endless depth past it is
-balance-overhaul order 6's to end.)
+THE DIFFICULTY CURVE (F7): REGION_TP_BUDGET_MULTIPLIER {A 0.85, B 1.00, C 1.25, D 1.20, E 1.30} on top of
+  the depth curve; ELITE node weights A 0.6 / B 1.0 / C 1.6 / D 1.4 / E 1.6. The PEAK is REACTOR DEPTHS
+  (floors 11-15, owner D3); THE BREACH dips as the build comes online; THE CORE is the finale. R-REGION:
+  every entry in [0.8, 1.5], shape C >= B >= A and E >= D, C/D/E out-dial A by >= 0.1, ladder holds in
+  every lane. The dial scales body COUNT, not per-enemy threat.
+THE ROUTE AUDIT (R-ROUTE-*) runs over the whole run (horizon 15 -> 25).
+RUN OUTCOME (sim, F8): TACTICAL win rate [0.20, 0.40], reaches depth 10 >= 0.60, loss depth [11, 18];
+  NAIVE win rate <= 0.03, death depth [4, 8]; first boss: TACTICAL clears >= 0.75 of reaching seeds, NAIVE
+  reaches >= 0.40 and clears >= 0.15; S-SKILL gap >= 5. All navigation-waived until the policies finish floors.
 
 
 ================================================================================
@@ -1092,9 +1089,8 @@ ceiling, of what needs refinement.
   7. The contract anchors "the player" to a fixed 25 DPT / 205 eHP, ignoring found
      weapons, abilities, crits, and consumables — the model systematically
      under-counts real player power. (SECTION 2, 6)
-  8. Endless depth (past ~15–20) already fails the depth-coupling invariant. It is
-     labelled "intentional graceful degradation" but in practice means it becomes
-     unfairly hard, unaddressed. (SECTION 10)
+  8. [RESOLVED by balance-overhaul order 6 — by REMOVAL] Endless depth is gone: the run is 25 floors and
+     ends on the depth-25 boss (SECTION 16); R-LADDER is audited over the whole run.
   9. [RESOLVED by order 5] Special-move / summon / buff casters now have their
      EFFECTIVE DPT PRICED into TP via cycle-averaging (EnemyType.baseThreatPoints ->
      GameMath.cycleAveragedDamagePerTurn + specialEquivalent* per verb). COVERAGE
@@ -1154,6 +1150,18 @@ ceiling, of what needs refinement.
     perk deck and the build roll stream (GameMath.splitMix64). NOT changed (pre-existing, outside this order):
     EnemyManager's spawn / wiggle / effect streams (floor seeds differ by 1 per depth within a run) and the sim's
     TacticalPolicy tie-break Random (sequential run seeds; only affects wandering).
+25. [OPEN — order 6] Every run-outcome / boss / shop number the finite run promises (F8 win rate 20-40%, S-BOSS,
+    S-SHOP offers per visit) is REPORTED, not proven: the sim's navigation stalls on ~170/200 seeds, ~12 reach the
+    first boss, none clears it. The order-7 feel pass (or a navigation fix) is what turns them into evidence.
+26. [OPEN — order 6] The route model prices a weapon level at one perk pick (12 PP of progress) and the shop sells
+    it for 1.5 PP (23 credits) — deliberate (the rung is meant to be cheap) but a 20x gap the owner should know.
+27. [OWNER AWARENESS — order 6] Shop prices fell ~2.3x at depth 1 and ~5.5x at depth 25 (36 cr/PP with a +10%/floor
+    ramp -> 15.5 cr/PP flat). R-CREDITS v2 holds; real play may show credits piling up — S-SHOP's unspent line is
+    the tripwire once the sim reaches depth.
+28. [OPEN — order 6] REST still sits outside R-CALM-COST's band (0.58 discount at d25, waived to order 7); order 6
+    left REST alone by owner decision. EVENT left R-CALM-COST for R-EVENT-VALUE, so an EVENT now out-earns a COMBAT
+    floor by design (F15) — watch whether SAFEST routing through events feels too generous.
+29. [FOLLOW-UP — order 6] The run-final boss is the Corruptor reused (AS3); a dedicated final boss is recommended.
 
 BOTTOM LINE: the balance model is a coherent, well-documented SKELETON with a solid
 math contract, but it is provisional throughout, unplaytested, incomplete in its

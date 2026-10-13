@@ -1100,6 +1100,13 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               hint-driven switches per floor, each DamageClass's share of landed hit damage (the
               class the activation armed; burn ticks excluded), plus the S-SWITCH alternatives line:
               switches per COMBAT floor, hint take rate, switches per COMBAT floor that showed a hint.
+  S-BOSS      (NEW, balance-overhaul order 6 CP7, F10; RuleKind.SIM_BOSS) for every BossTable row, over the
+              TACTICAL seeds that REACH it: clear rate in [SIM_BOSS_CLEAR_RATE_MIN 0.50, MAX 0.90] (the first boss
+              >= SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN 0.75), fight-turns coefficient of variation (first exchange ->
+              kill) <= SIM_BOSS_MAX_FIGHT_TURNS_COV 0.30, median health fraction at the kill in [0.30, 0.60];
+              CoV / health need >= SIM_BOSS_MIN_SAMPLE 10 kills. Fifteen lines, all depth-derived, all riding
+              the navigation waiver (measured: 12 seeds reach depth 5, 0 clear). WHY: "bosses are sometimes OK,
+              sometimes too hard, sometimes too easy" (owner) — consistency is a played property.
   S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
               tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
               fighting retreat, not a dead end. The band exists to keep that structural
@@ -1128,7 +1135,8 @@ LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing be
    is governed by R-ROLE, its PLATED niche and R-ROLE-5's ammo check. R-ROLE has no
    waiver and BalanceAuditTest pins that.)
 
-  [SIM_SHOP] TACTICAL offers bought per Fabricator visit (balance-overhaul order 6 CP5 — income is the supply a run
+  [SIM_BOSS] all fifteen S-BOSS lines (balance-overhaul order 6 CP7 — measured only on seeds that reach a boss;
+  same waiver and expiry), [SIM_SHOP] TACTICAL offers bought per Fabricator visit (balance-overhaul order 6 CP5 — income is the supply a run
   collects; same waiver and expiry), [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
   depth" and inherit its waiver and expiry: TACTICAL win rate / reaches depth 10 / median death depth (losses) /
   first-boss clears (of seeds reaching it), NAIVE win rate / median death depth / reaches the first boss /
@@ -2040,6 +2048,9 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 6 / CP7 — S-BOSS + DOCS. New band S-BOSS (F10, fifteen navigation-waived lines); the RUN
+    REPORT (win rates, boss table, shop stats); SECTIONS 6 and 8 regenerated; knowledge SECTIONS 9 / 12 / 16
+    rewritten for the finite run. No balance number moved. Why: A6 / A7.
   balance-overhaul order 6 / CP6 — EVENTS AND MYSTERIES IN LADDER CURRENCIES (F15). EventEffect re-written (weapon
     levels, perk rank, heal/armour fractions, credits in floors of income; HP / credit / next-floor costs); the five
     events and six mystery outcomes re-expressed (SECTION 25 EVENT_* / MYSTERY_REWARD_*); R-MYSTERY-EV v2; new

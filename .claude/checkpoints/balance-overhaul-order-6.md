@@ -64,7 +64,8 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [ ] **CP7** — S-BOSS consistency reported; all docs; reviewer PASS.
       DONE WHEN: A5, A6, A7 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
   - [x] **CP7a** — S-BOSS (RuleKind.SIM_BOSS, 15 lines, navigation-waived), RUN REPORT, authority SECTIONS 6 + 8 regenerated.
-  - [ ] **CP7b** — remaining docs (authority S-BOSS text, knowledge SECTIONS 9/12/16, CLAUDE.md), then reviewer.
+  - [x] **CP7b** — remaining docs (authority S-BOSS text, knowledge SECTIONS 9/12/16, CLAUDE.md, route doc boss table).
+  - [ ] **CP7c** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -155,3 +156,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   looped over BOSS_TABLE_DEPTHS; `SimReport.appendRunReport` (RUN REPORT + BOSS TABLE + shop stats); BalanceSimTest
   `everyBossIsAConsistentFight`. Gates (run before a worker restart, code unchanged since): core:test 459 only StoryBarkTest;
   balanceSim exit 0, all 15 S-BOSS lines WAIV (12 seeds reach depth 5, 0 clear). Living tables regenerated from that build.
+- **CP7b:** docs only (+ a StoryRegion comment). knowledge: SECTION 9 (BossTable + five-boss living table), 12 (credits/
+  shop/F15 note), 16 (finite run, dial, outcome bands), problem 8 RESOLVED, problems 25-29 added. CLAUDE.md: sim row (thirteen
+  S-* bands), route row + RouteMap section (finite run, BossTable), moment-schedule + engine-backbone ending lines.
+  Gate: core:test 459 only StoryBarkTest; lwjgl3 compiles. NEXT: reviewer.
