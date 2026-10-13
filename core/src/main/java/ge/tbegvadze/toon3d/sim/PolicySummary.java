@@ -75,6 +75,19 @@ public final class PolicySummary {
         return cleared;
     }
 
+    // ---- S-BOSS (balance-overhaul order 6, F10) ------------------------------------------------
+
+    /** The boss floors at {@code depth} the runs played (one per run that reached it). */
+    public List<FloorLedger> bossFloorsAt(int depth) {
+        List<FloorLedger> floors = new ArrayList<>();
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (floor.bossFloor && floor.depth == depth) floors.add(floor);
+            }
+        }
+        return floors;
+    }
+
     // ---- S-SHOP (balance-overhaul order 6, F14) ------------------------------------------------
 
     /** Fabricator visits summed over every run (one per exited non-boss floor). */

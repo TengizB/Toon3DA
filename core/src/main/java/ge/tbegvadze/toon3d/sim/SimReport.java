@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -76,6 +77,7 @@ public final class SimReport {
         appendMatchupReport(report, matrix);
         appendHeavyReport(report, matrix);
         appendBuildReport(report, matrix);
+        appendRunReport(report, matrix);
 
         report.append("BEHAVIOURAL BANDS\n");
         report.append("--------------------------------------------------------------------------------\n");
@@ -88,6 +90,46 @@ public final class SimReport {
         report.append("BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails\n");
         report.append("`./gradlew balanceSim`.\n");
         return report.toString();
+    }
+
+    /**
+     * The RUN REPORT (balance-overhaul order 6): the finite run's outcome per policy (win rate, reach, loss depth),
+     * the BOSS table (per BossTable row: TACTICAL seeds reaching it, clears, median fight turns and health at the
+     * kill) and the shop (offers per Fabricator visit, credits held at the end). Information beside S-FAIR / S-BOSS /
+     * S-SHOP, which band the same numbers.
+     */
+    private static void appendRunReport(StringBuilder report, Map<String, PolicySummary> matrix) {
+        report.append("RUN REPORT — the finite ").append(BalanceConfig.RUN_FINAL_DEPTH).append("-floor run (balance-overhaul order 6)\n");
+        report.append("--------------------------------------------------------------------------------\n");
+        report.append(String.format("%-22s %7s %8s %9s %10s %11s%n", "policy", "winRate", "reach10", "lossDepth",
+                "offers/vis", "unspentFlr"));
+        for (PolicySummary summary : matrix.values()) {
+            report.append(String.format("%-22s %7.2f %8.2f %9.1f %10.2f %11.2f%n", summary.policyId, summary.winRate(),
+                    summary.reachedDepthFraction(BalanceConfig.SIM_TACTICAL_REACH_DEPTH), summary.medianLossDepth(),
+                    summary.offersPerFabricatorVisit(), summary.medianUnspentFloorsOfIncomeAtLoss()));
+        }
+        PolicySummary tactical = matrix.get(BehavioralBands.TACTICAL_ID);
+        if (tactical != null) {
+            report.append(String.format("BOSS TABLE (TACTICAL)%n%-8s %-12s %8s %8s %11s %11s%n",
+                    "depth", "archetype", "reached", "cleared", "medTurns", "medHealth"));
+            for (ge.tbegvadze.toon3d.route.BossTable.Row row : ge.tbegvadze.toon3d.route.BossTable.standard().rows()) {
+                List<FloorLedger> floors = tactical.bossFloorsAt(row.depth);
+                List<Integer> turns = new ArrayList<>();
+                List<Float> health = new ArrayList<>();
+                for (FloorLedger floor : floors) {
+                    if (floor.bossKilled && floor.bossKillTurn >= 0) {
+                        turns.add(floor.bossFightTurns());
+                        health.add(floor.bossKillHealthFraction);
+                    }
+                }
+                java.util.Collections.sort(turns);
+                java.util.Collections.sort(health);
+                report.append(String.format("%-8d %-12s %8d %8d %11s %11s%n", row.depth, row.archetype.name(), floors.size(),
+                        turns.size(), turns.isEmpty() ? "-" : String.valueOf(turns.get(turns.size() / 2)),
+                        health.isEmpty() ? "-" : String.format("%.2f", health.get(health.size() / 2))));
+            }
+        }
+        report.append('\n');
     }
 
     /**

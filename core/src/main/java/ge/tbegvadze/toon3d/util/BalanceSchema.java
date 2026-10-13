@@ -222,7 +222,14 @@ public final class BalanceSchema {
          * Fabricator visit (one visit per exited floor; a SHOP node's two machines count as one visit), and its
          * median credits held when a lost run ends are at most SIM_SHOP_MAX_UNSPENT_FLOORS floors of income.
          */
-        SIM_SHOP
+        SIM_SHOP,
+        /**
+         * S-BOSS (balance-overhaul order 6, F10): for every BossTable row, over the TACTICAL seeds that REACH it — the
+         * clear rate in [SIM_BOSS_CLEAR_RATE_MIN, MAX] (the first boss at least SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN),
+         * the fight-length coefficient of variation <= SIM_BOSS_MAX_FIGHT_TURNS_COV, and the median player health
+         * fraction at the kill in [SIM_BOSS_KILL_HEALTH_MIN, MAX]. Depth-derived: rides the navigation waiver.
+         */
+        SIM_BOSS
     }
 
     // =====================================================================================
@@ -393,6 +400,13 @@ public final class BalanceSchema {
         // a median 0.13 floors of income left unspent at death, i.e. it spends everything it has. Same waiver and
         // expiry; the unspent-credits line stays ENFORCED.
         waive(RuleKind.SIM_SHOP,    "TACTICAL offers bought per Fabricator visit", reason, expiry);
+        // S-BOSS (balance-overhaul order 6, F10) is measured on the seeds that REACH each boss, and almost none do
+        // while the navigation stalls (the first boss: ~12 of 200, none cleared) — every line inherits the waiver.
+        for (int depth : BalanceConfig.BOSS_TABLE_DEPTHS) {
+            waive(RuleKind.SIM_BOSS, "boss depth " + depth + " TACTICAL clear rate", reason, expiry);
+            waive(RuleKind.SIM_BOSS, "boss depth " + depth + " fight turns CoV", reason, expiry);
+            waive(RuleKind.SIM_BOSS, "boss depth " + depth + " median health at the kill", reason, expiry);
+        }
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */

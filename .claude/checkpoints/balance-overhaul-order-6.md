@@ -63,6 +63,8 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green.
 - [ ] **CP7** — S-BOSS consistency reported; all docs; reviewer PASS.
       DONE WHEN: A5, A6, A7 hold; both gates green; reviewer PASS; STATUS IMPLEMENTED.
+  - [x] **CP7a** — S-BOSS (RuleKind.SIM_BOSS, 15 lines, navigation-waived), RUN REPORT, authority SECTIONS 6 + 8 regenerated.
+  - [ ] **CP7b** — remaining docs (authority S-BOSS text, knowledge SECTIONS 9/12/16, CLAUDE.md), then reviewer.
 
 ## NOTES CARRIED FORWARD
 
@@ -147,3 +149,9 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - **CP6 NOT BUILT (judgement, say so in the IMPLEMENTATION NOTE):** the "weapon drop at d..d+1" currency has no EventEffect
   field — no event/outcome in the catalog needs it (VAULT's '=' weapon racks already drop on-curve guns).
 - **CP6 gates:** core:test 459, only StoryBarkTest; lwjgl3 compiles; balanceSim exit 0. Summary `cp6-summary.txt`.
+- **CP7a handover:** FloorLedger `bossKillTurn / bossKillHealthFraction / bossFightTurns()`; SimWorld records them in the turn
+  loop; `PolicySummary.bossFloorsAt(depth)`; `BehavioralBands.bossResults` (subjects "boss depth d TACTICAL clear rate | fight
+  turns CoV | median health at the kill", first row min SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN); SECTION 25 `SIM_BOSS_*`; waivers
+  looped over BOSS_TABLE_DEPTHS; `SimReport.appendRunReport` (RUN REPORT + BOSS TABLE + shop stats); BalanceSimTest
+  `everyBossIsAConsistentFight`. Gates (run before a worker restart, code unchanged since): core:test 459 only StoryBarkTest;
+  balanceSim exit 0, all 15 S-BOSS lines WAIV (12 seeds reach depth 5, 0 clear). Living tables regenerated from that build.

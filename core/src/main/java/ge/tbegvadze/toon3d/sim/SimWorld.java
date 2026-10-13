@@ -670,6 +670,11 @@ public final class SimWorld implements LevelTransitionListener {
                 floorLedger.turnsToFirstDamageExchange = turnsOnFloor;
             }
 
+            if (floorBoss != null && floorLedger.bossKillTurn < 0 && !floorBoss.isAlive()) {
+                // S-BOSS (balance-overhaul order 6, F10): the turn the boss died and the health it cost.
+                floorLedger.bossKillTurn           = turnsOnFloor;
+                floorLedger.bossKillHealthFraction = healthFraction();
+            }
             if (!player.isAlive()) {
                 recordDeath(threatWasTelegraphed, inResourceCrisis);
                 break;

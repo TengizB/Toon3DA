@@ -33,6 +33,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-HEAVY    — a player who reads the red floor answers the heavies committed at it; one who ignores it does not (balance-overhaul order 4)</li>
  *   <li>S-BUILD    — no build bias is a trap or a must-pick, and plain TACTICAL does not end every run as the same character (balance-overhaul order 5)</li>
  *   <li>S-SHOP     — the shop is a place to spend: TACTICAL buys every visit and dies with little banked (balance-overhaul order 6)</li>
+ *   <li>S-BOSS     — every boss is CONSISTENT: a fair clear rate, a steady fight length, a hurt-but-standing player (balance-overhaul order 6)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -62,6 +63,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(switchResults(tactical));
         if (tactical != null) results.addAll(heavyResults(tactical, naive));
         if (tactical != null) results.addAll(shopResults(tactical));
+        if (tactical != null) results.addAll(bossResults(tactical));
         results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
@@ -161,6 +163,56 @@ public final class BehavioralBands {
         results.add(BalanceSchema.result(RuleKind.SIM_SHOP, "TACTICAL median unspent credits at death (floors of income)",
                 unspent, 0f, BalanceConfig.SIM_SHOP_MAX_UNSPENT_FLOORS,
                 unspent <= BalanceConfig.SIM_SHOP_MAX_UNSPENT_FLOORS, "credits held when a lost run ended"));
+        return results;
+    }
+
+    /**
+     * S-BOSS (balance-overhaul order 6, F10): for each BossTable row, over the TACTICAL seeds that reach it — the
+     * clear rate in [SIM_BOSS_CLEAR_RATE_MIN, MAX] (the first boss at least SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN); the
+     * fight-length CoV at most SIM_BOSS_MAX_FIGHT_TURNS_COV; the median health fraction at the kill in
+     * [SIM_BOSS_KILL_HEALTH_MIN, MAX]. A row with fewer than SIM_BOSS_MIN_SAMPLE kills reports its CoV and median
+     * health as unmeasured (out of band). Depth-derived — rides the navigation waiver until it expires.
+     */
+    private static List<RuleResult> bossResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        for (int rowIndex = 0; rowIndex < BalanceConfig.BOSS_TABLE_DEPTHS.length; rowIndex++) {
+            int depth = BalanceConfig.BOSS_TABLE_DEPTHS[rowIndex];
+            List<FloorLedger> floors = tactical.bossFloorsAt(depth);
+            List<Float> turns = new ArrayList<>();
+            List<Float> health = new ArrayList<>();
+            for (FloorLedger floor : floors) {
+                if (!floor.bossKilled || floor.bossKillTurn < 0) continue;
+                turns.add((float) floor.bossFightTurns());
+                health.add(floor.bossKillHealthFraction);
+            }
+            int reached = floors.size();
+            int cleared = turns.size();
+            float clearRate = reached == 0 ? 0f : cleared / (float) reached;
+            float clearMin = rowIndex == 0 ? BalanceConfig.SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN : BalanceConfig.SIM_BOSS_CLEAR_RATE_MIN;
+            results.add(BalanceSchema.result(RuleKind.SIM_BOSS, "boss depth " + depth + " TACTICAL clear rate",
+                    clearRate, clearMin, BalanceConfig.SIM_BOSS_CLEAR_RATE_MAX,
+                    reached > 0 && clearRate >= clearMin && clearRate <= BalanceConfig.SIM_BOSS_CLEAR_RATE_MAX,
+                    cleared + " of " + reached + " seeds that reached it"));
+            boolean measured = cleared >= BalanceConfig.SIM_BOSS_MIN_SAMPLE;
+            float mean = 0f;
+            for (float value : turns) mean += value;
+            mean = cleared == 0 ? 0f : mean / cleared;
+            float variance = 0f;
+            for (float value : turns) variance += (value - mean) * (value - mean);
+            float coefficient = cleared == 0 || mean <= 0f ? 0f : (float) Math.sqrt(variance / cleared) / mean;
+            results.add(BalanceSchema.result(RuleKind.SIM_BOSS, "boss depth " + depth + " fight turns CoV",
+                    coefficient, 0f, BalanceConfig.SIM_BOSS_MAX_FIGHT_TURNS_COV,
+                    measured && coefficient <= BalanceConfig.SIM_BOSS_MAX_FIGHT_TURNS_COV,
+                    String.format("mean %.1f turns over %d kills (needs >= %d)", mean, cleared, BalanceConfig.SIM_BOSS_MIN_SAMPLE)));
+            java.util.Collections.sort(health);
+            float medianHealth = health.isEmpty() ? 0f : (health.size() % 2 == 1 ? health.get(health.size() / 2)
+                    : (health.get(health.size() / 2 - 1) + health.get(health.size() / 2)) / 2f);
+            results.add(BalanceSchema.result(RuleKind.SIM_BOSS, "boss depth " + depth + " median health at the kill",
+                    medianHealth, BalanceConfig.SIM_BOSS_KILL_HEALTH_MIN, BalanceConfig.SIM_BOSS_KILL_HEALTH_MAX,
+                    measured && medianHealth >= BalanceConfig.SIM_BOSS_KILL_HEALTH_MIN
+                            && medianHealth <= BalanceConfig.SIM_BOSS_KILL_HEALTH_MAX,
+                    "health fraction the turn the boss died, over " + cleared + " kills"));
+        }
         return results;
     }
 

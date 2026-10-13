@@ -3061,6 +3061,17 @@ public final class BalanceConfig {
     public static final int   SHOP_NODE_MACHINE_COUNT            = 2;
     /** F13: price multiplier on every offer a SHOP node's machines roll (stacks with the build's Haggler). Range: 0.80. */
     public static final float SHOP_NODE_PRICE_MULTIPLIER         = 0.80f;
+    // --- S-BOSS (F10): boss CONSISTENCY in play, per BossTable row, over the TACTICAL seeds that reach it.
+    /** F10: a boss's TACTICAL clear rate band (the first boss's floor is SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN). */
+    public static final float SIM_BOSS_CLEAR_RATE_MIN            = 0.50f;
+    public static final float SIM_BOSS_CLEAR_RATE_MAX            = 0.90f;
+    /** F10: the fight-length coefficient of variation (std / mean of turns, first exchange to kill) ceiling. */
+    public static final float SIM_BOSS_MAX_FIGHT_TURNS_COV       = 0.30f;
+    /** F10: the median player health fraction at the kill band (the R-BOSS survival ratio, felt). */
+    public static final float SIM_BOSS_KILL_HEALTH_MIN           = 0.30f;
+    public static final float SIM_BOSS_KILL_HEALTH_MAX           = 0.60f;
+    /** F10: kills a row needs before its CoV / median-health lines read as a measurement. */
+    public static final int   SIM_BOSS_MIN_SAMPLE                = 10;
     /** F14 S-SHOP: TACTICAL buys at least this many offers per Fabricator visit (per floor visited). */
     public static final float SIM_SHOP_MIN_OFFERS_PER_VISIT      = 1.5f;
     /** F14 S-SHOP: TACTICAL's median unspent credits when a lost run ends, in floors of modelled income. */

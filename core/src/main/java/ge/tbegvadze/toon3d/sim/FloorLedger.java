@@ -51,6 +51,17 @@ public final class FloorLedger {
     /** True when the floor's boss was killed. */
     public boolean bossKilled;
 
+    /** S-BOSS (balance-overhaul order 6, F10): the floor turn the boss died on, or -1. */
+    public int bossKillTurn = -1;
+    /** S-BOSS: the player's health fraction (HP / max HP) the turn the boss died; -1 when it did not. */
+    public float bossKillHealthFraction = -1f;
+
+    /** S-BOSS: turns from the first damage exchange to the boss's death (the fight itself); -1 when it did not die. */
+    public int bossFightTurns() {
+        if (bossKillTurn < 0) return -1;
+        return bossKillTurn - Math.max(0, turnsToFirstDamageExchange) + 1;
+    }
+
     /** True when the player left the floor through the exit (false when they died or stalled here). */
     public boolean exited;
 

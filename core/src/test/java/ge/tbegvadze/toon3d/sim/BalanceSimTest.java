@@ -205,6 +205,19 @@ class BalanceSimTest {
         assertBandsHold(results);
     }
 
+    /**
+     * S-BOSS (balance-overhaul order 6, F10) — every boss is consistent: per BossTable row, over the TACTICAL seeds
+     * that reach it, a clear rate in [0.50, 0.90] (the first boss >= 0.75), a fight-length CoV <= 0.30 and a median
+     * health at the kill in [0.30, 0.60]. Three lines per row, all depth-derived (navigation waiver until it expires).
+     */
+    @Test
+    void everyBossIsAConsistentFight() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_BOSS);
+        assertEquals(3 * BalanceConfig.BOSS_TABLE_DEPTHS.length, results.size(),
+                "S-BOSS reports clear rate, fight-turns CoV and health at the kill for every BossTable row");
+        assertBandsHold(results);
+    }
+
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */
     @Test
     void noRunEndsUnableToDamageAnything() {
