@@ -113,10 +113,10 @@ public final class BalanceReport {
         }
         System.out.println("------------------------------------------------------------------------------------");
         System.out.printf("  standard COMBAT node EV = %.2f. calm discount band %.0f-%.0f%%; risk premium band %.2f-%.2f;"
-                        + " mystery EV tolerance ±%.0f%%%n",
+                        + " mystery EV premium 0..+%.0f%%%n",
                 combat.expectedValue, BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MIN * 100f,
                 BalanceConfig.ROUTE_CALM_EV_DISCOUNT_MAX * 100f, BalanceConfig.ROUTE_RISK_PREMIUM_MIN,
-                BalanceConfig.ROUTE_RISK_PREMIUM_MAX, BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE * 100f);
+                BalanceConfig.ROUTE_RISK_PREMIUM_MAX, BalanceConfig.ROUTE_MYSTERY_EV_PREMIUM_MAX * 100f);
         System.out.println("  AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.");
         for (BalanceSchema.RuleResult result : BalanceSchema.riskPremiumResults()) {
             System.out.printf("  risk premium %-26s %5.2f  %s%n", result.subject, result.value,
@@ -620,23 +620,25 @@ public final class BalanceReport {
                 + "the per-fight power ladder (R-LADDER L1) holds in every region lane.");
     }
 
-    /** Route region letter A..D for a 0-based region index (clamped past D — endless "The Breach"). */
+    /** Route region letter A..E for a 0-based region index (the finite run, balance-overhaul order 6). */
     private static String regionLetter(int region) {
         switch (region) {
             case 0:  return "A";
             case 1:  return "B";
             case 2:  return "C";
-            default: return "D";
+            case 3:  return "D";
+            default: return "E";
         }
     }
 
-    /** Route region name for a 0-based region index (clamped past D). */
+    /** Route region name for a 0-based region index (A..E). */
     private static String regionName(int region) {
         switch (region) {
             case 0:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_A_NAME;
             case 1:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_B_NAME;
             case 2:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_C_NAME;
-            default: return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_D_NAME;
+            case 3:  return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_D_NAME;
+            default: return ge.tbegvadze.toon3d.util.RouteMapConstants.REGION_E_NAME;
         }
     }
 
@@ -825,31 +827,19 @@ public final class BalanceReport {
         }
     }
 
-    /** R-CREDITS: expected income vs the price of the expected purchase bundle, per region. */
+    /** R-CREDITS v2 (balance-overhaul order 6): income per floor vs the NEEDED BUNDLE per floor, per region. */
     private static void printCreditEconomyTable() {
-        System.out.println("CREDIT ECONOMY (R-CREDITS) — income(region) / bundle price, band "
-                + String.format("%.2f-%.2f", BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX)
-                + "  [kill base=" + String.format("%.0f", BalanceSchema.modelFloorKillCreditReward())
-                + "/floor  chips=" + String.format("%.0f", BalanceSchema.chipIncomePerFloor()) + "/floor]");
-        System.out.printf("%-8s %10s %10s %8s %-6s%n", "region", "income", "bundle", "ratio", "in?");
+        System.out.println("CREDIT ECONOMY (R-CREDITS v2) — income per floor / NEEDED BUNDLE per floor, band "
+                + String.format("%.2f-%.2f", BalanceConfig.CREDITS_V2_RATIO_MIN, BalanceConfig.CREDITS_V2_RATIO_MAX)
+                + "  [bundle = LEVEL UP rung + " + BalanceConfig.CREDITS_NEEDED_CONSUMABLES_PER_FLOOR + " consumables @ "
+                + String.format("%.0f", BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS) + "PP + region tier step / "
+                + BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE + " floors]");
+        System.out.printf("%-4s %-60s %8s %-6s%n", "", "region", "ratio", "in?");
         System.out.println("------------------------------------------------------------------------------------");
-        int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        int region = 0;
         for (BalanceSchema.RuleResult result : BalanceSchema.creditResults()) {
-            int firstDepth = region * band + 1;
-            int repDepth   = firstDepth + (band - 1) / 2;
-            float income = GameMath.creditIncomePerRegion(BalanceSchema.modelFloorKillCreditReward(),
-                    BalanceConfig.CREDIT_DEPTH_SCALE, BalanceSchema.chipIncomePerFloor(), firstDepth, band);
-            int bundle = BalanceSchema.regionPurchaseBundlePrice(repDepth);
-            System.out.printf("%-8d %10.0f %10d %8.2f %-6s%n",
-                    region, income, bundle, result.value,
+            System.out.printf("%-4s %-60s %8.2f %-6s%n", "", result.detail, result.value,
                     bandVerdict(result.satisfied, result.value, result.bandMinimum));
-            region++;
         }
-        System.out.println("  (bundle = " + BalanceConfig.SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION
-                + " significant @ " + String.format("%.0f", BalanceConfig.SHOP_SIGNIFICANT_BUY_POWER_POINTS)
-                + "PP + " + String.format("%.1f", BalanceConfig.SHOP_EXPECTED_SMALL_BUYS_PER_REGION)
-                + " small @ " + String.format("%.0f", BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS) + "PP each)");
     }
 
     /** Formula-derived shop prices (GameMath.shopPrice) for representative offers at depths 1/5/10/15. */
@@ -1052,9 +1042,10 @@ public final class BalanceReport {
                 "boss", "depth", "expDPT", "derHP", "bossDPT", "target", "gate", "fairRatio", "reward", "ammoCov");
         System.out.println("------------------------------------------------------------------------------------------");
 
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            int depth = archetype.canonicalDepth;
-            BossStats stats = BossBalance.statsForDepth(archetype, depth);
+        for (ge.tbegvadze.toon3d.route.BossTable.Row row : ge.tbegvadze.toon3d.route.BossTable.standard().rows()) {
+            BossBalance.Archetype archetype = row.archetype;
+            int depth = row.depth;
+            BossStats stats = BossBalance.statsForRow(row);
             float expectedDpt = BossBalance.expectedPlayerDamagePerTurn(depth);
 
             // R-BOSS-GATE margin: start-weapon (L1 COMMON on the ladder) TTK vs survivable turns with max heals.
@@ -1095,7 +1086,7 @@ public final class BalanceReport {
         // Derived verb damages vs the single-hit fairness caps (RULE 3).
         System.out.printf("%-22s %6s %10s %-12s%n", "boss verb", "dmg", "%eHP", "capVerdict");
         for (BalanceSchema.BossVerbSpec verb : BalanceSchema.bossVerbs()) {
-            BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
+            BossStats stats = BossBalance.canonicalStats(verb.archetype);
             int damage = stats.verbDamage(verb.dptFraction);
             float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
                     damage, BalanceConfig.REFERENCE_PLAYER_EHP);

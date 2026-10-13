@@ -62,16 +62,6 @@ public final class RouteEconomics {
                     / BalanceConfig.REFERENCE_PLAYER_EHP;
 
     /**
-     * The healing an EVENT choice is expected to hand over, as an eHP fraction: the v1 catalogue's
-     * survival payoffs are a FULL patch-up and armour-to-full (fractions of the player's own maxima),
-     * scaled by the share of choices that pick one.
-     */
-    private static final float EVENT_HEAL_EFFECTIVE_HIT_POINT_FRACTION =
-            BalanceConfig.ROUTE_EVENT_EXPECTED_CHOICE_SHARE
-                    * (BalanceConfig.PLAYER_MAX_HEALTH + BalanceConfig.PLAYER_MAX_ARMOR)
-                    / BalanceConfig.REFERENCE_PLAYER_EHP;
-
-    /**
      * The upgrade opportunity a floor's own weapon drops are worth (balance-overhaul order 2): the spec's
      * expected on-level weapon offers x {@link BalanceConfig#ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON}.
      */
@@ -144,17 +134,13 @@ public final class RouteEconomics {
                 .hiddenOutcomeTable(true)
                 .build());
 
-        // EVENT — a curated non-combat beat: zero spawns, a small curated room, one typed choice.
+        // EVENT — a curated non-combat beat: zero spawns, a small curated room, one typed choice. Balance-overhaul
+        // order 6 (F15): priced from the CATALOG itself — the weighted mean of each event's best choice in ladder
+        // currencies — so adding an event re-prices the node with no edit here.
         registry.register(NodeEconomics.node(RouteNodeType.EVENT, "event")
                 .displayName("DISTRESS BEACON")
                 .budgetScale(0f)
-                .guaranteedAmmoBoxes(BalanceConfig.ROUTE_EVENT_EXPECTED_CHOICE_SHARE
-                        * BalanceConfig.EVENT_AMMO_BOXES)
-                // The v1 event choices heal by FRACTION (a full patch-up, armour to full), not by a flat
-                // pickup value, so the ledger prices them as an eHP share — depth-honest by construction.
-                .guaranteedHealEffectiveHitPointFraction(EVENT_HEAL_EFFECTIVE_HIT_POINT_FRACTION)
-                .guaranteedExperiencePoints(BalanceConfig.ROUTE_EVENT_EXPECTED_CHOICE_SHARE
-                        * BalanceConfig.EVENT_XP_LARGE)
+                .eventCatalogReward()
                 .build());
 
         // BOSS — a forced SET_PIECE. Its HP/damage/reward are DERIVED by BossBalance and governed by
@@ -217,6 +203,7 @@ public final class RouteEconomics {
                 .displayName("MYSTERY: VAULT JACKPOT")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_VAULT)
                 .scanToneId(MysteryOutcome.VAULT_JACKPOT.scanTone().name())
+                .ladderReward(MysteryOutcome.VAULT_JACKPOT.reward())
                 .budgetScale(BalanceConfig.ROUTE_LIGHT_BUDGET_SCALE)
                 .guaranteedAmmoBoxes(BalanceConfig.MYSTERY_VAULT_AMMO_BOXES)
                 .guaranteedHealHitPoints(BalanceConfig.ELITE_MEDKITS * MEDKIT_FULL_HEAL
@@ -229,6 +216,7 @@ public final class RouteEconomics {
                 .displayName("MYSTERY: SECRET WARREN")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_SECRET_WARREN)
                 .scanToneId(MysteryOutcome.SECRET_WARREN.scanTone().name())
+                .ladderReward(MysteryOutcome.SECRET_WARREN.reward())
                 .budgetScale(1f)
                 .guaranteedAmmoBoxes(BalanceConfig.MYSTERY_WARREN_AMMO_BOXES)
                 .guaranteedHealHitPoints(BalanceConfig.MYSTERY_WARREN_MEDKITS
@@ -242,6 +230,7 @@ public final class RouteEconomics {
                 .displayName("MYSTERY: TRAP GAUNTLET")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_TRAP_GAUNTLET)
                 .scanToneId(MysteryOutcome.TRAP_GAUNTLET.scanTone().name())
+                .ladderReward(MysteryOutcome.TRAP_GAUNTLET.reward())
                 .budgetScale(BalanceConfig.ROUTE_CALM_BUDGET_SCALE)
                 .guaranteedAmmoBoxes(BalanceConfig.MYSTERY_TRAP_AMMO_BOXES)
                 .guaranteedHealHitPoints(BalanceConfig.MYSTERY_TRAP_MEDKITS * MEDKIT_FULL_HEAL
@@ -254,6 +243,7 @@ public final class RouteEconomics {
                 .displayName("MYSTERY: AMBUSH")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_AMBUSH)
                 .scanToneId(MysteryOutcome.AMBUSH.scanTone().name())
+                .ladderReward(MysteryOutcome.AMBUSH.reward())
                 .delegateId("elite")
                 .build());
 
@@ -262,6 +252,7 @@ public final class RouteEconomics {
                 .displayName("MYSTERY: LORE SIGNAL")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_LORE_SIGNAL)
                 .scanToneId(MysteryOutcome.LORE_SIGNAL.scanTone().name())
+                .ladderReward(MysteryOutcome.LORE_SIGNAL.reward())
                 .delegateId("rest")
                 .build());
 
@@ -272,6 +263,7 @@ public final class RouteEconomics {
                 .displayName("MYSTERY: MALFUNCTION")
                 .tableWeight(BalanceConfig.MYSTERY_WEIGHT_MALFUNCTION)
                 .scanToneId(MysteryOutcome.MALFUNCTION.scanTone().name())
+                .ladderReward(MysteryOutcome.MALFUNCTION.reward())
                 .budgetScale(BalanceConfig.ROUTE_CALM_BUDGET_SCALE)
                 .guaranteedHealHitPoints(-BalanceConfig.ROUTE_MALFUNCTION_HAZARD_HIT_POINTS)
                 .build());

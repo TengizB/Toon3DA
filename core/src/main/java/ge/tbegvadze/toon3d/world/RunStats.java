@@ -24,6 +24,15 @@ public class RunStats {
     public void recordKill()                  { enemiesKilled++; }
 
     /**
+     * VICTORY (balance-overhaul order 6, F4): set the moment the run-final boss at
+     * BalanceConfig.RUN_FINAL_DEPTH dies. A won run is never ALSO a death, whatever happens after.
+     */
+    private boolean victory;
+
+    public void    recordVictory() { victory = true; }
+    public boolean isVictory()     { return victory; }
+
+    /**
      * Appends one committed node's token to the run's route string, separating tokens with '-'.
      *
      * @param nodeToken a short symbol for the node type (e.g. its registry id or icon glyph)

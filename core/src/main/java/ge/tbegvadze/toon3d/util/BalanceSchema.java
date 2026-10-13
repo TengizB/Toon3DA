@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.util;
 
+import ge.tbegvadze.toon3d.route.BossTable;
+
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.enemy.HeavyAttack;
@@ -110,7 +112,7 @@ public final class BalanceSchema {
         COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
-        /** R-CREDITS (order 3): expected region income / price of the expected purchase bundle in [0.9, 1.4]. */
+        /** R-CREDITS v2 (balance-overhaul order 6): income per floor / NEEDED BUNDLE per floor in [1.10, 1.40], every region. */
         CREDITS,
         /** R-XP-PACE (order 4): a floor's available XP / xpRequired(expectedLevel) holds [1.0, 1.3] at every depth 1..15. */
         XP_PACE,
@@ -148,8 +150,14 @@ public final class BalanceSchema {
         RISK_PREMIUM,
         /** R-CALM-COST (order 7): a calm node's EV sits 10-30% BELOW a standard combat node's. */
         CALM_COST,
-        /** R-MYSTERY-EV (order 7): the weighted mystery table is within ±15% of a combat node; worst case bounded. */
+        /**
+         * R-MYSTERY-EV v2 (balance-overhaul order 6, F15): the weighted mystery table's EV is >= a combat node's (and
+         * <= ROUTE_MYSTERY_EV_PREMIUM_MAX above it), its outcomes SPREAD (higher variance than a combat node's
+         * zero), and the worst outcome stays bounded.
+         */
         MYSTERY_EV,
+        /** R-EVENT-VALUE (balance-overhaul order 6, F15): every EVENT offers a choice worth >= a COMBAT floor's supply. */
+        EVENT_VALUE,
         /** R-PIPS-DERIVED (order 7): the displayed DangerTier equals the tier DERIVED from priced threat. */
         PIPS_DERIVED,
         /** R-HONEST-SAFE (order 7): a safe-looking node IS safe, and scan tones partition by price. */
@@ -208,7 +216,20 @@ public final class BalanceSchema {
          * its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank). The depth-spread and dominant-tag
          * lines ride the navigation waiver (the latter by owner ruling D7); the sample line is never waived.
          */
-        SIM_BUILD
+        SIM_BUILD,
+        /**
+         * S-SHOP (balance-overhaul order 6, F14): TACTICAL buys at least SIM_SHOP_MIN_OFFERS_PER_VISIT offers per
+         * Fabricator visit (one visit per exited floor; a SHOP node's two machines count as one visit), and its
+         * median credits held when a lost run ends are at most SIM_SHOP_MAX_UNSPENT_FLOORS floors of income.
+         */
+        SIM_SHOP,
+        /**
+         * S-BOSS (balance-overhaul order 6, F10): for every BossTable row, over the TACTICAL seeds that REACH it — the
+         * clear rate in [SIM_BOSS_CLEAR_RATE_MIN, MAX] (the first boss at least SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN),
+         * the fight-length coefficient of variation <= SIM_BOSS_MAX_FIGHT_TURNS_COV, and the median player health
+         * fraction at the kill in [SIM_BOSS_KILL_HEALTH_MIN, MAX]. Depth-derived: rides the navigation waiver.
+         */
+        SIM_BOSS
     }
 
     // =====================================================================================
@@ -296,9 +317,11 @@ public final class BalanceSchema {
         String bespokeReason = "Priced honestly on its NodeSupplySpec plan since balance-overhaul order 2: "
                 + "the bespoke room never placed the ordinary loot the old ledger credited it with, and "
                 + "its contents are balance-overhaul order 6's to retune.";
-        String bespokeExpiry = "Expires with balance-overhaul order 6 (REST / EVENT / MYSTERY contents).";
+        // Balance-overhaul order 6: EVENT contents were re-expressed (F15) and the EVENT node left R-CALM-COST for
+        // R-EVENT-VALUE, so the event waiver is RETIRED. REST is out of order 6's scope (owner: "REST is ok"), so its
+        // waiver's expiry moves to the order-7 feel pass.
+        String bespokeExpiry = "Expires with the balance-overhaul order 7 feel pass (REST contents; order 6 left REST alone).";
         waive(RuleKind.CALM_COST, "rest EV discount",  bespokeReason, bespokeExpiry);
-        waive(RuleKind.CALM_COST, "event EV discount", bespokeReason, bespokeExpiry);
         // Balance-overhaul order 5, owner ruling D3: SCAVENGER is an ECONOMY tag. Its perks change supply,
         // shop prices and carrier drops — none of which is a turn to kill or a hit to die in a reference
         // fight — so R-CARRY's TTK x TTD reads it through a heal-at-shop-price conversion that cannot reach
@@ -345,7 +368,16 @@ public final class BalanceSchema {
                 + "so every depth-derived statistic reads low.";
         String expiry = "Expires when the balance simulator's scripted policies reach the exit on >90% "
                 + "of floors (BalanceSimTest reports the stall rate on every run).";
-        waive(RuleKind.SIM_FAIR,    "TACTICAL median death depth", reason, expiry);
+        // Balance-overhaul order 6 (F8): the run-outcome lines that replaced "TACTICAL median death depth" are all
+        // depth-derived and inherit this waiver and expiry (A6: reported until it expires, then enforced).
+        waive(RuleKind.SIM_FAIR,    "TACTICAL win rate",            reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH, reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL median death depth (losses)", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE win rate",               reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE median death depth",     reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "TACTICAL first-boss clears (of seeds reaching it)", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE reaches the first boss", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE first-boss clears",      reason, expiry);
         waive(RuleKind.SIM_FAIR,    "TACTICAL readable deaths",    reason, expiry);
         waive(RuleKind.SIM_SKILL,   "TACTICAL vs NAIVE depth gap", reason, expiry);
         waive(RuleKind.SIM_ROUTE,   "played per-floor net drain",  reason, expiry);
@@ -363,6 +395,18 @@ public final class BalanceSchema {
         // first synergy pick off the Chaingun + Shotgun start kit (measured 0.47, MARKSMAN 23 of 49). The sample
         // line ("TACTICAL runs holding a perk rank") stays ENFORCED.
         waive(RuleKind.SIM_BUILD,   "TACTICAL dominant-tag share", reason, expiry);
+        // S-SHOP (balance-overhaul order 6, F14): buys per visit are bounded by the credits a run COLLECTS, and the
+        // stalling policy picks up under half its planned supply (S-ECONOMY) — measured 0.64 offers per visit with
+        // a median 0.13 floors of income left unspent at death, i.e. it spends everything it has. Same waiver and
+        // expiry; the unspent-credits line stays ENFORCED.
+        waive(RuleKind.SIM_SHOP,    "TACTICAL offers bought per Fabricator visit", reason, expiry);
+        // S-BOSS (balance-overhaul order 6, F10) is measured on the seeds that REACH each boss, and almost none do
+        // while the navigation stalls (the first boss: ~12 of 200, none cleared) — every line inherits the waiver.
+        for (int depth : BalanceConfig.BOSS_TABLE_DEPTHS) {
+            waive(RuleKind.SIM_BOSS, "boss depth " + depth + " TACTICAL clear rate", reason, expiry);
+            waive(RuleKind.SIM_BOSS, "boss depth " + depth + " fight turns CoV", reason, expiry);
+            waive(RuleKind.SIM_BOSS, "boss depth " + depth + " median health at the kill", reason, expiry);
+        }
     }
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
@@ -818,6 +862,7 @@ public final class BalanceSchema {
         results.addAll(riskPremiumResults());
         results.addAll(calmCostResults());
         results.addAll(mysteryExpectedValueResults());
+        results.addAll(eventValueResults());
         results.addAll(derivedPipResults());
         results.addAll(honestSafeResults());
         results.addAll(trajectoryResults());
@@ -1245,10 +1290,11 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-REGION (new-game-balancr order 5): the REGION DANGER DIAL is a budgeted, provably-fair number, not
-     * a vibe. It checks that (1) every region's TP multiplier sits in [MIN, MAX]; (2) the dial is monotonic
-     * non-decreasing across regions (a deeper region is never easier); (3) the two lethal regions (C/D)
-     * out-dial region A by a measurable margin — a lethal region is EXPLICITLY, budgeted-ly lethal; and
+     * R-REGION (new-game-balancr order 5; re-shaped by balance-overhaul order 6, F7): the REGION DANGER DIAL
+     * is a budgeted, provably-fair number, not a vibe. It checks that (1) every region's TP multiplier sits in
+     * [MIN, MAX] (0.8–1.5); (2) the dial has the finite run's SHAPE — C >= B >= A and E >= D (OVERRIDES
+     * "monotonic non-decreasing": the peak sits at REACTOR DEPTHS, floors 11-15, and THE BREACH may dip as the
+     * build comes online); (3) the lethal regions (C/D/E) out-dial region A by a measurable margin — a lethal region is EXPLICITLY, budgeted-ly lethal; and
      * (4) the power ladder (R-LADDER L1) still holds in every region lane. Point (4) is the key fairness
      * proof: the region dial scales the BUDGET (how many bodies), not the per-enemy growth, so the on-curve
      * fight length is region-INDEPENDENT in every lane — region danger is an attrition tax of extra bodies,
@@ -1268,17 +1314,17 @@ public final class BalanceSchema {
                     BalanceConfig.REGION_TP_BUDGET_MULTIPLIER_MAX, inBand, regionDisplayName(region)));
         }
 
-        // 2. Monotonic non-decreasing across regions (deeper is never easier).
-        boolean monotonic = true;
-        for (int region = 1; region < multipliers.length; region++) {
-            if (multipliers[region] < multipliers[region - 1]) monotonic = false;
-        }
-        results.add(new RuleResult(RuleKind.REGION_DANGER, "region dial monotonic non-decreasing",
-                monotonic ? 1f : 0f, 1f, 1f, monotonic, "A <= B <= C <= D — a deeper region never trivialises"));
+        // 2. The finite run's shape (F7): C >= B >= A and E >= D — the peak at floors 11-15, the finale on top.
+        boolean shaped = multipliers.length == RouteMapConstants.FIXED_REGION_COUNT
+                && multipliers[2] >= multipliers[1] && multipliers[1] >= multipliers[0]
+                && multipliers[4] >= multipliers[3];
+        results.add(new RuleResult(RuleKind.REGION_DANGER, "region dial shape C>=B>=A, E>=D",
+                shaped ? 1f : 0f, 1f, 1f, shaped,
+                "one entry per region of the finite run; the peak at REACTOR DEPTHS, the finale at least THE BREACH"));
 
-        // 3. The lethal regions (C=2, D=3) out-dial region A by a measurable margin.
+        // 3. The lethal regions (C=2, D=3, E=4) out-dial region A by a measurable margin.
         float regionAMultiplier = multipliers.length > 0 ? multipliers[0] : 1f;
-        int[] lethalRegions = {2, 3};
+        int[] lethalRegions = {2, 3, 4};
         for (int region : lethalRegions) {
             if (region >= multipliers.length) continue;
             float threshold = regionAMultiplier + BalanceConfig.REGION_TP_LETHAL_MARGIN;
@@ -1307,13 +1353,14 @@ public final class BalanceSchema {
         return results;
     }
 
-    /** The route region name for a 0-based region index (A/B/C/D, clamped past D — endless "The Breach"). */
+    /** The route region name for a 0-based region index (A..E — the finite run, balance-overhaul order 6). */
     private static String regionDisplayName(int region) {
         switch (region) {
             case 0:  return RouteMapConstants.REGION_A_NAME;
             case 1:  return RouteMapConstants.REGION_B_NAME;
             case 2:  return RouteMapConstants.REGION_C_NAME;
-            default: return RouteMapConstants.REGION_D_NAME;
+            case 3:  return RouteMapConstants.REGION_D_NAME;
+            default: return RouteMapConstants.REGION_E_NAME;
         }
     }
 
@@ -1374,42 +1421,55 @@ public final class BalanceSchema {
         return chips * (float) Math.round(ge.tbegvadze.toon3d.level.SupplyPlanner.averageCreditChipValue());
     }
 
-    /** The credit price of the expected per-region purchase BUNDLE (one weapon-class buy + supplies). */
-    public static int regionPurchaseBundlePrice(int representativeDepth) {
-        int significant = GameMath.shopPrice(BalanceConfig.SHOP_SIGNIFICANT_BUY_POWER_POINTS,
-                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, representativeDepth,
-                BalanceConfig.SHOP_DEPTH_PRICE_SCALE) * BalanceConfig.SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION;
-        int small = GameMath.shopPrice(BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS,
-                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, representativeDepth,
-                BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
-        return Math.round(significant + BalanceConfig.SHOP_EXPECTED_SMALL_BUYS_PER_REGION * small);
+    /**
+     * The tier a region's one budgeted TIER UPGRADE buys (F12): the region's top weapon-drop tier, so the bundle
+     * prices the step that takes the on-curve weapon to the top of the region's rarity band.
+     */
+    public static WeaponTier regionTierUpgradeDestination(int region) {
+        int[] maximums = BalanceConfig.WEAPON_DROP_TIER_MAX_BY_REGION;
+        int tier = maximums[Math.min(Math.max(0, region), maximums.length - 1)];
+        return WeaponTier.values()[Math.min(tier, WeaponTier.values().length - 1)];
+    }
+
+    /** The NEEDED BUNDLE's price per floor at a depth (F12; GameMath.neededBundlePricePerFloor). */
+    public static float neededBundlePricePerFloor(int depth) {
+        int band   = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
+        int region = GameMath.regionIndexAtDepth(Math.max(1, depth), band);
+        int consumablePrice = GameMath.shopPrice(BalanceConfig.SHOP_SMALL_BUY_POWER_POINTS,
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        int tierPrice = GameMath.shopPrice(WeaponRoller.tierAbilityPowerPointBudget(regionTierUpgradeDestination(region)),
+                BalanceConfig.SHOP_CREDITS_PER_POWER_POINT, depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE);
+        return GameMath.neededBundlePricePerFloor(ladderLevelUpPrice(depth),
+                BalanceConfig.CREDITS_NEEDED_CONSUMABLES_PER_FLOOR, consumablePrice, tierPrice, band);
     }
 
     /**
-     * R-CREDITS (order 3): the credit sink is a real lever — expected income per region divided by the
-     * price of the expected purchase bundle (one weapon-class buy + a couple of supplies) lands in
-     * [0.9, 1.4] for every region across depths 1..15. Currency is thus neither a runaway score counter
-     * (income &gt;&gt; sink) nor unaffordable (income &lt;&lt; sink).
+     * R-CREDITS v2 (balance-overhaul order 6, F12 — REPLACES the order-3 rule "income per region / one weapon-class
+     * buy + 1.5 supplies in [0.9, 1.4]"): for every region of the finite run, the modelled on-curve credit income
+     * per floor divided by the NEEDED BUNDLE's price per floor — both averaged over the region's floors — lands in
+     * [CREDITS_V2_RATIO_MIN, MAX] = [1.10, 1.40]. A SURPLUS by design (owner D4: "shops are too expensive"): an
+     * on-curve player can always afford the rung, the consumables and the region's tier step, with change.
      */
     public static List<RuleResult> creditResults() {
         List<RuleResult> results = new ArrayList<>();
         int band = BalanceConfig.GEAR_CURVE_REGION_BAND_SIZE;
-        float killCreditBase = modelFloorKillCreditReward();
-        float chipIncome = chipIncomePerFloor();
         int regionCount = (BalanceConfig.RUN_FINAL_DEPTH + band - 1) / band; // regions spanning 1..RUN_FINAL_DEPTH
         for (int region = 0; region < regionCount; region++) {
             int firstDepth = region * band + 1;
-            int representativeDepth = firstDepth + (band - 1) / 2; // region's middle floor
-            float income = GameMath.creditIncomePerRegion(killCreditBase,
-                    BalanceConfig.CREDIT_DEPTH_SCALE, chipIncome, firstDepth, band);
-            int bundlePrice = regionPurchaseBundlePrice(representativeDepth);
-            float ratio = bundlePrice <= 0 ? 0f : income / bundlePrice;
-            boolean inBand = ratio >= BalanceConfig.CREDIT_INCOME_RATIO_MIN
-                    && ratio <= BalanceConfig.CREDIT_INCOME_RATIO_MAX;
-            results.add(new RuleResult(RuleKind.CREDITS, "region " + region + " income/bundle", ratio,
-                    BalanceConfig.CREDIT_INCOME_RATIO_MIN, BalanceConfig.CREDIT_INCOME_RATIO_MAX, inBand,
-                    "income " + Math.round(income) + " / bundle " + bundlePrice
-                            + " (rep depth " + representativeDepth + ")"));
+            float income = 0f;
+            float bundle = 0f;
+            for (int depth = firstDepth; depth < firstDepth + band; depth++) {
+                income += combatFloorCreditIncome(depth);
+                bundle += neededBundlePricePerFloor(depth);
+            }
+            income /= band;
+            bundle /= band;
+            float ratio = bundle <= 0f ? 0f : income / bundle;
+            boolean inBand = ratio >= BalanceConfig.CREDITS_V2_RATIO_MIN && ratio <= BalanceConfig.CREDITS_V2_RATIO_MAX;
+            results.add(new RuleResult(RuleKind.CREDITS, "region " + region + " income/needed bundle per floor", ratio,
+                    BalanceConfig.CREDITS_V2_RATIO_MIN, BalanceConfig.CREDITS_V2_RATIO_MAX, inBand,
+                    regionDisplayName(region) + ": income " + Math.round(income) + " / bundle " + Math.round(bundle)
+                            + " per floor (tier step to " + regionTierUpgradeDestination(region) + ")"));
         }
         return results;
     }
@@ -2146,18 +2206,19 @@ public final class BalanceSchema {
     public static List<RuleResult> bossGateResults() {
         List<RuleResult> results = new ArrayList<>();
         float minMargin  = BalanceConfig.BOSS_GATE_MIN_DAMAGE_MARGIN;
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            BossBalance.Archetype archetype = row.archetype;
+            BossStats stats = BossBalance.statsForRow(row);
             // Balance-overhaul order 1: the START weapon (L1 COMMON) on the boss floor, carried by an otherwise
             // on-curve character — the generous reading; the ladder's lag penalty applies to the weapon.
-            ExpectedPlayer startWeapon = ladderStartWeaponPlayer(archetype.canonicalDepth);
+            ExpectedPlayer startWeapon = ladderStartWeaponPlayer(row.depth);
             float maxHeals = startWeapon.effectiveHitPoints * BalanceConfig.BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION;
             float startTurnsToKill = GameMath.bossFightTurnsForPlayerDamagePerTurn(
                     stats.effectiveHitPoints, startWeapon.damagePerTurn);
             float survivableTurns  = GameMath.bossFightTurnsForPlayerDamagePerTurn(
                     startWeapon.effectiveHitPoints + maxHeals, stats.damagePerTurn);
             float margin = survivableTurns > 0f ? startTurnsToKill / survivableTurns : Float.POSITIVE_INFINITY;
-            results.add(new RuleResult(RuleKind.BOSS_GATE, archetype.displayName + " depth " + archetype.canonicalDepth,
+            results.add(new RuleResult(RuleKind.BOSS_GATE, archetype.displayName + " depth " + row.depth,
                     margin, minMargin, Float.POSITIVE_INFINITY, margin >= minMargin,
                     String.format("start-weapon TTK %.1f vs survivable %.1f turns (with max heals) — must be >= %.1fx",
                             startTurnsToKill, survivableTurns, minMargin)));
@@ -2166,31 +2227,42 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-BOSS-FAIR: the EXPECTED player at each boss depth gets a fight whose LENGTH lands in
-     * [target, 1.5*target] turns and whose SURVIVAL RATIO lands in [0.4, 0.7]. Both hold by construction of
-     * the derivation, so a broken input (a bad target or ratio) surfaces here rather than in a live fight.
+     * R-BOSS-FAIR (v2, balance-overhaul order 6 F9): for EVERY BossTable row, the EXPECTED player at the row's
+     * depth gets a fight whose LENGTH lands in the row's target +/- BOSS_FIGHT_TURNS_TOLERANCE (OVERRIDES the
+     * order-6 band [target, 1.5*target]) and whose SURVIVAL RATIO lands in [0.4, 0.7]; the row's own survival
+     * dial must sit in that band too. All hold by construction of the derivation, so a broken input (a bad
+     * target or ratio on a row) surfaces here rather than in a live fight.
      */
     public static List<RuleResult> bossFairResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats     = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
-            float expectedDpt   = BossBalance.expectedPlayerDamagePerTurn(archetype.canonicalDepth);
+        float tolerance = BalanceConfig.BOSS_FIGHT_TURNS_TOLERANCE;
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            String subject      = row.archetype.displayName + " depth " + row.depth;
+            BossStats stats     = BossBalance.statsForRow(row);
+            float expectedDpt   = BossBalance.expectedPlayerDamagePerTurn(row.depth);
             float fightTurns    = GameMath.bossFightTurnsForPlayerDamagePerTurn(
                     stats.effectiveHitPoints, expectedDpt);
-            float lengthMin     = stats.targetFightTurns;
-            float lengthMax     = stats.upperFightTurnsCap; // == 1.5 * target
-            results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " fight length",
+            float lengthMin     = stats.targetFightTurns * (1f - tolerance);
+            float lengthMax     = stats.targetFightTurns * (1f + tolerance);
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, subject + " fight length",
                     fightTurns, lengthMin, lengthMax, fightTurns >= lengthMin && fightTurns <= lengthMax,
-                    "expected-loadout fight turns must land in [target, 1.5*target]"));
+                    "expected-loadout fight turns must land in target +/- " + Math.round(tolerance * 100f) + "%"));
 
             float survivalRatio = GameMath.bossSurvivalCheckRatio(
-                    BossBalance.expectedPlayerEffectiveHitPoints(archetype.canonicalDepth), stats.damagePerTurn, fightTurns);
-            results.add(new RuleResult(RuleKind.BOSS_FAIR, archetype.displayName + " survival ratio",
+                    BossBalance.expectedPlayerEffectiveHitPoints(row.depth), stats.damagePerTurn, fightTurns);
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, subject + " survival ratio",
                     survivalRatio, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN,
                     BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
                     survivalRatio >= BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MIN
                             && survivalRatio <= BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_MAX,
-                    "a no-heal player survives this fraction of the fight"));
+                    "a no-heal player survives this fraction of the fight (row dial " + row.survivalRatio + ")"));
+
+            boolean targetInActBand = row.targetFightTurns >= BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MIN
+                    && row.targetFightTurns <= BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MAX;
+            results.add(new RuleResult(RuleKind.BOSS_FAIR, subject + " target turns",
+                    row.targetFightTurns, BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MIN,
+                    BalanceConfig.BOSS_TARGET_FIGHT_TURNS_ACT_MAX, targetInActBand,
+                    "the row's RULE-1 dial sits inside the act band"));
         }
         return results;
     }
@@ -2207,17 +2279,21 @@ public final class BalanceSchema {
     public static List<RuleResult> bossVerbCapResults() {
         List<RuleResult> results = new ArrayList<>();
         for (BossVerbSpec verb : BOSS_VERBS) {
-            BossStats stats = BossBalance.statsForDepth(verb.archetype, verb.archetype.canonicalDepth);
-            int damage = stats.verbDamage(verb.dptFraction);
-            float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
-                    damage, BossBalance.expectedPlayerEffectiveHitPoints(verb.archetype.canonicalDepth));
-            float bandMax = verb.telegraphed
-                    ? BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
-                    : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
-            results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName, fraction, 0f, bandMax,
-                    fraction <= bandMax,
-                    String.format("derived %d dmg = %.0f%% eHP; %s cap %.0f%%", damage, fraction * 100f,
-                            verb.telegraphed ? "telegraphed" : "un-telegraphed", bandMax * 100f)));
+            // Balance-overhaul order 6: every BossTable row the verb's archetype fights on (the Overseer at 5 AND 20).
+            for (BossTable.Row row : BossTable.standard().rows()) {
+                if (row.archetype != verb.archetype) continue;
+                BossStats stats = BossBalance.statsForRow(row);
+                int damage = stats.verbDamage(verb.dptFraction);
+                float fraction = GameMath.bossSingleHitFractionOfEffectiveHitPoints(
+                        damage, BossBalance.expectedPlayerEffectiveHitPoints(row.depth));
+                float bandMax = verb.telegraphed
+                        ? BalanceConfig.BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION
+                        : BalanceConfig.TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION;
+                results.add(new RuleResult(RuleKind.BOSS_VERB_CAP, verb.verbName + " depth " + row.depth, fraction, 0f, bandMax,
+                        fraction <= bandMax,
+                        String.format("derived %d dmg = %.0f%% eHP; %s cap %.0f%%", damage, fraction * 100f,
+                                verb.telegraphed ? "telegraphed" : "un-telegraphed", bandMax * 100f)));
+            }
         }
         return results;
     }
@@ -2230,12 +2306,11 @@ public final class BalanceSchema {
     public static List<RuleResult> bossRewardResults() {
         List<RuleResult> results = new ArrayList<>();
         float premium = BalanceConfig.BOSS_REWARD_RISK_PREMIUM;
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
-            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints,
-                    archetype.canonicalDepth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            BossStats stats = BossBalance.statsForRow(row);
+            float consumption = BossBalance.modelledConsumptionCredits(stats.effectiveHitPoints, row.depth);
             float ratio = consumption > 0f ? stats.creditReward / consumption : Float.POSITIVE_INFINITY;
-            results.add(new RuleResult(RuleKind.BOSS_REWARD, archetype.displayName + " reward/consumption",
+            results.add(new RuleResult(RuleKind.BOSS_REWARD, row.archetype.displayName + " depth " + row.depth + " reward/consumption",
                     ratio, premium - 0.02f, Float.POSITIVE_INFINITY, ratio >= premium - 0.02f,
                     String.format("reward %d credits vs modelled consumption %.0f (>= %.2fx)",
                             stats.creditReward, consumption, premium)));
@@ -2250,15 +2325,15 @@ public final class BalanceSchema {
      */
     public static List<RuleResult> bossAmmoResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (BossBalance.Archetype archetype : BossBalance.Archetype.values()) {
-            BossStats stats = BossBalance.statsForDepth(archetype, archetype.canonicalDepth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            BossStats stats = BossBalance.statsForRow(row);
             float demand       = BossBalance.modelledAmmoDemandDamage(stats.effectiveHitPoints);
             float reserveDamage = BalanceConfig.RESERVE_BANKING_FLOORS_TARGET
                     * GameMath.floorDemandAtDepth(modelFloorDemand(),
-                            BalanceConfig.ENEMY_HEALTH_GROWTH, archetype.canonicalDepth);
+                            BalanceConfig.ENEMY_HEALTH_GROWTH, row.depth);
             float arenaDamage  = BossBalance.arenaAmmoBudgetDamage(stats.effectiveHitPoints);
             float coverage     = demand > 0f ? (reserveDamage + arenaDamage) / demand : Float.POSITIVE_INFINITY;
-            results.add(new RuleResult(RuleKind.BOSS_AMMO, archetype.displayName + " ammo coverage",
+            results.add(new RuleResult(RuleKind.BOSS_AMMO, row.archetype.displayName + " depth " + row.depth + " ammo coverage",
                     coverage, 1f, Float.POSITIVE_INFINITY, coverage >= 1f,
                     String.format("reserve %.0f + arena %.0f vs demand %.0f damage", reserveDamage, arenaDamage, demand)));
         }
@@ -2282,8 +2357,11 @@ public final class BalanceSchema {
     // The audited depth range matches every other order-3/4 depth rule: 1..15.
     // =====================================================================================
 
-    /** The audited depth range shared by the order-7 route rules (the order-7 horizon; the ladder-era depth rules run to RUN_FINAL_DEPTH). */
-    private static final int ROUTE_AUDIT_MAX_DEPTH = 15;
+    /**
+     * The audited depth range shared by the order-7 route rules: the whole finite run (balance-overhaul order 6,
+     * A5 — was the order-7 horizon 15, which left regions D and E unaudited).
+     */
+    private static final int ROUTE_AUDIT_MAX_DEPTH = BalanceConfig.RUN_FINAL_DEPTH;
 
     /**
      * The order-3 MODEL FLOOR, handed to the route model so the map is priced against the very same
@@ -2409,6 +2487,11 @@ public final class BalanceSchema {
             if (node.forced() || nodeTypes.get(node.nodeType()).dangerTier() != DangerTier.CALM) {
                 continue;
             }
+            // OVERRIDE (balance-overhaul order 6, F15): an EVENT's worth is a CHOICE in ladder currencies and must be
+            // at least a COMBAT floor's supply — R-EVENT-VALUE governs it, so it is out of R-CALM-COST's domain.
+            if (node.eventCatalogReward()) {
+                continue;
+            }
             float worstDiscount = Float.NaN;
             int   worstDepth = 1;
             float worstExtremity = -1f;
@@ -2436,34 +2519,59 @@ public final class BalanceSchema {
     }
 
     /**
-     * R-MYSTERY-EV: the WEIGHTED EV of the mystery outcome table must sit within ±15% of a standard
-     * combat node at every audited depth (the order-9 doc ASSERTED this; now it is audited and can no
-     * longer drift when any payoff or upstream re-tune moves), and the worst outcome (MALFUNCTION)
-     * must stay "bad but survivable" as arithmetic: its expected NET resource loss may not exceed one
-     * floor's maximum modelled drain times {@code ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER}.
+     * R-MYSTERY-EV v2 (balance-overhaul order 6, F15 — OVERRIDES "the weighted table within +/-15% of a combat
+     * node"): every mystery outcome now pays in LADDER CURRENCIES (MysteryOutcome.reward), and at every depth
+     * 1..RUN_FINAL_DEPTH (1) the weighted table's EV is AT LEAST a standard combat node's — a gamble is worth
+     * taking — and at most ROUTE_MYSTERY_EV_PREMIUM_MAX above it — never the strictly-better pick; (2) its
+     * outcomes SPREAD: their weighted standard deviation is at least ROUTE_MYSTERY_MIN_SPREAD_FRACTION of the
+     * combat node's EV (a combat node's variance is zero, so this is "higher variance" with teeth); and (3) the
+     * worst outcome (MALFUNCTION) stays "bad but survivable" as arithmetic: its expected NET resource loss may
+     * not exceed one floor's maximum modelled drain times {@code ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER}.
      */
     public static List<RuleResult> mysteryExpectedValueResults() {
         List<RuleResult> results = new ArrayList<>();
         NodeEconomicsRegistry ledger = routeLedger();
         RouteEconomicsModel.ModelFloor floor = routeModelFloor();
         NodeEconomics mystery = ledger.forNodeType(RouteNodeType.MYSTERY);
+        List<NodeEconomics> outcomes = ledger.allOfKind(NodeEconomics.Kind.MYSTERY_OUTCOME);
 
-        float worstDeviation = 0f;
+        float worstRatio = Float.NaN;
+        float worstExtremity = -1f;
         int   worstDepth = 1;
+        float smallestSpread = Float.POSITIVE_INFINITY;
+        int   spreadDepth = 1;
+        float ratioMax = 1f + BalanceConfig.ROUTE_MYSTERY_EV_PREMIUM_MAX;
         for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
             RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
             RouteEconomicsModel.NodePrice table    = RouteEconomicsModel.price(ledger, mystery, floor, depth);
-            float deviation = standard.expectedValue == 0f ? 0f
-                    : Math.abs(table.expectedValue / standard.expectedValue - 1f);
-            if (deviation > worstDeviation) {
-                worstDeviation = deviation;
+            float ratio = standard.expectedValue == 0f ? 1f : table.expectedValue / standard.expectedValue;
+            float extremity = bandExtremity(ratio, 1f, ratioMax);
+            if (extremity > worstExtremity) {
+                worstExtremity = extremity;
+                worstRatio     = ratio;
                 worstDepth     = depth;
             }
+            float totalWeight = 0f, weightedSquares = 0f;
+            for (NodeEconomics outcome : outcomes) {
+                float deviation = RouteEconomicsModel.price(ledger, outcome, floor, depth).expectedValue
+                        - table.expectedValue;
+                totalWeight     += outcome.tableWeight();
+                weightedSquares += outcome.tableWeight() * deviation * deviation;
+            }
+            float spread = totalWeight <= 0f || standard.expectedValue == 0f ? 0f
+                    : (float) Math.sqrt(weightedSquares / totalWeight) / standard.expectedValue;
+            if (spread < smallestSpread) {
+                smallestSpread = spread;
+                spreadDepth    = depth;
+            }
         }
-        results.add(new RuleResult(RuleKind.MYSTERY_EV, "weighted table vs combat", worstDeviation,
-                0f, BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE,
-                worstDeviation <= BalanceConfig.ROUTE_MYSTERY_EV_TOLERANCE,
-                "worst depth " + worstDepth + " — |EV(table)/EV(combat) - 1|"));
+        results.add(new RuleResult(RuleKind.MYSTERY_EV, "weighted table EV / combat EV", worstRatio,
+                1f, ratioMax, worstRatio >= 1f && worstRatio <= ratioMax,
+                "worst depth " + worstDepth + " — a gamble worth taking, never the strictly-better pick"));
+        results.add(new RuleResult(RuleKind.MYSTERY_EV, "outcome spread / combat EV", smallestSpread,
+                BalanceConfig.ROUTE_MYSTERY_MIN_SPREAD_FRACTION, Float.POSITIVE_INFINITY,
+                smallestSpread >= BalanceConfig.ROUTE_MYSTERY_MIN_SPREAD_FRACTION,
+                "smallest at depth " + spreadDepth + " — weighted std of outcome EVs (combat's is zero)"));
 
         // Worst-outcome bound, measured at depth 1 where a loss hurts a thin run the most.
         float maximumLoss = oneFloorMaximumResourceLossPowerPoints()
@@ -2483,6 +2591,37 @@ public final class BalanceSchema {
             results.add(new RuleResult(RuleKind.MYSTERY_EV, "worst-case loss " + outcome.id(), worstLoss,
                     0f, maximumLoss, worstLoss <= maximumLoss,
                     "worst depth " + lossDepth + " — net resource loss in power points"));
+        }
+        return results;
+    }
+
+    /**
+     * R-EVENT-VALUE (balance-overhaul order 6, F15): every registered EVENT offers at least one choice whose
+     * ladder-currency value (RouteEconomicsModel.bestChoicePrice — resources + durability-weighted progress, a
+     * gamble at its expectation) is worth at least EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO x what ONE standard COMBAT
+     * floor SUPPLIES (ammo + heal + credits), at every depth 1..RUN_FINAL_DEPTH. An event is never a choice
+     * between two scraps.
+     */
+    public static List<RuleResult> eventValueResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        for (ge.tbegvadze.toon3d.route.FacilityEvent event : RouteRegistries.events().all()) {
+            float worstRatio = Float.POSITIVE_INFINITY;
+            int   worstDepth = 1;
+            for (int depth = 1; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+                float supply = RouteEconomicsModel.combatFloorSupplyPowerPoints(ledger, floor, depth);
+                float best   = RouteEconomicsModel.bestChoicePrice(event, floor, depth).expectedValue();
+                float ratio  = supply <= 0f ? Float.POSITIVE_INFINITY : best / supply;
+                if (ratio < worstRatio) {
+                    worstRatio = ratio;
+                    worstDepth = depth;
+                }
+            }
+            results.add(new RuleResult(RuleKind.EVENT_VALUE, event.id() + " best choice / combat supply", worstRatio,
+                    BalanceConfig.EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO, Float.POSITIVE_INFINITY,
+                    worstRatio >= BalanceConfig.EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO,
+                    "worst depth " + worstDepth + " — ladder-currency value of its best choice"));
         }
         return results;
     }
@@ -3134,7 +3273,11 @@ public final class BalanceSchema {
                     unplaced == 0, null));
             results.add(new RuleResult(RuleKind.SUPPLY, cell + " room-share violations", spreadViolations, 0f, 0f,
                     spreadViolations == 0, "worst multi-pickup room share " + String.format("%.2f", worstRoomShare)));
-            if (carrierEligible >= 4 * floors) {
+            // S6 applies where the floor has a carrier ROSTER. A boss arena has none by design (the planner caps
+            // carriers at the roster size, 0), so it is out of the rule's domain — not a waiver: before the
+            // finite run's 36-turn depth-25 arena its eligible count simply never reached the emit threshold
+            // (balance-overhaul order 6).
+            if (!spec.bossArenaAmmo() && carrierEligible >= 4 * floors) {
                 float share = carried / (float) carrierEligible;
                 results.add(new RuleResult(RuleKind.SUPPLY, cell + " carrier share", share,
                         BalanceConfig.SUPPLY_CARRIER_SHARE - 0.08f, BalanceConfig.SUPPLY_CARRIER_SHARE + 0.08f,

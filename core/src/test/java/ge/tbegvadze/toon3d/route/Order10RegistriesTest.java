@@ -81,11 +81,12 @@ class Order10RegistriesTest {
     }
 
     @Test
-    void distressBeaconTradesRevealAgainstAmmo() {
+    void distressBeaconTradesRevealAgainstCredits() {
+        // Balance-overhaul order 6 (F15): the "strip it" choice pays in credits (floors of income), not ammo boxes.
         FacilityEvent beacon = freshEvents().get("distress_beacon");
         assertEquals(2, beacon.choices().size());
         assertTrue(beacon.choices().get(0).effect().revealNextRegion());
-        assertTrue(beacon.choices().get(1).effect().ammoBoxes() > 0);
+        assertTrue(beacon.choices().get(1).effect().creditFloors() > 0f);
     }
 
     @Test
@@ -99,11 +100,12 @@ class Order10RegistriesTest {
     // ---- Region ambience registry ------------------------------------------
 
     @Test
-    void allFourV1RegionsAreRegistered() {
+    void allFiveRegionsAreRegistered() {
         RegionAmbienceRegistry registry = freshAmbience();
-        assertEquals(4, registry.size());
+        assertEquals(RouteMapConstants.FIXED_REGION_COUNT, registry.size());
         for (String theme : new String[]{RouteMapConstants.REGION_A_THEME, RouteMapConstants.REGION_B_THEME,
-                RouteMapConstants.REGION_C_THEME, RouteMapConstants.REGION_D_THEME}) {
+                RouteMapConstants.REGION_C_THEME, RouteMapConstants.REGION_D_THEME,
+                RouteMapConstants.REGION_E_THEME}) {
             assertTrue(registry.has(theme), "missing region ambience for " + theme);
         }
     }
@@ -112,7 +114,8 @@ class Order10RegistriesTest {
     void everyRegionCarriesCompleteThemingData() {
         RegionAmbienceRegistry registry = freshAmbience();
         for (String theme : new String[]{RouteMapConstants.REGION_A_THEME, RouteMapConstants.REGION_B_THEME,
-                RouteMapConstants.REGION_C_THEME, RouteMapConstants.REGION_D_THEME}) {
+                RouteMapConstants.REGION_C_THEME, RouteMapConstants.REGION_D_THEME,
+                RouteMapConstants.REGION_E_THEME}) {
             RegionAmbience ambience = registry.get(theme);
             assertNotNull(ambience.displayName());
             assertNotNull(ambience.crestPainterId());
@@ -131,7 +134,9 @@ class Order10RegistriesTest {
         RegionAmbienceRegistry registry = freshAmbience();
         float outer   = registry.get(RouteMapConstants.REGION_A_THEME).redAlertFrequency();
         float breach  = registry.get(RouteMapConstants.REGION_D_THEME).redAlertFrequency();
+        float core    = registry.get(RouteMapConstants.REGION_E_THEME).redAlertFrequency();
         assertTrue(outer < breach, "the breach should feel more hostile than the outer facility");
+        assertTrue(breach <= core, "the core (the finale) should feel at least as hostile as the breach");
     }
 
     @Test

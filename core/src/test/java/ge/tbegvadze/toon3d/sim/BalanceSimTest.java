@@ -80,10 +80,36 @@ class BalanceSimTest {
         assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_GATE));
     }
 
-    /** S-FAIR — the intended run length, and deaths the player could see coming. */
+    /**
+     * S-FAIR — THE RUN OUTCOME of the finite 25-floor run (balance-overhaul order 6, F8: win rates, reach, loss
+     * depths, the first boss; replaces the TACTICAL median-death-depth band) and deaths the player could see coming.
+     * All eight run-outcome lines are reported; only they may ride the navigation waiver — readable deaths may not
+     * be waived for any other reason than the one it already carries. A2(b): no ledger ever holds a floor past the
+     * run-final depth, and every VICTORY ended on it.
+     */
     @Test
     void tacticalRunsEndInTheIntendedWindowAndReadAsFair() {
-        assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_FAIR));
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_FAIR);
+        java.util.Set<String> runOutcome = java.util.Set.of("TACTICAL win rate",
+                "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH,
+                "TACTICAL median death depth (losses)", "TACTICAL first-boss clears (of seeds reaching it)",
+                "NAIVE win rate", "NAIVE median death depth", "NAIVE reaches the first boss", "NAIVE first-boss clears");
+        for (String subject : runOutcome) {
+            assertTrue(results.stream().anyMatch(result -> result.subject.equals(subject)),
+                    () -> "S-FAIR must report the F8 run-outcome line '" + subject + "'");
+        }
+        assertBandsHold(results);
+        for (PolicySummary summary : matrix().values()) {
+            for (RunLedger run : summary.runs) {
+                assertTrue(run.depthReached <= BalanceConfig.RUN_FINAL_DEPTH,
+                        () -> summary.policyId + " seed " + run.runSeed + " reached floor " + run.depthReached
+                                + " — there is no floor past the run-final boss");
+                if (run.ending == RunLedger.Ending.VICTORY) {
+                    assertEquals(BalanceConfig.RUN_FINAL_DEPTH, run.endingDepth,
+                            () -> summary.policyId + " seed " + run.runSeed + " won somewhere other than the final floor");
+                }
+            }
+        }
     }
 
     /** S-SKILL — playing well must be worth depths. */
@@ -162,6 +188,33 @@ class BalanceSimTest {
         java.util.Set<String> waivable = java.util.Set.of("build-bias median depth spread", "TACTICAL dominant-tag share");
         assertTrue(results.stream().filter(result -> !waivable.contains(result.subject))
                         .noneMatch(result -> result.waived), "only the depth spread and the dominant-tag share may be waived (D7)");
+        assertBandsHold(results);
+    }
+
+    /**
+     * S-SHOP (balance-overhaul order 6, F14) — the shop is a place to spend: TACTICAL buys at least 1.5 offers per
+     * Fabricator visit (navigation-limited: its income is the supply it collects — reported under the navigation
+     * waiver until it expires) and dies holding at most 1.5 floors of income (never waived).
+     */
+    @Test
+    void tacticalSpendsAtTheShop() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_SHOP);
+        assertEquals(2, results.size(), "S-SHOP evaluates offers per visit and unspent credits at death");
+        assertTrue(results.stream().filter(result -> !result.subject.equals("TACTICAL offers bought per Fabricator visit"))
+                        .noneMatch(result -> result.waived), "only the navigation-limited offers line may be waived");
+        assertBandsHold(results);
+    }
+
+    /**
+     * S-BOSS (balance-overhaul order 6, F10) — every boss is consistent: per BossTable row, over the TACTICAL seeds
+     * that reach it, a clear rate in [0.50, 0.90] (the first boss >= 0.75), a fight-length CoV <= 0.30 and a median
+     * health at the kill in [0.30, 0.60]. Three lines per row, all depth-derived (navigation waiver until it expires).
+     */
+    @Test
+    void everyBossIsAConsistentFight() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_BOSS);
+        assertEquals(3 * BalanceConfig.BOSS_TABLE_DEPTHS.length, results.size(),
+                "S-BOSS reports clear rate, fight-turns CoV and health at the kill for every BossTable row");
         assertBandsHold(results);
     }
 

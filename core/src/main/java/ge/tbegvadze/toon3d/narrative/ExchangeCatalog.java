@@ -524,11 +524,14 @@ public final class ExchangeCatalog {
     private static void registerEnding(ExchangeRegistry registry) {
 
         // The door. No option here commits anything: each one opens the price of that answer.
+        // Repeatable at the final clear (balance-overhaul order 6, D5): every victory opens the door
+        // again, and the player may walk out of a different one. The only row that bends "say it once".
         registry.register(ExchangeDefinition.builder(CORE_ENDING_EXCHANGE_ID)
                 .speaker(Speaker.PLANET)
                 .promptStringId("story.exchange.core.ending.prompt")
                 .trigger(ExchangeTrigger.MANUAL)
                 .region(StoryRegion.CORE)
+                .repeatableAtFinalClear(true)
                 .option(ExchangeOption.builder("unmake")
                         .playerLineStringId("story.exchange.core.ending.unmake")
                         .kind(ExchangeOptionKind.STANCE)

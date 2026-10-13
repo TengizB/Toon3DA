@@ -4141,6 +4141,38 @@ public final class GameMath {
     }
 
     /*
+     * Formula: gambleExpectedValue — the expected worth of a press-your-luck choice (F15)
+     * Derivation:
+     *   A gamble pays its reward with probability p and costs its bite otherwise:
+     *       EV = p * successValue - (1 - p) * failCost
+     *   A deterministic choice is p = 1 (the bite never lands).
+     * Edge cases:
+     *   p is clamped to [0, 1]; a negative failCost is nonsensical config and is not clamped.
+     */
+    public static float gambleExpectedValue(float successChance, float successValue, float failCost) {
+        float chance = Math.max(0f, Math.min(1f, successChance));
+        return chance * successValue - (1f - chance) * failCost;
+    }
+
+    /*
+     * Formula: neededBundlePricePerFloor — the credits an on-curve player NEEDS to spend per floor (R-CREDITS v2)
+     * Derivation:
+     *   Balance-overhaul order 6, F12. What a floor's income must cover is not a "significant purchase per
+     *   region" but the run's actual recurring needs, each at the floor's shop price:
+     *       bundle(d) = rungPrice(d) + consumablesPerFloor * consumablePrice(d) + tierUpgradePrice(region) / floorsPerRegion
+     *   one LEVEL UP rung (the order-1 ladder step), the typical consumable need, and one tier upgrade per
+     *   region amortised evenly over the region's floors. R-CREDITS v2 bands income(d) / bundle(d).
+     * Edge cases:
+     *   floorsPerRegion <= 0 -> the tier term is dropped (no floors to amortise over). Negative inputs are
+     *   nonsensical config and are not clamped, so a bad number surfaces as a bad ratio.
+     */
+    public static float neededBundlePricePerFloor(int rungPrice, float consumablesPerFloor, int consumablePrice,
+                                                  int tierUpgradePrice, int floorsPerRegion) {
+        float tierShare = floorsPerRegion > 0 ? tierUpgradePrice / (float) floorsPerRegion : 0f;
+        return rungPrice + consumablesPerFloor * consumablePrice + tierShare;
+    }
+
+    /*
      * Formula: creditIncomePerRegion — expected credits earned across one region (order 3, part C)
      * Derivation:
      *   The credit HALF of the economy is only a real resource if income is COUPLED to the sink. Income

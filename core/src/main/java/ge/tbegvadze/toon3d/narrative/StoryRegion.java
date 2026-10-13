@@ -71,10 +71,9 @@ public enum StoryRegion {
 
     /**
      * Maps a ROUTE-map region index (route/RouteRegion.regionIndex, 0-based act band) onto a story
-     * region.  The route map's fixed acts line up one-for-one with the story's first bands, and the
-     * endlessly-appended BREACH bands beyond them all read as the deepest story stage — the descent
-     * can go further than the story does, but the story must never run out.  Out-of-range indices
-     * clamp instead of throwing, so a route change can never crash the narrative layer.
+     * region.  Since balance-overhaul order 6 the run is finite and its five route regions line up
+     * one-for-one with the five story regions (route index 4, floors 21-25, is the CORE).  Out-of-range
+     * indices clamp instead of throwing, so a route change can never crash the narrative layer.
      *
      * <p>Order-7 owns the full route→story mapping (including the Core's final-node guard); this is
      * the depth-monotone version order-2 gates on.

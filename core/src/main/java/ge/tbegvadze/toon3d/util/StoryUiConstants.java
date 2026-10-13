@@ -869,6 +869,8 @@ public final class StoryUiConstants {
     public static final String STORY_FRAME_CONFIRM_NO_ID  = "story.frame.confirm.no";
     public static final String STORY_FRAME_RETURN_ID      = "story.frame.return";
     public static final String STORY_REPORT_TITLE_ID      = "story.report.title";
+    /** The report page's title for a WON run (balance-overhaul order 6, F4) — framing chrome, not a story line. */
+    public static final String STORY_REPORT_VICTORY_TITLE_ID = "story.report.victory";
     public static final String STORY_REPORT_OPEN_ID       = "story.report.open";
     public static final String STORY_REPORT_BACK_ID       = "story.report.back";
     public static final String STORY_REPORT_FLOOR_ID      = "story.report.floor";

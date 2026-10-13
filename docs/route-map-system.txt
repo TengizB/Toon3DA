@@ -87,7 +87,8 @@ CORE DATA TYPES
                           run-state, owned by World (order-3). Cursor API: initializeCursor,
                           getSelectableNext (AVAILABLE outgoing edges), commitTo (VISITED old,
                           BYPASSED siblings, CURRENT next, AVAILABLE its edges), isBossNext,
-                          appendLayers (endless lazy extension), reveal / revealRegion (fog).
+                          reveal / revealRegion (fog). The map is FINITE (balance-overhaul order 6):
+                          built whole at run start, 25 floors, nothing ever appends a layer.
   NodeStatus (enum)     — cursor-relative: LOCKED, AVAILABLE, VISITED, CURRENT, BYPASSED.
   DangerTier (enum)     — CALM < STANDARD < DANGER < GAMBLE < SET_PIECE. Drives overlay colour and the
                           order-2 anti-starvation guards. Ordinal-comparable for tuning.
@@ -108,7 +109,7 @@ World.create()). Each is the ONLY edit-point for its kind of content:
                               (DefaultCombatProfile) so every node stays playable pre-implementation.
   NodeAffixRegistry         — affix id -> NodeAffixDefinition (order-9 ELITE modifiers).
   FacilityEventRegistry     — event id -> FacilityEvent (order-10 narrative beats).
-  RegionAmbienceRegistry    — themeId -> RegionAmbience (order-10 act theming; fallback = THE BREACH).
+  RegionAmbienceRegistry    — themeId -> RegionAmbience (order-10 act theming; fallback = THE CORE).
   IconPainterRegistry / RegionCrestPainterRegistry — the render-layer twins (order-5); populated by
                               RouteIconBootstrap (LibGDX-touching, so it can't live in the route pkg).
   (A NodeLevelProfileRegistry-style "NodeLevelProfileRegistry" fallback + a RouteRng/RouteRegistries
@@ -129,8 +130,7 @@ GameMath; the generator only orchestrates.
 
 DETERMINISM MODEL (three independent streams so nothing correlates or depends on visit order):
   - STRUCTURAL rolls (layer widths, branch spread) draw from a per-BAND stream mixSeed(runSeed,
-    regionIndex), so a band is identical whether generated at run start or appended later by endless
-    extension.
+    regionIndex), so a band's structure never depends on any other band.
   - Per-node CONTENT rolls each draw from an independent sub-stream salted off the node's fixed
     nodeSeed: TYPE_STREAM_SALT (node type), GENERATOR_STREAM_SALT (combat biome), AFFIX_STREAM_SALT
     (ELITE affix). The branch you COULD have taken == the branch you DID take.
@@ -167,15 +167,24 @@ REGION BANDS (RegionPlan / RegionSpec — DATA, not code branches):
   A band is REGION_BAND_SIZE (5) deep and ENDS on its lastDepth, which is a boss floor because
   REGION_BAND_SIZE == Constants.BOSS_FLOOR_INTERVAL (5) — so GameMath.isBossFloor(lastDepth) holds by
   construction. The generator injects a forced BOSS at a boss depth, or a forced REGION_GATE at a band
-  boundary that ISN'T a boss depth. defaultPlan(): FIXED_REGION_COUNT (3) named acts — OUTER FACILITY
-  (1-5), RESEARCH WING (6-10), REACTOR DEPTHS (11-15) — then endless "THE BREACH" bands (16-20, …)
-  appended lazily via withAppendedBreachBand() as the run descends. Each RegionSpec carries per-type
+  boundary that ISN'T a boss depth. defaultPlan() is THE FINITE RUN (balance-overhaul order 6, F1):
+  FIXED_REGION_COUNT (5 = RUN_FINAL_DEPTH / REGION_BAND_SIZE) named acts — OUTER FACILITY (1-5),
+  RESEARCH WING (6-10), REACTOR DEPTHS (11-15), THE BREACH (16-20), THE CORE (21-25) — and nothing
+  else. The RegionPlan constructor REFUSES a plan whose last band reaches past BalanceConfig.
+  RUN_FINAL_DEPTH (25); the old endless path (withAppendedBreachBand, extendWithNextRegion,
+  shouldExtend, RouteMap.appendLayers, EXTENSION_TRIGGER_DISTANCE) is deleted. The depth-25 BOSS is
+  the run-final boss: killing it ends the run as a VICTORY (World; see docs/story-ui-system.txt for the
+  ending exchange at the final clear). Each RegionSpec carries per-type
   and per-generator weight multipliers (see REGION CATALOG). RegionSpec.toRegion() projects to the
   RouteRegion the map stores; RegionAmbience (order-10) adds the visual/audio identity keyed by themeId.
 
 BOSS CONVERGENCE: GameMath.isBossFloor(depth) is the SINGLE authority. The generator forces a BOSS
 node there and DefaultCombatProfile returns GeneratorId.BOSS_ARENA on the same depths, so map and
 pipeline agree by construction — no independent boss-depth logic anywhere.
+  WHICH boss (balance-overhaul order 6, F3): route/BossTable — one register() row per boss floor (depth,
+  archetype, target fight turns, survival ratio; numbers in BalanceConfig SECTION 25): 5 OVERSEER 22,
+  10 CORRUPTOR 26, 15 HELL_BARON 30, 20 OVERSEER 32, 25 CORRUPTOR 36. BossBalance derives every stat from
+  the row against ExpectedPlayer(depth); the depth-25 row is the run-final boss (its death = VICTORY).
 
 
 WORLD INTEGRATION & THE NODE->FLOOR PIPELINE (order-3)
@@ -439,6 +448,13 @@ MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-pr
       AMBUSH        (18) : delegates → "elite_hotzone" (combat-heavy lockdown; keeps its red alert).
       LORE_SIGNAL   (14) : delegates → "rest_medbay" (near-combat-free; EVENT profile order-10 degrade).
       MALFUNCTION   (14) : built — failing sector: hazards, unlit, NO reward (bad-but-survivable).
+  THE PAYOUT (balance-overhaul order 6, F15): every outcome also carries a hidden REWARD in LADDER
+  CURRENCIES (MysteryOutcome.reward(), an EventEffect), paid when the player LEAVES the sector
+  (World.payMysteryOutcomeOnce on the exit portal; SimWorld.payMysteryOutcome mirrors it):
+      VAULT_JACKPOT  +1 weapon level + 0.5 floors of credits      SECRET_WARREN  a perk rank (carried tag)
+      TRAP_GAUNTLET  1.5 floors of credits                        AMBUSH         0.5 floors of credits
+      LORE_SIGNAL    0.25 floors of credits                       MALFUNCTION    COSTS 0.25 floors of credits
+  (SECTION 25 MYSTERY_REWARD_*; "a floor of credits" = one COMBAT floor's modelled income at the depth.)
 
   FAIRNESS RULES (design invariants):
     - Pre-scan the card is ALWAYS '?'. A SCANNER (order-6) reveals only the ScanTone BUCKET
@@ -496,8 +512,13 @@ THE RULES (all in BalanceSchema; full text in docs/game-balance-authority.txt SE
                      — so SWARM / OVERCLOCKED now carry a VAULT PREMIUM that pays for the threat they add.
   R-CALM-COST        a calm node's EV sits 10-35% BELOW a combat node's: safety is bought with tempo
                      and loot, never free income on top.
-  R-MYSTERY-EV       the weighted outcome table is within ±15% of a combat floor, and MALFUNCTION's
-                     expected loss is bounded ("bad but survivable" as arithmetic).
+  R-MYSTERY-EV v2    (balance-overhaul order 6, F15) the weighted outcome table — floors + ladder payouts —
+                     is worth >= a combat floor and <= +30%, its outcomes SPREAD (weighted std >= 25%
+                     of a combat node's EV), and MALFUNCTION's expected loss is bounded.
+  R-EVENT-VALUE      (balance-overhaul order 6, F15) every registered EVENT offers a choice worth >= one
+                     COMBAT floor's supply (ammo + heal + credits) at every depth 1..25. The EVENT node is
+                     priced from the catalog (the weighted mean of each event's BEST choice) and left
+                     R-CALM-COST's domain for this rule.
   R-PIPS-DERIVED     DangerTier is DERIVED from the priced threat ratio (GameMath.derivedDangerTierIndex:
                      forced -> SET_PIECE, hidden table -> GAMBLE, else CALM/STANDARD/DANGER thresholds)
                      and must equal what the overlay displays. The map may tempt; it may never lie.
@@ -530,8 +551,12 @@ ROUTE GUARANTEES AT MAP-GEN (RouteMapGenerator.repairBandGuarantees — a determ
       promises without collapsing a layer into one node type.
     - REAL CHOICES       : every selectable layer offers >= ROUTE_MIN_NODE_TYPES_PER_LAYER (2) DISTINCT
       node types. A row of identical cards is a choice in name only.
-  Proven over 100 seeds by BalanceAuditTest + RouteEconomicsTest, including endless lazily-appended
-  bands, and the repair is deterministic so seeds stay shareable.
+  Proven over 100 seeds by BalanceAuditTest + RouteEconomicsTest through the run-final band, and the
+    repair is deterministic so seeds stay shareable. STRUCTURAL FALLBACK (balance-overhaul order 6, first
+    hit by region E): when no node ahead may legally change type (each is its layer's last combat
+    option), the reachability repair adds ONE edge from the stranded node to the next layer's node that
+    still reaches the kind, nearest its existing successors' lanes — it repairs the graph, removes no
+    choice, and uses no RNG.
 
 WHAT ORDER-7 RE-PRICED (the payoff numbers below are its output, not the order-8/9/10 hand-set ones)
   CACHE  2 ammo boxes + 1 medkit (was 4 + medkit + stim + armour) — a chained cache route used to sail
@@ -562,7 +587,8 @@ the FitViewport letterbox mid-frame — see WeaponHudRenderer). The bloom is ins
 concentric additive-blended discs (glBlendFunc SRC_ALPHA, ONE) drawn through the one ShapeRenderer.
 
 SCREEN BANDS (world coords, 1280x720, Y-up):
-  TITLE PLATE   y 648..712  — "FACILITY NAV — SELECT VECTOR", region crest (left), "DEPTH n -> n+1" (right)
+  TITLE PLATE   y 648..712  — "FACILITY NAV — SELECT VECTOR", region crest (left), "FLOOR n / 25" (right;
+                            n = the floor the console sends you to — the staging room reads FLOOR 1; F6)
   MAP VIEWPORT  y 150..640  — hologram schematic (bottom->top flow: CURRENT low, candidates high)
   LEGEND STRIP  y  96..150  — focused node's hint line
   CONFIRM BAR   y  12.. 92  — [◀ CANCEL] ......... [ENGAGE ▶] (visual targets; touch is order-6)
@@ -744,14 +770,19 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
   THE EVENT REGISTRY (the content system):
     FacilityEvent  = { id, title, weight, narrativeLines[], EventChoice[1..3] }
     EventChoice    = { label, description, EventEffect }
-    EventEffect    = a TYPED bundle (heal / armourToFull / ammoBoxes / grantXp / revealNextRegion /
-                     nextFloorBudgetBonus / gamble{lootChance,failDamage} / result+fail+log text).
+    EventEffect    = a TYPED bundle in LADDER CURRENCIES (balance-overhaul order 6, F15): weaponLevels (on the
+                     equipped gun, capped at depth + 1), perkRank (a tag the player carries), heal / armour
+                     FRACTIONS, credits in floors of income; costs healthCost / creditCost /
+                     nextFloorBudgetBonus; plus revealNextRegion and gamble{lootChance,failDamage} and the
+                     result + fail + log text. (The order-10 ammoBoxes / grantXp / armourToFull are gone.)
   Every choice routes through an EXISTING system, so there is NO bespoke per-event code path — the
   same trick NodeAffix uses. FacilityEventRegistry.rollFor(nodeSeed) draws deterministically
   (weightedChoiceIndex + RouteRng, like MYSTERY). Adding an event is one register() line in
-  FacilityEvents.registerAll. v1 catalog: distress_beacon (reveal vs ammo), abandoned_stash (a
-  gamble locker), surviving_tech (escort: armour + hotter next floor, vs keycard), corrupted_shrine
-  (full heal + hotter next floor, vs XP), data_terminal (pure-lore breather, guaranteed XP).
+  FacilityEvents.registerAll. Catalog (balance-overhaul order 6 payouts): distress_beacon (reveal + 0.75
+  floors of credits, vs a 3-floor credit haul), abandoned_stash (60%: +1 weapon level + 20% heal + 2
+  floors of credits, 40%: a 20% HP bite; vs walk away), surviving_tech (escort: armour to full + a perk
+  rank + 0.75 floors, next floor hotter; vs 0.75 floors), corrupted_shrine (full heal + a weapon level +
+  0.75 floors, next floor hotter; vs a perk rank), data_terminal (a perk rank + 0.75 floors, no risk).
 
   WORLD SIDE (the headless registry can't touch World, by design): EventRoomGenerator marks the
   interactable via Level.markEventStation(); World copies getEventStationTiles() into
@@ -759,9 +790,10 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
   pendingEventId. In the PLAYING update, the first time the player steps ORTHOGONALLY ADJACENT to the
   interactable, World opens RunPhase.EVENT_CHOICE and presents the event on EventChoiceOverlayRenderer
   (a full-screen choice-card overlay REUSING the level-up card UI pattern). A tap resolves the choice:
-  applyEventChoice() applies the EventEffect through existing paths (heal path + particles/vignette,
-  applyArmor, itemInventory.addAmmo across OWNED ammo types, playerProgress.addXp,
-  RouteMap.revealRegion, a one-shot pendingNextFloorBudgetBonus folded into the NEXT floor's budget),
+  applyEventChoice() applies the EventEffect through World.applyLadderEffect (the shop's level-up path
+  via WeaponRoller.applyLevelUp, the shop's perk grant, the heal path + particles/vignette, applyArmor,
+  the credit wallet, RouteMap.revealRegion, a one-shot pendingNextFloorBudgetBonus folded into the NEXT
+  floor's budget),
   a GAMBLE rolls the floor seed (loot on success, a survivable bite + fail sting on failure — never a
   lost run), and the chosen token is appended to the run's route story
   (RunStats.annotateLastRouteNode, e.g. "event:distress_beacon:answered"). Adjacency-trigger + a
@@ -777,7 +809,8 @@ REGION THEMING / ACTS (RegionAmbienceRegistry)
   lightingMoodId, musicId — ids/flags the audio + red-alert systems read LATER; NO audio assets added
   here), bossId, and gateFlavour (the REGION_GATE announce copy). v1 regions: outer_facility (cool
   steel, baseline demons), research_wing (clinical, lab horrors), reactor_depths (amber-hot, reactor
-  brutes, red-alert common), the_breach (corrupted violet, necrotic, endless — also the fallback).
+  brutes, red-alert common), the_breach (corrupted violet, necrotic), the_core (deep violet-white, core
+  wardens, red-alert most common — the finale, and the fallback).
 
   REGION-ENTRY ANNOUNCE (generic, not gate-specific): World tracks lastAnnouncedRegionIndex and, on
   each floor build, computes routePlan.regionForDepth(currentDepth); the first time it crosses into a
@@ -840,8 +873,9 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
      MAP-GEN and stored on the node (RouteNode.chosenGeneratorId), biased by the region's generatorWeight.
   ** MYSTERY outcomes (BalanceConfig SECTION 19 MYSTERY_WEIGHT_*, sum 100): VAULT_JACKPOT 16,
      SECRET_WARREN 18, TRAP_GAUNTLET 18, AMBUSH 18 (->elite_hotzone), LORE_SIGNAL 14 (->rest_medbay),
-     MALFUNCTION 16. The weights are AUDITED (R-MYSTERY-EV): the table's EV must sit within ±15% of a
-     standard combat floor at every audited depth, so re-tuning one outcome's payoff re-tunes the table.
+     MALFUNCTION 16. The weights AND the ladder payouts are AUDITED (R-MYSTERY-EV v2): the table's EV must
+     sit in [1.0, 1.3] x a standard combat floor at every depth 1..25 with a real spread, so re-tuning one
+     outcome's payoff re-tunes the table.
   ELITE affixes (RouteMapConstants.AFFIX_*, rolled at AFFIX_ROLL_CHANCE_ELITE 0.60): IRRADIATED,
      OVERCLOCKED, SWARM, FORTIFIED, VOLATILE (see DANGER / GAMBLE NODES).
 
@@ -850,8 +884,9 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
 REGION CATALOG (LIVING TABLE) — one row per act band; a new region ADDS a row
 ================================================================================
 Depth ranges assume REGION_BAND_SIZE = 5 (== Constants.BOSS_FLOOR_INTERVAL). The first
-FIXED_REGION_COUNT (3) acts are fixed; THE BREACH repeats endlessly (each band appended lazily) and is
-also the RegionAmbience fallback. Node/generator biases are the RegionSpec multipliers over the base
+FIXED_REGION_COUNT (5) acts are the whole run (balance-overhaul order 6); THE CORE closes it on the
+run-final boss and is also the RegionAmbience fallback. Region E's name obeys the vocabulary ladder
+(F2): "Core" has no narrative/StoryTerm row, so the NAV console names it plainly. Node/generator biases are the RegionSpec multipliers over the base
 pool (unlisted types/generators stay at 1.0, so every registered type/generator still appears).
 
   index themeId            name             depths  crest                   faction (hook)   biases (multipliers)
@@ -859,10 +894,11 @@ pool (unlisted types/generators stay at 1.0, so every registered type/generator 
   0     outer_facility     OUTER FACILITY   1-5     gear ring               baseline demons  COMBAT/ELITE/CACHE/MYSTERY tuned for onboarding
   1     research_wing      RESEARCH WING    6-10    molecule / atom         lab horrors      MYSTERY/EVENT/ELITE up; ROOMS_MST leaned
   2     reactor_depths     REACTOR DEPTHS   11-15   radiation trefoil       reactor brutes   ELITE/REST/SHOP up; CAVERN leaned; red-alert common
-  3+    the_breach         THE BREACH       16-20…  cracked/corrupted sigil necrotic          ELITE/REST/SHOP up; CAVERN leaned; endless (fallback)
+  3     the_breach         THE BREACH       16-20   cracked/corrupted sigil necrotic          ELITE/REST/SHOP up; CAVERN leaned
+  4     the_core           THE CORE         21-25   core lattice            core wardens     ELITE up, REST/SHOP down; ROOMS_MST leaned; run-final boss (fallback)
   Each region also carries (RegionAmbience, order-10): overlayThemeId tint, wallPalette, enemyFactionId,
   redAlertFrequency / lightingMoodId / musicId ambience hooks, bossId, and gateFlavour announce copy.
-  Exact multiplier values live in RouteMapConstants.REGION_{A,B,C,D}_* — tune there, never inline.
+  Exact multiplier values live in RouteMapConstants.REGION_{A,B,C,D,E}_* — tune there, never inline.
 
 
 ================================================================================

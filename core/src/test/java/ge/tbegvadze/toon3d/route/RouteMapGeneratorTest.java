@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 import org.junit.jupiter.api.Test;
@@ -14,11 +15,12 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Headless tests for {@link RouteMapGenerator}: determinism, structural connectivity, boss
- * convergence, the anti-starvation / anti-clump guards, combat-generator assignment, and endless
+ * convergence, the anti-starvation / anti-clump guards, combat-generator assignment, and the finite
  * lazy extension. Uses freshly populated registries so the shared singletons are never touched.
  */
 class RouteMapGeneratorTest {
@@ -302,7 +304,7 @@ class RouteMapGeneratorTest {
     }
 
     // ---------------------------------------------------------------------
-    // Regions + endless extension
+    // Regions + the finite run (balance-overhaul order 6)
     // ---------------------------------------------------------------------
 
     @Test
@@ -313,32 +315,29 @@ class RouteMapGeneratorTest {
         assertEquals(plan.finalDepth(), map.getLayerCount() - 1);
     }
 
+    /** A1 (balance-overhaul order 6): every seed's map is exactly 25 floors in 5 regions, ending on a BOSS. */
     @Test
-    void endlessExtensionAppendsAReproducibleBand() {
-        RegionPlan plan = RegionPlan.defaultPlan();
-        long seed = 123456L;
-
-        RouteMap map = generator().generate(seed, plan);
-        int depthBefore = map.getLayerCount() - 1;
-        RegionPlan extended = generator().extendWithNextRegion(map, plan);
-
-        assertEquals(depthBefore + RouteMapConstants.REGION_BAND_SIZE, map.getLayerCount() - 1);
-        assertEquals(plan.regionCount() + 1, extended.regionCount());
-        assertEquals(plan.regionCount() + 1, map.getRegions().size());
-
-        // The appended band is byte-identical to generating the extended plan up front (proves the
-        // per-region mixSeed makes lazy extension deterministic).
-        RouteMap upfront = generator().generate(seed, extended);
-        assertMapsStructurallyEqual(map, upfront);
+    void everyMapIsTheFiniteRunEndingOnTheFinalBoss() {
+        for (long seed = 1L; seed <= 50L; seed++) {
+            RouteMap map = generator().generate(seed, RegionPlan.defaultPlan());
+            assertEquals(BalanceConfig.RUN_FINAL_DEPTH, map.getLayerCount() - 1, "seed " + seed);
+            assertEquals(RouteMapConstants.FIXED_REGION_COUNT, map.getRegions().size(), "seed " + seed);
+            List<RouteNode> finalLayer = map.getLayers().get(map.getLayerCount() - 1);
+            assertEquals(1, finalLayer.size(), "the final layer is a forced convergence");
+            assertEquals(RouteNodeType.BOSS, finalLayer.get(0).type, "seed " + seed + " must end on the boss");
+        }
     }
 
+    /** No plan may reach past the run-final depth — there is no band to append after region E. */
     @Test
-    void shouldExtendTriggersOnlyNearTheFinalLayer() {
-        RouteMap map = generator().generate(5L, RegionPlan.defaultPlan());
-        int finalDepth = map.getLayerCount() - 1;
-        assertFalse(generator().shouldExtend(map, 1));
-        assertTrue(generator().shouldExtend(map, finalDepth - RouteMapConstants.EXTENSION_TRIGGER_DISTANCE));
-        assertTrue(generator().shouldExtend(map, finalDepth));
+    void aPlanReachingPastTheFinalDepthIsRefused() {
+        RegionSpec beyond = RegionSpec.builder(RouteMapConstants.FIXED_REGION_COUNT)
+                .displayName("BEYOND").themeId("beyond")
+                .depthSpan(BalanceConfig.RUN_FINAL_DEPTH + 1, BalanceConfig.RUN_FINAL_DEPTH + RouteMapConstants.REGION_BAND_SIZE)
+                .build();
+        List<RegionSpec> regions = new java.util.ArrayList<>(RegionPlan.defaultPlan().regions());
+        regions.add(beyond);
+        assertThrows(IllegalArgumentException.class, () -> new RegionPlan(regions));
     }
 
     // =====================================================================

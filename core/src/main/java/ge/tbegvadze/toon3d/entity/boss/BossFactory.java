@@ -17,7 +17,7 @@ public final class BossFactory {
     /**
      * Builds the boss for a boss floor. HP and every verb's damage are DERIVED from depth
      * (new-game-balancr order 6) via {@link BossBalance} — never a flat constant — and the archetype
-     * rotation matches {@link BossBalance#archetypeForDepth}.
+     * archetype is the route/BossTable row's ({@link BossBalance#archetypeForDepth}).
      *
      * <p>Headless by construction (no LibGDX state), so both {@code World} and the order-9 balance
      * simulator build the SAME boss from the same depth + seed. It used to be a private static in
@@ -32,9 +32,9 @@ public final class BossFactory {
         int spawnColumn = arenaLayout.bossColumn;
         int spawnRow    = arenaLayout.bossRow;
         // HP and every verb's damage are DERIVED from depth (order 6): the boss's whole stat block comes
-        // from BossBalance, never a flat constant. The archetype rotation matches BossBalance.archetypeForDepth.
+        // from BossBalance, never a flat constant. The archetype is the BossTable row's (balance-overhaul order 6).
         BossBalance.Archetype archetype = BossBalance.archetypeForDepth(depth);
-        BossStats stats = BossBalance.statsForDepth(archetype, depth);
+        BossStats stats = BossBalance.statsForDepth(depth);
         Boss boss;
         switch (archetype) {
             case OVERSEER:

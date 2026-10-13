@@ -61,6 +61,8 @@ public final class NodeEconomics {
     private final String        delegateId;
     private final float         tableWeight;
     private final String        scanToneId;
+    private final EventEffect   ladderReward;
+    private final boolean       eventCatalogReward;
 
     private NodeEconomics(Builder builder) {
         this.kind                = Objects.requireNonNull(builder.kind, "kind");
@@ -78,6 +80,8 @@ public final class NodeEconomics {
         this.forced              = builder.forced;
         this.delegateId          = builder.delegateId;
         this.tableWeight         = builder.tableWeight;
+        this.ladderReward        = builder.ladderReward;
+        this.eventCatalogReward  = builder.eventCatalogReward;
         this.scanToneId          = builder.scanToneId;
     }
 
@@ -127,6 +131,23 @@ public final class NodeEconomics {
      */
     public float guaranteedHealEffectiveHitPointFraction() {
         return guaranteedHealEffectiveHitPointFraction;
+    }
+
+    /**
+     * A payout in LADDER CURRENCIES on top of the floor (balance-overhaul order 6, F15): a MYSTERY outcome's
+     * hidden reward ({@link MysteryOutcome#reward()}); {@code null} for none. Priced by
+     * {@code RouteEconomicsModel.ladderRewardPrice}, folded into the row's resources / progress / EV.
+     */
+    public EventEffect ladderReward() {
+        return ladderReward;
+    }
+
+    /**
+     * Whether this row is paid by the EVENT catalog (balance-overhaul order 6, F15): its payout is the weighted
+     * mean, over every registered {@link FacilityEvent}, of that event's BEST choice in ladder currencies.
+     */
+    public boolean eventCatalogReward() {
+        return eventCatalogReward;
     }
 
     /** Credits gained (positive) or spent (negative) beyond the ordinary kill + chip income. */
@@ -209,6 +230,8 @@ public final class NodeEconomics {
         private String        delegateId;
         private float         tableWeight;
         private String        scanToneId;
+        private EventEffect   ladderReward;
+        private boolean       eventCatalogReward;
 
         private Builder(Kind kind, String id) {
             this.kind = kind;
@@ -282,6 +305,16 @@ public final class NodeEconomics {
 
         public Builder scanToneId(String scanToneId) {
             this.scanToneId = scanToneId;
+            return this;
+        }
+
+        public Builder ladderReward(EventEffect ladderReward) {
+            this.ladderReward = ladderReward;
+            return this;
+        }
+
+        public Builder eventCatalogReward() {
+            this.eventCatalogReward = true;
             return this;
         }
 

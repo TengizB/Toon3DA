@@ -34,6 +34,7 @@ import ge.tbegvadze.toon3d.route.RouteRegion;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 import java.util.ArrayList;
@@ -421,7 +422,9 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     /** Builds the depth readout, region banner (+ its tint), and the focused node's legend hint. */
     private void buildHeaderText(RouteMap map) {
         RouteNode current = map.getCurrent();
-        depthText = "DEPTH " + current.depth + "  ->  " + (current.depth + 1);
+        int nextFloor = Math.min(current.depth + 1, BalanceConfig.RUN_FINAL_DEPTH);
+        depthText = RouteMapConstants.NAV_FLOOR_HEADER_PREFIX + nextFloor
+                + RouteMapConstants.NAV_FLOOR_HEADER_SEPARATOR + BalanceConfig.RUN_FINAL_DEPTH;
         font.getData().setScale(RouteMapConstants.DEPTH_TEXT_SCALE);
         layout.setText(font, depthText);
         depthTextX = worldWidth - 40f - layout.width;

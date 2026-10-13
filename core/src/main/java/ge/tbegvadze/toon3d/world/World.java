@@ -100,6 +100,7 @@ import ge.tbegvadze.toon3d.route.FloorEffects;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.GuaranteedContentStamper;
 import ge.tbegvadze.toon3d.route.LevelPlan;
+import ge.tbegvadze.toon3d.route.MysteryOutcome;
 import ge.tbegvadze.toon3d.route.Placement;
 import ge.tbegvadze.toon3d.route.NodeLevelProfile;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
@@ -125,6 +126,8 @@ import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.BalanceSchema;
+import ge.tbegvadze.toon3d.util.WeaponConstants;
 import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
@@ -261,6 +264,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private RegionPlan              routePlan;
     /** The node the player committed to; the next floor is built from it. Null before the first commit. */
     private RouteNode               pendingNode;
+    /** F15: whether the current MYSTERY floor's ladder payout was already paid (reset on every route commit). */
+    private boolean                 mysteryRewardPaid;
     /**
      * TEMPORARY TESTING ({@link RouteMapConstants#BOSS_TEST_ALWAYS_CLICKABLE}): set when a BOSS node was
      * tapped out of turn, so the FADING_OUT completion jumps {@code currentDepth} onto the boss's real
@@ -906,6 +911,15 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase != RunPhase.PLAYING) {
             return;
         }
+        // THE FINITE RUN (balance-overhaul order 6, F4): there is no floor past the run-final depth.
+        // The run-final boss's death already filed the VICTORY; its ending exchange is the way out, so
+        // the portal only re-asks for it (in case something on screen held it back) and never descends.
+        if (!isStartingRoom && currentDepth >= BalanceConfig.RUN_FINAL_DEPTH) {
+            coreEndingRequested = false;
+            return;
+        }
+        // F15: leaving a MYSTERY sector pays its outcome's ladder-currency reward (once per floor).
+        payMysteryOutcomeOnce();
 
         // Staging-room exit: generate the route map (once) from the run seed, then present the depth-0 ->
         // depth-1 lanes through the same FACILITY NAV console every later portal uses. The player's first
@@ -940,13 +954,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
-        // Normal descent: present the next-node choice. Keep the graph ahead of the player first so the
-        // descent never runs out of map (endless lazy extension).
-        ensureRouteExtended();
+        // Normal descent: present the next-node choice. The map is finite (balance-overhaul order 6) and
+        // built whole at run start, so every floor above the run-final boss has a legal next node.
         java.util.List<RouteNode> nextPicks = routeMap.getSelectableNext();
         if (nextPicks.isEmpty()) {
-            // Defensive: no legal move (should not happen once extension has run). Fall back to a
-            // straight descent so the run can never soft-lock at the portal.
+            // Defensive: no legal move (only past the final layer, which the VICTORY path never reaches).
+            // Fall back to a straight descent so the run can never soft-lock at the portal.
             fadeTimerSeconds = 0f;
             runPhase = RunPhase.FADING_OUT;
             return;
@@ -1076,20 +1089,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         routeMap.commitTo(next);
         pendingNode = next;
+        mysteryRewardPaid = false;
         recordRouteCommit(next);
         fadeTimerSeconds = 0f;
         runPhase = RunPhase.FADING_OUT;
-    }
-
-    /**
-     * Endless-mode safety: extend the map with the next region band once the player nears its final
-     * layer, so {@link RouteMap#getSelectableNext()} always has a legal move to offer.
-     */
-    private void ensureRouteExtended() {
-        if (routeMap != null && routePlan != null
-                && routeMapGenerator.shouldExtend(routeMap, currentDepth)) {
-            routePlan = routeMapGenerator.extendWithNextRegion(routeMap, routePlan);
-        }
     }
 
     /** Appends the committed node to the run's shareable route string and logs the beat. */
@@ -1752,8 +1755,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     /**
-     * Places 1-2 vending machines on the floor (guaranteed presence on EVERY floor, including the
-     * weapon-selection starting room and boss arenas). Each machine occupies a wall-mounted,
+     * Places the floor's vending machines (guaranteed presence on EVERY floor, including the
+     * weapon-selection starting room and boss arenas): exactly one, two on a SHOP node (balance-overhaul
+     * order 6, F13 — whose machines also price at the SHOP-node discount, see buildShopContext). Each machine occupies a wall-mounted,
      * reachable, non-softlocking floor tile that is stamped solid ('@') and registered as a
      * billboard. Runs after enemies exist (so machine tiles dodge enemies) and before
      * ground-item/credit-chip seeding (so those seeders skip the solid tile).
@@ -1765,11 +1769,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // still requires an eligible wall-mounted tile; if a floor has none, no machine is placed.
 
         java.util.Random random = new java.util.Random(GameMath.floorSeed(runSeed, depth) ^ 0x5309CAFED00DL);
-        int machineCount = GameBalance.SHOP_MIN_PER_FLOOR;
-        if (GameBalance.SHOP_MAX_PER_FLOOR > GameBalance.SHOP_MIN_PER_FLOOR
-                && random.nextFloat() < GameBalance.SHOP_SECOND_MACHINE_CHANCE) {
-            machineCount = GameBalance.SHOP_MAX_PER_FLOOR;
-        }
+        int machineCount = isShopNodeFloor() ? GameBalance.SHOP_NODE_MACHINE_COUNT
+                                             : GameBalance.SHOP_MACHINES_PER_FLOOR;
 
         int startColumn = MathUtils.floor(findPlayerStartX(targetLevel) / Constants.CELL_SIZE);
         int startRow    = MathUtils.floor(findPlayerStartY(targetLevel) / Constants.CELL_SIZE);
@@ -1837,7 +1838,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         MeleeWeapon meleeWeapon = inventory.getMeleeWeapon();
         if (meleeWeapon != null) ownedWeapons.add(meleeWeapon);
-        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild);
+        return new ShopContext(depth, ownedWeapons, inventory.getEquippedWeapon(), playerBuild,
+                isShopNodeFloor() ? GameBalance.SHOP_NODE_PRICE_MULTIPLIER : 1f);
+    }
+
+    /** True while the floor being played was built from a SHOP route node (F13: two machines, discounted). */
+    private boolean isShopNodeFloor() {
+        return !isStartingRoom && pendingNode != null && pendingNode.type == RouteNodeType.SHOP;
     }
 
     /**
@@ -2528,12 +2535,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         updateLowHealthStoryBark();
         updateLowHealthWarningSound();
         // Story MOMENT SCHEDULE (order-5): the cold open once per run, the tutorial lines as each
-        // control becomes useful, and — at the bottom of the descent, with the Core's boss down —
-        // the ending choice. All three only ASK; the narrative layer's one-shot flags mean a veteran
-        // player gets nothing from the first two and reaches the third exactly once.
+        // control becomes useful, and — at the bottom of the descent, with the run-final boss down —
+        // the VICTORY and the ending choice. All only ASK; the narrative layer's one-shot flags mean a
+        // veteran gets nothing from the first two, while the ending door opens on every victory (D5).
         requestColdOpenBarks();
         requestControlHintBarks();
         requestBossDefeatedBark();
+        recordFinalClearVictory();
         requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
         updateHeavyEdgePulse();
@@ -3003,8 +3011,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /**
      * Applies one picked {@link EventChoice}'s typed {@link EventEffect} (route-map order-10) through
-     * EXISTING systems — heal, armour, ammo, XP, map reveal, next-floor budget — so there is no bespoke
-     * per-event code path. A GAMBLE choice rolls the floor's own seed: on success the effect applies and
+     * EXISTING systems — in LADDER CURRENCIES since balance-overhaul order 6 (see {@link #applyLadderEffect}) —
+     * so there is no bespoke per-event code path. A GAMBLE choice rolls the floor's own seed: on success the effect applies and
      * the result line shows; on failure a small survivable bite plus the fail line (never a lost run).
      * The picked choice's token is appended to the run's route story.
      */
@@ -3018,35 +3026,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
 
         if (success) {
-            if (effect.healFraction() > 0f && player != null) {
-                int healAmount = Math.round(player.getMaxHealth() * effect.healFraction());
-                if (healAmount > 0) {
-                    player.applyTreatment(healAmount);   // a treatment: the build's heal multiplier (order 5)
-                    if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
-                    if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
-                }
-            }
-            if (effect.armourToFull() && player != null) {
-                player.applyArmor(player.getMaxArmor());
-            }
-            if (effect.ammoBoxes() > 0) {
-                grantAmmoBoxes(effect.ammoBoxes());
-            }
-            if (effect.grantXp() > 0) {
-                // A hand-set XP grant is authored at DEPTH 1 and re-expressed as the same share of a
-                // level at the depth actually played (new-game-balancr order 7) — otherwise the flat
-                // number silently decays to nothing against the geometric level curve and a deep EVENT
-                // node becomes worthless. R-CALM-COST prices the event node on this scaled value.
-                playerProgress.addXp(GameMath.depthScaledRewardXp(effect.grantXp(),
-                        BalanceConfig.XP_BASE_REQUIREMENT, BalanceConfig.XP_CURVE_GROWTH_PER_LEVEL,
-                        BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, currentDepth));
-            }
-            if (effect.revealNextRegion()) {
-                revealNextRegion();
-            }
-            if (effect.nextFloorBudgetBonus() > 0f) {
-                pendingNextFloorBudgetBonus += effect.nextFloorBudgetBonus();
-            }
+            applyLadderEffect(effect, GameMath.floorSeed(runSeed, currentDepth) ^ 0xE7E1D1CEL);
             if (effect.resultText() != null && eventTextSystem != null) {
                 eventTextSystem.spawnWithColor(effect.resultText(), EventTextSystem.COLOR_GREEN);
             }
@@ -3076,39 +3056,90 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
-     * Grants {@code boxCount} ammo boxes spread across the player's OWNED ammo types (route-map
-     * order-10 EVENT reward), reusing each type's {@code amountPerBox}. Falls back to ALL ammo types for
-     * a melee-only run so the reward is never wasted. Directly credits the reserve (an event hands the
-     * ammo over, rather than stamping tiles on the current floor).
+     * Pays (and charges) an {@link EventEffect} in LADDER CURRENCIES (balance-overhaul order 6, F15) through the
+     * systems that already own each currency: weapon levels through the shop's level-up path (capped at the floor's
+     * level + 1, the shop rung's ceiling), a perk rank through the shop's perk grant (a tag the player carries,
+     * else any unmaxed perk), heal through the medkit treatment path, armour through the armour path, credits in
+     * floors of a COMBAT floor's income at this depth through the wallet. Costs: an HP fraction (never lethal),
+     * credits (never below zero), a hotter next floor. Shared by EVENT choices and the MYSTERY payout.
+     *
+     * @param seed the deterministic stream that picks the perk (same seed, same perk)
      */
-    private void grantAmmoBoxes(int boxCount) {
-        java.util.List<AmmoType> ammoTypes = collectOwnedAmmoTypes();
-        if (ammoTypes.isEmpty()) {
-            for (AmmoType ammoType : AmmoType.values()) ammoTypes.add(ammoType);
+    private void applyLadderEffect(EventEffect effect, long seed) {
+        if (effect == null) return;
+        if (effect.weaponLevels() > 0 && inventory.getEquippedWeapon() != null) {
+            Weapon equipped = inventory.getEquippedWeapon();
+            int ceiling = Math.min(WeaponConstants.MAX_WEAPON_LEVEL, Math.max(1, currentDepth) + 1);
+            for (int level = 0; level < effect.weaponLevels(); level++) {
+                if (equipped.isLevelGapExempt() || !equipped.canLevelUp() || equipped.getWeaponLevel() >= ceiling) break;
+                weaponRoller.applyLevelUp(equipped);
+            }
         }
-        int typeCount = ammoTypes.size();
-        // Distribute the boxes as evenly as possible across owned types (first types get any remainder).
-        for (int typeIndex = 0; typeIndex < typeCount; typeIndex++) {
-            int boxesForType = boxCount / typeCount + (typeIndex < boxCount % typeCount ? 1 : 0);
-            if (boxesForType <= 0) continue;
-            AmmoType ammoType = ammoTypes.get(typeIndex);
-            itemInventory.addAmmo(ammoType, boxesForType * ammoType.getAmountPerBox());
+        if (effect.perkRank()) {
+            Perk perk = pickLadderPerk(new java.util.Random(seed));
+            if (perk != null) grantShopAbility(perk);
+        }
+        if (effect.healFraction() > 0f && player != null) {
+            int healAmount = Math.round(player.getMaxHealth() * effect.healFraction());
+            if (healAmount > 0) {
+                player.applyTreatment(healAmount);   // a treatment: the build's heal multiplier (order 5)
+                if (impactEffectSystem != null) impactEffectSystem.spawnHealParticles();
+                if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();
+            }
+        }
+        if (effect.armourFraction() > 0f && player != null) {
+            player.applyArmor(Math.round(player.getMaxArmor() * effect.armourFraction()));
+        }
+        float floorIncome = BalanceSchema.combatFloorCreditIncome(currentDepth);
+        if (effect.creditFloors() > 0f) {
+            int credits = Math.round(effect.creditFloors() * floorIncome);
+            playerStats.addCredits(credits);
+            runStats.recordCreditsEarned(credits);
+        }
+        if (effect.creditCostFloors() > 0f) {
+            int toll = Math.min(playerStats.getCredits(), Math.round(effect.creditCostFloors() * floorIncome));
+            if (toll > 0 && playerStats.spendCredits(toll)) runStats.recordCreditsSpent(toll);
+        }
+        if (effect.healthCostFraction() > 0f && player != null) {
+            int cost = Math.min(player.getHealth() - 1, Math.round(player.getMaxHealth() * effect.healthCostFraction()));
+            if (cost > 0) player.applyDamage(cost);
+        }
+        if (effect.revealNextRegion()) {
+            revealNextRegion();
+        }
+        if (effect.nextFloorBudgetBonus() > 0f) {
+            pendingNextFloorBudgetBonus += effect.nextFloorBudgetBonus();
         }
     }
 
-    /** The distinct ammo types the player's equipped loadout can use (empty for a melee-only run). */
-    private java.util.List<AmmoType> collectOwnedAmmoTypes() {
-        java.util.List<AmmoType> types = new java.util.ArrayList<>();
-        Loadout loadout = inventory.getLoadout();
-        if (loadout != null) {
-            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
-                Weapon weapon = loadout.getSlot(slotIndex);
-                if (weapon == null) continue;
-                AmmoType ammoType = weapon.getAmmoType();
-                if (ammoType != null && !types.contains(ammoType)) types.add(ammoType);
-            }
+    /** A perk for a ladder payout: an unmaxed perk of a tag the player carries, else any unmaxed perk. */
+    private Perk pickLadderPerk(java.util.Random random) {
+        java.util.EnumSet<BuildTag> carried = carriedBuildTags();
+        java.util.List<Perk> preferred = new java.util.ArrayList<>();
+        java.util.List<Perk> fallback  = new java.util.ArrayList<>();
+        for (Perk perk : Perk.values()) {
+            if (playerBuild.isMaxed(perk)) continue;
+            fallback.add(perk);
+            if (carried.contains(perk.tag)) preferred.add(perk);
         }
-        return types;
+        java.util.List<Perk> pool = preferred.isEmpty() ? fallback : preferred;
+        return pool.isEmpty() ? null : pool.get(random.nextInt(pool.size()));
+    }
+
+    /**
+     * The MYSTERY payout (balance-overhaul order 6, F15): leaving a mystery sector pays its rolled outcome's
+     * {@link MysteryOutcome#reward()} in ladder currencies — once per floor, whatever the outcome was.
+     */
+    private void payMysteryOutcomeOnce() {
+        if (mysteryRewardPaid || isStartingRoom || pendingNode == null) return;
+        if (pendingNode.type != RouteNodeType.MYSTERY || GameMath.isBossFloor(currentDepth)) return;
+        mysteryRewardPaid = true;
+        MysteryOutcome outcome = MysteryOutcome.rollFor(pendingNode.nodeSeed);
+        applyLadderEffect(outcome.reward(), pendingNode.nodeSeed ^ 0x4D59535445525921L);
+        if (outcome.reward().resultText() != null && eventTextSystem != null) {
+            eventTextSystem.spawnWithColor(outcome.reward().resultText(), EventTextSystem.COLOR_GREEN);
+        }
+        Gdx.app.log("RouteMap", "mystery payout outcome=" + outcome.name());
     }
 
     /**
@@ -3655,20 +3686,43 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     }
 
     /**
+     * VICTORY (balance-overhaul order 6, F4): the run-final boss at {@link BalanceConfig#RUN_FINAL_DEPTH}
+     * is down, so the run is WON — filed right here, at the defeat, so a death a moment later or an app
+     * killed mid-ending can never take the win back (the edge cases the idea file names). The report
+     * snapshot is taken first, so "RECORD" still compares against what the save held, and it prints
+     * DESCENT COMPLETE. Polled like the boss-defeat bark: BossFloorController owns the defeat and must
+     * not learn about records.
+     */
+    private void recordFinalClearVictory() {
+        if (runStats.isVictory())                                                   return;
+        if (currentDepth < BalanceConfig.RUN_FINAL_DEPTH)                            return;
+        if (bossFloorController == null || !bossFloorController.isBossDefeated())     return;
+        runStats.recordFloor(currentDepth);
+        runStats.recordVictory();
+        instanceReportRenderer.show(runStats, persistentStats);
+        saveRunRecordsOnce();
+        Gdx.app.log("RunOutcome", "VICTORY depth=" + currentDepth + " turns=" + runStats.ticksElapsed
+                + " route=" + runStats.getRouteString());
+    }
+
+    /**
      * THE ENDING (order-5, story/06-endings.md): opens the one fully consequential choice in the
-     * game, once, at the bottom.
+     * game, at the bottom.
      *
-     * <p>The guard is the edge case order-7 Part A names: the route map is endless, so "the Core"
-     * is a story region many floors can belong to, and the ending must NOT open on just any of them.
-     * It waits for the deepest region ever reached to be the Core AND for the Core's own boss to be
-     * down — a forced convergence the player cannot route around, which is exactly what a final node
-     * needs to be. Everything after that (idle, alive, no bark on screen) is the ordinary exchange
+     * <p>The run is finite (balance-overhaul order 6): the Core is the last region and its boss, at
+     * {@link BalanceConfig#RUN_FINAL_DEPTH}, is the run-final boss. The guard still waits for the deepest
+     * region ever reached to be the Core AND for that boss to be down — a forced convergence the player
+     * cannot route around. The door is flagged repeatable at the final clear (F5 / D5), so a save that
+     * has already reached an ending meets it again on every victory and may choose differently. Everything after that (idle, alive, no bark on screen) is the ordinary exchange
      * readiness check, inherited by holding the beat pending rather than opening it here.
      */
     private void requestCoreEndingExchange() {
         if (coreEndingRequested)                                                        return;
         if (barkSystem.getProgress().getDeepestRegion() != StoryRegion.CORE)             return;
         if (bossFloorController == null || !bossFloorController.isBossDefeated())        return;
+        // Only at a FINAL CLEAR (reviewer r1 B1): the door is repeatable, so without this a save that once reached
+        // the Core would reopen it on ANY boss kill — and an answer there would end a depth-5 run with no VICTORY.
+        if (!runStats.isVictory())                                                       return;
         coreEndingRequested = exchangeSystem.requestById(ExchangeCatalog.CORE_ENDING_EXCHANGE_ID);
     }
 

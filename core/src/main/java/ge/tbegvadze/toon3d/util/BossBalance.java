@@ -1,12 +1,15 @@
 package ge.tbegvadze.toon3d.util;
 
+import ge.tbegvadze.toon3d.route.BossTable;
+
 /**
  * The boss derivation ENGINE (new-game-balancr order 6) — the single place that turns a boss archetype +
  * depth into a {@link BossStats} block, composing the {@link GameMath} BOSS BALANCE RULESET methods with the
  * {@link BalanceConfig} SECTION 14 inputs. There are NO flat boss HP or damage constants anywhere anymore:
  * {@code World} calls {@link #statsForDepth} at spawn, {@code BalanceReport}/{@code BalanceSchema} call it to
  * audit, and the boss attack patterns read the derived verb damages off the {@code Boss} it produced. Same
- * archetype + depth ⇒ byte-identical stats (pure function of the config), and a deeper endless-mode boss
+ * table row + depth ⇒ byte-identical stats (pure function of the config); the rows come from
+ * {@link BossTable} (balance-overhaul order 6), so the same archetype fought deeper (the Overseer at 20)
  * re-derives a larger HP pool and reward automatically.
  *
  * <p>Headless: only {@link GameMath} + {@link BalanceConfig}, no LibGDX, so it runs in the balance audit.
@@ -16,42 +19,27 @@ public final class BossBalance {
     private BossBalance() {}
 
     /**
-     * The three act bosses, each a DATA row: its canonical depth, its RULE-1 fight-length dial, and the
-     * positional multiplier its Threat Points (and thus XP reward) price at. Adding a boss = one row here
-     * plus its verb-fraction constants in SECTION 14 — no switch statement in the derivation.
+     * The three boss archetypes — WHO fights (choreography, positional multiplier, name). WHERE and HOW HARD
+     * is the {@link BossTable} row (balance-overhaul order 6, F3): depth, target fight turns and survival ratio
+     * are row data, so an archetype may fight on several floors (the Overseer at 5 and 20) with different dials.
      */
     public enum Archetype {
-        OVERSEER  (BalanceConfig.OVERSEER_DEPTH,   BalanceConfig.OVERSEER_TARGET_FIGHT_TURNS,
-                   BalanceConfig.POSITIONAL_MULT_RANGED, "The Overseer"),
-        CORRUPTOR (BalanceConfig.CORRUPTOR_DEPTH,  BalanceConfig.CORRUPTOR_TARGET_FIGHT_TURNS,
-                   BalanceConfig.POSITIONAL_MULT_RANGED, "The Corruptor"),
-        HELL_BARON(BalanceConfig.HELL_BARON_DEPTH, BalanceConfig.HELL_BARON_TARGET_FIGHT_TURNS,
-                   BalanceConfig.POSITIONAL_MULT_MELEE,  "Hell Baron");
+        OVERSEER  (BalanceConfig.POSITIONAL_MULT_RANGED, "The Overseer"),
+        CORRUPTOR (BalanceConfig.POSITIONAL_MULT_RANGED, "The Corruptor"),
+        HELL_BARON(BalanceConfig.POSITIONAL_MULT_MELEE,  "Hell Baron");
 
-        public final int    canonicalDepth;
-        public final float  targetFightTurns;
         public final float  positionalMultiplier;
         public final String displayName;
 
-        Archetype(int canonicalDepth, float targetFightTurns, float positionalMultiplier, String displayName) {
-            this.canonicalDepth       = canonicalDepth;
-            this.targetFightTurns     = targetFightTurns;
+        Archetype(float positionalMultiplier, String displayName) {
             this.positionalMultiplier = positionalMultiplier;
             this.displayName          = displayName;
         }
     }
 
-    /**
-     * Which archetype fights on a given boss floor. Matches the boss rotation the world uses: the first boss
-     * floor is the Overseer, then Corruptor, then Hell Baron, cycling every three boss floors (endless mode).
-     * {@code depth} must be a boss floor (a positive multiple of {@link Constants#BOSS_FLOOR_INTERVAL}).
-     */
+    /** Which archetype fights on a given boss floor — the {@link BossTable} row's (no modulo rotation). */
     public static Archetype archetypeForDepth(int depth) {
-        int bossIndex = ((depth / Constants.BOSS_FLOOR_INTERVAL) - 1) % Archetype.values().length;
-        if (bossIndex < 0) {
-            bossIndex = 0;
-        }
-        return Archetype.values()[bossIndex];
+        return BossTable.standard().rowForDepth(depth).archetype;
     }
 
     /**
@@ -68,28 +56,38 @@ public final class BossBalance {
         return GameMath.expectedPlayerAtDepth(depth).effectiveHitPoints;
     }
 
-    /** The derived stat block for the boss that fights at {@code depth}. */
+    /** The derived stat block for the boss that fights at {@code depth} — its {@link BossTable} row's dials. */
     public static BossStats statsForDepth(int depth) {
-        return statsForDepth(archetypeForDepth(depth), depth);
+        return statsFor(BossTable.standard().rowForDepth(depth), depth);
+    }
+
+    /** The derived stat block for a table row, at the row's own depth. */
+    public static BossStats statsForRow(BossTable.Row row) {
+        return statsFor(row, row.depth);
+    }
+
+    /** An archetype's CANONICAL stats: its shallowest table row (the EnemyType reference numbers). */
+    public static BossStats canonicalStats(Archetype archetype) {
+        return statsForRow(BossTable.standard().firstRowFor(archetype));
     }
 
     /**
-     * The derived stat block for a specific archetype at a specific depth. HP is derived from the fight-length
-     * target against the EXPECTED player's DPT (RULE 1); DPT is the survival-check output (RULE 3); reward is
-     * the modelled fight consumption times the risk premium (RULE 6). One HP bar split across phases (the boss
-     * is not RE-fought), so the multi-phase factor is 1.0 per the ruleset.
+     * The derived stat block for a row's archetype and dials at {@code depth}. HP is derived from the row's
+     * fight-length target against the EXPECTED player's DPT (RULE 1, F9); DPT is the survival-check output at
+     * the row's survival ratio (RULE 3); reward is the modelled fight consumption times the risk premium
+     * (RULE 6). One HP bar split across phases (the boss is not RE-fought), so the multi-phase factor is 1.0.
      */
-    public static BossStats statsForDepth(Archetype archetype, int depth) {
-        float targetTurns  = archetype.targetFightTurns;
+    private static BossStats statsFor(BossTable.Row row, int depth) {
+        Archetype archetype = row.archetype;
+        float targetTurns  = row.targetFightTurns;
         float expectedDpt  = expectedPlayerDamagePerTurn(depth);
 
-        // Rounded UP, so the expected player's fight is never a fraction of a turn shorter than its target
-        // (R-BOSS-FAIR's lower bound is the target itself).
+        // Rounded UP, so the expected player's fight is never a fraction of a turn shorter than its target.
         int effectiveHitPoints = (int) Math.ceil(GameMath.bossEffectiveHitPoints(
                 expectedDpt, targetTurns, BalanceConfig.BOSS_MULTI_PHASE_FACTOR_PER_PHASE));
 
         float damagePerTurn = GameMath.bossDamagePerTurnForSurvivalCheck(
-                expectedPlayerEffectiveHitPoints(depth), targetTurns, BalanceConfig.BOSS_SURVIVAL_CHECK_RATIO_TARGET);
+                expectedPlayerEffectiveHitPoints(depth), targetTurns, row.survivalRatio);
 
         float upperFightTurnsCap = GameMath.bossUpperFightTurnsCap(
                 targetTurns, BalanceConfig.BOSS_UPPER_FIGHT_TURNS_MULTIPLIER);

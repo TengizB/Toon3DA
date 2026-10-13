@@ -47,12 +47,23 @@ public final class ShopContext {
 
     public ShopContext(int depth, List<WeaponProfile> ownedWeapons, WeaponProfile equippedWeapon,
                        PlayerBuild playerBuild) {
+        this(depth, ownedWeapons, equippedWeapon, playerBuild, 1f);
+    }
+
+    /**
+     * @param nodePriceMultiplier the floor's node discount (balance-overhaul order 6, F13: a SHOP node's
+     *                            machines price at GameBalance.SHOP_NODE_PRICE_MULTIPLIER; 1.0 elsewhere),
+     *                            multiplied into {@link #priceMultiplier} with the build's own
+     */
+    public ShopContext(int depth, List<WeaponProfile> ownedWeapons, WeaponProfile equippedWeapon,
+                       PlayerBuild playerBuild, float nodePriceMultiplier) {
         this.depth          = depth;
         this.equippedWeapon = equippedWeapon;
         this.ownedWeapons = (ownedWeapons != null)
                 ? Collections.unmodifiableList(ownedWeapons)
                 : Collections.emptyList();
         this.playerBuild     = playerBuild;
-        this.priceMultiplier = playerBuild != null ? playerBuild.stats().shopPriceMultiplier() : 1f;
+        this.priceMultiplier = (playerBuild != null ? playerBuild.stats().shopPriceMultiplier() : 1f)
+                * nodePriceMultiplier;
     }
 }

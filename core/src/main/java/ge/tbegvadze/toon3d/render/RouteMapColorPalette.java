@@ -50,6 +50,7 @@ final class RouteMapColorPalette {
     private final Color tintResearchWing  = new Color(0.72f, 0.92f, 0.80f, 1f); // clinical white-green
     private final Color tintReactorDepths = new Color(0.96f, 0.66f, 0.30f, 1f); // amber-hot
     private final Color tintTheBreach     = new Color(0.82f, 0.36f, 0.62f, 1f); // corrupted violet-red
+    private final Color tintTheCore       = new Color(0.86f, 0.80f, 1.00f, 1f); // deep violet-white
 
     // ---- Risk-pip colours by danger tier (green -> amber -> red ramp) -------
     private final Color pipCalm     = medGreen;
@@ -88,6 +89,7 @@ final class RouteMapColorPalette {
             case RouteMapConstants.REGION_B_THEME: return tintResearchWing;
             case RouteMapConstants.REGION_C_THEME: return tintReactorDepths;
             case RouteMapConstants.REGION_D_THEME: return tintTheBreach;
+            case RouteMapConstants.REGION_E_THEME: return tintTheCore;
             default:                               return holoCyan;
         }
     }

@@ -18,8 +18,13 @@ public final class RunLedger {
     public enum Ending {
         /** The marine was killed. The normal ending. */
         KILLED,
-        /** The run hit the simulator's depth ceiling still alive (a "win" for band purposes). */
+        /** The run hit a SHALLOWER-than-final simulator depth ceiling still alive (smoke/probe settings). */
         SURVIVED_TO_CEILING,
+        /**
+         * The run killed the run-final boss at BalanceConfig.RUN_FINAL_DEPTH (balance-overhaul order 6, F4):
+         * the descent is won and there is no floor after it.
+         */
+        VICTORY,
         /** The run stalled: a floor could not be finished within the turn cap. */
         STALLED
     }
@@ -97,6 +102,12 @@ public final class RunLedger {
 
     /** Total credits spent at vending machines across the run. */
     public int creditsSpent;
+
+    /** S-SHOP (balance-overhaul order 6, F14): Fabricator visits (one per exited non-boss floor) and offers bought. */
+    public int fabricatorVisits;
+    public int shopPurchases;
+    /** Credits the run still held when it ended — the "unspent at death" S-SHOP reads. */
+    public int creditsHeldAtEnd;
 
     /** Times the never-softlock emergency ammo lifeline fired. */
     public int emergencySupplyTriggers;

@@ -36,5 +36,6 @@ public final class RouteIconBootstrap {
         registry.register(RouteMapConstants.REGION_B_THEME, new MoleculeCrestPainter());
         registry.register(RouteMapConstants.REGION_C_THEME, new RadiationTrefoilCrestPainter());
         registry.register(RouteMapConstants.REGION_D_THEME, new CorruptedSigilCrestPainter());
+        registry.register(RouteMapConstants.REGION_E_THEME, new CoreLatticeCrestPainter());
     }
 }

@@ -21,7 +21,8 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *
  * <ul>
  *   <li>S-GATE     — the hoarder can never clear the first boss (the headline guarantee)</li>
- *   <li>S-FAIR     — deaths land in the intended depth window and read as fair</li>
+ *   <li>S-FAIR     — the RUN OUTCOME of the finite 25-floor run (win rates, reach, death depths, the first boss —
+ *                    balance-overhaul order 6, F8) and deaths that read as fair</li>
  *   <li>S-SKILL    — playing well is worth depths; the gap IS the difficulty range</li>
  *   <li>S-ROUTE    — the priced map's drain survives contact with play</li>
  *   <li>S-ECONOMY  — the supply a played floor yields tracks the supply its planner put down</li>
@@ -31,6 +32,8 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-SWITCH   — a competent player switches guns by matchup when the game tells it to (balance-overhaul order 3)</li>
  *   <li>S-HEAVY    — a player who reads the red floor answers the heavies committed at it; one who ignores it does not (balance-overhaul order 4)</li>
  *   <li>S-BUILD    — no build bias is a trap or a must-pick, and plain TACTICAL does not end every run as the same character (balance-overhaul order 5)</li>
+ *   <li>S-SHOP     — the shop is a place to spend: TACTICAL buys every visit and dies with little banked (balance-overhaul order 6)</li>
+ *   <li>S-BOSS     — every boss is CONSISTENT: a fair clear rate, a steady fight length, a hurt-but-standing player (balance-overhaul order 6)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -52,13 +55,15 @@ public final class BehavioralBands {
 
         if (hoarder != null)  results.addAll(gateResults(hoarder));
         if (hoarder != null)  results.add(lagResult(hoarder));
-        if (tactical != null) results.addAll(fairResults(tactical));
+        if (tactical != null) results.addAll(fairResults(tactical, naive));
         if (tactical != null && naive != null) results.add(skillResult(tactical, naive));
         if (tactical != null) results.add(routeResult(tactical));
         if (tactical != null) results.addAll(economyResults(tactical));
         if (tactical != null) results.addAll(supplyResults(tactical));
         if (tactical != null) results.addAll(switchResults(tactical));
         if (tactical != null) results.addAll(heavyResults(tactical, naive));
+        if (tactical != null) results.addAll(shopResults(tactical));
+        if (tactical != null) results.addAll(bossResults(tactical));
         results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         return results;
@@ -141,6 +146,76 @@ public final class BehavioralBands {
         return results;
     }
 
+    /**
+     * S-SHOP (balance-overhaul order 6, F14): the shop is a place to spend, not to window-shop. TACTICAL buys at
+     * least SIM_SHOP_MIN_OFFERS_PER_VISIT offers per Fabricator visit, and its median credits held when a lost run
+     * ends are at most SIM_SHOP_MAX_UNSPENT_FLOORS floors of the modelled income at that depth.
+     */
+    private static List<RuleResult> shopResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        int visits = tactical.fabricatorVisits();
+        float perVisit = tactical.offersPerFabricatorVisit();
+        results.add(BalanceSchema.result(RuleKind.SIM_SHOP, "TACTICAL offers bought per Fabricator visit",
+                perVisit, BalanceConfig.SIM_SHOP_MIN_OFFERS_PER_VISIT, Float.POSITIVE_INFINITY,
+                visits > 0 && perVisit >= BalanceConfig.SIM_SHOP_MIN_OFFERS_PER_VISIT,
+                visits + " visits over " + tactical.runCount() + " runs"));
+        float unspent = tactical.medianUnspentFloorsOfIncomeAtLoss();
+        results.add(BalanceSchema.result(RuleKind.SIM_SHOP, "TACTICAL median unspent credits at death (floors of income)",
+                unspent, 0f, BalanceConfig.SIM_SHOP_MAX_UNSPENT_FLOORS,
+                unspent <= BalanceConfig.SIM_SHOP_MAX_UNSPENT_FLOORS, "credits held when a lost run ended"));
+        return results;
+    }
+
+    /**
+     * S-BOSS (balance-overhaul order 6, F10): for each BossTable row, over the TACTICAL seeds that reach it — the
+     * clear rate in [SIM_BOSS_CLEAR_RATE_MIN, MAX] (the first boss at least SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN); the
+     * fight-length CoV at most SIM_BOSS_MAX_FIGHT_TURNS_COV; the median health fraction at the kill in
+     * [SIM_BOSS_KILL_HEALTH_MIN, MAX]. A row with fewer than SIM_BOSS_MIN_SAMPLE kills reports its CoV and median
+     * health as unmeasured (out of band). Depth-derived — rides the navigation waiver until it expires.
+     */
+    private static List<RuleResult> bossResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        for (int rowIndex = 0; rowIndex < BalanceConfig.BOSS_TABLE_DEPTHS.length; rowIndex++) {
+            int depth = BalanceConfig.BOSS_TABLE_DEPTHS[rowIndex];
+            List<FloorLedger> floors = tactical.bossFloorsAt(depth);
+            List<Float> turns = new ArrayList<>();
+            List<Float> health = new ArrayList<>();
+            for (FloorLedger floor : floors) {
+                if (!floor.bossKilled || floor.bossKillTurn < 0) continue;
+                turns.add((float) floor.bossFightTurns());
+                health.add(floor.bossKillHealthFraction);
+            }
+            int reached = floors.size();
+            int cleared = turns.size();
+            float clearRate = reached == 0 ? 0f : cleared / (float) reached;
+            float clearMin = rowIndex == 0 ? BalanceConfig.SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN : BalanceConfig.SIM_BOSS_CLEAR_RATE_MIN;
+            results.add(BalanceSchema.result(RuleKind.SIM_BOSS, "boss depth " + depth + " TACTICAL clear rate",
+                    clearRate, clearMin, BalanceConfig.SIM_BOSS_CLEAR_RATE_MAX,
+                    reached > 0 && clearRate >= clearMin && clearRate <= BalanceConfig.SIM_BOSS_CLEAR_RATE_MAX,
+                    cleared + " of " + reached + " seeds that reached it"));
+            boolean measured = cleared >= BalanceConfig.SIM_BOSS_MIN_SAMPLE;
+            float mean = 0f;
+            for (float value : turns) mean += value;
+            mean = cleared == 0 ? 0f : mean / cleared;
+            float variance = 0f;
+            for (float value : turns) variance += (value - mean) * (value - mean);
+            float coefficient = cleared == 0 || mean <= 0f ? 0f : (float) Math.sqrt(variance / cleared) / mean;
+            results.add(BalanceSchema.result(RuleKind.SIM_BOSS, "boss depth " + depth + " fight turns CoV",
+                    coefficient, 0f, BalanceConfig.SIM_BOSS_MAX_FIGHT_TURNS_COV,
+                    measured && coefficient <= BalanceConfig.SIM_BOSS_MAX_FIGHT_TURNS_COV,
+                    String.format("mean %.1f turns over %d kills (needs >= %d)", mean, cleared, BalanceConfig.SIM_BOSS_MIN_SAMPLE)));
+            java.util.Collections.sort(health);
+            float medianHealth = health.isEmpty() ? 0f : (health.size() % 2 == 1 ? health.get(health.size() / 2)
+                    : (health.get(health.size() / 2 - 1) + health.get(health.size() / 2)) / 2f);
+            results.add(BalanceSchema.result(RuleKind.SIM_BOSS, "boss depth " + depth + " median health at the kill",
+                    medianHealth, BalanceConfig.SIM_BOSS_KILL_HEALTH_MIN, BalanceConfig.SIM_BOSS_KILL_HEALTH_MAX,
+                    measured && medianHealth >= BalanceConfig.SIM_BOSS_KILL_HEALTH_MIN
+                            && medianHealth <= BalanceConfig.SIM_BOSS_KILL_HEALTH_MAX,
+                    "health fraction the turn the boss died, over " + cleared + " kills"));
+        }
+        return results;
+    }
+
     /** S-GATE: the starting loadout cannot beat the first boss, no matter how well it is played. */
     private static List<RuleResult> gateResults(PolicySummary hoarder) {
         List<RuleResult> results = new ArrayList<>();
@@ -164,15 +239,59 @@ public final class BehavioralBands {
                 hoarder.runCount() + " seeds; " + hoarder.stalledRunCount() + " stalled");
     }
 
-    /** S-FAIR: the intended run length, and deaths the player could see coming. */
-    private static List<RuleResult> fairResults(PolicySummary tactical) {
+    /**
+     * S-FAIR — THE RUN OUTCOME (balance-overhaul order 6, F8; REPLACES the TACTICAL median-death-depth band
+     * [8, 14]) — and deaths the player could see coming. Every depth-derived line rides the navigation waiver.
+     */
+    private static List<RuleResult> fairResults(PolicySummary tactical, PolicySummary naive) {
         List<RuleResult> results = new ArrayList<>();
-        float medianDepth = tactical.medianEndingDepth();
-        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL median death depth",
-                medianDepth, BalanceConfig.SIM_TARGET_DEPTH_MIN, BalanceConfig.SIM_TARGET_DEPTH_MAX,
-                medianDepth >= BalanceConfig.SIM_TARGET_DEPTH_MIN
-                        && medianDepth <= BalanceConfig.SIM_TARGET_DEPTH_MAX,
-                tactical.runCount() + " seeds; " + tactical.stalledRunCount() + " stalled"));
+        String stallNote = tactical.runCount() + " seeds; " + tactical.stalledRunCount() + " stalled";
+
+        float winRate = tactical.winRate();
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL win rate",
+                winRate, BalanceConfig.SIM_TACTICAL_WIN_RATE_MIN, BalanceConfig.SIM_TACTICAL_WIN_RATE_MAX,
+                winRate >= BalanceConfig.SIM_TACTICAL_WIN_RATE_MIN && winRate <= BalanceConfig.SIM_TACTICAL_WIN_RATE_MAX,
+                "clears the depth-" + BalanceConfig.RUN_FINAL_DEPTH + " boss; " + stallNote));
+
+        float reach = tactical.reachedDepthFraction(BalanceConfig.SIM_TACTICAL_REACH_DEPTH);
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH,
+                reach, BalanceConfig.SIM_TACTICAL_REACH_FRACTION_MIN, 1f,
+                reach >= BalanceConfig.SIM_TACTICAL_REACH_FRACTION_MIN, stallNote));
+
+        float lossDepth = tactical.medianLossDepth();
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL median death depth (losses)",
+                lossDepth, BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MIN, BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MAX,
+                lossDepth >= BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MIN
+                        && lossDepth <= BalanceConfig.SIM_TACTICAL_LOSS_DEPTH_MAX, stallNote));
+
+        int firstBossDepth = BalanceConfig.BOSS_TABLE_DEPTHS[0];
+        int tacticalReachingBoss = tactical.runsReachingDepth(firstBossDepth);
+        float tacticalBossClear = tacticalReachingBoss == 0 ? 0f
+                : tactical.runsClearingFirstBoss() / (float) tacticalReachingBoss;
+        results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL first-boss clears (of seeds reaching it)",
+                tacticalBossClear, BalanceConfig.SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN, 1f,
+                tacticalReachingBoss > 0 && tacticalBossClear >= BalanceConfig.SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN,
+                tactical.runsClearingFirstBoss() + " of " + tacticalReachingBoss + " seeds that reached depth " + firstBossDepth));
+
+        if (naive != null) {
+            float naiveWin = naive.winRate();
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE win rate",
+                    naiveWin, 0f, BalanceConfig.SIM_NAIVE_WIN_RATE_MAX,
+                    naiveWin <= BalanceConfig.SIM_NAIVE_WIN_RATE_MAX, naive.runCount() + " seeds"));
+            float naiveDepth = naive.medianEndingDepth();
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE median death depth",
+                    naiveDepth, BalanceConfig.SIM_NAIVE_DEPTH_MIN, BalanceConfig.SIM_NAIVE_DEPTH_MAX,
+                    naiveDepth >= BalanceConfig.SIM_NAIVE_DEPTH_MIN && naiveDepth <= BalanceConfig.SIM_NAIVE_DEPTH_MAX,
+                    naive.runCount() + " seeds; " + naive.stalledRunCount() + " stalled"));
+            float naiveReach = naive.reachedDepthFraction(firstBossDepth);
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE reaches the first boss",
+                    naiveReach, BalanceConfig.SIM_FIRST_BOSS_NAIVE_REACH_MIN, 1f,
+                    naiveReach >= BalanceConfig.SIM_FIRST_BOSS_NAIVE_REACH_MIN, "depth " + firstBossDepth));
+            float naiveClear = naive.clearedFirstBossFraction();
+            results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "NAIVE first-boss clears",
+                    naiveClear, BalanceConfig.SIM_FIRST_BOSS_NAIVE_CLEAR_MIN, 1f,
+                    naiveClear >= BalanceConfig.SIM_FIRST_BOSS_NAIVE_CLEAR_MIN, "of all " + naive.runCount() + " seeds"));
+        }
 
         float readableFraction = tactical.readableDeathFraction();
         results.add(BalanceSchema.result(RuleKind.SIM_FAIR, "TACTICAL readable deaths",

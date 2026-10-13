@@ -1072,22 +1072,15 @@ public final class BalanceConfig {
     // fighting-retreat deaths. Melee (fist, no ammo) is the true backstop. Range: 0.15–0.35.
     public static final float EMERGENCY_SUPPLY_FRACTION = 0.25f;
 
-    // --- CREDIT ECONOMY BAND (order 3, part C): the credit sink is only a real resource if income is
-    // COUPLED to it. R-CREDITS checks expected income per region / price of the expected purchase
-    // bundle (one weapon-class buy + a couple of supplies) lands in [MIN, MAX] — a region affords
-    // roughly one significant purchase plus resupply, banking about one region's worth.
-    public static final float CREDIT_INCOME_RATIO_MIN = 0.9f;
-    public static final float CREDIT_INCOME_RATIO_MAX = 1.4f;
+    // --- CREDIT ECONOMY BAND: R-CREDITS v2 (balance-overhaul order 6, F12) lives in SECTION 25 — it REPLACED the
+    // order-3 band [0.9, 1.4] on "one weapon-class buy + 1.5 supplies per region" (CREDIT_INCOME_RATIO_* and
+    // SHOP_EXPECTED_*_BUYS_PER_REGION deleted).
     /** Target credit banking horizon (floors) — a full purse should bank about one region. Range: 4–7. */
     public static final float CREDIT_BANK_TARGET_FLOORS = 5f;
-    /** PP value of the ONE "significant" (weapon-class) purchase a region's income is expected to afford. */
+    /** PP value of one "significant" (weapon-class) purchase — the route model's upgrade-opportunity unit. */
     public static final float SHOP_SIGNIFICANT_BUY_POWER_POINTS = 12f;
-    /** PP value of a representative small (supply) purchase — ammo box / stim, used in the credit bundle. */
+    /** PP value of a representative small (supply) purchase — ammo box / stim; the NEEDED BUNDLE's consumable (F12). */
     public static final float SHOP_SMALL_BUY_POWER_POINTS        = 3f;
-    /** Significant (weapon-class) purchases a region's income should afford. */
-    public static final int   SHOP_EXPECTED_SIGNIFICANT_BUYS_PER_REGION = 1;
-    /** Small (supply) purchases a region's income should afford on top of the significant buy (1–2). */
-    public static final float SHOP_EXPECTED_SMALL_BUYS_PER_REGION       = 1.5f;
 
     // --- HEAL PRICING BANDS (Balance Authority R-HEAL) — RE-STATED by balance-overhaul order 1 (the
     // OVERRIDE CLAUSE: "flat heal values and R-HEAL's flat survival-turns pricing -> fractional heals").
@@ -1162,19 +1155,20 @@ public final class BalanceConfig {
     // 3. THE REGION DANGER DIAL (fixes knowledge-doc problem 12) — route regions stop being frequency-only.
     //    Each region declares a Threat-Point budget multiplier applied ON TOP of the depth curve
     //    (GameMath.regionScaledFloorThreatPointBudget), indexed 0-based by region
-    //    (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); depths past the last entry clamp to it (endless
-    //    "The Breach" keeps its multiplier forever). Node WEIGHT multipliers (RouteMapConstants
+    //    (floor((depth-1)/GEAR_CURVE_REGION_BAND_SIZE)); one entry per region of the finite run. Node WEIGHT multipliers (RouteMapConstants
     //    REGION_*_MULTIPLIER_*) stay for FLAVOUR — what kind of rooms; this dial owns HOW HARD. A lethal
     //    region is now EXPLICITLY lethal and budgeted, and the depth-coupling audit reads it per lane so it
-    //    stays provably fair (region danger is extra bodies, not an unfair per-duel spike). Aligned to the
-    //    four route regions: A OUTER FACILITY 0.9 | B RESEARCH WING 1.0 | C REACTOR DEPTHS 1.15 | D THE
-    //    BREACH 1.25 (RouteMapConstants.REGION_A..D_NAME). Range per entry: 0.8–1.3, monotonic non-decreasing.
-    public static final float[] REGION_TP_BUDGET_MULTIPLIER = {0.90f, 1.00f, 1.15f, 1.25f};
+    //    stays provably fair (region danger is extra bodies, not an unfair per-duel spike).
+    //    BALANCE-OVERHAUL ORDER 6 (F7, OVERRIDES {0.90, 1.00, 1.15, 1.25} + "monotonic non-decreasing"): the five
+    //    regions of the finite run, with the PEAK the owner asked for at floors 10-15 — A OUTER FACILITY 0.85 |
+    //    B RESEARCH WING 1.00 | C REACTOR DEPTHS 1.25 | D THE BREACH 1.20 (dips as the build comes online) |
+    //    E THE CORE 1.30 (the finale). Range per entry: 0.8–1.5; shape C >= B >= A and E >= D (R-REGION).
+    public static final float[] REGION_TP_BUDGET_MULTIPLIER = {0.85f, 1.00f, 1.25f, 1.20f, 1.30f};
     /** R-REGION lower bound: no region's TP dial may fall below this (a region never trivialises a floor). */
     public static final float   REGION_TP_BUDGET_MULTIPLIER_MIN = 0.8f;
     /** R-REGION upper bound: no region's TP dial may exceed this (region danger stays an attrition tax, not a wall). */
-    public static final float   REGION_TP_BUDGET_MULTIPLIER_MAX = 1.3f;
-    /** R-REGION: minimum margin by which the two LETHAL regions (C/D) must out-dial region A (measurably harder). */
+    public static final float   REGION_TP_BUDGET_MULTIPLIER_MAX = 1.5f;
+    /** R-REGION: minimum margin by which the LETHAL regions (C/D/E) must out-dial region A (measurably harder). */
     public static final float   REGION_TP_LETHAL_MARGIN         = 0.1f;
 
     // =====================================================================================
@@ -1344,22 +1338,14 @@ public final class BalanceConfig {
     /** Boss phases: one HP bar split into this many equal escalation phases (RULE 4). 2 = phase-2 at 50%. */
     public static final int   BOSS_PHASE_COUNT                     = 2;
 
-    // Per-boss TARGET FIGHT TURNS — the RULE-1 dial. Each sits inside the act band [18, 40] and escalates
-    // by act (a deeper boss is a longer fight). bossHP = expectedPlayerSustainedDpt(depth) * target.
-    /** The Overseer's target fight length (turns), inside the act band. Range: 18–40. */
-    public static final float OVERSEER_TARGET_FIGHT_TURNS          = 22f;
-    /** The Corruptor's target fight length (turns), inside the act band. Range: 18–40. */
-    public static final float CORRUPTOR_TARGET_FIGHT_TURNS         = 28f;
-    /** Hell Baron's target fight length (turns), inside the act band. Range: 18–40. */
-    public static final float HELL_BARON_TARGET_FIGHT_TURNS        = 34f;
+    // Per-boss TARGET FIGHT TURNS and boss DEPTHS moved to the BOSS TABLE, SECTION 25 (balance-overhaul order 6).
 
     // VERB DAMAGE TABLES — each boss verb's single-hit damage as a FRACTION of that boss's derived DPT
     // (order 6, TECHNICAL NOTES). A telegraphed signature hit is a multiple of the sustained per-turn
     // average; an un-telegraphed poke is a small fraction (it must stay under 25% eHP, RULE 3). All are
     // audited against the 35%/25% single-hit caps by R-BOSS-VERB-CAP at the derived values.
 
-    // The Overseer (depth 5) — security core robot; laser lanes + melee charge.
-    public static final int   OVERSEER_DEPTH                = 5;
+    // The Overseer (depths 5 / 20, BOSS TABLE) — security core robot; laser lanes + melee charge.
     /** MELEE (UN-telegraphed poke) as a fraction of boss DPT — must resolve under 25% eHP. Range: 0.5–1.0. */
     public static final float OVERSEER_MELEE_DPT_FRACTION   = 0.75f;
     /** CHARGE (telegraphed line strike) as a fraction of boss DPT — the signature hit. Range: 1.2–2.2. */
@@ -1378,16 +1364,14 @@ public final class BalanceConfig {
     public static final float OVERSEER_HEAL_HP_THRESHOLD    = 0.35f;
     public static final int   OVERSEER_HEAL_TURNS           = 5;
 
-    // The Corruptor (depth 10) — mutated scientist; summoner + acid burst.
-    public static final int   CORRUPTOR_DEPTH               = 10;
+    // The Corruptor (depths 10 / 25, BOSS TABLE) — mutated scientist; summoner + acid burst.
     /** ACID (telegraphed burst) as a fraction of boss DPT. Range: 1.0–1.8. */
     public static final float CORRUPTOR_ACID_DPT_FRACTION   = 1.40f;
     public static final int   CORRUPTOR_SUMMON_COOLDOWN     = 3;
     public static final int   CORRUPTOR_MINION_CAP          = 5;
     public static final int   CORRUPTOR_ACID_POOL_DURATION  = 3;
 
-    // Hell Baron (depth 15) — armored greater demon; firewall + enrage.
-    public static final int   HELL_BARON_DEPTH              = 15;
+    // Hell Baron (depth 15, BOSS TABLE) — armored greater demon; firewall + enrage.
     /** FIRE (telegraphed hazard tick) as a fraction of boss DPT — the DOT seed. Range: 0.3–0.7. */
     public static final float HELL_BARON_FIRE_DPT_FRACTION      = 0.50f;
     /** CLEAVE phase-1 (telegraphed) as a fraction of boss DPT. Range: 1.3–2.0. */
@@ -1617,12 +1601,8 @@ public final class BalanceConfig {
     // (SHOP_TWO_MACHINE_MIN_SPACING) stays in GameBalance — layout, not economy.
     // =====================================================================================
 
-    /** Minimum UAC Fabricator machines per non-boss floor (guaranteed credit sink). */
-    public static final int   SHOP_MIN_PER_FLOOR            = 1;
-    /** Maximum machines per floor. */
-    public static final int   SHOP_MAX_PER_FLOOR            = 2;
-    /** Probability a floor rolls the second machine. */
-    public static final float SHOP_SECOND_MACHINE_CHANCE    = 0.40f;
+    // Machine counts per floor moved to SECTION 25 (F13: exactly SHOP_MACHINES_PER_FLOOR, SHOP_NODE_MACHINE_COUNT on
+    // a SHOP node) — they REPLACED SHOP_MIN_PER_FLOOR 1 / SHOP_MAX_PER_FLOOR 2 / SHOP_SECOND_MACHINE_CHANCE 0.40.
 
     // Stock roll — offers per machine and weighted category pool for the remainder slots.
     public static final int   SHOP_ENTRY_MIN                 = 9;
@@ -1642,9 +1622,14 @@ public final class BalanceConfig {
     // sets the whole economy's price level, so the credit BAND (R-CREDITS) is tuned by moving a single
     // number. depthFactor = 1 + SHOP_DEPTH_PRICE_SCALE * (depth - 1) keeps prices meaningful as kill
     // bounties grow with depth.
-    public static final float SHOP_DEPTH_PRICE_SCALE       = 0.10f;
-    /** Credits charged per power point of an offer's priced value — the single price-level knob. Range: 24–48. */
-    public static final float SHOP_CREDITS_PER_POWER_POINT = 36f;
+    // RE-FIT (balance-overhaul order 6, F12 — owner D4 "shops everywhere are too expensive"): 0.10 -> 0.0 and
+    // 36 -> 15.5 so R-CREDITS v2 holds in every region. Modelled income per floor climbs ~5% a floor while the
+    // NEEDED BUNDLE's value climbs by region tier, so a depth price ramp on top made the deep regions
+    // unaffordable; the flattest ratio across A..E is no ramp at all (modelled A 1.37, B 1.33, C 1.26, D 1.15,
+    // E 1.33 against [1.10, 1.40]). The depth factor stays in the formula — 0.0 is a tuning, not a deletion.
+    public static final float SHOP_DEPTH_PRICE_SCALE       = 0.0f;
+    /** Credits charged per power point of an offer's priced value — the single price-level knob. Range: 12–48. */
+    public static final float SHOP_CREDITS_PER_POWER_POINT = 15.5f;
     /** Damage supplied per power point when pricing an ammo box (box damage / this = its PP value). Range: 60–120. */
     public static final float SHOP_AMMO_DAMAGE_PER_POWER_POINT = 90f;
     /** HP restored per power point when pricing a medkit (heal amount / this = its PP value). Range: 8–16. */
@@ -1676,10 +1661,10 @@ public final class BalanceConfig {
      */
     public static final int   SIM_SEED_COUNT              = 200;
     /**
-     * Depth the simulator stops at. Above the S-FAIR target band, so a run that survives to the
-     * ceiling is a genuine outlier rather than an artefact of stopping early.
+     * Depth the simulator stops at: the whole finite run (balance-overhaul order 6 — was 20 under the
+     * endless descent). A run that clears the depth-RUN_FINAL_DEPTH boss ends as VICTORY, never deeper.
      */
-    public static final int   SIM_DEPTH_CEILING           = 20;
+    public static final int   SIM_DEPTH_CEILING           = BalanceConfig.RUN_FINAL_DEPTH;
     /** First floor of a simulated run (the staging room is skipped — see SimWorld). */
     public static final int   SIM_STARTING_DEPTH          = 1;
     /**
@@ -1739,10 +1724,8 @@ public final class BalanceConfig {
      */
     public static final float SIM_GATE_MAX_CLEAR_FRACTION = 0.0f;
 
-    // --- D. S-FAIR: deaths land in the intended window, and read as fair -----------------
-    /** Median death depth the TACTICAL policy should reach — the intended run length. */
-    public static final int   SIM_TARGET_DEPTH_MIN        = 8;
-    public static final int   SIM_TARGET_DEPTH_MAX        = 14;
+    // --- D. S-FAIR: deaths read as fair. The run-outcome bands that REPLACED the TACTICAL median-death-depth
+    // band [SIM_TARGET_DEPTH_MIN 8, MAX 14] live in SECTION 25 (balance-overhaul order 6, F8).
     /**
      * Fraction of TACTICAL deaths that must be READABLE: preceded either by a committed enemy
      * intent (the hit was shown before it landed) or by a resource state under the crisis
@@ -1754,8 +1737,9 @@ public final class BalanceConfig {
     /**
      * Median depth the TACTICAL policy must reach BEYOND the NAIVE one. The game ships one
      * difficulty (order 8); this gap IS its difficulty range, so it may never collapse.
+     * Balance-overhaul order 6 (F8, OVERRIDE): 3 -> 5, against the finite 25-floor run.
      */
-    public static final int   SIM_SKILL_DEPTH_GAP_MIN     = 3;
+    public static final int   SIM_SKILL_DEPTH_GAP_MIN     = 5;
 
     // --- F. S-ECONOMY: the played economy matches the modelled one -----------------------
     /**
@@ -1872,8 +1856,12 @@ public final class BalanceConfig {
     public static final float AFFIX_OVERCLOCKED_BUDGET_MULT = 1.2f;
     /** SWARM: budget multiplier (the crowd-control test — the one fewer-bodies exception). Range: 1.3–1.6. */
     public static final float AFFIX_SWARM_BUDGET_MULT       = 1.5f;
-    /** OVERCLOCKED vault premium: extra owned-ammo boxes that pay for its raised threat. */
-    public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 1;
+    /**
+     * OVERCLOCKED vault premium: extra owned-ammo boxes that pay for its raised threat. Balance-overhaul order 6
+     * (CP5): 1 -> 2 — the re-fit shop makes a credit worth ~2.3x the power it was, so the host ELITE's credit
+     * income out-grew this ammo-only premium (R-RISK-PREMIUM read 0.999 at d16).
+     */
+    public static final int   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES = 2;
     /** SWARM vault premium: extra owned-ammo boxes that pay for its raised threat. */
     public static final int   AFFIX_SWARM_VAULT_AMMO_BOXES       = 9;
     /** IRRADIATED: extra radioactive-barrel weight on top of the ELITE base. */
@@ -1933,13 +1921,9 @@ public final class BalanceConfig {
     public static final int MYSTERY_WARREN_AMMO_BOXES = 2;
     public static final int MYSTERY_WARREN_MEDKITS    = 1;
 
-    // --- F. EVENT-NODE PAYOFFS (the average an event choice hands out) -------------------
-    /** XP awarded by an event choice at its small tier. */
-    public static final int   EVENT_XP_SMALL              = 60;
-    /** XP awarded by an event choice at its large tier. */
-    public static final int   EVENT_XP_LARGE              = 200;
-    /** Ammo boxes an event choice hands out (spread across owned ammo types, cache-style). */
-    public static final int   EVENT_AMMO_BOXES            = 6;
+    // --- F. EVENT-NODE PAYOFFS. Balance-overhaul order 6 (F15) re-expressed them in LADDER CURRENCIES — the
+    // magnitudes live in SECTION 25 (EVENT_* / MYSTERY_REWARD_*); the order-10 XP and ammo-box payoffs
+    // (EVENT_XP_SMALL 60, EVENT_XP_LARGE 200, EVENT_AMMO_BOXES 6) are deleted.
     /** Next-floor encounter-budget nudge an event choice may apply (e.g. escort +10%). */
     public static final float EVENT_NEXT_FLOOR_BUDGET_BONUS = 0.10f;
     /** Fraction of a mimic-ambush roll's [0,1) space that resolves as loot (else an ambush sting). */
@@ -2013,8 +1997,8 @@ public final class BalanceConfig {
     public static final float ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS = 45f;
     /** HP a MALFUNCTION sector's failing hazards are expected to cost (the bad-but-survivable pull). */
     public static final float ROUTE_MALFUNCTION_HAZARD_HIT_POINTS   = 55f;
-    /** Share of an EVENT's payoff any single choice delivers, averaged over the v1 choice catalogue. */
-    public static final float ROUTE_EVENT_EXPECTED_CHOICE_SHARE     = 0.40f;
+    // ROUTE_EVENT_EXPECTED_CHOICE_SHARE (0.40) deleted by balance-overhaul order 6: the EVENT ledger row is now
+    // priced from the catalog itself (the mean of each event's best choice, RouteEconomicsModel).
 
     // --- I. THE ROUTE BANDS (what the audit enforces) -------------------------------------
     /** R-RISK-PREMIUM: (reward premium)/(threat premium) — danger pays, slightly better than fair. */
@@ -2029,10 +2013,18 @@ public final class BalanceConfig {
      * maximum HP. Measured range across the audited depths: cache 0.12-0.23, shop 0.18-0.23, rest
      * 0.13-0.31, event 0.24-0.32.
      */
+    // OVERRIDE (balance-overhaul order 6, CP4): MAX 0.35 -> 0.40. The audit horizon is now the whole 25-floor run
+    // and the F7 dial puts REACTOR DEPTHS at 1.25 and THE CORE at 1.30, so a COMBAT node's bodies (and their XP /
+    // credits) grow past the 1..15 range this band was sketched on while a calm node's payoff stays capped:
+    // measured cache 0.36 / shop 0.37 at d21. Calm still costs tempo and loot — it just costs more at the peak.
     public static final float ROUTE_CALM_EV_DISCOUNT_MIN = 0.10f;
-    public static final float ROUTE_CALM_EV_DISCOUNT_MAX = 0.35f;
-    /** R-MYSTERY-EV: the weighted mystery table EV may differ from a combat node's by at most this. */
-    public static final float ROUTE_MYSTERY_EV_TOLERANCE = 0.15f;
+    public static final float ROUTE_CALM_EV_DISCOUNT_MAX = 0.40f;
+    /**
+     * R-MYSTERY-EV v2 (balance-overhaul order 6, F15 — OVERRIDES "within +/-15% of a combat node"): the weighted
+     * table's EV is AT LEAST a combat node's and at most this premium above it (a gamble pays for its variance,
+     * but must never become the strictly-better pick). Range: 0.20–0.40.
+     */
+    public static final float ROUTE_MYSTERY_EV_PREMIUM_MAX = 0.30f;
     /**
      * R-MYSTERY-EV (worst case): the worst outcome's expected NET resource loss, as a multiple of
      * ONE floor's maximum modelled drain (the order-3 net-drain band max plus the un-covered share
@@ -2084,7 +2076,10 @@ public final class BalanceConfig {
      * the ELITEs the upgrade guarantee plants), with ~5% headroom above.
      */
     public static final float ROUTE_TRAJECTORY_XP_PACE_MIN = 0.70f;
-    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 2.95f;
+    // OVERRIDE (balance-overhaul order 6, CP4): MAX 2.95 -> 3.20. The F7 peak (REACTOR DEPTHS 1.25) is more bodies
+    // on the fight-everything route, so DEADLIEST banks more XP (measured 3.07). The fairness end-stop is the
+    // depth-coupling line below, which stays in band — out-levelling the content is what DEADLIEST pays HP for.
+    public static final float ROUTE_TRAJECTORY_XP_PACE_MAX = 3.20f;
     /**
      * Depth coupling measured at the level the journey's XP ACTUALLY bought (the per-floor band is
      * [0.90, 1.20], which assumes an exactly on-curve player). This is the fairness end-stop of the
@@ -2417,7 +2412,10 @@ public final class BalanceConfig {
     /** CACHE: negative drain = the heals deliberately exceed the modelled incoming damage (a breather). */
     public static final float NODE_SUPPLY_CACHE_DRAIN_TARGET  = -1.25f;
     public static final float NODE_SUPPLY_CACHE_ARMOUR_SHARE  = 0.40f;
-    public static final float NODE_SUPPLY_CACHE_CREDITS       = 1.20f;
+    // Balance-overhaul order 6 (CP5): 1.20 -> 1.50 — after the shop re-fit a credit buys ~2.3x the power, so
+    // COMBAT's bounties out-grew the depot (R-CALM-COST cache discount read 0.40 at d25); more chips keep it a
+    // breather that still costs loot.
+    public static final float NODE_SUPPLY_CACHE_CREDITS       = 1.50f;
     public static final int   NODE_SUPPLY_CACHE_WEAPONS       = 1;
     public static final float NODE_SUPPLY_CACHE_WEAPON_CHANCE = 0.50f;
 
@@ -2928,7 +2926,9 @@ public final class BalanceConfig {
     /** Share of a floor's incoming damage that arrives as HEAVY hits (the guardable part). Range: 0.25-0.45. */
     public static final float   BUILD_FLOOR_HEAVY_DAMAGE_SHARE  = 0.35f;
     /** Turns per floor a PYRO build stands in fire (its own cone ignites the lanes it fights in — Incinerator.marchShot -> HazardManager.igniteFire). Unverified model input; the sim can measure it. Range: 3-6. */
-    public static final float   BUILD_PYRO_FIRE_TURNS_PER_FLOOR = 5f;
+    // Balance-overhaul order 6 (CP4): 5 -> 5.5. The F7 dial (REACTOR DEPTHS 1.15 -> 1.25) added bodies at d15,
+    // diluting fire's share of a PYRO floor's incoming until FIREPROOF r1 read +9.8% (PK1 felt floor 10%).
+    public static final float   BUILD_PYRO_FIRE_TURNS_PER_FLOOR = 5.5f;
     /** Share of a floor's bodies a BLADE build kills in melee. Range: 0.3-0.6. */
     public static final float   BUILD_BLADE_MELEE_KILL_SHARE    = 0.45f;
     /** Share of a BLADE build's melee turns fought below BUILD_BERSERK_LOW_HEALTH_FRACTION. Range: 0.15-0.35. */
@@ -2992,4 +2992,134 @@ public final class BalanceConfig {
     public static final int[]   ABILITY_ROLL_SWEEP_DEPTHS        = {3, 12, 22};
     /** A4: seeds the R-ABILITY roll sweep rolls at every (tier, depth, melee-ness). Range: 30. */
     public static final int     ABILITY_ROLL_SWEEP_SEEDS         = 30;
+
+    // =====================================================================================
+    // SECTION 25 — RUN SHAPE & ECONOMY (balance-overhaul order 6: the 25-floor run).
+    // The descent is FINITE (RUN_FINAL_DEPTH floors in five regions of five, route/RegionPlan), a boss closes
+    // every region, and the depth-RUN_FINAL_DEPTH boss's death is a VICTORY. Everything the finite run re-derives
+    // lives here: the BOSS TABLE (F3, F9), the region difficulty dial (F7), the shop economy (F12, F13), the
+    // event / mystery currencies (F15) and the run-outcome / S-BOSS / S-SHOP sim bands (F8, F10, F14).
+    // =====================================================================================
+
+    // --- BOSS TABLE (F3). One row per boss floor: route/BossTable registers these (index-aligned) and
+    // util/BossBalance derives HP / DPT / reward from the row against ExpectedPlayer(depth) — there is no
+    // modulo rotation and no per-boss *_DEPTH / *_TARGET_FIGHT_TURNS constant anymore (OVERRIDES the order-6
+    // new-game-balancr constants OVERSEER_DEPTH 5 / CORRUPTOR_DEPTH 10 / HELL_BARON_DEPTH 15 and their target
+    // turns 22 / 28 / 34). The rotation is the old cycle made explicit, so the Core-ending boss is unchanged.
+    /** F3: the boss floors, in descent order. Each must be a boss floor (GameMath.isBossFloor). */
+    public static final int[]   BOSS_TABLE_DEPTHS              = {5, 10, 15, 20, 25};
+    // F3: the ARCHETYPE on each row is data in route/BossTable.bootstrap (OVERSEER, CORRUPTOR, HELL_BARON,
+    // OVERSEER, CORRUPTOR), index-aligned with these arrays.
+    /** F3: each row's RULE-1 target fight length (turns), inside the act band [18, 40]. Range: 18–40. */
+    public static final float[] BOSS_TABLE_TARGET_FIGHT_TURNS  = {22f, 26f, 30f, 32f, 36f};
+    /** F3: each row's RULE-3 survival-ratio target, inside [BOSS_SURVIVAL_CHECK_RATIO_MIN, _MAX]. Range: 0.40–0.70. */
+    public static final float[] BOSS_TABLE_SURVIVAL_RATIO      = {0.50f, 0.50f, 0.50f, 0.50f, 0.50f};
+    /**
+     * F9 (R-BOSS-FAIR v2): the on-curve player's fight must last its row's target +/- this fraction
+     * (OVERRIDES the order-6 band [target, 1.5 * target]; the 1.5x upper cap survives as the soft-enrage
+     * trigger, BOSS_UPPER_FIGHT_TURNS_MULTIPLIER). Range: 0.25.
+     */
+    public static final float   BOSS_FIGHT_TURNS_TOLERANCE     = 0.25f;
+
+    // --- RUN-OUTCOME BANDS (F8; sim/BehavioralBands S-FAIR + S-SKILL). They REPLACE S-FAIR's TACTICAL median
+    // death depth [8, 14]. Depth-derived, so they ride the navigation waiver until the scripted policies finish
+    // >90% of floors (BalanceSchema.waiveNavigationLimitedBands) — reported every run, enforced the day it expires.
+    /** F8: TACTICAL win rate (clears the depth-RUN_FINAL_DEPTH boss) band. Range: 0.20–0.40. */
+    public static final float SIM_TACTICAL_WIN_RATE_MIN          = 0.20f;
+    public static final float SIM_TACTICAL_WIN_RATE_MAX          = 0.40f;
+    /** F8: the depth TACTICAL must reach on at least SIM_TACTICAL_REACH_FRACTION_MIN of seeds. */
+    public static final int   SIM_TACTICAL_REACH_DEPTH           = 10;
+    public static final float SIM_TACTICAL_REACH_FRACTION_MIN    = 0.60f;
+    /** F8: TACTICAL's median death depth over its LOSSES (non-VICTORY runs). Range: 11–18. */
+    public static final int   SIM_TACTICAL_LOSS_DEPTH_MIN        = 11;
+    public static final int   SIM_TACTICAL_LOSS_DEPTH_MAX        = 18;
+    /** F8: NAIVE win rate ceiling. */
+    public static final float SIM_NAIVE_WIN_RATE_MAX             = 0.03f;
+    /** F8: NAIVE median death depth band. Range: 4–8. */
+    public static final int   SIM_NAIVE_DEPTH_MIN                = 4;
+    public static final int   SIM_NAIVE_DEPTH_MAX                = 8;
+    /** F8 FIRST BOSS: TACTICAL clears it on at least this share of the seeds that REACH it. */
+    public static final float SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN  = 0.75f;
+    /** F8 FIRST BOSS: NAIVE reaches it on at least this share of seeds ... */
+    public static final float SIM_FIRST_BOSS_NAIVE_REACH_MIN     = 0.40f;
+    /** ... and clears it on at least this share of seeds (of all seeds). */
+    public static final float SIM_FIRST_BOSS_NAIVE_CLEAR_MIN     = 0.15f;
+
+    // --- SHOP ECONOMY (F12, F13). R-CREDITS v2: for every region, the modelled on-curve credit income per floor
+    // divided by the price of the NEEDED BUNDLE per floor lands in [CREDITS_V2_RATIO_MIN, MAX] — a surplus, so
+    // the shop is a place to spend (owner D4). NEEDED BUNDLE per floor = one LEVEL UP rung (order 1)
+    // + CREDITS_NEEDED_CONSUMABLES_PER_FLOOR consumables at SHOP_SMALL_BUY_POWER_POINTS
+    // + one tier upgrade per region (to the region's top drop tier) amortised over its floors.
+    /** F12: R-CREDITS v2 band on income / needed bundle, per region. Range: 1.10–1.40. */
+    public static final float CREDITS_V2_RATIO_MIN               = 1.10f;
+    public static final float CREDITS_V2_RATIO_MAX               = 1.40f;
+    /** F12: consumables the on-curve player typically needs per floor (the NEEDED BUNDLE's supply part). */
+    public static final float CREDITS_NEEDED_CONSUMABLES_PER_FLOOR = 1.5f;
+    /** F13: UAC Fabricators on every floor that is not a SHOP node (the guaranteed LEVEL UP rung rides it). */
+    public static final int   SHOP_MACHINES_PER_FLOOR            = 1;
+    /** F13: Fabricators on a SHOP node's floor (the two-machine upgrade / supply bias applies). */
+    public static final int   SHOP_NODE_MACHINE_COUNT            = 2;
+    /** F13: price multiplier on every offer a SHOP node's machines roll (stacks with the build's Haggler). Range: 0.80. */
+    public static final float SHOP_NODE_PRICE_MULTIPLIER         = 0.80f;
+    // --- S-BOSS (F10): boss CONSISTENCY in play, per BossTable row, over the TACTICAL seeds that reach it.
+    /** F10: a boss's TACTICAL clear rate band (the first boss's floor is SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN). */
+    public static final float SIM_BOSS_CLEAR_RATE_MIN            = 0.50f;
+    public static final float SIM_BOSS_CLEAR_RATE_MAX            = 0.90f;
+    /** F10: the fight-length coefficient of variation (std / mean of turns, first exchange to kill) ceiling. */
+    public static final float SIM_BOSS_MAX_FIGHT_TURNS_COV       = 0.30f;
+    /** F10: the median player health fraction at the kill band (the R-BOSS survival ratio, felt). */
+    public static final float SIM_BOSS_KILL_HEALTH_MIN           = 0.30f;
+    public static final float SIM_BOSS_KILL_HEALTH_MAX           = 0.60f;
+    /** F10: kills a row needs before its CoV / median-health lines read as a measurement. */
+    public static final int   SIM_BOSS_MIN_SAMPLE                = 10;
+    /** F14 S-SHOP: TACTICAL buys at least this many offers per Fabricator visit (per floor visited). */
+    public static final float SIM_SHOP_MIN_OFFERS_PER_VISIT      = 1.5f;
+    /** F14 S-SHOP: TACTICAL's median unspent credits when a lost run ends, in floors of modelled income. */
+    public static final float SIM_SHOP_MAX_UNSPENT_FLOORS        = 1.5f;
+
+    // --- EVENTS AND MYSTERIES IN LADDER CURRENCIES (F15). Every reward / cost is a weapon LEVEL (<= d+1), a PERK
+    // RANK of a carried tag, a HEAL / ARMOUR fraction, or CREDITS in floors of a COMBAT floor's income at the depth
+    // (route/EventEffect); route/FacilityEvents and route/MysteryOutcome carry the data, RouteEconomicsModel
+    // prices it in power points, and R-MYSTERY-EV v2 + R-EVENT-VALUE band it.
+    /** F15: credits a small event payout grants (riding a level / perk / heal), in floors of income. */
+    public static final float EVENT_CREDIT_FLOORS_SMALL          = 0.75f;
+    /**
+     * F15: credits the all-credits event payout grants (the beacon "strip it for parts" choice), in floors of
+     * income. An EVENT floor replaces a COMBAT floor, so its best choice must be worth that floor's WHOLE supply
+     * (ammo + heal + credits, R-EVENT-VALUE) — about three floors of credits at depth 1.
+     */
+    public static final float EVENT_CREDIT_FLOORS_LARGE          = 3.00f;
+    /** F15: credits riding the stash gamble's weapon level (paid only when the gamble pays). */
+    public static final float EVENT_STASH_CREDIT_FLOORS          = 2.00f;
+    /** F15: heal fraction riding the stash gamble's weapon level. */
+    public static final float EVENT_GAMBLE_HEAL_FRACTION         = 0.20f;
+    /** F15: HP fraction a lost stash gamble bites. */
+    public static final float EVENT_GAMBLE_FAIL_HEALTH_FRACTION  = 0.20f;
+    /** F15: the surviving tech's armour patch (fraction of max armour). */
+    public static final float EVENT_TECH_ARMOUR_FRACTION         = 1.00f;
+    /** F15: the shrine's surge (fraction of max HP). */
+    public static final float EVENT_SHRINE_HEAL_FRACTION         = 1.00f;
+    /** F15 MYSTERY: VAULT JACKPOT pays a weapon level and this many floors of credits on the way out. */
+    public static final float MYSTERY_REWARD_VAULT_CREDIT_FLOORS = 0.50f;
+    /** F15 MYSTERY: TRAP GAUNTLET pays this many floors of credits for surviving the hazards. */
+    public static final float MYSTERY_REWARD_TRAP_CREDIT_FLOORS  = 1.50f;
+    /** F15 MYSTERY: AMBUSH (an ELITE floor) pays this many floors of credits on top. */
+    public static final float MYSTERY_REWARD_AMBUSH_CREDIT_FLOORS = 0.50f;
+    /** F15 MYSTERY: LORE SIGNAL (a med-bay) pays this many floors of credits (salvaged intel). */
+    public static final float MYSTERY_REWARD_LORE_CREDIT_FLOORS  = 0.25f;
+    /** F15 MYSTERY: MALFUNCTION costs this many floors of credits (a failing sector eats a toll). */
+    public static final float MYSTERY_REWARD_MALFUNCTION_CREDIT_COST_FLOORS = 0.25f;
+    /**
+     * R-MYSTERY-EV v2 (F15): the table's outcome EVs must SPREAD — their weighted standard deviation is at least
+     * this fraction of a standard COMBAT node's EV (a mystery is a gamble, never a safe COMBAT in disguise).
+     */
+    public static final float ROUTE_MYSTERY_MIN_SPREAD_FRACTION  = 0.25f;
+    /**
+     * F15: power points ONE weapon level is worth in the route model (permanent progress). A level is a full
+     * ladder rung (R-LADDER L4: >= 25% DPT on its floor), so it is priced like one perk pick — never at the
+     * shop's deliberately cheap rung price. Range: 8–16.
+     */
+    public static final float ROUTE_WEAPON_LEVEL_POWER_POINTS    = EXPECTED_PERK_POWER_PP_PER_PICK;
+    /** R-EVENT-VALUE (F15): every EVENT's best choice is worth at least this x a COMBAT floor's SUPPLY (PP). */
+    public static final float EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO = 1.00f;
 }

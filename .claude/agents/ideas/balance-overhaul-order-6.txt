@@ -1,9 +1,41 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: The 25-Floor Run — finite descent, bosses, economy
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-13
 ---
+
+IMPLEMENTATION NOTE (2026-10-13 — where the build differs from the plan; full record in
+.claude/checkpoints/balance-overhaul-order-6.md):
+  - F15: the "weapon drop at d..d+1" currency has NO EventEffect field — no event or mystery outcome
+    in the catalog needs it (the VAULT's weapon racks already drop on-curve guns). Every other
+    currency (weapon level, perk rank, heal / armour fraction, credits in floors of income; costs
+    HP / credits / a hotter next floor) is built. Mystery rewards are paid when the player LEAVES
+    the sector. Ammo boxes and flat XP are no longer event payouts.
+  - F13: boss floors (and the staging room) keep their single Fabricator; F13 only specified
+    non-boss floors. S-SHOP (F14) counts offers per Fabricator VISIT (one per exited floor; a SHOP
+    node's two machines are one visit).
+  - F12: SHOP_DEPTH_PRICE_SCALE re-fit to 0.0 (and SHOP_CREDITS_PER_POWER_POINT 36 -> 15.5): any
+    depth ramp starved regions D/E of R-CREDITS v2.
+  - EVENT left R-CALM-COST's domain for the new R-EVENT-VALUE (F15 makes an event worth >= a COMBAT
+    floor's supply); its old waiver is retired. REST stays waived (out of scope), expiry re-pointed
+    to order 7.
+  - R-SUPPLY's S6 carrier-share rule now excludes boss arenas (no carrier roster by design; the
+    36-turn depth-25 arena was the first to cross the rule's emit threshold).
+  - RouteMapGenerator gained a deterministic structural fallback (one extra edge) in its
+    reachability repair: region E exposed a lane where no type rewrite was legal.
+  - The route audit horizon moved 15 -> 25 (A5), which forced two named band overrides:
+    R-CALM-COST max 0.35 -> 0.40 and R-TRAJECTORY XP pace max 2.95 -> 3.20; plus
+    BUILD_PYRO_FIRE_TURNS_PER_FLOOR 5 -> 5.5, NODE_SUPPLY_CACHE_CREDITS 1.50,
+    AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES 2 (ripples of the dial and the shop re-fit).
+  - R-BOSS-FAIR v2 is target +/- 25% (F9); the depth-25 boss sits in the act band (36), not the
+    unused run-final band.
+  - Reviewer r1 B1: the repeatable ending door opens only at a FINAL CLEAR (runStats.isVictory()).
+  - Every depth-derived sim band (F8, S-BOSS, S-SHOP offers) is REPORTED under the navigation
+    waiver (A6). The desktop visual check (region-E crest, FLOOR n / 25, DESCENT COMPLETE) is owed.
+  - Follow-ups (reviewer r1 non-blocking): dedupe the ladder payout between World and SimWorld and
+    the two "floor of income" functions; break the util <-> route BossTable cycle; move the payout
+    seed salts into a Constants file.
 
 Order 6 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 Depends on orders 1-5 (the finished player model: ladder, supply, matchups,

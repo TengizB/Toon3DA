@@ -38,6 +38,90 @@ public final class PolicySummary {
         return median(depths);
     }
 
+    // ---- RUN OUTCOME (balance-overhaul order 6, F8) ----------------------------------------------
+
+    /** Fraction of runs that killed the run-final boss (Ending.VICTORY). */
+    public float winRate() {
+        int won = 0;
+        for (RunLedger run : runs) if (run.ending == RunLedger.Ending.VICTORY) won++;
+        return fraction(won, runs.size());
+    }
+
+    /** Fraction of runs whose deepest floor reached at least {@code depth}. */
+    public float reachedDepthFraction(int depth) {
+        int reached = 0;
+        for (RunLedger run : runs) if (run.depthReached >= depth) reached++;
+        return fraction(reached, runs.size());
+    }
+
+    /** Median ending depth over the LOSSES only (every run that did not end in VICTORY); 0 when there are none. */
+    public float medianLossDepth() {
+        List<Integer> depths = new ArrayList<>(runs.size());
+        for (RunLedger run : runs) if (run.ending != RunLedger.Ending.VICTORY) depths.add(run.endingDepth);
+        return depths.isEmpty() ? 0f : median(depths);
+    }
+
+    /** Runs that reached the FIRST boss floor (depth >= {@code firstBossDepth}). */
+    public int runsReachingDepth(int firstBossDepth) {
+        int reached = 0;
+        for (RunLedger run : runs) if (run.depthReached >= firstBossDepth) reached++;
+        return reached;
+    }
+
+    /** Runs that killed the first boss (the absolute count behind {@link #clearedFirstBossFraction()}). */
+    public int runsClearingFirstBoss() {
+        int cleared = 0;
+        for (RunLedger run : runs) if (run.clearedFirstBoss) cleared++;
+        return cleared;
+    }
+
+    // ---- S-BOSS (balance-overhaul order 6, F10) ------------------------------------------------
+
+    /** The boss floors at {@code depth} the runs played (one per run that reached it). */
+    public List<FloorLedger> bossFloorsAt(int depth) {
+        List<FloorLedger> floors = new ArrayList<>();
+        for (RunLedger run : runs) {
+            for (FloorLedger floor : run.floors) {
+                if (floor.bossFloor && floor.depth == depth) floors.add(floor);
+            }
+        }
+        return floors;
+    }
+
+    // ---- S-SHOP (balance-overhaul order 6, F14) ------------------------------------------------
+
+    /** Fabricator visits summed over every run (one per exited non-boss floor). */
+    public int fabricatorVisits() {
+        int visits = 0;
+        for (RunLedger run : runs) visits += run.fabricatorVisits;
+        return visits;
+    }
+
+    /** Offers bought per Fabricator visit, over every run; 0 when nobody ever reached a machine. */
+    public float offersPerFabricatorVisit() {
+        int visits = fabricatorVisits();
+        int bought = 0;
+        for (RunLedger run : runs) bought += run.shopPurchases;
+        return visits == 0 ? 0f : bought / (float) visits;
+    }
+
+    /**
+     * Median credits held when a LOST run ended, in floors of the modelled COMBAT-floor income at that depth
+     * (BalanceSchema.combatFloorCreditIncome); 0 when there are no losses.
+     */
+    public float medianUnspentFloorsOfIncomeAtLoss() {
+        List<Float> floors = new ArrayList<>();
+        for (RunLedger run : runs) {
+            if (run.ending == RunLedger.Ending.VICTORY) continue;
+            float income = ge.tbegvadze.toon3d.util.BalanceSchema.combatFloorCreditIncome(run.endingDepth);
+            floors.add(income <= 0f ? 0f : run.creditsHeldAtEnd / income);
+        }
+        if (floors.isEmpty()) return 0f;
+        java.util.Collections.sort(floors);
+        int middle = floors.size() / 2;
+        return floors.size() % 2 == 1 ? floors.get(middle) : (floors.get(middle - 1) + floors.get(middle)) / 2f;
+    }
+
     /** Fraction of runs that killed the FIRST boss (the S-GATE subject). */
     public float clearedFirstBossFraction() {
         int cleared = 0;
