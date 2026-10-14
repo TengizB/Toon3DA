@@ -47,7 +47,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP1** — SimNavigator navigation fixes; navigation waiver deleted; every S-band enforced; ROUND SUMMARY page.
       DONE WHEN: stall column < 10% of floors for all three policies; A1, A4 hold; both gates green.
       (D3: A1's "every band enforced" moves to CP6 — out-of-band bands ride the round-pending waiver.)
-- [ ] **CP2** — round-1 brief (focus points + the P4 form verbatim) at `.claude/balance-feedback/playtest-round-1-brief.md`.
+- [x] **CP2** — round-1 brief (focus points + the P4 form verbatim) at `.claude/balance-feedback/playtest-round-1-brief.md`.
       DONE WHEN: the brief exists; handover says the build is with the owner, waiting on notes.
 - [ ] **CP3** — round-1 notes saved verbatim; `playtest-round-1-analysis.md` lists every P3 metric
       (sim value, owner answers, sample sizes) and the tuning proposal.
@@ -83,3 +83,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   round 1: is the sim's early death the game or TacticalPolicy (boss fights ~58 turns, never a clear)?
 - **Diagnostics** (never committed) live in the scratchpad: `ZzStallDiag.java`, `ZzDeathDiag.java` — copy into
   core/src/test/.../sim to run with `--tests '*Zz*'`, then move them out again.
+
+- **CP2 handover — WAITING ON THE OWNER.** The brief is `.claude/balance-feedback/playtest-round-1-brief.md`
+  (three focus points: floors 1-5 difficulty, the first boss, medkits/ammo; the P4 form verbatim). The build is the
+  branch head after this commit. Next (CP3) needs >= 5 owner runs of PLAY NOTES typed into chat: save each form
+  VERBATIM to `.claude/balance-feedback/play-notes/round-1/<date>-<k>.md`, re-run balanceSim on the same build,
+  write `playtest-round-1-analysis.md` (every P3 metric: sim value from the ROUND SUMMARY, owner answers, sample
+  sizes, agree/disagree) and the tuning proposal (<= ~5 master knobs, P6). Notes from an older build are excluded.
+  Calibration lead: the questionnaire says the owner has beaten the boss "a couple of times"; the sim never does —
+  P7 may move TacticalPolicy before any game number moves.
