@@ -373,6 +373,27 @@ public final class EnemyConstants {
     // would push the whole cluster off the top / off the sides; these keep it clamped inside view.
     // Left/right/top gap (screen pixels) kept clear so the cluster never touches the screen edge.
     public static final float   ENEMY_UI_SCREEN_EDGE_MARGIN         = 8f;
+
+    // UI-cluster DECLUTTER. When enemies stand behind one another in a lane their clusters (bar, name
+    // tag, intent icon + label) project onto the same screen spot and turn into an unreadable pile.
+    // The layout pass places clusters nearest-enemy-first; a farther cluster that would overlap one
+    // already placed is moved to the cheapest free spot (stacked above, or slid left/right) and tied
+    // back to its sprite with a thin leader line. A cluster with no free spot on screen is hidden —
+    // the nearest enemies always win.
+    // Clear gap (screen pixels) kept between two placed clusters, and around each cluster's box.
+    public static final float   ENEMY_UI_DECLUTTER_GAP              = 6f;
+    // Narrowest box a cluster reserves, so a short name over a thin far bar still claims room.
+    public static final float   ENEMY_UI_DECLUTTER_MIN_HALF_WIDTH   = 40f;
+    // Cost of one pixel of sideways displacement relative to one pixel of upward displacement.
+    // Above 1 prefers stacking above (keeps the cluster over its own column) when both fit.
+    public static final float   ENEMY_UI_DECLUTTER_SIDEWAYS_COST    = 1.25f;
+    // Displacement (screen pixels) beyond which a leader line ties the cluster back to its sprite.
+    public static final float   ENEMY_UI_LEADER_MIN_OFFSET          = 12f;
+    public static final float   ENEMY_UI_LEADER_THICKNESS           = 2f;
+    public static final float   ENEMY_UI_LEADER_RED                 = 0.85f;
+    public static final float   ENEMY_UI_LEADER_GREEN               = 0.85f;
+    public static final float   ENEMY_UI_LEADER_BLUE                = 0.85f;
+    public static final float   ENEMY_UI_LEADER_ALPHA               = 0.55f;
     // Border / backdrop tint (semi-transparent near-black frame)
     public static final float   ENEMY_HEALTH_BAR_BORDER_RED         = 0.05f;
     public static final float   ENEMY_HEALTH_BAR_BORDER_GREEN       = 0.05f;
