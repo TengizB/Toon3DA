@@ -113,6 +113,21 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final float[]   intentClusterTops;
     private final boolean[] drawIntentFlags;
 
+    // UI-cluster declutter (see layoutUiClusters). uiClusterFlags marks an alerted enemy whose
+    // bar/name/intent cluster takes part in the layout; the leader arrays hold the thin line drawn from
+    // a displaced cluster back to its own sprite. placedCluster* is the scratch list of boxes already
+    // claimed this frame (nearest enemies first).
+    private final boolean[] uiClusterFlags;
+    private final boolean[] uiLeaderFlags;
+    private final float[]   uiLeaderFromXs;
+    private final float[]   uiLeaderFromYs;
+    private final float[]   uiLeaderToXs;
+    private final float[]   uiLeaderToYs;
+    private final float[]   placedClusterLefts;
+    private final float[]   placedClusterRights;
+    private final float[]   placedClusterBottoms;
+    private final float[]   placedClusterTops;
+
     // Pre-allocated orbiting-shard-ring cache (elemental-golem-auric-sentinel) — parallel to
     // sortedIndices, populated in pass 1 and consumed by the shard pass (pass 1.55). The ring draws every
     // frame for every visible Sentinel, so the geometry is cached rather than recomputed, and NOTHING
@@ -207,6 +222,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.intentCenterXs      = new float[scratchSize];
         this.intentClusterTops   = new float[scratchSize];
         this.drawIntentFlags     = new boolean[scratchSize];
+        this.uiClusterFlags       = new boolean[scratchSize];
+        this.uiLeaderFlags        = new boolean[scratchSize];
+        this.uiLeaderFromXs       = new float[scratchSize];
+        this.uiLeaderFromYs       = new float[scratchSize];
+        this.uiLeaderToXs         = new float[scratchSize];
+        this.uiLeaderToYs         = new float[scratchSize];
+        this.placedClusterLefts   = new float[scratchSize];
+        this.placedClusterRights  = new float[scratchSize];
+        this.placedClusterBottoms = new float[scratchSize];
+        this.placedClusterTops    = new float[scratchSize];
         this.shapeRenderer       = new ShapeRenderer();
         // Sized for the largest render-resolution tier so setRenderResolution() on WallRenderer never
         // forces this batch to reallocate.
@@ -345,6 +370,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
             drawShardFlags[sortedPosition]  = false;
             drawCrustFlags[sortedPosition]  = false;
             drawIntentFlags[sortedPosition] = false;
+            uiClusterFlags[sortedPosition]  = false;
+            uiLeaderFlags[sortedPosition]   = false;
             float attackAnimStrength      = enemy.getAttackAnimStrength();
 
             TextureRegion region = textureRegions.get(enemy.type);
@@ -689,14 +716,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float rawBarBottom      = drawTop + spriteScreenHeight * ENEMY_HEALTH_BAR_GAP_FRACTION;
                 float barBottomPosition = Math.min(rawBarBottom, maxBarBottom);
 
-                // Bar cache for pass 2 — only within the bar draw distance.
+                // Cluster geometry is cached for every alerted enemy (the declutter layout needs the box
+                // even when only the intent icon is drawn); the bar itself is drawn in pass 2 only
+                // within the bar draw distance.
+                barLeftPositions[sortedPosition]   = barLeft;
+                barBottomPositions[sortedPosition] = barBottomPosition;
+                barWidths[sortedPosition]          = barWidth;
+                barHeights[sortedPosition]         = barHeight;
+                uiClusterFlags[sortedPosition]     = true;
                 if (depth <= ENEMY_HEALTH_BAR_MAX_DISTANCE_TILES) {
                     float fillFraction = Math.max(0f, Math.min(1f,
                                               (float) enemy.health / enemy.maxHealth));
-                    barLeftPositions[sortedPosition]   = barLeft;
-                    barBottomPositions[sortedPosition] = barBottomPosition;
-                    barWidths[sortedPosition]          = barWidth;
-                    barHeights[sortedPosition]         = barHeight;
                     barFillFractions[sortedPosition]   = fillFraction;
                     barHealthCurrents[sortedPosition]  = enemy.health;
                     barHealthMaxes[sortedPosition]     = enemy.maxHealth;
@@ -717,6 +747,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         batch.setColor(Color.WHITE);
         batch.end();
+
+        // Resolve overlapping UI clusters BEFORE any overlay pass reads the cached positions.
+        layoutUiClusters(enemies, visibleCount);
 
         // =====================================================================
         // Pass 1.5: Animated affliction overlays (fire / toxin / bleed)
@@ -1034,6 +1067,32 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
 
         // =====================================================================
+        // Pass 1.9: Leader lines — a thin line from each displaced UI cluster back to its own sprite,
+        // so a cluster slid aside by the declutter layout still reads as belonging to its enemy.
+        // =====================================================================
+        boolean anyLeader = false;
+        for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+            if (uiLeaderFlags[sortedPosition]) { anyLeader = true; break; }
+        }
+        if (anyLeader) {
+            batch.begin();
+            batch.setColor(ENEMY_UI_LEADER_RED, ENEMY_UI_LEADER_GREEN, ENEMY_UI_LEADER_BLUE, ENEMY_UI_LEADER_ALPHA);
+            for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
+                if (!uiLeaderFlags[sortedPosition]) continue;
+                float fromX = uiLeaderFromXs[sortedPosition];
+                float fromY = uiLeaderFromYs[sortedPosition];
+                float toX   = uiLeaderToXs[sortedPosition];
+                float toY   = uiLeaderToYs[sortedPosition];
+                float length = GameMath.distance(fromX, fromY, toX, toY);
+                float angleDegrees = GameMath.angleBetween(fromX, fromY, toX, toY) * MathUtils.radiansToDegrees;
+                drawCenteredQuad((fromX + toX) / 2f, (fromY + toY) / 2f,
+                        length, ENEMY_UI_LEADER_THICKNESS, angleDegrees);
+            }
+            batch.setColor(Color.WHITE);
+            batch.end();
+        }
+
+        // =====================================================================
         // Pass 2: Health bars (white-pixel texture; single batch, ~3 flushes total)
         // =====================================================================
         boolean anyBarsToRender = false;
@@ -1056,11 +1115,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float barHeight    = barHeights[sortedPosition];
                 float fillFraction = barFillFractions[sortedPosition];
 
-                // barLeft/barWidth are WORLD-space (the cluster is a world-space batch draw); convert the
-                // bar's centre to a column index only for the z-buffer occlusion test.
-                int barCenterColumn = (int)((barLeft + barWidth / 2f) / projectionColumnWidth);
-                if (barCenterColumn < 0 || barCenterColumn >= projectionColumnCount) continue;
-                if (depth >= wallRenderer.getZBufferUnchecked(barCenterColumn)) continue;
+                // Wall occlusion was already decided by layoutUiClusters (at the cluster's own anchor,
+                // before any declutter shift) — a displaced cluster must not be re-tested at its new X.
 
                 float borderPixels = ENEMY_HEALTH_BAR_BORDER_PIXELS;
 
@@ -1209,10 +1265,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float depth   = sortedDepths[sortedPosition];
                 // intentCenterXs holds a WORLD X (it is uiCenterX, drawn via world-space batch/font
                 // calls below); convert back to a column index only for the z-buffer occlusion test.
+                // Wall occlusion was already decided by layoutUiClusters (see pass 2).
                 float centerX = intentCenterXs[sortedPosition];
-                int   centerColumn = (int) (centerX / projectionColumnWidth);
-                if (centerColumn < 0 || centerColumn >= projectionColumnCount) continue;
-                if (depth >= wallRenderer.getZBufferUnchecked(centerColumn)) continue; // occluded by wall
 
                 Enemy         enemy = enemies.get(sortedIndices[sortedPosition]);
                 PlannedAction plan  = enemy.plannedAction;
@@ -1325,6 +1379,174 @@ public final class EnemyRenderer implements Renderable, Disposable {
             shapeRenderer.end();
             Gdx.gl.glDisable(GL20.GL_BLEND);
         }
+    }
+
+    /**
+     * UI-cluster DECLUTTER. Enemies queued up in one lane project their floating clusters (health bar,
+     * name tag, intent icon + word label) onto the same screen spot, and the passes that draw them would
+     * paint one enemy's label over another's name. This lays the clusters out before anything is drawn:
+     * <ol>
+     *   <li>A cluster whose anchor column is behind a wall is dropped (the test the bar / intent passes
+     *       used to run themselves — done here, at the UNSHIFTED anchor, so a slide never changes it).</li>
+     *   <li>Clusters are placed nearest-enemy-first: the enemy that can hit you soonest keeps its
+     *       natural spot over its sprite.</li>
+     *   <li>A farther cluster that would overlap a placed one moves to the cheapest free spot — stacked
+     *       just above a placed box, or slid just left / right of one — that stays fully on screen and
+     *       overlaps nothing. A leader line then ties it back to its own sprite.</li>
+     *   <li>With no free spot it is hidden. The nearer threats already own the space.</li>
+     * </ol>
+     * Rewrites barLeftPositions / barBottomPositions / intentCenterXs / intentClusterTops in place.
+     * Allocation-free: every box lives in the pre-sized placedCluster* arrays.
+     */
+    private void layoutUiClusters(List<Enemy> enemies, int visibleCount) {
+        int placedCount = 0;
+        float screenTop = WALL_PROJECTION_SCREEN_HEIGHT - ENEMY_UI_SCREEN_EDGE_MARGIN;
+        float labelBand = nameTagLineHeight * (INTENT_LABEL_FONT_SCALE / ENEMY_NAME_TAG_FONT_SCALE)
+                          + INTENT_LABEL_GAP_ABOVE_ICON + 2f * INTENT_LABEL_PLATE_PAD_Y;
+        float nameTagBand = nameTagLineHeight + ENEMY_NAME_TAG_BAR_GAP;
+
+        // Sorted farthest-first, so walk backwards for nearest-first placement.
+        for (int sortedPosition = visibleCount - 1; sortedPosition >= 0; sortedPosition--) {
+            if (!uiClusterFlags[sortedPosition]) continue;
+            if (!drawBarFlags[sortedPosition] && !drawIntentFlags[sortedPosition]) continue;
+
+            float depth      = sortedDepths[sortedPosition];
+            float barLeft    = barLeftPositions[sortedPosition];
+            float barBottom  = barBottomPositions[sortedPosition];
+            float barWidth   = barWidths[sortedPosition];
+            float barHeight  = barHeights[sortedPosition];
+            float anchorX    = barLeft + barWidth / 2f;
+
+            int anchorColumn = (int) (anchorX / projectionColumnWidth);
+            if (anchorColumn < 0 || anchorColumn >= projectionColumnCount
+                    || depth >= wallRenderer.getZBufferUnchecked(anchorColumn)) {
+                drawBarFlags[sortedPosition]    = false;
+                drawIntentFlags[sortedPosition] = false;
+                continue;
+            }
+
+            Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
+
+            // ---- Cluster box (conservative: includes the trait glyph left of the bar) ----
+            float halfWidth = barWidth / 2f + ENEMY_TRAIT_GLYPH_MAX_SIZE + ENEMY_TRAIT_GLYPH_BAR_GAP;
+            float top = barBottom + barHeight + ENEMY_HEALTH_BAR_BORDER_PIXELS;
+            if (depth <= ENEMY_NAME_TAG_MAX_DISTANCE_TILES && !enemy.nameTag.isEmpty()) {
+                nameTagLayout.setText(nameTagFont, enemy.nameTag);
+                halfWidth = Math.max(halfWidth, nameTagLayout.width / 2f);
+                top += nameTagBand;
+            }
+            if (drawIntentFlags[sortedPosition]) {
+                float iconSize = GameMath.intentIconSize(INTENT_ICON_SIZE_WORLD, depth,
+                        INTENT_ICON_REFERENCE_DISTANCE_TILES, INTENT_ICON_MIN_SIZE, INTENT_ICON_MAX_SIZE);
+                float drawnSize = iconSize * (1f + INTENT_POP_SCALE_BONUS)
+                        * (isHeavyTelegraphing(enemy) ? HEAVY_INTENT_ICON_SCALE : 1f);
+                halfWidth = Math.max(halfWidth, drawnSize / 2f);
+                float intentTop = barBottom + barHeight + INTENT_ICON_NAMETAG_CLEARANCE
+                        + iconSize * INTENT_NUMBER_BAND_FRACTION + INTENT_ICON_Y_OFFSET_ABOVE_HEALTHBAR
+                        + drawnSize + INTENT_ICON_BOB_AMPLITUDE;
+                if (depth <= INTENT_LABEL_MAX_DISTANCE_TILES) {
+                    PlannedAction plan = enemy.plannedAction;
+                    nameTagFont.getData().setScale(INTENT_LABEL_FONT_SCALE);
+                    hpTextLayout.setText(nameTagFont, intentLabelText(plan.verb, enemy, plan));
+                    nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
+                    halfWidth = Math.max(halfWidth, hpTextLayout.width / 2f + INTENT_LABEL_PLATE_PAD_X);
+                    intentTop += labelBand;
+                }
+                top = Math.max(top, intentTop);
+            }
+            halfWidth = Math.max(halfWidth, ENEMY_UI_DECLUTTER_MIN_HALF_WIDTH) + ENEMY_UI_DECLUTTER_GAP / 2f;
+            float bottom = barBottom - ENEMY_HEALTH_BAR_BORDER_PIXELS - ENEMY_UI_DECLUTTER_GAP / 2f;
+            top += ENEMY_UI_DECLUTTER_GAP / 2f;
+            float height = top - bottom;
+
+            // Desired spot: over the sprite, pulled fully on screen for the (possibly wider) box.
+            float minCenterX = ENEMY_UI_SCREEN_EDGE_MARGIN + halfWidth;
+            float maxCenterX = WORLD_WIDTH - ENEMY_UI_SCREEN_EDGE_MARGIN - halfWidth;
+            float desiredCenterX = minCenterX <= maxCenterX
+                    ? MathUtils.clamp(anchorX, minCenterX, maxCenterX) : WORLD_WIDTH / 2f;
+            float desiredBottom  = Math.min(bottom, screenTop - height);
+
+            float bestCenterX = desiredCenterX;
+            float bestBottom  = desiredBottom;
+            boolean found = isClusterSpotFree(desiredCenterX, desiredBottom, halfWidth, height, placedCount);
+            if (!found) {
+                float bestCost = Float.MAX_VALUE;
+                for (int placedIndex = 0; placedIndex < placedCount; placedIndex++) {
+                    for (int candidateKind = 0; candidateKind < 3; candidateKind++) {
+                        float candidateCenterX = desiredCenterX;
+                        float candidateBottom  = desiredBottom;
+                        if (candidateKind == 0) {          // stacked just above the placed box
+                            candidateBottom  = placedClusterTops[placedIndex];
+                        } else if (candidateKind == 1) {   // slid just right of it
+                            candidateCenterX = placedClusterRights[placedIndex] + halfWidth;
+                        } else {                           // slid just left of it
+                            candidateCenterX = placedClusterLefts[placedIndex] - halfWidth;
+                        }
+                        if (!isClusterSpotFree(candidateCenterX, candidateBottom, halfWidth, height, placedCount)) {
+                            continue;
+                        }
+                        float cost = Math.abs(candidateBottom - desiredBottom)
+                                + Math.abs(candidateCenterX - desiredCenterX) * ENEMY_UI_DECLUTTER_SIDEWAYS_COST;
+                        if (cost < bestCost) {
+                            bestCost    = cost;
+                            bestCenterX = candidateCenterX;
+                            bestBottom  = candidateBottom;
+                            found       = true;
+                        }
+                    }
+                }
+            }
+
+            if (!found) {
+                drawBarFlags[sortedPosition]    = false;
+                drawIntentFlags[sortedPosition] = false;
+                continue;
+            }
+
+            placedClusterLefts[placedCount]   = bestCenterX - halfWidth;
+            placedClusterRights[placedCount]  = bestCenterX + halfWidth;
+            placedClusterBottoms[placedCount] = bestBottom;
+            placedClusterTops[placedCount]    = bestBottom + height;
+            placedCount++;
+
+            float shiftX = bestCenterX - anchorX;
+            float shiftY = bestBottom - bottom;
+            barLeftPositions[sortedPosition]   += shiftX;
+            barBottomPositions[sortedPosition] += shiftY;
+            intentCenterXs[sortedPosition]     += shiftX;
+            intentClusterTops[sortedPosition]  += shiftY;
+
+            // Leader line from the sprite's head to the bottom of its displaced cluster. Only a real
+            // declutter shift earns one — the screen-edge clamp alone moves a cluster by a few pixels.
+            if (Math.abs(shiftX) + Math.abs(shiftY) > ENEMY_UI_LEADER_MIN_OFFSET) {
+                float spriteTop = fxDrawBottoms[sortedPosition] + fxSpriteHeights[sortedPosition];
+                uiLeaderFromXs[sortedPosition] = MathUtils.clamp(fxCenterWorldXs[sortedPosition], 0f, WORLD_WIDTH);
+                uiLeaderFromYs[sortedPosition] = Math.min(spriteTop, screenTop);
+                uiLeaderToXs[sortedPosition]   = bestCenterX;
+                uiLeaderToYs[sortedPosition]   = barBottomPositions[sortedPosition] - ENEMY_HEALTH_BAR_BORDER_PIXELS;
+                uiLeaderFlags[sortedPosition]  = true;
+            }
+        }
+    }
+
+    /**
+     * True when a cluster box centred at {@code centerX} with the given bottom, half-width and height lies
+     * fully inside the screen's UI safe area and overlaps none of the first {@code placedCount} boxes.
+     */
+    private boolean isClusterSpotFree(float centerX, float bottom, float halfWidth, float height, int placedCount) {
+        float left  = centerX - halfWidth;
+        float right = centerX + halfWidth;
+        float top   = bottom + height;
+        if (left < ENEMY_UI_SCREEN_EDGE_MARGIN || right > WORLD_WIDTH - ENEMY_UI_SCREEN_EDGE_MARGIN) return false;
+        if (top > WALL_PROJECTION_SCREEN_HEIGHT - ENEMY_UI_SCREEN_EDGE_MARGIN) return false;
+        if (bottom < ENEMY_UI_SCREEN_EDGE_MARGIN) return false;
+        for (int placedIndex = 0; placedIndex < placedCount; placedIndex++) {
+            if (left   < placedClusterRights[placedIndex]  && right > placedClusterLefts[placedIndex]
+             && bottom < placedClusterTops[placedIndex]    && top   > placedClusterBottoms[placedIndex]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void resolveNameTagColor(int dungeonLevel, Color out) {

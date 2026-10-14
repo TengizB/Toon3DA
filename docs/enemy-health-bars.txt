@@ -299,3 +299,26 @@ HIT WORDS (C1)     Every player hit sets Enemy.matchupTintSecondsRemaining / mat
                    (above the name tag when shown) for 0.8 s, fading over its last 0.25 s. Both timers
                    decay in Enemy.advanceHitFlash. Words are pre-built GlyphLayouts. No numbers ever
                    (AS5). Constants: EnemyConstants.ENEMY_MATCHUP_*.
+
+PART 4 — UI-CLUSTER DECLUTTER (enemies queued up in one lane)
+---------------------------------------------------------------
+PROBLEM            Enemies standing behind one another in a corridor project their floating
+                   clusters (bar + name tag + HP text + intent icon + intent word) onto the same
+                   screen spot. Bars/names were drawn in one pass and intents in the next, so a far
+                   enemy's "Moving" label painted straight over a near enemy's name: unreadable.
+LAYOUT PASS        EnemyRenderer.layoutUiClusters() runs once per frame between the sprite pass and
+                   every overlay pass. For each alerted enemy it builds a conservative box (trait
+                   glyph + bar, name tag, intent icon at its pop size, intent word plate) and places
+                   the boxes NEAREST ENEMY FIRST — the closest threat always keeps its natural spot.
+                   A farther box that would overlap a placed one moves to the cheapest free spot:
+                   stacked just above a placed box, or slid just left/right of one; cost = upward
+                   pixels + sideways pixels x ENEMY_UI_DECLUTTER_SIDEWAYS_COST. A spot must lie fully
+                   inside the screen margin and overlap no placed box. With no free spot the cluster
+                   is hidden (the nearer threats already own the space). The pass rewrites the cached
+                   bar / intent anchors in place; nothing is allocated.
+OCCLUSION          The wall z-buffer test moved INTO the layout pass and runs at the cluster's
+                   UNSHIFTED anchor, so a displaced cluster is never re-tested (or hidden) at its new X.
+LEADER LINE        A cluster shifted by more than ENEMY_UI_LEADER_MIN_OFFSET gets a thin translucent
+                   line from its sprite's head to the bottom of its bar (drawn just before the bar
+                   pass), so a cluster slid aside still reads as belonging to its enemy.
+KNOBS              EnemyConstants.ENEMY_UI_DECLUTTER_* and ENEMY_UI_LEADER_*.
