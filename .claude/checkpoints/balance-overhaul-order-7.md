@@ -43,9 +43,10 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 
 ## STEP LEDGER
 
-- [ ] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — SimNavigator navigation fixes; navigation waiver deleted; every S-band enforced; ROUND SUMMARY page.
+- [x] **CP0** — this file, committed and pushed before anything else changes.
+- [x] **CP1** — SimNavigator navigation fixes; navigation waiver deleted; every S-band enforced; ROUND SUMMARY page.
       DONE WHEN: stall column < 10% of floors for all three policies; A1, A4 hold; both gates green.
+      (D3: A1's "every band enforced" moves to CP6 — out-of-band bands ride the round-pending waiver.)
 - [ ] **CP2** — round-1 brief (focus points + the P4 form verbatim) at `.claude/balance-feedback/playtest-round-1-brief.md`.
       DONE WHEN: the brief exists; handover says the build is with the owner, waiting on notes.
 - [ ] **CP3** — round-1 notes saved verbatim; `playtest-round-1-analysis.md` lists every P3 metric
@@ -60,4 +61,25 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 
 ## NOTES CARRIED FORWARD
 
-(none yet)
+- **ENV:** `./gradlew` cannot run in the repo (Android Gradle plugin; dl.google.com is 403). Gate via the
+  desktop-only MIRROR in the scratchpad (`mirror/`): symlinks to core/lwjgl3/assets/gradle*/docs/story,
+  `settings.gradle` = `include 'lwjgl3','core'`, root `build.gradle` = the repo's minus the `buildscript{}` block,
+  `configure(subprojects)` instead of `subprojects - project(':android')`, googleapis maven mirror first.
+  Run: `./gradlew core:test lwjgl3:compileJava core:balanceSim -q --continue` (~2-5 min).
+- **BASELINE (2026-10-14, `b8c9aa5`):** core:test 459, only StoryBarkTest red (pre-existing, also red at order 6);
+  balanceSim green with TACTICAL 171/200 stalled.
+- **Side commits (not checkpoints, short-lane bug fixes found by the sim):** `b1df71d` GuaranteedContentStamper never
+  stamps a solid prop into a chokepoint (CACHE crates cut ~5% of sampled floors in two); `e886538` Weapon.completeReload
+  skips Inventory.spend when nothing is needed (crash once runs got deeper).
+- **CP1 handover:** stall causes fixed in sim/ (see authority SECTION 3 S-NAVIGATION). New: `sim/LoopBreaker`,
+  `sim/RoundSummary` (printed first by BalanceSimTest.writeReport), `RuleKind.SIM_NAVIGATION`,
+  `PolicySummary.stalledFloorFraction()`, `FloorLedger.ammoReserveFractionOnExit[]` / `ammoHeldFractionAtDeath`,
+  BalanceConfig SIM_LOOP_*, SIM_MAX_STALLED_FLOOR_FRACTION, ROUND_* (P3 bands). Waiver = `BalanceSchema.
+  waiveRoundPendingBands()` — DELETE a line in the round its band is met; mirror in authority SECTION 4.
+  CP1 matrix (authority SECTION 8): TACTICAL 0 stalled, median death 3, 54 reach the first boss, 0 clear; ROUND
+  SUMMARY OUT: T4 exit HP 0.91, starved deaths 0.32, T6 SPREAD 0.62, T7 tag 0.47, T8 all, T9 offers 1.00, G
+  SHELLS 0.73 + lifeline 0.10, J2 STEADY_AIM 0.85. IN: T2, T3 x3, T5 x2, T6 switches.
+  Death diag (200 TACTICAL): every death held 0 medkits; mean level at death ~1.6. Calibration (P7) question for
+  round 1: is the sim's early death the game or TacticalPolicy (boss fights ~58 turns, never a clear)?
+- **Diagnostics** (never committed) live in the scratchpad: `ZzStallDiag.java`, `ZzDeathDiag.java` — copy into
+  core/src/test/.../sim to run with `--tests '*Zz*'`, then move them out again.

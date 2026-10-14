@@ -58,6 +58,15 @@ final class SimNavigator {
      */
     private int lastPathDistance = Integer.MAX_VALUE;
 
+    /**
+     * True when the last {@link #nextStepToward} could only be answered by walking THROUGH an enemy — the
+     * returned step leads into a tile an enemy stands on. Set by the enemy-blind fallback (balance-overhaul
+     * order 7, P8): a sleeping enemy parked in a one-tile corridor used to make every goal beyond it
+     * "unsteppable", so the policy dropped all of its goals and wandered until the floor's turn cap. A player
+     * walks up to it and shoots it; the caller does exactly that when this flag is set.
+     */
+    private boolean lastStepBlockedByEnemy;
+
     private final DoorPassabilityRule doorPassabilityRule;
 
     SimNavigator(Level level, DoorManager doorManager, DoorPassabilityRule doorPassabilityRule) {
@@ -80,9 +89,33 @@ final class SimNavigator {
      */
     boolean nextStepToward(int fromColumn, int fromRow, int toColumn, int toRow,
                            EnemyManager enemyManager, int[] stepOut) {
+        lastStepBlockedByEnemy = false;
         if (!inBounds(toColumn, toRow)) return false;
         if (fromColumn == toColumn && fromRow == toRow) return false;
+        if (!enemyBlindPlanning
+                && stepAlongFlood(fromColumn, fromRow, toColumn, toRow, enemyManager, stepOut)) return true;
+        if (enemyManager == null) return false;
+        // No path around the enemies: plan as if they were not there, and report whether the first step runs
+        // into one (the caller then fights its way through instead of giving the goal up).
+        if (!stepAlongFlood(fromColumn, fromRow, toColumn, toRow, null, stepOut)) return false;
+        lastStepBlockedByEnemy = enemyManager.isTileOccupiedByEnemy(fromColumn + stepOut[0], fromRow + stepOut[1]);
+        return true;
+    }
 
+    /**
+     * While set, paths are planned straight through enemies (the {@link LoopBreaker} push): the step that runs
+     * into one is reported through {@link #lastStepBlockedByEnemy} and the caller fights it.
+     */
+    private boolean enemyBlindPlanning;
+
+    void setEnemyBlindPlanning(boolean enemyBlind) { this.enemyBlindPlanning = enemyBlind; }
+
+    /** True when the last {@link #nextStepToward} step leads into a tile an enemy stands on. */
+    boolean lastStepBlockedByEnemy() { return lastStepBlockedByEnemy; }
+
+    /** One strictly-closer step along a flood from the goal; enemies block only when supplied. */
+    private boolean stepAlongFlood(int fromColumn, int fromRow, int toColumn, int toRow,
+                                   EnemyManager enemyManager, int[] stepOut) {
         // Flood OUT FROM THE GOAL so the distance field can be read as "steps still to walk", and a
         // goal tile that is itself blocked (an enemy standing on it) still yields a useful gradient.
         floodFrom(toColumn, toRow, enemyManager);
@@ -209,9 +242,14 @@ final class SimNavigator {
         return TouchAction.BACK;
     }
 
-    /** The button that turns the marine to FACE the given cardinal direction, or NONE if already facing it. */
+    /**
+     * The button that turns the marine to FACE the given cardinal direction, or NONE if already facing it —
+     * or when the direction is not cardinal at all (a diagonal can never be faced, so no rotation brings
+     * the marine closer to it; balance-overhaul order 7, P8).
+     */
     static TouchAction actionToFace(int facingStepColumn, int facingStepRow,
                                     int desiredStepColumn, int desiredStepRow) {
+        if (Math.abs(desiredStepColumn) + Math.abs(desiredStepRow) != 1) return TouchAction.NONE;
         if (desiredStepColumn == facingStepColumn && desiredStepRow == facingStepRow) {
             return TouchAction.NONE;
         }

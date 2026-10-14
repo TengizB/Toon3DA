@@ -61,7 +61,11 @@ final class SimPolicySupport {
         }
 
         // Otherwise turn to face the most pressing threat: whatever is adjacent, else an awake enemy
-        // holding a clear line inside weapon range. One rotation, then the branch above fires.
+        // holding a clear line inside weapon range. One rotation, then the branch above fires. A gun that
+        // can do nothing once it faces the threat is not worth the turn (balance-overhaul order 7, P8): the
+        // marine would face it, find nothing to press, let the walk plan turn it away, and turn back again
+        // next turn — for the rest of the floor.
+        if (!view.isWeaponUsable(weapon)) return TouchAction.NONE;
         Enemy pressing = mostPressingThreat(view, range);
         if (pressing != null) {
             int differenceColumn = pressing.tileColumn - view.playerTileColumn();
@@ -75,7 +79,12 @@ final class SimPolicySupport {
         return TouchAction.NONE;
     }
 
-    /** The adjacent enemy, else the closest awake enemy on a clear cardinal line inside range. */
+    /**
+     * The adjacent enemy, else the closest awake enemy on a clear cardinal line inside range. Both must share
+     * the marine's row or column: the marine only ever attacks along its facing, and a DIAGONAL neighbour can
+     * never be faced — turning toward one rotated the marine in place until the floor's turn cap ran out
+     * (balance-overhaul order 7, P8: the largest single cause of stalled floors).
+     */
     private static Enemy mostPressingThreat(SimView view, int range) {
         Enemy best = null;
         int   bestDistance = Integer.MAX_VALUE;
@@ -83,10 +92,11 @@ final class SimPolicySupport {
             if (!enemy.isAlive()) continue;
             int distance = view.tileDistanceTo(enemy);
             if (distance > Math.max(1, range) || distance >= bestDistance) continue;
+            boolean sharesLine = enemy.tileColumn == view.playerTileColumn()
+                                 || enemy.tileRow == view.playerTileRow();
+            if (!sharesLine) continue;
             boolean adjacent = distance <= 1;
-            boolean onLine   = (enemy.tileColumn == view.playerTileColumn()
-                                || enemy.tileRow == view.playerTileRow())
-                               && view.hasClearShotAt(enemy.tileColumn, enemy.tileRow);
+            boolean onLine   = view.hasClearShotAt(enemy.tileColumn, enemy.tileRow);
             if (!adjacent && !(onLine && enemy.isAlerted())) continue;
             bestDistance = distance;
             best         = enemy;
@@ -150,6 +160,28 @@ final class SimPolicySupport {
         return best;
     }
 
+    /**
+     * The closest living enemy (Chebyshev) the marine can walk to or shoot, at ANY distance — the boss-floor
+     * quarry (balance-overhaul order 7, P8). Null when none is reachable.
+     */
+    static Enemy nearestReachableEnemy(SimView view) {
+        Enemy best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (Enemy enemy : view.enemies()) {
+            if (!enemy.isAlive()) continue;
+            int distance = view.tileDistanceTo(enemy);
+            if (distance >= bestDistance) continue;
+            boolean canEngage = view.hasClearShotAt(enemy.tileColumn, enemy.tileRow)
+                    || (view.navigator() != null
+                        && view.navigator().isReachable(view.playerTileColumn(), view.playerTileRow(),
+                                                        enemy.tileColumn, enemy.tileRow));
+            if (!canEngage) continue;
+            bestDistance = distance;
+            best         = enemy;
+        }
+        return best;
+    }
+
     /** One step along the shortest walkable path to a tile, or NONE when it cannot be reached. */
     static TouchAction stepToward(SimView view, int targetColumn, int targetRow, int[] stepBuffer) {
         SimNavigator navigator = view.navigator();
@@ -158,6 +190,14 @@ final class SimPolicySupport {
                                                  targetColumn, targetRow,
                                                  view.enemyManager(), stepBuffer);
         if (!found) return TouchAction.NONE;
+        if (navigator.lastStepBlockedByEnemy()) {
+            // The only way on is through the enemy standing in it: face it, then shoot (or wait it out).
+            TouchAction turn = SimNavigator.actionToFace(view.facingStepColumn(), view.facingStepRow(),
+                                                         stepBuffer[0], stepBuffer[1]);
+            if (turn != TouchAction.NONE) return turn;
+            TouchAction gunAction = serviceWeapon(view, view.equippedWeapon());
+            return gunAction != TouchAction.NONE ? gunAction : TouchAction.SKIP_TURN;
+        }
         return SimNavigator.actionForStep(view.facingStepColumn(), view.facingStepRow(),
                                           stepBuffer[0], stepBuffer[1]);
     }

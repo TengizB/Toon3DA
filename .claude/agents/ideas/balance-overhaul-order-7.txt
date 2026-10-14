@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Meta
 TITLE: Feel Pass — tune from play notes and the simulator
 CREATED: 2026-09-30
@@ -316,6 +316,14 @@ DECISIONS
       order-9 logs are an optional extra (P10).  (2026-09-30)
   D2  Part G (ammo) and J2 (card picks) were left blank -> filled from the notes
       (Q5, Q9) and the sim's FLOOR / BUILD reports.  (2026-09-30)
+  D3  CP1 found that with navigation fixed the GAME is far out of band (TACTICAL
+      median death floor 3, 0 of 54 first-boss clears, win rate 0), so "every
+      S-band enforced and green" could not hold at CP1 without a blind sim-only
+      retune -> the navigation waiver is deleted and the bands still out of band
+      ride a narrower ROUND-PENDING waiver (BalanceSchema.waiveRoundPendingBands),
+      each line deleted the round its band is met, all expiring at CP6. A1 is
+      therefore fully met at CP6, not CP1; S-NAVIGATION (stalls < 10% of played
+      floors) is enforced from CP1.  (owner, 2026-10-14)
 
 
 OPEN QUESTIONS

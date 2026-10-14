@@ -384,6 +384,16 @@ public final class PolicySummary {
         return runs.isEmpty() ? 0f : kills / (float) runs.size();
     }
 
+    /**
+     * S-NAVIGATION (balance-overhaul order 7, P8): the share of PLAYED floors left stalled — a stalled run stalls on
+     * exactly one floor (its last), so this is stalled runs over every floor any run of this policy stood on.
+     */
+    public float stalledFloorFraction() {
+        int floors = 0;
+        for (RunLedger run : runs) floors += run.floors.size();
+        return fraction(stalledRunCount(), floors);
+    }
+
     /** Runs that could not finish a floor inside the turn cap — a policy failure, reported not hidden. */
     public int stalledRunCount() {
         int stalled = 0;

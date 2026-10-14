@@ -699,8 +699,8 @@ THE SIX RULES (enforced by BossBalance + R-BOSS-* on EVERY row):
   R6 Reward = consumption x 1.3 (at the depth's shop price level, now flat); XP from boss TP;
      pre-boss provisioning; R-BOSS-AMMO coverage >= 1.
   IN PLAY (S-BOSS, F10): per row, over TACTICAL seeds reaching it — clear rate [0.50, 0.90] (first boss
-  >= 0.75), fight-turns CoV <= 0.30, median health at the kill [0.30, 0.60]. Reported under the
-  navigation waiver: today ~12 of 200 seeds reach the first boss and none clears it.
+  >= 0.75), fight-turns CoV <= 0.30, median health at the kill [0.30, 0.60]. Since order 7 CP1
+  the sim navigates: 54 of 200 TACTICAL seeds reach the first boss and NONE clears it (round-pending waiver).
 
 Tune a boss via its BossTable row (target turns, survival ratio) — semantic dials, never raw HP. A
 dedicated final boss is a recommended follow-up (one row + an archetype). Choreography is untouched.
@@ -853,15 +853,15 @@ LEVERS THAT SURVIVE: box SIZES (LEVER 2) set the grain, reserve CAPS (LEVER 3) b
   the same plan (route-map-system.txt, "RE-DERIVED FROM THE NODE SPECS").
 
 PLAYED (S-SUPPLY / S-ECONOMY, the sim): TACTICAL leaves COMBAT floors at ~0.79 health (band 0.55-0.80),
-  no played floor is below its heal floor; the share of planned ammo picked up reads 0.57 (waived — the
-  navigator stalls with carriers alive). The sim FLOOR REPORT prints the per-generator x node breakdown.
+  no played floor is below its heal floor; the share of planned ammo picked up reads 0.53 at order 7 CP1
+  (round-pending waiver; no longer a stall artefact — TACTICAL leaves carriers and detours behind). The sim FLOOR REPORT prints the per-generator x node breakdown.
 
 CREDITS AND THE SHOP (balance-overhaul order 6, F12/F13): R-CREDITS v2 — income per floor / the NEEDED
   BUNDLE per floor (LEVEL UP rung + 1.5 consumables @ 3 PP + the region's tier step / 5 floors) in
   [1.10, 1.40] for every region (A 1.37, B 1.33, C 1.27, D 1.16, E 1.33). Price knobs re-fit:
   SHOP_CREDITS_PER_POWER_POINT 36 -> 15.5, SHOP_DEPTH_PRICE_SCALE 0.10 -> 0.0 (a credit is worth the same
   at every depth). Exactly ONE Fabricator per floor; a SHOP node has TWO (upgrade / supply biased) at
-  x0.80 prices. S-SHOP (sim): offers per visit >= 1.5 (navigation-waived, 0.70) and unspent credits at
+  x0.80 prices. S-SHOP (sim): offers per visit >= 1.5 (round-pending waiver, 1.00 at order 7 CP1) and unspent credits at
   death <= 1.5 floors of income (enforced, 0.13). Ripple: NODE_SUPPLY_CACHE_CREDITS 1.50.
 EVENTS AND MYSTERIES (F15) pay in ladder currencies — weapon levels, perk ranks, heal / armour fractions,
   credits in floors of income — never ammo boxes or flat XP; see docs/route-map-system.txt.
@@ -984,7 +984,8 @@ THE DIFFICULTY CURVE (F7): REGION_TP_BUDGET_MULTIPLIER {A 0.85, B 1.00, C 1.25, 
 THE ROUTE AUDIT (R-ROUTE-*) runs over the whole run (horizon 15 -> 25).
 RUN OUTCOME (sim, F8): TACTICAL win rate [0.20, 0.40], reaches depth 10 >= 0.60, loss depth [11, 18];
   NAIVE win rate <= 0.03, death depth [4, 8]; first boss: TACTICAL clears >= 0.75 of reaching seeds, NAIVE
-  reaches >= 0.40 and clears >= 0.15; S-SKILL gap >= 5. All navigation-waived until the policies finish floors.
+  reaches >= 0.40 and clears >= 0.15; S-SKILL gap >= 5. Order 7 CP1: the policies now finish floors (S-NAVIGATION); measured TACTICAL win rate 0, median loss
+  depth 3, 0 first-boss clears — out of band, on the round-pending waiver until the playtest rounds move it.
 
 
 ================================================================================
@@ -1150,9 +1151,10 @@ ceiling, of what needs refinement.
     perk deck and the build roll stream (GameMath.splitMix64). NOT changed (pre-existing, outside this order):
     EnemyManager's spawn / wiggle / effect streams (floor seeds differ by 1 per depth within a run) and the sim's
     TacticalPolicy tie-break Random (sequential run seeds; only affects wandering).
-25. [OPEN — order 6] Every run-outcome / boss / shop number the finite run promises (F8 win rate 20-40%, S-BOSS,
-    S-SHOP offers per visit) is REPORTED, not proven: the sim's navigation stalls on ~170/200 seeds, ~12 reach the
-    first boss, none clears it. The order-7 feel pass (or a navigation fix) is what turns them into evidence.
+25. [MEASURED — order 7 CP1, was OPEN] The run-outcome / boss / shop numbers are now EVIDENCE, not stall artefacts:
+    the navigation is fixed (TACTICAL 0 stalled runs of 200). The evidence says the game is too hard early —
+    median death floor 3, 54 seeds reach the first boss, 0 clear it, character level ~1.6 at death. Round 1 of
+    the order-7 feel pass starts from this (authority doc SECTION 8, ROUND SUMMARY).
 26. [OPEN — order 6] The route model prices a weapon level at one perk pick (12 PP of progress) and the shop sells
     it for 1.5 PP (23 credits) — deliberate (the rung is meant to be cheap) but a 20x gap the owner should know.
 27. [OWNER AWARENESS — order 6] Shop prices fell ~2.3x at depth 1 and ~5.5x at depth 25 (36 cr/PP with a +10%/floor

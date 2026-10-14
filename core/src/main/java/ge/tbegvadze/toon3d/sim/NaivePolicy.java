@@ -26,6 +26,7 @@ public final class NaivePolicy implements PlayerPolicy {
     private final int[] stepBuffer = new int[2];
     private final TravelPlanner travelPlanner = new TravelPlanner();
     private final TargetMemory  targetMemory  = new TargetMemory();
+    private final LoopBreaker   loopBreaker   = new LoopBreaker();
 
     /** Deterministic tie-breaker for the "which way now?" case; seeded per run by the simulator. */
     private final java.util.Random tieBreak;
@@ -41,6 +42,18 @@ public final class NaivePolicy implements PlayerPolicy {
 
     @Override
     public TouchAction chooseAction(SimView view) {
+        // The LoopBreaker push (balance-overhaul order 7, P8): NAIVE has no sidesteps to skip, but its CHASE can
+        // bounce between two tiles behind an enemy that keeps stepping to the diagonal — while pushing, it drops
+        // the chase and walks on, routing through whatever stands in the way.
+        boolean pushing = loopBreaker.beginTurn(view);
+        if (view.navigator() != null) view.navigator().setEnemyBlindPlanning(pushing);
+        TouchAction action = decide(view, pushing);
+        if (view.navigator() != null) view.navigator().setEnemyBlindPlanning(false);
+        loopBreaker.recordAction(action);
+        return action;
+    }
+
+    private TouchAction decide(SimView view, boolean pushing) {
         // 1. Heal only when nearly dead — the classic beginner mistake of banking medkits.
         if (view.vitalityFraction() < BalanceConfig.SIM_NAIVE_HEAL_FRACTION && view.medkitCount() > 0) {
             return TouchAction.HEAL;
@@ -55,7 +68,7 @@ public final class NaivePolicy implements PlayerPolicy {
 
         // 3. Walk at the nearest enemy it can actually reach and hit it. Chasing is this policy's
         //    defining mistake: it spends turns and health on fights it could have walked past.
-        Enemy chased = targetMemory.resolve(view);
+        Enemy chased = pushing ? null : targetMemory.resolve(view);
         if (chased != null) {
             TouchAction toward = SimPolicySupport.approachAndAttack(view, chased, stepBuffer);
             if (toward != TouchAction.NONE) return toward;

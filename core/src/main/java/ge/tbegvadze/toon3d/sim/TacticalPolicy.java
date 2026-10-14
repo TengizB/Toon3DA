@@ -50,6 +50,7 @@ public final class TacticalPolicy implements PlayerPolicy {
 
     private final int[]  stepBuffer = new int[2];
     private final TravelPlanner travelPlanner = new TravelPlanner();
+    private final LoopBreaker   loopBreaker   = new LoopBreaker();
     private final java.util.Random tieBreak;
     private final BuildBias buildBias;
 
@@ -71,11 +72,25 @@ public final class TacticalPolicy implements PlayerPolicy {
 
     @Override
     public TouchAction chooseAction(SimView view) {
+        boolean pushing = loopBreaker.beginTurn(view);
+        if (view.navigator() != null) view.navigator().setEnemyBlindPlanning(pushing);
+        TouchAction action = decide(view, pushing);
+        if (view.navigator() != null) view.navigator().setEnemyBlindPlanning(false);
+        loopBreaker.recordAction(action);
+        return action;
+    }
+
+    /**
+     * One turn's decision. {@code pushing} is the {@link LoopBreaker}'s verdict (balance-overhaul order 7, P8):
+     * while it holds, the two sidesteps (off a heavy's red floor, off a ranged lane) are skipped — they are what
+     * the walk plan kept undoing — and the walk plan fights through whatever blocks it.
+     */
+    private TouchAction decide(SimView view, boolean pushing) {
         // 0. READ THE RED FLOOR (balance-overhaul order 4, CP7b; replaces the old "guard at a fifth of what is
         //    left" trigger): a HEAVY is committed and this tile is one of its danger tiles. Answer it before
         //    anything else — a heavy is half the on-curve health pool, and a heal spent in front of it is a
         //    heal and a half-pool lost. Step off, else stagger it, else guard it.
-        TouchAction heavyAnswer = answerHeavyThreat(view);
+        TouchAction heavyAnswer = pushing ? TouchAction.NONE : answerHeavyThreat(view);
         if (heavyAnswer != TouchAction.NONE) {
             travelPlanner.interrupt();   // the walk plan is stale once a fight starts
             return heavyAnswer;
@@ -112,7 +127,7 @@ public final class TacticalPolicy implements PlayerPolicy {
         //    heavy answer at the top of this method is the guard now, and it only fires on a danger tile.)
 
         // 5. Deny the snipers their line — the cardinal-line constraint IS the counterplay.
-        if (view.standingOnARangedEnemyLine()) {
+        if (!pushing && view.standingOnARangedEnemyLine()) {
             TouchAction sidestep = SimPolicySupport.stepOffRangedLines(view);
             if (sidestep != TouchAction.NONE) return sidestep;
         }

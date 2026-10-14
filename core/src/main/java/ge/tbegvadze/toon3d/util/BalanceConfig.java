@@ -1708,6 +1708,60 @@ public final class BalanceConfig {
      * destinations; patience is what stops it committing to something it can never reach.
      */
     public static final int   SIM_GOAL_PATIENCE_TURNS = 25;
+    /**
+     * LOOP BREAKER (balance-overhaul order 7, P8). A scripted player that has bounced among at most
+     * SIM_LOOP_MAX_DISTINCT_TILES tiles for SIM_LOOP_WINDOW_TURNS turns without firing, reloading or healing is
+     * caught between two of its own rules (a dodge undone by the walk plan, a heavy that re-commits every
+     * time it steps back into the lane). It then PUSHES for SIM_LOOP_PUSH_TURNS turns: no sidestepping, the
+     * walk plan routes straight through enemies and fights whatever stands in the way — the player who notices
+     * they are going in circles and does something different. Navigation competence, never a game rule.
+     */
+    public static final int   SIM_LOOP_WINDOW_TURNS        = 16;
+    public static final int   SIM_LOOP_MAX_DISTINCT_TILES  = 4;
+    public static final int   SIM_LOOP_PUSH_TURNS          = 12;
+    /**
+     * P8 / A1 (balance-overhaul order 7): the largest share of PLAYED floors any standard policy may leave
+     * stalled (the floor's turn cap ran out before the exit). The navigation waiver this replaces existed because
+     * the share was ~85% of runs; the depth-derived bands only measure the game once it is below this.
+     */
+    public static final float SIM_MAX_STALLED_FLOOR_FRACTION = 0.10f;
+    // --- ROUND SUMMARY (balance-overhaul order 7, P3): the target metrics a playtest round reads ----------
+    // The sim half of each P3 metric, printed with an IN/OUT marker on the ROUND SUMMARY page every balanceSim
+    // run. Where a P3 band already exists as an S-band constant it is reused (S-HEAVY, S-BUILD, F8, S-SHOP,
+    // S-ECONOMY); the rest live here. A band moves only under P5 (>= 3 owner runs consistently contradicting it).
+    /** P2: minimum owner runs per playtest round (a documentary number — the rounds are run by hand). */
+    public static final int   ROUND_MIN_RUNS                     = 5;
+    /** T2: SOLDIER hits-to-kill at depths 3-5, start kit / on-curve kit, at least this (the ladder punishes lag). */
+    public static final float ROUND_T2_LAG_HITS_RATIO_MIN        = 1.5f;
+    /** T3: "floors 1-3 are full" reads COMBAT + ELITE floors at depth <= this. */
+    public static final int   ROUND_T3_EARLY_DEPTH_MAX           = 3;
+    /** T3: mean enemies a floor 1-3 spawns, at least this. */
+    public static final float ROUND_T3_MIN_ENEMIES               = 12f;
+    /** T3: median turns to the first damage exchange on floors 1-3, at most this. */
+    public static final float ROUND_T3_MAX_TURNS_TO_FIRST_EXCHANGE = 15f;
+    /** T3: mean encounter groups a floor 1-3 fields, at least this. */
+    public static final float ROUND_T3_MIN_GROUPS                = 2f;
+    /** T4: TACTICAL median COMBAT-floor exit health fraction band. */
+    public static final float ROUND_T4_EXIT_HEALTH_MIN           = 0.55f;
+    public static final float ROUND_T4_EXIT_HEALTH_MAX           = 0.80f;
+    /** T4: a "starved" death holds no heal and less than this fraction of its carried ammo caps. */
+    public static final float ROUND_T4_STARVED_AMMO_FRACTION     = 0.20f;
+    /** T4: at most this share of TACTICAL deaths may be starved deaths. */
+    public static final float ROUND_T4_MAX_STARVED_DEATH_SHARE   = 0.30f;
+    /** T6: no DamageClass may deal more than this share of TACTICAL's landed damage. */
+    public static final float ROUND_T6_MAX_CLASS_DAMAGE_SHARE    = 0.50f;
+    /** T6: hint-driven switches per hinted COMBAT floor, at least this. */
+    public static final float ROUND_T6_MIN_SWITCHES_PER_HINTED_FLOOR = 1.0f;
+    /** T7: no keystone may be more than this share of the keystones plain TACTICAL takes. */
+    public static final float ROUND_T7_MAX_KEYSTONE_SHARE        = 0.50f;
+    /** G: median reserve on leaving a COMBAT floor, per carried ammo type, as a fraction of its cap. */
+    public static final float ROUND_G_RESERVE_MIN                = 0.10f;
+    public static final float ROUND_G_RESERVE_MAX                = 0.60f;
+    /** J2: no perk may be picked on more than this share of the screens that offered it... */
+    public static final float ROUND_J2_MAX_PERK_PICK_RATE        = 0.60f;
+    /** ...counted over perks offered at least this many times (a rate on three offers is noise). */
+    public static final int   ROUND_J2_MIN_PERK_OFFERS           = 10;
+
     /** Vitality fraction at which TACTICAL breaks off a fight and heads for the stairs (no heals left). */
     public static final float SIM_TACTICAL_RETREAT_FRACTION = 0.35f;
     /** Vitality/ammo/heal fraction below which a turn counts as taken in a RESOURCE CRISIS. */
@@ -1784,9 +1838,9 @@ public final class BalanceConfig {
     // --- S-BUILD + THE BUILD REPORT (balance-overhaul order 5, A6) ----------------------------
     // Four build-biased TACTICAL variants (sim/BuildBias: CLOSE, MARKSMAN, PYRO-DEMOLITION, BULWARK) play
     // as extra matrix rows. Two claims: no bias is a trap or a must-pick in PLAY (depth spread — depth-
-    // derived, so it rides the navigation waiver that SIM_FAIR's median depth carries), and plain TACTICAL
-    // does not end every run as the same character (dominant-tag share — waived with the navigation waiver by
-    // owner ruling D7 while ~91% of sim runs never level up; its >= SIM_BUILD_MIN_SAMPLE sample line is enforced).
+    // derived; enforced since balance-overhaul order 7 fixed the sim's navigation), and plain TACTICAL
+    // does not end every run as the same character (dominant-tag share — on the order-7 round-pending waiver,
+    // a round-1 question (J2); its >= SIM_BUILD_MIN_SAMPLE sample line is enforced).
     /**
      * Seeds per build-biased variant. Equal to SIM_SEED_COUNT: the whole seven-row matrix plays in well under
      * a minute on a 4-core machine (CP6 measured), so the variants get the headline sample rather than a cut.
@@ -1800,8 +1854,8 @@ public final class BalanceConfig {
     public static final int   SIM_BUILD_MIN_SAMPLE             = 30;
     /**
      * Seeds of the dedicated plain-TACTICAL BUILD SAMPLE row (TACTICAL-BUILD-SAMPLE) the dominant-tag share is
-     * read from. Only ~10% of TACTICAL runs level up while the navigation waiver stands (CP6 measured 20 of
-     * 200), so 600 seeds give ~60 ranked runs — twice SIM_BUILD_MIN_SAMPLE. The main 200-seed rows every other
+     * read from. Order 5 sized it when only ~10% of TACTICAL runs levelled up (CP6 measured 20 of 200; order 7
+     * CP1, navigating: 278 ranked runs of 600), so 600 seeds give ~60 ranked runs at worst — twice SIM_BUILD_MIN_SAMPLE. The main 200-seed rows every other
      * band reads are untouched; the sample's first 200 seeds replay plain TACTICAL's runs exactly.
      */
     public static final int   SIM_BUILD_SAMPLE_SEED_COUNT      = 600;
@@ -3022,8 +3076,8 @@ public final class BalanceConfig {
     public static final float   BOSS_FIGHT_TURNS_TOLERANCE     = 0.25f;
 
     // --- RUN-OUTCOME BANDS (F8; sim/BehavioralBands S-FAIR + S-SKILL). They REPLACE S-FAIR's TACTICAL median
-    // death depth [8, 14]. Depth-derived, so they ride the navigation waiver until the scripted policies finish
-    // >90% of floors (BalanceSchema.waiveNavigationLimitedBands) — reported every run, enforced the day it expires.
+    // death depth [8, 14]. Depth-derived. The navigation waiver they rode is DELETED (balance-overhaul order 7: S-NAVIGATION enforced);
+    // lines still out of band ride BalanceSchema.waiveRoundPendingBands until a playtest round meets them.
     /** F8: TACTICAL win rate (clears the depth-RUN_FINAL_DEPTH boss) band. Range: 0.20–0.40. */
     public static final float SIM_TACTICAL_WIN_RATE_MIN          = 0.20f;
     public static final float SIM_TACTICAL_WIN_RATE_MAX          = 0.40f;

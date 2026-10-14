@@ -43,6 +43,17 @@ final class TravelPlanner {
     TouchAction travel(SimView view, boolean collectSupplies, int[] stepBuffer) {
         forgetPreviousFloor(view);
 
+        // A floor with no stairs yet is a boss floor whose exit opens on the kill (BossFloorController): the
+        // way out IS the boss, so go and fight it (balance-overhaul order 7, P8 — the policies used to wander
+        // the arena until the turn cap, which is why the simulator never reported a boss clear).
+        if (view.exitTile() == null) {
+            ge.tbegvadze.toon3d.enemy.Enemy quarry = SimPolicySupport.nearestReachableEnemy(view);
+            if (quarry != null) {
+                TouchAction hunt = SimPolicySupport.approachAndAttack(view, quarry, stepBuffer);
+                if (hunt != TouchAction.NONE) return hunt;
+            }
+        }
+
         for (int attempt = 0; attempt <= 3; attempt++) {
             if (!holdsUsableGoal(view)) {
                 chooseGoal(view, collectSupplies);

@@ -45,7 +45,10 @@ class BalanceSimTest {
         try {
             List<RuleResult> bandResults = BehavioralBands.evaluate(playedMatrix);
             // Balance-overhaul order 1: the LADDER REPORT (played probes at every depth) rides along as OUTPUT.
-            String reportText = SimReport.render(playedMatrix, bandResults) + '\n' + LadderReport.run().render();
+            // Balance-overhaul order 7 (A4): the ROUND SUMMARY page leads — a playtest round's analysis starts there.
+            LadderReport ladder = LadderReport.run();
+            String reportText = RoundSummary.render(playedMatrix, bandResults, ladder) + '\n'
+                    + SimReport.render(playedMatrix, bandResults) + '\n' + ladder.render();
             Path written = SimReport.write(Path.of("").toAbsolutePath(), reportText);
             System.out.println("balance-sim report: " + written);
             System.out.println(reportText);
@@ -83,8 +86,8 @@ class BalanceSimTest {
     /**
      * S-FAIR — THE RUN OUTCOME of the finite 25-floor run (balance-overhaul order 6, F8: win rates, reach, loss
      * depths, the first boss; replaces the TACTICAL median-death-depth band) and deaths the player could see coming.
-     * All eight run-outcome lines are reported; only they may ride the navigation waiver — readable deaths may not
-     * be waived for any other reason than the one it already carries. A2(b): no ledger ever holds a floor past the
+     * All eight run-outcome lines are reported; out-of-band ones ride the order-7 round-pending waiver until a
+     * playtest round meets them (balance-overhaul order 7 deleted the navigation waiver). A2(b): no ledger ever holds a floor past the
      * run-final depth, and every VICTORY ended on it.
      */
     @Test
@@ -141,11 +144,14 @@ class BalanceSimTest {
 
     /**
      * S-LAG (balance-overhaul order 1) — a run whose weapon never climbs the power ladder ends early: the
-     * start-weapon hoarder's median death depth is at most SIM_LAG_MAX_MEDIAN_DEPTH (navigation waiver applies).
+     * start-weapon hoarder's median death depth is at most SIM_LAG_MAX_MEDIAN_DEPTH. Enforced since balance-overhaul
+     * order 7 (navigation fixed) and never waived.
      */
     @Test
     void aWeaponThatNeverClimbsTheLadderEndsTheRunEarly() {
-        assertBandsHold(bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_LAG));
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_LAG);
+        assertTrue(results.stream().noneMatch(result -> result.waived), "S-LAG is no longer waived (order 7)");
+        assertBandsHold(results);
     }
 
     /**
@@ -175,46 +181,57 @@ class BalanceSimTest {
 
     /**
      * S-BUILD (balance-overhaul order 5, A6) — the four build-biased TACTICAL variants reach median depths within
-     * SIM_BUILD_DEPTH_SPREAD of each other (depth-derived: reported under the navigation waiver until it expires),
+     * SIM_BUILD_DEPTH_SPREAD of each other (depth-derived; enforced since balance-overhaul order 7),
      * and plain TACTICAL's end-of-run dominant tag is no single tag on more than SIM_BUILD_MAX_DOMINANT_TAG_SHARE
      * of its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank, read from the 600-seed
-     * TACTICAL-BUILD-SAMPLE row). The depth spread and the dominant-tag share ride the navigation waiver (the share
-     * by owner ruling D7); the sample line is never waived.
+     * TACTICAL-BUILD-SAMPLE row). Only the dominant-tag share may be waived (the order-7 round-pending waiver,
+     * a round-1 J2 question); the depth spread and the sample line are enforced.
      */
     @Test
     void buildBiasesStayCloseAndNoTagDominates() {
         List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_BUILD);
         assertEquals(3, results.size(), "S-BUILD evaluates the depth spread, the TACTICAL sample and the dominant-tag share");
-        java.util.Set<String> waivable = java.util.Set.of("build-bias median depth spread", "TACTICAL dominant-tag share");
-        assertTrue(results.stream().filter(result -> !waivable.contains(result.subject))
-                        .noneMatch(result -> result.waived), "only the depth spread and the dominant-tag share may be waived (D7)");
+        assertTrue(results.stream().filter(result -> !result.subject.equals("TACTICAL dominant-tag share"))
+                        .noneMatch(result -> result.waived), "only the dominant-tag share may be waived (order 7)");
         assertBandsHold(results);
     }
 
     /**
      * S-SHOP (balance-overhaul order 6, F14) — the shop is a place to spend: TACTICAL buys at least 1.5 offers per
-     * Fabricator visit (navigation-limited: its income is the supply it collects — reported under the navigation
-     * waiver until it expires) and dies holding at most 1.5 floors of income (never waived).
+     * Fabricator visit (on the order-7 round-pending waiver until a round meets it) and dies holding at most 1.5 floors of income (never waived).
      */
     @Test
     void tacticalSpendsAtTheShop() {
         List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_SHOP);
         assertEquals(2, results.size(), "S-SHOP evaluates offers per visit and unspent credits at death");
         assertTrue(results.stream().filter(result -> !result.subject.equals("TACTICAL offers bought per Fabricator visit"))
-                        .noneMatch(result -> result.waived), "only the navigation-limited offers line may be waived");
+                        .noneMatch(result -> result.waived), "only the round-pending offers line may be waived");
         assertBandsHold(results);
     }
 
     /**
      * S-BOSS (balance-overhaul order 6, F10) — every boss is consistent: per BossTable row, over the TACTICAL seeds
      * that reach it, a clear rate in [0.50, 0.90] (the first boss >= 0.75), a fight-length CoV <= 0.30 and a median
-     * health at the kill in [0.30, 0.60]. Three lines per row, all depth-derived (navigation waiver until it expires).
+     * health at the kill in [0.30, 0.60]. Three lines per row, all depth-derived (order-7 round-pending waiver until a round meets them).
      */
     @Test
     void everyBossIsAConsistentFight() {
         List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_BOSS);
         assertEquals(3 * BalanceConfig.BOSS_TABLE_DEPTHS.length, results.size(),
                 "S-BOSS reports clear rate, fight-turns CoV and health at the kill for every BossTable row");
+        assertBandsHold(results);
+    }
+
+    /**
+     * S-NAVIGATION (balance-overhaul order 7, P8 / A1) — every policy in the matrix finishes the floors it plays:
+     * at most SIM_MAX_STALLED_FLOOR_FRACTION of its played floors may run the turn cap out. One line per policy,
+     * never waived — every depth-derived band stands on it.
+     */
+    @Test
+    void scriptedPlayersFinishTheFloorsTheyPlay() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_NAVIGATION);
+        assertEquals(matrix().size(), results.size(), "S-NAVIGATION reports one stalled-floor line per policy");
+        assertTrue(results.stream().noneMatch(result -> result.waived), "S-NAVIGATION is never waived");
         assertBandsHold(results);
     }
 
@@ -232,9 +249,9 @@ class BalanceSimTest {
      * the sabotaged one measurably out-fights it.
      *
      * <p>The stronger claim ("S-GATE turns RED under sabotage") needs the sabotaged runs to actually
-     * finish a boss fight. They do not yet: the scripted policies stall on most generated floors and
-     * every simulated boss floor currently runs its turn cap out, so that assertion would be checking
-     * the harness's pathing rather than the game's balance. This test therefore asserts what it can
+     * clear a boss. Since balance-overhaul order 7 the policies finish their floors and fight the boss, but
+     * no policy clears the first boss yet (the round-pending S-BOSS state), so that assertion would still
+     * be checking an out-of-band game rather than the gate. This test therefore asserts what it can
      * honestly measure today and reports the rest; see the CHANGE PROTOCOL notes in
      * docs/game-balance-authority.txt.
      */

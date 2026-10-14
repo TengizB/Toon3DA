@@ -196,6 +196,11 @@ public final class BalanceSchema {
         SIM_SUPPLY,
         /** S-SOFTLOCK (order 9): zero seeds end in a "cannot damage anything" state. */
         SIM_SOFTLOCK,
+        /**
+         * S-NAVIGATION (balance-overhaul order 7, P8): every policy leaves at most SIM_MAX_STALLED_FLOOR_FRACTION of
+         * its played floors stalled. Never waived — it is what the depth-derived bands stand on.
+         */
+        SIM_NAVIGATION,
         /** S-LAG (balance-overhaul order 1): the start-weapon hoarder dies by SIM_LAG_MAX_MEDIAN_DEPTH (median). */
         SIM_LAG,
         /**
@@ -211,10 +216,10 @@ public final class BalanceSchema {
         SIM_HEAVY,
         /**
          * S-BUILD (balance-overhaul order 5, A6): the four build-biased TACTICAL variants' median death depths
-         * within SIM_BUILD_DEPTH_SPREAD of each other (depth-derived: rides the navigation waiver), and plain
+         * within SIM_BUILD_DEPTH_SPREAD of each other (depth-derived; enforced since balance-overhaul order 7), and plain
          * TACTICAL's end-of-run dominant tag is no single tag on more than SIM_BUILD_MAX_DOMINANT_TAG_SHARE of
          * its runs (over at least SIM_BUILD_MIN_SAMPLE runs that held a perk rank). The depth-spread and dominant-tag
-         * lines ride the navigation waiver (the latter by owner ruling D7); the sample line is never waived.
+         * share rides the order-7 round-pending waiver; the sample line is never waived.
          */
         SIM_BUILD,
         /**
@@ -227,7 +232,7 @@ public final class BalanceSchema {
          * S-BOSS (balance-overhaul order 6, F10): for every BossTable row, over the TACTICAL seeds that REACH it — the
          * clear rate in [SIM_BOSS_CLEAR_RATE_MIN, MAX] (the first boss at least SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN),
          * the fight-length coefficient of variation <= SIM_BOSS_MAX_FIGHT_TURNS_COV, and the median player health
-         * fraction at the kill in [SIM_BOSS_KILL_HEALTH_MIN, MAX]. Depth-derived: rides the navigation waiver.
+         * fraction at the kill in [SIM_BOSS_KILL_HEALTH_MIN, MAX]. Depth-derived: rides the order-7 round-pending waiver until a round meets it.
          */
         SIM_BOSS
     }
@@ -309,7 +314,7 @@ public final class BalanceSchema {
         // The Railgun's [WEAPON_POWER] "scarcity-gated over-band" waiver was DELETED by balance-overhaul
         // order 3 (AS8): R-WEAPON is retired and the Railgun is governed by R-ROLE (the PLATED niche plus
         // its own ammo-feasibility check, R-ROLE-5).
-        waiveNavigationLimitedBands();
+        waiveRoundPendingBands();
         // Balance-overhaul order 2 (CP6): the route ledger is now priced on what each floor is BUILT with
         // (its NodeSupplySpec plan). The old ledger credited the bespoke MED-BAY and EVENT rooms with 35% of
         // a combat floor's ordinary loot they never placed; priced honestly, REST sits below the calm band
@@ -355,53 +360,35 @@ public final class BalanceSchema {
     }
 
     /**
-     * The order-9 behavioural bands whose measurement currently depends on the SCRIPTED PLAYER's
-     * pathing competence rather than on the game's balance. The simulator plays the real systems, but
-     * its heuristic navigation still fails to finish a sizeable share of generated floors (it runs the
-     * floor's turn cap out instead of reaching the stairs), which drags every depth-derived statistic
-     * down. Waiving them keeps the numbers VISIBLE in every report while being honest that they do not
-     * yet measure what they claim to; S-GATE and S-SOFTLOCK are unaffected and stay enforced.
+     * ROUND-PENDING waivers (balance-overhaul order 7, CP1 — owner decision 2026-10-14). They REPLACE the order-9
+     * navigation waiver, which is deleted: the scripted policies now finish their floors (S-NAVIGATION, enforced),
+     * so these bands finally measure the GAME — and the game, measured, is out of band (TACTICAL median death on
+     * floor 3, 0 first-boss clears of 54 reached, win rate 0). Bringing it into band is the job of the order's
+     * playtest rounds (owner PLAY NOTES + the sim, at most ~5 master knobs a round, P5/P6), not of a blind sim-only
+     * retune before the owner has played. Narrower than the waiver it replaces: S-LAG and S-BUILD's depth spread
+     * are in band now and are ENFORCED. Each line is deleted the round its band is met; all expire at CP6.
      */
-    private static void waiveNavigationLimitedBands() {
-        String reason = "Measures the scripted policy's floor-completion rate, not the game's balance: "
-                + "the order-9 navigation heuristic still stalls on a large share of generated floors, "
-                + "so every depth-derived statistic reads low.";
-        String expiry = "Expires when the balance simulator's scripted policies reach the exit on >90% "
-                + "of floors (BalanceSimTest reports the stall rate on every run).";
-        // Balance-overhaul order 6 (F8): the run-outcome lines that replaced "TACTICAL median death depth" are all
-        // depth-derived and inherit this waiver and expiry (A6: reported until it expires, then enforced).
+    private static void waiveRoundPendingBands() {
+        String reason = "Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL "
+                + "median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds "
+                + "(owner PLAY NOTES + sim), not by a blind sim-only retune.";
+        String expiry = "Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; "
+                + "any line still out of band after round 3 goes to the follow-up idea request with its evidence.";
         waive(RuleKind.SIM_FAIR,    "TACTICAL win rate",            reason, expiry);
         waive(RuleKind.SIM_FAIR,    "TACTICAL reaches depth " + BalanceConfig.SIM_TACTICAL_REACH_DEPTH, reason, expiry);
         waive(RuleKind.SIM_FAIR,    "TACTICAL median death depth (losses)", reason, expiry);
-        waive(RuleKind.SIM_FAIR,    "NAIVE win rate",               reason, expiry);
-        waive(RuleKind.SIM_FAIR,    "NAIVE median death depth",     reason, expiry);
         waive(RuleKind.SIM_FAIR,    "TACTICAL first-boss clears (of seeds reaching it)", reason, expiry);
+        waive(RuleKind.SIM_FAIR,    "NAIVE median death depth",     reason, expiry);
         waive(RuleKind.SIM_FAIR,    "NAIVE reaches the first boss", reason, expiry);
         waive(RuleKind.SIM_FAIR,    "NAIVE first-boss clears",      reason, expiry);
-        waive(RuleKind.SIM_FAIR,    "TACTICAL readable deaths",    reason, expiry);
         waive(RuleKind.SIM_SKILL,   "TACTICAL vs NAIVE depth gap", reason, expiry);
-        waive(RuleKind.SIM_ROUTE,   "played per-floor net drain",  reason, expiry);
         waive(RuleKind.SIM_ECONOMY, "experienced vs planned supply", reason, expiry);
         waive(RuleKind.SIM_ECONOMY, "emergency lifeline floors",   reason, expiry);
-        // S-LAG (balance-overhaul order 1) inherits this waiver and its expiry: a hoarder that STALLS on
-        // floor 1 reads as "dies early" for navigation reasons, so the band is reported but not yet a
-        // statement about the ladder. R-LADDER L2 proves the same property on paper meanwhile.
-        waive(RuleKind.SIM_LAG,     "HOARDER-START-WEAPON median death depth", reason, expiry);
-        // S-BUILD's depth part (balance-overhaul order 5, A6) is depth-derived too: it inherits this exact waiver
-        // and expiry, and is enforced the day SIM_FAIR's median depth is.
-        waive(RuleKind.SIM_BUILD,   "build-bias median depth spread", reason, expiry);
-        // Owner ruling D7 (balance-overhaul order 5): the dominant-tag share inherits the same waiver and expiry —
-        // ~91% of sim runs never level up and every ranked run holds exactly one rank, so the "dominant tag" is the
-        // first synergy pick off the Chaingun + Shotgun start kit (measured 0.47, MARKSMAN 23 of 49). The sample
-        // line ("TACTICAL runs holding a perk rank") stays ENFORCED.
-        waive(RuleKind.SIM_BUILD,   "TACTICAL dominant-tag share", reason, expiry);
-        // S-SHOP (balance-overhaul order 6, F14): buys per visit are bounded by the credits a run COLLECTS, and the
-        // stalling policy picks up under half its planned supply (S-ECONOMY) — measured 0.64 offers per visit with
-        // a median 0.13 floors of income left unspent at death, i.e. it spends everything it has. Same waiver and
-        // expiry; the unspent-credits line stays ENFORCED.
         waive(RuleKind.SIM_SHOP,    "TACTICAL offers bought per Fabricator visit", reason, expiry);
-        // S-BOSS (balance-overhaul order 6, F10) is measured on the seeds that REACH each boss, and almost none do
-        // while the navigation stalls (the first boss: ~12 of 200, none cleared) — every line inherits the waiver.
+        // Owner ruling D7 (order 5) tied the dominant-tag share to the old waiver; with the runs now playing whole
+        // floors the share reads 0.47 over 278 ranked runs — still the first synergy pick off the start kit, still
+        // a round-1 question (J2 perk picks), so it moves to this waiver rather than being enforced red.
+        waive(RuleKind.SIM_BUILD,   "TACTICAL dominant-tag share", reason, expiry);
         for (int depth : BalanceConfig.BOSS_TABLE_DEPTHS) {
             waive(RuleKind.SIM_BOSS, "boss depth " + depth + " TACTICAL clear rate", reason, expiry);
             waive(RuleKind.SIM_BOSS, "boss depth " + depth + " fight turns CoV", reason, expiry);
