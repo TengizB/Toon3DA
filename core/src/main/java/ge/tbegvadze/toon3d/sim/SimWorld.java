@@ -686,6 +686,7 @@ public final class SimWorld implements LevelTransitionListener {
         floorLedger.enemiesLeftAlive = countLiveEnemies();
         floorLedger.exited           = descentRequested;
         floorLedger.healthFractionOnExit = healthFraction();
+        recordAmmoReserveFractions();
         if (floorBoss != null) floorLedger.bossKilled = !floorBoss.isAlive();
         if (floorLedger.bossFloor && floorLedger.bossKilled
                 && currentDepth == Constants.BOSS_FLOOR_INTERVAL) {
@@ -1057,6 +1058,7 @@ public final class SimWorld implements LevelTransitionListener {
 
     private void recordDeath(boolean threatWasTelegraphed, boolean inResourceCrisis) {
         floorLedger.diedWithNoHealsHeld = view.medkitCount() == 0;
+        floorLedger.ammoHeldFractionAtDeath = carriedAmmoHeldFraction();
         ledger.ending                      = RunLedger.Ending.KILLED;
         ledger.endingDepth                 = currentDepth;
         ledger.deathWasTelegraphed         = threatWasTelegraphed;
@@ -1089,6 +1091,38 @@ public final class SimWorld implements LevelTransitionListener {
             demand += enemy.maxHealth;
         }
         return demand;
+    }
+
+    /** True when a gun in the loadout fires this ammo type. */
+    private boolean isAmmoTypeCarried(AmmoType ammoType) {
+        Loadout loadout = inventory.getLoadout();
+        for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+            Weapon weapon = loadout.getSlot(slotIndex);
+            if (weapon != null && weapon.getAmmoType() == ammoType) return true;
+        }
+        return false;
+    }
+
+    /** ROUND SUMMARY G: each carried type's reserve as a fraction of its cap; NaN for a type nothing fires. */
+    private void recordAmmoReserveFractions() {
+        for (AmmoType ammoType : AmmoType.values()) {
+            floorLedger.ammoReserveFractionOnExit[ammoType.ordinal()] =
+                    isAmmoTypeCarried(ammoType) && ammoType.getReserveCap() > 0
+                            ? itemInventory.countOf(ammoType.getItemType()) / (float) ammoType.getReserveCap()
+                            : Float.NaN;
+        }
+    }
+
+    /** ROUND SUMMARY T4: the reserve held across every carried ammo type, over their summed caps (0 when none). */
+    private float carriedAmmoHeldFraction() {
+        int held = 0;
+        int cap  = 0;
+        for (AmmoType ammoType : AmmoType.values()) {
+            if (!isAmmoTypeCarried(ammoType)) continue;
+            held += itemInventory.countOf(ammoType.getItemType());
+            cap  += ammoType.getReserveCap();
+        }
+        return cap > 0 ? held / (float) cap : 0f;
     }
 
     private int countAllAmmo() {
@@ -1228,8 +1262,16 @@ public final class SimWorld implements LevelTransitionListener {
         if (playerController != null) playerController.setSwitchHintWeapon(hint);
     }
 
-    /** The stairs-down tile of the current floor as {column, row}, or null when the floor has none. */
-    int[] exitTile() { return exitTile; }
+    /**
+     * The stairs-down tile of the current floor as {column, row}, or null when the floor has none YET. A boss
+     * floor's stairs are walled up by {@code BossFloorController} until the boss dies and restored on the kill,
+     * so a floor built without an exit is re-scanned until one appears (balance-overhaul order 7, P8: the
+     * cached null used to outlive the boss, and a cleared boss floor stalled at its turn cap).
+     */
+    int[] exitTile() {
+        if (exitTile == null && level != null) exitTile = locateExitTile(level);
+        return exitTile;
+    }
 
     private static int[] locateExitTile(Level level) {
         for (int tileRow = 0; tileRow < level.getHeight(); tileRow++) {

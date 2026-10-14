@@ -140,6 +140,14 @@ public final class FloorLedger {
     /** True when the player died on this floor holding no medkit at all. */
     public boolean diedWithNoHealsHeld;
 
+    /**
+     * ROUND SUMMARY (balance-overhaul order 7, P3 T4 / G): reserve ammo held when the player left (or died on) the
+     * floor, as a fraction of AmmoType.getReserveCap(), per AmmoType ordinal — NaN for a type no carried gun fires.
+     */
+    public final float[] ammoReserveFractionOnExit = new float[ge.tbegvadze.toon3d.item.AmmoType.values().length];
+    /** Reserve held across every CARRIED ammo type at death as a fraction of their summed caps (NaN: no death here). */
+    public float ammoHeldFractionAtDeath = Float.NaN;
+
     /** Whether the floor carried its S4 heal floor reachable without a keycard (exempt floors: true). */
     public boolean healFloorMet() {
         return healFloorFraction <= 0f || reachableHealValue + 1e-3f >= healFloorFraction;

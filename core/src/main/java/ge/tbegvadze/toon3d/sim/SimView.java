@@ -116,20 +116,40 @@ public final class SimView {
         return itemInventory.countOf(ammoType.getItemType());
     }
 
-    /** True when the equipped weapon has neither a loaded round nor a reserve to reload from. */
+    /**
+     * True when the equipped weapon can neither fire nor reload. Balance-overhaul order 7 (P8): "an empty
+     * clip and an empty reserve" was the old test, and it missed the gun a burst weapon leaves behind — a
+     * Chaingun holding fewer rounds than one burst and nothing to reload from cannot fire again, yet read as
+     * armed, so the policy kept it in hand and turned back and forth in front of every enemy for the rest of
+     * the floor.
+     */
     public boolean equippedWeaponIsDry() {
         Weapon weapon = equippedWeapon();
         if (weapon == null) return true;
-        if (weapon.getAmmoType() == null) return false;    // melee never runs dry
-        return weapon.getShotsInClip() <= 0 && reserveAmmoForEquipped() <= 0;
+        return !isWeaponUsable(weapon);
     }
 
-    /** The loaded+reserve rounds for a specific slot's weapon — used when deciding to switch guns. */
+    /** The loaded+reserve rounds for a specific slot's weapon — 0 for a gun that can never fire again. */
     public int roundsAvailableFor(Weapon weapon) {
         if (weapon == null) return 0;
         AmmoType ammoType = weapon.getAmmoType();
         if (ammoType == null) return Integer.MAX_VALUE;     // melee: always "available"
+        if (!isWeaponUsable(weapon)) return 0;
         return weapon.getShotsInClip() + itemInventory.countOf(ammoType.getItemType());
+    }
+
+    /**
+     * True when the weapon can fire now, is mid-reload, or can start a reload (a free clip slot and a
+     * reserve behind it). Melee never runs dry. Reads the weapon's own {@link Weapon#canFire()}, so a
+     * per-weapon firing rule (the Chaingun's whole-burst minimum) is honoured without the sim restating it.
+     */
+    public boolean isWeaponUsable(Weapon weapon) {
+        if (weapon == null) return false;
+        AmmoType ammoType = weapon.getAmmoType();
+        if (ammoType == null) return true;
+        if (weapon.canFire() || weapon.isReloading()) return true;
+        return weapon.getShotsInClip() < weapon.getEffectiveClipSize()
+               && itemInventory.countOf(ammoType.getItemType()) > 0;
     }
 
     // -------------------------------------------------------------------------

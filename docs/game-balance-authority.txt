@@ -648,8 +648,8 @@ R-CREDITS v2 (RuleKind.CREDITS) — the shop is a place to SPEND (balance-overha
   rows fell behind COMBAT — NODE_SUPPLY_CACHE_CREDITS 1.20 -> 1.50 (R-CALM-COST cache 0.40 at d25) and
   AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES 1 -> 2 (R-RISK-PREMIUM 0.999 at d16). The MYSTERY table (0.82x
   COMBAT at d25) carries a waiver that expires at CP6, which re-derives R-MYSTERY-EV (F15).
-  S-SHOP (sim, F14; RuleKind.SIM_SHOP): TACTICAL buys >= 1.5 offers per Fabricator visit (navigation-
-  waived: measured 0.64 because a stalling run collects < half its supply) and dies holding <= 1.5
+  S-SHOP (sim, F14; RuleKind.SIM_SHOP): TACTICAL buys >= 1.5 offers per Fabricator visit (round-pending
+  waiver since order 7 CP1: measured 1.00 with navigation fixed; was 0.64 while runs stalled) and dies holding <= 1.5
   floors of income (ENFORCED; measured 0.13 — it spends everything it collects).
 
 R-BOSS-* (RuleKind.BOSS_GATE / BOSS_FAIR / BOSS_VERB_CAP / BOSS_REWARD / BOSS_AMMO) — bosses as BUILD CHECKS (order 6)
@@ -910,10 +910,11 @@ NEVER-SOFTLOCK (GameMath.emergencySupplyTriggers, not a schema band — a floor 
 
 S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   S-LAG: HOARDER-START-WEAPON's median death depth <= SIM_LAG_MAX_MEDIAN_DEPTH (6) — a weapon
-  that never climbs the ladder ends the run early. Reported every balanceSim run; WAIVED under
-  the navigation-limited waiver (SECTION 4), whose expiry it inherits.
+  that never climbs the ladder ends the run early. Reported every balanceSim run; ENFORCED since
+  balance-overhaul order 7 deleted the navigation waiver (measured 3.0 at CP1).
   THE LADDER REPORT (sim/LadderReport, printed under the bands, OUTPUT not an assertion): the
-  ordinary matrix stalls on the first floors, so the report plays one-floor PROBES started at
+  ordinary matrix stalled on the first floors when it was built (fixed by order 7), and a probe
+  still isolates the ladder from the route, so the report plays one-floor PROBES started at
   every depth 1..25 (SimSettings.ladderProbe, SIM_LADDER_PROBE_SEEDS_PER_DEPTH seeds per kit):
   TACTICAL with the ON-CURVE kit (guns at the floor's level, the region's lowest drop tier) and
   HOARDER-START-WEAPON with the START kit (L1 COMMON), both on the on-curve character (vitality
@@ -961,8 +962,8 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
                           rule; a tag preference there would move S-SWITCH / S-HEAVY). SIM_BUILD_SEED_COUNT
                           (200) seeds each. Plain TACTICAL's perk pick is synergy first, then most-ranked tag.
     TACTICAL-BUILD-SAMPLE plain TACTICAL over SIM_BUILD_SAMPLE_SEED_COUNT (600) seeds — S-BUILD's dominant-tag
-                          run set. Only ~8-10% of TACTICAL runs level up while the navigation waiver stands
-                          (20 of 200), so the 200-seed row cannot reach the 30-run sample; this row does (49).
+                          run set. Sized when only ~8-10% of TACTICAL runs levelled up (order 5: 20 of 200;
+                          49 ranked of 600); with navigation fixed (order 7 CP1) 278 of 600 end ranked.
                           Its first 200 seeds replay plain TACTICAL exactly; no other band reads it.
 
   S-GATE      HOARDER-START-WEAPON clears the FIRST boss on 0% of seeds. The headline
@@ -975,8 +976,8 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               median death depth over its LOSSES in [11, 18]; NAIVE win rate <= 0.03; NAIVE median death
               depth in [4, 8]; FIRST BOSS: TACTICAL clears it on >= 0.75 of the seeds that reach it,
               NAIVE reaches it on >= 0.40 and clears it on >= 0.15 of all seeds (SECTION 25). All eight
-              are depth-derived and ride the navigation waiver (A6: reported every run, enforced when
-              it expires). Unchanged: >= 90% of deaths preceded either by a COMMITTED enemy intent (the
+              are depth-derived. The navigation waiver is DELETED (order 7 CP1); the seven lines still
+              out of band (all but NAIVE win rate) ride the round-pending waiver (SECTION 4). Unchanged: >= 90% of deaths preceded either by a COMMITTED enemy intent (the
               hit was shown before it landed) or by a sub-25% resource state (the player walked in
               weak). WHY: a death must feel like "I made a mistake", never a dice roll; and a finite
               run must be WON by a prepared player sometimes, never always.
@@ -998,8 +999,8 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               balance-overhaul order 4, see below], and ZERO played floors
               hold less reachable heal value than their S4 heal floor. WHY (AS2): "usually full
               HP" was the complaint — a normal floor should cost something; REST and CACHE are
-              where HP comes back. NOT waived: it reads exited floors only, so the navigation stall
-              shrinks its sample but does not bias it.
+              where HP comes back. NOT waived: it reads exited floors only (and since order 7 almost
+              every played floor is exited).
               OVERRIDE (balance-overhaul order 4 CP7b, hub decision): MAX 0.80 -> 0.90. Old rule: a
               competent player leaves a COMBAT floor at <= 0.80 HP. New rule: <= 0.90. Why: TACTICAL now
               answers ~0.99 of heavies (S-HEAVY), which removed the half-pool hits that were the floor's
@@ -1059,19 +1060,20 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               NAIVE is unchanged and ignores telegraphs. HOARDER inherits TACTICAL's answer.
   S-BUILD     (balance-overhaul order 5, A6) — BUILDS DIFFER IN PLAY. Three lines:
               (1) DEPTH SPREAD: the four build-biased variants' median death depths satisfy max / min <=
-              1 + SIM_BUILD_DEPTH_SPREAD (1.25) — no bias is a trap or a must-pick. Depth-derived: it
-              carries the navigation waiver (same reason and expiry as SIM_FAIR's median depth).
+              1 + SIM_BUILD_DEPTH_SPREAD (1.25) — no bias is a trap or a must-pick. Depth-derived: ENFORCED
+              since order 7 CP1 (navigation fixed; measured 1.00, every variant median 3.0).
               (2) SAMPLE (ENFORCED, never waived): the TACTICAL-BUILD-SAMPLE row has >= SIM_BUILD_MIN_SAMPLE
               (30) runs that ended holding a perk rank, so (3) is never read off an empty sample.
               (3) DOMINANT TAG: over those runs, no single BuildTag is the end-of-run dominant tag
               (PlayerBuild.highestRankTag; ties keep the earliest tag, counted in the report) on more than
-              SIM_BUILD_MAX_DOMINANT_TAG_SHARE (0.40) of them. WAIVED by owner ruling D7 (2026-10-11) under
-              the same navigation waiver and expiry: measured 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 / ENERGY 6 /
+              SIM_BUILD_MAX_DOMINANT_TAG_SHARE (0.40) of them. WAIVED by owner ruling D7 (2026-10-11), moved to
+              the order-7 round-pending waiver at CP1 (still 0.47, MARKSMAN 130 / CLOSE_QUARTERS 111 of 278 ranked
+              runs — a round-1 J2 question). Order-5 measurement: 0.47 (MARKSMAN 23 / CLOSE_QUARTERS 17 / ENERGY 6 /
               PYRO 1 / DEMOLITION 1 / VITALITY 1 of 49 ranked runs, 600 seeds) because ~91% of sim runs never
               level up and every ranked run holds exactly ONE rank, so "dominant tag" is just the first
-              synergy pick off the Chaingun (MARKSMAN) + Shotgun (CLOSE_QUARTERS) start kit. Enforced again
-              when the navigation waiver expires.
-              HONEST CAVEAT: while the navigation waiver stands, only ~8-10% of runs level up at all, NO
+              synergy pick off the Chaingun (MARKSMAN) + Shotgun (CLOSE_QUARTERS) start kit. Enforced
+              when a playtest round meets it.
+              HONEST CAVEAT (order 5; order 7 CP1: ~46% of runs now end ranked, still no keystone taken): only ~8-10% of runs level up at all, NO
               keystone is ever offered in the sim (no run reaches level 5), and the four biased variants
               play identical depths (median 2.0, ~175/200 stalled, mean level 1.10) — S-BUILD measures the
               first perk pick and nothing deeper. R-PERK / R-KEYSTONE / R-CARRY carry the build claim on
@@ -1104,9 +1106,21 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               TACTICAL seeds that REACH it: clear rate in [SIM_BOSS_CLEAR_RATE_MIN 0.50, MAX 0.90] (the first boss
               >= SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN 0.75), fight-turns coefficient of variation (first exchange ->
               kill) <= SIM_BOSS_MAX_FIGHT_TURNS_COV 0.30, median health fraction at the kill in [0.30, 0.60];
-              CoV / health need >= SIM_BOSS_MIN_SAMPLE 10 kills. Fifteen lines, all depth-derived, all riding
-              the navigation waiver (measured: 12 seeds reach depth 5, 0 clear). WHY: "bosses are sometimes OK,
+              CoV / health need >= SIM_BOSS_MIN_SAMPLE 10 kills. Fifteen lines, all depth-derived, riding the
+              order-7 round-pending waiver (CP1, navigation fixed: 54 seeds reach depth 5, 0 clear). WHY: "bosses are sometimes OK,
               sometimes too hard, sometimes too easy" (owner) — consistency is a played property.
+  S-NAVIGATION (NEW, balance-overhaul order 7 CP1, P8; RuleKind.SIM_NAVIGATION) — one line per policy in the
+              matrix: at most SIM_MAX_STALLED_FLOOR_FRACTION (0.10) of the floors it PLAYED may run the turn cap
+              out. NEVER waived: every depth-derived band stands on it. It replaced the order-9 navigation waiver.
+              Measured at CP1: TACTICAL 0.00 (0 of 200 runs), HOARDER 0.00, NAIVE 0.03 (10 runs — its chase).
+              WHY a band, not a test detail: the navigation waiver let the sim report "median death floor 2"
+              for two whole series while measuring its own pathing. The fixes (all in sim/, never game rules):
+              no facing a DIAGONAL threat (it can never be faced — the largest single stall); a burst gun below
+              one burst with no reserve counts as DRY; never turn toward a threat the gun cannot answer; plan
+              THROUGH a sleeping blocker and shoot it (SimNavigator's enemy-blind fallback); a floor with no
+              stairs is a boss floor — hunt the boss; re-scan the boss floor's exit after the kill; and the
+              LoopBreaker (SIM_LOOP_*: <= 4 tiles in 16 turns with nothing fired / reloaded / healed opens a
+              12-turn PUSH that skips the sidesteps and routes through enemies).
   S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
               tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
               fighting retreat, not a dead end. The band exists to keep that structural
@@ -1129,41 +1143,36 @@ and mirror it HERE in the same commit. A waiver must state a real reason and a
 condition under which it expires; BalanceReport prints all active waivers so
 they can never fade into folklore. Never weaken a band to make a test pass.
 
-LIVE WAIVERS (the order-9 navigation-limited bands + the bespoke-node pricing below):
+LIVE WAIVERS (the order-7 round-pending bands + the bespoke-node pricing below):
   (DELETED by balance-overhaul order 3, AS8: [WEAPON_POWER] Railgun (full charge)
    45.0 vs heavy 24-32 — "gated by slug scarcity". R-WEAPON is retired; the Railgun
    is governed by R-ROLE, its PLATED niche and R-ROLE-5's ammo check. R-ROLE has no
    waiver and BalanceAuditTest pins that.)
 
-  [SIM_BOSS] all fifteen S-BOSS lines (balance-overhaul order 6 CP7 — measured only on seeds that reach a boss;
-  same waiver and expiry), [SIM_SHOP] TACTICAL offers bought per Fabricator visit (balance-overhaul order 6 CP5 — income is the supply a run
-  collects; same waiver and expiry), [SIM_FAIR] the eight F8 run-outcome lines (balance-overhaul order 6 — they replaced "TACTICAL median death
-  depth" and inherit its waiver and expiry: TACTICAL win rate / reaches depth 10 / median death depth (losses) /
-  first-boss clears (of seeds reaching it), NAIVE win rate / median death depth / reaches the first boss /
-  first-boss clears), [SIM_FAIR] TACTICAL readable deaths,
-  [SIM_SKILL] TACTICAL vs NAIVE depth gap, [SIM_ROUTE] played per-floor net drain,
-  [SIM_ECONOMY] experienced vs planned supply (re-based, order 2 CP7), [SIM_ECONOMY] emergency lifeline floors,
-  [SIM_LAG] HOARDER-START-WEAPON median death depth (balance-overhaul order 1 — inherits
-  this waiver and its expiry; it reads 1.0 today because hoarder runs STALL on floor 1,
-  which says nothing about the ladder — R-LADDER L2 and the LADDER REPORT carry the claim),
-  [SIM_BUILD] build-bias median depth spread (balance-overhaul order 5 — depth-derived, inherits this
-  waiver and its expiry), [SIM_BUILD] TACTICAL dominant-tag share (balance-overhaul order 5, owner ruling
-  D7 — inherits this waiver and its expiry: measured 0.47 against <= 0.40 because ~91% of sim runs never
-  level up and every ranked run holds one rank; the >= 30-run sample line stays ENFORCED)
-    reason:  these read the SCRIPTED PLAYER's floor-completion rate, not the
-             game's balance. The order-9 simulator plays the real systems, but its
-             navigation heuristic still runs the turn cap out on a large share of
-             generated floors instead of reaching the stairs (~88% of TACTICAL runs
-             in the first matrix), which drags every depth-derived statistic down:
-             median death depth reads 2 against a band of [8, 14]. Enforcing them
-             today would gate the build on the harness's pathing, and TUNING the
-             game to satisfy them would be tuning against a measurement error.
-             S-GATE and S-SOFTLOCK are unaffected and stay enforced; the readable-
-             death half of S-FAIR already reads 1.00.
-    expires: when the scripted policies reach the exit on >90% of floors. The stall
-             count is printed in every balance-sim report (the "stalled" column), so
-             the moment the harness is good enough the waiver must be deleted and
-             the bands enforced against the real numbers.
+  (DELETED by balance-overhaul order 7, CP1 — the order-9 NAVIGATION waiver. It covered every
+   depth-derived S-band because the scripted policies ran the floor's turn cap out on ~85% of runs.
+   Order 7 fixed the navigation (diagonal threats, unusable burst guns, sleeping blockers, boss floors,
+   the stale boss-floor exit, the LoopBreaker push) and replaced the waiver with the ENFORCED band
+   S-NAVIGATION: every policy leaves <= SIM_MAX_STALLED_FLOOR_FRACTION (0.10) of its played floors
+   stalled — measured TACTICAL 0.00, NAIVE 0.03. S-LAG, S-BUILD's depth spread, S-ROUTE and S-FAIR's
+   readable deaths are in band and ENFORCED with no waiver.)
+
+  ROUND-PENDING (balance-overhaul order 7, CP1; owner decision 2026-10-14) —
+  BalanceSchema.waiveRoundPendingBands:
+  [SIM_FAIR] TACTICAL win rate / reaches depth 10 / median death depth (losses) / first-boss clears (of
+  seeds reaching it), NAIVE median death depth / reaches the first boss / first-boss clears;
+  [SIM_SKILL] TACTICAL vs NAIVE depth gap; [SIM_ECONOMY] experienced vs planned supply, emergency lifeline
+  floors; [SIM_SHOP] TACTICAL offers bought per Fabricator visit; [SIM_BUILD] TACTICAL dominant-tag share;
+  [SIM_BOSS] all fifteen lines.
+    reason:  with navigation fixed the simulator measures the GAME, and the game is out of band
+             (CP1 matrix: TACTICAL median death floor 3, 54 of 200 reach the first boss and 0
+             clear it, win rate 0, dominant tag 0.47). Bringing it into band is what the order's
+             playtest rounds are for — owner PLAY NOTES + the sim, at most ~5 master knobs a round
+             (P5/P6) — not a blind sim-only retune before the owner has played. NAIVE win rate
+             (0.00 <= 0.03) is in band and NOT waived.
+    expires: balance-overhaul order 7 CP6. Each line is deleted in the round its band is met; any
+             line still out after round 3 goes, with its evidence, into the follow-up idea
+             request (P9).
 
   [CALM_COST] rest EV discount (balance-overhaul order 2, CP6; re-pointed by order 6)
     reason:  the route ledger is now priced on each floor's NodeSupplySpec plan. The old
@@ -1352,101 +1361,86 @@ Verdant Spiresower SOLDIER     PLATED       57     57.0     24     1    24.00   
 WAIVERS (registry: BalanceSchema.activeWaivers())
 ------------------------------------------------------------------------------------
   [SIM_FAIR]     TACTICAL win rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_FAIR]     TACTICAL reaches depth 10
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_FAIR]     TACTICAL median death depth (losses)
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_FAIR]     NAIVE win rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_FAIR]     NAIVE median death depth
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_FAIR]     TACTICAL first-boss clears (of seeds reaching it)
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
+  [SIM_FAIR]     NAIVE median death depth
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_FAIR]     NAIVE reaches the first boss
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_FAIR]     NAIVE first-boss clears
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_FAIR]     TACTICAL readable deaths
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_SKILL]    TACTICAL vs NAIVE depth gap
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_ROUTE]    played per-floor net drain
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_ECONOMY]  experienced vs planned supply
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_ECONOMY]  emergency lifeline floors
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_LAG]      HOARDER-START-WEAPON median death depth
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_BUILD]    build-bias median depth spread
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
-  [SIM_BUILD]    TACTICAL dominant-tag share
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_SHOP]     TACTICAL offers bought per Fabricator visit
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
+  [SIM_BUILD]    TACTICAL dominant-tag share
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 5 TACTICAL clear rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 5 fight turns CoV
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 5 median health at the kill
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 10 TACTICAL clear rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 10 fight turns CoV
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 10 median health at the kill
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 15 TACTICAL clear rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 15 fight turns CoV
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 15 median health at the kill
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 20 TACTICAL clear rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 20 fight turns CoV
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 20 median health at the kill
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 25 TACTICAL clear rate
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 25 fight turns CoV
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [SIM_BOSS]     boss depth 25 median health at the kill
-    reason:  Measures the scripted policy's floor-completion rate, not the game's balance: the order-9 navigation heuristic still stalls on a large share of generated floors, so every depth-derived statistic reads low.
-    expires: Expires when the balance simulator's scripted policies reach the exit on >90% of floors (BalanceSimTest reports the stall rate on every run).
+    reason:  Measured out of band by the now-navigating simulator (balance-overhaul order 7 CP1: TACTICAL median death floor 3, 0 of 54 first-boss clears); tuning is owed by the order's playtest rounds (owner PLAY NOTES + sim), not by a blind sim-only retune.
+    expires: Expires at balance-overhaul order 7 CP6: each line is deleted the round its band is met; any line still out of band after round 3 goes to the follow-up idea request with its evidence.
   [CALM_COST]    rest EV discount
     reason:  Priced honestly on its NodeSupplySpec plan since balance-overhaul order 2: the bespoke room never placed the ordinary loot the old ledger credited it with, and its contents are balance-overhaul order 6's to retune.
     expires: Expires with the balance-overhaul order 7 feel pass (REST contents; order 6 left REST alone).
@@ -2048,6 +2042,14 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 7 / CP1 — THE SIM NAVIGATES. Navigation fixes in sim/ (SECTION 3 S-NAVIGATION), the
+    LoopBreaker (SECTION 18 SIM_LOOP_*), new band S-NAVIGATION (SIM_MAX_STALLED_FLOOR_FRACTION 0.10, never
+    waived), the ROUND SUMMARY page (SECTION 18 ROUND_* bands) printed first in every balanceSim report. The
+    order-9 NAVIGATION waiver is DELETED; S-LAG and S-BUILD's depth spread are now enforced; the still-out bands
+    moved to the narrower ROUND-PENDING waiver (SECTION 4, owner decision 2026-10-14). TACTICAL stalled runs
+    171 -> 0, NAIVE 153 -> 10; TACTICAL median death 2 -> 3; first boss reached by 12 -> 54 seeds, cleared by 0.
+    Two game bugs the deeper sim exposed were fixed in their own commits (solid guarantee props stamped into
+    chokepoints; a reload completing with nothing to chamber crashed). No balance number moved. Why: P8 / A1 / A4.
   balance-overhaul order 6 / CP7 — S-BOSS + DOCS. New band S-BOSS (F10, fifteen navigation-waived lines); the RUN
     REPORT (win rates, boss table, shop stats); SECTIONS 6 and 8 regenerated; knowledge SECTIONS 9 / 12 / 16
     rewritten for the finite run. No balance number moved. Why: A6 / A7.
@@ -2317,13 +2319,44 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 6 (CP7) matrix — the
-FINITE 25-floor run (SIM_DEPTH_CEILING = RUN_FINAL_DEPTH; a cleared depth-25 boss ends a run as VICTORY),
-the shop re-fit (one Fabricator per floor, two discounted on a SHOP node) and the ladder-currency event /
-mystery payouts — with the FLOOR, MATCHUP, HEAVY, BUILD and RUN REPORTS (the RUN REPORT carries the win
-rates, the BOSS TABLE and the shop stats). The living S-* bands are the BEHAVIOURAL BANDS block below:
-S-GATE, S-LAG, S-FAIR (now the eight F8 run-outcome lines + readable deaths), S-SKILL, S-ROUTE, S-ECONOMY,
-S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
+SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 7 (CP1) matrix — the first
+matrix in which the scripted players FINISH their floors (S-NAVIGATION: TACTICAL 0 stalled runs of 200), so
+every depth-derived number below measures the game rather than the harness. It opens with the ROUND SUMMARY
+(the sim half of each P3 playtest metric, IN/OUT against its band), then the FLOOR, MATCHUP, HEAVY, BUILD and
+RUN REPORTS, the BEHAVIOURAL BANDS block and the LADDER REPORT. WAIV lines carry the order-7 ROUND-PENDING
+waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds are what move it.
+
+  ROUND SUMMARY (balance-overhaul order 7, P3) — the sim half of each playtest target metric
+  --------------------------------------------------------------------------------
+  id   metric (sim)                                       value band                owner Q
+  T2   SOLDIER hits-to-kill d3-5, start kit / on-curve      2.10 >= 1.50        IN   Q8
+  T3   floors 1-3 mean enemies spawned                    15.18 >= 12.00       IN   Q2 Q3
+  T3   floors 1-3 median turns to first exchange          10.00 <= 15.00       IN   Q2
+  T3   floors 1-3 mean encounter groups                    4.17 >= 2.00        IN   Q3
+  T4   floors below the heal floor                         0.00 0.00..0.00     IN   Q4
+  T4   TACTICAL median COMBAT exit health                  0.91 0.55..0.80     OUT  Q4
+  T4   deaths with no heal and < 20% ammo held             0.32 <= 0.30        OUT  Q1 Q5
+  T5   TACTICAL heavies answered                           0.95 0.80..1.00     IN   Q7
+  T5   NAIVE heavies answered                              0.20 <= 0.30        IN   Q7
+  T6   largest DamageClass share (SPREAD)                  0.62 <= 0.50        OUT  Q6
+  T6   hint-driven switches per hinted COMBAT floor        1.00 >= 1.00        IN   Q6
+  T7   dominant-tag share (278 ranked runs)                0.47 <= 0.40        OUT  Q9
+  T7   largest keystone share (0 taken)                       - <= 0.50        -    Q9
+  T8   TACTICAL win rate                                   0.00 0.20..0.40     OUT  Q11 runs
+  T8   first-boss clears of seeds reaching it (54)         0.00 0.75..1.00     OUT  Q11 runs
+  T8   S-BOSS lines in band (of 15)                        0.00 15.00..15.00   OUT  Q11
+  T9   TACTICAL offers bought per Fabricator visit         1.00 >= 1.50        OUT  Q10
+  T9   median unspent credits at death (floors)            0.19 <= 1.50        IN   Q10
+  G    BULLETS median reserve leaving COMBAT (143)         0.40 0.10..0.60     IN   Q5
+  G    SHELLS median reserve leaving COMBAT (122)          0.73 0.10..0.60     OUT  Q5
+  G    CELLS median reserve leaving COMBAT (12)            0.44 0.10..0.60     IN   Q5
+  G    ROCKETS median reserve leaving COMBAT (11)          0.19 0.10..0.60     IN   Q5
+  G    SLUGS median reserve leaving COMBAT (7)             0.57 0.10..0.60     IN   Q5
+  G    emergency lifeline floors                           0.10 <= 0.05        OUT  Q5
+  J2   highest perk pick rate (STEADY_AIM)                 0.85 <= 0.60        OUT  Q9
+  IN/OUT is the sim half only. A metric is IN BAND for the round when the sim is IN and the owner's
+  PLAY NOTES do not contradict it (P3); '-' = not measured this run (no sample).
+
 
   ================================================================================
   BALANCE SIMULATION SUMMARY (new-game-balancr order 9)
@@ -2335,169 +2368,169 @@ S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
   POLICIES
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
-  NAIVE                    200     1.0     153     1.00      0.00      0.00    -0.56
-  TACTICAL                 200     2.0     171     1.00      0.00      0.00    -0.79
-  HOARDER-START-WEAPON     200     2.0     170     1.00      0.00      0.00    -0.73
-  TACTICAL-CLOSE           200     2.0     171     1.00      0.00      0.00    -0.79
-  TACTICAL-MARKSMAN        200     2.0     171     1.00      0.00      0.00    -0.79
-  TACTICAL-PYRO-DEMO       200     2.0     170     1.00      0.00      0.00    -0.79
-  TACTICAL-BULWARK         200     2.0     170     1.00      0.00      0.00    -0.79
-  TACTICAL-BUILD-SAMPLE    600     2.0     522     1.00      0.00      0.00    -0.72
+  NAIVE                    200     2.0      10     1.00      0.00      0.00    -0.79
+  TACTICAL                 200     3.0       0     1.00      0.00      0.00    -1.27
+  HOARDER-START-WEAPON     200     3.0       0     1.00      0.00      0.00    -1.21
+  TACTICAL-CLOSE           200     3.0       0     1.00      0.00      0.00    -1.27
+  TACTICAL-MARKSMAN        200     3.0       0     1.00      0.00      0.00    -1.27
+  TACTICAL-PYRO-DEMO       200     3.0       0     1.00      0.00      0.00    -1.27
+  TACTICAL-BULWARK         200     3.0       0     1.00      0.00      0.00    -1.28
+  TACTICAL-BUILD-SAMPLE    600     3.0       4     1.00      0.00      0.00    -1.25
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
   policy                 supplyTook  emergency    bossTurns
-  NAIVE                       0.256      0.000        900.0
-  TACTICAL                    0.447      0.016        553.2
-  HOARDER-START-WEAPON        0.459      0.013        391.4
-  TACTICAL-CLOSE              0.447      0.016        553.2
-  TACTICAL-MARKSMAN           0.447      0.016        553.2
-  TACTICAL-PYRO-DEMO          0.447      0.016        493.0
-  TACTICAL-BULWARK            0.447      0.016        493.0
-  TACTICAL-BUILD-SAMPLE       0.521      0.017        596.1
+  NAIVE                       0.252      0.000         61.2
+  TACTICAL                    0.526      0.096         58.0
+  HOARDER-START-WEAPON        0.539      0.096         57.4
+  TACTICAL-CLOSE              0.527      0.095         58.9
+  TACTICAL-MARKSMAN           0.523      0.097         57.8
+  TACTICAL-PYRO-DEMO          0.526      0.095         58.0
+  TACTICAL-BULWARK            0.524      0.094         57.9
+  TACTICAL-BUILD-SAMPLE       0.562      0.095         61.1
 
   FLOOR REPORT (TACTICAL) — means per played floor; heal in max-HP, ammo in units, HP as a health fraction
   --------------------------------------------------------------------------------
   generator        node     depth  floor  spawn killed   grp 1stDmg   heal  <flr ammo p/took  hpIn hpOut  0-heal
-  cavern           COMBAT    1-5      58   14.4    4.8   4.0   11.5   0.80     0    14/4     0.97  0.83       7
-  cavern           ELITE     1-5      22   16.9    4.2   4.5   23.8   0.92     0    20/5     0.95  0.92       2
-  cavern           SHOP      1-5       6    5.3    3.2   1.3   20.0   0.58     0     6/2     0.95  0.97       0
-  event_room       EVENT     1-5       1    0.0    0.0   0.0      -   0.45     0     0/0     0.74  0.74       0
-  linear_corridor  COMBAT    1-5      49   14.2    5.3   3.9   30.6   0.80     0    14/4     0.98  0.83       8
-  linear_corridor  ELITE     1-5      15   16.2    5.3   4.5   12.6   0.93     0    19/8     0.98  0.88       2
-  linear_corridor  SHOP      1-5       5    5.4    1.2   1.4   23.0   0.54     0     9/3     0.85  0.87       0
-  med_bay          REST      1-5      12    0.0    0.0   0.0      -   0.00     0     0/0     0.93  0.95       0
-  rooms_mst        CACHE     1-5     124    4.9    1.8   1.1   42.9   0.71     0     4/1     0.97  0.97       0
-  rooms_mst        COMBAT    1-5      56   14.5    3.5   3.9   50.6   0.80     0    13/3     0.99  0.90       2
-  rooms_mst        ELITE     1-5      19   17.7    4.3   5.0   14.2   1.00     0    21/6     0.92  0.93       2
-  rooms_mst        SHOP      1-5       6    5.2    1.5   1.3   37.8   0.54     0     9/1     0.99  1.00       0
+  cavern           COMBAT    1-5      75   14.5    6.3   4.0   14.0   0.82     0    13/7     0.97  0.83      25
+  cavern           ELITE     1-5      49   16.7    5.6   4.6   14.6   0.91     0    21/8     0.88  0.73      24
+  cavern           SHOP      1-5      13    5.3    2.1   1.3   30.3   0.56     0     6/1     0.82  0.79       0
+  event_room       EVENT     1-5       2    0.0    0.0   0.0      -   0.45     0     0/0     0.80  0.92       0
+  linear_corridor  COMBAT    1-5      65   14.1    6.4   3.9   17.0   0.80     0    13/6     0.91  0.68      21
+  linear_corridor  ELITE     1-5      29   16.5    7.0   4.7   18.5   0.93     0    20/9     0.87  0.78      14
+  linear_corridor  SHOP      1-5      11    5.4    2.1   1.4   43.8   0.54     0     8/4     0.80  0.81       0
+  med_bay          REST      1-5      28    0.0    0.0   0.0      -   0.00     0     0/0     0.79  0.81       0
+  rooms_mst        CACHE     1-5     188    5.0    2.6   1.2   43.9   0.73     0     4/2     0.87  0.90      14
+  rooms_mst        COMBAT    1-5      79   14.6    6.4   3.9   26.7   0.80     0    13/7     0.94  0.82      24
+  rooms_mst        ELITE     1-5      40   17.9    5.9   4.9   21.4   0.99     0    21/7     0.93  0.75      21
+  rooms_mst        SHOP      1-5      10    5.2    2.2   1.3   32.1   0.56     0     7/3     0.82  0.79       2
 
   A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
-    COMBAT    1-5   cavern 0.80   rooms_mst 0.80   gap    0% OK
-    ELITE     1-5   cavern 0.92   rooms_mst 1.00   gap    9% OK
-    SHOP      1-5   cavern 0.58   rooms_mst 0.54   gap    8% OK
+    COMBAT    1-5   cavern 0.82   rooms_mst 0.80   gap    2% OK
+    ELITE     1-5   cavern 0.91   rooms_mst 0.99   gap    8% OK
+    SHOP      1-5   cavern 0.56   rooms_mst 0.56   gap    1% OK
 
   MATCHUP REPORT — per played floor; damage share by class (% of landed hit damage)
   --------------------------------------------------------------------------------
   policy               depth  floor  eff/f  res/f  swt/f BALLI SPREA ENERG  RAIL  FIRE EXPLO BLADE BLUNT
-  NAIVE                 1-5     326   0.00   0.84   0.00    97     0     0     0     0     3     0     0
-  TACTICAL              1-5     385   0.12   0.74   0.04    41    52     1     2     0     3     0     1
-  HOARDER-START-WEAPON  1-5     376   0.12   0.81   0.04    41    54     0     0     0     3     0     2
-  TACTICAL-CLOSE        1-5     385   0.12   0.74   0.04    41    52     1     2     0     3     0     1
-  TACTICAL-MARKSMAN     1-5     385   0.12   0.74   0.04    41    52     1     2     0     3     0     1
-  TACTICAL-PYRO-DEMO    1-5     385   0.12   0.74   0.04    41    52     1     2     0     3     0     2
-  TACTICAL-BULWARK      1-5     385   0.12   0.74   0.04    41    52     1     2     0     3     0     2
-  TACTICAL-BUILD-SAMPLE  1-5    1117   0.13   0.79   0.05    41    48     2     3     1     4     0     2
+  NAIVE                 1-5     399   0.00   0.98   0.00    97     0     0     0     0     3     0     0
+  TACTICAL              1-5     643   0.29   0.96   0.07    20    62     2     4     1     4     0     6
+  HOARDER-START-WEAPON  1-5     622   0.27   1.03   0.07    21    70     0     0     0     2     0     7
+  TACTICAL-CLOSE        1-5     645   0.33   0.96   0.07    20    62     3     4     1     4     0     6
+  TACTICAL-MARKSMAN     1-5     639   0.29   0.96   0.07    20    62     2     4     1     4     0     6
+  TACTICAL-PYRO-DEMO    1-5     643   0.29   0.95   0.07    20    62     2     4     1     4     0     6
+  TACTICAL-BULWARK      1-5     646   0.29   0.95   0.07    20    62     2     4     1     4     0     6
+  TACTICAL-BUILD-SAMPLE  1-5    1958   0.36   0.97   0.06    19    58     5     6     2     5     0     6
     S-SWITCH alternatives (per policy): switches/COMBAT floor | hint take rate | switches per
     COMBAT floor that showed a hint | COMBAT floors (hinted)
-    NAIVE                  0.00 |   0.00 |   0.00 | 127 (8)
-    TACTICAL               0.07 |   1.00 |   1.00 | 163 (12)
-    HOARDER-START-WEAPON   0.06 |   1.00 |   1.00 | 162 (10)
-    TACTICAL-CLOSE         0.07 |   1.00 |   1.00 | 163 (12)
-    TACTICAL-MARKSMAN      0.07 |   1.00 |   1.00 | 163 (12)
-    TACTICAL-PYRO-DEMO     0.07 |   1.00 |   1.00 | 163 (12)
-    TACTICAL-BULWARK       0.07 |   1.00 |   1.00 | 163 (12)
-    TACTICAL-BUILD-SAMPLE   0.08 |   1.00 |   1.00 | 509 (42)
+    NAIVE                  0.00 |   0.00 |   0.00 | 146 (20)
+    TACTICAL               0.14 |   1.00 |   1.00 | 219 (30)
+    HOARDER-START-WEAPON   0.13 |   1.00 |   1.00 | 225 (29)
+    TACTICAL-CLOSE         0.14 |   1.00 |   1.00 | 220 (30)
+    TACTICAL-MARKSMAN      0.14 |   1.00 |   1.00 | 218 (30)
+    TACTICAL-PYRO-DEMO     0.14 |   1.00 |   1.00 | 219 (30)
+    TACTICAL-BULWARK       0.14 |   1.00 |   1.00 | 219 (30)
+    TACTICAL-BUILD-SAMPLE   0.12 |   1.00 |   1.00 | 724 (88)
 
   HEAVY REPORT — heavies committed AT the player, by how they ended (counts per band)
   --------------------------------------------------------------------------------
   policy               depth  commit  avoid  guard  stagg  killd landed answerd armBlk hazDmg/f heavyD
-  NAIVE                1-5       144      1      0      0     20    121    0.15     20     2.7     28
+  NAIVE                1-5       250     15      0      0     34    200    0.20     59     3.8     52
   NAIVE                6-10        0      0      0      0      0      0       -      0     0.0      0
   NAIVE                11-15       0      0      0      0      0      0       -      0     0.0      0
   NAIVE                16+         0      0      0      0      0      0       -      0     0.0      0
-  NAIVE                ALL    committed 144, answered share 0.15, unresolved at floor end 2
-  TACTICAL             1-5      1166    918    219      0     26      2    1.00     62     3.8      3
+  NAIVE                ALL    committed 250, answered share 0.20, unresolved at floor end 1
+  TACTICAL             1-5       863    282    478      9     48     36    0.95    209     8.8     21
   TACTICAL             6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL             11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL             16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL             ALL    committed 1166, answered share 1.00, unresolved at floor end 1
-  HOARDER-START-WEAPON 1-5      1180    914    238      0     25      2    1.00     59     4.5      5
+  TACTICAL             ALL    committed 863, answered share 0.95, unresolved at floor end 10
+  HOARDER-START-WEAPON 1-5       923    294    521     11     47     43    0.95    231     7.9     26
   HOARDER-START-WEAPON 6-10        0      0      0      0      0      0       -      0     0.0      0
   HOARDER-START-WEAPON 11-15       0      0      0      0      0      0       -      0     0.0      0
   HOARDER-START-WEAPON 16+         0      0      0      0      0      0       -      0     0.0      0
-  HOARDER-START-WEAPON ALL    committed 1180, answered share 1.00, unresolved at floor end 1
-  TACTICAL-CLOSE       1-5      1166    918    219      0     26      2    1.00     62     3.8      3
+  HOARDER-START-WEAPON ALL    committed 923, answered share 0.95, unresolved at floor end 7
+  TACTICAL-CLOSE       1-5       863    282    478      9     48     36    0.95    209     8.8     21
   TACTICAL-CLOSE       6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-CLOSE       11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-CLOSE       16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-CLOSE       ALL    committed 1166, answered share 1.00, unresolved at floor end 1
-  TACTICAL-MARKSMAN    1-5      1166    918    219      0     26      2    1.00     62     3.8      3
+  TACTICAL-CLOSE       ALL    committed 863, answered share 0.95, unresolved at floor end 10
+  TACTICAL-MARKSMAN    1-5       868    282    477      9     48     40    0.94    210     8.9     21
   TACTICAL-MARKSMAN    6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-MARKSMAN    11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-MARKSMAN    16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-MARKSMAN    ALL    committed 1166, answered share 1.00, unresolved at floor end 1
-  TACTICAL-PYRO-DEMO   1-5      1166    918    219      0     26      2    1.00     62     3.9      3
+  TACTICAL-MARKSMAN    ALL    committed 868, answered share 0.94, unresolved at floor end 12
+  TACTICAL-PYRO-DEMO   1-5       865    286    474      9     49     38    0.95    208     8.6     22
   TACTICAL-PYRO-DEMO   6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-PYRO-DEMO   11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-PYRO-DEMO   16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-PYRO-DEMO   ALL    committed 1166, answered share 1.00, unresolved at floor end 1
-  TACTICAL-BULWARK     1-5      1166    918    219      0     26      2    1.00     62     3.9      3
+  TACTICAL-PYRO-DEMO   ALL    committed 865, answered share 0.95, unresolved at floor end 9
+  TACTICAL-BULWARK     1-5       864    281    480      9     48     36    0.95    213     8.8     20
   TACTICAL-BULWARK     6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-BULWARK     11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-BULWARK     16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-BULWARK     ALL    committed 1166, answered share 1.00, unresolved at floor end 1
-  TACTICAL-BUILD-SAMPLE 1-5      3434   2614    710      2     95      5    1.00    178     4.7      4
+  TACTICAL-BULWARK     ALL    committed 864, answered share 0.95, unresolved at floor end 10
+  TACTICAL-BUILD-SAMPLE 1-5      2754    910   1456     34    178    145    0.94    656     9.5     55
   TACTICAL-BUILD-SAMPLE 6-10        0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-BUILD-SAMPLE 11-15       0      0      0      0      0      0       -      0     0.0      0
   TACTICAL-BUILD-SAMPLE 16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-BUILD-SAMPLE ALL    committed 3434, answered share 1.00, unresolved at floor end 8
+  TACTICAL-BUILD-SAMPLE ALL    committed 2754, answered share 0.94, unresolved at floor end 31
     Heavy kinds committed at each policy (count): 
-    NAIVE                CHARGE 22 | LANCE 122 | AREA_STRIKE 0 | SELF_DESTRUCT 0 |
-    TACTICAL             CHARGE 474 | LANCE 683 | AREA_STRIKE 7 | SELF_DESTRUCT 2 |
-    HOARDER-START-WEAPON CHARGE 475 | LANCE 697 | AREA_STRIKE 6 | SELF_DESTRUCT 2 |
-    TACTICAL-CLOSE       CHARGE 474 | LANCE 683 | AREA_STRIKE 7 | SELF_DESTRUCT 2 |
-    TACTICAL-MARKSMAN    CHARGE 474 | LANCE 683 | AREA_STRIKE 7 | SELF_DESTRUCT 2 |
-    TACTICAL-PYRO-DEMO   CHARGE 474 | LANCE 683 | AREA_STRIKE 7 | SELF_DESTRUCT 2 |
-    TACTICAL-BULWARK     CHARGE 474 | LANCE 683 | AREA_STRIKE 7 | SELF_DESTRUCT 2 |
-    TACTICAL-BUILD-SAMPLE CHARGE 928 | LANCE 2472 | AREA_STRIKE 27 | SELF_DESTRUCT 7 |
+    NAIVE                CHARGE 42 | LANCE 194 | AREA_STRIKE 12 | SELF_DESTRUCT 2 |
+    TACTICAL             CHARGE 198 | LANCE 605 | AREA_STRIKE 55 | SELF_DESTRUCT 5 |
+    HOARDER-START-WEAPON CHARGE 191 | LANCE 677 | AREA_STRIKE 50 | SELF_DESTRUCT 5 |
+    TACTICAL-CLOSE       CHARGE 198 | LANCE 605 | AREA_STRIKE 55 | SELF_DESTRUCT 5 |
+    TACTICAL-MARKSMAN    CHARGE 198 | LANCE 609 | AREA_STRIKE 55 | SELF_DESTRUCT 6 |
+    TACTICAL-PYRO-DEMO   CHARGE 199 | LANCE 609 | AREA_STRIKE 52 | SELF_DESTRUCT 5 |
+    TACTICAL-BULWARK     CHARGE 197 | LANCE 606 | AREA_STRIKE 56 | SELF_DESTRUCT 5 |
+    TACTICAL-BUILD-SAMPLE CHARGE 569 | LANCE 1995 | AREA_STRIKE 166 | SELF_DESTRUCT 24 |
     Outcomes: AVOIDED left the tiles; GUARDED front-arc hit; STAGGERED cancelled by stagger/riposte/stun;
     killd = source died first; landed = unguarded or flanked hit. S-HEAVY bands answered = all but landed.
 
   BUILD REPORT — per TACTICAL build bias; dominant tag = highest-rank tag at run end
   --------------------------------------------------------------------------------
   policy                runs  medDep stalled meanLvl  keys/r noRank  ties
-  TACTICAL               200     2.0     171    1.10    0.00    182     1
-  TACTICAL-BUILD-SAMPLE   600     2.0     522    1.08    0.00    556     2
-  TACTICAL-CLOSE         200     2.0     171    1.10    0.00    182     1
-  TACTICAL-MARKSMAN      200     2.0     171    1.10    0.00    182     1
-  TACTICAL-PYRO-DEMO     200     2.0     170    1.10    0.00    182     1
-  TACTICAL-BULWARK       200     2.0     170    1.10    0.00    182     1
+  TACTICAL               200     3.0       0    1.46    0.00    113     2
+  TACTICAL-BUILD-SAMPLE   600     3.0       4    1.51    0.00    322    17
+  TACTICAL-CLOSE         200     3.0       0    1.47    0.00    113     4
+  TACTICAL-MARKSMAN      200     3.0       0    1.46    0.00    113     2
+  TACTICAL-PYRO-DEMO     200     3.0       0    1.46    0.00    113     3
+  TACTICAL-BULWARK       200     3.0       0    1.46    0.00    113     1
     Dominant tag at run end (runs; excludes runs with no perk rank):
-    TACTICAL             CLOSE_QUARTERS 6 | MARKSMAN 12 | PYRO 0 | DEMOLITION 0 | ENERGY 0 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
-    TACTICAL-BUILD-SAMPLE CLOSE_QUARTERS 15 | MARKSMAN 25 | PYRO 2 | DEMOLITION 0 | ENERGY 1 | BULWARK 0 | BLADE 1 | SCAVENGER 0 | VITALITY 0 |
-    TACTICAL-CLOSE       CLOSE_QUARTERS 9 | MARKSMAN 9 | PYRO 0 | DEMOLITION 0 | ENERGY 0 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
-    TACTICAL-MARKSMAN    CLOSE_QUARTERS 4 | MARKSMAN 14 | PYRO 0 | DEMOLITION 0 | ENERGY 0 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
-    TACTICAL-PYRO-DEMO   CLOSE_QUARTERS 2 | MARKSMAN 7 | PYRO 4 | DEMOLITION 5 | ENERGY 0 | BULWARK 0 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
-    TACTICAL-BULWARK     CLOSE_QUARTERS 4 | MARKSMAN 11 | PYRO 0 | DEMOLITION 0 | ENERGY 0 | BULWARK 3 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL             CLOSE_QUARTERS 37 | MARKSMAN 43 | PYRO 2 | DEMOLITION 0 | ENERGY 3 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
+    TACTICAL-BUILD-SAMPLE CLOSE_QUARTERS 111 | MARKSMAN 130 | PYRO 9 | DEMOLITION 7 | ENERGY 13 | BULWARK 0 | BLADE 5 | SCAVENGER 2 | VITALITY 1 |
+    TACTICAL-CLOSE       CLOSE_QUARTERS 45 | MARKSMAN 36 | PYRO 2 | DEMOLITION 0 | ENERGY 2 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
+    TACTICAL-MARKSMAN    CLOSE_QUARTERS 30 | MARKSMAN 53 | PYRO 2 | DEMOLITION 0 | ENERGY 0 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
+    TACTICAL-PYRO-DEMO   CLOSE_QUARTERS 20 | MARKSMAN 25 | PYRO 24 | DEMOLITION 14 | ENERGY 3 | BULWARK 0 | BLADE 1 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL-BULWARK     CLOSE_QUARTERS 25 | MARKSMAN 33 | PYRO 2 | DEMOLITION 0 | ENERGY 2 | BULWARK 25 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
     Perk pick rate per offer (picked / offered on level-up screens):
     perk                   tag             offered  picked   rate B-offered B-picked B-rate
-    BUCKSHOT_DISCIPLINE    CLOSE_QUARTERS       10       7   0.70        20       10   0.50
-    POINT_MAN              CLOSE_QUARTERS        4       3   0.75         8        6   0.75
-    BREACHER               CLOSE_QUARTERS        9       5   0.56         8        3   0.38
-    STEADY_AIM             MARKSMAN             10       9   0.90        24       17   0.71
-    FIRST_BLOOD            MARKSMAN             15      13   0.87        20       15   0.75
-    LANE_DISCIPLINE        MARKSMAN              5       4   0.80        12       10   0.83
-    ACCELERANT             PYRO                  4       1   0.25         4        0   0.00
-    WILDFIRE               PYRO                  7       0   0.00        12        2   0.17
-    FIREPROOF              PYRO                  6       1   0.17         8        2   0.25
-    SHAPED_CHARGES         DEMOLITION            5       0   0.00         8        2   0.25
-    BLAST_SHIELD           DEMOLITION            6       0   0.00         8        2   0.25
-    SAPPER                 DEMOLITION            5       0   0.00         8        1   0.13
-    CAPACITOR              ENERGY                5       1   0.20         8        2   0.25
-    ARC_JUMP               ENERGY                1       0   0.00         0        0      -
-    OVERCHARGE             ENERGY                7       2   0.29         8        0   0.00
-    SHIELD_WALL            BULWARK               4       0   0.00         4        1   0.25
-    RIPOSTE_DRILL          BULWARK               2       0   0.00         8        2   0.25
-    PLATE_CARRIER          BULWARK               3       0   0.00         4        1   0.25
-    BUTCHER                BLADE                 6       0   0.00        12        0   0.00
-    BLOODLETTING           BLADE                 8       1   0.13         8        0   0.00
-    PACK_RAT               SCAVENGER             4       0   0.00         4        0   0.00
-    HAGGLER                SCAVENGER             4       0   0.00         8        0   0.00
-    SALVAGER               SCAVENGER             3       0   0.00         8        0   0.00
-    HARDY                  VITALITY              3       0   0.00         4        0   0.00
-    FIELD_MEDIC            VITALITY              3       0   0.00         8        0   0.00
-    SECOND_WIND            VITALITY              2       0   0.00         4        0   0.00
+    BUCKSHOT_DISCIPLINE    CLOSE_QUARTERS       53      41   0.77        64       38   0.59
+    POINT_MAN              CLOSE_QUARTERS       52      37   0.71        52       40   0.77
+    BREACHER               CLOSE_QUARTERS       55      36   0.65        75       45   0.60
+    STEADY_AIM             MARKSMAN             68      58   0.85       100       66   0.66
+    FIRST_BLOOD            MARKSMAN             63      51   0.81        85       60   0.71
+    LANE_DISCIPLINE        MARKSMAN             44      36   0.82        48       28   0.58
+    ACCELERANT             PYRO                 36       6   0.17        42       11   0.26
+    WILDFIRE               PYRO                 38       2   0.05        40       13   0.32
+    FIREPROOF              PYRO                 26       6   0.23        33        9   0.27
+    SHAPED_CHARGES         DEMOLITION           31       4   0.13        18        4   0.22
+    BLAST_SHIELD           DEMOLITION           26       3   0.12        28        7   0.25
+    SAPPER                 DEMOLITION           22       1   0.05        16        4   0.25
+    CAPACITOR              ENERGY               29       7   0.24        33        6   0.18
+    ARC_JUMP               ENERGY               28       2   0.07        40        2   0.05
+    OVERCHARGE             ENERGY               32       7   0.22        43        0   0.00
+    SHIELD_WALL            BULWARK              23       0   0.00        41        9   0.22
+    RIPOSTE_DRILL          BULWARK              29       0   0.00        36        9   0.25
+    PLATE_CARRIER          BULWARK              30       0   0.00        36        9   0.25
+    BUTCHER                BLADE                39       1   0.03        52        0   0.00
+    BLOODLETTING           BLADE                35       4   0.11        24        3   0.13
+    PACK_RAT               SCAVENGER            30       1   0.03        37        0   0.00
+    HAGGLER                SCAVENGER            26       0   0.00        50        0   0.00
+    SALVAGER               SCAVENGER            29       4   0.14        30        5   0.17
+    HARDY                  VITALITY             26       0   0.00        10        0   0.00
+    FIELD_MEDIC            VITALITY             26       1   0.04        20        0   0.00
+    SECOND_WIND            VITALITY             28       0   0.00        51        0   0.00
     Keystone pick rate (picked / offered on keystone screens):
     keystone               tag             offered  picked   rate B-offered B-picked B-rate
     SCATTERGUN_DOCTRINE    CLOSE_QUARTERS        0       0      -         0        0      -
@@ -2516,17 +2549,17 @@ S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
   RUN REPORT — the finite 25-floor run (balance-overhaul order 6)
   --------------------------------------------------------------------------------
   policy                 winRate  reach10 lossDepth offers/vis  unspentFlr
-  NAIVE                     0.00     0.00       1.0       0.00        0.20
-  TACTICAL                  0.00     0.00       2.0       0.70        0.13
-  HOARDER-START-WEAPON      0.00     0.00       2.0       0.44        0.15
-  TACTICAL-CLOSE            0.00     0.00       2.0       0.70        0.13
-  TACTICAL-MARKSMAN         0.00     0.00       2.0       0.70        0.13
-  TACTICAL-PYRO-DEMO        0.00     0.00       2.0       0.70        0.13
-  TACTICAL-BULWARK          0.00     0.00       2.0       0.70        0.13
-  TACTICAL-BUILD-SAMPLE     0.00     0.00       2.0       0.82        0.13
+  NAIVE                     0.00     0.00       2.0       0.00        0.32
+  TACTICAL                  0.00     0.00       3.0       1.00        0.19
+  HOARDER-START-WEAPON      0.00     0.00       3.0       0.75        0.21
+  TACTICAL-CLOSE            0.00     0.00       3.0       1.01        0.19
+  TACTICAL-MARKSMAN         0.00     0.00       3.0       1.00        0.19
+  TACTICAL-PYRO-DEMO        0.00     0.00       3.0       1.00        0.18
+  TACTICAL-BULWARK          0.00     0.00       3.0       1.00        0.18
+  TACTICAL-BUILD-SAMPLE     0.00     0.00       3.0       1.08        0.19
   BOSS TABLE (TACTICAL)
   depth    archetype     reached  cleared    medTurns   medHealth
-  5        OVERSEER           12        0           -           -
+  5        OVERSEER           54        0           -           -
   10       CORRUPTOR           0        0           -           -
   15       HELL_BARON          0        0           -           -
   20       OVERSEER            0        0           -           -
@@ -2535,31 +2568,31 @@ S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
   OK   [SIM_GATE] HOARDER first-boss clears: value=0.00 band=0.00..0.00 OK — 200 seeds; R-BOSS-GATE proves the same thing on paper
-  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=2.00 band=0.00..6.00 OK — 200 seeds; 170 stalled
-  WAIV [SIM_FAIR] TACTICAL win rate: value=0.00 band=0.20..0.40 OUT-OF-BAND (WAIVED) — clears the depth-25 boss; 200 seeds; 171 stalled
-  WAIV [SIM_FAIR] TACTICAL reaches depth 10: value=0.00 band=0.60..1.00 OUT-OF-BAND (WAIVED) — 200 seeds; 171 stalled
-  WAIV [SIM_FAIR] TACTICAL median death depth (losses): value=2.00 band=11.00..18.00 OUT-OF-BAND (WAIVED) — 200 seeds; 171 stalled
-  WAIV [SIM_FAIR] TACTICAL first-boss clears (of seeds reaching it): value=0.00 band=0.75..1.00 OUT-OF-BAND (WAIVED) — 0 of 12 seeds that reached depth 5
+  OK   [SIM_LAG] HOARDER-START-WEAPON median death depth: value=3.00 band=0.00..6.00 OK — 200 seeds; 0 stalled
+  WAIV [SIM_FAIR] TACTICAL win rate: value=0.00 band=0.20..0.40 OUT-OF-BAND (WAIVED) — clears the depth-25 boss; 200 seeds; 0 stalled
+  WAIV [SIM_FAIR] TACTICAL reaches depth 10: value=0.00 band=0.60..1.00 OUT-OF-BAND (WAIVED) — 200 seeds; 0 stalled
+  WAIV [SIM_FAIR] TACTICAL median death depth (losses): value=3.00 band=11.00..18.00 OUT-OF-BAND (WAIVED) — 200 seeds; 0 stalled
+  WAIV [SIM_FAIR] TACTICAL first-boss clears (of seeds reaching it): value=0.00 band=0.75..1.00 OUT-OF-BAND (WAIVED) — 0 of 54 seeds that reached depth 5
   OK   [SIM_FAIR] NAIVE win rate: value=0.00 band=0.00..0.03 OK — 200 seeds
-  WAIV [SIM_FAIR] NAIVE median death depth: value=1.00 band=4.00..8.00 OUT-OF-BAND (WAIVED) — 200 seeds; 153 stalled
-  WAIV [SIM_FAIR] NAIVE reaches the first boss: value=0.01 band=0.40..1.00 OUT-OF-BAND (WAIVED) — depth 5
+  WAIV [SIM_FAIR] NAIVE median death depth: value=2.00 band=4.00..8.00 OUT-OF-BAND (WAIVED) — 200 seeds; 10 stalled
+  WAIV [SIM_FAIR] NAIVE reaches the first boss: value=0.03 band=0.40..1.00 OUT-OF-BAND (WAIVED) — depth 5
   WAIV [SIM_FAIR] NAIVE first-boss clears: value=0.00 band=0.15..1.00 OUT-OF-BAND (WAIVED) — of all 200 seeds
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
-  WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=1.00 band=5.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 2.0 vs NAIVE 1.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.13 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
-  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.45 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
-  OK   [SIM_ECONOMY] emergency lifeline floors: value=0.02 band=0.00..0.05 OK — the never-softlock ammo drop is a backstop, not a supply line
-  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.85 band=0.55..0.90 OK — mean health fraction leaving a COMBAT floor by its exit
+  WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=1.00 band=5.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 3.0 vs NAIVE 2.0
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.38 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.53 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
+  WAIV [SIM_ECONOMY] emergency lifeline floors: value=0.10 band=0.00..0.05 OUT-OF-BAND (WAIVED) — the never-softlock ammo drop is a backstop, not a supply line
+  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.78 band=0.55..0.90 OK — mean health fraction leaving a COMBAT floor by its exit
   OK   [SIM_SUPPLY] floors below the heal floor: value=0.00 band=0.00..0.00 OK — reachable heal value under the S4 floor
-  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=12.00 band=10.00..Infinity OK — of 163 COMBAT floors; keeps the two lines below off an empty sample
+  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=30.00 band=10.00..Infinity OK — of 219 COMBAT floors; keeps the two lines below off an empty sample
   OK   [SIM_SWITCH] TACTICAL hint take rate: value=1.00 band=0.80..Infinity OK — hint-driven switches / hint episodes
-  OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.07 per COMBAT floor overall (kit-limited, not banded — D3)
-  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=1166.00 band=30.00..Infinity OK — keeps the share below off an empty sample
-  OK   [SIM_HEAVY] TACTICAL heavies answered: value=1.00 band=0.80..1.00 OK — (avoided + guarded + staggered + killed first) / committed at the player
-  OK   [SIM_HEAVY] NAIVE heavies answered: value=0.15 band=0.00..0.30 OK — 144 committed; NAIVE ignores telegraphs
-  WAIV [SIM_SHOP] TACTICAL offers bought per Fabricator visit: value=0.70 band=1.50..Infinity OUT-OF-BAND (WAIVED) — 185 visits over 200 runs
-  OK   [SIM_SHOP] TACTICAL median unspent credits at death (floors of income): value=0.13 band=0.00..1.50 OK — credits held when a lost run ended
-  WAIV [SIM_BOSS] boss depth 5 TACTICAL clear rate: value=0.00 band=0.75..0.90 OUT-OF-BAND (WAIVED) — 0 of 12 seeds that reached it
+  OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.14 per COMBAT floor overall (kit-limited, not banded — D3)
+  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=863.00 band=30.00..Infinity OK — keeps the share below off an empty sample
+  OK   [SIM_HEAVY] TACTICAL heavies answered: value=0.95 band=0.80..1.00 OK — (avoided + guarded + staggered + killed first) / committed at the player
+  OK   [SIM_HEAVY] NAIVE heavies answered: value=0.20 band=0.00..0.30 OK — 250 committed; NAIVE ignores telegraphs
+  WAIV [SIM_SHOP] TACTICAL offers bought per Fabricator visit: value=1.00 band=1.50..Infinity OUT-OF-BAND (WAIVED) — 443 visits over 200 runs
+  OK   [SIM_SHOP] TACTICAL median unspent credits at death (floors of income): value=0.19 band=0.00..1.50 OK — credits held when a lost run ended
+  WAIV [SIM_BOSS] boss depth 5 TACTICAL clear rate: value=0.00 band=0.75..0.90 OUT-OF-BAND (WAIVED) — 0 of 54 seeds that reached it
   WAIV [SIM_BOSS] boss depth 5 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 0.0 turns over 0 kills (needs >= 10)
   WAIV [SIM_BOSS] boss depth 5 median health at the kill: value=0.00 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 0 kills
   WAIV [SIM_BOSS] boss depth 10 TACTICAL clear rate: value=0.00 band=0.50..0.90 OUT-OF-BAND (WAIVED) — 0 of 0 seeds that reached it
@@ -2574,9 +2607,9 @@ S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
   WAIV [SIM_BOSS] boss depth 25 TACTICAL clear rate: value=0.00 band=0.50..0.90 OUT-OF-BAND (WAIVED) — 0 of 0 seeds that reached it
   WAIV [SIM_BOSS] boss depth 25 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 0.0 turns over 0 kills (needs >= 10)
   WAIV [SIM_BOSS] boss depth 25 median health at the kill: value=0.00 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 0 kills
-  OK   [SIM_BUILD] build-bias median depth spread: value=1.00 band=1.00..1.25 OK — max / min median death depth: CLOSE 2.0, MARKSMAN 2.0, PYRO-DEMO 2.0, BULWARK 2.0
-  OK   [SIM_BUILD] TACTICAL runs holding a perk rank: value=44.00 band=30.00..Infinity OK — of 600 TACTICAL-BUILD-SAMPLE runs; 556 with no perk rank excluded; keeps the share below off an empty sample
-  WAIV [SIM_BUILD] TACTICAL dominant-tag share: value=0.57 band=0.00..0.40 OUT-OF-BAND (WAIVED) — top MARKSMAN; CLOSE_QUARTERS 15, MARKSMAN 25, PYRO 2, ENERGY 1, BLADE 1; 2 decided by a tie (earliest tag wins)
+  OK   [SIM_BUILD] build-bias median depth spread: value=1.00 band=1.00..1.25 OK — max / min median death depth: CLOSE 3.0, MARKSMAN 3.0, PYRO-DEMO 3.0, BULWARK 3.0
+  OK   [SIM_BUILD] TACTICAL runs holding a perk rank: value=278.00 band=30.00..Infinity OK — of 600 TACTICAL-BUILD-SAMPLE runs; 322 with no perk rank excluded; keeps the share below off an empty sample
+  WAIV [SIM_BUILD] TACTICAL dominant-tag share: value=0.47 band=0.00..0.40 OUT-OF-BAND (WAIVED) — top MARKSMAN; CLOSE_QUARTERS 111, MARKSMAN 130, PYRO 9, DEMOLITION 7, ENERGY 13, BLADE 5, SCAVENGER 2, VITALITY 1; 17 decided by a tie (earliest tag wins)
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
@@ -2585,6 +2618,14 @@ S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
   OK   [SIM_SOFTLOCK] TACTICAL-PYRO-DEMO softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL-BULWARK softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL-BUILD-SAMPLE softlocks: value=0.00 band=0.00..0.00 OK — 600 seeds
+  OK   [SIM_NAVIGATION] NAIVE stalled floors: value=0.03 band=0.00..0.10 OK — 10 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] HOARDER-START-WEAPON stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-CLOSE stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-MARKSMAN stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-PYRO-DEMO stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-BULWARK stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-BUILD-SAMPLE stalled floors: value=0.00 band=0.00..0.10 OK — 4 stalled runs; share of every played floor
 
   A WAIV line is out of band with an explicit, reasoned waiver registered in
   BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails
@@ -2595,32 +2636,31 @@ S-SUPPLY, S-SWITCH, S-HEAVY, S-BUILD, S-SHOP, S-BOSS, S-SOFTLOCK.
   One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
   role        depths  onKill lagKill  ratio |   onDie  lagDie
-  CHAFF        1-5      2.29    4.57   2.00 |   22.54   73.25
-  CHAFF        6-10     2.20   12.00   5.45 |   85.60   66.85
-  CHAFF       11-15     2.03   18.33   9.03 |   49.27   26.36
-  CHAFF       16-20     3.13   30.13   9.64 |       -   19.77
-  CHAFF       21-25     2.11   49.10  23.28 |   67.83   23.31
-  SOLDIER      1-5      3.83    6.86   1.79 |   32.64   31.87
-  SOLDIER      6-10     2.92   16.67   5.71 |   28.56   10.61
-  SOLDIER     11-15     2.79   29.86  10.70 |   29.37   10.33
-  SOLDIER     16-20     3.41   67.86  19.88 |   29.32   10.34
-  SOLDIER     21-25     2.55   86.86  34.04 |   26.26   13.36
-  BRUISER      1-5      7.01    8.08   1.15 |   18.93       -
-  BRUISER      6-10     4.82   20.38   4.22 |       -   22.25
-  BRUISER     11-15     8.48   59.67   7.04 |   75.88   37.10
-  BRUISER     16-20     0.42       -      - |       -       -
-  BRUISER     21-25     4.73  115.40  24.40 |       -   13.69
+  CHAFF        1-5      2.27    4.67   2.05 |   23.89   80.79
+  CHAFF        6-10     1.86   12.00   6.44 |   83.30   36.96
+  CHAFF       11-15     1.67   18.00  10.77 |   89.43   25.68
+  CHAFF       16-20     2.32   30.44  13.10 |   65.97   20.47
+  CHAFF       21-25     1.87   49.10  26.31 |   63.39   23.31
+  SOLDIER      1-5      3.66    5.75   1.57 |   35.83   34.29
+  SOLDIER      6-10     2.88   17.50   6.09 |   24.58   10.61
+  SOLDIER     11-15     2.54   29.86  11.75 |   29.37   10.33
+  SOLDIER     16-20     2.50   60.17  24.04 |   27.62   10.34
+  SOLDIER     21-25     2.50   86.86  34.72 |   24.83   13.43
+  BRUISER      1-5      6.93    8.08   1.17 |   12.46   18.93
+  BRUISER      6-10     4.79   20.47   4.27 |   47.62   21.99
+  BRUISER     11-15     7.35   59.67   8.12 |   77.06   37.10
+  BRUISER     16-20     4.88   74.88  15.35 |       -       -
+  BRUISER     21-25     5.02  115.40  23.01 |       -   13.69
   MINI_ELITE   1-5         -       -      - |       -       -
   MINI_ELITE   6-10        -       -      - |       -       -
   MINI_ELITE  11-15        -       -      - |       -       -
   MINI_ELITE  16-20        -       -      - |       -       -
   MINI_ELITE  21-25        -       -      - |       -       -
-  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 1.89 (target >= 1.5)
+  A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.10 (target >= 1.5)
 
-  NOTES (balance-overhaul order 6):
-  - Every depth-derived line — the eight F8 run-outcome lines, S-SKILL, all fifteen S-BOSS lines and S-SHOP's
-    offers-per-visit — is REPORTED under the navigation waiver: TACTICAL still stalls on ~170 of 200 seeds, only
-    ~12 seeds reach the first boss and none clears it, so no run reaches depth 10. A6: they are enforced the day
-    the scripted policies finish > 90% of floors. S-GATE and S-SHOP's unspent-credits line are ENFORCED and green.
-  - Moves vs order 5 came from the region dial (A 0.90 -> 0.85), the shop rolls and the mystery payouts:
-    TACTICAL stalls 175 -> 171, S-BUILD sample 49 -> 44, S-HEAVY sample 1108 -> 1166, S-SUPPLY 0.86 -> 0.85.
+  NOTES (order 7 CP1)
+  - Stalls gone: TACTICAL / HOARDER / every build bias 0 of 200 runs; NAIVE 10 (its chase), BUILD-SAMPLE 4 of 600.
+  - What the sim now says about the game (round-1 input, not yet acted on): TACTICAL dies on floors 1-5 (median 3)
+    with ~0.85 HP on arrival, 0 heals held at every death; 54 seeds reach the first boss (the Overseer) and none
+    clears it; mean character level ~1.6 at death (lvlGap -1.27); SPREAD deals 62% of landed damage; SHELLS
+    pile up (0.73 of cap leaving a COMBAT floor) while the lifeline fires on 10% of floors.

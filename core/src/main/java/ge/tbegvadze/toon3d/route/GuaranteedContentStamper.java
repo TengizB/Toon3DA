@@ -46,16 +46,70 @@ public final class GuaranteedContentStamper {
         if (level == null || count <= 0) return 0;
         Random random = new Random(seed ^ (SEED_SALT * (symbol + 1L)));
         List<int[]> ordered = orderedLegalTiles(level, placement, random);
+        // A symbol the player cannot walk through (a crate, a locker, a barrel, a column) must never be
+        // stamped into a chokepoint: one crate in a one-tile corridor cut the exit off from the start, and
+        // the floor could not be finished at all. Count what the start can reach once, and refuse any tile
+        // whose stamp would shrink that set by more than the tile itself.
+        boolean blocksWalking = blocksWalking(symbol);
+        int[] start = blocksWalking ? findSymbol(level, 'p') : null;
+        int reachableTiles = start != null ? countReachableTiles(level, start) : 0;
         int stamped = 0;
         for (int index = 0; index < ordered.size() && stamped < count; index++) {
             int[] tile = ordered.get(index);
             // Re-check legality: an earlier guarantee in the same plan may have taken this tile.
             if (!isLegalStampTile(level, tile[0], tile[1])) continue;
+            char previous = level.getCell(tile[0], tile[1]);
             level.setCell(tile[0], tile[1], symbol);
+            if (start != null) {
+                int reachableAfter = countReachableTiles(level, start);
+                if (reachableAfter < reachableTiles - 1) {
+                    level.setCell(tile[0], tile[1], previous);   // a chokepoint: leave it open
+                    continue;
+                }
+                reachableTiles = reachableAfter;
+            }
             stamped++;
         }
         return stamped;
     }
+
+    /** True for a symbol the player cannot walk through once stamped. */
+    private static boolean blocksWalking(char symbol) {
+        return Level.isWall(symbol) || Level.isPropSolid(symbol) || Level.isColumn(symbol);
+    }
+
+    /**
+     * How many tiles the player can walk to from {@code start}: a cardinal flood over every tile that is
+     * not a wall, a solid prop or a column (doors count as passable — they open on a step).
+     */
+    private static int countReachableTiles(Level level, int[] start) {
+        int levelWidth  = level.getWidth();
+        int levelHeight = level.getHeight();
+        boolean[][] reached = new boolean[levelWidth][levelHeight];
+        java.util.ArrayDeque<int[]> frontier = new java.util.ArrayDeque<>();
+        reached[start[0]][start[1]] = true;
+        frontier.add(start);
+        int reachedCount = 1;
+        while (!frontier.isEmpty()) {
+            int[] tile = frontier.poll();
+            for (int direction = 0; direction < FLOOD_STEP_COLUMNS.length; direction++) {
+                int neighbourColumn = tile[0] + FLOOD_STEP_COLUMNS[direction];
+                int neighbourRow    = tile[1] + FLOOD_STEP_ROWS[direction];
+                if (neighbourColumn < 0 || neighbourRow < 0
+                        || neighbourColumn >= levelWidth || neighbourRow >= levelHeight) continue;
+                if (reached[neighbourColumn][neighbourRow]) continue;
+                if (blocksWalking(level.getCell(neighbourColumn, neighbourRow))) continue;
+                reached[neighbourColumn][neighbourRow] = true;
+                frontier.add(new int[]{neighbourColumn, neighbourRow});
+                reachedCount++;
+            }
+        }
+        return reachedCount;
+    }
+
+    /** Cardinal flood steps, fixed order (determinism). */
+    private static final int[] FLOOD_STEP_COLUMNS = { 1, -1, 0,  0 };
+    private static final int[] FLOOD_STEP_ROWS    = { 0,  0, 1, -1 };
 
     /** All legal tiles ordered per the placement intent (deterministic given {@code random}). */
     private static List<int[]> orderedLegalTiles(Level level, Placement placement, Random random) {

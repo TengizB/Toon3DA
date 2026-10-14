@@ -818,7 +818,9 @@ public abstract class Weapon implements WeaponProfile {
     private void completeReload() {
         if (ammoInventory != null && ammoType != null) {
             int bulletsNeeded = getEffectiveClipSize() - shotsInClip;
-            int roundsLoaded  = ammoInventory.spend(ammoType.getItemType(), bulletsNeeded);
+            // A reload can finish with nothing to chamber (the clip was topped up, or the effective clip size
+            // shrank, while it ran): Inventory.spend refuses a quantity below 1, so skip it rather than crash.
+            int roundsLoaded  = bulletsNeeded > 0 ? ammoInventory.spend(ammoType.getItemType(), bulletsNeeded) : 0;
             shotsInClip += roundsLoaded;
             if (shotsInClip == 0) {
                 if (eventTextSystem != null) eventTextSystem.spawn("OUT OF AMMO!");

@@ -28,6 +28,8 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-ECONOMY  — the supply a played floor yields tracks the supply its planner put down</li>
  *   <li>S-SUPPLY   — TACTICAL leaves a COMBAT floor hurt, and no floor is below its heal floor</li>
  *   <li>S-SOFTLOCK — a run may end, but never get stuck unable to damage anything</li>
+ *   <li>S-NAVIGATION — the scripted player finishes the floors it plays (balance-overhaul order 7; replaced the
+ *                    navigation waiver every depth-derived band used to carry)</li>
  *   <li>S-LAG      — a weapon that never climbs the power ladder ends the run early (balance-overhaul order 1)</li>
  *   <li>S-SWITCH   — a competent player switches guns by matchup when the game tells it to (balance-overhaul order 3)</li>
  *   <li>S-HEAVY    — a player who reads the red floor answers the heavies committed at it; one who ignores it does not (balance-overhaul order 4)</li>
@@ -66,6 +68,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(bossResults(tactical));
         results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
+        for (PolicySummary summary : matrix.values()) results.add(navigationResult(summary));
         return results;
     }
 
@@ -80,9 +83,9 @@ public final class BehavioralBands {
 
     /**
      * S-BUILD (balance-overhaul order 5, A6). DEPTH part: the build-biased variants' median death depths satisfy
-     * max / min <= 1 + SIM_BUILD_DEPTH_SPREAD (no trap bias, no must-pick bias) — depth-derived, so it carries the
-     * navigation waiver SIM_FAIR's median depth carries; skipped unless all four variants are in the matrix.
-     * DOMINANT-TAG part (waived with the navigation waiver by owner ruling D7; its sample line is enforced): over the plain-TACTICAL BUILD SAMPLE row's runs that held a perk rank at the
+     * max / min <= 1 + SIM_BUILD_DEPTH_SPREAD (no trap bias, no must-pick bias) — depth-derived and ENFORCED since
+     * balance-overhaul order 7 (navigation fixed); skipped unless all four variants are in the matrix.
+     * DOMINANT-TAG part (rides the order-7 round-pending waiver; its sample line is enforced): over the plain-TACTICAL BUILD SAMPLE row's runs that held a perk rank at the
      * end (at least SIM_BUILD_MIN_SAMPLE of them), no single BuildTag is the end-of-run highest-rank tag on more
      * than SIM_BUILD_MAX_DOMINANT_TAG_SHARE of them. Runs with no rank are excluded and counted in the detail;
      * skipped when the sample row is not in the matrix.
@@ -171,7 +174,7 @@ public final class BehavioralBands {
      * clear rate in [SIM_BOSS_CLEAR_RATE_MIN, MAX] (the first boss at least SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN); the
      * fight-length CoV at most SIM_BOSS_MAX_FIGHT_TURNS_COV; the median health fraction at the kill in
      * [SIM_BOSS_KILL_HEALTH_MIN, MAX]. A row with fewer than SIM_BOSS_MIN_SAMPLE kills reports its CoV and median
-     * health as unmeasured (out of band). Depth-derived — rides the navigation waiver until it expires.
+     * health as unmeasured (out of band). Depth-derived — rides the order-7 round-pending waiver until a round meets it.
      */
     private static List<RuleResult> bossResults(PolicySummary tactical) {
         List<RuleResult> results = new ArrayList<>();
@@ -241,7 +244,7 @@ public final class BehavioralBands {
 
     /**
      * S-FAIR — THE RUN OUTCOME (balance-overhaul order 6, F8; REPLACES the TACTICAL median-death-depth band
-     * [8, 14]) — and deaths the player could see coming. Every depth-derived line rides the navigation waiver.
+     * [8, 14]) — and deaths the player could see coming. Out-of-band lines ride the order-7 round-pending waiver until a round meets them.
      */
     private static List<RuleResult> fairResults(PolicySummary tactical, PolicySummary naive) {
         List<RuleResult> results = new ArrayList<>();
@@ -430,6 +433,19 @@ public final class BehavioralBands {
                                   : "no heavy was committed at NAIVE"));
         }
         return results;
+    }
+
+    /**
+     * S-NAVIGATION (balance-overhaul order 7, P8 / A1): the scripted player finishes the floors it plays — at most
+     * SIM_MAX_STALLED_FLOOR_FRACTION of played floors may run the turn cap out. This is the condition every depth-
+     * derived band depends on; it replaced the order-9 navigation waiver. Never waived.
+     */
+    private static RuleResult navigationResult(PolicySummary summary) {
+        float stalledShare = summary.stalledFloorFraction();
+        return BalanceSchema.result(RuleKind.SIM_NAVIGATION, summary.policyId + " stalled floors",
+                stalledShare, 0f, BalanceConfig.SIM_MAX_STALLED_FLOOR_FRACTION,
+                stalledShare <= BalanceConfig.SIM_MAX_STALLED_FLOOR_FRACTION,
+                summary.stalledRunCount() + " stalled runs; share of every played floor");
     }
 
     /** S-SOFTLOCK: no run may end unable to damage anything. Zero, by contract, for every policy. */
