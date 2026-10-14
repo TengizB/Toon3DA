@@ -2640,7 +2640,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.render(camera);
 
         // Shop machines (shop_order_6) — animated fabricator billboards, drawn in the prop pass so
-        // they write into the prop z-buffer and enemies/weapon HUD draw over them correctly.
+        // they are recorded in the shared occluder buffer and enemies/weapon HUD draw over them correctly.
         shopMachineRenderer.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, effectiveFovRadians);
         shopMachineRenderer.setLightingTime(facilityTimeSeconds);

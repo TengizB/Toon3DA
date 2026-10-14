@@ -621,10 +621,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
-            float[] propZBuffer      = (propRenderer != null) ? propRenderer.getPropSpriteZBuffer()      : null;
-            float[] propColumnBottom = (propRenderer != null) ? propRenderer.getPropSpriteColumnBottom() : null;
-            float[] propColumnTop    = (propRenderer != null) ? propRenderer.getPropSpriteColumnTop()    : null;
-            float   columnHeightSpan = clampedTop - clampedBottom;
+            SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
 
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
@@ -636,46 +633,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
                 int texSrcX = region.getRegionX() + localSrcX;
 
-                if (propZBuffer != null && depth >= propZBuffer[screenColumn]) {
-                    // A closer prop blocks this column. Draw the enemy in two segments around
-                    // the prop's vertical extent so the enemy stays visible above and below
-                    // small props (e.g. ammo pickups) that don't fill the full column height.
-                    float propBottom = propColumnBottom[screenColumn];
-                    float propTop    = propColumnTop[screenColumn];
+                batch.draw(region.getTexture(),
+                           screenColumn * projectionColumnWidth, clampedBottom,
+                           projectionColumnWidth, clampedTop - clampedBottom,
+                           texSrcX, texSrcY, 1, texSrcHeight,
+                           false, false);
 
-                    // Above-prop segment: screen rows [max(propTop, clampedBottom), clampedTop]
-                    float aboveSegBottom = Math.max(propTop, clampedBottom);
-                    if (aboveSegBottom < clampedTop && columnHeightSpan > 0f) {
-                        int aboveSrcHeight = Math.max(1,
-                                (int)(texSrcHeight * (clampedTop - aboveSegBottom) / columnHeightSpan));
-                        aboveSrcHeight = Math.min(aboveSrcHeight, texSrcHeight);
-                        batch.draw(region.getTexture(),
-                                   screenColumn * projectionColumnWidth, aboveSegBottom,
-                                   projectionColumnWidth, clampedTop - aboveSegBottom,
-                                   texSrcX, texSrcY, 1, aboveSrcHeight,
-                                   false, false);
-                    }
-
-                    // Below-prop segment: screen rows [clampedBottom, min(propBottom, clampedTop)]
-                    float belowSegTop = Math.min(propBottom, clampedTop);
-                    if (clampedBottom < belowSegTop && columnHeightSpan > 0f) {
-                        int belowSrcYOffset = (int)(texSrcHeight * (clampedTop - belowSegTop) / columnHeightSpan);
-                        int belowSrcY       = texSrcY + belowSrcYOffset;
-                        int belowSrcHeight  = texSrcHeight - belowSrcYOffset;
-                        if (belowSrcHeight > 0) {
-                            batch.draw(region.getTexture(),
-                                       screenColumn * projectionColumnWidth, clampedBottom,
-                                       projectionColumnWidth, belowSegTop - clampedBottom,
-                                       texSrcX, belowSrcY, 1, belowSrcHeight,
-                                       false, false);
-                        }
-                    }
-                } else {
-                    batch.draw(region.getTexture(),
-                               screenColumn * projectionColumnWidth, clampedBottom,
-                               projectionColumnWidth, clampedTop - clampedBottom,
-                               texSrcX, texSrcY, 1, texSrcHeight,
-                               false, false);
+                // Props (and shop machines) were drawn before enemies. Where one stands nearer than
+                // this enemy, re-draw its column slice on top: its opaque pixels hide the enemy and its
+                // transparent pixels let the enemy show through — never a hole cut through the enemy.
+                if (occluderBuffer != null) {
+                    occluderBuffer.redrawInFront(batch, screenColumn, depth, projectionColumnWidth);
                 }
             }
 
