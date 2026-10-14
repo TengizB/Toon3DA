@@ -126,13 +126,10 @@ public class PropRenderer implements Renderable, Disposable {
     private final int[]   sortedIndices;
     private final float[] sortedDepths;
 
-    // Per-column depth written during render — lets EnemyRenderer occlude against props.
-    private final float[] propSpriteZBuffer;
-    // Per-column vertical bounds of the nearest occluding prop — used by EnemyRenderer to
-    // draw enemy segments above and below a small prop (e.g. ammo) rather than skipping the
-    // entire column height when only the center is blocked.
-    private final float[] propSpriteColumnBottom;
-    private final float[] propSpriteColumnTop;
+    // Per-column record of the nearest opaque billboard slices drawn this frame. Shared with
+    // ShopMachineRenderer and EnemyRenderer: a sprite drawn later but standing farther away draws
+    // its full column, then re-draws the nearer slices on top (see SpriteOccluderBuffer).
+    private final SpriteOccluderBuffer occluderBuffer;
 
     private float playerWorldX      = 0f;
     private float playerWorldY      = 0f;
@@ -159,9 +156,7 @@ public class PropRenderer implements Renderable, Disposable {
         // Sized for the largest render-resolution tier (RENDER_RESOLUTION_MAX_COLUMNS) so switching the
         // knob at runtime never reallocates; only the columns below wallRenderer.getProjectionColumnCount()
         // are read/written each frame.
-        this.propSpriteZBuffer      = new float[RENDER_RESOLUTION_MAX_COLUMNS];
-        this.propSpriteColumnBottom = new float[RENDER_RESOLUTION_MAX_COLUMNS];
-        this.propSpriteColumnTop    = new float[RENDER_RESOLUTION_MAX_COLUMNS];
+        this.occluderBuffer         = new SpriteOccluderBuffer(RENDER_RESOLUTION_MAX_COLUMNS);
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
         this.batch                        = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
         this.textures                     = buildTextures();
@@ -301,19 +296,12 @@ public class PropRenderer implements Renderable, Disposable {
         return environmentTextureSet;
     }
 
-    /** Returns the per-column depth buffer written during render so EnemyRenderer can occlude against props. */
-    public float[] getPropSpriteZBuffer() {
-        return propSpriteZBuffer;
-    }
-
-    /** Returns the per-column screen-bottom of the nearest occluding prop, parallel to {@link #getPropSpriteZBuffer()}. */
-    public float[] getPropSpriteColumnBottom() {
-        return propSpriteColumnBottom;
-    }
-
-    /** Returns the per-column screen-top of the nearest occluding prop, parallel to {@link #getPropSpriteZBuffer()}. */
-    public float[] getPropSpriteColumnTop() {
-        return propSpriteColumnTop;
+    /**
+     * Returns the per-column occluder record filled during render, so billboards drawn after the
+     * props (shop machines, enemies) can restore nearer props over themselves.
+     */
+    public SpriteOccluderBuffer getOccluderBuffer() {
+        return occluderBuffer;
     }
 
     @Override
@@ -325,10 +313,8 @@ public class PropRenderer implements Renderable, Disposable {
         int   projectionColumnCount = wallRenderer.getProjectionColumnCount();
         float columnWidth           = wallRenderer.getColumnWidth();
         int propCount = propPlacements.size();
-        // Reset z-buffer every frame so stale depths from the previous frame don't occlude.
-        java.util.Arrays.fill(propSpriteZBuffer, Float.MAX_VALUE);
-        java.util.Arrays.fill(propSpriteColumnBottom, 0f);
-        java.util.Arrays.fill(propSpriteColumnTop,    0f);
+        // Reset the occluder record every frame so stale slices from the previous frame don't occlude.
+        occluderBuffer.clear();
 
         // --- Cull and collect visible props, computing depth for each. ---
         int visibleCount = 0;
@@ -472,7 +458,7 @@ public class PropRenderer implements Renderable, Disposable {
                     int auraLastColumn  = Math.min(projectionColumnCount - 1, auraRight);
                     for (int screenColumn = auraFirstColumn; screenColumn <= auraLastColumn; screenColumn++) {
                         if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                        if (depth >= propSpriteZBuffer[screenColumn]) continue;
+                        if (depth >= occluderBuffer.getNearestDepth(screenColumn)) continue;
                         int auraTexSrcX = (screenColumn - auraLeft) * auraGlowWidth / auraSpan;
                         auraTexSrcX = MathUtils.clamp(auraTexSrcX, 0, auraGlowWidth - 1);
                         batch.draw(weaponPickupGlowTexture,
@@ -495,28 +481,27 @@ public class PropRenderer implements Renderable, Disposable {
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
-                // Skip columns where a wall (or closer prop) is in front.
+                // Skip columns where a wall is in front. No prop-vs-prop test: this pass is sorted
+                // far→near, so a nearer prop is always drawn after (and over) a farther one.
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                // Skip columns where a nearer prop was already drawn (painter's order, far→near,
-                // so a shallower depth here means a previous iteration already wrote it).
-                if (depth >= propSpriteZBuffer[screenColumn]) continue;
 
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
-
-                // Elevated billboards (solid props + pickup items + stairs) write to the z-buffer
-                // so EnemyRenderer knows to draw enemies behind them when they are farther away.
-                // Only opaque columns occlude; transparent sprite columns leave the enemy visible.
-                // Pure floor stains (corpse, blood, oil, energy scorch, dropped-shotgun decal)
-                // are excluded — enemies visually walk over those flat decals.
-                recordPropOccluderColumn(screenColumn, depth, prop.propChar, opacityMask,
-                        texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
 
                 batch.draw(texture,
                            screenColumn * columnWidth, clampedBottom,
                            columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
+
+                // Elevated billboards (solid props + pickup items + stairs) are recorded so sprites
+                // drawn later but standing farther away re-draw this slice over themselves. Pure floor
+                // stains (corpse, blood, oil, energy scorch, dropped-shotgun decal) are excluded —
+                // enemies visually walk over those flat decals.
+                if (Level.isPropOccluder(prop.propChar)) {
+                    recordOccluderColumn(screenColumn, depth, texture, opacityMask,
+                            texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
+                }
             }
         }
 
@@ -600,7 +585,7 @@ public class PropRenderer implements Renderable, Disposable {
                     int auraLastCol  = Math.min(projectionColumnCount - 1, auraRight);
                     for (int screenColumn = auraFirstCol; screenColumn <= auraLastCol; screenColumn++) {
                         if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                        if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
+                        if (renderDepth >= occluderBuffer.getNearestDepth(screenColumn)) continue;
                         int auraTexSrcX = (screenColumn - auraLeft) * weaponPickupGlowTexture.getWidth() / auraSpan;
                         auraTexSrcX = MathUtils.clamp(auraTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
                         batch.draw(weaponPickupGlowTexture,
@@ -625,14 +610,11 @@ public class PropRenderer implements Renderable, Disposable {
                 float chipGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 float chipBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 batch.setColor(chipRed, chipGreen, chipBlue, 1f);
+                ColumnOpacityMask chipOpacityMask = COLUMN_OPACITY.get(chipTexture);
                 int chipFirstCol = Math.max(0, chipLeft);
                 int chipLastCol  = Math.min(projectionColumnCount - 1, chipRight);
                 for (int screenColumn = chipFirstCol; screenColumn <= chipLastCol; screenColumn++) {
                     if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                    if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
-                    propSpriteZBuffer[screenColumn]      = renderDepth;
-                    propSpriteColumnBottom[screenColumn] = chipClampBot;
-                    propSpriteColumnTop[screenColumn]    = chipClampTop;
                     int chipTexSrcX = (screenColumn - chipLeft) * chipTexW / chipSpan;
                     chipTexSrcX = MathUtils.clamp(chipTexSrcX, 0, chipTexW - 1);
                     batch.draw(chipTexture,
@@ -640,6 +622,11 @@ public class PropRenderer implements Renderable, Disposable {
                                columnWidth, chipClampTop - chipClampBot,
                                chipTexSrcX, chipTexSrcY, 1, chipTexSrcH,
                                false, false);
+                    // Ground items are drawn after the sorted prop pass, so a nearer prop already on
+                    // screen is restored over the chip instead of clipping the chip's whole column.
+                    occluderBuffer.redrawInFront(batch, screenColumn, renderDepth, columnWidth);
+                    recordOccluderColumn(screenColumn, renderDepth, chipTexture, chipOpacityMask,
+                            chipTexSrcX, chipTexSrcY, chipTexSrcH, chipClampBot, chipClampTop);
                 }
                 continue;
             }
@@ -709,7 +696,7 @@ public class PropRenderer implements Renderable, Disposable {
                     int glowLastColumn  = Math.min(projectionColumnCount - 1, glowRight);
                     for (int screenColumn = glowFirstColumn; screenColumn <= glowLastColumn; screenColumn++) {
                         if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                        if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
+                        if (renderDepth >= occluderBuffer.getNearestDepth(screenColumn)) continue;
                         int glowTexSrcX = (screenColumn - glowLeft) * weaponPickupGlowTexture.getWidth() / glowColumnSpan;
                         glowTexSrcX = MathUtils.clamp(glowTexSrcX, 0, weaponPickupGlowTexture.getWidth() - 1);
                         batch.draw(weaponPickupGlowTexture,
@@ -727,14 +714,11 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
+            ColumnOpacityMask pickupOpacityMask = COLUMN_OPACITY.get(pickupTexture);
             int firstColumn = Math.max(0, leftScreenColumn);
             int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                if (renderDepth >= propSpriteZBuffer[screenColumn]) continue;
-                propSpriteZBuffer[screenColumn]      = renderDepth;
-                propSpriteColumnBottom[screenColumn] = clampedBottom;
-                propSpriteColumnTop[screenColumn]    = clampedTop;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 batch.draw(pickupTexture,
@@ -742,6 +726,11 @@ public class PropRenderer implements Renderable, Disposable {
                            columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
+                occluderBuffer.redrawInFront(batch, screenColumn, renderDepth, columnWidth);
+                // Recorded with the texture's opacity mask: only columns with opaque pixels occlude,
+                // and an enemy behind sees through the pickup's transparent gaps.
+                recordOccluderColumn(screenColumn, renderDepth, pickupTexture, pickupOpacityMask,
+                        texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
             }
         }
 
@@ -828,16 +817,20 @@ public class PropRenderer implements Renderable, Disposable {
             int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
             for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
                 if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                if (depth >= propSpriteZBuffer[screenColumn]) continue;
                 int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
                 texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
-                recordPropOccluderColumn(screenColumn, depth, prop.propChar, opacityMask,
-                        texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 batch.draw(texture,
                            screenColumn * columnWidth, clampedBottom,
                            columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
+                // This pass is unsorted and runs after the others: restore any nearer sprite this
+                // column just painted over, then record this slice if it is an elevated billboard.
+                occluderBuffer.redrawInFront(batch, screenColumn, depth, columnWidth);
+                if (Level.isPropOccluder(prop.propChar)) {
+                    recordOccluderColumn(screenColumn, depth, texture, opacityMask,
+                            texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
+                }
             }
         }
 
@@ -986,13 +979,13 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     // ── Per-column opacity masks ───────────────────────────────────────────
-    // Prop billboards are drawn as 1-pixel-wide column slices and record their
-    // depth into a per-column z-buffer so EnemyRenderer can carve an enemy around
-    // a nearer prop. A sprite with wide transparent margins (e.g. the ammo
-    // pickups) must NOT occlude through its see-through pixels, otherwise an enemy
-    // behind it is clipped where the prop is actually transparent. For every
-    // generated texture we therefore record, per texture column, the topmost and
-    // bottommost opaque pixel row (or -1 when the whole column is transparent).
+    // Prop billboards are drawn as 1-pixel-wide column slices and record each slice
+    // in the shared SpriteOccluderBuffer, so a farther sprite drawn later can re-draw
+    // the nearer prop over itself. A column with no opaque pixels must NOT be
+    // recorded, or it would displace a farther opaque slice that still stands in
+    // front of an enemy. For every generated texture we therefore record, per
+    // texture column, the topmost and bottommost opaque pixel row (or -1 when the
+    // whole column is transparent).
     // Keyed by Texture identity; populated in finalize(), pruned on dispose().
     private static final IdentityHashMap<Texture, ColumnOpacityMask> COLUMN_OPACITY = new IdentityHashMap<>();
 
@@ -1040,37 +1033,25 @@ public class PropRenderer implements Renderable, Disposable {
         return texture;
     }
 
-    // Records the nearest occluding prop's depth and opaque vertical extent for one
-    // screen column, but only where the sprite column actually has opaque pixels.
-    // Columns that are transparent (margins, gaps between rounds, the empty space
-    // above/below a horizontal sprite) are skipped, so the enemy behind stays
-    // visible through them. occBottom/occTop are the screen-space (Y-up) bounds of
-    // just the opaque run, letting EnemyRenderer carve a tight gap.
-    private void recordPropOccluderColumn(int screenColumn, float depth, char propChar,
-                                          ColumnOpacityMask opacityMask, int texSrcX,
-                                          int texSrcY, int texSrcHeight,
-                                          float clampedBottom, float clampedTop) {
-        if (!Level.isPropOccluder(propChar)) return;
-        float occBottom = clampedBottom;
-        float occTop    = clampedTop;
+    // Records one drawn sprite column slice in the shared occluder buffer, but only where the
+    // sprite column actually has opaque pixels inside the drawn rows. Fully transparent columns
+    // (margins, gaps between rounds, empty space beside a horizontal sprite) are skipped, so they
+    // never displace a farther — but still nearer-than-the-enemy — opaque slice from the record.
+    // The batch's current colour is captured so a re-draw reproduces this draw exactly.
+    private void recordOccluderColumn(int screenColumn, float depth, Texture texture,
+                                      ColumnOpacityMask opacityMask, int texSrcX,
+                                      int texSrcY, int texSrcHeight,
+                                      float clampedBottom, float clampedTop) {
         if (opacityMask != null) {
-            int topRow    = opacityMask.opaqueTopRow[texSrcX];
-            if (topRow == -1) return;                              // fully transparent column
+            int topRow = opacityMask.opaqueTopRow[texSrcX];
+            if (topRow == -1) return;                                         // fully transparent column
             int bottomRow = opacityMask.opaqueBottomRow[texSrcX];
-            int visibleTop    = Math.max(topRow, texSrcY);          // clip to the drawn texture region
-            int visibleBottom = Math.min(bottomRow, texSrcY + texSrcHeight - 1);
-            if (visibleTop > visibleBottom) return;                // opaque run lies outside the visible rows
-            // Texture row → screen Y: row texSrcY maps to clampedTop, row texSrcY+texSrcHeight to clampedBottom.
-            float columnHeightSpan = clampedTop - clampedBottom;
-            occTop    = clampedTop - (visibleTop - texSrcY)        / (float) texSrcHeight * columnHeightSpan;
-            occBottom = clampedTop - (visibleBottom + 1 - texSrcY) / (float) texSrcHeight * columnHeightSpan;
+            if (Math.max(topRow, texSrcY) > Math.min(bottomRow, texSrcY + texSrcHeight - 1)) return; // opaque run clipped away
         }
-        propSpriteZBuffer[screenColumn]      = depth;
-        propSpriteColumnBottom[screenColumn] = occBottom;
-        propSpriteColumnTop[screenColumn]    = occTop;
+        occluderBuffer.record(screenColumn, depth, texture, texSrcX, texSrcY, texSrcHeight,
+                clampedBottom, clampedTop, batch.getPackedColor());
     }
 
-    // Draws a solid filled rectangle leaving a 2-pixel black border around all edges.
     private static void fillBody(Pixmap pixmap, float red, float green, float blue) {
         int width  = pixmap.getWidth();
         int height = pixmap.getHeight();

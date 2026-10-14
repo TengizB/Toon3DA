@@ -176,6 +176,13 @@ and placer are described in docs/procedural-level-generation.txt (SHARED FLOOR P
 EnemyRenderer (render/EnemyRenderer.java):
   - Mirrors PropRenderer: same projection math, same painter's-algorithm depth sort,
     same per-column z-buffer occlusion test, zero per-frame allocations.
+  - Props, ground items and shop machines are drawn BEFORE enemies. Each opaque prop column slice
+    is recorded in the shared render/SpriteOccluderBuffer (2 nearest slices per column, owned by
+    PropRenderer). An enemy draws its whole column, then redrawInFront() re-draws any nearer
+    recorded slice on top — the prop's opaque pixels hide the enemy, its transparent pixels show
+    it. (The old scheme cut a rectangular gap out of the enemy, which left holes wherever a nearer
+    weapon pickup's texture was transparent.) Ground items, dynamic drops and shop machines use
+    the same draw-then-restore rule against props already on screen.
   - Textures loaded from asset paths at construction; procedural fallbacks if absent.
   - DORMANT enemies rendered with shade *= DORMANT_SHADE_DAMPEN (0.7) — visibly darker.
   - VORTEX EYE drawBottom raised by VORTEX_EYE_HOVER_OFFSET_FRACTION (0.25) × lineHeight.

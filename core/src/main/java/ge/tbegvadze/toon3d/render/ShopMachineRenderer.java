@@ -56,11 +56,9 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     // Machines to draw — injected by World after seeding; never null.
     private List<VendingMachine> machines = Collections.emptyList();
 
-    // Prop z-buffers, shared from PropRenderer: read to be occluded by nearer props, and the body
-    // writes into them so EnemyRenderer (which runs after us) occludes enemies behind the machine.
-    private float[] propZBuffer;
-    private float[] propColumnBottom;
-    private float[] propColumnTop;
+    // Occluder record shared from PropRenderer: nearer props are re-drawn over the machine, and the
+    // body is recorded so EnemyRenderer (which runs after us) re-draws it over enemies behind it.
+    private SpriteOccluderBuffer occluderBuffer;
 
     // Camera / player state (mirrors PropRenderer).
     private float playerWorldX = 0f;
@@ -103,9 +101,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
      * in turn, occludes enemies drawn behind it. Called once after both renderers are built.
      */
     public void setPropRenderer(PropRenderer propRenderer) {
-        this.propZBuffer      = propRenderer.getPropSpriteZBuffer();
-        this.propColumnBottom = propRenderer.getPropSpriteColumnBottom();
-        this.propColumnTop    = propRenderer.getPropSpriteColumnTop();
+        this.occluderBuffer = propRenderer.getOccluderBuffer();
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -296,9 +292,10 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
     /**
      * Draws one billboard layer as vertical 1-pixel columns, clipping each against the wall z-buffer
-     * (and the shared prop z-buffer) so walls and nearer props occlude it. Blend mode and colour must
-     * be set by the caller. When {@code writeOccluder} is true the drawn columns are recorded in the
-     * prop z-buffer so EnemyRenderer occludes enemies standing behind the cabinet.
+     * so walls occlude it. Blend mode and colour must be set by the caller. When {@code writeOccluder}
+     * is true (the alpha-blended body) nearer props are re-drawn over each column and the column is
+     * recorded in the shared occluder buffer so EnemyRenderer re-draws the cabinet over enemies
+     * standing behind it; otherwise (additive glows) columns behind a nearer prop are skipped.
      */
     private void drawLayer(Texture texture, float screenCenterColumn, float centerY,
                            float layerWidth, float layerHeight, float depth, boolean writeOccluder) {
@@ -326,12 +323,10 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         int lastColumn  = Math.min(projectionColumnCount - 1, rightColumn);
         for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
             if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-            if (propZBuffer != null && depth >= propZBuffer[screenColumn]) continue;
-            if (writeOccluder && propZBuffer != null) {
-                propZBuffer[screenColumn]      = depth;
-                propColumnBottom[screenColumn] = clampedBottom;
-                propColumnTop[screenColumn]    = clampedTop;
-            }
+            // Additive glow layers are simply hidden behind a nearer prop; re-drawing a prop over
+            // additive light would not undo it.
+            if (!writeOccluder && occluderBuffer != null
+                    && depth >= occluderBuffer.getNearestDepth(screenColumn)) continue;
             int texSrcX = (screenColumn - leftColumn) * textureWidth / columnSpan;
             texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
             batch.draw(texture,
@@ -339,6 +334,13 @@ public class ShopMachineRenderer implements Renderable, Disposable {
                        columnWidth, clampedTop - clampedBottom,
                        texSrcX, texSrcY, 1, texSrcHeight,
                        false, false);
+            if (writeOccluder && occluderBuffer != null) {
+                // The body draws its whole column, then nearer props are restored over it, so the
+                // cabinet shows through their transparent pixels instead of being clipped away.
+                occluderBuffer.redrawInFront(batch, screenColumn, depth, columnWidth);
+                occluderBuffer.record(screenColumn, depth, texture, texSrcX, texSrcY, texSrcHeight,
+                        clampedBottom, clampedTop, batch.getPackedColor());
+            }
         }
     }
 
