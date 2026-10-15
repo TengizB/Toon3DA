@@ -1912,9 +1912,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     /**
      * Local articulation test: making (tileColumn,tileRow) solid must not disconnect its open
-     * orthogonal neighbors. They are safe if they all belong to one 8-connected component of open
+     * orthogonal neighbors. They are safe if they all belong to one 4-connected component of open
      * tiles within the 3x3 block around the tile (excluding the tile itself). One (or zero) open
      * orthogonal neighbor is trivially safe (blocking a dead-end never disconnects anything).
+     * 4-connected, never 8: the player only steps in cardinal directions, so two open neighbours that
+     * touch only diagonally (an L-bend whose corner tile is a wall) are NOT linked — an 8-connected
+     * flood let a machine be mounted in a corridor bend and seal the passage.
      */
     private boolean orthOpenNeighborsLocallyConnected(Level targetLevel, int tileColumn, int tileRow) {
         int[][] orthogonalSteps = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
@@ -1928,7 +1931,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (openNeighbors.size() <= 1) return true;
 
-        // Flood-fill 8-connected through open tiles inside the 3x3 block, excluding the center tile.
+        // Flood-fill 4-connected (cardinal steps only, matching player movement) through open tiles
+        // inside the 3x3 block, excluding the center tile.
         boolean[][] visited = new boolean[3][3];
         java.util.ArrayDeque<int[]> frontier = new java.util.ArrayDeque<>();
         int[] start = openNeighbors.get(0);
@@ -1936,21 +1940,18 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         frontier.push(start);
         while (!frontier.isEmpty()) {
             int[] current = frontier.pop();
-            for (int deltaColumn = -1; deltaColumn <= 1; deltaColumn++) {
-                for (int deltaRow = -1; deltaRow <= 1; deltaRow++) {
-                    if (deltaColumn == 0 && deltaRow == 0) continue;
-                    int nextColumn = current[0] + deltaColumn;
-                    int nextRow    = current[1] + deltaRow;
-                    if (nextColumn < tileColumn - 1 || nextColumn > tileColumn + 1
-                            || nextRow < tileRow - 1 || nextRow > tileRow + 1) continue;
-                    if (nextColumn == tileColumn && nextRow == tileRow) continue; // the tile being blocked
-                    int localColumn = nextColumn - tileColumn + 1;
-                    int localRow    = nextRow - tileRow + 1;
-                    if (visited[localColumn][localRow]) continue;
-                    if (isSolidForMachine(targetLevel, nextColumn, nextRow)) continue;
-                    visited[localColumn][localRow] = true;
-                    frontier.push(new int[]{nextColumn, nextRow});
-                }
+            for (int[] step : orthogonalSteps) {
+                int nextColumn = current[0] + step[0];
+                int nextRow    = current[1] + step[1];
+                if (nextColumn < tileColumn - 1 || nextColumn > tileColumn + 1
+                        || nextRow < tileRow - 1 || nextRow > tileRow + 1) continue;
+                if (nextColumn == tileColumn && nextRow == tileRow) continue; // the tile being blocked
+                int localColumn = nextColumn - tileColumn + 1;
+                int localRow    = nextRow - tileRow + 1;
+                if (visited[localColumn][localRow]) continue;
+                if (isSolidForMachine(targetLevel, nextColumn, nextRow)) continue;
+                visited[localColumn][localRow] = true;
+                frontier.push(new int[]{nextColumn, nextRow});
             }
         }
         for (int index = 0; index < openNeighbors.size(); index++) {

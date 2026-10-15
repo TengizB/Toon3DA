@@ -180,11 +180,36 @@ final class GroupBarrelPlacer {
             int tileColumn = candidate[0];
             int tileRow    = candidate[1];
             // Earlier barrels (this room's, or another's) may have changed what is safe: re-check, then stamp.
+            // A barrel may never plug a one-tile-wide passage, even where a detour keeps everything reachable.
+            if (plugsAPassage(grid, tileColumn, tileRow)) continue;
             if (!keepsEverythingReachable(grid, survey, tileColumn, tileRow)) continue;
             grid[tileRow][tileColumn] = BARREL_SYMBOL;
             placed++;
         }
         return placed;
+    }
+
+    /**
+     * Passage guard: true when a barrel here would sit in a one-tile-wide passage, OR would squeeze a solid
+     * neighbour into one. Checked before stamping so FloorPopulator's final passage sweep never has to remove
+     * a counted barrel. The grid is left exactly as it was.
+     */
+    private static boolean plugsAPassage(char[][] grid, int tileColumn, int tileRow) {
+        if (FloorPopulator.wouldPlugPassage(grid, tileColumn, tileRow)) return true;
+        char previous = grid[tileRow][tileColumn];
+        grid[tileRow][tileColumn] = BARREL_SYMBOL;
+        boolean plugs = false;
+        for (int direction = 0; direction < 4 && !plugs; direction++) {
+            int neighborColumn = tileColumn + STEP_COLUMNS[direction];
+            int neighborRow    = tileRow    + STEP_ROWS[direction];
+            if (neighborRow < 0 || neighborRow >= grid.length
+                    || neighborColumn < 0 || neighborColumn >= grid[0].length) continue;
+            char neighbor = grid[neighborRow][neighborColumn];
+            if (!Level.isPropSolid(neighbor) && !Level.isColumn(neighbor)) continue;
+            plugs = FloorPopulator.wouldPlugPassage(grid, neighborColumn, neighborRow);
+        }
+        grid[tileRow][tileColumn] = previous;
+        return plugs;
     }
 
     /**

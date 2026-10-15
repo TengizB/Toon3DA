@@ -1274,7 +1274,9 @@ public class CavernGenerator implements ILevelGenerator, SupplySlotProvider {
             int targetRow    = -1;
             for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT && targetColumn < 0; tileRow++) {
                 for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                    if (!reachable[tileRow][tileColumn] && isWalkableTile(grid[tileRow][tileColumn])) {
+                    // Any tile the player could stand on counts (decals, pickups, doors), not only
+                    // plain floor — a decal pocket walled off by props is still a stranded walkway.
+                    if (!reachable[tileRow][tileColumn] && !isEmergencyBlocker(grid[tileRow][tileColumn])) {
                         targetColumn = tileColumn;
                         targetRow    = tileRow;
                         break;

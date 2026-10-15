@@ -29,7 +29,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LevelGeneratorSnapshotTest {
 
     /**
-     * SHA-256 over {@link #fingerprint()}, re-baselined for the WALKWAY-BLOCKING CONNECTIVITY FIX.
+     * SHA-256 over {@link #fingerprint()}, re-baselined for the PASSAGE-BLOCKING FIX (follow-up to the
+     * walkway fix below).
+     *
+     * <p>Two holes remained. (1) {@code repairUnreachableFloorRegions()} flooded with the real movement rule
+     * but only TARGETED stranded tiles among the four plain floor chars, so a pocket made of walkable decals
+     * (stains, scorch, observatory plating) walled in by props was never reopened — ~23% of seeds still had
+     * an unreachable tile. It now targets every tile the player can stand on. (2) A solid prop or column in
+     * a one-tile-wide passage still plugged it whenever a detour existed; {@code FloorPopulator} now ends
+     * with {@code clearPluggedPassages()} and {@code GroupBarrelPlacer} refuses such tiles. Neither consumes
+     * RNG, so only the affected seeds' tiles change. The prior baseline passed on the pre-fix generator.
+     *
+     * <p>PRIOR RE-BASELINE (retained for history) — the WALKWAY-BLOCKING CONNECTIVITY FIX.
      *
      * <p>{@code verifyAndRepairConnectivity()} previously audited only room CENTRES, so a solid prop,
      * wall accent, or 'P' column dropped into a walkway during decoration could strand a floor pocket
@@ -138,7 +149,7 @@ class LevelGeneratorSnapshotTest {
     // {0.85, 1.00, 1.25, 1.20, 1.30}, so every floor's Threat-Point budget outside region B changed and the
     // encounter planner rolls different rosters. A deliberate balance change.
     private static final String EXPECTED_DIGEST =
-            "412544b093bb229c39ea2812eb4d9b3737d69dd81b2ed20f1125e23bcd3eb29f";
+            "61306b280120285f10b10274560ed22325e5e8d8046f29d4fd98abb411bc0336";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {
