@@ -73,10 +73,28 @@ GroupBarrelPlacer runs on COMBAT and ELITE floors only (spec.type(); hand levels
      Random seeded from the floor seed; each gets HAZARD_GROUP_BARRELS_MIN..MAX (1-2) 'E' barrels.
   3. A barrel is SOLID, so every placement is guarded by a flood fill (columns blocking, with and without
      keycards): every tile that was reachable, and the exit, must stay reachable or the tile is skipped.
+     A barrel is also never placed where FloorPopulator.wouldPlugPassage is true (see PASSAGES below).
   4. The symbol is the existing 'E' (no new symbol). On ROOMS_MST the generated palette pins 'E' to
      prop_explosive_barrel (as the atmospheric plant does) so the free variety pool can never repaint a live
      barrel; the cave / corridor generators use the legacy prop palette where 'E' already is the barrel.
   The result (barrels, hostable rooms, rooms served) rides on FloorContentReport; R-HAZARD audits it.
+
+PASSAGES — a non-walkable object never blocks a way through. Two guarantees, on every generated floor:
+  1. REACHABILITY. ROOMS_MST, LINEAR_CORRIDOR and CAVERN end their connectivity audit with
+     repairUnreachableFloorRegions(): flood from the spawn with the in-game movement rule (walls, solid props
+     and columns block; floor, decals, pickups and doors pass) and, while ANY tile the player could stand on is
+     unreached, carve a blocker-clearing corridor to it. "Any tile the player could stand on" — not just the
+     four plain floor chars: a pocket made only of stains / scorch / observatory plating walled in by props is
+     just as stranded (this hole left ~23% of ROOMS_MST and ~16% of LINEAR_CORRIDOR seeds with an
+     unreachable tile until it was closed).
+  2. NO PLUGGED PASSAGE. Reachability alone lets a prop sit in a one-tile-wide corridor or partition gap
+     whenever a detour exists. FloorPopulator.populate (the last step of every generator) ends with
+     clearPluggedPassages(): any solid prop or column that is blocked on both sides of one axis and open on
+     both sides of the other (wouldPlugPassage) is turned back into plain floor. Removing a blocker can never
+     strand anything, so this cannot undo guarantee 1.
+  Runtime: the shop machine '@' (World.tryMakeMachineCandidate) checks that its open neighbours stay linked
+  through a 4-connected flood of the surrounding 3x3 — never 8-connected, since the player cannot step
+  diagonally and an 8-connected test let a machine seal a corridor's L-bend.
 
 The numbers live in BalanceConfig SECTION 21 and are audited by R-SUPPLY / R-DENSITY over a
 30-seed x generator x node type x depth {1,5,10,15,20,25} sweep (BalanceSchema.supplySweepReports);
@@ -311,9 +329,6 @@ geometry for the raycaster.
 
 === KNOWN LIMITATIONS ===
 
-  • No flood-fill validation: if room placement is unusually unlucky, some rooms could
-    theoretically be disconnected (not yet observed in practice; MST guarantees connectivity
-    for all rooms in the connected list, but room placement can sometimes fail).
   • All rooms are rectangular; no L-shaped, T-shaped, or irregular rooms.
   • No special room types beyond entrance + standard.
   • Corridors are always 1 tile wide; no wider passages or open-plan connections.

@@ -1784,7 +1784,8 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
      * from the spawn and, while any walkable floor tile remains unreachable, carves a
      * blocker-clearing corridor from the spawn to one such tile — connecting that whole region.
      * It repeats until every floor tile is reachable, so the player can always reach all loot,
-     * enemies, and the exit.
+     * enemies, and the exit. "Walkable" is the in-game movement rule (isPassableForBFS), not just
+     * the four plain floor chars, so a pocket of decals or pickups walled off by props is reopened too.
      */
     private void repairUnreachableFloorRegions(char[][] grid, int spawnColumn, int spawnRow) {
         int safetyCap = LevelGenConstants.LEVEL_GEN_GRID_WIDTH + LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
@@ -1794,14 +1795,14 @@ public class LinearCorridorGenerator implements ILevelGenerator, SupplySlotProvi
             int targetRow    = -1;
             for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT && targetColumn < 0; tileRow++) {
                 for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                    if (!reachable[tileRow][tileColumn] && isWalkableFloor(grid, tileColumn, tileRow)) {
+                    if (!reachable[tileRow][tileColumn] && isPassableForBFS(grid[tileRow][tileColumn])) {
                         targetColumn = tileColumn;
                         targetRow    = tileRow;
                         break;
                     }
                 }
             }
-            if (targetColumn < 0) return; // every floor tile is reachable
+            if (targetColumn < 0) return; // every walkable tile is reachable
             carveEmergencyCorridor(grid, spawnColumn, spawnRow, targetColumn, targetRow);
         }
     }

@@ -201,6 +201,9 @@ public final class FloorPopulator {
                 GroupBarrelPlacer.place(grid, survey, stampedSpawns, reservedTiles, spec, seed);
         int barrelCount = barrels.barrels;
 
+        // --- PASSAGES: the last write to the grid. No solid prop or column may plug a one-tile-wide passage.
+        clearPluggedPassages(grid);
+
         FloorContentReport report = buildReport(generatorName, spec, depth, survey, stampedSpawns, facts,
                 anchorRegion, anchorWalk, plan, placement);
         report.attachBarrels(barrels.barrels, barrels.eligibleRooms, barrels.roomsServed);
@@ -268,5 +271,44 @@ public final class FloorPopulator {
 
     private static long tileKey(int tileColumn, int tileRow) {
         return ((long) tileRow << 32) | (tileColumn & 0xFFFFFFFFL);
+    }
+
+    /**
+     * Final passage sweep, shared by every generator (they all finish through {@link #populate}). The
+     * reachability repairs only guarantee that every tile can be reached SOMEHOW; a crate, barrel or
+     * terminal dropped into a one-tile-wide corridor or a doorway-sized gap in a partition still plugs that
+     * passage whenever a detour happens to exist. Every such prop/column is turned back into plain floor.
+     * Removing a blocker never strands anything, so this cannot undo any earlier connectivity guarantee.
+     */
+    static void clearPluggedPassages(char[][] grid) {
+        for (int tileRow = 0; tileRow < grid.length; tileRow++) {
+            for (int tileColumn = 0; tileColumn < grid[tileRow].length; tileColumn++) {
+                char cell = grid[tileRow][tileColumn];
+                if (!Level.isPropSolid(cell) && !Level.isColumn(cell)) continue;
+                if (wouldPlugPassage(grid, tileColumn, tileRow)) grid[tileRow][tileColumn] = ' ';
+            }
+        }
+    }
+
+    /**
+     * True when a solid tile at (tileColumn, tileRow) would sit INSIDE a one-tile-wide passage: blocked on
+     * both sides along one axis and open on both sides along the other, so it is the only way through.
+     * Blocked = wall, solid prop, column or off-grid; open = anything the player can step onto (doors too).
+     */
+    static boolean wouldPlugPassage(char[][] grid, int tileColumn, int tileRow) {
+        boolean northOpen = isOpenForPassage(grid, tileColumn, tileRow + 1);
+        boolean southOpen = isOpenForPassage(grid, tileColumn, tileRow - 1);
+        boolean eastOpen  = isOpenForPassage(grid, tileColumn + 1, tileRow);
+        boolean westOpen  = isOpenForPassage(grid, tileColumn - 1, tileRow);
+        return (northOpen && southOpen && !eastOpen && !westOpen)
+            || (eastOpen && westOpen && !northOpen && !southOpen);
+    }
+
+    private static boolean isOpenForPassage(char[][] grid, int tileColumn, int tileRow) {
+        if (tileRow < 0 || tileRow >= grid.length || tileColumn < 0 || tileColumn >= grid[tileRow].length) {
+            return false;
+        }
+        char cell = grid[tileRow][tileColumn];
+        return !Level.isWall(cell) && !Level.isPropSolid(cell) && !Level.isColumn(cell);
     }
 }
