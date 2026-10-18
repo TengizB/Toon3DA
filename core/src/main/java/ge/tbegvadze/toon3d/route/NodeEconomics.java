@@ -3,7 +3,7 @@ package ge.tbegvadze.toon3d.route;
 import java.util.Objects;
 
 /**
- * The PRICE TAG of one route-map subject — a node type, an ELITE affix, or a MYSTERY outcome
+ * The PRICE TAG of one route-map subject — a node type, an ELITE affix, a COMBAT floor twist, or a MYSTERY outcome
  * (new-game-balancr order 7, "Route Economics"). Registered in {@link NodeEconomicsRegistry}
  * alongside the subject's {@link NodeTypeDefinition} / affix / outcome, exactly the same registry
  * discipline: this is DATA, never a switch.
@@ -42,7 +42,13 @@ public final class NodeEconomics {
         /** An ELITE {@link NodeAffix} — the row is a MODIFIER folded onto its host ELITE node. */
         AFFIX,
         /** One {@link MysteryOutcome} row of the hidden table. */
-        MYSTERY_OUTCOME
+        MYSTERY_OUTCOME,
+        /**
+         * A COMBAT FLOOR TWIST (floor-twists): a MODIFIER folded onto its host COMBAT node, priced by
+         * R-TWIST against plain COMBAT. Deliberately NOT {@link #AFFIX}, so R-RISK-PREMIUM (which folds
+         * every AFFIX row onto the ELITE node) never prices a twist on a node it can never sit on.
+         */
+        TWIST
     }
 
     private final Kind          kind;
@@ -205,6 +211,11 @@ public final class NodeEconomics {
     /** Starts an AFFIX row (a threat/reward modifier folded onto its host node). */
     public static Builder affix(String id) {
         return new Builder(Kind.AFFIX, id).budgetScale(1f);
+    }
+
+    /** Starts a TWIST row (a threat/reward modifier folded onto its host COMBAT node). */
+    public static Builder twist(String id) {
+        return new Builder(Kind.TWIST, id).budgetScale(1f);
     }
 
     /** Starts a MYSTERY_OUTCOME row of the hidden table. */

@@ -50,7 +50,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — data + constants + economics rows.
+- [x] **CP1** — data + constants + economics rows.
       DONE WHEN: `route/AffixScope` exists; `NodeAffixDefinition` carries scope/minDepth/ruleLine/twist
       modifiers with no-effect Builder defaults; `NodeAffixRegistry.poolFor(AffixScope)` exists and
       `elitePool()` returns the same five; three FLOOR_TWIST rows registered; `FloorEffects.twistId`;
@@ -83,3 +83,21 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - CP0: stop-condition check — `narrative/StoryProgress.hasSeen/markSeen(String beatId)` →
   `util/StoryStore.isBeatSeen/markBeatSeen` keyed `story.beat.<id>`; generic, so three new
   TeachingTopic rows need no schema change.
+- **CP1 handover:** `route/AffixScope{ELITE_AFFIX(ELITE, AFFIX_ROLL_CHANCE_ELITE), FLOOR_TWIST(COMBAT,
+  TWIST_ROLL_CHANCE_COMBAT)}` with `hostNodeType()`/`rollChance()`. `NodeAffixDefinition` new accessors:
+  `scope() minDepth() ruleLine() minimapDisabled() lightMultiplier() wakeRadiusTiles() wakeSightTiles()
+  overridesWakePerception() hunterEnemyTypeName() scatteredAmmoBoxes() extraStims() extraArmourShards()
+  twistGuarantees(seed)` (the '+'/'a' SCATTERED pickups; ammo boxes are NOT in it — use an
+  `AmmoCacheRequest(n, Placement.SCATTERED)`). Builder: `.scope() .minDepth() .ruleLine() .minimapDisabled()
+  .lightMultiplier() .wakePerception(radius, sight) .hunterEnemyTypeName() .scatteredAmmoBoxes() .extraStims()
+  .extraArmourShards()`. Registry: `poolFor(scope)`, `definitionsFor(scope)`; `elitePool()` = poolFor(ELITE_AFFIX).
+  `FloorEffects.withTwist(id)/twistId()`. `NodeEconomics.Kind.TWIST` + `NodeEconomics.twist(id)` — a SEPARATE kind
+  so R-RISK-PREMIUM's AFFIX loop never folds a twist onto ELITE. HUNTED row = budgetScale 1+TWIST_HUNTED_THREAT_SHARE
+  (placeholder 0.40, CP3 tunes it against the real IRON_STALKER TP). Constants: BalanceConfig SECTION 27 (end of
+  file); RouteMapConstants `TWIST_*_ID/_NAME/_RULE_LINE`, `AFFIX_*_RULE_LINE`, `TWIST_ROLL_CHANCE_COMBAT`,
+  `TWIST_HUNTED_ENEMY_TYPE_NAME="IRON_STALKER"`, `LEGEND_TWIST_OFFSET_Y=-30`; RenderConstants
+  `TWIST_BLACKOUT_LIGHT_MULTIPLIER/ENEMY_MIN_SHADE`; HudConstants `TWIST_AMBER_*`, `TWIST_NAV_OFFLINE_*`,
+  `TWIST_HUNTED_WARNING_TEXT/ARRIVAL_TEXT`; EnemyConstants `TWIST_HUNTED_TRAIL_CAPACITY`, `_ENGAGE_DISTANCE_TILES`(2),
+  `_BLOCKED_WAIT_TURNS`(2), `TWIST_HUNTER_HEALTH_BAR_FRAME_*`, SECTION-27 shims. EliteProfile ignores a non-ELITE_AFFIX
+  row (defensive). Idea STATUS -> IN PROGRESS. Nothing rolls a twist yet (CP2 wires the generator).
+

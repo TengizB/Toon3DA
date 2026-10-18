@@ -72,6 +72,10 @@ public final class EliteProfile implements NodeLevelProfile {
         // Fold in the map-gen affix, if any: a bundle of typed modifiers, no bespoke per-affix code.
         NodeAffixDefinition affix = node != null && node.affix != null
                 ? affixes.definition(node.affix.id()) : null;
+        // Defensive (floor-twists): only an ELITE_AFFIX row folds here; a twist belongs to COMBAT alone.
+        if (affix != null && affix.scope() != AffixScope.ELITE_AFFIX) {
+            affix = null;
+        }
         if (affix != null) {
             affix.applyToConfig(config);
             // An affix multiplies the spec's threat (an EXTRA multiplier, never the node type's own).

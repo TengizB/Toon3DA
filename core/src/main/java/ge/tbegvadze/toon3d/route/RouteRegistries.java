@@ -7,6 +7,8 @@ import ge.tbegvadze.toon3d.level.GateAirlockGenerator;
 import ge.tbegvadze.toon3d.level.LevelGenerator;
 import ge.tbegvadze.toon3d.level.LinearCorridorGenerator;
 import ge.tbegvadze.toon3d.level.MedBayGenerator;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 /**
@@ -391,6 +393,7 @@ public final class RouteRegistries {
     static void registerAffixes(NodeAffixRegistry registry) {
         // IRRADIATED — extra radioactive barrels + a hazard-pool read.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_IRRADIATED_ID, "IRRADIATED")
+                .ruleLine(RouteMapConstants.AFFIX_IRRADIATED_RULE_LINE)
                 .radioactiveBarrelWeightBonus(RouteMapConstants.AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS)
                 .extraRadioactiveBarrels(RouteMapConstants.AFFIX_IRRADIATED_EXTRA_BARRELS)
                 .build());
@@ -398,6 +401,7 @@ public final class RouteRegistries {
         // OVERCLOCKED — enemies hit harder (approximated as more depth Threat spent). The raised threat
         // is PAID FOR by a richer vault (R-RISK-PREMIUM, order 7): danger must never be a sucker bet.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_OVERCLOCKED_ID, "OVERCLOCKED")
+                .ruleLine(RouteMapConstants.AFFIX_OVERCLOCKED_RULE_LINE)
                 .budgetScaleMultiplier(RouteMapConstants.AFFIX_OVERCLOCKED_BUDGET_MULT)
                 .extraVaultAmmoBoxes(RouteMapConstants.AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES)
                 .build());
@@ -405,19 +409,64 @@ public final class RouteRegistries {
         // SWARM — the one exception to fewer-bodies: many chaff, a crowd-control test. The biggest
         // threat multiplier in the catalog, so it carries the biggest vault premium.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_SWARM_ID, "SWARM")
+                .ruleLine(RouteMapConstants.AFFIX_SWARM_RULE_LINE)
                 .budgetScaleMultiplier(RouteMapConstants.AFFIX_SWARM_BUDGET_MULT)
                 .extraVaultAmmoBoxes(RouteMapConstants.AFFIX_SWARM_VAULT_AMMO_BOXES)
                 .build());
 
         // FORTIFIED — armour + more cover columns (a slugfest).
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_FORTIFIED_ID, "FORTIFIED")
+                .ruleLine(RouteMapConstants.AFFIX_FORTIFIED_RULE_LINE)
                 .extraColumns(RouteMapConstants.AFFIX_FORTIFIED_EXTRA_COLUMNS)
                 .extraArmourPickups(RouteMapConstants.AFFIX_FORTIFIED_EXTRA_ARMOUR)
                 .build());
 
         // VOLATILE — extra explosive barrels: the arena itself is a weapon for both sides.
         registry.register(NodeAffixDefinition.builder(RouteMapConstants.AFFIX_VOLATILE_ID, "VOLATILE")
+                .ruleLine(RouteMapConstants.AFFIX_VOLATILE_RULE_LINE)
                 .extraExplosiveBarrels(RouteMapConstants.AFFIX_VOLATILE_EXTRA_BARRELS)
+                .build());
+
+        // ---- FLOOR TWISTS (floor-twists) — FLOOR_TWIST scope: only ever on a COMBAT node (R1) ----
+        // A twist is a bundle of the same typed modifiers. Adding a fourth twist built from these kinds is
+        // ONE row here + its NodeEconomics row + its SECTION 27 numbers + its rule line (+ a TeachingTopic).
+
+        // BLACKOUT — information for perception: no mini-map, the floor dark (exit lit), and dormant
+        // enemies wake only from much closer. Priced threat-neutral (R-TWIST T2).
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.TWIST_BLACKOUT_ID,
+                        RouteMapConstants.TWIST_BLACKOUT_NAME)
+                .scope(AffixScope.FLOOR_TWIST)
+                .weight(BalanceConfig.TWIST_WEIGHT_BLACKOUT)
+                .minDepth(BalanceConfig.TWIST_MIN_DEPTH_BLACKOUT)
+                .ruleLine(RouteMapConstants.TWIST_BLACKOUT_RULE_LINE)
+                .minimapDisabled(true)
+                .lightMultiplier(RenderConstants.TWIST_BLACKOUT_LIGHT_MULTIPLIER)
+                .wakePerception(BalanceConfig.TWIST_BLACKOUT_WAKE_RADIUS_TILES,
+                        BalanceConfig.TWIST_BLACKOUT_WAKE_SIGHT_TILES)
+                .build());
+
+        // SALVAGE — more resistance, more supply lying around (the SWARM budget override + scattered loot).
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.TWIST_SALVAGE_ID,
+                        RouteMapConstants.TWIST_SALVAGE_NAME)
+                .scope(AffixScope.FLOOR_TWIST)
+                .weight(BalanceConfig.TWIST_WEIGHT_SALVAGE)
+                .minDepth(BalanceConfig.TWIST_MIN_DEPTH_SALVAGE)
+                .ruleLine(RouteMapConstants.TWIST_SALVAGE_RULE_LINE)
+                .budgetScaleMultiplier(BalanceConfig.TWIST_SALVAGE_BUDGET_MULT)
+                .scatteredAmmoBoxes(BalanceConfig.TWIST_SALVAGE_AMMO_BOXES)
+                .extraStims(BalanceConfig.TWIST_SALVAGE_STIMS)
+                .extraArmourShards(BalanceConfig.TWIST_SALVAGE_ARMOUR_SHARDS)
+                .build());
+
+        // HUNTED — tempo: after TWIST_HUNTED_ARRIVAL_TURNS an Iron Stalker is printed where you arrived
+        // and walks your trail. The hunter is named, not imported (route never depends on enemy).
+        registry.register(NodeAffixDefinition.builder(RouteMapConstants.TWIST_HUNTED_ID,
+                        RouteMapConstants.TWIST_HUNTED_NAME)
+                .scope(AffixScope.FLOOR_TWIST)
+                .weight(BalanceConfig.TWIST_WEIGHT_HUNTED)
+                .minDepth(BalanceConfig.TWIST_MIN_DEPTH_HUNTED)
+                .ruleLine(RouteMapConstants.TWIST_HUNTED_RULE_LINE)
+                .hunterEnemyTypeName(RouteMapConstants.TWIST_HUNTED_ENEMY_TYPE_NAME)
                 .build());
     }
 }

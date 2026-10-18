@@ -355,6 +355,11 @@ public final class RouteMapConstants {
      */
     public static final float LEGEND_PROMISE_THREAT_OFFSET_Y = 22f;
     public static final float LEGEND_PROMISE_REWARD_OFFSET_Y = -6f;
+    /**
+     * Floor-twists R14: the focused node's affix / twist line ("HUNTED — A HUNTER WALKS YOUR TRAIL", hazard
+     * amber), a third stacked line under the threat and reward promise. Offset from the bar's vertical middle.
+     */
+    public static final float LEGEND_TWIST_OFFSET_Y = -30f;
     public static final float CONFIRM_LABEL_SCALE = 1.1f;
 
     // =========================================================================
@@ -617,6 +622,33 @@ public final class RouteMapConstants {
     public static final int   AFFIX_FORTIFIED_EXTRA_ARMOUR = BalanceConfig.AFFIX_FORTIFIED_EXTRA_ARMOUR;
     /** VOLATILE: extra explosive barrels 'E' — the arena itself is a weapon for both sides. */
     public static final int   AFFIX_VOLATILE_EXTRA_BARRELS = BalanceConfig.AFFIX_VOLATILE_EXTRA_BARRELS;
+
+    // ---- ELITE affix RULE LINES (floor-twists R14) — the confirm bar's third line, "<NAME> — <RULE>" ----
+    public static final String AFFIX_IRRADIATED_RULE_LINE  = "HOT BARRELS";
+    public static final String AFFIX_OVERCLOCKED_RULE_LINE = "MEANER RESISTANCE · BIGGER VAULT";
+    public static final String AFFIX_SWARM_RULE_LINE       = "MORE BODIES · BIGGER VAULT";
+    public static final String AFFIX_FORTIFIED_RULE_LINE   = "COVER · EXTRA ARMOUR";
+    public static final String AFFIX_VOLATILE_RULE_LINE    = "EXPLOSIVE BARRELS";
+
+    // ---- FLOOR TWISTS (floor-twists) — FLOOR_TWIST-scoped rows of NodeAffixRegistry on COMBAT nodes ----
+    // A twist rides the same RouteNode.affix slot, affix sub-stream, hint suffix and card corner tag as an
+    // ELITE affix. Every balance-bearing number lives in BalanceConfig SECTION 27; these are shims.
+    public static final String TWIST_BLACKOUT_ID = "blackout";
+    public static final String TWIST_SALVAGE_ID  = "salvage";
+    public static final String TWIST_HUNTED_ID   = "hunted";
+    public static final String TWIST_BLACKOUT_NAME = "BLACKOUT";
+    public static final String TWIST_SALVAGE_NAME  = "SALVAGE";
+    public static final String TWIST_HUNTED_NAME   = "HUNTED";
+    public static final String TWIST_BLACKOUT_RULE_LINE = "NO MAP · DARK · THEY SEE LESS";
+    public static final String TWIST_SALVAGE_RULE_LINE  = "MORE SUPPLY · MORE RESISTANCE";
+    public static final String TWIST_HUNTED_RULE_LINE   = "A HUNTER WALKS YOUR TRAIL";
+    /** R2: share of eligible COMBAT nodes that roll one twist. */
+    public static final float TWIST_ROLL_CHANCE_COMBAT = BalanceConfig.TWIST_ROLL_CHANCE_COMBAT;
+    /**
+     * The archetype name a HUNTED twist prints (AS10). A NAME, resolved by World/SimWorld through
+     * EnemyType.valueOf — the exchange-reward ItemType idiom — so the headless route package never imports enemy.
+     */
+    public static final String TWIST_HUNTED_ENEMY_TYPE_NAME = "IRON_STALKER";
 
     // ---- MYSTERY (RouteNodeType.MYSTERY, profile "mystery") ----------------
     // The outcome is rolled at ENTRY from the node's fixed nodeSeed (deterministic per run/seed), so

@@ -599,4 +599,10 @@ public final class RenderConstants {
     public static final float PROP_HEIGHT_MAGNETIC_DECK        = 0.18f; // '?'
     public static final float PROP_HEIGHT_ZEROG_DEBRIS         = 0.16f; // ']'
     public static final float PROP_HEIGHT_STARLIGHT_SEAM       = 0.14f; // '-'
+
+    // ---- FLOOR TWISTS (floor-twists R7b/R7c) — BLACKOUT is cosmetic here (AS8); its perception half is BalanceConfig SECTION 27 ----
+    /** R7b: every tile brightness on a BLACKOUT floor is multiplied by this — except the exit, which stays LIT. */
+    public static final float TWIST_BLACKOUT_LIGHT_MULTIPLIER = 0.45f;
+    /** R7c: enemy billboards on a BLACKOUT floor never shade below this, so a body in the dark is a silhouette. */
+    public static final float TWIST_BLACKOUT_ENEMY_MIN_SHADE  = 0.35f;
 }

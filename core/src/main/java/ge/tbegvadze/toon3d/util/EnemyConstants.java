@@ -703,4 +703,22 @@ public final class EnemyConstants {
     public static final float HELL_BARON_ACCENT_R = 1.00f;
     public static final float HELL_BARON_ACCENT_G = 0.30f;
     public static final float HELL_BARON_ACCENT_B = 0.05f;
+
+    // ---- FLOOR TWISTS (floor-twists R10/R11/R15) — the HUNTED trail hunter ----
+    /** R10: capacity of the pre-allocated player-trail ring buffer; overflow falls back to greedy pursuit (R11f). */
+    public static final int     TWIST_HUNTED_TRAIL_CAPACITY          = 512;
+    /** R11a: within this Manhattan distance of the player the hunter fights as an ordinary alerted IRON_STALKER. */
+    public static final int     TWIST_HUNTED_ENGAGE_DISTANCE_TILES   = 2;
+    /** R11d: turns the hunter waits behind an enemy on its trail before one greedy step toward the player. */
+    public static final int     TWIST_HUNTED_BLOCKED_WAIT_TURNS      = 2;
+    /** R15: the trail hunter's health-bar frame, in the twist amber so THE hunter reads apart from any Iron Stalker. */
+    public static final float   TWIST_HUNTER_HEALTH_BAR_FRAME_RED    = 0.98f;
+    public static final float   TWIST_HUNTER_HEALTH_BAR_FRAME_GREEN  = 0.72f;
+    public static final float   TWIST_HUNTER_HEALTH_BAR_FRAME_BLUE   = 0.16f;
+    public static final float   TWIST_HUNTER_HEALTH_BAR_FRAME_ALPHA  = 1f;
+    /** R9/R12 shims — the balance numbers live in BalanceConfig SECTION 27. */
+    public static final int     TWIST_HUNTED_ARRIVAL_TURNS            = BalanceConfig.TWIST_HUNTED_ARRIVAL_TURNS;
+    public static final int     TWIST_HUNTED_WARNING_TURNS            = BalanceConfig.TWIST_HUNTED_WARNING_TURNS;
+    public static final int     TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES = BalanceConfig.TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES;
+    public static final int     TWIST_HUNTED_BOUNTY_AMMO_BOXES        = BalanceConfig.TWIST_HUNTED_BOUNTY_AMMO_BOXES;
 }

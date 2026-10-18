@@ -6,7 +6,7 @@ import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 /**
  * The v1 NODE EV LEDGER catalog (new-game-balancr order 7): one {@link NodeEconomics} row for
- * every node type, every ELITE affix and every MYSTERY outcome the map can offer. This is the
+ * every node type, every ELITE affix, every COMBAT floor twist and every MYSTERY outcome the map can offer. This is the
  * route-map twin of {@code BalanceSchema}'s weapon / enemy / heal registries — the place the
  * branching map declares its PRICE to the balance contract.
  *
@@ -78,6 +78,7 @@ public final class RouteEconomics {
     public static void registerAll(NodeEconomicsRegistry registry) {
         registerNodes(registry);
         registerAffixes(registry);
+        registerTwists(registry);
         registerMysteryOutcomes(registry);
     }
 
@@ -191,6 +192,37 @@ public final class RouteEconomics {
 
         registry.register(NodeEconomics.affix(RouteMapConstants.AFFIX_VOLATILE_ID)
                 .displayName("VOLATILE").build());
+    }
+
+    // =========================================================================
+    // TWIST ROWS (floor-twists) — a threat multiplier folded onto a COMBAT node, plus what pays for it.
+    // Priced by R-TWIST against plain COMBAT: a twist that adds threat must pay inside the R-RISK-PREMIUM
+    // band (T1); a threat-neutral twist must sit within TWIST_NEUTRAL_EV_TOLERANCE of COMBAT's EV (T2).
+    // =========================================================================
+
+    private static void registerTwists(NodeEconomicsRegistry registry) {
+        // BLACKOUT — information for perception: no threat change, no guaranteed payoff (a sidegrade).
+        registry.register(NodeEconomics.twist(RouteMapConstants.TWIST_BLACKOUT_ID)
+                .displayName(RouteMapConstants.TWIST_BLACKOUT_NAME).build());
+
+        // SALVAGE — the SWARM-style budget override, paid for by scattered owned-ammo boxes plus one stim
+        // and one armour shard (the FORTIFIED row's flat-HP conversion).
+        registry.register(NodeEconomics.twist(RouteMapConstants.TWIST_SALVAGE_ID)
+                .displayName(RouteMapConstants.TWIST_SALVAGE_NAME)
+                .budgetScale(BalanceConfig.TWIST_SALVAGE_BUDGET_MULT)
+                .guaranteedAmmoBoxes(BalanceConfig.TWIST_SALVAGE_AMMO_BOXES)
+                .guaranteedHealHitPoints(BalanceConfig.TWIST_SALVAGE_STIMS * MEDKIT_STIM_HEAL
+                        + BalanceConfig.TWIST_SALVAGE_ARMOUR_SHARDS * ARMOUR_SHARD_VALUE)
+                .build());
+
+        // HUNTED — priced as if the hunter ALWAYS arrives (AS16): its declared share of the floor's
+        // threat (R-TWIST T3 checks the share is honest against the real archetype price), paid for by
+        // the bounty boxes it drops.
+        registry.register(NodeEconomics.twist(RouteMapConstants.TWIST_HUNTED_ID)
+                .displayName(RouteMapConstants.TWIST_HUNTED_NAME)
+                .budgetScale(1f + BalanceConfig.TWIST_HUNTED_THREAT_SHARE)
+                .guaranteedAmmoBoxes(BalanceConfig.TWIST_HUNTED_BOUNTY_AMMO_BOXES)
+                .build());
     }
 
     // =========================================================================
