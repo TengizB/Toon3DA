@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.progression;
 
+import ge.tbegvadze.toon3d.util.BalanceConfig;
+
 /**
  * THE RUN'S BUILD (balance-overhaul order 5) — the perk ranks and keystones picked this run, plus the
  * cached {@link BuildStats} aggregate every runtime seam reads. Recomputed on every pick (perks first,
@@ -18,6 +20,9 @@ public final class PlayerBuild {
     private final int[]      perkRanks       = new int[PERKS.length];
     private final boolean[]  keystonesPicked = new boolean[KEYSTONES.length];
     private final BuildStats stats           = new BuildStats();
+    /** The effect sets of the relics bonded this run, in bond order (relics-run-changing-artifacts). */
+    private final PerkEffect[][] relicEffectSets = new PerkEffect[BalanceConfig.RELIC_MAX_HELD][];
+    private int relicEffectSetCount;
 
     /** Adds one rank to a perk (capped at its max rank). Returns false when it was already maxed. */
     public boolean addPerkRank(Perk perk) {
@@ -35,6 +40,22 @@ public final class PlayerBuild {
         keystonesPicked[index] = true;
         recompute();
         return true;
+    }
+
+    /**
+     * Folds one relic's effects into the build (applied at rank 1, after the perks and before the keystones).
+     * Returns false when RELIC_MAX_HELD sets are already held. PlayerBuild never learns relic ids.
+     */
+    public boolean addRelicEffects(PerkEffect[] effects) {
+        if (relicEffectSetCount >= relicEffectSets.length) return false;
+        relicEffectSets[relicEffectSetCount++] = effects;
+        recompute();
+        return true;
+    }
+
+    /** Number of relic effect sets folded into the build. */
+    public int relicEffectSetCount() {
+        return relicEffectSetCount;
     }
 
     /** Ranks held in a perk (0 = not picked). */
@@ -98,6 +119,8 @@ public final class PlayerBuild {
     public void reset() {
         java.util.Arrays.fill(perkRanks, 0);
         java.util.Arrays.fill(keystonesPicked, false);
+        java.util.Arrays.fill(relicEffectSets, null);
+        relicEffectSetCount = 0;
         recompute();
     }
 
@@ -105,6 +128,9 @@ public final class PlayerBuild {
         stats.reset();
         for (Perk perk : PERKS) {
             perk.applyRanks(stats, perkRanks[perk.ordinal()]);
+        }
+        for (int setIndex = 0; setIndex < relicEffectSetCount; setIndex++) {
+            for (PerkEffect effect : relicEffectSets[setIndex]) effect.applyAt(stats, 1);
         }
         for (Keystone keystone : KEYSTONES) {
             if (keystonesPicked[keystone.ordinal()]) keystone.apply(stats);

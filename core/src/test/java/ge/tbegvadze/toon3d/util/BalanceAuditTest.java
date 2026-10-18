@@ -308,6 +308,47 @@ class BalanceAuditTest {
     }
 
     /**
+     * R-RELIC (relics-run-changing-artifacts): every non-CURSED relic's gain lands in its rarity x valuation band
+     * at every reference depth — felt, never dominant. Also pins that the rule actually evaluated every relic.
+     */
+    @Test
+    void everyRelicPricesIntoItsRarityBand() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.relicResults();
+        assertNoViolations(results);
+        assertTrue(!results.isEmpty(), "R-RELIC evaluated at least one relic");
+    }
+
+    /**
+     * R-RELIC-CURSE: every CURSED relic nets a gain inside the CURSED band, and its cost effects alone cost a real
+     * loss somewhere (the R-KEYSTONE cost idiom).
+     */
+    @Test
+    void everyCursedRelicTradesAGainForARealCost() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.relicCurseResults();
+        assertNoViolations(results);
+        assertTrue(results.stream().anyMatch(result -> result.subject.endsWith(" cost")),
+                "R-RELIC-CURSE evaluated a cursed relic's cost");
+    }
+
+    /**
+     * R-RELIC-STACK: at every boss depth a run's expected relics never out-carry one committed build, and the
+     * luckiest hand stays inside the build spread.
+     */
+    @Test
+    void noRelicHandOutCarriesACommittedBuild() {
+        assertNoViolations(BalanceSchema.relicStackResults());
+    }
+
+    /**
+     * R-RELIC-SOURCE: every offer can fill, weights sum to 1, ids are unique, every curse states and carries its
+     * cost, the perk-rank price anchor matches the measured build, and the route offers relics at all.
+     */
+    @Test
+    void theRelicPoolAlwaysFillsAnOffer() {
+        assertNoViolations(BalanceSchema.relicSourceResults());
+    }
+
+    /**
      * R-REGION (order 5): the region danger dial is bounded and monotonic, the lethal regions (C/D)
      * out-dial region A measurably, and the per-fight depth-coupling holds in every region lane.
      */

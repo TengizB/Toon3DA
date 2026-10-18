@@ -176,6 +176,15 @@ public final class RoundSummary {
         row(page, "J2", "highest perk pick rate (" + topPerk + ")", topRate,
                 0f, BalanceConfig.ROUND_J2_MAX_PERK_PICK_RATE, "Q9");
 
+        // R1 (relics-run-changing-artifacts): the LEGENDARY probe row's mean ending depth over the NO-RELIC baseline,
+        // banded like S-RELIC SR1 — a relic is felt, but no relic is mandatory.
+        PolicySummary noRelic   = matrix.get(BehavioralBands.TACTICAL_NO_RELIC_ID);
+        PolicySummary legendary = matrix.get(BehavioralBands.relicProbeId(RelicProbe.LEGENDARY));
+        float relicLift = noRelic == null || legendary == null || noRelic.meanEndingDepth() <= 0f ? Float.NaN
+                : legendary.meanEndingDepth() / noRelic.meanEndingDepth();
+        row(page, "R1", "relic rows mean-depth lift LEGENDARY / NO-RELIC", relicLift,
+                1f - BalanceConfig.SIM_RELIC_ROW_TRAP_TOLERANCE, 1f + BalanceConfig.SIM_RELIC_ROW_MAX_LIFT, "Q11 runs");
+
         page.append("IN/OUT is the sim half only. A metric is IN BAND for the round when the sim is IN and the owner's\n");
         page.append("PLAY NOTES do not contradict it (P3); '-' = not measured this run (no sample).\n\n");
         return page.toString();

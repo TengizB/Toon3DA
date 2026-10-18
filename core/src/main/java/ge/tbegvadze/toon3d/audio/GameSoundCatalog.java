@@ -981,6 +981,22 @@ public final class GameSoundCatalog {
                               .amplitude(0.10f).delay(0.06f).build())
                 .build());
 
+        // A relic bonding (relics-run-changing-artifacts): two struck-METAL partials, the second a
+        // fifth higher and 0.16 s later, so it RISES -- and rings in a short room echo. LEVEL_UP is a
+        // pleasant sine triad; this is a cold, bell-like clink, so the two never read as one object.
+        // Loudness 0: it plays inside the frozen offer overlay.
+        registry.register(SoundDefinition
+                .builder(GameSoundId.RELIC_BONDED, SoundCategory.INTERFACE)
+                .volume(0.55f).cycleSpread(0f).loudness(0)
+                .roomEcho(0.080f, 0.35f, 2600f, 0.30f)
+                .layers(
+                    SoundLayer.builder(WaveformKind.METAL, 0.45f)
+                              .frequency(660f).envelope(0.001f, 5f).amplitude(0.60f).build(),
+                    SoundLayer.builder(WaveformKind.METAL, 0.45f)
+                              .frequency(990f).envelope(0.001f, 5f).amplitude(0.55f)
+                              .delay(0.16f).build())
+                .build());
+
         // One tick. A chaingun spree must not become a xylophone: the hard re-trigger interval
         // is what guards it.
         registry.register(SoundDefinition

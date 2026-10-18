@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.relic.RelicSource;
+
 /**
  * The typed, data-only OUTCOME of picking one {@link EventChoice} on an EVENT node (route-map order-10), and
  * the hidden payout of a MYSTERY outcome. Balance-overhaul order 6 (F15) re-expressed every reward and cost
@@ -38,6 +40,7 @@ public final class EventEffect {
     private final String  resultText;
     private final String  failText;
     private final String  logToken;
+    private final RelicSource relicOffer;
 
     private EventEffect(Builder builder) {
         this.weaponLevels             = builder.weaponLevels;
@@ -54,6 +57,7 @@ public final class EventEffect {
         this.resultText               = builder.resultText;
         this.failText                 = builder.failText;
         this.logToken                 = builder.logToken;
+        this.relicOffer               = builder.relicOffer;
     }
 
     /** Weapon LEVELS added to the equipped gun (each capped at the floor's level + 1, the shop rung's ceiling). */
@@ -98,6 +102,9 @@ public final class EventEffect {
     /** Telemetry token appended to the run's route story for this choice, or {@code null}. */
     public String logToken() { return logToken; }
 
+    /** The relic offer this effect queues (relics-run-changing-artifacts), or {@code null} for none. */
+    public RelicSource relicOffer() { return relicOffer; }
+
     /** Whether this effect involves a random gamble roll (vs a deterministic apply). */
     public boolean isGamble() { return gambleLootChance > 0f; }
 
@@ -122,6 +129,7 @@ public final class EventEffect {
         private String  resultText;
         private String  failText;
         private String  logToken;
+        private RelicSource relicOffer;
 
         public Builder weaponLevels(int levels)        { this.weaponLevels = levels; return this; }
         public Builder perkRank()                      { this.perkRank = true; return this; }
@@ -142,6 +150,7 @@ public final class EventEffect {
         public Builder resultText(String resultText) { this.resultText = resultText; return this; }
         public Builder failText(String failText)     { this.failText = failText; return this; }
         public Builder logToken(String logToken)     { this.logToken = logToken; return this; }
+        public Builder relicOffer(RelicSource source) { this.relicOffer = source; return this; }
 
         public EventEffect build() {
             return new EventEffect(this);

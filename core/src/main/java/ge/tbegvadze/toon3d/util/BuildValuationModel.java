@@ -251,10 +251,19 @@ public final class BuildValuationModel {
         final float bodiesPerFloor;
         /** Planned units of each ammo type per floor (the R-ROLE-5 yardstick, from the role table). */
         final Map<AmmoType, Float> ammoUnitsPerFloor;
+        /** The kill share of creditsPerFloor (KILL_CREDIT_BONUS pays on it; relics CP4). */
+        final float killCreditsPerFloor;
+        /** Mean depth-1 power points of one planned ammo unit on the floor (KILL_AMMO_REFUND; relics CP4). */
+        final float ammoPowerPointsPerUnit;
+        /** BULLETS' reserve cap in power points, and the mean over the other types (FLOOR_ARRIVAL_AMMO). */
+        final float generalistReserveCapPowerPoints;
+        final float otherReserveCapPowerPoints;
 
         Context(int depth, ExpectedPlayer player, float damageScale, float incomingFraction, float healFraction,
                 float armourFraction, float ammoPowerPoints, float healPowerPoints, float creditsPerFloor,
-                float carriedPowerPoints, float bodiesPerFloor, Map<AmmoType, Float> ammoUnitsPerFloor) {
+                float carriedPowerPoints, float bodiesPerFloor, Map<AmmoType, Float> ammoUnitsPerFloor,
+                float killCreditsPerFloor, float ammoPowerPointsPerUnit, float generalistReserveCapPowerPoints,
+                float otherReserveCapPowerPoints) {
             this.depth              = depth;
             this.player             = player;
             this.damageScale        = damageScale;
@@ -267,6 +276,10 @@ public final class BuildValuationModel {
             this.carriedPowerPoints = carriedPowerPoints;
             this.bodiesPerFloor     = bodiesPerFloor;
             this.ammoUnitsPerFloor  = ammoUnitsPerFloor;
+            this.killCreditsPerFloor = killCreditsPerFloor;
+            this.ammoPowerPointsPerUnit = ammoPowerPointsPerUnit;
+            this.generalistReserveCapPowerPoints = generalistReserveCapPowerPoints;
+            this.otherReserveCapPowerPoints = otherReserveCapPowerPoints;
         }
     }
 
@@ -287,6 +300,8 @@ public final class BuildValuationModel {
         float hitGrowth = GameMath.expectedHitGrowthAtDepth(depth);
         NodeSupplySpec combat = NodeSupplySpecs.combat();
         float incoming = 0f, heals = 0f, armour = 0f, ammoPoints = 0f, credits = 0f, carried = 0f, bodies = 0f;
+        // Relic terms (CP4): accumulated beside the original sums, never into them (A11 byte identity).
+        float killCreditTotal = 0f, ammoUnits = 0f;
         int seeds = Math.max(1, BalanceConfig.BUILD_SUPPLY_SEED_COUNT);
         for (int seedIndex = 0; seedIndex < seeds; seedIndex++) {
             long seed = GameMath.floorSeed(BalanceConfig.BUILD_SUPPLY_SEED_SALT + seedIndex, depth);
@@ -300,18 +315,47 @@ public final class BuildValuationModel {
             float killCredits = 0f;
             for (EnemyType type : roster) killCredits += type.baseCreditReward();
             credits += killCredits * (1f + BalanceConfig.CREDIT_DEPTH_SCALE * (depth - 1));
+            killCreditTotal += killCredits * (1f + BalanceConfig.CREDIT_DEPTH_SCALE * (depth - 1));
             for (PlannedPickup pickup : plan.pickups()) {
                 float points = pickupPowerPoints(pickup, hitGrowth);
-                if (pickup.category == SupplyCategory.AMMO) ammoPoints += points;
+                if (pickup.category == SupplyCategory.AMMO) {
+                    ammoPoints += points;
+                    ammoUnits += ammoUnitsOf(pickup, depth);
+                }
                 if (pickup.category == SupplyCategory.CREDITS) credits += pickup.creditAmount;
                 if (pickup.carried) carried += points;
             }
         }
         float healPoints = GameMath.healPowerPoints((heals + armour) / seeds, BalanceConfig.PLAYER_MAX_HEALTH,
                 BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT);
+        float otherCapPoints = 0f;
+        int otherTypes = 0;
+        for (AmmoType ammoType : AmmoType.values()) {
+            if (ammoType == AmmoType.BULLETS) continue;
+            otherCapPoints += reserveCapPowerPoints(ammoType, depth, hitGrowth);
+            otherTypes++;
+        }
         return new Context(depth, player, damageScale, incoming / seeds, heals / seeds, armour / seeds,
                 ammoPoints / seeds, healPoints, credits / seeds, carried / seeds, bodies / seeds,
-                WeaponRoleModel.table(depth).supplyPerFloor);
+                WeaponRoleModel.table(depth).supplyPerFloor, killCreditTotal / seeds,
+                ammoUnits > 0f ? ammoPoints / ammoUnits : 0f,
+                reserveCapPowerPoints(AmmoType.BULLETS, depth, hitGrowth),
+                otherTypes > 0 ? otherCapPoints / otherTypes : 0f);
+    }
+
+    /** Units in one planned ammo pickup (its damage value over the type's per-unit damage at the depth). */
+    private static float ammoUnitsOf(PlannedPickup pickup, int depth) {
+        AmmoType ammoType = AmmoType.fromPickupChar(pickup.symbol);
+        if (ammoType == null) return 0f;
+        float perUnit = GameMath.supplyDamagePerUnitAtDepth(SupplyPlanner.depthOneDamagePerUnit(ammoType), depth);
+        return perUnit > 0f ? pickup.value / perUnit : 0f;
+    }
+
+    /** One ammo type's full reserve cap in depth-1 power points (the FLOOR_ARRIVAL_AMMO refill's yardstick). */
+    private static float reserveCapPowerPoints(AmmoType ammoType, int depth, float hitGrowth) {
+        float perUnit = GameMath.supplyDamagePerUnitAtDepth(SupplyPlanner.depthOneDamagePerUnit(ammoType), depth);
+        return GameMath.ammoPowerPoints(ammoType.getReserveCap() * perUnit, hitGrowth,
+                BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT);
     }
 
     /** One planned pickup in depth-1 power points (ammo / heal / armour; credits and weapons read 0 here). */
@@ -375,9 +419,60 @@ public final class BuildValuationModel {
                 stats.wildfire());
     }
 
-    /** Enemy HP of a scenario's archetype at the context's depth (matchup-neutral eHP, grown). */
-    private static float scenarioHitPoints(Context context, WeaponRoleModel.RoleScenario scenario) {
-        return GameMath.enemyHealthAtDepth(scenario.archetype.neutralEffectiveHitPoints(), context.depth);
+    /**
+     * Enemy HP of a scenario's archetype at the context's depth (matchup-neutral eHP, grown), x the build's
+     * ENEMY_HEALTH_MULTIPLIER (exactly 1 without a relic; scenarios are never bosses, which the relic skips).
+     */
+    private static float scenarioHitPoints(Context context, WeaponRoleModel.RoleScenario scenario, BuildStats stats) {
+        return GameMath.enemyHealthAtDepth(scenario.archetype.neutralEffectiveHitPoints(), context.depth)
+                * stats.enemyHealthMultiplier();
+    }
+
+    /** The relic damage term on every scenario hit: LOW_HEALTH_DAMAGE (exactly 1 without a relic). */
+    private static float relicDamageMultiplier(BuildStats stats) {
+        return GameMath.relicLowHealthDamageMultiplier(stats.lowHealthDamageBonus(),
+                BalanceConfig.BUILD_BLADE_LOW_HEALTH_TURN_SHARE);
+    }
+
+    /** A relic blast tile's damage on a scenario's archetype: the reference-soldier yardstick x the EXPLOSIVE matchup. */
+    private static float relicBlastOn(Context context, WeaponRoleModel.RoleScenario scenario, float fraction) {
+        return GameMath.relicBlastDamage(fraction, BalanceSchema.barrelReferenceSoldierMaxHealth(context.depth))
+                * MatchupCatalog.shared().multiplier(DamageClass.EXPLOSIVE, scenario.archetype.trait());
+    }
+
+    /**
+     * A cleared group fight's turns under the relic blast kinds: CORPSE_BLAST
+     * ({@link GameMath#relicCorpseBurstScenarioTurns}) and DOOR_BLAST ({@link GameMath#relicDoorOpenerTurns} —
+     * a share of fights opens on a turn-less door blast, re-walked on its survivors at their mean health). Both
+     * are priced on the walk's output (the GameMath blocks state the approximation). Exactly {@code turns}
+     * without a relic.
+     */
+    private static float relicFightTurns(Context context, RoleScenarioWeapon model, WeaponRoleModel.RoleScenario scenario,
+                                         float hitPoints, float scale, float matchup, BuildStats stats, float turns) {
+        float doorFraction = stats.doorBlastFraction();
+        float corpseFraction = stats.corpseBlastFraction();
+        if (!(doorFraction > 0f) && !(corpseFraction > 0f)) return turns;
+        float burst = corpseFraction > 0f ? relicBlastOn(context, scenario, corpseFraction) : 0f;
+        float result = GameMath.relicCorpseBurstScenarioTurns(turns, scenario.groupSize, hitPoints, burst,
+                BalanceConfig.RELIC_VALUATION_CORPSE_ADJACENCY);
+        if (doorFraction > 0f) {
+            float centre = relicBlastOn(context, scenario, doorFraction);
+            float ring = relicBlastOn(context, scenario, doorFraction * BalanceConfig.RELIC_BLAST_RING_SHARE);
+            int survivors = GameMath.relicBlastSurvivorCount(hitPoints, centre, ring, scenario.groupSize);
+            float openerTurns = 0f;
+            if (survivors > 0) {
+                float meanHealth = GameMath.relicBlastSurvivorMeanHealth(hitPoints, centre, ring, scenario.groupSize);
+                RoleScenarioOutcome opener = GameMath.roleScenarioClear(model, survivors,
+                        BalanceConfig.ROLE_GROUP_TARGETS_IN_LANE, scenario.distanceMin, scenario.distanceMax,
+                        meanHealth, scale, matchup, BalanceConfig.ROLE_SCENARIO_TURN_CAP);
+                openerTurns = opener.cleared ? opener.turnsToClear : BalanceConfig.ROLE_SCENARIO_TURN_CAP;
+                // Blast kills never burst (R8), so only the opener's survivors feed the corpse burst.
+                openerTurns = GameMath.relicCorpseBurstScenarioTurns(openerTurns, survivors, meanHealth, burst,
+                        BalanceConfig.RELIC_VALUATION_CORPSE_ADJACENCY);
+            }
+            result = GameMath.relicDoorOpenerTurns(result, openerTurns, BalanceConfig.RELIC_VALUATION_DOOR_FIGHT_SHARE);
+        }
+        return result;
     }
 
     /**
@@ -394,21 +489,36 @@ public final class BuildValuationModel {
         WeaponRoleModel.RoleWeapon row = WeaponRoleModel.weapons().get(weaponIndex);
         WeaponRoleModel.RoleScenario scenario = WeaponRoleModel.scenarios().get(scenarioIndex);
         RoleScenarioWeapon model = buildWeapon(row, stats);
-        float hitPoints = scenarioHitPoints(context, scenario);
+        float hitPoints = scenarioHitPoints(context, scenario, stats);
         float matchup = MatchupCatalog.shared().multiplier(row.damageClass, scenario.archetype.trait());
-        float scale = context.damageScale * stats.damageMultiplierFor(row.damageClass);
+        float scale = context.damageScale * stats.damageMultiplierFor(row.damageClass) * relicDamageMultiplier(stats);
         if (scenario.bruiserCharge) {
-            float hits = GameMath.roleScenarioBruiserWeightedHitsTaken(model, scenario.distanceMax, hitPoints, scale,
-                    matchup, BalanceConfig.SHOTGUN_STAGGER_MIN_TURNS_BETWEEN, BalanceConfig.ROLE_SCENARIO_TURN_CAP,
-                    stats.ownExplosionDamageMultiplier());
-            return new ScenarioOutcome(hits, 0, hits < BalanceConfig.ROLE_SCENARIO_TURN_CAP);
+            float hits = bruiserHits(model, scenario, hitPoints, scale, matchup, stats);
+            boolean cleared = hits < BalanceConfig.ROLE_SCENARIO_TURN_CAP;
+            if (cleared && stats.doorBlastFraction() > 0f) {
+                // DOOR_BLAST: the charge that opens through a door starts with the centre blast on the bruiser.
+                float left = hitPoints - relicBlastOn(context, scenario, stats.doorBlastFraction());
+                float openerHits = left > 0f ? bruiserHits(model, scenario, left, scale, matchup, stats) : 0f;
+                hits = GameMath.relicDoorOpenerTurns(hits, openerHits, BalanceConfig.RELIC_VALUATION_DOOR_FIGHT_SHARE);
+            }
+            return new ScenarioOutcome(hits, 0, cleared);
         }
         RoleScenarioOutcome outcome = clear(model, scenario, hitPoints, scale, matchup);
         float guardTerms = heavyFightDamageMultiplier(context, scenario.archetype, stats, outcome, hitPoints,
                 scenario.groupSize, false);
         if (guardTerms != 1f) outcome = clear(model, scenario, hitPoints, scale * guardTerms, matchup);
-        return new ScenarioOutcome(outcome.cleared ? outcome.turnsToClear : BalanceConfig.ROLE_SCENARIO_TURN_CAP,
-                outcome.ammoSpent, outcome.cleared);
+        float turns = outcome.cleared ? outcome.turnsToClear : BalanceConfig.ROLE_SCENARIO_TURN_CAP;
+        if (outcome.cleared) {
+            turns = relicFightTurns(context, model, scenario, hitPoints, scale * guardTerms, matchup, stats, turns);
+        }
+        return new ScenarioOutcome(turns, outcome.ammoSpent, outcome.cleared);
+    }
+
+    private static float bruiserHits(RoleScenarioWeapon model, WeaponRoleModel.RoleScenario scenario, float hitPoints,
+                                     float scale, float matchup, BuildStats stats) {
+        return GameMath.roleScenarioBruiserWeightedHitsTaken(model, scenario.distanceMax, hitPoints, scale,
+                matchup, BalanceConfig.SHOTGUN_STAGGER_MIN_TURNS_BETWEEN, BalanceConfig.ROLE_SCENARIO_TURN_CAP,
+                stats.ownExplosionDamageMultiplier());
     }
 
     private static RoleScenarioOutcome clear(RoleScenarioWeapon model, WeaponRoleModel.RoleScenario scenario,
@@ -483,7 +593,7 @@ public final class BuildValuationModel {
     static float barrelOpenerTurns(Context context, int weaponIndex, int scenarioIndex, BuildStats stats) {
         WeaponRoleModel.RoleWeapon row = WeaponRoleModel.weapons().get(weaponIndex);
         WeaponRoleModel.RoleScenario scenario = WeaponRoleModel.scenarios().get(scenarioIndex);
-        float hitPoints = scenarioHitPoints(context, scenario);
+        float hitPoints = scenarioHitPoints(context, scenario, stats);
         float blast = BalanceSchema.barrelEnemyDamage(BalanceConfig.HAZARD_BARREL_RING_FRACTION, context.depth)
                 * stats.barrelDamageMultiplier()
                 * MatchupCatalog.shared().multiplier(DamageClass.EXPLOSIVE, scenario.archetype.trait());
@@ -492,7 +602,8 @@ public final class BuildValuationModel {
             RoleScenarioWeapon model = buildWeapon(row, stats);
             float matchup = MatchupCatalog.shared().multiplier(row.damageClass, scenario.archetype.trait());
             RoleScenarioOutcome outcome = clear(model, scenario, hitPoints - blast,
-                    context.damageScale * stats.damageMultiplierFor(row.damageClass), matchup);
+                    context.damageScale * stats.damageMultiplierFor(row.damageClass) * relicDamageMultiplier(stats),
+                    matchup);
             followUp = outcome.cleared ? outcome.turnsToClear : BalanceConfig.ROLE_SCENARIO_TURN_CAP;
         }
         return GameMath.barrelOpenerTurns(hitPoints, blast, followUp);
@@ -525,9 +636,9 @@ public final class BuildValuationModel {
         EnemyType archetype = scenario.archetype;
         HeavyAttack heavy = archetype.heavyWindUp();
         RoleScenarioWeapon model = buildWeapon(row, stats);
-        float hitPoints = scenarioHitPoints(context, scenario);
+        float hitPoints = scenarioHitPoints(context, scenario, stats);
         float matchup = MatchupCatalog.shared().multiplier(row.damageClass, archetype.trait());
-        float scale = context.damageScale * stats.damageMultiplierFor(row.damageClass);
+        float scale = context.damageScale * stats.damageMultiplierFor(row.damageClass) * relicDamageMultiplier(stats);
         RoleScenarioOutcome firstPass = clear(model, scenario, hitPoints, scale, matchup);
         float heavyHit = heavy == null ? 0f : heavyHit(context, heavy);
         float guardMultiplier = guardHeavyMultiplier(stats);
@@ -541,6 +652,8 @@ public final class BuildValuationModel {
                 / Math.max(1, archetype.attackCadenceTurns());
         float damage = GameMath.attritionDamageTaken(ordinaryTurns, ordinaryHit, heavies, heavyHit,
                 GameMath.heavyTakenFactor(guardedShare(stats), guardMultiplier));
+        // DAMAGE_TAKEN_MULTIPLIER on every hit; FIRST_HIT_SHIELD absorbs the opening ordinary hit.
+        damage = GameMath.relicDuelDamage(damage, stats.damageTakenMultiplier(), stats.firstHitShield() ? ordinaryHit : 0f);
         float pool = buildPool(context, stats);
         float survivals = GameMath.fightsSurvived(pool, damage);
         float damagePerTurn = totalTurns > 0f ? damage / totalTurns : 0f;
@@ -575,12 +688,24 @@ public final class BuildValuationModel {
         float meleeHeal = meleeKills * stats.meleeKillHealTotalFraction() * stats.maxHealthMultiplier();
         float secondWind = stats.secondWind()
                 ? HeavyAttack.CHARGE.damageFraction() * BalanceConfig.HEAVY_DAMAGE_SCALE : 0f;
+        float shieldHit = stats.firstHitShield()
+                ? GameMath.relicShieldHitFraction(referenceSoldierHit(context), stats.damageTakenMultiplier(), player.maxHealth)
+                : 0f;
+        // Relic sustain (CP4): exactly 0 without a relic, so the sum below is the pre-relic value bit for bit.
+        float relicSustain = GameMath.relicFloorSustain(context.bodiesPerFloor, BalanceConfig.RELIC_VALUATION_KILL_SHARE,
+                stats.killHealFraction(), stats.killArmorFraction(), BalanceConfig.RELIC_VALUATION_DOORS_PER_FLOOR,
+                stats.doorOpenHealFraction(), stats.floorArrivalHealFraction(), stats.floorArrivalArmorFraction(),
+                shieldHit, stats.maxHealthMultiplier(), armourRatio, stats.maxArmorMultiplier());
         return GameMath.floorSustain(stats.maxHealthMultiplier(), armourRatio, stats.maxArmorMultiplier(),
                 context.healFraction + Math.max(0f, extraHealFraction), stats.healMultiplier(),
-                context.armourFraction, meleeHeal, secondWind);
+                context.armourFraction, meleeHeal, secondWind) + relicSustain;
     }
 
-    /** A floor's incoming damage under a build (guarded heavies, PYRO fire exposure). */
+    /**
+     * A floor's incoming damage under a build (guarded heavies, PYRO fire exposure). The enemy part is scaled
+     * by the relic DAMAGE_TAKEN and ENEMY_HEALTH multipliers ({@link GameMath#relicIncomingMultiplier}); the
+     * fire part is not (status ticks bypass the relic damage entry, R11).
+     */
     static float floorIncoming(Context context, BuildTag tag, BuildStats stats) {
         float baseFactor = GameMath.heavyTakenFactor(BalanceConfig.HEAVY_EXPECTED_AVOIDANCE, BalanceConfig.GUARD_FRONT_HEAVY);
         float buildFactor = GameMath.heavyTakenFactor(guardedShare(stats), guardHeavyMultiplier(stats));
@@ -589,8 +714,10 @@ public final class BuildValuationModel {
             fire = BalanceConfig.BUILD_PYRO_FIRE_TURNS_PER_FLOOR * BalanceConfig.BURN_TICK_FRACTION
                     * stats.maxHealthMultiplier();
         }
-        return GameMath.floorIncoming(context.incomingFraction, BalanceConfig.BUILD_FLOOR_HEAVY_DAMAGE_SHARE,
-                buildFactor, baseFactor, fire);
+        float enemyIncoming = GameMath.floorIncoming(context.incomingFraction, BalanceConfig.BUILD_FLOOR_HEAVY_DAMAGE_SHARE,
+                buildFactor, baseFactor, 0f);
+        return enemyIncoming * GameMath.relicIncomingMultiplier(stats.damageTakenMultiplier(), stats.enemyHealthMultiplier())
+                + Math.max(0f, fire);
     }
 
     /** A COMBAT floor's planned heal (medkits) under the build, in fractions of the on-curve max HP. */
@@ -606,7 +733,7 @@ public final class BuildValuationModel {
 
     /** The build's pool in reference-soldier hits (R8 hits-to-die at the depth, continuous). */
     static float poolHitsToDie(Context context, BuildStats stats) {
-        return GameMath.ladderTurnsToKill(buildPool(context, stats), referenceSoldierHit(context));
+        return GameMath.ladderTurnsToKill(buildPool(context, stats), referenceSoldierHit(context) * stats.damageTakenMultiplier());
     }
 
     private static float referenceSoldierHit(Context context) {
@@ -617,12 +744,13 @@ public final class BuildValuationModel {
     /** Turns to kill the reference soldier with the reference melee weapon (Combat Knife). */
     static float meleeTurns(Context context, BuildStats stats) {
         EnemyType soldier = BalanceSchema.ladderReferenceArchetype(EnemyRole.SOLDIER);
-        float hitPoints = GameMath.enemyHealthAtDepth(soldier.neutralEffectiveHitPoints(), context.depth);
+        float hitPoints = GameMath.enemyHealthAtDepth(soldier.neutralEffectiveHitPoints(), context.depth)
+                * stats.enemyHealthMultiplier();
         float strength = GameMath.meleeDamageMultiplier(stats.attributeGrant(Attribute.STRENGTH), 0,
                 BalanceConfig.STR_MELEE_PER_POINT);
         float lowHealth = 1f + stats.berserkLowHealthMeleeBonus() * BalanceConfig.BUILD_BLADE_LOW_HEALTH_TURN_SHARE;
         float hit = BalanceConfig.MELEE_KNIFE_DAMAGE * context.damageScale * strength
-                * stats.damageMultiplierFor(DamageClass.BLADE) * lowHealth;
+                * stats.damageMultiplierFor(DamageClass.BLADE) * lowHealth * relicDamageMultiplier(stats);
         return GameMath.ladderTurnsToKill(hitPoints, hit);
     }
 
@@ -635,28 +763,52 @@ public final class BuildValuationModel {
         public final float carriers;
         /** Salvager's extra items alone. */
         public final float carrierExtras;
+        /** XP_MULTIPLIER's extra levels in power points (relics CP4; 0 without a relic). */
+        public final float experience;
 
-        SupplyValue(float ammo, float heals, float credits, float carriers, float carrierExtras) {
+        SupplyValue(float ammo, float heals, float credits, float carriers, float carrierExtras, float experience) {
             this.ammo          = ammo;
             this.heals         = heals;
             this.credits       = credits;
             this.carriers      = carriers;
             this.carrierExtras = carrierExtras;
+            this.experience    = experience;
         }
 
         /** Every component once (the carriers' base drops are already in ammo and heals). */
         public float total() {
-            return ammo + heals + credits + carrierExtras;
+            return ammo + heals + credits + carrierExtras + experience;
+        }
+
+        /** Every component floorSustain does not already read (all but heals) — the carry's conversion base. */
+        public float totalExceptHeals() {
+            return ammo + credits + carrierExtras + experience;
         }
     }
 
+    /**
+     * A floor's supply under a build. Relic kinds (CP4), each exactly 0 / the identity without a relic:
+     * KILL_AMMO_REFUND and FLOOR_ARRIVAL_AMMO on ammo ({@link GameMath#relicAmmoPowerPoints}; the arrival
+     * refill covers the kit's gun slots — BULLETS for the generalist, each other slot at the mean of the other
+     * types' reserve caps), KILL_CREDIT_BONUS on the kill credits ({@link GameMath#relicKillCredits}) and
+     * XP_MULTIPLIER as the experience component ({@link GameMath#relicExperiencePowerPoints}).
+     */
     static SupplyValue supply(Context context, BuildStats stats) {
-        float ammo = context.ammoPowerPoints * stats.ammoPickupMultiplier();
+        float arrivalCapPoints = GameMath.relicKitReserveCapPowerPoints(context.generalistReserveCapPowerPoints,
+                context.otherReserveCapPowerPoints, BalanceConfig.BUILD_KIT_GUN_SLOTS + stats.extraLoadoutSlots());
+        float ammo = context.ammoPowerPoints * stats.ammoPickupMultiplier()
+                + GameMath.relicAmmoPowerPoints(context.bodiesPerFloor, BalanceConfig.RELIC_VALUATION_KILL_SHARE,
+                        stats.killAmmoRefundChance(), context.ammoPowerPointsPerUnit, stats.floorArrivalAmmoFraction(),
+                        arrivalCapPoints);
         float heals = context.healPowerPoints * stats.healMultiplier() * stats.maxHealthMultiplier();
-        float credits = GameMath.creditPowerPoints(context.creditsPerFloor, BalanceConfig.SHOP_CREDITS_PER_POWER_POINT,
+        float creditsPerFloor = GameMath.relicKillCredits(context.creditsPerFloor, context.killCreditsPerFloor,
+                stats.killCreditMultiplier() - 1f);
+        float credits = GameMath.creditPowerPoints(creditsPerFloor, BalanceConfig.SHOP_CREDITS_PER_POWER_POINT,
                 context.depth, BalanceConfig.SHOP_DEPTH_PRICE_SCALE, stats.shopPriceMultiplier());
         float extras = context.carriedPowerPoints * stats.carrierExtraDropChance();
-        return new SupplyValue(ammo, heals, credits, context.carriedPowerPoints + extras, extras);
+        float experience = GameMath.relicExperiencePowerPoints(stats.experienceMultiplier() - 1f,
+                BalanceConfig.EXPECTED_LEVELS_PER_DEPTH, BalanceConfig.EXPECTED_PERK_POWER_PP_PER_PICK);
+        return new SupplyValue(ammo, heals, credits, context.carriedPowerPoints + extras, extras, experience);
     }
 
     // =====================================================================================
@@ -771,6 +923,7 @@ public final class BuildValuationModel {
                         ordinaryHit, heavies, heavy == null ? 0f : heavyHit(context, heavy),
                         GameMath.heavyTakenFactor(guardedShare(stats), guardHeavyMultiplier(stats)));
             }
+            damage *= stats.damageTakenMultiplier();
             survivals[scenarioIndex] = Float.isInfinite(damage) ? 0f : GameMath.fightsSurvived(pool, damage);
         }
         return survivals;
@@ -823,9 +976,11 @@ public final class BuildValuationModel {
      * The largest loss a build causes against the no-build player at a depth, over every probe OTHER than
      * the excluded niche: every weapon x scenario cell (a weapon the player carries got slower), the duel,
      * the floor (in the build tag's context and in the neutral one), the melee fight, the floor's supply,
-     * and the share of max HP one full medkit restores.
+     * and the share of max HP one full medkit restores. A null niche excludes nothing (every probe counts;
+     * the floor is read in the neutral VITALITY context only) — the R-RELIC-CURSE cost probe.
      */
     public static Loss worstLoss(BuildStats stats, Niche excluded, int depth) {
+        if (excluded == null) return worstLossOverEveryProbe(stats, depth);
         Context context = context(depth);
         BuildStats none = new BuildStats();
         Loss worst = new Loss("none", 0f);
@@ -855,6 +1010,32 @@ public final class BuildValuationModel {
         if (excluded.metric != BuildNicheMetric.MELEE_TURNS) {
             worst = worse(worst, "melee", meleeTurns(context, none), meleeTurns(context, stats), false);
         }
+        worst = worse(worst, "supply", supply(context, none).total(), supply(context, stats).total(), true);
+        worst = worse(worst, "medkit restores", medkitRestoreFraction(none), medkitRestoreFraction(stats), true);
+        return worst;
+    }
+
+    private static Loss worstLossOverEveryProbe(BuildStats stats, int depth) {
+        Context context = context(depth);
+        BuildStats none = new BuildStats();
+        Loss worst = new Loss("none", 0f);
+        List<WeaponRoleModel.RoleWeapon> weapons = WeaponRoleModel.weapons();
+        List<WeaponRoleModel.RoleScenario> scenarios = WeaponRoleModel.scenarios();
+        for (int weaponIndex = 0; weaponIndex < weapons.size(); weaponIndex++) {
+            for (int scenarioIndex = 0; scenarioIndex < scenarios.size(); scenarioIndex++) {
+                ScenarioOutcome before = scenarioOutcome(context, weaponIndex, scenarioIndex, none);
+                if (!before.cleared) continue;
+                ScenarioOutcome after = scenarioOutcome(context, weaponIndex, scenarioIndex, stats);
+                worst = worse(worst, weapons.get(weaponIndex).displayName + " in " + scenarios.get(scenarioIndex).id,
+                        before.score, after.score, false);
+            }
+        }
+        Niche duelNiche = duelNiche();
+        worst = worse(worst, "duel", duel(context, duelNiche, none).survivals, duel(context, duelNiche, stats).survivals, true);
+        Niche floorNiche = new Niche(BuildNicheMetric.FLOOR_SURVIVALS, null, null, BuildTag.VITALITY);
+        worst = worse(worst, "floor (" + BuildTag.VITALITY + ")", floorSurvivals(context, floorNiche, none),
+                floorSurvivals(context, floorNiche, stats), true);
+        worst = worse(worst, "melee", meleeTurns(context, none), meleeTurns(context, stats), false);
         worst = worse(worst, "supply", supply(context, none).total(), supply(context, stats).total(), true);
         worst = worse(worst, "medkit restores", medkitRestoreFraction(none), medkitRestoreFraction(stats), true);
         return worst;
@@ -931,10 +1112,28 @@ public final class BuildValuationModel {
         }
         Keystone keystone = keystoneOf(tag);
         if (keystone != null) keystone.apply(stats);
-        BuildStats none = new BuildStats();
+        return carryOf(context, stats, tag, keystone, ranks, summary.toString());
+    }
 
-        float[] before = loadoutAnswers(context, none, tag, BalanceConfig.BUILD_KIT_GUN_SLOTS);
-        float[] after = loadoutAnswers(context, stats, tag, BalanceConfig.BUILD_KIT_GUN_SLOTS + stats.extraLoadoutSlots());
+    /**
+     * THE CARRY OF ANY BUILD AGGREGATE (relics CP4 — the R-CARRY measurement extracted from {@link #carry}):
+     * {@code stats} against the same player without it at {@code depth}. TTK lift = the geometric mean over
+     * S1..S8 of the loadout's scenario lifts, the kit being {@code kitTag}'s (its own class + the generalist;
+     * null or a tag with no ranged class = the best roster from every weapon) with
+     * BUILD_KIT_GUN_SLOTS + stats.extraLoadoutSlots() guns (QUARTERMASTER / FOURTH HOLSTER add one); TTD lift =
+     * the floor-survivals lift in kitTag's floor context, with the build's extra supply spent on heals at the
+     * Fabricator ({@link #supplyHealEquivalent}). carry = TTK x TTD. Not cached (callers cache:
+     * {@link #carry} per tag, RelicValuationModel per relic and depth).
+     */
+    public static Carry carryOf(BuildStats stats, BuildTag kitTag, int depth) {
+        return carryOf(context(depth), stats, kitTag, null, 0, "");
+    }
+
+    private static Carry carryOf(Context context, BuildStats stats, BuildTag kitTag, Keystone keystone, int ranks,
+                                 String ranksSummary) {
+        BuildStats none = new BuildStats();
+        float[] before = loadoutAnswers(context, none, kitTag, BalanceConfig.BUILD_KIT_GUN_SLOTS);
+        float[] after = loadoutAnswers(context, stats, kitTag, BalanceConfig.BUILD_KIT_GUN_SLOTS + stats.extraLoadoutSlots());
         float[] lifts = new float[before.length];
         List<WeaponRoleModel.RoleScenario> scenarios = WeaponRoleModel.scenarios();
         for (int index = 0; index < before.length; index++) {
@@ -942,12 +1141,11 @@ public final class BuildValuationModel {
                     BalanceConfig.BUILD_CARRY_MIN_TURNS);
         }
         float killLift = GameMath.geometricMeanLift(lifts);
-        float extraHeal = 0f;
-        if (tag == BuildTag.SCAVENGER) extraHeal = supplyHealEquivalent(context, none, stats);
-        float survivalsBefore = GameMath.fightsSurvived(floorSustain(context, tag, none, 0f), floorIncoming(context, tag, none));
-        float survivalsAfter = GameMath.fightsSurvived(floorSustain(context, tag, stats, extraHeal), floorIncoming(context, tag, stats));
+        float extraHeal = supplyHealEquivalent(context, none, stats, kitTag);
+        float survivalsBefore = GameMath.fightsSurvived(floorSustain(context, kitTag, none, 0f), floorIncoming(context, kitTag, none));
+        float survivalsAfter = GameMath.fightsSurvived(floorSustain(context, kitTag, stats, extraHeal), floorIncoming(context, kitTag, stats));
         float dieLift = GameMath.survivalLift(survivalsBefore, survivalsAfter);
-        return new Carry(tag, keystone, ranks, summary.toString(), killLift, dieLift,
+        return new Carry(kitTag, keystone, ranks, ranksSummary, killLift, dieLift,
                 GameMath.buildCarryScore(killLift, dieLift));
     }
 
@@ -965,7 +1163,7 @@ public final class BuildValuationModel {
         List<Integer> pool = new ArrayList<>();
         for (int weaponIndex = 0; weaponIndex < weapons.size(); weaponIndex++) {
             WeaponRoleModel.RoleWeapon weapon = weapons.get(weaponIndex);
-            boolean inPool = !ownsRangedWeapon(tag) || inKit(weapon, tag);
+            boolean inPool = tag == null || !ownsRangedWeapon(tag) || inKit(weapon, tag);
             if (!inPool) continue;
             pool.add(weaponIndex);
             scores[weaponIndex] = new float[scenarios.size()];
@@ -1017,13 +1215,24 @@ public final class BuildValuationModel {
     }
 
     /**
-     * SCAVENGER's carry conversion: the extra supply power points a floor yields under the build, spent at
+     * The carry's supply conversion: the extra supply power points a floor yields under the build, spent at
      * the Fabricator on heals — a full medkit costs MEDKIT_FULL_HEAL_FRACTION x PLAYER_MAX_HEALTH /
      * SHOP_HEAL_HP_PER_POWER_POINT points and restores MEDKIT_FULL_HEAL_FRACTION of max HP, so one point
      * buys SHOP_HEAL_HP_PER_POWER_POINT / PLAYER_MAX_HEALTH of max HP. Returned in fractions of max HP.
+     *
+     * <p>Every kit converts only the supply floorSustain does NOT already read ({@link SupplyValue#totalExceptHeals}:
+     * the heals component is the floor's planned heal, which floorSustain counts through healMultiplier x
+     * hpMult — converting it too would count a medkit twice). A tag build that changes no non-heal component
+     * converts exactly 0, which is the pre-relic R-CARRY for every tag but SCAVENGER. SCAVENGER's row keeps
+     * its pre-relic conversion of the WHOLE delta (heals included — QUARTERMASTER's max-HP cut reads there
+     * twice), so the BUILDS (R-CARRY) table stays byte-identical (A11); no relic carries the SCAVENGER tag.
      */
-    private static float supplyHealEquivalent(Context context, BuildStats none, BuildStats stats) {
-        float extraPoints = supply(context, stats).total() - supply(context, none).total();
+    private static float supplyHealEquivalent(Context context, BuildStats none, BuildStats stats, BuildTag kitTag) {
+        SupplyValue before = supply(context, none);
+        SupplyValue after = supply(context, stats);
+        float extraPoints = kitTag == BuildTag.SCAVENGER
+                ? after.total() - before.total()
+                : after.totalExceptHeals() - before.totalExceptHeals();
         return GameMath.powerPointsToHealFraction(extraPoints, BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT,
                 BalanceConfig.PLAYER_MAX_HEALTH);
     }

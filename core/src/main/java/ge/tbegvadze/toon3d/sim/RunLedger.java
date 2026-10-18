@@ -112,6 +112,16 @@ public final class RunLedger {
     /** Times the never-softlock emergency ammo lifeline fired. */
     public int emergencySupplyTriggers;
 
+    /** RELIC REPORT (relics-run-changing-artifacts): the ids of the relics held when the run ended, in bond order. */
+    public final List<String> relicIdsAtEnd = new ArrayList<>();
+
+    /** The relic a S-RELIC probe row was GRANTED at depth-1 arrival, or null (every other row). */
+    public String grantedProbeRelicId;
+
+    /** Relic offers that rolled at least one card, and the ones the policy bonded, by RelicSource ordinal. */
+    public final int[] relicOffersSeen  = new int[ge.tbegvadze.toon3d.relic.RelicSource.values().length];
+    public final int[] relicOffersTaken = new int[ge.tbegvadze.toon3d.relic.RelicSource.values().length];
+
     /** One entry per floor entered, in descent order. */
     public final List<FloorLedger> floors = new ArrayList<>();
 

@@ -630,6 +630,7 @@ public final class RouteMapConstants {
     public static final int MYSTERY_WEIGHT_AMBUSH        = BalanceConfig.MYSTERY_WEIGHT_AMBUSH;
     public static final int MYSTERY_WEIGHT_LORE_SIGNAL   = BalanceConfig.MYSTERY_WEIGHT_LORE_SIGNAL;
     public static final int MYSTERY_WEIGHT_MALFUNCTION   = BalanceConfig.MYSTERY_WEIGHT_MALFUNCTION;
+    public static final int MYSTERY_WEIGHT_RELIC_CACHE   = BalanceConfig.MYSTERY_WEIGHT_RELIC_CACHE;
 
     /** First-frame reveal sting stamped by the MYSTERY meta-profile on entry. */
     public static final String MYSTERY_STING_TEXT = "SECTOR SCAN FAILED — UNKNOWN CONTACT";

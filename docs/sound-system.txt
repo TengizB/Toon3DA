@@ -151,7 +151,7 @@ its attack transient, and the transient is what makes a gunshot read as a gunsho
 
 4. THE CATALOG
 ==============
-92 sounds today. THERE IS NO CAP on how many sounds the catalog may hold. Orders 1-6 carried one (64,
+93 sounds today. THERE IS NO CAP on how many sounds the catalog may hold. Orders 1-6 carried one (64,
 then 72) that came from the original design document, not from the owner; order 7 deleted it at the
 owner's request ("I never asked for a cap"). A new sound is a new `GameSoundId` plus one `register()`
 call — nothing has to be cut to make room. What still bounds each sound is its length
@@ -172,6 +172,10 @@ call — nothing has to be cut to make room. What still bounds each sound is its
                    UI_CONFIRM, UI_FOCUS, SHOP_DISPENSE, FIRE_IGNITE, TOXIC_SPILL, CRYSTAL_SHATTER,
                    CRYSTAL_GROW, FROST_CRUST, HEAVY_FOOTFALL, LANCE_BEAM, ENEMY_SPAWN, SPIRE_GROW,
                    STONE_CRUMBLE, BOSS_ROAR, BOSS_SLAM, BOSS_REPAIR, BOSS_DEATH
+  relics           RELIC_BONDED (INTERFACE bus): two struck-METAL partials, 660 Hz then 990 Hz at +0.16 s
+                   (a rising fifth, ~0.6 s), with a short room echo (0.08 s, 0.35, 2.6 kHz, wet 0.30). The
+                   one deliberate exception to "echo on loud events only": a cold bell-like clink, the
+                   opposite of LEVEL_UP's pleasant sine triad, so a relic never sounds like a level.
 
 HISTORY: under the old cap (since removed), order 4 came in three over the design's tally, and three
 rows were cut. They stay cut on their merits, not for room:
@@ -322,6 +326,10 @@ balance simulator and the whole existing test suite working untouched.
     the barrel detonation listener  -> BARREL_EXPLOSION at the barrel tile
     `update()`                   -> setSuppressed / setPlayerState / update(deltaTime)
     the kill-event listener      -> KILL_CONFIRM (the XP receipt)
+    World.chooseRelicOfferCard() -> RELIC_BONDED via playMenu (the world is suppressed in RELIC_OFFER;
+                                    the overlay's own sound, like LEVEL_UP). UI_MENU_CLOSE follows from the
+                                    menu-transition detector one update later; the chime is a 0.6 s ring so
+                                    the close blip rides under it and was kept.
     the pending-level-up branch  -> LEVEL_UP, BEFORE the phase change (the next update suppresses
                                     gameplay sound for the overlay; this is the overlay's sound)
     takeStandingGroundWeapon()   -> PICKUP_WEAPON, or PICKUP_AMMO when the weapon was broken down.

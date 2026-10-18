@@ -267,5 +267,15 @@ public final class RouteEconomics {
                 .budgetScale(BalanceConfig.ROUTE_CALM_BUDGET_SCALE)
                 .guaranteedHealHitPoints(-BalanceConfig.ROUTE_MALFUNCTION_HAZARD_HIT_POINTS)
                 .build());
+
+        // RELIC CACHE — the artifact pull: delegates to the SUPPLY CACHE floor (a calm depot) and pays a
+        // two-card relic offer at the exit, priced as progress by RouteEconomicsModel.ladderRewardPrice.
+        registry.register(NodeEconomics.mysteryOutcome(MysteryOutcome.RELIC_CACHE.name())
+                .displayName("MYSTERY: RELIC CACHE")
+                .tableWeight(BalanceConfig.MYSTERY_WEIGHT_RELIC_CACHE)
+                .scanToneId(MysteryOutcome.RELIC_CACHE.scanTone().name())
+                .ladderReward(MysteryOutcome.RELIC_CACHE.reward())
+                .delegateId("cache")
+                .build());
     }
 }

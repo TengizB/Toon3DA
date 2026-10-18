@@ -235,6 +235,24 @@ class BalanceSimTest {
         assertBandsHold(results);
     }
 
+    /**
+     * S-RELIC (relics-run-changing-artifacts, CP8) — no relic is a trap and none is mandatory: the COMMON / RARE /
+     * LEGENDARY probe rows (SR1) and the CURSED row (SR2) sit inside their mean-depth bands over the NO-RELIC
+     * baseline, LEGENDARY is felt over COMMON (SR3), every sampled non-affine relic is inside its own band (SR4),
+     * every non-affine relic was sampled (SR5), and standard TACTICAL actually holds relics (SR6).
+     */
+    @Test
+    void noRelicIsATrapAndNoneIsMandatory() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_RELIC);
+        for (String prefix : List.of("SR1 ", "SR2 ", "SR3 ", "SR4 ", "SR5 ", "SR6 ")) {
+            assertTrue(results.stream().anyMatch(result -> result.subject.startsWith(prefix)),
+                    () -> "S-RELIC must report its " + prefix.trim() + " line");
+        }
+        assertEquals(3, results.stream().filter(result -> result.subject.startsWith("SR1 ")).count(),
+                "SR1 reads the COMMON, RARE and LEGENDARY probe rows");
+        assertBandsHold(results);
+    }
+
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */
     @Test
     void noRunEndsUnableToDamageAnything() {

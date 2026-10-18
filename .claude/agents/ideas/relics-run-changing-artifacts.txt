@@ -1,0 +1,1253 @@
+STATUS: IMPLEMENTED
+CATEGORY: Items
+TITLE: Relics — rare run-changing artifacts, priced in balance
+CREATED: 2026-10-18
+IMPLEMENTED: 2026-10-18
+---
+
+IMPLEMENTATION NOTE (2026-10-18, hub decisions taken while building — the catalog
+table below shows the DESIGNED starting state; the code + BalanceReport RELICS table are
+the shipped state):
+  - CP2: route-event costs (lost gamble bite, health toll) use Player.applyEventCostDamage,
+    which bypasses the relic shield and damage multiplier (R11 = enemy attacks, heavies,
+    explosions). Relic-blast kills get the relic kill terms but never a corpse burst (R8).
+  - CP5: R-RELIC-CURSE measures its minimum loss on the relic's COST effects alone
+    (PerkModifier.isCostAt), because worstLoss over every probe reported spurious losses for
+    pure gains. bestHandLift is affinity-consistent (non-affine relics + at most ONE BuildTag).
+  - CP5: magnitudes retuned inside SECTION 26 (D7). Nine relics could not fit by magnitude
+    (saturation, integer kill-turn breakpoints, boolean-only effects) and were recomposed with
+    EXISTING kinds: recoil_spring (+AMMO_PICKUP_BONUS), spotters_lens (DAMAGE_TAKEN 0.95 + tiny
+    unhurt-target damage, trigger ON_HIT_TAKEN), grief_engine (+KILL_ARMOR), choke_bore
+    (+KILL_ARMOR, smaller SPREAD), capacitor_bank (ARC_CHAIN_MULTIPLIER instead of
+    ENERGY_DAMAGE), second_heart (SECOND_WIND only), overclocked_servos (ALL_WEAPON_DAMAGE +
+    RANGE_BONUS instead of FIRST_HIT_CRITICAL); counterweight and asbestos_lining moved to
+    LEGENDARY. Rarity counts are therefore 10 COMMON / 11 RARE / 9 LEGENDARY / 6 CURSED (A2's
+    11/12/7/6 is superseded). RELIC_CARRY_BAND_LEGENDARY top widened 1.20 -> 1.22 (a band new in
+    this feature) for second_heart's Second Wind flag.
+  - CP2/CP7: in-play feedback text is GENERIC, not per-relic: "+N HP - RELIC", "+N AR - RELIC",
+    "+N <AMMO> - RELIC" and "SHIELD - HIT ABSORBED" (A7's "ABLATIVE SHELL — HIT ABSORBED" is
+    superseded). BuildStats aggregates effects without relic ids, and the default font has no
+    U+2014, so UI strings use " - ".
+  - Review fix: a "kill" (R8) is every XP-awarding player kill — weapon, burn/poison tick, guard
+    reflect and relic blast. All get the relic kill terms; only weapon and DoT kills may corpse-burst.
+  - CP6: MYSTERY_WEIGHT_RELIC_CACHE = 3, BELOW D7's floor of 4: the pre-relic mystery table
+    already sat at R-MYSTERY-EV 1.2917 of its 1.30 ceiling, and weight 4 gives 1.3022. At 3 it is
+    1.2996 (margin 0.0004). Mystery relic caches are therefore rarer than designed.
+
+SUPERSEDES .claude/agents/ideas/roguelike_order_14_artifacts_and_special_relics.txt
+(now REJECTED). What carried over from it: relics are run-scoped passives that
+rewrite one rule, arrive through EXISTING channels (no tile symbol), use a
+rarity tier, and the Demon-Core/Berserker "devil's bargain" became the CURSED
+tier. What did not: its items/ package and ArtifactSlots class (the BuildStats
+seam already does that job), its 2-slot swap overlay (no cap pressure is needed
+at ~5 relics per run), Night Vision (the minimap/lighting work since made it
+moot), Reactor Shard's double projectile (it rewrites every Weapon subclass's
+marchShot; unpriceable in the current valuation), and its unpriced numbers.
+
+The owner PRE-APPROVED this design ("generate a single idea file, then start
+implementing it right away"). There are no open questions; every choice is under
+ASSUMPTIONS or DECISIONS. The owner asked for ONE file, so this is not split,
+even though it runs to ten checkpoints.
+
+
+OVERVIEW
+--------
+A RELIC is a rare, named artifact that changes one rule for the rest of the
+run: kills heal you, doors you open explode, the first hit on each floor does
+nothing, enemies arrive weaker. There are 36 of them in four tiers (COMMON,
+RARE, LEGENDARY, CURSED). A run collects about five: one chosen at the start of
+the run, one after each of the first four bosses, and the odd one from a
+MYSTERY sector or a quarantine-locker EVENT. Each one is offered as a
+"choose one of N" card screen, so two runs never play the same way.
+
+What the owner said: "rare items that change the rules for the rest of the run
+... a lot of different relics ... integrate it with the game balance."
+What the owner wants: runs that feel different from the first floor on,
+without a new power source that quietly breaks the balance contract. The
+second half of that is the reason for the size of this file. Every relic is
+priced in the balance contract's own terms: a carry lift measured on the eight
+reference scenarios by the existing build valuation. Each rarity has a band.
+The relics a run is expected to hold are capped against what one committed
+perk build is worth. The simulator checks that no relic is a trap and none is
+mandatory.
+
+Rarity alone is not enough to make runs feel different: today most runs end
+before the first boss (TACTICAL median death depth is 3, and the first boss is
+at depth 5). So every run also opens with a choice of three COMMON relics.
+That is the decision that makes run one differ from run two.
+
+
+SCOPE
+-----
+IN
+  - A new headless package ge.tbegvadze.toon3d.relic: the relic catalog (36
+    register() rows), the run's held relics, the offer roller, and the trigger
+    runtime.
+  - Relics fold into the EXISTING build seam: their effects are PerkEffect
+    rows (PerkModifier kind + magnitude). PlayerBuild applies them into the same
+    BuildStats aggregate that every damage, heal, kill and shop seam already
+    reads. Seventeen new PerkModifier kinds cover the rules perks never had.
+  - Runtime seams for the new kinds: Player (damage taken, first-hit shield),
+    EnemyManager (kill heal, armour, credits, XP, ammo refund, corpse burst,
+    spawn health, low-health damage), ExplosiveBarrelManager (the relic blast),
+    DoorManager (a player-opened-door listener), floor arrival (heal, armour,
+    ammo). Every seam is shared by World and SimWorld.
+  - Four acquisition sources: RUN_START (3 COMMON), BOSS (3 cards, bosses 1-4),
+    MYSTERY outcome RELIC_CACHE (2 cards, COMMON/RARE), EVENT "QUARANTINE
+    LOCKER" (2 CURSED cards, or sell the seal for credits).
+  - A new RunPhase.RELIC_OFFER with a touch card overlay, a RELICS section on
+    the inventory's BUILD page, a RELICS line on the run report, one new sound
+    row, and event-text feedback for discrete triggers.
+  - BALANCE: BalanceConfig SECTION 26 RELICS. Four new schema rule kinds
+    (R-RELIC, R-RELIC-CURSE, R-RELIC-STACK, R-RELIC-SOURCE) with
+    BalanceAuditTest coverage. RelicValuationModel. Route pricing of relic
+    offers. BalanceReport RELICS and RELIC STACK tables. The simulator gets
+    relic choice, five probe rows and an S-RELIC band, with BalanceSimTest
+    coverage, plus SimReport RELIC REPORT, RoundSummary and LadderReport
+    lines.
+  - Docs: new docs/relic-system.txt; game-balance-authority.txt;
+    game-balance-knowledge.txt; route-map-system.txt; sound-system.txt;
+    xp-level-progression.txt; .claude/CLAUDE.md.
+
+OUT (deliberately not doing now)
+  - Any new tile symbol, pedestal prop or ground item for relics. Relics are
+    never on the floor. They are offered on a card screen.
+  - Relics in the shop. The shop economy (R-CREDITS v2, S-SHOP) is
+    deliberately left alone.
+  - Relics from ELITE floors. That would change the ELITE node's priced EV
+    and R-RISK-PREMIUM band mid-feel-pass.
+  - Dropping, swapping, selling or removing a held relic, cursed or not. A
+    relic is for the run. There is no slot cap to manage; there is a safety
+    cap of 8.
+  - Any persistence: no "discovered relics" list, no codex shelf, no new
+    StatsStore or StoryStore key, no schema bump. A follow-up idea can add a
+    discovery log.
+  - ORA lines, barks, a TeachingTopic, or codex entries about relics. The
+    offer card is the teaching: it says what the relic does. A story pass can
+    add lines later through docs/narrative-authority.txt.
+  - Barrel relics. Barrel value is read only on the BARREL_OPENER niche, not
+    on the carry the rarity bands use, so a barrel relic would price at about
+    1.00 and fail every band. Follow-up: teach carryOf about barrel openers
+    first.
+  - Folding relic power into ExpectedPlayer. Bosses, TP and the ladder stay
+    derived from the relic-free on-curve player. See D3.
+  - Per-relic art. A card shows a rarity frame, a trigger badge, the name and
+    the text. There is no per-relic glyph.
+  - Weapon-mechanics relics that would rewrite a Weapon subclass's fire path
+    (extra projectiles, pierce for every class).
+  - New non-balance tests. No test for the overlay, catalog, runtime or route
+    wiring. See the Testing Policy note in IMPLEMENTATION PLAN step 5.
+
+
+GAMEPLAY LOOP
+-------------
+Every action is still exactly one turn. Taking a relic costs NO turn: the
+offer is a hard-pause overlay, like the level-up screen.
+
+  RUN START
+  1. The player arms up in the staging room, picks a route node and arrives on
+     depth 1. On the first frame where the world is in PLAYING and the player
+     is idle, the RELIC_OFFER overlay opens with 3 COMMON cards plus a LEAVE
+     IT plate.
+  2. Tap a card: that relic is bonded. Its effects fold into the build at
+     once, the RELIC_BONDED sound plays, and event text reads
+     "RELIC BONDED — <NAME>". The overlay closes and play resumes on the same
+     turn. Tap LEAVE IT: nothing is bonded and the overlay closes.
+
+  BOSS (depths 5, 10, 15, 20 — never 25, which is the run's VICTORY)
+  3. The boss dies. World notices it in the same poll that asks for the
+     BOSS_DEFEATED bark and queues a BOSS offer. The overlay opens on the next
+     idle PLAYING frame with 3 cards rolled from that boss's rarity weights,
+     at least one RARE or better, never CURSED.
+
+  MYSTERY SECTOR (outcome RELIC_CACHE)
+  4. The player leaves the sector. The mystery payout queues a MYSTERY_CACHE
+     offer of 2 cards (COMMON or RARE). It opens on the first idle PLAYING
+     frame of the next floor.
+
+  EVENT "QUARANTINE LOCKER"
+  5. Choose BREAK THE SEAL: an offer of 2 CURSED cards opens as soon as the
+     event overlay closes. Choose SELL THE SEAL: the large credit payout, and
+     no relic.
+
+  WHILE HELD (all inside turns the world already resolves; never per frame)
+  6. On a kill credited to the player: kill heal and armour, the credit
+     bonus, the XP bonus, the ammo refund roll, and the corpse burst. They
+     resolve during the kill, inside the turn that killed it.
+  7. When the player opens a door (the turn spent opening it): the door blast
+     and the door heal. Each door triggers at most once per floor, and the
+     blast resolves before the enemies act that turn.
+  8. On floor arrival, before the first turn: the arrival heal, armour and
+     ammo, and the first-hit shield re-arms.
+  9. On every hit the player takes: the shield is spent first if armed, then
+     the damage-taken multiplier, then the existing guard, armour and
+     toughness pipeline. Second Wind still has the last word.
+ 10. When an enemy spawns (floor load or a mid-floor summon, never a boss):
+     its health is multiplied.
+ 11. On every weapon hit while the player is below
+     BUILD_BERSERK_LOW_HEALTH_FRACTION (30%) of max HP: the low-health damage
+     bonus applies.
+ 12. The player dies: the held relics are listed on the run report and are
+     gone. The next run starts with none.
+
+
+RULES
+-----
+  Identity and holding
+  R1  A relic is one RelicDefinition row: id (lower_snake), display name
+      (UPPER), RelicRarity, RelicTrigger (UI badge), RelicValuation (CARRY or
+      SUPPLY), optional BuildTag affinity, 1..4 PerkEffects, an effect line,
+      and a cost line (required for CURSED, forbidden otherwise). Every
+      magnitude is a BalanceConfig constant named
+      RELIC_<RELIC_ID>_<PERK_MODIFIER_KIND>.
+  R2  A run holds each relic at most once, up to RELIC_MAX_HELD = 8. Held
+      relics are never removed during the run. Death or a new run clears them.
+  R3  Relic effects apply after the perks and before the keystones in
+      PlayerBuild.recompute. The PerkModifier stacking rule is unchanged:
+      bonus kinds add, cost and multiplier kinds multiply, and boolean kinds
+      OR.
+
+  Offers
+  R4  RelicSource defines each offer:
+        RUN_START        3 cards, COMMON only.
+        BOSS             3 cards, rarity rolled per card from
+                         RELIC_BOSS_OFFER_RARITY_WEIGHTS[bossIndex]
+                         ({COMMON, RARE, LEGENDARY}); if no card is RARE+, the
+                         last card is re-rolled as RARE.
+        MYSTERY_CACHE    2 cards, from RELIC_MYSTERY_OFFER_RARITY_WEIGHTS
+                         {COMMON, RARE}.
+        QUARANTINE_LOCKER 2 cards, CURSED only.
+      Every offer has a LEAVE IT plate.
+  R5  Eligibility. A relic is never offered when:
+        - it is already held;
+        - it has a BuildTag affinity and the player neither carries a weapon
+          of that tag nor holds a perk rank in it;
+        - every one of its effects is a boolean that is already true in the
+          build.
+      If a rarity has too few eligible relics, the card falls back to the
+      nearest rarity: RARE, then COMMON, then LEGENDARY (CURSED never stands
+      in for anything else). With zero eligible relics the offer is skipped
+      and logged. At RELIC_MAX_HELD, offers are skipped.
+  R6  Offers are deterministic. The seed is GameMath.floorSeed(runSeed ^
+      RELIC_OFFER_SEED_SALT, depth) mixed with the source ordinal. Same seed,
+      same cards, in World and SimWorld alike.
+  R7  At most RELIC_PENDING_OFFER_CAPACITY = 2 offers wait, first in first
+      out. A pending offer survives floor transitions and is dropped on
+      death. It opens only in PLAYING, with the player IDLE, no bark panel
+      mid-reveal blocking, and no other overlay. It opens before a pending
+      story exchange and after a pending level-up.
+
+  Triggered rules (the new PerkModifier kinds; see TECHNICAL NOTES)
+  R8  A "kill" means a death that awards XP through KillXpListener. A kill by
+      a corpse burst never causes another corpse burst (no chains).
+  R9  Relic blasts hit ENEMIES ONLY. They never damage the player, never
+      detonate barrels, deal EXPLOSIVE damage through the matchup with the
+      hazard-blast flag set (no weapon build terms, no Sapper multiplier),
+      and use the reference soldier's HP at the floor's depth as the 1.0
+      unit.
+        Door blast: centre on the tile beyond the door, opposite the player.
+                    If that tile is a wall, centre on the door tile. Centre
+                    takes fraction x 1.0; the 4 neighbours take fraction x
+                    RELIC_BLAST_RING_SHARE.
+        Corpse burst: the 4 orthogonal neighbours of the dead enemy's tile,
+                    each at fraction x 1.0. The centre is empty.
+  R10 Door triggers (blast, heal) fire on a CLOSED -> OPENING transition the
+      player requested, once per door tile per floor.
+  R11 FIRST_HIT_SHIELD: the first hit each floor from an enemy attack, a
+      heavy, or an explosion deals 0 and is spent. A status tick never spends
+      it.
+  R12 Multiplier clamps: damage taken x is clamped to >= 0.50 and enemy
+      health x to >= 0.50. A positive hit always deals at least 1.
+      Arrival ammo refunds once per AMMO TYPE carried, not once per gun.
+  R13 ENEMY_HEALTH_MULTIPLIER never applies to EnemyRole.BOSS and only
+      changes enemies spawned after the relic is bonded.
+
+  Phase machine
+  R14 RunPhase gains RELIC_OFFER. Legal transitions:
+        PLAYING -> RELIC_OFFER (pending offer, idle);
+        RELIC_OFFER -> PLAYING (card tapped or LEAVE IT);
+        RELIC_OFFER -> PAUSE_MENU -> RELIC_OFFER (the pause button works and
+        returns to the same offer).
+      Nothing else enters or leaves it. Death cannot happen in it (the world
+      is frozen). RELIC_OFFER is a hard-pause overlay: barks queue, no
+      exchange opens, and the thumb clusters are not drawn.
+  R15 Taps on the overlay are ignored for RELIC_OFFER_INPUT_LOCKOUT_SECONDS
+      = 0.4 s after it opens, so a thumb mashing FIRE cannot pick a card
+      blind.
+
+
+PLAYER EXPERIENCE
+-----------------
+At the start of the run, three small rule-benders: heal on every floor, kills
+pay more, doors heal you. The pick is "what kind of run do I want", and it is
+legible before the first enemy. After the first boss, the bigger cards
+arrive: VAMPIRIC CORE ("every kill heals"), BREACHING CHARGE ("doors you open
+explode"). The player starts playing differently: opening doors on purpose
+with enemies behind them, diving into a pack because kills refund health. The
+CURSED tier is the bargain card. BLOOD PACT (+35% damage, take 25% more) is
+offered only behind a seal the player chose to break, so a cursed relic is
+never forced on anyone.
+
+Death stays explainable. Every effect is printed on the card, listed on the
+BUILD page and named on the run report ("RELICS: BLOOD PACT, KEVLAR WEAVE").
+A cursed cost is printed in red on the same card as the gain.
+
+Teaching is the card itself: one plain line per effect, a trigger badge (ON
+KILL, ON DOOR, ON ARRIVAL, ALWAYS, ON HIT, LOW HP, LETHAL HIT, ON SPAWN), and
+a rarity frame. Discrete triggers also confirm themselves in play
+("ABLATIVE SHELL — HIT ABSORBED", "+9 HP — FIELD DRESSING"). No ORA line is
+needed.
+
+
+TECHNICAL NOTES
+---------------
+Package decision: new ge.tbegvadze.toon3d.relic. It holds the data and
+selection classes, with no LibGDX imports. RelicRuntime touches only
+simulation types (entity, level, hazard, door), exactly as SimWorld does.
+Dependencies point one way: route -> relic -> progression/util. relic never
+imports route; the boss index and depth are passed in. util.RelicValuationModel
+imports relic, the same util <-> content pattern BuildValuationModel already
+uses with progression.
+
+relic/ (NEW)
+  RelicRarity       enum COMMON, RARE, LEGENDARY, CURSED. Data per constant:
+                    label, isCursed. No switch anywhere.
+  RelicTrigger      enum ALWAYS, ON_KILL, ON_DOOR_OPEN, ON_FLOOR_ARRIVAL,
+                    ON_HIT_TAKEN, ON_LOW_HEALTH, ON_LETHAL_HIT, ON_ENEMY_SPAWN.
+                    Data: badge label ("ALWAYS", "ON KILL", "ON DOOR",
+                    "ON ARRIVAL", "ON HIT", "LOW HP", "LETHAL HIT",
+                    "ON SPAWN").
+  RelicValuation    enum CARRY, SUPPLY. Which metric the rarity band reads.
+  RelicSource       enum RUN_START, BOSS, MYSTERY_CACHE, QUARANTINE_LOCKER.
+                    Data per constant: card count, allowed rarities, a
+                    guarantee flag (BOSS: one RARE+). The rarity weights come
+                    from BalanceConfig arrays.
+  RelicDefinition   immutable row plus Builder. Required builder fields: id,
+                    name, rarity, trigger, valuation, effectText, and >= 1
+                    PerkEffect. costText is required iff rarity == CURSED.
+                    affinity (BuildTag) is optional. build() throws
+                    IllegalStateException on a missing required field.
+                    Accessors: id(), name(), rarity(), trigger(), valuation(),
+                    affinity(), effects() (a copy-free PerkEffect[] view),
+                    effectText(), costText().
+  RelicRegistry     register(RelicDefinition) (rejects a duplicate id),
+                    get(String id), all(), allOfRarity(RelicRarity),
+                    size(). Iteration order = registration order.
+  RelicCatalog      static bootstrap(RelicRegistry): THE CONTENT FILE. 36
+                    register() calls, one per relic (catalog below). Adding a
+                    relic = one register() call plus its BalanceConfig
+                    magnitudes.
+  RelicText         static String percent(float) helper for card text (the
+                    Perk.percent idiom). Card text is built from BalanceConfig,
+                    so text never drifts from numbers.
+  RelicHand         the run's held relics: fixed RelicDefinition[RELIC_MAX_HELD],
+                    count().
+                      add(RelicDefinition, PlayerBuild): boolean. False if held
+                        or full. Otherwise calls
+                        playerBuild.addRelicEffects(def.effects()).
+                      holds(RelicDefinition), get(int index), clear().
+                    Allocation-free after construction.
+  RelicOffer        mutable, pre-allocated output: source, depth,
+                    cards[RELIC_OFFER_MAX_CARDS], count. The roller fills it;
+                    it is never allocated per offer.
+  RelicOfferRoller  static roll(RelicSource source, int depth, int bossIndex,
+                    RelicHand hand, BuildStats stats, EnumSet<BuildTag>
+                    carriedOrRankedTags, long seed, RelicOffer out).
+                    Implements R4-R6.
+  RelicRuntime      per-run trigger runner, owned by World and by SimWorld
+                    (one class, never mirrored code). implements
+                    door.DoorOpenedListener.
+                      beginFloor(Level level, Player player, PlayerInventory
+                        inventory, RelicBlastTarget blastTarget): resets the
+                        per-floor door-trigger grid (allocated here, at floor
+                        start, sized to the level, never in render), then
+                        applies FLOOR_ARRIVAL_HEAL / _ARMOR / _AMMO and
+                        reports each through the feedback listener.
+                      onDoorOpenedByPlayer(int tileColumn, int tileRow):
+                        R9/R10 door blast plus door heal.
+                      setFeedbackListener(RelicFeedbackListener): World
+                        routes it to EventTextSystem; null in SimWorld.
+  RelicFeedbackListener  void onRelicTriggered(String text, boolean
+                    positive).
+
+progression/ (EXTEND — the single seam, see D1)
+  PerkModifier      17 NEW constants, each owning its apply body:
+                      ALL_WEAPON_DAMAGE (add to every class),
+                      KILL_HEAL, KILL_ARMOR, KILL_CREDIT_BONUS,
+                      KILL_AMMO_REFUND (chance, min 1), XP_MULTIPLIER,
+                      DOOR_BLAST, DOOR_OPEN_HEAL, CORPSE_BLAST,
+                      FLOOR_ARRIVAL_HEAL, FLOOR_ARRIVAL_ARMOR,
+                      FLOOR_ARRIVAL_AMMO, FIRST_HIT_SHIELD (boolean),
+                      LOW_HEALTH_DAMAGE (all classes), DAMAGE_TAKEN_MULTIPLIER
+                      (x), ENEMY_HEALTH_MULTIPLIER (x), CLIP_SIZE_MULTIPLIER
+                      (x on the existing clipSizeCostMultiplier field).
+  BuildStats        new package-private fields with identity defaults. The
+                    new fields are reset in reset() and copied in copyFrom().
+                    Public accessors:
+                      killHealFraction(), killArmorFraction(),
+                      killCreditMultiplier() (1 + sum),
+                      killAmmoRefundChance(), experienceMultiplier() (1 + sum),
+                      doorBlastFraction(), doorOpenHealFraction(),
+                      corpseBlastFraction(), floorArrivalHealFraction(),
+                      floorArrivalArmorFraction(), floorArrivalAmmoFraction(),
+                      firstHitShield(), lowHealthDamageBonus(),
+                      damageTakenMultiplier() (clamped,
+                      RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN),
+                      enemyHealthMultiplier() (clamped,
+                      RELIC_ENEMY_HEALTH_MULTIPLIER_MIN).
+                    New public static ofEffects(PerkEffect... effects): a
+                    fresh aggregate with each effect applied at rank 1. Used
+                    by the valuation.
+                    Every existing accessor's result for a relic-free build
+                    is UNCHANGED.
+  PlayerBuild       addRelicEffects(PerkEffect[] effects): boolean (false at
+                    RELIC_MAX_HELD sets), relicEffectSetCount(), reset()
+                    clears them, recompute() applies perks, then relic sets
+                    at rank 1, then keystones. PlayerBuild never learns
+                    relic ids (no progression -> relic import).
+
+Runtime seams (EXTEND; all shared by World and SimWorld)
+  entity/Player     applyDamage and every other damage entry point:
+                      1) shield: if firstHitShield and not spent this floor,
+                         and the source is not a status tick -> spend it,
+                         set firstHitShieldEventPending, return;
+                      2) damage = max(1, round(damage x damageTakenMultiplier()));
+                      3) the existing pipeline, unchanged.
+                    resetFloorBuildState() also re-arms the shield.
+                    consumeFirstHitShieldEvent(): boolean, polled by World for
+                    feedback.
+                    If the shield cannot tell a status tick apart at
+                    applyDamage, add a boolean parameter on the status path
+                    only (StatusEffectController's caller). Do not guess.
+  enemy/EnemyManager  applyBuildKillTerms gains: KILL_HEAL (applyHealing,
+                    not a treatment), KILL_ARMOR (applyArmor), KILL_AMMO_REFUND
+                    (buildRandom roll, active weapon refundReserveRounds(1)),
+                    CORPSE_BLAST (via RelicBlastTarget, skipped while a relic
+                    blast is in progress — R8).
+                    XP: xpAwarded = round(xp x experienceMultiplier()) before
+                    KillXpListener and KillEventListener.
+                    Credits: baseReward = round(base x killCreditMultiplier())
+                    before KillCreditListener.
+                    Spawn: non-BOSS max and current HP x enemyHealthMultiplier().
+                    LOW_HEALTH_DAMAGE: the BERSERKER read
+                    (isPlayerBelowBerserkThreshold) widened to every damage
+                    class for this bonus.
+                    setRelicBlastTarget(RelicBlastTarget) is wired per floor.
+  hazard/RelicBlastTarget (NEW interface)
+                    void detonateRelicBlast(int tileColumn, int tileRow,
+                    float centreFraction, float ringFraction). Implemented
+                    by ExplosiveBarrelManager. It shares the per-tile enemy
+                    hit code with detonateBarrel, minus the player branch and
+                    the barrel chain. Visual: impactEventListener.onEnemyKilled
+                    at the centre, scale RELIC_BLAST_VISUAL_SCALE_DOOR /
+                    _CORPSE.
+  door/DoorOpenedListener (NEW interface)
+                    void onDoorOpenedByPlayer(int tileColumn, int tileRow).
+                    DoorManager.setDoorOpenedListener(...) is a second slot.
+                    The audio DoorStateListener is untouched. It fires in
+                    requestOpen on CLOSED -> OPENING; PlayerController is the
+                    only caller of requestOpen, so every such open is the
+                    player's.
+  World / SimWorld  Own one RelicHand and one RelicRuntime per run. Wire
+                    RelicBlastTarget and DoorOpenedListener wherever the
+                    floor's ExplosiveBarrelManager and DoorManager are built.
+                    Call relicRuntime.beginFloor(...) right after every
+                    player.resetFloorBuildState() (World ~1412, SimWorld
+                    ~457). Call applyBuildEffects() after every relic is
+                    bonded (it already pushes max-HP/armour deltas and the
+                    extra loadout slot).
+
+Acquisition (EXTEND)
+  World             RunPhase.RELIC_OFFER. A pending-offer FIFO (R7). Queues:
+                      RUN_START on depth-1 arrival;
+                      BOSS in requestBossDefeatedBark's poll, guarded by
+                        its own once-per-floor flag, and skipped when the
+                        depth is BalanceConfig.RUN_FINAL_DEPTH;
+                      the EventEffect relic offer in applyLadderEffect
+                        (MYSTERY payout and EVENT choice).
+                    runStats.recordRelicBonded(name);
+                    Gdx.app.log("Relic", ...).
+  route/EventEffect Builder.relicOffer(RelicSource), accessor relicOffer()
+                    (null = none).
+  route/MysteryOutcome  new row RELIC_CACHE(MYSTERY_WEIGHT_RELIC_CACHE,
+                    ScanTone.REWARD_RICH, "RELIC", CacheProfile.PROFILE_ID,
+                    EventEffect.builder().relicOffer(MYSTERY_CACHE)
+                    .resultText("RELIC CACHE OPENED").build()).
+                    RouteMapConstants mirrors the weight like its siblings.
+  route/FacilityEvents  new event "quarantine_locker", registered with the
+                    others. Text is UI text in the existing event idiom:
+                      title "QUARANTINE LOCKER";
+                      narrative "A sealed locker stamped DO NOT OPEN." /
+                                "Something inside is still warm.";
+                      choice "BREAK THE SEAL" — "Take one of two quarantined
+                        relics. Each helps. Each costs." ->
+                        relicOffer(QUARANTINE_LOCKER), logToken "broken";
+                      choice "SELL THE SEAL" — "Report it unopened and claim
+                        the containment bounty." ->
+                        credits(EVENT_CREDIT_FLOORS_LARGE), logToken "sold".
+  route/RouteEconomicsModel  ladderRewardPrice adds progress PP =
+                    RelicValuationModel.offerPowerPoints(source, depth) when
+                    effect.relicOffer() != null.
+  route/RouteEconomics  a NodeEconomics row for RELIC_CACHE, derived the
+                    same way as its sibling outcome rows (R-ROUTE-PRICED).
+  world/RunStats    recordRelicBonded(String), getRelicsBonded() (comma
+                    list).
+
+Valuation (NEW plus EXTEND; math-expert)
+  util/BuildValuationModel
+    - Extract carryOf(BuildStats stats, BuildTag kitTag, int depth) from
+      carry(BuildTag). carry(tag) becomes a call to it. R-CARRY numbers must
+      stay BYTE-IDENTICAL (BalanceReport BUILDS table diff is empty). kitTag
+      null = "best pair from every weapon". Kit size = 2 +
+      stats.extraLoadoutSlots() (QUARTERMASTER already adds a gun this way).
+    - Terms for the new kinds (formulas in GameMath, each with its comment
+      block):
+        KILL_HEAL / KILL_ARMOR -> floorSustain: bodiesPerFloor x
+          RELIC_VALUATION_KILL_SHARE x fraction (armour scaled by
+          armourRatio x maxArmorMultiplier). Same shape as meleeHeal.
+        DOOR_OPEN_HEAL         -> floorSustain: RELIC_VALUATION_DOORS_PER_FLOOR
+          x fraction.
+        FLOOR_ARRIVAL_HEAL / _ARMOR -> floorSustain: + fraction, once per
+          floor.
+        FIRST_HIT_SHIELD       -> floorSustain: + one reference-soldier hit
+          (as a max-HP fraction); duel: the first hit absorbed.
+        DAMAGE_TAKEN_MULTIPLIER -> floorIncoming x m; duel damage x m;
+          poolHitsToDie / m.
+        ENEMY_HEALTH_MULTIPLIER -> scenario and duel target eHP x m;
+          floorIncoming x m (fights shorten in proportion).
+        LOW_HEALTH_DAMAGE      -> every scenario hit x (1 + m x
+          BUILD_BLADE_LOW_HEALTH_TURN_SHARE), the BERSERKER term for all
+          classes.
+        ALL_WEAPON_DAMAGE / CLIP_SIZE_MULTIPLIER -> already read
+          (classDamageBonus / buildClipActions).
+        DOOR_BLAST             -> GameMath.relicDoorOpenerTurns: with
+          probability RELIC_VALUATION_DOOR_FIGHT_SHARE the fight opens with
+          a blast (centre on the lead target, ring on group members), reusing
+          the barrelOpenerTurns walk; expected turns = (1 - share) x turns +
+          share x openerTurns.
+        CORPSE_BLAST           -> GameMath.relicCorpseBurstScenarioTurns:
+          in a group of n, each of the first n-1 kills deals fraction x
+          refSoldierHP x RELIC_VALUATION_CORPSE_ADJACENCY to the remaining
+          group HP. Turns scale by the remaining group HP fraction.
+        KILL_CREDIT_BONUS      -> SupplyValue.credits += killCredits x bonus.
+        KILL_AMMO_REFUND       -> SupplyValue.ammo += bodies x share x chance
+          x the floor's mean ammo PP per unit.
+        FLOOR_ARRIVAL_AMMO     -> SupplyValue.ammo += fraction x stack cap of
+          the kit's ammo types x PP per unit (ammoUnitsPerFloor).
+        XP_MULTIPLIER          -> new SupplyValue.experience component =
+          bonus x EXPECTED_LEVELS_PER_DEPTH x EXPECTED_PERK_POWER_PP_PER_PICK
+          per floor. It counts in SUPPLY_TOTAL and in the carry's
+          supply-to-heal conversion.
+    - worstLoss(stats, excludedNiche, depth) accepts excludedNiche == null
+      (every probe counts).
+  util/RelicValuationModel (NEW, cached, synchronized lazy tables)
+      carryLift(RelicDefinition, int depth): carryOf(BuildStats.ofEffects(
+        def.effects()), def.affinity(), depth).score.
+      gain(RelicDefinition, int depth): CARRY -> carryLift; SUPPLY -> supply
+        ratio on BuildNicheMetric.SUPPLY_TOTAL (with / without).
+      nearestReferenceDepth(int depth): over RELIC_REFERENCE_DEPTHS.
+      meanCarryLift(RelicRarity, int depth).
+      expectedRelicCount(int depth) = RELIC_VALUATION_START_TAKE_SHARE
+        + (BossTable depths < depth) + (depth - 1) x nodeOfferRatePerFloor().
+      nodeOfferRatePerFloor() = (NODE_WEIGHT_MYSTERY / sum NODE_WEIGHT_*) x
+        (MYSTERY_WEIGHT_RELIC_CACHE / sum MYSTERY_WEIGHT_*)
+        + (NODE_WEIGHT_EVENT / sum) x (locker weight / sum event weights) x
+          RELIC_VALUATION_EVENT_TAKE_SHARE.
+      expectedHandLift(int depth): product of expected lifts — the start
+        COMMON mean, each prior boss's rarity-weighted mean, and node offers
+        as meanLift^(count).
+      bestHandLift(int depth): the round(expectedRelicCount) highest
+        carryLifts reachable by that depth (LEGENDARY only through the
+        bosses passed, CURSED only through node offers).
+      offerPowerPoints(RelicSource, int depth) =
+        GameMath.relicPowerPoints(rarity-weighted mean carryLift of the
+        source's pool).
+  util/GameMath (NEW pure formulas, each with the Formula / Derivation /
+      Edge cases block)
+      relicPowerPoints(float lift) = SHOP_PERK_RANK_POWER_POINTS x ln(lift) /
+        ln(RELIC_PERK_RANK_EQUIVALENT_LIFT); 0 for lift <= 1.
+      relicDoorOpenerTurns(...), relicCorpseBurstScenarioTurns(...).
+      relicHandLift(float[] lifts, int count): the product, clamped >= 1 per
+        term for non-cursed.
+      relicBlastDamage(float fraction, float referenceHealth): round, >= 0.
+  util/ExpectedPlayer is NOT changed (D3).
+
+Constants
+  BalanceConfig SECTION 26 — RELICS (new, after SECTION 25)
+    Catalog magnitudes: RELIC_<ID>_<KIND> (values in the catalog table).
+    Holding/offers: RELIC_MAX_HELD = 8, RELIC_OFFER_MAX_CARDS = 3,
+      RELIC_PENDING_OFFER_CAPACITY = 2, RELIC_OFFER_SEED_SALT =
+      0x52454C4943L, RELIC_START_OFFER_CARDS = 3, RELIC_BOSS_OFFER_CARDS = 3,
+      RELIC_NODE_OFFER_CARDS = 2,
+      RELIC_BOSS_OFFER_RARITY_WEIGHTS = {{0.50,0.40,0.10}, {0.35,0.45,0.20},
+        {0.20,0.50,0.30}, {0.10,0.50,0.40}},
+      RELIC_MYSTERY_OFFER_RARITY_WEIGHTS = {0.60, 0.40},
+      MYSTERY_WEIGHT_RELIC_CACHE = 10.
+    Runtime: RELIC_BLAST_RING_SHARE = 0.60,
+      RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN = 0.50,
+      RELIC_ENEMY_HEALTH_MULTIPLIER_MIN = 0.50.
+    Bands: RELIC_REFERENCE_DEPTHS = {5, 15, 25};
+      RELIC_CARRY_BAND_COMMON = {1.03, 1.08},
+      RELIC_CARRY_BAND_RARE = {1.06, 1.13},
+      RELIC_CARRY_BAND_LEGENDARY = {1.10, 1.20},
+      RELIC_CARRY_BAND_CURSED = {1.05, 1.18},
+      RELIC_SUPPLY_BAND_COMMON = {1.06, 1.20},
+      RELIC_SUPPLY_BAND_RARE = {1.15, 1.35},
+      RELIC_SUPPLY_BAND_CURSED = {1.20, 1.60},
+      RELIC_CURSED_MIN_LOSS = 0.10,
+      RELIC_PERK_RANK_EQUIVALENT_LIFT = 1.08,
+      RELIC_PERK_RANK_EQUIVALENT_TOLERANCE = 0.03.
+    Valuation assumptions (stated once, printed by BalanceReport):
+      RELIC_VALUATION_KILL_SHARE = 0.60, RELIC_VALUATION_DOORS_PER_FLOOR = 3,
+      RELIC_VALUATION_DOOR_FIGHT_SHARE = 0.30,
+      RELIC_VALUATION_CORPSE_ADJACENCY = 0.50,
+      RELIC_VALUATION_EVENT_TAKE_SHARE = 0.50,
+      RELIC_VALUATION_START_TAKE_SHARE = 1.0.
+    Sim: SIM_RELIC_PROBE_SEED_COUNT = 120, SIM_RELIC_ROW_TRAP_TOLERANCE =
+      0.10, SIM_RELIC_ROW_MAX_LIFT = 0.40, SIM_RELIC_CURSED_ROW_TOLERANCE =
+      0.15, SIM_RELIC_PER_RELIC_TRAP_TOLERANCE = 0.25,
+      SIM_RELIC_PER_RELIC_MAX_LIFT = 0.60, SIM_RELIC_MIN_RUNS_PER_RELIC = 10.
+  HudConstants (overlay geometry, colours)
+      RELIC_OFFER_CARD_WIDTH 340, _CARD_HEIGHT 300, _CARD_GAP 24,
+      _CARD_Y (centred - 20), _TITLE_Y, _LEAVE_WIDTH 280, _LEAVE_HEIGHT 76,
+      _LEAVE_Y 40, RELIC_OFFER_INPUT_LOCKOUT_SECONDS 0.4,
+      RELIC_RARITY_COLOR_R/G/B[4]: COMMON steel (0.62, 0.70, 0.78), RARE
+      violet (0.62, 0.42, 0.95), LEGENDARY amber (1.00, 0.70, 0.20), CURSED
+      blood (0.85, 0.12, 0.12); RELIC_COST_TEXT_COLOR = the CURSED red.
+  EffectConstants  RELIC_BLAST_VISUAL_SCALE_DOOR 0.65,
+      RELIC_BLAST_VISUAL_SCALE_CORPSE 0.45.
+
+Audio
+  GameSoundId.RELIC_BONDED plus one register() row in
+  GameSoundCatalog.bootstrap(). UI bus. A rising two-partial METAL chime with
+  a short room echo, about 0.6 s, so it reads as a different object from
+  LEVEL_UP. It is played from World's update path on bond. The overlay's open
+  reuses UI_MENU_OPEN.
+
+Tile symbols: none (D2).
+Story string ids: none (D5).
+Persistence keys: none (D6).
+Tick subscribers: none new. Every trigger hangs off an existing turn-resolving
+call site (the kill path, requestOpen, floor arrival, the damage entry).
+
+
+THE CATALOG (36) — value = the RELIC_<ID>_<KIND> constant's starting value.
+Starting values are placeholders that CP5 may retune inside the bands (D7).
+Text uses the constants. Affinity "—" = none.
+
+  id                 NAME               rarity  trigger         valuation affinity       effects (kind value)                                   effect line / cost line
+  -----------------  -----------------  ------  --------------  --------  -------------  -----------------------------------------------------  ------------------------------------
+  COMMON (11)
+  field_dressing     FIELD DRESSING     COMMON  ON_FLOOR_ARRIVAL CARRY     —              FLOOR_ARRIVAL_HEAL 0.10                                Arriving on a floor heals 10% max HP
+  spare_plates       SPARE PLATES       COMMON  ON_FLOOR_ARRIVAL CARRY     —              FLOOR_ARRIVAL_ARMOR 0.20                               Arriving on a floor restores 20% max armour
+  bandolier          BANDOLIER          COMMON  ON_FLOOR_ARRIVAL SUPPLY    —              FLOOR_ARRIVAL_AMMO 0.10                                Arriving refills 10% of each carried ammo type
+  bounty_chip        BOUNTY CHIP        COMMON  ON_KILL         SUPPLY    —              KILL_CREDIT_BONUS 0.40                                 Kills pay +40% credits
+  threshold_stim     THRESHOLD STIM     COMMON  ON_DOOR_OPEN    CARRY     —              DOOR_OPEN_HEAL 0.04                                    Each door you open heals 4% max HP (once per door)
+  salvage_hook       SALVAGE HOOK       COMMON  ON_KILL         SUPPLY    —              CARRIER_EXTRA_DROP 0.35                                Carriers drop a second item 35% of the time
+  medics_glove       MEDIC'S GLOVE      COMMON  ALWAYS          CARRY     —              HEAL_BONUS 0.30                                        Medkits and treatments heal +30%
+  recoil_spring      RECOIL SPRING      COMMON  ON_KILL         SUPPLY    —              KILL_AMMO_REFUND 0.30                                  Kills refund a round to your gun 30% of the time
+  dog_tags           DOG TAGS           COMMON  ON_KILL         SUPPLY    —              XP_MULTIPLIER 0.20                                     +20% experience from kills
+  spotters_lens      SPOTTER'S LENS     COMMON  ALWAYS          CARRY     MARKSMAN       FULL_HEALTH_TARGET_DAMAGE 0.50                         +50% BALLISTIC / RAIL damage to unhurt enemies
+  asbestos_lining    ASBESTOS LINING    COMMON  ALWAYS          CARRY     PYRO           FIRE_TILE_IMMUNE, BURN_TURNS 1, FIRE_DAMAGE 0.10       Fire tiles can't hurt you; burns +1 turn; +10% FIRE
+  RARE (12)
+  breaching_charge   BREACHING CHARGE   RARE    ON_DOOR_OPEN    CARRY     —              DOOR_BLAST 0.60                                        Doors you open explode beyond them — enemies only
+  vampiric_core      VAMPIRIC CORE      RARE    ON_KILL         CARRY     —              KILL_HEAL 0.04                                         Every kill heals 4% max HP
+  salvage_plating    SALVAGE PLATING    RARE    ON_KILL         CARRY     —              KILL_ARMOR 0.08                                        Every kill restores 8% max armour
+  grief_engine       GRIEF ENGINE       RARE    ON_KILL         CARRY     —              CORPSE_BLAST 0.35                                      Enemies you kill burst into the enemies beside them
+  kevlar_weave       KEVLAR WEAVE       RARE    ON_HIT_TAKEN    CARRY     —              DAMAGE_TAKEN_MULTIPLIER 0.88                           Take 12% less damage
+  ablative_shell     ABLATIVE SHELL     RARE    ON_HIT_TAKEN    CARRY     —              FIRST_HIT_SHIELD                                       The first hit you take on each floor does nothing
+  culling_signal     CULLING SIGNAL     RARE    ON_ENEMY_SPAWN  CARRY     —              ENEMY_HEALTH_MULTIPLIER 0.90                           Enemies (not bosses) arrive with 10% less health
+  choke_bore         CHOKE BORE         RARE    ALWAYS          CARRY     CLOSE_QUARTERS SPREAD_DAMAGE 0.25, KNOCKBACK_BONUS 1                  +25% SPREAD damage; knockback +1 tile
+  capacitor_bank     CAPACITOR BANK     RARE    ALWAYS          CARRY     ENERGY         ENERGY_DAMAGE 0.25, ARC_CHAIN_JUMP 1                   +25% ENERGY damage; arcs jump to +1 enemy
+  shaped_casings     SHAPED CASINGS     RARE    ALWAYS          CARRY     DEMOLITION     EXPLOSIVE_DAMAGE 0.25, OWN_EXPLOSION_REDUCTION 0.50    +25% EXPLOSIVE damage; your blasts hurt you half
+  counterweight      COUNTERWEIGHT      RARE    ON_HIT_TAKEN    CARRY     BULWARK        WIDE_GUARD_ARC, GUARD_REFLECT 0.25                     Guard covers your flanks; reflects 25% it stops
+  bone_saw           BONE SAW           RARE    ON_KILL         CARRY     BLADE          MELEE_DAMAGE 0.25, MELEE_KILL_HEAL 0.04                +25% melee damage; melee kills heal 4% max HP
+  LEGENDARY (7)
+  second_heart       SECOND HEART       LEGENDARY ON_LETHAL_HIT   CARRY     —              SECOND_WIND, MAX_HEALTH_BONUS 0.15                     Once per floor a killing blow leaves you at 1 HP; +15% max HP
+  hunger_loop        HUNGER LOOP        LEGENDARY ON_KILL         CARRY     —              KILL_HEAL 0.05, KILL_ARMOR 0.05                        Every kill heals 5% max HP and 5% max armour
+  chain_detonator    CHAIN DETONATOR    LEGENDARY ON_KILL         CARRY     —              CORPSE_BLAST 0.45, DOOR_BLAST 0.60                     Kills burst and doors you open explode — enemies only
+  fourth_holster     FOURTH HOLSTER     LEGENDARY ALWAYS          CARRY     —              EXTRA_LOADOUT_SLOT 1, FLOOR_ARRIVAL_AMMO 0.10          +1 weapon slot; arriving refills 10% of each ammo type
+  deadman_trigger    DEADMAN TRIGGER    LEGENDARY ON_LOW_HEALTH   CARRY     —              LOW_HEALTH_DAMAGE 0.60                                 Below 30% HP every weapon deals +60% damage
+  atrophy_field      ATROPHY FIELD      LEGENDARY ON_ENEMY_SPAWN  CARRY     —              ENEMY_HEALTH_MULTIPLIER 0.82                           Enemies (not bosses) arrive with 18% less health
+  overclocked_servos OVERCLOCKED SERVOS LEGENDARY ALWAYS          CARRY     —              FIRST_HIT_CRITICAL, RANGE_BONUS 1                      Your first hit on every enemy is a critical; +1 range
+  CURSED (6)
+  blood_pact         BLOOD PACT         CURSED  ALWAYS          CARRY     —              ALL_WEAPON_DAMAGE 0.35 / DAMAGE_TAKEN_MULTIPLIER 1.25   +35% damage with every weapon / You take 25% more damage
+  fever_core         FEVER CORE         CURSED  ON_KILL         CARRY     —              KILL_HEAL 0.07 / HEAL_COST 0.50                        Every kill heals 7% max HP / Medkits and treatments heal half
+  volatile_rig       VOLATILE RIG       CURSED  ON_DOOR_OPEN    CARRY     —              DOOR_BLAST 0.80, CORPSE_BLAST 0.50 / MAX_ARMOR_COST 0.60  Doors and kills explode, hard / Max armour -40%
+  tithe_engine       TITHE ENGINE       CURSED  ON_KILL         SUPPLY    —              KILL_CREDIT_BONUS 1.00, XP_MULTIPLIER 0.40 / ENEMY_HEALTH_MULTIPLIER 1.15  Kills pay double credits, +40% XP / Enemies arrive with 15% more health
+  iron_lung          IRON LUNG          CURSED  ON_HIT_TAKEN    CARRY     —              DAMAGE_TAKEN_MULTIPLIER 0.72 / ALL_WEAPON_DAMAGE_COST 0.85  Take 28% less damage / -15% damage with every weapon
+  deaths_door        DEATH'S DOOR       CURSED  ON_LOW_HEALTH   CARRY     —              LOW_HEALTH_DAMAGE 0.90 / MAX_HEALTH_COST 0.80          Below 30% HP every weapon deals +90% / Max HP -20%
+
+  Themes: offence (spotters_lens, choke_bore, capacitor_bank, shaped_casings,
+  overclocked_servos, deadman_trigger, blood_pact, deaths_door); defence
+  (spare_plates, kevlar_weave, ablative_shell, counterweight, second_heart,
+  iron_lung); sustain (field_dressing, medics_glove, threshold_stim,
+  vampiric_core, salvage_plating, bone_saw, hunger_loop, fever_core);
+  economy (bandolier, bounty_chip, salvage_hook, recoil_spring, dog_tags,
+  tithe_engine); environment/doors (threshold_stim, breaching_charge,
+  grief_engine, chain_detonator, volatile_rig); enemy-rule (culling_signal,
+  atrophy_field); build synergy (the 7 tag-affine rows plus fourth_holster).
+  The "low HP" text reads the percentage from
+  BUILD_BERSERK_LOW_HEALTH_FRACTION (0.30), never a literal.
+
+
+VISUAL DESIGN
+-------------
+RELIC_OFFER overlay (render/RelicOfferOverlayRenderer — new; libgdx-specialist).
+It uses the same card pipeline as LevelUpOverlayRenderer: glow, shadow,
+gradient body, header strip, border, drop-shadowed text.
+  - Full-screen scrim at alpha 0.78 over the frozen 3D view. No HUD and no
+    thumb clusters in this phase.
+  - Title, centred near the top: "RELIC RECOVERED — CHOOSE ONE". On a
+    QUARANTINE_LOCKER offer the title is "QUARANTINED — EACH ONE COSTS" and
+    is drawn in CURSED red.
+  - 2 or 3 cards, 340 x 300, gap 24, centred. Each card has:
+      - a header strip in its rarity colour holding the NAME;
+      - a rarity label at the top-left ("COMMON" / "RARE" / "LEGENDARY" /
+        "CURSED");
+      - a trigger badge chip at the top-right (e.g. "ON KILL");
+      - the effect line, word-wrapped;
+      - for CURSED, the cost line in red under a thin divider;
+      - for an affine relic, the BuildTag chip, using the colour from
+        render/BuildTagPalette.
+    LEGENDARY cards get a slow 1.5 s alpha pulse on the glow. CURSED cards
+    get a dark red vignette inside the border. Pulses are cosmetic and use
+    the overlay's own time; there are no turn effects.
+  - A LEAVE IT plate, 280 x 76 at y = 40, centred, dim steel. Every touch
+    target is >= 76 px tall.
+  - No allocations in render(): the card text layouts and wrapped lines are
+    built once when the offer opens.
+BUILD page (render/BuildPagePanel): a RELICS (n) section listing each held
+  relic as its name in rarity colour plus the effect line, with the cost line
+  in red for cursed. With nothing held it reads "RELICS — none". Up to 8 rows
+  must fit without overlapping the perk/keystone lists. Use two columns if
+  needed.
+Run report (render/InstanceReportRenderer): one line,
+  "RELICS: <names>" or "RELICS: none".
+In-play feedback (World -> EventTextSystem):
+  - arrival heal/armour/ammo: green "+N HP — FIELD DRESSING" etc.;
+  - shield spent: "ABLATIVE SHELL — HIT ABSORBED" plus a single heal-style
+    vignette pulse;
+  - door blast and corpse burst: the existing explosion burst at the blast
+    centre.
+  Kill heals show no text, the same as Bloodletting today, to avoid spam.
+
+
+BALANCE NOTES
+-------------
+Balance-bearing: BalanceConfig SECTION 26, four new BalanceSchema rule kinds,
+balance-bearing GameMath formulas, BuildValuationModel/RelicValuationModel,
+and sim/. TESTS step 5 is therefore the balance branch. THE CHANGE PROTOCOL
+(authority SECTION 7) applies in full: green audit, green sim, regenerated
+SECTION 6 and SECTION 8, and one CHANGELOG line.
+
+The pricing model
+  - A relic's GAIN is measured exactly the way R-CARRY measures a build: the
+    kill-speed lift times the survival lift, geometric means over S1..S8,
+    with a two-gun kit (the affinity tag's kit, else the best pair). Supply
+    the relic adds is converted to heal at the Fabricator's price. This is
+    computed by BuildValuationModel.carryOf on BuildStats.ofEffects(relic).
+    Economy relics (valuation SUPPLY) are banded on the SUPPLY_TOTAL ratio
+    instead, because the carry conversion under-reads supply. That is the
+    same reason SCAVENGER's R-CARRY row is waived (D3 of balance-overhaul
+    order 5).
+  - Scale: a perk rank is worth about x1.08 carry at depth 15 (MARKSMAN
+    1.751 over 7 ranks). So COMMON is about half a rank to one rank, RARE
+    about one to one and a half, LEGENDARY about one and a half to two and a
+    half, and CURSED nets about one rank after its cost.
+
+New schema rules (RuleKind values; evaluated by BalanceSchema.evaluate)
+  R-RELIC (RELIC)  For every non-CURSED relic, at every RELIC_REFERENCE_DEPTH:
+        gain in the band for its rarity x valuation. The band floor is the
+        "felt" test: a relic whose kinds the valuation does not read prices
+        at 1.00 and fails, so an unpriced effect kind cannot ship.
+  R-RELIC-CURSE (RELIC_CURSE)  For every CURSED relic: gain in the CURSED
+        band for its valuation at every reference depth, AND worstLoss(stats,
+        null, d) >= RELIC_CURSED_MIN_LOSS at some reference depth (the
+        R-KEYSTONE cost idiom).
+  R-RELIC-STACK (RELIC_STACK)  At every BossTable depth:
+        expectedHandLift(d) <= the WORST non-waived R-CARRY tag score ("a
+          run's expected relics never out-carry one committed build"), and
+        bestHandLift(d) <= the BEST non-waived R-CARRY score x (1 +
+          BUILD_CARRY_TOLERANCE) ("even the luckiest hand stays inside the
+          build spread").
+        Both ceilings are read live from buildCarryResults(). No new number.
+  R-RELIC-SOURCE (RELIC_SOURCE)  Structural:
+        each rarity has >= RELIC_OFFER_MAX_CARDS non-affine relics (an offer
+          always fills);
+        each weight row sums to 1 (+/- 1e-4);
+        no duplicate ids;
+        every CURSED relic has a cost line and at least one cost kind (a
+          multiplier below 1 on a player stat, or above 1 on damage taken /
+          enemy health);
+        RELIC_PERK_RANK_EQUIVALENT_LIFT is within
+          RELIC_PERK_RANK_EQUIVALENT_TOLERANCE of
+          (worst non-waived carry)^(1 / its row's ranks + keystone count);
+        nodeOfferRatePerFloor() > 0.
+  Existing rules that now read relics: R-ROUTE-PRICED (the RELIC_CACHE
+  NodeEconomics row), R-MYSTERY-EV v2 and R-HONEST-SAFE (the new outcome),
+  R-EVENT-VALUE (quarantine_locker: SELL THE SEAL alone already meets it, the
+  same payout as distress_beacon's IGNORE). COVERAGE gains: every relic
+  resolves its rarity, trigger and valuation.
+
+ExpectedPlayer and the ladder (D3)
+  The on-curve player is unchanged. Relics are bounded BONUS power, accounted
+  beside it: RelicValuationModel.expectedRelicCount(depth) is printed as a
+  new LadderReport column and in BalanceReport's RELIC STACK table (depth,
+  expected count, expected hand, best hand, both ceilings, status).
+
+Tuning order if a rule fails (D7)
+  1. Retune that relic's own SECTION 26 magnitude. The relics are new
+     numbers and may be tuned freely.
+  2. For R-MYSTERY-EV: lower MYSTERY_WEIGHT_RELIC_CACHE (floor 4).
+  3. Never move an existing pre-relic number or band to make a relic fit.
+  4. A waiver (reason plus expiry, authority SECTION 4) only for the S-RELIC
+     sim lines, and only if order 7's round-pending state makes a
+     depth-derived line unmeasurable. It is recorded in the checkpoint
+     handover.
+
+Simulator
+  - PlayerPolicy: default RelicDefinition chooseRelic(RelicDefinition[]
+    offered, int count, SimView view) returns offered[0] (NAIVE, HOARDER).
+    default RelicRarity startingRelicProbe() returns null.
+    default boolean declinesRelicOffers() returns false.
+  - TacticalPolicy.chooseRelic: the highest
+    RelicValuationModel.carryLift(card, nearestReferenceDepth(depth)). A
+    CURSED card wins only if strictly higher. Returns null (LEAVE) if every
+    card is <= 1.0.
+  - SimWorld mirrors every World acquisition: RUN_START on depth-1 arrival;
+    BOSS on defeat (not the final depth); the MYSTERY payout's relic offer.
+    EVENT choices are mirrored only if SimWorld already applies EVENT
+    choices; today it does not, and the locker is no exception. It calls
+    relicRuntime.beginFloor and wires the blast target and door listener.
+    RunLedger records the held relic ids at run end.
+  - Five probe rows (BalanceSimulator.relicProbePolicies(), each
+    SIM_RELIC_PROBE_SEED_COUNT seeds):
+      TACTICAL-NO-RELIC        declines every offer (the baseline);
+      TACTICAL-RELIC-COMMON / -RARE / -LEGENDARY / -CURSED
+                               declines every offer, but is granted ONE relic
+                               of that rarity at depth-1 arrival, chosen
+                               ROUND-ROBIN over the non-affine pool by run
+                               index. Every relic gets floor/ceil(120 / pool)
+                               runs.
+    The standard TACTICAL / NAIVE / HOARDER and build-bias rows take offers
+    normally, including the RUN_START COMMON.
+  - S-RELIC (RuleKind.SIM_RELIC), in BehavioralBands. Uses MEAN ending depth,
+    because medians are integers at about 3:
+      SR1 for COMMON / RARE / LEGENDARY rows: mean depth / NO-RELIC in
+          [1 - SIM_RELIC_ROW_TRAP_TOLERANCE, 1 + SIM_RELIC_ROW_MAX_LIFT];
+      SR2 CURSED row: in [1 - SIM_RELIC_CURSED_ROW_TOLERANCE,
+          1 + SIM_RELIC_ROW_MAX_LIFT];
+      SR3 rarity is felt: mean depth LEGENDARY >= COMMON;
+      SR4 per non-affine relic with >= SIM_RELIC_MIN_RUNS_PER_RELIC probe runs:
+          its mean depth / NO-RELIC in [1 - SIM_RELIC_PER_RELIC_TRAP_TOLERANCE,
+          1 + SIM_RELIC_PER_RELIC_MAX_LIFT] ("no trap, nothing mandatory");
+      SR5 sample: every non-affine relic got >= SIM_RELIC_MIN_RUNS_PER_RELIC
+          probe runs (always enforced);
+      SR6 wiring: standard TACTICAL mean relics held at run end >= 1.0.
+    Tag-affine relics are banded by the audit only. A probe start weapon may
+    not carry their tag, which would make them look like traps. This is
+    recorded in docs/relic-system.txt.
+  - Reports:
+      SimReport RELIC REPORT: per probe row mean/median depth; per relic
+        runs, mean depth and ratio; TACTICAL offers seen / taken / left by
+        source; MODEL vs PLAYED kills and doors opened per floor
+        (DoorManager.getOpenedDoorCount) against RELIC_VALUATION_KILL_SHARE
+        and _DOORS_PER_FLOOR, report-only.
+      RoundSummary row "R1 relic rows mean-depth lift LEGENDARY / NO-RELIC",
+        IN/OUT.
+      LadderReport column "relics (expected)".
+
+Proposed admission checklist (balance-overhaul order 8 is not built yet; when
+it is, it absorbs this as K19 RELIC):
+  DECLARE  rarity, trigger, valuation, affinity, effects (PerkModifier kinds
+           the valuation reads), effect/cost text from BalanceConfig.
+  BAND     R-RELIC or R-RELIC-CURSE at every reference depth; R-RELIC-STACK
+           re-checked; S-RELIC SR4 if non-affine.
+  PRICE    RelicValuationModel (never hand-set); offers via
+           GameMath.relicPowerPoints.
+  REGISTER one RelicCatalog register() call plus SECTION 26 magnitudes.
+  COMMUNICATE the card text and the BUILD page.
+  DONE     audit and sim green; the BalanceReport RELICS table lists it.
+
+
+INTERACTIONS
+------------
+  - Build system (progression): the same BuildStats instance is already wired
+    into the Player, every Weapon, EnemyManager and StatusEffectController,
+    in World and SimWorld alike. Every relic is live everywhere with no new
+    wiring beyond the new kinds' read sites. Perks and keystones stack with
+    relics under the existing stacking rule.
+  - Level-up: offers queue behind a pending level-up (R7). The BUILD page
+    shows both.
+  - Route map: RELIC_CACHE joins the mystery table, which shifts every
+    outcome's share. quarantine_locker joins the event pool. Both are priced,
+    and R-MYSTERY-EV, R-HONEST-SAFE, R-ROUTE-PRICED and R-EVENT-VALUE stay
+    green.
+  - Bosses: BossTable, BossBalance and R-BOSS-* are untouched. The boss offer
+    is NOT part of R-BOSS-REWARD (which prices a supply refund); it is priced
+    by R-RELIC-STACK.
+  - Doors: a second DoorManager listener slot. Audio and arena locking are
+    untouched.
+  - Barrels: ExplosiveBarrelManager gains detonateRelicBlast. Barrel
+    behaviour is unchanged.
+  - Narrative: hard-pause precedence (barks queue). No content. The boot card,
+    the cold open and the control hints are unaffected. The RUN_START offer
+    opens after the boot card, at the first idle frame of depth 1.
+  - Audio: one new sound row.
+  - Telemetry: RunStats route story, run report, Gdx log.
+
+
+EDGE CASES
+----------
+  - Action lock: an offer opens only when the PlayerController is IDLE. It
+    never interrupts an animation.
+  - Player dies on the turn a boss dies (mutual kill): DEAD wins and the
+    pending offer is discarded.
+  - Final boss (depth 25): no offer. The VICTORY flow is untouched.
+  - Floor transition with a pending MYSTERY offer: it opens on the next
+    floor's first idle frame.
+  - App paused (onApplicationPause) in RELIC_OFFER: on resume the same offer
+    is still open, and the 0.4 s tap lockout re-arms. App killed: the run is
+    lost exactly as a mid-level-up kill loses it today. Nothing is persisted.
+  - Pause button in RELIC_OFFER: PAUSE_MENU, then back to the same offer
+    (R14). Abandon run from pause discards it.
+  - Inventory full / RELIC_MAX_HELD reached: offer skipped, event text
+    "RELIC CAPACITY REACHED".
+  - Too few eligible relics: the R5 fallback; zero means skip and log.
+  - A door blast centred on a wall tile: the R9 fallback to the door tile.
+    Blast tiles outside the level are skipped by the existing bounds check.
+  - A corpse burst killing more enemies: they award XP and kill terms, but
+    never burst (R8).
+  - Second Wind (perk) plus SECOND HEART (relic): the boolean is already
+    true. The relic stays eligible for its max-HP part, and the card text is
+    honest about both.
+  - ENEMY_HEALTH_MULTIPLIER mid-floor: only enemies spawned later; a boss
+    never.
+  - Hand-made levels vs generated: relics do not touch generation. Door and
+    kill triggers work on both.
+  - New run / NEW OPERATOR wipe: RelicHand.clear() and PlayerBuild.reset()
+    are part of the run reset. There is no persistent state to wipe.
+  - Hard-pause overlay already open when an offer is queued: it waits (R7).
+  - Sim determinism: offers are seeded (R6). theSameSeedReplaysTheSameRun
+    must stay green.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  core/.../relic/ exists with RelicRarity, RelicTrigger, RelicValuation,
+      RelicSource, RelicDefinition (+Builder), RelicRegistry, RelicCatalog,
+      RelicText, RelicHand, RelicOffer, RelicOfferRoller, RelicRuntime and
+      RelicFeedbackListener. No class there imports com.badlogic.gdx.
+  A2  RelicCatalog.bootstrap registers exactly the 36 relics in the catalog
+      table: 11 COMMON, 12 RARE, 7 LEGENDARY, 6 CURSED. Each is one
+      register() call. No switch statement on a relic, rarity, trigger,
+      source or PerkModifier exists anywhere in main sources.
+  A3  Every relic magnitude is a BalanceConfig SECTION 26 constant named
+      RELIC_<ID>_<KIND>. Card text contains no numeric literal that is not
+      derived from BalanceConfig.
+  A4  Starting a new run and arriving on depth 1 opens the RELIC_OFFER
+      overlay with 3 COMMON cards and a LEAVE IT plate. Taps in the first
+      0.4 s do nothing. Tapping a card bonds it and plays RELIC_BONDED. The
+      inventory BUILD page then lists it under RELICS.
+  A5  With VAMPIRIC CORE held, killing an enemy at 50% HP raises HP by 4% of
+      max on that same turn.
+  A6  With BREACHING CHARGE held, opening a closed door with an enemy on the
+      tile beyond it damages that enemy before it acts that turn, never
+      damages the player, and never detonates a barrel. Re-opening the same
+      door on the same floor does not blast again.
+  A7  With ABLATIVE SHELL held, the first enemy attack on a floor deals 0 and
+      shows "ABLATIVE SHELL — HIT ABSORBED". The second attack deals normal
+      damage. A burn tick does not spend it.
+  A8  Killing the depth-5 boss opens a 3-card BOSS offer with at least one
+      RARE or LEGENDARY card and no CURSED card. Killing the depth-25 boss
+      opens no offer.
+  A9  A MYSTERY node that rolls RELIC_CACHE opens a 2-card COMMON/RARE offer
+      on the next idle frame. The quarantine_locker EVENT's BREAK THE SEAL
+      opens a 2-card CURSED offer, and each card shows its cost line in red.
+  A10 Dying lists the held relics on the run report ("RELICS: ...") and the
+      next run starts with none.
+  A11 BuildStats for a relic-free build returns exactly the pre-change value
+      from every pre-existing accessor. The BalanceReport BUILDS (R-CARRY)
+      table is byte-identical before and after carryOf is extracted.
+  A12 `./gradlew test` is green, with the new rules R-RELIC, R-RELIC-CURSE,
+      R-RELIC-STACK and R-RELIC-SOURCE evaluated and asserted by named
+      BalanceAuditTest methods. A deliberately out-of-band magnitude (tried
+      locally, never committed) fails with a message naming the relic id,
+      the depth and the band.
+  A13 `./gradlew balanceSim` is green, including S-RELIC SR1-SR6 asserted by
+      a named BalanceSimTest method. summary.txt contains the RELIC REPORT,
+      the RoundSummary R1 row and the LadderReport "relics (expected)"
+      column.
+  A14 Authority SECTION 6 and SECTION 8 are regenerated and include the
+      RELICS and RELIC STACK tables. SECTION 3 documents the four R-RELIC
+      rules and S-RELIC. SECTION 5 has a "new relic" row. The CHANGELOG has
+      one line.
+  A15 docs/relic-system.txt exists, and .claude/CLAUDE.md lists the relic
+      package, the doc, and the HudConstants/BalanceConfig additions.
+  A16 No new test FILE exists. The only new test methods are in
+      util/BalanceAuditTest and sim/BalanceSimTest. No existing test is
+      weakened. An existing route test that counts mystery outcomes or
+      events is updated in the same commit if its count legitimately changed.
+  A17 `./gradlew build` is green and `./gradlew lwjgl3:run` plays: the start
+      offer, a bonded relic's effect, and the BUILD page.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect)
+     The relic package; the 17 PerkModifier kinds plus BuildStats fields,
+     accessors and ofEffects; the PlayerBuild relic sets; BalanceConfig
+     SECTION 26; HudConstants and EffectConstants entries.
+  2. LOGIC  (java-architect; math-expert for every GameMath/valuation formula)
+     The runtime seams (Player, EnemyManager, ExplosiveBarrelManager,
+     DoorManager, RelicRuntime), World/SimWorld wiring, the catalog, the
+     roller, acquisition (RunPhase.RELIC_OFFER, EventEffect, MysteryOutcome,
+     FacilityEvents, RouteEconomics), and RelicValuationModel +
+     BuildValuationModel.carryOf + the new terms.
+  3. RENDER  (libgdx-specialist)
+     RelicOfferOverlayRenderer, the BuildPagePanel RELICS section, the
+     InstanceReportRenderer line, event-text feedback, and the RELIC_BONDED
+     sound row (java-architect may do the audio row).
+  4. CONTENT
+     The 36 catalog rows are data inside step 2. No level files and no
+     weapons.
+  5. TESTS  Balance-bearing.
+     Extend util/BalanceAuditTest with everyRelicPricesIntoItsRarityBand,
+     everyCursedRelicTradesAGainForARealCost, noRelicHandOutCarriesACommittedBuild,
+     and theRelicPoolAlwaysFillsAnOffer (plus fullSchemaSweepHasNoViolations,
+     which picks the rules up automatically). Extend sim/BalanceSimTest with
+     noRelicIsATrapAndNoneIsMandatory. Both gates. Nothing else gets a test:
+     the overlay, catalog, runtime, roller and route wiring are verified by
+     `./gradlew build` + `./gradlew lwjgl3:run` per the Testing Policy.
+     That is deliberate, not an oversight.
+  6. DOCS
+     - docs/relic-system.txt (NEW): the model, the catalog table, the
+       seams, the sources, the rules, ADD A RELIC (the recipe), and the
+       valuation assumptions.
+     - docs/game-balance-authority.txt: SECTION 3 R-RELIC, R-RELIC-CURSE,
+       R-RELIC-STACK, R-RELIC-SOURCE, S-RELIC; SECTION 5 a "new relic" row;
+       SECTIONS 6 and 8 regenerated; CHANGELOG.
+     - docs/game-balance-knowledge.txt: the relic section and SECTION 26.
+     - docs/route-map-system.txt: RELIC_CACHE outcome and quarantine_locker.
+     - docs/sound-system.txt: the RELIC_BONDED row.
+     - docs/xp-level-progression.txt: relics vs perks, and the stacking order.
+     - .claude/CLAUDE.md: package table row for …toon3d.relic; a Key Classes
+       entry; the Where to Find Info and Docs Directory rows for
+       relic-system.txt; the sim package line mentions S-RELIC; the
+       Rendering order notes the RELIC_OFFER overlay (with the level-up
+       overlay tier).
+
+RISKS AND UNKNOWNS
+  - The valuation is the big job (CP4). DOOR_BLAST and CORPSE_BLAST need a
+    scenario-walk term, and the scenario walk is intricate. If a term cannot
+    be fitted into the walk, math-expert prices it with the stated GameMath
+    formula applied to the walk's OUTPUT (turns), and documents the
+    approximation. Never leave a kind unpriced: R-RELIC would fail it.
+  - balance-overhaul order 7 (feel pass) is IN PROGRESS, waiting on owner
+    play notes, and order 4 is IN PROGRESS. The RUN_START relic changes every
+    standard sim row, so the order-7 round's sim half moves. CP8's CHANGELOG
+    line must record the before/after of the ROUND SUMMARY. Build relics on
+    top of order 4's current state of Player.applyDamage without touching
+    heavy or guard logic.
+  - R-MYSTERY-EV v2 sits inside [combat EV, +30%]. Adding a high-value
+    outcome may push it over. The tuning order in BALANCE NOTES handles it.
+  - S-RELIC is measured where TACTICAL dies around depth 3. Effects that pay
+    off deep (late-game scaling) under-read in the sim. The per-relic band is
+    therefore wide, and the audit is the tighter gate.
+  - BalanceSimTest runtime grows by about 600 runs (roughly 30%).
+  - Confirm early (CP2) that a status tick can be told apart at the Player
+    damage entry (R11). If not, add the parameter on the status path only.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN — a state that can be CHECKED, never an action
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/relics-run-changing-artifacts.md exists on the
+       branch, committed and pushed.
+  CP1  (java-architect) The relic package exists with every class in A1. The
+       catalog is EMPTY at this point (filled in CP3). PerkModifier has the 17
+       new kinds. BuildStats has the new fields, accessors, reset/copyFrom
+       coverage and ofEffects. PlayerBuild has addRelicEffects and applies it
+       in recompute. BalanceConfig SECTION 26 holds the holding, offer, band,
+       valuation and sim constants (not yet the per-relic magnitudes).
+       `./gradlew build` and `./gradlew test` are green, and the BalanceReport
+       BUILDS table is unchanged. Deliberately unwired: no seam reads the new
+       fields yet (CP2), and nothing offers a relic (CP6).
+  CP2  (java-architect) Every new kind is read at its seam: Player (shield,
+       damage multiplier, re-arm, consumeFirstHitShieldEvent), EnemyManager
+       (kill heal/armour/ammo/XP/credits, spawn health, low-health damage,
+       corpse burst with the no-chain guard), hazard/RelicBlastTarget
+       implemented by ExplosiveBarrelManager, door/DoorOpenedListener in
+       DoorManager, and RelicRuntime.beginFloor/onDoorOpenedByPlayer. All of
+       it is wired in BOTH World and SimWorld. Build and test are green, and
+       sim output is unchanged (no relic can be held yet). The handover notes
+       how R11's status-tick distinction was made.
+  CP3  (java-architect) RelicCatalog registers all 36 relics with their
+       RELIC_<ID>_<KIND> magnitudes in SECTION 26 and their text built from
+       BalanceConfig. RelicOfferRoller implements R4-R6. A temporary local
+       harness (not committed) printing one roll per source shows the R5
+       eligibility working. Build and test are green.
+  CP4  (math-expert) BuildValuationModel.carryOf exists, and the BUILDS table
+       is byte-identical (A11). Every new kind has its valuation term and
+       GameMath formula with the comment block. RelicValuationModel exists
+       (carryLift, gain, expectedRelicCount, nodeOfferRatePerFloor,
+       expectedHandLift, bestHandLift, offerPowerPoints). worstLoss accepts a
+       null niche. Build and test are green.
+  CP5  (java-architect + math-expert) BalanceSchema has RuleKinds RELIC,
+       RELIC_CURSE, RELIC_STACK and RELIC_SOURCE (plus COVERAGE rows).
+       BalanceAuditTest has the four named methods. Every relic is in band at
+       5/15/25, with magnitudes tuned only inside SECTION 26 (D7).
+       BalanceReport prints the RELICS and RELIC STACK tables. `./gradlew
+       test` is green, and the negative drill message is recorded in the
+       handover.
+  CP6  (java-architect) RunPhase.RELIC_OFFER and the pending FIFO exist in
+       World, with RUN_START, BOSS and EventEffect.relicOffer queuing.
+       MysteryOutcome.RELIC_CACHE, the RouteEconomics row,
+       FacilityEvents quarantine_locker and the RouteEconomicsModel pricing
+       are in. RunStats records relics. The offer is resolved by a
+       placeholder tap handler that takes card 0 (the visual overlay is
+       CP7), so the flow is playable end to end. `./gradlew test` is green,
+       including the route rules; any route test count is updated with the
+       reason.
+  CP7  (libgdx-specialist) RelicOfferOverlayRenderer replaces the CP6
+       placeholder (the VISUAL DESIGN spec, R14/R15). BuildPagePanel shows
+       RELICS. The run report line, the event-text feedback and the
+       RELIC_BONDED sound row are in. `./gradlew build` is green, and
+       `./gradlew lwjgl3:run` shows A4, A5, A7 and A10 by hand.
+  CP8  (java-architect) PlayerPolicy relic methods, TACTICAL/NAIVE choice,
+       SimWorld acquisition mirroring, RunLedger relic ids, the five probe
+       rows, S-RELIC SR1-SR6 in BehavioralBands, the BalanceSimTest method,
+       the SimReport RELIC REPORT, the RoundSummary R1 row and the LadderReport
+       column are all in. `./gradlew test` and `./gradlew balanceSim` are
+       green (any waiver strictly per D7 step 4). The handover holds the
+       before/after ROUND SUMMARY.
+  CP9  (java-architect for docs, then reviewer) Every doc in step 6 is updated
+       in one commit. Authority SECTIONS 6 and 8 are regenerated, and the
+       CHANGELOG line is in. The reviewer returns PASS. STATUS is IMPLEMENTED
+       with the date.
+
+
+ASSUMPTIONS
+-----------
+  AS1  About 5 relics per full run is "rare": 1 start, 4 bosses, and about
+       0.3 from nodes. Roughly one relic per region feels like an event; one
+       per floor would be loot.
+  AS2  Choose one of N with a LEAVE plate, rather than a single fixed drop.
+       It is the Slay the Spire/Hades idiom, it makes every relic a decision,
+       and it is what lets S-RELIC claim "nothing is mandatory".
+  AS3  There is no slot cap or swap UI. Five relics never need managing; the
+       old draft's 2-slot cap existed to stop stacked legendaries, and
+       R-RELIC-STACK now does that with numbers.
+  AS4  Relic text is UI text built from BalanceConfig, the Perk/Keystone
+       idiom. It does not use story string ids (D5).
+  AS5  Boss offers never contain CURSED cards. A cursed relic is only ever
+       met behind a seal the player chose to break, so curses are never
+       forced.
+  AS6  Kills count only when the player is credited (XP-awarding deaths).
+       That matches the existing BLOODLETTING path.
+  AS7  Relic blasts are enemies-only and never chain barrels. The
+       fairness pillar: the player must never die to their own relic. Barrel
+       chains would also make door blasts unpredictable.
+  AS8  Door triggers fire once per door per floor. That closes the
+       open-close farm without a cooldown (there are no time-based
+       cooldowns).
+  AS9  The first-hit shield ignores status ticks. A burn eating the shield
+       would feel like a bug.
+  AS10 The enemy-health relic never touches bosses. Boss HP is derived by
+       BossBalance and the R-BOSS bands. Bending it would need its own rule.
+  AS11 Kill heals use applyHealing, not applyTreatment, so Field Medic and
+       MEDIC'S GLOVE do not double-dip. This is the melee-kill-heal
+       precedent.
+  AS12 Arrival ammo refunds per ammo type (not per gun), so two guns sharing
+       BULLETS do not double the refill.
+  AS13 The RUN_START offer opens on depth-1 arrival, after the staging-room
+       weapon pick, so tag affinity can read the chosen weapon.
+  AS14 The weights and magnitudes in this file are starting values. CP5 tunes
+       magnitudes inside the bands. The bands and weights are the design.
+  AS15 HOARDER takes the start relic (offered[0]). S-GATE must still hold.
+       A COMMON relic must not let the start loadout clear the first boss;
+       if it does, that is a real finding and the COMMON is retuned.
+  AS16 Valuation model assumptions (kill share 0.60, 3 doors per floor, 30%
+       of fights through a door, 0.5 corpse adjacency, 50% locker take rate)
+       are stated constants. The RELIC REPORT prints played-vs-model kills
+       and doors, so they can be corrected from data later.
+  AS17 Tag-affine relics are excluded from sim probes and banded by the
+       audit only (S-RELIC note above).
+  AS18 The overlay's card art is procedural layout and colour only. There
+       are no textures and no per-relic glyphs.
+  AS19 Relic UI geometry lives in HudConstants and blast visuals in
+       EffectConstants. No new Constants file is created.
+  AS20 The roguelike_order_14 draft's dependencies (inventory-loot-ransack,
+       secret rooms) are not needed. Every source here already exists.
+
+
+DECISIONS
+---------
+  D1  Relics reuse the perk/keystone build seam (PerkModifier + PerkEffect ->
+      PlayerBuild -> one BuildStats aggregate) instead of a parallel effect
+      system. Reason: that aggregate is already wired into every runtime seam
+      in World and SimWorld, and into the valuation the audit uses. A parallel
+      system would need double wiring and a second pricing model.
+      (2026-10-18)
+  D2  No tile symbol and no ground item. Relics arrive by offer from four
+      existing channels: run start, boss defeat, a mystery outcome, and an
+      event. Reason: the STRICT RULE cost, a pickup-symbol budget, and the
+      supply planner (R-SUPPLY) would all be touched for no player benefit.
+      (2026-10-18)
+  D3  ExpectedPlayer is not changed. Relics are bounded bonus power, capped by
+      R-RELIC-STACK against the existing R-CARRY scores. Reason: folding them
+      into the on-curve player would re-derive boss HP, TP and every ladder
+      band in the middle of the order-7 feel pass. A cap expressed in the
+      build contract's own scores integrates relics without moving anything
+      else. (2026-10-18)
+  D4  Every run opens with a 3-COMMON relic choice. Reason: the owner wants
+      every run to feel different, and today most runs end before the first
+      boss, so boss-only relics would be invisible to most players.
+      (2026-10-18)
+  D5  No narrative content (no ORA line, codex entry, teaching topic or story
+      string id). Reason: the card text is the teaching, and new story lines
+      carry their own contract (docs/narrative-authority.txt) and process.
+      A story pass is a follow-up. (2026-10-18)
+  D6  No persistence (run-scoped only; no discovery log). Reason: a new
+      StatsStore/StoryStore key is a schema change, and the "new game" wipe
+      would need to know about it. Discovery can be a follow-up idea.
+      (2026-10-18)
+  D7  CP5 and CP8 may retune only the NEW SECTION 26 relic magnitudes and the
+      relic-cache mystery weight to pass the gates. Pre-existing numbers and
+      bands are never moved, and a sim waiver is allowed only for a
+      depth-derived S-RELIC line made unmeasurable by order 7's
+      round-pending state. Reason: the owner pre-approved this design with
+      implementation starting immediately, so the implementer needs a bounded
+      tuning license, not a question. (2026-10-18)
+  D8  Single file, not split into order files, despite ten checkpoints.
+      Reason: the owner asked for exactly one file. Each checkpoint still
+      leaves the build green. (2026-10-18)
+  D9  The relic package sits between route and progression. relic never
+      imports route (the boss index and depth are passed in). Reason: this
+      avoids a route <-> relic cycle while letting EventEffect carry a
+      RelicSource. (2026-10-18)
+  D10 Barrel relics, shop relics and ELITE-floor relics are cut (SCOPE OUT).
+      Reason: each would either price at 1.00 in today's carry model
+      (barrels) or move an existing balance band (R-CREDITS v2 / S-SHOP;
+      ELITE R-RISK-PREMIUM). (2026-10-18)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  roguelike_order_14_artifacts_and_special_relics.txt (superseded,
+          REJECTED); balance-overhaul-order-5.txt (perks/keystones — the seam
+          reused); balance-overhaul-order-6.txt (BossTable, the finite run,
+          event/mystery pricing); balance-overhaul-order-7.txt (IN PROGRESS
+          feel pass — see RISKS); balance-overhaul-order-8.txt (the content
+          contract that should absorb K19 RELIC);
+          starting-room-route-select-first-choice.txt (depth-1 arrival).
+  Docs:   docs/game-balance-authority.txt, docs/game-balance-knowledge.txt,
+          docs/xp-level-progression.txt, docs/route-map-system.txt,
+          docs/sound-system.txt, docs/relic-system.txt (new).

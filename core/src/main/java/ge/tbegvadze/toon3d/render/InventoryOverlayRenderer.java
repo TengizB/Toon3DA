@@ -192,6 +192,11 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         buildPagePanel.setPlayerBuild(playerBuild);
     }
 
+    /** Provides the run's relic hand so the BUILD page can list it. */
+    public void setRelicHand(ge.tbegvadze.toon3d.relic.RelicHand relicHand) {
+        buildPagePanel.setRelicHand(relicHand);
+    }
+
     /** Pass the facility clock so selection borders can pulse. */
     public void setTime(float time) {
         this.facilityTimeSeconds = time;

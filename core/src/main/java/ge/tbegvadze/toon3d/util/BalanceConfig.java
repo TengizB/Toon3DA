@@ -3176,4 +3176,165 @@ public final class BalanceConfig {
     public static final float ROUTE_WEAPON_LEVEL_POWER_POINTS    = EXPECTED_PERK_POWER_PP_PER_PICK;
     /** R-EVENT-VALUE (F15): every EVENT's best choice is worth at least this x a COMBAT floor's SUPPLY (PP). */
     public static final float EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO = 1.00f;
+
+    // =====================================================================================
+    // SECTION 26 — RELICS (relics-run-changing-artifacts): rare run-changing artifacts, priced in the build contract
+    // A relic is a run-scoped passive that folds into the SAME BuildStats aggregate perks and keystones use
+    // (PerkModifier + PerkEffect -> PlayerBuild). Holding, offers, trigger runtime, rarity bands, valuation
+    // assumptions and sim probe numbers live here. The per-relic RELIC_<ID>_<KIND> magnitudes follow the offers block. Starting values are tunable inside the bands (D7); the bands and weights are the design.
+    // =====================================================================================
+
+    // --- HOLDING & OFFERS --------------------------------------------------------------------
+    /** R2: a run holds at most this many relics (a safety cap; about five are expected). */
+    public static final int     RELIC_MAX_HELD                = 8;
+    /** The most cards any offer shows (sizes the pre-allocated RelicOffer). */
+    public static final int     RELIC_OFFER_MAX_CARDS         = 3;
+    /** R7: offers that may wait their turn, first in first out. */
+    public static final int     RELIC_PENDING_OFFER_CAPACITY  = 2;
+    /** R6: salt xor-ed into the run seed before GameMath.floorSeed, so relic rolls never mirror other seeded rolls. */
+    public static final long    RELIC_OFFER_SEED_SALT         = 0x52454C4943L;
+    /** R4 RUN_START: cards in the opening COMMON offer. */
+    public static final int     RELIC_START_OFFER_CARDS       = 3;
+    /** R4 BOSS: cards in a boss offer. */
+    public static final int     RELIC_BOSS_OFFER_CARDS        = 3;
+    /** R4 MYSTERY_CACHE / QUARANTINE_LOCKER: cards in a node offer. */
+    public static final int     RELIC_NODE_OFFER_CARDS        = 2;
+    /** R4 BOSS: per-card rarity weights {COMMON, RARE, LEGENDARY}, one row per offering boss (bosses 1-4). Each row sums to 1. */
+    public static final float[][] RELIC_BOSS_OFFER_RARITY_WEIGHTS = {
+        {0.50f, 0.40f, 0.10f}, {0.35f, 0.45f, 0.20f}, {0.20f, 0.50f, 0.30f}, {0.10f, 0.50f, 0.40f}
+    };
+    /** R4 MYSTERY_CACHE: per-card rarity weights {COMMON, RARE}. Sums to 1. */
+    public static final float[]   RELIC_MYSTERY_OFFER_RARITY_WEIGHTS = {0.60f, 0.40f};
+    /**
+     * Weight of the RELIC_CACHE mystery outcome (mirrored into RouteMapConstants). The spec's tuning floor was 4,
+     * but R-MYSTERY-EV (weighted table EV / combat EV, worst at depth 1) is 1.3022 at 4 against a 1.30 ceiling: the
+     * pre-relic table already sits at 1.2917 and RELIC_CACHE (supply-cache floor + one relic offer, about one perk
+     * rank) is priced ABOVE the 1.30 line, so any weight above ~3.1 breaks it. 3 is the largest integer that passes.
+     */
+    public static final int     MYSTERY_WEIGHT_RELIC_CACHE    = 3;
+
+    // --- RUNTIME -----------------------------------------------------------------------------
+    /** R9: the share of the centre blast fraction the four neighbours of a door blast take. */
+    public static final float   RELIC_BLAST_RING_SHARE                = 0.60f;
+    /** R12: damage-taken multiplier floor (the product of relic multipliers never reads below this). */
+    public static final float   RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN     = 0.50f;
+    /** R12/R13: enemy-health multiplier floor. */
+    public static final float   RELIC_ENEMY_HEALTH_MULTIPLIER_MIN     = 0.50f;
+
+    // --- CATALOG MAGNITUDES: RELIC_<RELIC_ID>_<PERK_MODIFIER_KIND> (CP3). Gain kinds ADD; cost kinds and
+    //     DAMAGE_TAKEN / ENEMY_HEALTH are MULTIPLIERS (0.88 = take 12% less). Boolean kinds carry no constant.
+    //     CP5 tuned them into their bands (D7) — see the RELICS table in BalanceReport.
+    // COMMON
+    public static final float RELIC_FIELD_DRESSING_FLOOR_ARRIVAL_HEAL        = 0.13f;
+    public static final float RELIC_SPARE_PLATES_FLOOR_ARRIVAL_ARMOR         = 0.22f;
+    public static final float RELIC_BANDOLIER_FLOOR_ARRIVAL_AMMO             = 0.38f;
+    public static final float RELIC_BOUNTY_CHIP_KILL_CREDIT_BONUS            = 0.21f;
+    public static final float RELIC_THRESHOLD_STIM_DOOR_OPEN_HEAL            = 0.04f;
+    public static final float RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP          = 1.00f;
+    public static final float RELIC_MEDICS_GLOVE_HEAL_BONUS                  = 0.13f;
+    public static final float RELIC_RECOIL_SPRING_KILL_AMMO_REFUND           = 0.50f;
+    public static final float RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS          = 0.35f;
+    public static final float RELIC_DOG_TAGS_XP_MULTIPLIER                   = 0.42f;
+    public static final float RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE  = 0.01f;
+    public static final float RELIC_SPOTTERS_LENS_DAMAGE_TAKEN_MULTIPLIER    = 0.95f;
+    // RARE
+    public static final float RELIC_BREACHING_CHARGE_DOOR_BLAST              = 0.42f;
+    public static final float RELIC_VAMPIRIC_CORE_KILL_HEAL                  = 0.02f;
+    public static final float RELIC_SALVAGE_PLATING_KILL_ARMOR               = 0.03f;
+    public static final float RELIC_GRIEF_ENGINE_CORPSE_BLAST                = 0.15f;
+    public static final float RELIC_GRIEF_ENGINE_KILL_ARMOR                  = 0.03f;
+    public static final float RELIC_KEVLAR_WEAVE_DAMAGE_TAKEN_MULTIPLIER     = 0.92f;
+    public static final float RELIC_CULLING_SIGNAL_ENEMY_HEALTH_MULTIPLIER   = 0.95f;
+    public static final float RELIC_CHOKE_BORE_SPREAD_DAMAGE                 = 0.06f;
+    public static final float RELIC_CHOKE_BORE_KILL_ARMOR                    = 0.03f;
+    public static final int   RELIC_CHOKE_BORE_KNOCKBACK_BONUS               = 1;
+    public static final float RELIC_CAPACITOR_BANK_ARC_CHAIN_MULTIPLIER      = 0.20f;
+    public static final int   RELIC_CAPACITOR_BANK_ARC_CHAIN_JUMP            = 1;
+    public static final float RELIC_SHAPED_CASINGS_EXPLOSIVE_DAMAGE          = 0.04f;
+    public static final float RELIC_SHAPED_CASINGS_OWN_EXPLOSION_REDUCTION   = 0.90f;
+    public static final float RELIC_BONE_SAW_MELEE_DAMAGE                    = 0.25f;
+    public static final float RELIC_BONE_SAW_MELEE_KILL_HEAL                 = 0.03f;
+    // LEGENDARY
+    public static final float RELIC_HUNGER_LOOP_KILL_HEAL                    = 0.02f;
+    public static final float RELIC_HUNGER_LOOP_KILL_ARMOR                   = 0.02f;
+    public static final float RELIC_CHAIN_DETONATOR_CORPSE_BLAST             = 0.45f;
+    public static final float RELIC_CHAIN_DETONATOR_DOOR_BLAST               = 0.70f;
+    public static final int   RELIC_FOURTH_HOLSTER_EXTRA_LOADOUT_SLOT        = 1;
+    public static final float RELIC_FOURTH_HOLSTER_FLOOR_ARRIVAL_AMMO        = 0.12f;
+    public static final float RELIC_DEADMAN_TRIGGER_LOW_HEALTH_DAMAGE        = 0.90f;
+    public static final float RELIC_ATROPHY_FIELD_ENEMY_HEALTH_MULTIPLIER    = 0.93f;
+    public static final float RELIC_OVERCLOCKED_SERVOS_ALL_WEAPON_DAMAGE     = 0.25f;
+    public static final int   RELIC_OVERCLOCKED_SERVOS_RANGE_BONUS           = 1;
+    public static final float RELIC_COUNTERWEIGHT_GUARD_REFLECT              = 0.25f;
+    public static final int   RELIC_ASBESTOS_LINING_BURN_TURNS               = 1;
+    public static final float RELIC_ASBESTOS_LINING_FIRE_DAMAGE              = 0.07f;
+    // CURSED (gain kinds add; cost kinds are MULTIPLIERS, e.g. 0.60 = -40%; DAMAGE_TAKEN / ENEMY_HEALTH above 1 are the cost)
+    public static final float RELIC_BLOOD_PACT_ALL_WEAPON_DAMAGE             = 0.55f;
+    public static final float RELIC_BLOOD_PACT_DAMAGE_TAKEN_MULTIPLIER       = 1.15f;
+    public static final float RELIC_FEVER_CORE_KILL_HEAL                     = 0.065f;
+    public static final float RELIC_FEVER_CORE_HEAL_COST                     = 0.50f;
+    public static final float RELIC_VOLATILE_RIG_DOOR_BLAST                  = 1.00f;
+    public static final float RELIC_VOLATILE_RIG_CORPSE_BLAST                = 0.50f;
+    public static final float RELIC_VOLATILE_RIG_MAX_ARMOR_COST              = 0.70f;
+    public static final float RELIC_TITHE_ENGINE_KILL_CREDIT_BONUS           = 0.40f;
+    public static final float RELIC_TITHE_ENGINE_XP_MULTIPLIER               = 0.40f;
+    public static final float RELIC_TITHE_ENGINE_ENEMY_HEALTH_MULTIPLIER     = 1.15f;
+    public static final float RELIC_IRON_LUNG_DAMAGE_TAKEN_MULTIPLIER        = 0.84f;
+    public static final float RELIC_IRON_LUNG_ALL_WEAPON_DAMAGE_COST         = 0.92f;
+    public static final float RELIC_DEATHS_DOOR_LOW_HEALTH_DAMAGE            = 1.70f;
+    public static final float RELIC_DEATHS_DOOR_MAX_HEALTH_COST              = 0.85f;
+
+    // --- RARITY BANDS (R-RELIC / R-RELIC-CURSE): a relic's carry lift (or supply ratio) must land in its band ---
+    /** Depths at which every relic is priced (early, mid, late). */
+    public static final int[]   RELIC_REFERENCE_DEPTHS                = {5, 15, 25};
+    public static final float[] RELIC_CARRY_BAND_COMMON               = {1.03f, 1.08f};
+    public static final float[] RELIC_CARRY_BAND_RARE                 = {1.06f, 1.13f};
+    /** Top edge 1.22, widened from 1.20 by the CP5 hub licence (one band, <= 0.02): SECOND HEART's Second Wind flag alone prices 1.205 at depth 5. */
+    public static final float[] RELIC_CARRY_BAND_LEGENDARY            = {1.10f, 1.22f};
+    public static final float[] RELIC_CARRY_BAND_CURSED               = {1.05f, 1.18f};
+    public static final float[] RELIC_SUPPLY_BAND_COMMON              = {1.06f, 1.20f};
+    public static final float[] RELIC_SUPPLY_BAND_RARE                = {1.15f, 1.35f};
+    public static final float[] RELIC_SUPPLY_BAND_CURSED              = {1.20f, 1.60f};
+    /** R-RELIC-CURSE: a cursed relic's worst niche loss is at least this at some reference depth. */
+    public static final float   RELIC_CURSED_MIN_LOSS                 = 0.10f;
+    /** Carry lift one perk rank is worth at depth 15 (MARKSMAN 1.751 over 7 ranks); anchors relic power points. */
+    public static final float   RELIC_PERK_RANK_EQUIVALENT_LIFT       = 1.08f;
+    /** R-RELIC-SOURCE: tolerance on the measured per-rank lift vs RELIC_PERK_RANK_EQUIVALENT_LIFT. */
+    public static final float   RELIC_PERK_RANK_EQUIVALENT_TOLERANCE  = 0.03f;
+
+    // --- VALUATION ASSUMPTIONS (stated once, printed by BalanceReport; AS16) -----------------
+    /** Share of a floor's bodies a kill-triggered relic is assumed to fire on. */
+    public static final float   RELIC_VALUATION_KILL_SHARE            = 0.60f;
+    /** Doors the player is assumed to open per floor. */
+    public static final int     RELIC_VALUATION_DOORS_PER_FLOOR       = 3;
+    /** Share of fights assumed to open through a door the player just opened. */
+    public static final float   RELIC_VALUATION_DOOR_FIGHT_SHARE      = 0.30f;
+    /** Share of a corpse burst's fraction assumed to land on remaining group members. */
+    public static final float   RELIC_VALUATION_CORPSE_ADJACENCY      = 0.50f;
+    /** Share of QUARANTINE_LOCKER events assumed to be broken open (vs sold). */
+    public static final float   RELIC_VALUATION_EVENT_TAKE_SHARE      = 0.50f;
+    /** Share of RUN_START offers assumed taken (every run holds the start relic). */
+    public static final float   RELIC_VALUATION_START_TAKE_SHARE      = 1.0f;
+    /**
+     * The quarantine_locker event's assumed weight in the EVENT pool (CP4): "one more equal-weight event" — every
+     * shipped FacilityEvent carries the builder default weight 1, and CP6 registers the locker the same way.
+     * Read by RelicValuationModel.nodeOfferRatePerFloor until the locker is registered (then its own weight is read).
+     */
+    public static final float   RELIC_VALUATION_LOCKER_EVENT_WEIGHT   = 1f;
+
+    // --- SIMULATOR (S-RELIC) -----------------------------------------------------------------
+    /** Seeds per relic probe row. */
+    public static final int     SIM_RELIC_PROBE_SEED_COUNT            = 120;
+    /** SR1: a rarity row's mean depth / no-relic baseline may not fall below 1 - this. */
+    public static final float   SIM_RELIC_ROW_TRAP_TOLERANCE          = 0.10f;
+    /** SR1/SR2: a probe row's mean depth ratio may not exceed 1 + this ("nothing is mandatory"). */
+    public static final float   SIM_RELIC_ROW_MAX_LIFT                = 0.40f;
+    /** SR2: the CURSED row may fall this far below the baseline. */
+    public static final float   SIM_RELIC_CURSED_ROW_TOLERANCE        = 0.15f;
+    /** SR4: a single relic's mean depth ratio may not fall below 1 - this. */
+    public static final float   SIM_RELIC_PER_RELIC_TRAP_TOLERANCE    = 0.25f;
+    /** SR4: a single relic's mean depth ratio may not exceed 1 + this. */
+    public static final float   SIM_RELIC_PER_RELIC_MAX_LIFT          = 0.60f;
+    /** SR4/SR5: probe runs a non-affine relic needs before its ratio is judged. */
+    public static final int     SIM_RELIC_MIN_RUNS_PER_RELIC          = 10;
 }

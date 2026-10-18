@@ -6,6 +6,7 @@ import java.util.List;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.RelicValuationModel;
 
 /**
  * THE LADDER REPORT (balance-overhaul order 1): the power ladder checked in PLAY, not only on paper.
@@ -87,9 +88,11 @@ public final class LadderReport {
         report.append("One-floor probes at every depth 1..").append(BalanceConfig.RUN_FINAL_DEPTH).append(", ")
                 .append(BalanceConfig.SIM_LADDER_PROBE_SEEDS_PER_DEPTH)
                 .append(" seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,\n")
-                .append("start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.\n");
-        report.append(String.format("%-11s %-6s %7s %7s %6s | %7s %7s%n",
-                "role", "depths", "onKill", "lagKill", "ratio", "onDie", "lagDie"));
+                .append("start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.\n")
+                .append("relics (expected) = RelicValuationModel.expectedRelicCount at the band's last depth: bounded\n")
+                .append("BONUS power beside the on-curve player (relics-run-changing-artifacts D3); probes carry none.\n");
+        report.append(String.format("%-11s %-6s %7s %7s %6s | %7s %7s | %s%n",
+                "role", "depths", "onKill", "lagKill", "ratio", "onDie", "lagDie", "relics (expected)"));
         for (EnemyRole role : EnemyRole.values()) {
             if (role == EnemyRole.BOSS) continue;
             for (int band = 0; band < onCurveHitsToKill.length; band++) {
@@ -97,10 +100,11 @@ public final class LadderReport {
                 int lastDepth  = Math.min(BalanceConfig.RUN_FINAL_DEPTH, firstDepth + BAND_SIZE - 1);
                 float onKill  = onCurveHitsToKill[band][role.ordinal()];
                 float lagKill = startKitHitsToKill[band][role.ordinal()];
-                report.append(String.format("%-11s %2d-%-3d %7s %7s %6s | %7s %7s%n", role.name(), firstDepth, lastDepth,
+                report.append(String.format("%-11s %2d-%-3d %7s %7s %6s | %7s %7s | %s%n", role.name(), firstDepth, lastDepth,
                         format(onKill), format(lagKill), format(lagKill / onKill),
                         format(onCurveHitsToDie[band][role.ordinal()]),
-                        format(startKitHitsToDie[band][role.ordinal()])));
+                        format(startKitHitsToDie[band][role.ordinal()]),
+                        format(RelicValuationModel.expectedRelicCount(lastDepth))));
             }
         }
         report.append(String.format("A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = %s "

@@ -47,6 +47,21 @@ public final class BalanceSimulator {
         return factories;
     }
 
+    /**
+     * The five S-RELIC probe rows (relics-run-changing-artifacts, CP8): TACTICAL that leaves every relic offer —
+     * granted nothing (the NO-RELIC baseline) or ONE relic of a rarity at depth-1 arrival, round-robin over that
+     * rarity's non-affine pool by run index. Played at SIM_RELIC_PROBE_SEED_COUNT seeds each.
+     */
+    public static List<PolicyFactory> relicProbePolicies() {
+        List<PolicyFactory> factories = new ArrayList<>();
+        for (RelicProbe probe : RelicProbe.values()) {
+            if (!probe.isProbe()) continue;
+            factories.add(factory(BehavioralBands.TACTICAL_ID + probe.policyIdSuffix,
+                    seed -> new TacticalPolicy(seed, BuildBias.NONE, probe)));
+        }
+        return factories;
+    }
+
     /** The single policy the S-GATE band is stated on — the headline guarantee. */
     public static PolicyFactory hoarderPolicy() {
         return factory("HOARDER-START-WEAPON", seed -> new HoarderStartWeaponPolicy(seed));
@@ -82,7 +97,8 @@ public final class BalanceSimulator {
     /**
      * Plays the full matrix at the shipping sample size — the {@code ./gradlew balanceSim} workload: the three
      * standard policies at SIM_SEED_COUNT, then the four build-biased TACTICAL rows at SIM_BUILD_SEED_COUNT
-     * (same seed origin, so every variant plays the same seeds as plain TACTICAL).
+     * (same seed origin, so every variant plays the same seeds as plain TACTICAL), the 600-seed BUILD SAMPLE row, and
+     * the five S-RELIC probe rows at SIM_RELIC_PROBE_SEED_COUNT.
      */
     public static Map<String, PolicySummary> runStandardMatrix() {
         Map<String, PolicySummary> summaries = runMatrix(standardPolicies(), BalanceConfig.SIM_SEED_COUNT,
@@ -91,6 +107,8 @@ public final class BalanceSimulator {
                 DEFAULT_SEED_OFFSET, SimSettings.standard()));
         PolicyFactory sample = buildSamplePolicy();
         summaries.put(sample.id(), runPolicy(sample, BalanceConfig.SIM_BUILD_SAMPLE_SEED_COUNT,
+                DEFAULT_SEED_OFFSET, SimSettings.standard()));
+        summaries.putAll(runMatrix(relicProbePolicies(), BalanceConfig.SIM_RELIC_PROBE_SEED_COUNT,
                 DEFAULT_SEED_OFFSET, SimSettings.standard()));
         return summaries;
     }

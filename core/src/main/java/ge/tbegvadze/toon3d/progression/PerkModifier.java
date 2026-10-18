@@ -35,7 +35,8 @@ public enum PerkModifier {
     BURN_MAX_STACK        { @Override void apply(BuildStats stats, float magnitude) { stats.burnMaxStackBonus += Math.round(magnitude); } },
     WILDFIRE              { @Override void apply(BuildStats stats, float magnitude) { stats.wildfire = true; } },
     BURN_TURNS            { @Override void apply(BuildStats stats, float magnitude) { stats.burnTurnBonus += Math.round(magnitude); } },
-    FIRE_TILE_IMMUNE      { @Override void apply(BuildStats stats, float magnitude) { stats.fireTileImmune = true; } },
+    FIRE_TILE_IMMUNE      { @Override void apply(BuildStats stats, float magnitude) { stats.fireTileImmune = true; }
+                              @Override public boolean isSatisfiedBy(BuildStats stats) { return stats.isFireTileImmune(); } },
     OWN_EXPLOSION_REDUCTION { @Override void apply(BuildStats stats, float magnitude) {
                                 stats.ownExplosionDamageReduction = Math.min(1f, stats.ownExplosionDamageReduction + magnitude); } },
     BARREL_DAMAGE         { @Override void apply(BuildStats stats, float magnitude) { stats.barrelDamageBonus += magnitude; } },
@@ -43,7 +44,8 @@ public enum PerkModifier {
     ARC_CHAIN_JUMP        { @Override void apply(BuildStats stats, float magnitude) { stats.arcChainJumpBonus += Math.round(magnitude); } },
     ARC_CHAIN_MULTIPLIER  { @Override void apply(BuildStats stats, float magnitude) { stats.arcChainMultiplierBonus += magnitude; } },
     PIERCE_PER_ENEMY_DAMAGE { @Override void apply(BuildStats stats, float magnitude) { stats.piercePerEnemyBonus += magnitude; } },
-    WIDE_GUARD_ARC        { @Override void apply(BuildStats stats, float magnitude) { stats.wideGuardArc = true; } },
+    WIDE_GUARD_ARC        { @Override void apply(BuildStats stats, float magnitude) { stats.wideGuardArc = true; }
+                              @Override public boolean isSatisfiedBy(BuildStats stats) { return stats.wideGuardArc; } },
     /** Shield Wall r2: the guarded heavy multiplier becomes the magnitude (the lowest override wins). */
     HEAVY_GUARD_MULTIPLIER { @Override void apply(BuildStats stats, float magnitude) {
                                 stats.heavyGuardMultiplier = Float.isNaN(stats.heavyGuardMultiplier)
@@ -60,12 +62,14 @@ public enum PerkModifier {
     CARRIER_EXTRA_DROP    { @Override void apply(BuildStats stats, float magnitude) {
                                 stats.carrierExtraDropChance = Math.min(1f, stats.carrierExtraDropChance + magnitude); } },
     HEAL_BONUS            { @Override void apply(BuildStats stats, float magnitude) { stats.healBonus += magnitude; } },
-    SECOND_WIND           { @Override void apply(BuildStats stats, float magnitude) { stats.secondWind = true; } },
+    SECOND_WIND           { @Override void apply(BuildStats stats, float magnitude) { stats.secondWind = true; }
+                              @Override public boolean isSatisfiedBy(BuildStats stats) { return stats.secondWind; } },
 
     // ---- KEYSTONE GAINS -----------------------------------------------------------------------
     SPREAD_RELOAD_FREE    { @Override void apply(BuildStats stats, float magnitude) { stats.spreadReloadFree = true; } },
     POINT_BLANK_KILL_SHELL_REFUND { @Override void apply(BuildStats stats, float magnitude) { stats.pointBlankKillShellRefund = true; } },
-    FIRST_HIT_CRITICAL    { @Override void apply(BuildStats stats, float magnitude) { stats.firstHitGuaranteedCritical = true; } },
+    FIRST_HIT_CRITICAL    { @Override void apply(BuildStats stats, float magnitude) { stats.firstHitGuaranteedCritical = true; }
+                              @Override public boolean isSatisfiedBy(BuildStats stats) { return stats.firstHitGuaranteedCritical; } },
     /** PYROMANIAC: fire immunity covers fire tiles too. */
     FIRE_IMMUNE           { @Override void apply(BuildStats stats, float magnitude) {
                                 stats.fireImmune = true;
@@ -90,16 +94,63 @@ public enum PerkModifier {
     NON_SPREAD_DAMAGE_COST { @Override void apply(BuildStats stats, float magnitude) {
                                 for (DamageClass damageClass : DAMAGE_CLASSES) {
                                     if (damageClass != DamageClass.SPREAD) multiplyClassDamage(stats, damageClass, magnitude);
-                                } } },
-    BALLISTIC_DAMAGE_COST { @Override void apply(BuildStats stats, float magnitude) { multiplyClassDamage(stats, DamageClass.BALLISTIC, magnitude); } },
+                                } }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
+    BALLISTIC_DAMAGE_COST { @Override void apply(BuildStats stats, float magnitude) { multiplyClassDamage(stats, DamageClass.BALLISTIC, magnitude); }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
     ALL_WEAPON_DAMAGE_COST { @Override void apply(BuildStats stats, float magnitude) {
-                                for (DamageClass damageClass : DAMAGE_CLASSES) multiplyClassDamage(stats, damageClass, magnitude); } },
-    CLIP_SIZE_COST        { @Override void apply(BuildStats stats, float magnitude) { stats.clipSizeCostMultiplier *= magnitude; } },
-    MAX_ARMOR_COST        { @Override void apply(BuildStats stats, float magnitude) { stats.maxArmorCostMultiplier *= magnitude; } },
-    MAX_HEALTH_COST       { @Override void apply(BuildStats stats, float magnitude) { stats.maxHealthKeystoneMultiplier *= magnitude; } },
-    HEAL_COST             { @Override void apply(BuildStats stats, float magnitude) { stats.healKeystoneMultiplier *= magnitude; } };
+                                for (DamageClass damageClass : DAMAGE_CLASSES) multiplyClassDamage(stats, damageClass, magnitude); }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
+    CLIP_SIZE_COST        { @Override void apply(BuildStats stats, float magnitude) { stats.clipSizeCostMultiplier *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
+    MAX_ARMOR_COST        { @Override void apply(BuildStats stats, float magnitude) { stats.maxArmorCostMultiplier *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
+    MAX_HEALTH_COST       { @Override void apply(BuildStats stats, float magnitude) { stats.maxHealthKeystoneMultiplier *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
+    HEAL_COST             { @Override void apply(BuildStats stats, float magnitude) { stats.healKeystoneMultiplier *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return true; } },
+
+    // ---- RELIC KINDS (relics-run-changing-artifacts CP1) ---------------------------------------
+    /** Adds the magnitude to every damage class. */
+    ALL_WEAPON_DAMAGE     { @Override void apply(BuildStats stats, float magnitude) {
+                                for (DamageClass damageClass : DAMAGE_CLASSES) addClassDamage(stats, damageClass, magnitude); } },
+    KILL_HEAL             { @Override void apply(BuildStats stats, float magnitude) { stats.killHealFraction += magnitude; } },
+    KILL_ARMOR            { @Override void apply(BuildStats stats, float magnitude) { stats.killArmorFraction += magnitude; } },
+    KILL_CREDIT_BONUS     { @Override void apply(BuildStats stats, float magnitude) { stats.killCreditBonus += magnitude; } },
+    KILL_AMMO_REFUND      { @Override void apply(BuildStats stats, float magnitude) {
+                                stats.killAmmoRefundChance = Math.min(1f, stats.killAmmoRefundChance + magnitude); } },
+    XP_MULTIPLIER         { @Override void apply(BuildStats stats, float magnitude) { stats.experienceBonus += magnitude; } },
+    DOOR_BLAST            { @Override void apply(BuildStats stats, float magnitude) { stats.doorBlastFraction += magnitude; } },
+    DOOR_OPEN_HEAL        { @Override void apply(BuildStats stats, float magnitude) { stats.doorOpenHealFraction += magnitude; } },
+    CORPSE_BLAST          { @Override void apply(BuildStats stats, float magnitude) { stats.corpseBlastFraction += magnitude; } },
+    FLOOR_ARRIVAL_HEAL    { @Override void apply(BuildStats stats, float magnitude) { stats.floorArrivalHealFraction += magnitude; } },
+    FLOOR_ARRIVAL_ARMOR   { @Override void apply(BuildStats stats, float magnitude) { stats.floorArrivalArmorFraction += magnitude; } },
+    FLOOR_ARRIVAL_AMMO    { @Override void apply(BuildStats stats, float magnitude) { stats.floorArrivalAmmoFraction += magnitude; } },
+    FIRST_HIT_SHIELD      { @Override void apply(BuildStats stats, float magnitude) { stats.firstHitShield = true; }
+                              @Override public boolean isSatisfiedBy(BuildStats stats) { return stats.firstHitShield; } },
+    LOW_HEALTH_DAMAGE     { @Override void apply(BuildStats stats, float magnitude) { stats.lowHealthDamageBonus += magnitude; } },
+    DAMAGE_TAKEN_MULTIPLIER { @Override void apply(BuildStats stats, float magnitude) { stats.damageTakenFactor *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return magnitude > 1f; } },
+    ENEMY_HEALTH_MULTIPLIER { @Override void apply(BuildStats stats, float magnitude) { stats.enemyHealthFactor *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return magnitude > 1f; } },
+    CLIP_SIZE_MULTIPLIER  { @Override void apply(BuildStats stats, float magnitude) { stats.clipSizeCostMultiplier *= magnitude; }
+                              @Override public boolean isCostAt(float magnitude) { return magnitude < 1f; } };
 
     private static final DamageClass[] DAMAGE_CLASSES = DamageClass.values();
+
+    /**
+     * True when this effect is a BOOLEAN kind whose flag is already set in {@code stats} (the relic offer's
+     * "nothing left to give" exclusion, R5). Every other kind is never satisfied; boolean kinds override it.
+     */
+    public boolean isSatisfiedBy(BuildStats stats) { return false; }
+
+    /**
+     * True when an effect of this kind at {@code magnitude} is a COST — it makes the player weaker (relics CP5:
+     * R-RELIC-CURSE measures a cursed relic's loss on its cost effects alone, and R-RELIC-SOURCE requires every
+     * CURSED relic to carry one). Every {@code *_COST} kind is a cost; DAMAGE_TAKEN / ENEMY_HEALTH multipliers
+     * are a cost above 1; CLIP_SIZE_MULTIPLIER below 1. Every other kind is a gain; the cost kinds override it.
+     */
+    public boolean isCostAt(float magnitude) { return false; }
 
     /** Folds one effect of this kind, at the given (total) magnitude, into the aggregate. */
     abstract void apply(BuildStats stats, float magnitude);

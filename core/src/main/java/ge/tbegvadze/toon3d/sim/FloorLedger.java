@@ -33,6 +33,9 @@ public final class FloorLedger {
     /** Enemy effective hit points the floor asked the player to chew through (the DEMAND term of S). */
     public float demandDamage;
 
+    /** RELIC REPORT: doors that began opening on this floor (DoorManager.getOpenedDoorCount), vs the valuation's assumption. */
+    public int doorsOpened;
+
     /** Enemies killed on this floor. */
     public int enemiesKilled;
 

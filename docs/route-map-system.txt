@@ -448,12 +448,20 @@ MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-pr
       AMBUSH        (18) : delegates → "elite_hotzone" (combat-heavy lockdown; keeps its red alert).
       LORE_SIGNAL   (14) : delegates → "rest_medbay" (near-combat-free; EVENT profile order-10 degrade).
       MALFUNCTION   (14) : built — failing sector: hazards, unlit, NO reward (bad-but-survivable).
+      RELIC_CACHE    (3) : delegates -> "supply_cache" (a calm depot floor); leaving it pays a TWO-CARD relic offer
+                           (COMMON 60% / RARE 40%, RelicSource.MYSTERY_CACHE) that opens on the NEXT floor's first idle
+                           PLAYING frame (relics-run-changing-artifacts; docs/relic-system.txt). ScanTone REWARD_RICH,
+                           hint "RELIC". Weight 3, not 10: R-MYSTERY-EV (1.2996 of its 1.30 ceiling) cannot take more.
+                           Table total is now 103 (16/18/18/18/14/16/3), so the shares above are of 103.
   THE PAYOUT (balance-overhaul order 6, F15): every outcome also carries a hidden REWARD in LADDER
   CURRENCIES (MysteryOutcome.reward(), an EventEffect), paid when the player LEAVES the sector
   (World.payMysteryOutcomeOnce on the exit portal; SimWorld.payMysteryOutcome mirrors it):
       VAULT_JACKPOT  +1 weapon level + 0.5 floors of credits      SECRET_WARREN  a perk rank (carried tag)
       TRAP_GAUNTLET  1.5 floors of credits                        AMBUSH         0.5 floors of credits
       LORE_SIGNAL    0.25 floors of credits                       MALFUNCTION    COSTS 0.25 floors of credits
+      RELIC_CACHE    EventEffect.relicOffer(MYSTERY_CACHE) — no resources; priced as PROGRESS, not currency:
+                     RouteEconomicsModel.ladderRewardPrice adds RelicValuationModel.offerPowerPoints(source, depth)
+                     (GameMath.relicPowerPoints of the source pool's mean carry lift, in perk-rank currency)
   (SECTION 25 MYSTERY_REWARD_*; "a floor of credits" = one COMBAT floor's modelled income at the depth.)
 
   FAIRNESS RULES (design invariants):
@@ -775,6 +783,8 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
                      FRACTIONS, credits in floors of income; costs healthCost / creditCost /
                      nextFloorBudgetBonus; plus revealNextRegion and gamble{lootChance,failDamage} and the
                      result + fail + log text. (The order-10 ammoBoxes / grantXp / armourToFull are gone.)
+                     relicOffer (relics-run-changing-artifacts): a RelicSource (null = none) that World.applyLadderEffect
+                     queues as a pending RELIC_OFFER; priced as progress PP, see docs/relic-system.txt.
   Every choice routes through an EXISTING system, so there is NO bespoke per-event code path — the
   same trick NodeAffix uses. FacilityEventRegistry.rollFor(nodeSeed) draws deterministically
   (weightedChoiceIndex + RouteRng, like MYSTERY). Adding an event is one register() line in
@@ -783,6 +793,12 @@ EVENT NODES (RouteNodeType.EVENT, profile "event", EventProfile)
   floors of credits, 40%: a 20% HP bite; vs walk away), surviving_tech (escort: armour to full + a perk
   rank + 0.75 floors, next floor hotter; vs 0.75 floors), corrupted_shrine (full heal + a weapon level +
   0.75 floors, next floor hotter; vs a perk rank), data_terminal (a perk rank + 0.75 floors, no risk).
+  quarantine_locker (relics-run-changing-artifacts; "A sealed locker stamped DO NOT OPEN."): BREAK THE SEAL ->
+  EventEffect.relicOffer(QUARANTINE_LOCKER) — a TWO-CARD offer of CURSED relics (each helps, each costs), opening as
+  soon as the event overlay closes, log token "broken"; SELL THE SEAL -> credits(EVENT_CREDIT_FLOORS_LARGE) 3 floors of
+  income (the same payout as distress_beacon's large-credit choice; this alone satisfies R-EVENT-VALUE), log token
+  "sold". Weight 1 like its siblings (six events now). The sim does not play EVENT choices, so the locker is priced
+  (RelicValuationModel assumes RELIC_VALUATION_EVENT_TAKE_SHARE 0.50 of lockers are broken) but not simulated.
 
   WORLD SIDE (the headless registry can't touch World, by design): EventRoomGenerator marks the
   interactable via Level.markEventStation(); World copies getEventStationTiles() into
@@ -871,10 +887,10 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
   region_gate REGION_GATE  SET_PIECE    0(F)  region_gate     GATE_AIRLOCK          icon_gate    forced at a non-boss band boundary; ceremony
   *  "pre-rolled pool" = the standard combat biome pool {ROOMS_MST, LINEAR_CORRIDOR, CAVERN}, chosen at
      MAP-GEN and stored on the node (RouteNode.chosenGeneratorId), biased by the region's generatorWeight.
-  ** MYSTERY outcomes (BalanceConfig SECTION 19 MYSTERY_WEIGHT_*, sum 100): VAULT_JACKPOT 16,
+  ** MYSTERY outcomes (BalanceConfig SECTION 19 MYSTERY_WEIGHT_*, sum 103): VAULT_JACKPOT 16,
      SECRET_WARREN 18, TRAP_GAUNTLET 18, AMBUSH 18 (->elite_hotzone), LORE_SIGNAL 14 (->rest_medbay),
-     MALFUNCTION 16. The weights AND the ladder payouts are AUDITED (R-MYSTERY-EV v2): the table's EV must
-     sit in [1.0, 1.3] x a standard combat floor at every depth 1..25 with a real spread, so re-tuning one
+     MALFUNCTION 16, RELIC_CACHE 3 (->supply_cache, SECTION 26 MYSTERY_WEIGHT_RELIC_CACHE). The weights
+     AND the ladder payouts are AUDITED (R-MYSTERY-EV v2): the table's EV must sit in [1.0, 1.3] x a standard combat floor at every depth 1..25 with a real spread, so re-tuning one
      outcome's payoff re-tunes the table.
   ELITE affixes (RouteMapConstants.AFFIX_*, rolled at AFFIX_ROLL_CHANCE_ELITE 0.60): IRRADIATED,
      OVERCLOCKED, SWARM, FORTIFIED, VOLATILE (see DANGER / GAMBLE NODES).
@@ -951,6 +967,8 @@ ADD A NEW ROUTE EVENT  — FacilityEventRegistry: write a FacilityEvent (title +
 ADD A NEW MYSTERY OUTCOME  — add the MysteryOutcome row (weight + scan tone + delegate/build recipe)
   AND a NodeEconomics.mysteryOutcome row in route/RouteEconomics. R-MYSTERY-EV re-audits the whole
   table's expected value against a combat floor, so a new outcome re-prices the table's weights.
+  A reward that is a RELIC OFFER (EventEffect.relicOffer(RelicSource)) is priced as progress through
+  RelicValuationModel.offerPowerPoints and queued by World.applyLadderEffect; see docs/relic-system.txt.
 
 ADD A NEW ELITE AFFIX  — register a NodeAffixDefinition (a bundle of typed modifiers) in
   RouteRegistries.registerAffixes; EliteProfile folds it in by id. PRICE IT with a NodeEconomics.affix
@@ -981,7 +999,9 @@ rather than reaching into it:
     also PRICED: every node/affix/outcome carries a NodeEconomics row, the balance-bearing route numbers
     live in BalanceConfig SECTION 19 (RouteMapConstants re-exports them), and the audit walks real maps.
     Changing a node's payoff or budget scale WITHOUT re-checking its row fails ./gradlew test.
-  - HAZARDS / SECRET ROOMS / RELICS: attach via post-generation Guarantees (stamped symbols) and the
+  - RELICS shipped as OFFERS, never floor pickups: a MYSTERY RELIC_CACHE and the quarantine_locker EVENT
+    (docs/relic-system.txt).
+  - HAZARDS / SECRET ROOMS: attach via post-generation Guarantees (stamped symbols) and the
     FloorEffects seam (red alert / sting text / telemetry token). The long-range SCANNER is a relic
     hook (setScannerActive / triggerScanReveal) already wired in INTERACTION & CONTROLS.
   - META-PROGRESSION / UNLOCKS: future unlocks register new node types / events / regions / affixes

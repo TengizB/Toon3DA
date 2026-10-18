@@ -134,6 +134,21 @@ public class RunStats {
     public int healsUsed;                 // medkits/stims consumed
     public int emergencySupplyTriggers;   // times the never-softlock ammo lifeline fired
 
+    /** The relics bonded this run, in order, as a comma-separated list (relics-run-changing-artifacts). */
+    private final StringBuilder relicsBonded = new StringBuilder();
+
+    /** Records a relic the player bonded (by display name). */
+    public void recordRelicBonded(String relicName) {
+        if (relicName == null || relicName.isEmpty()) return;
+        if (relicsBonded.length() > 0) relicsBonded.append(", ");
+        relicsBonded.append(relicName);
+    }
+
+    /** The bonded relics as a comma list; empty when none (the renderer prints its own "none"). */
+    public String getRelicsBonded() {
+        return relicsBonded.toString();
+    }
+
     /** Records ammo UNITS the player collected (positive amounts only). */
     public void recordAmmoPickedUp(int units) {
         if (units > 0) ammoPickedUp += units;

@@ -9,6 +9,8 @@ import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PerkDeck;
+import ge.tbegvadze.toon3d.relic.RelicDefinition;
+import ge.tbegvadze.toon3d.relic.RelicRarity;
 import ge.tbegvadze.toon3d.route.NodeEconomics;
 import ge.tbegvadze.toon3d.route.RouteEconomicsModel;
 import ge.tbegvadze.toon3d.route.RouteNode;
@@ -16,6 +18,7 @@ import ge.tbegvadze.toon3d.route.RouteNodeType;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.shop.ShopEntry;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.RelicValuationModel;
 
 /**
  * The ceiling of the skill range (new-game-balancr order 9): a player who has read the manual.
@@ -53,6 +56,7 @@ public final class TacticalPolicy implements PlayerPolicy {
     private final LoopBreaker   loopBreaker   = new LoopBreaker();
     private final java.util.Random tieBreak;
     private final BuildBias buildBias;
+    private final RelicProbe relicProbe;
 
     /** Plain TACTICAL ({@link BuildBias#NONE}). */
     public TacticalPolicy(long seed) {
@@ -61,13 +65,19 @@ public final class TacticalPolicy implements PlayerPolicy {
 
     /** A build-biased TACTICAL variant (balance-overhaul order 5, S-BUILD); NONE is plain TACTICAL. */
     public TacticalPolicy(long seed, BuildBias buildBias) {
-        this.tieBreak  = new java.util.Random(seed);
-        this.buildBias = buildBias == null ? BuildBias.NONE : buildBias;
+        this(seed, buildBias, RelicProbe.NONE);
+    }
+
+    /** A TACTICAL variant with a relic probe (relics-run-changing-artifacts, S-RELIC); NONE takes offers normally. */
+    public TacticalPolicy(long seed, BuildBias buildBias, RelicProbe relicProbe) {
+        this.tieBreak   = new java.util.Random(seed);
+        this.buildBias  = buildBias == null ? BuildBias.NONE : buildBias;
+        this.relicProbe = relicProbe == null ? RelicProbe.NONE : relicProbe;
     }
 
     @Override
     public String id() {
-        return "TACTICAL" + buildBias.policyIdSuffix;
+        return "TACTICAL" + buildBias.policyIdSuffix + relicProbe.policyIdSuffix;
     }
 
     @Override
@@ -403,5 +413,39 @@ public final class TacticalPolicy implements PlayerPolicy {
             return view.equippedWeapon().getWeaponLevel() < view.depth();
         }
         return true;
+    }
+
+    /**
+     * The relic the model prices highest (relics-run-changing-artifacts): the card with the largest
+     * {@link RelicValuationModel#carryLift} at the reference depth nearest the floor. A CURSED card wins only when
+     * STRICTLY higher (a tie goes to the clean relic); LEAVE IT (null) when no card lifts carry above 1.0.
+     */
+    @Override
+    public RelicDefinition chooseRelic(RelicDefinition[] offered, int count, SimView view) {
+        int referenceDepth = RelicValuationModel.nearestReferenceDepth(view != null ? view.depth() : 1);
+        RelicDefinition best = null;
+        float bestLift = 1f;
+        for (int index = 0; index < count; index++) {
+            RelicDefinition card = offered[index];
+            if (card == null) continue;
+            float lift = RelicValuationModel.carryLift(card, referenceDepth);
+            boolean tieOverCursed = lift == bestLift && best != null && best.rarity().isCursed();
+            boolean better = card.rarity().isCursed() ? lift > bestLift : (lift > bestLift || tieOverCursed);
+            if (better) {
+                best     = card;
+                bestLift = lift;
+            }
+        }
+        return best;
+    }
+
+    @Override
+    public RelicRarity startingRelicProbe() {
+        return relicProbe.grantedRarity;
+    }
+
+    @Override
+    public boolean declinesRelicOffers() {
+        return relicProbe.declinesOffers;
     }
 }

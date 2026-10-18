@@ -15,6 +15,7 @@ import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 import ge.tbegvadze.toon3d.world.PersistentStats;
 import ge.tbegvadze.toon3d.world.RunStats;
@@ -104,6 +105,7 @@ public final class InstanceReportRenderer implements Disposable {
         addLine(killsLabel,  String.valueOf(run.enemiesKilled),    bestKills);
         addLine(damageLabel, String.valueOf(run.totalDamageTaken), false);
         addLine(timeLabel,   GameMath.formatPlayTime(run.realSecondsPlayed), false);
+        addLine(relicsLine(run.getRelicsBonded()), null, false);
         addLine("", null, false);   // a blank row: the autopsy is a second block, not a fifth stat
 
         // RUN AUTOPSY (new-game-balancr order 9, part C) — the six lines a playtester reports a run
@@ -111,6 +113,21 @@ public final class InstanceReportRenderer implements Disposable {
         for (String autopsyLine : run.autopsyLines()) {
             addLine(autopsyLine, null, false);
         }
+    }
+
+    /** "RELICS: A, B" or "RELICS: none"; trimmed with an ellipsis if the list would overrun the panel. Built once per death. */
+    private String relicsLine(String relicNames) {
+        if (relicNames == null || relicNames.isEmpty()) return HudConstants.RELIC_REPORT_NONE;
+        String line = HudConstants.RELIC_REPORT_PREFIX + relicNames;
+        float maxWidth = StoryUiConstants.STORY_REPORT_PANEL_WIDTH - StoryUiConstants.STORY_REPORT_TEXT_INSET_X * 2f;
+        font.getData().setScale(StoryUiConstants.STORY_REPORT_TEXT_SIZE);
+        layout.setText(font, line);
+        while (layout.width > maxWidth && line.length() > HudConstants.RELIC_REPORT_PREFIX.length() + 1) {
+            line = line.substring(0, line.length() - 3) + "..";
+            layout.setText(font, line);
+        }
+        font.getData().setScale(1f);
+        return line;
     }
 
     private void addLine(String label, String value, boolean isRecord) {
