@@ -94,6 +94,8 @@ public enum GameSoundId {
     PICKUP_CREDIT,
     PLAYER_HEAL,
     LEVEL_UP,
+    /** A relic bonding: a rising two-partial struck-metal chime with a short room echo (relics feature). */
+    RELIC_BONDED,
     /** The XP receipt, deliberately near the floor of the mix. */
     KILL_CONFIRM,
     /** The quietest thing in the mix, and the first candidate for deletion. */

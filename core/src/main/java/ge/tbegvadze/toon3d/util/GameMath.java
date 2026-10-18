@@ -1878,6 +1878,20 @@ public final class GameMath {
         return minMul + (maxMul - minMul) * 0.5f * (1f + sineValue);
     }
 
+    /*
+     * Formula: centeredRowLeftX (relic offer cards; any row of equal items centred in the world)
+     * Derivation:
+     *   rowWidth = itemCount * itemWidth + (itemCount - 1) * gap
+     *   leftX    = (worldWidth - rowWidth) / 2          (equal margin either side)
+     *   item i starts at leftX + i * (itemWidth + gap)
+     * Edge cases: itemCount <= 0 -> rowWidth is -gap (meaningless but finite); callers draw nothing then.
+     *   A row wider than the world gives a negative leftX (clipped, never NaN).
+     */
+    public static float centeredRowLeftX(float worldWidth, float itemWidth, float gap, int itemCount) {
+        float rowWidth = itemCount * itemWidth + (itemCount - 1) * gap;
+        return (worldWidth - rowWidth) / 2f;
+    }
+
     // =========================================================================
     // HUD — ZERO-PADDED INTEGER APPEND (no boxing, no allocation)
     // =========================================================================

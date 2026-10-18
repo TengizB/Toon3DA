@@ -11,6 +11,10 @@ import ge.tbegvadze.toon3d.progression.BuildTag;
 import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
+import ge.tbegvadze.toon3d.relic.RelicDefinition;
+import ge.tbegvadze.toon3d.relic.RelicHand;
+import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
@@ -26,10 +30,11 @@ import ge.tbegvadze.toon3d.util.ProgressionConstants;
  */
 final class BuildPagePanel {
 
-    private enum RowKind { TAG_HEADER, PERK, KEYSTONE_GAIN, KEYSTONE_COST, KEYSTONES_HEADER }
+    private enum RowKind { TAG_HEADER, PERK, KEYSTONE_GAIN, KEYSTONE_COST, KEYSTONES_HEADER, RELICS_HEADER, RELIC, RELIC_COST, NOTE }
 
     private static final int   MAX_ROWS = BuildTag.values().length + Perk.values().length
-            + 1 + Keystone.values().length * 2;
+            + 1 + Keystone.values().length * 2
+            + 1 + BalanceConfig.RELIC_MAX_HELD * 2 + 1;   // relics: header + (gain + cost row) each; + the empty-perks note
 
     // Geometry (world units) — covers both inventory panels below the header.
     private static final float PANEL_X      = ItemConstants.INV_LEFT_PANEL_X;
@@ -56,7 +61,6 @@ final class BuildPagePanel {
     private static final float SCALE_NAME   = ProgressionConstants.BUILD_PAGE_SCALE_NAME;
     private static final float SCALE_EFFECT = ProgressionConstants.BUILD_PAGE_SCALE_EFFECT;
     private static final float SCALE_CHIP   = ProgressionConstants.BUILD_CHIP_FONT_SCALE;
-    private static final float SCALE_EMPTY  = ProgressionConstants.BUILD_PAGE_SCALE_EMPTY;
     private static final float SCALE_PLATE  = ProgressionConstants.BUILD_PAGE_SCALE_PLATE;
 
     private static final float PLATE_WIDTH  = ProgressionConstants.BUILD_PAGE_PLATE_WIDTH;
@@ -103,6 +107,7 @@ final class BuildPagePanel {
     private final StringBuilder textBuilder = new StringBuilder(24);
 
     private PlayerBuild playerBuild = null;
+    private RelicHand relicHand = null;
 
     // Flattened rows, rebuilt by open().
     private final RowKind[] rowKinds   = new RowKind[MAX_ROWS];
@@ -112,6 +117,10 @@ final class BuildPagePanel {
     private final int[]     rowRanks   = new int[MAX_ROWS];
     private final int[]     rowMaxRanks = new int[MAX_ROWS];
     private final float[]   rowChipWidths = new float[MAX_ROWS];
+    /** Per row: the RelicRarity ordinal (RELIC rows) indexing the HudConstants rarity colours; unused otherwise. */
+    private final int[]     rowRarityOrdinals = new int[MAX_ROWS];
+    private final String[]  rowBadges  = new String[MAX_ROWS];
+    private final Color[]   relicRarityColors = new Color[HudConstants.RELIC_RARITY_COLOR_R.length];
     private int rowCount   = 0;
     private int firstRow   = 0;
 
@@ -120,6 +129,15 @@ final class BuildPagePanel {
         this.spriteBatch   = spriteBatch;
         this.font          = font;
         this.glyphLayout   = glyphLayout;
+        for (int rarityIndex = 0; rarityIndex < relicRarityColors.length; rarityIndex++) {
+            relicRarityColors[rarityIndex] = new Color(HudConstants.RELIC_RARITY_COLOR_R[rarityIndex],
+                    HudConstants.RELIC_RARITY_COLOR_G[rarityIndex], HudConstants.RELIC_RARITY_COLOR_B[rarityIndex], 1f);
+        }
+    }
+
+    /** The run's held relics, read when the page opens (the hand object is stable for the world's life). */
+    void setRelicHand(RelicHand relicHand) {
+        this.relicHand = relicHand;
     }
 
     void setPlayerBuild(PlayerBuild playerBuild) {
@@ -131,6 +149,10 @@ final class BuildPagePanel {
         rowCount = 0;
         firstRow = 0;
         if (playerBuild == null) return;
+        addRelicRows();
+        if (playerBuild.keystoneCount() == 0 && !hasAnyPerk()) {
+            addRow(RowKind.NOTE, null, EMPTY_TEXT, null, 0, 0);
+        }
         font.getData().setScale(SCALE_CHIP);
         for (BuildTag tag : BuildTag.values()) {
             if (playerBuild.ranksInTag(tag) <= 0) continue;
@@ -151,6 +173,34 @@ final class BuildPagePanel {
             }
         }
         font.getData().setScale(1f);
+    }
+
+    private boolean hasAnyPerk() {
+        for (BuildTag tag : BuildTag.values()) {
+            if (playerBuild.ranksInTag(tag) > 0) return true;
+        }
+        return false;
+    }
+
+    /** RELICS (n) section: built once per open(); "RELICS - none" when the hand is empty. */
+    private void addRelicRows() {
+        int held = relicHand == null ? 0 : relicHand.count();
+        textBuilder.setLength(0);
+        if (held == 0) {
+            textBuilder.append(HudConstants.RELIC_BUILD_NONE_TEXT);
+        } else {
+            textBuilder.append(HudConstants.RELIC_BUILD_HEADER_PREFIX).append(held).append(')');
+        }
+        addRow(RowKind.RELICS_HEADER, null, textBuilder.toString(), null, 0, 0);
+        for (int relicIndex = 0; relicIndex < held; relicIndex++) {
+            RelicDefinition relic = relicHand.get(relicIndex);
+            addRow(RowKind.RELIC, null, relic.name(), relic.effectText(), 0, 0);
+            rowRarityOrdinals[rowCount - 1] = relic.rarity().ordinal();
+            rowBadges[rowCount - 1] = relic.rarity().label();
+            if (relic.costText() != null && !relic.costText().isEmpty()) {
+                addRow(RowKind.RELIC_COST, null, "", relic.costText(), 0, 0);
+            }
+        }
     }
 
     private void addRow(RowKind kind, BuildTag tag, String name, String effect, int rank, int maxRank) {
@@ -260,11 +310,6 @@ final class BuildPagePanel {
 
         // ---- text ----
         spriteBatch.begin();
-        if (rowCount == 0) {
-            font.getData().setScale(SCALE_EMPTY);
-            font.setColor(TEXT_DIM);
-            font.draw(spriteBatch, EMPTY_TEXT, PANEL_X, (PANEL_TOP + PANEL_BOTTOM) / 2f, PANEL_WIDTH, Align.center, false);
-        }
         for (int rowIndex = firstRow; rowIndex < lastRow; rowIndex++) {
             float baseline = rowBottom(rowIndex - firstRow) + ROW_TEXT_RISE + ProgressionConstants.BUILD_PAGE_ROW_BASELINE_EXTRA;
             RowKind kind = rowKinds[rowIndex];
@@ -277,6 +322,24 @@ final class BuildPagePanel {
                 font.setColor(TEXT_MAIN);
                 font.draw(spriteBatch, rowNames[rowIndex], NAME_X, baseline);
                 drawEffect(rowEffects[rowIndex], baseline, TEXT_DIM);
+            } else if (kind == RowKind.RELICS_HEADER) {
+                font.getData().setScale(SCALE_NAME);
+                font.setColor(relicHand != null && relicHand.count() > 0 ? GOLD : TEXT_DIM);
+                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X, baseline);
+            } else if (kind == RowKind.RELIC) {
+                Color rarityColor = relicRarityColors[rowRarityOrdinals[rowIndex]];
+                font.getData().setScale(SCALE_NAME);
+                font.setColor(rarityColor);
+                font.draw(spriteBatch, rowNames[rowIndex], NAME_X, baseline);
+                font.getData().setScale(SCALE_EFFECT);
+                font.draw(spriteBatch, rowBadges[rowIndex], PIPS_LEFT_X, baseline);
+                drawEffect(rowEffects[rowIndex], baseline, TEXT_MAIN);
+            } else if (kind == RowKind.RELIC_COST) {
+                drawEffect(rowEffects[rowIndex], baseline, COST_RED);
+            } else if (kind == RowKind.NOTE) {
+                font.getData().setScale(SCALE_EFFECT);
+                font.setColor(TEXT_DIM);
+                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X, baseline);
             } else if (kind == RowKind.KEYSTONES_HEADER) {
                 font.getData().setScale(SCALE_NAME);
                 font.setColor(GOLD);

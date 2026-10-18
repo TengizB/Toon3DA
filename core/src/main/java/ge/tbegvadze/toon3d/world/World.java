@@ -86,6 +86,7 @@ import ge.tbegvadze.toon3d.narrative.TeachingSystem;
 import ge.tbegvadze.toon3d.narrative.TeachingTopic;
 import ge.tbegvadze.toon3d.render.BossHudRenderer;
 import ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer;
+import ge.tbegvadze.toon3d.render.RelicOfferOverlayRenderer;
 import ge.tbegvadze.toon3d.progression.PlayerProgress;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
 import ge.tbegvadze.toon3d.progression.BuildTag;
@@ -181,6 +182,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private final AbilityFeedback        abilityFeedback;
     private final PlayerProgress         playerProgress;
     private final LevelUpOverlayRenderer levelUpOverlayRenderer;
+    private final RelicOfferOverlayRenderer relicOfferOverlayRenderer;
     /** Draws the tagged perks offered on each level-up (balance-overhaul order 5, B3). */
     private final PerkDeck               perkDeck;
     /** The perks currently on offer; refilled by the deck when a level-up begins. */
@@ -642,6 +644,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Progression — lives for the entire run; not reset between floors
         playerProgress         = new PlayerProgress();
         levelUpOverlayRenderer = new LevelUpOverlayRenderer(playerProgress);
+        relicOfferOverlayRenderer = new RelicOfferOverlayRenderer();
         eventChoiceOverlayRenderer = new EventChoiceOverlayRenderer();
         // Perk deck seeded off the run seed (the retired card deck's salt) so a run's offers are reproducible.
         perkDeck               = new PerkDeck(runSeed ^ 0xCA12D00D5EED1234L);
@@ -902,6 +905,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventoryOverlayRenderer.setWeaponHudRenderer(weaponHudRenderer);
         inventoryOverlayRenderer.setPlayerStats(playerStats);
         inventoryOverlayRenderer.setPlayerBuild(playerBuild);
+        inventoryOverlayRenderer.setRelicHand(relicHand);
         hudRenderer          = new HudRenderer(player, hudState);
         hudRenderer.setPlayerInventory(inventory);
         impactEffectRenderer = new ImpactEffectRenderer(impactEffectSystem);
@@ -2122,6 +2126,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         syncWeaponThreatLevels();
         if (player.consumeFirstHitShieldEvent()) {
             eventTextSystem.spawnWithColor(HudConstants.RELIC_SHIELD_ABSORB_TEXT, EventTextSystem.COLOR_GREEN);
+            if (hitVignetteRenderer != null) hitVignetteRenderer.triggerHeal();   // one heal-style pulse (CP7)
         }
         // OVERLAY PRECEDENCE (order-7 Part E): a hard-pause overlay — death, level-up, inventory,
         // shop, weapon inspect, the nav console, an event choice — owns the screen. Suppress the
@@ -2764,6 +2769,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // hide touch buttons so they don't obscure cards or inventory slots.
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             levelUpOverlayRenderer.render(camera);
+        } else if (runPhase == RunPhase.RELIC_OFFER) {
+            relicOfferOverlayRenderer.render(camera, relicOfferActive ? activeRelicOffer : null, relicOfferOpenSeconds);
         } else if (runPhase != RunPhase.WEAPON_INSPECT
                 && touchControllerRenderer != null
                 && runPhase != RunPhase.INVENTORY_OPEN
@@ -2781,8 +2788,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             touchControllerRenderer.render(camera);
         }
 
-        // Event text: rising screen-space text drawn above HUD but below the fade overlay.
-        eventTextRenderer.render(camera);
+        // Event text: rising screen-space text drawn above HUD but below the fade overlay. Held back while the
+        // relic offer is up, so a previous bond's line never sits on top of the cards being chosen.
+        if (runPhase != RunPhase.RELIC_OFFER) eventTextRenderer.render(camera);
         if (bossHudRenderer != null) bossHudRenderer.render(camera);
 
         // Story bark (order-2): the non-blocking one-liner panel, at its fixed top-centre anchor —
@@ -2937,6 +2945,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
+        relicOfferOverlayRenderer.dispose();
         eventChoiceOverlayRenderer.dispose();
         inventoryOverlayRenderer.dispose();
         weaponInspectOverlayRenderer.dispose();
@@ -5310,7 +5319,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
         if (relicOfferOpenSeconds < HudConstants.RELIC_OFFER_INPUT_LOCKOUT_SECONDS) return;
-        chooseRelicOfferCard(0);   // CP7 replaces: any tap after the lockout takes card 0
+        // Same unprojected world point as the pause hit-test above; the overlay owns the geometry it drew.
+        int tappedCard = relicOfferOverlayRenderer.cardIndexAt(activeRelicOffer, cardTouchPosition.x, cardTouchPosition.y);
+        if (tappedCard >= 0) {
+            chooseRelicOfferCard(tappedCard);
+        } else if (relicOfferOverlayRenderer.isLeaveAt(cardTouchPosition.x, cardTouchPosition.y)) {
+            gameAudio.playMenu(GameSoundId.UI_CONFIRM);
+            leaveRelicOffer();
+        }
     }
 
     /** The offer on screen, or null when none is open (CP7's renderer reads this). */
@@ -5338,6 +5354,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             Gdx.app.log("Relic", "bonded " + chosen.id() + " (" + chosen.rarity() + ") from "
                     + activeRelicOffer.source + " at depth " + activeRelicOffer.depth);
             eventTextSystem.spawnWithColor(HudConstants.RELIC_BONDED_TEXT_PREFIX + chosen.name(), EventTextSystem.COLOR_GOLD);
+            gameAudio.playMenu(GameSoundId.RELIC_BONDED);   // the overlay's own chime (world is suppressed in RELIC_OFFER)
         }
         closeRelicOffer();
     }

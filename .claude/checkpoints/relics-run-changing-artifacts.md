@@ -63,7 +63,7 @@ than hold. Never `git add -A`.
 - [x] **CP6** — RunPhase.RELIC_OFFER + pending FIFO, RUN_START/BOSS/EventEffect queuing, RELIC_CACHE,
       RouteEconomics row, quarantine_locker, RouteEconomicsModel pricing, RunStats; placeholder tap takes
       card 0. DONE WHEN: test green incl. route rules; flow playable end to end.
-- [ ] **CP7** — RelicOfferOverlayRenderer, BuildPagePanel RELICS, run-report line, event-text feedback,
+- [x] **CP7** — RelicOfferOverlayRenderer, BuildPagePanel RELICS, run-report line, event-text feedback,
       RELIC_BONDED sound. DONE WHEN: build green; desktop check of A4/A5/A7/A10 (or noted as owed).
 - [ ] **CP8** — sim: policy relic methods, SimWorld acquisition, RunLedger ids, 5 probe rows, S-RELIC
       SR1–SR6, BalanceSimTest method, RELIC REPORT, RoundSummary R1, LadderReport column.
@@ -172,3 +172,14 @@ than hold. Never `git add -A`.
   RelicValuationModel.mysteryWeightTotal() sums MysteryOutcome.values() (added MysteryOutcome.weight()).
   Order10RegistriesTest count 5 -> 6 events (quarantine_locker), legitimately. balanceSim exit 0; summary
   moved 3 lines from the new outcome (no band flipped). Not run on desktop yet.
+- **CP7 handover:** `render/RelicOfferOverlayRenderer.render(camera, offer, openSeconds)`,
+  `cardIndexAt(RelicOffer, x, y)`, `isLeaveAt(x, y)`; text layouts rebuilt once per new offer.
+  World.updateRelicOffer: pause hit-test -> lockout -> card / LEAVE IT (UI_CONFIRM). BuildPagePanel shows
+  RELICS (n) at the top (flattened in open()); InstanceReportRenderer "RELICS: ..." line (page at its
+  12-line cap). Shield absorb adds hitVignetteRenderer.triggerHeal(). Sound RELIC_BONDED (INTERFACE bus,
+  played via gameAudio.playMenu); docs/sound-system.txt updated (93 sounds). Default font lacks U+2014/
+  U+2026: UI strings use " - " and "..". Hub fix: event text is not drawn during RELIC_OFFER (a prior
+  bond's line overlapped the cards). Desktop check: xvfb harness screenshots of BOSS / QUARANTINE offers,
+  BUILD page and report at <scratchpad>/harness/shot/ (visuals OK). OWED: real touch-tap routing and the
+  by-hand A4/A5/A7/A10 run on a device — never exercised by real input. Running from repo assets/ writes
+  assets/game-audio + story-audio WAV caches (untracked): delete before committing.

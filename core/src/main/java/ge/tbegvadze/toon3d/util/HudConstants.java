@@ -313,7 +313,7 @@ public final class HudConstants {
 
     // --- RELIC FEEDBACK TEXT (relics-run-changing-artifacts): UI event text, not story strings ---
     /** Event text on bonding a relic: prefix + the relic's name. */
-    public static final String RELIC_BONDED_TEXT_PREFIX = "RELIC BONDED \u2014 ";
+    public static final String RELIC_BONDED_TEXT_PREFIX = "RELIC BONDED - ";
     /** Event text when an offer is skipped because the hand is full. */
     public static final String RELIC_CAPACITY_TEXT      = "RELIC CAPACITY REACHED";
 
@@ -324,4 +324,49 @@ public final class HudConstants {
     public static final String RELIC_FEEDBACK_AMMO_UNIT   = " ";
     /** Shown when FIRST_HIT_SHIELD absorbs a hit. */
     public static final String RELIC_SHIELD_ABSORB_TEXT   = "SHIELD - HIT ABSORBED";
+
+    // --- RELIC OFFER overlay presentation (relics-run-changing-artifacts CP7). World units; text is UI chrome, not story. ---
+    public static final String RELIC_OFFER_TITLE_TEXT            = "RELIC RECOVERED - CHOOSE ONE";
+    /** Title of a QUARANTINE_LOCKER offer, drawn in the CURSED red. */
+    public static final String RELIC_OFFER_TITLE_QUARANTINE_TEXT = "QUARANTINED - EACH ONE COSTS";
+    public static final String RELIC_OFFER_LEAVE_TEXT            = "LEAVE IT";
+    public static final float  RELIC_OFFER_SCRIM_ALPHA           = 0.78f;
+    public static final float  RELIC_OFFER_GLOW_INSET            = 10f;
+    public static final float  RELIC_OFFER_GLOW_ALPHA            = 0.22f;
+    /** LEGENDARY glow pulse: period in seconds and the alpha swing around RELIC_OFFER_GLOW_ALPHA. */
+    public static final float  RELIC_OFFER_LEGENDARY_PULSE_SECONDS = 1.5f;
+    public static final float  RELIC_OFFER_LEGENDARY_PULSE_SWING   = 0.18f;
+    public static final float  RELIC_OFFER_BORDER_THICKNESS      = 3f;
+    public static final float  RELIC_OFFER_HEADER_HEIGHT         = 62f;
+    public static final float  RELIC_OFFER_TEXT_PAD              = 24f;
+    public static final float  RELIC_OFFER_SHADOW_OFFSET         = 2.5f;
+    /** Depth of the CURSED inner vignette (inset band, in steps) and its colour alpha at the outermost step. */
+    public static final int    RELIC_OFFER_VIGNETTE_STEPS        = 5;
+    public static final float  RELIC_OFFER_VIGNETTE_STEP_SIZE    = 6f;
+    public static final float  RELIC_OFFER_VIGNETTE_ALPHA        = 0.30f;
+    // Offsets measured DOWN from the card top (text baselines) / UP from the card bottom.
+    public static final float  RELIC_OFFER_BADGE_ROW_DROP        = 94f;   // chip bottom below the card top (rarity label + trigger badge row)
+    public static final float  RELIC_OFFER_BADGE_HEIGHT          = 24f;
+    public static final float  RELIC_OFFER_BADGE_PAD             = 10f;
+    public static final float  RELIC_OFFER_EFFECT_DROP           = 108f;  // top of the first effect line, below the card top
+    public static final float  RELIC_OFFER_DIVIDER_RISE          = 108f;  // cost divider height above the card bottom
+    public static final float  RELIC_OFFER_COST_RISE             = 100f;  // cost text top, above the card bottom
+    public static final float  RELIC_OFFER_TAG_CHIP_RISE         = 14f;   // affinity chip bottom above the card bottom
+    public static final float  RELIC_OFFER_TAG_CHIP_HEIGHT       = 26f;
+    public static final float  RELIC_OFFER_SCALE_TITLE           = 2.2f;
+    public static final float  RELIC_OFFER_SCALE_NAME            = 1.7f;
+    public static final float  RELIC_OFFER_SCALE_BADGE           = 1.05f;
+    public static final float  RELIC_OFFER_SCALE_EFFECT          = 1.4f;
+    public static final float  RELIC_OFFER_SCALE_LEAVE           = 1.6f;
+    /** Dim steel LEAVE IT plate and its text. */
+    public static final float  RELIC_OFFER_LEAVE_R = 0.20f, RELIC_OFFER_LEAVE_G = 0.23f, RELIC_OFFER_LEAVE_B = 0.28f;
+    public static final float  RELIC_OFFER_LEAVE_TEXT_R = 0.78f, RELIC_OFFER_LEAVE_TEXT_G = 0.82f, RELIC_OFFER_LEAVE_TEXT_B = 0.88f;
+
+    // --- BUILD page RELICS section (render/BuildPagePanel) ---
+    public static final String RELIC_BUILD_HEADER_PREFIX = "RELICS (";
+    public static final String RELIC_BUILD_NONE_TEXT     = "RELICS - none";
+
+    // --- Run report line (render/InstanceReportRenderer) ---
+    public static final String RELIC_REPORT_PREFIX = "RELICS: ";
+    public static final String RELIC_REPORT_NONE   = "RELICS: none";
 }
