@@ -388,6 +388,54 @@ R-CARRY (RuleKind.BUILD_CARRY) — balance-overhaul order 5 (REPLACES the total-
   SCAVENGER in the expected player. Live: eight-tag spread 1.189 (limit 1.20) — VITALITY (2.081, pinned
   near its PK2 floor) is the best, MARKSMAN (1.751) the worst; ~1% headroom (see the knowledge doc).
 
+R-RELIC (RuleKind.RELIC) — relics-run-changing-artifacts (CP5)
+  Every non-CURSED relic (RelicCatalog, 36 rows; docs/relic-system.txt) has a GAIN — its R-CARRY-style carry lift
+  (BuildValuationModel.carryOf over BuildStats.ofEffects(its effects) on its affinity tag's two-gun kit, else the
+  best pair), or the SUPPLY_TOTAL ratio for an economy (valuation SUPPLY) relic — inside its rarity x valuation band
+  at EVERY RELIC_REFERENCE_DEPTHS depth (5 / 15 / 25). CARRY: COMMON [1.03, 1.08], RARE [1.06, 1.13], LEGENDARY
+  [1.10, 1.22]; SUPPLY: COMMON [1.06, 1.20], RARE [1.15, 1.35] (BalanceConfig SECTION 26). WHY the floor: it is the
+  "felt" test — a relic whose effect kinds the valuation does not read prices at exactly 1.00 and fails, so an
+  unpriced kind cannot ship. WHY SUPPLY: the carry conversion under-reads supply (the reason SCAVENGER's R-CARRY row is
+  waived). LEGENDARY top widened 1.20 -> 1.22 by the CP5 hub licence (a band new in this feature; SECOND HEART's
+  Second Wind flag alone prices 1.205 at d5). Asserted by BalanceAuditTest.everyRelicPricesIntoItsRarityBand.
+
+R-RELIC-CURSE (RuleKind.RELIC_CURSE) — relics-run-changing-artifacts (CP5)
+  Every CURSED relic: (a) its gain is inside the CURSED band for its valuation at every reference depth (CARRY
+  [1.05, 1.18], SUPPLY [1.20, 1.60]); AND (b) its COST effects alone (PerkModifier.isCostAt, priced by
+  RelicValuationModel.costLoss -> BuildValuationModel.worstLoss with a NULL niche, i.e. every probe counts) cost >=
+  RELIC_CURSED_MIN_LOSS (0.10) on some probe at some reference depth — the R-KEYSTONE cost idiom. MEASURE: the cost
+  effects ALONE, because worstLoss over the whole relic reported spurious losses for pure gains (an Incinerator-S2
+  cell) and would have let a free "curse" pass. WHY: a bargain with no price is just a bigger relic; and a
+  cursed card is only ever met behind a seal the player chose to break. Asserted by
+  BalanceAuditTest.everyCursedRelicTradesAGainForARealCost. Live: cost losses 0.107 .. 0.626.
+
+R-RELIC-STACK (RuleKind.RELIC_STACK) — relics-run-changing-artifacts (CP5)
+  At every BossTable depth (5/10/15/20/25): expectedHandLift(d) <= the WORST non-waived R-CARRY tag score ("a run's
+  expected relics never out-carry one committed build"), AND bestHandLift(d) <= the BEST non-waived R-CARRY score x
+  (1 + BUILD_CARRY_TOLERANCE) ("even the luckiest hand stays inside the build spread"). Both ceilings are read LIVE
+  from the R-CARRY results — no new number. bestHandLift is AFFINITY-CONSISTENT: the non-affine relics plus the
+  affine relics of at most ONE BuildTag (a two-gun build cannot use every tag-affine relic), best over every tag,
+  LEGENDARY at most one per boss passed, CURSED only through node offers. expectedRelicCount(d) = 1 (the start relic)
+  + bosses passed + (d - 1) x nodeOfferRatePerFloor() (0.00791 per floor with RELIC_CACHE at weight 3). WHY: relics are
+  BONUS power accounted beside the unchanged on-curve ExpectedPlayer (decision D3); this is the cap that keeps them from
+  becoming a second progression curve. Live: expected hand 1.086 / 1.191 / 1.320 / 1.479 / 1.695 at d5..d25 against the
+  1.751 ceiling (THIN at d25: 3.2%); best hand 1.175 .. 2.290 against 2.497. Asserted by
+  BalanceAuditTest.noRelicHandOutCarriesACommittedBuild.
+
+R-RELIC-SOURCE (RuleKind.RELIC_SOURCE) — relics-run-changing-artifacts (CP5)
+  Structural: each rarity holds >= RELIC_OFFER_MAX_CARDS (3) non-affine relics (an offer always fills); every
+  RelicSource weight row sums to 1 (+/- 1e-4) with one weight per allowed rarity; no duplicate relic ids; every CURSED
+  relic has a cost line AND at least one cost effect; RELIC_PERK_RANK_EQUIVALENT_LIFT (1.08) is within
+  RELIC_PERK_RANK_EQUIVALENT_TOLERANCE (0.03) of the worst committed build's per-rank lift ((worst non-waived carry)^
+  (1 / (ranks + keystone)); live 1.0725, MARKSMAN) — the price anchor offer pricing and the RELICS bands stand on;
+  nodeOfferRatePerFloor() > 0. COVERAGE gains one row per relic (rarity, trigger, valuation, banded). Existing rules
+  that now read relics: R-ROUTE-PRICED (the RELIC_CACHE NodeEconomics row; the priced offer is progress PP =
+  GameMath.relicPowerPoints of the source pool's mean lift), R-MYSTERY-EV v2 (RELIC_CACHE at weight 3: 1.2996 of the
+  1.30 ceiling — weight 4 breaks it at 1.3022; the idea's floor of 4 was unreachable), R-HONEST-SAFE, R-EVENT-VALUE
+  (quarantine_locker: SELL THE SEAL alone meets it). Asserted by BalanceAuditTest.theRelicPoolAlwaysFillsAnOffer.
+  Tuning order on a failure (D7): that relic's own SECTION 26 magnitude; then MYSTERY_WEIGHT_RELIC_CACHE; NEVER an
+  existing pre-relic number or band.
+
 R-SCARCITY (RuleKind.SCARCITY) — RETIRED by balance-overhaul order 2 (CP3c)
   OVERRIDE RECORD: the model-floor band (floor-wide S in [0.75, 0.95], per-weapon S
   < 0.60, net drain 5-15%) priced DICE — per-room ammo chances, per-kill drop chances
@@ -926,7 +974,7 @@ S-LAG (RuleKind.SIM_LAG) + THE LADDER REPORT (balance-overhaul order 1)
   out is 2.35x (target >= 1.5x). TacticalPolicy buys the rung for its equipped weapon (R15);
   HOARDER-START-WEAPON never does.
 
-S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY / S-BUILD / S-SOFTLOCK (+ S-LAG above) (RuleKind.SIM_*, order 9)
+S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY / S-BUILD / S-BOSS / S-NAVIGATION / S-RELIC / S-SOFTLOCK (+ S-LAG above) (RuleKind.SIM_*, order 9)
   THE BEHAVIOURAL BANDS — the only rules in this document that are checked against PLAY
   rather than against arithmetic. Everything above proves the numbers are self-consistent;
   it cannot prove the game plays the way they claim (knowledge-doc problem 1: "verified by
@@ -1121,6 +1169,29 @@ S-GATE / S-FAIR / S-SKILL / S-ROUTE / S-ECONOMY / S-SUPPLY / S-SWITCH / S-HEAVY 
               stairs is a boss floor — hunt the boss; re-scan the boss floor's exit after the kill; and the
               LoopBreaker (SIM_LOOP_*: <= 4 tiles in 16 turns with nothing fired / reloaded / healed opens a
               12-turn PUSH that skips the sidesteps and routes through enemies).
+  S-RELIC     (NEW, relics-run-changing-artifacts CP8; RuleKind.SIM_RELIC) — NO RELIC IS A TRAP AND NONE IS MANDATORY.
+              Five TACTICAL PROBE ROWS (BalanceSimulator.relicProbePolicies(), SIM_RELIC_PROBE_SEED_COUNT 120 seeds
+              each; ids TACTICAL-NO-RELIC, TACTICAL-RELIC-COMMON, TACTICAL-RELIC-RARE, TACTICAL-RELIC-LEGENDARY,
+              TACTICAL-RELIC-CURSED): each LEAVES every relic offer and is instead GRANTED nothing (the baseline) or ONE
+              relic of its rarity at depth-1 arrival, round-robin over that rarity's NON-AFFINE pool by run index, so each
+              relic gets floor/ceil(120 / pool) runs. Bands read MEAN ending depth (medians are integers near 3):
+              SR1 each COMMON / RARE / LEGENDARY row's mean depth / NO-RELIC in [1 - SIM_RELIC_ROW_TRAP_TOLERANCE 0.10,
+              1 + SIM_RELIC_ROW_MAX_LIFT 0.40]; SR2 the CURSED row in [1 - SIM_RELIC_CURSED_ROW_TOLERANCE 0.15, 1.40];
+              SR3 rarity is felt — LEGENDARY mean depth >= COMMON; SR4 every non-affine relic with >=
+              SIM_RELIC_MIN_RUNS_PER_RELIC (10) probe runs in [1 - SIM_RELIC_PER_RELIC_TRAP_TOLERANCE 0.25, 1 +
+              SIM_RELIC_PER_RELIC_MAX_LIFT 0.60] (30 lines); SR5 every non-affine relic got >= 10 probe runs (always
+              enforced); SR6 standard TACTICAL holds >= 1.0 relic at run end on average (the acquisition wiring is live).
+              ENFORCED, never waived. Tag-affine relics are banded by the audit only (a probe start weapon may not carry
+              their tag, which would make them look like traps). Measured at CP8: NO-RELIC mean depth 3.15; SR1 1.02 / 1.02
+              / 1.03; SR2 1.04; SR3 1.01; SR4 0.86 .. 1.12; SR5 minimum 13 runs; SR6 1.01. HONEST CAVEAT: TACTICAL dies near
+              floor 3, so deep-paying relics under-read and the audit (R-RELIC*) is the tighter gate; SR6 is THIN — TACTICAL
+              took the start relic on 200 of 200 runs, so it proves the RUN_START wiring, not the BOSS / MYSTERY paths; the
+              quarantine_locker is not played at all (SimWorld applies no EVENT choices). Asserted by
+              BalanceSimTest.noRelicIsATrapAndNoneIsMandatory. RELIC REPORT (sim/SimReport, OUTPUT not an assertion):
+              per probe row mean / median depth and lift; per relic runs, mean depth and ratio; TACTICAL offers seen /
+              taken / left by source; MODEL vs PLAYED kill share and doors per floor against RELIC_VALUATION_KILL_SHARE /
+              _DOORS_PER_FLOOR. RoundSummary row R1 (relic rows mean-depth lift LEGENDARY / NO-RELIC, IN/OUT) and the
+              LadderReport column "relics (expected)" ride the same change. See docs/relic-system.txt.
   S-SOFTLOCK  Zero seeds end unable to damage anything. Structurally guaranteed rather than
               tuned: the Fist is wired at run start and never removed, so "no ranged ammo" is a
               fighting retreat, not a dead end. The band exists to keep that structural
@@ -1215,6 +1286,13 @@ SECTION 5 — NEW-CONTENT CHECKLIST
                           (balance-overhaul order 5) — it must be felt on its niche and focused
      new keystone      -> ONE Keystone row (tag, gains, costs) + SECTION 24 magnitudes; R-KEYSTONE
                           (>= 30% niche, >= 10% cost) and R-CARRY read it automatically
+     new relic         -> ONE register() call in relic/RelicCatalog (rarity, trigger, valuation, affinity, effects,
+                          text built from the constants) + its RELIC_<ID>_<KIND> magnitudes in SECTION 26.
+                          R-RELIC / R-RELIC-CURSE put its gain inside its rarity x valuation band at d5/d15/d25,
+                          R-RELIC-STACK must still hold (mind the d25 slack), COVERAGE resolves it; a non-affine
+                          relic enters the S-RELIC probe rows automatically (SR4/SR5). A new effect KIND needs a
+                          PerkModifier constant AND a valuation term, or R-RELIC fails it at 1.00. Tune only the
+                          new relic's own numbers. docs/relic-system.txt section 9.
      new heal/pickup   -> add a HealPickupSpec + consumable classification
      new ammo type     -> add a ScarcityRowSpec
      new weapon ability-> add its magnitude to BalanceConfig SECTION 15 AND a
@@ -1575,6 +1653,58 @@ SCAVENGER       QUARTERMASTER            7    1.055    1.488    1.570    0.754  
 VITALITY        IRONHIDE                 7    1.000    2.081    2.081    1.000    1.189  HARDY=3 FIELD_MEDIC=3 SECOND_WIND=1
 ------------------------------------------------------------------------------------------------------------------------------
 SPREAD best / worst (waived tags excluded) = 1.189  IN BAND
+
+RELICS (R-RELIC / R-RELIC-CURSE) — gain at depths [5, 15, 25]; CARRY = carry lift, SUPPLY = SUPPLY_TOTAL ratio; cursed cost = worst loss of the cost effects alone (>= 0.10)
+  valuation assumptions: kill share 0.6, doors/floor 3, door-fight share 0.3, corpse adjacency 0.5, event take share 0.5, start take share 1.0, locker event weight 1.0
+relic               rarity    value  affinity        gain d5 gain d15 gain d25 band          cost     status
+------------------------------------------------------------------------------------------------------------------------------
+field_dressing      COMMON    CARRY  -                 1.053    1.046    1.042 [1.03,1.08]   -        IN BAND
+spare_plates        COMMON    CARRY  -                 1.052    1.045    1.041 [1.03,1.08]   -        IN BAND
+bandolier           COMMON    SUPPLY -                 1.170    1.097    1.069 [1.06,1.20]   -        IN BAND
+bounty_chip         COMMON    SUPPLY -                 1.070    1.107    1.121 [1.06,1.20]   -        IN BAND
+threshold_stim      COMMON    CARRY  -                 1.049    1.043    1.039 [1.03,1.08]   -        IN BAND
+salvage_hook        COMMON    SUPPLY -                 1.064    1.063    1.060 [1.06,1.20]   -        IN BAND
+medics_glove        COMMON    CARRY  -                 1.037    1.046    1.051 [1.03,1.08]   -        IN BAND
+recoil_spring       COMMON    SUPPLY -                 1.097    1.071    1.067 [1.06,1.20]   -        IN BAND
+dog_tags            COMMON    SUPPLY -                 1.171    1.097    1.069 [1.06,1.20]   -        IN BAND
+spotters_lens       COMMON    CARRY  MARKSMAN          1.055    1.055    1.055 [1.03,1.08]   -        IN BAND
+breaching_charge    RARE      CARRY  -                 1.081    1.070    1.110 [1.06,1.13]   -        IN BAND
+vampiric_core       RARE      CARRY  -                 1.078    1.087    1.096 [1.06,1.13]   -        IN BAND
+salvage_plating     RARE      CARRY  -                 1.067    1.075    1.083 [1.06,1.13]   -        IN BAND
+grief_engine        RARE      CARRY  -                 1.087    1.083    1.109 [1.06,1.13]   -        IN BAND
+kevlar_weave        RARE      CARRY  -                 1.087    1.087    1.087 [1.06,1.13]   -        IN BAND
+ablative_shell      RARE      CARRY  -                 1.081    1.075    1.072 [1.06,1.13]   -        IN BAND
+culling_signal      RARE      CARRY  -                 1.094    1.088    1.094 [1.06,1.13]   -        IN BAND
+choke_bore          RARE      CARRY  CLOSE_QUARTERS    1.088    1.075    1.088 [1.06,1.13]   -        IN BAND
+capacitor_bank      RARE      CARRY  ENERGY            1.096    1.093    1.086 [1.06,1.13]   -        IN BAND
+shaped_casings      RARE      CARRY  DEMOLITION        1.080    1.077    1.080 [1.06,1.13]   -        IN BAND
+bone_saw            RARE      CARRY  BLADE             1.088    1.098    1.108 [1.06,1.13]   -        IN BAND
+second_heart        LEGENDARY CARRY  -                 1.205    1.178    1.161 [1.10,1.22]   -        IN BAND
+hunger_loop         LEGENDARY CARRY  -                 1.123    1.137    1.151 [1.10,1.22]   -        IN BAND
+chain_detonator     LEGENDARY CARRY  -                 1.132    1.119    1.163 [1.10,1.22]   -        IN BAND
+fourth_holster      LEGENDARY CARRY  -                 1.147    1.135    1.127 [1.10,1.22]   -        IN BAND
+deadman_trigger     LEGENDARY CARRY  -                 1.127    1.115    1.159 [1.10,1.22]   -        IN BAND
+atrophy_field       LEGENDARY CARRY  -                 1.134    1.123    1.135 [1.10,1.22]   -        IN BAND
+overclocked_servos  LEGENDARY CARRY  -                 1.139    1.126    1.171 [1.10,1.22]   -        IN BAND
+counterweight       LEGENDARY CARRY  BULWARK           1.168    1.168    1.168 [1.10,1.22]   -        IN BAND
+asbestos_lining     LEGENDARY CARRY  PYRO              1.168    1.120    1.112 [1.10,1.22]   -        IN BAND
+blood_pact          CURSED    CARRY  -                 1.103    1.085    1.134 [1.05,1.18]   0.130    IN BAND
+fever_core          CURSED    CARRY  -                 1.112    1.107    1.115 [1.05,1.18]   0.500    IN BAND
+volatile_rig        CURSED    CARRY  -                 1.077    1.070    1.115 [1.05,1.18]   0.110    IN BAND
+tithe_engine        CURSED    SUPPLY -                 1.295    1.295    1.296 [1.20,1.60]   0.626    IN BAND
+iron_lung           CURSED    CARRY  -                 1.118    1.118    1.118 [1.05,1.18]   0.614    IN BAND
+deaths_door         CURSED    CARRY  -                 1.090    1.075    1.116 [1.05,1.18]   0.107    IN BAND
+------------------------------------------------------------------------------------------------------------------------------
+perk-rank equivalent lift: measured 1.0725 (MARKSMAN) vs RELIC_PERK_RANK_EQUIVALENT_LIFT 1.08 +/- 0.03; relics out of band: 0
+
+RELIC STACK (R-RELIC-STACK) — expected hand <= worst build 1.751; best hand <= best build x 1.20 = 2.497; node offers 0.00791 / floor
+depth  expected #   exp hand    ceiling  best hand    ceiling  status
+------------------------------------------------------------------------------
+5           1.032      1.086      1.751      1.175      2.497  IN BAND
+10          2.071      1.191      1.751      1.392      2.497  IN BAND
+15          3.111      1.320      1.751      1.606      2.497  IN BAND
+20          4.150      1.479      1.751      1.933      2.497  IN BAND
+25          5.190      1.695      1.751      2.290      2.497  IN BAND
 
 XP PACING (order 4) — floor XP / xpRequired(expected level)  (band 1.0-1.3 level-ups/floor)
   per-enemy XP = 0.35 * depth-scaled TP ; curve = 150 * 1.2495^(level-1) (geometric, tracks enemy compound)
@@ -1940,8 +2070,8 @@ elite                        1575    13.23    26.52   118.21    77.38 DANGER    
 cache                         295    18.58     7.60    45.09    37.43 CALM        OK    
 shop                          344    19.39     7.56    46.94    38.01 CALM        OK    
 rest                            0    30.62     0.00    30.62    30.62 CALM        OK    
-mystery                       633    21.98    14.89    75.70    58.77 GAMBLE      OK    
-event                           0    30.69     8.64    53.16    53.16 CALM        OK    
+mystery                       623    21.88    15.04    75.75    59.10 GAMBLE      OK    
+event                           0    33.72     7.20    52.44    52.44 CALM        OK    
 boss                         1968    14.87    22.65   118.80    67.76 SET_PIECE   OK    
 region_gate                     0     5.16     0.00     5.16     5.16 SET_PIECE   OK    
 irradiated                    984     8.57    11.32    60.54    35.02 -           -     
@@ -1955,6 +2085,7 @@ TRAP_GAUNTLET                 276    32.47     3.77    48.58    41.43 -         
 AMBUSH                       1575    19.63    26.52   124.61    83.78 -           -     
 LORE_SIGNAL                     0    33.82     0.00    33.82    33.82 -           -     
 MALFUNCTION                   276     0.50     3.17    18.25     7.90 -           -     
+RELIC_CACHE                   295    18.58    20.12    77.65    70.00 -           -     
 ------------------------------------------------------------------------------------
   standard COMBAT node EV = 45.94. calm discount band 10-40%; risk premium band 1.00-1.20; mystery EV premium 0..+30%
   AFFIX rows are MULTIPLIERS folded onto their host ELITE node; MYSTERY rows are the hidden table.
@@ -2042,6 +2173,21 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  relics-run-changing-artifacts — RELICS (36 rare run-changing artifacts: 10 COMMON / 11 RARE / 9 LEGENDARY / 6 CURSED;
+    a RUN_START choice of 3, a BOSS choice after bosses 1-4, a MYSTERY RELIC_CACHE and a quarantine_locker EVENT). New
+    BalanceConfig SECTION 26 (holding, offers, runtime, rarity bands, valuation assumptions, per-relic RELIC_<ID>_<KIND>
+    magnitudes, S-RELIC numbers); new rules R-RELIC, R-RELIC-CURSE, R-RELIC-STACK (expected hand <= the worst committed
+    build, best hand <= best build x 1.20; d25 slack 1.695 vs 1.751) and R-RELIC-SOURCE, plus a COVERAGE row per relic;
+    new band S-RELIC SR1-SR6 over five TACTICAL probe rows (never waived); BuildValuationModel.carryOf extracted (BUILDS
+    table byte-identical) and 17 new PerkModifier kinds priced; MYSTERY_WEIGHT_RELIC_CACHE 3 (R-MYSTERY-EV 1.2996 of
+    1.30; the idea's floor of 4 gives 1.3022). No pre-relic number or band moved; LEGENDARY carry band top 1.20 -> 1.22
+    (a band new in this feature). Sim ROUND SUMMARY before -> after (every standard row now holds a start relic): T4 exit
+    health 0.91 -> 0.90 OUT; T4 no-heal deaths 0.32 OUT -> 0.26 IN; T6 SPREAD share 0.62 -> 0.64 OUT; T7 dominant tag
+    0.47 -> 0.46 OUT; T7 keystone share - -> 0.43 IN; T8 first-boss clears 0.00 -> 0.02; T9 offers/visit 1.00 -> 1.11 OUT;
+    T9 unspent credits 0.19 -> 0.21; G BULLETS reserve 0.40 -> 0.56; G lifeline floors 0.10 -> 0.07 OUT; J2 top perk
+    STEADY_AIM 0.85 -> LANE_DISCIPLINE 0.83 OUT; NEW R1 relic lift 1.03 IN; no band flipped. Why: the owner wants runs
+    that feel different from the first floor on, without a second power curve (D3) — relics are capped against one
+    perk build instead of folded into the on-curve player. docs/relic-system.txt.
   balance-overhaul order 7 / CP1 — THE SIM NAVIGATES. Navigation fixes in sim/ (SECTION 3 S-NAVIGATION), the
     LoopBreaker (SECTION 18 SIM_LOOP_*), new band S-NAVIGATION (SIM_MAX_STALLED_FLOOR_FRACTION 0.10, never
     waived), the ROUND SUMMARY page (SECTION 18 ROUND_* bands) printed first in every balanceSim report. The
@@ -2319,41 +2465,45 @@ CHANGELOG
 SECTION 8 — THE BALANCE-SIM REPORT (latest `./gradlew balanceSim` output)
 --------------------------------------------------------------------------------
 Regenerate with `./gradlew balanceSim` and paste the summary here, the same way
-SECTION 6 mirrors BalanceReport. The run below is the balance-overhaul order 7 (CP1) matrix — the first
-matrix in which the scripted players FINISH their floors (S-NAVIGATION: TACTICAL 0 stalled runs of 200), so
-every depth-derived number below measures the game rather than the harness. It opens with the ROUND SUMMARY
-(the sim half of each P3 playtest metric, IN/OUT against its band), then the FLOOR, MATCHUP, HEAVY, BUILD and
-RUN REPORTS, the BEHAVIOURAL BANDS block and the LADDER REPORT. WAIV lines carry the order-7 ROUND-PENDING
-waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds are what move it.
+SECTION 6 mirrors BalanceReport. The run below is the relics-run-changing-artifacts (CP8) matrix: the balance-overhaul
+order 7 (CP1) matrix — the first in which the scripted players FINISH their floors (S-NAVIGATION: TACTICAL 0
+stalled runs of 200) — plus the five S-RELIC probe rows (TACTICAL-NO-RELIC and one relic per rarity, 120 seeds each),
+the RELIC REPORT, the S-RELIC lines SR1-SR6, the ROUND SUMMARY row R1 and the LadderReport "relics (expected)" column.
+Every standard row now opens with a RUN_START relic, so the depth-derived numbers moved a little (see the CHANGELOG
+line and the NOTES below). It opens with the ROUND SUMMARY (the sim half of each P3 playtest metric, IN/OUT against its
+band), then the FLOOR, MATCHUP, HEAVY, BUILD, RELIC and RUN REPORTS, the BEHAVIOURAL BANDS block and the LADDER REPORT.
+WAIV lines carry the order-7 ROUND-PENDING waiver (SECTION 4): the game, measured, is out of band, and the playtest
+rounds are what move it.
 
   ROUND SUMMARY (balance-overhaul order 7, P3) — the sim half of each playtest target metric
   --------------------------------------------------------------------------------
   id   metric (sim)                                       value band                owner Q
   T2   SOLDIER hits-to-kill d3-5, start kit / on-curve      2.10 >= 1.50        IN   Q8
-  T3   floors 1-3 mean enemies spawned                    15.18 >= 12.00       IN   Q2 Q3
+  T3   floors 1-3 mean enemies spawned                    15.14 >= 12.00       IN   Q2 Q3
   T3   floors 1-3 median turns to first exchange          10.00 <= 15.00       IN   Q2
-  T3   floors 1-3 mean encounter groups                    4.17 >= 2.00        IN   Q3
+  T3   floors 1-3 mean encounter groups                    4.16 >= 2.00        IN   Q3
   T4   floors below the heal floor                         0.00 0.00..0.00     IN   Q4
-  T4   TACTICAL median COMBAT exit health                  0.91 0.55..0.80     OUT  Q4
-  T4   deaths with no heal and < 20% ammo held             0.32 <= 0.30        OUT  Q1 Q5
+  T4   TACTICAL median COMBAT exit health                  0.90 0.55..0.80     OUT  Q4
+  T4   deaths with no heal and < 20% ammo held             0.26 <= 0.30        IN   Q1 Q5
   T5   TACTICAL heavies answered                           0.95 0.80..1.00     IN   Q7
   T5   NAIVE heavies answered                              0.20 <= 0.30        IN   Q7
-  T6   largest DamageClass share (SPREAD)                  0.62 <= 0.50        OUT  Q6
+  T6   largest DamageClass share (SPREAD)                  0.64 <= 0.50        OUT  Q6
   T6   hint-driven switches per hinted COMBAT floor        1.00 >= 1.00        IN   Q6
-  T7   dominant-tag share (278 ranked runs)                0.47 <= 0.40        OUT  Q9
-  T7   largest keystone share (0 taken)                       - <= 0.50        -    Q9
+  T7   dominant-tag share (345 ranked runs)                0.46 <= 0.40        OUT  Q9
+  T7   largest keystone share (7 taken)                    0.43 <= 0.50        IN   Q9
   T8   TACTICAL win rate                                   0.00 0.20..0.40     OUT  Q11 runs
-  T8   first-boss clears of seeds reaching it (54)         0.00 0.75..1.00     OUT  Q11 runs
+  T8   first-boss clears of seeds reaching it (60)         0.02 0.75..1.00     OUT  Q11 runs
   T8   S-BOSS lines in band (of 15)                        0.00 15.00..15.00   OUT  Q11
-  T9   TACTICAL offers bought per Fabricator visit         1.00 >= 1.50        OUT  Q10
-  T9   median unspent credits at death (floors)            0.19 <= 1.50        IN   Q10
-  G    BULLETS median reserve leaving COMBAT (143)         0.40 0.10..0.60     IN   Q5
-  G    SHELLS median reserve leaving COMBAT (122)          0.73 0.10..0.60     OUT  Q5
-  G    CELLS median reserve leaving COMBAT (12)            0.44 0.10..0.60     IN   Q5
-  G    ROCKETS median reserve leaving COMBAT (11)          0.19 0.10..0.60     IN   Q5
+  T9   TACTICAL offers bought per Fabricator visit         1.11 >= 1.50        OUT  Q10
+  T9   median unspent credits at death (floors)            0.21 <= 1.50        IN   Q10
+  G    BULLETS median reserve leaving COMBAT (154)         0.56 0.10..0.60     IN   Q5
+  G    SHELLS median reserve leaving COMBAT (129)          0.73 0.10..0.60     OUT  Q5
+  G    CELLS median reserve leaving COMBAT (17)            0.44 0.10..0.60     IN   Q5
+  G    ROCKETS median reserve leaving COMBAT (9)           0.19 0.10..0.60     IN   Q5
   G    SLUGS median reserve leaving COMBAT (7)             0.57 0.10..0.60     IN   Q5
-  G    emergency lifeline floors                           0.10 <= 0.05        OUT  Q5
-  J2   highest perk pick rate (STEADY_AIM)                 0.85 <= 0.60        OUT  Q9
+  G    emergency lifeline floors                           0.07 <= 0.05        OUT  Q5
+  J2   highest perk pick rate (LANE_DISCIPLINE)            0.83 <= 0.60        OUT  Q9
+  R1   relic rows mean-depth lift LEGENDARY / NO-RELIC      1.03 0.90..1.40     IN   Q11 runs
   IN/OUT is the sim half only. A metric is IN BAND for the round when the sim is IN and the owner's
   PLAY NOTES do not contradict it (P3); '-' = not measured this run (no sample).
 
@@ -2361,187 +2511,255 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
   ================================================================================
   BALANCE SIMULATION SUMMARY (new-game-balancr order 9)
   ================================================================================
-  Seeds per policy : 200 (build-bias variants: 200; TACTICAL-BUILD-SAMPLE: 600)
+  Seeds per policy : 200 (build-bias variants: 200; TACTICAL-BUILD-SAMPLE: 600; relic probes: 120)
   Depth ceiling    : 25
   Turn cap / floor : 900
 
   POLICIES
   --------------------------------------------------------------------------------
   policy                  runs  medDep stalled readable bossClear  softlock   lvlGap
-  NAIVE                    200     2.0      10     1.00      0.00      0.00    -0.79
-  TACTICAL                 200     3.0       0     1.00      0.00      0.00    -1.27
-  HOARDER-START-WEAPON     200     3.0       0     1.00      0.00      0.00    -1.21
-  TACTICAL-CLOSE           200     3.0       0     1.00      0.00      0.00    -1.27
-  TACTICAL-MARKSMAN        200     3.0       0     1.00      0.00      0.00    -1.27
-  TACTICAL-PYRO-DEMO       200     3.0       0     1.00      0.00      0.00    -1.27
-  TACTICAL-BULWARK         200     3.0       0     1.00      0.00      0.00    -1.28
-  TACTICAL-BUILD-SAMPLE    600     3.0       4     1.00      0.00      0.00    -1.25
+  NAIVE                    200     2.0      11     1.00      0.00      0.00    -0.82
+  TACTICAL                 200     3.0       0     1.00      0.00      0.00    -1.24
+  HOARDER-START-WEAPON     200     3.0       0     1.00      0.00      0.00    -1.18
+  TACTICAL-CLOSE           200     3.0       0     1.00      0.00      0.00    -1.25
+  TACTICAL-MARKSMAN        200     3.0       0     1.00      0.00      0.00    -1.24
+  TACTICAL-PYRO-DEMO       200     3.0       0     1.00      0.00      0.00    -1.24
+  TACTICAL-BULWARK         200     3.0       0     1.00      0.00      0.00    -1.25
+  TACTICAL-BUILD-SAMPLE    600     3.0       3     1.00      0.01      0.00    -1.23
+  TACTICAL-NO-RELIC        120     3.0       0     1.00      0.00      0.00    -1.24
+  TACTICAL-RELIC-COMMON    120     3.0       0     1.00      0.00      0.00    -1.24
+  TACTICAL-RELIC-RARE      120     3.0       0     1.00      0.00      0.00    -1.26
+  TACTICAL-RELIC-LEGENDARY   120     3.0       0     1.00      0.00      0.00    -1.24
+  TACTICAL-RELIC-CURSED    120     3.0       0     1.00      0.00      0.00    -1.22
 
   ECONOMY / PACING (means across every played floor)
   --------------------------------------------------------------------------------
   policy                 supplyTook  emergency    bossTurns
-  NAIVE                       0.252      0.000         61.2
-  TACTICAL                    0.526      0.096         58.0
-  HOARDER-START-WEAPON        0.539      0.096         57.4
-  TACTICAL-CLOSE              0.527      0.095         58.9
-  TACTICAL-MARKSMAN           0.523      0.097         57.8
-  TACTICAL-PYRO-DEMO          0.526      0.095         58.0
-  TACTICAL-BULWARK            0.524      0.094         57.9
-  TACTICAL-BUILD-SAMPLE       0.562      0.095         61.1
+  NAIVE                       0.262      0.000         71.3
+  TACTICAL                    0.596      0.069         64.9
+  HOARDER-START-WEAPON        0.576      0.083         61.3
+  TACTICAL-CLOSE              0.598      0.069         64.9
+  TACTICAL-MARKSMAN           0.596      0.069         64.9
+  TACTICAL-PYRO-DEMO          0.597      0.069         64.8
+  TACTICAL-BULWARK            0.600      0.067         65.9
+  TACTICAL-BUILD-SAMPLE       0.622      0.063         68.4
+  TACTICAL-NO-RELIC           0.533      0.098         57.4
+  TACTICAL-RELIC-COMMON       0.577      0.073         64.1
+  TACTICAL-RELIC-RARE         0.563      0.107         63.0
+  TACTICAL-RELIC-LEGENDARY      0.535      0.080         59.6
+  TACTICAL-RELIC-CURSED       0.562      0.107         65.8
 
   FLOOR REPORT (TACTICAL) — means per played floor; heal in max-HP, ammo in units, HP as a health fraction
   --------------------------------------------------------------------------------
   generator        node     depth  floor  spawn killed   grp 1stDmg   heal  <flr ammo p/took  hpIn hpOut  0-heal
-  cavern           COMBAT    1-5      75   14.5    6.3   4.0   14.0   0.82     0    13/7     0.97  0.83      25
-  cavern           ELITE     1-5      49   16.7    5.6   4.6   14.6   0.91     0    21/8     0.88  0.73      24
-  cavern           SHOP      1-5      13    5.3    2.1   1.3   30.3   0.56     0     6/1     0.82  0.79       0
-  event_room       EVENT     1-5       2    0.0    0.0   0.0      -   0.45     0     0/0     0.80  0.92       0
-  linear_corridor  COMBAT    1-5      65   14.1    6.4   3.9   17.0   0.80     0    13/6     0.91  0.68      21
-  linear_corridor  ELITE     1-5      29   16.5    7.0   4.7   18.5   0.93     0    20/9     0.87  0.78      14
-  linear_corridor  SHOP      1-5      11    5.4    2.1   1.4   43.8   0.54     0     8/4     0.80  0.81       0
-  med_bay          REST      1-5      28    0.0    0.0   0.0      -   0.00     0     0/0     0.79  0.81       0
-  rooms_mst        CACHE     1-5     188    5.0    2.6   1.2   43.9   0.73     0     4/2     0.87  0.90      14
-  rooms_mst        COMBAT    1-5      79   14.6    6.4   3.9   26.7   0.80     0    13/7     0.94  0.82      24
-  rooms_mst        ELITE     1-5      40   17.9    5.9   4.9   21.4   0.99     0    21/7     0.93  0.75      21
-  rooms_mst        SHOP      1-5      10    5.2    2.2   1.3   32.1   0.56     0     7/3     0.82  0.79       2
+  cavern           COMBAT    1-5      76   14.5    6.7   4.0   12.1   0.82     0    14/8     0.97  0.85      23
+  cavern           ELITE     1-5      50   16.7    5.9   4.6   13.1   0.91     0    21/9     0.87  0.72      25
+  cavern           SHOP      1-5      13    5.3    2.1   1.3   30.3   0.56     0     6/1     0.84  0.81       0
+  event_room       EVENT     1-5       2    0.0    0.0   0.0      -   0.45     0     0/0     0.81  0.93       0
+  linear_corridor  COMBAT    1-5      69   14.0    6.6   3.9   17.6   0.79     0    13/7     0.91  0.69      22
+  linear_corridor  COMBAT   11-15      1   20.0   10.0   5.0   22.0   1.16     0    20/9     0.50  0.00       1
+  linear_corridor  COMBAT    6-10      1   17.0    5.0   4.0   13.0   0.98     0    19/0     0.49  0.47       0
+  linear_corridor  ELITE     1-5      29   16.5    7.2   4.7   18.5   0.93     0    20/10    0.87  0.82      15
+  linear_corridor  SHOP      1-5      11    5.4    1.7   1.4   43.8   0.54     0     8/3     0.80  0.80       1
+  med_bay          REST      1-5      27    0.0    0.0   0.0      -   0.00     0     0/0     0.83  0.85       0
+  med_bay          REST     11-15      1    0.0    0.0   0.0      -   0.00     0     0/0     0.50  0.50       0
+  rooms_mst        CACHE     1-5     192    5.0    2.7   1.2   44.6   0.73     0     4/2     0.87  0.91      12
+  rooms_mst        CACHE     6-10      2    5.5    2.5   1.5   87.0   0.80     0    12/5     0.44  0.46       0
+  rooms_mst        COMBAT    1-5      79   14.6    6.7   3.9   26.6   0.80     0    14/8     0.93  0.81      21
+  rooms_mst        ELITE     1-5      40   17.9    6.3   4.9   21.6   0.99     0    21/8     0.93  0.78      19
+  rooms_mst        SHOP      1-5      10    5.2    3.1   1.3   32.1   0.56     0     7/4     0.89  0.75       1
+  rooms_mst        SHOP     11-15      1    6.0    0.0   2.0      -   0.54     0    17/0     0.50  0.50       0
+  rooms_mst        SHOP      6-10      1    6.0    3.0   2.0   15.0   0.80     0     7/9     0.47  0.46       0
 
   A4 — CAVERN heal value present vs ROOMS_MST (same node, same band), tolerance +/-10%
-    COMBAT    1-5   cavern 0.82   rooms_mst 0.80   gap    2% OK
+    COMBAT    1-5   cavern 0.82   rooms_mst 0.80   gap    1% OK
     ELITE     1-5   cavern 0.91   rooms_mst 0.99   gap    8% OK
     SHOP      1-5   cavern 0.56   rooms_mst 0.56   gap    1% OK
 
   MATCHUP REPORT — per played floor; damage share by class (% of landed hit damage)
   --------------------------------------------------------------------------------
   policy               depth  floor  eff/f  res/f  swt/f BALLI SPREA ENERG  RAIL  FIRE EXPLO BLADE BLUNT
-  NAIVE                 1-5     399   0.00   0.98   0.00    97     0     0     0     0     3     0     0
-  TACTICAL              1-5     643   0.29   0.96   0.07    20    62     2     4     1     4     0     6
-  HOARDER-START-WEAPON  1-5     622   0.27   1.03   0.07    21    70     0     0     0     2     0     7
-  TACTICAL-CLOSE        1-5     645   0.33   0.96   0.07    20    62     3     4     1     4     0     6
-  TACTICAL-MARKSMAN     1-5     639   0.29   0.96   0.07    20    62     2     4     1     4     0     6
-  TACTICAL-PYRO-DEMO    1-5     643   0.29   0.95   0.07    20    62     2     4     1     4     0     6
-  TACTICAL-BULWARK      1-5     646   0.29   0.95   0.07    20    62     2     4     1     4     0     6
-  TACTICAL-BUILD-SAMPLE  1-5    1958   0.36   0.97   0.06    19    58     5     6     2     5     0     6
+  NAIVE                 1-5     405   0.00   0.98   0.00    97     0     0     0     0     3     0     0
+  TACTICAL              1-5     658   0.34   1.04   0.07    18    65     4     4     2     2     0     5
+  TACTICAL              6-10      5   1.60   0.00   0.00     0     0     0     0   100     0     0     0
+  TACTICAL             11-15      3   1.33   2.00   0.00     0     0     0     0    78    22     0     0
+  HOARDER-START-WEAPON  1-5     618   0.26   1.11   0.07    20    72     0     0     0     1     0     7
+  TACTICAL-CLOSE        1-5     662   0.38   1.04   0.06    18    64     5     4     2     2     0     4
+  TACTICAL-CLOSE        6-10      5   1.60   0.00   0.00     0     0     0     0   100     0     0     0
+  TACTICAL-CLOSE       11-15      3   1.33   2.00   0.00     0     0     0     0    78    22     0     0
+  TACTICAL-MARKSMAN     1-5     658   0.35   1.04   0.07    18    65     4     5     2     2     0     5
+  TACTICAL-MARKSMAN     6-10      5   1.60   0.00   0.00     0     0     0     0   100     0     0     0
+  TACTICAL-MARKSMAN    11-15      3   1.33   2.00   0.00     0     0     0     0    78    22     0     0
+  TACTICAL-PYRO-DEMO    1-5     659   0.34   1.03   0.07    18    65     4     4     2     2     0     5
+  TACTICAL-PYRO-DEMO    6-10      5   1.80   0.00   0.00     0     0     0     0   100     0     0     0
+  TACTICAL-PYRO-DEMO   11-15      3   0.00   0.00   0.00     0     0     0     0    61     0     0    39
+  TACTICAL-BULWARK      1-5     659   0.35   1.04   0.07    18    65     4     4     2     2     0     5
+  TACTICAL-BULWARK      6-10      5   2.00   0.00   0.00     0     0     0     0   100     0     0     0
+  TACTICAL-BULWARK     11-15      3   0.00   0.00   0.00     0     0     0     0    67     0     0    33
+  TACTICAL-BUILD-SAMPLE  1-5    2016   0.40   1.04   0.06    18    59     6     6     2     4     0     5
+  TACTICAL-BUILD-SAMPLE  6-10     16   1.19   0.00   0.06     0     0     0    96     4     0     0     0
+  TACTICAL-BUILD-SAMPLE 11-15      6   0.67   1.00   0.00     0     0     0    84    13     4     0     0
+  TACTICAL-NO-RELIC     1-5     378   0.31   1.00   0.06    21    62     2     3     1     5     0     6
+  TACTICAL-RELIC-COMMON  1-5     384   0.36   1.02   0.06    20    63     6     3     1     3     0     4
+  TACTICAL-RELIC-RARE   1-5     384   0.38   1.00   0.06    19    61     4     3     1     7     0     5
+  TACTICAL-RELIC-LEGENDARY  1-5     388   0.40   1.04   0.06    18    58     4     4     1     9     0     6
+  TACTICAL-RELIC-CURSED  1-5     393   0.47   1.09   0.06    17    59     5     2     2     9     0     5
     S-SWITCH alternatives (per policy): switches/COMBAT floor | hint take rate | switches per
     COMBAT floor that showed a hint | COMBAT floors (hinted)
     NAIVE                  0.00 |   0.00 |   0.00 | 146 (20)
-    TACTICAL               0.14 |   1.00 |   1.00 | 219 (30)
-    HOARDER-START-WEAPON   0.13 |   1.00 |   1.00 | 225 (29)
-    TACTICAL-CLOSE         0.14 |   1.00 |   1.00 | 220 (30)
-    TACTICAL-MARKSMAN      0.14 |   1.00 |   1.00 | 218 (30)
-    TACTICAL-PYRO-DEMO     0.14 |   1.00 |   1.00 | 219 (30)
-    TACTICAL-BULWARK       0.14 |   1.00 |   1.00 | 219 (30)
-    TACTICAL-BUILD-SAMPLE   0.12 |   1.00 |   1.00 | 724 (88)
+    TACTICAL               0.14 |   1.00 |   1.00 | 226 (31)
+    HOARDER-START-WEAPON   0.13 |   1.00 |   1.00 | 228 (30)
+    TACTICAL-CLOSE         0.14 |   1.00 |   1.00 | 227 (31)
+    TACTICAL-MARKSMAN      0.14 |   1.00 |   1.00 | 226 (31)
+    TACTICAL-PYRO-DEMO     0.14 |   1.00 |   1.00 | 228 (31)
+    TACTICAL-BULWARK       0.14 |   1.00 |   1.00 | 225 (31)
+    TACTICAL-BUILD-SAMPLE   0.12 |   1.00 |   1.00 | 739 (91)
+    TACTICAL-NO-RELIC      0.12 |   1.00 |   1.00 | 137 (16)
+    TACTICAL-RELIC-COMMON   0.13 |   1.00 |   1.00 | 142 (18)
+    TACTICAL-RELIC-RARE    0.12 |   0.96 |   1.00 | 143 (17)
+    TACTICAL-RELIC-LEGENDARY   0.11 |   1.00 |   1.00 | 147 (16)
+    TACTICAL-RELIC-CURSED   0.11 |   1.00 |   1.00 | 143 (16)
 
   HEAVY REPORT — heavies committed AT the player, by how they ended (counts per band)
   --------------------------------------------------------------------------------
   policy               depth  commit  avoid  guard  stagg  killd landed answerd armBlk hazDmg/f heavyD
-  NAIVE                1-5       250     15      0      0     34    200    0.20     59     3.8     52
+  NAIVE                1-5       253     16      0      0     34    200    0.20     62     3.9     50
   NAIVE                6-10        0      0      0      0      0      0       -      0     0.0      0
   NAIVE                11-15       0      0      0      0      0      0       -      0     0.0      0
   NAIVE                16+         0      0      0      0      0      0       -      0     0.0      0
-  NAIVE                ALL    committed 250, answered share 0.20, unresolved at floor end 1
-  TACTICAL             1-5       863    282    478      9     48     36    0.95    209     8.8     21
-  TACTICAL             6-10        0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL             11-15       0      0      0      0      0      0       -      0     0.0      0
+  NAIVE                ALL    committed 253, answered share 0.20, unresolved at floor end 3
+  TACTICAL             1-5       847    258    483     10     51     36    0.95    222     9.9     20
+  TACTICAL             6-10        0      0      0      0      0      0       -      0     1.0      0
+  TACTICAL             11-15       9      7      0      0      1      1    0.89      2   112.0      1
   TACTICAL             16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL             ALL    committed 863, answered share 0.95, unresolved at floor end 10
-  HOARDER-START-WEAPON 1-5       923    294    521     11     47     43    0.95    231     7.9     26
+  TACTICAL             ALL    committed 856, answered share 0.95, unresolved at floor end 9
+  HOARDER-START-WEAPON 1-5       983    314    561     11     49     41    0.95    241     9.3     26
   HOARDER-START-WEAPON 6-10        0      0      0      0      0      0       -      0     0.0      0
   HOARDER-START-WEAPON 11-15       0      0      0      0      0      0       -      0     0.0      0
   HOARDER-START-WEAPON 16+         0      0      0      0      0      0       -      0     0.0      0
-  HOARDER-START-WEAPON ALL    committed 923, answered share 0.95, unresolved at floor end 7
-  TACTICAL-CLOSE       1-5       863    282    478      9     48     36    0.95    209     8.8     21
-  TACTICAL-CLOSE       6-10        0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-CLOSE       11-15       0      0      0      0      0      0       -      0     0.0      0
+  HOARDER-START-WEAPON ALL    committed 983, answered share 0.95, unresolved at floor end 7
+  TACTICAL-CLOSE       1-5       843    258    479     10     51     36    0.95    223     9.9     19
+  TACTICAL-CLOSE       6-10        0      0      0      0      0      0       -      0     1.0      0
+  TACTICAL-CLOSE       11-15       9      7      0      0      1      1    0.89      2   112.0      1
   TACTICAL-CLOSE       16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-CLOSE       ALL    committed 863, answered share 0.95, unresolved at floor end 10
-  TACTICAL-MARKSMAN    1-5       868    282    477      9     48     40    0.94    210     8.9     21
-  TACTICAL-MARKSMAN    6-10        0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-MARKSMAN    11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-CLOSE       ALL    committed 852, answered share 0.95, unresolved at floor end 9
+  TACTICAL-MARKSMAN    1-5       849    258    483     10     51     38    0.94    223    10.0     20
+  TACTICAL-MARKSMAN    6-10        0      0      0      0      0      0       -      0     1.0      0
+  TACTICAL-MARKSMAN    11-15       9      7      0      0      1      1    0.89      2   112.0      1
   TACTICAL-MARKSMAN    16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-MARKSMAN    ALL    committed 868, answered share 0.94, unresolved at floor end 12
-  TACTICAL-PYRO-DEMO   1-5       865    286    474      9     49     38    0.95    208     8.6     22
-  TACTICAL-PYRO-DEMO   6-10        0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-PYRO-DEMO   11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-MARKSMAN    ALL    committed 858, answered share 0.94, unresolved at floor end 9
+  TACTICAL-PYRO-DEMO   1-5       852    261    484     10     52     38    0.95    221    10.0     22
+  TACTICAL-PYRO-DEMO   6-10        0      0      0      0      0      0       -      0     1.0      0
+  TACTICAL-PYRO-DEMO   11-15       0      0      0      0      0      0       -      0     7.7      0
   TACTICAL-PYRO-DEMO   16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-PYRO-DEMO   ALL    committed 865, answered share 0.95, unresolved at floor end 9
-  TACTICAL-BULWARK     1-5       864    281    480      9     48     36    0.95    213     8.8     20
-  TACTICAL-BULWARK     6-10        0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-BULWARK     11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-PYRO-DEMO   ALL    committed 852, answered share 0.95, unresolved at floor end 7
+  TACTICAL-BULWARK     1-5       846    257    482     10     51     36    0.95    228    10.1     19
+  TACTICAL-BULWARK     6-10        0      0      0      0      0      0       -      0     1.0      0
+  TACTICAL-BULWARK     11-15       0      0      0      0      0      0       -      0     7.7      0
   TACTICAL-BULWARK     16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-BULWARK     ALL    committed 864, answered share 0.95, unresolved at floor end 10
-  TACTICAL-BUILD-SAMPLE 1-5      2754    910   1456     34    178    145    0.94    656     9.5     55
-  TACTICAL-BUILD-SAMPLE 6-10        0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-BUILD-SAMPLE 11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-BULWARK     ALL    committed 846, answered share 0.95, unresolved at floor end 10
+  TACTICAL-BUILD-SAMPLE 1-5      2858    906   1540     41    188    154    0.94    697    10.0     66
+  TACTICAL-BUILD-SAMPLE 6-10        8      1      7      0      0      0    1.00      2     2.8      0
+  TACTICAL-BUILD-SAMPLE 11-15       9      7      0      0      1      1    0.89      3    56.0      1
   TACTICAL-BUILD-SAMPLE 16+         0      0      0      0      0      0       -      0     0.0      0
-  TACTICAL-BUILD-SAMPLE ALL    committed 2754, answered share 0.94, unresolved at floor end 31
+  TACTICAL-BUILD-SAMPLE ALL    committed 2875, answered share 0.94, unresolved at floor end 29
+  TACTICAL-NO-RELIC    1-5       579    180    339      6     33     17    0.96    128     8.4     12
+  TACTICAL-NO-RELIC    6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-NO-RELIC    11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-NO-RELIC    16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-NO-RELIC    ALL    committed 579, answered share 0.96, unresolved at floor end 4
+  TACTICAL-RELIC-COMMON 1-5       559    160    340      6     33     17    0.96    133     7.7      9
+  TACTICAL-RELIC-COMMON 6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-COMMON 11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-COMMON 16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-COMMON ALL    committed 559, answered share 0.96, unresolved at floor end 3
+  TACTICAL-RELIC-RARE  1-5       613    200    357      4     30     17    0.96    163     9.4     11
+  TACTICAL-RELIC-RARE  6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-RARE  11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-RARE  16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-RARE  ALL    committed 613, answered share 0.96, unresolved at floor end 5
+  TACTICAL-RELIC-LEGENDARY 1-5       593    174    362      6     29     16    0.96    128     8.1     12
+  TACTICAL-RELIC-LEGENDARY 6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-LEGENDARY 11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-LEGENDARY 16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-LEGENDARY ALL    committed 593, answered share 0.96, unresolved at floor end 6
+  TACTICAL-RELIC-CURSED 1-5       605    170    375      6     28     14    0.96    139     8.9      6
+  TACTICAL-RELIC-CURSED 6-10        0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-CURSED 11-15       0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-CURSED 16+         0      0      0      0      0      0       -      0     0.0      0
+  TACTICAL-RELIC-CURSED ALL    committed 605, answered share 0.96, unresolved at floor end 12
     Heavy kinds committed at each policy (count): 
-    NAIVE                CHARGE 42 | LANCE 194 | AREA_STRIKE 12 | SELF_DESTRUCT 2 |
-    TACTICAL             CHARGE 198 | LANCE 605 | AREA_STRIKE 55 | SELF_DESTRUCT 5 |
-    HOARDER-START-WEAPON CHARGE 191 | LANCE 677 | AREA_STRIKE 50 | SELF_DESTRUCT 5 |
-    TACTICAL-CLOSE       CHARGE 198 | LANCE 605 | AREA_STRIKE 55 | SELF_DESTRUCT 5 |
-    TACTICAL-MARKSMAN    CHARGE 198 | LANCE 609 | AREA_STRIKE 55 | SELF_DESTRUCT 6 |
-    TACTICAL-PYRO-DEMO   CHARGE 199 | LANCE 609 | AREA_STRIKE 52 | SELF_DESTRUCT 5 |
-    TACTICAL-BULWARK     CHARGE 197 | LANCE 606 | AREA_STRIKE 56 | SELF_DESTRUCT 5 |
-    TACTICAL-BUILD-SAMPLE CHARGE 569 | LANCE 1995 | AREA_STRIKE 166 | SELF_DESTRUCT 24 |
+    NAIVE                CHARGE 42 | LANCE 194 | AREA_STRIKE 15 | SELF_DESTRUCT 2 |
+    TACTICAL             CHARGE 194 | LANCE 613 | AREA_STRIKE 44 | SELF_DESTRUCT 5 |
+    HOARDER-START-WEAPON CHARGE 226 | LANCE 703 | AREA_STRIKE 50 | SELF_DESTRUCT 4 |
+    TACTICAL-CLOSE       CHARGE 193 | LANCE 610 | AREA_STRIKE 44 | SELF_DESTRUCT 5 |
+    TACTICAL-MARKSMAN    CHARGE 194 | LANCE 615 | AREA_STRIKE 43 | SELF_DESTRUCT 6 |
+    TACTICAL-PYRO-DEMO   CHARGE 195 | LANCE 610 | AREA_STRIKE 43 | SELF_DESTRUCT 4 |
+    TACTICAL-BULWARK     CHARGE 191 | LANCE 604 | AREA_STRIKE 47 | SELF_DESTRUCT 4 |
+    TACTICAL-BUILD-SAMPLE CHARGE 563 | LANCE 2112 | AREA_STRIKE 175 | SELF_DESTRUCT 25 |
+    TACTICAL-NO-RELIC    CHARGE 124 | LANCE 424 | AREA_STRIKE 27 | SELF_DESTRUCT 4 |
+    TACTICAL-RELIC-COMMON CHARGE 117 | LANCE 414 | AREA_STRIKE 26 | SELF_DESTRUCT 2 |
+    TACTICAL-RELIC-RARE  CHARGE 145 | LANCE 434 | AREA_STRIKE 32 | SELF_DESTRUCT 2 |
+    TACTICAL-RELIC-LEGENDARY CHARGE 113 | LANCE 439 | AREA_STRIKE 39 | SELF_DESTRUCT 2 |
+    TACTICAL-RELIC-CURSED CHARGE 130 | LANCE 419 | AREA_STRIKE 53 | SELF_DESTRUCT 3 |
     Outcomes: AVOIDED left the tiles; GUARDED front-arc hit; STAGGERED cancelled by stagger/riposte/stun;
     killd = source died first; landed = unguarded or flanked hit. S-HEAVY bands answered = all but landed.
 
   BUILD REPORT — per TACTICAL build bias; dominant tag = highest-rank tag at run end
   --------------------------------------------------------------------------------
   policy                runs  medDep stalled meanLvl  keys/r noRank  ties
-  TACTICAL               200     3.0       0    1.46    0.00    113     2
-  TACTICAL-BUILD-SAMPLE   600     3.0       4    1.51    0.00    322    17
-  TACTICAL-CLOSE         200     3.0       0    1.47    0.00    113     4
-  TACTICAL-MARKSMAN      200     3.0       0    1.46    0.00    113     2
-  TACTICAL-PYRO-DEMO     200     3.0       0    1.46    0.00    113     3
-  TACTICAL-BULWARK       200     3.0       0    1.46    0.00    113     1
+  TACTICAL               200     3.0       0    1.73    0.01     84     6
+  TACTICAL-BUILD-SAMPLE   600     3.0       3    1.75    0.01    255    30
+  TACTICAL-CLOSE         200     3.0       0    1.73    0.01     84     9
+  TACTICAL-MARKSMAN      200     3.0       0    1.73    0.01     84     6
+  TACTICAL-PYRO-DEMO     200     3.0       0    1.72    0.00     84    13
+  TACTICAL-BULWARK       200     3.0       0    1.72    0.00     84     9
     Dominant tag at run end (runs; excludes runs with no perk rank):
-    TACTICAL             CLOSE_QUARTERS 37 | MARKSMAN 43 | PYRO 2 | DEMOLITION 0 | ENERGY 3 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
-    TACTICAL-BUILD-SAMPLE CLOSE_QUARTERS 111 | MARKSMAN 130 | PYRO 9 | DEMOLITION 7 | ENERGY 13 | BULWARK 0 | BLADE 5 | SCAVENGER 2 | VITALITY 1 |
-    TACTICAL-CLOSE       CLOSE_QUARTERS 45 | MARKSMAN 36 | PYRO 2 | DEMOLITION 0 | ENERGY 2 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
-    TACTICAL-MARKSMAN    CLOSE_QUARTERS 30 | MARKSMAN 53 | PYRO 2 | DEMOLITION 0 | ENERGY 0 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
-    TACTICAL-PYRO-DEMO   CLOSE_QUARTERS 20 | MARKSMAN 25 | PYRO 24 | DEMOLITION 14 | ENERGY 3 | BULWARK 0 | BLADE 1 | SCAVENGER 0 | VITALITY 0 |
-    TACTICAL-BULWARK     CLOSE_QUARTERS 25 | MARKSMAN 33 | PYRO 2 | DEMOLITION 0 | ENERGY 2 | BULWARK 25 | BLADE 0 | SCAVENGER 0 | VITALITY 0 |
+    TACTICAL             CLOSE_QUARTERS 52 | MARKSMAN 55 | PYRO 2 | DEMOLITION 0 | ENERGY 4 | BULWARK 0 | BLADE 1 | SCAVENGER 2 | VITALITY 0 |
+    TACTICAL-BUILD-SAMPLE CLOSE_QUARTERS 146 | MARKSMAN 160 | PYRO 9 | DEMOLITION 7 | ENERGY 13 | BULWARK 0 | BLADE 5 | SCAVENGER 4 | VITALITY 1 |
+    TACTICAL-CLOSE       CLOSE_QUARTERS 68 | MARKSMAN 41 | PYRO 2 | DEMOLITION 0 | ENERGY 2 | BULWARK 0 | BLADE 1 | SCAVENGER 2 | VITALITY 0 |
+    TACTICAL-MARKSMAN    CLOSE_QUARTERS 45 | MARKSMAN 66 | PYRO 2 | DEMOLITION 0 | ENERGY 1 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
+    TACTICAL-PYRO-DEMO   CLOSE_QUARTERS 32 | MARKSMAN 35 | PYRO 26 | DEMOLITION 17 | ENERGY 4 | BULWARK 0 | BLADE 1 | SCAVENGER 1 | VITALITY 0 |
+    TACTICAL-BULWARK     CLOSE_QUARTERS 38 | MARKSMAN 44 | PYRO 1 | DEMOLITION 0 | ENERGY 3 | BULWARK 29 | BLADE 0 | SCAVENGER 1 | VITALITY 0 |
     Perk pick rate per offer (picked / offered on level-up screens):
     perk                   tag             offered  picked   rate B-offered B-picked B-rate
-    BUCKSHOT_DISCIPLINE    CLOSE_QUARTERS       53      41   0.77        64       38   0.59
-    POINT_MAN              CLOSE_QUARTERS       52      37   0.71        52       40   0.77
-    BREACHER               CLOSE_QUARTERS       55      36   0.65        75       45   0.60
-    STEADY_AIM             MARKSMAN             68      58   0.85       100       66   0.66
-    FIRST_BLOOD            MARKSMAN             63      51   0.81        85       60   0.71
-    LANE_DISCIPLINE        MARKSMAN             44      36   0.82        48       28   0.58
-    ACCELERANT             PYRO                 36       6   0.17        42       11   0.26
-    WILDFIRE               PYRO                 38       2   0.05        40       13   0.32
-    FIREPROOF              PYRO                 26       6   0.23        33        9   0.27
-    SHAPED_CHARGES         DEMOLITION           31       4   0.13        18        4   0.22
-    BLAST_SHIELD           DEMOLITION           26       3   0.12        28        7   0.25
-    SAPPER                 DEMOLITION           22       1   0.05        16        4   0.25
-    CAPACITOR              ENERGY               29       7   0.24        33        6   0.18
-    ARC_JUMP               ENERGY               28       2   0.07        40        2   0.05
-    OVERCHARGE             ENERGY               32       7   0.22        43        0   0.00
-    SHIELD_WALL            BULWARK              23       0   0.00        41        9   0.22
-    RIPOSTE_DRILL          BULWARK              29       0   0.00        36        9   0.25
-    PLATE_CARRIER          BULWARK              30       0   0.00        36        9   0.25
-    BUTCHER                BLADE                39       1   0.03        52        0   0.00
-    BLOODLETTING           BLADE                35       4   0.11        24        3   0.13
-    PACK_RAT               SCAVENGER            30       1   0.03        37        0   0.00
-    HAGGLER                SCAVENGER            26       0   0.00        50        0   0.00
-    SALVAGER               SCAVENGER            29       4   0.14        30        5   0.17
-    HARDY                  VITALITY             26       0   0.00        10        0   0.00
-    FIELD_MEDIC            VITALITY             26       1   0.04        20        0   0.00
-    SECOND_WIND            VITALITY             28       0   0.00        51        0   0.00
+    BUCKSHOT_DISCIPLINE    CLOSE_QUARTERS       75      54   0.72        93       52   0.56
+    POINT_MAN              CLOSE_QUARTERS       65      49   0.75        99       77   0.78
+    BREACHER               CLOSE_QUARTERS       86      57   0.66       124       72   0.58
+    STEADY_AIM             MARKSMAN            102      84   0.82       150       92   0.61
+    FIRST_BLOOD            MARKSMAN             87      70   0.80       115       79   0.69
+    LANE_DISCIPLINE        MARKSMAN             72      60   0.83        76       47   0.62
+    ACCELERANT             PYRO                 49      10   0.20        62       21   0.34
+    WILDFIRE               PYRO                 49       3   0.06        65       19   0.29
+    FIREPROOF              PYRO                 43       8   0.19        49       19   0.39
+    SHAPED_CHARGES         DEMOLITION           48       6   0.13        47        8   0.17
+    BLAST_SHIELD           DEMOLITION           37       3   0.08        52       12   0.23
+    SAPPER                 DEMOLITION           34       1   0.03        35        6   0.17
+    CAPACITOR              ENERGY               43       8   0.19        65        9   0.14
+    ARC_JUMP               ENERGY               41       5   0.12        62        5   0.08
+    OVERCHARGE             ENERGY               44       8   0.18        65        3   0.05
+    SHIELD_WALL            BULWARK              36       0   0.00        62       13   0.21
+    RIPOSTE_DRILL          BULWARK              40       0   0.00        52       13   0.25
+    PLATE_CARRIER          BULWARK              39       0   0.00        40       10   0.25
+    BUTCHER                BLADE                50       3   0.06        60        0   0.00
+    BLOODLETTING           BLADE                56       6   0.11        52        9   0.17
+    PACK_RAT               SCAVENGER            43       2   0.05        50        0   0.00
+    HAGGLER                SCAVENGER            38       0   0.00        66        0   0.00
+    SALVAGER               SCAVENGER            34       4   0.12        32        5   0.16
+    HARDY                  VITALITY             45       0   0.00        32        0   0.00
+    FIELD_MEDIC            VITALITY             36       1   0.03        44        0   0.00
+    SECOND_WIND            VITALITY             40       2   0.05        64        0   0.00
     Keystone pick rate (picked / offered on keystone screens):
     keystone               tag             offered  picked   rate B-offered B-picked B-rate
-    SCATTERGUN_DOCTRINE    CLOSE_QUARTERS        0       0      -         0        0      -
-    DEADEYE                MARKSMAN              0       0      -         0        0      -
-    PYROMANIAC             PYRO                  0       0      -         0        0      -
-    DEMOLITIONIST          DEMOLITION            0       0      -         0        0      -
-    STORM_CONDUIT          ENERGY                0       0      -         0        0      -
-    IRON_BULWARK           BULWARK               0       0      -         0        0      -
-    BERSERKER              BLADE                 0       0      -         0        0      -
-    QUARTERMASTER          SCAVENGER             0       0      -         0        0      -
-    IRONHIDE               VITALITY              0       0      -         0        0      -
+    SCATTERGUN_DOCTRINE    CLOSE_QUARTERS        3       1   0.33         0        0      -
+    DEADEYE                MARKSMAN              4       3   0.75         3        2   0.67
+    PYROMANIAC             PYRO                  3       3   1.00         2        2   1.00
+    DEMOLITIONIST          DEMOLITION            1       0   0.00         1        1   1.00
+    STORM_CONDUIT          ENERGY                1       0   0.00         1        0   0.00
+    IRON_BULWARK           BULWARK               2       0   0.00         3        1   0.33
+    BERSERKER              BLADE                 2       0   0.00         2        0   0.00
+    QUARTERMASTER          SCAVENGER             2       0   0.00         4        0   0.00
+    IRONHIDE               VITALITY              3       0   0.00         2        0   0.00
     Unprefixed columns: TACTICAL-BUILD-SAMPLE. B- columns: the four build-biased variants together.
     noRank = runs that ended with no perk rank
     (excluded from S-BUILD's share); ties = dominant tag decided by a tie (earliest BuildTag wins).
@@ -2549,21 +2767,88 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
   RUN REPORT — the finite 25-floor run (balance-overhaul order 6)
   --------------------------------------------------------------------------------
   policy                 winRate  reach10 lossDepth offers/vis  unspentFlr
-  NAIVE                     0.00     0.00       2.0       0.00        0.32
-  TACTICAL                  0.00     0.00       3.0       1.00        0.19
-  HOARDER-START-WEAPON      0.00     0.00       3.0       0.75        0.21
-  TACTICAL-CLOSE            0.00     0.00       3.0       1.01        0.19
-  TACTICAL-MARKSMAN         0.00     0.00       3.0       1.00        0.19
-  TACTICAL-PYRO-DEMO        0.00     0.00       3.0       1.00        0.18
-  TACTICAL-BULWARK          0.00     0.00       3.0       1.00        0.18
-  TACTICAL-BUILD-SAMPLE     0.00     0.00       3.0       1.08        0.19
+  NAIVE                     0.00     0.00       2.0       0.00        0.33
+  TACTICAL                  0.00     0.00       3.0       1.11        0.21
+  HOARDER-START-WEAPON      0.00     0.00       3.0       0.73        0.24
+  TACTICAL-CLOSE            0.00     0.00       3.0       1.12        0.21
+  TACTICAL-MARKSMAN         0.00     0.00       3.0       1.11        0.21
+  TACTICAL-PYRO-DEMO        0.00     0.00       3.0       1.11        0.21
+  TACTICAL-BULWARK          0.00     0.00       3.0       1.11        0.21
+  TACTICAL-BUILD-SAMPLE     0.00     0.00       3.0       1.17        0.22
+  TACTICAL-NO-RELIC         0.00     0.00       3.0       1.09        0.18
+  TACTICAL-RELIC-COMMON     0.00     0.00       3.0       1.10        0.19
+  TACTICAL-RELIC-RARE       0.00     0.00       3.0       1.11        0.19
+  TACTICAL-RELIC-LEGENDARY    0.00     0.00       3.0       1.11        0.18
+  TACTICAL-RELIC-CURSED     0.00     0.00       3.0       1.25        0.22
   BOSS TABLE (TACTICAL)
   depth    archetype     reached  cleared    medTurns   medHealth
-  5        OVERSEER           54        0           -           -
-  10       CORRUPTOR           0        0           -           -
+  5        OVERSEER           60        1          28        0.35
+  10       CORRUPTOR           1        1           9        0.46
   15       HELL_BARON          0        0           -           -
   20       OVERSEER            0        0           -           -
   25       CORRUPTOR           0        0           -           -
+
+  RELIC REPORT — S-RELIC probe rows (mean ending depth over TACTICAL-NO-RELIC)
+  --------------------------------------------------------------------------------
+  probe row                   runs  meanDep   medDep    lift
+  TACTICAL-NO-RELIC            120     3.15      3.0   1.000
+  TACTICAL-RELIC-COMMON        120     3.20      3.0   1.016
+  TACTICAL-RELIC-RARE          120     3.20      3.0   1.016
+  TACTICAL-RELIC-LEGENDARY     120     3.23      3.0   1.026
+  TACTICAL-RELIC-CURSED        120     3.28      3.0   1.040
+  relic (non-affine)   rarity      runs  meanDep    lift
+  field_dressing       COMMON        14     2.71   0.862
+  spare_plates         COMMON        14     3.00   0.952
+  bandolier            COMMON        14     3.21   1.020
+  bounty_chip          COMMON        13     3.15   1.001
+  threshold_stim       COMMON        13     3.31   1.050
+  salvage_hook         COMMON        13     3.31   1.050
+  medics_glove         COMMON        13     3.54   1.123
+  recoil_spring        COMMON        13     3.54   1.123
+  dog_tags             COMMON        13     3.08   0.977
+  breaching_charge     RARE          18     3.28   1.041
+  vampiric_core        RARE          17     2.94   0.934
+  salvage_plating      RARE          17     3.24   1.027
+  grief_engine         RARE          17     3.00   0.952
+  kevlar_weave         RARE          17     3.24   1.027
+  ablative_shell       RARE          17     3.18   1.008
+  culling_signal       RARE          17     3.53   1.120
+  second_heart         LEGENDARY     18     3.39   1.076
+  hunger_loop          LEGENDARY     17     3.18   1.008
+  chain_detonator      LEGENDARY     17     3.35   1.064
+  fourth_holster       LEGENDARY     17     3.00   0.952
+  deadman_trigger      LEGENDARY     17     3.06   0.971
+  atrophy_field        LEGENDARY     17     3.35   1.064
+  overclocked_servos   LEGENDARY     17     3.29   1.046
+  blood_pact           CURSED        20     3.30   1.048
+  fever_core           CURSED        20     2.90   0.921
+  volatile_rig         CURSED        20     3.35   1.063
+  tithe_engine         CURSED        20     3.35   1.063
+  iron_lung            CURSED        20     3.50   1.111
+  deaths_door          CURSED        20     3.25   1.032
+  policy                  relicsHeld
+  NAIVE                         1.00
+  TACTICAL                      1.01
+  HOARDER-START-WEAPON          1.00
+  TACTICAL-CLOSE                1.01
+  TACTICAL-MARKSMAN             1.01
+  TACTICAL-PYRO-DEMO            1.01
+  TACTICAL-BULWARK              1.01
+  TACTICAL-BUILD-SAMPLE         1.01
+  TACTICAL-NO-RELIC             0.00
+  TACTICAL-RELIC-COMMON         1.00
+  TACTICAL-RELIC-RARE           1.00
+  TACTICAL-RELIC-LEGENDARY        1.00
+  TACTICAL-RELIC-CURSED         1.00
+  TACTICAL offers by source
+  source               seen  taken   left
+  RUN_START             200    200      0
+  BOSS                    2      2      0
+  MYSTERY_CACHE           0      0      0
+  QUARANTINE_LOCKER       0      0      0
+  MODEL vs PLAYED (TACTICAL, 666 floors; report-only)
+    kill share (kills / bodies spawned) : model 0.60  played 0.48
+    doors opened per floor              : model 3     played 2.03
 
   BEHAVIOURAL BANDS
   --------------------------------------------------------------------------------
@@ -2572,32 +2857,32 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
   WAIV [SIM_FAIR] TACTICAL win rate: value=0.00 band=0.20..0.40 OUT-OF-BAND (WAIVED) — clears the depth-25 boss; 200 seeds; 0 stalled
   WAIV [SIM_FAIR] TACTICAL reaches depth 10: value=0.00 band=0.60..1.00 OUT-OF-BAND (WAIVED) — 200 seeds; 0 stalled
   WAIV [SIM_FAIR] TACTICAL median death depth (losses): value=3.00 band=11.00..18.00 OUT-OF-BAND (WAIVED) — 200 seeds; 0 stalled
-  WAIV [SIM_FAIR] TACTICAL first-boss clears (of seeds reaching it): value=0.00 band=0.75..1.00 OUT-OF-BAND (WAIVED) — 0 of 54 seeds that reached depth 5
+  WAIV [SIM_FAIR] TACTICAL first-boss clears (of seeds reaching it): value=0.02 band=0.75..1.00 OUT-OF-BAND (WAIVED) — 1 of 60 seeds that reached depth 5
   OK   [SIM_FAIR] NAIVE win rate: value=0.00 band=0.00..0.03 OK — 200 seeds
-  WAIV [SIM_FAIR] NAIVE median death depth: value=2.00 band=4.00..8.00 OUT-OF-BAND (WAIVED) — 200 seeds; 10 stalled
+  WAIV [SIM_FAIR] NAIVE median death depth: value=2.00 band=4.00..8.00 OUT-OF-BAND (WAIVED) — 200 seeds; 11 stalled
   WAIV [SIM_FAIR] NAIVE reaches the first boss: value=0.03 band=0.40..1.00 OUT-OF-BAND (WAIVED) — depth 5
   WAIV [SIM_FAIR] NAIVE first-boss clears: value=0.00 band=0.15..1.00 OUT-OF-BAND (WAIVED) — of all 200 seeds
   OK   [SIM_FAIR] TACTICAL readable deaths: value=1.00 band=0.90..1.00 OK — telegraphed intent or a sub-25% resource state before the fatal turn
   WAIV [SIM_SKILL] TACTICAL vs NAIVE depth gap: value=1.00 band=5.00..Infinity OUT-OF-BAND (WAIVED) — TACTICAL 3.0 vs NAIVE 2.0
-  OK   [SIM_ROUTE] played per-floor net drain: value=0.38 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
-  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.53 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
-  WAIV [SIM_ECONOMY] emergency lifeline floors: value=0.10 band=0.00..0.05 OUT-OF-BAND (WAIVED) — the never-softlock ammo drop is a backstop, not a supply line
-  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.78 band=0.55..0.90 OK — mean health fraction leaving a COMBAT floor by its exit
+  OK   [SIM_ROUTE] played per-floor net drain: value=0.37 band=-1.10..0.90 OK — order-7 modelled band widened by the play tolerance
+  WAIV [SIM_ECONOMY] experienced vs planned supply: value=0.60 band=0.75..1.10 OUT-OF-BAND (WAIVED) — mean share of each exited floor's planned ammo picked up
+  WAIV [SIM_ECONOMY] emergency lifeline floors: value=0.07 band=0.00..0.05 OUT-OF-BAND (WAIVED) — the never-softlock ammo drop is a backstop, not a supply line
+  OK   [SIM_SUPPLY] TACTICAL COMBAT exit health: value=0.79 band=0.55..0.90 OK — mean health fraction leaving a COMBAT floor by its exit
   OK   [SIM_SUPPLY] floors below the heal floor: value=0.00 band=0.00..0.00 OK — reachable heal value under the S4 floor
-  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=30.00 band=10.00..Infinity OK — of 219 COMBAT floors; keeps the two lines below off an empty sample
+  OK   [SIM_SWITCH] TACTICAL COMBAT floors showing a hint: value=31.00 band=10.00..Infinity OK — of 226 COMBAT floors; keeps the two lines below off an empty sample
   OK   [SIM_SWITCH] TACTICAL hint take rate: value=1.00 band=0.80..Infinity OK — hint-driven switches / hint episodes
   OK   [SIM_SWITCH] TACTICAL switches per hinted COMBAT floor: value=1.00 band=1.00..Infinity OK — info: 0.14 per COMBAT floor overall (kit-limited, not banded — D3)
-  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=863.00 band=30.00..Infinity OK — keeps the share below off an empty sample
+  OK   [SIM_HEAVY] TACTICAL heavies committed at it: value=856.00 band=30.00..Infinity OK — keeps the share below off an empty sample
   OK   [SIM_HEAVY] TACTICAL heavies answered: value=0.95 band=0.80..1.00 OK — (avoided + guarded + staggered + killed first) / committed at the player
-  OK   [SIM_HEAVY] NAIVE heavies answered: value=0.20 band=0.00..0.30 OK — 250 committed; NAIVE ignores telegraphs
-  WAIV [SIM_SHOP] TACTICAL offers bought per Fabricator visit: value=1.00 band=1.50..Infinity OUT-OF-BAND (WAIVED) — 443 visits over 200 runs
-  OK   [SIM_SHOP] TACTICAL median unspent credits at death (floors of income): value=0.19 band=0.00..1.50 OK — credits held when a lost run ended
-  WAIV [SIM_BOSS] boss depth 5 TACTICAL clear rate: value=0.00 band=0.75..0.90 OUT-OF-BAND (WAIVED) — 0 of 54 seeds that reached it
-  WAIV [SIM_BOSS] boss depth 5 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 0.0 turns over 0 kills (needs >= 10)
-  WAIV [SIM_BOSS] boss depth 5 median health at the kill: value=0.00 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 0 kills
-  WAIV [SIM_BOSS] boss depth 10 TACTICAL clear rate: value=0.00 band=0.50..0.90 OUT-OF-BAND (WAIVED) — 0 of 0 seeds that reached it
-  WAIV [SIM_BOSS] boss depth 10 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 0.0 turns over 0 kills (needs >= 10)
-  WAIV [SIM_BOSS] boss depth 10 median health at the kill: value=0.00 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 0 kills
+  OK   [SIM_HEAVY] NAIVE heavies answered: value=0.20 band=0.00..0.30 OK — 253 committed; NAIVE ignores telegraphs
+  WAIV [SIM_SHOP] TACTICAL offers bought per Fabricator visit: value=1.11 band=1.50..Infinity OUT-OF-BAND (WAIVED) — 464 visits over 200 runs
+  OK   [SIM_SHOP] TACTICAL median unspent credits at death (floors of income): value=0.21 band=0.00..1.50 OK — credits held when a lost run ended
+  WAIV [SIM_BOSS] boss depth 5 TACTICAL clear rate: value=0.02 band=0.75..0.90 OUT-OF-BAND (WAIVED) — 1 of 60 seeds that reached it
+  WAIV [SIM_BOSS] boss depth 5 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 28.0 turns over 1 kills (needs >= 10)
+  WAIV [SIM_BOSS] boss depth 5 median health at the kill: value=0.35 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 1 kills
+  WAIV [SIM_BOSS] boss depth 10 TACTICAL clear rate: value=1.00 band=0.50..0.90 OUT-OF-BAND (WAIVED) — 1 of 1 seeds that reached it
+  WAIV [SIM_BOSS] boss depth 10 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 9.0 turns over 1 kills (needs >= 10)
+  WAIV [SIM_BOSS] boss depth 10 median health at the kill: value=0.46 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 1 kills
   WAIV [SIM_BOSS] boss depth 15 TACTICAL clear rate: value=0.00 band=0.50..0.90 OUT-OF-BAND (WAIVED) — 0 of 0 seeds that reached it
   WAIV [SIM_BOSS] boss depth 15 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 0.0 turns over 0 kills (needs >= 10)
   WAIV [SIM_BOSS] boss depth 15 median health at the kill: value=0.00 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 0 kills
@@ -2608,8 +2893,44 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
   WAIV [SIM_BOSS] boss depth 25 fight turns CoV: value=0.00 band=0.00..0.30 OUT-OF-BAND (WAIVED) — mean 0.0 turns over 0 kills (needs >= 10)
   WAIV [SIM_BOSS] boss depth 25 median health at the kill: value=0.00 band=0.30..0.60 OUT-OF-BAND (WAIVED) — health fraction the turn the boss died, over 0 kills
   OK   [SIM_BUILD] build-bias median depth spread: value=1.00 band=1.00..1.25 OK — max / min median death depth: CLOSE 3.0, MARKSMAN 3.0, PYRO-DEMO 3.0, BULWARK 3.0
-  OK   [SIM_BUILD] TACTICAL runs holding a perk rank: value=278.00 band=30.00..Infinity OK — of 600 TACTICAL-BUILD-SAMPLE runs; 322 with no perk rank excluded; keeps the share below off an empty sample
-  WAIV [SIM_BUILD] TACTICAL dominant-tag share: value=0.47 band=0.00..0.40 OUT-OF-BAND (WAIVED) — top MARKSMAN; CLOSE_QUARTERS 111, MARKSMAN 130, PYRO 9, DEMOLITION 7, ENERGY 13, BLADE 5, SCAVENGER 2, VITALITY 1; 17 decided by a tie (earliest tag wins)
+  OK   [SIM_BUILD] TACTICAL runs holding a perk rank: value=345.00 band=30.00..Infinity OK — of 600 TACTICAL-BUILD-SAMPLE runs; 255 with no perk rank excluded; keeps the share below off an empty sample
+  WAIV [SIM_BUILD] TACTICAL dominant-tag share: value=0.46 band=0.00..0.40 OUT-OF-BAND (WAIVED) — top MARKSMAN; CLOSE_QUARTERS 146, MARKSMAN 160, PYRO 9, DEMOLITION 7, ENERGY 13, BLADE 5, SCAVENGER 4, VITALITY 1; 30 decided by a tie (earliest tag wins)
+  OK   [SIM_RELIC] SR1 TACTICAL-RELIC-COMMON mean-depth lift: value=1.02 band=0.90..1.40 OK — mean depth 3.20 (120 runs); mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR1 TACTICAL-RELIC-RARE mean-depth lift: value=1.02 band=0.90..1.40 OK — mean depth 3.20 (120 runs); mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR1 TACTICAL-RELIC-LEGENDARY mean-depth lift: value=1.03 band=0.90..1.40 OK — mean depth 3.23 (120 runs); mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR2 TACTICAL-RELIC-CURSED mean-depth lift: value=1.04 band=0.85..1.40 OK — mean depth 3.28 (120 runs); mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR3 rarity is felt (LEGENDARY / COMMON mean depth): value=1.01 band=1.00..Infinity OK — LEGENDARY 3.23 vs COMMON 3.20
+  OK   [SIM_RELIC] SR4 field_dressing mean-depth lift: value=0.86 band=0.75..1.60 OK — COMMON; mean depth 2.71 over 14 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 spare_plates mean-depth lift: value=0.95 band=0.75..1.60 OK — COMMON; mean depth 3.00 over 14 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 bandolier mean-depth lift: value=1.02 band=0.75..1.60 OK — COMMON; mean depth 3.21 over 14 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 bounty_chip mean-depth lift: value=1.00 band=0.75..1.60 OK — COMMON; mean depth 3.15 over 13 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 threshold_stim mean-depth lift: value=1.05 band=0.75..1.60 OK — COMMON; mean depth 3.31 over 13 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 salvage_hook mean-depth lift: value=1.05 band=0.75..1.60 OK — COMMON; mean depth 3.31 over 13 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 medics_glove mean-depth lift: value=1.12 band=0.75..1.60 OK — COMMON; mean depth 3.54 over 13 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 recoil_spring mean-depth lift: value=1.12 band=0.75..1.60 OK — COMMON; mean depth 3.54 over 13 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 dog_tags mean-depth lift: value=0.98 band=0.75..1.60 OK — COMMON; mean depth 3.08 over 13 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 breaching_charge mean-depth lift: value=1.04 band=0.75..1.60 OK — RARE; mean depth 3.28 over 18 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 vampiric_core mean-depth lift: value=0.93 band=0.75..1.60 OK — RARE; mean depth 2.94 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 salvage_plating mean-depth lift: value=1.03 band=0.75..1.60 OK — RARE; mean depth 3.24 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 grief_engine mean-depth lift: value=0.95 band=0.75..1.60 OK — RARE; mean depth 3.00 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 kevlar_weave mean-depth lift: value=1.03 band=0.75..1.60 OK — RARE; mean depth 3.24 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 ablative_shell mean-depth lift: value=1.01 band=0.75..1.60 OK — RARE; mean depth 3.18 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 culling_signal mean-depth lift: value=1.12 band=0.75..1.60 OK — RARE; mean depth 3.53 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 second_heart mean-depth lift: value=1.08 band=0.75..1.60 OK — LEGENDARY; mean depth 3.39 over 18 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 hunger_loop mean-depth lift: value=1.01 band=0.75..1.60 OK — LEGENDARY; mean depth 3.18 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 chain_detonator mean-depth lift: value=1.06 band=0.75..1.60 OK — LEGENDARY; mean depth 3.35 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 fourth_holster mean-depth lift: value=0.95 band=0.75..1.60 OK — LEGENDARY; mean depth 3.00 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 deadman_trigger mean-depth lift: value=0.97 band=0.75..1.60 OK — LEGENDARY; mean depth 3.06 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 atrophy_field mean-depth lift: value=1.06 band=0.75..1.60 OK — LEGENDARY; mean depth 3.35 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 overclocked_servos mean-depth lift: value=1.05 band=0.75..1.60 OK — LEGENDARY; mean depth 3.29 over 17 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 blood_pact mean-depth lift: value=1.05 band=0.75..1.60 OK — CURSED; mean depth 3.30 over 20 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 fever_core mean-depth lift: value=0.92 band=0.75..1.60 OK — CURSED; mean depth 2.90 over 20 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 volatile_rig mean-depth lift: value=1.06 band=0.75..1.60 OK — CURSED; mean depth 3.35 over 20 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 tithe_engine mean-depth lift: value=1.06 band=0.75..1.60 OK — CURSED; mean depth 3.35 over 20 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 iron_lung mean-depth lift: value=1.11 band=0.75..1.60 OK — CURSED; mean depth 3.50 over 20 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR4 deaths_door mean-depth lift: value=1.03 band=0.75..1.60 OK — CURSED; mean depth 3.25 over 20 probe runs; mean depth over TACTICAL-NO-RELIC 3.15 (120 runs)
+  OK   [SIM_RELIC] SR5 probe runs per non-affine relic (fewest): value=13.00 band=10.00..Infinity OK — least-sampled relic bounty_chip; round-robin over each rarity's non-affine pool
+  OK   [SIM_RELIC] SR6 TACTICAL mean relics held at run end: value=1.01 band=1.00..Infinity OK — 200 runs; the acquisition wiring (RUN_START, BOSS, MYSTERY cache) is live
   OK   [SIM_SOFTLOCK] NAIVE softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] HOARDER-START-WEAPON softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
@@ -2618,14 +2939,24 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
   OK   [SIM_SOFTLOCK] TACTICAL-PYRO-DEMO softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL-BULWARK softlocks: value=0.00 band=0.00..0.00 OK — 200 seeds
   OK   [SIM_SOFTLOCK] TACTICAL-BUILD-SAMPLE softlocks: value=0.00 band=0.00..0.00 OK — 600 seeds
-  OK   [SIM_NAVIGATION] NAIVE stalled floors: value=0.03 band=0.00..0.10 OK — 10 stalled runs; share of every played floor
+  OK   [SIM_SOFTLOCK] TACTICAL-NO-RELIC softlocks: value=0.00 band=0.00..0.00 OK — 120 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-RELIC-COMMON softlocks: value=0.00 band=0.00..0.00 OK — 120 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-RELIC-RARE softlocks: value=0.00 band=0.00..0.00 OK — 120 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-RELIC-LEGENDARY softlocks: value=0.00 band=0.00..0.00 OK — 120 seeds
+  OK   [SIM_SOFTLOCK] TACTICAL-RELIC-CURSED softlocks: value=0.00 band=0.00..0.00 OK — 120 seeds
+  OK   [SIM_NAVIGATION] NAIVE stalled floors: value=0.03 band=0.00..0.10 OK — 11 stalled runs; share of every played floor
   OK   [SIM_NAVIGATION] TACTICAL stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
   OK   [SIM_NAVIGATION] HOARDER-START-WEAPON stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
   OK   [SIM_NAVIGATION] TACTICAL-CLOSE stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
   OK   [SIM_NAVIGATION] TACTICAL-MARKSMAN stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
   OK   [SIM_NAVIGATION] TACTICAL-PYRO-DEMO stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
   OK   [SIM_NAVIGATION] TACTICAL-BULWARK stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
-  OK   [SIM_NAVIGATION] TACTICAL-BUILD-SAMPLE stalled floors: value=0.00 band=0.00..0.10 OK — 4 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-BUILD-SAMPLE stalled floors: value=0.00 band=0.00..0.10 OK — 3 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-NO-RELIC stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-RELIC-COMMON stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-RELIC-RARE stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-RELIC-LEGENDARY stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
+  OK   [SIM_NAVIGATION] TACTICAL-RELIC-CURSED stalled floors: value=0.00 band=0.00..0.10 OK — 0 stalled runs; share of every played floor
 
   A WAIV line is out of band with an explicit, reasoned waiver registered in
   BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails
@@ -2635,27 +2966,29 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
   --------------------------------------------------------------------------------
   One-floor probes at every depth 1..25, 8 seeds per depth per kit. on = TACTICAL, on-curve kit; lag = HOARDER-START-WEAPON,
   start kit (L1 COMMON); both at the on-curve character level. ratio = lag / on.
-  role        depths  onKill lagKill  ratio |   onDie  lagDie
-  CHAFF        1-5      2.27    4.67   2.05 |   23.89   80.79
-  CHAFF        6-10     1.86   12.00   6.44 |   83.30   36.96
-  CHAFF       11-15     1.67   18.00  10.77 |   89.43   25.68
-  CHAFF       16-20     2.32   30.44  13.10 |   65.97   20.47
-  CHAFF       21-25     1.87   49.10  26.31 |   63.39   23.31
-  SOLDIER      1-5      3.66    5.75   1.57 |   35.83   34.29
-  SOLDIER      6-10     2.88   17.50   6.09 |   24.58   10.61
-  SOLDIER     11-15     2.54   29.86  11.75 |   29.37   10.33
-  SOLDIER     16-20     2.50   60.17  24.04 |   27.62   10.34
-  SOLDIER     21-25     2.50   86.86  34.72 |   24.83   13.43
-  BRUISER      1-5      6.93    8.08   1.17 |   12.46   18.93
-  BRUISER      6-10     4.79   20.47   4.27 |   47.62   21.99
-  BRUISER     11-15     7.35   59.67   8.12 |   77.06   37.10
-  BRUISER     16-20     4.88   74.88  15.35 |       -       -
-  BRUISER     21-25     5.02  115.40  23.01 |       -   13.69
-  MINI_ELITE   1-5         -       -      - |       -       -
-  MINI_ELITE   6-10        -       -      - |       -       -
-  MINI_ELITE  11-15        -       -      - |       -       -
-  MINI_ELITE  16-20        -       -      - |       -       -
-  MINI_ELITE  21-25        -       -      - |       -       -
+  relics (expected) = RelicValuationModel.expectedRelicCount at the band's last depth: bounded
+  BONUS power beside the on-curve player (relics-run-changing-artifacts D3); probes carry none.
+  role        depths  onKill lagKill  ratio |   onDie  lagDie | relics (expected)
+  CHAFF        1-5      2.27    4.67   2.05 |   23.89   80.79 | 1.03
+  CHAFF        6-10     1.86   12.00   6.44 |   83.30   36.96 | 2.07
+  CHAFF       11-15     1.67   18.00  10.77 |   89.43   25.68 | 3.11
+  CHAFF       16-20     2.32   30.44  13.10 |   65.97   20.47 | 4.15
+  CHAFF       21-25     1.87   49.10  26.31 |   63.39   23.31 | 5.19
+  SOLDIER      1-5      3.66    5.75   1.57 |   35.83   34.29 | 1.03
+  SOLDIER      6-10     2.88   17.50   6.09 |   24.58   10.61 | 2.07
+  SOLDIER     11-15     2.54   29.86  11.75 |   29.37   10.33 | 3.11
+  SOLDIER     16-20     2.50   60.17  24.04 |   27.62   10.34 | 4.15
+  SOLDIER     21-25     2.50   86.86  34.72 |   24.83   13.43 | 5.19
+  BRUISER      1-5      6.93    8.08   1.17 |   12.46   18.93 | 1.03
+  BRUISER      6-10     4.79   20.47   4.27 |   47.62   21.99 | 2.07
+  BRUISER     11-15     7.35   59.67   8.12 |   77.06   37.10 | 3.11
+  BRUISER     16-20     4.88   74.88  15.35 |       -       - | 4.15
+  BRUISER     21-25     5.02  115.40  23.01 |       -   13.69 | 5.19
+  MINI_ELITE   1-5         -       -      - |       -       - | 1.03
+  MINI_ELITE   6-10        -       -      - |       -       - | 2.07
+  MINI_ELITE  11-15        -       -      - |       -       - | 3.11
+  MINI_ELITE  16-20        -       -      - |       -       - | 4.15
+  MINI_ELITE  21-25        -       -      - |       -       - | 5.19
   A2 read-out: SOLDIER median hits-to-kill at depths 3-5, start kit / on-curve = 2.10 (target >= 1.5)
 
   NOTES (order 7 CP1)
@@ -2664,3 +2997,15 @@ waiver (SECTION 4): the game, measured, is out of band, and the playtest rounds 
     with ~0.85 HP on arrival, 0 heals held at every death; 54 seeds reach the first boss (the Overseer) and none
     clears it; mean character level ~1.6 at death (lvlGap -1.27); SPREAD deals 62% of landed damage; SHELLS
     pile up (0.73 of cap leaving a COMBAT floor) while the lifeline fires on 10% of floors.
+
+  NOTES (relics-run-changing-artifacts CP8)
+  - Every standard row opens with a RUN_START relic (TACTICAL takes the highest-carryLift card, NAIVE / HOARDER take
+    card 0), so the rows above are not comparable line-for-line with the order-7 CP1 matrix; the S-RELIC probe rows
+    isolate the relic effect (TACTICAL-NO-RELIC mean depth 3.15 vs 3.20 / 3.20 / 3.23 / 3.28 with a COMMON / RARE /
+    LEGENDARY / CURSED relic).
+  - ROUND SUMMARY before -> after: T4 exit health 0.91 -> 0.90 (OUT); T4 no-heal deaths 0.32 OUT -> 0.26 IN; T6 SPREAD
+    share 0.62 -> 0.64 OUT; T7 dominant tag 0.47 -> 0.46 OUT; T7 keystone share "-" -> 0.43 IN; T8 first-boss clears
+    0.00 -> 0.02; T9 offers per visit 1.00 -> 1.11 OUT; T9 unspent credits 0.19 -> 0.21; G BULLETS reserve 0.40 -> 0.56;
+    G lifeline floors 0.10 -> 0.07 OUT; J2 top perk STEADY_AIM 0.85 -> LANE_DISCIPLINE 0.83 OUT; NEW R1 relic lift 1.03
+    IN. The pre-existing band OK / WAIV / FAIL set is identical (no band flipped, 0 FAIL lines).
+  - MODEL vs PLAYED (report-only): kill share 0.60 modelled / 0.48 played; doors per floor 3 modelled / 2.03 played.

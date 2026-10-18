@@ -193,9 +193,31 @@ each; the cost is drawn in red. Live magnitudes: BalanceConfig KEYSTONE_*.
 
 THE BUILD PAGE
 --------------
-Inventory header -> BUILD (left of CODEX): every picked perk grouped under its tag chip
-with its rank pips, then the keystones in the gold frame. Tap UP / DOWN pages when it
+Inventory header -> BUILD (left of CODEX): a RELICS (n) section at the top (each held relic by name in its rarity
+colour plus its effect line, cursed costs in red; "RELICS - none" when empty), then every picked perk grouped
+under its tag chip with its rank pips, then the keystones in the gold frame. Tap UP / DOWN pages when it
 overflows. An empty build shows a one-line empty state.
+
+
+RELICS vs PERKS (relics-run-changing-artifacts; docs/relic-system.txt)
+----------------------------------------------------------------------
+A relic is the third source of build power, and it shares the perk/keystone machinery rather than building a
+parallel one: a relic is 1-3 PerkEffect rows (PerkModifier kind + magnitude) folded into the SAME BuildStats.
+  - WHEN: perks are earned by XP (a level-up offer of three); keystones replace the offer on levels 5/10/15/20;
+    relics are CHOSEN from an offer that costs no XP and no turn — one at the start of the run (3 COMMON), one
+    after each of bosses 1-4 (3 cards, at least one RARE+), and the odd one from a MYSTERY sector or a quarantine
+    locker. About five per run; never bought, dropped or swapped; cleared on death.
+  - WHAT: a perk rank is an incremental lift inside a STYLE (a BuildTag) and is worth ~x1.07-1.08 carry; a relic is
+    one rule change (kills heal you, doors you open explode, the first hit each floor does nothing, enemies arrive
+    weaker) worth half a rank to ~2.5 ranks by rarity, and mostly NOT tied to a tag (seven carry a tag affinity and
+    are only offered to a player who carries or ranks it).
+  - STACKING ORDER (PlayerBuild.recompute): stats.reset() -> PERKS at their ranks -> RELICS at rank 1 (each held
+    relic's effect set, in bond order) -> KEYSTONES. The usual rule holds: bonus kinds add, cost and multiplier
+    kinds multiply, boolean kinds OR. A keystone's cost therefore lands on top of a relic's gain; a relic has no
+    ranks, so a perk can never scale it.
+  - CAP: the relics a run is expected to hold may never out-carry one committed perk build (R-RELIC-STACK reads the
+    worst non-waived R-CARRY tag score as its ceiling), and the expected player still counts only
+    EXPECTED_PERK_POWER_PP_PER_PICK per level — relics are bonus power beside it, not inside it.
 
 
 ATTRIBUTES
@@ -265,5 +287,8 @@ To add a PERK: one Perk row (tag, max rank, PerkEffects, UI text) + its per-rank
   (felt in its niche, focused) and keep R-CARRY in band. No switch, no other registration.
 To add a KEYSTONE: one Keystone row (tag, gains, costs, the two UI lines) + SECTION 24
   magnitudes; it must pass R-KEYSTONE and keep R-CARRY in band.
+To add a RELIC: one register() call in relic/RelicCatalog + its RELIC_<ID>_<KIND> magnitudes in BalanceConfig
+  SECTION 26; it must land in its rarity x valuation band at depths 5/15/25 and keep R-RELIC-STACK green
+  (docs/relic-system.txt section 9). A new effect KIND needs a PerkModifier constant and a valuation term.
 To add a BUILD TAG: a BuildTag constant (its damage classes as data), a chip colour in
   render/BuildTagPalette, a niche metric for the valuation, and perks + a keystone for it.

@@ -68,8 +68,8 @@ than hold. Never `git add -A`.
 - [x] **CP8** — sim: policy relic methods, SimWorld acquisition, RunLedger ids, 5 probe rows, S-RELIC
       SR1–SR6, BalanceSimTest method, RELIC REPORT, RoundSummary R1, LadderReport column.
       DONE WHEN: test + balanceSim green; before/after ROUND SUMMARY recorded below.
-- [ ] **CP9** — docs (idea step 6), authority SECTIONS 6/8 regenerated, CHANGELOG; reviewer PASS;
-      STATUS IMPLEMENTED.
+- [x] **CP9a** — docs (idea step 6), authority SECTIONS 6/8 regenerated, CHANGELOG, CLAUDE.md.
+- [ ] **CP9b** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -198,3 +198,12 @@ than hold. Never `git add -A`.
   0.19->0.21; G BULLETS reserve 0.40->0.56; G lifeline floors 0.10->0.07 OUT; J2 top perk STEADY_AIM 0.85
   -> LANE_DISCIPLINE 0.83 OUT; NEW R1 relic lift 1.03 IN. Summaries: <scratchpad>/cp8-before-summary.txt,
   cp8-after-summary.txt. MODEL vs PLAYED: kill share 0.60/0.48, doors/floor 3/2.03 (report-only).
+- **CP9a handover:** new docs/relic-system.txt (655 lines; shipped catalog generated from code); authority
+  SECTION 3/5/6/8 + CHANGELOG; knowledge SECTION 6B + problems 30-34; route-map, xp-progression docs;
+  CLAUDE.md (package row, tree, Key Classes, docs rows "All 19", sim row "fifteen" bands, render order).
+  SECTION 6 = BalanceReport stdout run with -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 (else em-dashes
+  print '?'); SECTION 8 = summary.txt indented 2 spaces + NOTES block. Live R-RELIC-STACK d25 = 1.695 vs
+  1.751 (3.2% slack — the 1.8% in CP5 predates CP6's cache weight 10->3). Hub fixed the stale worked example
+  in GameMath.relicNodeOfferRate (0.0079). Known deviations for the reviewer: generic feedback strings
+  ("+N HP - RELIC", "SHIELD - HIT ABSORBED") instead of per-relic names; 5-arg detonateRelicBlast; roller
+  takes RelicRegistry; offers queue as requests and roll on open. Owed: device touch check.

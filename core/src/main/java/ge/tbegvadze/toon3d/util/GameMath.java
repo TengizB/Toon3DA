@@ -7597,7 +7597,7 @@ public final class GameMath {
      *   player breaks the seal (takes the offer) with probability t:
      *       rate = (wMystery / wNodes) x (wCache / wMysteryPool)
      *            + (wEvent / wNodes) x (wLocker / wEventPool) x t
-     *   Worked: 10/100 x 10/110 + 6/100 x 1/6 x 0.5 = 0.0141.
+     *   Worked (cache weight 3, mystery pool 103): 10/100 x 3/103 + 6/100 x 1/6 x 0.5 = 0.0079.
      * Edge cases: a non-positive pool total contributes 0; t clamped to [0, 1].
      */
     public static float relicNodeOfferRate(float mysteryNodeWeight, float eventNodeWeight, float nodeWeightTotal,
