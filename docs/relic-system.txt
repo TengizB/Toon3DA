@@ -295,6 +295,7 @@ every term is zero or the identity and the game plays exactly as before.
       floor, the hit deals 0 and the shield is spent (`firstHitShieldEventPending`, polled through
       `consumeFirstHitShieldEvent()` for feedback). STATUS TICKS NEVER SPEND IT: they enter through
       `applyDoTDamage(int)`, a separate path ending in loseHealth.
+      The player's OWN explosion (applyOwnExplosionDamage) is a hit and DOES spend it.
     - Damage multiplier (R12): `damage = max(1, round(damage x damageTakenMultiplier()))`, then the existing guard /
       armour / toughness pipeline unchanged. SECOND WIND (perk or relic) still has the last word.
     - `applyEventCostDamage(int)` (hub decision, CP2): route-event costs (a lost gamble bite, a health toll)
@@ -303,8 +304,9 @@ every term is zero or the identity and the game plays exactly as before.
   enemy/EnemyManager
     - Kill terms (`applyRelicKillTerms(enemy, allowCorpseBurst)`): KILL_HEAL (applyHealing), KILL_ARMOR
       (applyArmor), KILL_AMMO_REFUND (rolled on `buildRandom` ONLY when the chance is positive, so a relic-free
-      build draws nothing and every seeded stream is unchanged) and CORPSE_BLAST. They run for a kill credited to
-      the player (the BLOODLETTING path).
+      build draws nothing and every seeded stream is unchanged) and CORPSE_BLAST. They run for EVERY XP-awarding
+      player kill: weapon kills (the BLOODLETTING path), burn/poison kills (`processDoTKill`), guard-reflect
+      kills (`reflectIntoAttacker`, never bursts mid enemy turn) and relic-blast kills (never burst).
     - XP and credits: `depthScaledXpReward` x experienceMultiplier(), `depthScaledCreditReward` x
       killCreditMultiplier(), at every kill site, before KillXpListener / KillEventListener / KillCreditListener.
     - Spawn HP (R13): non-BOSS max and current HP x enemyHealthMultiplier(), applied to the floor's initial

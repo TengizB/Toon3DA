@@ -24,6 +24,12 @@ the shipped state):
     LEGENDARY. Rarity counts are therefore 10 COMMON / 11 RARE / 9 LEGENDARY / 6 CURSED (A2's
     11/12/7/6 is superseded). RELIC_CARRY_BAND_LEGENDARY top widened 1.20 -> 1.22 (a band new in
     this feature) for second_heart's Second Wind flag.
+  - CP2/CP7: in-play feedback text is GENERIC, not per-relic: "+N HP - RELIC", "+N AR - RELIC",
+    "+N <AMMO> - RELIC" and "SHIELD - HIT ABSORBED" (A7's "ABLATIVE SHELL — HIT ABSORBED" is
+    superseded). BuildStats aggregates effects without relic ids, and the default font has no
+    U+2014, so UI strings use " - ".
+  - Review fix: a "kill" (R8) is every XP-awarding player kill — weapon, burn/poison tick, guard
+    reflect and relic blast. All get the relic kill terms; only weapon and DoT kills may corpse-burst.
   - CP6: MYSTERY_WEIGHT_RELIC_CACHE = 3, BELOW D7's floor of 4: the pre-relic mystery table
     already sat at R-MYSTERY-EV 1.2917 of its 1.30 ceiling, and weight 4 gives 1.3022. At 3 it is
     1.2996 (margin 0.0004). Mystery relic caches are therefore rarer than designed.

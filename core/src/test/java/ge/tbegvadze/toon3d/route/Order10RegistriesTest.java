@@ -33,7 +33,7 @@ class Order10RegistriesTest {
     // ---- EVENT registry ----------------------------------------------------
 
     @Test
-    void allFiveV1EventsAreRegistered() {
+    void allV1EventsAndTheQuarantineLockerAreRegistered() {
         FacilityEventRegistry registry = freshEvents();
         // Five v1 events + the relics feature's quarantine_locker.
         assertEquals(6, registry.size());

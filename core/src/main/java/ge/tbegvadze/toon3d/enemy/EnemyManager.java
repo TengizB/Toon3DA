@@ -3269,6 +3269,8 @@ public final class EnemyManager implements EnemyHitTarget {
      * so the enemy list is safe to modify (no ConcurrentModificationException risk).
      */
     public void processDoTKill(Enemy enemy) {
+        // A burn/poison kill is the player's kill (it awards XP), so it earns the relic kill terms (R8).
+        applyRelicKillTerms(enemy, true);
         int xpAwarded = depthScaledXpReward(enemy.type);
         if (killXpListener    != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(enemy.nameTag, xpAwarded);
@@ -3412,6 +3414,8 @@ public final class EnemyManager implements EnemyHitTarget {
                     attacker.type.heightMultiplier(), reflected);
         }
         if (attacker.isAlive()) return;
+        // A reflect kill earns the relic kill terms, but never a corpse burst mid enemy turn (R8).
+        applyRelicKillTerms(attacker, false);
         int xpAwarded = depthScaledXpReward(attacker.type);
         if (killXpListener != null) killXpListener.onEnemyKilledForXp(xpAwarded);
         if (killEventListener != null) killEventListener.onEnemyKilled(attacker.nameTag, xpAwarded);

@@ -69,7 +69,10 @@ than hold. Never `git add -A`.
       SR1–SR6, BalanceSimTest method, RELIC REPORT, RoundSummary R1, LadderReport column.
       DONE WHEN: test + balanceSim green; before/after ROUND SUMMARY recorded below.
 - [x] **CP9a** — docs (idea step 6), authority SECTIONS 6/8 regenerated, CHANGELOG, CLAUDE.md.
-- [ ] **CP9b** — reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP9b** — reviewer round 1 = PASS WITH FIXES; code/paperwork fixes applied (this commit).
+- [ ] **CP9c** — BLOCKED ON OWNER: (1) by-hand touch run of A4/A5/A7/A10/A17 on device or lwjgl3:run;
+      (2) sign-off on the two decisions beyond D7 (cache weight 3 < floor 4; LEGENDARY band 1.20 -> 1.22).
+      Then STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -207,3 +210,13 @@ than hold. Never `git add -A`.
   in GameMath.relicNodeOfferRate (0.0079). Known deviations for the reviewer: generic feedback strings
   ("+N HP - RELIC", "SHIELD - HIT ABSORBED") instead of per-relic names; 5-arg detonateRelicBlast; roller
   takes RelicRegistry; offers queue as requests and roll on open. Owed: device touch check.
+- **CP9b handover:** reviewer r1 verdict at .claude/checkpoints/relics-run-changing-artifacts.reviewer-r1.md.
+  Fixed: relic kill terms now also on DoT kills (processDoTKill, burst allowed) and reflect kills
+  (reflectIntoAttacker, no burst); IMPLEMENTATION NOTE records generic feedback text and the kill rule;
+  relic-system.txt updated (kill rule; own explosion spends the shield); Order10RegistriesTest method renamed
+  (same assertions). Gates after fix: build 463 (StoryBarkTest only); balanceSim exit 0, 0 FAIL, S-RELIC all OK
+  (SR1 C/R/L 1.02/1.01/1.03, SR2 1.04, SR3 1.01, SR6 1.01). SR3 is near noise at TACTICAL's ~depth-3 deaths —
+  the AUDIT (R-RELIC bands) is the real rarity gate. No xdotool in the container, so a real-input run could
+  not be done here. Deferred (non-blocking, reviewer): visible pause button in RELIC_OFFER; saturated-effect
+  eligibility (e.g. SALVAGE HOOK with SALVAGER); SPOTTER'S LENS redesign (designer); overlay literals ->
+  HudConstants; RELIC_BONDED + UI_MENU_CLOSE overlap.
