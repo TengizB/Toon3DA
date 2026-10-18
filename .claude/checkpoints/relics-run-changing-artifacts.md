@@ -46,7 +46,7 @@ than hold. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file + the idea file committed and pushed.
-- [ ] **CP1** — relic package (A1 classes, catalog empty), 17 PerkModifier kinds, BuildStats fields/
+- [x] **CP1** — relic package (A1 classes, catalog empty), 17 PerkModifier kinds, BuildStats fields/
       accessors/reset/copyFrom/ofEffects, PlayerBuild.addRelicEffects, BalanceConfig SECTION 26 skeleton.
       DONE WHEN: build + test green (baseline failure only), BUILDS table unchanged; seams unwired (CP2).
 - [ ] **CP2** — every new kind read at its seam (Player, EnemyManager, RelicBlastTarget in
@@ -81,3 +81,22 @@ than hold. Never `git add -A`.
   `maven { url = "https://maven-central.storage-download.googleapis.com/maven2/" }` first in subprojects
   repositories. Run `./gradlew build` / `./gradlew :core:balanceSim` from the mirror. Test XML lands in the
   REAL `core/build/test-results/`.
+- **CP1 handover:** 17 new PerkModifier kinds (ALL_WEAPON_DAMAGE_COST already existed — no 18th). Every
+  catalog kind name exists verbatim. BuildStats new fields: killHealFraction, killArmorFraction,
+  killCreditBonus, killAmmoRefundChance, experienceBonus, floorArrival{Heal,Armor,Ammo}Fraction,
+  doorBlastFraction, doorOpenHealFraction, corpseBlastFraction, lowHealthDamageBonus, firstHitShield,
+  damageTakenFactor, enemyHealthFactor; accessors per spec (killCreditMultiplier/experienceMultiplier =
+  1+sum; damageTaken/enemyHealth clamped). ALL_WEAPON_DAMAGE lands in classDamageBonus; CLIP_SIZE_MULTIPLIER
+  multiplies clipSizeCostMultiplier (read by clipSizeMultiplier()). `BuildStats.ofEffects(PerkEffect...)`.
+  `PlayerBuild.addRelicEffects(PerkEffect[])` stores the definition's array reference.
+  `RelicSource.rarityWeightsFor(bossIndex)` aligned with `allowedRarities()` (row clamped).
+  TEMPORARY: `RelicOfferRoller.roll` is a stub (count=0) — SPEC GAP: it needs a `RelicRegistry`
+  parameter; CP3 adds it (signature change is fine, no callers yet). RelicRuntime methods are no-op
+  `// CP2` stubs; RelicCatalog.bootstrap empty (CP3).
+  R11: status ticks enter via `Player.applyDoTDamage(int)` (~l.147, separate path ending in loseHealth);
+  hits via public `applyDamage(int)` -> private `applyDamage(int, boolean heavy)` (~l.375), which
+  applyDirectionalDamage (~l.267) and applyOwnExplosionDamage (~l.453) also reach. Put shield + damage
+  multiplier at the top of the private method, before the dodge roll; leave applyDoTDamage alone.
+  resetFloorBuildState() ~l.474 re-arms. There is no entity/StatusEffectController — grep for the caller.
+  BUILDS table verified identical vs authority doc l.1564–1577 by running util.BalanceReport from the
+  mirror's classes.

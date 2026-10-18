@@ -97,7 +97,29 @@ public enum PerkModifier {
     CLIP_SIZE_COST        { @Override void apply(BuildStats stats, float magnitude) { stats.clipSizeCostMultiplier *= magnitude; } },
     MAX_ARMOR_COST        { @Override void apply(BuildStats stats, float magnitude) { stats.maxArmorCostMultiplier *= magnitude; } },
     MAX_HEALTH_COST       { @Override void apply(BuildStats stats, float magnitude) { stats.maxHealthKeystoneMultiplier *= magnitude; } },
-    HEAL_COST             { @Override void apply(BuildStats stats, float magnitude) { stats.healKeystoneMultiplier *= magnitude; } };
+    HEAL_COST             { @Override void apply(BuildStats stats, float magnitude) { stats.healKeystoneMultiplier *= magnitude; } },
+
+    // ---- RELIC KINDS (relics-run-changing-artifacts CP1) ---------------------------------------
+    /** Adds the magnitude to every damage class. */
+    ALL_WEAPON_DAMAGE     { @Override void apply(BuildStats stats, float magnitude) {
+                                for (DamageClass damageClass : DAMAGE_CLASSES) addClassDamage(stats, damageClass, magnitude); } },
+    KILL_HEAL             { @Override void apply(BuildStats stats, float magnitude) { stats.killHealFraction += magnitude; } },
+    KILL_ARMOR            { @Override void apply(BuildStats stats, float magnitude) { stats.killArmorFraction += magnitude; } },
+    KILL_CREDIT_BONUS     { @Override void apply(BuildStats stats, float magnitude) { stats.killCreditBonus += magnitude; } },
+    KILL_AMMO_REFUND      { @Override void apply(BuildStats stats, float magnitude) {
+                                stats.killAmmoRefundChance = Math.min(1f, stats.killAmmoRefundChance + magnitude); } },
+    XP_MULTIPLIER         { @Override void apply(BuildStats stats, float magnitude) { stats.experienceBonus += magnitude; } },
+    DOOR_BLAST            { @Override void apply(BuildStats stats, float magnitude) { stats.doorBlastFraction += magnitude; } },
+    DOOR_OPEN_HEAL        { @Override void apply(BuildStats stats, float magnitude) { stats.doorOpenHealFraction += magnitude; } },
+    CORPSE_BLAST          { @Override void apply(BuildStats stats, float magnitude) { stats.corpseBlastFraction += magnitude; } },
+    FLOOR_ARRIVAL_HEAL    { @Override void apply(BuildStats stats, float magnitude) { stats.floorArrivalHealFraction += magnitude; } },
+    FLOOR_ARRIVAL_ARMOR   { @Override void apply(BuildStats stats, float magnitude) { stats.floorArrivalArmorFraction += magnitude; } },
+    FLOOR_ARRIVAL_AMMO    { @Override void apply(BuildStats stats, float magnitude) { stats.floorArrivalAmmoFraction += magnitude; } },
+    FIRST_HIT_SHIELD      { @Override void apply(BuildStats stats, float magnitude) { stats.firstHitShield = true; } },
+    LOW_HEALTH_DAMAGE     { @Override void apply(BuildStats stats, float magnitude) { stats.lowHealthDamageBonus += magnitude; } },
+    DAMAGE_TAKEN_MULTIPLIER { @Override void apply(BuildStats stats, float magnitude) { stats.damageTakenFactor *= magnitude; } },
+    ENEMY_HEALTH_MULTIPLIER { @Override void apply(BuildStats stats, float magnitude) { stats.enemyHealthFactor *= magnitude; } },
+    CLIP_SIZE_MULTIPLIER  { @Override void apply(BuildStats stats, float magnitude) { stats.clipSizeCostMultiplier *= magnitude; } };
 
     private static final DamageClass[] DAMAGE_CLASSES = DamageClass.values();
 

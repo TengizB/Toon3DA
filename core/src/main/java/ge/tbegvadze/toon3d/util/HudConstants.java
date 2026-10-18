@@ -286,4 +286,28 @@ public final class HudConstants {
         { 0.96f, 0.66f, 0.30f },
         { 0.82f, 0.36f, 0.62f },
     };
+
+    // -------------------------------------------------------------------------
+    // RELIC OFFER overlay (relics-run-changing-artifacts): card geometry, rarity colours. World units, (0,0) bottom-left.
+    // -------------------------------------------------------------------------
+    public static final float RELIC_OFFER_CARD_WIDTH  = 340f;
+    public static final float RELIC_OFFER_CARD_HEIGHT = 300f;
+    public static final float RELIC_OFFER_CARD_GAP    = 24f;
+    /** Bottom edge of the card row: centred vertically, nudged 20 down to leave room for the title. */
+    public static final float RELIC_OFFER_CARD_Y      = Constants.WORLD_HEIGHT / 2f - RELIC_OFFER_CARD_HEIGHT / 2f - 20f;
+    /** Baseline of the offer title, near the top. */
+    public static final float RELIC_OFFER_TITLE_Y     = Constants.WORLD_HEIGHT - 80f;
+    public static final float RELIC_OFFER_LEAVE_WIDTH  = 280f;
+    public static final float RELIC_OFFER_LEAVE_HEIGHT = 76f;
+    public static final float RELIC_OFFER_LEAVE_Y      = 40f;
+    /** R15: taps are ignored this long after the overlay opens. */
+    public static final float RELIC_OFFER_INPUT_LOCKOUT_SECONDS = 0.4f;
+    /** Rarity colour channels indexed by RelicRarity ordinal: COMMON steel, RARE violet, LEGENDARY amber, CURSED blood. */
+    public static final float[] RELIC_RARITY_COLOR_R = {0.62f, 0.62f, 1.00f, 0.85f};
+    public static final float[] RELIC_RARITY_COLOR_G = {0.70f, 0.42f, 0.70f, 0.12f};
+    public static final float[] RELIC_RARITY_COLOR_B = {0.78f, 0.95f, 0.20f, 0.12f};
+    /** The cost line of a CURSED card: the CURSED red. */
+    public static final float RELIC_COST_TEXT_COLOR_R = 0.85f;
+    public static final float RELIC_COST_TEXT_COLOR_G = 0.12f;
+    public static final float RELIC_COST_TEXT_COLOR_B = 0.12f;
 }

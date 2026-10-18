@@ -453,4 +453,10 @@ public final class EffectConstants {
     public static final float HEAVY_EDGE_PULSE_R = 0.95f;
     public static final float HEAVY_EDGE_PULSE_G = 0.15f;
     public static final float HEAVY_EDGE_PULSE_B = 0.10f;
+
+    // -------------------------------------------------------------------------
+    // RELIC BLASTS (relics-run-changing-artifacts): impact-visual scale at the blast centre.
+    // -------------------------------------------------------------------------
+    public static final float RELIC_BLAST_VISUAL_SCALE_DOOR   = 0.65f;
+    public static final float RELIC_BLAST_VISUAL_SCALE_CORPSE = 0.45f;
 }

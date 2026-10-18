@@ -142,6 +142,38 @@ public final class BuildStats {
     /** QUARTERMASTER: shop price multiplier. */
     float shopPriceKeystoneMultiplier = 1f;
 
+    // --- RELIC KINDS (relics-run-changing-artifacts CP1): identity defaults, so a relic-free build reads as before ---
+    /** Relic KILL_HEAL: fraction of max HP every kill restores. */
+    float killHealFraction;
+    /** Relic KILL_ARMOR: fraction of max armour every kill restores. */
+    float killArmorFraction;
+    /** Relic KILL_CREDIT_BONUS: additive bonus on the credits a kill pays. */
+    float killCreditBonus;
+    /** Relic KILL_AMMO_REFUND: chance a kill refunds one round (capped at 1). */
+    float killAmmoRefundChance;
+    /** Relic XP_MULTIPLIER: additive bonus on the experience a kill awards. */
+    float experienceBonus;
+    /** Relic DOOR_BLAST: blast fraction of a door the player opens. */
+    float doorBlastFraction;
+    /** Relic DOOR_OPEN_HEAL: fraction of max HP a door the player opens heals. */
+    float doorOpenHealFraction;
+    /** Relic CORPSE_BLAST: blast fraction of a kill's corpse burst. */
+    float corpseBlastFraction;
+    /** Relic FLOOR_ARRIVAL_HEAL: fraction of max HP restored on arrival. */
+    float floorArrivalHealFraction;
+    /** Relic FLOOR_ARRIVAL_ARMOR: fraction of max armour restored on arrival. */
+    float floorArrivalArmorFraction;
+    /** Relic FLOOR_ARRIVAL_AMMO: fraction of each carried ammo type's cap refilled on arrival. */
+    float floorArrivalAmmoFraction;
+    /** Relic FIRST_HIT_SHIELD: the first hit each floor deals nothing. */
+    boolean firstHitShield;
+    /** Relic LOW_HEALTH_DAMAGE: additive damage bonus for every weapon class below the low-health fraction. */
+    float lowHealthDamageBonus;
+    /** Relic DAMAGE_TAKEN_MULTIPLIER: product of the multipliers (1.0 = unchanged); read clamped. */
+    float damageTakenFactor = 1f;
+    /** Relic ENEMY_HEALTH_MULTIPLIER: product of the multipliers (1.0 = unchanged); read clamped. */
+    float enemyHealthFactor = 1f;
+
     public BuildStats() {
         reset();
     }
@@ -200,6 +232,21 @@ public final class BuildStats {
         maxHealthKeystoneMultiplier = 1f;
         healKeystoneMultiplier = 1f;
         shopPriceKeystoneMultiplier = 1f;
+        killHealFraction = 0f;
+        killArmorFraction = 0f;
+        killCreditBonus = 0f;
+        killAmmoRefundChance = 0f;
+        experienceBonus = 0f;
+        doorBlastFraction = 0f;
+        doorOpenHealFraction = 0f;
+        corpseBlastFraction = 0f;
+        floorArrivalHealFraction = 0f;
+        floorArrivalArmorFraction = 0f;
+        floorArrivalAmmoFraction = 0f;
+        firstHitShield = false;
+        lowHealthDamageBonus = 0f;
+        damageTakenFactor = 1f;
+        enemyHealthFactor = 1f;
     }
 
     /** Copies every field from another aggregate (the valuation's per-rank snapshots). */
@@ -256,6 +303,21 @@ public final class BuildStats {
         maxHealthKeystoneMultiplier = other.maxHealthKeystoneMultiplier;
         healKeystoneMultiplier = other.healKeystoneMultiplier;
         shopPriceKeystoneMultiplier = other.shopPriceKeystoneMultiplier;
+        killHealFraction = other.killHealFraction;
+        killArmorFraction = other.killArmorFraction;
+        killCreditBonus = other.killCreditBonus;
+        killAmmoRefundChance = other.killAmmoRefundChance;
+        experienceBonus = other.experienceBonus;
+        doorBlastFraction = other.doorBlastFraction;
+        doorOpenHealFraction = other.doorOpenHealFraction;
+        corpseBlastFraction = other.corpseBlastFraction;
+        floorArrivalHealFraction = other.floorArrivalHealFraction;
+        floorArrivalArmorFraction = other.floorArrivalArmorFraction;
+        floorArrivalAmmoFraction = other.floorArrivalAmmoFraction;
+        firstHitShield = other.firstHitShield;
+        lowHealthDamageBonus = other.lowHealthDamageBonus;
+        damageTakenFactor = other.damageTakenFactor;
+        enemyHealthFactor = other.enemyHealthFactor;
     }
 
     // =====================================================================================
@@ -433,4 +495,35 @@ public final class BuildStats {
     public int   extraLoadoutSlots()               { return extraLoadoutSlots; }
     public boolean stimsDoNotCleanse()             { return stimsDoNotCleanse; }
     public float carrierExtraDropChance()          { return carrierExtraDropChance; }
+
+    // --- RELIC ACCESSORS (relics-run-changing-artifacts CP1) ------------------------------------
+    public float killHealFraction()                { return killHealFraction; }
+    public float killArmorFraction()               { return killArmorFraction; }
+    /** Credit multiplier on a kill: 1 + the summed bonuses. */
+    public float killCreditMultiplier()            { return 1f + killCreditBonus; }
+    public float killAmmoRefundChance()            { return Math.min(1f, killAmmoRefundChance); }
+    /** Experience multiplier on a kill: 1 + the summed bonuses. */
+    public float experienceMultiplier()            { return 1f + experienceBonus; }
+    public float doorBlastFraction()               { return doorBlastFraction; }
+    public float doorOpenHealFraction()            { return doorOpenHealFraction; }
+    public float corpseBlastFraction()             { return corpseBlastFraction; }
+    public float floorArrivalHealFraction()        { return floorArrivalHealFraction; }
+    public float floorArrivalArmorFraction()       { return floorArrivalArmorFraction; }
+    public float floorArrivalAmmoFraction()        { return floorArrivalAmmoFraction; }
+    public boolean firstHitShield()                { return firstHitShield; }
+    public float lowHealthDamageBonus()            { return lowHealthDamageBonus; }
+    /** Damage-taken multiplier, clamped to at least RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN (R12). */
+    public float damageTakenMultiplier()           { return Math.max(BalanceConfig.RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN, damageTakenFactor); }
+    /** Enemy-health multiplier, clamped to at least RELIC_ENEMY_HEALTH_MULTIPLIER_MIN (R12). */
+    public float enemyHealthMultiplier()           { return Math.max(BalanceConfig.RELIC_ENEMY_HEALTH_MULTIPLIER_MIN, enemyHealthFactor); }
+
+    /**
+     * A fresh aggregate with each effect applied at rank 1 (the relic valuation's input). Perk and
+     * keystone state is not included: this is the relic's effects alone.
+     */
+    public static BuildStats ofEffects(PerkEffect... effects) {
+        BuildStats stats = new BuildStats();
+        for (PerkEffect effect : effects) effect.applyAt(stats, 1);
+        return stats;
+    }
 }
