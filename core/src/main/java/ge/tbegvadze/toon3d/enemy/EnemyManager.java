@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.entity.MatchupOutcome;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.MeleeWeapon;
 import ge.tbegvadze.toon3d.entity.Player;
+import ge.tbegvadze.toon3d.hazard.RelicBlastTarget;
 import ge.tbegvadze.toon3d.entity.SpireHitTarget;
 import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.item.AmmoType;
@@ -88,6 +89,12 @@ public final class EnemyManager implements EnemyHitTarget {
     private KillXpListener      killXpListener;
     private KillEventListener   killEventListener;
     private KillCreditListener  killCreditListener;
+    /** Where a CORPSE_BLAST lands (relics R9): wired per floor by World / SimWorld; null = no blasts. */
+    private RelicBlastTarget    relicBlastTarget;
+    /** True while a corpse burst resolves, so a kill it causes can never burst again (relics R8). */
+    private boolean             resolvingCorpseBurst = false;
+    /** The floor's initial enemies are scaled by ENEMY_HEALTH_MULTIPLIER exactly once (relics R13). */
+    private boolean             initialEnemyHealthScaled = false;
     private DropPlacedListener  dropPlacedListener;
     private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
@@ -162,6 +169,8 @@ public final class EnemyManager implements EnemyHitTarget {
     private int     activationOriginColumn = -1;
     private int     activationOriginRow    = -1;
     private boolean activationHazardBlast  = false;
+    /** Armed around a relic blast (R8): its kills take the relic kill terms, minus the corpse burst. */
+    private boolean activationRelicBlast   = false;
     /** The run's build aggregate (balance-overhaul order 5); read live. Never null. */
     private BuildStats buildStats = BuildStats.NONE;
     /** True while a STORM CONDUIT arc is resolving, so the arc's own hit never arcs again (order 5). */
@@ -285,6 +294,28 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     public void setBuildStats(BuildStats stats) {
         this.buildStats = stats != null ? stats : BuildStats.NONE;
+        // RELICS (R13): the floor's initial enemies are built in the constructor, before the build is wired, so
+        // they take the enemy-health multiplier here, once. Enemies spawned later take it at spawn.
+        if (!initialEnemyHealthScaled) {
+            initialEnemyHealthScaled = true;
+            for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
+                applyRelicEnemyHealthMultiplier(enemies.get(enemyIndex));
+            }
+        }
+    }
+
+    /** Wires the relic blast target (the floor's ExplosiveBarrelManager) for CORPSE_BLAST. Null clears it. */
+    public void setRelicBlastTarget(RelicBlastTarget target) {
+        this.relicBlastTarget = target;
+    }
+
+    /** R13: a non-BOSS enemy's max and current HP x the build's enemy-health multiplier (identity when no relic). */
+    private void applyRelicEnemyHealthMultiplier(Enemy enemy) {
+        float healthMultiplier = buildStats.enemyHealthMultiplier();
+        if (healthMultiplier == 1f || enemy.type.role() == EnemyRole.BOSS) return;
+        int scaledHealth = Math.max(1, Math.round(enemy.maxHealth * healthMultiplier));
+        enemy.maxHealth = scaledHealth;
+        enemy.health    = scaledHealth;
     }
 
     /**
@@ -541,11 +572,11 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemyType.role() == EnemyRole.BOSS) {
             // Order 6: boss XP is DERIVED from the boss's depth-scaled stats (its Threat Points), so an
             // endless-mode boss at depth 20 pays its depth-20 XP automatically — no flat placeholder.
-            return BossBalance.statsForDepth(currentDepth).xpReward;
+            return scaledByExperienceMultiplier(BossBalance.statsForDepth(currentDepth).xpReward);
         }
-        return GameMath.xpRewardAtDepth(BalanceConfig.XP_PER_THREAT_POINT, enemyType.baseThreatPoints(),
-                BalanceConfig.ENEMY_HEALTH_GROWTH, BalanceConfig.ENEMY_DAMAGE_GROWTH,
-                currentDepth);
+        return scaledByExperienceMultiplier(GameMath.xpRewardAtDepth(BalanceConfig.XP_PER_THREAT_POINT,
+                enemyType.baseThreatPoints(), BalanceConfig.ENEMY_HEALTH_GROWTH, BalanceConfig.ENEMY_DAMAGE_GROWTH,
+                currentDepth));
     }
 
     /**
@@ -556,9 +587,21 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private int depthScaledCreditReward(EnemyType enemyType) {
         if (enemyType.role() == EnemyRole.BOSS) {
-            return BossBalance.statsForDepth(currentDepth).creditReward;
+            return scaledByKillCreditMultiplier(BossBalance.statsForDepth(currentDepth).creditReward);
         }
-        return enemyType.baseCreditReward();
+        return scaledByKillCreditMultiplier(enemyType.baseCreditReward());
+    }
+
+    /** RELICS: XP x the build's experience multiplier, before KillXpListener / KillEventListener. Identity at 1.0. */
+    private int scaledByExperienceMultiplier(int experience) {
+        float multiplier = buildStats.experienceMultiplier();
+        return multiplier == 1f ? experience : Math.round(experience * multiplier);
+    }
+
+    /** RELICS: base credits x the build's kill-credit multiplier, before KillCreditListener. Identity at 1.0. */
+    private int scaledByKillCreditMultiplier(int credits) {
+        float multiplier = buildStats.killCreditMultiplier();
+        return multiplier == 1f ? credits : Math.round(credits * multiplier);
     }
 
     /** Wires the kill-message system so every kill fires a display notification with name + XP. */
@@ -810,6 +853,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (level.isBlockedAt(tileColumn, tileRow, doorManager)) return;
         if (isTileOccupiedByEnemy(tileColumn, tileRow)) return;
         Enemy enemy = initScaledEnemy(type, tileColumn, tileRow, dungeonDepth);
+        applyRelicEnemyHealthMultiplier(enemy);
         enemy.alert();
         enemy.spawnedByBossSummon = spawnedByBossSummon;
         enemies.add(enemy);
@@ -894,6 +938,12 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.getActiveEffects().get(StatusType.BURNING).isActive(), thisKillWasMelee,
                     isPlayerBelowBerserkThreshold(), worldTurnIndex <= enemy.riposteWindowLastTurn);
             if (!resolvingStormArc) enemy.playerHitTaken = true;
+            // RELICS: LOW_HEALTH_DAMAGE widens the low-HP read to every damage class (BERSERKER's own melee term
+            // above is untouched). Identity with no relic.
+            float lowHealthBonus = buildStats.lowHealthDamageBonus();
+            if (lowHealthBonus > 0f && isPlayerBelowBerserkThreshold()) {
+                buildMultiplier *= 1f + lowHealthBonus;
+            }
         } else if (activationHazardBlast) {
             // PYROMANIAC is "from every source": a barrel blast takes only the burning-target term.
             buildMultiplier = buildStats.burningTargetMultiplier(
@@ -949,6 +999,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (!enemy.isAlive()) {
             // THE BUILD's kill terms (balance-overhaul order 5) — a weapon kill only (a barrel is not one).
             if (!activationHazardBlast) applyBuildKillTerms(thisKillWasMelee, enemy);
+            else if (activationRelicBlast) applyRelicKillTerms(enemy, false);
             int xpAwarded = depthScaledXpReward(enemy.type);
             if (killXpListener != null) {
                 killXpListener.onEnemyKilledForXp(xpAwarded);
@@ -1052,12 +1103,58 @@ public final class EnemyManager implements EnemyHitTarget {
         if (meleeKill && healFraction > 0f && cachedPlayer != null && cachedPlayer.isAlive()) {
             cachedPlayer.applyHealing(GameMath.fractionOfMaximum(cachedPlayer.getMaxHealth(), healFraction));
         }
+        applyRelicKillTerms(killed, true);
+    }
+
+    /**
+     * The relic kill terms (relics-run-changing-artifacts): KILL_HEAL (plain healing, not a treatment),
+     * KILL_ARMOR, KILL_AMMO_REFUND (rolled on {@code buildRandom} ONLY when the chance is positive, so a relic-free
+     * run draws nothing) and CORPSE_BLAST — the four orthogonal neighbours of the corpse take the fraction, the
+     * centre is empty. A kill caused by any relic blast (door or corpse) takes the other terms but never bursts
+     * ({@code allowCorpseBurst} false — R8: no chains).
+     */
+    private void applyRelicKillTerms(Enemy killed, boolean allowCorpseBurst) {
+        if (cachedPlayer != null && cachedPlayer.isAlive()) {
+            float killHealFraction = buildStats.killHealFraction();
+            if (killHealFraction > 0f) {
+                cachedPlayer.applyHealing(GameMath.fractionOfMaximum(cachedPlayer.getMaxHealth(), killHealFraction));
+            }
+            float killArmorFraction = buildStats.killArmorFraction();
+            if (killArmorFraction > 0f) {
+                cachedPlayer.applyArmor(GameMath.fractionOfMaximum(cachedPlayer.getMaxArmor(), killArmorFraction));
+            }
+        }
+        float ammoRefundChance = buildStats.killAmmoRefundChance();
+        if (ammoRefundChance > 0f && loadout != null && buildRandom.nextFloat() < ammoRefundChance) {
+            Weapon activeWeapon = loadout.active();
+            if (activeWeapon != null) activeWeapon.refundReserveRounds(1);
+        }
+        float corpseBlastFraction = buildStats.corpseBlastFraction();
+        if (allowCorpseBurst && corpseBlastFraction > 0f && relicBlastTarget != null && !resolvingCorpseBurst) {
+            resolvingCorpseBurst = true;
+            try {
+                relicBlastTarget.detonateRelicBlast(killed.tileColumn, killed.tileRow, 0f, corpseBlastFraction,
+                        EffectConstants.RELIC_BLAST_VISUAL_SCALE_CORPSE);
+            } finally {
+                resolvingCorpseBurst = false;
+            }
+        }
     }
 
     @Override
     public void setActivationOrigin(int tileColumn, int tileRow) {
         activationOriginColumn = tileColumn;
         activationOriginRow    = tileRow;
+    }
+
+    @Override
+    public void setActivationRelicBlast(boolean relicBlast) {
+        activationRelicBlast = relicBlast;
+    }
+
+    @Override
+    public boolean isActivationRelicBlast() {
+        return activationRelicBlast;
     }
 
     @Override

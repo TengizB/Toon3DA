@@ -11,6 +11,7 @@ public interface RelicBlastTarget {
      * @param tileRow        blast centre row
      * @param centreFraction fraction of reference HP dealt on the centre tile (0 = nothing there)
      * @param ringFraction   fraction dealt on each of the four orthogonal neighbours
+     * @param visualScale    height multiplier of the burst drawn at the centre (EffectConstants.RELIC_BLAST_VISUAL_SCALE_*)
      */
-    void detonateRelicBlast(int tileColumn, int tileRow, float centreFraction, float ringFraction);
+    void detonateRelicBlast(int tileColumn, int tileRow, float centreFraction, float ringFraction, float visualScale);
 }

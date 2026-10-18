@@ -26,7 +26,7 @@ import ge.tbegvadze.toon3d.util.GameMath;
  *
  * Zero allocations per detonation: the chain queue is a pre-allocated int[].
  */
-public final class ExplosiveBarrelManager implements BarrelHitTarget {
+public final class ExplosiveBarrelManager implements BarrelHitTarget, RelicBlastTarget {
 
     // Cardinal cross pattern: centre, east, west, north, south
     private static final int[] BLAST_STEP_COLUMNS = { 0,  1, -1,  0,  0 };
@@ -46,6 +46,8 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
     /** Enemy-side blast damage on the barrel's own tile / on each orthogonal neighbour, fixed for the floor's depth. */
     private final int                 enemyCentreDamage;
     private final int                 enemyRingDamage;
+    /** The reference soldier's max HP at this floor's depth: the 1.0 unit of a relic blast (relics R9). */
+    private final float               referenceSoldierMaxHealth;
     private       ImpactEventListener impactEventListener = null;
     private       BarrelDetonationListener detonationListener = null;
 
@@ -62,7 +64,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
         this.level          = level;
         // Unrounded on purpose: the ring (0.6 x soldier) must land exactly on a chaff's own rounded HP, so the
         // reference stays a float and only the final damage is rounded (BalanceSchema R-HAZARD audits it).
-        float referenceSoldierMaxHealth = GameMath.enemyHealthAtDepth(
+        this.referenceSoldierMaxHealth = GameMath.enemyHealthAtDepth(
                 BalanceConfig.HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH, depth);
         this.enemyCentreDamage = GameMath.barrelBlastDamage(
                 BalanceConfig.HAZARD_BARREL_CENTRE_FRACTION, referenceSoldierMaxHealth);
@@ -160,23 +162,10 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
             if (enemyHitTarget != null) {
                 Object enemy = enemyHitTarget.enemyAt(blastColumn, blastRow);
                 if (enemy != null) {
-                    // AS6 (balance-overhaul order 3): a barrel blast is EXPLOSIVE against traits. A barrel
-                    // can detonate mid-activation (a shot into it), so restore whatever was armed.
-                    DamageClass previousClass = enemyHitTarget.getActivationDamageClass();
-                    boolean previousFloorNeutral = enemyHitTarget.isActivationMatchupFloorNeutral();
-                    boolean previousHazardBlast  = enemyHitTarget.isActivationHazardBlast();
-                    enemyHitTarget.setActivationDamageClass(DamageClass.EXPLOSIVE);
-                    enemyHitTarget.setActivationMatchupFloorNeutral(false);
-                    // A barrel is a HAZARD blast: no weapon build terms; its own Sapper / DEMOLITIONIST
-                    // multiplier (balance-overhaul order 5) scales it instead.
-                    enemyHitTarget.setActivationHazardBlast(true);
                     int blastDamage = Math.round((centreTile ? enemyCentreDamage : enemyRingDamage)
                             * player.getBuildStats().barrelDamageMultiplier(detonatedByPlayer));
-                    enemyHitTarget.applyDamageTo(enemy, blastDamage);
+                    applyHazardBlastToEnemy(enemy, blastDamage);
                     enemyBlastDamageDealt += blastDamage;
-                    enemyHitTarget.setActivationHazardBlast(previousHazardBlast);
-                    enemyHitTarget.setActivationDamageClass(previousClass);
-                    enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
                 }
             }
 
@@ -195,6 +184,67 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget {
                     chainRows[chainCount]    = blastRow;
                     chainCount++;
                 }
+            }
+        }
+    }
+
+    /**
+     * One enemy's share of a hazard blast: EXPLOSIVE through the matchup, floor-neutral off, hazard-blast flag on
+     * (no weapon build terms, no kill terms). Restores whatever the target had armed — a blast can fire
+     * mid-activation (a shot into a barrel) or inside a kill resolving (a corpse burst).
+     */
+    private void applyHazardBlastToEnemy(Object enemy, int blastDamage) {
+        // AS6 (balance-overhaul order 3): a barrel blast is EXPLOSIVE against traits.
+        DamageClass previousClass = enemyHitTarget.getActivationDamageClass();
+        boolean previousFloorNeutral = enemyHitTarget.isActivationMatchupFloorNeutral();
+        boolean previousHazardBlast  = enemyHitTarget.isActivationHazardBlast();
+        enemyHitTarget.setActivationDamageClass(DamageClass.EXPLOSIVE);
+        enemyHitTarget.setActivationMatchupFloorNeutral(false);
+        // A barrel is a HAZARD blast: no weapon build terms; its own Sapper / DEMOLITIONIST
+        // multiplier (balance-overhaul order 5) scales it instead.
+        enemyHitTarget.setActivationHazardBlast(true);
+        enemyHitTarget.applyDamageTo(enemy, blastDamage);
+        enemyHitTarget.setActivationHazardBlast(previousHazardBlast);
+        enemyHitTarget.setActivationDamageClass(previousClass);
+        enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
+    }
+
+    /**
+     * A relic blast (relics-run-changing-artifacts R9): ENEMIES ONLY — never the player, never a barrel chain.
+     * The centre tile takes {@code centreFraction}, each of the four orthogonal neighbours {@code ringFraction},
+     * of the reference soldier's HP at this floor's depth (a fraction of 0 skips that tile). Kills credit XP and
+     * credits like a barrel kill; the weapon build terms do not apply (hazard-blast flag), but the relic-blast flag
+     * gives them the relic kill terms minus the corpse burst (R8).
+     */
+    @Override
+    public void detonateRelicBlast(int tileColumn, int tileRow, float centreFraction, float ringFraction,
+                                   float visualScale) {
+        if (enemyHitTarget == null) return;
+        if (impactEventListener != null) {
+            float worldX = tileColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+            float worldY = tileRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+            impactEventListener.onEnemyKilled(worldX, worldY, visualScale,
+                    GameMath.relicBlastDamage(Math.max(centreFraction, ringFraction), referenceSoldierMaxHealth));
+        }
+        boolean previousRelicBlast = enemyHitTarget.isActivationRelicBlast();
+        enemyHitTarget.setActivationRelicBlast(true);
+        try {
+            detonateRelicBlastTiles(tileColumn, tileRow, centreFraction, ringFraction);
+        } finally {
+            enemyHitTarget.setActivationRelicBlast(previousRelicBlast);
+        }
+    }
+
+    private void detonateRelicBlastTiles(int tileColumn, int tileRow, float centreFraction, float ringFraction) {
+        for (int blastIndex = 0; blastIndex < BLAST_STEP_COLUMNS.length; blastIndex++) {
+            float fraction = blastIndex == 0 ? centreFraction : ringFraction;
+            if (fraction <= 0f) continue;
+            int blastColumn = tileColumn + BLAST_STEP_COLUMNS[blastIndex];
+            int blastRow    = tileRow    + BLAST_STEP_ROWS[blastIndex];
+            if (Level.isWall(level.getCell(blastColumn, blastRow))) continue;
+            Object enemy = enemyHitTarget.enemyAt(blastColumn, blastRow);
+            if (enemy != null) {
+                applyHazardBlastToEnemy(enemy, GameMath.relicBlastDamage(fraction, referenceSoldierMaxHealth));
             }
         }
     }

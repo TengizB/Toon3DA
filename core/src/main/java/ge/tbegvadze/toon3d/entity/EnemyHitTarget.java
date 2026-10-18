@@ -159,6 +159,16 @@ public interface EnemyHitTarget {
      */
     default void setActivationHazardBlast(boolean hazardBlast) {}
 
+    /**
+     * While armed, the hazard blast is a RELIC blast (relics-run-changing-artifacts R8/R9): its kills still earn
+     * the relic kill terms (heal, armour, ammo refund) but never a corpse burst. Armed by ExplosiveBarrelManager
+     * around detonateRelicBlast, beside the hazard-blast flag. Default: no-op.
+     */
+    default void setActivationRelicBlast(boolean relicBlast) {}
+
+    /** Whether {@link #setActivationRelicBlast} is currently armed. Default false. */
+    default boolean isActivationRelicBlast() { return false; }
+
     /** Whether {@link #setActivationHazardBlast} is currently armed. Default false. */
     default boolean isActivationHazardBlast() { return false; }
 

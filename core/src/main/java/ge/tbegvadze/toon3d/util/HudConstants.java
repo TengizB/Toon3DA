@@ -310,4 +310,13 @@ public final class HudConstants {
     public static final float RELIC_COST_TEXT_COLOR_R = 0.85f;
     public static final float RELIC_COST_TEXT_COLOR_G = 0.12f;
     public static final float RELIC_COST_TEXT_COLOR_B = 0.12f;
+
+    // --- RELIC FEEDBACK TEXT (relics-run-changing-artifacts): UI event text, not story strings ---
+    /** Suffix of a relic trigger line: "+9 HP - RELIC". */
+    public static final String RELIC_FEEDBACK_SUFFIX      = " - RELIC";
+    public static final String RELIC_FEEDBACK_HEALTH_UNIT = " HP";
+    public static final String RELIC_FEEDBACK_ARMOR_UNIT  = " AR";
+    public static final String RELIC_FEEDBACK_AMMO_UNIT   = " ";
+    /** Shown when FIRST_HIT_SHIELD absorbs a hit. */
+    public static final String RELIC_SHIELD_ABSORB_TEXT   = "SHIELD - HIT ABSORBED";
 }

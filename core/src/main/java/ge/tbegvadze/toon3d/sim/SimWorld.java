@@ -130,6 +130,9 @@ public final class SimWorld implements LevelTransitionListener {
     private final PerkDeck            perkDeck;
     /** The run's build (balance-overhaul order 5) — mirrors World.playerBuild. */
     private final PlayerBuild         playerBuild = new PlayerBuild();
+    /** The run's held relics and trigger runner (relics-run-changing-artifacts) — mirrors World; no feedback listener. */
+    private final ge.tbegvadze.toon3d.relic.RelicHand    relicHand    = new ge.tbegvadze.toon3d.relic.RelicHand();
+    private final ge.tbegvadze.toon3d.relic.RelicRuntime relicRuntime = new ge.tbegvadze.toon3d.relic.RelicRuntime();
     private final java.util.EnumSet<BuildTag> carriedTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
     private int                       appliedBuildMaxHealthBonus = 0;
     private int                       appliedBuildMaxArmorBonus  = 0;
@@ -390,6 +393,8 @@ public final class SimWorld implements LevelTransitionListener {
         if (meleeWeapon != null) meleeWeapon.setAbilityResolver(abilityResolver);
 
         explosiveBarrelManager = new ExplosiveBarrelManager(level, enemyManager, player, currentDepth);
+        enemyManager.setRelicBlastTarget(explosiveBarrelManager);
+        doorManager.setDoorOpenedListener(relicRuntime);
         enemyManager.setKillXpListener(playerProgress::addXp);
         enemyManager.setKillEventListener((nameTag, xpAwarded) -> floorLedger.enemiesKilled++);
         enemyManager.setKillCreditListener((baseReward, dungeonDepth) ->
@@ -455,6 +460,7 @@ public final class SimWorld implements LevelTransitionListener {
         enemyManager.setBuildStats(playerBuild.stats());
         enemyManager.setPlayerReference(player);
         player.resetFloorBuildState();
+        relicRuntime.beginFloor(level, player, inventory, explosiveBarrelManager);
 
         hazardManager = new HazardManager(level, enemyManager, statusEffectController,
                                           seed ^ 0x4A2A5D9BL);
@@ -863,6 +869,11 @@ public final class SimWorld implements LevelTransitionListener {
             meleeWeapon.addAbilityBuildTags(carriedTagsScratch);
         }
         return carriedTagsScratch;
+    }
+
+    /** The run's held relics (CP8: SimWorld acquisition). */
+    ge.tbegvadze.toon3d.relic.RelicHand relicHand() {
+        return relicHand;
     }
 
     /** The run's build (read-only by convention) — SimView exposes it to the policies. */

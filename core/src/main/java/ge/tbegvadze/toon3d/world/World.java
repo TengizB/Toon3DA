@@ -16,6 +16,8 @@ import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
 import ge.tbegvadze.toon3d.hazard.SpireManager;
+import ge.tbegvadze.toon3d.relic.RelicHand;
+import ge.tbegvadze.toon3d.relic.RelicRuntime;
 import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
@@ -186,6 +188,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * deltas (attribute grants, the max HP / armour multipliers). Dies with the run.
      */
     private final PlayerBuild            playerBuild = new PlayerBuild();
+    /** The run's held relics and their trigger runner (relics-run-changing-artifacts). One World = one run: both die with it. */
+    private final RelicHand              relicHand    = new RelicHand();
+    private final RelicRuntime           relicRuntime = new RelicRuntime();
     /** Carried weapon tags, refilled by {@link #carriedBuildTags()} (scratch — never allocated per offer). */
     private final java.util.EnumSet<BuildTag> carriedTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
     /** The build's max-HP / max-armour bonus already applied to the Player (applyBuildEffects deltas). */
@@ -721,6 +726,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         // Event text and hit vignette — run-persistent feedback systems
         eventTextSystem     = new EventTextSystem();
+        relicRuntime.setFeedbackListener((text, positive) ->
+                eventTextSystem.spawnWithColor(text, positive ? EventTextSystem.COLOR_GREEN : EventTextSystem.COLOR_RED));
         eventTextRenderer   = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
         abilityFeedback     = new AbilityFeedback(eventTextSystem, impactEffectSystem);
@@ -1374,6 +1381,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             meleeWeapon.setAbilityResolver(abilityResolver);
         }
         explosiveBarrelManager = new ExplosiveBarrelManager(targetLevel, enemyManager, player, currentDepth);
+        enemyManager.setRelicBlastTarget(explosiveBarrelManager);
+        doorManager.setDoorOpenedListener(relicRuntime);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
         impactEffectSystem.setGameAudio(gameAudio);
         enemyManager.setImpactEventListener(impactEffectSystem);
@@ -1410,6 +1419,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setBuildStats(playerBuild.stats());
         enemyManager.setPlayerReference(player);
         player.resetFloorBuildState();
+        relicRuntime.beginFloor(targetLevel, player, inventory, explosiveBarrelManager);
         enemyManager.setDropPlacedListener((tileColumn, tileRow, dropChar) ->
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
@@ -2079,8 +2089,16 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         inventory.syncFloorThreatLevel(Math.max(1, currentDepth));
     }
 
+    /** The run's held relics (CP6/CP7: acquisition and the build page read it). */
+    public RelicHand getRelicHand() {
+        return relicHand;
+    }
+
     public void update(float deltaTime) {
         syncWeaponThreatLevels();
+        if (player.consumeFirstHitShieldEvent()) {
+            eventTextSystem.spawnWithColor(HudConstants.RELIC_SHIELD_ABSORB_TEXT, EventTextSystem.COLOR_GREEN);
+        }
         // OVERLAY PRECEDENCE (order-7 Part E): a hard-pause overlay — death, level-up, inventory,
         // shop, weapon inspect, the nav console, an event choice — owns the screen. Suppress the
         // bark layer while one is open: requests still QUEUE, nothing is delivered or aged, and the
@@ -3034,7 +3052,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // Lost gamble: a survivable bite + the fail sting (worst case wastes the hop, never fatal-by-design).
             if (effect.gambleFailDamageFraction() > 0f && player != null) {
                 int damage = Math.round(player.getMaxHealth() * effect.gambleFailDamageFraction());
-                if (damage > 0) player.applyDamage(damage);
+                if (damage > 0) player.applyEventCostDamage(damage);
             }
             String failLine = effect.failText() != null ? effect.failText() : "IT WAS A TRAP";
             if (eventTextSystem != null) {
@@ -3102,7 +3120,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         if (effect.healthCostFraction() > 0f && player != null) {
             int cost = Math.min(player.getHealth() - 1, Math.round(player.getMaxHealth() * effect.healthCostFraction()));
-            if (cost > 0) player.applyDamage(cost);
+            if (cost > 0) player.applyEventCostDamage(cost);
         }
         if (effect.revealNextRegion()) {
             revealNextRegion();

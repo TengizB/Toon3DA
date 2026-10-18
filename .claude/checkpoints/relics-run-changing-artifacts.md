@@ -49,7 +49,7 @@ than hold. Never `git add -A`.
 - [x] **CP1** — relic package (A1 classes, catalog empty), 17 PerkModifier kinds, BuildStats fields/
       accessors/reset/copyFrom/ofEffects, PlayerBuild.addRelicEffects, BalanceConfig SECTION 26 skeleton.
       DONE WHEN: build + test green (baseline failure only), BUILDS table unchanged; seams unwired (CP2).
-- [ ] **CP2** — every new kind read at its seam (Player, EnemyManager, RelicBlastTarget in
+- [x] **CP2** — every new kind read at its seam (Player, EnemyManager, RelicBlastTarget in
       ExplosiveBarrelManager, DoorOpenedListener in DoorManager, RelicRuntime) wired in World AND SimWorld.
       DONE WHEN: build + test green, sim output unchanged; R11 status-tick method noted below.
 - [ ] **CP3** — RelicCatalog registers all 36 with SECTION 26 magnitudes; RelicOfferRoller R4–R6.
@@ -100,3 +100,19 @@ than hold. Never `git add -A`.
   resetFloorBuildState() ~l.474 re-arms. There is no entity/StatusEffectController — grep for the caller.
   BUILDS table verified identical vs authority doc l.1564–1577 by running util.BalanceReport from the
   mirror's classes.
+- **CP2 handover:** `RelicBlastTarget.detonateRelicBlast(col, row, centreFraction, ringFraction, visualScale)`
+  (5 args). Corpse burst = centre 0, ring = fraction. Relic blasts arm `EnemyHitTarget.setActivationRelicBlast`
+  (+ the hazard-blast flag): their kills get XP/credits AND the relic kill terms minus the corpse burst
+  (`applyRelicKillTerms(enemy, allowCorpseBurst=false)`) — R8/EDGE CASES; barrel kills still get none.
+  Hub fix: route-event costs use new `Player.applyEventCostDamage(int)` (bypasses the relic shield and
+  damage multiplier; R11 = enemy attacks/heavies/explosions only). XP/credit multipliers live in
+  `EnemyManager.depthScaledXpReward/depthScaledCreditReward` (every kill site). Enemy HP scaling: in
+  `setBuildStats` (initial floor enemies) + `spawnEnemyInternal`, BOSS skipped. Door open is turn-less
+  (INTERACTING -> finishAction(false)); blast resolves inside requestOpen before any enemy turn.
+  Door blast centre = door + signum(door - player), wall -> door tile. Feedback strings in HudConstants
+  `RELIC_FEEDBACK_*` / `RELIC_SHIELD_ABSORB_TEXT` (generic "RELIC"/"SHIELD", no per-relic name).
+  Getters: `World.getRelicHand()`, `SimWorld.relicHand()` (package-private), `SimWorld.playerBuild()`.
+  Bond = `relicHand.add(def, playerBuild)` then existing `applyBuildEffects()` (World ~5173, SimWorld ~830).
+  Floor build: World `buildLevelDependentResources` (~1333), SimWorld `buildFloor` (~377).
+  World `applyLadderEffect` ~3028/3095. Sim summary byte-identical to CP1 (diff of summary.txt);
+  balanceSim ~50 s. HEAD summary kept at <scratchpad>/head-summary.txt.

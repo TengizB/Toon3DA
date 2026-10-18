@@ -3525,6 +3525,22 @@ public final class GameMath {
     }
 
     /*
+     * Formula: relicBlastDamage — a relic blast tile's damage as a FRACTION of the reference soldier's HP
+     * Derivation:
+     *   damage = max(1, round(fraction x referenceHealth))
+     *   referenceHealth = the reference SOLDIER's max HP at the floor's depth (enemyHealthAtDepth), so 1.0 unit
+     *   is the same yardstick a barrel uses. The door blast's centre takes fraction x 1.0 and each of the four
+     *   neighbours fraction x RELIC_BLAST_RING_SHARE; the corpse burst puts fraction x 1.0 on each neighbour.
+     *   Example (depth 10, soldier 161 HP): fraction 0.30 -> round(48.3) = 48.
+     * Edge cases:
+     *   referenceHealth <= 0 or fraction <= 0 -> 1; callers skip a tile whose fraction is 0 ("nothing there")
+     *   before asking. Math.round is half-up.
+     */
+    public static int relicBlastDamage(float fraction, float referenceHealth) {
+        return Math.max(1, Math.round(fraction * referenceHealth));
+    }
+
+    /*
      * Formula: groupBarrelRoomCount — how many group rooms must hold barrels (balance-overhaul order 4, H14)
      * Derivation:
      *   needed = ceil(share x eligibleRooms)   (share = HAZARD_GROUP_ROOM_SHARE, 0.40)

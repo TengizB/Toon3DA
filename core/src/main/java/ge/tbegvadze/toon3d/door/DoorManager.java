@@ -43,6 +43,9 @@ public class DoorManager {
     // simulator, where every notification is skipped.
     private DoorStateListener doorStateListener;
 
+    // Second slot (relics-run-changing-artifacts): told when the PLAYER opens a CLOSED door. Null in tests.
+    private DoorOpenedListener doorOpenedListener;
+
     public DoorManager(Level level) {
         doorsByPackedKey = new HashMap<>();
         lockedDoorColors = new HashMap<>();
@@ -252,6 +255,7 @@ public class DoorManager {
                 door.animationProgress = 0f;
                 openedDoorCount++;
                 if (doorStateListener != null) doorStateListener.onDoorOpening(tileColumn, tileRow);
+                if (doorOpenedListener != null) doorOpenedListener.onDoorOpenedByPlayer(tileColumn, tileRow);
                 break;
             case CLOSING:
                 door.animationProgress = 1f - door.animationProgress;
@@ -262,6 +266,11 @@ public class DoorManager {
             case OPEN:
                 break;
         }
+    }
+
+    /** Wires the relic door hook (fired on a player's CLOSED -> OPENING request). Null clears it. */
+    public void setDoorOpenedListener(DoorOpenedListener listener) {
+        this.doorOpenedListener = listener;
     }
 
     /** Wires the cosmetic door-movement hook (sound). Null clears it. */

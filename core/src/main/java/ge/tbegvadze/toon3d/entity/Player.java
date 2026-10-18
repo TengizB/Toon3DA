@@ -80,6 +80,11 @@ public class Player implements Renderable, Disposable, StatusHost {
 
     /** Second Wind (balance-overhaul order 5): true once this floor's lethal-hit save has been spent. */
     private boolean secondWindSpentThisFloor = false;
+    /** Relic FIRST_HIT_SHIELD: spent for this floor / an absorb the HUD has not yet reported. */
+    private boolean firstHitShieldSpentThisFloor = false;
+    private boolean firstHitShieldEventPending   = false;
+    /** True only inside {@link #applyEventCostDamage}: the relic shield and multiplier stand aside. */
+    private boolean relicTermsBypassed           = false;
 
     /**
      * Damage the guard BLOCKED on the last {@link #applyDirectionalDamage} call — incoming minus taken for a
@@ -367,6 +372,20 @@ public class Player implements Renderable, Disposable, StatusHost {
     }
 
     /**
+     * A route-event COST (a lost gamble's bite, a health toll) rather than a hit: the normal pipeline, but the
+     * relic shield and damage-taken multiplier do not apply — R11 limits them to enemy attacks, heavies and
+     * explosions, and a price the player agreed to must cost what the card said.
+     */
+    public void applyEventCostDamage(int amount) {
+        relicTermsBypassed = true;
+        try {
+            applyDamage(amount, false);
+        } finally {
+            relicTermsBypassed = false;
+        }
+    }
+
+    /**
      * The damage pipeline with the HEAVY flag (balance-overhaul order 4, H8): identical to
      * {@link #applyDamage(int)} except that step (c) charges the armour pool
      * {@link GameMath#armorShredCost} (absorbed x ARMOUR_HEAVY_SHRED_MULTIPLIER) for a heavy hit. The HP
@@ -374,6 +393,20 @@ public class Player implements Renderable, Disposable, StatusHost {
      */
     private void applyDamage(int amount, boolean heavy) {
         if (ProgressionConstants.debug) return;
+
+        // RELICS (R11): the first hit each floor is absorbed whole. Status ticks take applyDoTDamage and never get here.
+        if (amount > 0 && !relicTermsBypassed && buildStats.firstHitShield() && !firstHitShieldSpentThisFloor) {
+            firstHitShieldSpentThisFloor = true;
+            firstHitShieldEventPending   = true;
+            return;
+        }
+        // RELICS (R12): the damage-taken multiplier; a positive hit always deals at least 1.
+        if (amount > 0 && !relicTermsBypassed) {
+            float damageTakenMultiplier = buildStats.damageTakenMultiplier();
+            if (damageTakenMultiplier != 1f) {
+                amount = Math.max(1, Math.round(amount * damageTakenMultiplier));
+            }
+        }
 
         // (a) AGILITY dodge roll — checked before armour or toughness.
         if (playerStats != null) {
@@ -473,6 +506,14 @@ public class Player implements Renderable, Disposable, StatusHost {
     /** Floor arrival: Second Wind's once-per-floor save is available again. */
     public void resetFloorBuildState() {
         secondWindSpentThisFloor = false;
+        firstHitShieldSpentThisFloor = false;
+    }
+
+    /** True once after the relic shield absorbed a hit (World polls it for feedback); clears on read. */
+    public boolean consumeFirstHitShieldEvent() {
+        boolean pending = firstHitShieldEventPending;
+        firstHitShieldEventPending = false;
+        return pending;
     }
 
     /**
