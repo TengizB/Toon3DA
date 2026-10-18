@@ -263,7 +263,17 @@ public final class BalanceSchema {
          * the fight-length coefficient of variation <= SIM_BOSS_MAX_FIGHT_TURNS_COV, and the median player health
          * fraction at the kill in [SIM_BOSS_KILL_HEALTH_MIN, MAX]. Depth-derived: rides the order-7 round-pending waiver until a round meets it.
          */
-        SIM_BOSS
+        SIM_BOSS,
+        /**
+         * S-RELIC (relics-run-changing-artifacts, CP8): no relic is a trap and none is mandatory, read from the five
+         * TACTICAL relic probe rows' MEAN ending depths over the NO-RELIC baseline — SR1 each COMMON / RARE /
+         * LEGENDARY row in [1 - SIM_RELIC_ROW_TRAP_TOLERANCE, 1 + SIM_RELIC_ROW_MAX_LIFT]; SR2 the CURSED row in
+         * [1 - SIM_RELIC_CURSED_ROW_TOLERANCE, 1 + SIM_RELIC_ROW_MAX_LIFT]; SR3 LEGENDARY >= COMMON; SR4 every
+         * non-affine relic with >= SIM_RELIC_MIN_RUNS_PER_RELIC probe runs in [1 - SIM_RELIC_PER_RELIC_TRAP_TOLERANCE,
+         * 1 + SIM_RELIC_PER_RELIC_MAX_LIFT]; SR5 every non-affine relic got that many runs; SR6 standard TACTICAL holds
+         * at least one relic at run end on average. Tag-affine relics are banded by the audit only (AS17).
+         */
+        SIM_RELIC
     }
 
     // =====================================================================================

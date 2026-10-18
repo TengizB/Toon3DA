@@ -65,7 +65,7 @@ than hold. Never `git add -A`.
       card 0. DONE WHEN: test green incl. route rules; flow playable end to end.
 - [x] **CP7** — RelicOfferOverlayRenderer, BuildPagePanel RELICS, run-report line, event-text feedback,
       RELIC_BONDED sound. DONE WHEN: build green; desktop check of A4/A5/A7/A10 (or noted as owed).
-- [ ] **CP8** — sim: policy relic methods, SimWorld acquisition, RunLedger ids, 5 probe rows, S-RELIC
+- [x] **CP8** — sim: policy relic methods, SimWorld acquisition, RunLedger ids, 5 probe rows, S-RELIC
       SR1–SR6, BalanceSimTest method, RELIC REPORT, RoundSummary R1, LadderReport column.
       DONE WHEN: test + balanceSim green; before/after ROUND SUMMARY recorded below.
 - [ ] **CP9** — docs (idea step 6), authority SECTIONS 6/8 regenerated, CHANGELOG; reviewer PASS;
@@ -183,3 +183,18 @@ than hold. Never `git add -A`.
   BUILD page and report at <scratchpad>/harness/shot/ (visuals OK). OWED: real touch-tap routing and the
   by-hand A4/A5/A7/A10 run on a device — never exercised by real input. Running from repo assets/ writes
   assets/game-audio + story-audio WAV caches (untracked): delete before committing.
+- **CP8 handover:** gates verified by hub: build 463 tests (StoryBarkTest only); balanceSim exit 0, 0 FAIL
+  lines, ~48 s; BalanceSimTest 17 incl. `noRelicIsATrapAndNoneIsMandatory` (balanceSim-tagged suite).
+  `sim/RelicProbe` enum (NONE/NO_RELIC/COMMON/RARE/LEGENDARY/CURSED); rows TACTICAL-NO-RELIC,
+  TACTICAL-RELIC-{COMMON,RARE,LEGENDARY,CURSED}, 120 seeds each. RuleKind.SIM_RELIC (javadoc = full rule).
+  SimWorld resolves offers at trigger time (not queued): resolveRunStartRelic / resolveBossRelicOffer /
+  payMysteryOutcome->offerRelic; no EVENT choices in sim (locker not mirrored). LADDER probes carry no
+  relics (D3). AS17 via SimWorld.nonAffinePool. No retune, no waiver. S-RELIC: NO-RELIC mean depth 3.15;
+  SR1 C/R/L 1.02/1.02/1.03; SR2 CURSED 1.04; SR3 1.01; SR4 30 lines 0.86..1.12; SR5 min 13 runs;
+  SR6 1.01 (thin: TACTICAL took the start relic 200/200). Pre-existing band OK/WAIV/FAIL set identical.
+  ROUND SUMMARY before/after (CHANGELOG evidence): T4 exit health 0.91->0.90 OUT; T4 no-heal deaths
+  0.32 OUT->0.26 IN; T6 SPREAD share 0.62->0.64 OUT; T7 dominant tag 0.47->0.46 OUT; T7 keystone share
+  -->0.43 IN; T8 first-boss clears 0.00->0.02; T9 offers/visit 1.00->1.11 OUT; T9 unspent credits
+  0.19->0.21; G BULLETS reserve 0.40->0.56; G lifeline floors 0.10->0.07 OUT; J2 top perk STEADY_AIM 0.85
+  -> LANE_DISCIPLINE 0.83 OUT; NEW R1 relic lift 1.03 IN. Summaries: <scratchpad>/cp8-before-summary.txt,
+  cp8-after-summary.txt. MODEL vs PLAYED: kill share 0.60/0.48, doors/floor 3/2.03 (report-only).

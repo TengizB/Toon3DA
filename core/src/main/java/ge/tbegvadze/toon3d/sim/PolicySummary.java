@@ -38,6 +38,25 @@ public final class PolicySummary {
         return median(depths);
     }
 
+    /**
+     * The MEAN depth runs ended on (S-RELIC, relics-run-changing-artifacts): medians are integers near depth 3,
+     * too coarse to see a relic's lift, so the relic bands read the mean. 0 for an empty summary.
+     */
+    public float meanEndingDepth() {
+        if (runs.isEmpty()) return 0f;
+        float total = 0f;
+        for (RunLedger run : runs) total += run.endingDepth;
+        return total / runs.size();
+    }
+
+    /** Mean relics held when the run ended (S-RELIC SR6). */
+    public float meanRelicsHeldAtEnd() {
+        if (runs.isEmpty()) return 0f;
+        float total = 0f;
+        for (RunLedger run : runs) total += run.relicIdsAtEnd.size();
+        return total / runs.size();
+    }
+
     // ---- RUN OUTCOME (balance-overhaul order 6, F8) ----------------------------------------------
 
     /** Fraction of runs that killed the run-final boss (Ending.VICTORY). */

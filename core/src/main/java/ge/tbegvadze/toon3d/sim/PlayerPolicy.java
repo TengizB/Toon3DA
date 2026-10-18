@@ -9,6 +9,8 @@ import ge.tbegvadze.toon3d.entity.WeaponRoll;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
 import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
+import ge.tbegvadze.toon3d.relic.RelicDefinition;
+import ge.tbegvadze.toon3d.relic.RelicRarity;
 import ge.tbegvadze.toon3d.route.RouteNode;
 import ge.tbegvadze.toon3d.shop.ShopEntry;
 
@@ -83,6 +85,27 @@ public interface PlayerPolicy {
      * defined by not using it.
      */
     default boolean buyShopEntry(ShopEntry entry, SimView view) {
+        return false;
+    }
+
+    /**
+     * Picks one of the {@code count} relic cards on an offer, or null to LEAVE IT (relics-run-changing-artifacts).
+     * Default: the first card — NAIVE and HOARDER take whatever is put in front of them (AS15).
+     */
+    default RelicDefinition chooseRelic(RelicDefinition[] offered, int count, SimView view) {
+        return count > 0 ? offered[0] : null;
+    }
+
+    /**
+     * The rarity this policy is GRANTED one relic of at depth-1 arrival (the S-RELIC probe rows), or null.
+     * The relic itself is chosen round-robin over that rarity's non-affine pool by run index ({@link SimWorld}).
+     */
+    default RelicRarity startingRelicProbe() {
+        return null;
+    }
+
+    /** True when this policy leaves every relic offer (the S-RELIC probe rows). Default: false. */
+    default boolean declinesRelicOffers() {
         return false;
     }
 }

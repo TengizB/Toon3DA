@@ -52,6 +52,13 @@ import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PerkDeck;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
+import ge.tbegvadze.toon3d.relic.RelicCatalog;
+import ge.tbegvadze.toon3d.relic.RelicDefinition;
+import ge.tbegvadze.toon3d.relic.RelicOffer;
+import ge.tbegvadze.toon3d.relic.RelicOfferRoller;
+import ge.tbegvadze.toon3d.relic.RelicRarity;
+import ge.tbegvadze.toon3d.relic.RelicSource;
+import ge.tbegvadze.toon3d.route.BossTable;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
 import ge.tbegvadze.toon3d.route.GuaranteedContent;
 import ge.tbegvadze.toon3d.route.LevelPlan;
@@ -134,6 +141,13 @@ public final class SimWorld implements LevelTransitionListener {
     private final ge.tbegvadze.toon3d.relic.RelicHand    relicHand    = new ge.tbegvadze.toon3d.relic.RelicHand();
     private final ge.tbegvadze.toon3d.relic.RelicRuntime relicRuntime = new ge.tbegvadze.toon3d.relic.RelicRuntime();
     private final java.util.EnumSet<BuildTag> carriedTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
+    /** The offer being decided (CP8): filled by the real roller, never allocated per offer. */
+    private final RelicOffer          relicOffer = new RelicOffer();
+    private final java.util.EnumSet<BuildTag> relicTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
+    /** RUN_START fires once per run, on depth-1 arrival (mirrors World.queueRunStartRelicOffer). */
+    private boolean                   runStartRelicResolved;
+    /** BOSS fires once per boss floor, on the defeat (mirrors World.queueBossRelicOffer). */
+    private boolean                   bossRelicResolvedThisFloor;
     private int                       appliedBuildMaxHealthBonus = 0;
     private int                       appliedBuildMaxArmorBonus  = 0;
     private final int[]               appliedBuildAttributeGrants = new int[Attribute.values().length];
@@ -308,6 +322,7 @@ public final class SimWorld implements LevelTransitionListener {
 
         while (currentDepth <= settings.depthCeiling()) {
             buildFloor();
+            resolveRunStartRelic();
             playFloor();
             if (!player.isAlive()) {
                 ledger.ending      = RunLedger.Ending.KILLED;
@@ -351,6 +366,7 @@ public final class SimWorld implements LevelTransitionListener {
         for (BuildTag tag : BuildTag.values()) ledger.ranksByTagAtEnd[tag.ordinal()] = playerBuild.ranksInTag(tag);
         ledger.dominantTagAtEnd        = playerBuild.highestRankTag();
         ledger.emergencySupplyTriggers = ledger.total(floor -> floor.emergencySupplyFired ? 1 : 0);
+        for (int index = 0; index < relicHand.count(); index++) ledger.relicIdsAtEnd.add(relicHand.get(index).id());
         return ledger;
     }
 
@@ -549,6 +565,7 @@ public final class SimWorld implements LevelTransitionListener {
         ledger.depthReached = Math.max(ledger.depthReached, currentDepth);
         turnsOnFloor        = 0;
         floorActive         = true;
+        bossRelicResolvedThisFloor = false;
     }
 
     /** Runs the node -&gt; floor pipeline (mirrors World.buildFloorForNode); falls back to depth-driven. */
@@ -686,7 +703,9 @@ public final class SimWorld implements LevelTransitionListener {
                 break;
             }
             resolvePendingLevelUps();
+            resolveBossRelicOffer();
         }
+        floorLedger.doorsOpened = doorManager.getOpenedDoorCount();
         floorLedger.hazardDamageToEnemies = explosiveBarrelManager.getEnemyBlastDamageDealt()
                 + (statusEffectController.getHazardDamageToEnemies() - hazardDamageBaseline);
         floorLedger.enemiesLeftAlive = countLiveEnemies();
@@ -918,6 +937,95 @@ public final class SimWorld implements LevelTransitionListener {
             int toll = Math.min(playerStats.getCredits(), Math.round(effect.creditCostFloors() * floorIncome));
             if (toll > 0) playerStats.spendCredits(toll);
         }
+        // The MYSTERY relic cache (mirrors World.applyLadderEffect): World queues it and opens it on the next PLAYING
+        // frame; the roll is seeded by (run, depth, source) alone, so resolving it here draws the same cards.
+        if (effect.relicOffer() != null) offerRelic(effect.relicOffer(), currentDepth, 0);
+    }
+
+    // =====================================================================================
+    // RELICS (relics-run-changing-artifacts, CP8) — mirrors World's acquisition
+    // =====================================================================================
+
+    /**
+     * RUN_START on depth-1 arrival, once per run (mirrors World.queueRunStartRelicOffer, AS13). A S-RELIC probe row
+     * leaves the offer and is instead GRANTED one relic of its rarity, round-robin over that rarity's non-affine
+     * pool by run index (AS17). A LADDER probe takes no relic: it measures the on-curve player, which carries none (D3).
+     */
+    private void resolveRunStartRelic() {
+        if (runStartRelicResolved || settings.isLadderProbe()) return;
+        runStartRelicResolved = true;
+        offerRelic(RelicSource.RUN_START, Math.max(1, currentDepth), 0);
+        RelicRarity probeRarity = policy.startingRelicProbe();
+        if (probeRarity == null) return;
+        List<RelicDefinition> pool = nonAffinePool(probeRarity);
+        if (pool.isEmpty()) return;
+        long runIndex = runSeed - BalanceSimulator.DEFAULT_SEED_OFFSET;
+        RelicDefinition granted = pool.get((int) Math.floorMod(runIndex, (long) pool.size()));
+        if (bondRelic(granted)) ledger.grantedProbeRelicId = granted.id();
+    }
+
+    /** The rarity's relics with no build-tag affinity, in registration order — the probe rows' round-robin pool. */
+    static List<RelicDefinition> nonAffinePool(RelicRarity rarity) {
+        List<RelicDefinition> pool = new ArrayList<>();
+        for (RelicDefinition definition : RelicCatalog.registry().allOfRarity(rarity)) {
+            if (definition.affinity() == null) pool.add(definition);
+        }
+        return pool;
+    }
+
+    /**
+     * BOSS on the defeat, once per boss floor, never on the run-final boss (that is the VICTORY); the boss index is
+     * the count of BossTable rows shallower than this floor — exactly World.queueBossRelicOffer.
+     */
+    private void resolveBossRelicOffer() {
+        if (bossRelicResolvedThisFloor || floorBoss == null || floorBoss.isAlive() || !player.isAlive()) return;
+        bossRelicResolvedThisFloor = true;
+        if (currentDepth >= BalanceConfig.RUN_FINAL_DEPTH) return;
+        int bossIndex = 0;
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            if (row.depth < currentDepth) bossIndex++;
+        }
+        offerRelic(RelicSource.BOSS, currentDepth, bossIndex);
+    }
+
+    /**
+     * Rolls an offer through the real roller with World's seed and tag rule, then lets the policy bond a card or
+     * LEAVE IT. An offer that rolls no cards (full hand, empty pool) is skipped, as on device.
+     */
+    private void offerRelic(RelicSource source, int depth, int bossIndex) {
+        RelicOfferRoller.roll(source, depth, bossIndex, relicHand, playerBuild.stats(), relicEligibilityTags(),
+                RelicOfferRoller.seedFor(runSeed, depth, source), relicOffer, RelicCatalog.registry());
+        if (relicOffer.count == 0) return;
+        ledger.relicOffersSeen[source.ordinal()]++;
+        RelicDefinition chosen = policy.declinesRelicOffers() ? null
+                : policy.chooseRelic(relicOffer.cards, relicOffer.count, view);
+        if (chosen != null && !isInOffer(chosen)) chosen = relicOffer.cards[0];
+        if (chosen != null && bondRelic(chosen)) ledger.relicOffersTaken[source.ordinal()]++;
+        relicOffer.clear();
+    }
+
+    private boolean isInOffer(RelicDefinition definition) {
+        for (int index = 0; index < relicOffer.count; index++) {
+            if (relicOffer.cards[index] == definition) return true;
+        }
+        return false;
+    }
+
+    /** Bonds a relic (mirrors World.chooseRelicOfferCard): the hand folds it into the build, the build re-derives. */
+    private boolean bondRelic(RelicDefinition definition) {
+        if (!relicHand.add(definition, playerBuild)) return false;
+        applyBuildEffects();
+        return true;
+    }
+
+    /** Mirrors World.relicEligibilityTags: carried weapons' tags plus every tag holding a perk rank (R5). */
+    private java.util.EnumSet<BuildTag> relicEligibilityTags() {
+        relicTagsScratch.clear();
+        relicTagsScratch.addAll(carriedBuildTags());
+        for (BuildTag tag : BuildTag.values()) {
+            if (playerBuild.ranksInTag(tag) > 0) relicTagsScratch.add(tag);
+        }
+        return relicTagsScratch;
     }
 
     /** A perk rank bought at the Fabricator (mirrors World.grantShopAbility): no level spent. */

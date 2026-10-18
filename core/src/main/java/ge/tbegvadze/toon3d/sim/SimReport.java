@@ -37,7 +37,8 @@ public final class SimReport {
         report.append("Seeds per policy : ").append(BalanceConfig.SIM_SEED_COUNT)
               .append(" (build-bias variants: ").append(BalanceConfig.SIM_BUILD_SEED_COUNT)
               .append("; ").append(BehavioralBands.TACTICAL_BUILD_SAMPLE_ID).append(": ")
-              .append(BalanceConfig.SIM_BUILD_SAMPLE_SEED_COUNT).append(")\n");
+              .append(BalanceConfig.SIM_BUILD_SAMPLE_SEED_COUNT).append("; relic probes: ")
+              .append(BalanceConfig.SIM_RELIC_PROBE_SEED_COUNT).append(")\n");
         report.append("Depth ceiling    : ").append(BalanceConfig.SIM_DEPTH_CEILING).append('\n');
         report.append("Turn cap / floor : ").append(BalanceConfig.SIM_TURNS_PER_FLOOR_CAP).append('\n');
         report.append('\n');
@@ -78,6 +79,7 @@ public final class SimReport {
         appendHeavyReport(report, matrix);
         appendBuildReport(report, matrix);
         appendRunReport(report, matrix);
+        appendRelicReport(report, matrix);
 
         report.append("BEHAVIOURAL BANDS\n");
         report.append("--------------------------------------------------------------------------------\n");
@@ -90,6 +92,71 @@ public final class SimReport {
         report.append("BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails\n");
         report.append("`./gradlew balanceSim`.\n");
         return report.toString();
+    }
+
+    /**
+     * The RELIC REPORT (relics-run-changing-artifacts, CP8): the five probe rows' mean / median ending depth and lift
+     * over NO-RELIC; per probed (non-affine) relic its runs, mean depth and lift; the relics each standard row holds at
+     * the end; TACTICAL's offers seen / taken / left by source; and the valuation's two assumptions (kill share, doors
+     * per floor) against what TACTICAL actually PLAYED. Information beside S-RELIC — report-only for the assumptions.
+     */
+    private static void appendRelicReport(StringBuilder report, Map<String, PolicySummary> matrix) {
+        report.append("RELIC REPORT — S-RELIC probe rows (mean ending depth over ").append(BehavioralBands.TACTICAL_NO_RELIC_ID)
+              .append(")\n");
+        report.append("--------------------------------------------------------------------------------\n");
+        PolicySummary baseline = matrix.get(BehavioralBands.TACTICAL_NO_RELIC_ID);
+        float baselineMean = baseline == null ? Float.NaN : baseline.meanEndingDepth();
+        report.append(String.format("%-26s %5s %8s %8s %7s%n", "probe row", "runs", "meanDep", "medDep", "lift"));
+        for (RelicProbe probe : RelicProbe.values()) {
+            if (!probe.isProbe()) continue;
+            PolicySummary row = matrix.get(BehavioralBands.relicProbeId(probe));
+            if (row == null) continue;
+            report.append(String.format("%-26s %5d %8.2f %8.1f %7.3f%n", row.policyId, row.runCount(),
+                    row.meanEndingDepth(), row.medianEndingDepth(), row.meanEndingDepth() / baselineMean));
+        }
+        report.append(String.format("%-20s %-10s %5s %8s %7s%n", "relic (non-affine)", "rarity", "runs", "meanDep", "lift"));
+        for (RelicProbe probe : RelicProbe.values()) {
+            if (probe.grantedRarity == null) continue;
+            for (ge.tbegvadze.toon3d.relic.RelicDefinition relic : SimWorld.nonAffinePool(probe.grantedRarity)) {
+                float[] runsAndMean = BehavioralBands.probeRunsAndMeanDepth(matrix, relic.id());
+                report.append(String.format("%-20s %-10s %5d %8.2f %7.3f%n", relic.id(), relic.rarity().name(),
+                        (int) runsAndMean[0], runsAndMean[1], runsAndMean[1] / baselineMean));
+            }
+        }
+        report.append(String.format("%-22s %11s%n", "policy", "relicsHeld"));
+        for (PolicySummary summary : matrix.values()) {
+            report.append(String.format("%-22s %11.2f%n", summary.policyId, summary.meanRelicsHeldAtEnd()));
+        }
+        PolicySummary tactical = matrix.get(BehavioralBands.TACTICAL_ID);
+        if (tactical != null) {
+            report.append(String.format("TACTICAL offers by source%n%-18s %6s %6s %6s%n", "source", "seen", "taken", "left"));
+            int sourceCount = ge.tbegvadze.toon3d.relic.RelicSource.values().length;
+            int[] seen  = tactical.summedCounts(run -> run.relicOffersSeen, sourceCount);
+            int[] taken = tactical.summedCounts(run -> run.relicOffersTaken, sourceCount);
+            for (ge.tbegvadze.toon3d.relic.RelicSource source : ge.tbegvadze.toon3d.relic.RelicSource.values()) {
+                int index = source.ordinal();
+                report.append(String.format("%-18s %6d %6d %6d%n", source.name(), seen[index], taken[index],
+                        seen[index] - taken[index]));
+            }
+            int spawned = 0;
+            int killed  = 0;
+            int doors   = 0;
+            int floors  = 0;
+            for (FloorLedger floor : tactical.allFloors()) {
+                spawned += floor.enemiesSpawned;
+                killed  += floor.enemiesKilled;
+                doors   += floor.doorsOpened;
+                floors++;
+            }
+            report.append(String.format("MODEL vs PLAYED (TACTICAL, %d floors; report-only)%n", floors));
+            report.append(String.format("  kill share (kills / bodies spawned) : model %.2f  played %s%n",
+                    BalanceConfig.RELIC_VALUATION_KILL_SHARE,
+                    spawned == 0 ? "-" : String.format("%.2f", killed / (float) spawned)));
+            report.append(String.format("  doors opened per floor              : model %d     played %s%n",
+                    BalanceConfig.RELIC_VALUATION_DOORS_PER_FLOOR,
+                    floors == 0 ? "-" : String.format("%.2f", doors / (float) floors)));
+        }
+        report.append('\n');
     }
 
     /**

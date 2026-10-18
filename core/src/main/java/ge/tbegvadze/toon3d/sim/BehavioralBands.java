@@ -36,6 +36,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-BUILD    — no build bias is a trap or a must-pick, and plain TACTICAL does not end every run as the same character (balance-overhaul order 5)</li>
  *   <li>S-SHOP     — the shop is a place to spend: TACTICAL buys every visit and dies with little banked (balance-overhaul order 6)</li>
  *   <li>S-BOSS     — every boss is CONSISTENT: a fair clear rate, a steady fight length, a hurt-but-standing player (balance-overhaul order 6)</li>
+ *   <li>S-RELIC    — no relic is a trap and none is mandatory, and standard TACTICAL actually holds relics (relics-run-changing-artifacts)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -47,6 +48,13 @@ public final class BehavioralBands {
     public static final String HOARDER_ID  = "HOARDER-START-WEAPON";
     /** Plain TACTICAL over SIM_BUILD_SAMPLE_SEED_COUNT seeds — the S-BUILD dominant-tag run set. */
     public static final String TACTICAL_BUILD_SAMPLE_ID = "TACTICAL-BUILD-SAMPLE";
+    /** The S-RELIC baseline probe row: TACTICAL leaving every relic offer. */
+    public static final String TACTICAL_NO_RELIC_ID = relicProbeId(RelicProbe.NO_RELIC);
+
+    /** The matrix row id of one S-RELIC probe ({@code "TACTICAL-RELIC-LEGENDARY"}). */
+    public static String relicProbeId(RelicProbe probe) {
+        return TACTICAL_ID + probe.policyIdSuffix;
+    }
 
     /** Evaluates every band the supplied matrix has the data for. Missing policies are skipped. */
     public static List<RuleResult> evaluate(Map<String, PolicySummary> matrix) {
@@ -67,6 +75,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(shopResults(tactical));
         if (tactical != null) results.addAll(bossResults(tactical));
         results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
+        results.addAll(relicResults(matrix, tactical));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         for (PolicySummary summary : matrix.values()) results.add(navigationResult(summary));
         return results;
@@ -217,6 +226,95 @@ public final class BehavioralBands {
                     "health fraction the turn the boss died, over " + cleared + " kills"));
         }
         return results;
+    }
+
+    /**
+     * S-RELIC (relics-run-changing-artifacts, CP8) — SR1..SR5 read the five probe rows' MEAN ending depth over the
+     * NO-RELIC baseline (skipped unless all five rows are in the matrix); SR6 reads standard TACTICAL. See
+     * {@link RuleKind#SIM_RELIC} for the bands.
+     */
+    private static List<RuleResult> relicResults(Map<String, PolicySummary> matrix, PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        PolicySummary baseline = matrix.get(TACTICAL_NO_RELIC_ID);
+        boolean allPresent = baseline != null;
+        for (RelicProbe probe : RelicProbe.values()) {
+            if (probe.isProbe() && matrix.get(relicProbeId(probe)) == null) allPresent = false;
+        }
+        if (allPresent) {
+            float baselineMean = baseline.meanEndingDepth();
+            String baselineNote = String.format("mean depth over %s %.2f (%d runs)", TACTICAL_NO_RELIC_ID, baselineMean,
+                    baseline.runCount());
+            for (RelicProbe probe : RelicProbe.values()) {
+                if (probe.grantedRarity == null) continue;
+                PolicySummary row = matrix.get(relicProbeId(probe));
+                float ratio = baselineMean <= 0f ? Float.NaN : row.meanEndingDepth() / baselineMean;
+                float tolerance = probe.grantedRarity.isCursed()
+                        ? BalanceConfig.SIM_RELIC_CURSED_ROW_TOLERANCE : BalanceConfig.SIM_RELIC_ROW_TRAP_TOLERANCE;
+                float minimum = 1f - tolerance;
+                float maximum = 1f + BalanceConfig.SIM_RELIC_ROW_MAX_LIFT;
+                results.add(BalanceSchema.result(RuleKind.SIM_RELIC,
+                        (probe.grantedRarity.isCursed() ? "SR2 " : "SR1 ") + relicProbeId(probe) + " mean-depth lift",
+                        ratio, minimum, maximum, ratio >= minimum && ratio <= maximum,
+                        String.format("mean depth %.2f (%d runs); ", row.meanEndingDepth(), row.runCount()) + baselineNote));
+            }
+            float legendaryMean = matrix.get(relicProbeId(RelicProbe.LEGENDARY)).meanEndingDepth();
+            float commonMean    = matrix.get(relicProbeId(RelicProbe.COMMON)).meanEndingDepth();
+            float rarityRatio   = commonMean <= 0f ? Float.NaN : legendaryMean / commonMean;
+            results.add(BalanceSchema.result(RuleKind.SIM_RELIC, "SR3 rarity is felt (LEGENDARY / COMMON mean depth)",
+                    rarityRatio, 1f, Float.POSITIVE_INFINITY, rarityRatio >= 1f,
+                    String.format("LEGENDARY %.2f vs COMMON %.2f", legendaryMean, commonMean)));
+
+            int fewestRuns = Integer.MAX_VALUE;
+            String fewestId = "-";
+            float perRelicMinimum = 1f - BalanceConfig.SIM_RELIC_PER_RELIC_TRAP_TOLERANCE;
+            float perRelicMaximum = 1f + BalanceConfig.SIM_RELIC_PER_RELIC_MAX_LIFT;
+            for (RelicProbe probe : RelicProbe.values()) {
+                if (probe.grantedRarity == null) continue;
+                for (ge.tbegvadze.toon3d.relic.RelicDefinition relic : SimWorld.nonAffinePool(probe.grantedRarity)) {
+                    float[] runsAndMean = probeRunsAndMeanDepth(matrix, relic.id());
+                    int runs = (int) runsAndMean[0];
+                    if (runs < fewestRuns) {
+                        fewestRuns = runs;
+                        fewestId   = relic.id();
+                    }
+                    if (runs < BalanceConfig.SIM_RELIC_MIN_RUNS_PER_RELIC) continue;
+                    float ratio = baselineMean <= 0f ? Float.NaN : runsAndMean[1] / baselineMean;
+                    results.add(BalanceSchema.result(RuleKind.SIM_RELIC, "SR4 " + relic.id() + " mean-depth lift",
+                            ratio, perRelicMinimum, perRelicMaximum, ratio >= perRelicMinimum && ratio <= perRelicMaximum,
+                            String.format("%s; mean depth %.2f over %d probe runs; ", relic.rarity().name(), runsAndMean[1], runs)
+                                    + baselineNote));
+                }
+            }
+            if (fewestRuns == Integer.MAX_VALUE) fewestRuns = 0;
+            results.add(BalanceSchema.result(RuleKind.SIM_RELIC, "SR5 probe runs per non-affine relic (fewest)",
+                    fewestRuns, BalanceConfig.SIM_RELIC_MIN_RUNS_PER_RELIC, Float.POSITIVE_INFINITY,
+                    fewestRuns >= BalanceConfig.SIM_RELIC_MIN_RUNS_PER_RELIC,
+                    "least-sampled relic " + fewestId + "; round-robin over each rarity's non-affine pool"));
+        }
+        if (tactical != null) {
+            float held = tactical.meanRelicsHeldAtEnd();
+            results.add(BalanceSchema.result(RuleKind.SIM_RELIC, "SR6 TACTICAL mean relics held at run end",
+                    held, 1f, Float.POSITIVE_INFINITY, held >= 1f,
+                    tactical.runCount() + " runs; the acquisition wiring (RUN_START, BOSS, MYSTERY cache) is live"));
+        }
+        return results;
+    }
+
+    /** {runs, mean ending depth} over every probe-row run GRANTED this relic. */
+    static float[] probeRunsAndMeanDepth(Map<String, PolicySummary> matrix, String relicId) {
+        int runs = 0;
+        float total = 0f;
+        for (RelicProbe probe : RelicProbe.values()) {
+            if (probe.grantedRarity == null) continue;
+            PolicySummary row = matrix.get(relicProbeId(probe));
+            if (row == null) continue;
+            for (RunLedger run : row.runs) {
+                if (!relicId.equals(run.grantedProbeRelicId)) continue;
+                runs++;
+                total += run.endingDepth;
+            }
+        }
+        return new float[]{runs, runs == 0 ? Float.NaN : total / runs};
     }
 
     /** S-GATE: the starting loadout cannot beat the first boss, no matter how well it is played. */
