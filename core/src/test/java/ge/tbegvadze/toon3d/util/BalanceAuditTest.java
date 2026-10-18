@@ -654,6 +654,8 @@ class BalanceAuditTest {
                             ge.tbegvadze.toon3d.route.RouteRegistries.nodeTypes(),
                             ge.tbegvadze.toon3d.route.RouteRegistries.generators());
             generator.setEliteAffixPool(ge.tbegvadze.toon3d.route.RouteRegistries.affixes().elitePool());
+            generator.setTwistPool(ge.tbegvadze.toon3d.route.RouteRegistries.affixes()
+                    .definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST));
             ge.tbegvadze.toon3d.route.RouteMap map = generator.generate(seed,
                     ge.tbegvadze.toon3d.route.RegionPlan.defaultPlan());
             java.util.List<ge.tbegvadze.toon3d.route.RouteEconomicsModel.TrajectorySample> safest =

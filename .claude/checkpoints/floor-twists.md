@@ -56,7 +56,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       `elitePool()` returns the same five; three FLOOR_TWIST rows registered; `FloorEffects.twistId`;
       BalanceConfig SECTION 27; RouteMapConstants/RenderConstants/HudConstants/EnemyConstants entries;
       three `Kind.TWIST` NodeEconomics rows; nothing rolls a twist; `./gradlew build` + `./gradlew test` green.
-- [ ] **CP2** — twist roll + plan folding (SALVAGE fully live).
+- [x] **CP2** — twist roll + plan folding (SALVAGE fully live).
       DONE WHEN: RouteMapGenerator rolls twists on COMBAT only (R1-R4) and every generator owner sets the
       pool; DefaultCombatProfile folds the twist (R5) with sting/statLog/twistId; ELITE affixes identical
       for a fixed seed; `./gradlew build` + `./gradlew test` green.
@@ -100,4 +100,20 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `TWIST_HUNTED_WARNING_TEXT/ARRIVAL_TEXT`; EnemyConstants `TWIST_HUNTED_TRAIL_CAPACITY`, `_ENGAGE_DISTANCE_TILES`(2),
   `_BLOCKED_WAIT_TURNS`(2), `TWIST_HUNTER_HEALTH_BAR_FRAME_*`, SECTION-27 shims. EliteProfile ignores a non-ELITE_AFFIX
   row (defensive). Idea STATUS -> IN PROGRESS. Nothing rolls a twist yet (CP2 wires the generator).
+- **CP2 handover:** `RouteMapGenerator.setTwistPool(List<NodeAffixDefinition>)` (pass
+  `RouteRegistries.affixes().definitionsFor(AffixScope.FLOOR_TWIST)`); set in World, SimWorld, BalanceSchema
+  `generateAuditMap`, and the two existing tests that build generators (BalanceAuditTest
+  `safestAndDeadliestRoutesSpanARealDifficultyRange`, RouteEconomicsTest `generator()`) — behaviour-change updates,
+  no new test. `rollTwist` = chance then weighted pick over rows with minDepth <= depth (no boss depth).
+  `DefaultCombatProfile(GeneratorRegistry, NodeAffixRegistry)` folds only a COMBAT node's FLOOR_TWIST row: budget ->
+  `EnemyBudgetOverride.scaled`, ammo -> `AmmoCacheRequest(n, SCATTERED)`, `twistGuarantees(seed)`, FloorEffects
+  `.withTwist(id).withSting(NAME).withStatLog(id)` (route string -> "combat:salvage"). World: twist stings use
+  new `EventTextSystem.COLOR_AMBER` (8; EventTextRenderer BASE_AMBER from HudConstants.TWIST_AMBER_*); build log
+  line adds `twist= budgetScale= scatteredAmmoBoxes=` (A8). **Decision:** SimWorld never fulfilled ANY plan's
+  ammo-cache request (pre-existing gap, ELITE vault boxes included); it now stamps them ONLY on twisted floors
+  (`fulfillTwistAmmo`, a mirror of World.fulfillAmmoCache) so existing bands do not move. `SimWorld.currentTwistId`
+  holds the floor's twist (set in generateLevel) for CP4/5/8.
+  Verification: scratch harness `<scratchpad>/harness/TwistMapCheck.java` (not committed) over 300 seeds — ELITE
+  affix signature identical with/without the twist pool (0 maps differ), 1316 twisted nodes (blackout 455 / hunted
+  394 / salvage 467), min depths 2/4/2, all on COMBAT, regeneration identical, 0 violations.
 

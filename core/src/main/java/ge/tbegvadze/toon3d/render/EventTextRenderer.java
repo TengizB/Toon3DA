@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
@@ -53,6 +54,8 @@ public final class EventTextRenderer implements Disposable {
     private static final Color BASE_BLUE         = new Color(0.45f, 0.72f, 1f,    1f);
     /** Equal to HudRenderer's AR_LABEL — the armour bar's blue. */
     private static final Color BASE_ARMOUR       = new Color(0.55f, 0.85f, 1.00f, 1f);
+    private static final Color BASE_AMBER        = new Color(HudConstants.TWIST_AMBER_RED,
+            HudConstants.TWIST_AMBER_GREEN, HudConstants.TWIST_AMBER_BLUE, 1f);
 
     private final EventTextSystem eventTextSystem;
     private final SpriteBatch     batch;
@@ -285,6 +288,7 @@ public final class EventTextRenderer implements Disposable {
             case EventTextSystem.COLOR_CREDIT_CYAN:  return BASE_CREDIT_CYAN;
             case EventTextSystem.COLOR_BLUE:         return BASE_BLUE;
             case EventTextSystem.COLOR_ARMOUR:       return BASE_ARMOUR;
+            case EventTextSystem.COLOR_AMBER:        return BASE_AMBER;
             default:                                 return BASE_WHITE;
         }
     }

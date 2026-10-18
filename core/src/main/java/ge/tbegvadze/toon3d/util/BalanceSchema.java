@@ -2999,6 +2999,7 @@ public final class BalanceSchema {
         RouteMapGenerator generator = new RouteMapGenerator(RouteRegistries.nodeTypes(),
                 RouteRegistries.generators());
         generator.setEliteAffixPool(RouteRegistries.affixes().elitePool());
+        generator.setTwistPool(RouteRegistries.affixes().definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST));
         return generator.generate(seed, RegionPlan.defaultPlan());
     }
 

@@ -36,6 +36,7 @@ class RouteEconomicsTest {
         RouteRegistries.registerAffixes(affixes);
         RouteMapGenerator generator = new RouteMapGenerator(nodeTypes, generators);
         generator.setEliteAffixPool(affixes.elitePool());
+        generator.setTwistPool(affixes.definitionsFor(AffixScope.FLOOR_TWIST));
         return generator;
     }
 

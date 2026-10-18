@@ -627,6 +627,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Order-9: supply the ELITE affix catalog so hotzones can roll a readable twist (empty pool =
         // no affix rolls). MYSTERY uses its own entry-time outcome table, not a map-gen affix.
         routeMapGenerator.setEliteAffixPool(RouteRegistries.affixes().elitePool());
+        // Floor-twists: COMBAT nodes may roll one FLOOR TWIST (BLACKOUT / SALVAGE / HUNTED) from the same registry.
+        routeMapGenerator.setTwistPool(RouteRegistries.affixes().definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST));
         routeMapOverlay   = new RouteMapOverlay();
         routeMapOverlay.setNodeCommitListener(this::commitRouteNode);
         routeMapOverlayRenderer = new RouteMapOverlayRenderer();
@@ -1192,7 +1194,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // it on the room's event station. Null on every non-EVENT floor.
         pendingEventId = plan.eventId();
         Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
-                + " generator=" + plan.generatorId().stableId());
+                + " generator=" + plan.generatorId().stableId()
+                + (plan.floorEffects().twistId() != null
+                        ? " twist=" + plan.floorEffects().twistId()
+                          + " budgetScale=" + (budget != null ? budget.budgetScale() : 1f)
+                          + " scatteredAmmoBoxes=" + (plan.ammoCache() != null ? plan.ammoCache().boxCount() : 0)
+                        : ""));
         return built;
     }
 
@@ -1226,7 +1233,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             alertTimeSeconds   = 0f;
         }
         if (effects.stingText() != null && eventTextSystem != null) {
-            eventTextSystem.spawnWithColor(effects.stingText(), EventTextSystem.COLOR_RED);
+            // A floor twist's sting is amber (the twist's card colour); every other sting stays red.
+            eventTextSystem.spawnWithColor(effects.stingText(), effects.twistId() != null
+                    ? EventTextSystem.COLOR_AMBER : EventTextSystem.COLOR_RED);
         }
         // The resolved-but-hidden outcome is logged so the post-run route story is complete: it annotates
         // the node token committed at route-select time (e.g. "mystery" -> "mystery:VAULT").

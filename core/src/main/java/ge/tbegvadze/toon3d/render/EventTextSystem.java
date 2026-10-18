@@ -27,6 +27,8 @@ public final class EventTextSystem {
     public static final byte COLOR_BLUE         = 6;
     /** Armour-bar blue (HudRenderer's AR label colour) — the "ARMOUR HELD" floater (order 4, H9). */
     public static final byte COLOR_ARMOUR       = 7;
+    /** Twist amber (floor-twists): a floor twist's arrival sting and the HUNTED warning. */
+    public static final byte COLOR_AMBER        = 8;
 
     /**
      * Banner tier constants — controls font scale, animation style, and screen anchor.

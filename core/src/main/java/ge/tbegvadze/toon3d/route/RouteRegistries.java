@@ -271,7 +271,7 @@ public final class RouteRegistries {
      */
     static void registerLevelProfiles(NodeLevelProfileRegistry registry, GeneratorRegistry generators,
                                       NodeAffixRegistry affixes, FacilityEventRegistry events) {
-        DefaultCombatProfile defaultProfile = new DefaultCombatProfile(generators);
+        DefaultCombatProfile defaultProfile = new DefaultCombatProfile(generators, affixes);
         registry.register(defaultProfile);
         registry.setFallback(defaultProfile);
 
