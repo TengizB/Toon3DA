@@ -24,6 +24,9 @@ the shipped state):
     LEGENDARY. Rarity counts are therefore 10 COMMON / 11 RARE / 9 LEGENDARY / 6 CURSED (A2's
     11/12/7/6 is superseded). RELIC_CARRY_BAND_LEGENDARY top widened 1.20 -> 1.22 (a band new in
     this feature) for second_heart's Second Wind flag.
+  - CP6: MYSTERY_WEIGHT_RELIC_CACHE = 3, BELOW D7's floor of 4: the pre-relic mystery table
+    already sat at R-MYSTERY-EV 1.2917 of its 1.30 ceiling, and weight 4 gives 1.3022. At 3 it is
+    1.2996 (margin 0.0004). Mystery relic caches are therefore rarer than designed.
 
 SUPERSEDES .claude/agents/ideas/roguelike_order_14_artifacts_and_special_relics.txt
 (now REJECTED). What carried over from it: relics are run-scoped passives that

@@ -16,8 +16,13 @@ import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.hazard.HazardManager;
 import ge.tbegvadze.toon3d.hazard.SpireManager;
+import ge.tbegvadze.toon3d.relic.RelicCatalog;
+import ge.tbegvadze.toon3d.relic.RelicDefinition;
 import ge.tbegvadze.toon3d.relic.RelicHand;
+import ge.tbegvadze.toon3d.relic.RelicOffer;
+import ge.tbegvadze.toon3d.relic.RelicOfferRoller;
 import ge.tbegvadze.toon3d.relic.RelicRuntime;
+import ge.tbegvadze.toon3d.relic.RelicSource;
 import ge.tbegvadze.toon3d.hud.HudRenderer;
 import ge.tbegvadze.toon3d.input.PlayerController;
 import ge.tbegvadze.toon3d.input.touch.TouchAction;
@@ -94,6 +99,7 @@ import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TilesetGfxBootstrap;
 import ge.tbegvadze.toon3d.route.AmmoCacheRequest;
+import ge.tbegvadze.toon3d.route.BossTable;
 import ge.tbegvadze.toon3d.route.EnemyBudgetOverride;
 import ge.tbegvadze.toon3d.route.EventChoice;
 import ge.tbegvadze.toon3d.route.EventEffect;
@@ -134,6 +140,7 @@ import ge.tbegvadze.toon3d.util.BossBalance;
 import ge.tbegvadze.toon3d.util.BossStats;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.HudConstants;
+import ge.tbegvadze.toon3d.util.TouchConstants;
 import ge.tbegvadze.toon3d.util.SoundConstants;
 import ge.tbegvadze.toon3d.util.GameBalance;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -150,7 +157,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 public class World implements Renderable, Disposable, LevelTransitionListener {
 
-    private enum RunPhase { TITLE, BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE, CODEX_OPEN, PAUSE_MENU, SETTINGS_MENU, ENDING_HOLD }
+    private enum RunPhase { TITLE, BOOT_CARD, PLAYING, FADING_OUT, FADING_IN, LEVEL_UP_OVERLAY, RELIC_OFFER, DEAD, INVENTORY_OPEN, WEAPON_INSPECT, SHOP_OPEN, ROUTE_SELECT, EVENT_CHOICE, STORY_EXCHANGE, CODEX_OPEN, PAUSE_MENU, SETTINGS_MENU, ENDING_HOLD }
 
     // -------------------------------------------------------------------------
     // Run-persistent resources — kept alive across all floor transitions
@@ -191,6 +198,22 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     /** The run's held relics and their trigger runner (relics-run-changing-artifacts). One World = one run: both die with it. */
     private final RelicHand              relicHand    = new RelicHand();
     private final RelicRuntime           relicRuntime = new RelicRuntime();
+    // --- RELIC OFFERS (relics-run-changing-artifacts R7/R14/R15) ---
+    // A FIFO of REQUESTS (source, depth, boss index), rolled when opened so eligibility reads the hand as it
+    // is then; the roll itself is seeded (R6), so the same run still deals the same cards. Parallel arrays
+    // sized RELIC_PENDING_OFFER_CAPACITY: nothing is allocated per offer.
+    private final RelicSource[]          pendingRelicSources     = new RelicSource[BalanceConfig.RELIC_PENDING_OFFER_CAPACITY];
+    private final int[]                  pendingRelicDepths      = new int[BalanceConfig.RELIC_PENDING_OFFER_CAPACITY];
+    private final int[]                  pendingRelicBossIndexes = new int[BalanceConfig.RELIC_PENDING_OFFER_CAPACITY];
+    private int                          pendingRelicCount       = 0;
+    /** The offer on screen (filled by the roller when it opens; valid only while {@link #relicOfferActive}). */
+    private final RelicOffer             activeRelicOffer        = new RelicOffer();
+    private boolean                      relicOfferActive        = false;
+    private float                        relicOfferOpenSeconds   = 0f;
+    private boolean                      relicRunStartQueued     = false;
+    private boolean                      relicBossOfferQueued    = false;
+    /** Which phase the pause menu returns to (PLAYING, or RELIC_OFFER when paused from an offer - R14). */
+    private RunPhase                     pauseReturnPhase        = RunPhase.PLAYING;
     /** Carried weapon tags, refilled by {@link #carriedBuildTags()} (scratch — never allocated per offer). */
     private final java.util.EnumSet<BuildTag> carriedTagsScratch = java.util.EnumSet.noneOf(BuildTag.class);
     /** The build's max-HP / max-armour bonus already applied to the Player (applyBuildEffects deltas). */
@@ -1524,6 +1547,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         gameState.isBossFloor        = bossFloorController != null;
         bossDefeatBarkRequested      = false;
+        relicBossOfferQueued         = false;
         // RUN AUTOPSY (order 9): a fresh floor resets the per-floor drain and boss-turn counters.
         runStats.beginFloor(gameState.isBossFloor);
 
@@ -2408,6 +2432,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             return;
         }
 
+        // RELIC_OFFER — hard-pause overlay (relics-run-changing-artifacts R14): the world takes no turn,
+        // barks queue, no exchange opens, the thumb clusters are not drawn.
+        if (runPhase == RunPhase.RELIC_OFFER) {
+            updateRelicOffer(deltaTime);
+            return;
+        }
+
         // LEVEL_UP_OVERLAY — game paused while player picks a perk (balance-overhaul order 5)
         if (runPhase == RunPhase.LEVEL_UP_OVERLAY) {
             if (gameViewport != null && Gdx.input.justTouched()) {
@@ -2452,6 +2483,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // over a black screen would read as a bug. It opens HERE instead: in play, with the player
         // standing still and nothing else owning the screen. The exchange takes the phase, so the
         // sim below does not run this frame and the world takes no turn while it is up.
+        // A queued relic offer (R7): opens AFTER a pending level-up (that one takes the phase at the end of
+        // the frame it was earned in) and BEFORE a pending story exchange.
+        if (openPendingRelicOffer()) {
+            return;
+        }
         if (openPendingStoryExchange()) {
             return;
         }
@@ -2475,6 +2511,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             // never spent.
             teachingSystem.onPlayerDied(hudState.medicalCharges > 0);
             storyTelemetry.recordDeathWithMedkits(hudState.medicalCharges); // order-10 B comprehension proxy
+            pendingRelicCount = 0;   // R7: a pending relic offer is dropped on death
             runStats.recordFloor(currentDepth);
             sealRunAutopsy();
             // Snapshot the run BEFORE the records are saved, so "RECORD" still means "this instance
@@ -2559,6 +2596,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         requestColdOpenBarks();
         requestControlHintBarks();
         requestBossDefeatedBark();
+        queueRunStartRelicOffer();
+        queueBossRelicOffer();
         recordFinalClearVictory();
         requestCoreEndingExchange();
         abilityFeedback.update(deltaTime);
@@ -2734,6 +2773,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 && runPhase != RunPhase.BOOT_CARD
                 && runPhase != RunPhase.STORY_EXCHANGE
                 && runPhase != RunPhase.CODEX_OPEN
+                && runPhase != RunPhase.RELIC_OFFER
                 && runPhase != RunPhase.PAUSE_MENU
                 && runPhase != RunPhase.SETTINGS_MENU
                 && runPhase != RunPhase.ENDING_HOLD) {
@@ -3121,6 +3161,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (effect.healthCostFraction() > 0f && player != null) {
             int cost = Math.min(player.getHealth() - 1, Math.round(player.getMaxHealth() * effect.healthCostFraction()));
             if (cost > 0) player.applyEventCostDamage(cost);
+        }
+        if (effect.relicOffer() != null) {
+            queueRelicOffer(effect.relicOffer(), currentDepth, 0);
         }
         if (effect.revealNextRegion()) {
             revealNextRegion();
@@ -4006,6 +4049,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // The mixer's clock may have jumped while backgrounded; drop its per-turn counters and
         // timestamps so the first sounds after resume are not judged against stale ones.
         gameAudio.onApplicationResume();
+        if (runPhase == RunPhase.RELIC_OFFER) relicOfferOpenSeconds = 0f;   // R15: the lockout re-arms on resume
         if (touchInputState != null) {
             touchInputState.resetAllButtonStates();
             touchInputState.consumeTapAction();
@@ -4273,7 +4317,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private static boolean isMenuPhase(RunPhase phase) {
         return phase == RunPhase.INVENTORY_OPEN || phase == RunPhase.SHOP_OPEN
                 || phase == RunPhase.PAUSE_MENU || phase == RunPhase.SETTINGS_MENU
-                || phase == RunPhase.CODEX_OPEN || phase == RunPhase.WEAPON_INSPECT;
+                || phase == RunPhase.CODEX_OPEN || phase == RunPhase.WEAPON_INSPECT
+                || phase == RunPhase.RELIC_OFFER;
     }
 
     /**
@@ -4575,7 +4620,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * lore, one row down, for whoever wants it.
      */
     private void openPauseMenu() {
-        if (runPhase != RunPhase.PLAYING) return;
+        if (runPhase != RunPhase.PLAYING && runPhase != RunPhase.RELIC_OFFER) return;
+        pauseReturnPhase = runPhase;   // R14: RELIC_OFFER -> PAUSE_MENU -> RELIC_OFFER
         pauseMenu.clear();
         for (PauseMenuItem item : PauseMenuItem.values()) {
             pauseMenu.addRow(item.getLabelStringId(), null, true);
@@ -4596,7 +4642,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             touchInputState.resetAllButtonStates();
             touchInputState.consumeTapAction();
         }
-        runPhase = RunPhase.PLAYING;
+        runPhase = pauseReturnPhase;
+        if (pauseReturnPhase == RunPhase.RELIC_OFFER) relicOfferOpenSeconds = 0f;   // R15: re-arm the lockout
+        pauseReturnPhase = RunPhase.PLAYING;
     }
 
     private void updatePauseMenu() {
@@ -5146,6 +5194,169 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     private void applyPerkPick(Perk perk) {
         playerBuild.addPerkRank(perk);
         completeLevelUp();
+    }
+
+    // -------------------------------------------------------------------------
+    // Relic offers (relics-run-changing-artifacts)
+    // -------------------------------------------------------------------------
+
+    /** Queues a request (R7): FIFO, capacity RELIC_PENDING_OFFER_CAPACITY; a full queue drops the newcomer. */
+    private void queueRelicOffer(RelicSource source, int depth, int bossIndex) {
+        if (pendingRelicCount >= pendingRelicSources.length) {
+            Gdx.app.log("Relic", "offer dropped (queue full): " + source.name() + " depth=" + depth);
+            return;
+        }
+        pendingRelicSources[pendingRelicCount]     = source;
+        pendingRelicDepths[pendingRelicCount]      = depth;
+        pendingRelicBossIndexes[pendingRelicCount] = bossIndex;
+        pendingRelicCount++;
+    }
+
+    /** RUN_START: once per run, the first time the world is out of the staging room (depth-1 arrival, AS13). */
+    private void queueRunStartRelicOffer() {
+        if (relicRunStartQueued || isStartingRoom) return;
+        relicRunStartQueued = true;
+        queueRelicOffer(RelicSource.RUN_START, Math.max(1, currentDepth), 0);
+    }
+
+    /** BOSS: polled beside the BOSS_DEFEATED bark; once per floor; never the run-final boss (that is the VICTORY). */
+    private void queueBossRelicOffer() {
+        if (relicBossOfferQueued)                                                return;
+        if (bossFloorController == null || !bossFloorController.isBossDefeated()) return;
+        relicBossOfferQueued = true;
+        if (currentDepth >= BalanceConfig.RUN_FINAL_DEPTH)                       return;
+        int bossIndex = 0;
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            if (row.depth < currentDepth) bossIndex++;
+        }
+        queueRelicOffer(RelicSource.BOSS, currentDepth, bossIndex);
+    }
+
+    /** The tags that make a relic with an affinity eligible: carried weapons plus perks with a rank (R5). */
+    private java.util.EnumSet<BuildTag> relicEligibilityTags() {
+        java.util.EnumSet<BuildTag> tags = carriedBuildTags();
+        for (BuildTag tag : BuildTag.values()) {
+            if (playerBuild.ranksInTag(tag) > 0) tags.add(tag);
+        }
+        return tags;
+    }
+
+    /**
+     * Opens the oldest queued offer when the world is genuinely ready: PLAYING, alive, the player IDLE, no
+     * level-up waiting and no bark panel mid fade (a bark HELD at full opacity never blocks: it has no timer,
+     * so waiting on it could wait forever). An offer that rolls no cards is skipped (logged, or "RELIC CAPACITY
+     * REACHED" when the hand is full) and the next one is tried.
+     *
+     * @return true when an offer just took the screen (the caller skips this frame's sim)
+     */
+    private boolean openPendingRelicOffer() {
+        if (pendingRelicCount == 0 || runPhase != RunPhase.PLAYING)  return false;
+        if (player.isDead() || !playerController.isIdle())            return false;
+        if (playerProgress.hasPendingLevelUp())                       return false;
+        if (barkSystem.hasActiveBark()) {
+            float barkVisible = barkSystem.getVisibleFraction();
+            if (barkVisible > 0f && barkVisible < 1f)                 return false;
+        }
+        while (pendingRelicCount > 0) {
+            RelicSource source = pendingRelicSources[0];
+            int depth          = pendingRelicDepths[0];
+            int bossIndex      = pendingRelicBossIndexes[0];
+            for (int index = 1; index < pendingRelicCount; index++) {
+                pendingRelicSources[index - 1]     = pendingRelicSources[index];
+                pendingRelicDepths[index - 1]      = pendingRelicDepths[index];
+                pendingRelicBossIndexes[index - 1] = pendingRelicBossIndexes[index];
+            }
+            pendingRelicCount--;
+            pendingRelicSources[pendingRelicCount] = null;
+
+            RelicOfferRoller.roll(source, depth, bossIndex, relicHand, playerBuild.stats(), relicEligibilityTags(),
+                    RelicOfferRoller.seedFor(runSeed, depth, source), activeRelicOffer, RelicCatalog.registry());
+            if (activeRelicOffer.count == 0) {
+                if (relicHand.count() >= BalanceConfig.RELIC_MAX_HELD) {
+                    eventTextSystem.spawnWithColor(HudConstants.RELIC_CAPACITY_TEXT, EventTextSystem.COLOR_RED);
+                }
+                Gdx.app.log("Relic", "offer skipped (no cards): " + source.name() + " depth=" + depth
+                        + " held=" + relicHand.count());
+                activeRelicOffer.clear();
+                continue;
+            }
+            relicOfferActive      = true;
+            relicOfferOpenSeconds = 0f;
+            if (touchInputState != null) {
+                touchInputState.resetAllButtonStates();
+                touchInputState.consumeTapAction();
+            }
+            runPhase = RunPhase.RELIC_OFFER;
+            Gdx.app.log("Relic", "offer opened: " + source.name() + " depth=" + depth + " cards=" + activeRelicOffer.count);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * RELIC_OFFER frame: advances the overlay clock and routes the tap. The pause button works (R14); every
+     * other tap is ignored for RELIC_OFFER_INPUT_LOCKOUT_SECONDS (R15) so a thumb mashing FIRE cannot pick blind.
+     */
+    private void updateRelicOffer(float deltaTime) {
+        relicOfferOpenSeconds += deltaTime;
+        if (touchInputState != null) touchInputState.consumeTapAction();
+        if (gameViewport == null || !Gdx.input.justTouched()) return;
+        cardTouchPosition.set(Gdx.input.getX(), Gdx.input.getY());
+        gameViewport.unproject(cardTouchPosition);
+        float pauseHalf = TouchConstants.PAUSE_BUTTON_SIZE / 2f;
+        if (Math.abs(cardTouchPosition.x - TouchConstants.PAUSE_BUTTON_CENTER_X) <= pauseHalf
+                && Math.abs(cardTouchPosition.y - TouchConstants.PAUSE_BUTTON_CENTER_Y) <= pauseHalf) {
+            openPauseMenu();
+            return;
+        }
+        if (relicOfferOpenSeconds < HudConstants.RELIC_OFFER_INPUT_LOCKOUT_SECONDS) return;
+        chooseRelicOfferCard(0);   // CP7 replaces: any tap after the lockout takes card 0
+    }
+
+    /** The offer on screen, or null when none is open (CP7's renderer reads this). */
+    public RelicOffer getActiveRelicOffer() {
+        return relicOfferActive ? activeRelicOffer : null;
+    }
+
+    /** Seconds the offer has been open (the overlay animates from this; the tap lockout compares to it). */
+    public float getRelicOfferOpenSeconds() {
+        return relicOfferOpenSeconds;
+    }
+
+    /**
+     * Bonds card {@code index} of the open offer: the hand takes it, the build re-derives (max HP / armour
+     * deltas, the extra loadout slot), the run records it, and play resumes on the same turn. The caller owns
+     * the input lockout (R15); this method does not re-check it.
+     */
+    public void chooseRelicOfferCard(int index) {
+        if (runPhase != RunPhase.RELIC_OFFER || !relicOfferActive) return;
+        if (index < 0 || index >= activeRelicOffer.count)          return;
+        RelicDefinition chosen = activeRelicOffer.cards[index];
+        if (relicHand.add(chosen, playerBuild)) {
+            applyBuildEffects();
+            runStats.recordRelicBonded(chosen.name());
+            Gdx.app.log("Relic", "bonded " + chosen.id() + " (" + chosen.rarity() + ") from "
+                    + activeRelicOffer.source + " at depth " + activeRelicOffer.depth);
+            eventTextSystem.spawnWithColor(HudConstants.RELIC_BONDED_TEXT_PREFIX + chosen.name(), EventTextSystem.COLOR_GOLD);
+        }
+        closeRelicOffer();
+    }
+
+    /** LEAVE IT: nothing is bonded and the overlay closes. */
+    public void leaveRelicOffer() {
+        if (runPhase != RunPhase.RELIC_OFFER || !relicOfferActive) return;
+        Gdx.app.log("Relic", "offer left: " + activeRelicOffer.source + " depth=" + activeRelicOffer.depth);
+        closeRelicOffer();
+    }
+
+    private void closeRelicOffer() {
+        relicOfferActive = false;
+        activeRelicOffer.clear();
+        if (touchInputState != null) {
+            touchInputState.resetAllButtonStates();
+            touchInputState.consumeTapAction();
+        }
+        runPhase = RunPhase.PLAYING;
     }
 
     /** The keystone pick (balance-overhaul order 5, B4): the same ceremony as a perk pick. */

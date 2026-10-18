@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.relic.RelicSource;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
@@ -49,7 +50,15 @@ public enum MysteryOutcome {
     /** The bad-but-survivable pull: a failing sector — hazards, unlit, a shortcut. Built directly. Costs credits. */
     MALFUNCTION(RouteMapConstants.MYSTERY_WEIGHT_MALFUNCTION, ScanTone.QUIET, "MALFUNCTION", null,
             EventEffect.builder().creditCost(BalanceConfig.MYSTERY_REWARD_MALFUNCTION_CREDIT_COST_FLOORS)
-                    .resultText("SECTOR FAILING — REPAIR TOLL DEDUCTED").build());
+                    .resultText("SECTOR FAILING — REPAIR TOLL DEDUCTED").build()),
+
+    /**
+     * The artifact pull (relics-run-changing-artifacts): a calm depot floor (delegates to the SUPPLY CACHE), and
+     * leaving it pays a two-card relic offer (COMMON / RARE) that opens on the next floor's first idle frame.
+     */
+    RELIC_CACHE(RouteMapConstants.MYSTERY_WEIGHT_RELIC_CACHE, ScanTone.REWARD_RICH, "RELIC", CacheProfile.PROFILE_ID,
+            EventEffect.builder().relicOffer(RelicSource.MYSTERY_CACHE)
+                    .resultText("RELIC CACHE OPENED").build());
 
     /**
      * Scan tone buckets a scanner reveals. Deliberately coarser than the outcome list: multiple
@@ -97,6 +106,11 @@ public enum MysteryOutcome {
      */
     public EventEffect reward() {
         return reward;
+    }
+
+    /** This outcome's pool weight (the model side sums these so its mystery total is the registered table). */
+    public float weight() {
+        return weight;
     }
 
     /** The scan tone bucket this outcome falls in. */

@@ -4,6 +4,7 @@ import ge.tbegvadze.toon3d.level.SupplyPlanner;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.ExpectedPlayer;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RelicValuationModel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -169,7 +170,8 @@ public final class RouteEconomicsModel {
         float armourPowerPoints = effect.armourFraction() * depthOnePlayer.maxArmor / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT;
         float dangerPowerPoints = effect.nextFloorBudgetBonus() * BalanceConfig.ROUTE_RISK_POWER_POINTS_PER_STANDARD_FLOOR;
         float progress = effect.weaponLevels() * BalanceConfig.ROUTE_WEAPON_LEVEL_POWER_POINTS
-                + (effect.perkRank() ? BalanceConfig.SHOP_PERK_RANK_POWER_POINTS : 0f);
+                + (effect.perkRank() ? BalanceConfig.SHOP_PERK_RANK_POWER_POINTS : 0f)
+                + (effect.relicOffer() != null ? RelicValuationModel.offerPowerPoints(effect.relicOffer(), depth) : 0f);
         float resources = creditPowerPoints + healPowerPoints + armourPowerPoints - dangerPowerPoints;
         if (!effect.isGamble()) return new LadderRewardPrice(resources, progress);
         // A gamble: the whole payout lands with the loot chance; the bite (an HP fraction) otherwise.

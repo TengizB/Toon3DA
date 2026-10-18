@@ -3205,8 +3205,13 @@ public final class BalanceConfig {
     };
     /** R4 MYSTERY_CACHE: per-card rarity weights {COMMON, RARE}. Sums to 1. */
     public static final float[]   RELIC_MYSTERY_OFFER_RARITY_WEIGHTS = {0.60f, 0.40f};
-    /** Weight of the RELIC_CACHE mystery outcome (CP6 mirrors it into RouteMapConstants). Tuning floor 4. */
-    public static final int     MYSTERY_WEIGHT_RELIC_CACHE    = 10;
+    /**
+     * Weight of the RELIC_CACHE mystery outcome (mirrored into RouteMapConstants). The spec's tuning floor was 4,
+     * but R-MYSTERY-EV (weighted table EV / combat EV, worst at depth 1) is 1.3022 at 4 against a 1.30 ceiling: the
+     * pre-relic table already sits at 1.2917 and RELIC_CACHE (supply-cache floor + one relic offer, about one perk
+     * rank) is priced ABOVE the 1.30 line, so any weight above ~3.1 breaks it. 3 is the largest integer that passes.
+     */
+    public static final int     MYSTERY_WEIGHT_RELIC_CACHE    = 3;
 
     // --- RUNTIME -----------------------------------------------------------------------------
     /** R9: the share of the centre blast fraction the four neighbours of a door blast take. */

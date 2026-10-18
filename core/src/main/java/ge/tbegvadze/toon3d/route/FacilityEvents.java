@@ -1,5 +1,6 @@
 package ge.tbegvadze.toon3d.route;
 
+import ge.tbegvadze.toon3d.relic.RelicSource;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
@@ -17,6 +18,7 @@ import ge.tbegvadze.toon3d.util.RouteMapConstants;
  *   <li>SURVIVING TECH — escort (armour to full + a perk rank, next floor +budget) vs sell their keycard.</li>
  *   <li>CORRUPTED SHRINE — a Faustian pull (full heal + a weapon level, next floor hotter) vs a perk rank.</li>
  *   <li>DATA TERMINAL — the pure-lore breather: a perk rank, no downside.</li>
+ *   <li>QUARANTINE LOCKER — break the seal for one of two cursed relics, or sell it unopened.</li>
  * </ul>
  *
  * <p>Pure / headless — no LibGDX imports.
@@ -32,11 +34,32 @@ public final class FacilityEvents {
         registry.register(survivingTech());
         registry.register(corruptedShrine());
         registry.register(dataTerminal());
+        registry.register(quarantineLocker());
     }
 
     // Balance-overhaul order 6 (F15): every choice pays — and costs — in LADDER CURRENCIES (EventEffect): weapon
     // levels, a perk rank of a carried tag, heal / armour fractions, credits in floors of income. R-EVENT-VALUE
     // requires every event to offer at least one choice worth a COMBAT floor's supply.
+
+    /** QUARANTINE LOCKER — a cursed relic (each helps, each costs) or the containment bounty. */
+    private static FacilityEvent quarantineLocker() {
+        return FacilityEvent.builder("quarantine_locker")
+                .title("QUARANTINE LOCKER")
+                .narrative("A sealed locker stamped DO NOT OPEN.",
+                           "Something inside is still warm.")
+                .choice("BREAK THE SEAL", "Take one of two quarantined relics. Each helps. Each costs.",
+                        EventEffect.builder()
+                                .relicOffer(RelicSource.QUARANTINE_LOCKER)
+                                .logToken("broken")
+                                .build())
+                .choice("SELL THE SEAL", "Report it unopened and claim the containment bounty.",
+                        EventEffect.builder()
+                                .credits(BalanceConfig.EVENT_CREDIT_FLOORS_LARGE)
+                                .resultText("SEAL REPORTED — BOUNTY BANKED")
+                                .logToken("sold")
+                                .build())
+                .build();
+    }
 
     /** DISTRESS BEACON — trade information for resources. */
     private static FacilityEvent distressBeacon() {

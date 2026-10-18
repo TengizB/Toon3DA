@@ -312,6 +312,11 @@ public final class HudConstants {
     public static final float RELIC_COST_TEXT_COLOR_B = 0.12f;
 
     // --- RELIC FEEDBACK TEXT (relics-run-changing-artifacts): UI event text, not story strings ---
+    /** Event text on bonding a relic: prefix + the relic's name. */
+    public static final String RELIC_BONDED_TEXT_PREFIX = "RELIC BONDED \u2014 ";
+    /** Event text when an offer is skipped because the hand is full. */
+    public static final String RELIC_CAPACITY_TEXT      = "RELIC CAPACITY REACHED";
+
     /** Suffix of a relic trigger line: "+9 HP - RELIC". */
     public static final String RELIC_FEEDBACK_SUFFIX      = " - RELIC";
     public static final String RELIC_FEEDBACK_HEALTH_UNIT = " HP";

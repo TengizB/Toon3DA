@@ -60,7 +60,7 @@ than hold. Never `git add -A`.
 - [x] **CP5** — BalanceSchema RELIC / RELIC_CURSE / RELIC_STACK / RELIC_SOURCE + COVERAGE, four named
       BalanceAuditTest methods, all relics in band, BalanceReport RELICS + RELIC STACK tables.
       DONE WHEN: `./gradlew test` green (baseline failure only); negative-drill message recorded below.
-- [ ] **CP6** — RunPhase.RELIC_OFFER + pending FIFO, RUN_START/BOSS/EventEffect queuing, RELIC_CACHE,
+- [x] **CP6** — RunPhase.RELIC_OFFER + pending FIFO, RUN_START/BOSS/EventEffect queuing, RELIC_CACHE,
       RouteEconomics row, quarantine_locker, RouteEconomicsModel pricing, RunStats; placeholder tap takes
       card 0. DONE WHEN: test green incl. route rules; flow playable end to end.
 - [ ] **CP7** — RelicOfferOverlayRenderer, BuildPagePanel RELICS, run-report line, event-text feedback,
@@ -158,3 +158,17 @@ than hold. Never `git add -A`.
   <scratchpad>/harness/setc.py + rep.sh. CP6 must re-check R-MYSTERY-EV, R-HONEST-SAFE, R-ROUTE-PRICED,
   R-EVENT-VALUE, R-RELIC-STACK after registering RELIC_CACHE (read BalanceConfig.MYSTERY_WEIGHT_RELIC_CACHE;
   RelicValuationModel already adds it to the mystery total) and quarantine_locker (weight 1).
+- **CP6 handover:** RunPhase is a private enum in World; RELIC_OFFER added after LEVEL_UP_OVERLAY (update
+  early-return, thumb-cluster exclusion, isMenuPhase blips, pause round-trip via pauseReturnPhase, resume
+  re-arms lockout). Queue holds REQUESTS (source, depth, bossIndex) and rolls on open (seedFor). Opens in
+  PLAYING + idle + no pending level-up + no bark mid-fade; before openPendingStoryExchange. Dropped on
+  death. API: `getActiveRelicOffer()`, `chooseRelicOfferCard(int)`, `leaveRelicOffer()`,
+  `getRelicOfferOpenSeconds()`; private `updateRelicOffer(deltaTime)` holds the lockout, the pause-button
+  hit-test (TouchConstants.PAUSE_BUTTON_*) and the PLACEHOLDER `chooseRelicOfferCard(0); // CP7 replaces`.
+  Nothing is drawn in RELIC_OFFER yet. RUN_START queued by `queueRunStartRelicOffer()` on first PLAYING
+  frame with !isStartingRoom; BOSS by `queueBossRelicOffer()` after requestBossDefeatedBark; EventEffect in
+  applyLadderEffect. RunStats.getRelicsBonded() = "" when none. HudConstants RELIC_BONDED_TEXT_PREFIX,
+  RELIC_CAPACITY_TEXT. MYSTERY_WEIGHT_RELIC_CACHE = 3 (see idea IMPLEMENTATION NOTE; R-MYSTERY-EV 1.2996).
+  RelicValuationModel.mysteryWeightTotal() sums MysteryOutcome.values() (added MysteryOutcome.weight()).
+  Order10RegistriesTest count 5 -> 6 events (quarantine_locker), legitimately. balanceSim exit 0; summary
+  moved 3 lines from the new outcome (no band flipped). Not run on desktop yet.

@@ -12,6 +12,7 @@ import ge.tbegvadze.toon3d.relic.RelicSource;
 import ge.tbegvadze.toon3d.relic.RelicValuation;
 import ge.tbegvadze.toon3d.route.BossTable;
 import ge.tbegvadze.toon3d.route.FacilityEvent;
+import ge.tbegvadze.toon3d.route.MysteryOutcome;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
 import ge.tbegvadze.toon3d.route.RouteNodeType;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
@@ -192,17 +193,11 @@ public final class RelicValuationModel {
         return total;
     }
 
-    /**
-     * The mystery pool's total with RELIC_CACHE in it: the six shipped outcome weights (RouteMapConstants,
-     * mirrored from BalanceConfig) + MYSTERY_WEIGHT_RELIC_CACHE. CP6 adds the outcome row; it must not add a
-     * second cache weight here. A new mystery outcome must be added to this sum (MysteryOutcome has no public
-     * weight accessor).
-     */
+    /** The mystery pool's total: the weights of every registered MysteryOutcome (RELIC_CACHE included, once). */
     private static float mysteryWeightTotal() {
-        return RouteMapConstants.MYSTERY_WEIGHT_VAULT + RouteMapConstants.MYSTERY_WEIGHT_SECRET_WARREN
-                + RouteMapConstants.MYSTERY_WEIGHT_TRAP_GAUNTLET + RouteMapConstants.MYSTERY_WEIGHT_AMBUSH
-                + RouteMapConstants.MYSTERY_WEIGHT_LORE_SIGNAL + RouteMapConstants.MYSTERY_WEIGHT_MALFUNCTION
-                + BalanceConfig.MYSTERY_WEIGHT_RELIC_CACHE;
+        float total = 0f;
+        for (MysteryOutcome outcome : MysteryOutcome.values()) total += outcome.weight();
+        return total;
     }
 
     /** The locker's event weight: its registered weight once CP6 registers it, else the stated assumption. */

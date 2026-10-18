@@ -35,9 +35,10 @@ class Order10RegistriesTest {
     @Test
     void allFiveV1EventsAreRegistered() {
         FacilityEventRegistry registry = freshEvents();
-        assertEquals(5, registry.size());
+        // Five v1 events + the relics feature's quarantine_locker.
+        assertEquals(6, registry.size());
         for (String id : new String[]{"distress_beacon", "abandoned_stash", "surviving_tech",
-                "corrupted_shrine", "data_terminal"}) {
+                "corrupted_shrine", "data_terminal", "quarantine_locker"}) {
             assertNotNull(registry.get(id), "missing event " + id);
         }
     }
