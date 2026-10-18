@@ -3353,8 +3353,12 @@ public final class BalanceConfig {
     public static final float   TWIST_WEIGHT_BLACKOUT                 = 1.0f;
     /** R2: relative pick weight of SALVAGE among the eligible twists. */
     public static final float   TWIST_WEIGHT_SALVAGE                  = 1.0f;
-    /** R2: relative pick weight of HUNTED among the eligible twists. */
-    public static final float   TWIST_WEIGHT_HUNTED                   = 1.0f;
+    /**
+     * R2: relative pick weight of HUNTED among the eligible twists. Tuned 1.0 -> 0.5 at CP3: HUNTED is priced as a
+     * 1.78x-threat floor, so the R-TRAJECTORY DEADLIEST walker takes every one it sees and its XP buys a level too
+     * many (depth coupling 1.72 > 1.65 at weight 0.75+; 1.58 at 0.5). The band does not move — the twist does.
+     */
+    public static final float   TWIST_WEIGHT_HUNTED                   = 0.5f;
     /** R3: the shallowest depth BLACKOUT may roll on (floor one is the teaching floor). */
     public static final int     TWIST_MIN_DEPTH_BLACKOUT              = 2;
     /** R3: the shallowest depth SALVAGE may roll on. */
@@ -3385,14 +3389,18 @@ public final class BalanceConfig {
     public static final int     TWIST_HUNTED_WARNING_TURNS            = 5;
     /** R9a: the arrival tile must be at least this far (Manhattan tiles) from the player for the hunter to spawn. */
     public static final int     TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES = 5;
-    /** R12: owned-ammo boxes the trail hunter drops on death, on top of its ordinary drops. */
-    public static final int     TWIST_HUNTED_BOUNTY_AMMO_BOXES        = 3;
+    /**
+     * R12: owned-ammo boxes the trail hunter drops on death, on top of its ordinary drops. Tuned 3 -> 10 at CP3:
+     * the hunter is a MINI_ELITE worth ~0.77 of a COMBAT floor's TP, and R-TWIST T1 prices it as always arriving
+     * (AS16), so the bounty must pay a 1.78x threat into the [1.0, 1.2] premium band (10 boxes -> 1.02-1.03).
+     */
+    public static final int     TWIST_HUNTED_BOUNTY_AMMO_BOXES        = 10;
     /**
      * T3: the declared extra threat of the hunter as a share of a COMBAT floor's Threat-Point budget, priced at
      * FULL (as if it always arrives — AS16). R-TWIST T3 fails if the hunter's real per-archetype TP at any audited
      * depth, over the COMBAT floor's TP budget, exceeds this: the ledger may not under-price the hunter.
      */
-    public static final float   TWIST_HUNTED_THREAT_SHARE             = 0.40f;
+    public static final float   TWIST_HUNTED_THREAT_SHARE             = 0.78f;   // CP3: real IRON_STALKER share peaks 0.765 at depth 4
 
     // --- AUDIT (R-TWIST) + SIMULATOR (S-TWIST) -------------------------------------------------
     /** T2: a threat-neutral twist's total EV must sit within +-this share of plain COMBAT's at every audited depth. */

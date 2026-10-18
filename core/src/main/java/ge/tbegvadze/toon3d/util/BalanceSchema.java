@@ -177,6 +177,12 @@ public final class BalanceSchema {
         ROUTE_PRICED,
         /** R-RISK-PREMIUM (order 7): (reward premium)/(threat premium) in [1.0, 1.2] for every danger node. */
         RISK_PREMIUM,
+        /**
+         * R-TWIST (floor-twists): a COMBAT FLOOR TWIST priced against plain COMBAT — a threat-raising twist pays
+         * inside the R-RISK-PREMIUM band (T1), a threat-neutral one sits within TWIST_NEUTRAL_EV_TOLERANCE of COMBAT's
+         * EV (T2), and a twist that prints a hunter declares at least the hunter's real Threat-Point share (T3).
+         */
+        TWIST,
         /** R-CALM-COST (order 7): a calm node's EV sits 10-30% BELOW a standard combat node's. */
         CALM_COST,
         /**
@@ -890,6 +896,7 @@ public final class BalanceSchema {
         results.addAll(bossAmmoResults());
         results.addAll(routePricedResults());
         results.addAll(riskPremiumResults());
+        results.addAll(twistResults());
         results.addAll(calmCostResults());
         results.addAll(mysteryExpectedValueResults());
         results.addAll(eventValueResults());
@@ -2725,6 +2732,118 @@ public final class BalanceSchema {
         return new RuleResult(RuleKind.RISK_PREMIUM, subject, worstValue,
                 BalanceConfig.ROUTE_RISK_PREMIUM_MIN, BalanceConfig.ROUTE_RISK_PREMIUM_MAX, inBand,
                 "worst depth " + worstDepth + " — reward premium / threat premium");
+    }
+
+    /**
+     * R-TWIST (floor-twists): every COMBAT FLOOR TWIST, priced as COMBAT with the twist row folded on through
+     * {@link RouteEconomicsModel#price(NodeEconomicsRegistry, NodeEconomics, NodeEconomics,
+     * RouteEconomicsModel.ModelFloor, int)}, against plain COMBAT at the same depth, over every depth from the
+     * twist's minimum to the run's last, worst depth reported:
+     * <ul>
+     *   <li>T1 — a twist that raises the threat (budget scale above 1) pays a reward premium / threat premium
+     *       inside the SAME [ROUTE_RISK_PREMIUM_MIN, ROUTE_RISK_PREMIUM_MAX] band R-RISK-PREMIUM uses (AS25);</li>
+     *   <li>T2 — a threat-neutral twist's total EV sits within +-TWIST_NEUTRAL_EV_TOLERANCE of COMBAT's;</li>
+     *   <li>T3 — a twist that prints a hunter (HUNTED) declares at least the hunter's real price: the archetype's
+     *       depth-scaled Threat Points (the encounter planner's own charge) over the COMBAT floor's Threat-Point
+     *       budget may not exceed TWIST_HUNTED_THREAT_SHARE — the ledger may not under-price the hunter.</li>
+     * </ul>
+     * Coverage (a twist with no row) is R-ROUTE-PRICED's, which already iterates every registered affix id.
+     */
+    public static List<RuleResult> twistResults() {
+        List<RuleResult> results = new ArrayList<>();
+        NodeEconomicsRegistry ledger = routeLedger();
+        RouteEconomicsModel.ModelFloor floor = routeModelFloor();
+        NodeEconomics combat = ledger.get(ge.tbegvadze.toon3d.route.RouteEconomics.STANDARD_COMBAT_ID);
+        for (ge.tbegvadze.toon3d.route.NodeAffixDefinition twist
+                : RouteRegistries.affixes().definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST)) {
+            NodeEconomics row = ledger.get(twist.id());
+            if (row == null || combat == null) {
+                continue; // R-ROUTE-PRICED reports the missing row
+            }
+            int firstDepth = Math.max(1, twist.minDepth());
+            if (row.budgetScale() > 1f) {
+                results.add(worstTwistPremium(ledger, floor, combat, row, firstDepth));
+            } else {
+                results.add(worstTwistNeutrality(ledger, floor, combat, row, firstDepth));
+            }
+            if (twist.hunterEnemyTypeName() != null) {
+                results.add(worstHunterShare(ledger, floor, row, twist, firstDepth));
+            }
+        }
+        return results;
+    }
+
+    /** T1: the depth whose premium ratio sits furthest outside (or nearest the edge of) the risk-premium band. */
+    private static RuleResult worstTwistPremium(NodeEconomicsRegistry ledger, RouteEconomicsModel.ModelFloor floor,
+                                                NodeEconomics combat, NodeEconomics twist, int firstDepth) {
+        float worstValue = Float.NaN;
+        int   worstDepth = firstDepth;
+        float worstExtremity = -1f;
+        for (int depth = firstDepth; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+            RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
+            RouteEconomicsModel.NodePrice priced   = RouteEconomicsModel.price(ledger, combat, twist, floor, depth);
+            float ratio = GameMath.rewardPremiumRatio(priced.rewardPowerPoints, standard.rewardPowerPoints,
+                    priced.threatCost, standard.threatCost);
+            float extremity = bandExtremity(ratio, BalanceConfig.ROUTE_RISK_PREMIUM_MIN,
+                    BalanceConfig.ROUTE_RISK_PREMIUM_MAX);
+            if (extremity > worstExtremity) {
+                worstExtremity = extremity;
+                worstValue     = ratio;
+                worstDepth     = depth;
+            }
+        }
+        return bandedResult(RuleKind.TWIST, "T1 combat + " + twist.id() + " risk premium", worstValue,
+                BalanceConfig.ROUTE_RISK_PREMIUM_MIN, BalanceConfig.ROUTE_RISK_PREMIUM_MAX,
+                "worst depth " + worstDepth + " — reward premium / threat premium vs plain COMBAT");
+    }
+
+    /** T2: the depth whose EV departs furthest from plain COMBAT's, as a signed share of COMBAT's EV. */
+    private static RuleResult worstTwistNeutrality(NodeEconomicsRegistry ledger, RouteEconomicsModel.ModelFloor floor,
+                                                   NodeEconomics combat, NodeEconomics twist, int firstDepth) {
+        float worstValue = 0f;
+        int   worstDepth = firstDepth;
+        for (int depth = firstDepth; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+            RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
+            RouteEconomicsModel.NodePrice priced   = RouteEconomicsModel.price(ledger, combat, twist, floor, depth);
+            float departure = GameMath.relativeDeparture(priced.expectedValue, standard.expectedValue);
+            if (Float.isNaN(departure) || Math.abs(departure) > Math.abs(worstValue)) {
+                worstValue = departure;
+                worstDepth = depth;
+                if (Float.isNaN(departure)) break;
+            }
+        }
+        return bandedResult(RuleKind.TWIST, "T2 combat + " + twist.id() + " EV vs combat", worstValue,
+                -BalanceConfig.TWIST_NEUTRAL_EV_TOLERANCE, BalanceConfig.TWIST_NEUTRAL_EV_TOLERANCE,
+                "worst depth " + worstDepth + " — (twist EV - combat EV) / |combat EV|");
+    }
+
+    /** T3: the depth at which the hunter's real Threat-Point share of the COMBAT budget is largest. */
+    private static RuleResult worstHunterShare(NodeEconomicsRegistry ledger, RouteEconomicsModel.ModelFloor floor,
+                                               NodeEconomics twistRow,
+                                               ge.tbegvadze.toon3d.route.NodeAffixDefinition twist, int firstDepth) {
+        EnemyType hunter;
+        try {
+            hunter = EnemyType.valueOf(twist.hunterEnemyTypeName());
+        } catch (IllegalArgumentException unknown) {
+            return bandedResult(RuleKind.TWIST, "T3 " + twist.id() + " hunter share", Float.NaN, 0f,
+                    BalanceConfig.TWIST_HUNTED_THREAT_SHARE, "unknown hunter archetype " + twist.hunterEnemyTypeName());
+        }
+        float worstShare = 0f;
+        int   worstDepth = firstDepth;
+        for (int depth = firstDepth; depth <= ROUTE_AUDIT_MAX_DEPTH; depth++) {
+            RouteEconomicsModel.NodePrice standard = RouteEconomicsModel.standardCombat(ledger, floor, depth);
+            float hunterThreat = GameMath.enemyThreatAtDepth(hunter.baseThreatPoints(),
+                    BalanceConfig.ENEMY_HEALTH_GROWTH, BalanceConfig.ENEMY_DAMAGE_GROWTH, depth);
+            float share = GameMath.threatShareOfBudget(hunterThreat, standard.threatCost);
+            if (share > worstShare) {
+                worstShare = share;
+                worstDepth = depth;
+            }
+        }
+        return bandedResult(RuleKind.TWIST, "T3 " + twist.id() + " hunter TP share", worstShare, 0f,
+                BalanceConfig.TWIST_HUNTED_THREAT_SHARE,
+                "worst depth " + worstDepth + " — " + hunter.name() + " TP / COMBAT floor TP (declared "
+                        + String.format("%.2f", twistRow.budgetScale() - 1f) + ")");
     }
 
     /**

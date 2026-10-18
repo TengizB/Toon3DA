@@ -60,7 +60,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: RouteMapGenerator rolls twists on COMBAT only (R1-R4) and every generator owner sets the
       pool; DefaultCombatProfile folds the twist (R5) with sting/statLog/twistId; ELITE affixes identical
       for a fixed seed; `./gradlew build` + `./gradlew test` green.
-- [ ] **CP3** — R-TWIST (T1-T3) + trajectory folding + BalanceReport twist rows, tuned in band; `./gradlew test` green.
+- [x] **CP3** — R-TWIST (T1-T3) + trajectory folding + BalanceReport twist rows, tuned in band; `./gradlew test` green.
 - [ ] **CP4** — BLACKOUT runtime (light multiplier w/ exit exemption, NAV OFFLINE plate, enemy min shade,
       wake perception override, all reset on rebuild) in World + SimWorld; `./gradlew build` green.
 - [ ] **CP5** — HUNTED runtime (PlayerTrail, HuntedPursuit + listener, trail branch R11a-g,
@@ -116,4 +116,19 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   Verification: scratch harness `<scratchpad>/harness/TwistMapCheck.java` (not committed) over 300 seeds — ELITE
   affix signature identical with/without the twist pool (0 maps differ), 1316 twisted nodes (blackout 455 / hunted
   394 / salvage 467), min depths 2/4/2, all on COMBAT, regeneration identical, 0 violations.
+- **CP3 handover:** `BalanceSchema.twistResults()` (RuleKind.TWIST, in the full sweep after riskPremium) — T1
+  for budgetScale>1 rows, T2 otherwise, T3 for any row whose definition names a hunter (resolved by
+  `EnemyType.valueOf`). New GameMath `threatShareOfBudget(extra, floor)` and `relativeDeparture(value, ref)`.
+  BalanceAuditTest gains `floorTwistsArePricedAgainstPlainCombat` (extension, not a new file). BalanceReport prints
+  the twist lines under ROUTE ECONOMICS. **R-TRAJECTORY needed NO code:** `RouteEconomicsModel.walk` already folds
+  `affixRowFor(ledger, node)` (the spec assumed it ignored affixes), so the CP2 `setTwistPool` in
+  `generateAuditMap` is the whole fold. **Tuning (numbers moved, no band):** `TWIST_HUNTED_THREAT_SHARE` 0.40->0.78
+  (real IRON_STALKER share peaks 0.765 at depth 4 — it is a MINI_ELITE); `TWIST_HUNTED_BOUNTY_AMMO_BOXES` 3->10 (T1
+  needed >= 8 at that share); `TWIST_WEIGHT_HUNTED` 1.0->0.5 (at >= 0.75 the DEADLIEST trajectory's depth coupling
+  steps to 1.72 > 1.65; 0.5 keeps all policies <= 1.58). Final: T2 blackout 0.00; T1 salvage 1.037 (d25); T1 hunted
+  1.022 (d25); T3 hunted 0.765 / 0.78 (d4). **Known model gap (put in the authority doc, CP9):** the ledger prices
+  HUNTED by scaling the roster, which also scales PLANNED supply/heal the hunter does not bring (~0.90 premium with
+  zero bounty) — partly offset by pricing the hunter as always arriving (AS16). A9's "3 boxes" is now 10 —
+  record as an IMPLEMENTATION NOTE in the idea file at close. Sweep harnesses: `<scratchpad>/harness/TwistSweep.java`,
+  `CouplingSweep.java` (a zero-effect dummy twist emulates a lower hunted frequency without recompiling).
 

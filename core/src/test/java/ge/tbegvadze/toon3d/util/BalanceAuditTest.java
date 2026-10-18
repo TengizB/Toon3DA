@@ -569,6 +569,20 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.riskPremiumResults());
     }
 
+    /**
+     * R-TWIST (floor-twists): every COMBAT floor twist is priced against plain COMBAT — a threat-raising
+     * twist pays inside the risk-premium band (T1), a neutral one stays near COMBAT's EV (T2), and the
+     * HUNTED ledger row never under-prices its hunter (T3).
+     */
+    @Test
+    void floorTwistsArePricedAgainstPlainCombat() {
+        java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.twistResults();
+        assertTrue(results.size() >= ge.tbegvadze.toon3d.route.RouteRegistries.affixes()
+                .definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST).size(),
+                "every registered floor twist must be audited by R-TWIST");
+        assertNoViolations(results);
+    }
+
     /** R-CALM-COST (order 7): every calm node's EV sits below a combat node's by the banded discount. */
     @Test
     void calmNodesCostTempoAndLoot() {
