@@ -42,6 +42,10 @@ public final class BalanceReport {
         System.out.println();
         printBuildTable();
         System.out.println();
+        printRelicTable();
+        System.out.println();
+        printRelicStackTable();
+        System.out.println();
         printXpPacingTable();
         System.out.println();
         printScarcityTable();
@@ -487,6 +491,83 @@ public final class BalanceReport {
         System.out.println("------------------------------------------------------------------------------------------------------------------------------");
         System.out.println(String.format("SPREAD best / worst (waived tags excluded) = %.3f  ", spread)
                 + (spread <= 1f + BalanceConfig.BUILD_CARRY_TOLERANCE ? "IN BAND" : "*** OUT OF BAND — a trap or a dominant build ***"));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // RELICS (relics-run-changing-artifacts) — R-RELIC / R-RELIC-CURSE: every relic's gain (carry lift, or
+    // SUPPLY_TOTAL ratio for a SUPPLY relic) at the reference depths against its rarity x valuation band.
+    // -----------------------------------------------------------------------------------
+    private static void printRelicTable() {
+        int[] depths = BalanceConfig.RELIC_REFERENCE_DEPTHS;
+        System.out.println("RELICS (R-RELIC / R-RELIC-CURSE) — gain at depths " + java.util.Arrays.toString(depths)
+                + "; CARRY = carry lift, SUPPLY = SUPPLY_TOTAL ratio; cursed cost = worst loss of the cost effects alone (>= "
+                + String.format("%.2f", BalanceConfig.RELIC_CURSED_MIN_LOSS) + ")");
+        System.out.println("  valuation assumptions: kill share " + BalanceConfig.RELIC_VALUATION_KILL_SHARE
+                + ", doors/floor " + BalanceConfig.RELIC_VALUATION_DOORS_PER_FLOOR
+                + ", door-fight share " + BalanceConfig.RELIC_VALUATION_DOOR_FIGHT_SHARE
+                + ", corpse adjacency " + BalanceConfig.RELIC_VALUATION_CORPSE_ADJACENCY
+                + ", event take share " + BalanceConfig.RELIC_VALUATION_EVENT_TAKE_SHARE
+                + ", start take share " + BalanceConfig.RELIC_VALUATION_START_TAKE_SHARE
+                + ", locker event weight " + BalanceConfig.RELIC_VALUATION_LOCKER_EVENT_WEIGHT);
+        StringBuilder header = new StringBuilder(String.format("%-19s %-9s %-6s %-14s", "relic", "rarity", "value", "affinity"));
+        for (int depth : depths) header.append(String.format(" %8s", "gain d" + depth));
+        header.append(String.format(" %-13s %-8s %s", "band", "cost", "status"));
+        System.out.println(header);
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        int outOfBand = 0;
+        for (ge.tbegvadze.toon3d.relic.RelicDefinition relic : ge.tbegvadze.toon3d.relic.RelicCatalog.registry().all()) {
+            float[] band = BalanceSchema.relicBandOf(relic);
+            StringBuilder line = new StringBuilder(String.format("%-19s %-9s %-6s %-14s", relic.id(), relic.rarity(),
+                    relic.valuation(), relic.affinity() == null ? "-" : relic.affinity().name()));
+            boolean inBand = band != null;
+            for (int depth : depths) {
+                float gain = RelicValuationModel.gain(relic, depth);
+                if (band != null && (gain < band[0] - 1e-6f || gain > band[1] + 1e-6f)) inBand = false;
+                line.append(String.format(" %8.3f", gain));
+            }
+            line.append(String.format(" %-13s", band == null ? "NONE" : String.format("[%.2f,%.2f]", band[0], band[1])));
+            String cost = "-";
+            if (relic.rarity().isCursed()) {
+                float worstLoss = 0f;
+                for (int depth : depths) {
+                    BuildValuationModel.Loss loss = RelicValuationModel.costLoss(relic, depth);
+                    if (loss != null) worstLoss = Math.max(worstLoss, loss.loss);
+                }
+                cost = String.format("%.3f", worstLoss);
+                if (worstLoss < BalanceConfig.RELIC_CURSED_MIN_LOSS) inBand = false;
+            }
+            line.append(String.format(" %-8s %s", cost, inBand ? "IN BAND" : "*** OUT OF BAND ***"));
+            if (!inBand) outOfBand++;
+            System.out.println(line);
+        }
+        System.out.println("------------------------------------------------------------------------------------------------------------------------------");
+        System.out.println(String.format("perk-rank equivalent lift: measured %.4f (%s) vs RELIC_PERK_RANK_EQUIVALENT_LIFT %.2f +/- %.2f;"
+                        + " relics out of band: %d", BalanceSchema.measuredPerkRankEquivalentLift(),
+                BalanceSchema.worstCommittedBuildTag(), BalanceConfig.RELIC_PERK_RANK_EQUIVALENT_LIFT,
+                BalanceConfig.RELIC_PERK_RANK_EQUIVALENT_TOLERANCE, outOfBand));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // RELIC STACK (relics-run-changing-artifacts) — R-RELIC-STACK: the expected and the luckiest relic hand at
+    // every boss depth against the R-CARRY ceilings (worst committed build; best build x (1 + tolerance)).
+    // -----------------------------------------------------------------------------------
+    private static void printRelicStackTable() {
+        float[] ceilings = BalanceSchema.relicStackCeilings();
+        System.out.println(String.format("RELIC STACK (R-RELIC-STACK) — expected hand <= worst build %.3f; best hand <= best build x %.2f = %.3f;"
+                        + " node offers %.5f / floor", ceilings[0], 1f + BalanceConfig.BUILD_CARRY_TOLERANCE, ceilings[1],
+                RelicValuationModel.nodeOfferRatePerFloor()));
+        System.out.printf("%-6s %10s %10s %10s %10s %10s  %s%n",
+                "depth", "expected #", "exp hand", "ceiling", "best hand", "ceiling", "status");
+        System.out.println("------------------------------------------------------------------------------");
+        for (ge.tbegvadze.toon3d.route.BossTable.Row row : ge.tbegvadze.toon3d.route.BossTable.standard().rows()) {
+            int depth = row.depth;
+            float expected = RelicValuationModel.expectedHandLift(depth);
+            float best = RelicValuationModel.bestHandLift(depth);
+            boolean ok = expected <= ceilings[0] + 1e-6f && best <= ceilings[1] + 1e-6f;
+            System.out.printf("%-6d %10.3f %10.3f %10.3f %10.3f %10.3f  %s%n", depth,
+                    RelicValuationModel.expectedRelicCount(depth), expected, ceilings[0], best, ceilings[1],
+                    ok ? "IN BAND" : "*** OUT OF BAND ***");
+        }
     }
 
     // -----------------------------------------------------------------------------------

@@ -57,7 +57,7 @@ than hold. Never `git add -A`.
 - [x] **CP4** — BuildValuationModel.carryOf extracted (BUILDS table byte-identical), valuation term +
       GameMath formula per new kind, RelicValuationModel, worstLoss null niche.
       DONE WHEN: build + test green; BUILDS diff empty.
-- [ ] **CP5** — BalanceSchema RELIC / RELIC_CURSE / RELIC_STACK / RELIC_SOURCE + COVERAGE, four named
+- [x] **CP5** — BalanceSchema RELIC / RELIC_CURSE / RELIC_STACK / RELIC_SOURCE + COVERAGE, four named
       BalanceAuditTest methods, all relics in band, BalanceReport RELICS + RELIC STACK tables.
       DONE WHEN: `./gradlew test` green (baseline failure only); negative-drill message recorded below.
 - [ ] **CP6** — RunPhase.RELIC_OFFER + pending FIFO, RUN_START/BOSS/EventEffect queuing, RELIC_CACHE,
@@ -145,3 +145,16 @@ than hold. Never `git add -A`.
   R-RELIC-CURSE must measure the loss on the relic's COST effects alone (hub decision, see CP5).
   Out-of-scope latent bug noted (NOT fixed): BuildStats.NONE built before its count constants ->
   zero-length arrays; use `new BuildStats()` in new code.
+- **CP5 handover:** RuleKinds RELIC / RELIC_CURSE / RELIC_STACK / RELIC_SOURCE + COVERAGE rows;
+  BalanceSchema.relicResults()/relicCurseResults()/relicStackResults()/relicSourceResults(). Four
+  BalanceAuditTest methods added (only). test: 463, only StoryBarkTest fails. All 36 in band (see the
+  idea's IMPLEMENTATION NOTE for the 9 recompositions + LEGENDARY band 1.22). RELIC STACK d25 expected hand
+  1.719 vs ceiling 1.751 — only 1.8% slack: any raise of a COMMON/RARE magnitude or the cache weight can
+  break it. Perk-rank anchor 1.0725 (1.08±0.03). Negative drill: kevlar 0.70 ->
+  "[RELIC] R-RELIC kevlar_weave d5: value=1.43 band=1.06..1.13 OUT-OF-BAND — RARE CARRY gain 1.4286
+  OUTSIDE band [1.06, 1.13] at depth 5 (carry 1.4286)". BalanceReport: only 52 added lines (RELICS + RELIC
+  STACK) after BUILDS; earlier sections identical. salvage_hook sits at CARRIER_EXTRA_DROP 1.00 (margin
+  0.0003). Tuning tools: <scratchpad>/harness/tune/ (ComposeHarness, TuneHarness, StackHarness, cp.txt),
+  <scratchpad>/harness/setc.py + rep.sh. CP6 must re-check R-MYSTERY-EV, R-HONEST-SAFE, R-ROUTE-PRICED,
+  R-EVENT-VALUE, R-RELIC-STACK after registering RELIC_CACHE (read BalanceConfig.MYSTERY_WEIGHT_RELIC_CACHE;
+  RelicValuationModel already adds it to the mystery total) and quarantine_locker (weight 1).

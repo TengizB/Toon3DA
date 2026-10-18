@@ -29,7 +29,7 @@ public final class RelicCatalog {
         return SHARED;
     }
 
-    /** Registers all 36 relics: 11 COMMON, 12 RARE, 7 LEGENDARY, 6 CURSED. */
+    /** Registers all 36 relics: 10 COMMON, 11 RARE, 9 LEGENDARY, 6 CURSED. */
     public static void bootstrap(RelicRegistry registry) {
         // ---- COMMON ----
         registry.register(RelicDefinition.builder()
@@ -77,8 +77,9 @@ public final class RelicCatalog {
         registry.register(RelicDefinition.builder()
                 .id("recoil_spring").name("RECOIL SPRING")
                 .rarity(RelicRarity.COMMON).trigger(RelicTrigger.ON_KILL).valuation(RelicValuation.SUPPLY)
-                .effects(PerkEffect.of(PerkModifier.KILL_AMMO_REFUND, BalanceConfig.RELIC_RECOIL_SPRING_KILL_AMMO_REFUND))
-                .effectText("Kills refund a round to your gun "+RelicText.percent(BalanceConfig.RELIC_RECOIL_SPRING_KILL_AMMO_REFUND)+" of the time")
+                .effects(PerkEffect.of(PerkModifier.KILL_AMMO_REFUND, BalanceConfig.RELIC_RECOIL_SPRING_KILL_AMMO_REFUND),
+                        PerkEffect.of(PerkModifier.AMMO_PICKUP_BONUS, BalanceConfig.RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS))
+                .effectText("Kills refund a round to your gun "+RelicText.percent(BalanceConfig.RELIC_RECOIL_SPRING_KILL_AMMO_REFUND)+" of the time; ammo pickups give +"+RelicText.percent(BalanceConfig.RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS))
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("dog_tags").name("DOG TAGS")
@@ -88,19 +89,11 @@ public final class RelicCatalog {
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("spotters_lens").name("SPOTTER'S LENS")
-                .rarity(RelicRarity.COMMON).trigger(RelicTrigger.ALWAYS).valuation(RelicValuation.CARRY)
+                .rarity(RelicRarity.COMMON).trigger(RelicTrigger.ON_HIT_TAKEN).valuation(RelicValuation.CARRY)
                 .affinity(BuildTag.MARKSMAN)
-                .effects(PerkEffect.of(PerkModifier.FULL_HEALTH_TARGET_DAMAGE, BalanceConfig.RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE))
-                .effectText("+"+RelicText.percent(BalanceConfig.RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE)+" BALLISTIC / RAIL damage to unhurt enemies")
-                .build());
-        registry.register(RelicDefinition.builder()
-                .id("asbestos_lining").name("ASBESTOS LINING")
-                .rarity(RelicRarity.COMMON).trigger(RelicTrigger.ALWAYS).valuation(RelicValuation.CARRY)
-                .affinity(BuildTag.PYRO)
-                .effects(PerkEffect.of(PerkModifier.FIRE_TILE_IMMUNE, 1f),
-                        PerkEffect.of(PerkModifier.BURN_TURNS, BalanceConfig.RELIC_ASBESTOS_LINING_BURN_TURNS),
-                        PerkEffect.of(PerkModifier.FIRE_DAMAGE, BalanceConfig.RELIC_ASBESTOS_LINING_FIRE_DAMAGE))
-                .effectText("Fire tiles can't hurt you; burns +"+BalanceConfig.RELIC_ASBESTOS_LINING_BURN_TURNS+" turn; +"+RelicText.percent(BalanceConfig.RELIC_ASBESTOS_LINING_FIRE_DAMAGE)+" FIRE")
+                .effects(PerkEffect.of(PerkModifier.DAMAGE_TAKEN_MULTIPLIER, BalanceConfig.RELIC_SPOTTERS_LENS_DAMAGE_TAKEN_MULTIPLIER),
+                        PerkEffect.of(PerkModifier.FULL_HEALTH_TARGET_DAMAGE, BalanceConfig.RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE))
+                .effectText("You see shots coming: take "+RelicText.percent(1f - BalanceConfig.RELIC_SPOTTERS_LENS_DAMAGE_TAKEN_MULTIPLIER)+" less damage; +"+RelicText.percent(BalanceConfig.RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE)+" BALLISTIC / RAIL damage to unhurt enemies")
                 .build());
         // ---- RARE ----
         registry.register(RelicDefinition.builder()
@@ -124,8 +117,9 @@ public final class RelicCatalog {
         registry.register(RelicDefinition.builder()
                 .id("grief_engine").name("GRIEF ENGINE")
                 .rarity(RelicRarity.RARE).trigger(RelicTrigger.ON_KILL).valuation(RelicValuation.CARRY)
-                .effects(PerkEffect.of(PerkModifier.CORPSE_BLAST, BalanceConfig.RELIC_GRIEF_ENGINE_CORPSE_BLAST))
-                .effectText("Enemies you kill burst into the enemies beside them")
+                .effects(PerkEffect.of(PerkModifier.CORPSE_BLAST, BalanceConfig.RELIC_GRIEF_ENGINE_CORPSE_BLAST),
+                        PerkEffect.of(PerkModifier.KILL_ARMOR, BalanceConfig.RELIC_GRIEF_ENGINE_KILL_ARMOR))
+                .effectText("Enemies you kill burst into the enemies beside them; every kill restores "+RelicText.percent(BalanceConfig.RELIC_GRIEF_ENGINE_KILL_ARMOR)+" max armour")
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("kevlar_weave").name("KEVLAR WEAVE")
@@ -150,16 +144,17 @@ public final class RelicCatalog {
                 .rarity(RelicRarity.RARE).trigger(RelicTrigger.ALWAYS).valuation(RelicValuation.CARRY)
                 .affinity(BuildTag.CLOSE_QUARTERS)
                 .effects(PerkEffect.of(PerkModifier.SPREAD_DAMAGE, BalanceConfig.RELIC_CHOKE_BORE_SPREAD_DAMAGE),
+                        PerkEffect.of(PerkModifier.KILL_ARMOR, BalanceConfig.RELIC_CHOKE_BORE_KILL_ARMOR),
                         PerkEffect.of(PerkModifier.KNOCKBACK_BONUS, BalanceConfig.RELIC_CHOKE_BORE_KNOCKBACK_BONUS))
-                .effectText("+"+RelicText.percent(BalanceConfig.RELIC_CHOKE_BORE_SPREAD_DAMAGE)+" SPREAD damage; knockback +"+BalanceConfig.RELIC_CHOKE_BORE_KNOCKBACK_BONUS+" tile")
+                .effectText("+"+RelicText.percent(BalanceConfig.RELIC_CHOKE_BORE_SPREAD_DAMAGE)+" SPREAD damage; every kill restores "+RelicText.percent(BalanceConfig.RELIC_CHOKE_BORE_KILL_ARMOR)+" max armour; knockback +"+BalanceConfig.RELIC_CHOKE_BORE_KNOCKBACK_BONUS+" tile")
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("capacitor_bank").name("CAPACITOR BANK")
                 .rarity(RelicRarity.RARE).trigger(RelicTrigger.ALWAYS).valuation(RelicValuation.CARRY)
                 .affinity(BuildTag.ENERGY)
-                .effects(PerkEffect.of(PerkModifier.ENERGY_DAMAGE, BalanceConfig.RELIC_CAPACITOR_BANK_ENERGY_DAMAGE),
+                .effects(PerkEffect.of(PerkModifier.ARC_CHAIN_MULTIPLIER, BalanceConfig.RELIC_CAPACITOR_BANK_ARC_CHAIN_MULTIPLIER),
                         PerkEffect.of(PerkModifier.ARC_CHAIN_JUMP, BalanceConfig.RELIC_CAPACITOR_BANK_ARC_CHAIN_JUMP))
-                .effectText("+"+RelicText.percent(BalanceConfig.RELIC_CAPACITOR_BANK_ENERGY_DAMAGE)+" ENERGY damage; arcs jump to +"+BalanceConfig.RELIC_CAPACITOR_BANK_ARC_CHAIN_JUMP+" enemy")
+                .effectText("Arc chain hits deal +"+RelicText.percent(BalanceConfig.RELIC_CAPACITOR_BANK_ARC_CHAIN_MULTIPLIER)+" of the shot; arcs jump to +"+BalanceConfig.RELIC_CAPACITOR_BANK_ARC_CHAIN_JUMP+" enemy")
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("shaped_casings").name("SHAPED CASINGS")
@@ -168,14 +163,6 @@ public final class RelicCatalog {
                 .effects(PerkEffect.of(PerkModifier.EXPLOSIVE_DAMAGE, BalanceConfig.RELIC_SHAPED_CASINGS_EXPLOSIVE_DAMAGE),
                         PerkEffect.of(PerkModifier.OWN_EXPLOSION_REDUCTION, BalanceConfig.RELIC_SHAPED_CASINGS_OWN_EXPLOSION_REDUCTION))
                 .effectText("+"+RelicText.percent(BalanceConfig.RELIC_SHAPED_CASINGS_EXPLOSIVE_DAMAGE)+" EXPLOSIVE damage; your blasts hurt you "+RelicText.percent(BalanceConfig.RELIC_SHAPED_CASINGS_OWN_EXPLOSION_REDUCTION)+" less")
-                .build());
-        registry.register(RelicDefinition.builder()
-                .id("counterweight").name("COUNTERWEIGHT")
-                .rarity(RelicRarity.RARE).trigger(RelicTrigger.ON_HIT_TAKEN).valuation(RelicValuation.CARRY)
-                .affinity(BuildTag.BULWARK)
-                .effects(PerkEffect.of(PerkModifier.WIDE_GUARD_ARC, 1f),
-                        PerkEffect.of(PerkModifier.GUARD_REFLECT, BalanceConfig.RELIC_COUNTERWEIGHT_GUARD_REFLECT))
-                .effectText("Guard covers your flanks; reflects "+RelicText.percent(BalanceConfig.RELIC_COUNTERWEIGHT_GUARD_REFLECT)+" it stops")
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("bone_saw").name("BONE SAW")
@@ -189,9 +176,8 @@ public final class RelicCatalog {
         registry.register(RelicDefinition.builder()
                 .id("second_heart").name("SECOND HEART")
                 .rarity(RelicRarity.LEGENDARY).trigger(RelicTrigger.ON_LETHAL_HIT).valuation(RelicValuation.CARRY)
-                .effects(PerkEffect.of(PerkModifier.SECOND_WIND, 1f),
-                        PerkEffect.of(PerkModifier.MAX_HEALTH_BONUS, BalanceConfig.RELIC_SECOND_HEART_MAX_HEALTH_BONUS))
-                .effectText("Once per floor a killing blow leaves you at 1 HP; +"+RelicText.percent(BalanceConfig.RELIC_SECOND_HEART_MAX_HEALTH_BONUS)+" max HP")
+                .effects(PerkEffect.of(PerkModifier.SECOND_WIND, 1f))
+                .effectText("Once per floor a killing blow leaves you at 1 HP")
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("hunger_loop").name("HUNGER LOOP")
@@ -229,9 +215,26 @@ public final class RelicCatalog {
         registry.register(RelicDefinition.builder()
                 .id("overclocked_servos").name("OVERCLOCKED SERVOS")
                 .rarity(RelicRarity.LEGENDARY).trigger(RelicTrigger.ALWAYS).valuation(RelicValuation.CARRY)
-                .effects(PerkEffect.of(PerkModifier.FIRST_HIT_CRITICAL, 1f),
+                .effects(PerkEffect.of(PerkModifier.ALL_WEAPON_DAMAGE, BalanceConfig.RELIC_OVERCLOCKED_SERVOS_ALL_WEAPON_DAMAGE),
                         PerkEffect.of(PerkModifier.RANGE_BONUS, BalanceConfig.RELIC_OVERCLOCKED_SERVOS_RANGE_BONUS))
-                .effectText("Your first hit on every enemy is a critical; +"+BalanceConfig.RELIC_OVERCLOCKED_SERVOS_RANGE_BONUS+" range")
+                .effectText("+"+RelicText.percent(BalanceConfig.RELIC_OVERCLOCKED_SERVOS_ALL_WEAPON_DAMAGE)+" damage with every weapon; +"+BalanceConfig.RELIC_OVERCLOCKED_SERVOS_RANGE_BONUS+" range")
+                .build());
+        registry.register(RelicDefinition.builder()
+                .id("counterweight").name("COUNTERWEIGHT")
+                .rarity(RelicRarity.LEGENDARY).trigger(RelicTrigger.ON_HIT_TAKEN).valuation(RelicValuation.CARRY)
+                .affinity(BuildTag.BULWARK)
+                .effects(PerkEffect.of(PerkModifier.WIDE_GUARD_ARC, 1f),
+                        PerkEffect.of(PerkModifier.GUARD_REFLECT, BalanceConfig.RELIC_COUNTERWEIGHT_GUARD_REFLECT))
+                .effectText("Guard covers your flanks; reflects "+RelicText.percent(BalanceConfig.RELIC_COUNTERWEIGHT_GUARD_REFLECT)+" it stops")
+                .build());
+        registry.register(RelicDefinition.builder()
+                .id("asbestos_lining").name("ASBESTOS LINING")
+                .rarity(RelicRarity.LEGENDARY).trigger(RelicTrigger.ALWAYS).valuation(RelicValuation.CARRY)
+                .affinity(BuildTag.PYRO)
+                .effects(PerkEffect.of(PerkModifier.FIRE_TILE_IMMUNE, 1f),
+                        PerkEffect.of(PerkModifier.BURN_TURNS, BalanceConfig.RELIC_ASBESTOS_LINING_BURN_TURNS),
+                        PerkEffect.of(PerkModifier.FIRE_DAMAGE, BalanceConfig.RELIC_ASBESTOS_LINING_FIRE_DAMAGE))
+                .effectText("Fire tiles can't hurt you; burns +"+BalanceConfig.RELIC_ASBESTOS_LINING_BURN_TURNS+" turn; +"+RelicText.percent(BalanceConfig.RELIC_ASBESTOS_LINING_FIRE_DAMAGE)+" FIRE")
                 .build());
         // ---- CURSED ----
         registry.register(RelicDefinition.builder()

@@ -20,6 +20,11 @@ import ge.tbegvadze.toon3d.progression.BuildTag;
 import ge.tbegvadze.toon3d.progression.Keystone;
 import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
+import ge.tbegvadze.toon3d.relic.RelicCatalog;
+import ge.tbegvadze.toon3d.relic.RelicDefinition;
+import ge.tbegvadze.toon3d.relic.RelicRarity;
+import ge.tbegvadze.toon3d.relic.RelicSource;
+import ge.tbegvadze.toon3d.relic.RelicValuation;
 // The order-7 ROUTE ECONOMICS rules read the (headless, LibGDX-free) route subsystem: the priced
 // node ledger, the pricing/trajectory model, and the real map generator the audit walks.
 import ge.tbegvadze.toon3d.route.DangerTier;
@@ -39,8 +44,10 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * LAYER 2 of the Balance Authority — the RULE SCHEMA (see {@code docs/game-balance-authority.txt}).
@@ -132,6 +139,28 @@ public final class BalanceSchema {
          * 1 + BUILD_CARRY_TOLERANCE of every other tag's (best / worst).
          */
         BUILD_CARRY,
+        /**
+         * R-RELIC (relics-run-changing-artifacts): every non-CURSED relic's GAIN (carry lift; SUPPLY_TOTAL ratio for a
+         * SUPPLY relic) lands in its rarity x valuation band at every RELIC_REFERENCE_DEPTHS depth. The floor is the
+         * "felt" test: a relic whose kinds the valuation does not read prices at 1.00 and fails.
+         */
+        RELIC,
+        /**
+         * R-RELIC-CURSE: every CURSED relic's gain lands in the CURSED band for its valuation at every reference
+         * depth, AND its COST effects alone cost >= RELIC_CURSED_MIN_LOSS on some probe at some reference depth.
+         */
+        RELIC_CURSE,
+        /**
+         * R-RELIC-STACK: at every BossTable depth the expected hand never out-carries the WORST non-waived R-CARRY
+         * build, and the luckiest affinity-consistent hand stays within the BEST x (1 + BUILD_CARRY_TOLERANCE).
+         */
+        RELIC_STACK,
+        /**
+         * R-RELIC-SOURCE (structural): every rarity fills an offer with non-affine relics, every weight row sums to 1,
+         * ids are unique, every CURSED relic has a cost line and a cost kind, RELIC_PERK_RANK_EQUIVALENT_LIFT matches
+         * the worst committed build's per-rank lift, and the route offers relics at all.
+         */
+        RELIC_SOURCE,
         /** R-REGION (order 5): region TP dial is monotonic + bounded; C/D spend more than A; coupling holds per lane. */
         REGION_DANGER,
         /** R-BOSS-GATE (order 6): the DEPTH-1 starting loadout cannot win — turnsToKill >= 2x survivableTurns (with max heals). */
@@ -839,6 +868,10 @@ public final class BalanceSchema {
         results.addAll(perkResults());
         results.addAll(keystoneResults());
         results.addAll(buildCarryResults());
+        results.addAll(relicResults());
+        results.addAll(relicCurseResults());
+        results.addAll(relicStackResults());
+        results.addAll(relicSourceResults());
         results.addAll(regionResults());
         results.addAll(bossGateResults());
         results.addAll(bossFairResults());
@@ -1691,6 +1724,221 @@ public final class BalanceSchema {
         return results;
     }
 
+    // =====================================================================================
+    // R-RELIC / R-RELIC-CURSE / R-RELIC-STACK / R-RELIC-SOURCE (relics-run-changing-artifacts CP5)
+    // — util/RelicValuationModel. A relic is priced in R-CARRY's own terms; the bands are SECTION 26.
+    // =====================================================================================
+
+    /** The rarity x valuation band table (SECTION 26). A pair with no row is a COVERAGE violation. */
+    private static final Map<RelicRarity, Map<RelicValuation, float[]>> RELIC_BANDS = buildRelicBands();
+
+    private static Map<RelicRarity, Map<RelicValuation, float[]>> buildRelicBands() {
+        Map<RelicRarity, Map<RelicValuation, float[]>> bands = new EnumMap<>(RelicRarity.class);
+        for (RelicRarity rarity : RelicRarity.values()) bands.put(rarity, new EnumMap<>(RelicValuation.class));
+        bands.get(RelicRarity.COMMON).put(RelicValuation.CARRY, BalanceConfig.RELIC_CARRY_BAND_COMMON);
+        bands.get(RelicRarity.COMMON).put(RelicValuation.SUPPLY, BalanceConfig.RELIC_SUPPLY_BAND_COMMON);
+        bands.get(RelicRarity.RARE).put(RelicValuation.CARRY, BalanceConfig.RELIC_CARRY_BAND_RARE);
+        bands.get(RelicRarity.RARE).put(RelicValuation.SUPPLY, BalanceConfig.RELIC_SUPPLY_BAND_RARE);
+        bands.get(RelicRarity.LEGENDARY).put(RelicValuation.CARRY, BalanceConfig.RELIC_CARRY_BAND_LEGENDARY);
+        bands.get(RelicRarity.CURSED).put(RelicValuation.CARRY, BalanceConfig.RELIC_CARRY_BAND_CURSED);
+        bands.get(RelicRarity.CURSED).put(RelicValuation.SUPPLY, BalanceConfig.RELIC_SUPPLY_BAND_CURSED);
+        return bands;
+    }
+
+    /** A relic's gain band {min, max} for its rarity x valuation, or null when none is registered. */
+    public static float[] relicBandOf(RelicDefinition relic) {
+        if (relic.rarity() == null || relic.valuation() == null) return null;
+        return RELIC_BANDS.get(relic.rarity()).get(relic.valuation());
+    }
+
+    /** R-RELIC: every non-CURSED relic's gain in its rarity x valuation band at every reference depth. */
+    public static List<RuleResult> relicResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (RelicDefinition relic : RelicCatalog.registry().all()) {
+            if (relic.rarity().isCursed()) continue;
+            results.addAll(relicBandResults(RuleKind.RELIC, "R-RELIC", relic));
+        }
+        return results;
+    }
+
+    /** One band row per reference depth (a relic with no band gets one failing row — COVERAGE names it too). */
+    private static List<RuleResult> relicBandResults(RuleKind kind, String rule, RelicDefinition relic) {
+        List<RuleResult> results = new ArrayList<>();
+        float[] band = relicBandOf(relic);
+        if (band == null) {
+            results.add(new RuleResult(kind, rule + " " + relic.id() + " band", 0f, 1f, 1f, false,
+                    "no band registered for " + relic.rarity() + " x " + relic.valuation()));
+            return results;
+        }
+        for (int depth : BalanceConfig.RELIC_REFERENCE_DEPTHS) {
+            float gain = RelicValuationModel.gain(relic, depth);
+            boolean inBand = gain >= band[0] - 1e-6f && gain <= band[1] + 1e-6f;
+            results.add(new RuleResult(kind, rule + " " + relic.id() + " d" + depth, gain, band[0], band[1], inBand,
+                    String.format("%s %s gain %.4f %s band [%.2f, %.2f] at depth %d (carry %.4f)",
+                            relic.rarity(), relic.valuation(), gain, inBand ? "inside" : "OUTSIDE", band[0], band[1],
+                            depth, RelicValuationModel.carryLift(relic, depth))));
+        }
+        return results;
+    }
+
+    /**
+     * R-RELIC-CURSE: every CURSED relic's gain in its CURSED band at every reference depth, and its COST effects
+     * alone ({@link RelicValuationModel#costLoss}) cost >= RELIC_CURSED_MIN_LOSS at some reference depth.
+     */
+    public static List<RuleResult> relicCurseResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (RelicDefinition relic : RelicCatalog.registry().all()) {
+            if (!relic.rarity().isCursed()) continue;
+            results.addAll(relicBandResults(RuleKind.RELIC_CURSE, "R-RELIC-CURSE", relic));
+            BuildValuationModel.Loss worst = null;
+            int worstDepth = 0;
+            for (int depth : BalanceConfig.RELIC_REFERENCE_DEPTHS) {
+                BuildValuationModel.Loss loss = RelicValuationModel.costLoss(relic, depth);
+                if (loss != null && (worst == null || loss.loss > worst.loss)) {
+                    worst = loss;
+                    worstDepth = depth;
+                }
+            }
+            float value = worst == null ? 0f : worst.loss;
+            boolean real = value >= BalanceConfig.RELIC_CURSED_MIN_LOSS;
+            results.add(new RuleResult(RuleKind.RELIC_CURSE, "R-RELIC-CURSE " + relic.id() + " cost",
+                    value, BalanceConfig.RELIC_CURSED_MIN_LOSS, Float.MAX_VALUE, real,
+                    worst == null ? "no cost effect at all"
+                            : String.format("cost effects alone lose %.3f (worst: %s at depth %d; needs >= %.2f)",
+                                    value, worst.probe, worstDepth, BalanceConfig.RELIC_CURSED_MIN_LOSS)));
+        }
+        return results;
+    }
+
+    /**
+     * R-RELIC-STACK: at every BossTable depth, expectedHandLift <= the WORST non-waived R-CARRY score and
+     * bestHandLift <= the BEST non-waived R-CARRY score x (1 + BUILD_CARRY_TOLERANCE). Both ceilings are read live.
+     */
+    public static List<RuleResult> relicStackResults() {
+        List<RuleResult> results = new ArrayList<>();
+        float[] ceilings = relicStackCeilings();
+        float expectedCeiling = ceilings[0];
+        float bestCeiling = ceilings[1];
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            int depth = row.depth;
+            float expected = RelicValuationModel.expectedHandLift(depth);
+            float best = RelicValuationModel.bestHandLift(depth);
+            float count = RelicValuationModel.expectedRelicCount(depth);
+            results.add(new RuleResult(RuleKind.RELIC_STACK, "R-RELIC-STACK expected hand d" + depth,
+                    expected, 1f, expectedCeiling, expected <= expectedCeiling + 1e-6f,
+                    String.format("%.2f expected relics lift %.4f vs the worst committed build %.4f at depth %d",
+                            count, expected, expectedCeiling, depth)));
+            results.add(new RuleResult(RuleKind.RELIC_STACK, "R-RELIC-STACK best hand d" + depth,
+                    best, 1f, bestCeiling, best <= bestCeiling + 1e-6f,
+                    String.format("luckiest %d-relic hand lifts %.4f vs best build x (1 + tolerance) %.4f at depth %d",
+                            Math.min(BalanceConfig.RELIC_MAX_HELD, Math.round(count)), best, bestCeiling, depth)));
+        }
+        return results;
+    }
+
+    /**
+     * {worst non-waived R-CARRY score, best non-waived score x (1 + BUILD_CARRY_TOLERANCE)} — R-RELIC-STACK's
+     * ceilings, read live from the same per-tag carry R-CARRY ({@link #buildCarryResults}) evaluates.
+     */
+    public static float[] relicStackCeilings() {
+        float best = 0f;
+        float worst = Float.MAX_VALUE;
+        for (BuildTag tag : BuildTag.values()) {
+            if (isCarryWaived(tag)) continue;
+            float score = BuildValuationModel.carry(tag).score;
+            best = Math.max(best, score);
+            worst = Math.min(worst, score);
+        }
+        return new float[]{worst, best * (1f + BalanceConfig.BUILD_CARRY_TOLERANCE)};
+    }
+
+    /** The worst non-waived R-CARRY tag (the build RELIC_PERK_RANK_EQUIVALENT_LIFT is derived from). */
+    public static BuildTag worstCommittedBuildTag() {
+        BuildTag worstTag = null;
+        float worst = Float.MAX_VALUE;
+        for (BuildTag tag : BuildTag.values()) {
+            if (isCarryWaived(tag)) continue;
+            float score = BuildValuationModel.carry(tag).score;
+            if (score < worst) {
+                worst = score;
+                worstTag = tag;
+            }
+        }
+        return worstTag;
+    }
+
+    /** The measured per-rank lift: (worst committed carry)^(1 / (its ranks + keystone count)). */
+    public static float measuredPerkRankEquivalentLift() {
+        BuildValuationModel.Carry carry = BuildValuationModel.carry(worstCommittedBuildTag());
+        int steps = carry.ranks + (carry.keystone == null ? 0 : 1);
+        return steps <= 0 ? 1f : (float) Math.pow(carry.score, 1.0 / steps);
+    }
+
+    /** R-RELIC-SOURCE: the structural checks on the pool, the offer weights and the price anchor. */
+    public static List<RuleResult> relicSourceResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RelicDefinition> relics = RelicCatalog.registry().all();
+        // An offer always fills: every rarity holds at least RELIC_OFFER_MAX_CARDS relics nobody's tag can exclude.
+        for (RelicRarity rarity : RelicRarity.values()) {
+            int nonAffine = 0;
+            for (RelicDefinition relic : relics) {
+                if (relic.rarity() == rarity && relic.affinity() == null) nonAffine++;
+            }
+            results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE " + rarity + " offer fills",
+                    nonAffine, BalanceConfig.RELIC_OFFER_MAX_CARDS, Float.MAX_VALUE,
+                    nonAffine >= BalanceConfig.RELIC_OFFER_MAX_CARDS,
+                    nonAffine + " non-affine " + rarity + " relics; an offer shows up to " + BalanceConfig.RELIC_OFFER_MAX_CARDS));
+        }
+        // Every weight row a source can draw sums to 1 and has one weight per allowed rarity.
+        for (RelicSource source : RelicSource.values()) {
+            float[] previous = null;
+            for (int bossIndex = 0; bossIndex < BalanceConfig.RELIC_BOSS_OFFER_RARITY_WEIGHTS.length; bossIndex++) {
+                float[] weights = source.rarityWeightsFor(bossIndex);
+                if (weights == previous) break; // a single-row source clamps every index to its one row
+                previous = weights;
+                float sum = 0f;
+                for (float weight : weights) sum += weight;
+                boolean shaped = weights.length == source.allowedRarities().length;
+                results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE " + source + " weights row " + bossIndex,
+                        sum, 1f - 1e-4f, 1f + 1e-4f, shaped && Math.abs(sum - 1f) <= 1e-4f,
+                        String.format("sums to %.5f over %d weights for %d rarities", sum, weights.length,
+                                source.allowedRarities().length)));
+            }
+        }
+        // No duplicate ids (the registry already refuses one; this pins it as a rule).
+        Set<String> ids = new HashSet<>();
+        int duplicates = 0;
+        for (RelicDefinition relic : relics) {
+            if (!ids.add(relic.id())) duplicates++;
+        }
+        results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE unique ids", duplicates, 0f, 0f,
+                duplicates == 0, relics.size() + " relics, " + duplicates + " duplicate ids"));
+        // Every CURSED relic states its price and carries a cost kind.
+        for (RelicDefinition relic : relics) {
+            if (!relic.rarity().isCursed()) continue;
+            boolean costLine = relic.costText() != null && !relic.costText().isEmpty();
+            int costKinds = RelicValuationModel.costEffects(relic).length;
+            results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE " + relic.id() + " has a cost",
+                    costKinds, 1f, Float.MAX_VALUE, costLine && costKinds >= 1,
+                    (costLine ? "cost line present" : "NO cost line") + ", " + costKinds + " cost effect(s)"));
+        }
+        // The price anchor: one perk rank's carry, measured on the worst committed build.
+        float measured = measuredPerkRankEquivalentLift();
+        BuildValuationModel.Carry worstCarry = BuildValuationModel.carry(worstCommittedBuildTag());
+        float anchor = BalanceConfig.RELIC_PERK_RANK_EQUIVALENT_LIFT;
+        float tolerance = BalanceConfig.RELIC_PERK_RANK_EQUIVALENT_TOLERANCE;
+        results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE perk-rank equivalent lift",
+                measured, anchor - tolerance, anchor + tolerance, Math.abs(measured - anchor) <= tolerance + 1e-6f,
+                String.format("%s carry %.4f ^ (1 / (%d ranks + %d keystone)) = %.4f vs RELIC_PERK_RANK_EQUIVALENT_LIFT %.2f +/- %.2f",
+                        worstCarry.tag, worstCarry.score, worstCarry.ranks, worstCarry.keystone == null ? 0 : 1,
+                        measured, anchor, tolerance)));
+        // The route offers relics at all.
+        float nodeRate = RelicValuationModel.nodeOfferRatePerFloor();
+        results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE node offer rate", nodeRate, 1e-6f,
+                Float.MAX_VALUE, nodeRate > 0f, String.format("%.5f relic offers taken per floor from route nodes", nodeRate)));
+        return results;
+    }
+
     /**
      * R-DOT (restated by balance-overhaul order 4): exactly one definition per DoT. There are TWO
      * families, each defined once and re-exported byte-for-byte: the STATUS DoTs are fractions of the
@@ -1887,6 +2135,16 @@ public final class BalanceSchema {
                     priced ? 1f : 0f, 1f, 1f, priced,
                     priced ? "priced " + pricing
                            : "UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema"));
+        }
+        // relics-run-changing-artifacts CP5: every relic resolves its rarity, its trigger and its valuation, and the
+        // rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY LEGENDARY, is unpriced content).
+        for (RelicDefinition relic : RelicCatalog.registry().all()) {
+            boolean resolved = relic.rarity() != null && relic.trigger() != null && relic.valuation() != null
+                    && relicBandOf(relic) != null;
+            results.add(new RuleResult(RuleKind.COVERAGE, "relic " + relic.id(),
+                    resolved ? 1f : 0f, 1f, 1f, resolved,
+                    resolved ? relic.rarity() + " / " + relic.trigger() + " / " + relic.valuation() + " banded"
+                             : "UNRESOLVED — a relic needs a rarity, a trigger, a valuation and a band for that rarity x valuation"));
         }
         return results;
     }

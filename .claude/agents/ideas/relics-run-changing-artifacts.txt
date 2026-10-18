@@ -5,6 +5,26 @@ CREATED: 2026-10-18
 IMPLEMENTED: -
 ---
 
+IMPLEMENTATION NOTE (2026-10-18, hub decisions taken while building — the catalog
+table below shows the DESIGNED starting state; the code + BalanceReport RELICS table are
+the shipped state):
+  - CP2: route-event costs (lost gamble bite, health toll) use Player.applyEventCostDamage,
+    which bypasses the relic shield and damage multiplier (R11 = enemy attacks, heavies,
+    explosions). Relic-blast kills get the relic kill terms but never a corpse burst (R8).
+  - CP5: R-RELIC-CURSE measures its minimum loss on the relic's COST effects alone
+    (PerkModifier.isCostAt), because worstLoss over every probe reported spurious losses for
+    pure gains. bestHandLift is affinity-consistent (non-affine relics + at most ONE BuildTag).
+  - CP5: magnitudes retuned inside SECTION 26 (D7). Nine relics could not fit by magnitude
+    (saturation, integer kill-turn breakpoints, boolean-only effects) and were recomposed with
+    EXISTING kinds: recoil_spring (+AMMO_PICKUP_BONUS), spotters_lens (DAMAGE_TAKEN 0.95 + tiny
+    unhurt-target damage, trigger ON_HIT_TAKEN), grief_engine (+KILL_ARMOR), choke_bore
+    (+KILL_ARMOR, smaller SPREAD), capacitor_bank (ARC_CHAIN_MULTIPLIER instead of
+    ENERGY_DAMAGE), second_heart (SECOND_WIND only), overclocked_servos (ALL_WEAPON_DAMAGE +
+    RANGE_BONUS instead of FIRST_HIT_CRITICAL); counterweight and asbestos_lining moved to
+    LEGENDARY. Rarity counts are therefore 10 COMMON / 11 RARE / 9 LEGENDARY / 6 CURSED (A2's
+    11/12/7/6 is superseded). RELIC_CARRY_BAND_LEGENDARY top widened 1.20 -> 1.22 (a band new in
+    this feature) for second_heart's Second Wind flag.
+
 SUPERSEDES .claude/agents/ideas/roguelike_order_14_artifacts_and_special_relics.txt
 (now REJECTED). What carried over from it: relics are run-scoped passives that
 rewrite one rule, arrive through EXISTING channels (no tile symbol), use a

@@ -1,6 +1,9 @@
 package ge.tbegvadze.toon3d.util;
 
 import ge.tbegvadze.toon3d.progression.BuildStats;
+import ge.tbegvadze.toon3d.progression.BuildTag;
+import ge.tbegvadze.toon3d.progression.PerkEffect;
+import ge.tbegvadze.toon3d.progression.PerkModifier;
 import ge.tbegvadze.toon3d.relic.RelicCatalog;
 import ge.tbegvadze.toon3d.relic.RelicDefinition;
 import ge.tbegvadze.toon3d.relic.RelicRarity;
@@ -255,16 +258,27 @@ public final class RelicValuationModel {
     /**
      * The luckiest hand at a depth: the round(expectedRelicCount) highest carry lifts reachable (capped at
      * RELIC_MAX_HELD; LEGENDARY at most one per boss passed; CURSED only past depth 1) —
-     * {@link GameMath#relicHandLift}.
+     * {@link GameMath#relicHandLift}. AFFINITY-CONSISTENT (CP5 hub decision): one two-gun build cannot use every
+     * tag-affine relic at once, so a hand holds the non-affine relics plus the affine relics of at most ONE
+     * {@link BuildTag}; the result is the best over every tag and the no-affine hand.
      */
     public static float bestHandLift(int depth) {
+        float best = bestHandLift(depth, null);
+        for (BuildTag tag : BuildTag.values()) {
+            best = Math.max(best, bestHandLift(depth, tag));
+        }
+        return best;
+    }
+
+    /** The luckiest hand whose only tag-affine relics carry {@code allowedAffinity} (null = non-affine relics only). */
+    static float bestHandLift(int depth, BuildTag allowedAffinity) {
         int count = Math.min(BalanceConfig.RELIC_MAX_HELD, Math.round(expectedRelicCount(depth)));
         int legendaryCap = bossesPassedBefore(depth);
         boolean cursedReachable = depth > 1 && lockerRatePerFloor() > 0f;
-        List<RelicDefinition> candidates = new ArrayList<>(registry().all());
         List<Float> lifts = new ArrayList<>();
         List<Boolean> legendary = new ArrayList<>();
-        for (RelicDefinition definition : candidates) {
+        for (RelicDefinition definition : registry().all()) {
+            if (definition.affinity() != null && definition.affinity() != allowedAffinity) continue;
             if (definition.rarity() == RelicRarity.CURSED && !cursedReachable) continue;
             if (definition.rarity() == RelicRarity.LEGENDARY && legendaryCap == 0) continue;
             lifts.add(carryLift(definition, depth));
@@ -285,5 +299,29 @@ public final class RelicValuationModel {
             chosen[filled++] = lifts.get(index);
         }
         return GameMath.relicHandLift(chosen, filled);
+    }
+
+    // =====================================================================================
+    // THE CURSE (R-RELIC-CURSE / R-RELIC-SOURCE)
+    // =====================================================================================
+
+    /** The relic's COST effects alone ({@link PerkModifier#isCostAt}); empty for a relic with none. */
+    public static PerkEffect[] costEffects(RelicDefinition definition) {
+        List<PerkEffect> costs = new ArrayList<>();
+        for (PerkEffect effect : definition.effects()) {
+            if (effect.kind.isCostAt(effect.magnitudeAt(1))) costs.add(effect);
+        }
+        return costs.toArray(new PerkEffect[0]);
+    }
+
+    /**
+     * What a cursed relic's price costs the player at a depth: worstLoss over EVERY probe (null niche) of its cost
+     * effects alone (CP5 hub decision — worstLoss of the whole relic reports spurious losses for pure gains).
+     * Null when the relic has no cost effect.
+     */
+    public static BuildValuationModel.Loss costLoss(RelicDefinition definition, int depth) {
+        PerkEffect[] costs = costEffects(definition);
+        if (costs.length == 0) return null;
+        return BuildValuationModel.worstLoss(BuildStats.ofEffects(costs), null, depth);
     }
 }
