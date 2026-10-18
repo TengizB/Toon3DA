@@ -1,0 +1,664 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Level Design
+TITLE: Floor Twists — rule-changing floor modifiers on the map
+CREATED: 2026-10-18
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+Some generated COMBAT floors roll ONE "floor twist": a named rule change that alters HOW the floor
+plays, not how it looks. The twist is printed on the route-map card BEFORE the player commits, so it
+becomes a route decision ("the dark floor, or the one with a hunter on it?"). v1 ships three twists
+that need no new tile symbol, no new enemy art and no persistence schema change: BLACKOUT, SALVAGE
+and HUNTED.
+
+What the owner SAID: five pitch twists (BLACKOUT, LOCKDOWN, HUNTED, FLOODED, SALVAGE), shown on the
+map node. What the owner WANTS: floor-to-floor variety in decision-making, bought with rules rather
+than art, and a map that offers more than "which node type". The design answers the need with the
+ELITE affix machinery the route layer already has (NodeAffixRegistry), widened to COMBAT nodes,
+instead of a parallel system.
+
+WHY THESE THREE (and not LOCKDOWN / FLOODED first):
+  - SALVAGE is pure data on machinery that already ships (encounter budget override, owned-ammo
+    cache request, scattered pickup guarantees, the NodeEconomics ledger). Lowest risk, and it is the
+    twist that proves the pricing path end to end.
+  - BLACKOUT changes INFORMATION (no mini-map, dark) and is made fair by changing PERCEPTION for
+    both sides (enemies wake from much closer). It is one render seam (tile brightness), one HUD
+    toggle and one EnemyManager perception override — no art.
+  - HUNTED changes TEMPO: a floor that punishes lingering. It reuses an existing archetype
+    (IRON_STALKER, a MINI_ELITE, sprite already shipped) and the existing spawnEnemy path; the only
+    new behaviour is "walk the player's own trail", which is robust precisely because every trail
+    tile is a tile the player already proved walkable.
+  - LOCKDOWN needs a per-door re-seal state machine, a terminal interaction and a no-softlock proof
+    across all three generators (rooms, linear corridor, cave). FLOODED needs a new per-tile
+    movement cost (almost certainly a new FIXED tile meaning plus water art). Both are the expensive
+    ones; both are follow-ups (SCOPE OUT).
+
+
+SCOPE
+-----
+IN
+  - The twist is a SCOPE of the existing ELITE affix registry: NodeAffixDefinition gains a scope
+    (ELITE_AFFIX / FLOOR_TWIST) and the twist's typed modifiers; three FLOOR_TWIST rows are
+    registered next to the five ELITE affixes in RouteRegistries.registerAffixes.
+  - Map-gen rolls at most one twist onto eligible COMBAT nodes (chance, per-twist weight, per-twist
+    minimum depth), deterministically from the node's existing affix sub-stream.
+  - The route console shows the twist on the card (corner tag, already drawn for any affix) AND as
+    a third line in the confirm bar (name + one-line rule), for any focused node carrying an affix
+    or a twist.
+  - The COMBAT floor profile folds the twist into the floor plan; World (and SimWorld) apply the
+    twist's runtime modifiers after the floor is built, through the existing FloorEffects seam.
+  - BLACKOUT, SALVAGE and HUNTED, fully playable on device.
+  - One ORA teaching line per twist (three new TeachingTopic rows), one-shot for the save, fired on
+    the first arrival on that twist; an event-text sting naming the twist on EVERY arrival.
+  - The balance contract: a NodeEconomics row per twist, one new audit rule (R-TWIST), the
+    trajectory audit folding twists in, one new behavioural band (S-TWIST), a TWIST REPORT in the
+    sim summary. Both gates green.
+  - Run telemetry: the route string records the twist (e.g. "combat:HUNTED").
+  - Docs updated in the same commits (see IMPLEMENTATION PLAN step 6).
+
+OUT (deliberately not doing now)
+  - LOCKDOWN (doors seal behind you, a terminal reopens them) — follow-up idea
+    `floor-twists-lockdown`; needs a door re-seal state, a 'T' terminal interaction and a
+    softlock proof per generator. DoorManager.lockArenaDoor is the obvious starting seam.
+  - FLOODED (tiles cost an extra turn) — follow-up; needs a per-tile movement-cost meaning that is
+    very likely a new FIXED symbol (STRICT RULE) plus water floor art.
+  - Twists on any node type other than COMBAT. ELITE keeps its own affixes (one affix slot per
+    node, and ELITE+twist would stack two threat multipliers past what R-RISK-PREMIUM prices).
+    MYSTERY, CACHE, SHOP, REST, EVENT, BOSS, REGION_GATE never carry a twist.
+  - Two twists on one floor. Never.
+  - A hunter that follows you to the next floor, or more than one hunter per floor.
+  - A HUD countdown widget for HUNTED. The warning is event text + sound (see RULES); a persistent
+    clock is a later polish idea if playtests ask for it.
+  - Twist-aware sim policies (TACTICAL does not prefer or avoid twists). The sim plays whatever the
+    map deals it; S-TWIST checks no twist is a death trap.
+  - New sounds. Every cue reuses a shipped GameSoundId.
+  - Twists on hand-made / file-loaded levels (no route node, no twist).
+  - Any change to existing ELITE affix numbers, MYSTERY weights or node-type prices.
+  - The codex. No archive entry for twists in v1 (the card and ORA say everything needed).
+  - Fixing ELITE affixes' card display beyond the shared confirm-bar line described below.
+
+
+GAMEPLAY LOOP
+-------------
+1. Route select. The FACILITY NAV console shows the next layer. A COMBAT card that rolled a twist
+   carries the amber affix corner tag. Focusing it, the confirm bar reads, top to bottom:
+       RESISTANCE                       (threat word, node accent colour — unchanged)
+       STANDARD SUPPLY                  (reward promise, grey — unchanged)
+       HUNTED — A HUNTER WALKS YOUR TRAIL   (twist line, amber — new)
+2. Player commits. The floor is built with the twist folded in (SALVAGE: more threat, more supply).
+3. Arrival (first PLAYING frame after the floor fade): an amber event-text sting shows the twist
+   name ("BLACKOUT" / "SALVAGE" / "HUNTED"). If the player has never been on this twist before, ORA
+   says its teaching line (bark, CONTROL_HINT channel).
+4. Play. Every player action is one turn, as always:
+   - BLACKOUT: no mini-map ("NAV OFFLINE" plate in its place); the floor is dark except the exit;
+     dormant enemies wake only when the player is within 2 tiles, or in their line of sight within
+     4 tiles.
+   - SALVAGE: more enemies and more supply lying around.
+   - HUNTED: the floor counts the player's turns. At turn 40 - 5 = 35 a warning sting fires; at turn
+     40 an Iron Stalker is printed at the tile the player arrived on, already alerted, and walks the
+     player's trail every turn until it has a direct shot at them, then fights normally. Killing it
+     drops a bounty. Taking the exit first means it never arrives.
+5. Exit. The twist ends with the floor. Nothing carries over.
+
+
+RULES
+-----
+GENERATION
+  R1  Only COMBAT nodes may roll a twist. A node holds at most one affix-or-twist (the existing
+      RouteNode.affix slot; no new field on RouteNode).
+  R2  Roll: in RouteMapGenerator's finalisation pass, from the node's EXISTING affix sub-stream
+      (GameMath.mixSeed(nodeSeed, AFFIX_STREAM_SALT)), with chance TWIST_ROLL_CHANCE_COMBAT; then a
+      weighted pick among the FLOOR_TWIST rows whose minDepth <= the node's depth, by each row's
+      weight. No eligible row -> no twist. The same seed always yields the same twists, and adding
+      twists changes no other roll (node type, generator, ELITE affix all draw from other streams
+      or from nodes of a different type).
+  R3  Minimum depths: BLACKOUT 2, SALVAGE 2, HUNTED 4. Depth 1 never carries a twist (floor one is
+      the teaching floor). Boss depths never hold a COMBAT node, so they never carry one; the COMBAT
+      profile additionally ignores any twist on a boss depth (defensive).
+  R4  A twisted node's map hint keeps the existing " — <NAME>" suffix (RouteMapGenerator already
+      appends any affix's display name), so every place that shows the hint shows the twist.
+
+FLOOR PLAN (headless, in the COMBAT profile)
+  R5  The COMBAT profile folds a FLOOR_TWIST into the plan with the same typed-modifier idiom
+      EliteProfile uses for affixes — no per-twist code path:
+        - budgetScaleMultiplier -> an EnemyBudgetOverride on the plan (depth ramp still first);
+        - extra scattered owned-ammo boxes -> the plan's AmmoCacheRequest (World fulfils it with the
+          player's OWNED ammo types, exactly like the cache);
+        - extra scattered pickups -> Guarantees.pickup(symbol, n, Placement.SCATTERED, seed) using
+          existing symbols only ('+' stim pack, 'a' armour shard);
+        - FloorEffects gains the twist id (new field + `withTwist(id)`), plus withSting(name) and
+          withStatLog(twist id) — the run route string becomes e.g. "combat:SALVAGE".
+  R6  Twists never change the floor's generator, layout, node type, danger pips or region.
+
+RUNTIME (World and SimWorld both apply these after rebuildForLevel, in applyPendingFloorEffects /
+its SimWorld mirror; every modifier resets on the next floor build)
+  R7  BLACKOUT
+        a. Mini-map: LevelRenderer is not drawn this floor; in its rectangle a static dark plate with
+           the amber text NAV OFFLINE is drawn (HudConstants). The player dot is not drawn either.
+        b. Light: every floor/wall/prop brightness read through Level.getTileBrightness is
+           multiplied by TWIST_BLACKOUT_LIGHT_MULTIPLIER (0.45, RenderConstants, cosmetic) — EXCEPT
+           the exit/stairs tile, which keeps its LIT brightness and becomes the floor's beacon.
+           Carried as a per-Level light multiplier (default 1.0) so it dies with the Level.
+        c. Never darkened: enemy health bars, intent/telegraph icons, the weapon HUD, HUD panels,
+           event text, bark panels. Enemy billboards are drawn with a minimum shade of
+           TWIST_BLACKOUT_ENEMY_MIN_SHADE (0.35, RenderConstants) so a body in the dark is a
+           silhouette, never invisible.
+        d. Perception (balance-bearing): for the dormant-WAKE check only (EnemyManager Phase A),
+           the proximity radius is TWIST_BLACKOUT_WAKE_RADIUS_TILES (2, default 4) and the
+           wake-by-sight range is TWIST_BLACKOUT_WAKE_SIGHT_TILES (4, default 8). Chain-alert radius,
+           attack ranges, ranged LOS for attacks and isSameCardinalLine are UNCHANGED — an awake
+           enemy fights exactly as it does anywhere else.
+  R8  SALVAGE — no runtime modifier. Everything is in the plan (R5): threat x1.30 (more bodies,
+      through the same override SWARM uses), +4 owned-ammo boxes scattered, +1 '+' stim pack,
+      +1 'a' armour shard scattered. Numbers are placeholders tuned into R-TWIST's band.
+  R9  HUNTED — the hunter clock (new headless class, enemy package):
+        a. States: WAITING -> WARNED -> ARRIVED -> DONE.
+           WAITING: counts completed player turns on this floor (turns, never seconds; overlays and
+             menus advance no turns, so they advance no clock).
+           WAITING -> WARNED at turn TWIST_HUNTED_ARRIVAL_TURNS - TWIST_HUNTED_WARNING_TURNS
+             (40 - 5): amber event text "SOMETHING IS ON THE STAIRS BEHIND YOU"
+             (HudConstants.TWIST_HUNTED_WARNING_TEXT).
+           WARNED -> ARRIVED at turn >= TWIST_HUNTED_ARRIVAL_TURNS, on the first turn the spawn is
+             legal: the arrival tile (the tile the player stood on when the floor began) is not
+             blocked, not occupied, and is at least TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES (5,
+             Manhattan) from the player. Otherwise it retries every turn, forever (a player camping
+             the arrival tile delays it — and gains nothing, because the floor's loot is elsewhere).
+             On arrival: EnemyManager.spawnEnemy(IRON_STALKER, arrival tile, depth) — normal depth
+             scaling, alerted, relic spawn-health multiplier applies as for any spawn — flagged as
+             the trail hunter; red event text "IT'S HERE" (HudConstants.TWIST_HUNTED_ARRIVAL_TEXT);
+             the INSECT family ALERT voice plays at the hunter's tile through the existing
+             EnemyVoiceListener (so it is heard from behind, panned by the existing perception).
+           ARRIVED -> DONE when the hunter dies. Leaving the floor in any state discards the clock.
+        b. One hunter per floor, never respawned.
+  R10 THE TRAIL. From the floor's first turn, every time the player SETTLES on a tile different from
+      the last recorded one, that tile is appended to a pre-allocated ring buffer of
+      TWIST_HUNTED_TRAIL_CAPACITY (512, EnemyConstants) entries. Recorded only on HUNTED floors. No
+      allocation per step.
+  R11 THE HUNTER'S TURN (inside EnemyManager's existing EXECUTE/COMMIT phases; commit-then-resolve
+      and intent icons unchanged):
+        a. If the hunter has line of sight to the player (existing hasLineOfSight), or is within
+           Manhattan 2 of the player, it behaves exactly as an ordinary alerted IRON_STALKER (moveset,
+           melee, abilities) for that turn.
+        b. Otherwise it follows the trail: its target is the NEWEST trail entry that is cardinally
+           adjacent to its tile and newer than its current trail index (it cuts the player's loops
+           and backtracks); if none, the next entry after its index. It steps there.
+        c. Next trail tile is a CLOSED door: the hunter spends this turn forcing it; the door is
+           passable for the hunter on its next turn regardless of animation timing. A forced door
+           plays DOOR_OPEN at its tile, does NOT fire DoorOpenedListener (no relic door blast/heal),
+           and does NOT count toward the player's opened-door count. A locked or arena-locked door is
+           never on the trail (the player could not pass it), and the hunter may not force one.
+        d. Next trail tile occupied by another enemy: it waits; after 2 waiting turns it takes one
+           ordinary greedy step toward the player and re-acquires the trail from there (R11b).
+        e. Two consecutive trail entries not cardinally adjacent (the player took a portal): when
+           the hunter stands on the earlier entry, its next move places it on the later one if free
+           (it "knows the way"); else it waits.
+        f. Trail overwritten past the hunter's index (buffer wrapped) or empty: ordinary greedy
+           stepToward behaviour.
+        g. The hunter never uses the exit and never leaves the floor.
+  R12 BOUNTY. When the trail hunter dies it drops, at its tile, TWIST_HUNTED_BOUNTY_AMMO_BOXES (3)
+      owned-ammo boxes (same owned-aware resolution as the cache; tile full -> nearest free floor
+      tile) in addition to its ordinary XP, credit and loot drops.
+  R13 Ranged/cardinal rule: unchanged for every enemy, the hunter included (IRON_STALKER is
+      melee-plus-ranged and already obeys isSameCardinalLine).
+
+PRESENTATION
+  R14 Route console confirm bar: when the focused, revealed node carries an affix or twist, a third
+      line is drawn at LEGEND_TWIST_OFFSET_Y (placeholder -30, RouteMapConstants) in hazard amber:
+      "<NAME> — <RULE LINE>". Rule lines (RouteMapConstants):
+        BLACKOUT  "NO MAP · DARK · THEY SEE LESS"
+        SALVAGE   "MORE SUPPLY · MORE RESISTANCE"
+        HUNTED    "A HUNTER WALKS YOUR TRAIL"
+      ELITE affixes get the same line with their display name and a rule line each (IRRADIATED
+      "HOT BARRELS", OVERCLOCKED "MEANER RESISTANCE · BIGGER VAULT", SWARM "MORE BODIES · BIGGER
+      VAULT", FORTIFIED "COVER · EXTRA ARMOUR", VOLATILE "EXPLOSIVE BARRELS") — today their name is
+      hidden behind the C1 promise lines. Truncated with the existing truncateToWidth if too wide.
+  R15 The hunter's health-bar frame is drawn in the twist amber (EnemyConstants colour) so the
+      player can tell THE hunter from an ordinary Iron Stalker.
+  R16 ORA: on arrival on a twist floor, World requests BarkTrigger.CONTROL_HINT with the twist's
+      TeachingTopic subject key. One-shot for the save (existing seen-flag mechanism); no re-teach
+      (threshold 0). Delivered even at the floor budget (CONTROL_HINT rows are STORY_CRITICAL).
+
+
+PLAYER EXPERIENCE
+-----------------
+The map stops being only "which node type" and becomes "which problem do I want": SALVAGE when the
+bag is empty and HP is high; BLACKOUT when the build is a short-range brawler that likes enemies
+asleep until close; HUNTED when you are strong and fast, or when the twin card is worse. On the
+floor, each twist asks one new question: BLACKOUT — "how do I navigate with no map, and can I sneak
+past what I can barely see?"; SALVAGE — "can I afford this many fights for this much loot?";
+HUNTED — "what is worth stopping for?" HUNTED's counter-play is readable: it walks where you
+walked, so keep moving, or pick the ground and kill it for the bounty.
+
+Teaching, for a player who never reads: the card says the rule in four words before the choice; the
+sting names it on arrival; ORA's single line explains it once; the twist itself teaches the rest
+(the dark is visible, the NAV OFFLINE plate is visible, the warning text and the alert voice from
+behind are unmissable). No tutorial screen.
+
+ORA lines (story-strings.properties; ids follow the TeachingCatalog control-hint pattern; plain
+words only — legal from Region 1, no proper nouns, no numbers, no senses she lacks):
+  story.bark.control.twist_blackout = Power's out on this floor. No map for you — but nothing down
+                                      here sees far in the dark either. Go quiet.
+  story.bark.control.twist_salvage  = Nobody cleared this floor out. More supplies lying around, and
+                                      more of whatever stopped the last crew.
+  story.bark.control.twist_hunted   = The floor sensors picked up something coming down behind us.
+                                      It'll walk the way you walked. Take what you need and keep moving.
+(If TeachingCatalog derives ids differently, use its derived ids — the TEXT above is the spec.)
+
+
+TECHNICAL NOTES
+---------------
+route (headless):
+  - NodeAffixDefinition: add `scope` (new enum route/AffixScope: ELITE_AFFIX, FLOOR_TWIST — per-
+    constant data names the host node type and the roll-chance constant; no switch), `minDepth`,
+    `ruleLine`, and the twist modifier fields, all defaulting to "no effect" in the Builder:
+      minimapDisabled (boolean), lightMultiplier (float, 1.0), wakeRadiusTiles (int, -1 = default),
+      wakeSightTiles (int, -1), hunterEnemyTypeName (String, null = none; resolved by World/SimWorld
+      to an EnemyType by name, the same idiom as an exchange reward's ItemType name, so route never
+      imports enemy), scatteredAmmoBoxes (int), extraStims (int), extraArmourShards (int).
+      Existing fields keep their ELITE meaning; budgetScaleMultiplier is shared.
+  - NodeAffixRegistry: `poolFor(AffixScope)`; `elitePool()` becomes poolFor(ELITE_AFFIX)
+    (behaviour identical); `ids()` unchanged (so R-ROUTE-PRICED covers twists automatically).
+  - RouteRegistries.registerAffixes: three FLOOR_TWIST register() rows. Ids in RouteMapConstants:
+    TWIST_BLACKOUT_ID "blackout", TWIST_SALVAGE_ID "salvage", TWIST_HUNTED_ID "hunted"; display
+    names "BLACKOUT" / "SALVAGE" / "HUNTED".
+  - RouteMapGenerator: `setTwistPool(List<NodeAffix>)` + the COMBAT branch of rollAffix (R2). It
+    needs the definitions' minDepth/weight: inject the registry (or pass definitions) — today's
+    "uniform until order-9 gives affixes their own weights" stub may be replaced by real weights for
+    BOTH scopes ONLY if ELITE weights all equal AFFIX_WEIGHT_DEFAULT (otherwise leave ELITE uniform;
+    no ELITE roll may change).
+  - Every RouteMapGenerator owner sets the twist pool: World, sim/SimWorld (line ~225),
+    util/BalanceSchema's trajectory generator (line ~3001), and any other `setEliteAffixPool` caller.
+  - DefaultCombatProfile: takes the NodeAffixRegistry (RouteRegistries.registerLevelProfiles passes
+    AFFIXES) and folds a FLOOR_TWIST (R5). Only when node.type == COMBAT and not a boss depth.
+  - FloorEffects: `twistId` field + `withTwist(String)` + `twistId()`; hasAny() includes it.
+  - NodeEconomics.Kind gains TWIST (`NodeEconomics.twist(id)` builder); RouteEconomics registers
+    one row per twist from BalanceConfig SECTION 27. R-RISK-PREMIUM keeps iterating Kind.AFFIX only.
+enemy:
+  - New headless `enemy/PlayerTrail` (pre-allocated int ring buffer, R10) and `enemy/HuntedPursuit`
+    (the R9 clock; reports WARNED / ARRIVED / hunter killed through a small listener interface
+    `enemy/HuntedPursuitListener`, so enemy never imports render, narrative or audio — the
+    EnemyVoiceListener idiom).
+  - EnemyManager: `setWakePerception(radiusTiles, sightTiles)` + `resetWakePerception()` used only
+    by Phase A's dormant-wake check (R7d); trail-hunter flag on Enemy (`followsPlayerTrail`) and the
+    R11 movement branch before the type's ordinary plan; bounty hook on that enemy's death (R12)
+    reported to World through the listener so World fulfils owned-ammo boxes.
+door:
+  - DoorManager: `forceOpenForEnemy(column, row)` — CLOSED/CLOSING -> OPEN immediately, plays the
+    door-state sound through DoorStateListener, never fires DoorOpenedListener, never increments
+    openedDoorCount, refuses locked / arena-locked doors.
+level:
+  - Level: per-level `lightMultiplier` (default 1.0, package-private setter used by World through
+    an existing public seam or a new public setter) applied inside getTileBrightness, exit/stairs
+    exempt (R7b).
+world:
+  - World.applyPendingFloorEffects: looks the twist up (RouteRegistries.affixes().definition) and
+    applies each typed modifier (minimap flag, light multiplier, wake perception, hunter clock).
+    rebuildForLevel resets all of them. Twist arrival also fires the R16 teaching request and the
+    sting. Player settle -> PlayerTrail.record; turn end -> HuntedPursuit.onPlayerTurnCompleted at
+    the same call site that advances EnemyManager's turn.
+  - sim/SimWorld mirrors the non-render parts: wake perception, trail, hunter clock, bounty.
+render / hud:
+  - LevelRenderer skipped + NAV OFFLINE plate (HudRenderer or LevelRenderer, libgdx-specialist's
+    call; no allocation in render; strings/colours/geometry in HudConstants).
+  - EnemyRenderer: minimum shade on BLACKOUT (R7c), amber health-bar frame for the hunter (R15).
+  - RouteMapOverlayRenderer: the R14 third confirm-bar line (pre-computed when focus changes, never
+    per frame string building).
+narrative:
+  - TeachingTopic: TWIST_BLACKOUT(TACTICAL, 0), TWIST_SALVAGE(TACTICAL, 0), TWIST_HUNTED(CRITICAL, 0).
+    TeachingCatalog registers rows from the enum; strings go in assets/story/story-strings.properties
+    (and StoryStrings.defaults() if that table mirrors control hints).
+Constants:
+  - BalanceConfig NEW SECTION 27 — FLOOR TWISTS (every balance-bearing number below), with
+    RouteMapConstants / EnemyConstants re-export shims where call sites want them.
+  - RenderConstants: TWIST_BLACKOUT_LIGHT_MULTIPLIER 0.45, TWIST_BLACKOUT_ENEMY_MIN_SHADE 0.35.
+  - HudConstants: NAV OFFLINE plate geometry/colour/text, TWIST_HUNTED_WARNING_TEXT,
+    TWIST_HUNTED_ARRIVAL_TEXT, TWIST_STING colour (amber).
+  - RouteMapConstants: twist ids, rule lines (incl. the five ELITE affix rule lines),
+    LEGEND_TWIST_OFFSET_Y.
+  - EnemyConstants: TWIST_HUNTED_TRAIL_CAPACITY 512, hunter health-bar frame colour.
+Tile symbols: none new. Uses existing '+', 'a', ammo boxes via AmmoCacheRequest, existing doors.
+Persistence: none new. The only persisted effect is the three teaching seen-flags, through the
+  existing one-shot flag store keyed by subject string — no StoryStore/StatsStore key, no
+  SCHEMA_VERSION bump. (If the implementer finds seen-flags are NOT keyed generically, STOP and
+  report — that would be a schema change this spec does not authorise.)
+Tick bus: HuntedPursuit advances once per completed player turn; it is not a real-time timer.
+
+
+VISUAL DESIGN
+-------------
+  - Card: the existing amber affix diamond (RouteGlyphs.affixTag) — no new icon.
+  - Confirm bar third line: palette.hazardAmber, LEGEND_TEXT_SCALE, centred like the promise lines.
+  - Arrival sting: EventTextSystem amber, the twist's display name.
+  - BLACKOUT: the 3D view at 45% brightness, the exit glowing at full LIT brightness, the mini-map
+    rectangle a near-black panel (0x0A0A0C, alpha = HUD_PANEL_ALPHA) with "NAV OFFLINE" centred in
+    amber and a 1-px amber frame. Enemy silhouettes never below 0.35 shade.
+  - HUNTED: warning text amber, arrival text red (EventTextSystem.COLOR_RED); hunter health-bar
+    frame amber. No new sprite.
+  - SALVAGE: nothing new — the extra pickups use their existing billboards and auras.
+  - Nothing is placed in the HUD or touch safe zones; no new touch button.
+
+
+BALANCE NOTES
+-------------
+BALANCE-BEARING. SALVAGE and HUNTED change enemy and loot counts; BLACKOUT changes wake perception.
+All of it lands in BalanceConfig SECTION 27 + BalanceSchema + sim/, so both gates apply.
+
+BalanceConfig SECTION 27 — FLOOR TWISTS (placeholders; the implementer tunes them INTO the bands):
+  TWIST_ROLL_CHANCE_COMBAT              0.30   share of eligible COMBAT nodes that carry a twist
+  TWIST_WEIGHT_BLACKOUT / _SALVAGE / _HUNTED   1.0 each
+  TWIST_MIN_DEPTH_BLACKOUT 2, TWIST_MIN_DEPTH_SALVAGE 2, TWIST_MIN_DEPTH_HUNTED 4
+  TWIST_BLACKOUT_WAKE_RADIUS_TILES      2      (default ALERT_RADIUS_TILES 4)
+  TWIST_BLACKOUT_WAKE_SIGHT_TILES       4      (default LOS_MAX_RANGE_TILES 8, wake check only)
+  TWIST_SALVAGE_BUDGET_MULT             1.30
+  TWIST_SALVAGE_AMMO_BOXES              4
+  TWIST_SALVAGE_STIMS                   1
+  TWIST_SALVAGE_ARMOUR_SHARDS           1
+  TWIST_HUNTED_ARRIVAL_TURNS            40
+  TWIST_HUNTED_WARNING_TURNS            5
+  TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES 5
+  TWIST_HUNTED_BOUNTY_AMMO_BOXES        3
+  TWIST_HUNTED_THREAT_SHARE             declared extra threat of the hunter as a share of a COMBAT
+                                        floor's budget (priced at FULL — as if it always arrives)
+  TWIST_NEUTRAL_EV_TOLERANCE            0.10
+  TWIST_SIM_MAX_DEATH_RATE_RATIO        1.50
+  TWIST_SIM_MIN_FLOORS                  60
+
+NodeEconomics rows (route/RouteEconomics, Kind.TWIST):
+  blackout  budgetScale 1.0, no guaranteed payoff (an information-for-perception sidegrade).
+  salvage   budgetScale TWIST_SALVAGE_BUDGET_MULT, guaranteedAmmoBoxes TWIST_SALVAGE_AMMO_BOXES,
+            guaranteedHealHitPoints = stim heal + armour shard value (the same conversion the
+            FORTIFIED row uses).
+  hunted    budgetScale 1 + TWIST_HUNTED_THREAT_SHARE, guaranteedAmmoBoxes
+            TWIST_HUNTED_BOUNTY_AMMO_BOXES.
+
+New audit rule R-TWIST (BalanceSchema RuleKind.TWIST), evaluated at every depth 1..RUN_FINAL_DEPTH
+from the twist's minDepth, priced COMBAT + twist against plain COMBAT through
+RouteEconomicsModel.price(ledger, combatRow, twistRow, floor, depth), worst depth reported:
+  T1 a twist whose budgetScale > 1: reward premium / threat premium in
+     [ROUTE_RISK_PREMIUM_MIN, ROUTE_RISK_PREMIUM_MAX] (the SAME band R-RISK-PREMIUM uses — a
+     twist that adds danger must pay for it, never a sucker bet, never free).
+  T2 a twist whose budgetScale == 1: total EV within +-TWIST_NEUTRAL_EV_TOLERANCE of plain COMBAT.
+  T3 HUNTED honesty: the hunter's actual Threat-Point price at the depth (the same per-archetype TP
+     the encounter planner charges for IRON_STALKER at that depth) divided by the COMBAT floor's
+     TP budget is <= TWIST_HUNTED_THREAT_SHARE. The ledger may not under-price the hunter.
+R-ROUTE-PRICED: already iterates RouteRegistries.affixes().ids(), so a twist with no row fails the
+  build with no code change — confirm, do not duplicate.
+R-TRAJECTORY: the trajectory walk prices a visited node WITH its twist row folded in (today it
+  ignores affixes entirely; ELITE affix folding stays as it is — out of scope). All three policies
+  must stay in band. R-PIPS-DERIVED is unchanged (pips are per node TYPE).
+
+New behavioural band S-TWIST (sim/BehavioralBands), never waived, read from the TACTICAL row:
+  ST1 for each twist with >= TWIST_SIM_MIN_FLOORS floors played: the floor-death rate on that
+      twist's floors <= TWIST_SIM_MAX_DEATH_RATE_RATIO x the floor-death rate on plain COMBAT floors
+      in the same depth range. Under-sampled twists are REPORTED "n/a (sample n)" and do not fail;
+      the CP that turns the band on records the sample sizes in its handover note.
+  ST2 every twist appears at least once in the TACTICAL row's played floors (the roll is live).
+SimReport gains a TWIST REPORT block: twist, floors played, floor-death rate, mean turns on floor,
+  mean HP drain, hunter arrivals / kills (HUNTED).
+
+KNOWN MODEL GAP (state it in the authority doc): the sim does not navigate by the mini-map, so
+BLACKOUT's information loss is invisible to it — the sim sees only the wake-perception change and
+will read BLACKOUT as slightly EASIER. That is why BLACKOUT is priced neutral (T2) rather than
+priced from the sim, and why the light/minimap half is a feel question for playtests.
+
+Gate protocol (docs/game-balance-authority.txt SECTION 7): `./gradlew test` and
+`./gradlew balanceSim` green; BalanceReport re-run and pasted over SECTION 6; one CHANGELOG line
+with the ROUND SUMMARY before -> after. No existing band may be waived to fit twists; if an
+existing band flips, the twist numbers move, not the band.
+
+
+INTERACTIONS
+------------
+  - Route map: twists ride the existing affix slot, sub-stream, hint suffix and corner tag; the
+    confirm bar gains the third line for affixes too. Route guarantees (UPGRADE / CALM / PRE-BOSS /
+    REAL CHOICES) are untouched — twists never change a node's type.
+  - Encounter planner: SALVAGE's threat goes through EnemyBudgetOverride exactly like SWARM; the
+    depth ramp is applied first (route invariant).
+  - Supply: SALVAGE and the HUNTED bounty use the owned-aware ammo path, so neither dumps ammo the
+    player cannot use; '+' and 'a' are existing pickups.
+  - Enemies: wake override touches only Phase A; the hunter is an ordinary IRON_STALKER for combat,
+    intent, telegraph, abilities, drops and voice. Relics that scale spawn health apply to it.
+    Relics that fire on door opening never fire on a hunter-forced door (R11c).
+  - Doors: auto-closing doors behind the player are what make the hunter pause (one turn per door)
+    — a real, readable counter-play.
+  - Narrative: three CONTROL_HINT rows; the floor bark budget is not consumed by them
+    (STORY_CRITICAL); the vocabulary ladder is not touched (no proper nouns).
+  - Perks/relics: `barrelsOnMinimap` has nothing to show on a BLACKOUT floor (accepted; the map is
+    offline). BLINDED status stacks with BLACKOUT (both apply).
+  - Telemetry/report: the route string shows "combat:<TWIST>" in the run report automatically.
+  - Audio: DOOR_OPEN for forced doors, the INSECT family alert voice for the arrival. No new ids.
+
+
+EDGE CASES
+----------
+  - Hand-made / route-map-less floors: no node -> no twist; all modifiers at defaults.
+  - MYSTERY delegating to the COMBAT fallback profile: the node is MYSTERY, so no twist folds.
+  - Player dies the turn the hunter arrives: normal death; clock discarded with the floor.
+  - Player reaches the exit before turn 40: the hunter never arrives; no bounty; nothing carried.
+  - Arrival tile permanently blocked (a barrel pushed onto it, an enemy parked on it): retry every
+    turn (R9a); never spawns in a wall or on the player.
+  - Hunter killed by a barrel, a hazard or a DoT: still DONE, still drops the bounty (it died).
+  - Hard-pause overlays (level-up, relic offer, inventory, codex, pause, exchange): no turns pass,
+    so the clock and the hunter freeze; barks queue as usual.
+  - Action lock mid-animation: the trail records on SETTLE, never mid-slide.
+  - App paused (onApplicationPause): nothing persisted; state is in-memory and per-floor.
+  - Floor transition mid-effect: rebuildForLevel resets minimap flag, light multiplier, wake
+    perception, trail and clock BEFORE the next floor's effects apply.
+  - Save wiped (NEW OPERATOR): the three teaching flags reset with every other seen-flag.
+  - Trail capacity exceeded on a very long floor: the hunter falls back to greedy (R11f).
+  - Portals: R11e.
+  - BLACKOUT + exit in an unlit dead-end: the exit is exempt from the dark (R7b), so it stays
+    findable without the map.
+  - Two COMBAT cards in a layer both twisted: allowed; still a choice (different twists or a
+    twist vs a different node type). REAL CHOICES counts node TYPES, unaffected.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  RouteRegistries.affixes() holds the five ELITE affixes and three FLOOR_TWIST rows; elitePool()
+      returns exactly the five ELITE affixes; every map seed's ELITE affixes are identical to before
+      this change (same seed -> same ELITE affix on the same node).
+  A2  On a generated map, twists appear only on COMBAT nodes, never at depth 1, HUNTED never before
+      depth 4, at most one per node; regenerating the same run seed gives the same twists.
+  A3  Focusing a revealed twisted COMBAT card on the route console shows the twist's amber third
+      line (e.g. "HUNTED — A HUNTER WALKS YOUR TRAIL") under the unchanged threat/reward lines;
+      focusing an affixed ELITE card shows its affix line the same way. The amber corner tag shows
+      on both.
+  A4  Arriving on a twisted floor shows the twist name as an amber event-text sting; the run report's
+      route string shows "combat:<twist id>" for that floor.
+  A5  First-ever arrival on each twist delivers that twist's ORA line (resolves from
+      story-strings.properties, no !id! marker); a second arrival on the same twist, in this run or
+      after an app restart, does not repeat it.
+  A6  BLACKOUT: the mini-map and player dot are absent and the NAV OFFLINE plate is in their place;
+      the 3D view is visibly darker while the exit tile renders at full brightness; enemy health bars
+      and intent icons are drawn at normal brightness; a dormant enemy 3 tiles away in open sight does
+      not wake, the same enemy wakes at 2 tiles; once awake it attacks at its normal ranges.
+  A7  The next floor after a BLACKOUT floor has its mini-map, normal light and normal wake radius.
+  A8  SALVAGE: the floor's planned threat is TWIST_SALVAGE_BUDGET_MULT x a plain COMBAT floor's at the
+      same depth (log line / BalanceReport), and the 4 extra ammo boxes are of ammo types the player
+      owns, plus one '+' and one 'a' placed on walkable tiles.
+  A9  HUNTED: after 35 player turns the warning text shows; after 40 (with the player >= 5 tiles from
+      the arrival tile) an Iron Stalker with an amber health-bar frame appears at the arrival tile with
+      its alert sound; standing still in a different room, it reaches the player by the route the
+      player walked, opening closed doors on the way (each costs it one turn); killing it drops 3
+      owned-ammo boxes; it never appears twice; leaving the floor first means it never appears.
+  A10 A door forced open by the hunter does not trigger a held door relic (blast/heal).
+  A11 No new tile symbol in docs/tile-symbols.txt; no new StoryStore/StatsStore key; SCHEMA_VERSION
+      unchanged; no keyboard input; no new touch button.
+  A12 Adding a fourth twist is one register() row in RouteRegistries.registerAffixes + its
+      NodeEconomics row + its SECTION 27 numbers + its rule line (+ a TeachingTopic row and string) —
+      no edit to RouteMapGenerator, DefaultCombatProfile, World.applyPendingFloorEffects or the
+      overlay for a twist built from existing modifier kinds.
+  A13 `./gradlew build`, `./gradlew test` (R-ROUTE-PRICED, R-TWIST T1-T3, R-TRAJECTORY green) and
+      `./gradlew balanceSim` (S-TWIST green, every existing band unchanged in status) all pass; the
+      sim summary contains the TWIST REPORT.
+  A14 docs/route-map-system.txt, docs/game-balance-authority.txt (R-TWIST, S-TWIST, SECTION 5 line,
+      SECTION 6 tables, CHANGELOG), docs/game-balance-knowledge.txt, docs/enemy-system.txt and
+      docs/story-ui-system.txt describe the shipped behaviour.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect)
+     AffixScope; NodeAffixDefinition scope + twist fields + Builder; NodeAffixRegistry.poolFor;
+     three register() rows; FloorEffects.twistId; BalanceConfig SECTION 27; RouteMapConstants ids,
+     rule lines, LEGEND_TWIST_OFFSET_Y; RenderConstants / HudConstants / EnemyConstants entries.
+  2. ROUTE + PLAN      (java-architect)
+     RouteMapGenerator twist roll + setTwistPool at every generator owner; DefaultCombatProfile
+     folding; NodeEconomics.Kind.TWIST + RouteEconomics rows.
+  3. BALANCE RULES     (java-architect, math-expert for the T3 TP share formula -> GameMath)
+     R-TWIST in BalanceSchema, trajectory folding, BalanceReport twist rows, tuning into band.
+  4. RUNTIME           (java-architect)
+     Level light multiplier; EnemyManager wake override; PlayerTrail + HuntedPursuit + listener;
+     EnemyManager hunter branch + bounty hook; DoorManager.forceOpenForEnemy; World
+     applyPendingFloorEffects / rebuildForLevel resets / turn + settle hooks; SimWorld mirror.
+  5. RENDER            (libgdx-specialist)
+     NAV OFFLINE plate + minimap skip; EnemyRenderer min shade + hunter frame; route console third
+     line; event-text stings.
+  6. CONTENT           (java-architect — narrative)
+     Three TeachingTopic rows + strings; arrival request in World.
+  7. SIM BAND          (java-architect)
+     S-TWIST in BehavioralBands, per-floor twist id in the sim ledger, TWIST REPORT in SimReport.
+  8. TESTS             Balance-bearing: extend util/BalanceAuditTest for R-TWIST (only if it
+                       enumerates rule kinds explicitly — otherwise it already evaluates every
+                       BalanceSchema rule) and sim/BalanceSimTest for S-TWIST; both gates
+                       (`./gradlew test` + `./gradlew balanceSim`). NO new test files and NO tests
+                       for the renderer, hunter AI, door, narrative or route-console work — those
+                       are verified by `./gradlew build` + `./gradlew lwjgl3:run`. An existing test
+                       that counts TeachingTopic values or affix rows is UPDATED in the same commit
+                       (legitimate behaviour change), never weakened.
+  9. DOCS              docs/route-map-system.txt (FLOOR TWISTS section beside NODE AFFIXES, the
+                       confirm-bar third line in the OVERLAY spec, ADD A FLOOR TWIST recipe,
+                       catalog table); docs/game-balance-authority.txt (R-TWIST in SECTION 3,
+                       S-TWIST, SECTION 5 "new ROUTE content" line names twists, SECTION 6
+                       regenerated, CHANGELOG line, the BLACKOUT model gap); docs/game-balance-
+                       knowledge.txt (SECTION 27 map); docs/enemy-system.txt (wake override, trail
+                       hunter, forced doors); docs/story-ui-system.txt (TeachingTopic count and the
+                       three rows); docs/tick-system.txt (the hunter clock is per player turn);
+                       .claude/CLAUDE.md (route package line mentions twists; TeachingTopic count;
+                       BalanceConfig SECTION 27 in the HudConstants/RenderConstants rows only if new
+                       constant families are worth listing).
+
+RISKS AND UNKNOWNS
+  - Pricing the hunter (T3): confirm early which function prices one archetype's TP at a depth;
+    if it needs a new formula it goes in GameMath with the mandatory comment block (math-expert).
+  - TACTICAL's chooseNode may systematically avoid or prefer COMBAT; if twists are under-sampled,
+    raise SIM seeds for the TWIST REPORT only via the existing seed matrix knob — do not add a policy.
+  - The confirm bar (y 12..92) may not fit a third line at the current text scale; fallback is to
+    draw the twist line ABOVE the bar's threat line (LEGEND_TWIST_OFFSET_Y positive) — the outcome
+    (three readable lines) is the spec, the offset is not.
+  - Seen-flag store must be generic-by-subject (see TECHNICAL NOTES "Persistence"); verify in CP7.
+  - Greedy enemy movement means an ordinary alerted IRON_STALKER can get stuck; the trail branch
+    must run BEFORE the type's ordinary plan whenever R11a does not hold, or the hunter will stall
+    behind the first wall.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/floor-twists.md exists on the branch, committed and pushed.
+  CP1  AffixScope, the widened NodeAffixDefinition/Builder, NodeAffixRegistry.poolFor, the three
+       FLOOR_TWIST rows, FloorEffects.twistId, BalanceConfig SECTION 27 and the RouteMapConstants /
+       RenderConstants / HudConstants / EnemyConstants entries exist; elitePool() returns the same
+       five affixes; nothing rolls a twist yet (DELIBERATELY unwired — CP2 wires it); `./gradlew
+       build` green. NOTE: R-ROUTE-PRICED will flag the three unpriced ids — so CP1 ALSO registers
+       the three Kind.TWIST NodeEconomics rows, and `./gradlew test` is green.
+  CP2  RouteMapGenerator rolls twists on COMBAT nodes (R1-R4) and every generator owner (World,
+       SimWorld, BalanceSchema trajectory generator) sets the twist pool; DefaultCombatProfile
+       folds a twist into the plan (R5) with sting, statLog and twistId; ELITE affix rolls are
+       byte-identical for a fixed seed (checked by logging one map before/after); `./gradlew build`
+       + `./gradlew test` green. Runtime modifiers (BLACKOUT, HUNTED) are DELIBERATELY not applied
+       yet — SALVAGE is fully live; CP4/CP5 finish the other two.
+  CP3  R-TWIST (T1-T3) evaluated in BalanceSchema, the trajectory audit folds twist rows,
+       BalanceReport lists twist rows, SECTION 27 numbers tuned into band, BalanceAuditTest extended
+       if needed; `./gradlew test` green.
+  CP4  BLACKOUT runtime live in World and SimWorld: Level light multiplier with exit exemption,
+       mini-map skipped with NAV OFFLINE plate, enemy minimum shade, wake perception override, all
+       reset on rebuildForLevel; A6/A7 verified on `./gradlew lwjgl3:run` (handover note says how
+       the floor was forced, e.g. a temporary local seed — not committed); `./gradlew build` green.
+  CP5  HUNTED runtime live in World and SimWorld: PlayerTrail, HuntedPursuit + listener, EnemyManager
+       trail branch (R11a-g), DoorManager.forceOpenForEnemy, bounty, warning/arrival text and alert
+       voice, amber hunter health-bar frame; A9/A10 verified on run; `./gradlew build` + `./gradlew
+       test` green.
+  CP6  Route console third confirm-bar line for twists and ELITE affixes (R14, all eight rule
+       lines); A3/A4 verified on run; `./gradlew build` green.
+  CP7  Three TeachingTopic rows + their strings in story-strings.properties (and defaults if
+       mirrored); World requests them on twist arrival; seen-flag store confirmed generic (no schema
+       bump); A5 verified; `./gradlew build` + `./gradlew test` (StoryLocalizationTest) green.
+  CP8  S-TWIST (ST1/ST2) in BehavioralBands, twist id recorded per sim floor, TWIST REPORT in
+       SimReport, BalanceSimTest extended; `./gradlew balanceSim` green with no existing band
+       changing status; handover records per-twist sample sizes and the ROUND SUMMARY before/after.
+  CP9  All docs in IMPLEMENTATION PLAN step 9 updated (BalanceReport pasted over authority SECTION
+       6, CHANGELOG line), CLAUDE.md touched where listed; `./gradlew build` + `./gradlew test`
+       green; ready for `reviewer`.
+
+
+ASSUMPTIONS
+-----------
+  AS1  v1 = BLACKOUT, SALVAGE, HUNTED (justified in OVERVIEW); LOCKDOWN and FLOODED are follow-ups.
+  AS2  Twists extend NodeAffixRegistry with a scope rather than a parallel registry (owner's
+       instruction to reuse/extend), and ride the existing RouteNode.affix slot.
+  AS3  Only COMBAT nodes carry twists; ELITE keeps its affixes; never both.
+  AS4  Roll chance 0.30 per eligible COMBAT node — roughly one twisted card every couple of layers
+       without making plain floors rare. Tunable.
+  AS5  No twist at depth 1; HUNTED from depth 4 (an Iron Stalker on floor 2 is too sharp a spike).
+  AS6  BLACKOUT is made fair by halving enemy wake perception, not by paying loot; it prices
+       EV-neutral (T2).
+  AS7  BLACKOUT keeps the exit at full brightness as a beacon; health bars/intents/HUD never dim.
+  AS8  The BLACKOUT light multiplier (0.45) and enemy min shade (0.35) are cosmetic RenderConstants,
+       not balance numbers.
+  AS9  SALVAGE = threat x1.30 + 4 owned ammo boxes + 1 stim + 1 armour shard, tuned into the
+       R-RISK-PREMIUM band; "more enemies" is delivered through the same budget override as SWARM.
+  AS10 The hunter is always IRON_STALKER (the archetype literally named for it, MINI_ELITE, moves
+       every turn, sprite shipped) at normal depth scaling — no health multiplier, no new type.
+  AS11 Arrival at player turn 40, warning 5 turns earlier — turns, never seconds.
+  AS12 The hunter spawns on the tile the player arrived on, never within 5 tiles of the player.
+  AS13 The hunter follows the player's recorded trail with loop-cutting, and fights normally once
+       it has sight or is within 2 tiles.
+  AS14 Hunter-forced doors cost it one turn, play DOOR_OPEN, and never fire relic door effects.
+  AS15 Bounty = 3 owned-ammo boxes on top of normal drops; priced in the HUNTED ledger row.
+  AS16 HUNTED is priced as if the hunter always arrives (conservative; a fast player is rewarded with
+       a cheaper floor, which is the point of the twist).
+  AS17 No HUD countdown; event text + positional alert voice carry the warning.
+  AS18 The confirm-bar third line also fixes ELITE affix visibility (their name is hidden by the C1
+       promise today) — same code path, so including it costs nothing and removes a lie of omission.
+  AS19 Teaching via three new TeachingTopic rows (CONTROL_HINT channel), one-shot, no re-teach;
+       HUNTED is CRITICAL tier, BLACKOUT and SALVAGE TACTICAL.
+  AS20 The event-text sting and HUNTED texts are HUD strings in HudConstants (the ELITE_STING_TEXT
+       precedent), not story strings; everything ORA says is a string id.
+  AS21 No new sound ids: DOOR_OPEN and the INSECT family alert voice.
+  AS22 No codex entry for twists in v1.
+  AS23 Sim policies stay twist-blind; S-TWIST checks fairness from what the map deals.
+  AS24 BLACKOUT's information loss is unmodelled by the sim (documented model gap).
+  AS25 R-TWIST reuses R-RISK-PREMIUM's band constants rather than adding a new band.
+  AS26 Trail ring buffer 512 entries; overflow falls back to greedy.
+  AS27 Portals on the trail are followed (R11e).
+  AS28 Relic spawn-health multipliers apply to the hunter like any spawn.
+
+
+DECISIONS
+---------
+  D1  Owner asked to start implementation immediately after this file is written and to decide by
+      default -> no questions raised; every choice above is recorded under ASSUMPTIONS for cheap
+      objection.  (2026-10-18)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  branching-facility-route-map-order-9.txt (ELITE affixes, FloorEffects — the machinery
+          this extends), new-game-balancr-order-7.txt (the priced map / R-RISK-PREMIUM),
+          balance-overhaul-order-2.txt (NodeSupplySpec), narrative-rework-order-4.txt
+          (TeachingTopic), containment-lockdown-arena-waves.txt and doors.txt (inputs for the
+          LOCKDOWN follow-up), fog-of-war-minimap.txt / minimap-full-visibility-overhaul.txt
+          (mini-map), relics-run-changing-artifacts.txt (door relics that must not fire).
+  Docs:   docs/route-map-system.txt, docs/game-balance-authority.txt,
+          docs/game-balance-knowledge.txt, docs/enemy-system.txt, docs/story-ui-system.txt,
+          docs/narrative-authority.txt, docs/tick-system.txt, docs/tile-symbols.txt (unchanged).
