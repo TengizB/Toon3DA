@@ -52,7 +52,7 @@ than hold. Never `git add -A`.
 - [x] **CP2** — every new kind read at its seam (Player, EnemyManager, RelicBlastTarget in
       ExplosiveBarrelManager, DoorOpenedListener in DoorManager, RelicRuntime) wired in World AND SimWorld.
       DONE WHEN: build + test green, sim output unchanged; R11 status-tick method noted below.
-- [ ] **CP3** — RelicCatalog registers all 36 with SECTION 26 magnitudes; RelicOfferRoller R4–R6.
+- [x] **CP3** — RelicCatalog registers all 36 with SECTION 26 magnitudes; RelicOfferRoller R4–R6.
       DONE WHEN: build + test green; local (uncommitted) roll harness showed R5 eligibility.
 - [ ] **CP4** — BuildValuationModel.carryOf extracted (BUILDS table byte-identical), valuation term +
       GameMath formula per new kind, RelicValuationModel, worstLoss null niche.
@@ -116,3 +116,15 @@ than hold. Never `git add -A`.
   Floor build: World `buildLevelDependentResources` (~1333), SimWorld `buildFloor` (~377).
   World `applyLadderEffect` ~3028/3095. Sim summary byte-identical to CP1 (diff of summary.txt);
   balanceSim ~50 s. HEAD summary kept at <scratchpad>/head-summary.txt.
+- **CP3 handover:** registry = static lazy `RelicCatalog.registry()` (RouteRegistries idiom); iterate
+  `.all()` / `.allOfRarity(r)`; `def.effects()` -> `BuildStats.ofEffects(...)`. 53 `RELIC_<ID>_<KIND>`
+  constants in SECTION 26 (before RARITY BANDS). Conventions: gain kinds add; DAMAGE_TAKEN/ENEMY_HEALTH
+  multipliers and every *_COST kind are the multiplier itself (text = percent(1-m) or percent(m-1));
+  integer kinds int 1; booleans `PerkEffect.of(kind, 1f)`. `PerkModifier.isSatisfiedBy(BuildStats)` per
+  boolean kind. Roll call: `seed = RelicOfferRoller.seedFor(runSeed, depth, source);
+  RelicOfferRoller.roll(source, depth, bossIndex, relicHand, playerBuild.stats(), carriedOrRankedTags,
+  seed, offer, RelicCatalog.registry())`; bossIndex 0..3 (clamped); tags = BuildTag.forDamageClass of
+  carried weapons + perks with rank>0. Fallback stays within the source's allowed rarities; BOSS
+  guarantee re-rolls last card RARE then LEGENDARY, else shrinks. Harness (uncommitted):
+  <scratchpad>/harness/RollHarness.java — 300 seeds, all R4–R6 checks clean. "1 HP" in SECOND HEART
+  text is the fixed Second Wind rule (no constant exists), not a tunable.

@@ -3181,8 +3181,7 @@ public final class BalanceConfig {
     // SECTION 26 — RELICS (relics-run-changing-artifacts): rare run-changing artifacts, priced in the build contract
     // A relic is a run-scoped passive that folds into the SAME BuildStats aggregate perks and keystones use
     // (PerkModifier + PerkEffect -> PlayerBuild). Holding, offers, trigger runtime, rarity bands, valuation
-    // assumptions and sim probe numbers live here. The per-relic RELIC_<ID>_<KIND> magnitudes arrive with the
-    // catalog (CP3). Starting values are tunable inside the bands (D7); the bands and weights are the design.
+    // assumptions and sim probe numbers live here. The per-relic RELIC_<ID>_<KIND> magnitudes follow the offers block. Starting values are tunable inside the bands (D7); the bands and weights are the design.
     // =====================================================================================
 
     // --- HOLDING & OFFERS --------------------------------------------------------------------
@@ -3216,6 +3215,65 @@ public final class BalanceConfig {
     public static final float   RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN     = 0.50f;
     /** R12/R13: enemy-health multiplier floor. */
     public static final float   RELIC_ENEMY_HEALTH_MULTIPLIER_MIN     = 0.50f;
+
+    // --- CATALOG MAGNITUDES: RELIC_<RELIC_ID>_<PERK_MODIFIER_KIND> (CP3). Gain kinds ADD; cost kinds and
+    //     DAMAGE_TAKEN / ENEMY_HEALTH are MULTIPLIERS (0.88 = take 12% less). Boolean kinds carry no constant.
+    //     Starting values: CP5 may retune any of them inside the bands (D7).
+    // COMMON
+    public static final float RELIC_FIELD_DRESSING_FLOOR_ARRIVAL_HEAL        = 0.10f;
+    public static final float RELIC_SPARE_PLATES_FLOOR_ARRIVAL_ARMOR         = 0.20f;
+    public static final float RELIC_BANDOLIER_FLOOR_ARRIVAL_AMMO             = 0.10f;
+    public static final float RELIC_BOUNTY_CHIP_KILL_CREDIT_BONUS            = 0.40f;
+    public static final float RELIC_THRESHOLD_STIM_DOOR_OPEN_HEAL            = 0.04f;
+    public static final float RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP          = 0.35f;
+    public static final float RELIC_MEDICS_GLOVE_HEAL_BONUS                  = 0.30f;
+    public static final float RELIC_RECOIL_SPRING_KILL_AMMO_REFUND           = 0.30f;
+    public static final float RELIC_DOG_TAGS_XP_MULTIPLIER                   = 0.20f;
+    public static final float RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE  = 0.50f;
+    public static final int   RELIC_ASBESTOS_LINING_BURN_TURNS               = 1;
+    public static final float RELIC_ASBESTOS_LINING_FIRE_DAMAGE              = 0.10f;
+    // RARE
+    public static final float RELIC_BREACHING_CHARGE_DOOR_BLAST              = 0.60f;
+    public static final float RELIC_VAMPIRIC_CORE_KILL_HEAL                  = 0.04f;
+    public static final float RELIC_SALVAGE_PLATING_KILL_ARMOR               = 0.08f;
+    public static final float RELIC_GRIEF_ENGINE_CORPSE_BLAST                = 0.35f;
+    public static final float RELIC_KEVLAR_WEAVE_DAMAGE_TAKEN_MULTIPLIER     = 0.88f;
+    public static final float RELIC_CULLING_SIGNAL_ENEMY_HEALTH_MULTIPLIER   = 0.90f;
+    public static final float RELIC_CHOKE_BORE_SPREAD_DAMAGE                 = 0.25f;
+    public static final int   RELIC_CHOKE_BORE_KNOCKBACK_BONUS               = 1;
+    public static final float RELIC_CAPACITOR_BANK_ENERGY_DAMAGE             = 0.25f;
+    public static final int   RELIC_CAPACITOR_BANK_ARC_CHAIN_JUMP            = 1;
+    public static final float RELIC_SHAPED_CASINGS_EXPLOSIVE_DAMAGE          = 0.25f;
+    public static final float RELIC_SHAPED_CASINGS_OWN_EXPLOSION_REDUCTION   = 0.50f;
+    public static final float RELIC_COUNTERWEIGHT_GUARD_REFLECT              = 0.25f;
+    public static final float RELIC_BONE_SAW_MELEE_DAMAGE                    = 0.25f;
+    public static final float RELIC_BONE_SAW_MELEE_KILL_HEAL                 = 0.04f;
+    // LEGENDARY
+    public static final float RELIC_SECOND_HEART_MAX_HEALTH_BONUS            = 0.15f;
+    public static final float RELIC_HUNGER_LOOP_KILL_HEAL                    = 0.05f;
+    public static final float RELIC_HUNGER_LOOP_KILL_ARMOR                   = 0.05f;
+    public static final float RELIC_CHAIN_DETONATOR_CORPSE_BLAST             = 0.45f;
+    public static final float RELIC_CHAIN_DETONATOR_DOOR_BLAST               = 0.60f;
+    public static final int   RELIC_FOURTH_HOLSTER_EXTRA_LOADOUT_SLOT        = 1;
+    public static final float RELIC_FOURTH_HOLSTER_FLOOR_ARRIVAL_AMMO        = 0.10f;
+    public static final float RELIC_DEADMAN_TRIGGER_LOW_HEALTH_DAMAGE        = 0.60f;
+    public static final float RELIC_ATROPHY_FIELD_ENEMY_HEALTH_MULTIPLIER    = 0.82f;
+    public static final int   RELIC_OVERCLOCKED_SERVOS_RANGE_BONUS           = 1;
+    // CURSED (gain kinds add; cost kinds are MULTIPLIERS, e.g. 0.60 = -40%; DAMAGE_TAKEN / ENEMY_HEALTH above 1 are the cost)
+    public static final float RELIC_BLOOD_PACT_ALL_WEAPON_DAMAGE             = 0.35f;
+    public static final float RELIC_BLOOD_PACT_DAMAGE_TAKEN_MULTIPLIER       = 1.25f;
+    public static final float RELIC_FEVER_CORE_KILL_HEAL                     = 0.07f;
+    public static final float RELIC_FEVER_CORE_HEAL_COST                     = 0.50f;
+    public static final float RELIC_VOLATILE_RIG_DOOR_BLAST                  = 0.80f;
+    public static final float RELIC_VOLATILE_RIG_CORPSE_BLAST                = 0.50f;
+    public static final float RELIC_VOLATILE_RIG_MAX_ARMOR_COST              = 0.60f;
+    public static final float RELIC_TITHE_ENGINE_KILL_CREDIT_BONUS           = 1.00f;
+    public static final float RELIC_TITHE_ENGINE_XP_MULTIPLIER               = 0.40f;
+    public static final float RELIC_TITHE_ENGINE_ENEMY_HEALTH_MULTIPLIER     = 1.15f;
+    public static final float RELIC_IRON_LUNG_DAMAGE_TAKEN_MULTIPLIER        = 0.72f;
+    public static final float RELIC_IRON_LUNG_ALL_WEAPON_DAMAGE_COST         = 0.85f;
+    public static final float RELIC_DEATHS_DOOR_LOW_HEALTH_DAMAGE            = 0.90f;
+    public static final float RELIC_DEATHS_DOOR_MAX_HEALTH_COST              = 0.80f;
 
     // --- RARITY BANDS (R-RELIC / R-RELIC-CURSE): a relic's carry lift (or supply ratio) must land in its band ---
     /** Depths at which every relic is priced (early, mid, late). */
