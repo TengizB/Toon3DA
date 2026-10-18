@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Items
 TITLE: Relics — rare run-changing artifacts, priced in balance
 CREATED: 2026-10-18
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-18
 ---
 
 IMPLEMENTATION NOTE (2026-10-18, hub decisions taken while building — the catalog

@@ -70,7 +70,7 @@ than hold. Never `git add -A`.
       DONE WHEN: test + balanceSim green; before/after ROUND SUMMARY recorded below.
 - [x] **CP9a** — docs (idea step 6), authority SECTIONS 6/8 regenerated, CHANGELOG, CLAUDE.md.
 - [x] **CP9b** — reviewer round 1 = PASS WITH FIXES; code/paperwork fixes applied (this commit).
-- [ ] **CP9c** — BLOCKED ON OWNER: (1) by-hand touch run of A4/A5/A7/A10/A17 on device or lwjgl3:run;
+- [x] **CP9c** — owner instructed "mark idea as implemented" (2026-10-18), accepting the two D7 overrides; the by-hand touch run was not reported done. Was: BLOCKED ON OWNER: (1) by-hand touch run of A4/A5/A7/A10/A17 on device or lwjgl3:run;
       (2) sign-off on the two decisions beyond D7 (cache weight 3 < floor 4; LEGENDARY band 1.20 -> 1.22).
       Then STATUS IMPLEMENTED.
 
