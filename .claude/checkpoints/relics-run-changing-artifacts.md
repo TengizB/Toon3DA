@@ -54,7 +54,7 @@ than hold. Never `git add -A`.
       DONE WHEN: build + test green, sim output unchanged; R11 status-tick method noted below.
 - [x] **CP3** — RelicCatalog registers all 36 with SECTION 26 magnitudes; RelicOfferRoller R4–R6.
       DONE WHEN: build + test green; local (uncommitted) roll harness showed R5 eligibility.
-- [ ] **CP4** — BuildValuationModel.carryOf extracted (BUILDS table byte-identical), valuation term +
+- [x] **CP4** — BuildValuationModel.carryOf extracted (BUILDS table byte-identical), valuation term +
       GameMath formula per new kind, RelicValuationModel, worstLoss null niche.
       DONE WHEN: build + test green; BUILDS diff empty.
 - [ ] **CP5** — BalanceSchema RELIC / RELIC_CURSE / RELIC_STACK / RELIC_SOURCE + COVERAGE, four named
@@ -128,3 +128,20 @@ than hold. Never `git add -A`.
   guarantee re-rolls last card RARE then LEGENDARY, else shrinks. Harness (uncommitted):
   <scratchpad>/harness/RollHarness.java — 300 seeds, all R4–R6 checks clean. "1 HP" in SECOND HEART
   text is the fixed Second Wind rule (no constant exists), not a tunable.
+- **CP4 handover:** `BuildValuationModel.carryOf(BuildStats, BuildTag kitTag|null, int depth) -> Carry`
+  (.score). Full BalanceReport output byte-identical to CP3 (re-run: `java -cp
+  core/build/classes/java/main:<gdx-1*.jar> ge.tbegvadze.toon3d.util.BalanceReport`; baseline at
+  <scratchpad>/report_before.txt). `worstLoss(stats, null, depth)` = every probe. `RelicValuationModel`:
+  carryLift, gain, nearestReferenceDepth, meanCarryLift, expectedRelicCount, nodeOfferRatePerFloor,
+  expectedHandLift, bestHandLift, offerPowerPoints, QUARANTINE_LOCKER_EVENT_ID. New SECTION 26 constant
+  RELIC_VALUATION_LOCKER_EVENT_WEIGHT = 1. CP6: the model sums the six RouteMapConstants.MYSTERY_WEIGHT_*
+  + BalanceConfig.MYSTERY_WEIGHT_RELIC_CACHE explicitly — the RELIC_CACHE MysteryOutcome must read the
+  BalanceConfig constant (RouteMapConstants may mirror it) and the model must not then double-count it;
+  locker counted once (registered weight if present).
+  ZERO-VALUE halves in carry (relic still priced by its other effect): MELEE_DAMAGE (bone_saw), BURN_TURNS,
+  KNOCKBACK_BONUS, ARC_CHAIN_JUMP, GUARD_REFLECT, RANGE_BONUS.
+  CP5 inputs: harness table at <scratchpad>/harness/val/table.txt — only 8/36 in band; RELIC-STACK fails
+  at d15-25 as spec'd. worstLoss(null) reports SPURIOUS losses for pure gains (Incinerator-S2 cell), so
+  R-RELIC-CURSE must measure the loss on the relic's COST effects alone (hub decision, see CP5).
+  Out-of-scope latent bug noted (NOT fixed): BuildStats.NONE built before its count constants ->
+  zero-length arrays; use `new BuildStats()` in new code.

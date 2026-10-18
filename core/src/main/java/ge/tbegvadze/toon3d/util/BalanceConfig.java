@@ -3305,6 +3305,12 @@ public final class BalanceConfig {
     public static final float   RELIC_VALUATION_EVENT_TAKE_SHARE      = 0.50f;
     /** Share of RUN_START offers assumed taken (every run holds the start relic). */
     public static final float   RELIC_VALUATION_START_TAKE_SHARE      = 1.0f;
+    /**
+     * The quarantine_locker event's assumed weight in the EVENT pool (CP4): "one more equal-weight event" — every
+     * shipped FacilityEvent carries the builder default weight 1, and CP6 registers the locker the same way.
+     * Read by RelicValuationModel.nodeOfferRatePerFloor until the locker is registered (then its own weight is read).
+     */
+    public static final float   RELIC_VALUATION_LOCKER_EVENT_WEIGHT   = 1f;
 
     // --- SIMULATOR (S-RELIC) -----------------------------------------------------------------
     /** Seeds per relic probe row. */

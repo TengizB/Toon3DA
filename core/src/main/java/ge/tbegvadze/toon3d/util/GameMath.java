@@ -7284,6 +7284,320 @@ public final class GameMath {
         return Math.max(0f, turnsToKillLift) * Math.max(0f, turnsToDieLift);
     }
 
+    // =====================================================================================
+    // RELIC VALUATION (relics-run-changing-artifacts CP4) — every relic kind priced in the R-CARRY terms.
+    // Each formula is the identity (x 1 / + 0) for a relic-free BuildStats, which keeps R-CARRY byte-identical.
+    // =====================================================================================
+
+    /*
+     * Formula: relicLowHealthDamageMultiplier — LOW_HEALTH_DAMAGE as a whole-fight damage multiplier
+     * Derivation:
+     *   The relic adds a bonus m to every hit while the player is below BUILD_BERSERK_LOW_HEALTH_FRACTION of
+     *   max HP. The scenario walk has no HP track, so the bonus is spread over the share s of a fight's turns
+     *   the player is assumed to spend that low (BUILD_BLADE_LOW_HEALTH_TURN_SHARE — the BERSERKER term, now
+     *   for every class):
+     *       multiplier = 1 + m x s
+     *   Worked: m 0.60, s 0.25 -> x1.15.
+     * Edge cases: negative m or s read as 0 (-> exactly 1, the relic-free identity); s clamped to [0, 1].
+     */
+    public static float relicLowHealthDamageMultiplier(float lowHealthBonus, float lowHealthTurnShare) {
+        float share = Math.max(0f, Math.min(1f, lowHealthTurnShare));
+        return 1f + Math.max(0f, lowHealthBonus) * share;
+    }
+
+    /*
+     * Formula: relicIncomingMultiplier — DAMAGE_TAKEN_MULTIPLIER and ENEMY_HEALTH_MULTIPLIER on a floor's incoming
+     * Derivation:
+     *   Every enemy hit lands x damageTaken. A fight's length is proportional to the enemy's HP (the walk
+     *   clears HP at a fixed damage rate), and incoming damage is proportional to the turns enemies live,
+     *   so enemy HP x e scales the incoming by e too:
+     *       incoming' = incoming x damageTaken x enemyHealth
+     *   Worked: kevlar 0.88 -> x0.88; tithe engine 1.15 -> x1.15; both -> x1.012.
+     * Edge cases: negative inputs read as 0. Relic-free (1, 1) -> exactly 1.
+     */
+    public static float relicIncomingMultiplier(float damageTakenMultiplier, float enemyHealthMultiplier) {
+        return Math.max(0f, damageTakenMultiplier) * Math.max(0f, enemyHealthMultiplier);
+    }
+
+    /*
+     * Formula: relicShieldHitFraction — FIRST_HIT_SHIELD as sustain (fraction of the on-curve max HP)
+     * Derivation:
+     *   The first enemy hit of each floor does nothing. The canonical first hit is one reference-soldier
+     *   hit h, which would have landed x damageTaken; as a share of the on-curve max HP H:
+     *       shield = h x damageTaken / H        (once per floor)
+     *   Worked: h 24, H 260, damageTaken 1 -> 0.092 of max HP.
+     * Edge cases: H <= 0 -> 0; negative inputs read as 0.
+     */
+    public static float relicShieldHitFraction(float referenceHit, float damageTakenMultiplier, float maxHealth) {
+        if (maxHealth <= 0f) return 0f;
+        return Math.max(0f, referenceHit) * Math.max(0f, damageTakenMultiplier) / maxHealth;
+    }
+
+    /*
+     * Formula: relicFloorSustain — the relic kinds that add sustain to one COMBAT floor
+     * Derivation (fractions of the on-curve max HP, the floorSustain scale; heals are fractions of the
+     * BUILD's max HP, armour of the BUILD's max armour, so they ride hpMult / armourRatio x arMult):
+     *   kills       = bodies x killShare                                  (kills a kill-relic fires on)
+     *   killHeal    = kills x KILL_HEAL x hpMult
+     *   killArmour  = kills x KILL_ARMOR x armourRatio x arMult
+     *   doorHeal    = doorsPerFloor x DOOR_OPEN_HEAL x hpMult              (once per door, R10)
+     *   arrival     = FLOOR_ARRIVAL_HEAL x hpMult + FLOOR_ARRIVAL_ARMOR x armourRatio x arMult  (once a floor)
+     *   sustain    += killHeal + killArmour + doorHeal + arrival + shieldHit
+     *   Relic heals are PLAIN healing at runtime (not a treatment), so healMultiplier does not touch them.
+     *   Overheal (a heal at full HP) is not modelled — the same assumption floorSustain makes for medkits.
+     *   Worked: 8 bodies x 0.6 x 0.04 x 1 = 0.192 (vampiric core).
+     * Edge cases: negative inputs read as 0; relic-free (all zero) -> exactly 0.
+     */
+    public static float relicFloorSustain(float bodiesPerFloor, float killShare, float killHealFraction,
+                                          float killArmourFraction, float doorsPerFloor, float doorHealFraction,
+                                          float arrivalHealFraction, float arrivalArmourFraction,
+                                          float shieldHitFraction, float healthMultiplier, float armourRatio,
+                                          float armourMultiplier) {
+        float health = Math.max(0f, healthMultiplier);
+        float armour = Math.max(0f, armourRatio) * Math.max(0f, armourMultiplier);
+        float kills = Math.max(0f, bodiesPerFloor) * Math.max(0f, Math.min(1f, killShare));
+        return kills * (Math.max(0f, killHealFraction) * health + Math.max(0f, killArmourFraction) * armour)
+                + Math.max(0f, doorsPerFloor) * Math.max(0f, doorHealFraction) * health
+                + Math.max(0f, arrivalHealFraction) * health
+                + Math.max(0f, arrivalArmourFraction) * armour
+                + Math.max(0f, shieldHitFraction);
+    }
+
+    /*
+     * Formula: relicDuelDamage — what the BULWARK duel costs under DAMAGE_TAKEN_MULTIPLIER and FIRST_HIT_SHIELD
+     * Derivation:
+     *   The duel's damage D is a sum of enemy hits; each lands x m. The shield absorbs the first hit (one
+     *   ordinary hit o, the enemy's opening attack) before it lands:
+     *       damage = max(0, D - absorbedHit) x m
+     *   Worked: D 300, o 24, m 0.88 -> 242.9.
+     * Edge cases: negative inputs read as 0; relic-free (absorbed 0, m 1) -> exactly D.
+     */
+    public static float relicDuelDamage(float damage, float damageTakenMultiplier, float absorbedHit) {
+        return Math.max(0f, damage - Math.max(0f, absorbedHit)) * Math.max(0f, damageTakenMultiplier);
+    }
+
+    /*
+     * Formula: relicBlastSurvivorCount / relicBlastSurvivorMeanHealth — a group after a door blast
+     * Derivation:
+     *   A DOOR_BLAST puts its centre c on the lead member and its ring r (c x RELIC_BLAST_RING_SHARE) on every
+     *   other member (the ring covers the four neighbours, and a scenario group stands bunched in a lane).
+     *   With member health h and n members:
+     *       lead left   = max(0, h - c);   others left = max(0, h - r)
+     *       survivors   = [lead left > 0] + (n - 1) x [others left > 0]
+     *       mean health = (lead left + (n - 1) x others left) / survivors
+     *   The walk takes one uniform member health, so the survivors are re-walked at their MEAN health — an
+     *   approximation that is exact when the blast kills the lead (or nobody) and n = 1.
+     *   Worked: h 100, c 60, r 36, n 3 -> 3 survivors at (40 + 2 x 64) / 3 = 56.
+     * Edge cases: n < 1 is 1; negative blasts read as 0; no survivor -> count 0, mean 0.
+     */
+    public static int relicBlastSurvivorCount(float memberHealth, float centreBlast, float ringBlast, int groupSize) {
+        int members = Math.max(1, groupSize);
+        int count = memberHealth - Math.max(0f, centreBlast) > 0f ? 1 : 0;
+        if (memberHealth - Math.max(0f, ringBlast) > 0f) count += members - 1;
+        return count;
+    }
+
+    public static float relicBlastSurvivorMeanHealth(float memberHealth, float centreBlast, float ringBlast, int groupSize) {
+        int survivors = relicBlastSurvivorCount(memberHealth, centreBlast, ringBlast, groupSize);
+        if (survivors <= 0) return 0f;
+        int members = Math.max(1, groupSize);
+        float leadLeft = Math.max(0f, memberHealth - Math.max(0f, centreBlast));
+        float otherLeft = Math.max(0f, memberHealth - Math.max(0f, ringBlast));
+        return (leadLeft + (members - 1) * otherLeft) / survivors;
+    }
+
+    /*
+     * Formula: relicDoorOpenerTurns — DOOR_BLAST as expected turns to clear a reference fight
+     * Derivation:
+     *   A share p of fights (RELIC_VALUATION_DOOR_FIGHT_SHARE) opens through a door the player just opened.
+     *   Opening a door is turn-less (the blast resolves inside requestOpen, before any enemy turn), so such a
+     *   fight is the ordinary walk on the blast's survivors (relicBlastSurvivorCount / MeanHealth) with no
+     *   extra turn — unlike barrelOpenerTurns, which spends the first turn on the barrel. Expected:
+     *       turns = (1 - p) x turnsWithoutBlast + p x openerTurns
+     *   Worked: 3.0 turns, opener 1.6, p 0.30 -> 2.58.
+     *   APPROXIMATION: the blast is priced on the walk's OUTPUT for the opener fight only; ammo and the
+     *   cleared flag stay the no-blast fight's (a blast only ever saves both).
+     * Edge cases: p clamped to [0, 1]; negative turns read as 0. p 0 -> exactly turnsWithoutBlast.
+     */
+    public static float relicDoorOpenerTurns(float turnsWithoutBlast, float openerTurns, float doorFightShare) {
+        float share = Math.max(0f, Math.min(1f, doorFightShare));
+        return (1f - share) * Math.max(0f, turnsWithoutBlast) + share * Math.max(0f, openerTurns);
+    }
+
+    /*
+     * Formula: relicCorpseBurstScenarioTurns — CORPSE_BLAST as turns to clear a group
+     * Derivation:
+     *   A group of n members of health h holds H = n x h. Each of the first n - 1 kills bursts b (fraction x
+     *   the reference soldier's HP x the EXPLOSIVE matchup) into its neighbours, and an adjacency share a of
+     *   it (RELIC_VALUATION_CORPSE_ADJACENCY) lands on members still standing. The last kill has nobody left
+     *   to hit, and the first member must die to the weapon, so at most (n - 1) x h of it is useful:
+     *       burst   = min((n - 1) x b x a, (n - 1) x h)
+     *       turns'  = turns x (H - burst) / H
+     *   The weapon clears HP at a steady rate in the walk, so removing a share of the group's HP removes the
+     *   same share of its turns.
+     *   APPROXIMATION: priced on the walk's OUTPUT (RISKS) — the burst's timing inside the fight (it lands
+     *   only after the first kill) and its splitting across members are not walked.
+     *   Worked: n 3, h 100, b 55, a 0.5 -> burst 55, turns x 245/300 = x0.817.
+     * Edge cases: n <= 1, h <= 0 or b <= 0 -> exactly turns; a clamped to [0, 1].
+     */
+    public static float relicCorpseBurstScenarioTurns(float turns, int groupSize, float memberHealth,
+                                                      float burstDamage, float adjacencyShare) {
+        if (groupSize <= 1 || memberHealth <= 0f || burstDamage <= 0f) return turns;
+        float adjacency = Math.max(0f, Math.min(1f, adjacencyShare));
+        float groupHealth = groupSize * memberHealth;
+        float burst = Math.min((groupSize - 1) * burstDamage * adjacency, (groupSize - 1) * memberHealth);
+        return turns * (groupHealth - burst) / groupHealth;
+    }
+
+    /*
+     * Formula: relicKillCredits — KILL_CREDIT_BONUS on a floor's credits
+     * Derivation: credits' = credits + killCredits x bonus — the bonus pays only on the kill share of a
+     *   floor's credits (pickup chips are untouched).
+     *   Worked: 465 credits of which 300 from kills, bonus 0.40 -> 585.
+     * Edge cases: negative bonus or kill credits read as 0; bonus 0 -> exactly credits.
+     */
+    public static float relicKillCredits(float credits, float killCredits, float killCreditBonus) {
+        return credits + Math.max(0f, killCredits) * Math.max(0f, killCreditBonus);
+    }
+
+    /*
+     * Formula: relicAmmoPowerPoints — KILL_AMMO_REFUND and FLOOR_ARRIVAL_AMMO as ammo power points per floor
+     * Derivation (depth-1 power points, the supplyPowerPoints currency):
+     *   refund   = bodies x killShare x chance x ppPerUnit     (one round per refunding kill, priced at the
+     *              floor's mean planned ammo power points per unit)
+     *   arrival  = arrivalFraction x arrivalCapPowerPoints     (the fraction of each carried type's reserve
+     *              cap, the cap already priced per type and summed over the kit)
+     *   ammo    += refund + arrival
+     *   Worked: 8 x 0.6 x 0.3 x 0.12 + 0.1 x 30 = 3.17 PP.
+     * Edge cases: negative inputs read as 0; relic-free -> exactly 0.
+     */
+    public static float relicAmmoPowerPoints(float bodiesPerFloor, float killShare, float refundChance,
+                                             float powerPointsPerUnit, float arrivalFraction,
+                                             float arrivalCapPowerPoints) {
+        return Math.max(0f, bodiesPerFloor) * Math.max(0f, Math.min(1f, killShare))
+                * Math.max(0f, Math.min(1f, refundChance)) * Math.max(0f, powerPointsPerUnit)
+                + Math.max(0f, arrivalFraction) * Math.max(0f, arrivalCapPowerPoints);
+    }
+
+    /*
+     * Formula: relicKitReserveCapPowerPoints — the reserve caps FLOOR_ARRIVAL_AMMO refills a fraction of
+     * Derivation:
+     *   The relic refills a fraction of EACH carried ammo type's reserve cap. The valuation's kit carries
+     *   one gun per slot: the generalist (BULLETS, cap priced g) and slots - 1 others, whose type is not
+     *   known to the supply model, each priced at the mean of the other types' caps o:
+     *       capPoints = g + max(0, slots - 1) x o
+     *   APPROXIMATION: two guns of one type would be refilled once at runtime; the kit model assumes distinct
+     *   types (the R-CARRY kit pairs a class with the generalist, so it nearly always is).
+     *   Worked: g 20, o 35, 2 slots -> 55 PP of caps; 0.10 of it -> 5.5 PP a floor.
+     * Edge cases: slots < 1 reads as 1; negative inputs read as 0.
+     */
+    public static float relicKitReserveCapPowerPoints(float generalistCapPowerPoints, float otherCapPowerPoints,
+                                                      int gunSlots) {
+        return Math.max(0f, generalistCapPowerPoints) + Math.max(0, gunSlots - 1) * Math.max(0f, otherCapPowerPoints);
+    }
+
+    /*
+     * Formula: relicExperiencePowerPoints — XP_MULTIPLIER as power points per floor (SupplyValue.experience)
+     * Derivation:
+     *   The on-curve player gains EXPECTED_LEVELS_PER_DEPTH levels a floor, each a pick worth
+     *   EXPECTED_PERK_POWER_PP_PER_PICK. +x% experience from kills is x% more levels:
+     *       experience = bonus x levelsPerDepth x ppPerPick
+     *   Worked: 0.20 x 1.0 x 12 = 2.4 PP a floor.
+     *   Assumes kill XP is the level clock (the XP curve is tuned so it is); compounding of the extra levels
+     *   is ignored.
+     * Edge cases: negative inputs read as 0; bonus 0 -> exactly 0.
+     */
+    public static float relicExperiencePowerPoints(float experienceBonus, float levelsPerDepth, float powerPointsPerPick) {
+        return Math.max(0f, experienceBonus) * Math.max(0f, levelsPerDepth) * Math.max(0f, powerPointsPerPick);
+    }
+
+    /*
+     * Formula: relicPowerPoints — a relic's carry lift in power points (offer pricing on the route)
+     * Derivation:
+     *   One perk rank is worth a carry lift of L (RELIC_PERK_RANK_EQUIVALENT_LIFT, measured ~1.08 at depth
+     *   15) and costs SHOP_PERK_RANK_POWER_POINTS at the shop. Lifts compose by product, so a lift x is
+     *   ln(x) / ln(L) ranks' worth:
+     *       PP = SHOP_PERK_RANK_POWER_POINTS x ln(lift) / ln(L)
+     *   Worked: lift 1.08 -> 12 PP; 1.166 (= 1.08^2) -> 24 PP; 1.04 -> 6.1 PP.
+     * Edge cases: lift <= 1 or non-finite -> 0 (a relic that does not lift is worth nothing); L <= 1 -> 0.
+     *   L and the per-rank points are read from BalanceConfig (constants: the method stays pure).
+     */
+    public static float relicPowerPoints(float lift) {
+        float rankEquivalentLift = BalanceConfig.RELIC_PERK_RANK_EQUIVALENT_LIFT;
+        if (!(lift > 1f) || Float.isInfinite(lift) || !(rankEquivalentLift > 1f)) return 0f;
+        return Math.max(0f, BalanceConfig.SHOP_PERK_RANK_POWER_POINTS)
+                * (float) (Math.log(lift) / Math.log(rankEquivalentLift));
+    }
+
+    /*
+     * Formula: relicHandLift — the carry lift of a held hand of relics (R-RELIC-STACK)
+     * Derivation:
+     *   Lifts are ratios on the same carry scale (buildCarryScore), so independent relics compose by product.
+     *   A card whose lift is below 1 is a card the player LEAVES (the TACTICAL rule), whatever its rarity — a
+     *   CURSED relic's lift is already NET of its cost — so every term is clamped at 1:
+     *       hand = prod_{i < count} max(1, lift_i)
+     *   The clamp only ever raises the hand, so it is the conservative side of an upper-bound rule.
+     *   Worked: {1.05, 1.10, 0.97} -> 1.155.
+     * Edge cases: count clamped to [0, lifts.length]; null -> 1; a non-finite term is skipped.
+     */
+    public static float relicHandLift(float[] lifts, int count) {
+        if (lifts == null) return 1f;
+        int terms = Math.max(0, Math.min(count, lifts.length));
+        double product = 1.0;
+        for (int index = 0; index < terms; index++) {
+            float lift = lifts[index];
+            if (Float.isNaN(lift) || Float.isInfinite(lift)) continue;
+            product *= Math.max(1f, lift);
+        }
+        return (float) product;
+    }
+
+    /*
+     * Formula: relicExpectedHandLift — the expected hand as mean lifts raised to expected counts
+     * Derivation:
+     *   An acquisition source s contributes E_s expected relics (a take share, a boss, a node rate x floors),
+     *   each drawn at its rarity-weighted mean lift m_s. With independent draws the expected log-lift adds,
+     *   so the hand is (to first order)
+     *       hand = prod_s max(1, m_s) ^ E_s
+     *   The clamp is relicHandLift's (a below-1 card is left).
+     *   Worked: start 1.05^1, two bosses 1.10^1 each, nodes 1.06^0.8 -> 1.33.
+     * Edge cases: count clamped to the shorter array; negative exponents read as 0; null -> 1.
+     */
+    public static float relicExpectedHandLift(float[] meanLifts, float[] expectedCounts, int count) {
+        if (meanLifts == null || expectedCounts == null) return 1f;
+        int terms = Math.max(0, Math.min(count, Math.min(meanLifts.length, expectedCounts.length)));
+        double logSum = 0.0;
+        for (int index = 0; index < terms; index++) {
+            float lift = meanLifts[index];
+            if (Float.isNaN(lift) || Float.isInfinite(lift)) continue;
+            logSum += Math.log(Math.max(1f, lift)) * Math.max(0f, expectedCounts[index]);
+        }
+        return (float) Math.exp(logSum);
+    }
+
+    /*
+     * Formula: relicNodeOfferRate — expected relic offers per non-boss floor from route nodes
+     * Derivation:
+     *   A floor's node is drawn from the weighted node pool. A MYSTERY node rolls RELIC_CACHE with its share
+     *   of the mystery pool; an EVENT node rolls quarantine_locker with its share of the event pool, and the
+     *   player breaks the seal (takes the offer) with probability t:
+     *       rate = (wMystery / wNodes) x (wCache / wMysteryPool)
+     *            + (wEvent / wNodes) x (wLocker / wEventPool) x t
+     *   Worked: 10/100 x 10/110 + 6/100 x 1/6 x 0.5 = 0.0141.
+     * Edge cases: a non-positive pool total contributes 0; t clamped to [0, 1].
+     */
+    public static float relicNodeOfferRate(float mysteryNodeWeight, float eventNodeWeight, float nodeWeightTotal,
+                                           float cacheWeight, float mysteryWeightTotal, float lockerWeight,
+                                           float eventWeightTotal, float eventTakeShare) {
+        if (nodeWeightTotal <= 0f) return 0f;
+        float mystery = mysteryWeightTotal > 0f
+                ? Math.max(0f, mysteryNodeWeight) / nodeWeightTotal * Math.max(0f, cacheWeight) / mysteryWeightTotal : 0f;
+        float event = eventWeightTotal > 0f
+                ? Math.max(0f, eventNodeWeight) / nodeWeightTotal * Math.max(0f, lockerWeight) / eventWeightTotal
+                  * Math.max(0f, Math.min(1f, eventTakeShare)) : 0f;
+        return mystery + event;
+    }
+
     /** {@link #classifyMatchup} result: the multiplier is at or above the effective threshold. */
     public static final int MATCHUP_CLASS_EFFECTIVE = 1;
     /** {@link #classifyMatchup} result: the multiplier lies strictly between the thresholds. */
