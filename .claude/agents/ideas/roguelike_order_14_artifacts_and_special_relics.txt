@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: REJECTED: superseded by relics-run-changing-artifacts.txt
 CATEGORY: Items
 TITLE: Artifacts & Special Relics — Passive Always-On Boons
 ---
