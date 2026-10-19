@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.render;
 
+import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
@@ -19,6 +21,16 @@ import ge.tbegvadze.toon3d.util.GameMath;
  *       before they start.</li>
  * </ul>
  * The mood is set when a floor is built, before its first frame, and never while workers run.
+ *
+ * <p>MUZZLE LIGHT (visual-identity-order-2, R8/R9). The player's shot adds a short light term. THREADING
+ * CONTRACT: the light state ({@link #lightIntensity} and the light colour) is a per-frame SNAPSHOT. It is
+ * mutated ONLY by {@link #pulseMuzzleLight}, {@link #update} and {@link #resetLight}, all of which run on
+ * the render thread inside World.update, strictly BEFORE any renderer starts its frame (and therefore
+ * before worker tasks are dispatched; the executor hand-off publishes it). Workers and render code only
+ * READ it, via {@link #lightAddInto} (pure, thread-safe given that contract) or the render-thread fields
+ * written by {@link #evaluate}. While the world is hard-paused update() is not called, so the snapshot
+ * simply holds its last value. The term is additive to the colour MULTIPLIER:
+ * {@code channel = clamp01(shade x tint + lightAdd)}.
  */
 public final class AtmosphereGrade {
 
@@ -26,6 +38,19 @@ public final class AtmosphereGrade {
     public float red = 1f;
     public float green = 1f;
     public float blue = 1f;
+
+    /** Light-add channels of the last {@link #evaluate} call (zero when no pulse). Render thread only. */
+    public float lightAddRed;
+    public float lightAddGreen;
+    public float lightAddBlue;
+
+    // Muzzle-light snapshot (see class javadoc for the threading contract).
+    private float lightIntensity;
+    private float lightRed;
+    private float lightGreen;
+    private float lightBlue;
+    private float lightPeak;
+    private float lightElapsedSeconds;
 
     private LightingMood mood;
 
@@ -46,13 +71,84 @@ public final class AtmosphereGrade {
             red = 1f;
             green = 1f;
             blue = 1f;
+        } else {
+            float fog = GameMath.atmosphereFogFactor(distanceTiles, current.fogStartTiles(), current.fogEndTiles());
+            red   = whiteToTint(GameMath.lerp(current.nearRed(),   current.farRed(),   fog), strength);
+            green = whiteToTint(GameMath.lerp(current.nearGreen(), current.farGreen(), fog), strength);
+            blue  = whiteToTint(GameMath.lerp(current.nearBlue(),  current.farBlue(),  fog), strength);
+        }
+        if (lightIntensity == 0f) {
+            lightAddRed = 0f;
+            lightAddGreen = 0f;
+            lightAddBlue = 0f;
+        } else {
+            float light = lightAt(lightIntensity, distanceTiles);
+            lightAddRed   = light * lightRed;
+            lightAddGreen = light * lightGreen;
+            lightAddBlue  = light * lightBlue;
+        }
+    }
+
+    /** True while a muzzle pulse is lighting the world (branch-skip for the light term, R10). */
+    public boolean isLightActive() {
+        return lightIntensity != 0f;
+    }
+
+    /** Starts (or restarts, never stacks) a muzzle pulse for a weapon; peak 0 (melee) is ignored. */
+    public void pulseMuzzleLight(ItemType weaponItemType) {
+        float peak = MuzzleLightCatalog.peakOf(weaponItemType);
+        if (peak <= 0f) return;
+        lightPeak = peak;
+        lightRed = MuzzleLightCatalog.redOf(weaponItemType);
+        lightGreen = MuzzleLightCatalog.greenOf(weaponItemType);
+        lightBlue = MuzzleLightCatalog.blueOf(weaponItemType);
+        lightElapsedSeconds = 0f;
+        lightIntensity = peak;
+    }
+
+    /** Advances the pulse clock (R9). World calls it only when the world is not hard-paused. */
+    public void update(float deltaTime) {
+        if (lightIntensity == 0f) return;
+        lightElapsedSeconds += deltaTime;
+        lightIntensity = Math.max(0f,
+                lightPeak * (1f - lightElapsedSeconds / EffectConstants.MUZZLE_LIGHT_DURATION_SECONDS));
+    }
+
+    /** Clears any pulse (floor build). */
+    public void resetLight() {
+        lightIntensity = 0f;
+        lightElapsedSeconds = 0f;
+        lightPeak = 0f;
+    }
+
+    /** Light multiplier for a surface {@code distanceTiles} away: falloff x intensity. */
+    public static float lightAt(float intensity, float distanceTiles) {
+        return GameMath.muzzleLightFalloff(distanceTiles, EffectConstants.MUZZLE_LIGHT_RADIUS_TILES) * intensity;
+    }
+
+    /**
+     * Thread-safe (read-only on the frame snapshot): writes the light-add RGB for a surface at
+     * {@code distanceTiles} into {@code outRgb[outOffset..+2]}; zeros when no pulse is active.
+     */
+    public void lightAddInto(float distanceTiles, float[] outRgb, int outOffset) {
+        float intensity = lightIntensity;
+        if (intensity == 0f) {
+            outRgb[outOffset] = 0f;
+            outRgb[outOffset + 1] = 0f;
+            outRgb[outOffset + 2] = 0f;
             return;
         }
-        float fog = GameMath.atmosphereFogFactor(distanceTiles, current.fogStartTiles(), current.fogEndTiles());
-        red   = whiteToTint(GameMath.lerp(current.nearRed(),   current.farRed(),   fog), strength);
-        green = whiteToTint(GameMath.lerp(current.nearGreen(), current.farGreen(), fog), strength);
-        blue  = whiteToTint(GameMath.lerp(current.nearBlue(),  current.farBlue(),  fog), strength);
+        float light = lightAt(intensity, distanceTiles);
+        outRgb[outOffset]     = light * lightRed;
+        outRgb[outOffset + 1] = light * lightGreen;
+        outRgb[outOffset + 2] = light * lightBlue;
     }
+
+    /** The frame's current pulse intensity (0 when idle). */
+    public float getLightIntensity() { return lightIntensity; }
+    public float getLightRed()   { return lightRed; }
+    public float getLightGreen() { return lightGreen; }
+    public float getLightBlue()  { return lightBlue; }
 
     /**
      * R6: weapon colour = lerp(WHITE, nearTint, GRADE_STRENGTH_WEAPON) x clamp(playerTileBrightness,

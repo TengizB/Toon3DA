@@ -43,7 +43,7 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
       sheets; Main.dispose → disposeAll. DONE WHEN: A1-A3 hold on run; build green.
 - [x] **CP2** — EnemyRenderer contact shadows (R4-R6, hover + lunge). DONE WHEN: A5, A6 by code/run; build green.
 - [x] **CP3** — PropRenderer + ShopMachineRenderer contact shadows. DONE WHEN: A4 holds; build green.
-- [ ] **CP4** — MuzzleLightCatalog, GameMath.muzzleLightFalloff, AtmosphereGrade light term + clock, PlayerController
+- [x] **CP4** — MuzzleLightCatalog, GameMath.muzzleLightFalloff, AtmosphereGrade light term + clock, PlayerController
       weapon-fired listener wired by World; walls + floor/ceiling read it (props/enemies deliberately not yet).
       DONE WHEN: build green.
 - [ ] **CP5** — props, shop machine, enemies apply the light term; docs. DONE WHEN: A7-A9 on run; build + test at
@@ -78,3 +78,11 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   On-screen: verified by pixel sampling (scratchpad shots o2b vs p1): ovals 15-35% darker than the same floor,
   under the floating weapon pickups. NOTE: my first visual read ("pale, misplaced") was WRONG — near-black floor
   makes a faint dark ellipse look pale in a downscaled view; measure pixels before calling a bug.
+- **CP4 handover:** `render/MuzzleLightCatalog` (ordinal table, default WARM, melee peak 0; all 14 R7 names exist).
+  `AtmosphereGrade`: `pulseMuzzleLight(ItemType)` (restart, no stack), `update(dt)` (World.update, PLAYING only),
+  `resetLight()` (in resolveLightingMood). Render-thread: after `evaluate(d, strength)` read `lightAddRed/Green/Blue`
+  (zero when idle) — NEVER after `evaluateWeaponTint` (stale). Workers: `lightAddInto(d, out, off)` (snapshot only).
+  Walls: `gradeScratch` is 6 floats ([3..5] light). Floor: `rowLightFalloffTable` × frame intensity × colour.
+  Channel = clamp01(shade × tint + lightAdd), then red alert. Listener: `PlayerController.setWeaponFiredListener`
+  right after the only `playPlayerWeapon` call in `tryFire`; dry fire / railgun charge / reload never reach it.
+  Known: a pulse active at death stays frozen in the dying world (screen fades; new World resets) — acceptable.

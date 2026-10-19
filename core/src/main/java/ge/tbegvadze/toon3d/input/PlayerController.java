@@ -59,6 +59,8 @@ public class PlayerController {
     private Runnable                weaponReloadStartedListener       = null;
     /** Fired every time GUARD is used (narrative-rework order-10 B comprehension-proxy telemetry). Nullable. */
     private Runnable                guardUsedListener                 = null;
+    // Fired at the exact site that plays the weapon's fire sound (visual-identity-order-2: muzzle light).
+    private java.util.function.Consumer<ItemType> weaponFiredListener = null;
     /** Fired with the ammo UNITS actually collected on a pickup (order 3 telemetry). Nullable. */
     private java.util.function.IntConsumer ammoPickedUpListener       = null;
     /** Gameplay sound. Injected by World; null in headless runs, where every call is a no-op. */
@@ -180,6 +182,11 @@ public class PlayerController {
     }
 
     /** Injects the GUARD-used listener (narrative-rework order-10 B comprehension-proxy telemetry). Nullable. */
+    /** Notified with the weapon's ItemType each time a shot is actually fired (same beat as the fire sound). */
+    public void setWeaponFiredListener(java.util.function.Consumer<ItemType> listener) {
+        this.weaponFiredListener = listener;
+    }
+
     public void setGuardUsedListener(Runnable listener) {
         this.guardUsedListener = listener;
     }
@@ -666,6 +673,7 @@ public class PlayerController {
         weapon.fire(playerTileColumn, playerTileRow, facingStepColumn, facingStepRow,
                     level, hitTarget, barrelHitTarget, doorManager::blocksSight);
         if (gameAudio != null) gameAudio.playPlayerWeapon(weapon.getItemType());
+        if (weaponFiredListener != null) weaponFiredListener.accept(weapon.getItemType());
         // Point-blank grenade: detonating on an enemy on the adjacent cell catches the shooter too.
         if (weapon instanceof GrenadeLauncher) {
             int selfDamage = ((GrenadeLauncher) weapon).consumePendingSelfDamage();

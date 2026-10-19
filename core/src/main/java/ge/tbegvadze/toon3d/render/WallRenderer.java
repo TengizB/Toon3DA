@@ -149,7 +149,8 @@ public class WallRenderer implements Renderable, Disposable {
     private static final class WallColumnResult {
         // Per-column grade scratch (red, green, blue): each column is owned by one worker at a time, and
         // AtmosphereGrade.evaluateInto is the thread-safe variant, so no shared mutable state is touched.
-        final float[] gradeScratch = new float[3];
+        // [0..2] = graded tint, [3..5] = muzzle light-add (visual-identity-order-2 R8).
+        final float[] gradeScratch = new float[6];
 
         // Wall or cylinder surface drawn behind any door panel.
         boolean drawSurface;
@@ -2079,10 +2080,15 @@ public class WallRenderer implements Renderable, Disposable {
             result.gradeScratch[0] = 1f;
             result.gradeScratch[1] = 1f;
             result.gradeScratch[2] = 1f;
+            result.gradeScratch[3] = 0f;
+            result.gradeScratch[4] = 0f;
+            result.gradeScratch[5] = 0f;
             return;
         }
         AtmosphereGrade.evaluateInto(grade.getMood(), perpWallDistanceTiles,
                 ArtDirection.GRADE_STRENGTH_ENVIRONMENT, result.gradeScratch, 0);
+        // Muzzle light: read-only on the frame snapshot (AtmosphereGrade threading contract).
+        grade.lightAddInto(perpWallDistanceTiles, result.gradeScratch, 3);
     }
 
     public void setAlertPulse(float pulse) {
@@ -2411,9 +2417,9 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceDrawTop      = drawTop;
                 evaluateEnvironmentGrade(result, perpWallDistance);
                 float[] columnGrade = result.gradeScratch;
-                float gradedRed   = clampUnit(shade * columnGrade[0]);
-                float gradedGreen = clampUnit(shade * columnGrade[1]);
-                float gradedBlue  = clampUnit(shade * columnGrade[2]);
+                float gradedRed   = clampUnit(shade * columnGrade[0] + columnGrade[3]);
+                float gradedGreen = clampUnit(shade * columnGrade[1] + columnGrade[4]);
+                float gradedBlue  = clampUnit(shade * columnGrade[2] + columnGrade[5]);
                 result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                 result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
@@ -2461,9 +2467,9 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceDrawTop      = drawTop;
                 evaluateEnvironmentGrade(result, perpWallDistance);
                 float[] wallGrade = result.gradeScratch;
-                float gradedRed   = clampUnit(shade * wallGrade[0]);
-                float gradedGreen = clampUnit(shade * wallGrade[1]);
-                float gradedBlue  = clampUnit(shade * wallGrade[2]);
+                float gradedRed   = clampUnit(shade * wallGrade[0] + wallGrade[3]);
+                float gradedGreen = clampUnit(shade * wallGrade[1] + wallGrade[4]);
+                float gradedBlue  = clampUnit(shade * wallGrade[2] + wallGrade[5]);
                 result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                 result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
@@ -2533,9 +2539,9 @@ public class WallRenderer implements Renderable, Disposable {
                     result.doorPanelDrawTop       = clampedPanelTop;
                     evaluateEnvironmentGrade(result, doorPerpWallDistance);
                     float[] doorGrade = result.gradeScratch;
-                    float doorGradedRed   = clampUnit(shade * doorGrade[0]);
-                    float doorGradedGreen = clampUnit(shade * doorGrade[1]);
-                    float doorGradedBlue  = clampUnit(shade * doorGrade[2]);
+                    float doorGradedRed   = clampUnit(shade * doorGrade[0] + doorGrade[3]);
+                    float doorGradedGreen = clampUnit(shade * doorGrade[1] + doorGrade[4]);
+                    float doorGradedBlue  = clampUnit(shade * doorGrade[2] + doorGrade[5]);
                     result.doorPanelRed   = Math.min(1f, doorGradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                     result.doorPanelGreen = doorGradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                     result.doorPanelBlue  = doorGradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);

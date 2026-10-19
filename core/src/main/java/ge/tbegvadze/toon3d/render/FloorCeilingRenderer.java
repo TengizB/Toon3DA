@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.level.Level;
 import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderResolution;
 
@@ -90,6 +91,15 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     // share it). Row distance depends only on the row and resolution, so the table is rebuilt only when the
     // backdrop is (re)allocated - never per frame. Workers only read it.
     private float[] rowTintTable;
+
+    // R8 muzzle light: per-row FALLOFF (depends only on row distance, rebuilt with the tint table) and the
+    // per-frame light-add snapshot (intensity x colour), written once in render() BEFORE workers start.
+    private float[] rowLightFalloffTable;
+    private float   frameLightAddRed;
+    private float   frameLightAddGreen;
+    private float   frameLightAddBlue;
+    private float   frameLightIntensity;
+    private AtmosphereGrade atmosphereGrade;
 
     private float playerWorldX        = 0f;
     private float playerWorldY        = 0f;
@@ -178,12 +188,15 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     private void rebuildRowTintTable() {
         int rowCount = backdropHeight / 2;
         rowTintTable = new float[rowCount * 3];
+        rowLightFalloffTable = new float[rowCount];
         for (int drawY = 0; drawY < rowCount; drawY++) {
             float pixelOffset = GameMath.floorPixelOffsetBelowHorizon(drawY * rowsPerBackdropRow, WORLD_HEIGHT);
             float rowDistance = Math.min(GameMath.floorRowDistance(pixelOffset, WORLD_HEIGHT),
                                          FLOOR_MAX_VISIBLE_DISTANCE_CELLS);
             AtmosphereGrade.evaluateInto(mood, rowDistance, ArtDirection.GRADE_STRENGTH_ENVIRONMENT,
                                          rowTintTable, drawY * 3);
+            rowLightFalloffTable[drawY] = GameMath.muzzleLightFalloff(rowDistance,
+                    EffectConstants.MUZZLE_LIGHT_RADIUS_TILES);
         }
     }
 
@@ -195,6 +208,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         this.directionX         = playerDirectionX;
         this.directionY         = playerDirectionY;
         this.fieldOfViewRadians = playerFieldOfViewRadians;
+    }
+
+    /** Supplies the grade whose muzzle-light snapshot is read each frame (R8). Null disables the term. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
     }
 
     public void setAlertPulse(float pulse) {
@@ -221,6 +239,14 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         cachedRayDirLeftY  = directionY + planeY;
         cachedRayDirRightX = directionX - planeX;
         cachedRayDirRightY = directionY - planeY;
+
+        // Muzzle light snapshot for this frame: intensity x colour, read once here on the render thread and
+        // only READ by workers (AtmosphereGrade threading contract). Zero intensity skips the term (R10).
+        AtmosphereGrade grade = atmosphereGrade;
+        frameLightIntensity = grade != null ? grade.getLightIntensity() : 0f;
+        frameLightAddRed    = frameLightIntensity * (grade != null ? grade.getLightRed()   : 0f);
+        frameLightAddGreen  = frameLightIntensity * (grade != null ? grade.getLightGreen() : 0f);
+        frameLightAddBlue   = frameLightIntensity * (grade != null ? grade.getLightBlue()  : 0f);
 
         int backdropHorizonRow = backdropHeight / 2;
 
@@ -299,6 +325,17 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
             final float tintGreen = tintTable[drawY * 3 + 1];
             final float tintBlue  = tintTable[drawY * 3 + 2];
 
+            // Muzzle light add for this row (falloff table x frame intensity/colour); zero when idle.
+            float lightAddRed = 0f;
+            float lightAddGreen = 0f;
+            float lightAddBlue = 0f;
+            if (frameLightIntensity != 0f) {
+                float rowFalloff = rowLightFalloffTable[drawY];
+                lightAddRed   = rowFalloff * frameLightAddRed;
+                lightAddGreen = rowFalloff * frameLightAddGreen;
+                lightAddBlue  = rowFalloff * frameLightAddBlue;
+            }
+
             // Pre-compute base backbuffer offsets for this row pair to avoid repeated multiplications.
             int floorRowOffset   = (backdropHeight - 1 - drawY) * backdropWidth;
             int ceilingRowOffset = drawY * backdropWidth;
@@ -325,9 +362,9 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                 float tileBrightness     = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);
                 float adjustedShade      = Math.min(shade * tileBrightness, MAX_LIGHTING_SHADE);
 
-                float shadeRed   = adjustedShade * tintRed;
-                float shadeGreen = adjustedShade * tintGreen;
-                float shadeBlue  = adjustedShade * tintBlue;
+                float shadeRed   = adjustedShade * tintRed   + lightAddRed;
+                float shadeGreen = adjustedShade * tintGreen + lightAddGreen;
+                float shadeBlue  = adjustedShade * tintBlue  + lightAddBlue;
                 int floorPixel = GameMath.applyRgbShadeToPackedRGBA(
                         floorRawPixel, shadeRed, shadeGreen, shadeBlue,
                         ALERT_WALL_RED_BOOST, ALERT_WALL_GB_DAMPEN, alertPulse);

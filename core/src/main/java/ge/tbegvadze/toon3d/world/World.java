@@ -1522,6 +1522,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         currentLightingMood = resolved;
         atmosphereGrade.setMood(resolved);
+        atmosphereGrade.resetLight();   // R9: a floor transition mid-pulse clears the light
         viewVignetteRenderer.setMood(resolved);
         if (Gdx.app != null) {
             Gdx.app.log("Atmosphere", "Atmosphere mood=" + resolved.id() + (forced ? " (forced)" : ""));
@@ -1541,6 +1542,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         });
         resolveLightingMood();
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel, currentLightingMood);
+        floorCeilingRenderer.setAtmosphereGrade(atmosphereGrade);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         wallRenderer.setAtmosphereGrade(atmosphereGrade);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
@@ -1768,6 +1770,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         playerController.setEmptyFireAttemptListener(teachingSystem::onEmptyFireAttempt);
         playerController.setWeaponReloadStartedListener(teachingSystem::onWeaponReloaded);
         // order-10 B comprehension proxy: how many deaths it took to reach the first GUARD use.
+        // MUZZLE LIGHT (visual-identity-order-2): a shot lights the world through the grade (melee rows are peak 0).
+        playerController.setWeaponFiredListener(atmosphereGrade::pulseMuzzleLight);
         playerController.setGuardUsedListener(() -> storyTelemetry.recordGuardFirstUsed(persistentStats.totalDeaths));
         playerController.setWeaponSwitchCallback(() -> {
             weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());
@@ -2314,6 +2318,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                                  player.directionX, player.directionY);
         gameAudio.update(deltaTime);
         playMenuTransitionSound();
+
+        // MUZZLE LIGHT clock (R9): cosmetic real-time animation, frozen by every hard-pause overlay. Runs
+        // before any renderer's frame, so the grade's light snapshot is valid for the whole render pass.
+        if (runPhase == RunPhase.PLAYING) {
+            atmosphereGrade.update(deltaTime);
+        }
 
         // TITLE phase (order-8 Part A) — the launch screen. Nothing is running: the world behind it
         // is built but frozen and not even drawn, and the descent begins only when the player picks

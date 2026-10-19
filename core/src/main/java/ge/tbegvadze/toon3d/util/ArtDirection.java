@@ -144,4 +144,17 @@ public final class ArtDirection {
     public static final int   MOOD_CORE_WHITE_VIOLET_HORIZON_FLOOR_PACKED = 0x0C0818FF;
     public static final int   MOOD_CORE_WHITE_VIOLET_HORIZON_CEILING_PACKED = 0x090614FF;
     public static final float MOOD_CORE_WHITE_VIOLET_VIGNETTE_ALPHA = 0.50f;
+
+    // -------------------------------------------------------------------------
+    // MUZZLE LIGHT COLOURS (visual-identity-order-2, R7): the light's colour per weapon family.
+    // -------------------------------------------------------------------------
+    public static final float MUZZLE_WARM_RED    = 1.00f;
+    public static final float MUZZLE_WARM_GREEN  = 0.82f;
+    public static final float MUZZLE_WARM_BLUE   = 0.55f;
+    public static final float MUZZLE_ENERGY_RED   = 0.60f;
+    public static final float MUZZLE_ENERGY_GREEN = 0.90f;
+    public static final float MUZZLE_ENERGY_BLUE  = 1.00f;
+    public static final float MUZZLE_FIRE_RED    = 1.00f;
+    public static final float MUZZLE_FIRE_GREEN  = 0.55f;
+    public static final float MUZZLE_FIRE_BLUE   = 0.20f;
 }

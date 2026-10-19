@@ -1189,6 +1189,23 @@ public final class GameMath {
     }
 
     /*
+     * Formula: muzzleLightFalloff
+     * Derivation:
+     *   Linear distance ratio to the light radius: u = distanceTiles / radiusTiles.
+     *   Squared quadratic falloff (bright at the muzzle, soft tail, exactly 0 at the radius):
+     *       falloff = max(0, 1 - u)^2
+     * Edge cases:
+     *   radiusTiles <= 0 returns 0 (no light). Negative distance is treated as 0 (full falloff = 1).
+     *   Distance at or beyond the radius returns 0.
+     */
+    public static float muzzleLightFalloff(float distanceTiles, float radiusTiles) {
+        if (radiusTiles <= 0f) return 0f;
+        float remaining = 1f - Math.max(0f, distanceTiles) / radiusTiles;
+        if (remaining <= 0f) return 0f;
+        return remaining * remaining;
+    }
+
+    /*
      * Formula: contactShadowAlpha
      * Derivation:
      *   The shadow texture is an ellipse inscribed in its rectangle. For a texel centre mapped to
