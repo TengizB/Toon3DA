@@ -12,6 +12,12 @@ public final class FloorLedger {
     /** 1-based floor number. */
     public int depth;
 
+    /** Floor-twists (HUNTED): the trail hunter was printed on this floor. */
+    public boolean hunterArrived;
+
+    /** Floor-twists (HUNTED): the trail hunter died on this floor (its bounty was dropped). */
+    public boolean hunterKilled;
+
     /** Turns (player actions) spent on this floor. */
     public int turnsSpent;
 

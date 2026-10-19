@@ -711,6 +711,8 @@ public final class EnemyConstants {
     public static final int     TWIST_HUNTED_ENGAGE_DISTANCE_TILES   = 2;
     /** R11d: turns the hunter waits behind an enemy on its trail before one greedy step toward the player. */
     public static final int     TWIST_HUNTED_BLOCKED_WAIT_TURNS      = 2;
+    /** R12: how far (Chebyshev rings) the hunter's bounty boxes may spread from its death tile to find free floor. */
+    public static final int     TWIST_HUNTED_BOUNTY_SEARCH_RADIUS_TILES = 8;
     /** R15: the trail hunter's health-bar frame, in the twist amber so THE hunter reads apart from any Iron Stalker. */
     public static final float   TWIST_HUNTER_HEALTH_BAR_FRAME_RED    = 0.98f;
     public static final float   TWIST_HUNTER_HEALTH_BAR_FRAME_GREEN  = 0.72f;

@@ -63,7 +63,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP3** — R-TWIST (T1-T3) + trajectory folding + BalanceReport twist rows, tuned in band; `./gradlew test` green.
 - [x] **CP4** — BLACKOUT runtime (light multiplier w/ exit exemption, NAV OFFLINE plate, enemy min shade,
       wake perception override, all reset on rebuild) in World + SimWorld; `./gradlew build` green.
-- [ ] **CP5** — HUNTED runtime (PlayerTrail, HuntedPursuit + listener, trail branch R11a-g,
+- [x] **CP5** — HUNTED runtime (PlayerTrail, HuntedPursuit + listener, trail branch R11a-g,
       DoorManager.forceOpenForEnemy, bounty, texts + voice, amber frame) in World + SimWorld;
       `./gradlew build` + `./gradlew test` green.
 - [ ] **CP6** — route console third confirm-bar line (R14, eight rule lines); `./gradlew build` green.
@@ -148,3 +148,30 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `DISPLAY=:77 import -window root shot.png` after ~75 s: NAV OFFLINE plate in the mini-map rect, no dot, dark view.
   Both hacks REVERTED before commit (grep TEMP-VERIFY must be empty). Runtime WAV caches assets/game-audio/ and
   assets/story-audio/ are produced by running — never stage them.
+- **CP5 handover:** HUNTED is live. New headless `enemy/PlayerTrail` (int ring buffer addressed by SEQUENCE:
+  `record/clear/newestSequence/oldestSequence/holds/columnAt/rowAt`), `enemy/HuntedPursuit` (State INACTIVE/WAITING/
+  WARNED/ARRIVED/DONE; `turnsOnFloor()`), `enemy/HuntedPursuitListener` (`onHunterWarning()`, `onHunterArrived(c,r)`,
+  `onHunterKilled(c,r)`). EnemyManager: public `beginHunt(EnemyType, arrivalCol, arrivalRow, listener)` and
+  `getHuntedPursuit()`; `takeTurn` records the trail FIRST (the tick fires on settle, so the tile is settled) and
+  advances the clock LAST; the trail branch sits at the top of `computeNextPlan` (after the Hulk finisher) when
+  `followsPlayerTrail && !trailHunterEngages` (Manhattan <= 2 or hasLineOfSight); `executeMove` routes a fixed-tile
+  move of the hunter to `executeTrailStep` (door forcing: first time costs the turn, a re-closed door it already paid
+  for is re-forced free via `Enemy.forcedDoorColumn/Row`). Enemy fields: `followsPlayerTrail, trailSequence,
+  trailTargetSequence, trailBlockedTurns, forcedDoorColumn/Row`. `DoorManager.forceOpenForEnemy(c,r)` (-> OPEN now,
+  DoorStateListener sound only from CLOSED, never DoorOpenedListener / openedDoorCount, refuses keycard/arena locks) +
+  `isLockedAgainstForcing`. **Decision (spec said World fulfils the bounty):** the bounty is placed INSIDE
+  `EnemyManager.killEnemy` (`placeHunterBounty`) with the cache's owned-aware rule (owned ammo types from the loadout,
+  every type if none, spread evenly) on the nearest free tiles within the new `EnemyConstants.
+  TWIST_HUNTED_BOUNTY_SEARCH_RADIUS_TILES` (8 — radius 4 fits only 9 boxes in a 1-wide corridor), so World and
+  SimWorld get the identical bounty with no mirror code; World sees the boxes through the existing DropPlacedListener.
+  Record this as an IMPLEMENTATION NOTE at close. World: `huntedPursuitListener` field (amber warning / red arrival
+  event text, HudConstants strings); `applyTwistRuntimeModifiers` resolves `hunterEnemyTypeName` with
+  `EnemyType.valueOf` and calls beginHunt at the player's tile. ALERT voice is fired by EnemyManager at spawn
+  (`enemyVoiceListener`, INSECT family = IRON_STALKER's). SimWorld: `beginTwistHunt(twist)` after the floor ledger
+  exists; `FloorLedger.hunterArrived/hunterKilled` (CP8's TWIST REPORT reads them). EnemyRenderer: amber border for
+  `followsPlayerTrail`. **Verified:** scratch harness `<scratchpad>/harness/ge/tbegvadze/toon3d/level/HuntHarness.java`
+  (not committed; javac against core/build/classes/java/main + gdx-1.14.1.jar) drives the REAL EnemyManager/DoorManager
+  on a two-room map: warning at turn 35, arrival at 40 on the arrival tile, loop cut (seq 0 -> 7), the closed door
+  costs exactly one turn and plays one open sound, player-opened-door count unchanged (A10), engages on sight, kill ->
+  10 ammo boxes, state DONE. **NOT verified on device:** the amber health-bar frame and the two event texts (xdotool
+  is absent, so 40 turns of touch input cannot be scripted under Xvfb) — build-verified only; reviewer should look.

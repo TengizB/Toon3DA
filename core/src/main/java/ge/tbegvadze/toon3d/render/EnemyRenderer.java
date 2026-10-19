@@ -1133,8 +1133,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
                 float borderPixels = ENEMY_HEALTH_BAR_BORDER_PIXELS;
 
-                batch.setColor(ENEMY_HEALTH_BAR_BORDER_RED, ENEMY_HEALTH_BAR_BORDER_GREEN,
-                               ENEMY_HEALTH_BAR_BORDER_BLUE, ENEMY_HEALTH_BAR_BORDER_ALPHA);
+                // Floor-twists R15: THE trail hunter's frame is twist amber, so it reads apart from any Iron Stalker.
+                if (enemies.get(sortedIndices[sortedPosition]).followsPlayerTrail) {
+                    batch.setColor(TWIST_HUNTER_HEALTH_BAR_FRAME_RED,
+                                   TWIST_HUNTER_HEALTH_BAR_FRAME_GREEN,
+                                   TWIST_HUNTER_HEALTH_BAR_FRAME_BLUE,
+                                   TWIST_HUNTER_HEALTH_BAR_FRAME_ALPHA);
+                } else {
+                    batch.setColor(ENEMY_HEALTH_BAR_BORDER_RED, ENEMY_HEALTH_BAR_BORDER_GREEN,
+                                   ENEMY_HEALTH_BAR_BORDER_BLUE, ENEMY_HEALTH_BAR_BORDER_ALPHA);
+                }
                 batch.draw(whitePixelTexture,
                            barLeft - borderPixels, barBottom - borderPixels,
                            barWidth + 2f * borderPixels, barHeight + 2f * borderPixels,

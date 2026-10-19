@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorStateListener;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.HuntedPursuitListener;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
@@ -1274,9 +1275,45 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (twist.overridesWakePerception()) {
             enemyManager.setWakePerception(twist.wakeRadiusTiles(), twist.wakeSightTiles());
         }
+        // R9: a hunter row starts the hunter clock at the player's arrival tile (the tile it will be printed on).
+        // The type is named, not imported, by the route layer — resolved here, the exchange-reward idiom.
+        if (twist.hunterEnemyTypeName() != null) {
+            try {
+                EnemyType hunterType = EnemyType.valueOf(twist.hunterEnemyTypeName());
+                enemyManager.beginHunt(hunterType,
+                        MathUtils.floor(player.positionX / Constants.CELL_SIZE),
+                        MathUtils.floor(player.positionY / Constants.CELL_SIZE),
+                        huntedPursuitListener);
+            } catch (IllegalArgumentException unknownType) {
+                Gdx.app.error("FloorTwist", "unknown hunter type " + twist.hunterEnemyTypeName());
+            }
+        }
         Gdx.app.log("FloorTwist", "applied twist=" + twist.id() + " minimapOffline=" + minimapOffline
-                + " light=" + twist.lightMultiplier() + " wake=" + twist.wakeRadiusTiles() + "/" + twist.wakeSightTiles());
+                + " light=" + twist.lightMultiplier() + " wake=" + twist.wakeRadiusTiles() + "/" + twist.wakeSightTiles()
+                + " hunter=" + twist.hunterEnemyTypeName());
     }
+
+    /**
+     * Floor-twists R9/R12: a HUNTED floor's clock, as the player sees it — the amber warning, the red arrival
+     * (the hunter's alert voice is fired by EnemyManager itself, at its tile), and a log line on the kill
+     * (the bounty is already on the floor through the drop listener). One instance; every floor's manager uses it.
+     */
+    private final HuntedPursuitListener huntedPursuitListener = new HuntedPursuitListener() {
+        @Override public void onHunterWarning() {
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(HudConstants.TWIST_HUNTED_WARNING_TEXT, EventTextSystem.COLOR_AMBER);
+            }
+        }
+        @Override public void onHunterArrived(int tileColumn, int tileRow) {
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(HudConstants.TWIST_HUNTED_ARRIVAL_TEXT, EventTextSystem.COLOR_RED);
+            }
+            Gdx.app.log("FloorTwist", "hunter arrived at " + tileColumn + "," + tileRow);
+        }
+        @Override public void onHunterKilled(int tileColumn, int tileRow) {
+            Gdx.app.log("FloorTwist", "hunter killed at " + tileColumn + "," + tileRow + " — bounty dropped");
+        }
+    };
 
     /**
      * Stamps a SUPPLY CACHE's ammo boxes across the player's OWNED ammo types (route-map order-8).

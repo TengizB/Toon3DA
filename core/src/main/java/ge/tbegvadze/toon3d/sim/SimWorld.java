@@ -6,6 +6,8 @@ import java.util.List;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.HuntedPursuitListener;
 import ge.tbegvadze.toon3d.entity.MatchupCatalog;
 import ge.tbegvadze.toon3d.entity.AbilityResolver;
 import ge.tbegvadze.toon3d.entity.ArcCannon;
@@ -571,9 +573,33 @@ public final class SimWorld implements LevelTransitionListener {
         recordPlannedContent(level.getFloorContentReport());
         ledger.floors.add(floorLedger);
         ledger.depthReached = Math.max(ledger.depthReached, currentDepth);
+        beginTwistHunt(twist);
         turnsOnFloor        = 0;
         floorActive         = true;
         bossRelicResolvedThisFloor = false;
+    }
+
+    /**
+     * Floor-twists R9 (HUNTED): mirrors World.applyTwistRuntimeModifiers' hunter clock — the hunt starts at the
+     * player's arrival tile, and the floor ledger records the arrival and the kill (the TWIST REPORT reads them).
+     */
+    private void beginTwistHunt(ge.tbegvadze.toon3d.route.NodeAffixDefinition twist) {
+        if (twist == null || twist.hunterEnemyTypeName() == null) return;
+        EnemyType hunterType;
+        try {
+            hunterType = EnemyType.valueOf(twist.hunterEnemyTypeName());
+        } catch (IllegalArgumentException unknownType) {
+            return;
+        }
+        final FloorLedger huntLedger = floorLedger;
+        enemyManager.beginHunt(hunterType,
+                (int) Math.floor(player.positionX / Constants.CELL_SIZE),
+                (int) Math.floor(player.positionY / Constants.CELL_SIZE),
+                new HuntedPursuitListener() {
+                    @Override public void onHunterWarning() { }
+                    @Override public void onHunterArrived(int tileColumn, int tileRow) { huntLedger.hunterArrived = true; }
+                    @Override public void onHunterKilled(int tileColumn, int tileRow)  { huntLedger.hunterKilled  = true; }
+                });
     }
 
     /** Runs the node -&gt; floor pipeline (mirrors World.buildFloorForNode); falls back to depth-driven. */
