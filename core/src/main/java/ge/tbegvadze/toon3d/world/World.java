@@ -246,6 +246,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private Level                  level;
     private FloorCeilingRenderer   floorCeilingRenderer;
+    // Visual identity order-1: the floor's resolved lighting mood and the one grade evaluator every
+    // world renderer will share (renderers are wired to it in later checkpoints).
+    private final AtmosphereGrade  atmosphereGrade = new AtmosphereGrade();
+    private LightingMood           currentLightingMood;
     private DoorManager            doorManager;
     private WallRenderer           wallRenderer;
     private PropRenderer           propRenderer;
@@ -628,6 +632,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // a level's EnvironmentTextureSet can realize just its palette's textures. Must run after the
         // catalog bootstrap above (the assertion cross-checks against it).
         TilesetGfxBootstrap.bootstrap();
+        // Visual identity order-1: floor/ceiling materials, then the five lighting moods (whose bootstrap
+        // cross-checks every region's lightingMoodId against RouteRegistries, bootstrapped above).
+        SurfaceMaterials.bootstrap();
+        LightingMoods.bootstrap();
         // Room-blueprint catalog (symbol/sprite-reuse order-5). Idempotent. Registers every v1 room as a
         // self-describing RoomBlueprint; nothing selects from it yet (generate() still uses the internal
         // RoomType tag until order-8), it exists so the registry seam is live and enumerable.
@@ -1456,6 +1464,67 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         buildLevelDependentResources(targetLevel, null);
     }
 
+    /** The lighting mood of the floor being built (visual identity order-1). Never null after a build. */
+    public LightingMood getCurrentLightingMood() { return currentLightingMood; }
+
+    /** The shared colour-grade evaluator for this world's renderers. */
+    public AtmosphereGrade getAtmosphereGrade() { return atmosphereGrade; }
+
+    /**
+     * Resolves this floor's {@link LightingMood} and gives it to the {@link AtmosphereGrade}: the dev
+     * override system property {@code toon3d.forceMood} (R12) wins, otherwise the floor's region
+     * ambience {@code lightingMoodId} (R11), otherwise the registry fallback with one warning. Logs
+     * "Atmosphere mood=&lt;id&gt;" (or "(forced)").
+     */
+    private void resolveLightingMood() {
+        LightingMoodRegistry moods = LightingMoods.registry();
+        LightingMood resolved = null;
+        boolean forced = false;
+
+        String forcedId = null;
+        try {
+            forcedId = System.getProperty("toon3d.forceMood");
+        } catch (SecurityException ignored) {
+            // Property lookup unavailable: treat as unset.
+        }
+        if (forcedId != null) {
+            resolved = moods.get(forcedId);
+            if (resolved != null) {
+                forced = true;
+            } else if (Gdx.app != null) {
+                Gdx.app.log("Atmosphere", "toon3d.forceMood='" + forcedId + "' is not a registered mood - ignored");
+            }
+        }
+
+        if (resolved == null) {
+            String moodId = null;
+            if (routePlan != null) {
+                try {
+                    RegionSpec region = routePlan.regionForDepth(currentDepth);
+                    RegionAmbience ambience = region == null ? null
+                            : RouteRegistries.regionAmbience().get(region.themeId());
+                    moodId = ambience == null ? null : ambience.lightingMoodId();
+                } catch (IllegalArgumentException depthOutsidePlan) {
+                    moodId = null;
+                }
+            }
+            resolved = moods.get(moodId);
+            if (resolved == null) {
+                resolved = moods.getFallback();
+                if (Gdx.app != null) {
+                    Gdx.app.log("Atmosphere", "no region mood for depth=" + currentDepth + " - using fallback "
+                            + resolved.id());
+                }
+            }
+        }
+
+        currentLightingMood = resolved;
+        atmosphereGrade.setMood(resolved);
+        if (Gdx.app != null) {
+            Gdx.app.log("Atmosphere", "Atmosphere mood=" + resolved.id() + (forced ? " (forced)" : ""));
+        }
+    }
+
     private void buildLevelDependentResources(Level targetLevel, StartGameLevelGenerator startRoomGen) {
         doorManager            = new DoorManager(targetLevel);
         // Doors are heard where they stand, so a door grinding shut behind the player is behind them.
@@ -1467,6 +1536,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 gameAudio.playAt(GameSoundId.DOOR_CLOSE, tileColumn, tileRow);
             }
         });
+        resolveLightingMood();
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);

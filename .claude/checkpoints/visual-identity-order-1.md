@@ -46,7 +46,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
 - [x] **CP1** — palette constants + GameMath formulas.
       DONE WHEN: util/ArtDirection has every TECHNICAL NOTES constant; GameMath.atmosphereFogFactor and
       applyRgbShadeToPackedRGBA exist with comment blocks; nothing reads them yet; build green.
-- [ ] **CP2** — mood + material registries, AtmosphereGrade, World resolution.
+- [x] **CP2** — mood + material registries, AtmosphereGrade, World resolution.
       DONE WHEN: LightingMood/Registry/LightingMoods (5 rows + R11), SurfaceMaterialRegistry/SurfaceMaterials
       (10 generators), AtmosphereGrade exist; World bootstraps, resolves mood (R11/R12), logs
       "Atmosphere mood=<id>"; build + test at baseline.
@@ -73,3 +73,17 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   `GameMath.atmosphereFogFactor(d, start, end)`; `GameMath.applyRgbShadeToPackedRGBA(pixel, r, g, b, boost, dampen,
   pulse)` mirrors the scalar version per channel (red-alert boost caps red shade at 1 before the multiply, as the
   scalar does). `RenderConstants.SURFACE_MATERIAL_SIZE = 64`.
+- **CP2 handover:** `LightingMood` getters `nearRed()..farBlue()`, `fogStartTiles()`, `fogEndTiles()`,
+  `horizonFloorPacked()`, `horizonCeilingPacked()`, `vignetteAlpha()`, `floorMaterialId()`, `ceilingMaterialId()`.
+  `LightingMoods.registry()` / `SurfaceMaterials.registry().getPixels(id)` (cached, SHARED across floors — read-only;
+  packed RGBA8888 row-major `row*64+column`, row 0 = south edge, column 0 = west — matches FloorCeilingRenderer's
+  existing `fillRows` sampling exactly, so it is a drop-in for `floorTexelsPacked`/`ceilingTexelsPacked`).
+  `AtmosphereGrade`: fields `red/green/blue` (render thread only), `evaluate(distanceTiles, strength)`,
+  `evaluateWeaponTint(playerTileBrightness)`, static thread-safe `evaluateInto(mood, d, strength, float[] out, off)`.
+  World: `resolveLightingMood()` runs just before `new FloorCeilingRenderer(targetLevel)` in the two-arg
+  `buildLevelDependentResources`; getters `getAtmosphereGrade()`, `getCurrentLightingMood()`; field `currentLightingMood`.
+  R11 enumerates `RegionPlan.defaultPlan().regions()` (RegionAmbienceRegistry has no enumerator).
+  Material shapes adjusted to meet R9 (colours kept): panel_grid light slot 20x4; reactor bars 4px; conduit 4px +
+  6 blobs r4; circuit 40 routes; flesh vein threshold 1.2 + nucleus lift. Measured R9 averages all in band
+  (floors 0.105-0.224, ceilings 0.063-0.176). Hash = `GameMath.combineHash`.
+  Still TODO: FLOOR/CEILING_AMBIENT_COLOUR_PACKED still read by FloorCeilingRenderer (CP4 decides).
