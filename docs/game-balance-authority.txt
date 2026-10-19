@@ -428,7 +428,7 @@ R-RELIC-SOURCE (RuleKind.RELIC_SOURCE) — relics-run-changing-artifacts (CP5)
   relic has a cost line AND at least one cost effect; RELIC_PERK_RANK_EQUIVALENT_LIFT (1.08) is within
   RELIC_PERK_RANK_EQUIVALENT_TOLERANCE (0.03) of the worst committed build's per-rank lift ((worst non-waived carry)^
   (1 / (ranks + keystone)); live 1.0725, MARKSMAN) — the price anchor offer pricing and the RELICS bands stand on;
-  nodeOfferRatePerFloor() > 0. COVERAGE gains one row per relic (rarity, trigger, valuation, banded). Existing rules
+  nodeOfferRatePerFloor() > 0. R-RELIC-SOURCE carries one "resolves" row per relic (rarity, trigger, valuation, banded — the line COVERAGE carried until balance-overhaul order 8). Existing rules
   that now read relics: R-ROUTE-PRICED (the RELIC_CACHE NodeEconomics row; the priced offer is progress PP =
   GameMath.relicPowerPoints of the source pool's mean lift), R-MYSTERY-EV v2 (RELIC_CACHE at weight 3: 1.2996 of the
   1.30 ceiling — weight 4 breaks it at 1.3022; the idea's floor of 4 was unreachable), R-HONEST-SAFE, R-EVENT-VALUE
@@ -531,19 +531,20 @@ R-FLAGS (RuleKind.FLAGS)
   regions. Both were set false by order 1; this rule makes the leak class
   structurally impossible to repeat.
 
-COVERAGE (RuleKind.COVERAGE) — the anti-"shipped unpriced" rule
-  The audit iterates the game's own content enums and FAILS if any entry is
-  unclassified:
-    - every WEAPON ItemType is RANGED (registered spec), MELEE, or
-      AMMO_FALLBACK (WEAPON_PISTOL: no weapon class exists; picking it up
-      grants bullets — see PlayerController);
-    - every CONSUMABLE ItemType is a priced heal or declared UTILITY
-      (STIMPACK is a temporary buff, not an HP resource);
-    - every non-boss EnemyRole has a registered TP band;
-    - every AmmoType has a scarcity row.
-  WHY: the necrotic faction shipped un-priced and silently corrupted every
-  floor budget for weeks. New content that skips pricing no longer produces a
-  green build.
+ADMISSION (RuleKind.ADMISSION) — the content balance contract (balance-overhaul order 8)
+  OVERRIDE RECORD: REPLACES COVERAGE (RuleKind.COVERAGE, new-game-balancr order 1 — "every weapon item,
+  consumable, ammo type and enemy role is classified"). Its four checks are FOLDED, strictly stronger, into
+  C-WEAPON, C-ITEM, C-AMMO and C-ENEMY / C-VERB; its later relic line ("rarity x valuation resolves a band")
+  moved to R-RELIC-SOURCE as "R-RELIC-SOURCE resolves <id>". RuleKind.COVERAGE no longer exists.
+  Eighteen C-rules, one per content kind K1-K18 (BalanceSchema.AdmissionRule; each constant carries its
+  evaluator, so adding a rule is one constant). Each iterates the game's own collection and returns ONE
+  result per content item, subject "C-<KIND>: <id>"; a failure prints "ADMISSION C-<KIND>: <id> — <every
+  missing item>". A C-rule checks DECLARED + PRICED + REACHED-BY-ITS-BAND-RULE, never the band verdict,
+  which is why it can never be waived (G5: waive() throws for ADMISSION). What each rule checks, the
+  checklists and the worked examples: SECTION 5. BalanceAuditTest runs one test per C-rule.
+  WHY: the necrotic faction shipped un-priced and silently corrupted every floor budget for weeks. COVERAGE
+  caught four content kinds; the series added a dozen more models (ladder, supply, roles, heavies, builds,
+  bosses, route, shop) that one careless addition could break just as quietly.
 
 R-GEARGATE (RuleKind.GEAR_GATE) — RETIRED by balance-overhaul order 1
   OVERRIDE RECORD: the per-region gear step (GEAR_CURVE_PER_REGION 1.35^region) and
@@ -1243,6 +1244,10 @@ and mirror it HERE in the same commit. A waiver must state a real reason and a
 condition under which it expires; BalanceReport prints all active waivers so
 they can never fade into folklore. Never weaken a band to make a test pass.
 
+G5 LIMIT (balance-overhaul order 8): an ADMISSION failure — a MISSING declaration, pricing row or dangling
+reference (SECTION 5) — can NEVER be waived; BalanceSchema.waive() throws for RuleKind.ADMISSION. Only a
+VALUE outside its band is waivable, and only here.
+
 LIVE WAIVERS (the order-7 round-pending bands + the bespoke-node pricing below):
   (DELETED by balance-overhaul order 3, AS8: [WEAPON_POWER] Railgun (full charge)
    45.0 vs heavy 24-32 — "gated by slug scarcity". R-WEAPON is retired; the Railgun
@@ -1295,62 +1300,302 @@ LIVE WAIVERS (the order-7 round-pending bands + the bespoke-node pricing below):
     expires: a long-group reference scenario exists (order 7 feel pass).
 
 --------------------------------------------------------------------------------
-SECTION 5 — NEW-CONTENT CHECKLIST
+SECTION 5 — ADD CONTENT — THE CONTENT BALANCE CONTRACT (balance-overhaul order 8)
 --------------------------------------------------------------------------------
-1. Add the tuning numbers to util/BalanceConfig.java FIRST (correct section),
-   then reference them from the matching *Constants shim if call sites need the
-   old name.
-2. Declare the content's role/band in util/BalanceSchema.java:
-     new ranged weapon -> declare its DamageClass on the Weapon subclass, then add
-                          ONE row to util/WeaponRoleModel (its scenario shape —
-                          the class/ammo/clip/reload/range come from the weapon);
-                          R-ROLE must stay green (a niche, no dominance, ammo
-                          feasible); add its attacks to the telegraph list if any
-                          hit can exceed the cap
-     new enemy         -> nothing to register: EnemyType.role() is the
-                          declaration; the audit picks it up automatically
-                          (a new ROLE needs a TP band entry)
-     new perk          -> ONE Perk row (tag, ranks, PerkEffects) + its per-rank magnitudes in
-                          SECTION 24; Perk.values() is iterated by R-PERK (PK1 / PK2) and R-CARRY
-                          (balance-overhaul order 5) — it must be felt on its niche and focused
-     new keystone      -> ONE Keystone row (tag, gains, costs) + SECTION 24 magnitudes; R-KEYSTONE
-                          (>= 30% niche, >= 10% cost) and R-CARRY read it automatically
-     new relic         -> ONE register() call in relic/RelicCatalog (rarity, trigger, valuation, affinity, effects,
-                          text built from the constants) + its RELIC_<ID>_<KIND> magnitudes in SECTION 26.
-                          R-RELIC / R-RELIC-CURSE put its gain inside its rarity x valuation band at d5/d15/d25,
-                          R-RELIC-STACK must still hold (mind the d25 slack), COVERAGE resolves it; a non-affine
-                          relic enters the S-RELIC probe rows automatically (SR4/SR5). A new effect KIND needs a
-                          PerkModifier constant AND a valuation term, or R-RELIC fails it at 1.00. Tune only the
-                          new relic's own numbers. docs/relic-system.txt section 9.
-     new heal/pickup   -> add a HealPickupSpec + consumable classification
-     new ammo type     -> add a ScarcityRowSpec
-     new weapon ability-> add its magnitude to BalanceConfig SECTION 15 AND a
-                          pricing case in GameMath.abilityPowerPoints (R-ABILITY
-                          fails the build on an unpriced ability); declare its Rank
-                          (STANDARD / MAJOR / SIGNATURE) and BuildTag; it must price
-                          >= ABILITY_MIN_FELT_PP (8) at its rank's expected level and
-                          keep every tier's roll band green (docs/weapon-creation-guide.txt)
-     new status        -> ONE base definition in BalanceConfig SECTION 8
-     new ROUTE content -> a NodeEconomics row in route/RouteEconomics for every new
-                          node type, ELITE affix, FLOOR TWIST (Kind.TWIST; numbers in
-                          SECTION 27, priced by R-TWIST, banded by S-TWIST) or MYSTERY
-                          outcome, and its numbers
-                          in BalanceConfig SECTION 19 (R-ROUTE-PRICED fails the build
-                          without the row; R-PIPS-DERIVED then requires the node's
-                          declared DangerTier to equal the tier its price derives).
-                          A payoff or budget-scale change is a BALANCE change: re-run
-                          the audit, since R-CALM-COST / R-RISK-PREMIUM / R-MYSTERY-EV
-                          all read it. Update docs/route-map-system.txt too — that
-                          doc's UPDATE CONTRACT is enforced like tile-symbols.txt.
-     new player start  -> NOTHING to add: the ONE starting attribute block lives in
-                          BalanceConfig SECTION 7 (PLAYER_START_*) and is tuned in place.
-                          Never add a second block, a mode enum, or a difficulty
-                          argument — R-SINGLE-DIFFICULTY fails the build (SECTION 3).
-3. Run `./gradlew test` — BalanceAuditTest must be green. If a value must
-   deliberately sit out of band, register a waiver (SECTION 4), never a hack.
-4. Run BalanceReport and paste its output over SECTION 6 below.
-5. Update this document (and docs/game-balance-knowledge.txt if the factual
-   map changed) in the SAME commit.
+REPLACES the new-game-balancr order-1 "NEW-CONTENT CHECKLIST" (override record: the old list told a
+contributor what to remember; this contract makes the build refuse what they forgot). It is the ONE
+place that says how new balance-bearing content enters the game. Every content-creating agent, doc and
+idea file points here; nothing restates it.
+
+HOW IT IS ENFORCED
+  RuleKind.ADMISSION in util/BalanceSchema holds eighteen C-rules, one per content kind (K1-K18 below).
+  Each iterates the game's OWN collection — EnemyType.values(), the room registry after its headless
+  bootstrap, RegionPlan.defaultPlan(), every public number in BalanceConfig — so new content is found
+  without anybody listing it. util/BalanceAuditTest runs one test per C-rule under `./gradlew test`.
+  A C-rule checks that an item is DECLARED, PRICED and REACHED BY ITS BAND RULE; the band verdict itself
+  stays with the band rule (R-ENEMY, R-ROLE, R-HEAL, ...), which keeps its waiver policy.
+  BalanceReport prints the ADMISSION table (every item, per kind, admitted or what is missing).
+
+READING A C-RULE FAILURE
+    ADMISSION C-WEAPON: FLECHETTE_CARBINE — no declared niche for SPREAD (ROLE_DECLARED_NICHE_BY_CLASS) ...
+  = rule C-WEAPON (kind K5), content id FLECHETTE_CARBINE, then EVERY missing item, "; "-joined, each
+  naming what is missing and where it goes. Fix the declaration; re-run. An ADMISSION failure is never
+  a band question, so there is nothing to tune and nothing to waive.
+
+GENERAL
+  G1  "Balance-bearing content" = anything that changes damage, HP, supply, threat, XP, credits, prices,
+      run shape or player power. Every such addition is exactly one kind K1-K18; if none fits, it is K18
+      and the idea that adds it extends this contract (a new K row + its C-rule) in the same idea.
+  G2  Every checklist has six parts: DECLARE (numbers and flags that must exist), BAND (the rule/range it
+      must land in), PRICE (how its cost/value is computed — never hand-set where a formula exists),
+      REGISTER (the only way in), COMMUNICATE (how the player learns it), DONE (the checkable state).
+  G3  Every number lives in BalanceConfig, every formula in GameMath, every row is a register() or enum
+      row — never a switch.
+  G4  Adding balance-bearing content is FULL LANE (idea file + checkpoints). The short lane stays open
+      only for content that is supply-, spawn- and power-neutral — a SUPPLY_NEUTRAL room blueprint, a
+      sprite, a bark line — and C-ROOM checks the neutrality.
+  G5  An ADMISSION failure (a MISSING declaration, pricing row or dangling reference) can NEVER be waived:
+      BalanceSchema.waive() throws for RuleKind.ADMISSION. A VALUE outside its band is the band rule's
+      business and may be waived only through SECTION 4 (reason + expiry, mirrored there).
+
+THE CHECKLISTS (copy the block for each item an idea adds into its BALANCE ADMISSION section)
+  K1  ENEMY ARCHETYPE (EnemyType row)
+      DECLARE  role(), family() (trait inherited, override explicit), base HP,
+               base damage, cadence, range, positional multiplier, move-set with
+               every SpecialAbility, HEAVY flags, min spawn depth / region, the
+               EncounterGroupTemplate slots it may fill, tacticalVerb().
+      BAND     TP in its role band; the order-1 R8 TTK/TTD role targets at
+               depth 1 (R-LADDER L1 across 1..25); trait-aware eHP (order 3);
+               heavy verbs in the R-HEAVY band and avoidable.
+      PRICE    TP via EnemyType.baseThreatPoints (cycle-averaged, heavy
+               avoidance discount); XP derived from TP (never hand-set).
+      REGISTER EnemyType row; spawn symbol — a new FIXED spawn symbol follows the
+               CLAUDE.md STRICT RULE in one commit; at least one group template
+               slot; family voice (audio) and bestiary lines come structurally.
+      COMMUNICATE trait glyph (from family/trait), intent icons for its verbs,
+               danger markers for heavies, ORA archetype line (BestiaryCatalog
+               string id resolves).
+      DONE     C-ENEMY green; it appears in BalanceReport ENEMIES/LADDER tables
+               and spawns in the sim FLOOR REPORT at its depths.
+  K2  ENEMY FAMILY / TRAIT (EnemyFamily, EnemyTrait)
+      DECLARE  trait; trait glyph id; a MatchupCatalog row for EVERY DamageClass;
+               family voice binding (audio); family bestiary lines.
+      BAND     R-ROLE-1..3 still hold with the new trait's scenario added (a new
+               trait adds one reference scenario to R-ROLE).
+      DONE     C-FAMILY green; matchup table complete (no missing cell).
+  K3  ENEMY SPECIAL VERB (SpecialAbility)
+      DECLARE  pricing equivalence (special-verb pricing row), HEAVY flag stated
+               explicitly (true/false), danger-tile shape if HEAVY, telegraph
+               (commits >= 1 turn ahead if > 25% eHP), ORA ability line id.
+      BAND     R-TELEGRAPH; R-HEAVY if heavy; SUMMON verbs under the hard caps.
+      DONE     C-VERB green; TELEGRAPH AUDIT table lists it.
+  K4  BOSS (boss EnemyType + BossTable row)
+      DECLARE  BossTable row (depth, archetype, target fight turns, survival
+               ratio); phase count; verb fractions; heavy verbs flagged.
+      BAND     R-BOSS-* (gate, fair, verb cap incl. the 50% heavy cap, reward,
+               ammo); S-BOSS consistency.
+      PRICE    derived by BossBalance from ExpectedPlayer — never literal HP.
+      DONE     C-BOSS green; every BossTable depth resolves to a declared boss.
+  K5  WEAPON (Weapon subclass + ItemType)
+      DECLARE  DamageClass, role/niche scenario, ammo type, base damage / clip /
+               range / falloff / reload at LV1 COMMON, ladder participation
+               (only the Fist is exempt), special properties (pierce, splash,
+               knockback, stagger).
+      BAND     R-ROLE-1..5: it must be best in >= 1 reference scenario OR add a
+               new scenario (then every existing class is re-checked); it may not
+               take the ONLY niche of an existing class; no class best in > 2.
+               R-LADDER (it follows the ladder).
+      PRICE    scenario turns-to-clear; ammo feasibility; shop price via
+               GameMath.shopPrice from its PP.
+      REGISTER ItemType + weapon classification (C-WEAPON), WeaponRoller tier
+               rules, ground sprite and HUD per docs/weapon-creation-guide.txt.
+      COMMUNICATE class glyph + colour, STRONG VS / WEAK VS on the compare card,
+               switch-hint eligibility (MatchupAdvisor sees it automatically).
+      DONE     C-WEAPON green; SCENARIO table row; sim MATCHUP REPORT shows it
+               when carried.
+  K6  WEAPON ABILITY (WeaponAbility)
+      DECLARE  magnitude per level, cap, BuildTag, melee/ranged eligibility,
+               MAJOR flag, signature flag.
+      BAND     priced PP >= ABILITY_MIN_FELT_PP at its expected level; fits the
+               tier budgets (R-ABILITY).
+      PRICE    GameMath.abilityPowerPoints.
+      DONE     C-ABILITY green; roll sweep never exceeds a tier ceiling.
+  K7  PERK / KEYSTONE (Perk, Keystone)
+      DECLARE  BuildTag, ranks, per-rank modifiers, attribute grant; keystone
+               gain AND cost modifiers.
+      BAND     R-PERK (felt, focused), R-KEYSTONE (>= 30% niche gain, >= 10%
+               cost elsewhere), R-CARRY re-checked for every tag.
+      DONE     C-PERK green; PERKS/BUILDS tables list it; name/effect ids resolve.
+  K8  ITEM / PICKUP / CONSUMABLE (ItemType; heal, armour, utility)
+      DECLARE  category; effect as a FRACTION of max (HP/armour) or an explicit
+               non-HP utility effect; stack cap; cleanse behaviour; supply
+               category (which SupplyPlan category it counts toward) or the
+               explicit declaration NOT_FLOOR_SUPPLIED; pickup symbol (existing,
+               or STRICT RULE).
+      BAND     R-HEAL (survival-turns bought) for HP/armour items; R-SUPPLY
+               (counted in the plan).
+      PRICE    supply value in PP; shop price via GameMath.shopPrice.
+      COMMUNICATE inventory icon + name/description ids; HUD feedback on use.
+      DONE     C-ITEM green; placed only by SupplyPlanner (or declared shop/
+               reward-only).
+  K9  AMMO TYPE (AmmoType)
+      DECLARE  generosity factor, reserve cap, box size, shop box price source.
+      BAND     R-ROLE-5 (feasible), reserve banking target, R-SUPPLY.
+      DONE     C-AMMO green.
+  K10 STATUS EFFECT
+      DECLARE  ONE definition (R-DOT); magnitude as a fraction of max HP (DoT) or
+               a multiplier; duration; stacking; armour-shield interaction
+               (blocked or not, cost); cleanse (which item); HUD icon id.
+      BAND     R-DOT; its appliers' TP includes it (special-verb pricing).
+      DONE     C-STATUS green; status row shows it with turns remaining.
+  K11 HAZARD / GAMEPLAY PROP (explosive barrel kinds, fire / toxic tiles, any
+      prop or tile that deals damage or applies a status)
+      DECLARE  damage as a FRACTION (of the floor's reference enemy HP for
+               enemies, of max HP for the player); two-sidedness (hits player,
+               enemies, or both); the status it applies (K10); DamageClass for
+               matchups (EXPLOSIVE / FIRE / ...); lifetime and spread; placement
+               rule (which planner places it, near which groups).
+      BAND     hazard TP via GameMath.hazardTileThreatPoints inside the floor
+               budget; un-telegraphed player damage <= 25% (R-TELEGRAPH).
+      REGISTER existing symbols only, or the STRICT RULE; placement only through
+               the encounter/supply planners (never hand-placed by a generator).
+      COMMUNICATE a readable sprite/tile and, if it can hit the player, a visible
+               warning before it does (fuse, glow, danger marker).
+      DONE     C-HAZARD green; BalanceReport HAZARDS table lists it.
+  K12 ROOM BLUEPRINT (RoomBlueprint)
+      DECLARE  its supply stance: SUPPLY_NEUTRAL (emits NO pickup and NO enemy
+               symbols — only slots) or SLOT_PROVIDER (tagged supply / group
+               slots the planners may use).
+      BAND     building it in isolation emits no pickup or enemy-spawn symbol.
+      DONE     C-ROOM green. (A neutral blueprint may stay short-lane, G4.)
+  K13 LEVEL GENERATOR (GeneratorId)
+      DECLARE  SupplySlotProvider implementation; footprint band per region;
+               the node types it serves.
+      BAND     R-SUPPLY and R-DENSITY sweeps pass for every node type it serves.
+      DONE     C-GENERATOR green; sim FLOOR REPORT row per node type.
+  K14 ROUTE NODE TYPE (RouteNodeType + profile)
+      DECLARE  NodeSupplySpec row; NodeLevelProfile; route-card threat/reward
+               lines (C1 of order 2); region weights.
+      PRICE    NodeEconomics derived from the spec (never hand-set); DangerTier
+               derived (R-PIPS-DERIVED).
+      DONE     C-NODE green; R-ROUTE-* green.
+  K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX
+      DECLARE  every reward and cost in ladder currencies (weapon LV, perk rank,
+               HP/armour fraction, credits in floors of income, weapon drop);
+               an affix that raises threat declares its matching reward.
+      BAND     R-MYSTERY-EV; event value rule (order 6 F15); R-RISK-PREMIUM.
+      DONE     C-EVENT green.
+  K16 SHOP OFFER TYPE
+      DECLARE  its value in PP; category weight; availability rules.
+      PRICE    GameMath.shopPrice only — a literal credit price fails.
+      BAND     R-CREDITS v2 still holds.
+      DONE     C-SHOP green.
+  K17 REGION (RegionSpec)
+      DECLARE  REGION_TP_BUDGET_MULTIPLIER entry, elite weight, BossTable row for
+               its last floor, ambience + crest rows, story-region mapping.
+      BAND     R-REGION; run-outcome bands.
+      DONE     C-REGION green.
+  K18 ANY NEW BALANCE NUMBER (the catch-all)
+      DECLARE  every new public numeric field in BalanceConfig is either the
+               SUBJECT of at least one schema rule, or listed in
+               BalanceSchema's UNBANDED table with a one-line reason.
+      DONE     C-CONSTANT green.
+
+WHAT EACH C-RULE CHECKS (the build's half of each checklist; BalanceSchema.admission<Kind>Results())
+  C-ENEMY      every EnemyType: role / family / trait; positive HP, damage, range, cadence, move rate; a POSITIONAL_MULT_*
+               multiplier; tactical verb; every move-set verb priced; a wind-up heavy evaluated by R-HEAVY; legal
+               min spawn depth; ORA archetype line resolves. Non-boss also: TP + hit bands for its role, finite TP,
+               XP == round(XP_PER_THREAT_POINT x TP), a unique spawn symbol, an EncounterGroupTemplate slot.
+  C-FAMILY     every EnemyFamily: trait, ALERT / ATTACK / DEATH family voices (WIND_UP is shared by design), early +
+               deep bestiary lines. Every EnemyTrait: a positive matchup cell for every DamageClass, a glyph (unless
+               FLESH), a WeaponRoleModel reference scenario whose archetype presents it.
+  C-VERB       every SpecialAbility: a SpecialVerbPricing row; a damaging verb is a HeavyAttack committed >= 1 turn
+               ahead and evaluated by R-HEAVY; a summon verb has positive summon caps; ORA ability line resolves.
+  C-BOSS       every BossTable row: legal depth in BOSS_TABLE_DEPTHS, positive dials, BossVerbSpec rows, BossStats
+               derive, R-BOSS-GATE / R-BOSS-FAIR reach it. Every BOSS EnemyType is fought on some row.
+  C-WEAPON     every WEAPON ItemType is RANGED / MELEE / AMMO_FALLBACK. RANGED: a WeaponRoleModel row (class + ammo),
+               a declared niche (ROLE_DECLARED_NICHE_BY_CLASS naming a real scenario, or BALLISTIC = the generalist),
+               R-ROLE reaches its class, positive hit / clip / range, in SupplyPlanner.weaponDropPool(). MELEE: a
+               BLADE / BLUNT class (register its instance in BalanceSchema meleeWeaponInstances()).
+  C-ABILITY    every WeaponAbility: family / trigger / rank / BuildTag; finite PP >= 0 at every weapon level; a
+               SIGNATURE is eligible for at least one weapon family (signatures are legendary-slot rolls).
+  C-PERK       every Perk: tag, ranks, >= 1 effect, name + line, reached by PK1. Every Keystone: tag, >= 1 gain AND
+               >= 1 cost, both lines, reached by R-KEYSTONE. Every BuildTag: >= 1 perk, exactly one keystone, an
+               R-CARRY row.
+  C-ITEM       every non-weapon ItemType: a declared supply stance (ITEM_SUPPLY_STANCES — a SupplyCategory or
+               NOT_FLOOR_SUPPLIED + reason); a consumable is a priced heal (HealPickupSpec) or declared utility;
+               a stackable has a cap; a description.
+  C-AMMO       every AmmoType: a scarcity row, positive generosity / reserve cap / box / banking target, an AMMO
+               pickup ItemType, a positive shop box price source.
+  C-STATUS     every StatusType: a STATUS_DECLARATIONS row (shape DOT_FRACTION / DOT_FLAT / MULTIPLIER / CONTROL,
+               magnitude + duration constants that resolve and are > 0, a DoT fraction in (0, 1), armour-shield
+               interaction, a cleanse item that is a consumable).
+  C-HAZARD     every HAZARD_DECLARATIONS row (barrel 'E', barrel 'g', fire 'i', toxic 'q'): fraction constants resolve
+               (player side in (0, 1]), the symbol is a real hazard cell, its status is declared, a DamageClass (or a
+               stated reason), a placement owner that exists. BalanceReport HAZARDS lists the registry.
+  C-ROOM       every RoomBlueprint: supplyStance(); a SUPPLY_NEUTRAL room stamped in isolation over 120 seeds places
+               no pickup and no enemy-spawn symbol.
+  C-GENERATOR  every GeneratorId: registered, builds headless, serves >= 1 node type, R-SUPPLY sweep results for each
+               (direct SupplySlotProvider generators and the FloorPopulator / PocketSupplyRegions ones alike).
+  C-NODE       every RouteNodeType: NodeTypeDefinition, level profile, NodeSupplySpec, NodeEconomics row, a whole
+               route-card promise (threat word + reward line, both or neither), a region multiplier everywhere.
+  C-EVENT      every FacilityEvent choice, MysteryOutcome and affix / twist: priced; every effect in ladder
+               currencies (fractions, floors of income, weapon levels); a delegate profile that exists; an affix
+               that raises threat (budgetScale > 1) declares a reward.
+  C-SHOP       every OfferCategory: a SHOP_OFFER_SPECS row (PP value, weight constant), shopPrice > 0 at every
+               depth, and the LITERAL-PRICE TRIPWIRE: real rolled offers (d1/5/15/25 x 12 seeds, all five
+               categories) must cost exactly GameMath.shopPrice of their declared value.
+  C-REGION     every RegionSpec: a REGION_TP_BUDGET_MULTIPLIER entry, an ELITE multiplier, a BossTable row on its
+               last floor, ambience + crest, a StoryRegion.
+  C-CONSTANT   every public numeric BalanceConfig field is in CONSTANT_SUBJECTS (the RuleKind that bands it), UNBANDED
+               (with a reason) or GRANDFATHERED (the pre-order-8 fields — SHRINK-ONLY); a stale name fails too.
+               The build checks that a CONSTANT_SUBJECTS entry exists and names a kind; that the named rule
+               really reads and bands the field is the reviewer's check.
+
+EDGE CASES
+  - Content that fits two kinds (a turret that is an enemy AND a hazard) satisfies BOTH checklists.
+  - Hand-made .txt levels are exempt from K12/K13's supply rules (they are authored), but every symbol
+    and every content item they use is still admitted.
+  - Removing content: the same C-rules catch the dangling reference (a template slot, a BossTable row,
+    a niche scenario, a shop offer or an UNBANDED / GRANDFATHERED name pointing at nothing).
+  - A registry that can only be bootstrapped with LibGDX is not allowed for balance-bearing content: the
+    audit must see it headless. Split it (headless data / render half) as tileset and audio do.
+  - An idea file written before this contract: its implementer fills the BALANCE ADMISSION block at CP0.
+  - RELICS are not a K row: a relic is 1-3 PerkEffect rows priced by R-RELIC / R-RELIC-CURSE /
+    R-RELIC-STACK / R-RELIC-SOURCE (its rarity x valuation must resolve a band — the line COVERAGE used
+    to carry). Follow docs/relic-system.txt section 9 (ADD A RELIC); a new PerkModifier kind is K7 work.
+  - The player start is not content: the ONE PLAYER_START_* block is tuned in place (R-SINGLE-DIFFICULTY).
+
+THE WORKED EXAMPLES (hypothetical; numbers illustrative — real ones must pass both gates)
+  X1  ENEMY — "Scrap Hound" (K1)
+      DECLARE  role CHAFF; family MACHINE (trait SHIELDED, inherited); base HP 30,
+               damage 10, cadence 1, melee, positional 1.15 (fast melee);
+               move-set: none; HEAVY: none; min depth 6 (region B); template
+               slots: PACK (3-5), ESCORT chaff slot.
+      BAND     TP ~22 inside the CHAFF band; depth-1 targets met for CHAFF
+               (1-2 on-curve hits vs FLESH-equivalent; SHIELDED makes the
+               Assault Rifle take 2-3, an ENERGY weapon 1).
+      PRICE    TP from baseThreatPoints; XP derived.
+      REGISTER EnemyType row; needs a spawn symbol -> STRICT RULE commit (check
+               docs/tile-symbols.txt for a free one); PACK/ESCORT pools.
+      COMMUNICATE SHIELDED hexagon on its bar; MACHINE family voice; ORA line
+               story.bestiary.type.scrap_hound (no numbers).
+      DONE     C-ENEMY green; ENEMIES + LADDER tables list it; sim FLOOR REPORT
+               shows it in region B+ packs.
+  X2  WEAPON — "Flechette Carbine" (K5)
+      DECLARE  DamageClass SPREAD; niche: new scenario S9 "CHITIN group of 2 at
+               3-4 tiles"; ammo SHELLS; LV1 COMMON: 18 per flechette volley,
+               clip 6, range 5, falloff 0.10, reload 1; no knockback, stagger at
+               <= 2 tiles only.
+      BAND     best in S9 by >= 20% over the best BALLISTIC; does NOT beat the
+               Shotgun in S6 (the Shotgun keeps its niche); best in <= 2
+               scenarios; S1-S8 re-checked with S9 added.
+      PRICE    SCENARIO table row; shell feasibility; shop price from PP.
+      REGISTER ItemType + classification; WeaponRoller tiers; sprite/HUD per the
+               weapon guide.
+      COMMUNICATE SPREAD fan glyph; compare card "STRONG VS: chitin".
+      DONE     C-WEAPON green; R-ROLE green with S9; MATCHUP REPORT shows use.
+  X3  ITEM — "Trauma Kit" (K8)
+      DECLARE  category MEDICAL; restores 0.30 of max HP over 3 turns (0.10 per
+               turn, interrupted by nothing); cleanses BLEED; stack cap 2; supply
+               category NOT_FLOOR_SUPPLIED — sold in shops only, so it needs no
+               pickup symbol. (Had the designer wanted it on the floor, it would
+               declare supply category HEAL and either reuse an existing pickup
+               symbol or add one through the STRICT RULE.)
+      BAND     R-HEAL survival-turns within band for its fraction.
+      PRICE    supply value in PP -> GameMath.shopPrice.
+      COMMUNICATE inventory icon + ids; heal-over-time shown on the status row.
+      DONE     C-ITEM green; shop table lists its price; no generator places it
+               (the supply planner skips NOT_FLOOR_SUPPLIED items).
+
+THE CONTRIBUTOR'S LOOP
+  1. The designer's idea file fills one K block per content item in its BALANCE ADMISSION section, and
+     DECIDES each band (never "the builder will tune it").
+  2. The implementer adds the content through its registry and declares every field. A forgotten
+     hardened declaration does not compile (A3: EnemyType, Weapon, WeaponAbility, Perk, Keystone,
+     RoomBlueprint); a forgotten pricing row, band miss or unresolved id fails `./gradlew test`.
+  3. Both gates (`./gradlew test`, `./gradlew balanceSim`); regenerate SECTION 6 from BalanceReport.
+  4. reviewer checks the BALANCE ADMISSION block against these checklists; any unmet DONE is a FAIL.
 
 --------------------------------------------------------------------------------
 SECTION 6 — THE LIVING TABLES (BalanceReport output; regenerate on any change)
@@ -1571,6 +1816,33 @@ WAIVERS (registry: BalanceSchema.activeWaivers())
   [PERK]         PK1 WILDFIRE breakpoint by r3 (D4 resource: SCENARIO_AMMO S5 Incinerator)
     reason:  every reference group fight ends inside the first spray or two, so burn duration is invisible to the scenario math
     expires: a long-group reference scenario exists (order 7 feel pass)
+
+ADMISSION (balance-overhaul order 8) — the content balance contract, one row per content item
+rule         content                            status    detail
+------------------------------------------------------------------------------------
+C-ENEMY      PLAGUE_HULK                        ADMITTED  role SOLDIER ABERRATION / FLESH; stats, verb, move-set and ORA line...
+C-ENEMY      EYE_TYRANT                         ADMITTED  role CHAFF ABERRATION / FLESH; stats, verb, move-set and ORA line d...
+C-ENEMY      GORE_BITER                         ADMITTED  role CHAFF ABERRATION / FLESH; stats, verb, move-set and ORA line d...
+  ... (219 rows in all; every row ADMITTED — run BalanceReport for the full per-item table)
+  Per-rule summary:
+  C-ENEMY      20 / 20 admitted  (K1 ENEMY ARCHETYPE)
+  C-FAMILY     12 / 12 admitted  (K2 ENEMY FAMILY / TRAIT)
+  C-VERB       5 / 5 admitted  (K3 ENEMY SPECIAL VERB)
+  C-BOSS       8 / 8 admitted  (K4 BOSS)
+  C-WEAPON     14 / 14 admitted  (K5 WEAPON)
+  C-ABILITY    19 / 19 admitted  (K6 WEAPON ABILITY)
+  C-PERK       44 / 44 admitted  (K7 PERK / KEYSTONE)
+  C-ITEM       15 / 15 admitted  (K8 ITEM / PICKUP / CONSUMABLE)
+  C-AMMO       5 / 5 admitted  (K9 AMMO TYPE)
+  C-STATUS     10 / 10 admitted  (K10 STATUS EFFECT)
+  C-HAZARD     4 / 4 admitted  (K11 HAZARD / GAMEPLAY PROP)
+  C-ROOM       15 / 15 admitted  (K12 ROOM BLUEPRINT)
+  C-GENERATOR  7 / 7 admitted  (K13 LEVEL GENERATOR)
+  C-NODE       9 / 9 admitted  (K14 ROUTE NODE TYPE)
+  C-EVENT      21 / 21 admitted  (K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX)
+  C-SHOP       5 / 5 admitted  (K16 SHOP OFFER TYPE)
+  C-REGION     5 / 5 admitted  (K17 REGION)
+  C-CONSTANT   1 / 1 admitted  (K18 ANY NEW BALANCE NUMBER)
 
 BLOCK & DEFEND (order-3)
 role          baseBlk   blkMax   decay  survTurns in?   
@@ -2034,6 +2306,11 @@ Toxic 'q'        5.0     10.0          6         60.0
 Barrel ring       20.0     20.0          1        120.0
 Barrel ctr       39.0     39.0          1        234.0
   Hazards damage BOTH sides (player AND enemies) — two-sided by design. Enemy side: fire x2.5 (x FIRE matchup), toxic 2 stacks/turn at the enemy's own max HP.
+  Declared hazards (BalanceSchema HAZARD_DECLARATIONS, rule C-HAZARD):
+    explosive_barrel 'E' class EXPLOSIVE, status none, placed by ge.tbegvadze.toon3d.level.GroupBarrelPlacer
+    radioactive_barrel 'g' class EXPLOSIVE, status none, placed by ge.tbegvadze.toon3d.level.RoomBlueprints
+    fire 'i' class FIRE, status BURNING, placed by ge.tbegvadze.toon3d.hazard.HazardManager
+    toxic 'q' class none, status POISONED, placed by ge.tbegvadze.toon3d.hazard.HazardManager
 
 BARREL BLAST (H13) — centre 1.2 / ring 0.6 x reference SOLDIER HP (VOID_SHROUD base 50)
 depth  soldier    ring  centre | soldier left: 1 ring   | soldier left: 2 rings  | every chaff killed by ring?
@@ -2212,6 +2489,16 @@ THE TUNING LOOP the whole series was built to enable:
   Numbers chase feel; the schema keeps them honest.
 
 CHANGELOG
+  balance-overhaul order 8 — THE CONTENT BALANCE CONTRACT. New RuleKind.ADMISSION with eighteen C-rules (C-ENEMY ...
+    C-CONSTANT, one per content kind K1-K18) and one BalanceAuditTest method each; RuleKind.COVERAGE RETIRED (folded
+    into C-WEAPON / C-ITEM / C-AMMO / C-ENEMY / C-VERB; its relic line moved to R-RELIC-SOURCE). SECTION 5's
+    NEW-CONTENT CHECKLIST REPLACED by ADD CONTENT (G1-G5, K1-K18, X1-X3). Waiver policy gains G5 (ADMISSION is never
+    waivable). Declaration hardening (E3): EnemyType.heavyWindUp() / moveSet() abstract, RoomBlueprint.supplyStance()
+    (new level/RoomSupplyStance), requireNonNull on WeaponAbility / Perk / Keystone tags. C-CONSTANT grandfathers the
+    1066 numeric BalanceConfig fields that existed when it landed (BalanceSchema GRANDFATHERED, shrink-only); every
+    new one needs CONSTANT_SUBJECTS or UNBANDED. BalanceReport prints the ADMISSION table. NO number, band or waiver
+    moved; every current item is admitted. The CP6 negative drill fired all eighteen rules and found one defect (a new
+    AmmoType crashed BalanceSchema's class init), fixed.
   floor-twists — FLOOR TWISTS (BLACKOUT / SALVAGE / HUNTED: one rule-changing twist rolled onto ~30% of eligible COMBAT
     nodes, a FLOOR_TWIST scope of NodeAffixRegistry). New BalanceConfig SECTION 27; three Kind.TWIST NodeEconomics rows;
     new rule R-TWIST T1-T3 and band S-TWIST ST1/ST2 (never waived). Tuning at CP3 (numbers, no band):

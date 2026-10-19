@@ -31,6 +31,7 @@ public final class BalanceReport {
         printEnemyTable();
         System.out.println();
         printWaiversTable();
+        printAdmissionTable();
         System.out.println();
         printBlockTable();
         System.out.println();
@@ -295,6 +296,34 @@ public final class BalanceReport {
     // way a value may sit outside its band without failing the build; keeping the list
     // printed here keeps each one visible until its expiry condition is met.
     // -----------------------------------------------------------------------------------
+    /**
+     * A7: the ADMISSION table — one row per content item the C-* rules checked (balance-overhaul order 8),
+     * then one summary line per rule.
+     */
+    private static void printAdmissionTable() {
+        System.out.println("ADMISSION (balance-overhaul order 8) — the content balance contract, one row per content item");
+        System.out.printf("%-12s %-34s %-9s %s%n", "rule", "content", "status", "detail");
+        System.out.println("------------------------------------------------------------------------------------");
+        StringBuilder summary = new StringBuilder();
+        for (BalanceSchema.AdmissionRule rule : BalanceSchema.AdmissionRule.values()) {
+            int admitted = 0;
+            java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(rule);
+            for (BalanceSchema.RuleResult result : results) {
+                if (result.satisfied) admitted++;
+                String content = result.subject.substring(Math.min(result.subject.length(), rule.ruleId.length() + 2));
+                String detail = result.detail == null ? "" : result.detail;
+                if (detail.length() > 70) detail = detail.substring(0, 67) + "...";
+                System.out.printf("%-12s %-34s %-9s %s%n", rule.ruleId, content,
+                        result.satisfied ? "ADMITTED" : "MISSING", detail);
+            }
+            summary.append(String.format("  %-12s %d / %d admitted  (%s)%n", rule.ruleId, admitted, results.size(),
+                    rule.kindLabel));
+        }
+        System.out.println("  Per-rule summary:");
+        System.out.print(summary);
+        System.out.println();
+    }
+
     private static void printWaiversTable() {
         System.out.println("WAIVERS (registry: BalanceSchema.activeWaivers())");
         System.out.println("------------------------------------------------------------------------------------");
@@ -995,6 +1024,13 @@ public final class BalanceReport {
         System.out.println("  Hazards damage BOTH sides (player AND enemies) — two-sided by design. Enemy side: fire x"
                 + BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER + " (x FIRE matchup), toxic "
                 + BalanceConfig.HAZARD_TOXIC_ENEMY_STACKS_PER_TURN + " stacks/turn at the enemy's own max HP.");
+        System.out.println("  Declared hazards (BalanceSchema HAZARD_DECLARATIONS, rule C-HAZARD):");
+        for (BalanceSchema.HazardDeclaration hazard : BalanceSchema.hazardDeclarations()) {
+            System.out.println("    " + hazard.id + " '" + hazard.symbol + "' class "
+                    + (hazard.damageClass == null ? "none" : hazard.damageClass.name())
+                    + ", status " + (hazard.appliedStatus == null ? "none" : hazard.appliedStatus.name())
+                    + ", placed by " + hazard.placementOwnerClass);
+        }
         System.out.println();
         printBarrelBlastTable();
     }

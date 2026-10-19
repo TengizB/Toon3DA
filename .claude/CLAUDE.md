@@ -281,12 +281,13 @@ Work runs in one of two lanes. **Which lane is a factual question, not a judgeme
 Qualifies only when **all** hold:
 - **one subsystem** — one package area (e.g. `render`, or `narrative` + its strings file, or one level `.txt`);
 - **three files or fewer**;
-- **the behaviour is already decided** — a bug fix, a tuning of an existing non-balance constant, a copy change, a rename, a refactor behind an unchanged interface, or one `register()` row plus its data/string (a bark line, a codex entry, a room blueprint, a sprite);
+- **the behaviour is already decided** — a bug fix, a tuning of an existing non-balance constant, a copy change, a rename, a refactor behind an unchanged interface, or one `register()` row plus its data/string (a bark line, a codex entry, a supply- and spawn-neutral room blueprint, a sprite);
 - **no idea file covers it**, and it is not part of an ordered part.
 
 **Any one** of these puts it in the full lane:
 - a **new mechanic, enemy, weapon, item or control** (CLAUDE.md already routes these through `creative-game-designer`);
 - a **new FIXED tile symbol** (the STRICT RULE);
+- **balance-bearing content** — adding an enemy, weapon, ability, perk, item, ammo, status, hazard, room that places supply or spawns, generator, node type, event, shop offer, region, or a new `BalanceConfig` number is full lane and must pass the content contract (`docs/game-balance-authority.txt` → ADD CONTENT; enforced by `RuleKind.ADMISSION`'s C-rules, never waivable);
 - a **balance rule, band or policy** — `BalanceSchema`, `sim/` policies or bands (a single existing number in `BalanceConfig`/`GameBalance` may stay short-lane, but still owes both balance gates);
 - a **persistence schema change** — a new `StoryStore`/`StatsStore` key, a `SCHEMA_VERSION` bump, anything the "new game" wipe must know about;
 - **more than one subsystem**;
@@ -649,6 +650,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Game balance — current state, every number/system/formula and known problems | `docs/game-balance-knowledge.txt` |
 | Balance CONTRACT: the schema, the waivers, the behavioural bands, THE CHANGE PROTOCOL | `docs/game-balance-authority.txt` |
+| ADDING CONTENT (any enemy, weapon, ability, perk, item, ammo, status, hazard, room, generator, node, event, shop offer, region or new balance number): the per-kind admission checklists K1-K18 + worked examples | `docs/game-balance-authority.txt` SECTION 5 → ADD CONTENT |
 | XP and leveling system | `docs/xp-level-progression.txt` |
 | Level design philosophy | `docs/level-design-context.txt` |
 | Doom RPG design inspiration | `docs/doom-rpg-reference.txt` |

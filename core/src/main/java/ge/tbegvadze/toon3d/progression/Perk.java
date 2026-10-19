@@ -183,13 +183,18 @@ public enum Perk {
 
     Perk(BuildTag tag, int maxRank, String displayName, String effectLine,
          Attribute attributeGrant, int attributeGrantPerRank, PerkEffect... effects) {
-        this.tag                   = tag;
+        this.tag                   = java.util.Objects.requireNonNull(tag, "Perk tag");
         this.maxRank               = Math.max(1, Math.min(BalanceConfig.PERK_MAX_RANK, maxRank));
         this.displayName           = displayName;
         this.effectLine            = effectLine;
         this.attributeGrant        = attributeGrant;
         this.attributeGrantPerRank = attributeGrant == null ? 0 : attributeGrantPerRank;
         this.effects               = effects;
+    }
+
+    /** How many {@link PerkEffect} rows this perk declares (read-only; the balance admission rule C-PERK reads it). */
+    public int effectCount() {
+        return effects.length;
     }
 
     /** Folds ranks 1..rank of this perk into the aggregate (each effect at its TOTAL for that rank). */

@@ -30,6 +30,7 @@ public enum EnemyType {
         // Slow, positional area slam (order-5): a telegraphed cross-strike to step out of.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_AREA; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     EYE_TYRANT {
@@ -50,6 +51,7 @@ public enum EnemyType {
         // Rare long-cadence BLINDED debuff for flavour (order-5) — chaff stays mostly simple.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     GORE_BITER {
@@ -67,6 +69,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '3'; }
         @Override public String tacticalVerb()       { return "SWARMER: don't get surrounded — funnel the pack into a chokepoint."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     SHELL_BRUTE {
@@ -85,6 +89,7 @@ public enum EnemyType {
         @Override public char   spawnChar()          { return '4'; }
         @Override public String tacticalVerb()       { return "CHARGER: sidestep its charge, then punish the recovery."; }
         @Override public HeavyAttack heavyWindUp()   { return HeavyAttack.CHARGE; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     MIRE_WRAITH {
@@ -105,6 +110,7 @@ public enum EnemyType {
         // Ranged SLOWED debuff to pin the player in its firing lane (order-5).
         @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_CASTER; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     IRON_STALKER {
@@ -125,6 +131,7 @@ public enum EnemyType {
         // The "solve me" script (order-5): rotates BUFF_SELF (strength) and AREA_STRIKE on a fast cadence.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_ELITE; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_ELITE; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     ACID_DRONE {
@@ -145,6 +152,7 @@ public enum EnemyType {
         // Readable caster puzzle (order-5): a SLOWED debuff woven between its shots.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_CASTER; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     VOID_SHROUD {
@@ -162,6 +170,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return '^'; }
         @Override public String tacticalVerb()       { return "FLANKER: keep your back covered — rotate to face it before it hits your blind side."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     // -------------------------------------------------------------------------
@@ -186,6 +196,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns()  { return 1; }
         @Override public char   spawnChar()           { return '~'; }
         @Override public String tacticalVerb()        { return "SHAMBLER: slow but relentless — keep moving and never let it corner you."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     CRAWLER {
@@ -203,6 +215,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns()  { return 1; }
         @Override public char   spawnChar()           { return 'z'; }
         @Override public String tacticalVerb()        { return "SCUTTLER: fast and fragile — it closes the gap quickly, so drop it before the pack piles in."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     REVENANT {
@@ -229,6 +243,7 @@ public enum EnemyType {
         @Override public int chargeTriggerMinTiles()  { return EnemyConstants.REVENANT_LUNGE_TRIGGER_MIN_TILES; }
         @Override public int chargeTriggerMaxTiles()  { return EnemyConstants.REVENANT_LUNGE_TRIGGER_MAX_TILES; }
         @Override public int chargeCooldownTurns()    { return EnemyConstants.REVENANT_LUNGE_COOLDOWN_TURNS; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     VORTEX_EYE {
@@ -249,6 +264,7 @@ public enum EnemyType {
         // Short-range caster (order-5): a BLINDED debuff along its line to soften the player.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_DEBUFF; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_CASTER; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     BLIGHT_CORRUPTOR {
@@ -269,6 +285,7 @@ public enum EnemyType {
         // Carrier (order-5): summons chaff from its spores — kill it before the room floods.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_SUMMON; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     // -------------------------------------------------------------------------
@@ -305,6 +322,8 @@ public enum EnemyType {
         // MOVESET_NONE (the default): shard absorption is a damage-pipeline hook and the shard launch is
         // an ordinary ATTACK_RANGED with a resource cost, so nothing is added to the SpecialAbility
         // catalogue and SPECIAL_VERB_PRICING stays exactly as it was.
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     CINDERFORGE_COLOSSUS {
@@ -341,6 +360,7 @@ public enum EnemyType {
         // SpecialAbility (no new verb), so every region has a heavy to read and step out of.
         @Override public SpecialAbility[] moveSet()          { return MOVESET_AREA; }
         @Override public int             specialAbilityCadenceTurns() { return EnemyConstants.SPECIAL_CADENCE_SLOW; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
     },
 
     RIMESHELL_LANCER {
@@ -380,6 +400,7 @@ public enum EnemyType {
         // MOVESET_NONE (the default) and NO new SpecialAbility: the lance is a bespoke behaviour hook built
         // from the EXISTING IntentVerb.WIND_UP -> ATTACK_RANGED pair (like the Shell Brute charge), so the
         // SpecialAbility catalogue — and BalanceSchema's SPECIAL_VERB_PRICING coverage rule — are untouched.
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     VERDANT_SPIRESOWER {
@@ -410,6 +431,8 @@ public enum EnemyType {
         // IntentVerb.WIND_UP and resolves into a bespoke sow (SpireManager stamps the tiles), exactly as
         // the Rimeshell Lancer's lance is built from WIND_UP -> ATTACK. Nothing is added to the
         // SpecialAbility catalogue, so BalanceSchema COVERAGE stays green.
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     // -------------------------------------------------------------------------
@@ -434,6 +457,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return 'n'; }
         @Override public String tacticalVerb()       { return "BOSS: learn its attack pattern — telegraphed phases."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     CORRUPTOR {
@@ -452,6 +477,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return 'n'; }
         @Override public String tacticalVerb()       { return "BOSS: learn its attack pattern — telegraphed phases."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
     HELL_BARON {
@@ -470,6 +497,8 @@ public enum EnemyType {
         @Override public int    attackCadenceTurns() { return 1; }
         @Override public char   spawnChar()          { return 'n'; }
         @Override public String tacticalVerb()       { return "BOSS: learn its attack pattern — telegraphed phases."; }
+        @Override public HeavyAttack heavyWindUp()   { return null; }
+        @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     };
 
     public abstract int     maxHealth();
@@ -571,7 +600,7 @@ public enum EnemyType {
      * Shell Brute = CHARGE, Rimeshell Lancer = LANCE. Heavies delivered by a SpecialAbility are reported by
      * {@link SpecialAbility#heavyAttack()} instead. The Verdant Spiresower's WIND_UP is a sow, NOT a heavy.
      */
-    public HeavyAttack heavyWindUp() { return null; }
+    public abstract HeavyAttack heavyWindUp();
 
     /**
      * Nearest / farthest cardinal-lane gap (tiles) from which a {@link HeavyAttack#CHARGE} archetype may
@@ -583,8 +612,8 @@ public enum EnemyType {
     public int chargeTriggerMaxTiles() { return EnemyConstants.SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES; }
     public int chargeCooldownTurns()   { return 0; }
 
-    /** The SPECIAL abilities this archetype may commit (strategy-combat-order-5). Empty = simple chaff. */
-    public SpecialAbility[] moveSet() { return MOVESET_NONE; }
+    /** The SPECIAL abilities this archetype may commit (strategy-combat-order-5). Empty = simple chaff. Stated explicitly by every archetype (E3). */
+    public abstract SpecialAbility[] moveSet();
 
     /**
      * Enemy turns between SPECIAL-ability attempts; 0 disables specials entirely. A special is only

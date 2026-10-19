@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -35,6 +36,22 @@ class BalanceAuditTest {
         assertTrue(violationLines.isEmpty(),
                 () -> "Balance schema violations (tune the value in BalanceConfig back into band, "
                         + "or register an explicit waiver in BalanceSchema):\n"
+                        + String.join("\n", violationLines));
+    }
+
+    /**
+     * Asserts an ADMISSION rule found content and admitted all of it. An ADMISSION failure is a missing declaration
+     * or pricing row, never a band verdict, so there is no waiver to reach for.
+     */
+    private static void assertAdmitted(List<BalanceSchema.RuleResult> results) {
+        assertFalse(results.isEmpty(), "an admission rule that finds no content is itself broken");
+        List<String> violationLines = new ArrayList<>();
+        for (BalanceSchema.RuleResult result : results) {
+            if (result.isViolation()) violationLines.add("  " + result);
+        }
+        assertTrue(violationLines.isEmpty(),
+                () -> "ADMISSION failures are missing declarations or pricing rows and can never be waived (G5) "
+                        + "— add the declaration; see docs/game-balance-authority.txt ADD CONTENT:\n"
                         + String.join("\n", violationLines));
     }
 
@@ -149,10 +166,190 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.flagResults());
     }
 
-    /** COVERAGE: every weapon item, consumable, ammo type, and enemy role is classified/priced. */
+    /**
+     * C-ITEM (K8) — folds the retired COVERAGE kind's consumable rows (its relic row moved to R-RELIC-SOURCE
+     * "resolves", asserted by {@code theRelicPoolAlwaysFillsAnOffer}): every non-weapon ItemType declares a supply stance
+     * (planner category, or not floor supplied with a reason); a consumable is a priced heal or a declared utility;
+     * a HEAL stance has a HealPickupSpec; stackables have a stack size; descriptions are non-blank.
+     */
     @Test
-    void allContentIsCoveredByTheSchema() {
-        assertNoViolations(BalanceSchema.coverageResults());
+    void everyItemIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ITEM));
+    }
+
+    /**
+     * C-STATUS (K10): every StatusType has a declaration whose named magnitude and duration constants resolve and
+     * are positive (a DOT_FRACTION magnitude a fraction in (0, 1)), with its armour interaction and any cleanse item
+     * (a CONSUMABLE) declared.
+     */
+    @Test
+    void everyStatusEffectIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.STATUS));
+    }
+
+    /**
+     * C-HAZARD (K11): every declared hazard (barrels E / g, fire i, toxic q) names resolving constants (player side a
+     * fraction in (0, 1]), a recognised tile symbol, a declared applied status, a damage class and an existing
+     * placement owner.
+     */
+    @Test
+    void everyHazardIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.HAZARD));
+    }
+
+    /**
+     * C-ROOM (K12): every registered RoomBlueprint declares a supply stance, and a SUPPLY_NEUTRAL room's build(), run
+     * in isolation over a seed sweep, stamps no pickup and no enemy-spawn symbol.
+     */
+    @Test
+    void everyRoomBlueprintIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ROOM));
+    }
+
+    /**
+     * C-GENERATOR (K13): every GeneratorId is registered, builds headlessly, serves at least one node type and has
+     * R-SUPPLY generator-sweep results for each type it serves (its floors go through the shared supply pipeline).
+     */
+    @Test
+    void everyLevelGeneratorIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.GENERATOR));
+    }
+
+    /**
+     * C-ENEMY (K1): every EnemyType declares role, family, trait, positive stats, a known positional multiplier, a
+     * tactical verb, a priced move-set, an R-HEAVY-evaluated wind-up and a legal first depth; every non-boss also has
+     * its role's TP and hit bands (the old COVERAGE "enemy" row), finite positive threat, derived XP, a unique spawn
+     * symbol, a group-template slot and an ORA archetype line. Also pins G5: an ADMISSION waiver cannot be registered.
+     */
+    @Test
+    void everyEnemyArchetypeIsAdmitted() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ENEMY);
+        assertAdmitted(results);
+        assertEquals(ge.tbegvadze.toon3d.enemy.EnemyType.values().length, results.size(),
+                "one C-ENEMY result per EnemyType");
+        assertTrue(BalanceSchema.activeWaivers().stream()
+                        .noneMatch(waiver -> waiver.kind == BalanceSchema.RuleKind.ADMISSION),
+                "ADMISSION is never waived (G5)");
+    }
+
+    /**
+     * C-FAMILY (K2): every EnemyFamily has a trait, its own ALERT / ATTACK / DEATH voice in the audio catalog and both
+     * bestiary lines; every EnemyTrait has a positive matchup cell for every DamageClass, a glyph unless FLESH, and a
+     * WeaponRoleModel reference scenario whose archetype presents it.
+     */
+    @Test
+    void everyEnemyFamilyAndTraitIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.FAMILY));
+    }
+
+    /**
+     * C-VERB (K3) — folds the old COVERAGE "special verb" row and {@code everySpecialVerbHasARegisteredEquivalence}:
+     * every SpecialAbility has a SpecialVerbPricing; a damaging verb is a declared HEAVY committed at least a turn
+     * ahead and evaluated by R-HEAVY; a summon verb has positive caps; ORA has an ability line for it.
+     */
+    @Test
+    void everySpecialVerbIsAdmitted() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.VERB);
+        assertAdmitted(results);
+        for (ge.tbegvadze.toon3d.enemy.SpecialAbility ability : ge.tbegvadze.toon3d.enemy.SpecialAbility.values()) {
+            assertTrue(BalanceSchema.specialVerbPricing(ability) != null,
+                    ability.name() + " has no SpecialVerbPricing registered");
+        }
+    }
+
+    /**
+     * C-BOSS (K4): every BossTable row has a legal boss depth, positive dials, boss verbs, derived stats and
+     * R-BOSS-GATE / R-BOSS-FAIR results; every BOSS-role EnemyType is fought on some row.
+     */
+    @Test
+    void everyBossIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.BOSS));
+    }
+
+    /**
+     * C-WEAPON (K5) — folds the old COVERAGE "weapon item" row: every WEAPON ItemType is classified; a ranged one has
+     * a RoleWeapon row with class, ammo type and positive base hit / clip / range, a declared niche naming a real
+     * scenario (BALLISTIC is the generalist) that R-ROLE results reach, and a place in the planner's drop pool; a
+     * melee one is BLADE or BLUNT.
+     */
+    @Test
+    void everyWeaponIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.WEAPON));
+    }
+
+    /**
+     * C-ABILITY (K6): every WeaponAbility declares family, trigger, rank and build tag, prices to a finite
+     * non-negative PP at every weapon level 1..MAX_WEAPON_LEVEL, and a SIGNATURE ability is rollable on some weapon.
+     */
+    @Test
+    void everyWeaponAbilityIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ABILITY));
+    }
+
+    /**
+     * C-PERK (K7): every Perk and Keystone declares its tag, effects and text and is reached by PK1 / R-KEYSTONE;
+     * every BuildTag has a perk, exactly one keystone and an R-CARRY row (a waived SCAVENGER row still counts).
+     */
+    @Test
+    void everyPerkKeystoneAndBuildTagIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.PERK));
+    }
+
+    /**
+     * C-AMMO (K9) — folds the old COVERAGE "ammo type" row: every AmmoType has a scarcity row, positive generosity,
+     * reserve cap, box size and banking target, an AMMO pickup item, and the shop prices ammo at a positive rate.
+     */
+    @Test
+    void everyAmmoTypeIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.AMMO));
+    }
+
+    /**
+     * C-NODE (K14): every RouteNodeType has a definition, a supply spec, a registered level profile, an economics
+     * row, a whole route-card promise (or none) and a positive weight multiplier in every region of the default plan.
+     */
+    @Test
+    void everyRouteNodeTypeIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.NODE));
+    }
+
+    /**
+     * C-EVENT (K15): every facility event choice, mystery outcome and node affix / floor twist is priced — ladder
+     * currency effects, an economics row, a registered delegate profile, and a reward premium on anything that
+     * raises threat.
+     */
+    @Test
+    void everyRouteEventOutcomeAndAffixIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.EVENT));
+    }
+
+    /**
+     * C-SHOP (K16): every shop offer category has a declared value, a resolving non-negative weight constant, a
+     * positive shopPrice at every depth, and every offer DefaultShopOfferSource rolls headlessly costs exactly the
+     * shopPrice of its declared value (the literal-price tripwire).
+     */
+    @Test
+    void everyShopOfferCategoryIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.SHOP));
+    }
+
+    /**
+     * C-REGION (K17): every region of the default plan has a TP-budget dial, an elite weight, a boss on its last
+     * floor, a registered ambience with a crest painter, and a story region.
+     */
+    @Test
+    void everyRegionIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.REGION));
+    }
+
+    /**
+     * C-CONSTANT (K18): every numeric BalanceConfig field is the subject of a schema rule (CONSTANT_SUBJECTS), listed
+     * in UNBANDED with a reason, or in the shrink-only GRANDFATHERED list of pre-order-8 fields; a name listed
+     * anywhere that is no longer a field fails as stale. A new BalanceConfig number with no home fails here.
+     */
+    @Test
+    void everyBalanceNumberIsBandedOrDeclaredUnbanded() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.CONSTANT));
     }
 
     // R-GEARGATE (region gear step + golden-ratio gate) was RETIRED by balance-overhaul order 1 and REPLACED
@@ -341,11 +538,15 @@ class BalanceAuditTest {
 
     /**
      * R-RELIC-SOURCE: every offer can fill, weights sum to 1, ids are unique, every curse states and carries its
-     * cost, the perk-rank price anchor matches the measured build, and the route offers relics at all.
+     * cost, the perk-rank price anchor matches the measured build, the route offers relics at all, and every relic
+     * resolves its rarity, trigger, valuation and band (the retired COVERAGE kind's relic row).
      */
     @Test
     void theRelicPoolAlwaysFillsAnOffer() {
-        assertNoViolations(BalanceSchema.relicSourceResults());
+        List<BalanceSchema.RuleResult> results = BalanceSchema.relicSourceResults();
+        assertNoViolations(results);
+        assertTrue(results.stream().anyMatch(result -> result.subject.startsWith("R-RELIC-SOURCE resolves ")),
+                "every relic's resolution is checked");
     }
 
     /**
@@ -355,25 +556,6 @@ class BalanceAuditTest {
     @Test
     void regionDangerDialIsBoundedMonotonicAndFair() {
         assertNoViolations(BalanceSchema.regionResults());
-    }
-
-    /**
-     * Order-5 COVERAGE (special verbs): every catalogued enemy SPECIAL verb has a registered
-     * cycle-averaged Threat-Point equivalence (or an explicit exempt classification) — a new verb without
-     * one is an unpriced-content COVERAGE violation, exactly like an unpriced weapon or ammo type.
-     */
-    @Test
-    void everySpecialVerbHasARegisteredEquivalence() {
-        java.util.List<String> unpriced = new java.util.ArrayList<>();
-        for (ge.tbegvadze.toon3d.enemy.SpecialAbility ability
-                : ge.tbegvadze.toon3d.enemy.SpecialAbility.values()) {
-            if (BalanceSchema.specialVerbPricing(ability) == null) {
-                unpriced.add("  " + ability.name() + " has no SpecialVerbPricing registered");
-            }
-        }
-        assertTrue(unpriced.isEmpty(),
-                () -> "Unpriced enemy special verbs (register a SpecialVerbPricing equivalence):\n"
-                        + String.join("\n", unpriced));
     }
 
     /**

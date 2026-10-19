@@ -1,5 +1,16 @@
 package ge.tbegvadze.toon3d.util;
 
+import ge.tbegvadze.toon3d.audio.GameSoundCatalog;
+import ge.tbegvadze.toon3d.audio.SoundRegistry;
+import ge.tbegvadze.toon3d.enemy.EnemyFamily;
+import ge.tbegvadze.toon3d.enemy.EnemyTrait;
+import ge.tbegvadze.toon3d.enemy.EnemyVoiceMoment;
+import ge.tbegvadze.toon3d.entity.DamageClass;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
+import ge.tbegvadze.toon3d.level.EncounterGroupTemplate;
+import ge.tbegvadze.toon3d.level.EncounterGroupTemplateRegistry;
+import ge.tbegvadze.toon3d.narrative.BestiaryCatalog;
+import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.route.BossTable;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
@@ -48,6 +59,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * LAYER 2 of the Balance Authority — the RULE SCHEMA (see {@code docs/game-balance-authority.txt}).
@@ -67,11 +79,14 @@ import java.util.Set;
  * {@link Waiver} — visible, reasoned, auditable — registered via {@link #waive}. Never a silent
  * exception. {@link BalanceReport} prints all active waivers in their own table.
  *
- * <p><b>Coverage.</b> The schema iterates the game's own content enumerations
- * ({@link EnemyType}, {@link Perk}, {@link ItemType}, {@link AmmoType}) so content that
- * skips pricing can no longer ship silently: an unclassified weapon item, an enemy role without a
- * band, or an unpriced heal fails the audit (the anti-"shipped unpriced" rule — the necrotic
- * faction once corrupted every floor budget for weeks this way).
+ * <p><b>Admission.</b> The schema iterates the game's own content collections
+ * ({@link EnemyType}, {@link EnemyFamily}, {@link SpecialAbility}, {@link BossTable}, ...) so content
+ * that skips a declaration, a pricing row or a registry can no longer ship silently (the
+ * anti-"shipped unpriced" rule — the necrotic faction once corrupted every floor budget for weeks
+ * this way). Each {@link AdmissionRule} (C-*, {@link RuleKind#ADMISSION}) emits ONE result per content
+ * item whose detail lists EVERY missing item and where to add it. An admission result is a missing
+ * declaration, never a band verdict (that stays with the band rule), so it can NEVER be waived (G5).
+ * The old COVERAGE kind is retired: its rows live in C-WEAPON / C-ITEM / C-AMMO and R-RELIC-SOURCE.
  *
  * <p>Pure JVM: no LibGDX state, only {@link BalanceConfig} + {@link GameMath} + the headless
  * content enums, so it runs in CI. Every rule addition belongs here (later orders of the
@@ -115,8 +130,6 @@ public final class BalanceSchema {
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
         FLAGS,
-        /** COVERAGE: every content entry (weapon item, consumable, ammo type, enemy role) is classified/priced. */
-        COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
         /** R-CREDITS v2 (balance-overhaul order 6): income per floor / NEEDED BUNDLE per floor in [1.10, 1.40], every region. */
@@ -286,7 +299,13 @@ public final class BalanceSchema {
          * on plain (untwisted) COMBAT floors over the same depth range (an under-sampled twist reports n/a and does not
          * fail); ST2 every twist appears on at least one played floor (the roll is live). Never waived.
          */
-        SIM_TWIST
+        SIM_TWIST,
+        /**
+         * ADMISSION (balance-overhaul order 8, K1-K18 / the C-* rules): one result per content item saying whether
+         * it is DECLARED, PRICED and reached by its band rule. Never waivable (G5): a failure is a missing
+         * declaration or pricing row, so {@link #waive} refuses this kind and {@link #findWaiver} never returns one.
+         */
+        ADMISSION
     }
 
     // =====================================================================================
@@ -320,6 +339,9 @@ public final class BalanceSchema {
         public boolean isViolation() { return !satisfied && !waived; }
 
         @Override public String toString() {
+            if (kind == RuleKind.ADMISSION) {
+                return "ADMISSION " + subject + " — " + (detail == null ? "" : detail);
+            }
             return String.format("[%s] %s: value=%.2f band=%.2f..%.2f %s%s%s",
                     kind, subject, value, bandMinimum, bandMaximum,
                     satisfied ? "OK" : "OUT-OF-BAND",
@@ -450,6 +472,10 @@ public final class BalanceSchema {
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
     private static void waive(RuleKind kind, String subject, String reason, String expiryCondition) {
+        if (kind == RuleKind.ADMISSION) {
+            throw new IllegalArgumentException("ADMISSION results are never waivable (G5): " + subject
+                    + " — add the missing declaration instead");
+        }
         WAIVERS.add(new Waiver(kind, subject, reason, expiryCondition));
     }
 
@@ -459,6 +485,7 @@ public final class BalanceSchema {
     }
 
     private static Waiver findWaiver(RuleKind kind, String subject) {
+        if (kind == RuleKind.ADMISSION) return null; // G5: an admission result is never waived
         for (Waiver waiver : WAIVERS) {
             if (waiver.kind == kind && waiver.subject.equals(subject)) return waiver;
         }
@@ -495,7 +522,7 @@ public final class BalanceSchema {
 
     // =====================================================================================
     // R-ENEMY — role bands as DATA (an EnumMap, not a switch): a new EnemyRole without an
-    // entry here is a COVERAGE violation, never a silent pass.
+    // entry here is a C-ENEMY admission failure, never a silent pass.
     // =====================================================================================
 
     private static final Map<EnemyRole, float[]> ENEMY_THREAT_POINT_BANDS = buildEnemyThreatPointBands();
@@ -561,10 +588,10 @@ public final class BalanceSchema {
 
     // =====================================================================================
     // SPECIAL-VERB PRICING COVERAGE (new-game-balancr order 5). The cycle-averaged Threat-Point
-    // model (EnemyType.baseThreatPoints) prices every enemy SPECIAL verb. COVERAGE now fails the
+    // model (EnemyType.baseThreatPoints) prices every enemy SPECIAL verb. C-VERB now fails the
     // build if a catalogued SpecialAbility has NO registered equivalence — the anti-"shipped
     // unpriced" discipline extended to enemy moves. DATA (an EnumMap), never a switch. A new verb
-    // added to SpecialAbility without a row here is a COVERAGE violation.
+    // added to SpecialAbility without a row here is a C-VERB admission failure.
     // =====================================================================================
 
     /** How each enemy SPECIAL verb is priced into cycle-averaged Threat Points (order 5). */
@@ -590,7 +617,7 @@ public final class BalanceSchema {
         return Collections.unmodifiableMap(pricing);
     }
 
-    /** The pricing classification for an enemy SPECIAL verb, or null when none is registered (COVERAGE fails). */
+    /** The pricing classification for an enemy SPECIAL verb, or null when none is registered (C-VERB fails). */
     public static SpecialVerbPricing specialVerbPricing(SpecialAbility ability) {
         return SPECIAL_VERB_PRICING.get(ability);
     }
@@ -883,7 +910,7 @@ public final class BalanceSchema {
         results.addAll(hazardResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
-        results.addAll(coverageResults());
+        results.addAll(admissionResults());
         results.addAll(abilityBudgetResults());
         results.addAll(abilityRollSweepResults());
         results.addAll(creditResults());
@@ -1085,7 +1112,7 @@ public final class BalanceSchema {
         for (EnemyType enemyType : EnemyType.values()) {
             if (enemyType.role() == EnemyRole.BOSS) continue; // bosses follow the SECTION 14 ruleset
             float[] band = ENEMY_THREAT_POINT_BANDS.get(enemyType.role());
-            if (band == null) continue; // reported by coverageResults()
+            if (band == null) continue; // reported by C-ENEMY (admissionEnemyResults)
             float threatPoints = enemyType.baseThreatPoints();
             boolean inBand = threatPoints >= band[0] && threatPoints <= band[1];
             results.add(new RuleResult(RuleKind.ENEMY_THREAT_POINTS, enemyType.displayName(),
@@ -1103,7 +1130,7 @@ public final class BalanceSchema {
         List<RuleResult> results = new ArrayList<>();
         for (EnemyType enemyType : EnemyType.values()) {
             float[] band = ENEMY_HIT_BANDS.get(enemyType.role());
-            if (band == null) continue; // BOSS: SECTION 14 ruleset; unknown roles are a COVERAGE violation
+            if (band == null) continue; // BOSS: SECTION 14 ruleset; unknown roles are a C-ENEMY admission failure
             int hitsToKill = enemyHitsToKill(enemyType);
             int hitsToDie = enemyHitsToDie(enemyType);
             results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to kill",
@@ -1753,7 +1780,7 @@ public final class BalanceSchema {
     // — util/RelicValuationModel. A relic is priced in R-CARRY's own terms; the bands are SECTION 26.
     // =====================================================================================
 
-    /** The rarity x valuation band table (SECTION 26). A pair with no row is a COVERAGE violation. */
+    /** The rarity x valuation band table (SECTION 26). A pair with no row fails R-RELIC-SOURCE resolves. */
     private static final Map<RelicRarity, Map<RelicValuation, float[]>> RELIC_BANDS = buildRelicBands();
 
     private static Map<RelicRarity, Map<RelicValuation, float[]>> buildRelicBands() {
@@ -1785,7 +1812,7 @@ public final class BalanceSchema {
         return results;
     }
 
-    /** One band row per reference depth (a relic with no band gets one failing row — COVERAGE names it too). */
+    /** One band row per reference depth (a relic with no band gets one failing row — R-RELIC-SOURCE resolves names it too). */
     private static List<RuleResult> relicBandResults(RuleKind kind, String rule, RelicDefinition relic) {
         List<RuleResult> results = new ArrayList<>();
         float[] band = relicBandOf(relic);
@@ -1928,6 +1955,17 @@ public final class BalanceSchema {
                         String.format("sums to %.5f over %d weights for %d rarities", sum, weights.length,
                                 source.allowedRarities().length)));
             }
+        }
+        // relics-run-changing-artifacts CP5 (folded from the retired COVERAGE kind): every relic resolves its rarity, its
+        // trigger and its valuation, and the rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY
+        // LEGENDARY, is unpriced content).
+        for (RelicDefinition relic : relics) {
+            boolean resolved = relic.rarity() != null && relic.trigger() != null && relic.valuation() != null
+                    && relicBandOf(relic) != null;
+            results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE resolves " + relic.id(),
+                    resolved ? 1f : 0f, 1f, 1f, resolved,
+                    resolved ? relic.rarity() + " / " + relic.trigger() + " / " + relic.valuation() + " banded"
+                             : "UNRESOLVED — a relic needs a rarity, a trigger, a valuation and a band for that rarity x valuation"));
         }
         // No duplicate ids (the registry already refuses one; this pins it as a rule).
         Set<String> ids = new HashSet<>();
@@ -2114,62 +2152,1369 @@ public final class BalanceSchema {
         return 0;
     }
 
-    /** COVERAGE: every content entry is classified/priced — un-priced content fails the build. */
-    public static List<RuleResult> coverageResults() {
+    // =====================================================================================
+    // ADMISSION (balance-overhaul order 8, K1-K18 / the C-* rules). One result per content item:
+    // subject "<ruleId>: <contentId>", value 1 = admitted / 0 = not, band 1..1, detail = what was
+    // declared, or EVERY missing item ("; "-joined, each naming what is missing and where to add it).
+    // An ADMISSION rule checks the item is DECLARED, PRICED and REACHED by its band rule — never the
+    // band verdict itself (that stays with R-ENEMY, R-HEAVY, R-BOSS-*, ...). So no admission result is
+    // waivable (G5). Rules are DATA: the enum below carries each rule's evaluator, never a switch.
+    // =====================================================================================
+
+    /** The admission sub-rules, in E1 order. A new rule cannot compile without its evaluator. */
+    public enum AdmissionRule {
+        ENEMY("C-ENEMY", "K1 ENEMY ARCHETYPE", BalanceSchema::admissionEnemyResults),
+        FAMILY("C-FAMILY", "K2 ENEMY FAMILY / TRAIT", BalanceSchema::admissionFamilyResults),
+        VERB("C-VERB", "K3 ENEMY SPECIAL VERB", BalanceSchema::admissionVerbResults),
+        BOSS("C-BOSS", "K4 BOSS", BalanceSchema::admissionBossResults),
+        WEAPON("C-WEAPON", "K5 WEAPON", BalanceSchema::admissionWeaponResults),
+        ABILITY("C-ABILITY", "K6 WEAPON ABILITY", BalanceSchema::admissionAbilityResults),
+        PERK("C-PERK", "K7 PERK / KEYSTONE", BalanceSchema::admissionPerkResults),
+        ITEM("C-ITEM", "K8 ITEM / PICKUP / CONSUMABLE", BalanceSchema::admissionItemResults),
+        AMMO("C-AMMO", "K9 AMMO TYPE", BalanceSchema::admissionAmmoResults),
+        STATUS("C-STATUS", "K10 STATUS EFFECT", BalanceSchema::admissionStatusResults),
+        HAZARD("C-HAZARD", "K11 HAZARD / GAMEPLAY PROP", BalanceSchema::admissionHazardResults),
+        ROOM("C-ROOM", "K12 ROOM BLUEPRINT", BalanceSchema::admissionRoomResults),
+        GENERATOR("C-GENERATOR", "K13 LEVEL GENERATOR", BalanceSchema::admissionGeneratorResults),
+        NODE("C-NODE", "K14 ROUTE NODE TYPE", BalanceSchema::admissionNodeResults),
+        EVENT("C-EVENT", "K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX", BalanceSchema::admissionEventResults),
+        SHOP("C-SHOP", "K16 SHOP OFFER TYPE", BalanceSchema::admissionShopResults),
+        REGION("C-REGION", "K17 REGION", BalanceSchema::admissionRegionResults),
+        CONSTANT("C-CONSTANT", "K18 ANY NEW BALANCE NUMBER", BalanceSchema::admissionConstantResults);
+
+        public final String ruleId;
+        public final String kindLabel;
+        private final Supplier<List<RuleResult>> evaluator;
+
+        AdmissionRule(String ruleId, String kindLabel, Supplier<List<RuleResult>> evaluator) {
+            this.ruleId    = ruleId;
+            this.kindLabel = kindLabel;
+            this.evaluator = java.util.Objects.requireNonNull(evaluator, "evaluator for " + ruleId);
+        }
+    }
+
+    /** One admission result for one content item: {@code missing} empty means admitted. */
+    private static RuleResult admission(AdmissionRule rule, String contentId, List<String> missing,
+                                        String admittedDetail) {
+        boolean admitted = missing.isEmpty();
+        return new RuleResult(RuleKind.ADMISSION, rule.ruleId + ": " + contentId,
+                admitted ? 1f : 0f, 1f, 1f, admitted,
+                admitted ? admittedDetail : String.join("; ", missing));
+    }
+
+    /** The results of one admission rule. Every rule carries its evaluator (the constructor requires it — E3). */
+    public static List<RuleResult> admissionResults(AdmissionRule rule) {
+        return rule.evaluator.get();
+    }
+
+    /** Every admission rule's results, in {@link AdmissionRule} order. */
+    public static List<RuleResult> admissionResults() {
         List<RuleResult> results = new ArrayList<>();
-        for (ItemType itemType : ItemType.values()) {
-            if (itemType.getCategory() == ItemCategory.WEAPON) {
-                boolean classified = WEAPON_ITEM_CLASSIFICATIONS.containsKey(itemType);
-                results.add(new RuleResult(RuleKind.COVERAGE, "weapon item " + itemType.name(),
-                        classified ? 1f : 0f, 1f, 1f, classified,
-                        classified ? "classified " + WEAPON_ITEM_CLASSIFICATIONS.get(itemType)
-                                   : "UNCLASSIFIED — register it in BalanceSchema (ranged role, melee, or fallback)"));
-            } else if (itemType.getCategory() == ItemCategory.CONSUMABLE) {
-                boolean classified = CONSUMABLE_CLASSIFICATIONS.containsKey(itemType);
-                results.add(new RuleResult(RuleKind.COVERAGE, "consumable " + itemType.name(),
-                        classified ? 1f : 0f, 1f, 1f, classified,
-                        classified ? "classified " + CONSUMABLE_CLASSIFICATIONS.get(itemType)
-                                   : "UNCLASSIFIED — price it as a heal or declare it utility in BalanceSchema"));
+        for (AdmissionRule rule : AdmissionRule.values()) {
+            results.addAll(admissionResults(rule));
+        }
+        return results;
+    }
+
+    /** Whether a text string id resolves in the shipped-defaults story table (the headless check of a bestiary line). */
+    private static boolean storyLineResolves(StoryStrings strings, String barkRowId) {
+        return strings.has("story." + barkRowId);
+    }
+
+    /** Whether any result's subject starts with the prefix (proves a band rule actually reaches a content item). */
+    private static boolean anySubjectStartsWith(List<RuleResult> results, String prefix) {
+        for (RuleResult result : results) {
+            if (result.subject.startsWith(prefix)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * C-ENEMY (K1): every {@link EnemyType} declares role / family / trait, positive stats, a known positional
+     * multiplier, a tactical verb, a priced move-set and (if any) an R-HEAVY-evaluated wind-up, a legal first
+     * depth; every non-boss also has TP + hit bands for its role, finite positive threat, derived XP, a unique
+     * spawn symbol, a group-template slot that admits its role and an ORA archetype line.
+     */
+    public static List<RuleResult> admissionEnemyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> heavyRuleResults = heavyResults();
+        StoryStrings storyStrings = StoryStrings.defaults();
+        List<EncounterGroupTemplate> templates = EncounterGroupTemplateRegistry.shared().all();
+        for (EnemyType enemyType : EnemyType.values()) {
+            boolean boss = enemyType.role() == EnemyRole.BOSS;
+            List<String> missing = new ArrayList<>();
+            if (enemyType.role() == null)   missing.add("no role() — declare an EnemyRole in the EnemyType row");
+            if (enemyType.family() == null) missing.add("no family() — declare an EnemyFamily in the EnemyType row");
+            if (enemyType.trait() == null)  missing.add("no trait() — give its EnemyFamily a trait()");
+            if (enemyType.maxHealth() <= 0) missing.add("maxHealth() <= 0 — set a positive health constant in EnemyConstants");
+            if (enemyType.attackDamage() <= 0) missing.add("attackDamage() <= 0 — set a positive damage constant in EnemyConstants");
+            if (enemyType.attackRangeTiles() < 1) missing.add("attackRangeTiles() < 1 — a reach of at least 1 tile");
+            if (enemyType.attackCadenceTurns() < 1) missing.add("attackCadenceTurns() < 1 — at least 1 turn between attacks");
+            if (enemyType.moveEveryNTurns() < 1) missing.add("moveEveryNTurns() < 1 — at least 1 turn per move");
+            float positional = enemyType.positionalMultiplier();
+            if (positional != BalanceConfig.POSITIONAL_MULT_MELEE
+                    && positional != BalanceConfig.POSITIONAL_MULT_FAST_MELEE
+                    && positional != BalanceConfig.POSITIONAL_MULT_RANGED) {
+                missing.add("positionalMultiplier() " + positional + " is not one of BalanceConfig POSITIONAL_MULT_MELEE / _FAST_MELEE / _RANGED");
             }
+            String verb = enemyType.tacticalVerb();
+            if (verb == null || verb.trim().isEmpty()) missing.add("blank tacticalVerb() — ORA's archetype line is built from it");
+            for (SpecialAbility ability : enemyType.moveSet()) {
+                if (SPECIAL_VERB_PRICING.get(ability) == null) {
+                    missing.add("moveSet() ability " + ability + " has no SpecialVerbPricing — register it in BalanceSchema SPECIAL_VERB_PRICING");
+                }
+            }
+            HeavyAttack windUp = enemyType.heavyWindUp();
+            if (windUp != null && !anySubjectStartsWith(heavyRuleResults, windUp.displayName() + " d")) {
+                missing.add("heavyWindUp() " + windUp + " is not evaluated by R-HEAVY — heavyResults() must iterate it");
+            }
+            if (enemyType.minSpawnDepth() < 1 || enemyType.minSpawnDepth() > BalanceConfig.RUN_FINAL_DEPTH) {
+                missing.add("minSpawnDepth() " + enemyType.minSpawnDepth() + " outside 1.." + BalanceConfig.RUN_FINAL_DEPTH);
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.archetypeBarkId(enemyType))) {
+                missing.add("ORA archetype line story." + BestiaryCatalog.archetypeBarkId(enemyType)
+                        + " is missing — add it to BarkStrings.registerDefaults and assets/story/story-strings.properties");
+            }
+            if (!boss) {
+                if (enemyType.role() != null && !ENEMY_THREAT_POINT_BANDS.containsKey(enemyType.role())) {
+                    missing.add("role " + enemyType.role() + " has no TP band — add it to BalanceSchema buildEnemyThreatPointBands via ENEMY_HIT_BANDS");
+                }
+                if (enemyType.role() != null && !ENEMY_HIT_BANDS.containsKey(enemyType.role())) {
+                    missing.add("role " + enemyType.role() + " has no hit band — add it to BalanceSchema buildEnemyHitBands");
+                }
+                float threat = enemyType.baseThreatPoints();
+                if (Float.isNaN(threat) || Float.isInfinite(threat) || threat <= 0f) {
+                    missing.add("baseThreatPoints() " + threat + " is not finite and positive — check its stats and move-set pricing");
+                }
+                if (enemyType.baseXpReward() != Math.round(BalanceConfig.XP_PER_THREAT_POINT * threat)) {
+                    missing.add("baseXpReward() " + enemyType.baseXpReward() + " is not derived from threat (round(XP_PER_THREAT_POINT x baseThreatPoints())) — remove the override");
+                }
+                if (EnemyType.fromSpawnChar(enemyType.spawnChar()) != enemyType) {
+                    missing.add("spawnChar() '" + enemyType.spawnChar() + "' is not unique to this archetype — pick an unused symbol from docs/tile-symbols.txt");
+                }
+                boolean slotted = false;
+                for (EncounterGroupTemplate template : templates) {
+                    for (EncounterGroupTemplate.Slot slot : template.slots()) {
+                        if (slot.role.admits(enemyType)) slotted = true;
+                    }
+                }
+                if (!slotted) {
+                    missing.add("no EncounterGroupTemplate slot admits it — add or widen a template in EncounterGroupTemplates");
+                }
+            }
+            results.add(admission(AdmissionRule.ENEMY, enemyType.name(), missing,
+                    (boss ? "BOSS " : "role " + enemyType.role() + " ") + enemyType.family()
+                            + " / " + enemyType.trait() + "; stats, verb, move-set and ORA line declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-FAMILY (K2): every {@link EnemyFamily} has a trait, its own ALERT / ATTACK / DEATH voice in the audio
+     * catalog (WIND_UP is the shared fallback by design) and both bestiary lines; every {@link EnemyTrait} has a
+     * positive matchup cell for every {@link DamageClass}, a glyph unless it is FLESH, and a reference scenario
+     * whose archetype presents it.
+     */
+    public static List<RuleResult> admissionFamilyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        SoundRegistry soundRegistry = new SoundRegistry();
+        GameSoundCatalog.bootstrap(soundRegistry);
+        StoryStrings storyStrings = StoryStrings.defaults();
+        for (EnemyFamily family : EnemyFamily.values()) {
+            List<String> missing = new ArrayList<>();
+            if (family.trait() == null) missing.add("no trait — pass an EnemyTrait in the EnemyFamily constant");
+            for (EnemyVoiceMoment moment : EnemyVoiceMoment.values()) {
+                if (moment == EnemyVoiceMoment.WIND_UP) continue; // one shared telegraph sound, never a family voice
+                if (!soundRegistry.hasEnemyFamilyVoice(family, moment)) {
+                    missing.add("no " + moment + " voice — add registerFamilyVoice(" + family + ", ...) in audio/GameSoundCatalog");
+                }
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.familyBarkId(family))) {
+                missing.add("early bestiary line story." + BestiaryCatalog.familyBarkId(family) + " is missing from BarkStrings / story-strings.properties");
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.deepFamilyBarkId(family))) {
+                missing.add("deep bestiary line story." + BestiaryCatalog.deepFamilyBarkId(family) + " is missing from BarkStrings / story-strings.properties");
+            }
+            results.add(admission(AdmissionRule.FAMILY, family.name(), missing,
+                    "trait " + family.trait() + "; ALERT/ATTACK/DEATH voices and both ORA lines declared"));
+        }
+        for (EnemyTrait trait : EnemyTrait.values()) {
+            List<String> missing = new ArrayList<>();
+            for (DamageClass damageClass : DamageClass.values()) {
+                float raw = MatchupCatalog.shared().rawMultiplier(damageClass, trait);
+                if (Float.isNaN(raw) || raw <= 0f) {
+                    missing.add("matchup cell " + damageClass + " x " + trait + " is " + raw
+                            + " — register it in entity/MatchupCatalog / BalanceConfig SECTION 22");
+                }
+            }
+            if (trait != EnemyTrait.FLESH && !trait.hasGlyph()) {
+                missing.add("no health-bar glyph — set hasGlyph() in EnemyTrait and draw it in the health-bar glyph renderer");
+            }
+            boolean presented = false;
+            for (WeaponRoleModel.RoleScenario scenario : WeaponRoleModel.scenarios()) {
+                if (scenario.archetype.trait() == trait) presented = true;
+            }
+            if (!presented) {
+                missing.add("no WeaponRoleModel reference scenario presents it — add a scenario whose archetype has this trait");
+            }
+            results.add(admission(AdmissionRule.FAMILY, trait.name(), missing,
+                    "matchup cells for all " + DamageClass.values().length + " damage classes, glyph and a reference scenario declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-VERB (K3): every {@link SpecialAbility} has a {@link SpecialVerbPricing}; a damaging verb is a declared
+     * HEAVY committed >= 1 turn ahead and evaluated by R-HEAVY; a summon verb has positive summon caps; and ORA
+     * has an ability line for it.
+     */
+    public static List<RuleResult> admissionVerbResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> heavyRuleResults = heavyResults();
+        StoryStrings storyStrings = StoryStrings.defaults();
+        for (SpecialAbility ability : SpecialAbility.values()) {
+            List<String> missing = new ArrayList<>();
+            SpecialVerbPricing pricing = SPECIAL_VERB_PRICING.get(ability);
+            if (pricing == null) {
+                missing.add("UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema SPECIAL_VERB_PRICING");
+            }
+            HeavyAttack heavy = ability.heavyAttack();
+            if (ability.dealsDamage() && heavy == null) {
+                missing.add("dealsDamage() but heavyAttack() is null — a damaging verb must be a declared HeavyAttack");
+            }
+            if (heavy != null) {
+                if (heavy.minimumCommitTurns() < 1) {
+                    missing.add("heavy " + heavy + " commits " + heavy.minimumCommitTurns() + " turns ahead — needs >= 1");
+                }
+                if (!anySubjectStartsWith(heavyRuleResults, heavy.displayName() + " d")) {
+                    missing.add("heavy " + heavy + " is not evaluated by R-HEAVY — heavyResults() must iterate it");
+                }
+            }
+            if (pricing == SpecialVerbPricing.AMORTISED_SUMMON
+                    && (EnemyConstants.SUMMON_COUNT_MAX <= 0 || EnemyConstants.SUMMON_ROOM_LIVE_CAP <= 0)) {
+                missing.add("summon caps must be > 0 — set EnemyConstants.SUMMON_COUNT_MAX and SUMMON_ROOM_LIVE_CAP");
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.abilityBarkId(ability))) {
+                missing.add("ORA ability line story." + BestiaryCatalog.abilityBarkId(ability)
+                        + " is missing from BarkStrings / story-strings.properties");
+            }
+            results.add(admission(AdmissionRule.VERB, ability.name(), missing,
+                    "priced " + pricing + (heavy != null ? "; heavy " + heavy + " banded by R-HEAVY" : "")
+                            + "; ORA line declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-BOSS (K4): every {@link BossTable#standard()} row has a legal boss depth, positive dials, boss verb specs,
+     * derived {@link BossStats} and R-BOSS-GATE / R-BOSS-FAIR results; every BOSS-role {@link EnemyType} is the
+     * boss of some row's archetype (matched by name, as {@code EnemyType.OVERSEER} / {@code Archetype.OVERSEER}).
+     */
+    public static List<RuleResult> admissionBossResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> gateResults = bossGateResults();
+        List<RuleResult> fairResults = bossFairResults();
+        Set<Integer> tableDepths = new HashSet<>();
+        for (int depth : BalanceConfig.BOSS_TABLE_DEPTHS) tableDepths.add(depth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            List<String> missing = new ArrayList<>();
+            if (row.depth < 1 || row.depth > BalanceConfig.RUN_FINAL_DEPTH) {
+                missing.add("depth " + row.depth + " outside 1.." + BalanceConfig.RUN_FINAL_DEPTH);
+            }
+            if (!tableDepths.contains(row.depth)) {
+                missing.add("depth " + row.depth + " is not in BalanceConfig.BOSS_TABLE_DEPTHS");
+            }
+            if (row.targetFightTurns <= 0f) missing.add("targetFightTurns <= 0 — set the RULE-1 dial on the BossTable row");
+            if (row.survivalRatio <= 0f) missing.add("survivalRatio <= 0 — set the survival dial on the BossTable row");
+            boolean hasVerbs = false;
+            for (BossVerbSpec verb : BOSS_VERBS) {
+                if (verb.archetype == row.archetype) hasVerbs = true;
+            }
+            if (!hasVerbs) {
+                missing.add("archetype " + row.archetype + " has no BossVerbSpec — register its verbs in BalanceSchema buildBossVerbRegistry");
+            }
+            BossStats stats = BossBalance.statsForRow(row);
+            if (stats == null || stats.effectiveHitPoints <= 0 || Float.isNaN(stats.damagePerTurn)
+                    || Float.isInfinite(stats.damagePerTurn) || stats.damagePerTurn <= 0f) {
+                missing.add("BossStats do not derive to finite positive HP / DPT at depth " + row.depth);
+            }
+            String gateSubject = row.archetype.displayName + " depth " + row.depth;
+            boolean gated = false;
+            for (RuleResult result : gateResults) {
+                if (result.subject.equals(gateSubject)) gated = true;
+            }
+            if (!gated) missing.add("no R-BOSS-GATE result for " + gateSubject + " — bossGateResults() must iterate the BossTable row");
+            boolean fair = false;
+            for (RuleResult result : fairResults) {
+                if (result.subject.equals(gateSubject + " fight length")) fair = true;
+            }
+            if (!fair) missing.add("no R-BOSS-FAIR result for " + gateSubject + " — bossFairResults() must iterate the BossTable row");
+            results.add(admission(AdmissionRule.BOSS, row.archetype.name() + " depth " + row.depth, missing,
+                    "BossTable row, boss verbs, derived stats and R-BOSS-GATE / R-BOSS-FAIR declared"));
         }
         for (EnemyType enemyType : EnemyType.values()) {
-            if (enemyType.role() == EnemyRole.BOSS) continue;
-            boolean hasBand = ENEMY_THREAT_POINT_BANDS.containsKey(enemyType.role());
-            results.add(new RuleResult(RuleKind.COVERAGE, "enemy " + enemyType.displayName(),
-                    hasBand ? 1f : 0f, 1f, 1f, hasBand,
-                    hasBand ? "role " + enemyType.role() + " banded"
-                            : "role " + enemyType.role() + " has NO TP band registered in BalanceSchema"));
+            if (enemyType.role() != EnemyRole.BOSS) continue;
+            boolean reachable = false;
+            for (BossTable.Row row : BossTable.standard().rows()) {
+                if (row.archetype.name().equals(enemyType.name())) reachable = true;
+            }
+            List<String> missing = new ArrayList<>();
+            if (!reachable) {
+                missing.add("no BossTable row has an archetype named " + enemyType.name()
+                        + " — add a BossTable row (route/BossTable) and a BossBalance.Archetype for it");
+            }
+            results.add(admission(AdmissionRule.BOSS, enemyType.name(), missing, "fought on a BossTable row"));
         }
+        return results;
+    }
+
+    /** The melee Weapon instances C-WEAPON reads a damage class from (no headless factory exists; mirrors WeaponRoleModel's direct construction). */
+    private static List<ge.tbegvadze.toon3d.entity.Weapon> meleeWeaponInstances() {
+        List<ge.tbegvadze.toon3d.entity.Weapon> weapons = new ArrayList<>();
+        weapons.add(new ge.tbegvadze.toon3d.entity.Fist());
+        weapons.add(new ge.tbegvadze.toon3d.entity.CombatKnife());
+        weapons.add(new ge.tbegvadze.toon3d.entity.Hammer());
+        weapons.add(new ge.tbegvadze.toon3d.entity.MeleeChainsaw());
+        return weapons;
+    }
+
+    /**
+     * C-WEAPON (K5): every WEAPON {@link ItemType} is classified (the old COVERAGE "weapon item" row). RANGED: a
+     * {@link WeaponRoleModel.RoleWeapon} row with damage class + ammo type and positive base hit, clip and range;
+     * its class is a ranged class with a declared niche naming an existing scenario (or is BALLISTIC, the
+     * generalist) that R-ROLE results reach; and it is in {@code SupplyPlanner.weaponDropPool()}. MELEE: its
+     * weapon's damage class is BLADE or BLUNT. AMMO_FALLBACK: admitted as a legacy ammo pickup.
+     */
+    public static List<RuleResult> admissionWeaponResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> roleResults = weaponRoleResults();
+        List<ge.tbegvadze.toon3d.entity.Weapon> meleeWeapons = meleeWeaponInstances();
+        List<ItemType> dropPool = ge.tbegvadze.toon3d.level.SupplyPlanner.weaponDropPool();
+        for (ItemType itemType : ItemType.values()) {
+            if (itemType.getCategory() != ItemCategory.WEAPON) continue;
+            List<String> missing = new ArrayList<>();
+            WeaponItemClassification classification = WEAPON_ITEM_CLASSIFICATIONS.get(itemType);
+            String admittedDetail = "classified " + classification;
+            if (classification == null) {
+                missing.add("UNCLASSIFIED — register it in BalanceSchema WEAPON_ITEM_CLASSIFICATIONS (ranged role, melee, or fallback)");
+            } else if (classification == WeaponItemClassification.RANGED) {
+                WeaponRoleModel.RoleWeapon roleWeapon = null;
+                for (WeaponRoleModel.RoleWeapon candidate : WeaponRoleModel.weapons()) {
+                    if (candidate.itemType == itemType) roleWeapon = candidate;
+                }
+                if (roleWeapon == null) {
+                    missing.add("no WeaponRoleModel.RoleWeapon row — add it in WeaponRoleModel.buildWeapons");
+                } else {
+                    ge.tbegvadze.toon3d.entity.DamageClass damageClass = roleWeapon.damageClass;
+                    if (damageClass == null) missing.add("RoleWeapon has no damageClass — declare damageClass() on the Weapon subclass");
+                    if (roleWeapon.ammoType == null) missing.add("RoleWeapon has no ammoType — declare getAmmoType() on the Weapon subclass");
+                    if (roleWeapon.undroppedHit <= 0f) missing.add("base damage <= 0 — set a positive base damage constant");
+                    if (roleWeapon.model.clipActions <= 0) missing.add("clip <= 0 — set a positive base clip size");
+                    if (roleWeapon.model.baseHitByTile.length <= 0) missing.add("range <= 0 — set a positive base range");
+                    if (damageClass != null) {
+                        if (!WeaponRoleModel.rangedClasses().contains(damageClass)) {
+                            missing.add("class " + damageClass + " is not a ranged class in WeaponRoleModel");
+                        }
+                        String[] niches = BalanceConfig.ROLE_DECLARED_NICHE_BY_CLASS;
+                        String niche = damageClass.ordinal() < niches.length ? niches[damageClass.ordinal()] : null;
+                        boolean generalist = damageClass == ge.tbegvadze.toon3d.entity.DamageClass.BALLISTIC;
+                        boolean nicheExists = false;
+                        for (WeaponRoleModel.RoleScenario scenario : WeaponRoleModel.scenarios()) {
+                            if (scenario.id.equals(niche)) nicheExists = true;
+                        }
+                        if (!generalist && niche == null) {
+                            missing.add("no declared niche for " + damageClass + " (ROLE_DECLARED_NICHE_BY_CLASS) — it must be best in >= 1 reference scenario (R-ROLE-1) or add one");
+                        } else if (!generalist && !nicheExists) {
+                            missing.add("declared niche " + niche + " for " + damageClass + " is not a WeaponRoleModel scenario id");
+                        }
+                        if (!anySubjectStartsWith(roleResults, "R-ROLE-3 " + damageClass + " ")) {
+                            missing.add("weaponRoleResults() has no R-ROLE result reaching class " + damageClass);
+                        }
+                    }
+                    admittedDetail = "RANGED " + damageClass + " / " + roleWeapon.ammoType
+                            + "; niche, stats and drop pool declared";
+                }
+                if (!dropPool.contains(itemType)) {
+                    missing.add("not in SupplyPlanner.weaponDropPool() — add it to SupplyPlanner WEAPON_POOL");
+                }
+            } else if (classification == WeaponItemClassification.MELEE) {
+                ge.tbegvadze.toon3d.entity.Weapon instance = null;
+                for (ge.tbegvadze.toon3d.entity.Weapon candidate : meleeWeapons) {
+                    if (candidate.getItemType() == itemType) instance = candidate;
+                }
+                if (instance == null) {
+                    missing.add("no melee Weapon instance — add it to BalanceSchema.meleeWeaponInstances");
+                } else if (instance.damageClass() != ge.tbegvadze.toon3d.entity.DamageClass.BLADE
+                        && instance.damageClass() != ge.tbegvadze.toon3d.entity.DamageClass.BLUNT) {
+                    missing.add("melee weapon damageClass() is " + instance.damageClass() + " — must be BLADE or BLUNT");
+                } else {
+                    admittedDetail = "MELEE " + instance.damageClass();
+                }
+            } else {
+                admittedDetail = "legacy ammo pickup, no weapon class";
+            }
+            results.add(admission(AdmissionRule.WEAPON, itemType.name(), missing, admittedDetail));
+        }
+        return results;
+    }
+
+    /**
+     * C-ABILITY (K6): every {@link WeaponAbility} has family, trigger, rank and build tag, a finite non-negative
+     * priced PP at every weapon level 1..MAX_WEAPON_LEVEL, and a SIGNATURE ability can be rolled onto some weapon
+     * (the legendary slot is rolled by family eligibility, not bound to one weapon item — see the report).
+     */
+    public static List<RuleResult> admissionAbilityResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            List<String> missing = new ArrayList<>();
+            if (ability.family == null)   missing.add("no family — declare Family in the WeaponAbility row");
+            if (ability.trigger == null)  missing.add("no trigger — declare Trigger in the WeaponAbility row");
+            if (ability.rank == null)     missing.add("no rank — declare Rank in the WeaponAbility row");
+            if (ability.buildTag == null) missing.add("no buildTag — declare a BuildTag in the WeaponAbility row");
+            for (int level = 1; level <= BalanceConfig.MAX_WEAPON_LEVEL; level++) {
+                float points = abilityPowerPointsAt(ability, level);
+                if (Float.isNaN(points) || Float.isInfinite(points) || points < 0f) {
+                    missing.add("abilityPowerPointsAt level " + level + " = " + points
+                            + " — price it in GameMath.abilityPowerPoints / WeaponRoller.buildAbilityInstance");
+                    break;
+                }
+            }
+            if (ability.rank == WeaponAbility.Rank.SIGNATURE
+                    && !ability.eligibleFor(true) && !ability.eligibleFor(false)) {
+                missing.add("SIGNATURE ability is eligible for no weapon family — fix its Family");
+            }
+            results.add(admission(AdmissionRule.ABILITY, ability.name(), missing,
+                    ability.rank + " " + ability.family + " / " + ability.trigger + "; priced at levels 1.."
+                            + BalanceConfig.MAX_WEAPON_LEVEL));
+        }
+        return results;
+    }
+
+    /**
+     * C-PERK (K7): every {@link Perk} has a tag, rank >= 1, an effect, display + effect text and PK1 FELT results;
+     * every {@link Keystone} has a tag, a gain and a cost effect, both lines and R-KEYSTONE results; every
+     * {@link BuildTag} has a perk, exactly one keystone and an R-CARRY row. Content ids are prefixed
+     * PERK / KEYSTONE / TAG because the three enums may share names.
+     */
+    public static List<RuleResult> admissionPerkResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> feltResults = perkFeltResults();
+        List<RuleResult> keystoneRuleResults = keystoneResults();
+        List<RuleResult> carryResults = buildCarryResults();
+        for (Perk perk : Perk.values()) {
+            List<String> missing = new ArrayList<>();
+            if (perk.tag == null) missing.add("no tag — declare a BuildTag in the Perk row");
+            if (perk.maxRank < 1) missing.add("maxRank < 1");
+            if (perk.effectCount() < 1) missing.add("no PerkEffect — give the Perk row at least one effect");
+            if (perk.displayName == null || perk.displayName.trim().isEmpty()) missing.add("blank display name");
+            if (perk.effectLine == null || perk.effectLine.trim().isEmpty()) missing.add("blank effect line");
+            if (!anySubjectStartsWith(feltResults, "PK1 " + perk.name() + " r")) {
+                missing.add("no PK1 FELT result — perkResults() must iterate it");
+            }
+            results.add(admission(AdmissionRule.PERK, "PERK " + perk.name(), missing,
+                    perk.tag + " rank " + perk.maxRank + "; effects, text and PK1 declared"));
+        }
+        for (Keystone keystone : Keystone.values()) {
+            List<String> missing = new ArrayList<>();
+            if (keystone.tag == null) missing.add("no tag — declare a BuildTag in the Keystone row");
+            if (keystone.gainEffectCount() < 1) missing.add("no gain effect — a keystone needs >= 1 gain");
+            if (keystone.costEffectCount() < 1) missing.add("no cost effect — a keystone needs >= 1 cost");
+            if (keystone.gainLine == null || keystone.gainLine.trim().isEmpty()) missing.add("blank gain line");
+            if (keystone.costLine == null || keystone.costLine.trim().isEmpty()) missing.add("blank cost line");
+            if (!anySubjectStartsWith(keystoneRuleResults, "R-KEYSTONE " + keystone.name() + " ")) {
+                missing.add("no R-KEYSTONE result — keystoneResults() must iterate it");
+            }
+            results.add(admission(AdmissionRule.PERK, "KEYSTONE " + keystone.name(), missing,
+                    keystone.tag + "; gain, cost, text and R-KEYSTONE declared"));
+        }
+        for (BuildTag tag : BuildTag.values()) {
+            List<String> missing = new ArrayList<>();
+            int perkCount = 0;
+            for (Perk perk : Perk.values()) if (perk.tag == tag) perkCount++;
+            int keystoneCount = 0;
+            for (Keystone keystone : Keystone.values()) if (keystone.tag == tag) keystoneCount++;
+            if (perkCount < 1) missing.add("no perk — add a Perk row with this tag");
+            if (keystoneCount != 1) missing.add(keystoneCount + " keystones — a tag has exactly one (Keystone)");
+            boolean hasCarry = false;
+            for (RuleResult result : carryResults) {
+                if (result.subject.equals(carrySubject(tag))) hasCarry = true;
+            }
+            if (!hasCarry) missing.add("no R-CARRY row — buildCarryResults() must iterate the tag");
+            results.add(admission(AdmissionRule.PERK, "TAG " + tag.name(), missing,
+                    perkCount + " perks, one keystone and an R-CARRY row declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-AMMO (K9): every {@link AmmoType} has a scarcity row, positive generosity, reserve cap, box size and
+     * banking target, an AMMO {@link ItemType} pickup, and the shop converts ammo damage at a positive rate.
+     */
+    public static List<RuleResult> admissionAmmoResults() {
+        List<RuleResult> results = new ArrayList<>();
         for (AmmoType ammoType : AmmoType.values()) {
+            List<String> missing = new ArrayList<>();
             boolean hasRow = false;
             for (ScarcityRowSpec row : SCARCITY_ROWS) {
-                if (row.ammoType == ammoType) { hasRow = true; break; }
+                if (row.ammoType == ammoType) hasRow = true;
             }
-            results.add(new RuleResult(RuleKind.COVERAGE, "ammo type " + ammoType.name(),
-                    hasRow ? 1f : 0f, 1f, 1f, hasRow,
-                    hasRow ? "priced in the scarcity model"
-                           : "NOT priced — register a scarcity row in BalanceSchema"));
+            if (!hasRow) missing.add("NOT priced — register a scarcity row in BalanceSchema buildScarcityRowRegistry");
+            if (ammoType.getSupplyGenerosity() <= 0f) missing.add("supply generosity <= 0 — set AMMO_SUPPLY_GENEROSITY_" + ammoType.name() + " in BalanceConfig");
+            if (ammoType.getReserveCap() <= 0) missing.add("reserve cap <= 0 — set the reserve cap constant");
+            if (ammoType.getAmountPerBox() <= 0) missing.add("box size <= 0 — set the box amount constant");
+            if (ammoType.getBankingFloorsTarget() <= 0f) missing.add("banking target <= 0 — set AMMO_BANKING_FLOORS_" + ammoType.name() + " in BalanceConfig");
+            ItemType pickup = ammoPickupItemOrNull(ammoType);
+            if (pickup == null || pickup.getCategory() != ItemCategory.AMMO) {
+                missing.add("no AMMO ItemType pickup — add an AMMO_" + ammoType.name()
+                        + " ItemType and map it in AmmoType.getItemType()");
+            }
+            if (BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT <= 0f) {
+                missing.add("SHOP_AMMO_DAMAGE_PER_POWER_POINT <= 0 — the shop cannot price ammo");
+            }
+            results.add(admission(AdmissionRule.AMMO, ammoType.name(), missing,
+                    "scarcity row, caps, box, banking target and pickup item declared"));
         }
-        // Order 5: every enemy SPECIAL verb must have a registered equivalence (or an explicit exempt
-        // classification) so the cycle-averaged Threat-Point model can never silently under-price a caster.
-        for (SpecialAbility ability : SpecialAbility.values()) {
-            SpecialVerbPricing pricing = SPECIAL_VERB_PRICING.get(ability);
-            boolean priced = pricing != null;
-            results.add(new RuleResult(RuleKind.COVERAGE, "special verb " + ability.name(),
-                    priced ? 1f : 0f, 1f, 1f, priced,
-                    priced ? "priced " + pricing
-                           : "UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema"));
+        return results;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K8 ITEM SUPPLY STANCES — where each non-weapon ItemType comes from. DATA, not a switch. A stance with a
+    // SupplyCategory means the SupplyPlanner / a placer puts the item on the floor in that category's budget; a
+    // null category (NOT_FLOOR_SUPPLIED) carries the one-line reason it is not floor supplied.
+    // -------------------------------------------------------------------------------------
+
+    /** One item's declared supply stance: the planner category that places it, or null plus the reason it is not floor supplied. */
+    public static final class ItemSupplyStance {
+        public final ge.tbegvadze.toon3d.level.SupplyCategory category;
+        public final String reason;
+
+        ItemSupplyStance(ge.tbegvadze.toon3d.level.SupplyCategory category, String reason) {
+            this.category = category;
+            this.reason   = reason;
         }
-        // relics-run-changing-artifacts CP5: every relic resolves its rarity, its trigger and its valuation, and the
-        // rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY LEGENDARY, is unpriced content).
-        for (RelicDefinition relic : RelicCatalog.registry().all()) {
-            boolean resolved = relic.rarity() != null && relic.trigger() != null && relic.valuation() != null
-                    && relicBandOf(relic) != null;
-            results.add(new RuleResult(RuleKind.COVERAGE, "relic " + relic.id(),
-                    resolved ? 1f : 0f, 1f, 1f, resolved,
-                    resolved ? relic.rarity() + " / " + relic.trigger() + " / " + relic.valuation() + " banded"
-                             : "UNRESOLVED — a relic needs a rarity, a trigger, a valuation and a band for that rarity x valuation"));
+
+        /** True for NOT_FLOOR_SUPPLIED (no planner category). */
+        public boolean isNotFloorSupplied() { return category == null; }
+    }
+
+    private static final Map<ItemType, ItemSupplyStance> ITEM_SUPPLY_STANCES = buildItemSupplyStances();
+
+    private static Map<ItemType, ItemSupplyStance> buildItemSupplyStances() {
+        Map<ItemType, ItemSupplyStance> stances = new EnumMap<>(ItemType.class);
+        ge.tbegvadze.toon3d.level.SupplyCategory heal = ge.tbegvadze.toon3d.level.SupplyCategory.HEAL;
+        ge.tbegvadze.toon3d.level.SupplyCategory credits = ge.tbegvadze.toon3d.level.SupplyCategory.CREDITS;
+        ge.tbegvadze.toon3d.level.SupplyCategory ammo = ge.tbegvadze.toon3d.level.SupplyCategory.AMMO;
+        stances.put(ItemType.MEDKIT_SMALL, new ItemSupplyStance(heal, "stim pack '+' — SupplyPlanner HEAL pickup, also a shop offer"));
+        stances.put(ItemType.MEDKIT_LARGE, new ItemSupplyStance(heal, "field medkit 'H' — SupplyPlanner HEAL pickup, also a shop offer"));
+        stances.put(ItemType.STIMPACK, new ItemSupplyStance(null,
+                "no placer, shop or reward references it — an inventory/UI identity only; the small medkit is the stim"));
+        stances.put(ItemType.KEYCARD_RED, new ItemSupplyStance(null,
+                "hand-level floor decal 'r' (Level.keycardColorOfPickup); no generator or planner places keycards"));
+        stances.put(ItemType.KEYCARD_YELLOW, new ItemSupplyStance(null,
+                "hand-level floor decal 'y' (Level.keycardColorOfPickup); no generator or planner places keycards"));
+        stances.put(ItemType.KEYCARD_BLUE, new ItemSupplyStance(null,
+                "hand-level floor decal 'b' (Level.keycardColorOfPickup); no generator or planner places keycards"));
+        stances.put(ItemType.CREDITS, new ItemSupplyStance(null,
+                "the wallet stack's inventory identity; floor credits are the CREDIT_SMALL/MEDIUM/LARGE chips"));
+        stances.put(ItemType.CREDIT_SMALL, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
+        stances.put(ItemType.CREDIT_MEDIUM, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
+        stances.put(ItemType.CREDIT_LARGE, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
+        for (AmmoType ammoType : AmmoType.values()) {
+            ItemType pickup = ammoPickupItemOrNull(ammoType);
+            if (pickup == null) continue; // C-AMMO reports the unmapped type; it must never break class init
+            stances.put(pickup, new ItemSupplyStance(ammo,
+                    "ammo box '" + ammoType.getPickupTileChar() + "' — SupplyPlanner AMMO pickup"));
         }
+        return Collections.unmodifiableMap(stances);
+    }
+
+    /**
+     * The AMMO pickup an ammo type is held as, or null when {@link AmmoType#getItemType()} does not map it (it throws
+     * for an unmapped type). Found by the CP6 negative drill: the schema's static data must survive any new content,
+     * so an unmapped type reaches C-AMMO as a named miss instead of crashing BalanceSchema's class initialiser.
+     */
+    private static ItemType ammoPickupItemOrNull(AmmoType ammoType) {
+        try {
+            return ammoType.getItemType();
+        } catch (IllegalStateException unmapped) {
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K10 STATUS DECLARATIONS — one row per StatusType: its shape, the BalanceConfig / EffectConstants /
+    // GameBalance constants (by NAME, resolved by reflection) holding its magnitude and duration, how the player's
+    // armour treats it (Player.tryArmourShieldStatus) and which consumable cleanses it (World H11).
+    // -------------------------------------------------------------------------------------
+
+    /** The shape of a status's magnitude. */
+    public enum StatusShape {
+        /** Damage per turn as a FRACTION of the host's max HP (burn, poison). */
+        DOT_FRACTION,
+        /** Damage per turn as a flat amount (bleed, from the Rend ability). */
+        DOT_FLAT,
+        /** A damage multiplier expressed as a percent or factor (empowered, vulnerable, weak). */
+        MULTIPLIER,
+        /** A control effect with no damage magnitude of its own (stun, blind, slow, expose). */
+        CONTROL
+    }
+
+    /** How the player's armour treats an ENEMY -> player application (Player.tryArmourShieldStatus). */
+    public enum StatusArmourInteraction { BLOCKED_BY_ARMOUR, NOT_SHIELDED }
+
+    /** One declared status. magnitudeConstant is null only for a CONTROL status with no magnitude. */
+    public static final class StatusDeclaration {
+        public final StatusShape shape;
+        public final String magnitudeConstant;
+        public final String durationConstant;
+        public final StatusArmourInteraction armourInteraction;
+        public final ItemType cleanseItem;
+
+        StatusDeclaration(StatusShape shape, String magnitudeConstant, String durationConstant,
+                          StatusArmourInteraction armourInteraction, ItemType cleanseItem) {
+            this.shape             = shape;
+            this.magnitudeConstant = magnitudeConstant;
+            this.durationConstant  = durationConstant;
+            this.armourInteraction = armourInteraction;
+            this.cleanseItem       = cleanseItem;
+        }
+    }
+
+    private static final Map<ge.tbegvadze.toon3d.status.StatusType, StatusDeclaration> STATUS_DECLARATIONS =
+            buildStatusDeclarations();
+
+    private static Map<ge.tbegvadze.toon3d.status.StatusType, StatusDeclaration> buildStatusDeclarations() {
+        Map<ge.tbegvadze.toon3d.status.StatusType, StatusDeclaration> rows =
+                new EnumMap<>(ge.tbegvadze.toon3d.status.StatusType.class);
+        StatusArmourInteraction blocked = StatusArmourInteraction.BLOCKED_BY_ARMOUR;
+        StatusArmourInteraction open = StatusArmourInteraction.NOT_SHIELDED;
+        // Armour interaction: Player.tryArmourShieldStatus blocks WEAK / SLOWED / BLINDED / POISONED, nothing else.
+        // Cleanse: World (H11) — only the SMALL medkit, only POISONED and WEAK (Player.cleansePoisonAndWeak).
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.BURNING, new StatusDeclaration(StatusShape.DOT_FRACTION,
+                "BURN_TICK_FRACTION", "BURN_DURATION_MIN", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.POISONED, new StatusDeclaration(StatusShape.DOT_FRACTION,
+                "POISON_TICK_FRACTION", "POISON_MAX_STACKS", blocked, ItemType.MEDKIT_SMALL));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.BLEED, new StatusDeclaration(StatusShape.DOT_FLAT,
+                "REND_DAMAGE_PER_TURN_BASE", "REND_DURATION_TURNS", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.STUNNED, new StatusDeclaration(StatusShape.CONTROL,
+                null, "STUN_DURATION_DEFAULT", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.BLINDED, new StatusDeclaration(StatusShape.CONTROL,
+                null, "BLIND_DURATION", blocked, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.SLOWED, new StatusDeclaration(StatusShape.CONTROL,
+                "SLOW_FACTOR", "SLOW_DURATION", blocked, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.EMPOWERED, new StatusDeclaration(StatusShape.MULTIPLIER,
+                "EMPOWERED_DAMAGE_PERCENT", "EMPOWERED_DURATION", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.VULNERABLE, new StatusDeclaration(StatusShape.MULTIPLIER,
+                "VULNERABLE_DAMAGE_PERCENT", "VULNERABLE_DURATION", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.WEAK, new StatusDeclaration(StatusShape.MULTIPLIER,
+                "WEAK_DAMAGE_PERCENT", "WEAK_DURATION", blocked, ItemType.MEDKIT_SMALL));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.EXPOSED, new StatusDeclaration(StatusShape.CONTROL,
+                null, "EXPOSED_DURATION", open, null));
+        return Collections.unmodifiableMap(rows);
+    }
+
+    /** Resolves a constant by NAME across BalanceConfig, EffectConstants and GameBalance; null when none has it. */
+    private static Float resolveBalanceConstant(String constantName) {
+        Class<?>[] holders = {BalanceConfig.class, EffectConstants.class, GameBalance.class};
+        for (Class<?> holder : holders) {
+            try {
+                Object value = holder.getField(constantName).get(null);
+                if (value instanceof Number) return ((Number) value).floatValue();
+            } catch (ReflectiveOperationException ignored) {
+                // try the next holder
+            }
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K11 HAZARD DECLARATIONS — every damaging prop / tile. The registry IS the list of hazards (no enum exists).
+    // -------------------------------------------------------------------------------------
+
+    /** One declared hazard. Player-side constants must be fractions in (0, 1]; enemy-side ones only positive. */
+    public static final class HazardDeclaration {
+        public final String id;
+        public final char symbol;
+        public final String[] playerFractionConstants;
+        public final String[] enemyConstants;
+        public final ge.tbegvadze.toon3d.status.StatusType appliedStatus;
+        public final ge.tbegvadze.toon3d.entity.DamageClass damageClass;
+        public final String damageClassReason;
+        public final String placementOwnerClass;
+
+        HazardDeclaration(String id, char symbol, String[] playerFractionConstants, String[] enemyConstants,
+                          ge.tbegvadze.toon3d.status.StatusType appliedStatus,
+                          ge.tbegvadze.toon3d.entity.DamageClass damageClass, String damageClassReason,
+                          String placementOwnerClass) {
+            this.id                      = id;
+            this.symbol                  = symbol;
+            this.playerFractionConstants = playerFractionConstants;
+            this.enemyConstants          = enemyConstants;
+            this.appliedStatus           = appliedStatus;
+            this.damageClass             = damageClass;
+            this.damageClassReason       = damageClassReason;
+            this.placementOwnerClass     = placementOwnerClass;
+        }
+    }
+
+    private static final List<HazardDeclaration> HAZARD_DECLARATIONS = buildHazardDeclarations();
+
+    private static List<HazardDeclaration> buildHazardDeclarations() {
+        List<HazardDeclaration> rows = new ArrayList<>();
+        String[] barrelPlayer = {"HAZARD_BARREL_PLAYER_CENTRE_FRACTION", "HAZARD_BARREL_PLAYER_RING_FRACTION"};
+        String[] barrelEnemy = {"HAZARD_BARREL_CENTRE_FRACTION", "HAZARD_BARREL_RING_FRACTION"};
+        String hazardPackage = "ge.tbegvadze.toon3d.";
+        rows.add(new HazardDeclaration("explosive_barrel", 'E', barrelPlayer, barrelEnemy, null,
+                ge.tbegvadze.toon3d.entity.DamageClass.EXPLOSIVE, null, hazardPackage + "level.GroupBarrelPlacer"));
+        rows.add(new HazardDeclaration("radioactive_barrel", 'g', barrelPlayer, barrelEnemy, null,
+                ge.tbegvadze.toon3d.entity.DamageClass.EXPLOSIVE, null, hazardPackage + "level.RoomBlueprints"));
+        rows.add(new HazardDeclaration("fire", 'i', new String[]{"BURN_TICK_FRACTION"},
+                new String[]{"HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER"}, ge.tbegvadze.toon3d.status.StatusType.BURNING,
+                ge.tbegvadze.toon3d.entity.DamageClass.FIRE, null, hazardPackage + "hazard.HazardManager"));
+        rows.add(new HazardDeclaration("toxic", 'q', new String[]{"POISON_TICK_FRACTION"},
+                new String[]{"HAZARD_TOXIC_ENEMY_STACKS_PER_TURN"}, ge.tbegvadze.toon3d.status.StatusType.POISONED,
+                null, "poison stacks are not a weapon damage class — the matchup table has no poison column",
+                hazardPackage + "hazard.HazardManager"));
+        return Collections.unmodifiableList(rows);
+    }
+
+    /** The declared hazards — BalanceReport's HAZARDS table prints exactly this list. */
+    public static List<HazardDeclaration> hazardDeclarations() {
+        return HAZARD_DECLARATIONS;
+    }
+
+    /** Whether the authoritative tile classifier recognises the symbol as this hazard's tile. */
+    private static boolean hazardSymbolRecognised(char symbol) {
+        return ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager.isBarrelCell(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isHazardFire(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isHazardToxic(symbol);
+    }
+
+    /** True when the symbol is a pickup (medical, armour, ammo, keycard) or an enemy-spawn tile — supply, not architecture. */
+    private static boolean isSupplySymbol(char symbol) {
+        return ge.tbegvadze.toon3d.level.Level.isMedicalPickup(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isArmourPickup(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isAmmoPickup(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isKeycardPickup(symbol)
+                || EnemyType.fromSpawnChar(symbol) != null;
+    }
+
+    /** Seeds C-ROOM sweeps per SUPPLY_NEUTRAL blueprint (an audit-local count, not a balance number). */
+    private static final int ROOM_STAMP_AUDIT_SEEDS = 120;
+
+    /**
+     * C-ITEM (K8): every non-WEAPON {@link ItemType} declares a supply stance (a planner category, or not floor
+     * supplied with a reason); a CONSUMABLE is a priced heal (a HealPickupSpec) or a declared utility; a HEAL stance
+     * has a HealPickupSpec; a stackable item has a positive stack size; and the description is non-blank.
+     */
+    public static List<RuleResult> admissionItemResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (ItemType itemType : ItemType.values()) {
+            if (itemType.getCategory() == ItemCategory.WEAPON) continue;
+            List<String> missing = new ArrayList<>();
+            ItemSupplyStance stance = ITEM_SUPPLY_STANCES.get(itemType);
+            if (stance == null) {
+                missing.add("no supply stance — declare it in BalanceSchema ITEM_SUPPLY_STANCES (a SupplyCategory, or NOT_FLOOR_SUPPLIED + reason)");
+            } else if (stance.isNotFloorSupplied() && (stance.reason == null || stance.reason.trim().isEmpty())) {
+                missing.add("NOT_FLOOR_SUPPLIED stance has no reason — state where the item comes from");
+            }
+            String classification = CONSUMABLE_CLASSIFICATIONS.get(itemType);
+            boolean pricedHeal = false;
+            if (classification != null) {
+                for (HealPickupSpec pickup : HEAL_PICKUPS) {
+                    if (pickup.displayName.equals(classification)) pricedHeal = true;
+                }
+            }
+            if (itemType.getCategory() == ItemCategory.CONSUMABLE
+                    && !pricedHeal && (classification == null || !classification.startsWith("UTILITY"))) {
+                missing.add("consumable is neither a priced heal nor a declared utility — price it as a HealPickupSpec or declare it UTILITY in BalanceSchema CONSUMABLE_CLASSIFICATIONS");
+            }
+            if (stance != null && stance.category == ge.tbegvadze.toon3d.level.SupplyCategory.HEAL && !pricedHeal) {
+                missing.add("HEAL stance but no HealPickupSpec — register one in BalanceSchema buildHealPickupRegistry and map it in CONSUMABLE_CLASSIFICATIONS");
+            }
+            if (itemType.isStackable() && itemType.getMaxStackSize() <= 0) {
+                missing.add("stackable but maxStackSize <= 0 — set the ITEM_STACK_MAX constant");
+            }
+            if (itemType.getDescription() == null || itemType.getDescription().trim().isEmpty()) {
+                missing.add("blank description — write one in ItemType");
+            }
+            results.add(admission(AdmissionRule.ITEM, itemType.name(), missing,
+                    stance == null ? "" : (stance.isNotFloorSupplied() ? "NOT_FLOOR_SUPPLIED: " : stance.category + ": ")
+                            + stance.reason));
+        }
+        return results;
+    }
+
+    /**
+     * C-STATUS (K10): every {@link ge.tbegvadze.toon3d.status.StatusType} has a declaration whose named magnitude
+     * and duration constants resolve (BalanceConfig / EffectConstants / GameBalance) and are positive; a
+     * DOT_FRACTION magnitude is a fraction in (0, 1); a CONTROL status may omit its magnitude only; a named cleanse
+     * item is a CONSUMABLE.
+     */
+    public static List<RuleResult> admissionStatusResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (ge.tbegvadze.toon3d.status.StatusType status : ge.tbegvadze.toon3d.status.StatusType.values()) {
+            List<String> missing = new ArrayList<>();
+            StatusDeclaration declaration = STATUS_DECLARATIONS.get(status);
+            if (declaration == null) {
+                missing.add("no declaration — add a row to BalanceSchema STATUS_DECLARATIONS (shape, constants, armour interaction, cleanse)");
+            } else {
+                if (declaration.magnitudeConstant == null) {
+                    if (declaration.shape != StatusShape.CONTROL) {
+                        missing.add("a " + declaration.shape + " status needs a magnitude constant");
+                    }
+                } else {
+                    Float magnitude = resolveBalanceConstant(declaration.magnitudeConstant);
+                    if (magnitude == null) {
+                        missing.add("magnitude constant " + declaration.magnitudeConstant + " not found in BalanceConfig / EffectConstants / GameBalance");
+                    } else if (magnitude <= 0f) {
+                        missing.add("magnitude " + declaration.magnitudeConstant + " = " + magnitude + " must be > 0");
+                    } else if (declaration.shape == StatusShape.DOT_FRACTION && magnitude >= 1f) {
+                        missing.add("DOT_FRACTION magnitude " + declaration.magnitudeConstant + " = " + magnitude + " must be a fraction in (0, 1)");
+                    }
+                }
+                Float duration = declaration.durationConstant == null ? null : resolveBalanceConstant(declaration.durationConstant);
+                if (duration == null) {
+                    missing.add("duration constant " + declaration.durationConstant + " not found in BalanceConfig / EffectConstants / GameBalance");
+                } else if (duration <= 0f) {
+                    missing.add("duration " + declaration.durationConstant + " = " + duration + " must be > 0");
+                }
+                if (declaration.armourInteraction == null) {
+                    missing.add("no armour-shield interaction declared");
+                }
+                if (declaration.cleanseItem != null && declaration.cleanseItem.getCategory() != ItemCategory.CONSUMABLE) {
+                    missing.add("cleanse item " + declaration.cleanseItem + " is not a CONSUMABLE");
+                }
+            }
+            results.add(admission(AdmissionRule.STATUS, status.name(), missing,
+                    declaration == null ? "" : declaration.shape + ", " + declaration.armourInteraction
+                            + (declaration.cleanseItem == null ? ", no cleanse" : ", cleansed by " + declaration.cleanseItem)));
+        }
+        return results;
+    }
+
+    /**
+     * C-HAZARD (K11): every {@link HazardDeclaration} names constants that resolve — player-side ones fractions in
+     * (0, 1], enemy-side ones positive — a symbol the tile classifiers recognise, an applied status that is itself
+     * declared in C-STATUS, a damage class (or a stated reason there is none), and a placement owner class that
+     * exists.
+     */
+    public static List<RuleResult> admissionHazardResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (HazardDeclaration hazard : HAZARD_DECLARATIONS) {
+            List<String> missing = new ArrayList<>();
+            for (String name : hazard.playerFractionConstants) {
+                Float value = resolveBalanceConstant(name);
+                if (value == null) missing.add("player-side constant " + name + " not found in BalanceConfig / EffectConstants / GameBalance");
+                else if (value <= 0f || value > 1f) missing.add("player-side " + name + " = " + value + " must be a fraction in (0, 1]");
+            }
+            for (String name : hazard.enemyConstants) {
+                Float value = resolveBalanceConstant(name);
+                if (value == null) missing.add("enemy-side constant " + name + " not found in BalanceConfig / EffectConstants / GameBalance");
+                else if (value <= 0f) missing.add("enemy-side " + name + " = " + value + " must be > 0");
+            }
+            if (!hazardSymbolRecognised(hazard.symbol)) {
+                missing.add("symbol '" + hazard.symbol + "' is not recognised by ExplosiveBarrelManager.isBarrelCell / Level.isHazardFire / Level.isHazardToxic");
+            }
+            if (hazard.appliedStatus != null && !STATUS_DECLARATIONS.containsKey(hazard.appliedStatus)) {
+                missing.add("applied status " + hazard.appliedStatus + " is not declared in STATUS_DECLARATIONS (C-STATUS)");
+            }
+            if (hazard.damageClass == null
+                    && (hazard.damageClassReason == null || hazard.damageClassReason.trim().isEmpty())) {
+                missing.add("no DamageClass and no stated reason — declare one");
+            }
+            try {
+                Class.forName(hazard.placementOwnerClass);
+            } catch (ClassNotFoundException exception) {
+                missing.add("placement owner " + hazard.placementOwnerClass + " does not exist");
+            }
+            results.add(admission(AdmissionRule.HAZARD, hazard.id, missing,
+                    "'" + hazard.symbol + "' " + hazard.damageClass + " / " + hazard.appliedStatus
+                            + "; placed by " + hazard.placementOwnerClass));
+        }
+        return results;
+    }
+
+    /**
+     * C-ROOM (K12): every registered {@link ge.tbegvadze.toon3d.level.RoomBlueprint} declares a supply stance; a
+     * SUPPLY_NEUTRAL room's build(), run in isolation over a seed sweep, stamps no pickup and no enemy-spawn symbol.
+     */
+    public static List<RuleResult> admissionRoomResults() {
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.level.RoomBlueprints.bootstrap();
+        ge.tbegvadze.toon3d.level.RoomBlueprintRegistry registry = ge.tbegvadze.toon3d.level.RoomBlueprints.rooms();
+        for (ge.tbegvadze.toon3d.level.RoomBlueprint blueprint : registry.all()) {
+            List<String> missing = new ArrayList<>();
+            ge.tbegvadze.toon3d.level.RoomSupplyStance stance = blueprint.supplyStance();
+            if (stance == null) {
+                missing.add("no supplyStance() — declare SUPPLY_NEUTRAL or SLOT_PROVIDER in RoomBlueprints");
+            } else if (stance == ge.tbegvadze.toon3d.level.RoomSupplyStance.SUPPLY_NEUTRAL) {
+                Set<Character> offending = new java.util.TreeSet<>();
+                for (long seed = 1; seed <= ROOM_STAMP_AUDIT_SEEDS; seed++) {
+                    for (char symbol : ge.tbegvadze.toon3d.level.RoomBlueprints.symbolsStampedInIsolation(blueprint, seed)) {
+                        if (isSupplySymbol(symbol)) offending.add(symbol);
+                    }
+                }
+                if (!offending.isEmpty()) {
+                    missing.add("declared SUPPLY_NEUTRAL but build() stamps supply symbols " + offending
+                            + " — remove them or declare SLOT_PROVIDER");
+                }
+            }
+            results.add(admission(AdmissionRule.ROOM, blueprint.id(), missing, "stance " + stance));
+        }
+        return results;
+    }
+
+    /**
+     * C-GENERATOR (K13): every {@link ge.tbegvadze.toon3d.route.GeneratorId} is registered, builds headlessly, serves
+     * at least one node type (generatorServes), and for each served type the R-SUPPLY generator sweep produced
+     * results — i.e. its floors went through the shared supply pipeline, directly as a SupplySlotProvider or through
+     * PocketSupplyRegions (the bespoke single-chamber generators).
+     */
+    public static List<RuleResult> admissionGeneratorResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> supplyResults = supplySweepResults();
+        for (ge.tbegvadze.toon3d.route.GeneratorId generatorId : ge.tbegvadze.toon3d.route.GeneratorId.values()) {
+            List<String> missing = new ArrayList<>();
+            String provider = "unbuilt";
+            if (!RouteRegistries.generators().isRegistered(generatorId)) {
+                missing.add("not registered — RouteRegistries.registerGenerators");
+            } else {
+                Object instance = RouteRegistries.generators().create(generatorId, 1L,
+                        new ge.tbegvadze.toon3d.level.LevelGenConfig());
+                provider = instance instanceof ge.tbegvadze.toon3d.level.SupplySlotProvider
+                        ? "SupplySlotProvider" : "PocketSupplyRegions";
+            }
+            RouteNodeType[] served = GENERATOR_SERVES.get(generatorId);
+            if (served == null || served.length == 0) {
+                missing.add("serves no node type — add it to BalanceSchema GENERATOR_SERVES");
+            } else {
+                for (RouteNodeType type : served) {
+                    if (!anySubjectStartsWith(supplyResults, generatorId.stableId() + " " + type + " d")) {
+                        missing.add("no R-SUPPLY sweep result for " + type + " — the generator must populate through FloorPopulator");
+                    }
+                }
+            }
+            results.add(admission(AdmissionRule.GENERATOR, generatorId.name(), missing,
+                    "registered, supply via " + provider + ", serves " + java.util.Arrays.toString(served)));
+        }
+        return results;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K16 SHOP OFFER SPECS — one row per shop OfferCategory: how its value in power points is declared, and the
+    // NAME of the category-weight constant ShopRoller reads. The values are declared here independently of
+    // DefaultShopOfferSource, so a literal price slipped into the shop is caught by the roll tripwire in C-SHOP.
+    // -------------------------------------------------------------------------------------
+
+    /** The declared power-point value of a rolled entry, given the weapons the context owned. */
+    private interface ShopEntryValue {
+        float powerPointsOf(ge.tbegvadze.toon3d.shop.ShopEntry entry,
+                            List<ge.tbegvadze.toon3d.entity.WeaponProfile> ownedWeapons);
+    }
+
+    /** One shop category's declaration. */
+    private static final class ShopOfferSpec {
+        final String weightConstant;
+        final java.util.function.IntToDoubleFunction referenceValueAtDepth;
+        final ShopEntryValue entryValue;
+
+        ShopOfferSpec(String weightConstant, java.util.function.IntToDoubleFunction referenceValueAtDepth,
+                      ShopEntryValue entryValue) {
+            this.weightConstant        = weightConstant;
+            this.referenceValueAtDepth = referenceValueAtDepth;
+            this.entryValue            = entryValue;
+        }
+    }
+
+    private static final Map<ge.tbegvadze.toon3d.shop.OfferCategory, ShopOfferSpec> SHOP_OFFER_SPECS =
+            buildShopOfferSpecs();
+
+    private static Map<ge.tbegvadze.toon3d.shop.OfferCategory, ShopOfferSpec> buildShopOfferSpecs() {
+        Map<ge.tbegvadze.toon3d.shop.OfferCategory, ShopOfferSpec> specs =
+                new EnumMap<>(ge.tbegvadze.toon3d.shop.OfferCategory.class);
+        // Tier upgrade: the ability-PP budget of the destination tier (the next tier above the weapon's).
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.WEAPON_TIER_UPGRADE, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_TIER_UPGRADE",
+                depth -> WeaponRoller.tierAbilityPowerPointBudget(WeaponTier.UNCOMMON),
+                (entry, owned) -> {
+                    WeaponTier source = ((ge.tbegvadze.toon3d.entity.WeaponProfile) entry.payload).getTier();
+                    WeaponTier[] tiers = WeaponTier.values();
+                    return WeaponRoller.tierAbilityPowerPointBudget(
+                            tiers[Math.min(source.ordinal() + 1, tiers.length - 1)]);
+                }));
+        // Level-up: one rung of the power ladder.
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.WEAPON_LEVEL_UP, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_WEAPON_LEVELUP",
+                depth -> BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS,
+                (entry, owned) -> BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS));
+        // Player ability: one perk rank.
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.PLAYER_ABILITY, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_ABILITY",
+                depth -> BalanceConfig.SHOP_PERK_RANK_POWER_POINTS,
+                (entry, owned) -> BalanceConfig.SHOP_PERK_RANK_POWER_POINTS));
+        // Ammo: the damage a box supplies (box amount x the best per-shot damage among owned weapons that eat it).
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.AMMO, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_AMMO",
+                depth -> AmmoType.BULLETS.getAmountPerBox() * BalanceConfig.ASSAULT_RIFLE_DAMAGE
+                        / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT,
+                (entry, owned) -> {
+                    AmmoType ammoType = (AmmoType) entry.payload;
+                    int bestDamage = 1;
+                    for (ge.tbegvadze.toon3d.entity.WeaponProfile weapon : owned) {
+                        if (weapon != null && weapon.getAmmoType() == ammoType) {
+                            bestDamage = Math.max(bestDamage, weapon.getEffectiveDamage());
+                        }
+                    }
+                    return entry.quantity * (float) bestDamage / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+                }));
+        // Medkit: the HP it restores at the base player max HP.
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.MEDKIT, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_MEDKIT",
+                depth -> GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH,
+                        BalanceConfig.MEDKIT_STIM_HEAL_FRACTION) / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT,
+                (entry, owned) -> GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH,
+                        entry.payload == ItemType.MEDKIT_LARGE
+                                ? BalanceConfig.MEDKIT_FULL_HEAL_FRACTION : BalanceConfig.MEDKIT_STIM_HEAL_FRACTION)
+                        / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT));
+        return Collections.unmodifiableMap(specs);
+    }
+
+    /** Depths and seeds the C-SHOP roll tripwire rolls each category at (audit-local counts, not balance numbers). */
+    private static final int[] SHOP_TRIPWIRE_DEPTHS = {1, 5, 15, 25};
+    private static final int   SHOP_TRIPWIRE_SEEDS  = 12;
+
+    /** Ladder-currency problems of one EventEffect: every field is a fraction, a floors-of-income count or a flag. */
+    private static void effectCurrencyProblems(String owner, ge.tbegvadze.toon3d.route.EventEffect effect,
+                                               List<String> problems) {
+        if (effect == null) {
+            problems.add(owner + " has no EventEffect — give it ge.tbegvadze.toon3d.route.EventEffect.NONE at least");
+            return;
+        }
+        float[] fractions = {effect.healFraction(), effect.armourFraction(), effect.healthCostFraction(),
+                effect.gambleLootChance(), effect.gambleFailDamageFraction()};
+        String[] fractionNames = {"heal", "armour", "healthCost", "gambleLootChance", "gambleFailDamage"};
+        for (int index = 0; index < fractions.length; index++) {
+            if (Float.isNaN(fractions[index]) || fractions[index] < 0f || fractions[index] > 1f) {
+                problems.add(owner + " " + fractionNames[index] + " " + fractions[index]
+                        + " is not a fraction in [0, 1] — express it as a fraction of max, not a literal amount");
+            }
+        }
+        float[] floors = {effect.creditFloors(), effect.creditCostFloors(), effect.nextFloorBudgetBonus()};
+        String[] floorNames = {"credits", "creditCost", "nextFloorBudgetBonus"};
+        for (int index = 0; index < floors.length; index++) {
+            if (Float.isNaN(floors[index]) || Float.isInfinite(floors[index]) || floors[index] < 0f) {
+                problems.add(owner + " " + floorNames[index] + " " + floors[index]
+                        + " must be finite and >= 0 (floors of income)");
+            }
+        }
+        if (effect.weaponLevels() < 0) problems.add(owner + " weaponLevels < 0");
+    }
+
+    /** True when a ledger row's reward side is non-zero (a threat-raising modifier must declare one). */
+    private static boolean economicsDeclaresReward(NodeEconomics row,
+                                                   ge.tbegvadze.toon3d.route.NodeAffixDefinition affix) {
+        boolean declared = row.guaranteedAmmoBoxes() > 0f || row.guaranteedHealHitPoints() > 0f
+                || row.guaranteedHealEffectiveHitPointFraction() > 0f || row.creditDelta() > 0f
+                || row.guaranteedExperiencePoints() > 0f || row.upgradeOpportunity() > 0f;
+        ge.tbegvadze.toon3d.route.EventEffect ladder = row.ladderReward();
+        if (ladder != null) {
+            declared |= ladder.weaponLevels() > 0 || ladder.perkRank() || ladder.healFraction() > 0f
+                    || ladder.armourFraction() > 0f || ladder.creditFloors() > 0f || ladder.relicOffer() != null;
+        }
+        if (affix != null) {
+            declared |= affix.extraVaultAmmoBoxes() > 0 || affix.scatteredAmmoBoxes() > 0
+                    || affix.extraStims() > 0 || affix.extraArmourShards() > 0;
+        }
+        return declared;
+    }
+
+    /**
+     * C-NODE (K14): every {@link RouteNodeType} has a NodeTypeDefinition, a NodeSupplySpec, a registered level
+     * profile for its profile id, a NodeEconomics row, a route-card promise that is whole (threat word and reward
+     * promise both present or both absent — only the supply-bearing nodes carry one), and a finite positive weight
+     * multiplier in every region of the default plan (an unlisted type is the documented unbiased 1.0).
+     */
+    public static List<RuleResult> admissionNodeResults() {
+        RouteRegistries.bootstrap();
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.route.RegionPlan plan = RegionPlan.defaultPlan();
+        for (RouteNodeType type : RouteNodeType.values()) {
+            List<String> missing = new ArrayList<>();
+            String promise = "no route-card promise";
+            if (!RouteRegistries.nodeTypes().isRegistered(type)) {
+                missing.add("no NodeTypeDefinition — register it in RouteRegistries.registerNodeTypes");
+            } else {
+                ge.tbegvadze.toon3d.route.NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(type);
+                if (!RouteRegistries.levelProfiles().isRegistered(definition.levelProfileId())) {
+                    missing.add("level profile '" + definition.levelProfileId() + "' is not registered — RouteRegistries.registerLevelProfiles");
+                }
+                boolean hasThreat = definition.threatWord() != null && !definition.threatWord().trim().isEmpty();
+                boolean hasReward = definition.rewardPromise() != null && !definition.rewardPromise().trim().isEmpty();
+                if (hasThreat != hasReward) {
+                    missing.add("route-card promise is half-declared (threatWord / rewardPromise) — set both via supplyPromise()");
+                }
+                if (hasThreat && hasReward) promise = "promise '" + definition.threatWord() + " / " + definition.rewardPromise() + "'";
+            }
+            if (!RouteRegistries.nodeSupplySpecs().isRegistered(type)) {
+                missing.add("no NodeSupplySpec — add a row in route/NodeSupplySpecs.registerAll");
+            }
+            if (routeLedger().forNodeType(type) == null) {
+                missing.add("no NodeEconomics row — register one in route/RouteEconomics");
+            }
+            for (ge.tbegvadze.toon3d.route.RegionSpec region : plan.regions()) {
+                float multiplier = region.nodeTypeMultiplier(type);
+                if (Float.isNaN(multiplier) || Float.isInfinite(multiplier) || multiplier <= 0f) {
+                    missing.add("region " + region.regionIndex() + " weight multiplier " + multiplier + " must be finite and > 0");
+                }
+            }
+            results.add(admission(AdmissionRule.NODE, type.name(), missing,
+                    "definition, supply spec, level profile, economics row, " + promise
+                            + ", region weights over " + plan.regionCount() + " regions"));
+        }
+        return results;
+    }
+
+    /**
+     * C-EVENT (K15): every FacilityEvent has choices whose EventEffects are in ladder currencies and is reached by
+     * R-EVENT-VALUE; every MysteryOutcome has a NodeEconomics row, a registered delegate profile and a ladder-currency
+     * reward; every registered affix / floor twist has a NodeEconomics row, and one that raises threat (budget scale
+     * above 1) declares a reward premium.
+     */
+    public static List<RuleResult> admissionEventResults() {
+        RouteRegistries.bootstrap();
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> eventValue = eventValueResults();
+        for (ge.tbegvadze.toon3d.route.FacilityEvent event : RouteRegistries.events().all()) {
+            List<String> missing = new ArrayList<>();
+            if (event.choices().isEmpty()) missing.add("no choices — add at least one choice() to the event");
+            for (ge.tbegvadze.toon3d.route.EventChoice choice : event.choices()) {
+                effectCurrencyProblems("choice '" + choice.label() + "'", choice.effect(), missing);
+            }
+            if (!anySubjectStartsWith(eventValue, event.id() + " ")) {
+                missing.add("no R-EVENT-VALUE result — eventValueResults() must iterate it");
+            }
+            results.add(admission(AdmissionRule.EVENT, "EVENT " + event.id(), missing,
+                    event.choices().size() + " choices in ladder currencies, priced by R-EVENT-VALUE"));
+        }
+        for (MysteryOutcome outcome : MysteryOutcome.values()) {
+            List<String> missing = new ArrayList<>();
+            if (routeLedger().get(outcome.name()) == null) {
+                missing.add("no NodeEconomics row — register a mysteryOutcome row in route/RouteEconomics");
+            }
+            if (outcome.delegateProfileId() != null
+                    && !RouteRegistries.levelProfiles().isRegistered(outcome.delegateProfileId())) {
+                missing.add("delegate profile '" + outcome.delegateProfileId() + "' is not a registered level profile");
+            }
+            if (outcome.reward() != null) effectCurrencyProblems("reward", outcome.reward(), missing);
+            results.add(admission(AdmissionRule.EVENT, "MYSTERY " + outcome.name(), missing,
+                    "economics row, delegate " + outcome.delegateProfileId() + ", ladder-currency reward"));
+        }
+        for (String affixId : RouteRegistries.affixes().ids()) {
+            List<String> missing = new ArrayList<>();
+            NodeEconomics row = routeLedger().get(affixId);
+            ge.tbegvadze.toon3d.route.NodeAffixDefinition definition = RouteRegistries.affixes().definition(affixId);
+            if (row == null) {
+                missing.add("no NodeEconomics row — register an affix / twist row in route/RouteEconomics");
+            } else if (row.budgetScale() > 1f && !economicsDeclaresReward(row, definition)) {
+                missing.add("raises threat (budget scale " + row.budgetScale() + ") but declares no reward premium — add a reward to its NodeEconomics row");
+            }
+            results.add(admission(AdmissionRule.EVENT, "AFFIX " + affixId, missing,
+                    "economics row" + (row != null && row.budgetScale() > 1f ? " with a reward premium" : " (not threat-raising)")));
+        }
+        return results;
+    }
+
+    /**
+     * C-SHOP (K16): every shop {@link ge.tbegvadze.toon3d.shop.OfferCategory} has a declared value spec, a category
+     * weight constant that resolves and is >= 0, a positive shopPrice at every depth 1..RUN_FINAL_DEPTH, and — the
+     * literal-price tripwire — every offer rolled headlessly by DefaultShopOfferSource carries exactly the
+     * shopPrice of its independently declared value (rolled at several depths and seeds for every category).
+     */
+    public static List<RuleResult> admissionShopResults() {
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.shop.DefaultShopOfferSource source = new ge.tbegvadze.toon3d.shop.DefaultShopOfferSource();
+        for (ge.tbegvadze.toon3d.shop.OfferCategory category : ge.tbegvadze.toon3d.shop.OfferCategory.values()) {
+            List<String> missing = new ArrayList<>();
+            ShopOfferSpec spec = SHOP_OFFER_SPECS.get(category);
+            int rolled = 0;
+            if (spec == null) {
+                missing.add("no SHOP_OFFER_SPECS row — declare its value and weight constant in BalanceSchema");
+            } else {
+                Float weight = resolveBalanceConstant(spec.weightConstant);
+                if (weight == null) missing.add("weight constant " + spec.weightConstant + " not found in GameBalance / BalanceConfig");
+                else if (weight < 0f) missing.add("weight " + spec.weightConstant + " = " + weight + " must be >= 0");
+                for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+                    float value = (float) spec.referenceValueAtDepth.applyAsDouble(depth);
+                    int price = GameMath.shopPrice(value, GameBalance.SHOP_CREDITS_PER_POWER_POINT, depth,
+                            GameBalance.SHOP_DEPTH_PRICE_SCALE);
+                    if (price <= 0) {
+                        missing.add("shopPrice of value " + value + " PP at depth " + depth + " is " + price + " — must be > 0");
+                        break;
+                    }
+                }
+                for (int depth : SHOP_TRIPWIRE_DEPTHS) {
+                    for (long seed = 1; seed <= SHOP_TRIPWIRE_SEEDS; seed++) {
+                        List<ge.tbegvadze.toon3d.entity.WeaponProfile> owned = new ArrayList<>();
+                        owned.add(new ge.tbegvadze.toon3d.entity.AssaultRifle());
+                        ge.tbegvadze.toon3d.progression.PlayerBuild build =
+                                category == ge.tbegvadze.toon3d.shop.OfferCategory.PLAYER_ABILITY
+                                        ? new ge.tbegvadze.toon3d.progression.PlayerBuild() : null;
+                        ge.tbegvadze.toon3d.shop.ShopContext context = new ge.tbegvadze.toon3d.shop.ShopContext(
+                                depth, owned, owned.get(0), build);
+                        java.util.Random random = new java.util.Random(seed * 31L + depth);
+                        ge.tbegvadze.toon3d.shop.ShopEntry entry = rollShopCategory(source, category, context, random);
+                        if (entry == null) continue;
+                        rolled++;
+                        int expected = GameMath.shopPrice(spec.entryValue.powerPointsOf(entry, owned),
+                                GameBalance.SHOP_CREDITS_PER_POWER_POINT, depth, GameBalance.SHOP_DEPTH_PRICE_SCALE);
+                        if (entry.price != expected) {
+                            missing.add("rolled offer '" + entry.displayName + "' at depth " + depth + " costs " + entry.price
+                                    + " but its declared value prices to " + expected
+                                    + " — a literal or drifted price; derive it through GameMath.shopPrice");
+                            break;
+                        }
+                    }
+                }
+                if (rolled == 0) {
+                    missing.add("the headless roll tripwire could not roll a single " + category + " offer");
+                }
+            }
+            results.add(admission(AdmissionRule.SHOP, category.name(), missing,
+                    "value spec, weight constant and price tripwire over " + rolled + " rolled offers"));
+        }
+        return results;
+    }
+
+    private static ge.tbegvadze.toon3d.shop.ShopEntry rollShopCategory(
+            ge.tbegvadze.toon3d.shop.DefaultShopOfferSource source, ge.tbegvadze.toon3d.shop.OfferCategory category,
+            ge.tbegvadze.toon3d.shop.ShopContext context, java.util.Random random) {
+        switch (category) {
+            case WEAPON_TIER_UPGRADE: return source.rollTierUpgradeOffer(context, random);
+            case WEAPON_LEVEL_UP:     return source.rollLevelUpOffer(context, random);
+            case PLAYER_ABILITY:      return source.rollAbilityOffer(context, random);
+            case AMMO:                return source.rollAmmoOffer(context, random);
+            case MEDKIT:              return source.rollMedkitOffer(context, random);
+            // A new OfferCategory rolls nothing here until it gets a case, so the tripwire names it
+            // ("could not roll a single X offer") instead of silently pricing a medkit in its place.
+            default:                  return null;
+        }
+    }
+
+    /**
+     * C-REGION (K17): every RegionSpec of the default plan has a REGION_TP_BUDGET_MULTIPLIER entry, a resolving
+     * ELITE multiplier (an unlisted one is the documented unbiased 1.0), a BossTable row on its last floor, a
+     * registered ambience with a crest painter, and a StoryRegion.
+     */
+    public static List<RuleResult> admissionRegionResults() {
+        RouteRegistries.bootstrap();
+        List<RuleResult> results = new ArrayList<>();
+        for (ge.tbegvadze.toon3d.route.RegionSpec region : RegionPlan.defaultPlan().regions()) {
+            List<String> missing = new ArrayList<>();
+            if (region.regionIndex() >= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER.length) {
+                missing.add("no REGION_TP_BUDGET_MULTIPLIER entry for index " + region.regionIndex() + " — extend the array in BalanceConfig");
+            }
+            float elite = region.nodeTypeMultiplier(RouteNodeType.ELITE);
+            if (Float.isNaN(elite) || elite <= 0f) missing.add("ELITE multiplier " + elite + " must be > 0");
+            boolean bossOnLastFloor = false;
+            for (BossTable.Row row : BossTable.standard().rows()) {
+                if (row.depth == region.lastDepth()) bossOnLastFloor = true;
+            }
+            if (!bossOnLastFloor) {
+                missing.add("no BossTable row on its last floor " + region.lastDepth() + " — register one in route/BossTable");
+            }
+            if (!RouteRegistries.regionAmbience().has(region.themeId())) {
+                missing.add("ambience '" + region.themeId() + "' is not registered — RouteRegistries.registerRegionAmbience");
+            } else {
+                String crest = RouteRegistries.regionAmbience().get(region.themeId()).crestPainterId();
+                if (crest == null || crest.trim().isEmpty()) missing.add("ambience has no crest painter id");
+            }
+            if (region.regionIndex() >= ge.tbegvadze.toon3d.narrative.StoryRegion.values().length) {
+                missing.add("no StoryRegion for index " + region.regionIndex() + " — add one to narrative/StoryRegion");
+            }
+            results.add(admission(AdmissionRule.REGION, "REGION " + region.regionIndex() + " " + region.displayName(), missing,
+                    "TP dial, elite weight, boss row, ambience + crest and story region declared"));
+        }
+        return results;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K18 C-CONSTANT — every numeric BalanceConfig number is the subject of a schema rule or declared unbanded.
+    // A NEW public static final numeric (or numeric array) field of BalanceConfig must be listed in exactly ONE of:
+    //   CONSTANT_SUBJECTS — field name -> the RuleKind that bands it (a declaration: C-CONSTANT checks it exists and
+//                       names a kind; that the rule really bands the field is the reviewer's check, SECTION 5), or
+    //   UNBANDED          — field name -> a one-line reason no rule bands it.
+    // GRANDFATHERED (the end of this file) holds every field that existed before order 8; it is SHRINK-ONLY.
+    // -------------------------------------------------------------------------------------
+
+    /** Fields a rule bands: field name -> the {@link RuleKind} that reads it. Empty until a new field is added. */
+    private static final Map<String, RuleKind> CONSTANT_SUBJECTS = new java.util.LinkedHashMap<>();
+
+    /** Fields deliberately banded by no rule: field name -> a one-line reason. Empty until a new field needs it. */
+    private static final Map<String, String> UNBANDED = new java.util.LinkedHashMap<>();
+
+    /** True for a numeric primitive or an (nested) array of them. */
+    private static boolean isNumericConstantType(Class<?> type) {
+        Class<?> element = type;
+        while (element.isArray()) element = element.getComponentType();
+        return element == int.class || element == long.class || element == float.class || element == double.class
+                || element == short.class || element == byte.class;
+    }
+
+    /** The name of every public static final numeric (or numeric array) field of BalanceConfig, by reflection. */
+    private static Set<String> balanceConfigNumericFieldNames() {
+        Set<String> names = new java.util.TreeSet<>();
+        for (Field field : BalanceConfig.class.getDeclaredFields()) {
+            int modifiers = field.getModifiers();
+            if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers) && Modifier.isFinal(modifiers)
+                    && isNumericConstantType(field.getType())) {
+                names.add(field.getName());
+            }
+        }
+        return names;
+    }
+
+    /**
+     * C-CONSTANT (K18): every numeric BalanceConfig field is in exactly one of CONSTANT_SUBJECTS, UNBANDED or the
+     * shrink-only GRANDFATHERED list; every name in any of them still exists. Emits one result per offending field
+     * or stale name, plus one GRANDFATHERED summary so the rule never returns an empty list.
+     */
+    public static List<RuleResult> admissionConstantResults() {
+        List<RuleResult> results = new ArrayList<>();
+        Set<String> fields = balanceConfigNumericFieldNames();
+        Set<String> grandfathered = new HashSet<>(java.util.Arrays.asList(GRANDFATHERED));
+        for (String name : fields) {
+            int listings = (CONSTANT_SUBJECTS.containsKey(name) ? 1 : 0) + (UNBANDED.containsKey(name) ? 1 : 0)
+                    + (grandfathered.contains(name) ? 1 : 0);
+            List<String> missing = new ArrayList<>();
+            if (listings == 0) {
+                missing.add("a new BalanceConfig number must be the subject of a schema rule (CONSTANT_SUBJECTS) "
+                        + "or listed in UNBANDED with a one-line reason");
+            } else if (listings > 1) {
+                missing.add("listed in more than one of CONSTANT_SUBJECTS / UNBANDED / GRANDFATHERED — keep exactly one");
+            } else {
+                continue; // admitted: one row per OFFENDING field only (there are > 1000 numbers)
+            }
+            results.add(admission(AdmissionRule.CONSTANT, name, missing, ""));
+        }
+        List<String> listed = new ArrayList<>(CONSTANT_SUBJECTS.keySet());
+        listed.addAll(UNBANDED.keySet());
+        listed.addAll(grandfathered);
+        for (String name : new java.util.TreeSet<>(listed)) {
+            if (fields.contains(name)) continue;
+            List<String> missing = new ArrayList<>();
+            missing.add("stale name — no such numeric BalanceConfig field; remove it from "
+                    + (grandfathered.contains(name) ? "GRANDFATHERED" : "CONSTANT_SUBJECTS / UNBANDED"));
+            results.add(admission(AdmissionRule.CONSTANT, name, missing, ""));
+        }
+        for (Map.Entry<String, RuleKind> subject : CONSTANT_SUBJECTS.entrySet()) {
+            if (subject.getValue() == null) {
+                results.add(admission(AdmissionRule.CONSTANT, subject.getKey(),
+                        java.util.Collections.singletonList("CONSTANT_SUBJECTS names no RuleKind for this field"), ""));
+            }
+        }
+        results.add(admission(AdmissionRule.CONSTANT, "GRANDFATHERED", new ArrayList<String>(),
+                grandfathered.size() + " pre-order-8 fields, shrink-only"));
         return results;
     }
 
@@ -3939,4 +5284,350 @@ public final class BalanceSchema {
         }
         return selected;
     }
+
+    /**
+     * C-CONSTANT's GRANDFATHERED list: every numeric BalanceConfig field that existed before balance-overhaul order 8.
+     * SHRINK-ONLY: never add a name here; a field that becomes banded moves to CONSTANT_SUBJECTS; a deleted
+     * field's name must be removed (C-CONSTANT fails a stale name). Sorted. A new field goes in CONSTANT_SUBJECTS
+     * or UNBANDED, never here.
+     */
+    private static final String[] GRANDFATHERED = {
+        "ABILITY_MIN_FELT_PP", "ABILITY_PP_LEGENDARY_SIGNATURE", "ABILITY_PP_PER_COUNT",
+        "ABILITY_PP_PER_EXPECTED_REFUND_ROUND", "ABILITY_PP_PER_EXTRA_BURST_ROUND", "ABILITY_ROLL_SWEEP_DEPTHS",
+        "ABILITY_ROLL_SWEEP_SEEDS", "ABILITY_UTIL_ALWAYS_ON", "ABILITY_UTIL_CONDITIONAL",
+        "ABILITY_UTIL_CROWD_CONTROL", "ABILITY_UTIL_DAMAGE_OVER_TIME", "ABILITY_UTIL_FLAT_EVENT",
+        "ABILITY_UTIL_PENETRATION", "ABILITY_UTIL_SUSTAIN_FRACTION", "ACID_DRONE_ATTACK_DAMAGE",
+        "ACID_DRONE_MAX_HEALTH", "ACID_DRONE_MOVE_EVERY_N_TURNS", "ACID_DRONE_POISON_CHANCE",
+        "ACID_DRONE_RANGE_TILES", "AFFIX_FORTIFIED_EXTRA_ARMOUR", "AFFIX_FORTIFIED_EXTRA_COLUMNS",
+        "AFFIX_IRRADIATED_BARREL_WEIGHT_BONUS", "AFFIX_IRRADIATED_EXTRA_BARRELS", "AFFIX_OVERCLOCKED_BUDGET_MULT",
+        "AFFIX_OVERCLOCKED_VAULT_AMMO_BOXES", "AFFIX_ROLL_CHANCE_ELITE", "AFFIX_ROLL_CHANCE_MYSTERY",
+        "AFFIX_SWARM_BUDGET_MULT", "AFFIX_SWARM_VAULT_AMMO_BOXES", "AFFIX_VOLATILE_EXTRA_BARRELS",
+        "AGI_DODGE_PER_POINT", "AGI_SPEED_PER_POINT", "ALERT_RADIUS_TILES", "AMMO_BANKING_FLOORS_BULLETS",
+        "AMMO_BANKING_FLOORS_CELLS", "AMMO_BANKING_FLOORS_ROCKETS", "AMMO_BANKING_FLOORS_SHELLS",
+        "AMMO_BANKING_FLOORS_SLUGS", "AMMO_BANKING_FLOORS_TOLERANCE", "AMMO_BOX_BULLETS", "AMMO_BOX_CELLS",
+        "AMMO_BOX_ROCKETS", "AMMO_BOX_SHELLS", "AMMO_RESERVE_CAP_BULLETS", "AMMO_RESERVE_CAP_CELLS",
+        "AMMO_RESERVE_CAP_ROCKETS", "AMMO_RESERVE_CAP_SHELLS", "AMMO_SUPPLY_GENEROSITY_BULLETS",
+        "AMMO_SUPPLY_GENEROSITY_CELLS", "AMMO_SUPPLY_GENEROSITY_ROCKETS", "AMMO_SUPPLY_GENEROSITY_SHELLS",
+        "AMMO_SUPPLY_GENEROSITY_SLUGS", "ARC_CANNON_CHAIN_DAMAGE_MULTIPLIER", "ARC_CANNON_CHAIN_JUMPS",
+        "ARC_CANNON_CLIP_SIZE", "ARC_CANNON_DAMAGE", "ARC_CANNON_DAMAGE_DROP_COEFF", "ARC_CANNON_RANGE_TILES",
+        "ARC_CANNON_RELOAD_TIME_TICKS", "ARMOR_PIERCE_ALREADY_PIERCING_BONUS", "ARMOR_PIERCE_BASE",
+        "ARMOR_PIERCE_CAP", "ARMOR_PIERCE_EXTRA_TARGETS", "ARMOR_PIERCE_PER_LEVEL", "ARMOUR_ABSORB_FRACTION",
+        "ARMOUR_HEAVY_SHRED_MULTIPLIER", "ARMOUR_SHARD_FRACTION", "ARMOUR_STATUS_COST_FRACTION",
+        "ARMOUR_VEST_FRACTION", "ASSAULT_RIFLE_CLIP_SIZE", "ASSAULT_RIFLE_DAMAGE", "ASSAULT_RIFLE_DAMAGE_DROP_COEFF",
+        "ASSAULT_RIFLE_RANGE_TILES", "ASSAULT_RIFLE_RELOAD_TIME_TICKS", "AURIC_MAX_SHARDS",
+        "AURIC_SENTINEL_ATTACK_CADENCE_TURNS", "AURIC_SENTINEL_ATTACK_DAMAGE", "AURIC_SENTINEL_MAX_HEALTH",
+        "AURIC_SENTINEL_MIN_SPAWN_DEPTH", "AURIC_SENTINEL_MOVE_EVERY_N_TURNS", "AURIC_SENTINEL_RANGE_TILES",
+        "AURIC_SHARD_ARMOR_POOL", "AURIC_SHARD_REGEN_TURNS", "BACKSTAB_DAMAGE_PERCENT", "BERSERKER_DAMAGE_PER_STACK",
+        "BERSERKER_HP_TICK_PER_STACK", "BERSERKER_MAX_STACKS", "BLIGHT_CORRUPTOR_ATTACK_DAMAGE",
+        "BLIGHT_CORRUPTOR_MAX_HEALTH", "BLIGHT_CORRUPTOR_MOVE_EVERY_N_TURNS", "BLIND_DURATION", "BLOCK_DECAY_TURNS",
+        "BLOCK_MAX", "BODY_TARGET_MAX_DEEP", "BODY_TARGET_MAX_DEPTH_ONE", "BODY_TARGET_MIN_DEEP",
+        "BODY_TARGET_MIN_DEPTH_ONE", "BODY_TARGET_REFERENCE_DEEP_DEPTH", "BOSS_ACT_PHASE_COUNT_MAX",
+        "BOSS_ACT_PHASE_COUNT_MIN", "BOSS_ARENA_AMMO_BUDGET_FRACTION", "BOSS_ENRAGE_DPT_RAMP_PER_TURN",
+        "BOSS_EXPECTED_LEVELS_PER_DEPTH", "BOSS_EXPECTED_OFFENCE_BUDGET_FRACTION", "BOSS_FIGHT_TURNS_TOLERANCE",
+        "BOSS_GATE_MIN_DAMAGE_MARGIN", "BOSS_GATE_MODELED_HEAL_SUPPLY_EHP_FRACTION", "BOSS_HARD_SINGLE_HIT_FRACTION",
+        "BOSS_MULTI_PHASE_FACTOR_PER_PHASE", "BOSS_PHASE_COUNT", "BOSS_REWARD_RISK_PREMIUM",
+        "BOSS_SURVIVAL_CHECK_RATIO_MAX", "BOSS_SURVIVAL_CHECK_RATIO_MIN", "BOSS_SURVIVAL_CHECK_RATIO_TARGET",
+        "BOSS_TABLE_DEPTHS", "BOSS_TABLE_SURVIVAL_RATIO", "BOSS_TABLE_TARGET_FIGHT_TURNS", "BOSS_TACTIC_CAMP_TURNS",
+        "BOSS_TACTIC_CHARGE_GAP_PHASE1", "BOSS_TACTIC_CHARGE_GAP_PHASE2", "BOSS_TACTIC_CLOSE_RANGE_TILES",
+        "BOSS_TACTIC_CORNERED_EXITS", "BOSS_TACTIC_HAZARD_GAP_PHASE1", "BOSS_TACTIC_HAZARD_GAP_PHASE2",
+        "BOSS_TACTIC_LAST_STAND_HP_FRACTION", "BOSS_TACTIC_RANDOM_TIEBREAK", "BOSS_TACTIC_SCORE_ADDS_ROOM",
+        "BOSS_TACTIC_SCORE_BASE", "BOSS_TACTIC_SCORE_CAMPING", "BOSS_TACTIC_SCORE_CLOSE_RANGE",
+        "BOSS_TACTIC_SCORE_CORNERED", "BOSS_TACTIC_SCORE_FAR_RANGE", "BOSS_TACTIC_SUMMON_GAP_PHASE1",
+        "BOSS_TACTIC_SUMMON_GAP_PHASE2", "BOSS_TARGET_FIGHT_TURNS_ACT_MAX", "BOSS_TARGET_FIGHT_TURNS_ACT_MIN",
+        "BOSS_TARGET_FIGHT_TURNS_RUN_FINAL_MAX", "BOSS_TARGET_FIGHT_TURNS_RUN_FINAL_MIN",
+        "BOSS_TELEGRAPHED_HEAVY_MAX_FRACTION", "BOSS_UPPER_FIGHT_TURNS_MULTIPLIER", "BRANCH_SPREAD_CHANCE",
+        "BRANCH_WIDTH_MAXIMUM", "BRANCH_WIDTH_MINIMUM", "BUILD_BERSERK_LOW_HEALTH_FRACTION",
+        "BUILD_BLADE_LOW_HEALTH_TURN_SHARE", "BUILD_BLADE_MELEE_KILL_SHARE", "BUILD_CARRY_DEPTH",
+        "BUILD_CARRY_MIN_TURNS", "BUILD_CARRY_TOLERANCE", "BUILD_EXPECTED_FOCUS_SHARE",
+        "BUILD_FLOOR_HEAVY_DAMAGE_SHARE", "BUILD_GUARD_LANES", "BUILD_HEAVY_PERIOD_TURNS", "BUILD_KIT_GUN_SLOTS",
+        "BUILD_LONG_RANGE_MIN_TILES", "BUILD_PERK_REFERENCE_DEPTHS", "BUILD_POINT_BLANK_MAX_TILES",
+        "BUILD_PYRO_FIRE_TURNS_PER_FLOOR", "BUILD_SUPPLY_SEED_COUNT", "BUILD_SUPPLY_SEED_SALT",
+        "BUILD_WIDE_GUARD_EXTRA_LANES", "BURN_DURATION_MAX", "BURN_DURATION_MIN", "BURN_TICK_FRACTION",
+        "BURST_FIRE_ROUND_COUNT", "CARRIER_DROP_SEARCH_RADIUS", "CHAINGUN_CLIP_SIZE", "CHAINGUN_DAMAGE",
+        "CHAINGUN_DAMAGE_DROP_COEFF", "CHAINGUN_RANGE_TILES", "CHAINGUN_RELOAD_TIME_TICKS",
+        "CHAIN_ALERT_RADIUS_TILES", "CINDERFORGE_COLOSSUS_ATTACK_DAMAGE", "CINDERFORGE_COLOSSUS_MAX_HEALTH",
+        "CINDERFORGE_COLOSSUS_MIN_SPAWN_DEPTH", "CINDERFORGE_COLOSSUS_MOVE_EVERY_N_TURNS",
+        "CINDERFORGE_CRUST_ARMOR_PER_STACK", "CINDERFORGE_CRUST_AVERAGED_FLAT_REDUCTION",
+        "CINDERFORGE_CRUST_MAX_STACKS", "CINDERFORGE_CRUST_SHATTER_MULTIPLIER", "CINDERFORGE_TRAIL_FIRE_TURNS",
+        "CINDERFORGE_TRAIL_MAX_LIVE_TILES", "CLEAVE_FRACTION_BASE", "CLEAVE_FRACTION_CAP",
+        "CLEAVE_FRACTION_PER_LEVEL", "CORRUPTOR_ACID_DPT_FRACTION", "CORRUPTOR_ACID_POOL_DURATION",
+        "CORRUPTOR_MINION_CAP", "CORRUPTOR_SUMMON_COOLDOWN", "CRAWLER_ATTACK_DAMAGE", "CRAWLER_MAX_HEALTH",
+        "CRAWLER_MOVE_EVERY_N_TURNS", "CREDITS_NEEDED_CONSUMABLES_PER_FLOOR", "CREDITS_V2_RATIO_MAX",
+        "CREDITS_V2_RATIO_MIN", "CREDIT_BANK_TARGET_FLOORS", "CREDIT_DEPTH_SCALE", "CREDIT_REWARD_ACID_DRONE",
+        "CREDIT_REWARD_AURIC_SENTINEL", "CREDIT_REWARD_BLIGHT_CORRUPTOR", "CREDIT_REWARD_CINDERFORGE_COLOSSUS",
+        "CREDIT_REWARD_CRAWLER", "CREDIT_REWARD_EYE_TYRANT", "CREDIT_REWARD_GHOUL", "CREDIT_REWARD_GORE_BITER",
+        "CREDIT_REWARD_IRON_STALKER", "CREDIT_REWARD_MIRE_WRAITH", "CREDIT_REWARD_PLAGUE_HULK",
+        "CREDIT_REWARD_REVENANT", "CREDIT_REWARD_RIMESHELL_LANCER", "CREDIT_REWARD_SHELL_BRUTE",
+        "CREDIT_REWARD_VERDANT_SPIRESOWER", "CREDIT_REWARD_VOID_SHROUD", "CREDIT_REWARD_VORTEX_EYE",
+        "CREDIT_SPAWN_WEIGHT_LARGE", "CREDIT_SPAWN_WEIGHT_MEDIUM", "CREDIT_SPAWN_WEIGHT_SMALL", "CRIT_CHANCE_BASE",
+        "CRIT_CHANCE_CAP", "CRIT_CHANCE_PER_LEVEL", "CRIT_DAMAGE_MULTIPLIER", "DAMAGE_MIN_MULTIPLIER",
+        "DBL_SHOTGUN_CLIP_SIZE", "DBL_SHOTGUN_DAMAGE", "DBL_SHOTGUN_RANGE_TILES", "DBL_SHOTGUN_RELOAD_TIME_TICKS",
+        "DEBUFF_TP_EQUIVALENCE", "DEFEND_BLOCK_GAIN_BRUISER", "DEFEND_BLOCK_GAIN_MINI_ELITE",
+        "DEFEND_BLOCK_GAIN_SOLDIER", "DEFEND_BRUISER_CADENCE_TURNS", "DEFEND_HP_THRESHOLD_FRACTION",
+        "DEFEND_MAX_CONSECUTIVE_TURNS", "DENSITY_CALM_MAX", "DENSITY_CALM_MIN", "DENSITY_COMBAT_MAX",
+        "DENSITY_COMBAT_MIN", "DENSITY_ELITE_MAX", "DENSITY_ELITE_MIN", "DODGE_CAP", "DOUBLE_BARREL_FALLOFF_BY_TILE",
+        "ELITE_ARMOUR", "ELITE_ARMOUR_VEST_DEPTH", "ELITE_MEDKITS", "ELITE_THREAT_RATIO_MAX",
+        "ELITE_THREAT_RATIO_MIN", "EMERGENCY_SUPPLY_FRACTION", "EMPOWERED_DAMAGE_PERCENT", "EMPOWERED_DURATION",
+        "ENCOUNTER_BUDGET_FILL_TARGET_FRACTION", "ENEMY_DAMAGE_GROWTH", "ENEMY_HEALTH_GROWTH",
+        "EVENT_BEST_CHOICE_MIN_SUPPLY_RATIO", "EVENT_BUDGET_SCALE", "EVENT_CREDIT_FLOORS_LARGE",
+        "EVENT_CREDIT_FLOORS_SMALL", "EVENT_GAMBLE_FAIL_HEALTH_FRACTION", "EVENT_GAMBLE_HEAL_FRACTION",
+        "EVENT_NEXT_FLOOR_BUDGET_BONUS", "EVENT_SHRINE_HEAL_FRACTION", "EVENT_STASH_CREDIT_FLOORS",
+        "EVENT_STASH_LOOT_CHANCE", "EVENT_TECH_ARMOUR_FRACTION", "EXECUTIONER_BONUS_BASE", "EXECUTIONER_BONUS_CAP",
+        "EXECUTIONER_BONUS_PER_LEVEL", "EXECUTIONER_THRESHOLD", "EXPECTED_LEVELS_PER_DEPTH",
+        "EXPECTED_PERK_POWER_PP_PER_PICK", "EXPLOSION_CHAIN_MAX", "EXPOSED_DURATION", "EYE_TYRANT_ATTACK_DAMAGE",
+        "EYE_TYRANT_MAX_HEALTH", "EYE_TYRANT_RANGE_TILES", "FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES",
+        "FIRST_CONTACT_MAX_WALK_TILES", "FIRST_CONTACT_MIN_WALK_TILES", "FLAME_BURN_FRACTION",
+        "FLAME_BURN_MAX_STACKS", "FLAME_BURN_TURNS", "FLAME_CLIP_SIZE", "FLAME_DAMAGE_DROP_COEFF", "FLAME_FALLOFF",
+        "FLAME_IMPACT_DAMAGE", "FLAME_MAX_FUEL", "FLAME_PICKUP_FUEL", "FLAME_RANGE_TILES", "FLAME_RELOAD_TICKS",
+        "FLOOR_BASE_THREAT_POINT_BUDGET", "FOOTPRINT_ORIGINAL_WALKABLE_CAVERN", "FOOTPRINT_ORIGINAL_WALKABLE_LINEAR",
+        "FOOTPRINT_ORIGINAL_WALKABLE_ROOMS", "FOOTPRINT_REDUCTION_BY_DEPTH", "FOOTPRINT_TOLERANCE",
+        "GATE_BUDGET_SCALE", "GEAR_CURVE_REGION_BAND_SIZE", "GHOUL_ATTACK_DAMAGE", "GHOUL_MAX_HEALTH",
+        "GHOUL_MOVE_EVERY_N_TURNS", "GORE_BITER_ATTACK_DAMAGE", "GORE_BITER_MAX_HEALTH",
+        "GORE_BITER_MOVE_EVERY_N_TURNS", "GRENADE_CLIP_SIZE", "GRENADE_DAMAGE_DROP_COEFF", "GRENADE_FALLOFF_DAMAGE",
+        "GRENADE_MAX_AMMO", "GRENADE_PICKUP_AMMO", "GRENADE_RANGE_TILES", "GRENADE_RELOAD_TIME_TICKS",
+        "GRENADE_SELF_DAMAGE", "GRENADE_SPLASH_DAMAGE", "GROUP_CHAFF_SLOT_MIN", "GROUP_HUNTER_MAX_FRACTION",
+        "GROUP_INSTANTIATION_ATTEMPTS", "GROUP_MAX_SINGLE_TYPE_FRACTION", "GROUP_MINIMUM_FILLABLE_REMAINDER",
+        "GROUP_SELECTION_NOISE", "GROUP_TP_FRACTION_CAP", "GROUP_WARBAND_MIN_DEPTH", "GUARD_BACK_HALF_ANGLE_DEGREES",
+        "GUARD_BACK_MULTIPLIER", "GUARD_FRONT_HALF_ANGLE_DEGREES", "GUARD_FRONT_HEAVY", "GUARD_FRONT_ORDINARY",
+        "GUARD_SIDE_MULTIPLIER", "HAZARD_BARREL_CENTRE_FRACTION", "HAZARD_BARREL_PLAYER_CENTRE_FRACTION",
+        "HAZARD_BARREL_PLAYER_RING_FRACTION", "HAZARD_BARREL_REFERENCE_SOLDIER_BASE_HEALTH",
+        "HAZARD_BARREL_RING_FRACTION", "HAZARD_EXPLOSION_IGNITE_CHANCE", "HAZARD_FIRE_BURN_TURNS",
+        "HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER", "HAZARD_FIRE_LIFETIME_TURNS", "HAZARD_FIRE_SPREAD_CHANCE",
+        "HAZARD_GROUP_BARRELS_MAX", "HAZARD_GROUP_BARRELS_MIN", "HAZARD_GROUP_BARREL_RADIUS_TILES",
+        "HAZARD_GROUP_MIN_SIZE", "HAZARD_GROUP_ROOM_SHARE", "HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS",
+        "HAZARD_TOXIC_ENEMY_STACKS_PER_TURN", "HAZARD_TOXIC_LIFETIME_TURNS", "HAZARD_TOXIC_SPREAD_CHANCE",
+        "HEAL_LARGE_MAX_FRACTION_MAX", "HEAL_LARGE_MAX_FRACTION_MIN", "HEAL_NET_DRAIN_FRACTION_MAX",
+        "HEAL_NET_DRAIN_FRACTION_MIN", "HEAL_SMALL_MAX_FRACTION_MAX", "HEAL_SMALL_MAX_FRACTION_MIN",
+        "HEAVY_AREA_STRIKE_DAMAGE_FRACTION", "HEAVY_DAMAGE_FRACTION", "HEAVY_DAMAGE_FRACTION_MAX",
+        "HEAVY_DAMAGE_FRACTION_MIN", "HEAVY_DAMAGE_SCALE", "HEAVY_EXPECTED_AVOIDANCE", "HEAVY_GUARDED_MAX_FRACTION",
+        "HEAVY_SELF_DESTRUCT_DAMAGE_FRACTION", "HELLFIRE_NOVA_DAMAGE_FRACTION", "HELLFIRE_NOVA_RADIUS",
+        "HELL_BARON_CLEAVE_P1_DPT_FRACTION", "HELL_BARON_CLEAVE_P2_DPT_FRACTION", "HELL_BARON_FIREWALL_COOLDOWN_P1",
+        "HELL_BARON_FIREWALL_COOLDOWN_P2", "HELL_BARON_FIREWALL_DURATION", "HELL_BARON_FIRE_DPT_FRACTION",
+        "INCENDIARY_BURN_DURATION", "INCENDIARY_BURN_PER_TURN_BASE", "INCENDIARY_BURN_PER_TURN_CAP",
+        "INCENDIARY_BURN_PER_TURN_PER_LEVEL", "INCENDIARY_INCINERATOR_EXTRA_TURNS", "IRON_STALKER_MAX_HEALTH",
+        "IRON_STALKER_MELEE_DAMAGE", "IRON_STALKER_MOVE_EVERY_N_TURNS", "IRON_STALKER_RANGED_DAMAGE",
+        "IRON_STALKER_RANGE_TILES", "JUDGMENT_COOLDOWN_FIRES", "JUDGMENT_DAMAGE_MULTIPLIER", "JUDGMENT_LANCE_RANGE",
+        "KEYSTONES_OFFERED", "KEYSTONE_BERSERKER_HEAL_MULTIPLIER", "KEYSTONE_BERSERKER_KILL_HEAL",
+        "KEYSTONE_BERSERKER_LOW_HEALTH_MELEE", "KEYSTONE_CHARACTER_LEVELS", "KEYSTONE_COST_MIN_LOSS",
+        "KEYSTONE_DEADEYE_CLIP_MULTIPLIER", "KEYSTONE_DEMOLITIONIST_BARREL_MULTIPLIER",
+        "KEYSTONE_DEMOLITIONIST_HEALTH_MULTIPLIER", "KEYSTONE_IRONHIDE_HEALTH_MULTIPLIER",
+        "KEYSTONE_IRONHIDE_HEAL_MULTIPLIER", "KEYSTONE_IRON_BULWARK_DAMAGE_MULTIPLIER",
+        "KEYSTONE_IRON_BULWARK_REFLECT_FRACTION", "KEYSTONE_NICHE_MIN_GAIN", "KEYSTONE_PYROMANIAC_ARMOR_MULTIPLIER",
+        "KEYSTONE_PYROMANIAC_BURNING_DAMAGE", "KEYSTONE_QUARTERMASTER_EXTRA_SLOTS",
+        "KEYSTONE_QUARTERMASTER_HEALTH_MULTIPLIER", "KEYSTONE_QUARTERMASTER_PRICE_MULTIPLIER",
+        "KEYSTONE_SCATTERGUN_NON_SPREAD_MULTIPLIER", "KEYSTONE_STORM_CONDUIT_ARC_FRACTION",
+        "KEYSTONE_STORM_CONDUIT_BALLISTIC_MULTIPLIER", "KINETIC_SLAM_CHANCE_BASE", "KINETIC_SLAM_CHANCE_CAP",
+        "KINETIC_SLAM_CHANCE_PER_LEVEL", "KINETIC_SLAM_WALL_BONUS_DAMAGE", "LADDER_AFFORD_FRACTION",
+        "LADDER_AHEAD_TWO_MIN_TTK_RATIO", "LADDER_EXPECTED_DEFENCE_BUDGET_FRACTION",
+        "LADDER_EXPECTED_OFFENCE_BUDGET_FRACTION", "LADDER_GROWTH", "LADDER_LAG_FOUR_MIN_TTK_RATIO",
+        "LADDER_LAG_TWO_MIN_TTK_RATIO", "LADDER_LEGENDARY_MIN_GAIN", "LADDER_LEVEL_FELT_MIN_GAIN",
+        "LADDER_LEVEL_UP_POWER_POINTS", "LADDER_ON_CURVE_TOLERANCE", "LADDER_RARITY_STEP_MIN_GAIN",
+        "LADDER_REFERENCE_RANGE_TILES", "LADDER_START_WEAPON_FROM_DEPTH", "LADDER_START_WEAPON_MIN_TTK_RATIO",
+        "LADDER_TP_BAND_HIGH_FACTOR", "LADDER_TP_BAND_LOW_FACTOR", "LADDER_TTD_HITS_BRUISER_MAX",
+        "LADDER_TTD_HITS_BRUISER_MIN", "LADDER_TTD_HITS_CHAFF_MIN", "LADDER_TTD_HITS_MINI_ELITE_MAX",
+        "LADDER_TTD_HITS_MINI_ELITE_MIN", "LADDER_TTD_HITS_SOLDIER_MAX", "LADDER_TTD_HITS_SOLDIER_MIN",
+        "LADDER_TTD_OPEN_BAND_CENTRE_FACTOR", "LADDER_TTK_HITS_BRUISER_MAX", "LADDER_TTK_HITS_BRUISER_MIN",
+        "LADDER_TTK_HITS_CHAFF_MAX", "LADDER_TTK_HITS_CHAFF_MIN", "LADDER_TTK_HITS_MINI_ELITE_MAX",
+        "LADDER_TTK_HITS_MINI_ELITE_MIN", "LADDER_TTK_HITS_SOLDIER_MAX", "LADDER_TTK_HITS_SOLDIER_MIN",
+        "LADDER_VITALITY_LAG_LEVELS", "LADDER_VITALITY_LAG_MAX_TTD_RATIO", "LANCE_SLOW_DURATION_TURNS",
+        "LEVEL_GAP_BONUS_CAP_LEVELS", "LEVEL_GAP_BONUS_PER_LEVEL", "LEVEL_GAP_FLOOR", "LEVEL_GAP_PENALTY_BASE",
+        "LEVEL_GAP_STEEPNESS", "LEVEL_GEN_DEPTH_ENEMY_BONUS_MAX", "LEVEL_GEN_DEPTH_ENEMY_UPGRADE_CHANCE",
+        "LEVEL_GEN_MAX_ENEMIES_PER_ROOM", "LEVEL_GEN_PROP_CHANCE", "LIFESTEAL_BASE", "LIFESTEAL_CAP",
+        "LIFESTEAL_PER_LEVEL", "LOS_MAX_RANGE_TILES", "MATCHUP_EFFECTIVE_THRESHOLD", "MATCHUP_RESISTED_THRESHOLD",
+        "MATCHUP_ROW_BURNABLE", "MATCHUP_ROW_CHITIN", "MATCHUP_ROW_FLESH", "MATCHUP_ROW_INFERNAL",
+        "MATCHUP_ROW_PLATED", "MATCHUP_ROW_SHIELDED", "MATCHUP_STRENGTH", "MATCHUP_TP_REFERENCE_WEIGHT",
+        "MAX_WEAPON_LEVEL", "MEDKIT_FULL_HEAL_FRACTION", "MEDKIT_STIM_HEAL_FRACTION", "MELEE_CHAINSAW_DAMAGE",
+        "MELEE_FIST_DAMAGE", "MELEE_HAMMER_DAMAGE", "MELEE_KNIFE_DAMAGE", "MIRE_WRAITH_ATTACK_DAMAGE",
+        "MIRE_WRAITH_MAX_HEALTH", "MIRE_WRAITH_MOVE_EVERY_N_TURNS", "MIRE_WRAITH_POISON_CHANCE",
+        "MIRE_WRAITH_RANGE_TILES", "MODEL_FLOOR_AVOIDANCE_FACTOR", "MODEL_FLOOR_EXPECTED_ARMOUR_PICKUPS",
+        "MODEL_FLOOR_EXPECTED_MEDKITS", "MODEL_FLOOR_EYE_TYRANT_COUNT", "MODEL_FLOOR_GORE_BITER_COUNT",
+        "MODEL_FLOOR_PLAGUE_HULK_COUNT", "MODEL_FLOOR_SHELL_BRUTE_COUNT", "MODEL_FLOOR_TURNS_ENGAGED_PER_ENEMY",
+        "MRK_DAMAGE_PER_POINT", "MYSTERY_REWARD_AMBUSH_CREDIT_FLOORS", "MYSTERY_REWARD_LORE_CREDIT_FLOORS",
+        "MYSTERY_REWARD_MALFUNCTION_CREDIT_COST_FLOORS", "MYSTERY_REWARD_TRAP_CREDIT_FLOORS",
+        "MYSTERY_REWARD_VAULT_CREDIT_FLOORS", "MYSTERY_TRAP_AMMO_BOXES", "MYSTERY_TRAP_BARRELS",
+        "MYSTERY_TRAP_MEDKITS", "MYSTERY_VAULT_AMMO_BOXES", "MYSTERY_WARREN_AMMO_BOXES", "MYSTERY_WARREN_MEDKITS",
+        "MYSTERY_WEIGHT_AMBUSH", "MYSTERY_WEIGHT_LORE_SIGNAL", "MYSTERY_WEIGHT_MALFUNCTION",
+        "MYSTERY_WEIGHT_RELIC_CACHE", "MYSTERY_WEIGHT_SECRET_WARREN", "MYSTERY_WEIGHT_TRAP_GAUNTLET",
+        "MYSTERY_WEIGHT_VAULT", "NODE_SUPPLY_CACHE_AMMO_RATIO", "NODE_SUPPLY_CACHE_ARMOUR_SHARE",
+        "NODE_SUPPLY_CACHE_BODIES", "NODE_SUPPLY_CACHE_CREDITS", "NODE_SUPPLY_CACHE_DRAIN_TARGET",
+        "NODE_SUPPLY_CACHE_THREAT", "NODE_SUPPLY_CACHE_WEAPONS", "NODE_SUPPLY_CACHE_WEAPON_CHANCE",
+        "NODE_SUPPLY_COMBAT_AMMO_RATIO", "NODE_SUPPLY_COMBAT_ARMOUR_SHARE", "NODE_SUPPLY_COMBAT_BODIES",
+        "NODE_SUPPLY_COMBAT_CREDITS", "NODE_SUPPLY_COMBAT_DRAIN_TARGET", "NODE_SUPPLY_COMBAT_THREAT",
+        "NODE_SUPPLY_COMBAT_WEAPONS", "NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MAX", "NODE_SUPPLY_COMBAT_WEAPON_OFFSET_MIN",
+        "NODE_SUPPLY_ELITE_AMMO_RATIO", "NODE_SUPPLY_ELITE_ARMOUR_SHARE", "NODE_SUPPLY_ELITE_BODIES",
+        "NODE_SUPPLY_ELITE_CREDITS", "NODE_SUPPLY_ELITE_DRAIN_TARGET", "NODE_SUPPLY_ELITE_THREAT",
+        "NODE_SUPPLY_ELITE_VAULT_AMMO_RATIO", "NODE_SUPPLY_ELITE_WEAPONS", "NODE_SUPPLY_ELITE_WEAPON_OFFSET_MAX",
+        "NODE_SUPPLY_ELITE_WEAPON_OFFSET_MIN", "NODE_SUPPLY_ELITE_WEAPON_TIER_BONUS", "NODE_SUPPLY_EVENT_THREAT",
+        "NODE_SUPPLY_GATE_THREAT", "NODE_SUPPLY_MYSTERY_BODIES", "NODE_SUPPLY_MYSTERY_THREAT",
+        "NODE_SUPPLY_SHOP_AMMO_RATIO", "NODE_SUPPLY_SHOP_ARMOUR_SHARE", "NODE_SUPPLY_SHOP_BODIES",
+        "NODE_SUPPLY_SHOP_CREDITS", "NODE_SUPPLY_SHOP_DRAIN_TARGET", "NODE_SUPPLY_SHOP_THREAT",
+        "OPENING_SALVO_BONUS_BASE", "OPENING_SALVO_BONUS_CAP", "OPENING_SALVO_BONUS_PER_LEVEL", "OVERSEER_ADDS_CAP",
+        "OVERSEER_CHARGE_DPT_FRACTION", "OVERSEER_CHARGE_RANGE_TILES", "OVERSEER_CHARGE_RECOVERY_TURNS",
+        "OVERSEER_FIRE_LANE_LENGTH", "OVERSEER_HEAL_HP_THRESHOLD", "OVERSEER_HEAL_TOTAL_HP_FRACTION",
+        "OVERSEER_HEAL_TURNS", "OVERSEER_LASER_DPT_FRACTION", "OVERSEER_MELEE_DPT_FRACTION", "OVERSEER_RAM_COOLDOWN",
+        "OVERSEER_SUMMON_COUNT", "OVERSEER_TOXIC_RADIUS", "PERKS_OFFERED", "PERK_ACCELERANT_BURN_STACKS_BY_RANK",
+        "PERK_ACCELERANT_FIRE_DAMAGE_BY_RANK", "PERK_ARC_JUMP_CHAIN_JUMPS_BY_RANK",
+        "PERK_ARC_JUMP_CHAIN_MULTIPLIER_BY_RANK", "PERK_BLAST_SHIELD_REDUCTION_BY_RANK",
+        "PERK_BLOODLETTING_HEAL_BY_RANK", "PERK_BREACHER_REFUND_CHANCE_BY_RANK",
+        "PERK_BUCKSHOT_SPREAD_DAMAGE_BY_RANK", "PERK_BUTCHER_MELEE_DAMAGE_BY_RANK",
+        "PERK_CAPACITOR_ENERGY_DAMAGE_BY_RANK", "PERK_DRAW_BIAS_PER_PICK", "PERK_FELT_MIN_GAIN",
+        "PERK_FIELD_MEDIC_HEAL_BY_RANK", "PERK_FIRST_BLOOD_DAMAGE_BY_RANK", "PERK_FOCUSED_MAX_GAIN",
+        "PERK_HAGGLER_DISCOUNT_BY_RANK", "PERK_HARDY_MAX_HEALTH_BY_RANK", "PERK_LANE_DISCIPLINE_DAMAGE_BY_RANK",
+        "PERK_LANE_DISCIPLINE_RANGE_BY_RANK", "PERK_MAX_RANK", "PERK_OVERCHARGE_PIERCE_BONUS_BY_RANK",
+        "PERK_PACK_RAT_AMMO_BY_RANK", "PERK_PLATE_CARRIER_ARMOR_BY_RANK", "PERK_POINT_MAN_KNOCKBACK_BONUS_TILES",
+        "PERK_POINT_MAN_POINT_BLANK_DAMAGE_BY_RANK", "PERK_POINT_MAN_STAGGER_REACH_TILES",
+        "PERK_RIPOSTE_DRILL_DAMAGE_BY_RANK", "PERK_RIPOSTE_DRILL_TURNS_BY_RANK", "PERK_SALVAGER_EXTRA_DROP_BY_RANK",
+        "PERK_SAPPER_BARREL_DAMAGE_BY_RANK", "PERK_SHAPED_CHARGES_DAMAGE_BY_RANK",
+        "PERK_SHIELD_WALL_HEAVY_GUARD_MULTIPLIER", "PERK_STEADY_AIM_FALLOFF_REDUCTION_BY_RANK",
+        "PERK_VITALITY_MAX_GAIN_PER_RANK", "PERK_WILDFIRE_BURN_TURNS_BY_RANK", "PLAGUE_HULK_ATTACK_DAMAGE",
+        "PLAGUE_HULK_MAX_HEALTH", "PLAGUE_HULK_MINIMAL_TOXIC_RADIUS_TILES", "PLAGUE_HULK_MOVE_EVERY_N_TURNS",
+        "PLAGUE_HULK_SELF_DESTRUCT_BLAST_RADIUS_TILES", "PLAGUE_HULK_SELF_DESTRUCT_BRACE_TURNS",
+        "PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT", "PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES",
+        "PLASMA_RIFLE_CLIP_SIZE", "PLASMA_RIFLE_DAMAGE", "PLASMA_RIFLE_DAMAGE_DROP_COEFF",
+        "PLASMA_RIFLE_RANGE_TILES", "PLASMA_RIFLE_RELOAD_TIME_TICKS", "PLAYER_MAX_ARMOR", "PLAYER_MAX_HEALTH",
+        "PLAYER_MOVE_DURATION", "PLAYER_ROTATE_DURATION", "PLAYER_START_AGILITY", "PLAYER_START_MARKSMANSHIP",
+        "PLAYER_START_STRENGTH", "PLAYER_START_TOUGHNESS", "PLAYER_VITALITY_GROWTH", "POINT_BLANK_BONUS_BASE",
+        "POINT_BLANK_BONUS_CAP", "POINT_BLANK_BONUS_PER_LEVEL", "POINT_BLANK_MAX_DISTANCE", "POISON_MAX_STACKS",
+        "POISON_STACKS_PER_ACID_HIT", "POISON_STACKS_PER_TOXIC_TURN", "POISON_TICK_FRACTION",
+        "POSITIONAL_MULT_FAST_MELEE", "POSITIONAL_MULT_MELEE", "POSITIONAL_MULT_RANGED",
+        "POSITIONAL_MULT_STATUS_BONUS", "RAILGUN_CLIP_SIZE", "RAILGUN_DAMAGE_BY_CHARGE",
+        "RAILGUN_DAMAGE_MIN_MULTIPLIER", "RAILGUN_DROP_COEFF", "RAILGUN_MAX_SLUGS", "RAILGUN_PICKUP_SLUGS",
+        "RAILGUN_RANGE_TILES", "RAILGUN_RELOAD_TIME_TICKS", "RANGED_KITE_MIN_TILES", "RARITY_DAMAGE_MULTIPLIER",
+        "REFERENCE_PLAYER_DPT", "REFERENCE_PLAYER_EHP", "REGION_TP_BUDGET_MULTIPLIER",
+        "REGION_TP_BUDGET_MULTIPLIER_MAX", "REGION_TP_BUDGET_MULTIPLIER_MIN", "REGION_TP_LETHAL_MARGIN",
+        "RELIC_ASBESTOS_LINING_BURN_TURNS", "RELIC_ASBESTOS_LINING_FIRE_DAMAGE",
+        "RELIC_ATROPHY_FIELD_ENEMY_HEALTH_MULTIPLIER", "RELIC_BANDOLIER_FLOOR_ARRIVAL_AMMO",
+        "RELIC_BLAST_RING_SHARE", "RELIC_BLOOD_PACT_ALL_WEAPON_DAMAGE", "RELIC_BLOOD_PACT_DAMAGE_TAKEN_MULTIPLIER",
+        "RELIC_BONE_SAW_MELEE_DAMAGE", "RELIC_BONE_SAW_MELEE_KILL_HEAL", "RELIC_BOSS_OFFER_CARDS",
+        "RELIC_BOSS_OFFER_RARITY_WEIGHTS", "RELIC_BOUNTY_CHIP_KILL_CREDIT_BONUS",
+        "RELIC_BREACHING_CHARGE_DOOR_BLAST", "RELIC_CAPACITOR_BANK_ARC_CHAIN_JUMP",
+        "RELIC_CAPACITOR_BANK_ARC_CHAIN_MULTIPLIER", "RELIC_CARRY_BAND_COMMON", "RELIC_CARRY_BAND_CURSED",
+        "RELIC_CARRY_BAND_LEGENDARY", "RELIC_CARRY_BAND_RARE", "RELIC_CHAIN_DETONATOR_CORPSE_BLAST",
+        "RELIC_CHAIN_DETONATOR_DOOR_BLAST", "RELIC_CHOKE_BORE_KILL_ARMOR", "RELIC_CHOKE_BORE_KNOCKBACK_BONUS",
+        "RELIC_CHOKE_BORE_SPREAD_DAMAGE", "RELIC_COUNTERWEIGHT_GUARD_REFLECT",
+        "RELIC_CULLING_SIGNAL_ENEMY_HEALTH_MULTIPLIER", "RELIC_CURSED_MIN_LOSS", "RELIC_DAMAGE_TAKEN_MULTIPLIER_MIN",
+        "RELIC_DEADMAN_TRIGGER_LOW_HEALTH_DAMAGE", "RELIC_DEATHS_DOOR_LOW_HEALTH_DAMAGE",
+        "RELIC_DEATHS_DOOR_MAX_HEALTH_COST", "RELIC_DOG_TAGS_XP_MULTIPLIER", "RELIC_ENEMY_HEALTH_MULTIPLIER_MIN",
+        "RELIC_FEVER_CORE_HEAL_COST", "RELIC_FEVER_CORE_KILL_HEAL", "RELIC_FIELD_DRESSING_FLOOR_ARRIVAL_HEAL",
+        "RELIC_FOURTH_HOLSTER_EXTRA_LOADOUT_SLOT", "RELIC_FOURTH_HOLSTER_FLOOR_ARRIVAL_AMMO",
+        "RELIC_GRIEF_ENGINE_CORPSE_BLAST", "RELIC_GRIEF_ENGINE_KILL_ARMOR", "RELIC_HUNGER_LOOP_KILL_ARMOR",
+        "RELIC_HUNGER_LOOP_KILL_HEAL", "RELIC_IRON_LUNG_ALL_WEAPON_DAMAGE_COST",
+        "RELIC_IRON_LUNG_DAMAGE_TAKEN_MULTIPLIER", "RELIC_KEVLAR_WEAVE_DAMAGE_TAKEN_MULTIPLIER", "RELIC_MAX_HELD",
+        "RELIC_MEDICS_GLOVE_HEAL_BONUS", "RELIC_MYSTERY_OFFER_RARITY_WEIGHTS", "RELIC_NODE_OFFER_CARDS",
+        "RELIC_OFFER_MAX_CARDS", "RELIC_OFFER_SEED_SALT", "RELIC_OVERCLOCKED_SERVOS_ALL_WEAPON_DAMAGE",
+        "RELIC_OVERCLOCKED_SERVOS_RANGE_BONUS", "RELIC_PENDING_OFFER_CAPACITY", "RELIC_PERK_RANK_EQUIVALENT_LIFT",
+        "RELIC_PERK_RANK_EQUIVALENT_TOLERANCE", "RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS",
+        "RELIC_RECOIL_SPRING_KILL_AMMO_REFUND", "RELIC_REFERENCE_DEPTHS", "RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP",
+        "RELIC_SALVAGE_PLATING_KILL_ARMOR", "RELIC_SHAPED_CASINGS_EXPLOSIVE_DAMAGE",
+        "RELIC_SHAPED_CASINGS_OWN_EXPLOSION_REDUCTION", "RELIC_SPARE_PLATES_FLOOR_ARRIVAL_ARMOR",
+        "RELIC_SPOTTERS_LENS_DAMAGE_TAKEN_MULTIPLIER", "RELIC_SPOTTERS_LENS_FULL_HEALTH_TARGET_DAMAGE",
+        "RELIC_START_OFFER_CARDS", "RELIC_SUPPLY_BAND_COMMON", "RELIC_SUPPLY_BAND_CURSED", "RELIC_SUPPLY_BAND_RARE",
+        "RELIC_THRESHOLD_STIM_DOOR_OPEN_HEAL", "RELIC_TITHE_ENGINE_ENEMY_HEALTH_MULTIPLIER",
+        "RELIC_TITHE_ENGINE_KILL_CREDIT_BONUS", "RELIC_TITHE_ENGINE_XP_MULTIPLIER",
+        "RELIC_VALUATION_CORPSE_ADJACENCY", "RELIC_VALUATION_DOORS_PER_FLOOR", "RELIC_VALUATION_DOOR_FIGHT_SHARE",
+        "RELIC_VALUATION_EVENT_TAKE_SHARE", "RELIC_VALUATION_KILL_SHARE", "RELIC_VALUATION_LOCKER_EVENT_WEIGHT",
+        "RELIC_VALUATION_START_TAKE_SHARE", "RELIC_VAMPIRIC_CORE_KILL_HEAL", "RELIC_VOLATILE_RIG_CORPSE_BLAST",
+        "RELIC_VOLATILE_RIG_DOOR_BLAST", "RELIC_VOLATILE_RIG_MAX_ARMOR_COST", "REND_DAMAGE_PER_TURN_BASE",
+        "REND_DAMAGE_PER_TURN_CAP", "REND_DAMAGE_PER_TURN_PER_LEVEL", "REND_DURATION_TURNS",
+        "RESERVE_BANKING_FLOORS_TARGET", "RESOURCE_RELIEF_WINDOW", "REST_ARMOUR", "REST_ARMOUR_VEST_DEPTH",
+        "REST_HEAL_FRACTION", "REST_MEDKITS", "REST_STIMS", "REVENANT_ATTACK_DAMAGE",
+        "REVENANT_LUNGE_COOLDOWN_TURNS", "REVENANT_LUNGE_TRIGGER_MAX_TILES", "REVENANT_LUNGE_TRIGGER_MIN_TILES",
+        "REVENANT_MAX_HEALTH", "REVENANT_MOVE_EVERY_N_TURNS", "RHYTHM_MAX_STACKS", "RHYTHM_RAMP_PER_HIT_BASE",
+        "RHYTHM_RAMP_PER_HIT_CAP", "RHYTHM_RAMP_PER_HIT_PER_LEVEL", "RIMESHELL_LANCER_ATTACK_DAMAGE",
+        "RIMESHELL_LANCER_MAX_HEALTH", "RIMESHELL_LANCER_MOVE_EVERY_N_TURNS", "RIMESHELL_LANCER_RANGE_TILES",
+        "RIMESHELL_LANCE_COOLDOWN_TURNS", "RIMESHELL_LANCE_FRIENDLY_FIRE_FRACTION", "RIMESHELL_SHELL_ARMOR",
+        "RIMESHELL_SHELL_AVERAGED_FLAT_REDUCTION", "ROLE_GENERALIST_BOUND", "ROLE_GROUP_TARGETS_IN_LANE",
+        "ROLE_INCINERATOR_S2_MAX_SPRAYS", "ROLE_MAX_SCENARIOS_BEST", "ROLE_NICHE_MARGIN",
+        "ROLE_RISK_GENERALIST_TILES", "ROLE_RISK_PAYS_RATIO", "ROLE_RISK_SPREAD_MAX_TILES",
+        "ROLE_RISK_SPREAD_MIN_TILES", "ROLE_S1_GROUP", "ROLE_S1_MAX_TILES", "ROLE_S1_MIN_TILES", "ROLE_S2_GROUP",
+        "ROLE_S2_MAX_TILES", "ROLE_S2_MIN_TILES", "ROLE_S3_GROUP", "ROLE_S3_MAX_TILES", "ROLE_S3_MIN_TILES",
+        "ROLE_S4_GROUP", "ROLE_S4_MAX_TILES", "ROLE_S4_MIN_TILES", "ROLE_S5_GROUP", "ROLE_S5_MAX_TILES",
+        "ROLE_S5_MIN_TILES", "ROLE_S6_GROUP", "ROLE_S6_MAX_TILES", "ROLE_S6_MIN_TILES", "ROLE_S7_GROUP",
+        "ROLE_S7_MAX_TILES", "ROLE_S7_MIN_TILES", "ROLE_S8_START_TILES", "ROLE_SCENARIO_DEPTHS",
+        "ROLE_SCENARIO_TURN_CAP", "ROLE_SUPPLY_SEED_COUNT", "ROUND_G_RESERVE_MAX", "ROUND_G_RESERVE_MIN",
+        "ROUND_J2_MAX_PERK_PICK_RATE", "ROUND_J2_MIN_PERK_OFFERS", "ROUND_MIN_RUNS", "ROUND_T2_LAG_HITS_RATIO_MIN",
+        "ROUND_T3_EARLY_DEPTH_MAX", "ROUND_T3_MAX_TURNS_TO_FIRST_EXCHANGE", "ROUND_T3_MIN_ENEMIES",
+        "ROUND_T3_MIN_GROUPS", "ROUND_T4_EXIT_HEALTH_MAX", "ROUND_T4_EXIT_HEALTH_MIN",
+        "ROUND_T4_MAX_STARVED_DEATH_SHARE", "ROUND_T4_STARVED_AMMO_FRACTION", "ROUND_T6_MAX_CLASS_DAMAGE_SHARE",
+        "ROUND_T6_MIN_SWITCHES_PER_HINTED_FLOOR", "ROUND_T7_MAX_KEYSTONE_SHARE", "ROUTE_BOSS_THREAT_SCALE",
+        "ROUTE_CALM_BUDGET_SCALE", "ROUTE_CALM_EV_DISCOUNT_MAX", "ROUTE_CALM_EV_DISCOUNT_MIN",
+        "ROUTE_CALM_GUARANTEE_LAYER", "ROUTE_HONEST_SAFE_MAX_THREAT_RATIO", "ROUTE_LIGHT_BUDGET_SCALE",
+        "ROUTE_MALFUNCTION_HAZARD_HIT_POINTS", "ROUTE_MIN_NODE_TYPES_PER_LAYER", "ROUTE_MYSTERY_EV_PREMIUM_MAX",
+        "ROUTE_MYSTERY_MIN_SPREAD_FRACTION", "ROUTE_MYSTERY_WORST_LOSS_FLOOR_MULTIPLIER",
+        "ROUTE_PERMANENT_POWER_WEIGHT", "ROUTE_PIP_CALM_MAX_THREAT_RATIO", "ROUTE_PIP_STANDARD_MAX_THREAT_RATIO",
+        "ROUTE_RISK_POWER_POINTS_PER_STANDARD_FLOOR", "ROUTE_RISK_PREMIUM_MAX", "ROUTE_RISK_PREMIUM_MIN",
+        "ROUTE_TRAJECTORY_COUPLING_MAX", "ROUTE_TRAJECTORY_COUPLING_MIN", "ROUTE_TRAJECTORY_DRAIN_MAX",
+        "ROUTE_TRAJECTORY_DRAIN_MIN", "ROUTE_TRAJECTORY_SCARCITY_MAX", "ROUTE_TRAJECTORY_SCARCITY_MIN",
+        "ROUTE_TRAJECTORY_SEED_COUNT", "ROUTE_TRAJECTORY_XP_PACE_MAX", "ROUTE_TRAJECTORY_XP_PACE_MIN",
+        "ROUTE_TRAP_GAUNTLET_HAZARD_HIT_POINTS", "ROUTE_UPGRADE_GUARANTEE_LAYER", "ROUTE_UPGRADE_OPPORTUNITY_CACHE",
+        "ROUTE_UPGRADE_OPPORTUNITY_COMBAT", "ROUTE_UPGRADE_OPPORTUNITY_ELITE",
+        "ROUTE_UPGRADE_OPPORTUNITY_PER_ON_LEVEL_WEAPON", "ROUTE_UPGRADE_OPPORTUNITY_POWER_POINTS",
+        "ROUTE_UPGRADE_OPPORTUNITY_SHOP", "ROUTE_WEAPON_LEVEL_POWER_POINTS", "RUN_FINAL_DEPTH",
+        "SCARCITY_PER_WEAPON_MAX", "SCARCITY_RATIO_FLOOR_MAX", "SCARCITY_RATIO_FLOOR_MIN",
+        "SCARCITY_RATIO_FLOOR_TARGET", "SCAVENGER_CHANCE_BASE", "SCAVENGER_CHANCE_CAP", "SCAVENGER_CHANCE_PER_LEVEL",
+        "SCAVENGER_REFUND_ROUNDS", "SHAPE_BIG_GROUP_SIZE", "SHAPE_GROUPED_MIN_FRACTION", "SHAPE_MAX_LONE_ENEMIES",
+        "SHAPE_MIN_BIG_GROUPS", "SHELL_BRUTE_ATTACK_DAMAGE", "SHELL_BRUTE_CHARGE_TRIGGER_MAX_TILES",
+        "SHELL_BRUTE_CHARGE_TRIGGER_MIN_TILES", "SHELL_BRUTE_MAX_HEALTH", "SHELL_BRUTE_MOVE_EVERY_N_TURNS",
+        "SHOP_AMMO_DAMAGE_PER_POWER_POINT", "SHOP_AMMO_LARGE_BOX_MULTIPLIER", "SHOP_BIAS_WEIGHT_MULTIPLIER",
+        "SHOP_CAT_WEIGHT_ABILITY", "SHOP_CAT_WEIGHT_AMMO", "SHOP_CAT_WEIGHT_MEDKIT", "SHOP_CAT_WEIGHT_TIER_UPGRADE",
+        "SHOP_CAT_WEIGHT_WEAPON_LEVELUP", "SHOP_CREDITS_PER_POWER_POINT", "SHOP_DEPTH_PRICE_SCALE", "SHOP_ENTRY_MAX",
+        "SHOP_ENTRY_MIN", "SHOP_HEAL_HP_PER_POWER_POINT", "SHOP_MACHINES_PER_FLOOR", "SHOP_MAX_PER_WINDOW",
+        "SHOP_NODE_MACHINE_COUNT", "SHOP_NODE_PRICE_MULTIPLIER", "SHOP_PERK_RANK_POWER_POINTS",
+        "SHOP_SIGNIFICANT_BUY_POWER_POINTS", "SHOP_SMALL_BUY_POWER_POINTS", "SHOP_WINDOW_LAYERS",
+        "SHOTGUN_CLIP_SIZE", "SHOTGUN_DAMAGE", "SHOTGUN_FALLOFF_BY_TILE", "SHOTGUN_KNOCKBACK_MAX_TILES",
+        "SHOTGUN_RANGE_TILES", "SHOTGUN_RELOAD_TIME_TICKS", "SHOTGUN_STAGGER_MAX_TILES",
+        "SHOTGUN_STAGGER_MIN_TURNS_BETWEEN", "SIM_BOSS_CLEAR_RATE_MAX", "SIM_BOSS_CLEAR_RATE_MIN",
+        "SIM_BOSS_KILL_HEALTH_MAX", "SIM_BOSS_KILL_HEALTH_MIN", "SIM_BOSS_MAX_FIGHT_TURNS_COV",
+        "SIM_BOSS_MIN_SAMPLE", "SIM_BUILD_DEPTH_SPREAD", "SIM_BUILD_MAX_DOMINANT_TAG_SHARE", "SIM_BUILD_MIN_SAMPLE",
+        "SIM_BUILD_SAMPLE_SEED_COUNT", "SIM_BUILD_SEED_COUNT", "SIM_DEPTH_CEILING",
+        "SIM_ECONOMY_EMERGENCY_MAX_FRACTION", "SIM_ECONOMY_SUPPLY_SHARE_MAX", "SIM_ECONOMY_SUPPLY_SHARE_MIN",
+        "SIM_ENGAGE_RANGE_TILES", "SIM_FAIR_READABLE_DEATH_MIN", "SIM_FIRST_BOSS_NAIVE_CLEAR_MIN",
+        "SIM_FIRST_BOSS_NAIVE_REACH_MIN", "SIM_FIRST_BOSS_TACTICAL_CLEAR_MIN", "SIM_GATE_MAX_CLEAR_FRACTION",
+        "SIM_GOAL_PATIENCE_TURNS", "SIM_HEAVY_MIN_SAMPLE", "SIM_HEAVY_NAIVE_MAX_SUCCESS",
+        "SIM_HEAVY_REPORT_BAND_LAST_DEPTHS", "SIM_HEAVY_TACTICAL_MIN_SUCCESS", "SIM_LADDER_PROBE_SEEDS_PER_DEPTH",
+        "SIM_LAG_MAX_MEDIAN_DEPTH", "SIM_LOOP_MAX_DISTINCT_TILES", "SIM_LOOP_PUSH_TURNS", "SIM_LOOP_WINDOW_TURNS",
+        "SIM_MAX_STALLED_FLOOR_FRACTION", "SIM_MAX_STEPS_PER_ACTION", "SIM_NAIVE_DEPTH_MAX", "SIM_NAIVE_DEPTH_MIN",
+        "SIM_NAIVE_HEAL_FRACTION", "SIM_NAIVE_WIN_RATE_MAX", "SIM_REFUSALS_BEFORE_TILE_WRITTEN_OFF",
+        "SIM_RELIC_CURSED_ROW_TOLERANCE", "SIM_RELIC_MIN_RUNS_PER_RELIC", "SIM_RELIC_PER_RELIC_MAX_LIFT",
+        "SIM_RELIC_PER_RELIC_TRAP_TOLERANCE", "SIM_RELIC_PROBE_SEED_COUNT", "SIM_RELIC_ROW_MAX_LIFT",
+        "SIM_RELIC_ROW_TRAP_TOLERANCE", "SIM_RESOURCE_CRISIS_FRACTION", "SIM_ROUTE_TRAJECTORY_TOLERANCE",
+        "SIM_SEED_COUNT", "SIM_SHOP_MAX_UNSPENT_FLOORS", "SIM_SHOP_MIN_OFFERS_PER_VISIT", "SIM_SKILL_DEPTH_GAP_MIN",
+        "SIM_SOFTLOCK_MAX_FRACTION", "SIM_STARTING_DEPTH", "SIM_SUPPLY_DETOUR_RANGE_TILES",
+        "SIM_SUPPLY_EXIT_HEALTH_MAX", "SIM_SUPPLY_EXIT_HEALTH_MIN", "SIM_SWITCH_MIN_HINTED_COMBAT_FLOORS",
+        "SIM_SWITCH_MIN_PER_HINTED_COMBAT_FLOOR", "SIM_SWITCH_MIN_TAKE_RATE", "SIM_TACTICAL_ENGAGE_RANGE_TILES",
+        "SIM_TACTICAL_HEAL_FRACTION", "SIM_TACTICAL_LOSS_DEPTH_MAX", "SIM_TACTICAL_LOSS_DEPTH_MIN",
+        "SIM_TACTICAL_REACH_DEPTH", "SIM_TACTICAL_REACH_FRACTION_MIN", "SIM_TACTICAL_RETREAT_FRACTION",
+        "SIM_TACTICAL_WIN_RATE_MAX", "SIM_TACTICAL_WIN_RATE_MIN", "SIM_TIME_STEP_SECONDS", "SIM_TURNS_PER_FLOOR_CAP",
+        "SLOW_DURATION", "SLOW_FACTOR", "SOULFORGE_KILLS_PER_LEVEL_UP", "SPIRESOWER_LEY_RANGE_TILES",
+        "SPIRESOWER_MAX_LIVE_SPIRES", "SPIRESOWER_REGEN_ARMOR_POOL", "SPIRESOWER_REGEN_PER_SPIRE",
+        "SPIRESOWER_SOW_CADENCE_TURNS", "SPIRESOWER_SOW_RADIUS_TILES", "SPIRESOWER_SPIRES_PER_SOW",
+        "SPIRESOWER_SPIRE_HIT_POINTS", "SPIRESOWER_SPIRE_LIFETIME_TURNS", "STAGGER_CHANCE_BASE",
+        "STAGGER_CHANCE_CAP", "STAGGER_CHANCE_PER_LEVEL", "STAGGER_STUN_DURATION", "STATIC_SPLASH_BASE",
+        "STATIC_SPLASH_CAP", "STATIC_SPLASH_PER_LEVEL", "STR_MELEE_PER_POINT", "STUCK_TURNS_BEFORE_WIGGLE",
+        "STUN_DURATION_DEFAULT", "STUN_DURATION_HEAVY", "SUMMON_EXPECTED_PER_FIGHT", "SUPPLY_AUDIT_DEPTHS",
+        "SUPPLY_AUDIT_SEED_COUNT", "SUPPLY_AVOIDANCE_FACTOR", "SUPPLY_CARRIED_SHARE", "SUPPLY_CARRIER_SHARE",
+        "SUPPLY_CREDIT_CHIPS_PER_FLOOR", "SUPPLY_EXIT_PATH_BONUS", "SUPPLY_GROUP_ROOM_BONUS",
+        "SUPPLY_HEAL_EARLY_SHARE", "SUPPLY_HEAL_FLOOR_FRACTION", "SUPPLY_MAX_ROOM_SHARE", "SUPPLY_OFF_TYPE_SHARE",
+        "SUPPLY_TRACK_TOLERANCE", "SUPPLY_TURNS_ENGAGED_PER_ENEMY", "TELEGRAPH_MAX_UNTELEGRAPHED_HIT_FRACTION",
+        "TGH_HP_PER_POINT", "TGH_REDUCTION_PER_POINT", "TIER_ABILITY_COUNT_COMMON", "TIER_ABILITY_COUNT_EPIC",
+        "TIER_ABILITY_COUNT_LEGENDARY", "TIER_ABILITY_COUNT_RARE", "TIER_ABILITY_COUNT_UNCOMMON",
+        "TIER_ABILITY_PP_BUDGET_COMMON", "TIER_ABILITY_PP_BUDGET_EPIC", "TIER_ABILITY_PP_BUDGET_LEGENDARY",
+        "TIER_ABILITY_PP_BUDGET_RARE", "TIER_ABILITY_PP_BUDGET_UNCOMMON", "TIER_ABILITY_PP_TOLERANCE",
+        "TIER_MAJOR_COUNT_COMMON", "TIER_MAJOR_COUNT_EPIC", "TIER_MAJOR_COUNT_LEGENDARY", "TIER_MAJOR_COUNT_RARE",
+        "TIER_MAJOR_COUNT_UNCOMMON", "TWIST_BLACKOUT_WAKE_RADIUS_TILES", "TWIST_BLACKOUT_WAKE_SIGHT_TILES",
+        "TWIST_HUNTED_ARRIVAL_TURNS", "TWIST_HUNTED_BOUNTY_AMMO_BOXES", "TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES",
+        "TWIST_HUNTED_THREAT_SHARE", "TWIST_HUNTED_WARNING_TURNS", "TWIST_MIN_DEPTH_BLACKOUT",
+        "TWIST_MIN_DEPTH_HUNTED", "TWIST_MIN_DEPTH_SALVAGE", "TWIST_NEUTRAL_EV_TOLERANCE",
+        "TWIST_ROLL_CHANCE_COMBAT", "TWIST_SALVAGE_AMMO_BOXES", "TWIST_SALVAGE_ARMOUR_SHARDS",
+        "TWIST_SALVAGE_BUDGET_MULT", "TWIST_SALVAGE_STIMS", "TWIST_SIM_MAX_DEATH_RATE_RATIO", "TWIST_SIM_MIN_FLOORS",
+        "TWIST_WEIGHT_BLACKOUT", "TWIST_WEIGHT_HUNTED", "TWIST_WEIGHT_SALVAGE", "VERDANT_SPIRESOWER_ATTACK_DAMAGE",
+        "VERDANT_SPIRESOWER_MAX_HEALTH", "VERDANT_SPIRESOWER_MOVE_EVERY_N_TURNS", "VOID_SHROUD_ATTACK_DAMAGE",
+        "VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER", "VOID_SHROUD_MAX_HEALTH", "VOID_SHROUD_MOVE_EVERY_N_TURNS",
+        "VORTEX_EYE_ATTACK_DAMAGE", "VORTEX_EYE_MAX_HEALTH", "VORTEX_EYE_MOVE_EVERY_N_TURNS",
+        "VORTEX_EYE_RANGE_TILES", "VULNERABLE_DAMAGE_PERCENT", "VULNERABLE_DURATION", "VULNERABLE_MAX_STACKS",
+        "WEAK_DAMAGE_PERCENT", "WEAK_DURATION", "WEAPON_BURN_BASE_PER_TURN", "WEAPON_DROP_TIER_MAX_BY_REGION",
+        "WEAPON_DROP_TIER_MIN_BY_REGION", "WEAPON_LEVEL_ROLL_OFFSETS", "WEAPON_LEVEL_ROLL_WEIGHTS",
+        "XP_BASE_REQUIREMENT", "XP_CATCHUP_MULTIPLIER", "XP_CURVE_GROWTH_PER_LEVEL", "XP_FLOOR_YIELD_MAX",
+        "XP_FLOOR_YIELD_MIN", "XP_PER_THREAT_POINT"
+    };
 }

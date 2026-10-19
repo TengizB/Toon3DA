@@ -93,12 +93,22 @@ public enum Keystone {
 
     Keystone(BuildTag tag, String displayName, String gainLine, String costLine,
              PerkEffect[] gains, PerkEffect[] costs) {
-        this.tag         = tag;
+        this.tag         = java.util.Objects.requireNonNull(tag, "Keystone tag");
         this.displayName = displayName;
         this.gainLine    = gainLine;
         this.costLine    = costLine;
         this.gains       = gains;
         this.costs       = costs;
+    }
+
+    /** How many gain effect rows this keystone declares (read-only; C-PERK reads it). */
+    public int gainEffectCount() {
+        return gains.length;
+    }
+
+    /** How many cost effect rows this keystone declares (read-only; C-PERK reads it). */
+    public int costEffectCount() {
+        return costs.length;
     }
 
     /** Folds the gains and the costs into the aggregate. */

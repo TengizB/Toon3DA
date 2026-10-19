@@ -164,6 +164,9 @@ others. Do not add a `tools:` line to this file.
 8.  VERIFY    you run ./gradlew build (and ./gradlew test; plus ./gradlew balanceSim for any
               balance change). Quote only failing lines; pass the result to reviewer so the
               same build is not paid for twice. Where it matters, run ./gradlew lwjgl3:run.
+              An idea that adds content: each content item's checkpoint DONE WHEN includes
+              "C-<KIND> green" (its BALANCE ADMISSION block, docs/game-balance-authority.txt
+              SECTION 5 ADD CONTENT); an older idea without the block gets it filled at CP0.
 9.  REVIEW    reviewer (blocking) — loop findings back to the owning spoke until PASS.
 10. CLOSE     every acceptance criterion met → STATUS: IMPLEMENTED + IMPLEMENTED: date; append
               an IMPLEMENTATION NOTE under the header if the build diverged from the plan.

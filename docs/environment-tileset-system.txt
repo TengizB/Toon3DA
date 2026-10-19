@@ -798,6 +798,12 @@ SECTION PLACEHOLDERS (each filled by its order, in the same commit that ships th
           it wants its own type tag — a RoomType constant. salvage_bay (order-8) is the worked example.
           That is a bigger change than pure registration, but it is still driven entirely by the blueprint
           seam: the generator's SELECTION code is never edited.
+        - BALANCE (balance-overhaul order 8, K12): every blueprint declares supplyStance() (no default —
+          forgetting it does not compile). SUPPLY_NEUTRAL = build() stamps NO pickup and NO enemy-spawn
+          symbol (every room shipped today); SLOT_PROVIDER = it offers tagged supply/group slots to the
+          planners. C-ROOM stamps each neutral room in isolation over a seed sweep and fails the build if it
+          places supply itself. A neutral room may stay short-lane; anything else is full lane and follows
+          docs/game-balance-authority.txt → ADD CONTENT (K12).
    2. That's it. selectBlueprint() already iterates the registry with a seeded weighted roll, so the new
       room competes in generation automatically. ZERO edits to the generator's room-SELECTION code.
    => Registering a room changes the generated-level RNG sequence (one more roulette candidate), so
