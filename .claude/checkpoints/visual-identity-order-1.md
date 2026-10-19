@@ -51,7 +51,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
       (10 generators), AtmosphereGrade exist; World bootstraps, resolves mood (R11/R12), logs
       "Atmosphere mood=<id>"; build + test at baseline.
 - [x] **CP3** — WallRenderer grades walls, doors, columns (R1). DONE WHEN: build green; A3 walls part.
-- [ ] **CP4** — FloorCeilingRenderer materials, horizon, per-row grade (R7, R8, R13). DONE WHEN: A3 holds; build green.
+- [x] **CP4** — FloorCeilingRenderer materials, horizon, per-row grade (R7, R8, R13). DONE WHEN: A3 holds; build green.
 - [ ] **CP5** — Prop/ShopMachine/Enemy bodies graded (R1, R2, R4, R5). DONE WHEN: A5-A7 hold; build green.
 - [ ] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
 - [ ] **CP7** — five moods checked via dev override (A4, A8, A12); docs (A14). DONE WHEN: build + test at
@@ -91,3 +91,10 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   on WORKER threads: grading uses per-column `WallColumnResult.gradeScratch` + static `AtmosphereGrade.evaluateInto`,
   never `grade.evaluate()` (shared fields). Same rule for every worker-threaded renderer. perpWallDistance is in tiles.
   No display in this container: on-screen A3 check is OWED to a desktop run (CP7 / reviewer note).
+- **CP4 handover:** `FloorCeilingRenderer(Level, LightingMood)` (null → fallback); materials from
+  `SurfaceMaterials.registry().getPixels`; old placeholder generators and `FLOOR/CEILING_AMBIENT_COLOUR_PACKED`
+  deleted (no other readers). Per-row tint table `rowTintTable` (float[rows*3]) rebuilt in ctor + `setRenderResolution`;
+  row distance = the same `floorRowDistance` fillRows uses (tiles, player-independent). Only the exact horizon row is
+  filled with a flat colour today and it is a FLOOR row → `horizonFloorPacked`; the ceiling horizon colour has no
+  slot in this renderer and is consumed by the CP6 vignette (AS8). Prop/Enemy/ShopMachine/WeaponHud renderers are
+  render-thread only → `grade.evaluate()` + fields are safe there.

@@ -118,11 +118,8 @@ public final class RenderConstants {
     public static final float  FLOOR_CAMERA_Z                   = 0.5f;
     public static final float  FLOOR_SHADING_FALLOFF            = 0.05f;
     public static final float  FLOOR_MAX_VISIBLE_DISTANCE_CELLS = 15.0f;
-    // Packed RGBA8888 ambient colours for max-distance / unshaded pixels
     /** Edge length in texels of every floor/ceiling surface material (power of two, tileable). */
     public static final int    SURFACE_MATERIAL_SIZE            = 64;
-    public static final int    FLOOR_AMBIENT_COLOUR_PACKED      = 0x141414FF;
-    public static final int    CEILING_AMBIENT_COLOUR_PACKED    = 0x10101CFF;
     // Placeholder procedural textures generated at runtime when these assets are absent
     public static final String LAB_FLOOR_TEXTURE_PATH   = "textures/lab/lab_floor_concrete.png";
     public static final String LAB_CEILING_TEXTURE_PATH = "textures/lab/lab_ceiling_panel.png";

@@ -1537,7 +1537,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             }
         });
         resolveLightingMood();
-        floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
+        floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel, currentLightingMood);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
         wallRenderer.setAtmosphereGrade(atmosphereGrade);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);

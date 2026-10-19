@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderResolution;
 
@@ -75,6 +76,8 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     private Texture backdropTexture;
     private int[] backbuffer;
 
+    // Floor/ceiling materials (R8): shared read-only arrays from SurfaceMaterials, never written here.
+    private final LightingMood mood;
     private final int[] floorTexelsPacked;
     private final int   floorTextureWidth;
     private final int   floorTextureHeight;
@@ -82,6 +85,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     private final int[] ceilingTexelsPacked;
     private final int   ceilingTextureWidth;
     private final int   ceilingTextureHeight;
+
+    // R13: graded tint per backdrop row (red, green, blue per row index, floor and its mirrored ceiling row
+    // share it). Row distance depends only on the row and resolution, so the table is rebuilt only when the
+    // backdrop is (re)allocated - never per frame. Workers only read it.
+    private float[] rowTintTable;
 
     private float playerWorldX        = 0f;
     private float playerWorldY        = 0f;
@@ -106,21 +114,24 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     private float cachedRayDirRightX;
     private float cachedRayDirRightY;
 
-    public FloorCeilingRenderer(Level level) {
+    public FloorCeilingRenderer(Level level, LightingMood lightingMood) {
         this.level = level;
+        this.mood  = lightingMood != null ? lightingMood : LightingMoods.registry().getFallback();
         batch = new SpriteBatch(1);
 
         backdropPixmap  = new Pixmap(backdropWidth, backdropHeight, Pixmap.Format.RGBA8888);
         backdropTexture = new Texture(backdropPixmap);
         backbuffer      = new int[backdropWidth * backdropHeight];
 
-        floorTextureWidth    = 64;
-        floorTextureHeight   = 64;
-        floorTexelsPacked    = generateFloorTexture(floorTextureWidth, floorTextureHeight);
+        floorTextureWidth    = SURFACE_MATERIAL_SIZE;
+        floorTextureHeight   = SURFACE_MATERIAL_SIZE;
+        floorTexelsPacked    = SurfaceMaterials.registry().getPixels(mood.floorMaterialId());
 
-        ceilingTextureWidth  = 64;
-        ceilingTextureHeight = 64;
-        ceilingTexelsPacked  = generateCeilingTexture(ceilingTextureWidth, ceilingTextureHeight);
+        ceilingTextureWidth  = SURFACE_MATERIAL_SIZE;
+        ceilingTextureHeight = SURFACE_MATERIAL_SIZE;
+        ceilingTexelsPacked  = SurfaceMaterials.registry().getPixels(mood.ceilingMaterialId());
+
+        rebuildRowTintTable();
 
         // Use up to 4 threads (including the main GL thread acting as one worker).
         workerCount = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
@@ -136,46 +147,6 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
             workerPool = null;
             workers    = new FloorRowWorker[0];
         }
-    }
-
-    // Procedural dark concrete floor texture: base dark gray with subtle grid lines.
-    private static int[] generateFloorTexture(int width, int height) {
-        int[] pixels = new int[width * height];
-        for (int row = 0; row < height; row++) {
-            for (int column = 0; column < width; column++) {
-                boolean isGridLine = (column == 0) || (row == 0);
-                int baseR = isGridLine ? 0x28 : 0x20;
-                int baseG = isGridLine ? 0x28 : 0x20;
-                int baseB = isGridLine ? 0x2A : 0x22;
-                // Subtle noise: alternate a couple of shades in a tile pattern.
-                int noisePattern = ((column / 8 + row / 8) & 1) == 0 ? 0 : 4;
-                pixels[row * width + column] = ((baseR + noisePattern) << 24)
-                                             | ((baseG + noisePattern) << 16)
-                                             | ((baseB + noisePattern) <<  8)
-                                             | 0xFF;
-            }
-        }
-        return pixels;
-    }
-
-    // Procedural dark-navy ceiling texture: dark base with lighter rectangular fixture.
-    private static int[] generateCeilingTexture(int width, int height) {
-        int[] pixels = new int[width * height];
-        int fixtureLeft   = width  / 4;
-        int fixtureRight  = width  * 3 / 4;
-        int fixtureTop    = height / 4;
-        int fixtureBottom = height * 3 / 4;
-        for (int row = 0; row < height; row++) {
-            for (int column = 0; column < width; column++) {
-                boolean inFixture = column >= fixtureLeft && column < fixtureRight
-                                 && row    >= fixtureTop  && row    < fixtureBottom;
-                int baseR = inFixture ? 0x30 : 0x14;
-                int baseG = inFixture ? 0x30 : 0x14;
-                int baseB = inFixture ? 0x38 : 0x20;
-                pixels[row * width + column] = (baseR << 24) | (baseG << 16) | (baseB << 8) | 0xFF;
-            }
-        }
-        return pixels;
     }
 
     /**
@@ -197,6 +168,23 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         backdropPixmap  = new Pixmap(backdropWidth, backdropHeight, Pixmap.Format.RGBA8888);
         backdropTexture = new Texture(backdropPixmap);
         backbuffer      = new int[backdropWidth * backdropHeight];
+        rebuildRowTintTable();
+    }
+
+    /*
+     * R13: row distance (tiles) is a pure function of the backdrop row, so fog + tint are evaluated once per
+     * row here (construction / resolution change) instead of per pixel or per frame.
+     */
+    private void rebuildRowTintTable() {
+        int rowCount = backdropHeight / 2;
+        rowTintTable = new float[rowCount * 3];
+        for (int drawY = 0; drawY < rowCount; drawY++) {
+            float pixelOffset = GameMath.floorPixelOffsetBelowHorizon(drawY * rowsPerBackdropRow, WORLD_HEIGHT);
+            float rowDistance = Math.min(GameMath.floorRowDistance(pixelOffset, WORLD_HEIGHT),
+                                         FLOOR_MAX_VISIBLE_DISTANCE_CELLS);
+            AtmosphereGrade.evaluateInto(mood, rowDistance, ArtDirection.GRADE_STRENGTH_ENVIRONMENT,
+                                         rowTintTable, drawY * 3);
+        }
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -256,7 +244,7 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         if (backdropHorizonRow * 2 < backdropHeight) {
             int horizonRow = backdropHeight / 2;
             for (int drawX = 0; drawX < backdropWidth; drawX++) {
-                backbuffer[horizonRow * backdropWidth + drawX] = FLOOR_AMBIENT_COLOUR_PACKED;
+                backbuffer[horizonRow * backdropWidth + drawX] = mood.horizonFloorPacked();
             }
         }
 
@@ -306,6 +294,10 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
             float floorTileY = GameMath.floorOriginTileComponent(cachedPlayerTileY, rowDistance, cachedRayDirLeftY);
 
             float shade = GameMath.floorShade(rowDistance, FLOOR_SHADING_FALLOFF);
+            final float[] tintTable = rowTintTable;
+            final float tintRed   = tintTable[drawY * 3];
+            final float tintGreen = tintTable[drawY * 3 + 1];
+            final float tintBlue  = tintTable[drawY * 3 + 2];
 
             // Pre-compute base backbuffer offsets for this row pair to avoid repeated multiplications.
             int floorRowOffset   = (backdropHeight - 1 - drawY) * backdropWidth;
@@ -333,11 +325,14 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                 float tileBrightness     = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);
                 float adjustedShade      = Math.min(shade * tileBrightness, MAX_LIGHTING_SHADE);
 
-                int floorPixel = GameMath.applyShadeToPackedRGBA(
-                        floorRawPixel, adjustedShade,
+                float shadeRed   = adjustedShade * tintRed;
+                float shadeGreen = adjustedShade * tintGreen;
+                float shadeBlue  = adjustedShade * tintBlue;
+                int floorPixel = GameMath.applyRgbShadeToPackedRGBA(
+                        floorRawPixel, shadeRed, shadeGreen, shadeBlue,
                         ALERT_WALL_RED_BOOST, ALERT_WALL_GB_DAMPEN, alertPulse);
-                int ceilPixel = GameMath.applyShadeToPackedRGBA(
-                        ceilRawPixel, adjustedShade,
+                int ceilPixel = GameMath.applyRgbShadeToPackedRGBA(
+                        ceilRawPixel, shadeRed, shadeGreen, shadeBlue,
                         ALERT_CEILING_TINT_STRENGTH, ALERT_WALL_GB_DAMPEN, alertPulse);
 
                 backbuffer[floorRowOffset   + drawX] = floorPixel;
