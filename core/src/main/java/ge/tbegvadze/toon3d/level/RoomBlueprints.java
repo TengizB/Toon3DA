@@ -59,6 +59,33 @@ public final class RoomBlueprints {
 
     private RoomBlueprints() {}
 
+    /**
+     * Every symbol {@code blueprint.build()} writes into a fresh, generously sized room for one seed (headless; the
+     * same isolation the build-demand drift guard uses). The balance rule C-ROOM sweeps seeds over it to prove a
+     * SUPPLY_NEUTRAL room stamps no pickup and no enemy spawn.
+     */
+    public static java.util.Set<Character> symbolsStampedInIsolation(RoomBlueprint blueprint, long seed) {
+        final int roomLeft = 2, roomBottom = 2, roomRight = 19, roomTop = 19;
+        char[][] grid = new char[LevelGenConstants.LEVEL_GEN_GRID_HEIGHT][LevelGenConstants.LEVEL_GEN_GRID_WIDTH];
+        for (char[] row : grid) java.util.Arrays.fill(row, 'x');
+        for (int tileRow = roomBottom + 1; tileRow < roomTop; tileRow++) {
+            for (int tileColumn = roomLeft + 1; tileColumn < roomRight; tileColumn++) {
+                grid[tileRow][tileColumn] = ' ';
+            }
+        }
+        LevelGenerator generator = new LevelGenerator(seed);
+        LevelGenerator.Room room = new LevelGenerator.Room(roomLeft, roomBottom, roomRight, roomTop);
+        room.type = LevelGenerator.roomTypeForBlueprint(blueprint);
+        blueprint.build(new RoomBuildContext(generator, grid, room));
+        java.util.Set<Character> stamped = new java.util.TreeSet<>();
+        for (int tileRow = roomBottom; tileRow <= roomTop; tileRow++) {
+            for (int tileColumn = roomLeft; tileColumn <= roomRight; tileColumn++) {
+                stamped.add(grid[tileRow][tileColumn]);
+            }
+        }
+        return stamped;
+    }
+
     /** The shared room-blueprint registry the generator selects from. */
     public static RoomBlueprintRegistry rooms() {
         return ROOMS;
@@ -88,6 +115,7 @@ public final class RoomBlueprints {
         // ENTRANCE: player spawn room; room 0 by position (never rolled). No themed architecture — its
         // interior stays fully lit floor and the generator stamps the player start separately.
         registry.register(new LambdaRoomBlueprint(ID_ENTRANCE, RoomKind.GENERIC,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(emptyDemand()),
                 context -> true,
                 context -> LevelGenConstants.LEVEL_GEN_ROOM_ENTRANCE_SELECTION_WEIGHT,
@@ -95,6 +123,7 @@ public final class RoomBlueprints {
 
         // STANDARD: baseline lab room; residual fallback for any candidate no specialty claims.
         registry.register(new LambdaRoomBlueprint(ID_STANDARD, RoomKind.GENERIC,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(emptyDemand()),
                 context -> true,
                 context -> LevelGenConstants.LEVEL_GEN_ROOM_STANDARD_SELECTION_WEIGHT,
@@ -115,6 +144,7 @@ public final class RoomBlueprints {
         // EQUAL-CHANCE: shares the common special-room weight and carries no per-level cap (a floor may
         // roll it as many times as its rooms fit) — see LEVEL_GEN_SPECIAL_ROOM_SELECTION_WEIGHT.
         registry.register(new LambdaRoomBlueprint(ID_SALVAGE_BAY, RoomKind.GENERIC,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(emptyDemand(), salvageBayCategoryCounts()),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_WIDTH
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SALVAGE_BAY_MIN_HEIGHT,
@@ -130,6 +160,7 @@ public final class RoomBlueprints {
         // generic-variety accents), and its demand declares only FLEXIBLE-category slot counts, so it
         // composes from whatever symbols are free. It competes in the STEP-A roulette like any room.
         registry.register(new LambdaRoomBlueprint(ID_SUPPLY_CACHE, RoomKind.GENERIC,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(emptyDemand(), supplyCacheCategoryCounts()),
                 context -> context.interiorWidth()  >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_WIDTH
                         && context.interiorHeight() >= LevelGenConstants.LEVEL_GEN_SUPPLY_CACHE_MIN_HEIGHT,
@@ -145,6 +176,7 @@ public final class RoomBlueprints {
 
         // SERVER_ROOM: data vault — terminal walls 't', rack rows of terminals/lockers, oil + a barrel.
         registry.register(new LambdaRoomBlueprint(ID_SERVER_ROOM, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         't', "wall_terminal",
                         'T', "prop_terminal",
@@ -162,6 +194,7 @@ public final class RoomBlueprints {
         // MEDICAL_BAY: medical 'M' walls + bio 'Q' accents, clinical props. EQUAL-CHANCE: shares the
         // common special-room weight and carries no per-level cap (a floor may roll more than one).
         registry.register(new LambdaRoomBlueprint(ID_MEDICAL_BAY, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'M', "wall_medical",
                         'Q', "wall_bio",
@@ -182,6 +215,7 @@ public final class RoomBlueprints {
 
         // ARMORY: last-stand room; blast-scarred 'X' walls, weapon racks, cameras, aftermath decals.
         registry.register(new LambdaRoomBlueprint(ID_ARMORY, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'X', "wall_blast",
                         '=', "prop_weapon_rack",
@@ -199,6 +233,7 @@ public final class RoomBlueprints {
 
         // CRYO_CHAMBER: cryogenic bay; frost 'Z' walls + glass 'N' accents, bio-pod rows.
         registry.register(new LambdaRoomBlueprint(ID_CRYO_CHAMBER, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'Z', "wall_cryo",
                         'N', "wall_glass",
@@ -217,6 +252,7 @@ public final class RoomBlueprints {
 
         // POWER_PLANT: reactor core (LARGE-class); radiation 'U' walls + emergency 'S' strips, generators.
         registry.register(new LambdaRoomBlueprint(ID_POWER_PLANT, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'U', "wall_radiation",
                         'S', "wall_emergency",
@@ -235,6 +271,7 @@ public final class RoomBlueprints {
 
         // COMMAND_CENTER: control room (LARGE-class); glass 'N' walls + emergency 'S' strips, terminals.
         registry.register(new LambdaRoomBlueprint(ID_COMMAND_CENTER, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'N', "wall_glass",
                         'S', "wall_emergency",
@@ -254,6 +291,7 @@ public final class RoomBlueprints {
 
         // CONTAINMENT_BLOCK: cell block; glass 'N' cell fronts + quarantine 'Q' walls, bio-pods, dread.
         registry.register(new LambdaRoomBlueprint(ID_CONTAINMENT_BLOCK, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'N', "wall_glass",
                         'Q', "wall_bio",
@@ -274,6 +312,7 @@ public final class RoomBlueprints {
 
         // RESEARCH_LAB: sci-fi set-piece; holo-data 'D' + force-field 'F' walls, specimen tanks, AI core.
         registry.register(new LambdaRoomBlueprint(ID_RESEARCH_LAB, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'D', "wall_holo_data",
                         'F', "wall_force_field",
@@ -295,6 +334,7 @@ public final class RoomBlueprints {
         // Its demand is exactly the "observatory" theme-tagged sprites, so order-4 binds them ONLY when
         // this room is placed — satisfying the containment rule (order-4 R2).
         registry.register(new LambdaRoomBlueprint(ID_STELLAR_OBSERVATORY, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         '`',  "wall_stellar_hull_plate",
                         '"',  "wall_stellar_viewport",
@@ -330,6 +370,7 @@ public final class RoomBlueprints {
         // 1.0 the depth gate made it invisible on the early floors most players see. Its build() composes
         // floor lighting + the shared wall theming (GORE_NEST case) + a bespoke nest-prop pass.
         registry.register(new LambdaRoomBlueprint(ID_GORE_NEST, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'G', "wall_gore",
                         'j', "wall_rust",
@@ -364,6 +405,7 @@ public final class RoomBlueprints {
         // hazard/vent wall pass (guaranteed vent midpoints) + a bespoke machinery-and-leak prop pass. The
         // 'E' cluster becomes live explosive barrels at load, making the room the game's chain-reaction arena.
         registry.register(new LambdaRoomBlueprint(ID_ATMOSPHERIC_PLANT, RoomKind.SIGNATURE,
+                RoomSupplyStance.SUPPLY_NEUTRAL,
                 RoomSymbolDemand.of(demand(
                         'h', "wall_hazard",
                         'v', "wall_vent",
@@ -438,15 +480,17 @@ public final class RoomBlueprints {
     private static final class LambdaRoomBlueprint implements RoomBlueprint {
         private final String id;
         private final RoomKind kind;
+        private final RoomSupplyStance supplyStance;
         private final RoomSymbolDemand demand;
         private final Eligibility eligibility;
         private final SelectionWeight weight;
         private final BuildStep buildStep;
 
-        LambdaRoomBlueprint(String id, RoomKind kind, RoomSymbolDemand demand,
+        LambdaRoomBlueprint(String id, RoomKind kind, RoomSupplyStance supplyStance, RoomSymbolDemand demand,
                             Eligibility eligibility, SelectionWeight weight, BuildStep buildStep) {
             this.id          = id;
             this.kind        = kind;
+            this.supplyStance = supplyStance;
             this.demand      = demand;
             this.eligibility = eligibility;
             this.weight      = weight;
@@ -455,6 +499,7 @@ public final class RoomBlueprints {
 
         @Override public String id() { return id; }
         @Override public RoomKind kind() { return kind; }
+        @Override public RoomSupplyStance supplyStance() { return supplyStance; }
         @Override public boolean eligible(RoomContext context) { return eligibility.test(context); }
         @Override public float selectionWeight(RoomContext context) { return weight.of(context); }
         @Override public RoomSymbolDemand symbolDemand() { return demand; }

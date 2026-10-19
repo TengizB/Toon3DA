@@ -42,6 +42,9 @@ public interface RoomBlueprint {
     /** SIGNATURE (fixed identity + look) or GENERIC (allocator-driven filler). */
     RoomKind kind();
 
+    /** The room's declared relationship to floor supply (K12 / C-ROOM) — required, no default (E3). */
+    RoomSupplyStance supplyStance();
+
     /**
      * Whether this room may occupy a candidate described by {@code context} — mirrors today's
      * {@code LevelGenConstants} minimum-size, depth-window, and per-level hard-cap gates.

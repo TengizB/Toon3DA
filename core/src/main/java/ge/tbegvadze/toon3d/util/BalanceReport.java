@@ -995,6 +995,13 @@ public final class BalanceReport {
         System.out.println("  Hazards damage BOTH sides (player AND enemies) — two-sided by design. Enemy side: fire x"
                 + BalanceConfig.HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER + " (x FIRE matchup), toxic "
                 + BalanceConfig.HAZARD_TOXIC_ENEMY_STACKS_PER_TURN + " stacks/turn at the enemy's own max HP.");
+        System.out.println("  Declared hazards (BalanceSchema HAZARD_DECLARATIONS, rule C-HAZARD):");
+        for (BalanceSchema.HazardDeclaration hazard : BalanceSchema.hazardDeclarations()) {
+            System.out.println("    " + hazard.id + " '" + hazard.symbol + "' class "
+                    + (hazard.damageClass == null ? "none" : hazard.damageClass.name())
+                    + ", status " + (hazard.appliedStatus == null ? "none" : hazard.appliedStatus.name())
+                    + ", placed by " + hazard.placementOwnerClass);
+        }
         System.out.println();
         printBarrelBlastTable();
     }

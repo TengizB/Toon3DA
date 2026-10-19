@@ -86,8 +86,7 @@ import java.util.function.Supplier;
  * this way). Each {@link AdmissionRule} (C-*, {@link RuleKind#ADMISSION}) emits ONE result per content
  * item whose detail lists EVERY missing item and where to add it. An admission result is a missing
  * declaration, never a band verdict (that stays with the band rule), so it can NEVER be waived (G5).
- * The older {@link RuleKind#COVERAGE} rows (weapon / consumable / ammo / relic) are folded into the
- * admission family checkpoint by checkpoint.
+ * The old COVERAGE kind is retired: its rows live in C-WEAPON / C-ITEM / C-AMMO and R-RELIC-SOURCE.
  *
  * <p>Pure JVM: no LibGDX state, only {@link BalanceConfig} + {@link GameMath} + the headless
  * content enums, so it runs in CI. Every rule addition belongs here (later orders of the
@@ -131,8 +130,6 @@ public final class BalanceSchema {
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
         FLAGS,
-        /** COVERAGE (being folded into ADMISSION, K8 / relic): consumable and relic rows only. */
-        COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
         /** R-CREDITS v2 (balance-overhaul order 6): income per floor / NEEDED BUNDLE per floor in [1.10, 1.40], every region. */
@@ -525,7 +522,7 @@ public final class BalanceSchema {
 
     // =====================================================================================
     // R-ENEMY — role bands as DATA (an EnumMap, not a switch): a new EnemyRole without an
-    // entry here is a COVERAGE violation, never a silent pass.
+    // entry here is a C-ENEMY admission failure, never a silent pass.
     // =====================================================================================
 
     private static final Map<EnemyRole, float[]> ENEMY_THREAT_POINT_BANDS = buildEnemyThreatPointBands();
@@ -591,10 +588,10 @@ public final class BalanceSchema {
 
     // =====================================================================================
     // SPECIAL-VERB PRICING COVERAGE (new-game-balancr order 5). The cycle-averaged Threat-Point
-    // model (EnemyType.baseThreatPoints) prices every enemy SPECIAL verb. COVERAGE now fails the
+    // model (EnemyType.baseThreatPoints) prices every enemy SPECIAL verb. C-VERB now fails the
     // build if a catalogued SpecialAbility has NO registered equivalence — the anti-"shipped
     // unpriced" discipline extended to enemy moves. DATA (an EnumMap), never a switch. A new verb
-    // added to SpecialAbility without a row here is a COVERAGE violation.
+    // added to SpecialAbility without a row here is a C-VERB admission failure.
     // =====================================================================================
 
     /** How each enemy SPECIAL verb is priced into cycle-averaged Threat Points (order 5). */
@@ -620,7 +617,7 @@ public final class BalanceSchema {
         return Collections.unmodifiableMap(pricing);
     }
 
-    /** The pricing classification for an enemy SPECIAL verb, or null when none is registered (COVERAGE fails). */
+    /** The pricing classification for an enemy SPECIAL verb, or null when none is registered (C-VERB fails). */
     public static SpecialVerbPricing specialVerbPricing(SpecialAbility ability) {
         return SPECIAL_VERB_PRICING.get(ability);
     }
@@ -913,7 +910,6 @@ public final class BalanceSchema {
         results.addAll(hazardResults());
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
-        results.addAll(coverageResults());
         results.addAll(admissionResults());
         results.addAll(abilityBudgetResults());
         results.addAll(abilityRollSweepResults());
@@ -1784,7 +1780,7 @@ public final class BalanceSchema {
     // — util/RelicValuationModel. A relic is priced in R-CARRY's own terms; the bands are SECTION 26.
     // =====================================================================================
 
-    /** The rarity x valuation band table (SECTION 26). A pair with no row is a COVERAGE violation. */
+    /** The rarity x valuation band table (SECTION 26). A pair with no row fails R-RELIC-SOURCE resolves. */
     private static final Map<RelicRarity, Map<RelicValuation, float[]>> RELIC_BANDS = buildRelicBands();
 
     private static Map<RelicRarity, Map<RelicValuation, float[]>> buildRelicBands() {
@@ -1816,7 +1812,7 @@ public final class BalanceSchema {
         return results;
     }
 
-    /** One band row per reference depth (a relic with no band gets one failing row — COVERAGE names it too). */
+    /** One band row per reference depth (a relic with no band gets one failing row — R-RELIC-SOURCE resolves names it too). */
     private static List<RuleResult> relicBandResults(RuleKind kind, String rule, RelicDefinition relic) {
         List<RuleResult> results = new ArrayList<>();
         float[] band = relicBandOf(relic);
@@ -1959,6 +1955,17 @@ public final class BalanceSchema {
                         String.format("sums to %.5f over %d weights for %d rarities", sum, weights.length,
                                 source.allowedRarities().length)));
             }
+        }
+        // relics-run-changing-artifacts CP5 (folded from the retired COVERAGE kind): every relic resolves its rarity, its
+        // trigger and its valuation, and the rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY
+        // LEGENDARY, is unpriced content).
+        for (RelicDefinition relic : relics) {
+            boolean resolved = relic.rarity() != null && relic.trigger() != null && relic.valuation() != null
+                    && relicBandOf(relic) != null;
+            results.add(new RuleResult(RuleKind.RELIC_SOURCE, "R-RELIC-SOURCE resolves " + relic.id(),
+                    resolved ? 1f : 0f, 1f, 1f, resolved,
+                    resolved ? relic.rarity() + " / " + relic.trigger() + " / " + relic.valuation() + " banded"
+                             : "UNRESOLVED — a relic needs a rarity, a trigger, a valuation and a band for that rarity x valuation"));
         }
         // No duplicate ids (the registry already refuses one; this pins it as a rule).
         Set<String> ids = new HashSet<>();
@@ -2145,31 +2152,6 @@ public final class BalanceSchema {
         return 0;
     }
 
-    /** COVERAGE (being folded into ADMISSION): consumable and relic rows only; enemy, verb, weapon and ammo moved to C-* rules. */
-    public static List<RuleResult> coverageResults() {
-        List<RuleResult> results = new ArrayList<>();
-        for (ItemType itemType : ItemType.values()) {
-            if (itemType.getCategory() == ItemCategory.CONSUMABLE) {
-                boolean classified = CONSUMABLE_CLASSIFICATIONS.containsKey(itemType);
-                results.add(new RuleResult(RuleKind.COVERAGE, "consumable " + itemType.name(),
-                        classified ? 1f : 0f, 1f, 1f, classified,
-                        classified ? "classified " + CONSUMABLE_CLASSIFICATIONS.get(itemType)
-                                   : "UNCLASSIFIED — price it as a heal or declare it utility in BalanceSchema"));
-            }
-        }
-        // relics-run-changing-artifacts CP5: every relic resolves its rarity, its trigger and its valuation, and the
-        // rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY LEGENDARY, is unpriced content).
-        for (RelicDefinition relic : RelicCatalog.registry().all()) {
-            boolean resolved = relic.rarity() != null && relic.trigger() != null && relic.valuation() != null
-                    && relicBandOf(relic) != null;
-            results.add(new RuleResult(RuleKind.COVERAGE, "relic " + relic.id(),
-                    resolved ? 1f : 0f, 1f, 1f, resolved,
-                    resolved ? relic.rarity() + " / " + relic.trigger() + " / " + relic.valuation() + " banded"
-                             : "UNRESOLVED — a relic needs a rarity, a trigger, a valuation and a band for that rarity x valuation"));
-        }
-        return results;
-    }
-
     // =====================================================================================
     // ADMISSION (balance-overhaul order 8, K1-K18 / the C-* rules). One result per content item:
     // subject "<ruleId>: <contentId>", value 1 = admitted / 0 = not, band 1..1, detail = what was
@@ -2188,12 +2170,12 @@ public final class BalanceSchema {
         WEAPON("C-WEAPON", "K5 WEAPON", BalanceSchema::admissionWeaponResults),
         ABILITY("C-ABILITY", "K6 WEAPON ABILITY", BalanceSchema::admissionAbilityResults),
         PERK("C-PERK", "K7 PERK / KEYSTONE", BalanceSchema::admissionPerkResults),
-        ITEM("C-ITEM", "K8 ITEM / PICKUP / CONSUMABLE"),
+        ITEM("C-ITEM", "K8 ITEM / PICKUP / CONSUMABLE", BalanceSchema::admissionItemResults),
         AMMO("C-AMMO", "K9 AMMO TYPE", BalanceSchema::admissionAmmoResults),
-        STATUS("C-STATUS", "K10 STATUS EFFECT"),
-        HAZARD("C-HAZARD", "K11 HAZARD / GAMEPLAY PROP"),
-        ROOM("C-ROOM", "K12 ROOM BLUEPRINT"),
-        GENERATOR("C-GENERATOR", "K13 LEVEL GENERATOR"),
+        STATUS("C-STATUS", "K10 STATUS EFFECT", BalanceSchema::admissionStatusResults),
+        HAZARD("C-HAZARD", "K11 HAZARD / GAMEPLAY PROP", BalanceSchema::admissionHazardResults),
+        ROOM("C-ROOM", "K12 ROOM BLUEPRINT", BalanceSchema::admissionRoomResults),
+        GENERATOR("C-GENERATOR", "K13 LEVEL GENERATOR", BalanceSchema::admissionGeneratorResults),
         NODE("C-NODE", "K14 ROUTE NODE TYPE"),
         EVENT("C-EVENT", "K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX"),
         SHOP("C-SHOP", "K16 SHOP OFFER TYPE"),
@@ -2697,6 +2679,415 @@ public final class BalanceSchema {
             }
             results.add(admission(AdmissionRule.AMMO, ammoType.name(), missing,
                     "scarcity row, caps, box, banking target and pickup item declared"));
+        }
+        return results;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K8 ITEM SUPPLY STANCES — where each non-weapon ItemType comes from. DATA, not a switch. A stance with a
+    // SupplyCategory means the SupplyPlanner / a placer puts the item on the floor in that category's budget; a
+    // null category (NOT_FLOOR_SUPPLIED) carries the one-line reason it is not floor supplied.
+    // -------------------------------------------------------------------------------------
+
+    /** One item's declared supply stance: the planner category that places it, or null plus the reason it is not floor supplied. */
+    public static final class ItemSupplyStance {
+        public final ge.tbegvadze.toon3d.level.SupplyCategory category;
+        public final String reason;
+
+        ItemSupplyStance(ge.tbegvadze.toon3d.level.SupplyCategory category, String reason) {
+            this.category = category;
+            this.reason   = reason;
+        }
+
+        /** True for NOT_FLOOR_SUPPLIED (no planner category). */
+        public boolean isNotFloorSupplied() { return category == null; }
+    }
+
+    private static final Map<ItemType, ItemSupplyStance> ITEM_SUPPLY_STANCES = buildItemSupplyStances();
+
+    private static Map<ItemType, ItemSupplyStance> buildItemSupplyStances() {
+        Map<ItemType, ItemSupplyStance> stances = new EnumMap<>(ItemType.class);
+        ge.tbegvadze.toon3d.level.SupplyCategory heal = ge.tbegvadze.toon3d.level.SupplyCategory.HEAL;
+        ge.tbegvadze.toon3d.level.SupplyCategory credits = ge.tbegvadze.toon3d.level.SupplyCategory.CREDITS;
+        ge.tbegvadze.toon3d.level.SupplyCategory ammo = ge.tbegvadze.toon3d.level.SupplyCategory.AMMO;
+        stances.put(ItemType.MEDKIT_SMALL, new ItemSupplyStance(heal, "stim pack '+' — SupplyPlanner HEAL pickup, also a shop offer"));
+        stances.put(ItemType.MEDKIT_LARGE, new ItemSupplyStance(heal, "field medkit 'H' — SupplyPlanner HEAL pickup, also a shop offer"));
+        stances.put(ItemType.STIMPACK, new ItemSupplyStance(null,
+                "no placer, shop or reward references it — an inventory/UI identity only; the small medkit is the stim"));
+        stances.put(ItemType.KEYCARD_RED, new ItemSupplyStance(null,
+                "hand-level floor decal 'r' (Level.keycardColorOfPickup); no generator or planner places keycards"));
+        stances.put(ItemType.KEYCARD_YELLOW, new ItemSupplyStance(null,
+                "hand-level floor decal 'y' (Level.keycardColorOfPickup); no generator or planner places keycards"));
+        stances.put(ItemType.KEYCARD_BLUE, new ItemSupplyStance(null,
+                "hand-level floor decal 'b' (Level.keycardColorOfPickup); no generator or planner places keycards"));
+        stances.put(ItemType.CREDITS, new ItemSupplyStance(null,
+                "the wallet stack's inventory identity; floor credits are the CREDIT_SMALL/MEDIUM/LARGE chips"));
+        stances.put(ItemType.CREDIT_SMALL, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
+        stances.put(ItemType.CREDIT_MEDIUM, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
+        stances.put(ItemType.CREDIT_LARGE, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
+        for (AmmoType ammoType : AmmoType.values()) {
+            stances.put(ammoType.getItemType(), new ItemSupplyStance(ammo,
+                    "ammo box '" + ammoType.getPickupTileChar() + "' — SupplyPlanner AMMO pickup"));
+        }
+        return Collections.unmodifiableMap(stances);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K10 STATUS DECLARATIONS — one row per StatusType: its shape, the BalanceConfig / EffectConstants /
+    // GameBalance constants (by NAME, resolved by reflection) holding its magnitude and duration, how the player's
+    // armour treats it (Player.tryArmourShieldStatus) and which consumable cleanses it (World H11).
+    // -------------------------------------------------------------------------------------
+
+    /** The shape of a status's magnitude. */
+    public enum StatusShape {
+        /** Damage per turn as a FRACTION of the host's max HP (burn, poison). */
+        DOT_FRACTION,
+        /** Damage per turn as a flat amount (bleed, from the Rend ability). */
+        DOT_FLAT,
+        /** A damage multiplier expressed as a percent or factor (empowered, vulnerable, weak). */
+        MULTIPLIER,
+        /** A control effect with no damage magnitude of its own (stun, blind, slow, expose). */
+        CONTROL
+    }
+
+    /** How the player's armour treats an ENEMY -> player application (Player.tryArmourShieldStatus). */
+    public enum StatusArmourInteraction { BLOCKED_BY_ARMOUR, NOT_SHIELDED }
+
+    /** One declared status. magnitudeConstant is null only for a CONTROL status with no magnitude. */
+    public static final class StatusDeclaration {
+        public final StatusShape shape;
+        public final String magnitudeConstant;
+        public final String durationConstant;
+        public final StatusArmourInteraction armourInteraction;
+        public final ItemType cleanseItem;
+
+        StatusDeclaration(StatusShape shape, String magnitudeConstant, String durationConstant,
+                          StatusArmourInteraction armourInteraction, ItemType cleanseItem) {
+            this.shape             = shape;
+            this.magnitudeConstant = magnitudeConstant;
+            this.durationConstant  = durationConstant;
+            this.armourInteraction = armourInteraction;
+            this.cleanseItem       = cleanseItem;
+        }
+    }
+
+    private static final Map<ge.tbegvadze.toon3d.status.StatusType, StatusDeclaration> STATUS_DECLARATIONS =
+            buildStatusDeclarations();
+
+    private static Map<ge.tbegvadze.toon3d.status.StatusType, StatusDeclaration> buildStatusDeclarations() {
+        Map<ge.tbegvadze.toon3d.status.StatusType, StatusDeclaration> rows =
+                new EnumMap<>(ge.tbegvadze.toon3d.status.StatusType.class);
+        StatusArmourInteraction blocked = StatusArmourInteraction.BLOCKED_BY_ARMOUR;
+        StatusArmourInteraction open = StatusArmourInteraction.NOT_SHIELDED;
+        // Armour interaction: Player.tryArmourShieldStatus blocks WEAK / SLOWED / BLINDED / POISONED, nothing else.
+        // Cleanse: World (H11) — only the SMALL medkit, only POISONED and WEAK (Player.cleansePoisonAndWeak).
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.BURNING, new StatusDeclaration(StatusShape.DOT_FRACTION,
+                "BURN_TICK_FRACTION", "BURN_DURATION_MIN", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.POISONED, new StatusDeclaration(StatusShape.DOT_FRACTION,
+                "POISON_TICK_FRACTION", "POISON_MAX_STACKS", blocked, ItemType.MEDKIT_SMALL));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.BLEED, new StatusDeclaration(StatusShape.DOT_FLAT,
+                "REND_DAMAGE_PER_TURN_BASE", "REND_DURATION_TURNS", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.STUNNED, new StatusDeclaration(StatusShape.CONTROL,
+                null, "STUN_DURATION_DEFAULT", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.BLINDED, new StatusDeclaration(StatusShape.CONTROL,
+                null, "BLIND_DURATION", blocked, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.SLOWED, new StatusDeclaration(StatusShape.CONTROL,
+                "SLOW_FACTOR", "SLOW_DURATION", blocked, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.EMPOWERED, new StatusDeclaration(StatusShape.MULTIPLIER,
+                "EMPOWERED_DAMAGE_PERCENT", "EMPOWERED_DURATION", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.VULNERABLE, new StatusDeclaration(StatusShape.MULTIPLIER,
+                "VULNERABLE_DAMAGE_PERCENT", "VULNERABLE_DURATION", open, null));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.WEAK, new StatusDeclaration(StatusShape.MULTIPLIER,
+                "WEAK_DAMAGE_PERCENT", "WEAK_DURATION", blocked, ItemType.MEDKIT_SMALL));
+        rows.put(ge.tbegvadze.toon3d.status.StatusType.EXPOSED, new StatusDeclaration(StatusShape.CONTROL,
+                null, "EXPOSED_DURATION", open, null));
+        return Collections.unmodifiableMap(rows);
+    }
+
+    /** Resolves a constant by NAME across BalanceConfig, EffectConstants and GameBalance; null when none has it. */
+    private static Float resolveBalanceConstant(String constantName) {
+        Class<?>[] holders = {BalanceConfig.class, EffectConstants.class, GameBalance.class};
+        for (Class<?> holder : holders) {
+            try {
+                Object value = holder.getField(constantName).get(null);
+                if (value instanceof Number) return ((Number) value).floatValue();
+            } catch (ReflectiveOperationException ignored) {
+                // try the next holder
+            }
+        }
+        return null;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K11 HAZARD DECLARATIONS — every damaging prop / tile. The registry IS the list of hazards (no enum exists).
+    // -------------------------------------------------------------------------------------
+
+    /** One declared hazard. Player-side constants must be fractions in (0, 1]; enemy-side ones only positive. */
+    public static final class HazardDeclaration {
+        public final String id;
+        public final char symbol;
+        public final String[] playerFractionConstants;
+        public final String[] enemyConstants;
+        public final ge.tbegvadze.toon3d.status.StatusType appliedStatus;
+        public final ge.tbegvadze.toon3d.entity.DamageClass damageClass;
+        public final String damageClassReason;
+        public final String placementOwnerClass;
+
+        HazardDeclaration(String id, char symbol, String[] playerFractionConstants, String[] enemyConstants,
+                          ge.tbegvadze.toon3d.status.StatusType appliedStatus,
+                          ge.tbegvadze.toon3d.entity.DamageClass damageClass, String damageClassReason,
+                          String placementOwnerClass) {
+            this.id                      = id;
+            this.symbol                  = symbol;
+            this.playerFractionConstants = playerFractionConstants;
+            this.enemyConstants          = enemyConstants;
+            this.appliedStatus           = appliedStatus;
+            this.damageClass             = damageClass;
+            this.damageClassReason       = damageClassReason;
+            this.placementOwnerClass     = placementOwnerClass;
+        }
+    }
+
+    private static final List<HazardDeclaration> HAZARD_DECLARATIONS = buildHazardDeclarations();
+
+    private static List<HazardDeclaration> buildHazardDeclarations() {
+        List<HazardDeclaration> rows = new ArrayList<>();
+        String[] barrelPlayer = {"HAZARD_BARREL_PLAYER_CENTRE_FRACTION", "HAZARD_BARREL_PLAYER_RING_FRACTION"};
+        String[] barrelEnemy = {"HAZARD_BARREL_CENTRE_FRACTION", "HAZARD_BARREL_RING_FRACTION"};
+        String hazardPackage = "ge.tbegvadze.toon3d.";
+        rows.add(new HazardDeclaration("explosive_barrel", 'E', barrelPlayer, barrelEnemy, null,
+                ge.tbegvadze.toon3d.entity.DamageClass.EXPLOSIVE, null, hazardPackage + "level.GroupBarrelPlacer"));
+        rows.add(new HazardDeclaration("radioactive_barrel", 'g', barrelPlayer, barrelEnemy, null,
+                ge.tbegvadze.toon3d.entity.DamageClass.EXPLOSIVE, null, hazardPackage + "level.RoomBlueprints"));
+        rows.add(new HazardDeclaration("fire", 'i', new String[]{"BURN_TICK_FRACTION"},
+                new String[]{"HAZARD_FIRE_ENEMY_DAMAGE_MULTIPLIER"}, ge.tbegvadze.toon3d.status.StatusType.BURNING,
+                ge.tbegvadze.toon3d.entity.DamageClass.FIRE, null, hazardPackage + "hazard.HazardManager"));
+        rows.add(new HazardDeclaration("toxic", 'q', new String[]{"POISON_TICK_FRACTION"},
+                new String[]{"HAZARD_TOXIC_ENEMY_STACKS_PER_TURN"}, ge.tbegvadze.toon3d.status.StatusType.POISONED,
+                null, "poison stacks are not a weapon damage class — the matchup table has no poison column",
+                hazardPackage + "hazard.HazardManager"));
+        return Collections.unmodifiableList(rows);
+    }
+
+    /** The declared hazards — BalanceReport's HAZARDS table prints exactly this list. */
+    public static List<HazardDeclaration> hazardDeclarations() {
+        return HAZARD_DECLARATIONS;
+    }
+
+    /** Whether the authoritative tile classifier recognises the symbol as this hazard's tile. */
+    private static boolean hazardSymbolRecognised(char symbol) {
+        return ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager.isBarrelCell(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isHazardFire(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isHazardToxic(symbol);
+    }
+
+    /** True when the symbol is a pickup (medical, armour, ammo, keycard) or an enemy-spawn tile — supply, not architecture. */
+    private static boolean isSupplySymbol(char symbol) {
+        return ge.tbegvadze.toon3d.level.Level.isMedicalPickup(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isArmourPickup(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isAmmoPickup(symbol)
+                || ge.tbegvadze.toon3d.level.Level.isKeycardPickup(symbol)
+                || EnemyType.fromSpawnChar(symbol) != null;
+    }
+
+    /** Seeds C-ROOM sweeps per SUPPLY_NEUTRAL blueprint (an audit-local count, not a balance number). */
+    private static final int ROOM_STAMP_AUDIT_SEEDS = 120;
+
+    /**
+     * C-ITEM (K8): every non-WEAPON {@link ItemType} declares a supply stance (a planner category, or not floor
+     * supplied with a reason); a CONSUMABLE is a priced heal (a HealPickupSpec) or a declared utility; a HEAL stance
+     * has a HealPickupSpec; a stackable item has a positive stack size; and the description is non-blank.
+     */
+    public static List<RuleResult> admissionItemResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (ItemType itemType : ItemType.values()) {
+            if (itemType.getCategory() == ItemCategory.WEAPON) continue;
+            List<String> missing = new ArrayList<>();
+            ItemSupplyStance stance = ITEM_SUPPLY_STANCES.get(itemType);
+            if (stance == null) {
+                missing.add("no supply stance — declare it in BalanceSchema ITEM_SUPPLY_STANCES (a SupplyCategory, or NOT_FLOOR_SUPPLIED + reason)");
+            } else if (stance.isNotFloorSupplied() && (stance.reason == null || stance.reason.trim().isEmpty())) {
+                missing.add("NOT_FLOOR_SUPPLIED stance has no reason — state where the item comes from");
+            }
+            String classification = CONSUMABLE_CLASSIFICATIONS.get(itemType);
+            boolean pricedHeal = false;
+            if (classification != null) {
+                for (HealPickupSpec pickup : HEAL_PICKUPS) {
+                    if (pickup.displayName.equals(classification)) pricedHeal = true;
+                }
+            }
+            if (itemType.getCategory() == ItemCategory.CONSUMABLE
+                    && !pricedHeal && (classification == null || !classification.startsWith("UTILITY"))) {
+                missing.add("consumable is neither a priced heal nor a declared utility — price it as a HealPickupSpec or declare it UTILITY in BalanceSchema CONSUMABLE_CLASSIFICATIONS");
+            }
+            if (stance != null && stance.category == ge.tbegvadze.toon3d.level.SupplyCategory.HEAL && !pricedHeal) {
+                missing.add("HEAL stance but no HealPickupSpec — register one in BalanceSchema buildHealPickupRegistry and map it in CONSUMABLE_CLASSIFICATIONS");
+            }
+            if (itemType.isStackable() && itemType.getMaxStackSize() <= 0) {
+                missing.add("stackable but maxStackSize <= 0 — set the ITEM_STACK_MAX constant");
+            }
+            if (itemType.getDescription() == null || itemType.getDescription().trim().isEmpty()) {
+                missing.add("blank description — write one in ItemType");
+            }
+            results.add(admission(AdmissionRule.ITEM, itemType.name(), missing,
+                    stance == null ? "" : (stance.isNotFloorSupplied() ? "NOT_FLOOR_SUPPLIED: " : stance.category + ": ")
+                            + stance.reason));
+        }
+        return results;
+    }
+
+    /**
+     * C-STATUS (K10): every {@link ge.tbegvadze.toon3d.status.StatusType} has a declaration whose named magnitude
+     * and duration constants resolve (BalanceConfig / EffectConstants / GameBalance) and are positive; a
+     * DOT_FRACTION magnitude is a fraction in (0, 1); a CONTROL status may omit its magnitude only; a named cleanse
+     * item is a CONSUMABLE.
+     */
+    public static List<RuleResult> admissionStatusResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (ge.tbegvadze.toon3d.status.StatusType status : ge.tbegvadze.toon3d.status.StatusType.values()) {
+            List<String> missing = new ArrayList<>();
+            StatusDeclaration declaration = STATUS_DECLARATIONS.get(status);
+            if (declaration == null) {
+                missing.add("no declaration — add a row to BalanceSchema STATUS_DECLARATIONS (shape, constants, armour interaction, cleanse)");
+            } else {
+                if (declaration.magnitudeConstant == null) {
+                    if (declaration.shape != StatusShape.CONTROL) {
+                        missing.add("a " + declaration.shape + " status needs a magnitude constant");
+                    }
+                } else {
+                    Float magnitude = resolveBalanceConstant(declaration.magnitudeConstant);
+                    if (magnitude == null) {
+                        missing.add("magnitude constant " + declaration.magnitudeConstant + " not found in BalanceConfig / EffectConstants / GameBalance");
+                    } else if (magnitude <= 0f) {
+                        missing.add("magnitude " + declaration.magnitudeConstant + " = " + magnitude + " must be > 0");
+                    } else if (declaration.shape == StatusShape.DOT_FRACTION && magnitude >= 1f) {
+                        missing.add("DOT_FRACTION magnitude " + declaration.magnitudeConstant + " = " + magnitude + " must be a fraction in (0, 1)");
+                    }
+                }
+                Float duration = declaration.durationConstant == null ? null : resolveBalanceConstant(declaration.durationConstant);
+                if (duration == null) {
+                    missing.add("duration constant " + declaration.durationConstant + " not found in BalanceConfig / EffectConstants / GameBalance");
+                } else if (duration <= 0f) {
+                    missing.add("duration " + declaration.durationConstant + " = " + duration + " must be > 0");
+                }
+                if (declaration.armourInteraction == null) {
+                    missing.add("no armour-shield interaction declared");
+                }
+                if (declaration.cleanseItem != null && declaration.cleanseItem.getCategory() != ItemCategory.CONSUMABLE) {
+                    missing.add("cleanse item " + declaration.cleanseItem + " is not a CONSUMABLE");
+                }
+            }
+            results.add(admission(AdmissionRule.STATUS, status.name(), missing,
+                    declaration == null ? "" : declaration.shape + ", " + declaration.armourInteraction
+                            + (declaration.cleanseItem == null ? ", no cleanse" : ", cleansed by " + declaration.cleanseItem)));
+        }
+        return results;
+    }
+
+    /**
+     * C-HAZARD (K11): every {@link HazardDeclaration} names constants that resolve — player-side ones fractions in
+     * (0, 1], enemy-side ones positive — a symbol the tile classifiers recognise, an applied status that is itself
+     * declared in C-STATUS, a damage class (or a stated reason there is none), and a placement owner class that
+     * exists.
+     */
+    public static List<RuleResult> admissionHazardResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (HazardDeclaration hazard : HAZARD_DECLARATIONS) {
+            List<String> missing = new ArrayList<>();
+            for (String name : hazard.playerFractionConstants) {
+                Float value = resolveBalanceConstant(name);
+                if (value == null) missing.add("player-side constant " + name + " not found in BalanceConfig / EffectConstants / GameBalance");
+                else if (value <= 0f || value > 1f) missing.add("player-side " + name + " = " + value + " must be a fraction in (0, 1]");
+            }
+            for (String name : hazard.enemyConstants) {
+                Float value = resolveBalanceConstant(name);
+                if (value == null) missing.add("enemy-side constant " + name + " not found in BalanceConfig / EffectConstants / GameBalance");
+                else if (value <= 0f) missing.add("enemy-side " + name + " = " + value + " must be > 0");
+            }
+            if (!hazardSymbolRecognised(hazard.symbol)) {
+                missing.add("symbol '" + hazard.symbol + "' is not recognised by ExplosiveBarrelManager.isBarrelCell / Level.isHazardFire / Level.isHazardToxic");
+            }
+            if (hazard.appliedStatus != null && !STATUS_DECLARATIONS.containsKey(hazard.appliedStatus)) {
+                missing.add("applied status " + hazard.appliedStatus + " is not declared in STATUS_DECLARATIONS (C-STATUS)");
+            }
+            if (hazard.damageClass == null
+                    && (hazard.damageClassReason == null || hazard.damageClassReason.trim().isEmpty())) {
+                missing.add("no DamageClass and no stated reason — declare one");
+            }
+            try {
+                Class.forName(hazard.placementOwnerClass);
+            } catch (ClassNotFoundException exception) {
+                missing.add("placement owner " + hazard.placementOwnerClass + " does not exist");
+            }
+            results.add(admission(AdmissionRule.HAZARD, hazard.id, missing,
+                    "'" + hazard.symbol + "' " + hazard.damageClass + " / " + hazard.appliedStatus
+                            + "; placed by " + hazard.placementOwnerClass));
+        }
+        return results;
+    }
+
+    /**
+     * C-ROOM (K12): every registered {@link ge.tbegvadze.toon3d.level.RoomBlueprint} declares a supply stance; a
+     * SUPPLY_NEUTRAL room's build(), run in isolation over a seed sweep, stamps no pickup and no enemy-spawn symbol.
+     */
+    public static List<RuleResult> admissionRoomResults() {
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.level.RoomBlueprints.bootstrap();
+        ge.tbegvadze.toon3d.level.RoomBlueprintRegistry registry = ge.tbegvadze.toon3d.level.RoomBlueprints.rooms();
+        for (ge.tbegvadze.toon3d.level.RoomBlueprint blueprint : registry.all()) {
+            List<String> missing = new ArrayList<>();
+            ge.tbegvadze.toon3d.level.RoomSupplyStance stance = blueprint.supplyStance();
+            if (stance == null) {
+                missing.add("no supplyStance() — declare SUPPLY_NEUTRAL or SLOT_PROVIDER in RoomBlueprints");
+            } else if (stance == ge.tbegvadze.toon3d.level.RoomSupplyStance.SUPPLY_NEUTRAL) {
+                Set<Character> offending = new java.util.TreeSet<>();
+                for (long seed = 1; seed <= ROOM_STAMP_AUDIT_SEEDS; seed++) {
+                    for (char symbol : ge.tbegvadze.toon3d.level.RoomBlueprints.symbolsStampedInIsolation(blueprint, seed)) {
+                        if (isSupplySymbol(symbol)) offending.add(symbol);
+                    }
+                }
+                if (!offending.isEmpty()) {
+                    missing.add("declared SUPPLY_NEUTRAL but build() stamps supply symbols " + offending
+                            + " — remove them or declare SLOT_PROVIDER");
+                }
+            }
+            results.add(admission(AdmissionRule.ROOM, blueprint.id(), missing, "stance " + stance));
+        }
+        return results;
+    }
+
+    /**
+     * C-GENERATOR (K13): every {@link ge.tbegvadze.toon3d.route.GeneratorId} is registered, builds headlessly, serves
+     * at least one node type (generatorServes), and for each served type the R-SUPPLY generator sweep produced
+     * results — i.e. its floors went through the shared supply pipeline, directly as a SupplySlotProvider or through
+     * PocketSupplyRegions (the bespoke single-chamber generators).
+     */
+    public static List<RuleResult> admissionGeneratorResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> supplyResults = supplySweepResults();
+        for (ge.tbegvadze.toon3d.route.GeneratorId generatorId : ge.tbegvadze.toon3d.route.GeneratorId.values()) {
+            List<String> missing = new ArrayList<>();
+            String provider = "unbuilt";
+            if (!RouteRegistries.generators().isRegistered(generatorId)) {
+                missing.add("not registered — RouteRegistries.registerGenerators");
+            } else {
+                Object instance = RouteRegistries.generators().create(generatorId, 1L,
+                        new ge.tbegvadze.toon3d.level.LevelGenConfig());
+                provider = instance instanceof ge.tbegvadze.toon3d.level.SupplySlotProvider
+                        ? "SupplySlotProvider" : "PocketSupplyRegions";
+            }
+            RouteNodeType[] served = GENERATOR_SERVES.get(generatorId);
+            if (served == null || served.length == 0) {
+                missing.add("serves no node type — add it to BalanceSchema GENERATOR_SERVES");
+            } else {
+                for (RouteNodeType type : served) {
+                    if (!anySubjectStartsWith(supplyResults, generatorId.stableId() + " " + type + " d")) {
+                        missing.add("no R-SUPPLY sweep result for " + type + " — the generator must populate through FloorPopulator");
+                    }
+                }
+            }
+            results.add(admission(AdmissionRule.GENERATOR, generatorId.name(), missing,
+                    "registered, supply via " + provider + ", serves " + java.util.Arrays.toString(served)));
         }
         return results;
     }

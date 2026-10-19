@@ -166,10 +166,53 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.flagResults());
     }
 
-    /** COVERAGE: every consumable and every relic is classified/priced (enemy, verb, weapon and ammo moved to the C-* admission rules). */
+    /**
+     * C-ITEM (K8) — folds the retired COVERAGE kind's consumable rows (its relic row moved to R-RELIC-SOURCE
+     * "resolves", asserted by {@code theRelicPoolAlwaysFillsAnOffer}): every non-weapon ItemType declares a supply stance
+     * (planner category, or not floor supplied with a reason); a consumable is a priced heal or a declared utility;
+     * a HEAL stance has a HealPickupSpec; stackables have a stack size; descriptions are non-blank.
+     */
     @Test
-    void allContentIsCoveredByTheSchema() {
-        assertNoViolations(BalanceSchema.coverageResults());
+    void everyItemIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ITEM));
+    }
+
+    /**
+     * C-STATUS (K10): every StatusType has a declaration whose named magnitude and duration constants resolve and
+     * are positive (a DOT_FRACTION magnitude a fraction in (0, 1)), with its armour interaction and any cleanse item
+     * (a CONSUMABLE) declared.
+     */
+    @Test
+    void everyStatusEffectIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.STATUS));
+    }
+
+    /**
+     * C-HAZARD (K11): every declared hazard (barrels E / g, fire i, toxic q) names resolving constants (player side a
+     * fraction in (0, 1]), a recognised tile symbol, a declared applied status, a damage class and an existing
+     * placement owner.
+     */
+    @Test
+    void everyHazardIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.HAZARD));
+    }
+
+    /**
+     * C-ROOM (K12): every registered RoomBlueprint declares a supply stance, and a SUPPLY_NEUTRAL room's build(), run
+     * in isolation over a seed sweep, stamps no pickup and no enemy-spawn symbol.
+     */
+    @Test
+    void everyRoomBlueprintIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ROOM));
+    }
+
+    /**
+     * C-GENERATOR (K13): every GeneratorId is registered, builds headlessly, serves at least one node type and has
+     * R-SUPPLY generator-sweep results for each type it serves (its floors go through the shared supply pipeline).
+     */
+    @Test
+    void everyLevelGeneratorIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.GENERATOR));
     }
 
     /**
@@ -447,11 +490,15 @@ class BalanceAuditTest {
 
     /**
      * R-RELIC-SOURCE: every offer can fill, weights sum to 1, ids are unique, every curse states and carries its
-     * cost, the perk-rank price anchor matches the measured build, and the route offers relics at all.
+     * cost, the perk-rank price anchor matches the measured build, the route offers relics at all, and every relic
+     * resolves its rarity, trigger, valuation and band (the retired COVERAGE kind's relic row).
      */
     @Test
     void theRelicPoolAlwaysFillsAnOffer() {
-        assertNoViolations(BalanceSchema.relicSourceResults());
+        List<BalanceSchema.RuleResult> results = BalanceSchema.relicSourceResults();
+        assertNoViolations(results);
+        assertTrue(results.stream().anyMatch(result -> result.subject.startsWith("R-RELIC-SOURCE resolves ")),
+                "every relic's resolution is checked");
     }
 
     /**

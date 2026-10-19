@@ -50,7 +50,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green on current content.
 - [x] **CP2** — C-WEAPON, C-ABILITY, C-PERK, C-AMMO live; COVERAGE weapon/ammo checks folded in.
       DONE WHEN: both gates green.
-- [ ] **CP3** — C-ITEM, C-STATUS, C-HAZARD, C-ROOM, C-GENERATOR live.
+- [x] **CP3** — C-ITEM, C-STATUS, C-HAZARD, C-ROOM, C-GENERATOR live.
       DONE WHEN: both gates green.
 - [ ] **CP4** — C-NODE, C-EVENT, C-SHOP, C-REGION live; BalanceReport ADMISSION table prints.
       DONE WHEN: A1, A7 hold; both gates green.
@@ -98,3 +98,16 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (`ItemType.getSignatureAbilities()` holds two STANDARD characteristic abilities), so C-ABILITY checks "eligible for
   >= 1 weapon family" instead of "exactly one weapon lists it"; class reach = an `R-ROLE-3 <CLASS>` subject; drop-pool
   membership required for RANGED only. COVERAGE now holds consumable + relic rows only (CP3 removes the kind).
+- **CP3 handover:** `admissionItemResults()` (15), `admissionStatusResults()` (10), `admissionHazardResults()` (4:
+  'E', 'g' — `ExplosiveBarrelManager.isBarrelCell` treats both as barrels —, fire 'i', toxic 'q'; SpireManager spires
+  deal no damage), `admissionRoomResults()` (15, all SUPPLY_NEUTRAL on a 120-seed isolated stamp sweep),
+  `admissionGeneratorResults()` (7). RuleKind.COVERAGE is GONE: consumables -> C-ITEM, the relic line ->
+  RELIC_SOURCE `"R-RELIC-SOURCE resolves <id>"`. New: `level/RoomSupplyStance`, `RoomBlueprint.supplyStance()` (no
+  default — E3 hardening for rooms is DONE here, CP5 need not repeat it), `RoomBlueprints.symbolsStampedInIsolation`,
+  `BalanceSchema.hazardDeclarations()`; `LevelGenerator.roomTypeForBlueprint` now package-private.
+  Decisions vs the contract: StatusShape gained DOT_FLAT (BLEED = Rend's flat per-turn, GameBalance); enemy-side
+  hazard constants checked > 0 only (barrel centre is 1.2 x reference soldier HP); toxic has no DamageClass (no poison
+  column) — declared with a reason; C-GENERATOR does NOT require `instanceof SupplySlotProvider` (BOSS_ARENA, MED_BAY,
+  EVENT_ROOM, GATE_AIRLOCK supply through FloorPopulator + PocketSupplyRegions) — it requires R-SUPPLY sweep results
+  per served type; BalanceReport HAZARDS keeps its rows and gains a "Declared hazards" list from the registry.
+  STIMPACK / CREDITS / keycards are NOT_FLOOR_SUPPLIED (no placer; keycards are hand-level decals r/y/b).

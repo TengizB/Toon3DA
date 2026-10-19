@@ -498,7 +498,7 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
      * OWN architecture still adds a build helper (as SALVAGE_BAY did) and, if it wants a distinct tag, its
      * own enum constant — but that is no longer required merely to register and select a room.
      */
-    private static RoomType roomTypeForBlueprint(RoomBlueprint blueprint) {
+    static RoomType roomTypeForBlueprint(RoomBlueprint blueprint) {
         String enumName = blueprint.id().toUpperCase(java.util.Locale.ROOT);
         for (RoomType candidate : RoomType.values()) {
             if (candidate.name().equals(enumName)) {
