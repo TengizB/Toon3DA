@@ -6,6 +6,8 @@ import java.util.List;
 import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.enemy.HuntedPursuitListener;
 import ge.tbegvadze.toon3d.entity.MatchupCatalog;
 import ge.tbegvadze.toon3d.entity.AbilityResolver;
 import ge.tbegvadze.toon3d.entity.ArcCannon;
@@ -223,6 +225,7 @@ public final class SimWorld implements LevelTransitionListener {
 
         routeMapGenerator = new RouteMapGenerator(RouteRegistries.nodeTypes(), RouteRegistries.generators());
         routeMapGenerator.setEliteAffixPool(RouteRegistries.affixes().elitePool());
+        routeMapGenerator.setTwistPool(RouteRegistries.affixes().definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST));
 
         weaponRoller   = new WeaponRoller(runSeed);
         playerStats    = new PlayerStats();
@@ -400,6 +403,13 @@ public final class SimWorld implements LevelTransitionListener {
 
         doorManager  = new DoorManager(level);
         enemyManager = new EnemyManager(level, doorManager, currentDepth, seed);
+        // Floor-twists: mirror World.applyTwistRuntimeModifiers' non-render half (the dark and the missing
+        // mini-map are invisible to the sim — the documented BLACKOUT model gap).
+        ge.tbegvadze.toon3d.route.NodeAffixDefinition twist = currentTwistId == null ? null
+                : RouteRegistries.affixes().definition(currentTwistId);
+        if (twist != null && twist.overridesWakePerception()) {
+            enemyManager.setWakePerception(twist.wakeRadiusTiles(), twist.wakeSightTiles());
+        }
         abilityResolver = new AbilityResolver(enemyManager, null, player, runSeed);
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);
@@ -556,6 +566,7 @@ public final class SimWorld implements LevelTransitionListener {
         hazardDamageBaseline             = statusEffectController.getHazardDamageToEnemies();
         switchHintWeapon                 = null;
         floorLedger.depth                = currentDepth;
+        floorLedger.twistId              = currentTwistId;
         floorLedger.bossFloor            = bossFloorController != null;
         floorLedger.playerLevelOnArrival = playerProgress.getPlayerLevel();
         floorLedger.demandDamage         = measureFloorDemandDamage();
@@ -563,13 +574,44 @@ public final class SimWorld implements LevelTransitionListener {
         recordPlannedContent(level.getFloorContentReport());
         ledger.floors.add(floorLedger);
         ledger.depthReached = Math.max(ledger.depthReached, currentDepth);
+        beginTwistHunt(twist);
         turnsOnFloor        = 0;
         floorActive         = true;
         bossRelicResolvedThisFloor = false;
     }
 
+    /**
+     * Floor-twists R9 (HUNTED): mirrors World.applyTwistRuntimeModifiers' hunter clock — the hunt starts at the
+     * player's arrival tile, and the floor ledger records the arrival and the kill (the TWIST REPORT reads them).
+     */
+    private void beginTwistHunt(ge.tbegvadze.toon3d.route.NodeAffixDefinition twist) {
+        if (twist == null || twist.hunterEnemyTypeName() == null) return;
+        EnemyType hunterType;
+        try {
+            hunterType = EnemyType.valueOf(twist.hunterEnemyTypeName());
+        } catch (IllegalArgumentException unknownType) {
+            return;
+        }
+        final FloorLedger huntLedger = floorLedger;
+        enemyManager.beginHunt(hunterType,
+                (int) Math.floor(player.positionX / Constants.CELL_SIZE),
+                (int) Math.floor(player.positionY / Constants.CELL_SIZE),
+                new HuntedPursuitListener() {
+                    @Override public void onHunterWarning() { }
+                    @Override public void onHunterArrived(int tileColumn, int tileRow) { huntLedger.hunterArrived = true; }
+                    @Override public void onHunterKilled(int tileColumn, int tileRow)  { huntLedger.hunterKilled  = true; }
+                });
+    }
+
+    /**
+     * The FLOOR TWIST id the floor being played was built with (floor-twists), or {@code null}. Set by
+     * {@link #generateLevel}; read by the runtime-modifier mirror and the TWIST REPORT.
+     */
+    private String currentTwistId;
+
     /** Runs the node -&gt; floor pipeline (mirrors World.buildFloorForNode); falls back to depth-driven. */
     private Level generateLevel(long seed) {
+        currentTwistId = null;
         if (pendingNode == null) {
             ILevelGenerator generator = GameMath.isBossFloor(currentDepth)
                     ? new BossArenaGenerator(seed)
@@ -589,7 +631,41 @@ public final class SimWorld implements LevelTransitionListener {
         for (GuaranteedContent guarantee : plan.guarantees()) {
             guarantee.applyTo(built);
         }
+        currentTwistId = plan.floorEffects().twistId();
+        // Floor-twists: a twist's scattered owned-ammo boxes are part of what R-TWIST prices, so the sim
+        // stamps them exactly as World.fulfillAmmoCache does. Deliberately ONLY for a twisted floor: the sim
+        // has never fulfilled the other plans' cache requests, and changing that would move existing bands.
+        if (currentTwistId != null) {
+            fulfillTwistAmmo(built, plan.ammoCache(), seed);
+        }
         return built;
+    }
+
+    /** Mirrors World.fulfillAmmoCache: the boxes spread over the OWNED ammo types (all types if none). */
+    private void fulfillTwistAmmo(Level targetLevel, ge.tbegvadze.toon3d.route.AmmoCacheRequest request, long seed) {
+        if (targetLevel == null || request == null || request.boxCount() <= 0) return;
+        java.util.List<Character> ammoSymbols = new java.util.ArrayList<>();
+        ge.tbegvadze.toon3d.entity.Loadout loadout = inventory.getLoadout();
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                Weapon weapon = loadout.getSlot(slotIndex);
+                if (weapon == null || weapon.getAmmoType() == null) continue;
+                char symbol = weapon.getAmmoType().getPickupTileChar();
+                if (!ammoSymbols.contains(symbol)) ammoSymbols.add(symbol);
+            }
+        }
+        if (ammoSymbols.isEmpty()) {
+            for (AmmoType ammoType : AmmoType.values()) ammoSymbols.add(ammoType.getPickupTileChar());
+        }
+        int typeCount  = ammoSymbols.size();
+        int totalBoxes = request.boxCount();
+        for (int typeIndex = 0; typeIndex < typeCount; typeIndex++) {
+            int boxesForType = totalBoxes / typeCount + (typeIndex < totalBoxes % typeCount ? 1 : 0);
+            if (boxesForType <= 0) continue;
+            long typeSeed = seed ^ (0x9E3779B97F4A7C15L * (typeIndex + 1L));
+            ge.tbegvadze.toon3d.route.GuaranteedContentStamper.stamp(targetLevel, ammoSymbols.get(typeIndex),
+                    boxesForType, request.placement(), typeSeed);
+        }
     }
 
     private void captureBossArenaLayout(ILevelGenerator generator) {
@@ -1177,6 +1253,7 @@ public final class SimWorld implements LevelTransitionListener {
 
     private void recordDeath(boolean threatWasTelegraphed, boolean inResourceCrisis) {
         floorLedger.diedWithNoHealsHeld = view.medkitCount() == 0;
+        floorLedger.diedOnFloor         = true;
         floorLedger.ammoHeldFractionAtDeath = carriedAmmoHeldFraction();
         ledger.ending                      = RunLedger.Ending.KILLED;
         ledger.endingDepth                 = currentDepth;

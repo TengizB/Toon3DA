@@ -32,6 +32,7 @@ import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.RenderResolution;
 
 import java.util.HashMap;
@@ -289,6 +290,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.planeY       = GameMath.cameraPlaneY(playerDirectionX, planeScale);
     }
 
+    /** Floor-twists R7c: the floor's light multiplier (1.0 = normal; a BLACKOUT floor dims enemy bodies). */
+    private float lightMultiplier = 1f;
+
+    /** Sets the floor light multiplier enemy billboards are dimmed by (never below the silhouette floor). */
+    public void setLightMultiplier(float multiplier) {
+        this.lightMultiplier = multiplier;
+    }
+
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
     }
@@ -446,6 +455,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (enemy.state == EnemyState.DORMANT) {
                 baseShade *= DORMANT_SHADE_DAMPEN;
             }
+            // Floor-twists R7c: a BLACKOUT floor dims the body with the room, never below a silhouette.
+            // Health bars and intent icons are drawn by their own passes and are never dimmed.
+            baseShade = GameMath.darkenedShadeWithFloor(baseShade, lightMultiplier,
+                    RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
             float baseRed   = Math.min(1f, baseShade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float baseGreen = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float baseBlue  = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
@@ -1120,8 +1133,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
                 float borderPixels = ENEMY_HEALTH_BAR_BORDER_PIXELS;
 
-                batch.setColor(ENEMY_HEALTH_BAR_BORDER_RED, ENEMY_HEALTH_BAR_BORDER_GREEN,
-                               ENEMY_HEALTH_BAR_BORDER_BLUE, ENEMY_HEALTH_BAR_BORDER_ALPHA);
+                // Floor-twists R15: THE trail hunter's frame is twist amber, so it reads apart from any Iron Stalker.
+                if (enemies.get(sortedIndices[sortedPosition]).followsPlayerTrail) {
+                    batch.setColor(TWIST_HUNTER_HEALTH_BAR_FRAME_RED,
+                                   TWIST_HUNTER_HEALTH_BAR_FRAME_GREEN,
+                                   TWIST_HUNTER_HEALTH_BAR_FRAME_BLUE,
+                                   TWIST_HUNTER_HEALTH_BAR_FRAME_ALPHA);
+                } else {
+                    batch.setColor(ENEMY_HEALTH_BAR_BORDER_RED, ENEMY_HEALTH_BAR_BORDER_GREEN,
+                                   ENEMY_HEALTH_BAR_BORDER_BLUE, ENEMY_HEALTH_BAR_BORDER_ALPHA);
+                }
                 batch.draw(whitePixelTexture,
                            barLeft - borderPixels, barBottom - borderPixels,
                            barWidth + 2f * borderPixels, barHeight + 2f * borderPixels,

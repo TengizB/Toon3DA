@@ -7,7 +7,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The BEHAVIOUR of one ELITE affix (order-9): a bundle of TYPED modifiers that bias a hotzone floor
+ * The BEHAVIOUR of one ELITE affix (order-9) — or, since floor-twists, of one FLOOR TWIST: the row's
+ * {@link AffixScope} says which. A twist is the same idiom on a COMBAT node: the plan-time modifiers
+ * (budget scale, scattered owned-ammo boxes, stims, armour shards) are folded by
+ * {@link DefaultCombatProfile}; the runtime modifiers (no mini-map, a light multiplier, wake perception,
+ * a trail hunter named by archetype) are applied by {@code World} / {@code SimWorld} after the floor is
+ * built. Every field defaults to "no effect", so a row declares only what it does, and a fourth twist
+ * built from these kinds needs no code change anywhere (A12).
+ *
+ * <p>Original order-9 description: the BEHAVIOUR of one ELITE affix: a bundle of TYPED modifiers that bias a hotzone floor
  * for flavour + a readable twist. This is the affix twin of {@link NodeTypeDefinition} — the
  * lightweight {@link NodeAffix} token stored on a {@link RouteNode} carries only id + display name;
  * the modifiers live here, looked up from the {@link NodeAffixRegistry} by {@link EliteProfile} at
@@ -25,6 +33,19 @@ public final class NodeAffixDefinition {
     private final String id;
     private final String displayName;
     private final float  weight;
+    private final AffixScope scope;
+    private final int    minDepth;
+    private final String ruleLine;
+
+    // Floor-twist modifiers (floor-twists R5/R7/R9). All "no effect" by default.
+    private final boolean minimapDisabled;
+    private final float   lightMultiplier;
+    private final int     wakeRadiusTiles;
+    private final int     wakeSightTiles;
+    private final String  hunterEnemyTypeName;
+    private final int     scatteredAmmoBoxes;
+    private final int     extraStims;
+    private final int     extraArmourShards;
 
     private final float  budgetScaleMultiplier;
     private final float  radioactiveBarrelWeightBonus;
@@ -38,6 +59,17 @@ public final class NodeAffixDefinition {
         this.id                           = Objects.requireNonNull(builder.id, "id");
         this.displayName                  = Objects.requireNonNull(builder.displayName, "displayName");
         this.weight                       = builder.weight;
+        this.scope                        = Objects.requireNonNull(builder.scope, "scope");
+        this.minDepth                     = builder.minDepth;
+        this.ruleLine                     = builder.ruleLine == null ? "" : builder.ruleLine;
+        this.minimapDisabled              = builder.minimapDisabled;
+        this.lightMultiplier              = builder.lightMultiplier;
+        this.wakeRadiusTiles              = builder.wakeRadiusTiles;
+        this.wakeSightTiles               = builder.wakeSightTiles;
+        this.hunterEnemyTypeName          = builder.hunterEnemyTypeName;
+        this.scatteredAmmoBoxes           = builder.scatteredAmmoBoxes;
+        this.extraStims                   = builder.extraStims;
+        this.extraArmourShards            = builder.extraArmourShards;
         this.budgetScaleMultiplier        = builder.budgetScaleMultiplier;
         this.radioactiveBarrelWeightBonus = builder.radioactiveBarrelWeightBonus;
         this.extraRadioactiveBarrels      = builder.extraRadioactiveBarrels;
@@ -71,6 +103,85 @@ public final class NodeAffixDefinition {
     /** Relative probability this affix is drawn from the pool. */
     public float weight() {
         return weight;
+    }
+
+    /** Which slot this row fills: an ELITE hotzone affix or a COMBAT floor twist. */
+    public AffixScope scope() {
+        return scope;
+    }
+
+    /** The shallowest RAW depth this row may roll on (R3). 1 = any depth. */
+    public int minDepth() {
+        return minDepth;
+    }
+
+    /** The short rule line the route console's confirm bar prints after the name (R14); never null. */
+    public String ruleLine() {
+        return ruleLine;
+    }
+
+    /** R7a: true when the floor's mini-map (and player dot) is replaced by the NAV OFFLINE plate. */
+    public boolean minimapDisabled() {
+        return minimapDisabled;
+    }
+
+    /** R7b: the per-Level tile-brightness multiplier (1.0 = unchanged; the exit is always exempt). */
+    public float lightMultiplier() {
+        return lightMultiplier;
+    }
+
+    /** R7d: the dormant-wake proximity radius in tiles, or -1 for the default. */
+    public int wakeRadiusTiles() {
+        return wakeRadiusTiles;
+    }
+
+    /** R7d: the dormant-wake sight range in tiles, or -1 for the default. */
+    public int wakeSightTiles() {
+        return wakeSightTiles;
+    }
+
+    /** True when either wake-perception value overrides the default. */
+    public boolean overridesWakePerception() {
+        return wakeRadiusTiles >= 0 || wakeSightTiles >= 0;
+    }
+
+    /**
+     * R9: the {@code EnemyType} NAME of the trail hunter this twist prints, or {@code null} for none. A name,
+     * resolved by World / SimWorld, so the headless route package never imports the enemy package.
+     */
+    public String hunterEnemyTypeName() {
+        return hunterEnemyTypeName;
+    }
+
+    /** R5: extra owned-ammo boxes scattered over a twisted COMBAT floor (fulfilled by World's cache path). */
+    public int scatteredAmmoBoxes() {
+        return scatteredAmmoBoxes;
+    }
+
+    /** R5: extra '+' stim packs scattered over a twisted COMBAT floor. */
+    public int extraStims() {
+        return extraStims;
+    }
+
+    /** R5: extra 'a' armour shards scattered over a twisted COMBAT floor. */
+    public int extraArmourShards() {
+        return extraArmourShards;
+    }
+
+    /**
+     * R5: the twist's scattered pickups as ordinary guarantees, existing symbols only ('+' stim pack, 'a'
+     * armour shard — docs/tile-symbols.txt). The owned-ammo boxes are NOT here: they are an
+     * {@link AmmoCacheRequest}, because only World knows the arsenal.
+     */
+    public List<GuaranteedContent> twistGuarantees(long seed) {
+        List<GuaranteedContent> extras = new ArrayList<>();
+        if (extraStims > 0) {
+            extras.add(Guarantees.pickup('+', extraStims, Placement.SCATTERED, seed));
+        }
+        if (extraArmourShards > 0) {
+            extras.add(Guarantees.pickup('a', extraArmourShards, Placement.SCATTERED, seed));
+        }
+        return extras;
     }
 
     /** The lightweight token stored on a {@link RouteNode} once this affix rolls. */
@@ -134,6 +245,17 @@ public final class NodeAffixDefinition {
         private final String id;
         private final String displayName;
         private float weight = ge.tbegvadze.toon3d.util.RouteMapConstants.AFFIX_WEIGHT_DEFAULT;
+        private AffixScope scope = AffixScope.ELITE_AFFIX;
+        private int     minDepth            = 1;
+        private String  ruleLine            = "";
+        private boolean minimapDisabled     = false;
+        private float   lightMultiplier     = 1f;
+        private int     wakeRadiusTiles     = -1;
+        private int     wakeSightTiles      = -1;
+        private String  hunterEnemyTypeName = null;
+        private int     scatteredAmmoBoxes  = 0;
+        private int     extraStims          = 0;
+        private int     extraArmourShards   = 0;
         private float budgetScaleMultiplier        = 1f;
         private float radioactiveBarrelWeightBonus = 0f;
         private int   extraRadioactiveBarrels      = 0;
@@ -155,6 +277,20 @@ public final class NodeAffixDefinition {
         public Builder extraColumns(int value)                   { this.extraColumns = value; return this; }
         public Builder extraArmourPickups(int value)             { this.extraArmourPickups = value; return this; }
         public Builder extraVaultAmmoBoxes(int value)            { this.extraVaultAmmoBoxes = value; return this; }
+        public Builder scope(AffixScope value)                   { this.scope = value; return this; }
+        public Builder minDepth(int value)                       { this.minDepth = value; return this; }
+        public Builder ruleLine(String value)                    { this.ruleLine = value; return this; }
+        public Builder minimapDisabled(boolean value)            { this.minimapDisabled = value; return this; }
+        public Builder lightMultiplier(float value)              { this.lightMultiplier = value; return this; }
+        public Builder wakePerception(int radiusTiles, int sightTiles) {
+            this.wakeRadiusTiles = radiusTiles;
+            this.wakeSightTiles  = sightTiles;
+            return this;
+        }
+        public Builder hunterEnemyTypeName(String value)         { this.hunterEnemyTypeName = value; return this; }
+        public Builder scatteredAmmoBoxes(int value)             { this.scatteredAmmoBoxes = value; return this; }
+        public Builder extraStims(int value)                     { this.extraStims = value; return this; }
+        public Builder extraArmourShards(int value)              { this.extraArmourShards = value; return this; }
 
         public NodeAffixDefinition build() {
             return new NodeAffixDefinition(this);

@@ -569,6 +569,20 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.riskPremiumResults());
     }
 
+    /**
+     * R-TWIST (floor-twists): every COMBAT floor twist is priced against plain COMBAT — a threat-raising
+     * twist pays inside the risk-premium band (T1), a neutral one stays near COMBAT's EV (T2), and the
+     * HUNTED ledger row never under-prices its hunter (T3).
+     */
+    @Test
+    void floorTwistsArePricedAgainstPlainCombat() {
+        java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.twistResults();
+        assertTrue(results.size() >= ge.tbegvadze.toon3d.route.RouteRegistries.affixes()
+                .definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST).size(),
+                "every registered floor twist must be audited by R-TWIST");
+        assertNoViolations(results);
+    }
+
     /** R-CALM-COST (order 7): every calm node's EV sits below a combat node's by the banded discount. */
     @Test
     void calmNodesCostTempoAndLoot() {
@@ -654,6 +668,8 @@ class BalanceAuditTest {
                             ge.tbegvadze.toon3d.route.RouteRegistries.nodeTypes(),
                             ge.tbegvadze.toon3d.route.RouteRegistries.generators());
             generator.setEliteAffixPool(ge.tbegvadze.toon3d.route.RouteRegistries.affixes().elitePool());
+            generator.setTwistPool(ge.tbegvadze.toon3d.route.RouteRegistries.affixes()
+                    .definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST));
             ge.tbegvadze.toon3d.route.RouteMap map = generator.generate(seed,
                     ge.tbegvadze.toon3d.route.RegionPlan.defaultPlan());
             java.util.List<ge.tbegvadze.toon3d.route.RouteEconomicsModel.TrajectorySample> safest =

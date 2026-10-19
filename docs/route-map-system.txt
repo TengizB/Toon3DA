@@ -435,6 +435,43 @@ ELITE HOTZONE  (RouteNodeType.ELITE, profile "elite_hotzone", EliteProfile)
                       + AFFIX_SWARM_VAULT_AMMO_BOXES extra vault boxes (the biggest premium in the catalog).
       - FORTIFIED   : extra cover columns 'P' + an extra armour pickup (a slugfest).
       - VOLATILE    : extra explosive barrels 'E' (the arena itself is a weapon for both sides).
+    Every row carries a SCOPE (route/AffixScope: ELITE_AFFIX -> ELITE nodes at AFFIX_ROLL_CHANCE_ELITE,
+    FLOOR_TWIST -> COMBAT nodes at TWIST_ROLL_CHANCE_COMBAT) and a one-line ruleLine; elitePool() ==
+    poolFor(ELITE_AFFIX) returns exactly the five above, and EliteProfile ignores any non-ELITE row.
+
+  FLOOR TWISTS (floor-twists — FLOOR_TWIST-scoped rows of the same registry, on COMBAT nodes):
+    A twist is a named RULE CHANGE for one floor, printed on the card before the player commits, so it is a
+    route decision. It rides the node's existing affix slot (one affix-or-twist per node, never two), the
+    affix sub-stream, the " — <NAME>" hint suffix and the amber corner tag.
+    ROLL (RouteMapGenerator.rollTwist, wired by setTwistPool(affixes().definitionsFor(FLOOR_TWIST)) at EVERY
+      generator owner — World, SimWorld, BalanceSchema.generateAuditMap): COMBAT nodes only; chance
+      TWIST_ROLL_CHANCE_COMBAT (0.30), then a weighted pick among rows whose minDepth <= the node's depth.
+      Depth 1 never; boss depths hold no COMBAT node. Deterministic; no ELITE roll changes for a fixed seed.
+    PLAN (DefaultCombatProfile(generators, affixes) — only for node.type == COMBAT, never a boss depth): the
+      typed modifiers fold exactly as EliteProfile folds an affix — budgetScaleMultiplier -> EnemyBudgetOverride;
+      scatteredAmmoBoxes -> AmmoCacheRequest(n, SCATTERED) fulfilled with the player's OWNED ammo types;
+      extraStims / extraArmourShards -> twistGuarantees ('+' / 'a', scattered); FloorEffects.withTwist(id)
+      .withSting(NAME).withStatLog(id) — the run route string reads e.g. "combat:hunted".
+    RUNTIME (World.applyTwistRuntimeModifiers, from applyPendingFloorEffects by twist id; SimWorld mirrors the
+      non-render half; every modifier dies with the floor's Level / EnemyManager / EnemyRenderer):
+      minimapDisabled -> no LevelRenderer / player dot, HudRenderer's NAV OFFLINE plate in their place;
+      lightMultiplier -> Level.setLightMultiplier (every tile but the '>' exit) + EnemyRenderer (never below
+      TWIST_BLACKOUT_ENEMY_MIN_SHADE; health bars / intents never dimmed); wakePerception(radius, sight) ->
+      EnemyManager.setWakePerception (Phase A's dormant-wake check ONLY); hunterEnemyTypeName ->
+      EnemyManager.beginHunt (the HUNTED clock + trail hunter, see docs/enemy-system.txt). On arrival the twist
+      name is an amber event-text sting, and ORA's one-shot teaching line is requested
+      (TeachingTopic.forFloorTwist(id)).
+    v1 catalog (BalanceConfig SECTION 27):
+      - BLACKOUT (min depth 2, weight 1.0) "NO MAP · DARK · THEY SEE LESS": no mini-map, light x0.45 with the
+        exit as beacon, dormant enemies wake within TWIST_BLACKOUT_WAKE_RADIUS_TILES 3 / by sight within
+        TWIST_BLACKOUT_WAKE_SIGHT_TILES 6 (defaults 4 / 8). Priced threat-neutral (R-TWIST T2).
+      - SALVAGE  (min depth 2, weight 1.0) "MORE SUPPLY · MORE RESISTANCE": budget x1.30 + 4 owned-ammo boxes
+        + 1 '+' + 1 'a', scattered. No runtime modifier.
+      - HUNTED   (min depth 4, weight 0.5) "A HUNTER WALKS YOUR TRAIL": at player turn 35 a warning, at 40 an
+        IRON_STALKER printed at the arrival tile (>= 5 tiles from the player) walks the player's trail, forces
+        doors, and drops 10 owned-ammo boxes on death. Taking the exit first means it never arrives.
+    Twists never change a node's type, generator, layout, danger pips or region; route guarantees count node
+    TYPES and are untouched. Hand-made floors have no node and therefore no twist.
 
 MYSTERY  (RouteNodeType.MYSTERY, profile "mystery", MysteryProfile — a META-profile)
   The icon is always '?'; the payload is the surprise. On ENTRY (not map-gen, so a scanner reveals only
@@ -502,9 +539,17 @@ RESISTANCE" / "SUPPLIES", SHOP "LIGHT RESISTANCE" / "FABRICATORS". When a reveal
 focused, RouteMapOverlayRenderer draws the two lines in the confirm bar's centre gap instead of the hint
 line: the threat word in the node's accent colour, the reward promise in neutral grey
 (LEGEND_PROMISE_*_OFFSET_Y). Nodes without a promise keep their hint line.
+A revealed focused node carrying an ELITE affix or a FLOOR TWIST adds a THIRD line in hazard amber at
+LEGEND_TWIST_OFFSET_Y: "<NAME> - <RULE LINE>" (the row's ruleLine; a plain hyphen, because the console's
+default font has no em-dash glyph), truncated to LEGEND_TWIST_MAX_WIDTH. With it present the two promise lines
+move to LEGEND_PROMISE_*_OFFSET_Y_WITH_TWIST so all three fit inside the bar. Built on focus change
+(buildHeaderText), never per frame; read from the row, so a new twist or affix needs no overlay edit. Rule
+lines: IRRADIATED "HOT BARRELS", OVERCLOCKED "MEANER RESISTANCE · BIGGER VAULT", SWARM "MORE BODIES · BIGGER
+VAULT", FORTIFIED "COVER · EXTRA ARMOUR", VOLATILE "EXPLOSIVE BARRELS", BLACKOUT / SALVAGE / HUNTED above.
 
 THE NODE EV LEDGER (route/NodeEconomics + NodeEconomicsRegistry + RouteEconomics)
-  One NodeEconomics row per NODE TYPE, per ELITE AFFIX and per MYSTERY OUTCOME, registered in
+  One NodeEconomics row per NODE TYPE, per ELITE AFFIX, per FLOOR TWIST (Kind.TWIST — a separate kind, so
+  R-RISK-PREMIUM never folds a twist onto ELITE; priced by R-TWIST) and per MYSTERY OUTCOME, registered in
   route/RouteEconomics exactly like a node type or an affix. A row declares:
     budgetScale        threat: its multiplier on the raw depth-scaled Threat-Point budget (1.0 ==
                        a standard COMBAT floor). Priced at what the floor ACTUALLY spawns — MED_BAY /
@@ -894,6 +939,8 @@ Forced nodes (BOSS, REGION_GATE) carry weight 0 and are injected by the generato
      outcome's payoff re-tunes the table.
   ELITE affixes (RouteMapConstants.AFFIX_*, rolled at AFFIX_ROLL_CHANCE_ELITE 0.60): IRRADIATED,
      OVERCLOCKED, SWARM, FORTIFIED, VOLATILE (see DANGER / GAMBLE NODES).
+  FLOOR TWISTS (RouteMapConstants.TWIST_*, on COMBAT nodes at TWIST_ROLL_CHANCE_COMBAT 0.30): BLACKOUT (d2+),
+     SALVAGE (d2+), HUNTED (d4+) — see FLOOR TWISTS under COMBAT.
 
 
 ================================================================================
@@ -974,6 +1021,15 @@ ADD A NEW ELITE AFFIX  — register a NodeAffixDefinition (a bundle of typed mod
   RouteRegistries.registerAffixes; EliteProfile folds it in by id. PRICE IT with a NodeEconomics.affix
   row in route/RouteEconomics: if it raises the budget it must raise the vault with it, or
   R-RISK-PREMIUM fails the build. Note it in DANGER / GAMBLE NODES.
+
+ADD A FLOOR TWIST  — built from EXISTING modifier kinds it is: ONE register() row in
+  RouteRegistries.registerAffixes (.scope(AffixScope.FLOOR_TWIST), id, display name, .minDepth, weight, .ruleLine and
+  its typed modifiers) + its NodeEconomics.twist row in route/RouteEconomics + its numbers in BalanceConfig SECTION 27
+  + its TWIST_*_RULE_LINE in RouteMapConstants + (for ORA's line) a TeachingTopic.TWIST_<ID> row and its
+  story.bark.control.twist_<id> string. NO edit to RouteMapGenerator, DefaultCombatProfile,
+  World.applyTwistRuntimeModifiers or the overlay. A twist that needs a NEW modifier kind adds the typed field +
+  Builder default to NodeAffixDefinition and its application in applyTwistRuntimeModifiers (and SimWorld). R-TWIST
+  T1/T2 must pass and S-TWIST must stay green; note the row in FLOOR TWISTS above.
 
 ADD A NEW NODE ICON  — 4-step recipe in NODE ICON VOCABULARY (write IconPainter -> register in
   RouteIconBootstrap -> point NodeTypeDefinition.iconPainterId at it -> add the catalog line).

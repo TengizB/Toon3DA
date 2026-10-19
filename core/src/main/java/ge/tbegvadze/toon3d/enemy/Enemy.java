@@ -368,6 +368,23 @@ public class Enemy implements StatusHost {
     public boolean spawnedByBossSummon       = false;
 
     /**
+     * Floor-twists R9-R12: true for THE trail hunter of a HUNTED floor (one per floor, spawned by
+     * {@link HuntedPursuit}). It walks the player's {@link PlayerTrail} until it has sight of them or is
+     * within {@code TWIST_HUNTED_ENGAGE_DISTANCE_TILES}, forces closed doors on the trail, drops the bounty on
+     * death and wears the amber health-bar frame. Every other enemy leaves it false.
+     */
+    public boolean followsPlayerTrail        = false;
+    /** The trail sequence number of the entry the hunter last stood on (-1 = not on the trail). */
+    public int     trailSequence             = -1;
+    /** The trail sequence number of the entry its committed MOVE targets (meaningful only while a trail step is planned). */
+    public int     trailTargetSequence       = -1;
+    /** Consecutive turns the hunter has waited behind another enemy on its next trail tile (R11d). */
+    public int     trailBlockedTurns         = 0;
+    /** The door the hunter already spent a turn forcing (R11c), so a door that swung shut again costs nothing more. */
+    public int     forcedDoorColumn          = -1;
+    public int     forcedDoorRow             = -1;
+
+    /**
      * The pickup symbol this enemy CARRIES (balance-overhaul order 2, S6): a planned share of the floor's
      * ammo / heal supply, copied from its spawn point. Dropped on death — whatever the cause — exactly
      * once; {@code 0} = carries nothing (and drops nothing). Summoned adds never carry.

@@ -130,6 +130,11 @@ public final class BalanceReport {
             System.out.printf("  %-38s %5.2f  %s%n", result.subject, result.value,
                     result.satisfied ? "OK" : "OUT-OF-BAND");
         }
+        System.out.println("  TWIST rows are MULTIPLIERS folded onto their host COMBAT node (floor-twists, R-TWIST):");
+        for (BalanceSchema.RuleResult result : BalanceSchema.twistResults()) {
+            System.out.printf("  %-38s %5.2f  %s  (%s)%n", result.subject, result.value,
+                    result.satisfied ? "OK" : "OUT-OF-BAND", result.detail);
+        }
     }
 
     /**

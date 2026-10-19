@@ -32,6 +32,10 @@ See docs/tick-system.txt for the full tick architecture.
 For every DORMANT enemy:
   - Chebyshev distance to player <= ALERT_RADIUS_TILES (4) → alert immediately.
   - OR Chebyshev <= LOS_MAX_RANGE_TILES (8) AND hasLineOfSight → alert.
+  - FLOOR TWIST override (floor-twists R7d): EnemyManager.setWakePerception(radius, sight) replaces the two numbers
+    above for THIS CHECK ONLY (a BLACKOUT floor: 3 / 6, BalanceConfig SECTION 27); resetWakePerception() restores
+    them, and a fresh per-floor EnemyManager starts at the defaults. Chain alert, every attack range, LOS for attacks
+    and isSameCardinalLine are untouched — an awake enemy fights exactly as anywhere else.
 
 ### Phase A2 — Chain Alert (BFS)
 Newly alerted enemies propagate wakeup to DORMANT enemies within
@@ -731,3 +735,33 @@ HEAVY OUTCOME OBSERVATION (balance-overhaul order 4, CP7b — headless, sim-faci
   ExplosiveBarrelManager.getEnemyBlastDamageDealt() (nominal barrel damage). The simulator turns all of it into
   the HEAVY REPORT and the S-HEAVY band (docs/game-balance-authority.txt SECTION 3 / SECTION 8). The killing
   blow was a heavy = a LANDED/GUARDED heavy resolved with the player dead afterwards.
+
+## THE HUNTED TRAIL HUNTER (floor-twists R9-R12)
+
+A HUNTED floor twist (docs/route-map-system.txt → FLOOR TWISTS) starts EnemyManager.beginHunt(type, arrivalCol,
+arrivalRow, listener) after the floor is built (World and SimWorld). Three headless classes in `enemy`:
+  PlayerTrail            pre-allocated int ring buffer (EnemyConstants.TWIST_HUNTED_TRAIL_CAPACITY 512) addressed by a
+                         monotonically increasing SEQUENCE (0 = the arrival tile); a sequence below oldestSequence() was
+                         overwritten. takeTurn records the player's tile FIRST — the tick fires on action completion, so
+                         it is the SETTLED tile; standing still records nothing.
+  HuntedPursuit          the clock, advanced LAST in takeTurn, once per completed player turn (never seconds — overlays
+                         advance no turn): WAITING -> WARNED at turn ARRIVAL - WARNING (40 - 5) -> ARRIVED at turn >= 40 on
+                         the first turn the arrival tile is free and >= 5 Manhattan from the player (retried every turn)
+                         -> DONE when the hunter dies. Discarded with the floor's manager, so taking the exit ends it.
+  HuntedPursuitListener  onHunterWarning / onHunterArrived / onHunterKilled — World shows the amber warning and red
+                         arrival event text; the sim counts arrivals / kills. EnemyManager never imports HUD or audio.
+The hunter is an ordinary depth-scaled, alerted IRON_STALKER spawn (relic spawn-health applies) flagged
+Enemy.followsPlayerTrail, standing on trail entry 0; its INSECT family ALERT voice fires at its tile on arrival.
+Each COMMIT (phase C, before the type's ordinary plan): within TWIST_HUNTED_ENGAGE_DISTANCE_TILES (2, Manhattan) or
+with hasLineOfSight to the player it plans as an ordinary Iron Stalker (R11a). Otherwise computeTrailPlan: it moves its
+trail position up to the newest entry it stands on (loop-cut / re-acquire), targets the NEWEST later entry cardinally
+adjacent to it, else the next entry (a portal hop, R11e), else greedy (trail lost, R11f); another enemy on the target
+-> WAIT, and after TWIST_HUNTED_BLOCKED_WAIT_TURNS (2) one greedy step (R11d). EXECUTE (executeTrailStep): a closed door
+on the target is forced through DoorManager.forceOpenForEnemy — the first time costs the turn, a door it already paid for
+that has swung shut again is re-forced free (Enemy.forcedDoorColumn/Row), so each door costs exactly one turn. A forced
+door plays the door sound, never fires DoorOpenedListener (no relic door blast/heal) and never counts toward the
+player's opened doors; keycard- and arena-locked doors are refused. It never uses the exit. On death by ANY route
+(killEnemy) it drops TWIST_HUNTED_BOUNTY_AMMO_BOXES (10) ammo boxes spread evenly over the ammo types the loadout owns
+(every type when none — the cache's rule) on the nearest free tiles within TWIST_HUNTED_BOUNTY_SEARCH_RADIUS_TILES (8),
+on top of its ordinary drop. EnemyRenderer draws its health-bar frame in TWIST_HUNTER_HEALTH_BAR_FRAME_* amber.
+

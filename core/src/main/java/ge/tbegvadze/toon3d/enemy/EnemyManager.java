@@ -860,6 +860,199 @@ public final class EnemyManager implements EnemyHitTarget {
         occupancy[tileColumn][tileRow] = true;
     }
 
+    // -------------------------------------------------------------------------
+    // HUNTED floor twist (floor-twists R9-R12): the trail, the hunter clock and the trail hunter
+    // -------------------------------------------------------------------------
+
+    /** The player's trail; allocated once per HUNTED floor by {@link #beginHunt}, null on every other floor. */
+    private PlayerTrail playerTrail;
+    /** The hunter clock; INACTIVE unless {@link #beginHunt} ran on this floor's manager. */
+    private final HuntedPursuit huntedPursuit = new HuntedPursuit();
+    /** Scratch for the bounty's owned ammo symbols — one slot per ammo type, filled at the hunter's death. */
+    private final char[] bountyAmmoSymbols = new char[AmmoType.values().length];
+
+    /**
+     * Starts a HUNTED floor (floor-twists R9/R10): the trail begins at the player's arrival tile (sequence 0,
+     * where the hunter will be printed) and the clock starts counting completed player turns. Called once,
+     * after the floor is built, by World and by the balance simulator. {@code listener} may be null.
+     */
+    public void beginHunt(EnemyType hunterType, int arrivalTileColumn, int arrivalTileRow,
+                          HuntedPursuitListener listener) {
+        if (hunterType == null) return;
+        if (playerTrail == null) playerTrail = new PlayerTrail(EnemyConstants.TWIST_HUNTED_TRAIL_CAPACITY);
+        playerTrail.clear();
+        playerTrail.record(arrivalTileColumn, arrivalTileRow);
+        huntedPursuit.begin(hunterType, arrivalTileColumn, arrivalTileRow, currentDepth, listener);
+    }
+
+    /** This floor's hunter clock (INACTIVE on a floor that is not HUNTED). Read-only use. */
+    public HuntedPursuit getHuntedPursuit() {
+        return huntedPursuit;
+    }
+
+    /**
+     * Prints the trail hunter at the arrival tile (R9a): an ordinary depth-scaled, alerted spawn (relic
+     * spawn-health applies, as for any spawn) flagged {@link Enemy#followsPlayerTrail}, standing on trail
+     * entry 0. Fires the family ALERT voice at its tile. False when the tile is blocked or occupied.
+     */
+    boolean trySpawnTrailHunter(EnemyType type, int tileColumn, int tileRow, int dungeonDepth) {
+        if (tileColumn < 0 || tileColumn >= level.getWidth())  return false;
+        if (tileRow    < 0 || tileRow    >= level.getHeight()) return false;
+        if (level.isBlockedAt(tileColumn, tileRow, doorManager)) return false;
+        if (isTileOccupiedByEnemy(tileColumn, tileRow)) return false;
+        if (cachedPlayerColumn == tileColumn && cachedPlayerRow == tileRow) return false;
+        int countBefore = enemies.size();
+        spawnEnemyInternal(type, tileColumn, tileRow, dungeonDepth, false);
+        if (enemies.size() == countBefore) return false;
+        Enemy hunter = enemies.get(enemies.size() - 1);
+        hunter.followsPlayerTrail = true;
+        hunter.trailSequence      = 0;
+        anyAlertedEver            = true;
+        if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(hunter, EnemyVoiceMoment.ALERT);
+        return true;
+    }
+
+    /** True when the trail hunter has sight of the player or is within the engage distance (R11a). */
+    private boolean trailHunterEngages(Enemy enemy, int playerColumn, int playerRow) {
+        if (GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow)
+                <= EnemyConstants.TWIST_HUNTED_ENGAGE_DISTANCE_TILES) {
+            return true;
+        }
+        return hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
+    }
+
+    /**
+     * COMMIT the trail hunter's next step (R11b-f) when it does not engage. Loop-cutting: it first moves its
+     * own trail position forward to the newest entry it is standing on, then targets the NEWEST later entry
+     * cardinally adjacent to it; with none adjacent, the next entry (a portal hop, R11e). A closed door is a
+     * legal target — executing the step forces it (R11c). Another enemy on the target: wait, and after
+     * {@code TWIST_HUNTED_BLOCKED_WAIT_TURNS} take one greedy step (R11d). Trail lost or empty: greedy (R11f).
+     */
+    private void computeTrailPlan(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        if (!enemy.shouldMoveThisTurn()) {
+            plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+            return;
+        }
+        PlayerTrail trail = playerTrail;
+        if (trail == null || trail.isEmpty()) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow);
+            return;
+        }
+        int newest   = trail.newestSequence();
+        int scanFrom = Math.max(trail.oldestSequence(), enemy.trailSequence + 1);
+        // Loop-cut / re-acquire: standing on a newer entry moves the hunter's position up to it.
+        for (int sequence = newest; sequence >= scanFrom; sequence--) {
+            if (trail.columnAt(sequence) == enemy.tileColumn && trail.rowAt(sequence) == enemy.tileRow) {
+                enemy.trailSequence = sequence;
+                break;
+            }
+        }
+        scanFrom = Math.max(trail.oldestSequence(), enemy.trailSequence + 1);
+        int targetSequence = -1;
+        for (int sequence = newest; sequence >= scanFrom; sequence--) {
+            int distance = GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow,
+                    trail.columnAt(sequence), trail.rowAt(sequence));
+            if (distance == 1) {
+                targetSequence = sequence;
+                break;
+            }
+        }
+        if (targetSequence < 0 && isStandingOnTrailEntry(enemy, trail, enemy.trailSequence)
+                && trail.holds(enemy.trailSequence + 1)) {
+            targetSequence = enemy.trailSequence + 1;   // R11e: the player took a portal — it knows the way
+        }
+        if (targetSequence < 0) {
+            plan.set(IntentVerb.MOVE, playerColumn, playerRow);   // R11f: trail overwritten — greedy
+            return;
+        }
+        int targetColumn = trail.columnAt(targetSequence);
+        int targetRow    = trail.rowAt(targetSequence);
+        boolean staticallyBlocked = !Level.isDoor(level.getCell(targetColumn, targetRow))
+                && level.isBlockedAt(targetColumn, targetRow, doorManager);
+        if (occupancy[targetColumn][targetRow] || staticallyBlocked) {
+            enemy.trailBlockedTurns++;
+            if (enemy.trailBlockedTurns >= EnemyConstants.TWIST_HUNTED_BLOCKED_WAIT_TURNS) {
+                enemy.trailBlockedTurns = 0;
+                plan.set(IntentVerb.MOVE, playerColumn, playerRow);   // R11d: one greedy step, then re-acquire
+            } else {
+                plan.set(IntentVerb.WAIT, enemy.tileColumn, enemy.tileRow);
+            }
+            return;
+        }
+        enemy.trailBlockedTurns   = 0;
+        enemy.trailTargetSequence = targetSequence;
+        plan.setMoveToTile(targetColumn, targetRow);
+    }
+
+    /**
+     * EXECUTE a committed trail step (R11c/R11e). A closed door on the target is forced: the first time that
+     * costs the turn; a door the hunter already forced that has swung shut again is re-forced for free, so a
+     * door costs it exactly one turn. A target that became blocked waits. The step may be a portal hop.
+     */
+    private void executeTrailStep(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
+        int goalColumn = plan.targetColumn;
+        int goalRow    = plan.targetRow;
+        // Only a one-tile cardinal step, or the verified R11e portal hop from the hunter's own trail entry.
+        boolean cardinalStep = GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow, goalColumn, goalRow) == 1;
+        boolean portalHop    = playerTrail != null
+                && enemy.trailTargetSequence == enemy.trailSequence + 1
+                && isStandingOnTrailEntry(enemy, playerTrail, enemy.trailSequence);
+        if (!cardinalStep && !portalHop) return;
+        if (Level.isDoor(level.getCell(goalColumn, goalRow)) && !doorManager.isPassable(goalColumn, goalRow)) {
+            if (doorManager.isLockedAgainstForcing(goalColumn, goalRow)) return;
+            boolean alreadyPaid = enemy.forcedDoorColumn == goalColumn && enemy.forcedDoorRow == goalRow;
+            doorManager.forceOpenForEnemy(goalColumn, goalRow);
+            if (!alreadyPaid) {
+                enemy.forcedDoorColumn = goalColumn;
+                enemy.forcedDoorRow    = goalRow;
+                return;   // this turn was spent forcing the door
+            }
+        }
+        if (!isPassableForEnemy(goalColumn, goalRow, playerColumn, playerRow)) return;
+        commitMove(enemy, goalColumn, goalRow);
+        enemy.trailSequence    = enemy.trailTargetSequence;
+        enemy.forcedDoorColumn = -1;
+        enemy.forcedDoorRow    = -1;
+    }
+
+    /** True when the hunter stands exactly on trail entry {@code sequence} (and the trail still holds it). */
+    private static boolean isStandingOnTrailEntry(Enemy enemy, PlayerTrail trail, int sequence) {
+        return trail.holds(sequence)
+                && trail.columnAt(sequence) == enemy.tileColumn
+                && trail.rowAt(sequence)    == enemy.tileRow;
+    }
+
+    /**
+     * R12: the trail hunter's bounty — {@code TWIST_HUNTED_BOUNTY_AMMO_BOXES} ammo boxes spread evenly over the
+     * ammo types the player's loadout OWNS (every type when none, the cache's rule), each on the nearest free
+     * floor tile to the death tile. On top of the ordinary drop, never instead of it.
+     */
+    private void placeHunterBounty(Enemy hunter) {
+        int symbolCount = 0;
+        if (loadout != null) {
+            for (int slotIndex = 0; slotIndex < loadout.getSlotCount(); slotIndex++) {
+                char symbol = ammoPickupCharForWeapon(loadout.getSlot(slotIndex));
+                if (symbol == 0) continue;
+                boolean seen = false;
+                for (int index = 0; index < symbolCount; index++) {
+                    if (bountyAmmoSymbols[index] == symbol) { seen = true; break; }
+                }
+                if (!seen && symbolCount < bountyAmmoSymbols.length) bountyAmmoSymbols[symbolCount++] = symbol;
+            }
+        }
+        if (symbolCount == 0) {
+            for (AmmoType ammoType : AmmoType.values()) {
+                if (symbolCount < bountyAmmoSymbols.length) bountyAmmoSymbols[symbolCount++] = ammoType.getPickupTileChar();
+            }
+        }
+        for (int box = 0; box < EnemyConstants.TWIST_HUNTED_BOUNTY_AMMO_BOXES; box++) {
+            int[] tile = findFreeDropTile(hunter.tileColumn, hunter.tileRow,
+                    EnemyConstants.TWIST_HUNTED_BOUNTY_SEARCH_RADIUS_TILES);
+            if (tile == null) break;
+            placeDeathDrop(tile[0], tile[1], bountyAmmoSymbols[box % symbolCount]);
+        }
+    }
+
     /** True as soon as any enemy has been alerted; drives World.gameState.redAlert. */
     public boolean anyAlerted() {
         return anyAlertedEver;
@@ -1397,10 +1590,14 @@ public final class EnemyManager implements EnemyHitTarget {
         cachedPlayerColumn = playerColumn;
         cachedPlayerRow    = playerRow;
         worldTurnIndex++;
+        // Floor-twists R10: the player has SETTLED (a tick fires on action completion), so this is the trail tile.
+        if (huntedPursuit.isActive() && playerTrail != null) playerTrail.record(playerColumn, playerRow);
         rebuildOccupancy();
         phaseA(playerColumn, playerRow);
         phaseBExecute(playerColumn, playerRow, player);
         phaseCCommit(playerColumn, playerRow, player);
+        // Floor-twists R9: one completed player turn on the hunter clock (it may print the hunter now).
+        huntedPursuit.onPlayerTurnCompleted(this, playerColumn, playerRow);
     }
 
     private void rebuildOccupancy() {
@@ -1419,6 +1616,29 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
+    /**
+     * The dormant-WAKE perception (floor-twists R7d). Read ONLY by Phase A's proximity / wake-by-sight
+     * check — the chain-alert radius, every attack range, LOS for attacks and isSameCardinalLine are
+     * untouched, so an awake enemy fights exactly as anywhere else. Defaults to the shipped radii.
+     */
+    private int wakeRadiusTiles = EnemyConstants.ALERT_RADIUS_TILES;
+    private int wakeSightTiles  = EnemyConstants.LOS_MAX_RANGE_TILES;
+
+    /**
+     * Overrides the dormant-wake perception for this floor (a BLACKOUT twist). A negative value keeps that
+     * default. The sight range never exceeds the LOS cap, which hasLineOfSight enforces anyway.
+     */
+    public void setWakePerception(int radiusTiles, int sightTiles) {
+        this.wakeRadiusTiles = radiusTiles >= 0 ? radiusTiles : EnemyConstants.ALERT_RADIUS_TILES;
+        this.wakeSightTiles  = sightTiles  >= 0 ? Math.min(sightTiles, EnemyConstants.LOS_MAX_RANGE_TILES)
+                                                : EnemyConstants.LOS_MAX_RANGE_TILES;
+    }
+
+    /** Restores the default dormant-wake perception. */
+    public void resetWakePerception() {
+        setWakePerception(-1, -1);
+    }
+
     // Phase A: proximity + LOS wake, then chain-alert BFS
     private void phaseA(int playerColumn, int playerRow) {
         int chainQueueSize = 0;
@@ -1431,9 +1651,9 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
             boolean shouldAlert = false;
-            if (chebyshev <= EnemyConstants.ALERT_RADIUS_TILES) {
+            if (chebyshev <= wakeRadiusTiles) {
                 shouldAlert = true;
-            } else if (chebyshev <= EnemyConstants.LOS_MAX_RANGE_TILES) {
+            } else if (chebyshev <= wakeSightTiles) {
                 shouldAlert = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             }
 
@@ -1871,6 +2091,8 @@ public final class EnemyManager implements EnemyHitTarget {
         int originRow    = enemy.tileRow;
         if (plan.fleeFromTarget) {
             stepAway(enemy, playerColumn, playerRow);
+        } else if (plan.goalIsFixedTile && enemy.followsPlayerTrail) {
+            executeTrailStep(enemy, plan, playerColumn, playerRow);   // floor-twists R11b-e
         } else if (plan.goalIsFixedTile) {
             // Flanker: head to the blind-side tile; if that route is blocked close on the player.
             if (!stepTowardTile(enemy, plan.targetColumn, plan.targetRow, playerColumn, playerRow)) {
@@ -2110,6 +2332,13 @@ public final class EnemyManager implements EnemyHitTarget {
         // countdown until it detonates or is killed first.
         if (enemy.type == EnemyType.PLAGUE_HULK && shouldPrimeOrContinueSelfDestruct(enemy)) {
             commitSelfDestruct(enemy, plan);
+            return;
+        }
+        // Floor-twists R11: the HUNTED trail hunter walks the player's trail until it engages (sight, or within
+        // the engage distance) — BEFORE the type's ordinary plan, or greedy movement stalls it behind the first
+        // wall. Engaged, it is an ordinary alerted Iron Stalker for the turn (R11a).
+        if (enemy.followsPlayerTrail && !trailHunterEngages(enemy, playerColumn, playerRow)) {
+            computeTrailPlan(enemy, plan, playerColumn, playerRow);
             return;
         }
         // Scripted archetypes consult their SPECIAL move-set first (order-5): on its cadence turn an
@@ -3371,6 +3600,11 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemyDeathHazardListener != null) {
             enemyDeathHazardListener.onEnemyDied(enemy.type, enemy.tileColumn, enemy.tileRow, enemy.selfDestructed);
         }
+        // Floor-twists R12: THE hunter dies by any route (weapon, DoT, barrel, hazard) -> bounty, clock DONE.
+        if (enemy.followsPlayerTrail) {
+            placeHunterBounty(enemy);
+            huntedPursuit.onHunterKilled(enemy.tileColumn, enemy.tileRow);
+        }
         enemies.remove(enemy);
     }
 
@@ -3617,8 +3851,13 @@ public final class EnemyManager implements EnemyHitTarget {
      * {@code null}. The ground-item placement fallback for a planned carrier drop (S6 edge case).
      */
     private int[] findFreeDropTile(int tileColumn, int tileRow) {
+        return findFreeDropTile(tileColumn, tileRow, BalanceConfig.CARRIER_DROP_SEARCH_RADIUS);
+    }
+
+    /** {@link #findFreeDropTile(int, int)} with an explicit search radius (the hunter bounty spreads wider). */
+    private int[] findFreeDropTile(int tileColumn, int tileRow, int searchRadius) {
         if (isFreeDropTile(tileColumn, tileRow)) return new int[]{tileColumn, tileRow};
-        for (int ring = 1; ring <= BalanceConfig.CARRIER_DROP_SEARCH_RADIUS; ring++) {
+        for (int ring = 1; ring <= searchRadius; ring++) {
             for (int rowOffset = -ring; rowOffset <= ring; rowOffset++) {
                 for (int columnOffset = -ring; columnOffset <= ring; columnOffset++) {
                     if (Math.max(Math.abs(rowOffset), Math.abs(columnOffset)) != ring) continue;

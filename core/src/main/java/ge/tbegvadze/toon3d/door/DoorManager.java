@@ -268,6 +268,38 @@ public class DoorManager {
         }
     }
 
+    /**
+     * Floor-twists R11c: the HUNTED trail hunter forces a door on the player's trail. CLOSED / CLOSING / OPENING
+     * -> OPEN immediately (passable for the hunter regardless of animation timing), with the door-movement
+     * sound through {@link DoorStateListener} when it actually moved. Deliberately NOT the player's open:
+     * never fires {@link DoorOpenedListener} (no relic door blast/heal, A10) and never counts toward
+     * {@link #getOpenedDoorCount()}. Refuses a keycard-locked or arena-locked door.
+     *
+     * @return true when the door is open after the call; false when there is no door or it is locked
+     */
+    public boolean forceOpenForEnemy(int tileColumn, int tileRow) {
+        long key = packKey(tileColumn, tileRow);
+        Door door = doorsByPackedKey.get(key);
+        if (door == null) return false;
+        if (lockedDoorColors.containsKey(key) && !unlockedDoors.contains(key)) return false;
+        if (arenaLockedDoors.contains(key)) return false;
+        if (door.state != DoorState.OPEN) {
+            if (door.state == DoorState.CLOSED && doorStateListener != null) {
+                doorStateListener.onDoorOpening(tileColumn, tileRow);
+            }
+            door.state             = DoorState.OPEN;
+            door.animationProgress = 0f;
+            refreshSnapshot();
+        }
+        return true;
+    }
+
+    /** True when a keycard or the boss arena still bars this door (the hunter may never force it). */
+    public boolean isLockedAgainstForcing(int tileColumn, int tileRow) {
+        long key = packKey(tileColumn, tileRow);
+        return (lockedDoorColors.containsKey(key) && !unlockedDoors.contains(key)) || arenaLockedDoors.contains(key);
+    }
+
     /** Wires the relic door hook (fired on a player's CLOSED -> OPENING request). Null clears it. */
     public void setDoorOpenedListener(DoorOpenedListener listener) {
         this.doorOpenedListener = listener;

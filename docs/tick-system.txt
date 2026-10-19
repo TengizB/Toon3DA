@@ -103,6 +103,10 @@ EnemyTurnSubscriber (world/EnemyTurnSubscriber.java)
   - Calls enemyManager.takeTurn(column, row, player).
   - After takeTurn returns: if anyAlerted() → sets gameState.redAlert = true.
   - EnemyManager is unmodified; this adapter keeps it ignorant of the bus.
+  - The HUNTED floor twist's clock (enemy/HuntedPursuit, floor-twists R9) rides INSIDE takeTurn, so it needs no
+    subscriber of its own: the player's settled tile is appended to the trail before phase A, and the clock advances
+    once after phase C — one completed player turn per tick, never a real-time timer. A hard-pause overlay fires no
+    tick, so it freezes the clock and the hunter alike.
 
 ## How to Add a New Subscriber
 

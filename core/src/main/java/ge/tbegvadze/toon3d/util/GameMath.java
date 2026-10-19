@@ -4356,6 +4356,61 @@ public final class GameMath {
     }
 
     /*
+     * Formula: darkened sprite shade with a silhouette floor (floor-twists R7c)
+     * Derivation:
+     *   shade' = max(shade * lightMultiplier, minimumShade)   when lightMultiplier < 1
+     *   shade' = shade                                         otherwise
+     *   A BLACKOUT floor dims an enemy billboard with the room, but never below minimumShade, so a body in
+     *   the dark reads as a silhouette and is never invisible. Normal light leaves the shade untouched
+     *   (including a dormant enemy's own dampened shade).
+     * Edge cases:
+     *   lightMultiplier >= 1 -> shade unchanged; negative inputs are clamped to 0 first.
+     */
+    public static float darkenedShadeWithFloor(float shade, float lightMultiplier, float minimumShade) {
+        if (lightMultiplier >= 1f) {
+            return shade;
+        }
+        return Math.max(Math.max(0f, shade) * Math.max(0f, lightMultiplier), minimumShade);
+    }
+
+    /*
+     * Formula: threat share of a floor budget (floor-twists R-TWIST T3)
+     * Derivation:
+     *   share = extraThreatPoints / floorThreatPoints
+     *   The extra body a twist adds (the HUNTED trail hunter) is charged in the SAME Threat-Point units the
+     *   encounter planner charges every archetype (enemyThreatAtDepth), and divided by the plain COMBAT floor's
+     *   priced Threat-Point cost at the same depth. A twist row declaring budgetScale = 1 + s is honest when its
+     *   real share is <= s.
+     * Edge cases:
+     *   floorThreatPoints <= 0 -> POSITIVE_INFINITY (an un-priced denominator must fail loudly);
+     *   extraThreatPoints <= 0 -> 0.
+     */
+    public static float threatShareOfBudget(float extraThreatPoints, float floorThreatPoints) {
+        if (floorThreatPoints <= 0f) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return Math.max(0f, extraThreatPoints) / floorThreatPoints;
+    }
+
+    /*
+     * Formula: signed relative departure (floor-twists R-TWIST T2)
+     * Derivation:
+     *   departure = (value - reference) / |reference|
+     *   Positive = above the reference, negative = below, in units of the reference's own magnitude, so a
+     *   +-10% tolerance reads the same whether the reference EV is positive or negative.
+     * Edge cases:
+     *   |reference| < 1e-6 -> 0 when value is also ~0, else NaN (a zero reference cannot carry a share; the
+     *   audit then fails loudly instead of reading as neutral).
+     */
+    public static float relativeDeparture(float value, float reference) {
+        float magnitude = Math.abs(reference);
+        if (magnitude < 1e-6f) {
+            return Math.abs(value) < 1e-6f ? 0f : Float.NaN;
+        }
+        return (value - reference) / magnitude;
+    }
+
+    /*
      * Formula: rewardPremiumRatio — does a node's reward pay for its danger? (R-RISK-PREMIUM)
      * Derivation:
      *   A route choice is only a real trade-off if reward scales with priced risk. Measure both as

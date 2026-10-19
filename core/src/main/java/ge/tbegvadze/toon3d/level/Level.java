@@ -432,12 +432,32 @@ public class Level {
      */
     public float getTileBrightness(int tileColumn, int tileRow, float timeSeconds) {
         char tile = getCell(tileColumn, tileRow);
-        if (tile == RenderConstants.LIT_TILE_CHAR)        return RenderConstants.LIT_TILE_BRIGHTNESS;
-        if (tile == RenderConstants.UNLIT_TILE_CHAR)      return RenderConstants.UNLIT_TILE_BRIGHTNESS;
-        if (tile == RenderConstants.FLICKERING_TILE_CHAR) return GameMath.flickerMultiplier(tileColumn, tileRow, timeSeconds);
-        // Stairs tile is always fully lit so it's never lost in dark zones.
+        // Stairs tile is always fully lit so it's never lost in dark zones — and it is EXEMPT from a floor
+        // twist's light multiplier (floor-twists R7b): on a BLACKOUT floor the exit is the beacon.
         if (tile == RenderConstants.STAIRS_DOWN_CHAR)     return RenderConstants.LIT_TILE_BRIGHTNESS;
-        return RenderConstants.BASE_TILE_BRIGHTNESS;
+        float brightness;
+        if (tile == RenderConstants.LIT_TILE_CHAR)             brightness = RenderConstants.LIT_TILE_BRIGHTNESS;
+        else if (tile == RenderConstants.UNLIT_TILE_CHAR)      brightness = RenderConstants.UNLIT_TILE_BRIGHTNESS;
+        else if (tile == RenderConstants.FLICKERING_TILE_CHAR) brightness = GameMath.flickerMultiplier(tileColumn, tileRow, timeSeconds);
+        else                                                   brightness = RenderConstants.BASE_TILE_BRIGHTNESS;
+        return brightness * lightMultiplier;
+    }
+
+    /**
+     * Per-level light multiplier (floor-twists R7b): every tile brightness except the exit's is multiplied by
+     * it. Defaults to 1.0 and lives on THIS Level, so it dies with the floor — the next floor is never dark.
+     * Cosmetic only: no gameplay system reads tile brightness.
+     */
+    private float lightMultiplier = 1f;
+
+    /** Sets the floor's light multiplier (clamped to [0, 1]); 1.0 = normal light. */
+    public void setLightMultiplier(float multiplier) {
+        this.lightMultiplier = Math.max(0f, Math.min(1f, multiplier));
+    }
+
+    /** The floor's light multiplier (1.0 = normal light). */
+    public float getLightMultiplier() {
+        return lightMultiplier;
     }
 
     public int getWidth() {

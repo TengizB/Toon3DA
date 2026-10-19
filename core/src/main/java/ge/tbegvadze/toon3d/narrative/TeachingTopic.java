@@ -75,7 +75,18 @@ public enum TeachingTopic {
 
     // ---- balance-overhaul-order-3 C6 ----
     /** The equipped weapon is RESISTED by what the player faces while a carried weapon would bite (the C4 switch hint). Re-taught after 3 hint episodes spent firing the resisted gun anyway. */
-    MATCHUP(TeachingTier.TACTICAL, 3);
+    MATCHUP(TeachingTier.TACTICAL, 3),
+
+    // ---- floor-twists R16: one line per FLOOR TWIST, on the first-ever arrival on it; never re-taught ----
+    /** First arrival on a BLACKOUT floor (no map, dark, enemies wake from closer). */
+    TWIST_BLACKOUT(TeachingTier.TACTICAL, 0),
+    /** First arrival on a SALVAGE floor (more supply, more resistance). */
+    TWIST_SALVAGE(TeachingTier.TACTICAL, 0),
+    /** First arrival on a HUNTED floor (a hunter will walk the player's trail). */
+    TWIST_HUNTED(TeachingTier.CRITICAL, 0);
+
+    /** The subject-key prefix that pairs a route FLOOR TWIST id with its topic ({@link #forFloorTwist}). */
+    private static final String FLOOR_TWIST_SUBJECT_PREFIX = "TWIST_";
 
     private final TeachingTier tier;
     private final int          reteachEvidenceThreshold;
@@ -117,6 +128,16 @@ public enum TeachingTopic {
     /** The short, stable token this topic uses inside catalog and localisation ids. */
     public String getCatalogKey() {
         return name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * The teaching topic for a route FLOOR TWIST id ("hunted" -> {@link #TWIST_HUNTED}), or null when the twist
+     * has no line. The pairing is by NAME, so a fourth twist is taught by adding its {@code TWIST_<ID>} row and
+     * string here — World's arrival code never names a twist (floor-twists A12).
+     */
+    public static TeachingTopic forFloorTwist(String twistId) {
+        if (twistId == null) return null;
+        return forSubjectKey(FLOOR_TWIST_SUBJECT_PREFIX + twistId.toUpperCase(Locale.ROOT));
     }
 
     /** The topic whose {@link #getSubjectKey()} matches, or null. Used to resolve order-9's fast-dismiss evidence back to a topic. */

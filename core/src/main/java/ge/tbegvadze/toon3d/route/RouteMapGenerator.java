@@ -46,6 +46,9 @@ public final class RouteMapGenerator {
     // setters. Empty by default, so no affix ever rolls until a catalog is injected.
     private List<NodeAffix> eliteAffixPool   = Collections.emptyList();
     private List<NodeAffix> mysteryAffixPool = Collections.emptyList();
+    // Floor twists (floor-twists): FLOOR_TWIST definitions, which carry the minimum depth + weight the
+    // twist roll needs. Empty by default, so no twist rolls until a catalog is injected.
+    private List<NodeAffixDefinition> twistPool = Collections.emptyList();
 
     public RouteMapGenerator(NodeTypeRegistry nodeTypes, GeneratorRegistry generators) {
         this.nodeTypes  = nodeTypes;
@@ -55,6 +58,15 @@ public final class RouteMapGenerator {
     /** Supplies the ELITE affix catalog (order-9). Empty = no affix rolls. */
     public void setEliteAffixPool(List<NodeAffix> pool) {
         this.eliteAffixPool = new ArrayList<>(pool);
+    }
+
+    /**
+     * Supplies the COMBAT FLOOR TWIST catalog (floor-twists): the registry's
+     * {@code definitionsFor(AffixScope.FLOOR_TWIST)}. Empty = no twist rolls. Every generator owner
+     * (World, SimWorld, the balance trajectory audit) sets it next to the ELITE pool.
+     */
+    public void setTwistPool(List<NodeAffixDefinition> twists) {
+        this.twistPool = new ArrayList<>(twists);
     }
 
     /** Supplies the MYSTERY affix catalog (order-9). Empty = no affix rolls. */
@@ -898,6 +910,9 @@ public final class RouteMapGenerator {
         } else if (node.type == RouteNodeType.MYSTERY) {
             catalog = mysteryAffixPool;
             chance  = RouteMapConstants.AFFIX_ROLL_CHANCE_MYSTERY;
+        } else if (node.type == AffixScope.FLOOR_TWIST.hostNodeType()) {
+            rollTwist(node);
+            return;
         } else {
             return;
         }
@@ -910,6 +925,35 @@ public final class RouteMapGenerator {
             java.util.Arrays.fill(weights, 1f); // uniform until order-9 gives affixes their own weights
             node.affix = catalog.get(GameMath.weightedChoiceIndex(weights, rng.nextFloat01()));
         }
+    }
+
+    /**
+     * The FLOOR TWIST roll (floor-twists R1-R3). From the node's EXISTING affix sub-stream — the stream
+     * a COMBAT node never drew from before, so adding twists changes no node type, generator or ELITE
+     * affix: first the scope's roll chance, then a weighted pick among the twists whose minimum depth the
+     * node has reached. No eligible twist (depth 1 has none) -> no twist. A boss depth never carries one.
+     * The twist rides the ordinary {@link RouteNode#affix} slot (one affix-or-twist per node).
+     */
+    private void rollTwist(RouteNode node) {
+        float chance = AffixScope.FLOOR_TWIST.rollChance();
+        if (twistPool.isEmpty() || chance <= 0f || GameMath.isBossFloor(node.depth)) {
+            return;
+        }
+        RouteRng rng = new RouteRng(GameMath.mixSeed(node.nodeSeed, AFFIX_STREAM_SALT));
+        if (!rng.nextChance(chance)) {
+            return;
+        }
+        float[] weights = new float[twistPool.size()];
+        float total = 0f;
+        for (int index = 0; index < twistPool.size(); index++) {
+            NodeAffixDefinition twist = twistPool.get(index);
+            weights[index] = twist.minDepth() <= node.depth ? Math.max(0f, twist.weight()) : 0f;
+            total += weights[index];
+        }
+        if (total <= 0f) {
+            return;
+        }
+        node.affix = twistPool.get(GameMath.weightedChoiceIndex(weights, rng.nextFloat01())).toToken();
     }
 
     // =========================================================================

@@ -7,7 +7,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The data-driven catalog of ELITE {@link NodeAffixDefinition}s (order-9). Mirrors the other route
+ * The data-driven catalog of ELITE {@link NodeAffixDefinition}s (order-9) and, since floor-twists, of the
+ * COMBAT FLOOR TWISTS — one registry, split by {@link AffixScope}. Mirrors the other route
  * registries: register once at bootstrap, then the rest of the game reads it. Two consumers —
  * {@link RouteMapGenerator} draws the token POOL to roll an affix onto an ELITE node at map-gen, and
  * {@link EliteProfile} looks the definition back up by the node's affix id to apply its modifiers.
@@ -40,16 +41,37 @@ public final class NodeAffixRegistry {
     }
 
     /**
-     * The ELITE affix token pool the generator rolls from (one {@link NodeAffix} per registered
-     * definition, in registration order). Empty until affixes are registered, so no affix ever rolls
-     * before the catalog is populated. A fresh list each call — never held across frames.
+     * The ELITE affix token pool the generator rolls from (one {@link NodeAffix} per ELITE_AFFIX-scoped
+     * definition, in registration order) — {@link #poolFor}{@code (ELITE_AFFIX)}, so the twist rows that
+     * share this registry never enter it and no ELITE roll changes. Empty until affixes are registered.
      */
     public List<NodeAffix> elitePool() {
+        return poolFor(AffixScope.ELITE_AFFIX);
+    }
+
+    /** The token pool of one scope, in registration order. A fresh list each call — never held across frames. */
+    public List<NodeAffix> poolFor(AffixScope scope) {
         List<NodeAffix> pool = new ArrayList<>(definitions.size());
         for (NodeAffixDefinition definition : definitions.values()) {
-            pool.add(definition.toToken());
+            if (definition.scope() == scope) {
+                pool.add(definition.toToken());
+            }
         }
         return pool;
+    }
+
+    /**
+     * The full definitions of one scope, in registration order (floor-twists: the twist roll needs each
+     * row's minimum depth and weight, which a token does not carry). A fresh list each call.
+     */
+    public List<NodeAffixDefinition> definitionsFor(AffixScope scope) {
+        List<NodeAffixDefinition> rows = new ArrayList<>(definitions.size());
+        for (NodeAffixDefinition definition : definitions.values()) {
+            if (definition.scope() == scope) {
+                rows.add(definition);
+            }
+        }
+        return rows;
     }
 
     /**

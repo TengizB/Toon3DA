@@ -175,6 +175,14 @@ public class HudRenderer implements Renderable, Disposable {
         this.groundWeaponLabel = label;
     }
 
+    /** Floor-twists R7a: true on a BLACKOUT floor — the mini-map rectangle shows the NAV OFFLINE plate. */
+    private boolean navOffline = false;
+
+    /** Shows (true) or hides the NAV OFFLINE plate in the mini-map's rectangle. World resets it every floor. */
+    public void setNavOffline(boolean navOffline) {
+        this.navOffline = navOffline;
+    }
+
     public void update(float deltaTime) {
         animationClockSeconds += deltaTime;
         if (animationClockSeconds > 1000f) animationClockSeconds -= 1000f;
@@ -212,6 +220,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawXpBarFilled(isDead);
         if (playerInventory != null) drawSlotStripFilled(playerInventory, pulse);
         if (!isDead) drawStatusIconsFilled();
+        if (navOffline) drawNavOfflinePlateFilled();
         shapes.end();
 
         // ---- Pass B: Line ----
@@ -219,6 +228,7 @@ public class HudRenderer implements Renderable, Disposable {
         drawPanelChromeLines(0f, 0f, LEFT_WIDTH, PANEL_HEIGHT);
         drawBarBorders();
         if (playerInventory != null) drawSlotStripLines(playerInventory);
+        if (navOffline) drawNavOfflinePlateFrame();
         shapes.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
@@ -234,7 +244,40 @@ public class HudRenderer implements Renderable, Disposable {
         if (medkitWarn) drawMedkitWarning(pulse);
         drawCreditsReadout();
         if (!isDead) drawDebuffTextList();
+        if (navOffline) drawNavOfflinePlateText();
         batch.end();
+    }
+
+    // =========================================================================
+    // NAV OFFLINE plate (floor-twists R7a) — drawn in the mini-map's rectangle on a BLACKOUT floor,
+    // where World skips the mini-map and the player dot. Static: no animation, no allocation.
+    // =========================================================================
+
+    private void drawNavOfflinePlateFilled() {
+        shapes.setColor(HudConstants.TWIST_NAV_OFFLINE_PLATE_RED, HudConstants.TWIST_NAV_OFFLINE_PLATE_GREEN,
+                HudConstants.TWIST_NAV_OFFLINE_PLATE_BLUE, HudConstants.TWIST_NAV_OFFLINE_PLATE_ALPHA);
+        shapes.rect(Constants.MINI_MAP_ORIGIN_X, Constants.MINI_MAP_ORIGIN_Y,
+                Constants.MINI_MAP_WORLD_SIZE, Constants.MINI_MAP_WORLD_SIZE);
+    }
+
+    private void drawNavOfflinePlateFrame() {
+        shapes.setColor(HudConstants.TWIST_AMBER_RED, HudConstants.TWIST_AMBER_GREEN,
+                HudConstants.TWIST_AMBER_BLUE, 1f);
+        float inset = HudConstants.TWIST_NAV_OFFLINE_FRAME_THICKNESS / 2f;
+        shapes.rect(Constants.MINI_MAP_ORIGIN_X + inset, Constants.MINI_MAP_ORIGIN_Y + inset,
+                Constants.MINI_MAP_WORLD_SIZE - HudConstants.TWIST_NAV_OFFLINE_FRAME_THICKNESS,
+                Constants.MINI_MAP_WORLD_SIZE - HudConstants.TWIST_NAV_OFFLINE_FRAME_THICKNESS);
+    }
+
+    private void drawNavOfflinePlateText() {
+        font.getData().setScale(HudConstants.TWIST_NAV_OFFLINE_TEXT_SCALE);
+        font.setColor(HudConstants.TWIST_AMBER_RED, HudConstants.TWIST_AMBER_GREEN,
+                HudConstants.TWIST_AMBER_BLUE, 1f);
+        glyphLayout.setText(font, HudConstants.TWIST_NAV_OFFLINE_TEXT);
+        float drawX = Constants.MINI_MAP_ORIGIN_X + (Constants.MINI_MAP_WORLD_SIZE - glyphLayout.width) / 2f;
+        float drawY = Constants.MINI_MAP_ORIGIN_Y + (Constants.MINI_MAP_WORLD_SIZE + glyphLayout.height) / 2f;
+        font.draw(batch, glyphLayout, drawX, drawY);
+        font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
     // =========================================================================

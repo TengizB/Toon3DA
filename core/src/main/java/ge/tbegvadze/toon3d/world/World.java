@@ -11,6 +11,7 @@ import ge.tbegvadze.toon3d.door.DoorManager;
 import ge.tbegvadze.toon3d.door.DoorStateListener;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.HuntedPursuitListener;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.entity.*;
 import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
@@ -308,6 +309,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      * resets red alert), so it survives the rebuild. Reset to {@link FloorEffects#NONE} each build.
      */
     private FloorEffects            pendingFloorEffects = FloorEffects.NONE;
+    /**
+     * The FLOOR TWIST the current floor was built with (floor-twists), or {@code null}. Applied by
+     * {@link #applyTwistRuntimeModifiers} after the rebuild; cleared by {@code rebuildForLevel} so no twist
+     * outlives its floor (the Level, EnemyManager and EnemyRenderer that carry its modifiers die with it too).
+     */
+    private ge.tbegvadze.toon3d.route.NodeAffixDefinition activeTwist;
+    /** Floor-twists R7a: true on a BLACKOUT floor — the mini-map and player dot are not drawn. */
+    private boolean minimapOffline = false;
     /**
      * The layout of the boss arena built for the current floor (boss ORDER 7). Captured whenever the
      * floor's generator is a {@link BossArenaGenerator} and consumed by {@code buildLevelDependentResources}
@@ -627,6 +636,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // Order-9: supply the ELITE affix catalog so hotzones can roll a readable twist (empty pool =
         // no affix rolls). MYSTERY uses its own entry-time outcome table, not a map-gen affix.
         routeMapGenerator.setEliteAffixPool(RouteRegistries.affixes().elitePool());
+        // Floor-twists: COMBAT nodes may roll one FLOOR TWIST (BLACKOUT / SALVAGE / HUNTED) from the same registry.
+        routeMapGenerator.setTwistPool(RouteRegistries.affixes().definitionsFor(ge.tbegvadze.toon3d.route.AffixScope.FLOOR_TWIST));
         routeMapOverlay   = new RouteMapOverlay();
         routeMapOverlay.setNodeCommitListener(this::commitRouteNode);
         routeMapOverlayRenderer = new RouteMapOverlayRenderer();
@@ -1192,7 +1203,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // it on the room's event station. Null on every non-EVENT floor.
         pendingEventId = plan.eventId();
         Gdx.app.log("RouteMap", "build depth=" + depth + " node=" + definition.id()
-                + " generator=" + plan.generatorId().stableId());
+                + " generator=" + plan.generatorId().stableId()
+                + (plan.floorEffects().twistId() != null
+                        ? " twist=" + plan.floorEffects().twistId()
+                          + " budgetScale=" + (budget != null ? budget.budgetScale() : 1f)
+                          + " scatteredAmmoBoxes=" + (plan.ammoCache() != null ? plan.ammoCache().boxCount() : 0)
+                        : ""));
         return built;
     }
 
@@ -1226,14 +1242,85 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             alertTimeSeconds   = 0f;
         }
         if (effects.stingText() != null && eventTextSystem != null) {
-            eventTextSystem.spawnWithColor(effects.stingText(), EventTextSystem.COLOR_RED);
+            // A floor twist's sting is amber (the twist's card colour); every other sting stays red.
+            eventTextSystem.spawnWithColor(effects.stingText(), effects.twistId() != null
+                    ? EventTextSystem.COLOR_AMBER : EventTextSystem.COLOR_RED);
         }
         // The resolved-but-hidden outcome is logged so the post-run route story is complete: it annotates
         // the node token committed at route-select time (e.g. "mystery" -> "mystery:VAULT").
         if (effects.statLogToken() != null) {
             runStats.annotateLastRouteNode(effects.statLogToken());
         }
+        // Floor-twists: the twist's runtime modifiers, looked up by id — never a switch on which twist it is.
+        if (effects.twistId() != null) {
+            ge.tbegvadze.toon3d.route.NodeAffixDefinition twist = RouteRegistries.affixes().definition(effects.twistId());
+            if (twist != null) {
+                applyTwistRuntimeModifiers(twist);
+            }
+        }
     }
+
+    /**
+     * Applies a FLOOR TWIST's runtime modifiers to the floor just built (floor-twists R7/R9). Every modifier is a
+     * typed field of the definition, so a fourth twist built from these kinds needs no edit here (A12).
+     */
+    private void applyTwistRuntimeModifiers(ge.tbegvadze.toon3d.route.NodeAffixDefinition twist) {
+        activeTwist    = twist;
+        minimapOffline = twist.minimapDisabled();
+        hudRenderer.setNavOffline(minimapOffline);
+        if (twist.lightMultiplier() != 1f) {
+            level.setLightMultiplier(twist.lightMultiplier());
+            enemyRenderer.setLightMultiplier(twist.lightMultiplier());
+        }
+        if (twist.overridesWakePerception()) {
+            enemyManager.setWakePerception(twist.wakeRadiusTiles(), twist.wakeSightTiles());
+        }
+        // R9: a hunter row starts the hunter clock at the player's arrival tile (the tile it will be printed on).
+        // The type is named, not imported, by the route layer — resolved here, the exchange-reward idiom.
+        if (twist.hunterEnemyTypeName() != null) {
+            try {
+                EnemyType hunterType = EnemyType.valueOf(twist.hunterEnemyTypeName());
+                enemyManager.beginHunt(hunterType,
+                        MathUtils.floor(player.positionX / Constants.CELL_SIZE),
+                        MathUtils.floor(player.positionY / Constants.CELL_SIZE),
+                        huntedPursuitListener);
+            } catch (IllegalArgumentException unknownType) {
+                Gdx.app.error("FloorTwist", "unknown hunter type " + twist.hunterEnemyTypeName());
+            }
+        }
+        // R16: ORA's one line about this twist, the first time the save ever arrives on it (one-shot through the
+        // ordinary CONTROL_HINT seen-flag, STORY_CRITICAL so the floor budget never swallows it). The topic is
+        // paired with the twist by name (TeachingTopic.forFloorTwist), so nothing here names a twist.
+        TeachingTopic twistTopic = TeachingTopic.forFloorTwist(twist.id());
+        if (twistTopic != null && barkSystem != null) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, twistTopic.getSubjectKey());
+        }
+        Gdx.app.log("FloorTwist", "applied twist=" + twist.id() + " minimapOffline=" + minimapOffline
+                + " light=" + twist.lightMultiplier() + " wake=" + twist.wakeRadiusTiles() + "/" + twist.wakeSightTiles()
+                + " hunter=" + twist.hunterEnemyTypeName());
+    }
+
+    /**
+     * Floor-twists R9/R12: a HUNTED floor's clock, as the player sees it — the amber warning, the red arrival
+     * (the hunter's alert voice is fired by EnemyManager itself, at its tile), and a log line on the kill
+     * (the bounty is already on the floor through the drop listener). One instance; every floor's manager uses it.
+     */
+    private final HuntedPursuitListener huntedPursuitListener = new HuntedPursuitListener() {
+        @Override public void onHunterWarning() {
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(HudConstants.TWIST_HUNTED_WARNING_TEXT, EventTextSystem.COLOR_AMBER);
+            }
+        }
+        @Override public void onHunterArrived(int tileColumn, int tileRow) {
+            if (eventTextSystem != null) {
+                eventTextSystem.spawnWithColor(HudConstants.TWIST_HUNTED_ARRIVAL_TEXT, EventTextSystem.COLOR_RED);
+            }
+            Gdx.app.log("FloorTwist", "hunter arrived at " + tileColumn + "," + tileRow);
+        }
+        @Override public void onHunterKilled(int tileColumn, int tileRow) {
+            Gdx.app.log("FloorTwist", "hunter killed at " + tileColumn + "," + tileRow + " — bounty dropped");
+        }
+    };
 
     /**
      * Stamps a SUPPLY CACHE's ammo boxes across the player's OWNED ammo types (route-map order-8).
@@ -1319,6 +1406,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     private void rebuildForLevel(Level newLevel) {
+        // Floor-twists: no twist outlives its floor (A7). The new floor's twist, if any, is applied after this
+        // rebuild by applyPendingFloorEffects; the per-floor Level / EnemyManager / EnemyRenderer start at defaults.
+        activeTwist    = null;
+        minimapOffline = false;
+        hudRenderer.setNavOffline(false);
         // Dispose all level-dependent GPU resources before replacing them.
         // Failing to dispose here causes a Texture/SpriteBatch leak per floor.
         floorCeilingRenderer.dispose();
@@ -2739,9 +2831,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
         levelRenderer.setAnimationClock(facilityTimeSeconds);
         levelRenderer.setBarrelsHighlighted(playerBuild.stats().barrelsOnMinimap());
-        levelRenderer.render(camera);
-
-        player.render(camera);
+        // Floor-twists R7a: a BLACKOUT floor has no map — HudRenderer draws the NAV OFFLINE plate in its place.
+        if (!minimapOffline) {
+            levelRenderer.render(camera);
+            player.render(camera);
+        }
 
         // Populate HudState each frame so renderers read current values without polling Player directly
         hudState.alertActive    = false;

@@ -15,36 +15,51 @@ package ge.tbegvadze.toon3d.route;
 public final class FloorEffects {
 
     /** The do-nothing default: no red alert, no sting, no telemetry note. */
-    public static final FloorEffects NONE = new FloorEffects(false, null, null);
+    public static final FloorEffects NONE = new FloorEffects(false, null, null, null);
 
     private final boolean redAlert;
     private final String  stingText;
     private final String  statLogToken;
+    private final String  twistId;
 
-    private FloorEffects(boolean redAlert, String stingText, String statLogToken) {
+    private FloorEffects(boolean redAlert, String stingText, String statLogToken, String twistId) {
         this.redAlert     = redAlert;
         this.stingText    = stingText;
         this.statLogToken = statLogToken;
+        this.twistId      = twistId;
     }
 
     /** A plain red-alert floor (ELITE): the emergency lighting pulses from the first frame. */
     public static FloorEffects redAlert() {
-        return new FloorEffects(true, null, null);
+        return new FloorEffects(true, null, null, null);
     }
 
     /** Returns a copy with the red-alert pulse forced on. */
     public FloorEffects withRedAlert() {
-        return new FloorEffects(true, stingText, statLogToken);
+        return new FloorEffects(true, stingText, statLogToken, twistId);
     }
 
     /** Returns a copy carrying a first-frame reveal sting (an EventText line shown on entry). */
     public FloorEffects withSting(String text) {
-        return new FloorEffects(redAlert, text, statLogToken);
+        return new FloorEffects(redAlert, text, statLogToken, twistId);
     }
 
     /** Returns a copy carrying a telemetry token appended to the run's route story (e.g. "VAULT"). */
     public FloorEffects withStatLog(String token) {
-        return new FloorEffects(redAlert, stingText, token);
+        return new FloorEffects(redAlert, stingText, token, twistId);
+    }
+
+    /**
+     * Returns a copy carrying the FLOOR TWIST this floor was built with (floor-twists R5): World / SimWorld
+     * look its {@link NodeAffixDefinition} up and apply the runtime modifiers after the rebuild.
+     */
+    public FloorEffects withTwist(String id) {
+        return new FloorEffects(redAlert, stingText, statLogToken, id);
+    }
+
+    /** The floor twist id this floor carries, or {@code null} for none. */
+    public String twistId() {
+        return twistId;
     }
 
     /** Whether the emergency red-alert pulse should be lit on this floor. */
@@ -64,6 +79,6 @@ public final class FloorEffects {
 
     /** Whether this bundle asks {@code World} to do anything at all. */
     public boolean hasAny() {
-        return redAlert || stingText != null || statLogToken != null;
+        return redAlert || stingText != null || statLogToken != null || twistId != null;
     }
 }

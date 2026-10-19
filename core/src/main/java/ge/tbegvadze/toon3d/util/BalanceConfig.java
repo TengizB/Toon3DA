@@ -3337,4 +3337,76 @@ public final class BalanceConfig {
     public static final float   SIM_RELIC_PER_RELIC_MAX_LIFT          = 0.60f;
     /** SR4/SR5: probe runs a non-affine relic needs before its ratio is judged. */
     public static final int     SIM_RELIC_MIN_RUNS_PER_RELIC          = 10;
+
+    // =====================================================================================
+    // SECTION 27 — FLOOR TWISTS (floor-twists): rule-changing modifiers on COMBAT nodes
+    // A twist is a FLOOR_TWIST-scoped row of the route NodeAffixRegistry, rolled onto an eligible COMBAT node
+    // at map-gen and shown on the card before the player commits. SALVAGE and HUNTED change the floor's threat
+    // and loot; BLACKOUT changes only the dormant-WAKE perception (its dark/no-map half is cosmetic and lives in
+    // RenderConstants/HudConstants). Priced by R-TWIST (T1-T3) against plain COMBAT, banded by S-TWIST.
+    // =====================================================================================
+
+    // --- ROLL ----------------------------------------------------------------------------------
+    /** R2: share of eligible COMBAT nodes (depth >= a twist's minimum) that carry one twist. */
+    public static final float   TWIST_ROLL_CHANCE_COMBAT              = 0.30f;
+    /** R2: relative pick weight of BLACKOUT among the eligible twists. */
+    public static final float   TWIST_WEIGHT_BLACKOUT                 = 1.0f;
+    /** R2: relative pick weight of SALVAGE among the eligible twists. */
+    public static final float   TWIST_WEIGHT_SALVAGE                  = 1.0f;
+    /**
+     * R2: relative pick weight of HUNTED among the eligible twists. Tuned 1.0 -> 0.5 at CP3: HUNTED is priced as a
+     * 1.78x-threat floor, so the R-TRAJECTORY DEADLIEST walker takes every one it sees and its XP buys a level too
+     * many (depth coupling 1.72 > 1.65 at weight 0.75+; 1.58 at 0.5). The band does not move — the twist does.
+     */
+    public static final float   TWIST_WEIGHT_HUNTED                   = 0.5f;
+    /** R3: the shallowest depth BLACKOUT may roll on (floor one is the teaching floor). */
+    public static final int     TWIST_MIN_DEPTH_BLACKOUT              = 2;
+    /** R3: the shallowest depth SALVAGE may roll on. */
+    public static final int     TWIST_MIN_DEPTH_SALVAGE               = 2;
+    /** R3: the shallowest depth HUNTED may roll on (an Iron Stalker on floor two is too sharp a spike). */
+    public static final int     TWIST_MIN_DEPTH_HUNTED                = 4;
+
+    // --- BLACKOUT (R7d) — the dormant-WAKE check only; attack ranges and LOS for attacks unchanged ---
+    /** R7d: proximity radius (tiles) that wakes a dormant enemy on a BLACKOUT floor (default ALERT_RADIUS_TILES). */
+    public static final int     TWIST_BLACKOUT_WAKE_RADIUS_TILES      = 3;   // CP8: 2 flipped S-RELIC SR3 (sim noise at 1.01); 3/6 restores it
+    /** R7d: wake-by-sight range (tiles) on a BLACKOUT floor (default LOS_MAX_RANGE_TILES, wake check only). */
+    public static final int     TWIST_BLACKOUT_WAKE_SIGHT_TILES       = 6;
+
+    // --- SALVAGE (R8) ---------------------------------------------------------------------------
+    /** R8: threat multiplier on the COMBAT floor's budget (through the same EnemyBudgetOverride SWARM uses). */
+    public static final float   TWIST_SALVAGE_BUDGET_MULT             = 1.30f;
+    /** R8: extra owned-ammo boxes scattered over the floor. */
+    public static final int     TWIST_SALVAGE_AMMO_BOXES              = 4;
+    /** R8: extra '+' stim packs scattered over the floor. */
+    public static final int     TWIST_SALVAGE_STIMS                   = 1;
+    /** R8: extra 'a' armour shards scattered over the floor. */
+    public static final int     TWIST_SALVAGE_ARMOUR_SHARDS           = 1;
+
+    // --- HUNTED (R9-R12) ------------------------------------------------------------------------
+    /** R9a: completed player turns on the floor before the trail hunter is printed. */
+    public static final int     TWIST_HUNTED_ARRIVAL_TURNS            = 40;
+    /** R9a: how many turns before the arrival the warning fires. */
+    public static final int     TWIST_HUNTED_WARNING_TURNS            = 5;
+    /** R9a: the arrival tile must be at least this far (Manhattan tiles) from the player for the hunter to spawn. */
+    public static final int     TWIST_HUNTED_MIN_SPAWN_DISTANCE_TILES = 5;
+    /**
+     * R12: owned-ammo boxes the trail hunter drops on death, on top of its ordinary drops. Tuned 3 -> 10 at CP3:
+     * the hunter is a MINI_ELITE worth ~0.77 of a COMBAT floor's TP, and R-TWIST T1 prices it as always arriving
+     * (AS16), so the bounty must pay a 1.78x threat into the [1.0, 1.2] premium band (10 boxes -> 1.02-1.03).
+     */
+    public static final int     TWIST_HUNTED_BOUNTY_AMMO_BOXES        = 10;
+    /**
+     * T3: the declared extra threat of the hunter as a share of a COMBAT floor's Threat-Point budget, priced at
+     * FULL (as if it always arrives — AS16). R-TWIST T3 fails if the hunter's real per-archetype TP at any audited
+     * depth, over the COMBAT floor's TP budget, exceeds this: the ledger may not under-price the hunter.
+     */
+    public static final float   TWIST_HUNTED_THREAT_SHARE             = 0.78f;   // CP3: real IRON_STALKER share peaks 0.765 at depth 4
+
+    // --- AUDIT (R-TWIST) + SIMULATOR (S-TWIST) -------------------------------------------------
+    /** T2: a threat-neutral twist's total EV must sit within +-this share of plain COMBAT's at every audited depth. */
+    public static final float   TWIST_NEUTRAL_EV_TOLERANCE            = 0.10f;
+    /** ST1: a twist's floor-death rate may not exceed this x the plain-COMBAT floor-death rate in the same depths. */
+    public static final float   TWIST_SIM_MAX_DEATH_RATE_RATIO        = 1.50f;
+    /** ST1: floors a twist needs in the TACTICAL row before ST1 judges it (fewer = reported n/a). */
+    public static final int     TWIST_SIM_MIN_FLOORS                  = 60;
 }

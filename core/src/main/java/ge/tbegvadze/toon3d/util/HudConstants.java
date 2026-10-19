@@ -369,4 +369,24 @@ public final class HudConstants {
     // --- Run report line (render/InstanceReportRenderer) ---
     public static final String RELIC_REPORT_PREFIX = "RELICS: ";
     public static final String RELIC_REPORT_NONE   = "RELICS: none";
+
+    // ---- FLOOR TWISTS (floor-twists) — HUD strings (the ELITE_STING_TEXT precedent, AS20) + the NAV OFFLINE plate ----
+    /** The twist amber (route palette hazardAmber) — arrival sting, HUNTED warning, the NAV OFFLINE text + frame. */
+    public static final float  TWIST_AMBER_RED   = 0.98f;
+    public static final float  TWIST_AMBER_GREEN = 0.72f;
+    public static final float  TWIST_AMBER_BLUE  = 0.16f;
+    /** R7a: the plate drawn in the mini-map's rectangle on a BLACKOUT floor (0x0A0A0C at the HUD panel alpha). */
+    public static final float  TWIST_NAV_OFFLINE_PLATE_RED   = 0x0A / 255f;
+    public static final float  TWIST_NAV_OFFLINE_PLATE_GREEN = 0x0A / 255f;
+    public static final float  TWIST_NAV_OFFLINE_PLATE_BLUE  = 0x0C / 255f;
+    public static final float  TWIST_NAV_OFFLINE_PLATE_ALPHA = HUD_PANEL_ALPHA;
+    /** R7a: the plate's amber frame thickness (world units). */
+    public static final float  TWIST_NAV_OFFLINE_FRAME_THICKNESS = 1f;
+    /** R7a: the plate's centred label and its glyph scale. */
+    public static final String TWIST_NAV_OFFLINE_TEXT        = "NAV OFFLINE";
+    public static final float  TWIST_NAV_OFFLINE_TEXT_SCALE  = 1.2f;
+    /** R9a: the HUNTED warning, TWIST_HUNTED_WARNING_TURNS before the arrival (amber event text). */
+    public static final String TWIST_HUNTED_WARNING_TEXT = "SOMETHING IS ON THE STAIRS BEHIND YOU";
+    /** R9a: the HUNTED arrival (red event text). */
+    public static final String TWIST_HUNTED_ARRIVAL_TEXT = "IT'S HERE";
 }

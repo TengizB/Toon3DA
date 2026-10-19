@@ -24,6 +24,7 @@ import ge.tbegvadze.toon3d.render.routeicons.RouteGlyphs;
 import ge.tbegvadze.toon3d.render.routeicons.RouteIconBootstrap;
 import ge.tbegvadze.toon3d.route.DangerTier;
 import ge.tbegvadze.toon3d.route.MysteryOutcome;
+import ge.tbegvadze.toon3d.route.NodeAffixDefinition;
 import ge.tbegvadze.toon3d.route.NodeStatus;
 import ge.tbegvadze.toon3d.route.NodeTypeDefinition;
 import ge.tbegvadze.toon3d.route.NodeTypeRegistry;
@@ -161,6 +162,9 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private float  promiseThreatX;
     private float  promiseRewardX;
     private Color  promiseThreatColor;
+    // Floor-twists R14: the focused node's affix / twist line ("<NAME> - <RULE LINE>"), or empty. Built on focus change.
+    private String twistLineText = "";
+    private float  twistLineX;
     private float  cancelLabelX, cancelLabelY, engageLabelX, engageLabelY;
     private float  toggleLabelXMap, toggleLabelXDetail, toggleLabelY;
 
@@ -472,6 +476,20 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
                 promiseThreatX = viewportCenterX - layout.width / 2f;
                 layout.setText(font, promiseRewardText);
                 promiseRewardX = viewportCenterX - layout.width / 2f;
+            }
+        }
+
+        // R14: a revealed node carrying an ELITE affix or a FLOOR TWIST names it, with its one-line rule, in
+        // amber under the promise. Read from the affix row, so a new twist needs no edit here (A12).
+        twistLineText = "";
+        if (focusNode != null && focusNode.revealed && focusNode.affix != null) {
+            NodeAffixDefinition affixDefinition = RouteRegistries.affixes().definition(focusNode.affix.id());
+            if (affixDefinition != null && !affixDefinition.ruleLine().isEmpty()) {
+                twistLineText = truncateToWidth(focusNode.affix.displayName()
+                                + RouteMapConstants.LEGEND_TWIST_SEPARATOR + affixDefinition.ruleLine(),
+                        RouteMapConstants.LEGEND_TEXT_SCALE, RouteMapConstants.LEGEND_TWIST_MAX_WIDTH);
+                layout.setText(font, twistLineText);
+                twistLineX = viewportCenterX - layout.width / 2f;
             }
         }
     }
@@ -1475,20 +1493,29 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         // Legend hint — now rendered in the confirm bar's centre gap (between CANCEL and ENGAGE), since
         // the dedicated legend strip band was retired to give the map more vertical room.
         float legendMiddleY = (RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + RouteMapConstants.CONFIRM_BAR_TOP_Y) / 2f;
+        boolean hasTwistLine = !twistLineText.isEmpty();
         if (!promiseThreatText.isEmpty()) {
             // C1: threat word in the node's accent colour, reward promise in neutral grey.
             font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
             setFont(promiseThreatColor, 1f);
-            font.draw(batch, promiseThreatText, promiseThreatX,
-                      legendMiddleY + RouteMapConstants.LEGEND_PROMISE_THREAT_OFFSET_Y);
+            font.draw(batch, promiseThreatText, promiseThreatX, legendMiddleY + (hasTwistLine
+                    ? RouteMapConstants.LEGEND_PROMISE_THREAT_OFFSET_Y_WITH_TWIST
+                    : RouteMapConstants.LEGEND_PROMISE_THREAT_OFFSET_Y));
             setFont(palette.textDim, 0.95f);
-            font.draw(batch, promiseRewardText, promiseRewardX,
-                      legendMiddleY + RouteMapConstants.LEGEND_PROMISE_REWARD_OFFSET_Y);
+            font.draw(batch, promiseRewardText, promiseRewardX, legendMiddleY + (hasTwistLine
+                    ? RouteMapConstants.LEGEND_PROMISE_REWARD_OFFSET_Y_WITH_TWIST
+                    : RouteMapConstants.LEGEND_PROMISE_REWARD_OFFSET_Y));
         } else if (!legendText.isEmpty()) {
             font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
             float legendY = legendMiddleY + 6f;
             setFont(regionTint, 0.95f);
             font.draw(batch, legendText, legendTextX, legendY);
+        }
+        if (hasTwistLine) {
+            // R14: the affix / twist line, hazard amber, under the promise.
+            font.getData().setScale(RouteMapConstants.LEGEND_TEXT_SCALE);
+            setFont(palette.hazardAmber, 1f);
+            font.draw(batch, twistLineText, twistLineX, legendMiddleY + RouteMapConstants.LEGEND_TWIST_OFFSET_Y);
         }
 
         // Confirm-bar labels. ENGAGE copy is dynamic (forced-node verbs) and dims when un-armed.
