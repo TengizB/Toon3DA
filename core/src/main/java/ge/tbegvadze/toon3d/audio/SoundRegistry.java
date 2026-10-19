@@ -121,6 +121,16 @@ public final class SoundRegistry {
         return family != null ? launchPitchByFamily[family.ordinal()] : 1f;
     }
 
+    /**
+     * Whether this family has its OWN registered voice for the moment (read-only; the balance
+     * admission rule C-FAMILY uses it). {@link #forEnemyFamily} cannot answer this, because it falls
+     * back to the shared per-moment voice and so never reports a missing binding.
+     */
+    public boolean hasEnemyFamilyVoice(EnemyFamily family, EnemyVoiceMoment moment) {
+        GameSoundId bound = familyVoiceBinding[family.ordinal()][moment.ordinal()];
+        return bound != null && isRegistered(bound);
+    }
+
     /** The sound a family with no binding makes at this moment; null leaves that moment silent. */
     public void bindEnemyVoiceFallback(EnemyVoiceMoment moment, GameSoundId soundId) {
         voiceFallback[moment.ordinal()] = soundId;

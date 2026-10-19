@@ -46,7 +46,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes; idea STATUS: IN PROGRESS.
-- [ ] **CP1** — RuleKind.ADMISSION with C-ENEMY, C-FAMILY, C-VERB, C-BOSS; COVERAGE enemy/verb checks folded in.
+- [x] **CP1** — RuleKind.ADMISSION with C-ENEMY, C-FAMILY, C-VERB, C-BOSS; COVERAGE enemy/verb checks folded in.
       DONE WHEN: both gates green on current content.
 - [ ] **CP2** — C-WEAPON, C-ABILITY, C-PERK, C-AMMO live; COVERAGE weapon/ammo checks folded in.
       DONE WHEN: both gates green.
@@ -72,3 +72,20 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   explicitly; order 8 adds rules and changes no number, and order 7 only tunes numbers, so it is built
   now. Per AS1, if order 7 later moves a rule, it changes here in the same commit; any BalanceConfig
   field order 7 adds after CP5 must be a rule subject or UNBANDED (C-CONSTANT is doing its job).
+- **ENV:** `./gradlew` cannot run in the repo (Android plugin; dl.google.com 403). Gate via the desktop-only
+  MIRROR in the scratchpad (`mirror/`: symlinks core/lwjgl3/assets/gradle*/docs/story, `settings.gradle` =
+  `include 'lwjgl3','core'`, root build.gradle minus `buildscript{}`, `configure(subprojects)`, googleapis maven
+  first). `./gradlew core:test lwjgl3:compileJava -q --continue` (~1 min), `./gradlew core:balanceSim -q` (~10 min).
+- **BASELINE (2026-10-19, `de13c3e`):** core:test 464, only `narrative.StoryBarkTest` red (pre-existing joke row
+  `bark.depth.core.2`, red since order 6 — not ours); balanceSim green (exit 0).
+- **The design decisions the spec left open** are in `balance-overhaul-order-8.contract.md` (committed `3e9fc6b`):
+  ADMISSION checks declared / priced / reached-by-its-band-rule, never the band verdict, so it is never waivable.
+- **CP1 handover:** `BalanceSchema.AdmissionRule` (18 constants; each carries its evaluator as a
+  `Supplier<List<RuleResult>>` method ref — a later CP implements a rule by passing `BalanceSchema::admissionXResults`
+  in the constant, nothing else). `admission(rule, id, missing, okDetail)` helper; subject `"C-X: ID"`;
+  `RuleResult.toString()` prints `ADMISSION C-X: ID — detail` (E2). `waive(ADMISSION, ...)` throws. Test helper
+  `assertAdmitted(results)` in BalanceAuditTest (fails on empty too). New read-only
+  `SoundRegistry.hasEnemyFamilyVoice(family, moment)` (forEnemyFamily falls back, so it could not report a miss).
+  COVERAGE now holds only weapon / consumable / ammo / relic rows. Counts: C-ENEMY 19, C-FAMILY 12 (6+6),
+  C-VERB 5, C-BOSS 5 rows + 3 boss types. Nothing in current content failed. core:test 467 (StoryBarkTest only).
+  Calls: WIND_UP is not a family voice (shared by design); summon caps = SUMMON_COUNT_MAX + SUMMON_ROOM_LIVE_CAP.

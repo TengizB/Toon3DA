@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -35,6 +36,22 @@ class BalanceAuditTest {
         assertTrue(violationLines.isEmpty(),
                 () -> "Balance schema violations (tune the value in BalanceConfig back into band, "
                         + "or register an explicit waiver in BalanceSchema):\n"
+                        + String.join("\n", violationLines));
+    }
+
+    /**
+     * Asserts an ADMISSION rule found content and admitted all of it. An ADMISSION failure is a missing declaration
+     * or pricing row, never a band verdict, so there is no waiver to reach for.
+     */
+    private static void assertAdmitted(List<BalanceSchema.RuleResult> results) {
+        assertFalse(results.isEmpty(), "an admission rule that finds no content is itself broken");
+        List<String> violationLines = new ArrayList<>();
+        for (BalanceSchema.RuleResult result : results) {
+            if (result.isViolation()) violationLines.add("  " + result);
+        }
+        assertTrue(violationLines.isEmpty(),
+                () -> "ADMISSION failures are missing declarations or pricing rows and can never be waived (G5) "
+                        + "— add the declaration; see docs/game-balance-authority.txt ADD CONTENT:\n"
                         + String.join("\n", violationLines));
     }
 
@@ -153,6 +170,57 @@ class BalanceAuditTest {
     @Test
     void allContentIsCoveredByTheSchema() {
         assertNoViolations(BalanceSchema.coverageResults());
+    }
+
+    /**
+     * C-ENEMY (K1): every EnemyType declares role, family, trait, positive stats, a known positional multiplier, a
+     * tactical verb, a priced move-set, an R-HEAVY-evaluated wind-up and a legal first depth; every non-boss also has
+     * its role's TP and hit bands (the old COVERAGE "enemy" row), finite positive threat, derived XP, a unique spawn
+     * symbol, a group-template slot and an ORA archetype line. Also pins G5: an ADMISSION waiver cannot be registered.
+     */
+    @Test
+    void everyEnemyArchetypeIsAdmitted() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ENEMY);
+        assertAdmitted(results);
+        assertEquals(ge.tbegvadze.toon3d.enemy.EnemyType.values().length, results.size(),
+                "one C-ENEMY result per EnemyType");
+        assertTrue(BalanceSchema.activeWaivers().stream()
+                        .noneMatch(waiver -> waiver.kind == BalanceSchema.RuleKind.ADMISSION),
+                "ADMISSION is never waived (G5)");
+    }
+
+    /**
+     * C-FAMILY (K2): every EnemyFamily has a trait, its own ALERT / ATTACK / DEATH voice in the audio catalog and both
+     * bestiary lines; every EnemyTrait has a positive matchup cell for every DamageClass, a glyph unless FLESH, and a
+     * WeaponRoleModel reference scenario whose archetype presents it.
+     */
+    @Test
+    void everyEnemyFamilyAndTraitIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.FAMILY));
+    }
+
+    /**
+     * C-VERB (K3) — folds the old COVERAGE "special verb" row and {@code everySpecialVerbHasARegisteredEquivalence}:
+     * every SpecialAbility has a SpecialVerbPricing; a damaging verb is a declared HEAVY committed at least a turn
+     * ahead and evaluated by R-HEAVY; a summon verb has positive caps; ORA has an ability line for it.
+     */
+    @Test
+    void everySpecialVerbIsAdmitted() {
+        List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.VERB);
+        assertAdmitted(results);
+        for (ge.tbegvadze.toon3d.enemy.SpecialAbility ability : ge.tbegvadze.toon3d.enemy.SpecialAbility.values()) {
+            assertTrue(BalanceSchema.specialVerbPricing(ability) != null,
+                    ability.name() + " has no SpecialVerbPricing registered");
+        }
+    }
+
+    /**
+     * C-BOSS (K4): every BossTable row has a legal boss depth, positive dials, boss verbs, derived stats and
+     * R-BOSS-GATE / R-BOSS-FAIR results; every BOSS-role EnemyType is fought on some row.
+     */
+    @Test
+    void everyBossIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.BOSS));
     }
 
     // R-GEARGATE (region gear step + golden-ratio gate) was RETIRED by balance-overhaul order 1 and REPLACED
@@ -355,25 +423,6 @@ class BalanceAuditTest {
     @Test
     void regionDangerDialIsBoundedMonotonicAndFair() {
         assertNoViolations(BalanceSchema.regionResults());
-    }
-
-    /**
-     * Order-5 COVERAGE (special verbs): every catalogued enemy SPECIAL verb has a registered
-     * cycle-averaged Threat-Point equivalence (or an explicit exempt classification) — a new verb without
-     * one is an unpriced-content COVERAGE violation, exactly like an unpriced weapon or ammo type.
-     */
-    @Test
-    void everySpecialVerbHasARegisteredEquivalence() {
-        java.util.List<String> unpriced = new java.util.ArrayList<>();
-        for (ge.tbegvadze.toon3d.enemy.SpecialAbility ability
-                : ge.tbegvadze.toon3d.enemy.SpecialAbility.values()) {
-            if (BalanceSchema.specialVerbPricing(ability) == null) {
-                unpriced.add("  " + ability.name() + " has no SpecialVerbPricing registered");
-            }
-        }
-        assertTrue(unpriced.isEmpty(),
-                () -> "Unpriced enemy special verbs (register a SpecialVerbPricing equivalence):\n"
-                        + String.join("\n", unpriced));
     }
 
     /**

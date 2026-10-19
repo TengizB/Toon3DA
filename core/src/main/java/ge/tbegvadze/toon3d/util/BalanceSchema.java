@@ -1,5 +1,16 @@
 package ge.tbegvadze.toon3d.util;
 
+import ge.tbegvadze.toon3d.audio.GameSoundCatalog;
+import ge.tbegvadze.toon3d.audio.SoundRegistry;
+import ge.tbegvadze.toon3d.enemy.EnemyFamily;
+import ge.tbegvadze.toon3d.enemy.EnemyTrait;
+import ge.tbegvadze.toon3d.enemy.EnemyVoiceMoment;
+import ge.tbegvadze.toon3d.entity.DamageClass;
+import ge.tbegvadze.toon3d.entity.MatchupCatalog;
+import ge.tbegvadze.toon3d.level.EncounterGroupTemplate;
+import ge.tbegvadze.toon3d.level.EncounterGroupTemplateRegistry;
+import ge.tbegvadze.toon3d.narrative.BestiaryCatalog;
+import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.route.BossTable;
 
 import ge.tbegvadze.toon3d.enemy.EnemyRole;
@@ -48,6 +59,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * LAYER 2 of the Balance Authority — the RULE SCHEMA (see {@code docs/game-balance-authority.txt}).
@@ -67,11 +79,15 @@ import java.util.Set;
  * {@link Waiver} — visible, reasoned, auditable — registered via {@link #waive}. Never a silent
  * exception. {@link BalanceReport} prints all active waivers in their own table.
  *
- * <p><b>Coverage.</b> The schema iterates the game's own content enumerations
- * ({@link EnemyType}, {@link Perk}, {@link ItemType}, {@link AmmoType}) so content that
- * skips pricing can no longer ship silently: an unclassified weapon item, an enemy role without a
- * band, or an unpriced heal fails the audit (the anti-"shipped unpriced" rule — the necrotic
- * faction once corrupted every floor budget for weeks this way).
+ * <p><b>Admission.</b> The schema iterates the game's own content collections
+ * ({@link EnemyType}, {@link EnemyFamily}, {@link SpecialAbility}, {@link BossTable}, ...) so content
+ * that skips a declaration, a pricing row or a registry can no longer ship silently (the
+ * anti-"shipped unpriced" rule — the necrotic faction once corrupted every floor budget for weeks
+ * this way). Each {@link AdmissionRule} (C-*, {@link RuleKind#ADMISSION}) emits ONE result per content
+ * item whose detail lists EVERY missing item and where to add it. An admission result is a missing
+ * declaration, never a band verdict (that stays with the band rule), so it can NEVER be waived (G5).
+ * The older {@link RuleKind#COVERAGE} rows (weapon / consumable / ammo / relic) are folded into the
+ * admission family checkpoint by checkpoint.
  *
  * <p>Pure JVM: no LibGDX state, only {@link BalanceConfig} + {@link GameMath} + the headless
  * content enums, so it runs in CI. Every rule addition belongs here (later orders of the
@@ -115,7 +131,7 @@ public final class BalanceSchema {
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
         FLAGS,
-        /** COVERAGE: every content entry (weapon item, consumable, ammo type, enemy role) is classified/priced. */
+        /** COVERAGE (being folded into ADMISSION, K5-K9): weapon item, consumable, ammo type and relic rows. */
         COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
@@ -286,7 +302,13 @@ public final class BalanceSchema {
          * on plain (untwisted) COMBAT floors over the same depth range (an under-sampled twist reports n/a and does not
          * fail); ST2 every twist appears on at least one played floor (the roll is live). Never waived.
          */
-        SIM_TWIST
+        SIM_TWIST,
+        /**
+         * ADMISSION (balance-overhaul order 8, K1-K18 / the C-* rules): one result per content item saying whether
+         * it is DECLARED, PRICED and reached by its band rule. Never waivable (G5): a failure is a missing
+         * declaration or pricing row, so {@link #waive} refuses this kind and {@link #findWaiver} never returns one.
+         */
+        ADMISSION
     }
 
     // =====================================================================================
@@ -320,6 +342,9 @@ public final class BalanceSchema {
         public boolean isViolation() { return !satisfied && !waived; }
 
         @Override public String toString() {
+            if (kind == RuleKind.ADMISSION) {
+                return "ADMISSION " + subject + " — " + (detail == null ? "" : detail);
+            }
             return String.format("[%s] %s: value=%.2f band=%.2f..%.2f %s%s%s",
                     kind, subject, value, bandMinimum, bandMaximum,
                     satisfied ? "OK" : "OUT-OF-BAND",
@@ -450,6 +475,10 @@ public final class BalanceSchema {
 
     /** Registers an explicit waiver. Every call must be mirrored in docs/game-balance-authority.txt. */
     private static void waive(RuleKind kind, String subject, String reason, String expiryCondition) {
+        if (kind == RuleKind.ADMISSION) {
+            throw new IllegalArgumentException("ADMISSION results are never waivable (G5): " + subject
+                    + " — add the missing declaration instead");
+        }
         WAIVERS.add(new Waiver(kind, subject, reason, expiryCondition));
     }
 
@@ -459,6 +488,7 @@ public final class BalanceSchema {
     }
 
     private static Waiver findWaiver(RuleKind kind, String subject) {
+        if (kind == RuleKind.ADMISSION) return null; // G5: an admission result is never waived
         for (Waiver waiver : WAIVERS) {
             if (waiver.kind == kind && waiver.subject.equals(subject)) return waiver;
         }
@@ -884,6 +914,7 @@ public final class BalanceSchema {
         results.addAll(dotUniquenessResults());
         results.addAll(flagResults());
         results.addAll(coverageResults());
+        results.addAll(admissionResults());
         results.addAll(abilityBudgetResults());
         results.addAll(abilityRollSweepResults());
         results.addAll(creditResults());
@@ -1085,7 +1116,7 @@ public final class BalanceSchema {
         for (EnemyType enemyType : EnemyType.values()) {
             if (enemyType.role() == EnemyRole.BOSS) continue; // bosses follow the SECTION 14 ruleset
             float[] band = ENEMY_THREAT_POINT_BANDS.get(enemyType.role());
-            if (band == null) continue; // reported by coverageResults()
+            if (band == null) continue; // reported by C-ENEMY (admissionEnemyResults)
             float threatPoints = enemyType.baseThreatPoints();
             boolean inBand = threatPoints >= band[0] && threatPoints <= band[1];
             results.add(new RuleResult(RuleKind.ENEMY_THREAT_POINTS, enemyType.displayName(),
@@ -1103,7 +1134,7 @@ public final class BalanceSchema {
         List<RuleResult> results = new ArrayList<>();
         for (EnemyType enemyType : EnemyType.values()) {
             float[] band = ENEMY_HIT_BANDS.get(enemyType.role());
-            if (band == null) continue; // BOSS: SECTION 14 ruleset; unknown roles are a COVERAGE violation
+            if (band == null) continue; // BOSS: SECTION 14 ruleset; unknown roles are a C-ENEMY admission failure
             int hitsToKill = enemyHitsToKill(enemyType);
             int hitsToDie = enemyHitsToDie(enemyType);
             results.add(new RuleResult(RuleKind.ENEMY_HITS, enemyType.displayName() + " hits to kill",
@@ -2114,7 +2145,7 @@ public final class BalanceSchema {
         return 0;
     }
 
-    /** COVERAGE: every content entry is classified/priced — un-priced content fails the build. */
+    /** COVERAGE (being folded into ADMISSION): weapon item, consumable, ammo type and relic rows; enemy + verb moved to C-ENEMY / C-VERB. */
     public static List<RuleResult> coverageResults() {
         List<RuleResult> results = new ArrayList<>();
         for (ItemType itemType : ItemType.values()) {
@@ -2132,14 +2163,6 @@ public final class BalanceSchema {
                                    : "UNCLASSIFIED — price it as a heal or declare it utility in BalanceSchema"));
             }
         }
-        for (EnemyType enemyType : EnemyType.values()) {
-            if (enemyType.role() == EnemyRole.BOSS) continue;
-            boolean hasBand = ENEMY_THREAT_POINT_BANDS.containsKey(enemyType.role());
-            results.add(new RuleResult(RuleKind.COVERAGE, "enemy " + enemyType.displayName(),
-                    hasBand ? 1f : 0f, 1f, 1f, hasBand,
-                    hasBand ? "role " + enemyType.role() + " banded"
-                            : "role " + enemyType.role() + " has NO TP band registered in BalanceSchema"));
-        }
         for (AmmoType ammoType : AmmoType.values()) {
             boolean hasRow = false;
             for (ScarcityRowSpec row : SCARCITY_ROWS) {
@@ -2150,16 +2173,6 @@ public final class BalanceSchema {
                     hasRow ? "priced in the scarcity model"
                            : "NOT priced — register a scarcity row in BalanceSchema"));
         }
-        // Order 5: every enemy SPECIAL verb must have a registered equivalence (or an explicit exempt
-        // classification) so the cycle-averaged Threat-Point model can never silently under-price a caster.
-        for (SpecialAbility ability : SpecialAbility.values()) {
-            SpecialVerbPricing pricing = SPECIAL_VERB_PRICING.get(ability);
-            boolean priced = pricing != null;
-            results.add(new RuleResult(RuleKind.COVERAGE, "special verb " + ability.name(),
-                    priced ? 1f : 0f, 1f, 1f, priced,
-                    priced ? "priced " + pricing
-                           : "UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema"));
-        }
         // relics-run-changing-artifacts CP5: every relic resolves its rarity, its trigger and its valuation, and the
         // rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY LEGENDARY, is unpriced content).
         for (RelicDefinition relic : RelicCatalog.registry().all()) {
@@ -2169,6 +2182,329 @@ public final class BalanceSchema {
                     resolved ? 1f : 0f, 1f, 1f, resolved,
                     resolved ? relic.rarity() + " / " + relic.trigger() + " / " + relic.valuation() + " banded"
                              : "UNRESOLVED — a relic needs a rarity, a trigger, a valuation and a band for that rarity x valuation"));
+        }
+        return results;
+    }
+
+    // =====================================================================================
+    // ADMISSION (balance-overhaul order 8, K1-K18 / the C-* rules). One result per content item:
+    // subject "<ruleId>: <contentId>", value 1 = admitted / 0 = not, band 1..1, detail = what was
+    // declared, or EVERY missing item ("; "-joined, each naming what is missing and where to add it).
+    // An ADMISSION rule checks the item is DECLARED, PRICED and REACHED by its band rule — never the
+    // band verdict itself (that stays with R-ENEMY, R-HEAVY, R-BOSS-*, ...). So no admission result is
+    // waivable (G5). Rules are DATA: the enum below carries each rule's evaluator, never a switch.
+    // =====================================================================================
+
+    /** The admission sub-rules, in E1 order. A rule with no evaluator yet is built by a later checkpoint. */
+    public enum AdmissionRule {
+        ENEMY("C-ENEMY", "K1 ENEMY ARCHETYPE", BalanceSchema::admissionEnemyResults),
+        FAMILY("C-FAMILY", "K2 ENEMY FAMILY / TRAIT", BalanceSchema::admissionFamilyResults),
+        VERB("C-VERB", "K3 ENEMY SPECIAL VERB", BalanceSchema::admissionVerbResults),
+        BOSS("C-BOSS", "K4 BOSS", BalanceSchema::admissionBossResults),
+        WEAPON("C-WEAPON", "K5 WEAPON"),
+        ABILITY("C-ABILITY", "K6 WEAPON ABILITY"),
+        PERK("C-PERK", "K7 PERK / KEYSTONE"),
+        ITEM("C-ITEM", "K8 ITEM / PICKUP / CONSUMABLE"),
+        AMMO("C-AMMO", "K9 AMMO TYPE"),
+        STATUS("C-STATUS", "K10 STATUS EFFECT"),
+        HAZARD("C-HAZARD", "K11 HAZARD / GAMEPLAY PROP"),
+        ROOM("C-ROOM", "K12 ROOM BLUEPRINT"),
+        GENERATOR("C-GENERATOR", "K13 LEVEL GENERATOR"),
+        NODE("C-NODE", "K14 ROUTE NODE TYPE"),
+        EVENT("C-EVENT", "K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX"),
+        SHOP("C-SHOP", "K16 SHOP OFFER TYPE"),
+        REGION("C-REGION", "K17 REGION"),
+        CONSTANT("C-CONSTANT", "K18 ANY NEW BALANCE NUMBER");
+
+        public final String ruleId;
+        public final String kindLabel;
+        private final Supplier<List<RuleResult>> evaluator;
+
+        AdmissionRule(String ruleId, String kindLabel) {
+            this(ruleId, kindLabel, null);
+        }
+
+        AdmissionRule(String ruleId, String kindLabel, Supplier<List<RuleResult>> evaluator) {
+            this.ruleId    = ruleId;
+            this.kindLabel = kindLabel;
+            this.evaluator = evaluator;
+        }
+
+        /** True once a checkpoint has implemented this rule's evaluator. */
+        public boolean isImplemented() { return evaluator != null; }
+    }
+
+    /** One admission result for one content item: {@code missing} empty means admitted. */
+    private static RuleResult admission(AdmissionRule rule, String contentId, List<String> missing,
+                                        String admittedDetail) {
+        boolean admitted = missing.isEmpty();
+        return new RuleResult(RuleKind.ADMISSION, rule.ruleId + ": " + contentId,
+                admitted ? 1f : 0f, 1f, 1f, admitted,
+                admitted ? admittedDetail : String.join("; ", missing));
+    }
+
+    /** The results of one admission rule; empty for a rule a later checkpoint has not implemented yet. */
+    public static List<RuleResult> admissionResults(AdmissionRule rule) {
+        return rule.evaluator == null ? new ArrayList<RuleResult>() : rule.evaluator.get();
+    }
+
+    /** Every implemented admission rule, in {@link AdmissionRule} order (later checkpoints supply their evaluators there). */
+    public static List<RuleResult> admissionResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (AdmissionRule rule : AdmissionRule.values()) {
+            results.addAll(admissionResults(rule));
+        }
+        return results;
+    }
+
+    /** Whether a text string id resolves in the shipped-defaults story table (the headless check of a bestiary line). */
+    private static boolean storyLineResolves(StoryStrings strings, String barkRowId) {
+        return strings.has("story." + barkRowId);
+    }
+
+    /** Whether any result's subject starts with the prefix (proves a band rule actually reaches a content item). */
+    private static boolean anySubjectStartsWith(List<RuleResult> results, String prefix) {
+        for (RuleResult result : results) {
+            if (result.subject.startsWith(prefix)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * C-ENEMY (K1): every {@link EnemyType} declares role / family / trait, positive stats, a known positional
+     * multiplier, a tactical verb, a priced move-set and (if any) an R-HEAVY-evaluated wind-up, a legal first
+     * depth; every non-boss also has TP + hit bands for its role, finite positive threat, derived XP, a unique
+     * spawn symbol, a group-template slot that admits its role and an ORA archetype line.
+     */
+    public static List<RuleResult> admissionEnemyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> heavyRuleResults = heavyResults();
+        StoryStrings storyStrings = StoryStrings.defaults();
+        List<EncounterGroupTemplate> templates = EncounterGroupTemplateRegistry.shared().all();
+        for (EnemyType enemyType : EnemyType.values()) {
+            boolean boss = enemyType.role() == EnemyRole.BOSS;
+            List<String> missing = new ArrayList<>();
+            if (enemyType.role() == null)   missing.add("no role() — declare an EnemyRole in the EnemyType row");
+            if (enemyType.family() == null) missing.add("no family() — declare an EnemyFamily in the EnemyType row");
+            if (enemyType.trait() == null)  missing.add("no trait() — give its EnemyFamily a trait()");
+            if (enemyType.maxHealth() <= 0) missing.add("maxHealth() <= 0 — set a positive health constant in EnemyConstants");
+            if (enemyType.attackDamage() <= 0) missing.add("attackDamage() <= 0 — set a positive damage constant in EnemyConstants");
+            if (enemyType.attackRangeTiles() < 1) missing.add("attackRangeTiles() < 1 — a reach of at least 1 tile");
+            if (enemyType.attackCadenceTurns() < 1) missing.add("attackCadenceTurns() < 1 — at least 1 turn between attacks");
+            if (enemyType.moveEveryNTurns() < 1) missing.add("moveEveryNTurns() < 1 — at least 1 turn per move");
+            float positional = enemyType.positionalMultiplier();
+            if (positional != BalanceConfig.POSITIONAL_MULT_MELEE
+                    && positional != BalanceConfig.POSITIONAL_MULT_FAST_MELEE
+                    && positional != BalanceConfig.POSITIONAL_MULT_RANGED) {
+                missing.add("positionalMultiplier() " + positional + " is not one of BalanceConfig POSITIONAL_MULT_MELEE / _FAST_MELEE / _RANGED");
+            }
+            String verb = enemyType.tacticalVerb();
+            if (verb == null || verb.trim().isEmpty()) missing.add("blank tacticalVerb() — ORA's archetype line is built from it");
+            for (SpecialAbility ability : enemyType.moveSet()) {
+                if (SPECIAL_VERB_PRICING.get(ability) == null) {
+                    missing.add("moveSet() ability " + ability + " has no SpecialVerbPricing — register it in BalanceSchema SPECIAL_VERB_PRICING");
+                }
+            }
+            HeavyAttack windUp = enemyType.heavyWindUp();
+            if (windUp != null && !anySubjectStartsWith(heavyRuleResults, windUp.displayName() + " d")) {
+                missing.add("heavyWindUp() " + windUp + " is not evaluated by R-HEAVY — heavyResults() must iterate it");
+            }
+            if (enemyType.minSpawnDepth() < 1 || enemyType.minSpawnDepth() > BalanceConfig.RUN_FINAL_DEPTH) {
+                missing.add("minSpawnDepth() " + enemyType.minSpawnDepth() + " outside 1.." + BalanceConfig.RUN_FINAL_DEPTH);
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.archetypeBarkId(enemyType))) {
+                missing.add("ORA archetype line story." + BestiaryCatalog.archetypeBarkId(enemyType)
+                        + " is missing — add it to BarkStrings.registerDefaults and assets/story/story-strings.properties");
+            }
+            if (!boss) {
+                if (enemyType.role() != null && !ENEMY_THREAT_POINT_BANDS.containsKey(enemyType.role())) {
+                    missing.add("role " + enemyType.role() + " has no TP band — add it to BalanceSchema buildEnemyThreatPointBands via ENEMY_HIT_BANDS");
+                }
+                if (enemyType.role() != null && !ENEMY_HIT_BANDS.containsKey(enemyType.role())) {
+                    missing.add("role " + enemyType.role() + " has no hit band — add it to BalanceSchema buildEnemyHitBands");
+                }
+                float threat = enemyType.baseThreatPoints();
+                if (Float.isNaN(threat) || Float.isInfinite(threat) || threat <= 0f) {
+                    missing.add("baseThreatPoints() " + threat + " is not finite and positive — check its stats and move-set pricing");
+                }
+                if (enemyType.baseXpReward() != Math.round(BalanceConfig.XP_PER_THREAT_POINT * threat)) {
+                    missing.add("baseXpReward() " + enemyType.baseXpReward() + " is not derived from threat (round(XP_PER_THREAT_POINT x baseThreatPoints())) — remove the override");
+                }
+                if (EnemyType.fromSpawnChar(enemyType.spawnChar()) != enemyType) {
+                    missing.add("spawnChar() '" + enemyType.spawnChar() + "' is not unique to this archetype — pick an unused symbol from docs/tile-symbols.txt");
+                }
+                boolean slotted = false;
+                for (EncounterGroupTemplate template : templates) {
+                    for (EncounterGroupTemplate.Slot slot : template.slots()) {
+                        if (slot.role.admits(enemyType)) slotted = true;
+                    }
+                }
+                if (!slotted) {
+                    missing.add("no EncounterGroupTemplate slot admits it — add or widen a template in EncounterGroupTemplates");
+                }
+            }
+            results.add(admission(AdmissionRule.ENEMY, enemyType.name(), missing,
+                    (boss ? "BOSS " : "role " + enemyType.role() + " ") + enemyType.family()
+                            + " / " + enemyType.trait() + "; stats, verb, move-set and ORA line declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-FAMILY (K2): every {@link EnemyFamily} has a trait, its own ALERT / ATTACK / DEATH voice in the audio
+     * catalog (WIND_UP is the shared fallback by design) and both bestiary lines; every {@link EnemyTrait} has a
+     * positive matchup cell for every {@link DamageClass}, a glyph unless it is FLESH, and a reference scenario
+     * whose archetype presents it.
+     */
+    public static List<RuleResult> admissionFamilyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        SoundRegistry soundRegistry = new SoundRegistry();
+        GameSoundCatalog.bootstrap(soundRegistry);
+        StoryStrings storyStrings = StoryStrings.defaults();
+        for (EnemyFamily family : EnemyFamily.values()) {
+            List<String> missing = new ArrayList<>();
+            if (family.trait() == null) missing.add("no trait — pass an EnemyTrait in the EnemyFamily constant");
+            for (EnemyVoiceMoment moment : EnemyVoiceMoment.values()) {
+                if (moment == EnemyVoiceMoment.WIND_UP) continue; // one shared telegraph sound, never a family voice
+                if (!soundRegistry.hasEnemyFamilyVoice(family, moment)) {
+                    missing.add("no " + moment + " voice — add registerFamilyVoice(" + family + ", ...) in audio/GameSoundCatalog");
+                }
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.familyBarkId(family))) {
+                missing.add("early bestiary line story." + BestiaryCatalog.familyBarkId(family) + " is missing from BarkStrings / story-strings.properties");
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.deepFamilyBarkId(family))) {
+                missing.add("deep bestiary line story." + BestiaryCatalog.deepFamilyBarkId(family) + " is missing from BarkStrings / story-strings.properties");
+            }
+            results.add(admission(AdmissionRule.FAMILY, family.name(), missing,
+                    "trait " + family.trait() + "; ALERT/ATTACK/DEATH voices and both ORA lines declared"));
+        }
+        for (EnemyTrait trait : EnemyTrait.values()) {
+            List<String> missing = new ArrayList<>();
+            for (DamageClass damageClass : DamageClass.values()) {
+                float raw = MatchupCatalog.shared().rawMultiplier(damageClass, trait);
+                if (Float.isNaN(raw) || raw <= 0f) {
+                    missing.add("matchup cell " + damageClass + " x " + trait + " is " + raw
+                            + " — register it in entity/MatchupCatalog / BalanceConfig SECTION 22");
+                }
+            }
+            if (trait != EnemyTrait.FLESH && !trait.hasGlyph()) {
+                missing.add("no health-bar glyph — set hasGlyph() in EnemyTrait and draw it in the health-bar glyph renderer");
+            }
+            boolean presented = false;
+            for (WeaponRoleModel.RoleScenario scenario : WeaponRoleModel.scenarios()) {
+                if (scenario.archetype.trait() == trait) presented = true;
+            }
+            if (!presented) {
+                missing.add("no WeaponRoleModel reference scenario presents it — add a scenario whose archetype has this trait");
+            }
+            results.add(admission(AdmissionRule.FAMILY, trait.name(), missing,
+                    "matchup cells for all " + DamageClass.values().length + " damage classes, glyph and a reference scenario declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-VERB (K3): every {@link SpecialAbility} has a {@link SpecialVerbPricing}; a damaging verb is a declared
+     * HEAVY committed >= 1 turn ahead and evaluated by R-HEAVY; a summon verb has positive summon caps; and ORA
+     * has an ability line for it.
+     */
+    public static List<RuleResult> admissionVerbResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> heavyRuleResults = heavyResults();
+        StoryStrings storyStrings = StoryStrings.defaults();
+        for (SpecialAbility ability : SpecialAbility.values()) {
+            List<String> missing = new ArrayList<>();
+            SpecialVerbPricing pricing = SPECIAL_VERB_PRICING.get(ability);
+            if (pricing == null) {
+                missing.add("UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema SPECIAL_VERB_PRICING");
+            }
+            HeavyAttack heavy = ability.heavyAttack();
+            if (ability.dealsDamage() && heavy == null) {
+                missing.add("dealsDamage() but heavyAttack() is null — a damaging verb must be a declared HeavyAttack");
+            }
+            if (heavy != null) {
+                if (heavy.minimumCommitTurns() < 1) {
+                    missing.add("heavy " + heavy + " commits " + heavy.minimumCommitTurns() + " turns ahead — needs >= 1");
+                }
+                if (!anySubjectStartsWith(heavyRuleResults, heavy.displayName() + " d")) {
+                    missing.add("heavy " + heavy + " is not evaluated by R-HEAVY — heavyResults() must iterate it");
+                }
+            }
+            if (pricing == SpecialVerbPricing.AMORTISED_SUMMON
+                    && (EnemyConstants.SUMMON_COUNT_MAX <= 0 || EnemyConstants.SUMMON_ROOM_LIVE_CAP <= 0)) {
+                missing.add("summon caps must be > 0 — set EnemyConstants.SUMMON_COUNT_MAX and SUMMON_ROOM_LIVE_CAP");
+            }
+            if (!storyLineResolves(storyStrings, BestiaryCatalog.abilityBarkId(ability))) {
+                missing.add("ORA ability line story." + BestiaryCatalog.abilityBarkId(ability)
+                        + " is missing from BarkStrings / story-strings.properties");
+            }
+            results.add(admission(AdmissionRule.VERB, ability.name(), missing,
+                    "priced " + pricing + (heavy != null ? "; heavy " + heavy + " banded by R-HEAVY" : "")
+                            + "; ORA line declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-BOSS (K4): every {@link BossTable#standard()} row has a legal boss depth, positive dials, boss verb specs,
+     * derived {@link BossStats} and R-BOSS-GATE / R-BOSS-FAIR results; every BOSS-role {@link EnemyType} is the
+     * boss of some row's archetype (matched by name, as {@code EnemyType.OVERSEER} / {@code Archetype.OVERSEER}).
+     */
+    public static List<RuleResult> admissionBossResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> gateResults = bossGateResults();
+        List<RuleResult> fairResults = bossFairResults();
+        Set<Integer> tableDepths = new HashSet<>();
+        for (int depth : BalanceConfig.BOSS_TABLE_DEPTHS) tableDepths.add(depth);
+        for (BossTable.Row row : BossTable.standard().rows()) {
+            List<String> missing = new ArrayList<>();
+            if (row.depth < 1 || row.depth > BalanceConfig.RUN_FINAL_DEPTH) {
+                missing.add("depth " + row.depth + " outside 1.." + BalanceConfig.RUN_FINAL_DEPTH);
+            }
+            if (!tableDepths.contains(row.depth)) {
+                missing.add("depth " + row.depth + " is not in BalanceConfig.BOSS_TABLE_DEPTHS");
+            }
+            if (row.targetFightTurns <= 0f) missing.add("targetFightTurns <= 0 — set the RULE-1 dial on the BossTable row");
+            if (row.survivalRatio <= 0f) missing.add("survivalRatio <= 0 — set the survival dial on the BossTable row");
+            boolean hasVerbs = false;
+            for (BossVerbSpec verb : BOSS_VERBS) {
+                if (verb.archetype == row.archetype) hasVerbs = true;
+            }
+            if (!hasVerbs) {
+                missing.add("archetype " + row.archetype + " has no BossVerbSpec — register its verbs in BalanceSchema buildBossVerbRegistry");
+            }
+            BossStats stats = BossBalance.statsForRow(row);
+            if (stats == null || stats.effectiveHitPoints <= 0 || Float.isNaN(stats.damagePerTurn)
+                    || Float.isInfinite(stats.damagePerTurn) || stats.damagePerTurn <= 0f) {
+                missing.add("BossStats do not derive to finite positive HP / DPT at depth " + row.depth);
+            }
+            String gateSubject = row.archetype.displayName + " depth " + row.depth;
+            boolean gated = false;
+            for (RuleResult result : gateResults) {
+                if (result.subject.equals(gateSubject)) gated = true;
+            }
+            if (!gated) missing.add("no R-BOSS-GATE result for " + gateSubject + " — bossGateResults() must iterate the BossTable row");
+            boolean fair = false;
+            for (RuleResult result : fairResults) {
+                if (result.subject.equals(gateSubject + " fight length")) fair = true;
+            }
+            if (!fair) missing.add("no R-BOSS-FAIR result for " + gateSubject + " — bossFairResults() must iterate the BossTable row");
+            results.add(admission(AdmissionRule.BOSS, row.archetype.name() + " depth " + row.depth, missing,
+                    "BossTable row, boss verbs, derived stats and R-BOSS-GATE / R-BOSS-FAIR declared"));
+        }
+        for (EnemyType enemyType : EnemyType.values()) {
+            if (enemyType.role() != EnemyRole.BOSS) continue;
+            boolean reachable = false;
+            for (BossTable.Row row : BossTable.standard().rows()) {
+                if (row.archetype.name().equals(enemyType.name())) reachable = true;
+            }
+            List<String> missing = new ArrayList<>();
+            if (!reachable) {
+                missing.add("no BossTable row has an archetype named " + enemyType.name()
+                        + " — add a BossTable row (route/BossTable) and a BossBalance.Archetype for it");
+            }
+            results.add(admission(AdmissionRule.BOSS, enemyType.name(), missing, "fought on a BossTable row"));
         }
         return results;
     }
