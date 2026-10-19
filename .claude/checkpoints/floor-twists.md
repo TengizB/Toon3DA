@@ -234,3 +234,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (trajectory scarcity near ceiling — recorded), #5 (bounty boxes have no reachability check), nit #4 (sim ammo-cache
   mirror). Owed before IMPLEMENTED: reviewer re-review of #1 + the on-device checks (amber frame, HUNTED texts, ORA
   twist lines, BLACKOUT silhouettes/exit glow).
+- **reviewer r2: blocking #1 PASS** (53aae6f). STATUS -> IMPLEMENTED 2026-10-19 on owner instruction ("Mark it done").
+  The on-device checks (A9 amber frame + HUNTED texts, A5 ORA twist lines, A6 BLACKOUT silhouettes/exit glow) were
+  never watched and are left to the owner's playtest. Open follow-ups: S-TWIST under-sampling, trajectory scarcity
+  near ceiling, bounty reachability, sim ammo-cache duplication.

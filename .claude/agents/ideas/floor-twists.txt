@@ -1,10 +1,10 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Level Design
 TITLE: Floor Twists — rule-changing floor modifiers on the map
 CREATED: 2026-10-18
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-19
 ---
-IMPLEMENTATION NOTE (2026-10-19, CP0-CP9 built; reviewer gate pending) — where the build diverged from this plan:
+IMPLEMENTATION NOTE (2026-10-19, CP0-CP9 built; reviewer r1 PASS WITH FIXES, blocking #1 fixed in CP9b and re-reviewed PASS; STATUS set IMPLEMENTED on owner instruction with the on-device checks for A5/A6/A9 still unwatched) — where the build diverged from this plan:
   - BLACKOUT wake perception ships at 3 / 6, not 2 / 4 (SECTION 27). At 2 / 4 the sim flipped an EXISTING band
     (S-RELIC SR3, 1.01 -> 0.99); per the gate protocol the twist number moved, not the band. A6 therefore reads: a
     dormant enemy 4 tiles away in open sight does not wake on BLACKOUT; the same enemy wakes at 3.
