@@ -52,7 +52,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green.
 - [x] **CP3** — C-ITEM, C-STATUS, C-HAZARD, C-ROOM, C-GENERATOR live.
       DONE WHEN: both gates green.
-- [ ] **CP4** — C-NODE, C-EVENT, C-SHOP, C-REGION live; BalanceReport ADMISSION table prints.
+- [x] **CP4** — C-NODE, C-EVENT, C-SHOP, C-REGION live; BalanceReport ADMISSION table prints.
       DONE WHEN: A1, A7 hold; both gates green.
 - [ ] **CP5** — declaration hardening (E3); C-CONSTANT with GRANDFATHERED / UNBANDED.
       DONE WHEN: A3, A4 hold; both gates green.
@@ -111,3 +111,14 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   EVENT_ROOM, GATE_AIRLOCK supply through FloorPopulator + PocketSupplyRegions) — it requires R-SUPPLY sweep results
   per served type; BalanceReport HAZARDS keeps its rows and gains a "Declared hazards" list from the registry.
   STIMPACK / CREDITS / keycards are NOT_FLOOR_SUPPLIED (no placer; keycards are hand-level decals r/y/b).
+- **CP4 handover:** `admissionNodeResults()` (9), `admissionEventResults()` (21; ids `EVENT <id>` / `MYSTERY <NAME>` /
+  `AFFIX <id>`), `admissionShopResults()` (5; private `SHOP_OFFER_SPECS`; the literal-price tripwire rolls a real
+  DefaultShopOfferSource at d1/5/15/25 x 12 seeds for ALL five categories and compares each price to shopPrice of an
+  independently declared value), `admissionRegionResults()` (5). `BalanceReport.printAdmissionTable()` prints after the
+  WAIVERS table (A7). Live counts: ENEMY 20, FAMILY 12, VERB 5, BOSS 8, WEAPON 14, ABILITY 19, PERK 44, ITEM 15,
+  AMMO 5, STATUS 10, HAZARD 4, ROOM 15, GENERATOR 7, NODE 9, EVENT 21, SHOP 5, REGION 5 — all admitted.
+  Decisions: a route-card promise is "threat word + reward promise both or neither" (only COMBAT/ELITE/CACHE/SHOP ship
+  one — RouteMapOverlayRenderer draws it only when both exist); an unset RegionSpec multiplier = the documented 1.0
+  (Region E has no ELITE row); BossTable.rowForDepth falls back, so C-REGION matches rows() by exact depth; StoryRegion
+  via fromRouteRegionIndex (clamps) so the check is index < StoryRegion.values().length. An affix with budgetScale > 1
+  must declare a reward. A1 completes at CP5 (C-CONSTANT is the 18th rule).

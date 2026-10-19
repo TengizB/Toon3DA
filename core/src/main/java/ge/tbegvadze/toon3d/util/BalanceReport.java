@@ -31,6 +31,7 @@ public final class BalanceReport {
         printEnemyTable();
         System.out.println();
         printWaiversTable();
+        printAdmissionTable();
         System.out.println();
         printBlockTable();
         System.out.println();
@@ -295,6 +296,38 @@ public final class BalanceReport {
     // way a value may sit outside its band without failing the build; keeping the list
     // printed here keeps each one visible until its expiry condition is met.
     // -----------------------------------------------------------------------------------
+    /**
+     * A7: the ADMISSION table — one row per content item the C-* rules checked (balance-overhaul order 8),
+     * then one summary line per rule. A rule a later checkpoint has not built prints "(not yet implemented)".
+     */
+    private static void printAdmissionTable() {
+        System.out.println("ADMISSION (balance-overhaul order 8) — the content balance contract, one row per content item");
+        System.out.printf("%-12s %-34s %-9s %s%n", "rule", "content", "status", "detail");
+        System.out.println("------------------------------------------------------------------------------------");
+        StringBuilder summary = new StringBuilder();
+        for (BalanceSchema.AdmissionRule rule : BalanceSchema.AdmissionRule.values()) {
+            if (!rule.isImplemented()) {
+                summary.append(String.format("  %-12s (not yet implemented)%n", rule.ruleId));
+                continue;
+            }
+            int admitted = 0;
+            java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(rule);
+            for (BalanceSchema.RuleResult result : results) {
+                if (result.satisfied) admitted++;
+                String content = result.subject.substring(Math.min(result.subject.length(), rule.ruleId.length() + 2));
+                String detail = result.detail == null ? "" : result.detail;
+                if (detail.length() > 70) detail = detail.substring(0, 67) + "...";
+                System.out.printf("%-12s %-34s %-9s %s%n", rule.ruleId, content,
+                        result.satisfied ? "ADMITTED" : "MISSING", detail);
+            }
+            summary.append(String.format("  %-12s %d / %d admitted  (%s)%n", rule.ruleId, admitted, results.size(),
+                    rule.kindLabel));
+        }
+        System.out.println("  Per-rule summary:");
+        System.out.print(summary);
+        System.out.println();
+    }
+
     private static void printWaiversTable() {
         System.out.println("WAIVERS (registry: BalanceSchema.activeWaivers())");
         System.out.println("------------------------------------------------------------------------------------");

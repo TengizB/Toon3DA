@@ -304,6 +304,44 @@ class BalanceAuditTest {
         assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.AMMO));
     }
 
+    /**
+     * C-NODE (K14): every RouteNodeType has a definition, a supply spec, a registered level profile, an economics
+     * row, a whole route-card promise (or none) and a positive weight multiplier in every region of the default plan.
+     */
+    @Test
+    void everyRouteNodeTypeIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.NODE));
+    }
+
+    /**
+     * C-EVENT (K15): every facility event choice, mystery outcome and node affix / floor twist is priced — ladder
+     * currency effects, an economics row, a registered delegate profile, and a reward premium on anything that
+     * raises threat.
+     */
+    @Test
+    void everyRouteEventOutcomeAndAffixIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.EVENT));
+    }
+
+    /**
+     * C-SHOP (K16): every shop offer category has a declared value, a resolving non-negative weight constant, a
+     * positive shopPrice at every depth, and every offer DefaultShopOfferSource rolls headlessly costs exactly the
+     * shopPrice of its declared value (the literal-price tripwire).
+     */
+    @Test
+    void everyShopOfferCategoryIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.SHOP));
+    }
+
+    /**
+     * C-REGION (K17): every region of the default plan has a TP-budget dial, an elite weight, a boss on its last
+     * floor, a registered ambience with a crest painter, and a story region.
+     */
+    @Test
+    void everyRegionIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.REGION));
+    }
+
     // R-GEARGATE (region gear step + golden-ratio gate) was RETIRED by balance-overhaul order 1 and REPLACED
     // by R-LADDER L2/L4 (per-floor lag multipliers, level felt), asserted by
     // thePowerLadderHoldsAtEveryDepthToTheRunEnd — a stronger, per-floor version of the same property.

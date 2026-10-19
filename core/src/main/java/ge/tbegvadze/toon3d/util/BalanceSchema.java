@@ -2176,10 +2176,10 @@ public final class BalanceSchema {
         HAZARD("C-HAZARD", "K11 HAZARD / GAMEPLAY PROP", BalanceSchema::admissionHazardResults),
         ROOM("C-ROOM", "K12 ROOM BLUEPRINT", BalanceSchema::admissionRoomResults),
         GENERATOR("C-GENERATOR", "K13 LEVEL GENERATOR", BalanceSchema::admissionGeneratorResults),
-        NODE("C-NODE", "K14 ROUTE NODE TYPE"),
-        EVENT("C-EVENT", "K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX"),
-        SHOP("C-SHOP", "K16 SHOP OFFER TYPE"),
-        REGION("C-REGION", "K17 REGION"),
+        NODE("C-NODE", "K14 ROUTE NODE TYPE", BalanceSchema::admissionNodeResults),
+        EVENT("C-EVENT", "K15 ROUTE EVENT / MYSTERY OUTCOME / NODE AFFIX", BalanceSchema::admissionEventResults),
+        SHOP("C-SHOP", "K16 SHOP OFFER TYPE", BalanceSchema::admissionShopResults),
+        REGION("C-REGION", "K17 REGION", BalanceSchema::admissionRegionResults),
         CONSTANT("C-CONSTANT", "K18 ANY NEW BALANCE NUMBER");
 
         public final String ruleId;
@@ -3088,6 +3088,340 @@ public final class BalanceSchema {
             }
             results.add(admission(AdmissionRule.GENERATOR, generatorId.name(), missing,
                     "registered, supply via " + provider + ", serves " + java.util.Arrays.toString(served)));
+        }
+        return results;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // K16 SHOP OFFER SPECS — one row per shop OfferCategory: how its value in power points is declared, and the
+    // NAME of the category-weight constant ShopRoller reads. The values are declared here independently of
+    // DefaultShopOfferSource, so a literal price slipped into the shop is caught by the roll tripwire in C-SHOP.
+    // -------------------------------------------------------------------------------------
+
+    /** The declared power-point value of a rolled entry, given the weapons the context owned. */
+    private interface ShopEntryValue {
+        float powerPointsOf(ge.tbegvadze.toon3d.shop.ShopEntry entry,
+                            List<ge.tbegvadze.toon3d.entity.WeaponProfile> ownedWeapons);
+    }
+
+    /** One shop category's declaration. */
+    private static final class ShopOfferSpec {
+        final String weightConstant;
+        final java.util.function.IntToDoubleFunction referenceValueAtDepth;
+        final ShopEntryValue entryValue;
+
+        ShopOfferSpec(String weightConstant, java.util.function.IntToDoubleFunction referenceValueAtDepth,
+                      ShopEntryValue entryValue) {
+            this.weightConstant        = weightConstant;
+            this.referenceValueAtDepth = referenceValueAtDepth;
+            this.entryValue            = entryValue;
+        }
+    }
+
+    private static final Map<ge.tbegvadze.toon3d.shop.OfferCategory, ShopOfferSpec> SHOP_OFFER_SPECS =
+            buildShopOfferSpecs();
+
+    private static Map<ge.tbegvadze.toon3d.shop.OfferCategory, ShopOfferSpec> buildShopOfferSpecs() {
+        Map<ge.tbegvadze.toon3d.shop.OfferCategory, ShopOfferSpec> specs =
+                new EnumMap<>(ge.tbegvadze.toon3d.shop.OfferCategory.class);
+        // Tier upgrade: the ability-PP budget of the destination tier (the next tier above the weapon's).
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.WEAPON_TIER_UPGRADE, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_TIER_UPGRADE",
+                depth -> WeaponRoller.tierAbilityPowerPointBudget(WeaponTier.UNCOMMON),
+                (entry, owned) -> {
+                    WeaponTier source = ((ge.tbegvadze.toon3d.entity.WeaponProfile) entry.payload).getTier();
+                    WeaponTier[] tiers = WeaponTier.values();
+                    return WeaponRoller.tierAbilityPowerPointBudget(
+                            tiers[Math.min(source.ordinal() + 1, tiers.length - 1)]);
+                }));
+        // Level-up: one rung of the power ladder.
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.WEAPON_LEVEL_UP, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_WEAPON_LEVELUP",
+                depth -> BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS,
+                (entry, owned) -> BalanceConfig.LADDER_LEVEL_UP_POWER_POINTS));
+        // Player ability: one perk rank.
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.PLAYER_ABILITY, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_ABILITY",
+                depth -> BalanceConfig.SHOP_PERK_RANK_POWER_POINTS,
+                (entry, owned) -> BalanceConfig.SHOP_PERK_RANK_POWER_POINTS));
+        // Ammo: the damage a box supplies (box amount x the best per-shot damage among owned weapons that eat it).
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.AMMO, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_AMMO",
+                depth -> AmmoType.BULLETS.getAmountPerBox() * BalanceConfig.ASSAULT_RIFLE_DAMAGE
+                        / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT,
+                (entry, owned) -> {
+                    AmmoType ammoType = (AmmoType) entry.payload;
+                    int bestDamage = 1;
+                    for (ge.tbegvadze.toon3d.entity.WeaponProfile weapon : owned) {
+                        if (weapon != null && weapon.getAmmoType() == ammoType) {
+                            bestDamage = Math.max(bestDamage, weapon.getEffectiveDamage());
+                        }
+                    }
+                    return entry.quantity * (float) bestDamage / BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT;
+                }));
+        // Medkit: the HP it restores at the base player max HP.
+        specs.put(ge.tbegvadze.toon3d.shop.OfferCategory.MEDKIT, new ShopOfferSpec(
+                "SHOP_CAT_WEIGHT_MEDKIT",
+                depth -> GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH,
+                        BalanceConfig.MEDKIT_STIM_HEAL_FRACTION) / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT,
+                (entry, owned) -> GameMath.fractionOfMaximum(BalanceConfig.PLAYER_MAX_HEALTH,
+                        entry.payload == ItemType.MEDKIT_LARGE
+                                ? BalanceConfig.MEDKIT_FULL_HEAL_FRACTION : BalanceConfig.MEDKIT_STIM_HEAL_FRACTION)
+                        / BalanceConfig.SHOP_HEAL_HP_PER_POWER_POINT));
+        return Collections.unmodifiableMap(specs);
+    }
+
+    /** Depths and seeds the C-SHOP roll tripwire rolls each category at (audit-local counts, not balance numbers). */
+    private static final int[] SHOP_TRIPWIRE_DEPTHS = {1, 5, 15, 25};
+    private static final int   SHOP_TRIPWIRE_SEEDS  = 12;
+
+    /** Ladder-currency problems of one EventEffect: every field is a fraction, a floors-of-income count or a flag. */
+    private static void effectCurrencyProblems(String owner, ge.tbegvadze.toon3d.route.EventEffect effect,
+                                               List<String> problems) {
+        if (effect == null) {
+            problems.add(owner + " has no EventEffect — give it ge.tbegvadze.toon3d.route.EventEffect.NONE at least");
+            return;
+        }
+        float[] fractions = {effect.healFraction(), effect.armourFraction(), effect.healthCostFraction(),
+                effect.gambleLootChance(), effect.gambleFailDamageFraction()};
+        String[] fractionNames = {"heal", "armour", "healthCost", "gambleLootChance", "gambleFailDamage"};
+        for (int index = 0; index < fractions.length; index++) {
+            if (Float.isNaN(fractions[index]) || fractions[index] < 0f || fractions[index] > 1f) {
+                problems.add(owner + " " + fractionNames[index] + " " + fractions[index]
+                        + " is not a fraction in [0, 1] — express it as a fraction of max, not a literal amount");
+            }
+        }
+        float[] floors = {effect.creditFloors(), effect.creditCostFloors(), effect.nextFloorBudgetBonus()};
+        String[] floorNames = {"credits", "creditCost", "nextFloorBudgetBonus"};
+        for (int index = 0; index < floors.length; index++) {
+            if (Float.isNaN(floors[index]) || Float.isInfinite(floors[index]) || floors[index] < 0f) {
+                problems.add(owner + " " + floorNames[index] + " " + floors[index]
+                        + " must be finite and >= 0 (floors of income)");
+            }
+        }
+        if (effect.weaponLevels() < 0) problems.add(owner + " weaponLevels < 0");
+    }
+
+    /** True when a ledger row's reward side is non-zero (a threat-raising modifier must declare one). */
+    private static boolean economicsDeclaresReward(NodeEconomics row,
+                                                   ge.tbegvadze.toon3d.route.NodeAffixDefinition affix) {
+        boolean declared = row.guaranteedAmmoBoxes() > 0f || row.guaranteedHealHitPoints() > 0f
+                || row.guaranteedHealEffectiveHitPointFraction() > 0f || row.creditDelta() > 0f
+                || row.guaranteedExperiencePoints() > 0f || row.upgradeOpportunity() > 0f;
+        ge.tbegvadze.toon3d.route.EventEffect ladder = row.ladderReward();
+        if (ladder != null) {
+            declared |= ladder.weaponLevels() > 0 || ladder.perkRank() || ladder.healFraction() > 0f
+                    || ladder.armourFraction() > 0f || ladder.creditFloors() > 0f || ladder.relicOffer() != null;
+        }
+        if (affix != null) {
+            declared |= affix.extraVaultAmmoBoxes() > 0 || affix.scatteredAmmoBoxes() > 0
+                    || affix.extraStims() > 0 || affix.extraArmourShards() > 0;
+        }
+        return declared;
+    }
+
+    /**
+     * C-NODE (K14): every {@link RouteNodeType} has a NodeTypeDefinition, a NodeSupplySpec, a registered level
+     * profile for its profile id, a NodeEconomics row, a route-card promise that is whole (threat word and reward
+     * promise both present or both absent — only the supply-bearing nodes carry one), and a finite positive weight
+     * multiplier in every region of the default plan (an unlisted type is the documented unbiased 1.0).
+     */
+    public static List<RuleResult> admissionNodeResults() {
+        RouteRegistries.bootstrap();
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.route.RegionPlan plan = RegionPlan.defaultPlan();
+        for (RouteNodeType type : RouteNodeType.values()) {
+            List<String> missing = new ArrayList<>();
+            String promise = "no route-card promise";
+            if (!RouteRegistries.nodeTypes().isRegistered(type)) {
+                missing.add("no NodeTypeDefinition — register it in RouteRegistries.registerNodeTypes");
+            } else {
+                ge.tbegvadze.toon3d.route.NodeTypeDefinition definition = RouteRegistries.nodeTypes().get(type);
+                if (!RouteRegistries.levelProfiles().isRegistered(definition.levelProfileId())) {
+                    missing.add("level profile '" + definition.levelProfileId() + "' is not registered — RouteRegistries.registerLevelProfiles");
+                }
+                boolean hasThreat = definition.threatWord() != null && !definition.threatWord().trim().isEmpty();
+                boolean hasReward = definition.rewardPromise() != null && !definition.rewardPromise().trim().isEmpty();
+                if (hasThreat != hasReward) {
+                    missing.add("route-card promise is half-declared (threatWord / rewardPromise) — set both via supplyPromise()");
+                }
+                if (hasThreat && hasReward) promise = "promise '" + definition.threatWord() + " / " + definition.rewardPromise() + "'";
+            }
+            if (!RouteRegistries.nodeSupplySpecs().isRegistered(type)) {
+                missing.add("no NodeSupplySpec — add a row in route/NodeSupplySpecs.registerAll");
+            }
+            if (routeLedger().forNodeType(type) == null) {
+                missing.add("no NodeEconomics row — register one in route/RouteEconomics");
+            }
+            for (ge.tbegvadze.toon3d.route.RegionSpec region : plan.regions()) {
+                float multiplier = region.nodeTypeMultiplier(type);
+                if (Float.isNaN(multiplier) || Float.isInfinite(multiplier) || multiplier <= 0f) {
+                    missing.add("region " + region.regionIndex() + " weight multiplier " + multiplier + " must be finite and > 0");
+                }
+            }
+            results.add(admission(AdmissionRule.NODE, type.name(), missing,
+                    "definition, supply spec, level profile, economics row, " + promise
+                            + ", region weights over " + plan.regionCount() + " regions"));
+        }
+        return results;
+    }
+
+    /**
+     * C-EVENT (K15): every FacilityEvent has choices whose EventEffects are in ladder currencies and is reached by
+     * R-EVENT-VALUE; every MysteryOutcome has a NodeEconomics row, a registered delegate profile and a ladder-currency
+     * reward; every registered affix / floor twist has a NodeEconomics row, and one that raises threat (budget scale
+     * above 1) declares a reward premium.
+     */
+    public static List<RuleResult> admissionEventResults() {
+        RouteRegistries.bootstrap();
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> eventValue = eventValueResults();
+        for (ge.tbegvadze.toon3d.route.FacilityEvent event : RouteRegistries.events().all()) {
+            List<String> missing = new ArrayList<>();
+            if (event.choices().isEmpty()) missing.add("no choices — add at least one choice() to the event");
+            for (ge.tbegvadze.toon3d.route.EventChoice choice : event.choices()) {
+                effectCurrencyProblems("choice '" + choice.label() + "'", choice.effect(), missing);
+            }
+            if (!anySubjectStartsWith(eventValue, event.id() + " ")) {
+                missing.add("no R-EVENT-VALUE result — eventValueResults() must iterate it");
+            }
+            results.add(admission(AdmissionRule.EVENT, "EVENT " + event.id(), missing,
+                    event.choices().size() + " choices in ladder currencies, priced by R-EVENT-VALUE"));
+        }
+        for (MysteryOutcome outcome : MysteryOutcome.values()) {
+            List<String> missing = new ArrayList<>();
+            if (routeLedger().get(outcome.name()) == null) {
+                missing.add("no NodeEconomics row — register a mysteryOutcome row in route/RouteEconomics");
+            }
+            if (outcome.delegateProfileId() != null
+                    && !RouteRegistries.levelProfiles().isRegistered(outcome.delegateProfileId())) {
+                missing.add("delegate profile '" + outcome.delegateProfileId() + "' is not a registered level profile");
+            }
+            if (outcome.reward() != null) effectCurrencyProblems("reward", outcome.reward(), missing);
+            results.add(admission(AdmissionRule.EVENT, "MYSTERY " + outcome.name(), missing,
+                    "economics row, delegate " + outcome.delegateProfileId() + ", ladder-currency reward"));
+        }
+        for (String affixId : RouteRegistries.affixes().ids()) {
+            List<String> missing = new ArrayList<>();
+            NodeEconomics row = routeLedger().get(affixId);
+            ge.tbegvadze.toon3d.route.NodeAffixDefinition definition = RouteRegistries.affixes().definition(affixId);
+            if (row == null) {
+                missing.add("no NodeEconomics row — register an affix / twist row in route/RouteEconomics");
+            } else if (row.budgetScale() > 1f && !economicsDeclaresReward(row, definition)) {
+                missing.add("raises threat (budget scale " + row.budgetScale() + ") but declares no reward premium — add a reward to its NodeEconomics row");
+            }
+            results.add(admission(AdmissionRule.EVENT, "AFFIX " + affixId, missing,
+                    "economics row" + (row != null && row.budgetScale() > 1f ? " with a reward premium" : " (not threat-raising)")));
+        }
+        return results;
+    }
+
+    /**
+     * C-SHOP (K16): every shop {@link ge.tbegvadze.toon3d.shop.OfferCategory} has a declared value spec, a category
+     * weight constant that resolves and is >= 0, a positive shopPrice at every depth 1..RUN_FINAL_DEPTH, and — the
+     * literal-price tripwire — every offer rolled headlessly by DefaultShopOfferSource carries exactly the
+     * shopPrice of its independently declared value (rolled at several depths and seeds for every category).
+     */
+    public static List<RuleResult> admissionShopResults() {
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.shop.DefaultShopOfferSource source = new ge.tbegvadze.toon3d.shop.DefaultShopOfferSource();
+        for (ge.tbegvadze.toon3d.shop.OfferCategory category : ge.tbegvadze.toon3d.shop.OfferCategory.values()) {
+            List<String> missing = new ArrayList<>();
+            ShopOfferSpec spec = SHOP_OFFER_SPECS.get(category);
+            int rolled = 0;
+            if (spec == null) {
+                missing.add("no SHOP_OFFER_SPECS row — declare its value and weight constant in BalanceSchema");
+            } else {
+                Float weight = resolveBalanceConstant(spec.weightConstant);
+                if (weight == null) missing.add("weight constant " + spec.weightConstant + " not found in GameBalance / BalanceConfig");
+                else if (weight < 0f) missing.add("weight " + spec.weightConstant + " = " + weight + " must be >= 0");
+                for (int depth = 1; depth <= BalanceConfig.RUN_FINAL_DEPTH; depth++) {
+                    float value = (float) spec.referenceValueAtDepth.applyAsDouble(depth);
+                    int price = GameMath.shopPrice(value, GameBalance.SHOP_CREDITS_PER_POWER_POINT, depth,
+                            GameBalance.SHOP_DEPTH_PRICE_SCALE);
+                    if (price <= 0) {
+                        missing.add("shopPrice of value " + value + " PP at depth " + depth + " is " + price + " — must be > 0");
+                        break;
+                    }
+                }
+                for (int depth : SHOP_TRIPWIRE_DEPTHS) {
+                    for (long seed = 1; seed <= SHOP_TRIPWIRE_SEEDS; seed++) {
+                        List<ge.tbegvadze.toon3d.entity.WeaponProfile> owned = new ArrayList<>();
+                        owned.add(new ge.tbegvadze.toon3d.entity.AssaultRifle());
+                        ge.tbegvadze.toon3d.progression.PlayerBuild build =
+                                category == ge.tbegvadze.toon3d.shop.OfferCategory.PLAYER_ABILITY
+                                        ? new ge.tbegvadze.toon3d.progression.PlayerBuild() : null;
+                        ge.tbegvadze.toon3d.shop.ShopContext context = new ge.tbegvadze.toon3d.shop.ShopContext(
+                                depth, owned, owned.get(0), build);
+                        java.util.Random random = new java.util.Random(seed * 31L + depth);
+                        ge.tbegvadze.toon3d.shop.ShopEntry entry = rollShopCategory(source, category, context, random);
+                        if (entry == null) continue;
+                        rolled++;
+                        int expected = GameMath.shopPrice(spec.entryValue.powerPointsOf(entry, owned),
+                                GameBalance.SHOP_CREDITS_PER_POWER_POINT, depth, GameBalance.SHOP_DEPTH_PRICE_SCALE);
+                        if (entry.price != expected) {
+                            missing.add("rolled offer '" + entry.displayName + "' at depth " + depth + " costs " + entry.price
+                                    + " but its declared value prices to " + expected
+                                    + " — a literal or drifted price; derive it through GameMath.shopPrice");
+                            break;
+                        }
+                    }
+                }
+                if (rolled == 0) {
+                    missing.add("the headless roll tripwire could not roll a single " + category + " offer");
+                }
+            }
+            results.add(admission(AdmissionRule.SHOP, category.name(), missing,
+                    "value spec, weight constant and price tripwire over " + rolled + " rolled offers"));
+        }
+        return results;
+    }
+
+    private static ge.tbegvadze.toon3d.shop.ShopEntry rollShopCategory(
+            ge.tbegvadze.toon3d.shop.DefaultShopOfferSource source, ge.tbegvadze.toon3d.shop.OfferCategory category,
+            ge.tbegvadze.toon3d.shop.ShopContext context, java.util.Random random) {
+        switch (category) {
+            case WEAPON_TIER_UPGRADE: return source.rollTierUpgradeOffer(context, random);
+            case WEAPON_LEVEL_UP:     return source.rollLevelUpOffer(context, random);
+            case PLAYER_ABILITY:      return source.rollAbilityOffer(context, random);
+            case AMMO:                return source.rollAmmoOffer(context, random);
+            default:                  return source.rollMedkitOffer(context, random);
+        }
+    }
+
+    /**
+     * C-REGION (K17): every RegionSpec of the default plan has a REGION_TP_BUDGET_MULTIPLIER entry, a resolving
+     * ELITE multiplier (an unlisted one is the documented unbiased 1.0), a BossTable row on its last floor, a
+     * registered ambience with a crest painter, and a StoryRegion.
+     */
+    public static List<RuleResult> admissionRegionResults() {
+        RouteRegistries.bootstrap();
+        List<RuleResult> results = new ArrayList<>();
+        for (ge.tbegvadze.toon3d.route.RegionSpec region : RegionPlan.defaultPlan().regions()) {
+            List<String> missing = new ArrayList<>();
+            if (region.regionIndex() >= BalanceConfig.REGION_TP_BUDGET_MULTIPLIER.length) {
+                missing.add("no REGION_TP_BUDGET_MULTIPLIER entry for index " + region.regionIndex() + " — extend the array in BalanceConfig");
+            }
+            float elite = region.nodeTypeMultiplier(RouteNodeType.ELITE);
+            if (Float.isNaN(elite) || elite <= 0f) missing.add("ELITE multiplier " + elite + " must be > 0");
+            boolean bossOnLastFloor = false;
+            for (BossTable.Row row : BossTable.standard().rows()) {
+                if (row.depth == region.lastDepth()) bossOnLastFloor = true;
+            }
+            if (!bossOnLastFloor) {
+                missing.add("no BossTable row on its last floor " + region.lastDepth() + " — register one in route/BossTable");
+            }
+            if (!RouteRegistries.regionAmbience().has(region.themeId())) {
+                missing.add("ambience '" + region.themeId() + "' is not registered — RouteRegistries.registerRegionAmbience");
+            } else {
+                String crest = RouteRegistries.regionAmbience().get(region.themeId()).crestPainterId();
+                if (crest == null || crest.trim().isEmpty()) missing.add("ambience has no crest painter id");
+            }
+            if (region.regionIndex() >= ge.tbegvadze.toon3d.narrative.StoryRegion.values().length) {
+                missing.add("no StoryRegion for index " + region.regionIndex() + " — add one to narrative/StoryRegion");
+            }
+            results.add(admission(AdmissionRule.REGION, "REGION " + region.regionIndex() + " " + region.displayName(), missing,
+                    "TP dial, elite weight, boss row, ambience + crest and story region declared"));
         }
         return results;
     }
