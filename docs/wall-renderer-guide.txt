@@ -26,7 +26,12 @@ batch.draw per column:
              false, false);                     // no flip needed
   srcY=0 = top of image; LibGDX Y-up maps image row 0 to visual top without manual flip.
 
-Shading: batch.setColor(shade, shade, shade, 1f) before each draw — embeds tint in vertex data, no flush.
+Shading: batch.setColor(red, green, blue, 1f) before each draw — embeds tint in vertex data, no flush.
+  The scalar shade (falloff × face × tile brightness, clamped) is GRADED per column by the floor's
+  lighting mood (visual-identity-order-1): channel = clamp01(shade × tint), tint from
+  AtmosphereGrade.evaluateInto(mood, perpWallDistance, GRADE_STRENGTH_ENVIRONMENT, column.gradeScratch)
+  — the static, thread-safe variant, because columns run on worker threads. The red-alert boost/dampen
+  is applied after the grade. Walls, door panels and columns all take it. See docs/art-direction.txt.
 
 Performance:
   Ceiling + floor  → 0 GL calls (batched, same texture)

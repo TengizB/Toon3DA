@@ -194,8 +194,10 @@ public final class SurfaceMaterials {
 
     private static int[] reactorGrateHot(int size) {
         int[] pixels = new int[size * size];
-        int period = 8;
-        int barWidth = 4;
+        // Coarse grating (4 cells per tile): at quarter-resolution backdrop distances an 8-texel
+        // period aliases into moire, so the cell is 16 with 6-texel bars and a lifted gap colour.
+        int period = 16;
+        int barWidth = 6;
         for (int row = 0; row < size; row++) {
             for (int column = 0; column < size; column++) {
                 int cellColumn = column % period;
@@ -203,14 +205,15 @@ public final class SurfaceMaterials {
                 int rgb;
                 if (cellColumn < barWidth || cellRow < barWidth) {
                     rgb = 0x2A1E14;
-                } else if (cellColumn >= 5 && cellColumn <= 6 && cellRow >= 5 && cellRow <= 6) {
+                } else if (cellColumn >= 9 && cellColumn <= 12 && cellRow >= 9 && cellRow <= 12) {
                     rgb = 0x3A1806;
                 } else {
-                    rgb = 0x0E0804;
+                    rgb = 0x1A1008;
                 }
-                // Hazard chevron band along the south edge: diagonal alternation every 4 texels.
+                // Hazard chevron band along the south edge: diagonal alternation every 4 texels,
+                // kept low-contrast so it reads as paint wear rather than a stripe across the floor.
                 if (row < 4) {
-                    rgb = (((column + row) / 4) & 1) == 0 ? 0x5A3A0C : 0x0E0A06;
+                    rgb = (((column + row) / 4) & 1) == 0 ? 0x4A300C : 0x1A1208;
                 }
                 put(pixels, size, column, row, rgb);
             }

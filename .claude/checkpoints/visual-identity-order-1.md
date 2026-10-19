@@ -54,7 +54,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
 - [x] **CP4** — FloorCeilingRenderer materials, horizon, per-row grade (R7, R8, R13). DONE WHEN: A3 holds; build green.
 - [x] **CP5** — Prop/ShopMachine/Enemy bodies graded (R1, R2, R4, R5). DONE WHEN: A5-A7 hold; build green.
 - [x] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
-- [ ] **CP7** — five moods checked via dev override (A4, A8, A12); docs (A14). DONE WHEN: build + test at
+- [x] **CP7** — five moods checked via dev override (A4, A8, A12); docs (A14). DONE WHEN: build + test at
       baseline; ready for reviewer.
 - [ ] **CP8** — reviewer PASS; STATUS IMPLEMENTED.
 
@@ -110,3 +110,14 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   `GameMath.vignetteAlpha(r, clear)`), World-lifetime field, mood set in `resolveLightingMood`, drawn right before
   `weaponHudRenderer.render` (after impact world effects — particles ARE vignetted), disposed in `World.dispose()`.
   New `ArtDirection.VIGNETTE_SHAKE_MARGIN_WORLD_UNITS = 24f` (max shake constant is 10). A9/A10 code-read only.
+- **CP7 handover:** On-screen check DONE via a scratchpad-only capture harness (not committed): a wrapper
+  ApplicationListener around `Main` that proxies `Gdx.input` (re-installed every frame — Lwjgl3Application resets
+  it) and reports `isPeripheralAvailable(MultitouchScreen)=true` (desktop otherwise never enables touch controls —
+  `World.initTouchControls` returns early), scripted taps in world coords, `ScreenUtils.getFrameBufferPixels`
+  shots; run under Xvfb :77 + openbox. Title needs TWO taps (first skips the reveal). All five moods captured
+  with `-Dtoon3d.forceMood` (via JAVA_TOOL_OPTIONS): five clearly distinct regions (A4). Tuned reactor_grate_hot
+  (8-texel period aliased to moire → 16-texel cells, 6-texel bars, lifted gap 0x1A1008, softer chevron), est. R9
+  avg ~0.11. NOT seen on screen: an enemy 8+ tiles away (A6), unlit-vs-lit enemy (A7), red alert (A8), FULL HD
+  (A12) — code-read only. Pre-existing, out of scope: the mini-map draws a large white unexplored grid (order 4).
+  Docs: docs/art-direction.txt (new), wall-renderer-guide, route-map-system, INDEX.md, CLAUDE.md (constants table,
+  Where to Find Info, Docs table 20, render order 4b).

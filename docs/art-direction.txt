@@ -1,0 +1,161 @@
+ART DIRECTION — "LIT BY THE MACHINE"
+=====================================
+The style bible. Single source of truth for the game's look: the palette, the five lighting
+moods, the atmosphere grade, what is exempt from it, and the floor/ceiling materials.
+Created by visual-identity-order-1; every later visual-identity order extends it in the same
+commit as its code. Ideas: .claude/agents/ideas/visual-identity*.txt.
+
+
+1. PILLARS
+----------
+Darkness is the canvas. Each of the five regions has ONE coloured atmosphere: a near light, a far
+haze, a horizon colour and a floor/ceiling material. One screenshot is enough to tell how deep you
+are. Things that glow and mean something are never tinted or fogged. Threats read above the world,
+and the world sits back. The interface uses exactly two inks: SUIT AMBER on gunmetal (the player's
+own suit, ORA's colour) and FACILITY CYAN on near-black (everything the facility shows you).
+Semantic combat colours are reserved and never decorate chrome.
+
+Series rules (repeated by every order):
+  V1  No new image/font/audio ASSET files, no new dependency. Everything new is generated in code.
+  V2  No custom ShaderProgram. SpriteBatch / ShapeRenderer colour multiplication and the CPU floor
+      backbuffer only, so every GLES2 phone behaves the same.
+  V3  No allocation in any render() path.
+  V4  The 2D game is untouched: no symbol, rule, turn cost, balance number, persistence key or touch
+      hit area changes.
+  V5  Semantic colours are sacred (red damage, blue defence, purple special, yellow movement intent,
+      green health/buff) — CombatPalette / ArtDirection, never decoration.
+  V6  Emissive exemption (SECTION 5).
+  V7  Not balance-bearing: zero new tests; verified by build + run.
+  V8  Readability beats mood. If a mood makes an enemy, pickup, number or button harder to read on a
+      phone, the mood loses.
+
+
+2. PALETTE — util/ArtDirection
+------------------------------
+Floats, `_RED/_GREEN/_BLUE` triples (the CombatPalette idiom, no LibGDX Color objects).
+  UI neutrals   UI_INK_BLACK (0.035,0.040,0.050)   UI_PANEL (0.075,0.085,0.105)
+                UI_PANEL_RAISED (0.120,0.135,0.160) UI_LINE (0.280,0.310,0.360)
+                UI_TEXT_PRIMARY (0.900,0.880,0.820) UI_TEXT_SECONDARY (0.600,0.620,0.640)
+                UI_TEXT_DISABLED (0.380,0.400,0.430)
+  inks          SUIT_AMBER (0.980,0.760,0.280)      SUIT_AMBER_DIM (0.550,0.400,0.140)
+                FACILITY_CYAN (0.420,0.860,0.980)   FACILITY_CYAN_DIM (0.240,0.440,0.520)
+  semantic      HEALTH_GREEN (0.360,0.900,0.460)    ARMOUR_BLUE (0.300,0.620,0.980)
+                CREDITS_GOLD (0.980,0.820,0.340)    PLANET_RED (0.800,0.170,0.150)
+                (damage/defence/special/move/buff/weak live in CombatPalette — never duplicated)
+  world         WORLD_SHADOW (0.020,0.020,0.030)
+The UI values are defined by order 1 and READ from order 4 on. Later orders may tune a value with a
+DECISIONS note but never add a third ink.
+
+
+3. THE FIVE MOODS — render/LightingMood + LightingMoodRegistry + LightingMoods.bootstrap()
+-----------------------------------------------------------------------------------------
+One mood per route region, keyed by RegionAmbience.lightingMoodId() (route-map order 10's hook, now
+CONSUMED). Numbers live in ArtDirection (MOOD_<ID>_*), rows in LightingMoods.bootstrap().
+Tints are RGB multipliers whose Rec.601 luminance is in [0.95, 1.05] — the grade shifts HUE with
+distance, never exposure. Fog distances in tiles.
+
+  id                 region             near tint           far tint            fog       vignette  floor / ceiling
+  cool_steel         A OUTER FACILITY   (0.92,1.00,1.10)    (0.62,1.08,1.40)    1.5-11.0  0.40      deck_grating_steel / ceiling_strip_lights
+  clinical_white     B RESEARCH WING    (1.00,1.00,0.98)    (0.80,1.12,0.92)    1.5-11.0  0.30      lab_tile_white / ceiling_panel_grid
+  amber_hot          C REACTOR DEPTHS   (1.10,0.98,0.80)    (1.55,0.86,0.40)    1.5-10.0  0.45      reactor_grate_hot / ceiling_pipes
+  corrupted_violet   D THE BREACH       (1.08,0.95,1.02)    (1.70,0.62,1.10)    1.0-8.0   0.55      breach_flesh_membrane / ceiling_torn_conduit
+  core_white_violet  E THE CORE         (0.98,0.98,1.12)    (1.05,0.80,1.85)    1.5-11.0  0.50      core_circuit_plate / ceiling_lattice
+Horizon colours (packed RGBA): see ArtDirection MOOD_<ID>_HORIZON_FLOOR_PACKED / _CEILING_PACKED.
+
+Resolution (World.resolveLightingMood, called in buildLevelDependentResources before any renderer is
+built): DEV override (SECTION 8) → routePlan.regionForDepth(currentDepth).themeId → RegionAmbience →
+lightingMoodId → registry. No plan / depth outside the plan / no ambience → fallback cool_steel with
+one log line. Logs "Atmosphere mood=<id>". Floors change behind a fade, so moods switch at level build
+(no blending).
+
+Fail-loud (R11): LightingMoods.bootstrap() throws IllegalStateException if any region of
+RegionPlan.defaultPlan() names a mood that is not registered, or a mood names an unregistered material.
+
+
+4. THE GRADE PIPELINE — render/AtmosphereGrade
+----------------------------------------------
+For a surface at distance d tiles with the existing scalar shade s (falloff × face × tile brightness,
+clamped exactly as before, including the minimum-brightness floor):
+  fog     = GameMath.atmosphereFogFactor(d, fogStart, fogEnd)      clamped smoothstep
+  tint    = lerp(near, far, fog)                                    per channel
+  tint    = lerp(WHITE, tint, strength(surface class))              per channel
+  channel = clamp01(s × tint.channel)
+then the red-alert boost/dampen exactly as before, on top. BLACKOUT, tile lighting and the shade floor
+all feed s, upstream of the grade.
+
+Strength by surface class (ArtDirection): GRADE_STRENGTH_ENVIRONMENT 1.00 (walls, doors, columns,
+floor, ceiling, props, decals, pickup bodies, shop machine body), GRADE_STRENGTH_ENEMY 0.50 (enemy
+bodies — threats read warmer and cleaner than the haze behind them), GRADE_STRENGTH_WEAPON 0.60.
+
+Where it runs:
+  WallRenderer          per column, on WORKER threads → static AtmosphereGrade.evaluateInto into the
+                        column's own `gradeScratch` (never the shared evaluate() fields).
+  FloorCeilingRenderer  per backdrop ROW, precomputed into `rowTintTable` (ctor + setRenderResolution;
+                        row distance is player-independent); per pixel GameMath.applyRgbShadeToPackedRGBA.
+  PropRenderer          per sprite (render thread, grade.evaluate()); depth in tiles.
+  ShopMachineRenderer   body sprite only.
+  EnemyRenderer         body: shade × level.getTileBrightness(enemy tile) (R5, like props) → existing min
+                        clamp / dormant dampen / BLACKOUT floor → grade 0.5 → status and boss tints lerped
+                        ON TOP, ungraded.
+  WeaponHudRenderer     no distance term: lerp(WHITE, near, 0.6) × clamp(player tile brightness,
+                        0.80, 1.15), channels capped at 1 (AtmosphereGrade.evaluateWeaponTint →
+                        setWeaponTint). Frame draws only; muzzle/idle effect sprites untinted.
+  ViewVignetteRenderer  radial alpha (clear inside 55% of the normalised elliptical radius, quadratic
+                        ramp to the corners, GameMath.vignetteAlpha), colour = the mood's ceiling
+                        horizon colour, alpha = mood.vignetteAlpha. Drawn after every world pass
+                        (including impact particles) and immediately BEFORE WeaponHudRenderer.render;
+                        the weapon, hit vignette, mini-map, HUD, touch buttons and every overlay draw
+                        over it. Oversized by VIGNETTE_SHAKE_MARGIN_WORLD_UNITS so screen shake never
+                        exposes its edge.
+The mini-map is UI and is not graded.
+
+
+5. EMISSIVE EXEMPTION (V6)
+--------------------------
+Never graded, never given tile brightness: enemy health bars, HP text, name tags, intent/telegraph
+icons, beam/affliction/shard/crust/haze overlays, boss enrage/repair tints and afterimages, the keycard
+aura, weapon-pickup tier glow, credit-chip aura, the shop machine's aura/window/status light/dispense
+drop/holo layers, hazard fire and toxic frames and the portal (PropRenderer: Level.isHazardDecal ||
+Level.isStairsDown — existing predicates, no symbol switch), enemy attack effects, impact particles, the
+guard shield, every vignette. Textures that mix body and glow in one image (AI core node, holo table)
+are graded as bodies.
+
+
+6. MATERIALS — render/SurfaceMaterialRegistry + SurfaceMaterials.bootstrap()
+----------------------------------------------------------------------------
+Ten 64×64 (RenderConstants.SURFACE_MATERIAL_SIZE) packed-RGBA8888 int[] textures, row-major
+`row*64+column`, row 0 = the tile's south edge, column 0 = west — the layout FloorCeilingRenderer
+samples. Generated on the CPU, deterministic (GameMath.combineHash, never java.util.Random), cached
+once and SHARED across floors (read-only).
+Value band (R9, pre-shade average luminance): floors 0.10-0.24, ceilings 0.06-0.18, so floor and
+ceiling always sit below the walls.
+  deck_grating_steel     steel plates, 32-texel seams, diamond tread, corner bolts
+  ceiling_strip_lights   32-texel panels with one fluorescent lens each (texture only, not a light)
+  lab_tile_white         16-texel tiles, value jitter, grout, the odd stain
+  ceiling_panel_grid     acoustic panels with a slim recessed light slot
+  reactor_grate_hot      coarse 16-texel grating (6-texel bars — an 8-texel period aliases into moire
+                         at backdrop distance), ember underglow in each cell, low-contrast chevron wear
+  ceiling_pipes          two pipes along X with highlight rows and clamp rings
+  breach_flesh_membrane  Worley-style cellular veins, wet specks, a stray deck-plate fragment
+  ceiling_torn_conduit   torn panel edges, hanging conduits, fleshy growth blobs
+  core_circuit_plate     orthogonal traces with node pads on an 8-grid
+  ceiling_lattice        diagonal lattice beams with crossing nodes
+
+
+7. RECIPE C — add a mood or a material
+--------------------------------------
+Add a MATERIAL: one `register(id, generator)` row in SurfaceMaterials.bootstrap() plus its
+MATERIAL_ID_* constant in ArtDirection; keep it in the R9 band (measure the average luminance in a
+throwaway main — never a committed test); deterministic hashing only.
+Add a MOOD: the MOOD_<ID>_* constants in ArtDirection (near/far luminance in [0.95, 1.05]), one
+register() row in LightingMoods.bootstrap(), and name it from the region's RegionAmbience row
+(route/RouteRegistries). Bootstrap fails loud if either side is missing. No switch anywhere.
+A new REGION must name a registered mood (docs/route-map-system.txt).
+
+
+8. DEV MOOD OVERRIDE
+--------------------
+`-Dtoon3d.forceMood=<id>` (a JVM system property, read once per floor build) forces that mood on every
+floor and logs "Atmosphere mood=<id> (forced)"; an unknown id is ignored with a warning. Nothing sets
+it on Android. Pass it locally, e.g. `JAVA_TOOL_OPTIONS="-Dtoon3d.forceMood=amber_hot" ./gradlew
+lwjgl3:run` — never commit it. It is the only way to check regions C-E without a 20-floor run.
