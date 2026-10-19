@@ -101,7 +101,8 @@ Where it runs:
                         0.80, 1.15), channels capped at 1 (AtmosphereGrade.evaluateWeaponTint →
                         setWeaponTint). Frame draws only; muzzle/idle effect sprites untinted.
   ViewVignetteRenderer  radial alpha (clear inside 55% of the normalised elliptical radius, quadratic
-                        ramp to the corners, GameMath.vignetteAlpha), colour = the mood's ceiling
+                        ramp reaching full alpha exactly at the VIEW corners — the ramp is measured in
+                        view coordinates even though the quad is oversized — GameMath.vignetteAlpha), colour = the mood's ceiling
                         horizon colour, alpha = mood.vignetteAlpha. Drawn after every world pass
                         (including impact particles) and immediately BEFORE WeaponHudRenderer.render;
                         the weapon, hit vignette, mini-map, HUD, touch buttons and every overlay draw
@@ -112,7 +113,8 @@ The mini-map is UI and is not graded.
 
 5. EMISSIVE EXEMPTION (V6)
 --------------------------
-Never graded, never given tile brightness: enemy health bars, HP text, name tags, intent/telegraph
+Never graded (their tile light is unchanged from before this order — they keep the scalar
+shade they always had, so their colour is identical under every mood): enemy health bars, HP text, name tags, intent/telegraph
 icons, beam/affliction/shard/crust/haze overlays, boss enrage/repair tints and afterimages, the keycard
 aura, weapon-pickup tier glow, credit-chip aura, the shop machine's aura/window/status light/dispense
 drop/holo layers, hazard fire and toxic frames and the portal (PropRenderer: Level.isHazardDecal ||

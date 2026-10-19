@@ -5,6 +5,26 @@ CREATED: 2026-10-19
 IMPLEMENTED: -
 ---
 
+IMPLEMENTATION NOTE (2026-10-19)
+--------------------------------
+Built as specified, with these deliberate deviations (accepted by reviewer):
+  - Materials keep their listed colours EXCEPT reactor_grate_hot: the 8-texel grating aliased into
+    moire at backdrop distance, so it became 16-texel cells with 6-texel bars, gap 0x1A1008 (was
+    0x0E0804) and a softer chevron 0x4A300C/0x1A1208 (was 0x5A3A0C/0x0E0A06); avg luminance 0.109.
+  - Other shapes changed to meet R9: ceiling_panel_grid light is a 20x4 slot; ceiling_torn_conduit
+    conduits 4 px and 6 blobs r=4; core_circuit_plate 40 routes; breach_flesh_membrane vein threshold
+    1.2 + nucleus lift; ceiling_lattice node ~2 px; "one tile in N" read per 32x32 quadrant / 16x16 tile.
+  - Materials are generated once and cached across floors (deterministic), not rebuilt per floor.
+  - The ceiling horizon colour has no flat-colour slot in FloorCeilingRenderer (the old
+    CEILING_AMBIENT_COLOUR_PACKED had no reader); it is consumed by the vignette (AS8).
+  - Emissive props are identified by the existing Level.isHazardDecal / isStairsDown predicates,
+    not a new per-prop flag. Emissives keep their pre-existing tile shade (R4's "never given tile
+    brightness" is not literal; A5 — same colour across moods — holds).
+  - The vignette is drawn after the impact world effects (R10: after every world pass), so impact
+    particles are vignetted. Its quad is oversized by VIGNETTE_SHAKE_MARGIN_WORLD_UNITS; the ramp is
+    measured in view coordinates so the corners still reach the full alpha.
+  - R11 enumerates RegionPlan.defaultPlan().regions() (RegionAmbienceRegistry has no enumerator).
+
 OVERVIEW
 --------
 Gives the game a light identity. A master palette (util/ArtDirection) and five
