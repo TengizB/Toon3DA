@@ -56,6 +56,8 @@ public final class ArtDirection {
     public static final float VIGNETTE_CLEAR_RADIUS_FRACTION = 0.55f;
     public static final int   VIGNETTE_TEXTURE_WIDTH  = 128;
     public static final int   VIGNETTE_TEXTURE_HEIGHT = 72;
+    /** World units the vignette quad is oversized on each side so screen shake (max ~10 + bump) never exposes an edge. */
+    public static final float VIGNETTE_SHAKE_MARGIN_WORLD_UNITS = 24f;
 
     // ------------------------------------------------------------------ ids
 

@@ -53,7 +53,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
 - [x] **CP3** — WallRenderer grades walls, doors, columns (R1). DONE WHEN: build green; A3 walls part.
 - [x] **CP4** — FloorCeilingRenderer materials, horizon, per-row grade (R7, R8, R13). DONE WHEN: A3 holds; build green.
 - [x] **CP5** — Prop/ShopMachine/Enemy bodies graded (R1, R2, R4, R5). DONE WHEN: A5-A7 hold; build green.
-- [ ] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
+- [x] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
 - [ ] **CP7** — five moods checked via dev override (A4, A8, A12); docs (A14). DONE WHEN: build + test at
       baseline; ready for reviewer.
 - [ ] **CP8** — reviewer PASS; STATUS IMPLEMENTED.
@@ -104,3 +104,9 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   Enemy: shade × tile brightness (logical tile) → existing min clamp / dormant / BLACKOUT floor → grade 0.5 → status
   and boss tints lerped ON TOP (ungraded). Overlays (bars, tags, icons, auras, shop glow layers) use scalar shade.
   A5-A7 checked by code read only (no display).
+- **CP6 handover:** `WeaponHudRenderer.setWeaponTint(r,g,b)` (frame draws only; effect sprites untinted), fed per frame
+  in World.render from `atmosphereGrade.evaluateWeaponTint(level.getTileBrightness(playerTile..., facilityTimeSeconds))`.
+  `render/ViewVignetteRenderer` (own SpriteBatch(1), 128x72 alpha texture, elliptical radius normalised so corners = 1,
+  `GameMath.vignetteAlpha(r, clear)`), World-lifetime field, mood set in `resolveLightingMood`, drawn right before
+  `weaponHudRenderer.render` (after impact world effects — particles ARE vignetted), disposed in `World.dispose()`.
+  New `ArtDirection.VIGNETTE_SHAKE_MARGIN_WORLD_UNITS = 24f` (max shake constant is 10). A9/A10 code-read only.

@@ -250,6 +250,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // world renderer will share (renderers are wired to it in later checkpoints).
     private final AtmosphereGrade  atmosphereGrade = new AtmosphereGrade();
     private LightingMood           currentLightingMood;
+    private ViewVignetteRenderer   viewVignetteRenderer;
     private DoorManager            doorManager;
     private WallRenderer           wallRenderer;
     private PropRenderer           propRenderer;
@@ -775,6 +776,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 eventTextSystem.spawnWithColor(text, positive ? EventTextSystem.COLOR_GREEN : EventTextSystem.COLOR_RED));
         eventTextRenderer   = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
+        viewVignetteRenderer = new ViewVignetteRenderer();
         abilityFeedback     = new AbilityFeedback(eventTextSystem, impactEffectSystem);
         abilityFeedback.setHealVignetteRenderer(hitVignetteRenderer);
         abilityFeedback.setLegendaryVignetteRenderer(hitVignetteRenderer);
@@ -1520,6 +1522,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
         currentLightingMood = resolved;
         atmosphereGrade.setMood(resolved);
+        viewVignetteRenderer.setMood(resolved);
         if (Gdx.app != null) {
             Gdx.app.log("Atmosphere", "Atmosphere mood=" + resolved.id() + (forced ? " (forced)" : ""));
         }
@@ -2887,6 +2890,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyAttackEffectSystem.render(camera);
 
         impactEffectRenderer.renderWorldEffects(camera);
+
+        // R10: per-mood corner vignette, after every world-space pass and immediately before the weapon.
+        viewVignetteRenderer.render(camera);
+
+        // R6: weapon tint = mood near tint x clamped light of the tile the player stands on.
+        atmosphereGrade.evaluateWeaponTint(level.getTileBrightness(
+                getPlayerTileColumn(), getPlayerTileRow(), facilityTimeSeconds));
+        weaponHudRenderer.setWeaponTint(atmosphereGrade.red, atmosphereGrade.green, atmosphereGrade.blue);
         weaponHudRenderer.render(camera);
 
         if (isShaking) {
@@ -3113,6 +3124,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // itself is headless — no GPU handles.
         codexOverlayRenderer.dispose();
         hitVignetteRenderer.dispose();
+        viewVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
         relicOfferOverlayRenderer.dispose();

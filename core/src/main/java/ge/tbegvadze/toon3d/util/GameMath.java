@@ -47,6 +47,27 @@ public final class GameMath {
     }
 
     /*
+     * Formula: vignetteAlpha - quadratic radial vignette ramp (visual-identity-order-1, R10)
+     * Derivation:
+     *   normalisedRadius is the distance from the view centre divided by the half-diagonal, measured in
+     *   the view's own normalised space (each axis scaled so its edge is 1, then divided by sqrt(2)), so
+     *   the centre is 0 and every corner is exactly 1 whatever the aspect ratio; iso-lines are ellipses
+     *   matching the 16:9 view.
+     *       rampFraction = clamp((normalisedRadius - clearFraction) / (1 - clearFraction), 0, 1)
+     *       alpha        = rampFraction^2
+     *   Zero inside clearFraction, a soft quadratic onset, 1 at the corners.
+     * Edge cases: clearFraction >= 1 has no ramp, so the result is 0 for radius < 1 and 1 at or beyond 1;
+     *   a negative radius is treated as 0.
+     */
+    public static float vignetteAlpha(float normalisedRadius, float clearFraction) {
+        if (clearFraction >= 1f) return normalisedRadius >= 1f ? 1f : 0f;
+        float rampFraction = (normalisedRadius - clearFraction) / (1f - clearFraction);
+        if (rampFraction <= 0f) return 0f;
+        if (rampFraction >= 1f) return 1f;
+        return rampFraction * rampFraction;
+    }
+
+    /*
      * Formula: easeTowardLinear — frame-rate-independent constant-rate approach to a target
      * Derivation:
      *   A cosmetic value that must take a FIXED wall-clock time to travel the full [0, 1] range,
