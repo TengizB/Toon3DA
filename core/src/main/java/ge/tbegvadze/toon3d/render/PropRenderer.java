@@ -131,6 +131,8 @@ public class PropRenderer implements Renderable, Disposable {
     // ShopMachineRenderer and EnemyRenderer: a sprite drawn later but standing farther away draws
     // its full column, then re-draws the nearer slices on top (see SpriteOccluderBuffer).
     private final SpriteOccluderBuffer occluderBuffer;
+    /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
+    private final Texture contactShadowTexture;
 
     private float playerWorldX      = 0f;
     private float playerWorldY      = 0f;
@@ -163,6 +165,7 @@ public class PropRenderer implements Renderable, Disposable {
         // knob at runtime never reallocates; only the columns below wallRenderer.getProjectionColumnCount()
         // are read/written each frame.
         this.occluderBuffer         = new SpriteOccluderBuffer(RENDER_RESOLUTION_MAX_COLUMNS);
+        this.contactShadowTexture   = ContactShadow.buildTexture();
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
         this.batch                        = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
         this.textures                     = buildTextures();
@@ -313,6 +316,37 @@ public class PropRenderer implements Renderable, Disposable {
     /** Sets the floor's colour grade (R1). Null disables the tint. */
     public void setAtmosphereGrade(AtmosphereGrade grade) {
         this.atmosphereGrade = grade;
+    }
+
+    /**
+     * R4 classification, by the predicates the draw loops already use: a SOLID prop gets the prop
+     * fraction, a floor pickup billboard (medical / armour / ammo / keycard body) gets the pickup
+     * fraction, everything else (walkable decals, hazard fire/toxic, stairs/portal, corpses) gets 0 =
+     * no shadow. Aura / glow draws never reach this: they are separate additive layers.
+     */
+    private static float contactShadowFractionForTile(char propChar) {
+        if (Level.isPropSolid(propChar)) return CONTACT_SHADOW_WIDTH_FRACTION_PROP;
+        if (Level.isMedicalPickup(propChar) || Level.isArmourPickup(propChar)
+                || Level.isAmmoPickup(propChar) || Level.isKeycardPickup(propChar)) {
+            return CONTACT_SHADOW_WIDTH_FRACTION_PICKUP;
+        }
+        return 0f;
+    }
+
+    /**
+     * Draws one billboard's contact shadow BEFORE its sprite (same per-column wall z-test). The sprite
+     * loops afterwards re-draw nearer recorded slices via the occluder buffer; shadows themselves are
+     * never recorded as occluders. Leaves the batch colour set to the shadow colour - callers set
+     * their sprite colour next.
+     */
+    private void drawContactShadow(float centerColumn, float floorLineY, float billboardWidth,
+                                   float widthFraction, float alphaScale, float depth,
+                                   int projectionColumnCount, float columnWidth) {
+        if (widthFraction <= 0f) return;
+        float alpha = alphaScale * ContactShadow.alphaAtDepth(
+                atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth);
+        ContactShadow.draw(batch, contactShadowTexture, wallRenderer, projectionColumnCount, columnWidth,
+                centerColumn * columnWidth, floorLineY, billboardWidth * widthFraction, depth, alpha);
     }
 
     /**
@@ -507,6 +541,9 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            drawContactShadow(screenCenterColumn,
+                    WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f, spriteScreenWidth,
+                    contactShadowFractionForTile(prop.propChar), 1f, depth, projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             // Per-column draw loop with z-buffer occlusion test.
@@ -643,7 +680,10 @@ public class PropRenderer implements Renderable, Disposable {
                 float chipRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                 float chipGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 float chipBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                batch.setColor(chipRed, chipGreen, chipBlue, 1f);
+                drawContactShadow(screenCenterColumn, chipFloorY, chipScreenHeight,
+                    CONTACT_SHADOW_WIDTH_FRACTION_PICKUP, CONTACT_SHADOW_HOVER_ALPHA_SCALE, renderDepth,
+                    projectionColumnCount, columnWidth);
+            batch.setColor(chipRed, chipGreen, chipBlue, 1f);
                 ColumnOpacityMask chipOpacityMask = COLUMN_OPACITY.get(chipTexture);
                 int chipFirstCol = Math.max(0, chipLeft);
                 int chipLastCol  = Math.min(projectionColumnCount - 1, chipRight);
@@ -747,6 +787,9 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            drawContactShadow(screenCenterColumn, visualFloorY, spriteScreenWidth,
+                    CONTACT_SHADOW_WIDTH_FRACTION_PICKUP, CONTACT_SHADOW_HOVER_ALPHA_SCALE, renderDepth,
+                    projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             ColumnOpacityMask pickupOpacityMask = COLUMN_OPACITY.get(pickupTexture);
@@ -846,6 +889,9 @@ public class PropRenderer implements Renderable, Disposable {
             float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            drawContactShadow(screenCenterColumn,
+                    WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f, spriteScreenWidth,
+                    contactShadowFractionForTile(prop.propChar), 1f, depth, projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);
@@ -877,6 +923,7 @@ public class PropRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        contactShadowTexture.dispose();
         disposeProp(genericWeaponFallbackTexture);
         disposeProp(weaponPickupGlowTexture);
         for (Texture texture : weaponPickupTextures.values()) {

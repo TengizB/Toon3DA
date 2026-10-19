@@ -71,6 +71,8 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     private float lightingTimeSeconds = 0f;
     private float alertPulse          = 0f;
     private AtmosphereGrade atmosphereGrade;
+    /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
+    private final Texture contactShadowTexture = ContactShadow.buildTexture();
 
     // Runtime render-resolution authority (util/RenderResolution via WallRenderer) — cached once per
     // render() call, read by drawMachine()/drawLayer() below. Every layer is drawn per-column (mirrors
@@ -243,6 +245,12 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         float bodyRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
         float bodyGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
         float bodyBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        // R4/R5: contact shadow under the cabinet, before the body (same per-column wall z-test). The
+        // wall renderer is the shared z-buffer authority; the shadow is never recorded as an occluder.
+        ContactShadow.draw(batch, contactShadowTexture, wallRenderer, projectionColumnCount, columnWidth,
+                screenCenterColumn * columnWidth, drawBottom, spriteWidth * CONTACT_SHADOW_WIDTH_FRACTION_SHOP,
+                depth, ContactShadow.alphaAtDepth(
+                        atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth));
         batch.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
         drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, true);
 
@@ -375,6 +383,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        contactShadowTexture.dispose();
         bodyTexture.dispose();
         glowTexture.dispose();
         holoSignTexture.dispose();

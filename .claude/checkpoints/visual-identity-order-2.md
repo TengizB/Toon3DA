@@ -42,7 +42,7 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
 - [x] **CP1** — EnemySpriteSheets (R1 cut, R2 session cache, R3 log); EnemyRenderer uses it, no longer disposes
       sheets; Main.dispose → disposeAll. DONE WHEN: A1-A3 hold on run; build green.
 - [x] **CP2** — EnemyRenderer contact shadows (R4-R6, hover + lunge). DONE WHEN: A5, A6 by code/run; build green.
-- [ ] **CP3** — PropRenderer + ShopMachineRenderer contact shadows. DONE WHEN: A4 holds; build green.
+- [x] **CP3** — PropRenderer + ShopMachineRenderer contact shadows. DONE WHEN: A4 holds; build green.
 - [ ] **CP4** — MuzzleLightCatalog, GameMath.muzzleLightFalloff, AtmosphereGrade light term + clock, PlayerController
       weapon-fired listener wired by World; walls + floor/ceiling read it (props/enemies deliberately not yet).
       DONE WHEN: build green.
@@ -70,3 +70,11 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   LEAVES batch colour set (caller restores). `GameMath.contactShadowAlpha(r)`. RenderConstants.CONTACT_SHADOW_*.
   Enemy: floor line captured pre-hover/pre-lunge, width pre-lunge-scale, EYE_TYRANT × 0.55, afterimages unshadowed,
   dead enemies culled before this loop. A5/A6 by code read.
+- **CP3 handover:** PropRenderer `contactShadowFractionForTile(char)`: isPropSolid → PROP 0.85; medical/armour/ammo/
+  keycard pickup → PICKUP 0.60; everything else (decals, hazards, portal, corpse stains) 0 = none. Ground items:
+  credit chips + weapon pickups → PICKUP × CONTACT_SHADOW_HOVER_ALPHA_SCALE (they FLOAT at eye height, so their
+  shadow sits well below the sprite; at full alpha it read as stray blobs — DECISION by orchestrator, a natural
+  extension of R6's hover rule). Spires none. Shop machine SHOP 0.90. Shadows never recorded as occluders.
+  On-screen: verified by pixel sampling (scratchpad shots o2b vs p1): ovals 15-35% darker than the same floor,
+  under the floating weapon pickups. NOTE: my first visual read ("pale, misplaced") was WRONG — near-black floor
+  makes a faint dark ellipse look pale in a downscaled view; measure pixels before calling a bug.
