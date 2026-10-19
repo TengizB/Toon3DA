@@ -14,6 +14,7 @@ import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderResolution;
 import ge.tbegvadze.toon3d.util.TilesetConstants;
@@ -132,6 +133,10 @@ public class WallRenderer implements Renderable, Disposable {
 
     // --- Structured concurrency: parallel DDA compute phase ---
     private final WallColumnResult[] columnResults;
+
+    // ATMOSPHERE GRADE (visual-identity-order-1, R1): per-floor colour grade. Null = no tint (old behaviour).
+    // Set by World before the floor's first frame and never while workers run, so workers only read it.
+    private AtmosphereGrade atmosphereGrade;
     private final int                workerCount;
     private final ExecutorService    workerPool;
     private final WallColumnWorker[] workers;
@@ -142,6 +147,10 @@ public class WallRenderer implements Renderable, Disposable {
     // GL-thread draw pass. Static so it carries no implicit outer-class reference.
     // -------------------------------------------------------------------------
     private static final class WallColumnResult {
+        // Per-column grade scratch (red, green, blue): each column is owned by one worker at a time, and
+        // AtmosphereGrade.evaluateInto is the thread-safe variant, so no shared mutable state is touched.
+        final float[] gradeScratch = new float[3];
+
         // Wall or cylinder surface drawn behind any door panel.
         boolean drawSurface;
         Texture surfaceTexture;
@@ -2055,6 +2064,27 @@ public class WallRenderer implements Renderable, Disposable {
         return columnWidth;
     }
 
+    /** Sets the floor's colour grade (R1). Null disables the tint. Call before the floor's first frame. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
+    }
+
+    /**
+     * Writes the R1 environment tint for a surface {@code perpWallDistanceTiles} tiles away into
+     * {@code result.gradeScratch} (white when no grade is set). Thread-safe; allocation-free.
+     */
+    private void evaluateEnvironmentGrade(WallColumnResult result, float perpWallDistanceTiles) {
+        AtmosphereGrade grade = atmosphereGrade;
+        if (grade == null) {
+            result.gradeScratch[0] = 1f;
+            result.gradeScratch[1] = 1f;
+            result.gradeScratch[2] = 1f;
+            return;
+        }
+        AtmosphereGrade.evaluateInto(grade.getMood(), perpWallDistanceTiles,
+                ArtDirection.GRADE_STRENGTH_ENVIRONMENT, result.gradeScratch, 0);
+    }
+
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
     }
@@ -2379,9 +2409,14 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
-                result.surfaceRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                result.surfaceGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                result.surfaceBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                evaluateEnvironmentGrade(result, perpWallDistance);
+                float[] columnGrade = result.gradeScratch;
+                float gradedRed   = clampUnit(shade * columnGrade[0]);
+                float gradedGreen = clampUnit(shade * columnGrade[1]);
+                float gradedBlue  = clampUnit(shade * columnGrade[2]);
+                result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             } else {
                 float wallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
                                                                          rayDirectionX, rayDirectionY,
@@ -2424,9 +2459,14 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
-                result.surfaceRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                result.surfaceGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                result.surfaceBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                evaluateEnvironmentGrade(result, perpWallDistance);
+                float[] wallGrade = result.gradeScratch;
+                float gradedRed   = clampUnit(shade * wallGrade[0]);
+                float gradedGreen = clampUnit(shade * wallGrade[1]);
+                float gradedBlue  = clampUnit(shade * wallGrade[2]);
+                result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             }
         }
 
@@ -2491,9 +2531,14 @@ public class WallRenderer implements Renderable, Disposable {
                     result.doorPanelTexSrcHeight  = doorTexSrcHeight;
                     result.doorPanelDrawBottom    = clampedPanelBottom;
                     result.doorPanelDrawTop       = clampedPanelTop;
-                    result.doorPanelRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                    result.doorPanelGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                    result.doorPanelBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    evaluateEnvironmentGrade(result, doorPerpWallDistance);
+                    float[] doorGrade = result.gradeScratch;
+                    float doorGradedRed   = clampUnit(shade * doorGrade[0]);
+                    float doorGradedGreen = clampUnit(shade * doorGrade[1]);
+                    float doorGradedBlue  = clampUnit(shade * doorGrade[2]);
+                    result.doorPanelRed   = Math.min(1f, doorGradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                    result.doorPanelGreen = doorGradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    result.doorPanelBlue  = doorGradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 }
             }
         }

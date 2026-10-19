@@ -1539,6 +1539,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         resolveLightingMood();
         floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
+        wallRenderer.setAtmosphereGrade(atmosphereGrade);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
         // TILESET SYSTEM (order-6): realize ONLY this level's palette textures (subset per level, not
         // the whole library) and hand the set to the renderers. order-6 only wires the supply + dispose

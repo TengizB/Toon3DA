@@ -50,7 +50,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
       DONE WHEN: LightingMood/Registry/LightingMoods (5 rows + R11), SurfaceMaterialRegistry/SurfaceMaterials
       (10 generators), AtmosphereGrade exist; World bootstraps, resolves mood (R11/R12), logs
       "Atmosphere mood=<id>"; build + test at baseline.
-- [ ] **CP3** — WallRenderer grades walls, doors, columns (R1). DONE WHEN: build green; A3 walls part.
+- [x] **CP3** — WallRenderer grades walls, doors, columns (R1). DONE WHEN: build green; A3 walls part.
 - [ ] **CP4** — FloorCeilingRenderer materials, horizon, per-row grade (R7, R8, R13). DONE WHEN: A3 holds; build green.
 - [ ] **CP5** — Prop/ShopMachine/Enemy bodies graded (R1, R2, R4, R5). DONE WHEN: A5-A7 hold; build green.
 - [ ] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
@@ -87,3 +87,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   6 blobs r4; circuit 40 routes; flesh vein threshold 1.2 + nucleus lift. Measured R9 averages all in band
   (floors 0.105-0.224, ceilings 0.063-0.176). Hash = `GameMath.combineHash`.
   Still TODO: FLOOR/CEILING_AMBIENT_COLOUR_PACKED still read by FloorCeilingRenderer (CP4 decides).
+- **CP3 handover:** `WallRenderer.setAtmosphereGrade(grade)` (World calls it after `new WallRenderer`). Wall columns run
+  on WORKER threads: grading uses per-column `WallColumnResult.gradeScratch` + static `AtmosphereGrade.evaluateInto`,
+  never `grade.evaluate()` (shared fields). Same rule for every worker-threaded renderer. perpWallDistance is in tiles.
+  No display in this container: on-screen A3 check is OWED to a desktop run (CP7 / reviewer note).
