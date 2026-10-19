@@ -1132,6 +1132,9 @@ ADD AN ENEMY             nothing to write by hand: `BestiaryCatalog` loops the e
                          `story.bark.enemy.<type>`, `story.bark.ability.<ability>` — in
                          `story-strings.properties` AND `BarkStrings`. A new archetype's line is the
                          plain-words translation of its `tacticalVerb()`; one behaviour, no numbers.
+                         This is the COMMUNICATE half of the balance contract's K1-K3
+                         (docs/game-balance-authority.txt SECTION 5 ADD CONTENT): C-ENEMY / C-FAMILY /
+                         C-VERB also fail `./gradlew test` when one of these ids does not resolve.
 ADD AN EXCHANGE          one `register()` in `ExchangeCatalog` (trigger, region, 2-3 options, each
                          STANCE / PROBE / CONSEQUENTIAL) + its string rows. Remember: exchanges BLOCK,
                          so if they start to feel frequent, delete rows.

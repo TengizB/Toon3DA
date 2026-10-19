@@ -485,7 +485,8 @@ THE FOUR AUDIT RULES (util/BalanceSchema; evaluated by BalanceAuditTest)
                    duplicate ids; every CURSED relic has a cost line AND at least one cost kind;
                    RELIC_PERK_RANK_EQUIVALENT_LIFT is within RELIC_PERK_RANK_EQUIVALENT_TOLERANCE of the measured
                    per-rank lift; nodeOfferRatePerFloor() > 0.
-  COVERAGE gains a row per relic: it resolves its rarity, trigger, valuation and a band for that rarity x valuation.
+  R-RELIC-SOURCE carries a "resolves" row per relic: its rarity, trigger, valuation and a band for that rarity x
+  valuation (this was COVERAGE's relic line until balance-overhaul order 8 retired COVERAGE into ADMISSION).
   Existing rules that now read relics: R-ROUTE-PRICED (the RELIC_CACHE NodeEconomics row), R-MYSTERY-EV v2 and
   R-HONEST-SAFE (the new outcome), R-EVENT-VALUE (quarantine_locker). The BalanceReport prints a RELICS table (per
   relic: rarity, valuation, affinity, gain at d5/d15/d25, band, cursed cost, status) and a RELIC STACK table.
@@ -613,7 +614,7 @@ TUNING ORDER IF A RULE FAILS (decision D7)
      trigger (the card badge), valuation (CARRY unless it is an economy relic), optional affinity, effects, effectText
      built with `RelicText.percent(...)` from the constants, and — iff CURSED — costText. No switch anywhere.
   4. Run `./gradlew test`. The magnitude must land in its rarity x valuation band at 5/15/25 (R-RELIC / R-RELIC-CURSE),
-     R-RELIC-STACK must hold (mind the d25 slack), and COVERAGE must resolve it. Read the RELICS table in BalanceReport
+     R-RELIC-STACK must hold (mind the d25 slack), and R-RELIC-SOURCE must resolve it. Read the RELICS table in BalanceReport
      for the gain; tune ONLY the new relic's own numbers.
   5. Run `./gradlew balanceSim`. A NON-AFFINE relic enters the probe rows automatically (round-robin); SR4 and SR5
      must hold. A tag-affine relic is audit-only.

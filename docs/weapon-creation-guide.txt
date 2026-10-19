@@ -5,6 +5,21 @@ Covers: game logic, marchShot, WeaponHudRenderer integration, FrameBuffer sprite
 
 ---
 
+## STEP 0 — THE BALANCE CONTRACT (balance-overhaul order 8; part of "done", before any code)
+
+A weapon is K5 and each new weapon ability is K6 of the content balance contract —
+docs/game-balance-authority.txt SECTION 5 "ADD CONTENT". Fill both checklists in the idea file's
+BALANCE ADMISSION section FIRST: DamageClass, the niche scenario it is best in (or a new reference
+scenario — then every class is re-checked), ammo type, LV1 COMMON damage / clip / range / falloff /
+reload, specials; for an ability its magnitude per level, cap, BuildTag, melee/ranged eligibility,
+MAJOR / SIGNATURE rank. The build enforces it: C-WEAPON fails `./gradlew test` on an unclassified item
+(BalanceSchema WEAPON_ITEM_CLASSIFICATIONS), a ranged weapon with no WeaponRoleModel row, no declared
+niche (ROLE_DECLARED_NICHE_BY_CLASS) or not in SupplyPlanner's drop pool, or a melee weapon missing from
+BalanceSchema meleeWeaponInstances(); C-ABILITY fails an ability GameMath.abilityPowerPoints cannot price.
+R-ROLE / R-ABILITY then judge the numbers. A weapon is not done until C-WEAPON and C-ABILITY are green.
+
+---
+
 ## ARCHITECTURE OVERVIEW
 
 Every weapon is an instance of the abstract class `Weapon` (entity package).

@@ -971,6 +971,14 @@ The governing invariant for ALL of these: if you had to edit a switch statement 
 overlay, the registries are being bypassed — fix THAT instead. Every recipe ends by updating this doc
 (the UPDATE CONTRACT at the top makes that mandatory, enforced like tile-symbols.txt).
 
+THE BALANCE HALF (balance-overhaul order 8): a node type is K14, an event / mystery outcome / affix / floor
+twist is K15, a shop offer type is K16 and a region is K17 of the content balance contract —
+docs/game-balance-authority.txt SECTION 5 "ADD CONTENT". C-NODE, C-EVENT, C-SHOP and C-REGION fail
+`./gradlew test` on a node with no NodeTypeDefinition / NodeSupplySpec / level profile / NodeEconomics row,
+an outcome or affix with no ledger row, an effect outside the ladder currencies, a threat-raising affix with
+no reward, a shop category with no SHOP_OFFER_SPECS row or a literal price, and a region with no TP-dial
+entry, boss row on its last floor, ambience or story region. Fill the K blocks in the idea file first.
+
 ADD A NEW LEVEL GENERATOR TO THE MAP
   1. Implement ILevelGenerator (as today; e.g. a new class in the `level` package).
   2. GeneratorRegistry.register(GeneratorId.MY_GENERATOR, (seed, config) -> new MyGenerator(seed, config))

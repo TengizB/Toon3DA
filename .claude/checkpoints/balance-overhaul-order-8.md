@@ -58,7 +58,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A3, A4 hold; both gates green.
 - [x] **CP6** — negative drill for all 18 C-rules, messages recorded in the handover below.
       DONE WHEN: A2 holds (nothing from the drill committed).
-- [ ] **CP7** — authority doc ADD CONTENT (G, K, X), knowledge doc, weapon guide, enemy doc,
+- [x] **CP7** — authority doc ADD CONTENT (G, K, X), knowledge doc, weapon guide, enemy doc,
       route/tileset/story cross-links.
       DONE WHEN: A5 holds.
 - [ ] **CP8** — CLAUDE.md rule + row, the seven agent files, _TEMPLATE.txt.
@@ -165,3 +165,13 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
     ADMISSION C-SHOP: DRILL_OFFER — no SHOP_OFFER_SPECS row — declare its value and weight constant in BalanceSchema
     ADMISSION C-REGION: REGION 0 OUTER FACILITY — ambience 'drill_theme' is not registered — RouteRegistries.registerRegionAmbience
     ADMISSION C-CONSTANT: DRILL_NEW_NUMBER — a new BalanceConfig number must be the subject of a schema rule (CONSTANT_SUBJECTS) or listed in UNBANDED with a one-line reason
+- **CP7 handover (A5 holds):** authority SECTION 5 is now "ADD CONTENT — THE CONTENT BALANCE CONTRACT" (G1-G5,
+  K1-K18 verbatim from the idea, a "WHAT EACH C-RULE CHECKS" table recording what the build actually checks
+  where it differs from the idea's wording — e.g. C-GENERATOR accepts the FloorPopulator supply path, C-ABILITY's
+  signature rule —, edge cases incl. relics + player start, X1-X3, the contributor's loop); the old checklist is
+  gone, recorded in its header and in SECTION 3's ADMISSION entry (which replaced the COVERAGE entry). SECTION 4
+  gains the G5 limit; SECTION 6 gains the ADMISSION table (summary + 3 sample rows) and the declared-hazards list;
+  CHANGELOG entry. Cross-links: knowledge doc (top pointer + known-problem 10 resolved, C-VERB renames), weapon
+  guide STEP 0, enemy-system ADD AN ENEMY (new section at the end) + COVERAGE -> C-VERB, route-map EXTENSIBILITY
+  RECIPES balance half, story-ui ADD AN ENEMY, relic-system COVERAGE -> R-RELIC-SOURCE; tileset RECIPE B since CP3.
+  Docs only — no code moved, so no gate re-run (last green: CP6 `db88b5d`).

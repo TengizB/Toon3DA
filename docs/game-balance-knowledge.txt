@@ -26,6 +26,11 @@ Whenever you touch balance: change the numbers in the SINGLE SOURCE OF TRUTH
 (util/BalanceConfig.java), re-run the auditor (SECTION 20), and assume the result
 still needs human playtesting before it can be called "good".
 
+ADDING CONTENT (an enemy, weapon, ability, perk, item, ammo type, status, hazard, room that places supply or
+spawns, generator, node type, event, shop offer, region, or a new BalanceConfig number) follows THE CONTENT
+BALANCE CONTRACT — docs/game-balance-authority.txt SECTION 5 "ADD CONTENT" (balance-overhaul order 8). The build
+enforces it: RuleKind.ADMISSION's eighteen C-rules fail `./gradlew test` on any undeclared or unpriced item.
+
 
 ================================================================================
 SECTION 0 — THE TURN-BASED FOUNDATION (why the math is exact)
@@ -715,7 +720,7 @@ The TP role bands are UNCHANGED — the archetype whose TRUE TP overflowed its b
 trimmed back into band (the point: the budget stops lying). Expected fallout landed on
 BLIGHT_CORRUPTOR: honest summon pricing pushed its 115-HP body to ~92 TP (over the
 36-66 soldier band), so its HP was trimmed 115 -> 90 (true TP ~64, golden ratio 3.75).
-COVERAGE now fails the build for any SpecialAbility with no registered equivalence
+COVERAGE (since balance-overhaul order 8: C-VERB) fails the build for any SpecialAbility with no registered equivalence
 (BalanceSchema.SpecialVerbPricing); SELF_DESTRUCT is explicitly exempt (a death-triggered
 finisher governed by the telegraph rule, not sustained DPT). BalanceReport's ENEMIES
 table prints cycleDPT + trueTP columns. The per-verb equivalence knobs (DEBUFF_TP_
@@ -1161,13 +1166,18 @@ ceiling, of what needs refinement.
      ends on the depth-25 boss (SECTION 16); R-LADDER is audited over the whole run.
   9. [RESOLVED by order 5] Special-move / summon / buff casters now have their
      EFFECTIVE DPT PRICED into TP via cycle-averaging (EnemyType.baseThreatPoints ->
-     GameMath.cycleAveragedDamagePerTurn + specialEquivalent* per verb). COVERAGE
+     GameMath.cycleAveragedDamagePerTurn + specialEquivalent* per verb). C-VERB
      fails the build on any unpriced SpecialAbility; the one archetype that overflowed
      its band once priced honestly (Blight Corruptor) was trimmed back in. (SECTION 8)
  10. Content has repeatedly shipped BEFORE being priced (the necrotic faction
      corrupted every floor's budget until a later pass). [MITIGATED by order 1:
      BalanceAuditTest's COVERAGE rule fails the build when a weapon item,
-     consumable, ammo type, or enemy role is unclassified/unpriced.] (SECTION 7)
+     consumable, ammo type, or enemy role is unclassified/unpriced.] [RESOLVED by
+     balance-overhaul order 8: COVERAGE became RuleKind.ADMISSION — eighteen C-rules, one
+     per content kind (enemy, family, verb, boss, weapon, ability, perk, item, ammo,
+     status, hazard, room, generator, node, event, shop, region, and every new
+     BalanceConfig number), never waivable; the recipe is docs/game-balance-authority.txt
+     SECTION 5 ADD CONTENT.] (SECTION 7)
  11. [RESOLVED by order 1] The two divergent DoT definitions were unified to one
      BURN base (4/turn) and one POISON base; the R-DOT rule fails the build if a
      second definition reappears. (SECTION 15)

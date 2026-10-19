@@ -425,7 +425,7 @@ labels them:
     orbiting shards are simultaneously its armour and its ammunition, so the counter to its offence and
     the counter to its defence are the SAME action. Implemented as plain state + a damage-pipeline hook,
     NOT as a SpecialAbility verb, so the SpecialAbility catalogue and BalanceSchema.SPECIAL_VERB_PRICING
-    are untouched and the verb COVERAGE rule stays green. Four touch points:
+    are untouched and the verb rule (C-VERB, formerly COVERAGE) stays green. Four touch points:
       ABSORB  Enemy.applyDamage, at the TOP — ahead of Block and flat armour, so the full mitigation
               order is SHARD -> Block -> armor -> HP. While shardCount > 0 any single incoming damage
               INSTANCE is NULLIFIED (not reduced) and costs one shard, whatever its size: a railgun slug
@@ -473,7 +473,7 @@ labels them:
     hardens while you hide and burns the ground you would have retreated across. Like the Sentinel it is
     plain state + two PASSIVE hooks (CP5 later added the existing AREA_STRIKE to its move-set, see HEAVY
     ASSIGNMENTS above; the crust/trail themselves add no SpecialAbility), so the SpecialAbility catalogue and
-    BalanceSchema.SPECIAL_VERB_PRICING are untouched and the COVERAGE rule stays green. Touch points:
+    BalanceSchema.SPECIAL_VERB_PRICING are untouched and C-VERB (formerly COVERAGE) stays green. Touch points:
       CRUST   Enemy.crustStacks (0..CINDERFORGE_CRUST_MAX_STACKS). GAIN: at the END of the Colossus's own
               turn (EnemyManager.advanceCrustCooling), if it took NO damage since its previous turn,
               +1 stack, each adding CINDERFORGE_CRUST_ARMOR_PER_STACK to Enemy.armor. LOSE: ANY damage
@@ -507,7 +507,7 @@ labels them:
     ARMOURED OR DANGEROUS, NEVER BOTH: the shell that makes it the toughest non-elite must OPEN for the
     lance to fire, so the puzzle is TIMING — shoot it on the RIGHT turn. Built from the EXISTING
     WIND_UP -> ATTACK pair (exactly like the Shell Brute charge), so NO SpecialAbility verb is added and
-    BalanceSchema.SPECIAL_VERB_PRICING / COVERAGE are untouched. Touch points:
+    BalanceSchema.SPECIAL_VERB_PRICING / C-VERB (formerly COVERAGE) are untouched. Touch points:
       CHARGE  computeLancerPlan: off cooldown (Enemy.lanceCooldownTurns == 0) with a clean cardinal firing
               line, it commits a WIND_UP, LOCKS the lane (Enemy.lanceDirectionColumn/Row, mirroring the
               charger's chargeDirection), and OPENS the shell (Enemy.openShell zeroes the live Enemy.armor)
@@ -536,7 +536,7 @@ labels them:
   - VERDANT_SPIRESOWER — SOW SPIRES + LEY-LINE REGEN (.claude/agents/ideas/elemental-golem-verdant-spiresower.txt).
     The first enemy that EDITS THE LEVEL. Built from plain state + a bespoke WIND_UP -> sow hook (the Shell
     Brute charge precedent) plus a damage-pipeline-adjacent regen tick, so NO SpecialAbility verb is added
-    and the BalanceSchema COVERAGE rule is untouched. The spire TILES live in hazard/SpireManager (reached
+    and the BalanceSchema C-VERB rule (formerly COVERAGE) is untouched. The spire TILES live in hazard/SpireManager (reached
     through the entity/SpireHitTarget seam), NOT on the enemy.
       SOW     computeSowerPlan: on SPIRESOWER_SOW_CADENCE_TURNS, under SPIRESOWER_MAX_LIVE_SPIRES, it
               selectSowTargets (deterministic seeded RNG) up to SPIRESOWER_SPIRES_PER_SOW walkable tiles
@@ -765,3 +765,23 @@ player's opened doors; keycard- and arena-locked doors are refused. It never use
 (every type when none — the cache's rule) on the nearest free tiles within TWIST_HUNTED_BOUNTY_SEARCH_RADIUS_TILES (8),
 on top of its ordinary drop. EnemyRenderer draws its health-bar frame in TWIST_HUNTER_HEALTH_BAR_FRAME_* amber.
 
+
+================================================================================
+ADD AN ENEMY (the balance half — balance-overhaul order 8, K1-K4)
+================================================================================
+An enemy is balance-bearing content, so it is FULL LANE and follows the content balance contract:
+docs/game-balance-authority.txt SECTION 5 "ADD CONTENT". Which checklist:
+  K1 ENEMY ARCHETYPE   a new EnemyType row          -> C-ENEMY
+  K2 FAMILY / TRAIT    a new EnemyFamily or trait   -> C-FAMILY (a matchup cell for every DamageClass,
+                                                       family voices, bestiary lines, a reference scenario)
+  K3 SPECIAL VERB      a new SpecialAbility         -> C-VERB (a SpecialVerbPricing row; a damaging verb
+                                                       is a HeavyAttack committed >= 1 turn ahead)
+  K4 BOSS              a boss EnemyType + BossTable -> C-BOSS (a BossTable row, BossVerbSpecs; HP derived
+                                                       by BossBalance from ExpectedPlayer, never literal)
+What cannot be forgotten at all (compile errors, E3): every EnemyType states role(), family(),
+positionalMultiplier(), attackCadenceTurns(), spawnChar(), tacticalVerb(), heavyWindUp() (null = no
+heavy) and moveSet() (MOVESET_NONE = no specials). What the build then checks (C-ENEMY): positive stats,
+a POSITIONAL_MULT_* multiplier, TP + hit bands for its role, XP derived from TP (never hand-set), a
+unique spawn symbol (a new FIXED symbol follows the CLAUDE.md STRICT RULE in one commit), an
+EncounterGroupTemplate slot that admits it, and its ORA archetype line (docs/story-ui-system.txt, ADD AN
+ENEMY). R-ENEMY / R-LADDER / R-HEAVY then judge the numbers; tune the enemy's own constants only.
