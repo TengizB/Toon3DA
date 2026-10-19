@@ -253,6 +253,22 @@ class BalanceSimTest {
         assertBandsHold(results);
     }
 
+    /**
+     * S-TWIST (floor-twists, CP8) — no floor twist is a death trap: every twist reports its ST1 death-rate line
+     * (n/a while under-sampled) and its ST2 "it was dealt" line, none is waived, and all of them hold.
+     */
+    @Test
+    void noFloorTwistIsADeathTrap() {
+        List<RuleResult> results = bandsOfKind(ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind.SIM_TWIST);
+        int twistCount = BehavioralBands.twistIds().size();
+        assertEquals(twistCount, results.stream().filter(result -> result.subject.startsWith("ST1 ")).count(),
+                "S-TWIST reports one ST1 line per floor twist");
+        assertEquals(twistCount, results.stream().filter(result -> result.subject.startsWith("ST2 ")).count(),
+                "S-TWIST reports one ST2 line per floor twist");
+        assertTrue(results.stream().noneMatch(result -> result.waived), "S-TWIST is never waived");
+        assertBandsHold(results);
+    }
+
     /** S-SOFTLOCK — a run may end, but never get stuck unable to damage anything. */
     @Test
     void noRunEndsUnableToDamageAnything() {

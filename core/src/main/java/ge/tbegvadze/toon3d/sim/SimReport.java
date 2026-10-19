@@ -80,6 +80,7 @@ public final class SimReport {
         appendBuildReport(report, matrix);
         appendRunReport(report, matrix);
         appendRelicReport(report, matrix);
+        appendTwistReport(report, matrix);
 
         report.append("BEHAVIOURAL BANDS\n");
         report.append("--------------------------------------------------------------------------------\n");
@@ -92,6 +93,34 @@ public final class SimReport {
         report.append("BalanceSchema and mirrored in docs/game-balance-authority.txt. A FAIL line fails\n");
         report.append("`./gradlew balanceSim`.\n");
         return report.toString();
+    }
+
+    /**
+     * The TWIST REPORT (floor-twists, CP8): per FLOOR TWIST over TACTICAL's played COMBAT floors — floors, floor-death
+     * rate, mean turns and health lost on the floor, and (HUNTED) hunter arrivals / kills — beside plain untwisted
+     * COMBAT floors as the reference S-TWIST compares against. Information beside the band.
+     */
+    private static void appendTwistReport(StringBuilder report, Map<String, PolicySummary> matrix) {
+        PolicySummary tactical = matrix.get(BehavioralBands.TACTICAL_ID);
+        if (tactical == null) return;
+        report.append("TWIST REPORT — TACTICAL COMBAT floors by floor twist (S-TWIST)\n");
+        report.append("--------------------------------------------------------------------------------\n");
+        report.append(String.format("%-14s %6s %8s %7s %9s %9s %8s %6s%n", "twist", "floors", "deathRt",
+                "depths", "meanTurns", "meanHpLost", "arrivals", "kills"));
+        java.util.List<String> rows = new java.util.ArrayList<>(BehavioralBands.twistIds());
+        rows.add(null);
+        for (String twistId : rows) {
+            int[] stats = BehavioralBands.twistFloorStats(tactical, twistId, 1, BalanceConfig.RUN_FINAL_DEPTH);
+            int floors = stats[BehavioralBands.TWIST_FLOORS];
+            report.append(String.format("%-14s %6d %8.3f %7s %9.1f %9.1f %8d %6d%n",
+                    twistId == null ? "(plain)" : twistId, floors,
+                    floors == 0 ? Float.NaN : stats[BehavioralBands.TWIST_DEATHS] / (float) floors,
+                    stats[BehavioralBands.TWIST_MIN_DEPTH] + "-" + stats[BehavioralBands.TWIST_MAX_DEPTH],
+                    floors == 0 ? Float.NaN : stats[BehavioralBands.TWIST_TURNS] / (float) floors,
+                    floors == 0 ? Float.NaN : stats[BehavioralBands.TWIST_HEALTH_LOST] / (float) floors,
+                    stats[BehavioralBands.TWIST_HUNTER_ARRIVALS], stats[BehavioralBands.TWIST_HUNTER_KILLS]));
+        }
+        report.append('\n');
     }
 
     /**

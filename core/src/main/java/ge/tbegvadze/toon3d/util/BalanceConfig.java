@@ -3368,9 +3368,9 @@ public final class BalanceConfig {
 
     // --- BLACKOUT (R7d) — the dormant-WAKE check only; attack ranges and LOS for attacks unchanged ---
     /** R7d: proximity radius (tiles) that wakes a dormant enemy on a BLACKOUT floor (default ALERT_RADIUS_TILES). */
-    public static final int     TWIST_BLACKOUT_WAKE_RADIUS_TILES      = 2;
+    public static final int     TWIST_BLACKOUT_WAKE_RADIUS_TILES      = 3;   // CP8: 2 flipped S-RELIC SR3 (sim noise at 1.01); 3/6 restores it
     /** R7d: wake-by-sight range (tiles) on a BLACKOUT floor (default LOS_MAX_RANGE_TILES, wake check only). */
-    public static final int     TWIST_BLACKOUT_WAKE_SIGHT_TILES       = 4;
+    public static final int     TWIST_BLACKOUT_WAKE_SIGHT_TILES       = 6;
 
     // --- SALVAGE (R8) ---------------------------------------------------------------------------
     /** R8: threat multiplier on the COMBAT floor's budget (through the same EnemyBudgetOverride SWARM uses). */

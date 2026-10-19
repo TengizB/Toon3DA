@@ -68,7 +68,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       `./gradlew build` + `./gradlew test` green.
 - [x] **CP6** — route console third confirm-bar line (R14, eight rule lines); `./gradlew build` green.
 - [x] **CP7** — three TeachingTopic rows + strings; World requests them on twist arrival; `./gradlew build` + `./gradlew test` green.
-- [ ] **CP8** — S-TWIST (ST1/ST2), per-floor twist id in the sim ledger, TWIST REPORT, BalanceSimTest
+- [x] **CP8** — S-TWIST (ST1/ST2), per-floor twist id in the sim ledger, TWIST REPORT, BalanceSimTest
       extended; `./gradlew balanceSim` green, no existing band changes status; sample sizes recorded.
 - [ ] **CP9** — docs (route-map, balance authority incl. SECTION 6 + CHANGELOG, balance knowledge,
       enemy-system, story-ui, tick-system, CLAUDE.md); `./gradlew build` + `./gradlew test` green; ready for `reviewer`.
@@ -195,3 +195,19 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   one used an em dash the default story font lacks — rewritten (same meaning) and recorded in docs/story-ui-system.txt
   (TeachingTopic count is now twenty-two; that doc is DONE for this feature). Record as an IMPLEMENTATION NOTE at
   close. Verified: `./gradlew build` (StoryLocalizationTest + two-line cap green). Not watched on device.
+- **CP8 handover:** S-TWIST is in `sim/BehavioralBands` (`twistResults`, public `twistIds()`,
+  `twistFloorStats(summary, twistIdOrNullForPlain, minDepth, maxDepth)` + the `TWIST_*` index constants),
+  `BalanceSchema.RuleKind.SIM_TWIST`, `FloorLedger.twistId/diedOnFloor` (set in SimWorld buildFloor / recordDeath),
+  `SimReport.appendTwistReport` (TWIST REPORT, after the RELIC REPORT), `BalanceSimTest.noFloorTwistIsADeathTrap`
+  (extension of the existing file). **Tuning (a number moved, no band):** with BLACKOUT wake 2/4 the sim flipped
+  S-RELIC SR3 OK -> FAIL (0.99; it was 1.01 at CP3 — a razor-thin band moved by BLACKOUT's sim effect). Sweep
+  (`<scratchpad>/sweep.sh`): 3/6 SR3 1.01 + 0 band-status diffs vs CP3; 3/4 FAIL; 2/6 SR3 1.00 (borderline). Shipped
+  `TWIST_BLACKOUT_WAKE_RADIUS_TILES` 2 -> 3, `TWIST_BLACKOUT_WAKE_SIGHT_TILES` 4 -> 6 (still "they see less": defaults
+  4/8). **Gates:** build + test green except the pre-existing StoryBarkTest failure; balanceSim EXIT 0, 0 FAIL lines,
+  every band and every ROUND SUMMARY line keeps its IN/OUT vs CP3. **Sample sizes (TACTICAL, 200 runs):** blackout 13
+  floors (death rate 0.615), salvage 12 (0.583), hunted 1 (1.000), plain COMBAT 201 (0.284) — every ST1 is "n/a
+  (sample < 60)"; the hunter arrived 0 times. ST2 passes but hunted rests on ONE floor (TACTICAL median depth is 3;
+  HUNTED starts at 4). The high twisted death rates (n=12-13, depths 2-4 vs plain 1-13) are unproven, but are the
+  first thing to watch when samples grow. ROUND SUMMARY before -> after (CP3 -> CP8): T4 exit health 0.90 -> 0.91 OUT;
+  T4 no-heal deaths 0.27 -> 0.28 IN; T6 SPREAD 0.63 -> 0.64 OUT; T7 dominant tag 0.47 -> 0.48 OUT; T7 keystone 0.43 ->
+  0.50 IN; T9 offers/visit 1.12 -> 1.11 OUT; all others identical.

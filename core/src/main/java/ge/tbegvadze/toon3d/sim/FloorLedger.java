@@ -12,6 +12,12 @@ public final class FloorLedger {
     /** 1-based floor number. */
     public int depth;
 
+    /** Floor-twists: the FLOOR TWIST id this floor was built with ("blackout" / "salvage" / "hunted"), or null. */
+    public String twistId;
+
+    /** The player died on this floor (the run's last floor, ended KILLED). Read by S-TWIST. */
+    public boolean diedOnFloor;
+
     /** Floor-twists (HUNTED): the trail hunter was printed on this floor. */
     public boolean hunterArrived;
 

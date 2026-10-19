@@ -566,6 +566,7 @@ public final class SimWorld implements LevelTransitionListener {
         hazardDamageBaseline             = statusEffectController.getHazardDamageToEnemies();
         switchHintWeapon                 = null;
         floorLedger.depth                = currentDepth;
+        floorLedger.twistId              = currentTwistId;
         floorLedger.bossFloor            = bossFloorController != null;
         floorLedger.playerLevelOnArrival = playerProgress.getPlayerLevel();
         floorLedger.demandDamage         = measureFloorDemandDamage();
@@ -1252,6 +1253,7 @@ public final class SimWorld implements LevelTransitionListener {
 
     private void recordDeath(boolean threatWasTelegraphed, boolean inResourceCrisis) {
         floorLedger.diedWithNoHealsHeld = view.medkitCount() == 0;
+        floorLedger.diedOnFloor         = true;
         floorLedger.ammoHeldFractionAtDeath = carriedAmmoHeldFraction();
         ledger.ending                      = RunLedger.Ending.KILLED;
         ledger.endingDepth                 = currentDepth;

@@ -279,7 +279,14 @@ public final class BalanceSchema {
          * 1 + SIM_RELIC_PER_RELIC_MAX_LIFT]; SR5 every non-affine relic got that many runs; SR6 standard TACTICAL holds
          * at least one relic at run end on average. Tag-affine relics are banded by the audit only (AS17).
          */
-        SIM_RELIC
+        SIM_RELIC,
+        /**
+         * S-TWIST (floor-twists, CP8): no FLOOR TWIST is a death trap, read from the TACTICAL row — ST1 for each twist
+         * with >= TWIST_SIM_MIN_FLOORS played floors, its floor-death rate <= TWIST_SIM_MAX_DEATH_RATE_RATIO x the rate
+         * on plain (untwisted) COMBAT floors over the same depth range (an under-sampled twist reports n/a and does not
+         * fail); ST2 every twist appears on at least one played floor (the roll is live). Never waived.
+         */
+        SIM_TWIST
     }
 
     // =====================================================================================

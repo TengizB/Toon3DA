@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import ge.tbegvadze.toon3d.route.AffixScope;
+import ge.tbegvadze.toon3d.route.NodeAffixDefinition;
+import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.BalanceSchema;
 import ge.tbegvadze.toon3d.util.BalanceSchema.RuleKind;
@@ -37,6 +40,7 @@ import ge.tbegvadze.toon3d.util.BalanceSchema.RuleResult;
  *   <li>S-SHOP     — the shop is a place to spend: TACTICAL buys every visit and dies with little banked (balance-overhaul order 6)</li>
  *   <li>S-BOSS     — every boss is CONSISTENT: a fair clear rate, a steady fight length, a hurt-but-standing player (balance-overhaul order 6)</li>
  *   <li>S-RELIC    — no relic is a trap and none is mandatory, and standard TACTICAL actually holds relics (relics-run-changing-artifacts)</li>
+ *   <li>S-TWIST    — no FLOOR TWIST is a death trap, and every twist is actually dealt (floor-twists)</li>
  * </ul>
  */
 public final class BehavioralBands {
@@ -76,6 +80,7 @@ public final class BehavioralBands {
         if (tactical != null) results.addAll(bossResults(tactical));
         results.addAll(buildResults(matrix, matrix.get(TACTICAL_BUILD_SAMPLE_ID)));
         results.addAll(relicResults(matrix, tactical));
+        if (tactical != null) results.addAll(twistResults(tactical));
         for (PolicySummary summary : matrix.values()) results.add(softlockResult(summary));
         for (PolicySummary summary : matrix.values()) results.add(navigationResult(summary));
         return results;
@@ -544,6 +549,82 @@ public final class BehavioralBands {
                 stalledShare, 0f, BalanceConfig.SIM_MAX_STALLED_FLOOR_FRACTION,
                 stalledShare <= BalanceConfig.SIM_MAX_STALLED_FLOOR_FRACTION,
                 summary.stalledRunCount() + " stalled runs; share of every played floor");
+    }
+
+    /** The FLOOR TWIST ids S-TWIST and the TWIST REPORT read, in registry order. */
+    public static List<String> twistIds() {
+        List<String> ids = new ArrayList<>();
+        for (NodeAffixDefinition definition : RouteRegistries.affixes().definitionsFor(AffixScope.FLOOR_TWIST)) {
+            ids.add(definition.id());
+        }
+        return ids;
+    }
+
+    /** Index layout of {@link #twistFloorStats}. */
+    public static final int TWIST_FLOORS = 0, TWIST_DEATHS = 1, TWIST_MIN_DEPTH = 2, TWIST_MAX_DEPTH = 3,
+            TWIST_TURNS = 4, TWIST_HEALTH_LOST = 5, TWIST_HUNTER_ARRIVALS = 6, TWIST_HUNTER_KILLS = 7, TWIST_STAT_COUNT = 8;
+
+    /**
+     * Totals over a summary's played COMBAT floors whose twist is {@code twistId} ({@code null} = plain, untwisted
+     * COMBAT) and whose depth is in [minDepth, maxDepth]: floors, deaths on them, the depth range actually seen, turns,
+     * health lost and (HUNTED) hunter arrivals / kills. Depth range fields are 0 when no floor matched.
+     */
+    public static int[] twistFloorStats(PolicySummary summary, String twistId, int minDepth, int maxDepth) {
+        int[] stats = new int[TWIST_STAT_COUNT];
+        stats[TWIST_MIN_DEPTH] = Integer.MAX_VALUE;
+        for (RunLedger run : summary.runs) {
+            for (FloorLedger floor : run.floors) {
+                if (!"COMBAT".equals(floor.nodeType)) continue;
+                if (twistId == null ? floor.twistId != null : !twistId.equals(floor.twistId)) continue;
+                if (floor.depth < minDepth || floor.depth > maxDepth) continue;
+                stats[TWIST_FLOORS]++;
+                if (floor.diedOnFloor) stats[TWIST_DEATHS]++;
+                stats[TWIST_MIN_DEPTH] = Math.min(stats[TWIST_MIN_DEPTH], floor.depth);
+                stats[TWIST_MAX_DEPTH] = Math.max(stats[TWIST_MAX_DEPTH], floor.depth);
+                stats[TWIST_TURNS] += floor.turnsSpent;
+                stats[TWIST_HEALTH_LOST] += floor.healthLost;
+                if (floor.hunterArrived) stats[TWIST_HUNTER_ARRIVALS]++;
+                if (floor.hunterKilled) stats[TWIST_HUNTER_KILLS]++;
+            }
+        }
+        if (stats[TWIST_FLOORS] == 0) stats[TWIST_MIN_DEPTH] = 0;
+        return stats;
+    }
+
+    /**
+     * S-TWIST (floor-twists, CP8), read from the TACTICAL row and never waived. ST1: for each twist with at least
+     * TWIST_SIM_MIN_FLOORS played floors, its floor-death rate over plain COMBAT's at the SAME depth range (the
+     * depths that twist was actually played at) is <= TWIST_SIM_MAX_DEATH_RATE_RATIO; an under-sampled twist reports
+     * "n/a (sample n)" and does not fail. ST2: every twist was played at least once (the roll is live).
+     */
+    private static List<RuleResult> twistResults(PolicySummary tactical) {
+        List<RuleResult> results = new ArrayList<>();
+        for (String twistId : twistIds()) {
+            int[] twist = twistFloorStats(tactical, twistId, 1, BalanceConfig.RUN_FINAL_DEPTH);
+            int floors = twist[TWIST_FLOORS];
+            if (floors < BalanceConfig.TWIST_SIM_MIN_FLOORS) {
+                results.add(BalanceSchema.result(RuleKind.SIM_TWIST, "ST1 " + twistId + " floor-death rate / plain COMBAT",
+                        Float.NaN, 0f, BalanceConfig.TWIST_SIM_MAX_DEATH_RATE_RATIO, true,
+                        "n/a (sample " + floors + " < " + BalanceConfig.TWIST_SIM_MIN_FLOORS + ")"));
+            } else {
+                int[] plain = twistFloorStats(tactical, null, twist[TWIST_MIN_DEPTH], twist[TWIST_MAX_DEPTH]);
+                float twistRate = twist[TWIST_DEATHS] / (float) floors;
+                float plainRate = plain[TWIST_FLOORS] == 0 ? Float.NaN : plain[TWIST_DEATHS] / (float) plain[TWIST_FLOORS];
+                float ratio;
+                if (Float.isNaN(plainRate)) ratio = Float.NaN;
+                else if (plainRate == 0f)   ratio = twistRate == 0f ? 0f : Float.POSITIVE_INFINITY;
+                else                        ratio = twistRate / plainRate;
+                boolean satisfied = !Float.isNaN(ratio) && ratio <= BalanceConfig.TWIST_SIM_MAX_DEATH_RATE_RATIO;
+                results.add(BalanceSchema.result(RuleKind.SIM_TWIST, "ST1 " + twistId + " floor-death rate / plain COMBAT",
+                        ratio, 0f, BalanceConfig.TWIST_SIM_MAX_DEATH_RATE_RATIO, satisfied,
+                        String.format(java.util.Locale.ROOT, "%d/%d twisted vs %d/%d plain, depths %d-%d",
+                                twist[TWIST_DEATHS], floors, plain[TWIST_DEATHS], plain[TWIST_FLOORS],
+                                twist[TWIST_MIN_DEPTH], twist[TWIST_MAX_DEPTH])));
+            }
+            results.add(BalanceSchema.result(RuleKind.SIM_TWIST, "ST2 " + twistId + " floors played",
+                    floors, 1f, Float.POSITIVE_INFINITY, floors >= 1, tactical.runCount() + " TACTICAL runs"));
+        }
+        return results;
     }
 
     /** S-SOFTLOCK: no run may end unable to damage anything. Zero, by contract, for every policy. */
