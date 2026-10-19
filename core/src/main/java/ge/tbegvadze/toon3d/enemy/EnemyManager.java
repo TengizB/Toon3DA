@@ -1419,6 +1419,29 @@ public final class EnemyManager implements EnemyHitTarget {
         }
     }
 
+    /**
+     * The dormant-WAKE perception (floor-twists R7d). Read ONLY by Phase A's proximity / wake-by-sight
+     * check — the chain-alert radius, every attack range, LOS for attacks and isSameCardinalLine are
+     * untouched, so an awake enemy fights exactly as anywhere else. Defaults to the shipped radii.
+     */
+    private int wakeRadiusTiles = EnemyConstants.ALERT_RADIUS_TILES;
+    private int wakeSightTiles  = EnemyConstants.LOS_MAX_RANGE_TILES;
+
+    /**
+     * Overrides the dormant-wake perception for this floor (a BLACKOUT twist). A negative value keeps that
+     * default. The sight range never exceeds the LOS cap, which hasLineOfSight enforces anyway.
+     */
+    public void setWakePerception(int radiusTiles, int sightTiles) {
+        this.wakeRadiusTiles = radiusTiles >= 0 ? radiusTiles : EnemyConstants.ALERT_RADIUS_TILES;
+        this.wakeSightTiles  = sightTiles  >= 0 ? Math.min(sightTiles, EnemyConstants.LOS_MAX_RANGE_TILES)
+                                                : EnemyConstants.LOS_MAX_RANGE_TILES;
+    }
+
+    /** Restores the default dormant-wake perception. */
+    public void resetWakePerception() {
+        setWakePerception(-1, -1);
+    }
+
     // Phase A: proximity + LOS wake, then chain-alert BFS
     private void phaseA(int playerColumn, int playerRow) {
         int chainQueueSize = 0;
@@ -1431,9 +1454,9 @@ public final class EnemyManager implements EnemyHitTarget {
                     enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
 
             boolean shouldAlert = false;
-            if (chebyshev <= EnemyConstants.ALERT_RADIUS_TILES) {
+            if (chebyshev <= wakeRadiusTiles) {
                 shouldAlert = true;
-            } else if (chebyshev <= EnemyConstants.LOS_MAX_RANGE_TILES) {
+            } else if (chebyshev <= wakeSightTiles) {
                 shouldAlert = hasLineOfSight(enemy.tileColumn, enemy.tileRow, playerColumn, playerRow);
             }
 

@@ -61,7 +61,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       pool; DefaultCombatProfile folds the twist (R5) with sting/statLog/twistId; ELITE affixes identical
       for a fixed seed; `./gradlew build` + `./gradlew test` green.
 - [x] **CP3** — R-TWIST (T1-T3) + trajectory folding + BalanceReport twist rows, tuned in band; `./gradlew test` green.
-- [ ] **CP4** — BLACKOUT runtime (light multiplier w/ exit exemption, NAV OFFLINE plate, enemy min shade,
+- [x] **CP4** — BLACKOUT runtime (light multiplier w/ exit exemption, NAV OFFLINE plate, enemy min shade,
       wake perception override, all reset on rebuild) in World + SimWorld; `./gradlew build` green.
 - [ ] **CP5** — HUNTED runtime (PlayerTrail, HuntedPursuit + listener, trail branch R11a-g,
       DoorManager.forceOpenForEnemy, bounty, texts + voice, amber frame) in World + SimWorld;
@@ -132,3 +132,19 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   record as an IMPLEMENTATION NOTE in the idea file at close. Sweep harnesses: `<scratchpad>/harness/TwistSweep.java`,
   `CouplingSweep.java` (a zero-effect dummy twist emulates a lower hunted frequency without recompiling).
 
+- **CP4 handover:** BLACKOUT is live. `Level.setLightMultiplier/getLightMultiplier` (default 1, clamped [0,1];
+  `getTileBrightness` multiplies every tile but '>' — the exit stays LIT, R7b). `EnemyManager.setWakePerception(radius,
+  sight)` / `resetWakePerception()` — read ONLY by Phase A's wake check (fields `wakeRadiusTiles/wakeSightTiles`).
+  `EnemyRenderer.setLightMultiplier` + `GameMath.darkenedShadeWithFloor(shade, light, min)` (body only; health bars and
+  intents are separate passes, untouched). `HudRenderer.setNavOffline(bool)` draws the plate in the mini-map rect.
+  `World.activeTwist` (NodeAffixDefinition) + `minimapOffline`; `World.applyTwistRuntimeModifiers(def)` is the ONE
+  place a twist's runtime modifiers apply (called from applyPendingFloorEffects by twist id) — CP5 adds the hunter
+  clock there; `rebuildForLevel` nulls activeTwist/minimapOffline and the per-floor Level/EnemyManager/EnemyRenderer
+  are rebuilt, so A7 holds by construction. SimWorld applies wake perception in generateLevel from `currentTwistId`.
+  **How it was verified (A6):** temporary, UNCOMMITTED hacks — Main `new World(seed, StartMode.RESPAWN)` (skips the
+  title) and, at the end of World's initial build, `String f=System.getProperty("toon3d.forceTwist"); if (f!=null)
+  applyTwistRuntimeModifiers(RouteRegistries.affixes().definition(f));` — then from the mirror
+  `Xvfb :77 &`, `DISPLAY=:77 JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Dtoon3d.forceTwist=blackout" ./gradlew lwjgl3:run`,
+  `DISPLAY=:77 import -window root shot.png` after ~75 s: NAV OFFLINE plate in the mini-map rect, no dot, dark view.
+  Both hacks REVERTED before commit (grep TEMP-VERIFY must be empty). Runtime WAV caches assets/game-audio/ and
+  assets/story-audio/ are produced by running — never stage them.

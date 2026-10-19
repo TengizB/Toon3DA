@@ -401,6 +401,13 @@ public final class SimWorld implements LevelTransitionListener {
 
         doorManager  = new DoorManager(level);
         enemyManager = new EnemyManager(level, doorManager, currentDepth, seed);
+        // Floor-twists: mirror World.applyTwistRuntimeModifiers' non-render half (the dark and the missing
+        // mini-map are invisible to the sim — the documented BLACKOUT model gap).
+        ge.tbegvadze.toon3d.route.NodeAffixDefinition twist = currentTwistId == null ? null
+                : RouteRegistries.affixes().definition(currentTwistId);
+        if (twist != null && twist.overridesWakePerception()) {
+            enemyManager.setWakePerception(twist.wakeRadiusTiles(), twist.wakeSightTiles());
+        }
         abilityResolver = new AbilityResolver(enemyManager, null, player, runSeed);
         abilityResolver.setPlayerInventory(itemInventory);
         abilityResolver.setStatusEffectController(statusEffectController);

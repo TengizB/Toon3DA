@@ -4356,6 +4356,24 @@ public final class GameMath {
     }
 
     /*
+     * Formula: darkened sprite shade with a silhouette floor (floor-twists R7c)
+     * Derivation:
+     *   shade' = max(shade * lightMultiplier, minimumShade)   when lightMultiplier < 1
+     *   shade' = shade                                         otherwise
+     *   A BLACKOUT floor dims an enemy billboard with the room, but never below minimumShade, so a body in
+     *   the dark reads as a silhouette and is never invisible. Normal light leaves the shade untouched
+     *   (including a dormant enemy's own dampened shade).
+     * Edge cases:
+     *   lightMultiplier >= 1 -> shade unchanged; negative inputs are clamped to 0 first.
+     */
+    public static float darkenedShadeWithFloor(float shade, float lightMultiplier, float minimumShade) {
+        if (lightMultiplier >= 1f) {
+            return shade;
+        }
+        return Math.max(Math.max(0f, shade) * Math.max(0f, lightMultiplier), minimumShade);
+    }
+
+    /*
      * Formula: threat share of a floor budget (floor-twists R-TWIST T3)
      * Derivation:
      *   share = extraThreatPoints / floorThreatPoints

@@ -32,6 +32,7 @@ import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
+import ge.tbegvadze.toon3d.util.RenderConstants;
 import ge.tbegvadze.toon3d.util.RenderResolution;
 
 import java.util.HashMap;
@@ -289,6 +290,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.planeY       = GameMath.cameraPlaneY(playerDirectionX, planeScale);
     }
 
+    /** Floor-twists R7c: the floor's light multiplier (1.0 = normal; a BLACKOUT floor dims enemy bodies). */
+    private float lightMultiplier = 1f;
+
+    /** Sets the floor light multiplier enemy billboards are dimmed by (never below the silhouette floor). */
+    public void setLightMultiplier(float multiplier) {
+        this.lightMultiplier = multiplier;
+    }
+
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
     }
@@ -446,6 +455,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (enemy.state == EnemyState.DORMANT) {
                 baseShade *= DORMANT_SHADE_DAMPEN;
             }
+            // Floor-twists R7c: a BLACKOUT floor dims the body with the room, never below a silhouette.
+            // Health bars and intent icons are drawn by their own passes and are never dimmed.
+            baseShade = GameMath.darkenedShadeWithFloor(baseShade, lightMultiplier,
+                    RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
             float baseRed   = Math.min(1f, baseShade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float baseGreen = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             float baseBlue  = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);

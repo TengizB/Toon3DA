@@ -309,6 +309,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
      */
     private FloorEffects            pendingFloorEffects = FloorEffects.NONE;
     /**
+     * The FLOOR TWIST the current floor was built with (floor-twists), or {@code null}. Applied by
+     * {@link #applyTwistRuntimeModifiers} after the rebuild; cleared by {@code rebuildForLevel} so no twist
+     * outlives its floor (the Level, EnemyManager and EnemyRenderer that carry its modifiers die with it too).
+     */
+    private ge.tbegvadze.toon3d.route.NodeAffixDefinition activeTwist;
+    /** Floor-twists R7a: true on a BLACKOUT floor — the mini-map and player dot are not drawn. */
+    private boolean minimapOffline = false;
+    /**
      * The layout of the boss arena built for the current floor (boss ORDER 7). Captured whenever the
      * floor's generator is a {@link BossArenaGenerator} and consumed by {@code buildLevelDependentResources}
      * to place the boss and wire {@link BossFloorController}. Null on every non-boss floor.
@@ -1242,6 +1250,32 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (effects.statLogToken() != null) {
             runStats.annotateLastRouteNode(effects.statLogToken());
         }
+        // Floor-twists: the twist's runtime modifiers, looked up by id — never a switch on which twist it is.
+        if (effects.twistId() != null) {
+            ge.tbegvadze.toon3d.route.NodeAffixDefinition twist = RouteRegistries.affixes().definition(effects.twistId());
+            if (twist != null) {
+                applyTwistRuntimeModifiers(twist);
+            }
+        }
+    }
+
+    /**
+     * Applies a FLOOR TWIST's runtime modifiers to the floor just built (floor-twists R7/R9). Every modifier is a
+     * typed field of the definition, so a fourth twist built from these kinds needs no edit here (A12).
+     */
+    private void applyTwistRuntimeModifiers(ge.tbegvadze.toon3d.route.NodeAffixDefinition twist) {
+        activeTwist    = twist;
+        minimapOffline = twist.minimapDisabled();
+        hudRenderer.setNavOffline(minimapOffline);
+        if (twist.lightMultiplier() != 1f) {
+            level.setLightMultiplier(twist.lightMultiplier());
+            enemyRenderer.setLightMultiplier(twist.lightMultiplier());
+        }
+        if (twist.overridesWakePerception()) {
+            enemyManager.setWakePerception(twist.wakeRadiusTiles(), twist.wakeSightTiles());
+        }
+        Gdx.app.log("FloorTwist", "applied twist=" + twist.id() + " minimapOffline=" + minimapOffline
+                + " light=" + twist.lightMultiplier() + " wake=" + twist.wakeRadiusTiles() + "/" + twist.wakeSightTiles());
     }
 
     /**
@@ -1328,6 +1362,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
 
     private void rebuildForLevel(Level newLevel) {
+        // Floor-twists: no twist outlives its floor (A7). The new floor's twist, if any, is applied after this
+        // rebuild by applyPendingFloorEffects; the per-floor Level / EnemyManager / EnemyRenderer start at defaults.
+        activeTwist    = null;
+        minimapOffline = false;
+        hudRenderer.setNavOffline(false);
         // Dispose all level-dependent GPU resources before replacing them.
         // Failing to dispose here causes a Texture/SpriteBatch leak per floor.
         floorCeilingRenderer.dispose();
@@ -2748,9 +2787,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
         levelRenderer.setAnimationClock(facilityTimeSeconds);
         levelRenderer.setBarrelsHighlighted(playerBuild.stats().barrelsOnMinimap());
-        levelRenderer.render(camera);
-
-        player.render(camera);
+        // Floor-twists R7a: a BLACKOUT floor has no map — HudRenderer draws the NAV OFFLINE plate in its place.
+        if (!minimapOffline) {
+            levelRenderer.render(camera);
+            player.render(camera);
+        }
 
         // Populate HudState each frame so renderers read current values without polling Player directly
         hudState.alertActive    = false;
