@@ -1,9 +1,21 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Systems
 TITLE: The Content Balance Contract — how new content enters
 CREATED: 2026-09-30
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-19
 ---
+IMPLEMENTATION NOTE (2026-10-19): built CP0-CP9 (see .claude/checkpoints/balance-overhaul-order-8.md; design
+decisions in balance-overhaul-order-8.contract.md); reviewer PASS. Built AHEAD of order 7 (still waiting on owner
+playtest notes) on the owner's explicit /implement — order 8 moves no number; AS1 applies if order 7 moves a rule.
+Diverged from the wording, never the intent (each recorded in authority SECTION 5 "WHAT EACH C-RULE CHECKS"):
+(1) a C-rule checks DECLARED + PRICED + REACHED-BY-ITS-BAND-RULE and leaves the band verdict to the band rule,
+which is what makes G5 mechanical (waive() throws for ADMISSION); (2) C-ABILITY: SIGNATURE abilities are
+legendary-slot rolls, so "eligible for >= 1 weapon family" replaces "bound to a weapon"; (3) C-GENERATOR accepts
+the FloorPopulator / PocketSupplyRegions supply path (four generators do not implement SupplySlotProvider) and
+requires R-SUPPLY sweep results instead; (4) C-STATUS gained a DOT_FLAT shape (BLEED); (5) C-NODE's route-card
+lines are "both or neither" (only four node types ship a promise); (6) RoomBlueprint.supplyStance() hardening
+landed at CP3 with C-ROOM rather than CP5; (7) the relic coverage line (not in K1-K18) moved to R-RELIC-SOURCE.
+The CP6 drill found one real defect (a new AmmoType crashed BalanceSchema's class init), fixed in CP6.
 
 Order 8 of 9 in the balance-overhaul series (index: balance-overhaul.txt).
 REQUIRED. Depends on orders 1-7 (it codifies their FINAL rules, as tuned by the

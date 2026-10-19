@@ -11,6 +11,9 @@ public enum RoomSupplyStance {
     /** The room's build() stamps no pickup and no enemy-spawn symbol; every pickup in it comes from the planner. */
     SUPPLY_NEUTRAL,
 
-    /** The room's build() itself stamps pickup symbols (its own supply slots); the planner must account for them. */
+    /**
+     * The room offers tagged supply / group slots that the planners may fill (K12); the room itself never stamps
+     * pickups or spawns. No shipped room uses it yet.
+     */
     SLOT_PROVIDER
 }

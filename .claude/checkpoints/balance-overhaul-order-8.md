@@ -63,7 +63,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A5 holds.
 - [x] **CP8** — CLAUDE.md rule + row, the seven agent files, _TEMPLATE.txt.
       DONE WHEN: A6, A8 hold; both gates green.
-- [ ] **CP9** — reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP9** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -184,3 +184,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   GRANDFATHERED addition = blocking), code-reviewer item 9 (balance literals outside BalanceConfig, literal shop
   price, pickups outside SupplyPlanner), orchestrator VERIFY step ("C-<KIND> green" in content checkpoints).
   _TEMPLATE.txt: BALANCE ADMISSION section after BALANCE NOTES (B5). NEXT: CP9 = reviewer.
+- **CP9 handover — DONE.** reviewer verdict PASS (A1-A8 met, nothing blocking). Its three non-blocking fixes +
+  one nit applied by the hub directly (the builder hit a usage limit; nothing was lost — tree was clean at 82f0871):
+  `rollShopCategory` has an explicit MEDKIT case and returns null by default (a new OfferCategory reaches the named
+  "could not roll" failure); AdmissionRule's two-argument constructor / isImplemented() / null-evaluator branches
+  and BalanceReport's "(not yet implemented)" branch deleted, evaluator requireNonNull (a rule cannot exist without
+  its evaluator); CONSTANT_SUBJECTS comment + SECTION 5 say the mapping's truth is the reviewer's check;
+  RoomSupplyStance.SLOT_PROVIDER javadoc aligned with K12. Gates on this commit: core:test 480 (StoryBarkTest only,
+  pre-existing), balanceSim exit 0. Idea STATUS: IMPLEMENTED 2026-10-19. Follow-up for order 7's close: check it
+  did not move a rule SECTION 5 restates; any number it adds goes in CONSTANT_SUBJECTS or UNBANDED.

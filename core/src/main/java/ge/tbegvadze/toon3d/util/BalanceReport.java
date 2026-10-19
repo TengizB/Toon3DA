@@ -298,7 +298,7 @@ public final class BalanceReport {
     // -----------------------------------------------------------------------------------
     /**
      * A7: the ADMISSION table — one row per content item the C-* rules checked (balance-overhaul order 8),
-     * then one summary line per rule. A rule a later checkpoint has not built prints "(not yet implemented)".
+     * then one summary line per rule.
      */
     private static void printAdmissionTable() {
         System.out.println("ADMISSION (balance-overhaul order 8) — the content balance contract, one row per content item");
@@ -306,10 +306,6 @@ public final class BalanceReport {
         System.out.println("------------------------------------------------------------------------------------");
         StringBuilder summary = new StringBuilder();
         for (BalanceSchema.AdmissionRule rule : BalanceSchema.AdmissionRule.values()) {
-            if (!rule.isImplemented()) {
-                summary.append(String.format("  %-12s (not yet implemented)%n", rule.ruleId));
-                continue;
-            }
             int admitted = 0;
             java.util.List<BalanceSchema.RuleResult> results = BalanceSchema.admissionResults(rule);
             for (BalanceSchema.RuleResult result : results) {

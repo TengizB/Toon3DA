@@ -2161,7 +2161,7 @@ public final class BalanceSchema {
     // waivable (G5). Rules are DATA: the enum below carries each rule's evaluator, never a switch.
     // =====================================================================================
 
-    /** The admission sub-rules, in E1 order. A rule with no evaluator yet is built by a later checkpoint. */
+    /** The admission sub-rules, in E1 order. A new rule cannot compile without its evaluator. */
     public enum AdmissionRule {
         ENEMY("C-ENEMY", "K1 ENEMY ARCHETYPE", BalanceSchema::admissionEnemyResults),
         FAMILY("C-FAMILY", "K2 ENEMY FAMILY / TRAIT", BalanceSchema::admissionFamilyResults),
@@ -2186,18 +2186,11 @@ public final class BalanceSchema {
         public final String kindLabel;
         private final Supplier<List<RuleResult>> evaluator;
 
-        AdmissionRule(String ruleId, String kindLabel) {
-            this(ruleId, kindLabel, null);
-        }
-
         AdmissionRule(String ruleId, String kindLabel, Supplier<List<RuleResult>> evaluator) {
             this.ruleId    = ruleId;
             this.kindLabel = kindLabel;
-            this.evaluator = evaluator;
+            this.evaluator = java.util.Objects.requireNonNull(evaluator, "evaluator for " + ruleId);
         }
-
-        /** True once a checkpoint has implemented this rule's evaluator. */
-        public boolean isImplemented() { return evaluator != null; }
     }
 
     /** One admission result for one content item: {@code missing} empty means admitted. */
@@ -2209,12 +2202,12 @@ public final class BalanceSchema {
                 admitted ? admittedDetail : String.join("; ", missing));
     }
 
-    /** The results of one admission rule; empty for a rule a later checkpoint has not implemented yet. */
+    /** The results of one admission rule. Every rule carries its evaluator (the constructor requires it — E3). */
     public static List<RuleResult> admissionResults(AdmissionRule rule) {
-        return rule.evaluator == null ? new ArrayList<RuleResult>() : rule.evaluator.get();
+        return rule.evaluator.get();
     }
 
-    /** Every implemented admission rule, in {@link AdmissionRule} order (later checkpoints supply their evaluators there). */
+    /** Every admission rule's results, in {@link AdmissionRule} order. */
     public static List<RuleResult> admissionResults() {
         List<RuleResult> results = new ArrayList<>();
         for (AdmissionRule rule : AdmissionRule.values()) {
@@ -3401,7 +3394,10 @@ public final class BalanceSchema {
             case WEAPON_LEVEL_UP:     return source.rollLevelUpOffer(context, random);
             case PLAYER_ABILITY:      return source.rollAbilityOffer(context, random);
             case AMMO:                return source.rollAmmoOffer(context, random);
-            default:                  return source.rollMedkitOffer(context, random);
+            case MEDKIT:              return source.rollMedkitOffer(context, random);
+            // A new OfferCategory rolls nothing here until it gets a case, so the tripwire names it
+            // ("could not roll a single X offer") instead of silently pricing a medkit in its place.
+            default:                  return null;
         }
     }
 
@@ -3445,7 +3441,8 @@ public final class BalanceSchema {
     // -------------------------------------------------------------------------------------
     // K18 C-CONSTANT — every numeric BalanceConfig number is the subject of a schema rule or declared unbanded.
     // A NEW public static final numeric (or numeric array) field of BalanceConfig must be listed in exactly ONE of:
-    //   CONSTANT_SUBJECTS — field name -> the RuleKind that bands it (and that rule must actually read it), or
+    //   CONSTANT_SUBJECTS — field name -> the RuleKind that bands it (a declaration: C-CONSTANT checks it exists and
+//                       names a kind; that the rule really bands the field is the reviewer's check, SECTION 5), or
     //   UNBANDED          — field name -> a one-line reason no rule bands it.
     // GRANDFATHERED (the end of this file) holds every field that existed before order 8; it is SHRINK-ONLY.
     // -------------------------------------------------------------------------------------

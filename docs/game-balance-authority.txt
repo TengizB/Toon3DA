@@ -1529,6 +1529,8 @@ WHAT EACH C-RULE CHECKS (the build's half of each checklist; BalanceSchema.admis
                last floor, ambience + crest, a StoryRegion.
   C-CONSTANT   every public numeric BalanceConfig field is in CONSTANT_SUBJECTS (the RuleKind that bands it), UNBANDED
                (with a reason) or GRANDFATHERED (the pre-order-8 fields — SHRINK-ONLY); a stale name fails too.
+               The build checks that a CONSTANT_SUBJECTS entry exists and names a kind; that the named rule
+               really reads and bands the field is the reviewer's check.
 
 EDGE CASES
   - Content that fits two kinds (a turret that is an enemy AND a hazard) satisfies BOTH checklists.
