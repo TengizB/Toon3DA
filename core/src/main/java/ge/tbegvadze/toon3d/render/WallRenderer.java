@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -163,6 +164,11 @@ public class WallRenderer implements Renderable, Disposable {
         float   surfaceRed;
         float   surfaceGreen;
         float   surfaceBlue;
+        // Muzzle-light add for the surface (R8): drawn as a separate ADDITIVE pass, never clamped into the
+        // multiplier above. All zero when no pulse is active.
+        float   surfaceLightRed;
+        float   surfaceLightGreen;
+        float   surfaceLightBlue;
 
         // Door panel composited on top of the surface (present when door is mid-animation).
         boolean drawDoorPanel;
@@ -175,6 +181,9 @@ public class WallRenderer implements Renderable, Disposable {
         float   doorPanelRed;
         float   doorPanelGreen;
         float   doorPanelBlue;
+        float   doorPanelLightRed;
+        float   doorPanelLightGreen;
+        float   doorPanelLightBlue;
     }
 
     // -------------------------------------------------------------------------
@@ -2247,6 +2256,43 @@ public class WallRenderer implements Renderable, Disposable {
                            false, false);
             }
         }
+
+        // Phase 3 - MUZZLE LIGHT additive pass (visual-identity-order-2 R8). The base pass above is exactly
+        // the pre-light grade (clamped multiplier). The light is ADDED in a second pass, albedo x lightAdd,
+        // so it can exceed the multiplier clamp: only the final framebuffer colour clamps. The blend func
+        // switches exactly twice (to additive, back to normal) and the whole pass is skipped at intensity
+        // 0. A column carrying a door panel lights the panel only (the surface it overlaps is covered).
+        AtmosphereGrade grade = atmosphereGrade;
+        if (grade != null && grade.isLightActive()) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+            for (int screenColumn = 0; screenColumn < projectionColumnCount; screenColumn++) {
+                WallColumnResult result = columnResults[screenColumn];
+                if (result.drawDoorPanel) {
+                    if (result.doorPanelLightRed + result.doorPanelLightGreen + result.doorPanelLightBlue > 0f) {
+                        batch.setColor(result.doorPanelLightRed, result.doorPanelLightGreen,
+                                       result.doorPanelLightBlue, 1f);
+                        batch.draw(result.doorPanelTexture,
+                                   screenColumn * columnWidth, result.doorPanelDrawBottom,
+                                   columnWidth, result.doorPanelDrawTop - result.doorPanelDrawBottom,
+                                   result.doorPanelTexColumn, result.doorPanelTexSrcY,
+                                   1, result.doorPanelTexSrcHeight,
+                                   false, false);
+                    }
+                } else if (result.drawSurface
+                        && result.surfaceLightRed + result.surfaceLightGreen + result.surfaceLightBlue > 0f) {
+                    batch.setColor(result.surfaceLightRed, result.surfaceLightGreen,
+                                   result.surfaceLightBlue, 1f);
+                    batch.draw(result.surfaceTexture,
+                               screenColumn * columnWidth, result.surfaceDrawBottom,
+                               columnWidth, result.surfaceDrawTop - result.surfaceDrawBottom,
+                               result.surfaceTexColumn, result.surfaceTexSrcY,
+                               1, result.surfaceTexSrcHeight,
+                               false, false);
+                }
+            }
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        }
+
         // Reset to white so no alert tint leaks into other renderers that share GL state.
         batch.setColor(Color.WHITE);
         batch.end();
@@ -2417,12 +2463,15 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceDrawTop      = drawTop;
                 evaluateEnvironmentGrade(result, perpWallDistance);
                 float[] columnGrade = result.gradeScratch;
-                float gradedRed   = clampUnit(shade * columnGrade[0] + columnGrade[3]);
-                float gradedGreen = clampUnit(shade * columnGrade[1] + columnGrade[4]);
-                float gradedBlue  = clampUnit(shade * columnGrade[2] + columnGrade[5]);
+                float gradedRed   = clampUnit(shade * columnGrade[0]);
+                float gradedGreen = clampUnit(shade * columnGrade[1]);
+                float gradedBlue  = clampUnit(shade * columnGrade[2]);
                 result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                 result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceLightRed   = columnGrade[3];
+                result.surfaceLightGreen = columnGrade[4];
+                result.surfaceLightBlue  = columnGrade[5];
             } else {
                 float wallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
                                                                          rayDirectionX, rayDirectionY,
@@ -2467,12 +2516,15 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceDrawTop      = drawTop;
                 evaluateEnvironmentGrade(result, perpWallDistance);
                 float[] wallGrade = result.gradeScratch;
-                float gradedRed   = clampUnit(shade * wallGrade[0] + wallGrade[3]);
-                float gradedGreen = clampUnit(shade * wallGrade[1] + wallGrade[4]);
-                float gradedBlue  = clampUnit(shade * wallGrade[2] + wallGrade[5]);
+                float gradedRed   = clampUnit(shade * wallGrade[0]);
+                float gradedGreen = clampUnit(shade * wallGrade[1]);
+                float gradedBlue  = clampUnit(shade * wallGrade[2]);
                 result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                 result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceLightRed   = wallGrade[3];
+                result.surfaceLightGreen = wallGrade[4];
+                result.surfaceLightBlue  = wallGrade[5];
             }
         }
 
@@ -2539,12 +2591,15 @@ public class WallRenderer implements Renderable, Disposable {
                     result.doorPanelDrawTop       = clampedPanelTop;
                     evaluateEnvironmentGrade(result, doorPerpWallDistance);
                     float[] doorGrade = result.gradeScratch;
-                    float doorGradedRed   = clampUnit(shade * doorGrade[0] + doorGrade[3]);
-                    float doorGradedGreen = clampUnit(shade * doorGrade[1] + doorGrade[4]);
-                    float doorGradedBlue  = clampUnit(shade * doorGrade[2] + doorGrade[5]);
+                    float doorGradedRed   = clampUnit(shade * doorGrade[0]);
+                    float doorGradedGreen = clampUnit(shade * doorGrade[1]);
+                    float doorGradedBlue  = clampUnit(shade * doorGrade[2]);
                     result.doorPanelRed   = Math.min(1f, doorGradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
                     result.doorPanelGreen = doorGradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                     result.doorPanelBlue  = doorGradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    result.doorPanelLightRed   = doorGrade[3];
+                    result.doorPanelLightGreen = doorGrade[4];
+                    result.doorPanelLightBlue  = doorGrade[5];
                 }
             }
         }

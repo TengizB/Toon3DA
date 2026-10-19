@@ -46,7 +46,7 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
 - [x] **CP4** — MuzzleLightCatalog, GameMath.muzzleLightFalloff, AtmosphereGrade light term + clock, PlayerController
       weapon-fired listener wired by World; walls + floor/ceiling read it (props/enemies deliberately not yet).
       DONE WHEN: build green.
-- [ ] **CP5** — props, shop machine, enemies apply the light term; docs. DONE WHEN: A7-A9 on run; build + test at
+- [x] **CP5** — props, shop machine, enemies apply the light term; docs. DONE WHEN: A7-A9 on run; build + test at
       baseline; ready for reviewer.
 - [ ] **CP6** — reviewer PASS; STATUS IMPLEMENTED.
 
@@ -86,3 +86,13 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   Channel = clamp01(shade × tint + lightAdd), then red alert. Listener: `PlayerController.setWeaponFiredListener`
   right after the only `playPlayerWeapon` call in `tryFire`; dry fire / railgun charge / reload never reach it.
   Known: a pulse active at death stays frozen in the dying world (screen fades; new World resets) — acceptable.
+- **CP5 handover:** Light applied to prop/shop/enemy bodies. DECISION (orchestrator, after on-screen measurement):
+  R8's clamp01(s×tint + light) on the MULTIPLIER clamped the light away (+2..3/255 measured). Rebuilt as: base draw
+  unchanged (clamped multiplier + red alert); light = a SECOND additive draw (GL_SRC_ALPHA, GL_ONE) of the same
+  texture region with colour = lightAdd — i.e. albedo × light on top, only the final colour clamps. Floor/ceiling:
+  `GameMath.applyRgbShadeAndLightToPackedRGBA`. Walls: Phase 3 additive pass (2 blend switches/frame), props +
+  enemies: 2 switches per LIT sprite, shop reuses the following additive glow state. Peaks raised 0.35/0.35/0.40
+  → 1.50/1.50/1.70 (dark R9 materials). Verified on screen by forcing `pulseMuzzleLight` via reflection in the
+  capture harness (shots/L_sheet.png): visible warm / cyan / orange splash on near floor+ceiling, no whiteout.
+  NOT verified on screen: an actual fire tap (start-room weapons are random per run), enemies lit (A7 enemy part),
+  chaingun refresh (A8, code read: restart-not-stack), A9 by construction (HUD/overlays never read the grade).

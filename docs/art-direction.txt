@@ -80,7 +80,9 @@ clamped exactly as before, including the minimum-brightness floor):
   tint    = lerp(near, far, fog)                                    per channel
   tint    = lerp(WHITE, tint, strength(surface class))              per channel
   channel = clamp01(s × tint.channel)
-then the red-alert boost/dampen exactly as before, on top. BLACKOUT, tile lighting and the shade floor
+then the red-alert boost/dampen exactly as before, on top. The muzzle-light splash (section 11, order 2)
+is NOT folded into that clamped multiplier: it is added afterwards (albedo × lightAdd), so only the final
+colour clamps. BLACKOUT, tile lighting and the shade floor
 all feed s, upstream of the grade.
 
 Strength by surface class (ArtDirection): GRADE_STRENGTH_ENVIRONMENT 1.00 (walls, doors, columns,
@@ -92,11 +94,16 @@ Where it runs:
                         column's own `gradeScratch` (never the shared evaluate() fields).
   FloorCeilingRenderer  per backdrop ROW, precomputed into `rowTintTable` (ctor + setRenderResolution;
                         row distance is player-independent); per pixel GameMath.applyRgbShadeToPackedRGBA.
-  PropRenderer          per sprite (render thread, grade.evaluate()); depth in tiles.
-  ShopMachineRenderer   body sprite only.
+  PropRenderer          per sprite (render thread, grade.evaluate()); depth in tiles. The muzzle-light add
+                        is read right after evaluate() (bodyLightAdd*), zeroed for emissive draws, and drawn as an additive
+                        re-draw of the body.
+                        Contact shadow BEFORE the body (section 10).
+  ShopMachineRenderer   body sprite only (+ additive muzzle-light re-draw of the body; contact shadow before it).
   EnemyRenderer         body: shade × level.getTileBrightness(enemy tile) (R5, like props) → existing min
                         clamp / dormant dampen / BLACKOUT floor → grade 0.5 → status and boss tints lerped
-                        ON TOP, ungraded.
+                        ON TOP, ungraded. Muzzle light is added to the graded body colour at FULL strength
+                        (not 0.5) as an additive re-draw after the sprite columns; the status and boss tints are unaffected. Contact shadow BEFORE the body
+                        (section 10); enemy sheets are alpha-cut at load (section 9).
   WeaponHudRenderer     no distance term: lerp(WHITE, near, 0.6) × clamp(player tile brightness,
                         0.80, 1.15), channels capped at 1 (AtmosphereGrade.evaluateWeaponTint →
                         setWeaponTint). Frame draws only; muzzle/idle effect sprites untinted.
@@ -161,3 +168,114 @@ A new REGION must name a registered mood (docs/route-map-system.txt).
 floor and logs "Atmosphere mood=<id> (forced)"; an unknown id is ignored with a warning. Nothing sets
 it on Android. Pass it locally, e.g. `JAVA_TOOL_OPTIONS="-Dtoon3d.forceMood=amber_hot" ./gradlew
 lwjgl3:run` — never commit it. It is the only way to check regions C-E without a 20-floor run.
+
+
+9. SPRITE CONDITIONING (visual-identity-order-2)
+------------------------------------------------
+render/EnemySpriteSheets is a static, session-lifetime holder of the enemy textures. Each enemy PNG
+(9 sheets under assets/textures/enemies; the PNG files are never edited) is decoded into a Pixmap
+(converted to RGBA8888 if needed), then hard-alpha-cut in ONE bulk pass over its bytes
+(EnemyConstants.ENEMY_SPRITE_ALPHA_CUT = 0.50): a texel with alpha/255 below the cut becomes RGBA 0,
+every other texel becomes fully opaque with its RGB kept. The Pixmap is uploaded (Nearest filter) and
+disposed. The procedural fallback sheet (file missing) is already opaque, is not conditioned, and is
+cached the same way.
+  Why 0.50: the 4.5-16% of texels with mid alpha (128-254) are anti-aliased EDGE texels in body
+  colour, not a dark glow; turning them opaque gives a crisp silhouette with no outline, while a
+  near-opaque cut chews ragged edges. No per-path override exists or is needed.
+  Cache: get(path, fallbackRed, fallbackGreen, fallbackBlue) returns the cached Texture.
+  EnemyRenderer brackets its nine gets with beginLoadBatch()/endLoadBatch(); the end call logs
+  "EnemySpriteSheets conditioned N sheets in M ms" once per app session (a `logged` flag), later floors
+  and runs only hit the cache. Measured: 9 sheets in 379 ms on the Xvfb/llvmpipe dev container, PNG
+  decode included (budget 400 ms).
+  Lifetime: World is rebuilt per run, so the cache is static. EnemyRenderer.dispose() does NOT dispose
+  the sheets; Main.dispose() calls EnemySpriteSheets.disposeAll() after the world is disposed.
+  Textures are unmanaged (Pixmap-built), like every procedural texture here.
+
+
+10. CONTACT SHADOWS (visual-identity-order-2)
+---------------------------------------------
+Every upright billboard gets a soft ellipse on the floor so nothing floats.
+  render/ContactShadow (static helper):
+    buildTexture()   64x32 (RenderConstants.CONTACT_SHADOW_TEXTURE_*) white ellipse, alpha =
+                     GameMath.contactShadowAlpha(r) = (1 - r^2)^2, Linear filter. Each renderer owns and
+                     disposes its own copy.
+    alphaAtDepth(mood, depthTiles)  CONTACT_SHADOW_ALPHA 0.50 x (1 - CONTACT_SHADOW_FOG_FADE 0.80 x fog),
+                     fog = atmosphereFogFactor at the billboard depth (0 with no mood).
+    draw(batch, texture, wallRenderer, columnCount, columnWidth, centerWorldX, floorLineY, shadowWidth,
+         depth, alpha)  one quad per column with float UVs, skipping columns the wall z-buffer hides
+                     exactly like the sprite; colour = ArtDirection.WORLD_SHADOW (never graded). It
+                     leaves the batch colour set; the caller sets the sprite colour next.
+  Geometry: centred on the billboard's screen X, vertical centre ON THE FLOOR LINE (the wall-stripe draw
+  bottom at the billboard's depth, BEFORE any hover, bob or lunge offset); width = projected billboard
+  width x a fraction; height = width x CONTACT_SHADOW_HEIGHT_RATIO 0.22.
+  Classification (by the predicates the loops already use, no symbol switch):
+    enemies (incl. bosses, live and upright)           WIDTH_FRACTION_ENEMY 0.70, width taken BEFORE the
+                                                        lunge scale; EYE_TYRANT alpha x HOVER_ALPHA_SCALE 0.55
+    Level.isPropSolid tiles (incl. generated props)     PROP 0.85
+    medical / armour / ammo / keycard pickup tiles      PICKUP 0.60
+    weapon pickups + credit chips (ground items)        PICKUP 0.60 x HOVER_ALPHA_SCALE (they float at eye
+                                                        height, so the shadow sits well below the sprite)
+    shop machine                                        SHOP 0.90
+    NONE: walkable decals, hazard fire/toxic, the portal (stairs), corpse/blood stains, boss afterimages,
+    aura/glow layers, runtime crystal spires.
+  Shadows are drawn BEFORE the sprite and are never recorded in the SpriteOccluderBuffer, so a nearer
+  prop's redrawInFront restores over them like over the sprite.
+
+
+11. MUZZLE LIGHT (visual-identity-order-2)
+------------------------------------------
+Firing a gun briefly lights the nearby world in the weapon's colour, through the same grade.
+  Catalog: render/MuzzleLightCatalog (ItemType-ordinal table, one register row per weapon, WARM fallback
+  for an unbound weapon). Colours in ArtDirection (MUZZLE_WARM / _ENERGY / _FIRE), peaks and timing in
+  EffectConstants:
+    WARM (1.00,0.82,0.55) peak 1.50   pistol, shotgun, double barrel, chaingun, assault rifle, rocket
+    ENERGY (0.60,0.90,1.00) peak 1.50 plasma, railgun, arc cannon
+    FIRE (1.00,0.55,0.20) peak 1.70   incinerator
+    none (peak 0: no pulse)           fist, knife, hammer, chainsaw
+  Peaks were raised from the spec's 0.35/0.40 after the on-screen check: the light scales the surface's
+  own albedo (additive pass), and this game's materials are deliberately dark (R9), so 0.35 added only
+  +2..4/255. At 1.5 a surface at the player's feet briefly reaches ~2.5x its lit colour.
+  Formula (R8): intensity i = peak x (1 - elapsed / MUZZLE_LIGHT_DURATION_SECONDS 0.10), floored at 0;
+  for a surface d tiles away  light = GameMath.muzzleLightFalloff(d, MUZZLE_LIGHT_RADIUS_TILES 4.0) x i
+  with falloff = max(0, 1 - d/radius)^2. The surface colour is
+        colour = albedo x clamp01(shade x tint)  [then red alert]  +  albedo x light x muzzle.colour
+  with ONLY the final framebuffer colour clamped. (The first implementation added the light to the shade
+  multiplier and clamped it; near surfaces already sit at multiplier ~1.0 (MAX_LIGHTING_SHADE), so the light
+  was clamped away and measured +2..3/255. Decision: the light must be able to exceed the clamp.)
+  How each surface does it:
+    floor + ceiling (CPU)  GameMath.applyRgbShadeAndLightToPackedRGBA: base factor (alert maths and its red
+                           min(1,..) exactly as before) PLUS the row's light add, final channel clamped.
+                           Rows with no light use the old function.
+    walls / doors / columns  the base column draws are unchanged. Workers fill the per-column light add
+                           (gradeScratch[3..5] -> surfaceLight* / doorPanelLight*). A separate PHASE 3 in
+                           WallRenderer.render re-draws the same column slices with additive blending
+                           (GL_SRC_ALPHA, GL_ONE), colour = light add, alpha 1 so the texture still masks.
+                           A door-panel column re-draws the panel only. Blend func switches exactly twice
+                           per frame (to additive, back), and the pass is skipped at intensity 0.
+    props / pickups / chips / weapon pickups / decals (PropRenderer.drawMuzzleLightPass)
+                           after each lit sprite's base column loop: additive re-draw of the same columns
+                           with the same wall z-test and a "nearer recorded sprite" skip. Two blend
+                           switches per LIT sprite only (a sprite with no light, or an emissive one whose
+                           add is zeroed, costs nothing).
+    shop machine body      additive re-draw right after the body; the next layer is additive anyway, so no
+                           extra blend switch.
+    enemy body             additive re-draw of the sprite columns after the base loop, before health bars
+                           and the other overlays; two blend switches per lit enemy.
+  Applied at full strength regardless of the surface's grade strength (a lit enemy is the point) to walls,
+  doors, columns, floor, ceiling, props, decals, pickup bodies, the shop body and enemy bodies. NEVER to
+  emissive draws, overlays, health bars, shadows or the weapon sprite.
+  A new pulse restarts the clock (chaingun fire refreshes, never stacks). Skipped by a branch at
+  intensity 0.
+  Threading contract: the light state is a per-frame SNAPSHOT mutated only by pulseMuzzleLight, update
+  and resetLight, all on the render thread inside World.update before any renderer starts its frame.
+  Worker threads (WallRenderer columns, floor rows) read it only through lightAddInto / precomputed
+  tables; render-thread code reads atmosphereGrade.lightAddRed/Green/Blue right AFTER evaluate()
+  (never after evaluateWeaponTint). Walls carry it in gradeScratch[3..5]; the floor uses a per-row
+  falloff table x the frame intensity x colour.
+  Listener site: PlayerController.setWeaponFiredListener (a Consumer<ItemType>; input never imports
+  render) is invoked right after the only gameAudio.playPlayerWeapon call in tryFire, so a dry fire, a
+  railgun charge turn, a reload and every melee swing emit no light; World wires it to
+  AtmosphereGrade.pulseMuzzleLight. Only the player's own shot lights the world (no explosions, barrels,
+  plasma bolts or enemy attacks).
+  Clock: AtmosphereGrade.update(deltaTime) runs in World.update only while the world is PLAYING, so it
+  pauses with every hard-pause overlay and resumes after; resetLight() runs on floor build.

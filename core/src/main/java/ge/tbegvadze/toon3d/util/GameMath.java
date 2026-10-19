@@ -1252,6 +1252,39 @@ public final class GameMath {
         return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
     }
 
+    /*
+     * Formula: applyRgbShadeAndLightToPackedRGBA
+     * Derivation:
+     *   applyRgbShadeToPackedRGBA, plus an ADDITIVE light multiplier applied AFTER the alert maths:
+     *       factorR = min(1, shadeRed * (1 + alertPulse * alertBoost)) + lightRed
+     *       factorG = shadeGreen * (1 - alertPulse * alertDampen)      + lightGreen
+     *       factorB = shadeBlue  * (1 - alertPulse * alertDampen)      + lightBlue
+     *       outC    = clamp(factorC * inC, 0, 255)
+     *   i.e. colour = albedo x base + albedo x light. Only the FINAL channel is clamped, so a surface
+     *   already at multiplier 1.0 can still brighten (the muzzle-light splash); with light = 0 this is
+     *   exactly applyRgbShadeToPackedRGBA.
+     * Edge cases:
+     *   Negative light is not guarded beyond the final clamp to 0.
+     */
+    public static int applyRgbShadeAndLightToPackedRGBA(int pixel, float shadeRed, float shadeGreen,
+                                                        float shadeBlue, float lightRed, float lightGreen,
+                                                        float lightBlue, float alertBoost,
+                                                        float alertDampen, float alertPulse) {
+        int inR = (pixel >>> 24) & 0xFF;
+        int inG = (pixel >>> 16) & 0xFF;
+        int inB = (pixel >>>  8) & 0xFF;
+
+        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost)) + lightRed;
+        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen) + lightGreen;
+        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen) + lightBlue;
+
+        int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
+        int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
+        int outB = MathUtils.clamp((int) (blueFactor  * inB), 0, 255);
+
+        return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
+    }
+
     // =========================================================================
     // ALERT PULSE — emergency facility lighting
     // =========================================================================

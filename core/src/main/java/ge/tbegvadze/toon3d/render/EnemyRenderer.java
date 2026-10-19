@@ -501,6 +501,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
                     RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
             // R1/R2: grade the BODY shade at enemy strength (half), then the red-alert wash on top. Every
             // status / boss / telegraph tint below lerps over this and is never graded (R4).
+            float bodyLightRed   = 0f;
+            float bodyLightGreen = 0f;
+            float bodyLightBlue  = 0f;
             float gradedRed   = baseShade;
             float gradedGreen = baseShade;
             float gradedBlue  = baseShade;
@@ -509,6 +512,12 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 gradedRed   = Math.min(1f, baseShade * atmosphereGrade.red);
                 gradedGreen = Math.min(1f, baseShade * atmosphereGrade.green);
                 gradedBlue  = Math.min(1f, baseShade * atmosphereGrade.blue);
+                // R8: the player's muzzle light on the BODY, at full strength (not the 0.5 grade strength).
+                // It is NOT folded into the clamped colour: it is re-drawn as an additive pass after the
+                // sprite columns (albedo x light), so a near, already-bright enemy still lights up.
+                bodyLightRed   = atmosphereGrade.lightAddRed;
+                bodyLightGreen = atmosphereGrade.lightAddGreen;
+                bodyLightBlue  = atmosphereGrade.lightAddBlue;
             }
             float baseRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
             float baseGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
@@ -748,6 +757,26 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (occluderBuffer != null) {
                     occluderBuffer.redrawInFront(batch, screenColumn, depth, projectionColumnWidth);
                 }
+            }
+
+            // R8 muzzle-light additive pass over the same columns (body only; tints, bars and shadows
+            // never take it). Same wall z-test; columns hidden behind a nearer recorded prop are skipped.
+            // Two blend switches, only for a lit enemy.
+            if (bodyLightRed + bodyLightGreen + bodyLightBlue > 0f) {
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
+                for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                    if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                    if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+                    int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
+                    localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
+                    batch.draw(region.getTexture(),
+                               screenColumn * projectionColumnWidth, clampedBottom,
+                               projectionColumnWidth, clampedTop - clampedBottom,
+                               region.getRegionX() + localSrcX, texSrcY, 1, texSrcHeight,
+                               false, false);
+                }
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             }
 
             // ---- Floating UI cluster geometry (health bar + name tag + intent icon) ----

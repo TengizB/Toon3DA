@@ -187,7 +187,12 @@ EnemyRenderer (render/EnemyRenderer.java):
     it. (The old scheme cut a rectangular gap out of the enemy, which left holes wherever a nearer
     weapon pickup's texture was transparent.) Ground items, dynamic drops and shop machines use
     the same draw-then-restore rule against props already on screen.
-  - Textures loaded from asset paths at construction; procedural fallbacks if absent.
+  - Textures come from render/EnemySpriteSheets (visual-identity-order-2): each enemy PNG is
+    alpha-conditioned ONCE per app session (alpha < ENEMY_SPRITE_ALPHA_CUT 0.50 -> transparent, else
+    opaque) and cached in a static holder; a procedural fallback sheet is cached if the file is
+    absent. EnemyRenderer does NOT dispose the sheets (it is rebuilt with every World); Main.dispose()
+    calls EnemySpriteSheets.disposeAll(). See docs/art-direction.txt sections 9-11 (also: the enemy
+    contact shadow and the muzzle light on the body).
   - DORMANT enemies rendered with shade *= DORMANT_SHADE_DAMPEN (0.7) — visibly darker.
   - VORTEX EYE drawBottom raised by VORTEX_EYE_HOVER_OFFSET_FRACTION (0.25) × lineHeight.
   - Inserted in World.render() after propRenderer.render(), before weaponHudRenderer.render().

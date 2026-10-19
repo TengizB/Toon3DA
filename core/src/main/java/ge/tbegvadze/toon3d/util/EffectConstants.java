@@ -466,7 +466,7 @@ public final class EffectConstants {
     // -------------------------------------------------------------------------
     public static final float MUZZLE_LIGHT_DURATION_SECONDS = 0.10f;
     public static final float MUZZLE_LIGHT_RADIUS_TILES     = 4.0f;
-    public static final float MUZZLE_LIGHT_PEAK_WARM        = 0.35f;
-    public static final float MUZZLE_LIGHT_PEAK_ENERGY      = 0.35f;
-    public static final float MUZZLE_LIGHT_PEAK_FIRE        = 0.40f;
+    public static final float MUZZLE_LIGHT_PEAK_WARM   = 1.50f;
+    public static final float MUZZLE_LIGHT_PEAK_ENERGY = 1.50f;
+    public static final float MUZZLE_LIGHT_PEAK_FIRE   = 1.70f;
 }

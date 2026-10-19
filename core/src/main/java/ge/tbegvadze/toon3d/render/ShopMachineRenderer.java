@@ -71,6 +71,8 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     private float lightingTimeSeconds = 0f;
     private float alertPulse          = 0f;
     private AtmosphereGrade atmosphereGrade;
+    /** True only during the muzzle-light re-draw of the body (it is recorded at its own depth). */
+    private boolean ownBodyRecorded;
     /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
     private final Texture contactShadowTexture = ContactShadow.buildTexture();
 
@@ -233,11 +235,18 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         float bodyGradeRed   = 1f;
         float bodyGradeGreen = 1f;
         float bodyGradeBlue  = 1f;
+        float bodyLightRed   = 0f;
+        float bodyLightGreen = 0f;
+        float bodyLightBlue  = 0f;
         if (atmosphereGrade != null) {
             atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
             bodyGradeRed   = atmosphereGrade.red;
             bodyGradeGreen = atmosphereGrade.green;
             bodyGradeBlue  = atmosphereGrade.blue;
+            // R8: muzzle light on the BODY only (read right after evaluate(); zero when idle).
+            bodyLightRed   = atmosphereGrade.lightAddRed;
+            bodyLightGreen = atmosphereGrade.lightAddGreen;
+            bodyLightBlue  = atmosphereGrade.lightAddBlue;
         }
         float gradedRed   = Math.min(1f, shade * bodyGradeRed);
         float gradedGreen = Math.min(1f, shade * bodyGradeGreen);
@@ -253,6 +262,17 @@ public class ShopMachineRenderer implements Renderable, Disposable {
                         atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth));
         batch.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
         drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, true);
+
+        // R8 muzzle light: an ADDITIVE re-draw of the body, colour = light add, so the light is not lost
+        // to the clamped shade multiplier. No blend restore is needed: the very next statement switches
+        // to additive for the window glow anyway, so the whole pass costs zero extra blend changes.
+        if (bodyLightRed + bodyLightGreen + bodyLightBlue > 0f) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+            batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
+            ownBodyRecorded = true;   // the body just recorded itself at this depth; do not skip on that
+            drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, false);
+            ownBodyRecorded = false;
+        }
 
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
 
@@ -352,7 +372,8 @@ public class ShopMachineRenderer implements Renderable, Disposable {
             // Additive glow layers are simply hidden behind a nearer prop; re-drawing a prop over
             // additive light would not undo it.
             if (!writeOccluder && occluderBuffer != null
-                    && depth >= occluderBuffer.getNearestDepth(screenColumn)) continue;
+                    && (ownBodyRecorded ? depth > occluderBuffer.getNearestDepth(screenColumn)
+                                        : depth >= occluderBuffer.getNearestDepth(screenColumn))) continue;
             int texSrcX = (screenColumn - leftColumn) * textureWidth / columnSpan;
             texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
             batch.draw(texture,

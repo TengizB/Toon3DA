@@ -32,6 +32,12 @@ Shading: batch.setColor(red, green, blue, 1f) before each draw — embeds tint i
   AtmosphereGrade.evaluateInto(mood, perpWallDistance, GRADE_STRENGTH_ENVIRONMENT, column.gradeScratch)
   — the static, thread-safe variant, because columns run on worker threads. The red-alert boost/dampen
   is applied after the grade. Walls, door panels and columns all take it. See docs/art-direction.txt.
+  MUZZLE LIGHT (visual-identity-order-2): NOT part of the clamped multiplier above. Workers compute the
+  per-column light add (AtmosphereGrade.lightAddInto into gradeScratch[3..5], zero unless a shot was fired
+  in the last 0.10 s) and store it on the column result. render() then runs an extra PHASE 3 after the
+  base draws: the same column slices re-drawn with additive blending (GL_SRC_ALPHA, GL_ONE), colour =
+  light add, skipped entirely at intensity 0, blend func switched exactly twice. A column with a door
+  panel lights the panel only. See docs/art-direction.txt section 11.
 
 Performance:
   Ceiling + floor  → 0 GL calls (batched, same texture)

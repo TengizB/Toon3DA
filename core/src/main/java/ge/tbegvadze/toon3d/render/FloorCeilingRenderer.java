@@ -335,6 +335,7 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                 lightAddGreen = rowFalloff * frameLightAddGreen;
                 lightAddBlue  = rowFalloff * frameLightAddBlue;
             }
+            final boolean rowLit = lightAddRed + lightAddGreen + lightAddBlue > 0f;
 
             // Pre-compute base backbuffer offsets for this row pair to avoid repeated multiplications.
             int floorRowOffset   = (backdropHeight - 1 - drawY) * backdropWidth;
@@ -362,15 +363,30 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                 float tileBrightness     = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);
                 float adjustedShade      = Math.min(shade * tileBrightness, MAX_LIGHTING_SHADE);
 
-                float shadeRed   = adjustedShade * tintRed   + lightAddRed;
-                float shadeGreen = adjustedShade * tintGreen + lightAddGreen;
-                float shadeBlue  = adjustedShade * tintBlue  + lightAddBlue;
-                int floorPixel = GameMath.applyRgbShadeToPackedRGBA(
-                        floorRawPixel, shadeRed, shadeGreen, shadeBlue,
-                        ALERT_WALL_RED_BOOST, ALERT_WALL_GB_DAMPEN, alertPulse);
-                int ceilPixel = GameMath.applyRgbShadeToPackedRGBA(
-                        ceilRawPixel, shadeRed, shadeGreen, shadeBlue,
-                        ALERT_CEILING_TINT_STRENGTH, ALERT_WALL_GB_DAMPEN, alertPulse);
+                float shadeRed   = adjustedShade * tintRed;
+                float shadeGreen = adjustedShade * tintGreen;
+                float shadeBlue  = adjustedShade * tintBlue;
+                int floorPixel;
+                int ceilPixel;
+                if (rowLit) {
+                    // R8: the light is added to the multiplier AFTER the alert maths and is NOT clamped
+                    // with it; only the final channel clamps, so near surfaces can still brighten.
+                    floorPixel = GameMath.applyRgbShadeAndLightToPackedRGBA(
+                            floorRawPixel, shadeRed, shadeGreen, shadeBlue,
+                            lightAddRed, lightAddGreen, lightAddBlue,
+                            ALERT_WALL_RED_BOOST, ALERT_WALL_GB_DAMPEN, alertPulse);
+                    ceilPixel = GameMath.applyRgbShadeAndLightToPackedRGBA(
+                            ceilRawPixel, shadeRed, shadeGreen, shadeBlue,
+                            lightAddRed, lightAddGreen, lightAddBlue,
+                            ALERT_CEILING_TINT_STRENGTH, ALERT_WALL_GB_DAMPEN, alertPulse);
+                } else {
+                    floorPixel = GameMath.applyRgbShadeToPackedRGBA(
+                            floorRawPixel, shadeRed, shadeGreen, shadeBlue,
+                            ALERT_WALL_RED_BOOST, ALERT_WALL_GB_DAMPEN, alertPulse);
+                    ceilPixel = GameMath.applyRgbShadeToPackedRGBA(
+                            ceilRawPixel, shadeRed, shadeGreen, shadeBlue,
+                            ALERT_CEILING_TINT_STRENGTH, ALERT_WALL_GB_DAMPEN, alertPulse);
+                }
 
                 backbuffer[floorRowOffset   + drawX] = floorPixel;
                 backbuffer[ceilingRowOffset + drawX] = ceilPixel;

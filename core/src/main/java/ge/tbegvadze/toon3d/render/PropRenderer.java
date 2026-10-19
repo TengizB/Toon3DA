@@ -146,6 +146,10 @@ public class PropRenderer implements Renderable, Disposable {
     private float bodyTintRed   = 1f;
     private float bodyTintGreen = 1f;
     private float bodyTintBlue  = 1f;
+    // R8 muzzle-light add for the same body (zero for emissive draws and when no pulse is active).
+    private float bodyLightAddRed;
+    private float bodyLightAddGreen;
+    private float bodyLightAddBlue;
     private float lightingTimeSeconds = 0f;
 
     // TILESET SYSTEM (order-6): the per-level texture supply realized from this level's palette. Set
@@ -350,6 +354,34 @@ public class PropRenderer implements Renderable, Disposable {
     }
 
     /**
+     * R8 muzzle-light ADDITIVE pass for one sprite body: re-draws the same column slices with additive
+     * blending, colour = the body's light add (alpha 1 so the sprite's own alpha still masks), so the
+     * light can exceed the clamped shade multiplier (albedo x lightAdd, only the framebuffer clamps).
+     * Same per-column wall z-test and nearer-sprite test as the glow draws. Skipped when the body has
+     * no light (idle, out of radius, or an emissive draw, whose add is zeroed). The blend func switches
+     * to additive and straight back, once per lit sprite.
+     */
+    private void drawMuzzleLightPass(Texture texture, int firstColumn, int lastColumn, int leftScreenColumn,
+                                     int columnSpan, int textureWidth, int texSrcY, int texSrcHeight,
+                                     float clampedBottom, float clampedTop, float depth, float columnWidth) {
+        if (bodyLightAddRed + bodyLightAddGreen + bodyLightAddBlue <= 0f) return;
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+        batch.setColor(bodyLightAddRed, bodyLightAddGreen, bodyLightAddBlue, 1f);
+        for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+            if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+            if (depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+            int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+            texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+            batch.draw(texture,
+                       screenColumn * columnWidth, clampedBottom,
+                       columnWidth, clampedTop - clampedBottom,
+                       texSrcX, texSrcY, 1, texSrcHeight,
+                       false, false);
+        }
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    /**
      * Fills bodyTint* with the R1 environment tint for a sprite BODY at {@code depthTiles}. Emissive sprites
      * (hazard fire/toxic frames, the portal; R4) get white, i.e. are never graded.
      */
@@ -358,12 +390,19 @@ public class PropRenderer implements Renderable, Disposable {
             bodyTintRed = 1f;
             bodyTintGreen = 1f;
             bodyTintBlue = 1f;
+            bodyLightAddRed = 0f;
+            bodyLightAddGreen = 0f;
+            bodyLightAddBlue = 0f;
             return;
         }
         atmosphereGrade.evaluate(depthTiles, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
         bodyTintRed   = atmosphereGrade.red;
         bodyTintGreen = atmosphereGrade.green;
         bodyTintBlue  = atmosphereGrade.blue;
+        // R8: read straight after evaluate() (zero when idle). Applied at full strength to every graded body.
+        bodyLightAddRed   = atmosphereGrade.lightAddRed;
+        bodyLightAddGreen = atmosphereGrade.lightAddGreen;
+        bodyLightAddBlue  = atmosphereGrade.lightAddBlue;
     }
 
     private static float clampUnit(float value) {
@@ -573,6 +612,9 @@ public class PropRenderer implements Renderable, Disposable {
                             texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 }
             }
+
+            drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
         }
 
         // Ground items: weapon pickups and credit chips spawned by the level generator.
@@ -702,6 +744,8 @@ public class PropRenderer implements Renderable, Disposable {
                     recordOccluderColumn(screenColumn, renderDepth, chipTexture, chipOpacityMask,
                             chipTexSrcX, chipTexSrcY, chipTexSrcH, chipClampBot, chipClampTop);
                 }
+                drawMuzzleLightPass(chipTexture, chipFirstCol, chipLastCol, chipLeft, chipSpan,
+                        chipTexW, chipTexSrcY, chipTexSrcH, chipClampBot, chipClampTop, renderDepth, columnWidth);
                 continue;
             }
 
@@ -810,6 +854,8 @@ public class PropRenderer implements Renderable, Disposable {
                 recordOccluderColumn(screenColumn, renderDepth, pickupTexture, pickupOpacityMask,
                         texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
             }
+            drawMuzzleLightPass(pickupTexture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, renderDepth, columnWidth);
         }
 
         // Dynamic props: enemy drops placed after level load (ammo boxes, corpse decals).
@@ -914,6 +960,8 @@ public class PropRenderer implements Renderable, Disposable {
                             texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 }
             }
+            drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
         }
 
         batch.setColor(Color.WHITE);
