@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderResolution;
@@ -69,6 +70,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     private float planeY       = 1f;
     private float lightingTimeSeconds = 0f;
     private float alertPulse          = 0f;
+    private AtmosphereGrade atmosphereGrade;
 
     // Runtime render-resolution authority (util/RenderResolution via WallRenderer) — cached once per
     // render() call, read by drawMachine()/drawLayer() below. Every layer is drawn per-column (mirrors
@@ -115,6 +117,9 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         this.planeX       = GameMath.cameraPlaneX(playerDirectionY, planeScale);
         this.planeY       = GameMath.cameraPlaneY(playerDirectionX, planeScale);
     }
+
+    /** Sets the floor's colour grade (R1, body sprite only). Null disables the tint. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) { this.atmosphereGrade = grade; }
 
     public void setLightingTime(float timeSeconds) { this.lightingTimeSeconds = timeSeconds; }
     public void setAlertPulse(float pulse)         { this.alertPulse = pulse; }
@@ -222,9 +227,17 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
         // ── 2. Tier-A body (alpha blend, ground-anchored, writes prop z-buffer for enemy occlusion) ──
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        float bodyRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-        float bodyGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-        float bodyBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        // R1: grade the BODY sprite only; aura / window / status / drop / holo layers are emissive (R4).
+        float bodyGradeRed = 1f, bodyGradeGreen = 1f, bodyGradeBlue = 1f;
+        if (atmosphereGrade != null) {
+            atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
+            bodyGradeRed   = atmosphereGrade.red;
+            bodyGradeGreen = atmosphereGrade.green;
+            bodyGradeBlue  = atmosphereGrade.blue;
+        }
+        float bodyRed   = Math.min(1f, Math.min(1f, shade * bodyGradeRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+        float bodyGreen = Math.min(1f, shade * bodyGradeGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        float bodyBlue  = Math.min(1f, shade * bodyGradeBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
         batch.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
         drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, true);
 

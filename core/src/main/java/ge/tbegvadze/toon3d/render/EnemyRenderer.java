@@ -30,6 +30,8 @@ import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.CombatPalette;
+import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderConstants;
@@ -298,6 +300,26 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.lightMultiplier = multiplier;
     }
 
+    // ATMOSPHERE GRADE + TILE LIGHT (visual-identity-order-1). Render thread only. Null grade = no tint.
+    private AtmosphereGrade atmosphereGrade;
+    private Level           level;
+    private float           lightingTimeSeconds = 0f;
+
+    /** Sets the floor's colour grade (R1, applied at enemy strength to the body only). Null disables it. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
+    }
+
+    /** Sets the level whose tile brightness lights enemy bodies (R5). Null = full light. */
+    public void setLevel(Level level) {
+        this.level = level;
+    }
+
+    /** Facility clock driving flickering tile brightness (same clock PropRenderer uses). */
+    public void setLightingTime(float timeSeconds) {
+        this.lightingTimeSeconds = timeSeconds;
+    }
+
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
     }
@@ -450,8 +472,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // Base shade: apply distance falloff then clamp to min so sprites sit in the world.
             // Active enemies use ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS; dormant enemies are additionally
             // darkened so they visibly "light up" when alerted.
-            float baseShade = Math.max(GameMath.wallShade(depth, WALL_SHADING_FALLOFF),
-                                       ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
+            // R5 (visual-identity-order-1): the body also takes the tile light it stands in (as props do),
+            // BEFORE the minimum-brightness clamp, so an unlit tile darkens it but never below the floor.
+            float enemyTileBrightness = (level != null)
+                    ? level.getTileBrightness(enemy.tileColumn, enemy.tileRow, lightingTimeSeconds)
+                    : 1f;
+            float baseShade = Math.max(
+                    Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * enemyTileBrightness,
+                             MAX_LIGHTING_SHADE),
+                    ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
             if (enemy.state == EnemyState.DORMANT) {
                 baseShade *= DORMANT_SHADE_DAMPEN;
             }
@@ -459,9 +488,20 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // Health bars and intent icons are drawn by their own passes and are never dimmed.
             baseShade = GameMath.darkenedShadeWithFloor(baseShade, lightMultiplier,
                     RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
-            float baseRed   = Math.min(1f, baseShade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float baseGreen = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float baseBlue  = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            // R1/R2: grade the BODY shade at enemy strength (half), then the red-alert wash on top. Every
+            // status / boss / telegraph tint below lerps over this and is never graded (R4).
+            float gradedRed   = baseShade;
+            float gradedGreen = baseShade;
+            float gradedBlue  = baseShade;
+            if (atmosphereGrade != null) {
+                atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENEMY);
+                gradedRed   = Math.min(1f, baseShade * atmosphereGrade.red);
+                gradedGreen = Math.min(1f, baseShade * atmosphereGrade.green);
+                gradedBlue  = Math.min(1f, baseShade * atmosphereGrade.blue);
+            }
+            float baseRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float baseGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float baseBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
 
             float hitFlashStrength = enemy.getHitFlashStrength();
             float spriteRed   = GameMath.lerpTowardWhite(baseRed,   hitFlashStrength);

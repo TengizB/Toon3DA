@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.EnvironmentSpriteRegistry;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -138,6 +139,11 @@ public class PropRenderer implements Renderable, Disposable {
     private float planeX            = 0f;
     private float planeY            = 1f;
     private float alertPulse        = 0f;
+    // ATMOSPHERE GRADE (visual-identity-order-1): null = no tint. Render thread only (no workers here).
+    private AtmosphereGrade atmosphereGrade;
+    private float bodyTintRed   = 1f;
+    private float bodyTintGreen = 1f;
+    private float bodyTintBlue  = 1f;
     private float lightingTimeSeconds = 0f;
 
     // TILESET SYSTEM (order-6): the per-level texture supply realized from this level's palette. Set
@@ -302,6 +308,32 @@ public class PropRenderer implements Renderable, Disposable {
      */
     public SpriteOccluderBuffer getOccluderBuffer() {
         return occluderBuffer;
+    }
+
+    /** Sets the floor's colour grade (R1). Null disables the tint. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
+    }
+
+    /**
+     * Fills bodyTint* with the R1 environment tint for a sprite BODY at {@code depthTiles}. Emissive sprites
+     * (hazard fire/toxic frames, the portal; R4) get white, i.e. are never graded.
+     */
+    private void evaluateBodyTint(boolean emissive, float depthTiles) {
+        if (emissive || atmosphereGrade == null) {
+            bodyTintRed = 1f;
+            bodyTintGreen = 1f;
+            bodyTintBlue = 1f;
+            return;
+        }
+        atmosphereGrade.evaluate(depthTiles, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
+        bodyTintRed   = atmosphereGrade.red;
+        bodyTintGreen = atmosphereGrade.green;
+        bodyTintBlue  = atmosphereGrade.blue;
+    }
+
+    private static float clampUnit(float value) {
+        return value < 0f ? 0f : (value > 1f ? 1f : value);
     }
 
     @Override
@@ -471,9 +503,10 @@ public class PropRenderer implements Renderable, Disposable {
                 }
             }
 
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            evaluateBodyTint(Level.isHazardDecal(prop.propChar) || Level.isStairsDown(prop.propChar), depth);
+            float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             // Per-column draw loop with z-buffer occlusion test.
@@ -606,9 +639,10 @@ public class PropRenderer implements Renderable, Disposable {
                         chipClampTop, chipClampBot, chipScreenHeight, chipTexH);
                 chipTexSrcH = Math.min(chipTexSrcH, chipTexH - chipTexSrcY);
                 chipTexSrcH = Math.max(1, chipTexSrcH);
-                float chipRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                float chipGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                float chipBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                evaluateBodyTint(false, renderDepth);
+                float chipRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                float chipGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                float chipBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
                 batch.setColor(chipRed, chipGreen, chipBlue, 1f);
                 ColumnOpacityMask chipOpacityMask = COLUMN_OPACITY.get(chipTexture);
                 int chipFirstCol = Math.max(0, chipLeft);
@@ -709,9 +743,10 @@ public class PropRenderer implements Renderable, Disposable {
                 }
             }
 
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            evaluateBodyTint(false, renderDepth);
+            float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             ColumnOpacityMask pickupOpacityMask = COLUMN_OPACITY.get(pickupTexture);
@@ -807,9 +842,10 @@ public class PropRenderer implements Renderable, Disposable {
             float tileBrightness = level.getTileBrightness(prop.tileColumn, prop.tileRow, lightingTimeSeconds);
             float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
                                             MAX_LIGHTING_SHADE);
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            evaluateBodyTint(Level.isHazardDecal(prop.propChar) || Level.isStairsDown(prop.propChar), depth);
+            float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);

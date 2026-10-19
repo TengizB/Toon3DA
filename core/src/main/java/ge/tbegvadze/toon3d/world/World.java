@@ -1552,6 +1552,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
         shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
         shopMachineRenderer.setPropRenderer(propRenderer);
+        shopMachineRenderer.setAtmosphereGrade(atmosphereGrade);
+        propRenderer.setAtmosphereGrade(atmosphereGrade);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         // Seeded from the floor seed (new-game-balancr order 9): spawn/drop/effect rolls replay
         // identically for the same run seed + depth, so a shared seed is a shared run.
@@ -1614,6 +1616,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);
+        enemyRenderer.setAtmosphereGrade(atmosphereGrade);
+        enemyRenderer.setLevel(targetLevel);
 
         enemyAttackEffectSystem = new EnemyAttackEffectSystem(wallRenderer);
         // The attack drives the existing visuals AND its sound, placed at the attacker so the
@@ -2827,6 +2831,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.setLightingTime(facilityTimeSeconds);
         wallRenderer.setLightingTime(facilityTimeSeconds);
         propRenderer.setLightingTime(facilityTimeSeconds);
+        enemyRenderer.setLightingTime(facilityTimeSeconds);
 
         if (gameState.redAlert) {
             alertTimeSeconds += Gdx.graphics.getDeltaTime();

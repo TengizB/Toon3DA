@@ -52,7 +52,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
       "Atmosphere mood=<id>"; build + test at baseline.
 - [x] **CP3** — WallRenderer grades walls, doors, columns (R1). DONE WHEN: build green; A3 walls part.
 - [x] **CP4** — FloorCeilingRenderer materials, horizon, per-row grade (R7, R8, R13). DONE WHEN: A3 holds; build green.
-- [ ] **CP5** — Prop/ShopMachine/Enemy bodies graded (R1, R2, R4, R5). DONE WHEN: A5-A7 hold; build green.
+- [x] **CP5** — Prop/ShopMachine/Enemy bodies graded (R1, R2, R4, R5). DONE WHEN: A5-A7 hold; build green.
 - [ ] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
 - [ ] **CP7** — five moods checked via dev override (A4, A8, A12); docs (A14). DONE WHEN: build + test at
       baseline; ready for reviewer.
@@ -98,3 +98,9 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   filled with a flat colour today and it is a FLOOR row → `horizonFloorPacked`; the ceiling horizon colour has no
   slot in this renderer and is consumed by the CP6 vignette (AS8). Prop/Enemy/ShopMachine/WeaponHud renderers are
   render-thread only → `grade.evaluate()` + fields are safe there.
+- **CP5 handover:** `setAtmosphereGrade` on PropRenderer / ShopMachineRenderer / EnemyRenderer, plus
+  `EnemyRenderer.setLevel(Level)` + `setLightingTime(float)` (fed `facilityTimeSeconds` per frame in World.render).
+  Emissive props exempt via existing predicates `Level.isHazardDecal || Level.isStairsDown` (portal '>'), no new flag.
+  Enemy: shade × tile brightness (logical tile) → existing min clamp / dormant / BLACKOUT floor → grade 0.5 → status
+  and boss tints lerped ON TOP (ungraded). Overlays (bars, tags, icons, auras, shop glow layers) use scalar shade.
+  A5-A7 checked by code read only (no display).
