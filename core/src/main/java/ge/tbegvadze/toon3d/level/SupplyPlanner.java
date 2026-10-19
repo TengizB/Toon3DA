@@ -58,6 +58,11 @@ public final class SupplyPlanner {
 
     private SupplyPlanner() {}
 
+    /** The weapon item types a planned drop can draw (read-only; the balance admission rule C-WEAPON reads it). */
+    public static List<ItemType> weaponDropPool() {
+        return Collections.unmodifiableList(java.util.Arrays.asList(WEAPON_POOL));
+    }
+
     // =====================================================================================
     // PLAN
     // =====================================================================================

@@ -192,6 +192,11 @@ public enum Perk {
         this.effects               = effects;
     }
 
+    /** How many {@link PerkEffect} rows this perk declares (read-only; the balance admission rule C-PERK reads it). */
+    public int effectCount() {
+        return effects.length;
+    }
+
     /** Folds ranks 1..rank of this perk into the aggregate (each effect at its TOTAL for that rank). */
     public void applyRanks(BuildStats stats, int rank) {
         int clampedRank = Math.min(maxRank, rank);

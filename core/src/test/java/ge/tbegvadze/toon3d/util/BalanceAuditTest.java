@@ -166,7 +166,7 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.flagResults());
     }
 
-    /** COVERAGE: every weapon item, consumable, ammo type, and enemy role is classified/priced. */
+    /** COVERAGE: every consumable and every relic is classified/priced (enemy, verb, weapon and ammo moved to the C-* admission rules). */
     @Test
     void allContentIsCoveredByTheSchema() {
         assertNoViolations(BalanceSchema.coverageResults());
@@ -221,6 +221,44 @@ class BalanceAuditTest {
     @Test
     void everyBossIsAdmitted() {
         assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.BOSS));
+    }
+
+    /**
+     * C-WEAPON (K5) — folds the old COVERAGE "weapon item" row: every WEAPON ItemType is classified; a ranged one has
+     * a RoleWeapon row with class, ammo type and positive base hit / clip / range, a declared niche naming a real
+     * scenario (BALLISTIC is the generalist) that R-ROLE results reach, and a place in the planner's drop pool; a
+     * melee one is BLADE or BLUNT.
+     */
+    @Test
+    void everyWeaponIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.WEAPON));
+    }
+
+    /**
+     * C-ABILITY (K6): every WeaponAbility declares family, trigger, rank and build tag, prices to a finite
+     * non-negative PP at every weapon level 1..MAX_WEAPON_LEVEL, and a SIGNATURE ability is rollable on some weapon.
+     */
+    @Test
+    void everyWeaponAbilityIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.ABILITY));
+    }
+
+    /**
+     * C-PERK (K7): every Perk and Keystone declares its tag, effects and text and is reached by PK1 / R-KEYSTONE;
+     * every BuildTag has a perk, exactly one keystone and an R-CARRY row (a waived SCAVENGER row still counts).
+     */
+    @Test
+    void everyPerkKeystoneAndBuildTagIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.PERK));
+    }
+
+    /**
+     * C-AMMO (K9) — folds the old COVERAGE "ammo type" row: every AmmoType has a scarcity row, positive generosity,
+     * reserve cap, box size and banking target, an AMMO pickup item, and the shop prices ammo at a positive rate.
+     */
+    @Test
+    void everyAmmoTypeIsAdmitted() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.AMMO));
     }
 
     // R-GEARGATE (region gear step + golden-ratio gate) was RETIRED by balance-overhaul order 1 and REPLACED

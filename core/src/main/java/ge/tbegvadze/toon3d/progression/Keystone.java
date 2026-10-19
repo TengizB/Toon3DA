@@ -101,6 +101,16 @@ public enum Keystone {
         this.costs       = costs;
     }
 
+    /** How many gain effect rows this keystone declares (read-only; C-PERK reads it). */
+    public int gainEffectCount() {
+        return gains.length;
+    }
+
+    /** How many cost effect rows this keystone declares (read-only; C-PERK reads it). */
+    public int costEffectCount() {
+        return costs.length;
+    }
+
     /** Folds the gains and the costs into the aggregate. */
     public void apply(BuildStats stats) {
         applyGains(stats);

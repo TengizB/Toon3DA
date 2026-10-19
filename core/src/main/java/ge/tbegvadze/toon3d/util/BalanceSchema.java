@@ -131,7 +131,7 @@ public final class BalanceSchema {
         DOT_UNIQUENESS,
         /** R-FLAGS: no live test/debug flags (any TEST/DEBUG boolean must be false). */
         FLAGS,
-        /** COVERAGE (being folded into ADMISSION, K5-K9): weapon item, consumable, ammo type and relic rows. */
+        /** COVERAGE (being folded into ADMISSION, K8 / relic): consumable and relic rows only. */
         COVERAGE,
         /** R-ABILITY (order 2): every ability has a priced PP value; every rollable tier fits its ability-PP budget. */
         ABILITY_BUDGET,
@@ -2145,33 +2145,17 @@ public final class BalanceSchema {
         return 0;
     }
 
-    /** COVERAGE (being folded into ADMISSION): weapon item, consumable, ammo type and relic rows; enemy + verb moved to C-ENEMY / C-VERB. */
+    /** COVERAGE (being folded into ADMISSION): consumable and relic rows only; enemy, verb, weapon and ammo moved to C-* rules. */
     public static List<RuleResult> coverageResults() {
         List<RuleResult> results = new ArrayList<>();
         for (ItemType itemType : ItemType.values()) {
-            if (itemType.getCategory() == ItemCategory.WEAPON) {
-                boolean classified = WEAPON_ITEM_CLASSIFICATIONS.containsKey(itemType);
-                results.add(new RuleResult(RuleKind.COVERAGE, "weapon item " + itemType.name(),
-                        classified ? 1f : 0f, 1f, 1f, classified,
-                        classified ? "classified " + WEAPON_ITEM_CLASSIFICATIONS.get(itemType)
-                                   : "UNCLASSIFIED — register it in BalanceSchema (ranged role, melee, or fallback)"));
-            } else if (itemType.getCategory() == ItemCategory.CONSUMABLE) {
+            if (itemType.getCategory() == ItemCategory.CONSUMABLE) {
                 boolean classified = CONSUMABLE_CLASSIFICATIONS.containsKey(itemType);
                 results.add(new RuleResult(RuleKind.COVERAGE, "consumable " + itemType.name(),
                         classified ? 1f : 0f, 1f, 1f, classified,
                         classified ? "classified " + CONSUMABLE_CLASSIFICATIONS.get(itemType)
                                    : "UNCLASSIFIED — price it as a heal or declare it utility in BalanceSchema"));
             }
-        }
-        for (AmmoType ammoType : AmmoType.values()) {
-            boolean hasRow = false;
-            for (ScarcityRowSpec row : SCARCITY_ROWS) {
-                if (row.ammoType == ammoType) { hasRow = true; break; }
-            }
-            results.add(new RuleResult(RuleKind.COVERAGE, "ammo type " + ammoType.name(),
-                    hasRow ? 1f : 0f, 1f, 1f, hasRow,
-                    hasRow ? "priced in the scarcity model"
-                           : "NOT priced — register a scarcity row in BalanceSchema"));
         }
         // relics-run-changing-artifacts CP5: every relic resolves its rarity, its trigger and its valuation, and the
         // rarity x valuation pair resolves a band (an unbanded pair, e.g. a SUPPLY LEGENDARY, is unpriced content).
@@ -2201,11 +2185,11 @@ public final class BalanceSchema {
         FAMILY("C-FAMILY", "K2 ENEMY FAMILY / TRAIT", BalanceSchema::admissionFamilyResults),
         VERB("C-VERB", "K3 ENEMY SPECIAL VERB", BalanceSchema::admissionVerbResults),
         BOSS("C-BOSS", "K4 BOSS", BalanceSchema::admissionBossResults),
-        WEAPON("C-WEAPON", "K5 WEAPON"),
-        ABILITY("C-ABILITY", "K6 WEAPON ABILITY"),
-        PERK("C-PERK", "K7 PERK / KEYSTONE"),
+        WEAPON("C-WEAPON", "K5 WEAPON", BalanceSchema::admissionWeaponResults),
+        ABILITY("C-ABILITY", "K6 WEAPON ABILITY", BalanceSchema::admissionAbilityResults),
+        PERK("C-PERK", "K7 PERK / KEYSTONE", BalanceSchema::admissionPerkResults),
         ITEM("C-ITEM", "K8 ITEM / PICKUP / CONSUMABLE"),
-        AMMO("C-AMMO", "K9 AMMO TYPE"),
+        AMMO("C-AMMO", "K9 AMMO TYPE", BalanceSchema::admissionAmmoResults),
         STATUS("C-STATUS", "K10 STATUS EFFECT"),
         HAZARD("C-HAZARD", "K11 HAZARD / GAMEPLAY PROP"),
         ROOM("C-ROOM", "K12 ROOM BLUEPRINT"),
@@ -2505,6 +2489,214 @@ public final class BalanceSchema {
                         + " — add a BossTable row (route/BossTable) and a BossBalance.Archetype for it");
             }
             results.add(admission(AdmissionRule.BOSS, enemyType.name(), missing, "fought on a BossTable row"));
+        }
+        return results;
+    }
+
+    /** The melee Weapon instances C-WEAPON reads a damage class from (no headless factory exists; mirrors WeaponRoleModel's direct construction). */
+    private static List<ge.tbegvadze.toon3d.entity.Weapon> meleeWeaponInstances() {
+        List<ge.tbegvadze.toon3d.entity.Weapon> weapons = new ArrayList<>();
+        weapons.add(new ge.tbegvadze.toon3d.entity.Fist());
+        weapons.add(new ge.tbegvadze.toon3d.entity.CombatKnife());
+        weapons.add(new ge.tbegvadze.toon3d.entity.Hammer());
+        weapons.add(new ge.tbegvadze.toon3d.entity.MeleeChainsaw());
+        return weapons;
+    }
+
+    /**
+     * C-WEAPON (K5): every WEAPON {@link ItemType} is classified (the old COVERAGE "weapon item" row). RANGED: a
+     * {@link WeaponRoleModel.RoleWeapon} row with damage class + ammo type and positive base hit, clip and range;
+     * its class is a ranged class with a declared niche naming an existing scenario (or is BALLISTIC, the
+     * generalist) that R-ROLE results reach; and it is in {@code SupplyPlanner.weaponDropPool()}. MELEE: its
+     * weapon's damage class is BLADE or BLUNT. AMMO_FALLBACK: admitted as a legacy ammo pickup.
+     */
+    public static List<RuleResult> admissionWeaponResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> roleResults = weaponRoleResults();
+        List<ge.tbegvadze.toon3d.entity.Weapon> meleeWeapons = meleeWeaponInstances();
+        List<ItemType> dropPool = ge.tbegvadze.toon3d.level.SupplyPlanner.weaponDropPool();
+        for (ItemType itemType : ItemType.values()) {
+            if (itemType.getCategory() != ItemCategory.WEAPON) continue;
+            List<String> missing = new ArrayList<>();
+            WeaponItemClassification classification = WEAPON_ITEM_CLASSIFICATIONS.get(itemType);
+            String admittedDetail = "classified " + classification;
+            if (classification == null) {
+                missing.add("UNCLASSIFIED — register it in BalanceSchema WEAPON_ITEM_CLASSIFICATIONS (ranged role, melee, or fallback)");
+            } else if (classification == WeaponItemClassification.RANGED) {
+                WeaponRoleModel.RoleWeapon roleWeapon = null;
+                for (WeaponRoleModel.RoleWeapon candidate : WeaponRoleModel.weapons()) {
+                    if (candidate.itemType == itemType) roleWeapon = candidate;
+                }
+                if (roleWeapon == null) {
+                    missing.add("no WeaponRoleModel.RoleWeapon row — add it in WeaponRoleModel.buildWeapons");
+                } else {
+                    ge.tbegvadze.toon3d.entity.DamageClass damageClass = roleWeapon.damageClass;
+                    if (damageClass == null) missing.add("RoleWeapon has no damageClass — declare damageClass() on the Weapon subclass");
+                    if (roleWeapon.ammoType == null) missing.add("RoleWeapon has no ammoType — declare getAmmoType() on the Weapon subclass");
+                    if (roleWeapon.undroppedHit <= 0f) missing.add("base damage <= 0 — set a positive base damage constant");
+                    if (roleWeapon.model.clipActions <= 0) missing.add("clip <= 0 — set a positive base clip size");
+                    if (roleWeapon.model.baseHitByTile.length <= 0) missing.add("range <= 0 — set a positive base range");
+                    if (damageClass != null) {
+                        if (!WeaponRoleModel.rangedClasses().contains(damageClass)) {
+                            missing.add("class " + damageClass + " is not a ranged class in WeaponRoleModel");
+                        }
+                        String[] niches = BalanceConfig.ROLE_DECLARED_NICHE_BY_CLASS;
+                        String niche = damageClass.ordinal() < niches.length ? niches[damageClass.ordinal()] : null;
+                        boolean generalist = damageClass == ge.tbegvadze.toon3d.entity.DamageClass.BALLISTIC;
+                        boolean nicheExists = false;
+                        for (WeaponRoleModel.RoleScenario scenario : WeaponRoleModel.scenarios()) {
+                            if (scenario.id.equals(niche)) nicheExists = true;
+                        }
+                        if (!generalist && niche == null) {
+                            missing.add("no declared niche for " + damageClass + " (ROLE_DECLARED_NICHE_BY_CLASS) — it must be best in >= 1 reference scenario (R-ROLE-1) or add one");
+                        } else if (!generalist && !nicheExists) {
+                            missing.add("declared niche " + niche + " for " + damageClass + " is not a WeaponRoleModel scenario id");
+                        }
+                        if (!anySubjectStartsWith(roleResults, "R-ROLE-3 " + damageClass + " ")) {
+                            missing.add("weaponRoleResults() has no R-ROLE result reaching class " + damageClass);
+                        }
+                    }
+                    admittedDetail = "RANGED " + damageClass + " / " + roleWeapon.ammoType
+                            + "; niche, stats and drop pool declared";
+                }
+                if (!dropPool.contains(itemType)) {
+                    missing.add("not in SupplyPlanner.weaponDropPool() — add it to SupplyPlanner WEAPON_POOL");
+                }
+            } else if (classification == WeaponItemClassification.MELEE) {
+                ge.tbegvadze.toon3d.entity.Weapon instance = null;
+                for (ge.tbegvadze.toon3d.entity.Weapon candidate : meleeWeapons) {
+                    if (candidate.getItemType() == itemType) instance = candidate;
+                }
+                if (instance == null) {
+                    missing.add("no melee Weapon instance — add it to BalanceSchema.meleeWeaponInstances");
+                } else if (instance.damageClass() != ge.tbegvadze.toon3d.entity.DamageClass.BLADE
+                        && instance.damageClass() != ge.tbegvadze.toon3d.entity.DamageClass.BLUNT) {
+                    missing.add("melee weapon damageClass() is " + instance.damageClass() + " — must be BLADE or BLUNT");
+                } else {
+                    admittedDetail = "MELEE " + instance.damageClass();
+                }
+            } else {
+                admittedDetail = "legacy ammo pickup, no weapon class";
+            }
+            results.add(admission(AdmissionRule.WEAPON, itemType.name(), missing, admittedDetail));
+        }
+        return results;
+    }
+
+    /**
+     * C-ABILITY (K6): every {@link WeaponAbility} has family, trigger, rank and build tag, a finite non-negative
+     * priced PP at every weapon level 1..MAX_WEAPON_LEVEL, and a SIGNATURE ability can be rolled onto some weapon
+     * (the legendary slot is rolled by family eligibility, not bound to one weapon item — see the report).
+     */
+    public static List<RuleResult> admissionAbilityResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (WeaponAbility ability : WeaponAbility.values()) {
+            List<String> missing = new ArrayList<>();
+            if (ability.family == null)   missing.add("no family — declare Family in the WeaponAbility row");
+            if (ability.trigger == null)  missing.add("no trigger — declare Trigger in the WeaponAbility row");
+            if (ability.rank == null)     missing.add("no rank — declare Rank in the WeaponAbility row");
+            if (ability.buildTag == null) missing.add("no buildTag — declare a BuildTag in the WeaponAbility row");
+            for (int level = 1; level <= BalanceConfig.MAX_WEAPON_LEVEL; level++) {
+                float points = abilityPowerPointsAt(ability, level);
+                if (Float.isNaN(points) || Float.isInfinite(points) || points < 0f) {
+                    missing.add("abilityPowerPointsAt level " + level + " = " + points
+                            + " — price it in GameMath.abilityPowerPoints / WeaponRoller.buildAbilityInstance");
+                    break;
+                }
+            }
+            if (ability.rank == WeaponAbility.Rank.SIGNATURE
+                    && !ability.eligibleFor(true) && !ability.eligibleFor(false)) {
+                missing.add("SIGNATURE ability is eligible for no weapon family — fix its Family");
+            }
+            results.add(admission(AdmissionRule.ABILITY, ability.name(), missing,
+                    ability.rank + " " + ability.family + " / " + ability.trigger + "; priced at levels 1.."
+                            + BalanceConfig.MAX_WEAPON_LEVEL));
+        }
+        return results;
+    }
+
+    /**
+     * C-PERK (K7): every {@link Perk} has a tag, rank >= 1, an effect, display + effect text and PK1 FELT results;
+     * every {@link Keystone} has a tag, a gain and a cost effect, both lines and R-KEYSTONE results; every
+     * {@link BuildTag} has a perk, exactly one keystone and an R-CARRY row. Content ids are prefixed
+     * PERK / KEYSTONE / TAG because the three enums may share names.
+     */
+    public static List<RuleResult> admissionPerkResults() {
+        List<RuleResult> results = new ArrayList<>();
+        List<RuleResult> feltResults = perkFeltResults();
+        List<RuleResult> keystoneRuleResults = keystoneResults();
+        List<RuleResult> carryResults = buildCarryResults();
+        for (Perk perk : Perk.values()) {
+            List<String> missing = new ArrayList<>();
+            if (perk.tag == null) missing.add("no tag — declare a BuildTag in the Perk row");
+            if (perk.maxRank < 1) missing.add("maxRank < 1");
+            if (perk.effectCount() < 1) missing.add("no PerkEffect — give the Perk row at least one effect");
+            if (perk.displayName == null || perk.displayName.trim().isEmpty()) missing.add("blank display name");
+            if (perk.effectLine == null || perk.effectLine.trim().isEmpty()) missing.add("blank effect line");
+            if (!anySubjectStartsWith(feltResults, "PK1 " + perk.name() + " r")) {
+                missing.add("no PK1 FELT result — perkResults() must iterate it");
+            }
+            results.add(admission(AdmissionRule.PERK, "PERK " + perk.name(), missing,
+                    perk.tag + " rank " + perk.maxRank + "; effects, text and PK1 declared"));
+        }
+        for (Keystone keystone : Keystone.values()) {
+            List<String> missing = new ArrayList<>();
+            if (keystone.tag == null) missing.add("no tag — declare a BuildTag in the Keystone row");
+            if (keystone.gainEffectCount() < 1) missing.add("no gain effect — a keystone needs >= 1 gain");
+            if (keystone.costEffectCount() < 1) missing.add("no cost effect — a keystone needs >= 1 cost");
+            if (keystone.gainLine == null || keystone.gainLine.trim().isEmpty()) missing.add("blank gain line");
+            if (keystone.costLine == null || keystone.costLine.trim().isEmpty()) missing.add("blank cost line");
+            if (!anySubjectStartsWith(keystoneRuleResults, "R-KEYSTONE " + keystone.name() + " ")) {
+                missing.add("no R-KEYSTONE result — keystoneResults() must iterate it");
+            }
+            results.add(admission(AdmissionRule.PERK, "KEYSTONE " + keystone.name(), missing,
+                    keystone.tag + "; gain, cost, text and R-KEYSTONE declared"));
+        }
+        for (BuildTag tag : BuildTag.values()) {
+            List<String> missing = new ArrayList<>();
+            int perkCount = 0;
+            for (Perk perk : Perk.values()) if (perk.tag == tag) perkCount++;
+            int keystoneCount = 0;
+            for (Keystone keystone : Keystone.values()) if (keystone.tag == tag) keystoneCount++;
+            if (perkCount < 1) missing.add("no perk — add a Perk row with this tag");
+            if (keystoneCount != 1) missing.add(keystoneCount + " keystones — a tag has exactly one (Keystone)");
+            boolean hasCarry = false;
+            for (RuleResult result : carryResults) {
+                if (result.subject.equals(carrySubject(tag))) hasCarry = true;
+            }
+            if (!hasCarry) missing.add("no R-CARRY row — buildCarryResults() must iterate the tag");
+            results.add(admission(AdmissionRule.PERK, "TAG " + tag.name(), missing,
+                    perkCount + " perks, one keystone and an R-CARRY row declared"));
+        }
+        return results;
+    }
+
+    /**
+     * C-AMMO (K9): every {@link AmmoType} has a scarcity row, positive generosity, reserve cap, box size and
+     * banking target, an AMMO {@link ItemType} pickup, and the shop converts ammo damage at a positive rate.
+     */
+    public static List<RuleResult> admissionAmmoResults() {
+        List<RuleResult> results = new ArrayList<>();
+        for (AmmoType ammoType : AmmoType.values()) {
+            List<String> missing = new ArrayList<>();
+            boolean hasRow = false;
+            for (ScarcityRowSpec row : SCARCITY_ROWS) {
+                if (row.ammoType == ammoType) hasRow = true;
+            }
+            if (!hasRow) missing.add("NOT priced — register a scarcity row in BalanceSchema buildScarcityRowRegistry");
+            if (ammoType.getSupplyGenerosity() <= 0f) missing.add("supply generosity <= 0 — set AMMO_SUPPLY_GENEROSITY_" + ammoType.name() + " in BalanceConfig");
+            if (ammoType.getReserveCap() <= 0) missing.add("reserve cap <= 0 — set the reserve cap constant");
+            if (ammoType.getAmountPerBox() <= 0) missing.add("box size <= 0 — set the box amount constant");
+            if (ammoType.getBankingFloorsTarget() <= 0f) missing.add("banking target <= 0 — set AMMO_BANKING_FLOORS_" + ammoType.name() + " in BalanceConfig");
+            ItemType pickup = ammoType.getItemType();
+            if (pickup == null || pickup.getCategory() != ItemCategory.AMMO) {
+                missing.add("no AMMO ItemType pickup — add an AMMO_" + ammoType.name() + " ItemType");
+            }
+            if (BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT <= 0f) {
+                missing.add("SHOP_AMMO_DAMAGE_PER_POWER_POINT <= 0 — the shop cannot price ammo");
+            }
+            results.add(admission(AdmissionRule.AMMO, ammoType.name(), missing,
+                    "scarcity row, caps, box, banking target and pickup item declared"));
         }
         return results;
     }

@@ -48,7 +48,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP0** — this file, committed and pushed before anything else changes; idea STATUS: IN PROGRESS.
 - [x] **CP1** — RuleKind.ADMISSION with C-ENEMY, C-FAMILY, C-VERB, C-BOSS; COVERAGE enemy/verb checks folded in.
       DONE WHEN: both gates green on current content.
-- [ ] **CP2** — C-WEAPON, C-ABILITY, C-PERK, C-AMMO live; COVERAGE weapon/ammo checks folded in.
+- [x] **CP2** — C-WEAPON, C-ABILITY, C-PERK, C-AMMO live; COVERAGE weapon/ammo checks folded in.
       DONE WHEN: both gates green.
 - [ ] **CP3** — C-ITEM, C-STATUS, C-HAZARD, C-ROOM, C-GENERATOR live.
       DONE WHEN: both gates green.
@@ -89,3 +89,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   COVERAGE now holds only weapon / consumable / ammo / relic rows. Counts: C-ENEMY 19, C-FAMILY 12 (6+6),
   C-VERB 5, C-BOSS 5 rows + 3 boss types. Nothing in current content failed. core:test 467 (StoryBarkTest only).
   Calls: WIND_UP is not a family voice (shared by design); summon caps = SUMMON_COUNT_MAX + SUMMON_ROOM_LIVE_CAP.
+- **CP2 handover:** `admissionWeaponResults()` (14), `admissionAbilityResults()` (19), `admissionPerkResults()`
+  (26 perks + 9 keystones + 9 tags; ids prefixed `PERK ` / `KEYSTONE ` / `TAG `), `admissionAmmoResults()` (5).
+  New read-only: `SupplyPlanner.weaponDropPool()`, `Perk.effectCount()`, `Keystone.gainEffectCount()/costEffectCount()`.
+  Melee weapons have no headless factory: BalanceSchema `meleeWeaponInstances()` builds Fist/CombatKnife/Hammer/
+  MeleeChainsaw directly (as WeaponRoleModel does for ranged) — a new melee item must be added there or C-WEAPON says so.
+  Decisions vs the contract: SIGNATURE abilities are legendary-slot rolls, not bound to a weapon
+  (`ItemType.getSignatureAbilities()` holds two STANDARD characteristic abilities), so C-ABILITY checks "eligible for
+  >= 1 weapon family" instead of "exactly one weapon lists it"; class reach = an `R-ROLE-3 <CLASS>` subject; drop-pool
+  membership required for RANGED only. COVERAGE now holds consumable + relic rows only (CP3 removes the kind).
