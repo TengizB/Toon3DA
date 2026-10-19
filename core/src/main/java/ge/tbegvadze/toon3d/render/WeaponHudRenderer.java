@@ -51,6 +51,10 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     // cause visual deformation + touch-coordinate misalignment for the rest of the frame.
     private final Map<Class<? extends Weapon>, Texture> weaponTextureCache;
     private Weapon              equippedWeapon;
+    // R6 frame tint (mood near tint x clamped tile light); default white. Set per frame by World.
+    private float               weaponTintRed   = 1f;
+    private float               weaponTintGreen = 1f;
+    private float               weaponTintBlue  = 1f;
     private Texture             normalTexture;
     private final SpriteBatch   batch;
     private final ShapeRenderer shapeRenderer;
@@ -3101,10 +3105,6 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         this.weaponTintGreen = green;
         this.weaponTintBlue  = blue;
     }
-
-    private float weaponTintRed   = 1f;
-    private float weaponTintGreen = 1f;
-    private float weaponTintBlue  = 1f;
 
     @Override
     public void render(OrthographicCamera camera) {

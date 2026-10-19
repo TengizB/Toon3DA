@@ -63,15 +63,18 @@ public final class ViewVignetteRenderer implements Renderable, Disposable {
     private static Texture buildVignetteTexture() {
         int width  = ArtDirection.VIGNETTE_TEXTURE_WIDTH;
         int height = ArtDirection.VIGNETTE_TEXTURE_HEIGHT;
+        float margin = ArtDirection.VIGNETTE_SHAKE_MARGIN_WORLD_UNITS;
         Pixmap pixmap = new Pixmap(width, height, Pixmap.Format.RGBA8888);
         pixmap.setBlending(Pixmap.Blending.None);
         for (int row = 0; row < height; row++) {
             for (int column = 0; column < width; column++) {
-                // Each axis scaled so its edge is +-1, then / sqrt(2): centre 0, every corner exactly 1.
-                float normalisedX = ((column + 0.5f) / width  - 0.5f) * 2f;
-                float normalisedY = ((row    + 0.5f) / height - 0.5f) * 2f;
-                float radius = (float) Math.sqrt(normalisedX * normalisedX + normalisedY * normalisedY)
-                             * 0.70710678f;
+                // The quad is oversized by the shake margin, so map each texel centre to its WORLD position
+                // on that quad and measure the radius against the 1280x720 VIEW: the view corner is exactly
+                // radius 1 (full alpha) and the margin beyond it clamps to full alpha inside vignetteAlpha.
+                float worldX = -margin + (column + 0.5f) / width  * (Constants.WORLD_WIDTH  + 2f * margin);
+                float worldY = -margin + (row    + 0.5f) / height * (Constants.WORLD_HEIGHT + 2f * margin);
+                float radius = GameMath.vignetteNormalisedRadius(worldX, worldY,
+                        Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
                 float pixelAlpha = GameMath.vignetteAlpha(radius, ArtDirection.VIGNETTE_CLEAR_RADIUS_FRACTION);
                 pixmap.drawPixel(column, row, 0xFFFFFF00 | Math.round(pixelAlpha * 255f));
             }

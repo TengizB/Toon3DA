@@ -228,16 +228,21 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         // ── 2. Tier-A body (alpha blend, ground-anchored, writes prop z-buffer for enemy occlusion) ──
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         // R1: grade the BODY sprite only; aura / window / status / drop / holo layers are emissive (R4).
-        float bodyGradeRed = 1f, bodyGradeGreen = 1f, bodyGradeBlue = 1f;
+        float bodyGradeRed   = 1f;
+        float bodyGradeGreen = 1f;
+        float bodyGradeBlue  = 1f;
         if (atmosphereGrade != null) {
             atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
             bodyGradeRed   = atmosphereGrade.red;
             bodyGradeGreen = atmosphereGrade.green;
             bodyGradeBlue  = atmosphereGrade.blue;
         }
-        float bodyRed   = Math.min(1f, Math.min(1f, shade * bodyGradeRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-        float bodyGreen = Math.min(1f, shade * bodyGradeGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-        float bodyBlue  = Math.min(1f, shade * bodyGradeBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        float gradedRed   = Math.min(1f, shade * bodyGradeRed);
+        float gradedGreen = Math.min(1f, shade * bodyGradeGreen);
+        float gradedBlue  = Math.min(1f, shade * bodyGradeBlue);
+        float bodyRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+        float bodyGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        float bodyBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
         batch.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
         drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, true);
 

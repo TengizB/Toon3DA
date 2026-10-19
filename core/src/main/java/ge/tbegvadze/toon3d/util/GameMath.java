@@ -47,6 +47,22 @@ public final class GameMath {
     }
 
     /*
+     * Formula: vignetteNormalisedRadius - centre-relative elliptical radius of a point in a view
+     * Derivation:
+     *   Scale each axis so the view edge is +-1:  nx = 2 * (pointX / viewWidth - 0.5),
+     *   ny = 2 * (pointY / viewHeight - 0.5). The corner is (+-1, +-1), at Euclidean distance sqrt(2), so
+     *       radius = sqrt(nx^2 + ny^2) / sqrt(2) = sqrt((nx^2 + ny^2) / 2).
+     *   The centre is 0 and every view corner is exactly 1 whatever the aspect ratio; iso-lines are
+     *   ellipses matching the view. A point outside the view (e.g. the shake margin) may exceed 1.
+     * Edge cases: viewWidth or viewHeight of 0 is a caller error (division by zero).
+     */
+    public static float vignetteNormalisedRadius(float pointX, float pointY, float viewWidth, float viewHeight) {
+        float normalisedX = (pointX / viewWidth  - 0.5f) * 2f;
+        float normalisedY = (pointY / viewHeight - 0.5f) * 2f;
+        return (float) Math.sqrt((normalisedX * normalisedX + normalisedY * normalisedY) * 0.5);
+    }
+
+    /*
      * Formula: vignetteAlpha - quadratic radial vignette ramp (visual-identity-order-1, R10)
      * Derivation:
      *   normalisedRadius is the distance from the view centre divided by the half-diagonal, measured in
