@@ -1129,6 +1129,58 @@ public final class GameMath {
         return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
     }
 
+    /*
+     * Formula: atmosphereFogFactor
+     * Derivation:
+     *   Normalised position in the fog band:
+     *       u = clamp((distanceTiles - fogStartTiles) / (fogEndTiles - fogStartTiles), 0, 1)
+     *   Smoothstep (zero slope at both ends so the hue shift has no visible seam):
+     *       fog = u * u * (3 - 2u)
+     *   0 at or before fogStart, 1 at or after fogEnd.
+     * Edge cases:
+     *   fogEndTiles <= fogStartTiles degenerates to a step at fogStart (0 below, 1 at or above).
+     *   Negative distance clamps to 0.
+     */
+    public static float atmosphereFogFactor(float distanceTiles, float fogStartTiles, float fogEndTiles) {
+        if (fogEndTiles <= fogStartTiles) {
+            return distanceTiles >= fogStartTiles ? 1f : 0f;
+        }
+        float normalised = (distanceTiles - fogStartTiles) / (fogEndTiles - fogStartTiles);
+        if (normalised <= 0f) return 0f;
+        if (normalised >= 1f) return 1f;
+        return normalised * normalised * (3f - 2f * normalised);
+    }
+
+    /*
+     * Formula: applyRgbShadeToPackedRGBA
+     * Derivation:
+     *   Per-channel twin of applyShadeToPackedRGBA. The scalar shade becomes one shade per channel
+     *   (shade x graded tint), and the same alert maths is applied to each channel:
+     *       outR = min(1, shadeRed * (1 + alertPulse * alertBoost)) * inR
+     *       outG = shadeGreen * (1 - alertPulse * alertDampen) * inG
+     *       outB = shadeBlue  * (1 - alertPulse * alertDampen) * inB
+     *   Every channel is clamped to [0,255] before repacking (alpha = 0xFF), so a tint above 1
+     *   multiplied by a bright shade can never wrap.
+     * Edge cases:
+     *   Negative shade (or dampen overshoot) clamps to 0. alertPulse outside [0,1] is not guarded.
+     */
+    public static int applyRgbShadeToPackedRGBA(int pixel, float shadeRed, float shadeGreen, float shadeBlue,
+                                                float alertBoost, float alertDampen, float alertPulse) {
+        int inR = (pixel >>> 24) & 0xFF;
+        int inG = (pixel >>> 16) & 0xFF;
+        int inB = (pixel >>>  8) & 0xFF;
+
+        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost));
+        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen);
+        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen);
+
+        int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
+        int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
+        int outB = MathUtils.clamp((int) (blueFactor  * inB), 0, 255);
+
+        return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
+    }
+
     // =========================================================================
     // ALERT PULSE — emergency facility lighting
     // =========================================================================

@@ -43,7 +43,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — palette constants + GameMath formulas.
+- [x] **CP1** — palette constants + GameMath formulas.
       DONE WHEN: util/ArtDirection has every TECHNICAL NOTES constant; GameMath.atmosphereFogFactor and
       applyRgbShadeToPackedRGBA exist with comment blocks; nothing reads them yet; build green.
 - [ ] **CP2** — mood + material registries, AtmosphereGrade, World resolution.
@@ -67,3 +67,9 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   = the repo's with the `buildscript{}` block deleted, `configure(subprojects)`, and
   `maven { url = "https://maven-central.storage-download.googleapis.com/maven2/" }` FIRST in subprojects
   repositories. Test XML lands in the REAL `core/build/test-results/`.
+- **CP1 handover:** `util/ArtDirection` — CombatPalette idiom (`_RED/_GREEN/_BLUE` triples), `MOOD_<ID>_NEAR_R/G/B`,
+  `_FAR_R/G/B`, `_FOG_START_TILES/_FOG_END_TILES`, `_HORIZON_FLOOR_PACKED/_HORIZON_CEILING_PACKED`, `_VIGNETTE_ALPHA`,
+  `MOOD_ID_*`, `MATERIAL_ID_*`, `GRADE_STRENGTH_ENVIRONMENT/ENEMY/WEAPON`, `WEAPON_LIGHT_MIN/MAX`, `VIGNETTE_*`.
+  `GameMath.atmosphereFogFactor(d, start, end)`; `GameMath.applyRgbShadeToPackedRGBA(pixel, r, g, b, boost, dampen,
+  pulse)` mirrors the scalar version per channel (red-alert boost caps red shade at 1 before the multiply, as the
+  scalar does). `RenderConstants.SURFACE_MATERIAL_SIZE = 64`.
