@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Visual Identity 2 — Grounded sprites: halo, shadows, light
 CREATED: 2026-10-19
