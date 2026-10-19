@@ -56,7 +56,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: A1, A7 hold; both gates green.
 - [x] **CP5** — declaration hardening (E3); C-CONSTANT with GRANDFATHERED / UNBANDED.
       DONE WHEN: A3, A4 hold; both gates green.
-- [ ] **CP6** — negative drill for all 18 C-rules, messages recorded in the handover below.
+- [x] **CP6** — negative drill for all 18 C-rules, messages recorded in the handover below.
       DONE WHEN: A2 holds (nothing from the drill committed).
 - [ ] **CP7** — authority doc ADD CONTENT (G, K, X), knowledge doc, weapon guide, enemy doc,
       route/tileset/story cross-links.
@@ -131,3 +131,37 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   empty with javadoc; results = one per offending / stale name + a `C-CONSTANT: GRANDFATHERED` summary row.
   Test `everyBalanceNumberIsBandedOrDeclaredUnbanded`. NOTE for order 7: any number it ADDS must go in
   CONSTANT_SUBJECTS or UNBANDED (never GRANDFATHERED).
+- **CP6 handover (A2 holds) — THE NEGATIVE DRILL (E6), run 2026-10-19, never committed.** One dummy per C-rule, all
+  applied at once by a scratchpad script (`drill/apply_drill.py`), `./gradlew core:test --tests '*BalanceAuditTest*'`
+  -> 18 of 18 ADMISSION tests failed (one per rule) + 7 band-rule tests reacting to the dummies; then
+  `git checkout -- core/src/main/java` (verified: no dummy left). Dummies: a SOLDIER on a taken spawn symbol with no
+  verb, a BOSS no BossTable row fights, a family with no voice/lines, an unpriced damaging non-heavy verb, an
+  unclassified weapon item, an unpriced ability, a cost-less second VITALITY keystone, an unstanced consumable, an
+  ammo type with no scarcity row/pickup, an undeclared status, a hazard row on a missing constant, a stance-less
+  room, an unregistered generator id, a bare node type, an unpriced mystery outcome, a spec-less shop category,
+  region A on an unregistered theme, and an unlisted BalanceConfig float. **The drill found one real defect, fixed in
+  this commit:** a new AmmoType crashed BalanceSchema's CLASS INIT (`AmmoType.getItemType()` throws for an unmapped
+  type, called by ITEM_SUPPLY_STANCES) — every audit test died with NoClassDefFoundError instead of naming the miss.
+  `BalanceSchema.ammoPickupItemOrNull()` now catches it; C-AMMO names the miss. Observed messages (first per rule;
+  the duplicate-symbol case reports the archetype that lost the symbol, PLAGUE_HULK, beside the dummy's own row):
+    ADMISSION C-NODE: DRILL_NODE — no NodeTypeDefinition — register it in RouteRegistries.registerNodeTypes; no NodeSupplySpec — add a row in route/NodeSupplySpecs.registerAll; no NodeEconomics row — register one in route/RouteEconomics
+    ADMISSION C-BOSS: DRILL_WARDEN — no BossTable row has an archetype named DRILL_WARDEN — add a BossTable row (route/BossTable) and a BossBalance.Archetype for it
+    ADMISSION C-GENERATOR: DRILL_GENERATOR — not registered — RouteRegistries.registerGenerators; serves no node type — add it to BalanceSchema GENERATOR_SERVES
+    ADMISSION C-ROOM: drill_room — no supplyStance() — declare SUPPLY_NEUTRAL or SLOT_PROVIDER in RoomBlueprints
+    ADMISSION C-HAZARD: drill_spike_trap — player-side constant HAZARD_DRILL_SPIKE_FRACTION not found in BalanceConfig / EffectConstants / GameBalance; enemy-side constant HAZARD_DRILL_SPIKE_FRACTION not found in BalanceConfig / EffectConstants / GameBalance
+    ADMISSION C-AMMO: DRILL_FLECHETTES — NOT priced — register a scarcity row in BalanceSchema buildScarcityRowRegistry; no AMMO ItemType pickup — add an AMMO_DRILL_FLECHETTES ItemType and map it in AmmoType.getItemType()
+    ADMISSION C-ABILITY: DRILL_ABILITY — abilityPowerPointsAt level 1 = NaN — price it in GameMath.abilityPowerPoints / WeaponRoller.buildAbilityInstance
+    ADMISSION C-ENEMY: DRILL_SCRAP_HOUND — blank tacticalVerb() — ORA's archetype line is built from it; ORA archetype line story.bark.enemy.drill_scrap_hound is missing — add it to BarkStrings.registerDefaults and assets/story/story-strings.properties
+    ADMISSION C-ENEMY: DRILL_WARDEN — ORA archetype line story.bark.enemy.drill_warden is missing — add it to BarkStrings.registerDefaults and assets/story/story-strings.properties
+    ADMISSION C-ENEMY: PLAGUE_HULK — spawnChar() '1' is not unique to this archetype — pick an unused symbol from docs/tile-symbols.txt
+    ADMISSION C-FAMILY: DRILL_FAMILY — no ALERT voice — add registerFamilyVoice(DRILL_FAMILY, ...) in audio/GameSoundCatalog; no ATTACK voice — add registerFamilyVoice(DRILL_FAMILY, ...) in audio/GameSoundCatalog; no DEATH voice — add registerFamilyVoice(DRILL_FAMILY, ...) in audio/GameSoundCatalog; early bestiary line story.bark.family.drill_family is missing from BarkStrings / story-strings.properties; deep bestiary line story.bark.family.drill_family.deep is missing from BarkStrings / story-strings.properties
+    ADMISSION C-VERB: DRILL_VERB — UNPRICED — register a SpecialVerbPricing equivalence in BalanceSchema SPECIAL_VERB_PRICING; dealsDamage() but heavyAttack() is null — a damaging verb must be a declared HeavyAttack; ORA ability line story.bark.ability.drill_verb is missing from BarkStrings / story-strings.properties
+    ADMISSION C-WEAPON: DRILL_FLECHETTE_CARBINE — UNCLASSIFIED — register it in BalanceSchema WEAPON_ITEM_CLASSIFICATIONS (ranged role, melee, or fallback)
+    ADMISSION C-PERK: KEYSTONE DRILL_KEYSTONE — no cost effect — a keystone needs >= 1 cost
+    ADMISSION C-PERK: TAG VITALITY — 2 keystones — a tag has exactly one (Keystone)
+    ADMISSION C-ITEM: DRILL_TRAUMA_KIT — no supply stance — declare it in BalanceSchema ITEM_SUPPLY_STANCES (a SupplyCategory, or NOT_FLOOR_SUPPLIED + reason); consumable is neither a priced heal nor a declared utility — price it as a HealPickupSpec or declare it UTILITY in BalanceSchema CONSUMABLE_CLASSIFICATIONS
+    ADMISSION C-STATUS: DRILL_BLEEDOUT — no declaration — add a row to BalanceSchema STATUS_DECLARATIONS (shape, constants, armour interaction, cleanse)
+    ADMISSION C-EVENT: MYSTERY DRILL_OUTCOME — no NodeEconomics row — register a mysteryOutcome row in route/RouteEconomics
+    ADMISSION C-SHOP: DRILL_OFFER — no SHOP_OFFER_SPECS row — declare its value and weight constant in BalanceSchema
+    ADMISSION C-REGION: REGION 0 OUTER FACILITY — ambience 'drill_theme' is not registered — RouteRegistries.registerRegionAmbience
+    ADMISSION C-CONSTANT: DRILL_NEW_NUMBER — a new BalanceConfig number must be the subject of a schema rule (CONSTANT_SUBJECTS) or listed in UNBANDED with a one-line reason

@@ -2670,9 +2670,10 @@ public final class BalanceSchema {
             if (ammoType.getReserveCap() <= 0) missing.add("reserve cap <= 0 — set the reserve cap constant");
             if (ammoType.getAmountPerBox() <= 0) missing.add("box size <= 0 — set the box amount constant");
             if (ammoType.getBankingFloorsTarget() <= 0f) missing.add("banking target <= 0 — set AMMO_BANKING_FLOORS_" + ammoType.name() + " in BalanceConfig");
-            ItemType pickup = ammoType.getItemType();
+            ItemType pickup = ammoPickupItemOrNull(ammoType);
             if (pickup == null || pickup.getCategory() != ItemCategory.AMMO) {
-                missing.add("no AMMO ItemType pickup — add an AMMO_" + ammoType.name() + " ItemType");
+                missing.add("no AMMO ItemType pickup — add an AMMO_" + ammoType.name()
+                        + " ItemType and map it in AmmoType.getItemType()");
             }
             if (BalanceConfig.SHOP_AMMO_DAMAGE_PER_POWER_POINT <= 0f) {
                 missing.add("SHOP_AMMO_DAMAGE_PER_POWER_POINT <= 0 — the shop cannot price ammo");
@@ -2726,10 +2727,25 @@ public final class BalanceSchema {
         stances.put(ItemType.CREDIT_MEDIUM, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
         stances.put(ItemType.CREDIT_LARGE, new ItemSupplyStance(credits, "credit chip — SupplyPlanner CREDITS, spawned by World.seedCreditChips"));
         for (AmmoType ammoType : AmmoType.values()) {
-            stances.put(ammoType.getItemType(), new ItemSupplyStance(ammo,
+            ItemType pickup = ammoPickupItemOrNull(ammoType);
+            if (pickup == null) continue; // C-AMMO reports the unmapped type; it must never break class init
+            stances.put(pickup, new ItemSupplyStance(ammo,
                     "ammo box '" + ammoType.getPickupTileChar() + "' — SupplyPlanner AMMO pickup"));
         }
         return Collections.unmodifiableMap(stances);
+    }
+
+    /**
+     * The AMMO pickup an ammo type is held as, or null when {@link AmmoType#getItemType()} does not map it (it throws
+     * for an unmapped type). Found by the CP6 negative drill: the schema's static data must survive any new content,
+     * so an unmapped type reaches C-AMMO as a named miss instead of crashing BalanceSchema's class initialiser.
+     */
+    private static ItemType ammoPickupItemOrNull(AmmoType ammoType) {
+        try {
+            return ammoType.getItemType();
+        } catch (IllegalStateException unmapped) {
+            return null;
+        }
     }
 
     // -------------------------------------------------------------------------------------
