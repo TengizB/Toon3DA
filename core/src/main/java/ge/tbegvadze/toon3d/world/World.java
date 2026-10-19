@@ -1288,6 +1288,13 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 Gdx.app.error("FloorTwist", "unknown hunter type " + twist.hunterEnemyTypeName());
             }
         }
+        // R16: ORA's one line about this twist, the first time the save ever arrives on it (one-shot through the
+        // ordinary CONTROL_HINT seen-flag, STORY_CRITICAL so the floor budget never swallows it). The topic is
+        // paired with the twist by name (TeachingTopic.forFloorTwist), so nothing here names a twist.
+        TeachingTopic twistTopic = TeachingTopic.forFloorTwist(twist.id());
+        if (twistTopic != null && barkSystem != null) {
+            barkSystem.request(BarkTrigger.CONTROL_HINT, twistTopic.getSubjectKey());
+        }
         Gdx.app.log("FloorTwist", "applied twist=" + twist.id() + " minimapOffline=" + minimapOffline
                 + " light=" + twist.lightMultiplier() + " wake=" + twist.wakeRadiusTiles() + "/" + twist.wakeSightTiles()
                 + " hunter=" + twist.hunterEnemyTypeName());

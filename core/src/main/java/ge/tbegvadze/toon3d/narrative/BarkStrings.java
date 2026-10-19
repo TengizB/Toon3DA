@@ -271,6 +271,13 @@ public final class BarkStrings {
         strings.put("story.bark.control.retaught.matchup",
                                                      "Wrong tool. The bag knows.");
         strings.put("story.bark.control.weapon_swap","Better gun on the floor. Check the stats before you take it.");
+        // floor-twists R16 — one line per twist, said once, on the first arrival on it.
+        strings.put("story.bark.control.twist_blackout",
+                                                     "Power's out. No map. Nothing down here sees far in the dark either. Go quiet.");
+        strings.put("story.bark.control.twist_salvage",
+                                                     "Nobody cleared this floor. More supplies here, and more of what stopped them.");
+        strings.put("story.bark.control.twist_hunted",
+                                                     "Sensors: something's coming down behind us. It walks your path. Keep moving.");
     }
 
     /**

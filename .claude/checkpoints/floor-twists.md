@@ -67,7 +67,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DoorManager.forceOpenForEnemy, bounty, texts + voice, amber frame) in World + SimWorld;
       `./gradlew build` + `./gradlew test` green.
 - [x] **CP6** — route console third confirm-bar line (R14, eight rule lines); `./gradlew build` green.
-- [ ] **CP7** — three TeachingTopic rows + strings; World requests them on twist arrival; `./gradlew build` + `./gradlew test` green.
+- [x] **CP7** — three TeachingTopic rows + strings; World requests them on twist arrival; `./gradlew build` + `./gradlew test` green.
 - [ ] **CP8** — S-TWIST (ST1/ST2), per-floor twist id in the sim ledger, TWIST REPORT, BalanceSimTest
       extended; `./gradlew balanceSim` green, no existing band changes status; sample sizes recorded.
 - [ ] **CP9** — docs (route-map, balance authority incl. SECTION 6 + CHANGELOG, balance knowledge,
@@ -186,3 +186,12 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   runPhase=PLAYING; onDescentRequested()` behind -Dtoon3d.forceRoute; overlay `present()` giving candidate 0 the
   -Dtoon3d.forceTwist affix token, revealed + focused) -> Xvfb screenshot: "RESISTANCE / STANDARD SUPPLY / HUNTED - A
   HUNTER WALKS YOUR TRAIL" stacked legibly in the bar. Hacks reverted from pre-hack copies before commit.
+- **CP7 handover:** `TeachingTopic.TWIST_BLACKOUT(TACTICAL,0) / TWIST_SALVAGE(TACTICAL,0) / TWIST_HUNTED(CRITICAL,0)`
+  + `TeachingTopic.forFloorTwist(twistId)` ("TWIST_" + id upper-cased -> forSubjectKey; null = no line). World's
+  `applyTwistRuntimeModifiers` requests `BarkTrigger.CONTROL_HINT` with that subject on every twist arrival — the
+  one-shot seen-flag (`story.beat.<id>`, generic: confirmed at CP0) makes it once per save (A5); no key, no schema bump.
+  Strings `story.bark.control.twist_*` in BarkStrings + the shipped properties. **Decision:** the idea's draft lines
+  overflowed the existing two-line bark cap (`StoryBarkTest.everyBarkFitsTheTwoLineCap`, 2 x 40 chars) and the BLACKOUT
+  one used an em dash the default story font lacks — rewritten (same meaning) and recorded in docs/story-ui-system.txt
+  (TeachingTopic count is now twenty-two; that doc is DONE for this feature). Record as an IMPLEMENTATION NOTE at
+  close. Verified: `./gradlew build` (StoryLocalizationTest + two-line cap green). Not watched on device.

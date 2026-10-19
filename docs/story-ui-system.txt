@@ -667,6 +667,22 @@ knows." Evidence is `TeachingSystem.onMatchupHintIgnored()`: one point per hint 
 player fires the resisted gun for `STORY_MATCHUP_HINT_EPISODE_FIRE_TURNS` (3) turns running (an
 episode ends when the hint clears), counted only after the first telling was delivered. No numbers.
 
+TWIST_BLACKOUT, TWIST_SALVAGE, TWIST_HUNTED (floor-twists R16) are the twentieth to twenty-second
+topics — twenty-two in all. One line per route FLOOR TWIST, requested on EVERY arrival on that twist by
+`World.applyTwistRuntimeModifiers` (BarkTrigger.CONTROL_HINT, the topic's subject key) and therefore
+delivered exactly once per save by the ordinary one-shot seen-flag (`story.beat.<id>` — no new key, no
+schema bump; NEW OPERATOR resets them with every other flag). BLACKOUT and SALVAGE are TACTICAL, HUNTED
+is CRITICAL; all three have threshold 0 — never re-taught. The pairing twist -> topic is BY NAME
+(`TeachingTopic.forFloorTwist("hunted")` -> `TWIST_HUNTED`), so World's arrival code names no twist; a
+fourth twist is taught by adding its `TWIST_<ID>` row and string. The idea file's draft lines were
+rewritten to the two-line bark cap (`STORY_BARK_MAX_LINES` x `STORY_LINE_MAX_CHARS`) and without the em
+dash the story font has no glyph for:
+    twist_blackout  "Power's out. No map. Nothing down here sees far in the dark either. Go quiet."
+    twist_salvage   "Nobody cleared this floor. More supplies here, and more of what stopped them."
+    twist_hunted    "Sensors: something's coming down behind us. It walks your path. Keep moving."
+Plain words only (legal from Region 1, no proper nouns, no numbers). The twist's NAME on arrival is an
+amber event-text sting (a HUD string, the ELITE sting precedent), not a story line.
+
 ADD A TEACHING TOPIC one value on `TeachingTopic` (tier + re-teach evidence threshold), its bark text
               (+ `.retaught` text if it has a threshold) in `BarkStrings` and the shipped properties
               file, and the firing condition + (if it has one) the evidence hook in `World` /
