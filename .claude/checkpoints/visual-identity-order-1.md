@@ -56,7 +56,7 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
 - [x] **CP6** — weapon tint (R6) + ViewVignetteRenderer (R10), disposed by World. DONE WHEN: A9, A10; build green.
 - [x] **CP7** — five moods checked via dev override (A4, A8, A12); docs (A14). DONE WHEN: build + test at
       baseline; ready for reviewer.
-- [ ] **CP8** — reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP8** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -121,3 +121,4 @@ tick in the same commit as the work**. Never more than one checkpoint uncommitte
   (A12) — code-read only. Pre-existing, out of scope: the mini-map draws a large white unexplored grid (order 4).
   Docs: docs/art-direction.txt (new), wall-renderer-guide, route-map-system, INDEX.md, CLAUDE.md (constants table,
   Where to Find Info, Docs table 20, render order 4b).
+- **CP8:** reviewer round 1 PASS WITH FIXES (fixed in 71ca913, c6c9899), round 2 PASS. STATUS IMPLEMENTED. Next: visual-identity-order-2.
