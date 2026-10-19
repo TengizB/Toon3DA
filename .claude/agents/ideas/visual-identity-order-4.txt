@@ -1,0 +1,335 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Visual Identity 4 — UI kit and the in-play HUD layer
+CREATED: 2026-10-19
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+Defines the game's interface vocabulary once, as render/UiKit: a chamfered panel,
+corner brackets, a plate with four states, a segmented meter, a divider and shadowed
+text, all coloured from util/ArtDirection's two inks. It then applies the kit to
+everything on screen DURING PLAY: the HUD panels, the touch buttons, the mini-map, the
+boss bar, event text and damage numbers. These are the UI pixels in every gameplay
+screenshot.
+
+What was SAID: "HUD and menus ... consistent". What is NEEDED: today the HUD is steel
+with LED green, the touch buttons phosphor green, the mini-map grey, and the boss bar,
+event text and damage numbers each their own. The player's suit interface should
+look like one designed object, in SUIT ink (amber on gunmetal: ORA's colour, because
+she is the suit).
+
+
+SCOPE
+-----
+IN
+  - render/UiKit: static, allocation-free primitives (R1-R6).
+  - ArtDirection UI geometry constants (R7).
+  - Restyle: hud/HudRenderer, input/touch/TouchControllerRenderer,
+    render/LevelRenderer (mini-map) + the player marker it draws,
+    render/BossHudRenderer, render/EventTextRenderer (+ EventTextSystem colour
+    mapping), render/ImpactEffectRenderer (damage numbers only).
+  - Adoption of order 3's type scale on these screens.
+  - docs/art-direction.txt UI KIT section; docs/procedural-vitals-hud.txt updated.
+
+OUT (deliberately not doing now)
+  - ANY change to touch geometry: button centres, sizes and hit areas
+    (TouchConstants positions/sizes) stay byte-identical (V4). Only drawing changes.
+  - HUD layout: panel positions, the 440-unit centre gap, the face box and bar sizes
+    stay. This is a re-skin, not a re-layout.
+  - Scanlines, chromatic aberration, CRT curvature (D3).
+  - Enemy health bars / intent icons / name-tag geometry (enemy-health-bars.txt owns
+    them; only their font changed in order 3).
+  - Overlays and menus (inventory, level-up, relic, codex, route map, shop, story,
+    framing): orders 5 and 6.
+  - The face portrait art.
+
+
+GAMEPLAY LOOP
+-------------
+None. Rendering only. Every tap lands exactly where it did before.
+
+
+RULES
+-----
+  R1  PANEL. UiKit.panel(shapes, x, y, width, height, fillR/G/B, fillAlpha,
+      borderR/G/B): a rectangle with all four corners chamfered at 45 degrees by
+      UI_CHAMFER, filled, with a UI_BORDER_THICKNESS outline in the border colour.
+      Drawn with ShapeRenderer filled triangles/rects and lines. No allocation.
+  R2  BRACKETS. UiKit.brackets(shapes, x, y, width, height, inkR/G/B, alpha): four
+      L-shaped corner marks, each arm UI_BRACKET_LENGTH long and UI_BRACKET_THICKNESS
+      thick, inset UI_BRACKET_INSET from the panel edge. This is the series'
+      signature motif.
+  R3  PLATE (any tappable). UiKit.plate(shapes, x, y, width, height, PlateState,
+      ink): chamfered with UI_PLATE_CHAMFER. States:
+        IDLE      fill UI_PANEL       alpha (caller's), border UI_LINE
+        PRESSED   fill UI_PANEL_RAISED alpha (caller's pressed alpha), border = ink, full alpha
+        SELECTED  fill UI_PANEL_RAISED, border = ink, plus brackets in ink
+        DISABLED  fill UI_PANEL at 0.5x alpha, border UI_LINE at 0.5x alpha
+      PlateState is an enum carrying its fill/border choice as per-constant data (no
+      switch).
+  R4  METER. UiKit.meter(shapes, x, y, width, height, fraction, segments, onR/G/B,
+      trackR/G/B): `segments` cells separated by UI_METER_GAP. Lit cells use on-colour;
+      the partial last cell is lit proportionally from its left edge.
+  R5  DIVIDER. UiKit.divider(shapes, x, y, width, inkR/G/B, alpha): a 1-unit line with
+      a 6-unit ink tick at its left end.
+  R6  SHADOWED TEXT. UiKit.text(batch, font, text, x, y, r, g, b, alpha): draws text
+      offset by UI_TEXT_SHADOW_OFFSET (down-right, in world units, scaled by the
+      font's current scale) in UI_INK_BLACK at UI_TEXT_SHADOW_ALPHA 0.85, then the
+      text. A GlyphLayout-free overload uses font.draw directly. No allocation (the
+      caller passes a pre-built CharSequence or StringBuilder).
+  R7  GEOMETRY CONSTANTS (ArtDirection): UI_CHAMFER 8, UI_PLATE_CHAMFER 12,
+      UI_BORDER_THICKNESS 2, UI_BRACKET_LENGTH 14, UI_BRACKET_THICKNESS 3,
+      UI_BRACKET_INSET 4, UI_METER_GAP 2, UI_TEXT_SHADOW_OFFSET 1.5,
+      UI_TEXT_SHADOW_ALPHA 0.85, UI_PANEL_ALPHA_HUD 0.82 (= today's HUD_PANEL_ALPHA,
+      which then references it), UI_SCRIM_ALPHA 0.75 (used from order 5).
+  R8  INK RULE. Everything in this order is SUIT ink: accents SUIT_AMBER, secondary
+      accents SUIT_AMBER_DIM, neutrals UI_*. FACILITY_CYAN appears only where the
+      facility is speaking: the mini-map EXIT marker (the facility's way out) and the
+      NAV OFFLINE plate's text on BLACKOUT floors. Semantic colours only where they
+      carry their meaning (V5).
+  R9  HUD (hud/HudRenderer):
+      - Left and right panels: UiKit.panel in UI_PANEL at UI_PANEL_ALPHA_HUD, border
+        UI_LINE, brackets SUIT_AMBER_DIM. The bevel light/dark lines are removed (the
+        chamfer + brackets replace them).
+      - Labels (HP, AR, ...) UI_TEXT_SECONDARY at TYPE_CAPTION. Values UI_TEXT_PRIMARY.
+      - HP meter: keep the existing green->red health ramp and tick count, with the
+        ramp's endpoints from ArtDirection.HEALTH_GREEN -> CombatPalette.DAMAGE;
+        track UI_INK_BLACK.
+      - AR meter: ARMOUR_BLUE, track UI_INK_BLACK.
+      - Ammo digits: HEAVY face (order 3), UI_TEXT_PRIMARY; low ammo (existing low
+        threshold) SUIT_AMBER; empty CombatPalette.DAMAGE. Clip pips SUIT_AMBER, track
+        UI_INK_BLACK.
+      - Melee meter: SUIT_AMBER (no longer green: green is reserved for health/buff).
+      - XP bar: CREDITS_GOLD (earned things are gold), track UI_INK_BLACK.
+      - Weapon slot strip: active slot = plate SELECTED in SUIT_AMBER; filled = IDLE;
+        empty = DISABLED.
+      - LED_GREEN accents become SUIT_AMBER, except where green means "healthy"
+        (then HEALTH_GREEN).
+      - Status icons: unchanged colours (semantic, already sourced from CombatPalette).
+      - Credits readout: CREDITS_GOLD. BLACKOUT NAV OFFLINE plate: UiKit.panel +
+        FACILITY_CYAN_DIM text (R8).
+      - Face box frame: UiKit.panel with brackets. The portrait is untouched.
+  R10 TOUCH BUTTONS (input/touch/TouchControllerRenderer): each button's outline
+      becomes a chamfered square of the same 96x96 (or its existing size) with
+      corner chamfer = TOUCH_BUTTON_CORNER_RADIUS (16). The constant is renamed
+      TOUCH_BUTTON_CHAMFER with the same value. Hit testing is unchanged and does not
+      read this constant (verify).
+        idle     fill UI_PANEL alpha TOUCH_FILL_ALPHA_IDLE, rim UI_LINE alpha
+                 TOUCH_RIM_ALPHA, icon UI_TEXT_PRIMARY alpha TOUCH_ICON_ALPHA_IDLE
+        pressed  fill UI_PANEL_RAISED alpha TOUCH_FILL_ALPHA_PRESSED, rim SUIT_AMBER
+                 alpha 1, icon SUIT_AMBER alpha TOUCH_ICON_ALPHA_PRESSED
+        locked   icon alpha TOUCH_ICON_ALPHA_LOCKED, rim UI_LINE (as today)
+      Contextual buttons (INSPECT, USE) and PAUSE use the same style. USE keeps its
+      prominence with permanent SUIT_AMBER brackets. The switch-hint outline keeps its
+      existing amber pulse and constants. The phosphor-green constants are deleted.
+      Icon shapes are unchanged.
+  R11 MINI-MAP (render/LevelRenderer): frame UiKit.panel (UI_INK_BLACK fill at 0.70,
+      border UI_LINE) + brackets SUIT_AMBER_DIM; walls UI_TEXT_SECONDARY at 0.85;
+      grid lines UI_LINE at 0.35; props UI_TEXT_DISABLED; barrel dot keeps its pulse
+      in CombatPalette.DAMAGE; enemies CombatPalette.DAMAGE (pulse unchanged); player
+      marker + facing wedge SUIT_AMBER; exit FACILITY_CYAN (pulse unchanged); shop
+      CREDITS_GOLD; doors keep their keycard colours; weapon dots SUIT_AMBER. Fog of war
+      and every geometry constant unchanged.
+  R12 BOSS BAR (render/BossHudRenderer): panel + brackets; name HEAVY UI_TEXT_PRIMARY at
+      TYPE_LABEL; epithet UI_TEXT_SECONDARY at TYPE_CAPTION; health meter
+      CombatPalette.DAMAGE with BOSS_HEALTH_SEGMENTS 20; phase threshold ticks
+      SUIT_AMBER; the existing heal flash and state labels keep their semantic
+      colours.
+  R13 EVENT TEXT (render/EventTextRenderer + EventTextSystem colour table): every line
+      drawn through UiKit.text (shadowed). Colour mapping by code: WHITE ->
+      UI_TEXT_PRIMARY, GREY -> UI_TEXT_SECONDARY, GOLD -> SUIT_AMBER, AMBER ->
+      SUIT_AMBER, GREEN -> HEALTH_GREEN, BLUE -> CombatPalette DEFENSE, ARMOUR ->
+      ARMOUR_BLUE, RED -> CombatPalette.DAMAGE. The byte codes and every call site are
+      unchanged; only the colour table they index changes.
+  R14 DAMAGE NUMBERS (render/ImpactEffectRenderer): HEAVY face, shadowed (R6), colours
+      semantic (damage dealt UI_TEXT_PRIMARY, crit/heavy SUIT_AMBER, blocked
+      CombatPalette DEFENSE, if those categories exist; existing categories map 1:1,
+      no new category).
+  R15 TYPE SCALE ADOPTION. On these screens, every text draw uses one of
+      ArtDirection.TYPE_* (order 3 R8) times the screen's existing global factor. No
+      raw literal scales remain in these files.
+
+
+PLAYER EXPERIENCE
+-----------------
+The bottom of the screen now reads as one instrument: dark gunmetal, amber brackets,
+bone-white numbers. Green and red only ever mean health and harm. The thumb buttons
+match the HUD instead of glowing a different green. A player who has never read
+anything learns the language early: amber is mine, cyan is the facility's.
+
+
+TECHNICAL NOTES
+---------------
+New: render/UiKit (static helpers, no state, no allocation), render/PlateState (enum).
+Constants: ArtDirection R7 block. HudConstants.HUD_PANEL_ALPHA references
+  ArtDirection.UI_PANEL_ALPHA_HUD. TouchConstants.TOUCH_BUTTON_CORNER_RADIUS is
+  renamed TOUCH_BUTTON_CHAMFER (same value; update all references).
+  ArtDirection.BOSS_HEALTH_SEGMENTS 20 (or HudConstants, near the boss block; builder
+  picks, documented).
+Touched: HudRenderer (its private static Color palette is replaced by ArtDirection
+  reads; any Color objects it keeps are pre-allocated fields), TouchControllerRenderer,
+  LevelRenderer, BossHudRenderer, EventTextRenderer, EventTextSystem (colour table
+  only), ImpactEffectRenderer.
+Package note: hud/ is not in CLAUDE.md's package table today. Add a row ("hud — the
+  in-play HUD renderer") in the docs step.
+Tile symbols, persistence, story, sound, balance: none.
+
+
+VISUAL DESIGN
+-------------
+The signature: a dark gunmetal slab, 45-degree cut corners, four small amber L-brackets.
+Bracket arms are 14 units long, short enough to read as a frame and not a box. The
+amber appears in exactly three roles: brackets, the active/pressed state, and the
+player's resource numbers (ammo, the player marker). Everything else is neutral, so
+amber never becomes wallpaper. Contrast target: UI_TEXT_PRIMARY on UI_PANEL is roughly
+12:1, and UI_TEXT_SECONDARY on UI_PANEL roughly 5:1. Both clear 4.5:1 (computed from
+the palette in docs/art-direction.txt).
+
+
+BALANCE NOTES
+-------------
+None.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Order 3 fonts: HEAVY for ammo, boss name, event text, damage numbers.
+  - Order 1 vignette: the HUD and buttons are drawn after it, so they are unaffected.
+  - Floor twists: the BLACKOUT plate is restyled (R9) but keeps its trigger and text.
+  - Switch hint (balance-overhaul order 3): its amber pulse outline is kept as is.
+  - Story bark panel: drawn above the HUD by StoryBarkRenderer and restyled in order 6.
+    Until then it keeps its own look; that is a deliberate interim state.
+
+
+EDGE CASES
+----------
+  - A HUD element at 0 width (empty meter): UiKit.meter draws only the track.
+  - Very low HP (ramp end): the meter shows CombatPalette.DAMAGE, and the existing
+    low-HP pulse logic is untouched.
+  - Locked touch buttons during the action lock: locked style (R10) as today.
+  - Hard-pause overlays: touch clusters are not drawn in those phases (unchanged).
+  - FULL_HD render resolution: UI is drawn in world units and is unaffected.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  render/UiKit exists with panel, brackets, plate, meter, divider and text (R1-R6).
+      A code read finds no `new` inside any of them.
+  A2  In play, the HUD panels, face box, mini-map frame and boss bar all show chamfered
+      corners and amber corner brackets.
+  A3  No phosphor/LED green remains in HUD chrome or touch buttons. Green on screen
+      appears only on the HP meter (and status/buff icons that mean a buff).
+  A4  Touch buttons: chamfered, bone icons when idle, amber rim + icon while pressed.
+      Every button's tap area is unchanged: tapping the same screen points triggers the
+      same actions as before (spot-check all 12 actions + PAUSE + INSPECT + USE).
+      TouchConstants positions and sizes are unchanged in the diff.
+  A5  Mini-map: player marker amber, enemies red, exit cyan, shop gold, keycard doors in
+      their key colours. Fog-of-war behaviour unchanged.
+  A6  Event text strings (e.g. "THREAT LV", region gate announce) render shadowed and
+      readable over a bright wall, in the R13 colours.
+  A7  Damage numbers render in the HEAVY face with shadow.
+  A8  `grep` finds no raw float literal passed to setScale in the six touched renderers.
+      All scales come from TYPE_* constants (R15).
+  A9  BLACKOUT floor: the NAV OFFLINE plate shows in the kit style with cyan text.
+  A10 `./gradlew build` + `./gradlew test` green. No new test file or method.
+  A11 docs/art-direction.txt UI KIT section (primitives, states, ink rule, contrast
+      table) and docs/procedural-vitals-hud.txt (palette + chamfer/bracket chrome)
+      updated. CLAUDE.md package table gains the hud row; the HUD Layout section's
+      HUD_PANEL_ALPHA note stays true.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (libgdx-specialist)  ArtDirection R7 block, PlateState,
+     TouchConstants rename.
+  2. LOGIC  none.
+  3. RENDER  (libgdx-specialist)  UiKit; then HudRenderer; TouchControllerRenderer;
+     LevelRenderer; BossHudRenderer; EventTextRenderer + EventTextSystem table;
+     ImpactEffectRenderer.
+  4. CONTENT  none.
+  5. TESTS  None. Not balance-bearing; verified by `./gradlew build` + `./gradlew
+     lwjgl3:run`. `./gradlew test` must stay green.
+  6. DOCS  docs/art-direction.txt UI KIT; docs/procedural-vitals-hud.txt;
+     .claude/CLAUDE.md package table (hud row) + key-classes mention of UiKit.
+
+RISKS AND UNKNOWNS
+  - ShapeRenderer chamfers need filled triangles: build each panel as a centre rect +
+    four edge rects + four corner triangles. Lines for the border use rectLine or thin
+    rects. Batch per ShapeType so a frame does not churn begin/end.
+  - Verify TouchControllerRenderer's corner radius is not also read by the touch hit
+    test (InputProcessor side). If it is, the hit test keeps reading the OLD value
+    under a new name. V4 forbids any hit-area change.
+  - Low-HP pulse, damage flash and other HUD animations must keep their timing; only
+    colours move.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/visual-identity-order-4.md exists on the branch, committed
+       and pushed.
+  CP1  render/UiKit + PlateState + the ArtDirection R7 constants exist; nothing uses
+       them yet (DELIBERATELY unused, CP2 onward use them); `./gradlew build` green.
+  CP2  HudRenderer restyled per R9 + R15. A2 (HUD part), A3 (HUD part) and A9 hold on
+       run; `./gradlew build` green.
+  CP3  TouchControllerRenderer restyled per R10, constant renamed. A4 verified
+       (including the tap spot-check); `./gradlew build` green.
+  CP4  LevelRenderer (R11) and BossHudRenderer (R12) restyled. A5 holds;
+       `./gradlew build` green.
+  CP5  EventTextRenderer/EventTextSystem (R13) and ImpactEffectRenderer (R14)
+       restyled. A6, A7 and A8 hold. Docs (step 6) updated. `./gradlew build` +
+       `./gradlew test` green. Ready for reviewer.
+
+
+ASSUMPTIONS
+-----------
+  AS1  The suit is the player's interface, and ORA (whose accent is already amber
+       0.98/0.78/0.30) is the suit. So the suit ink is amber. That ties the fiction to
+       the chrome for free.
+  AS2  Chamfered corners read "industrial facility" better than the current rounded
+       touch buttons. A 16-unit chamfer on a 96-unit button is as thumb-friendly as a
+       16-unit radius.
+  AS3  Ammo, melee charge and the player marker are "the player's own resource" and
+       use amber. HP and armour keep their universal semantic colours.
+  AS4  XP and credits share gold because both are earned rewards.
+  AS5  The HP ramp keeps its existing tick count. Segmenting it differently would
+       change how players read their health at a glance, which is not in scope.
+  AS6  The interim state where the story bark panel keeps its old look until order 6
+       is acceptable for one order.
+
+
+DECISIONS
+---------
+  D1  Owner instruction: decide by default and ask nothing.  ->  All choices are the
+      designer's.  (2026-10-19)
+  D2  Two inks, suit vs facility  ->  Amber = the player's suit (HUD, controls, the
+      player's own screens). Cyan = what the facility shows you. Diegetic, and easy to
+      learn without being told.  (2026-10-19)
+  D3  Scanlines / CRT / chromatic aberration (scanline-crt-hud-marine-vitals.txt)  ->
+      Not adopted. On phone screens they read as compression artefacts and they cost
+      legibility. The identity comes from shape (chamfer + brackets) and ink.
+      (2026-10-19)
+  D4  Touch hit areas  ->  Frozen. A visual pass must never move a control under a
+      player's thumb.  (2026-10-19)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  visual-identity.txt, visual-identity-order-3.txt (fonts),
+          procedural-hud-no-textures.txt, touch-controller-thumb-cluster.txt,
+          scanline-crt-hud-marine-vitals.txt (not adopted), fog-of-war-minimap.txt,
+          minimap-full-visibility-overhaul.txt, boss-fight-mobile-overseer-order-8.txt
+  Docs:   docs/art-direction.txt, docs/procedural-vitals-hud.txt

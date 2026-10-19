@@ -1,0 +1,274 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Visual Identity 5 — Suit screens: inventory, cards, codex
+CREATED: 2026-10-19
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+Applies order 4's UiKit and SUIT ink to the player's own full-screen overlays: the
+inventory family (grid, weapon slots, build page, item and ability windows), weapon
+inspect, the level-up card choice, the relic offer and the codex (ORA's archive). After
+this order, every screen the player opens from their own suit has the same frame,
+header, card and plate language as the HUD underneath it.
+
+What was SAID: "menus ... consistent art direction". What is NEEDED: each of these
+screens was built by a different idea series (inventory-menu, xp-level-progression,
+relics, story-ui order 6), so each has its own scrim alpha, title treatment, card
+style and private colour constants. They should read as one product.
+
+
+SCOPE
+-----
+IN
+  - UiKit additions: screenHeader and card (R1, R2).
+  - Restyle, in SUIT ink: render/InventoryOverlayRenderer, ItemGridPanel,
+    WeaponSlotsPanel, BuildPagePanel, ItemWindow, AbilityWindow,
+    WeaponInspectOverlayRenderer (+ WeaponLevelTag, MatchupGlyphs colours if they
+    draw chrome), progression/LevelUpOverlayRenderer, render/RelicOfferOverlayRenderer,
+    render/CodexOverlayRenderer.
+  - Type scale adoption (order 3 R8) on all of them.
+  - Private chrome colour constants in these classes and in HudConstants'
+    RELIC_OFFER_* / ItemConstants' INVENTORY_* chrome blocks are re-pointed at
+    ArtDirection (values move; names stay where other code reads them).
+  - docs: art-direction.txt SCREENS section; relic-system.txt and
+    story-ui-system.txt (codex visual) where they state colours.
+
+OUT (deliberately not doing now)
+  - Layout changes: every panel rectangle, card position, row height, scroll metric
+    and touch target in these screens stays (V4). Re-skin, not re-layout.
+  - RARITY and TIER colours (RELIC_RARITY_COLOR_*, WeaponTier colours, BuildTagPalette,
+    CombatPalette status colours). They are semantic, and the player already learned
+    them. They become the INK of a card's border/brackets, nothing else.
+  - Icons and item art (ItemIconTextures, weapon icons): unchanged.
+  - Facility and story screens (route map, shop, event console, story panels, boot
+    card, title, pause/settings, report): order 6.
+  - New screens, new buttons, transitions or animations beyond what exists.
+
+
+GAMEPLAY LOOP
+-------------
+None. Opening, navigating and closing each screen is unchanged: same taps, same
+places, same phases, same turn costs (none).
+
+
+RULES
+-----
+  R1  SCREEN HEADER. UiKit.screenHeader(shapes, batch, font, x, y, width, title): the
+      title in HEAVY at TYPE_HEADING in UI_TEXT_PRIMARY, left-aligned, then a
+      UiKit.divider below it the header's width, with its tick in SUIT_AMBER. Every
+      suit screen's existing title text uses it at its existing anchor.
+  R2  CARD. UiKit.card(shapes, x, y, width, height, inkR/G/B, PlateState): a plate
+      (order 4 R3) whose border and brackets take the given INK. For a relic card the
+      ink is the rarity colour. For a perk/keystone card it is BuildTagPalette's tag
+      colour (or SUIT_AMBER where no tag applies). For a weapon it is the tier colour.
+      Pressed/selected = SELECTED state in that ink. This is the ONLY place a rarity or
+      tier colour appears in chrome.
+  R3  SCRIM. Every suit screen draws one full-screen UI_INK_BLACK scrim at
+      UI_SCRIM_ALPHA 0.75 over the frozen view (relic offer 0.78 -> 0.75; the codex
+      and inventory adopt the same value). One scrim per screen, never stacked.
+  R4  PANELS. Every rectangular body panel becomes UiKit.panel in UI_PANEL at
+      ArtDirection.UI_PANEL_ALPHA_SCREEN (0.94; the HUD's 0.82 is for in-play chrome
+      only), border UI_LINE. SUIT_AMBER_DIM brackets go on the OUTERMOST panel of each
+      screen only (brackets on every nested panel become noise).
+  R5  PLATES. Every tappable control (tabs, close/back, LEAVE IT, CODEX, setting knobs
+      on the codex footer, inventory actions, scroll arrows if any) becomes UiKit.plate
+      with the four states mapped from that control's existing pressed/selected/
+      disabled logic. Tabs: selected tab = SELECTED in SUIT_AMBER; others IDLE.
+  R6  TEXT ROLES. Titles: R1. Section labels: TYPE_LABEL UI_TEXT_SECONDARY. Body text:
+      TYPE_BODY UI_TEXT_PRIMARY. Captions, hints, footnotes: TYPE_CAPTION
+      UI_TEXT_SECONDARY. Disabled: UI_TEXT_DISABLED. Numbers that are the player's
+      resources (ammo counts, credits): their semantic colours (CREDITS_GOLD for
+      credits). A relic's COST line keeps CombatPalette.DAMAGE red (it is a harm).
+  R7  NEW DOTS / BADGES (codex NEW dot, level-up "new" markers if any): SUIT_AMBER
+      filled 6-unit square with a 1-unit UI_INK_BLACK edge. Not a circle; squares fit
+      the chamfer language.
+  R8  RELIC OFFER specifics: the 0.4 s input lockout, glow and every timing constant are
+      unchanged. The rarity glow keeps its colour. The LEAVE IT plate becomes a
+      DISABLED-looking-until-pressed IDLE plate (UI_PANEL + UI_LINE), so it never
+      competes with the cards.
+  R9  CODEX specifics: tab column = plates (R5). Rows = flat (no plate) with a
+      UiKit.divider between rows; the selected row's left edge gets a 3-unit
+      SUIT_AMBER bar. The pinned WHERE AM I page keeps its pinned position with a
+      SUIT_AMBER tick on its divider. The footer settings strip = plates. The body
+      text keeps the story text size multiplier (accessibility) on top of TYPE_BODY.
+  R10 INVENTORY specifics: item grid cells = plates (IDLE empty, filled = IDLE with
+      the item icon, selected = SELECTED SUIT_AMBER). Weapon slots = cards inked by
+      the tier colour (R2). Build page tag chips keep BuildTagPalette fills, framed by
+      a 1-unit UI_LINE border.
+  R11 Every literal colour in the touched files' chrome code is replaced by an
+      ArtDirection / CombatPalette / existing semantic palette reference. Remaining
+      literals are allowed only inside icon/art drawing routines (e.g. a procedural
+      item icon), each marked with a short comment.
+
+
+PLAYER EXPERIENCE
+-----------------
+Opening the bag, levelling up, choosing a relic and reading the archive all happen
+inside the same object: the gunmetal suit display with amber brackets. Rarity still
+reads instantly, now as the colour of the card's frame instead of a different-looking
+card each time.
+
+
+TECHNICAL NOTES
+---------------
+New: UiKit.screenHeader, UiKit.card; ArtDirection.UI_PANEL_ALPHA_SCREEN 0.94.
+Touched: the eleven classes listed in SCOPE IN. Constant blocks re-pointed:
+  HudConstants RELIC_OFFER_* chrome colours (geometry untouched), ItemConstants
+  INVENTORY_* chrome colours, StoryUiConstants STORY_CODEX_* chrome colours (geometry
+  untouched).
+Story layer: CodexOverlayRenderer is part of the story UI. Its behaviour (unlocks,
+  tabs, NEW dots, scroll) is untouched; only paint changes.
+Tile symbols, persistence, sound, balance: none.
+
+
+VISUAL DESIGN
+-------------
+Every suit screen, top to bottom: scrim -> outer panel with amber brackets -> header
+(HEAVY title + amber-ticked divider) -> body panels without brackets -> plates for
+anything tappable. Rarity/tier colour lives on card frames only. No gradients except
+the scrim. No drop shadows on panels; text shadows only where text sits on the 3D
+view (it does not, here).
+
+
+BALANCE NOTES
+-------------
+None.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Order 3 fonts and order 4 kit: required (this order consumes them).
+  - Story accessibility settings (text size) on the codex: still applied.
+  - Relic offer phase rules (RunPhase.RELIC_OFFER, pause still works): unchanged.
+  - Level-up keystone offers at 5/10/15/20: same cards, inked by tag (R2).
+  - Weapon inspect's matchup glyphs: they keep their semantic colours.
+
+
+EDGE CASES
+----------
+  - Empty inventory / empty build page / no codex entries in a tab: the panels draw
+    with their existing empty-state text in UI_TEXT_SECONDARY.
+  - A CURSED relic card: ink is its rarity colour (red family). Its cost line stays
+    DAMAGE red; the card frame and the cost text are distinguishable by position.
+  - Text size LARGE in the codex: wraps as before (order 3 sweep holds; re-check
+    after the panel border thickness change).
+  - Pause opened over the relic offer and closed again: the offer redraws in the new
+    style with state intact (unchanged logic).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Opening each of: inventory (all tabs/pages), an item window, an ability window,
+      weapon inspect, a level-up offer, a keystone offer, a relic offer (RUN_START is
+      enough), and the codex shows the same scrim, the same header (HEAVY title +
+      amber-ticked divider), chamfered panels, and amber brackets on the outer panel
+      only.
+  A2  Relic cards are framed in their rarity colour, weapon slot cards in their tier
+      colour, perk cards in their tag colour. A pressed/selected card shows brackets in
+      that colour.
+  A3  Every tap target is where it was: each screen's controls trigger the same actions
+      at the same points (spot-check every control on every screen). Geometry constants
+      are unchanged in the diff.
+  A4  A grep of the eleven touched classes finds no chrome colour literal outside icon
+      drawing routines (R11).
+  A5  The codex NEW marker is an amber square, the selected row has the amber left bar,
+      and WHERE AM I stays pinned.
+  A6  All scrims are 0.75 (code read).
+  A7  No text overflows any panel at story text sizes SMALL/MEDIUM/LARGE on these
+      screens.
+  A8  `./gradlew build` + `./gradlew test` green. No new test file or method.
+  A9  docs/art-direction.txt SCREENS section (header, card, scrim, plate rules, suit vs
+      facility table so far). docs/relic-system.txt (overlay colours now from
+      ArtDirection, rarity colours unchanged) and docs/story-ui-system.txt (codex
+      paint) updated.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (libgdx-specialist)  ArtDirection.UI_PANEL_ALPHA_SCREEN;
+     re-point the chrome colour blocks named in TECHNICAL NOTES.
+  2. LOGIC  none.
+  3. RENDER  (libgdx-specialist)  UiKit.screenHeader/card; then the screens in the
+     CHECKPOINTS order.
+  4. CONTENT  none.
+  5. TESTS  None. Not balance-bearing; verified by `./gradlew build` + `./gradlew
+     lwjgl3:run`. `./gradlew test` must stay green.
+  6. DOCS  docs/art-direction.txt SCREENS; docs/relic-system.txt; docs/story-ui-system.txt
+     (codex visual); docs/inventory-menu-order-*.txt only if one states a colour that
+     changed (update that line).
+
+RISKS AND UNKNOWNS
+  - ItemWindow (1068 lines) and WeaponInspectOverlayRenderer (917 lines) are large. Find
+    their chrome routines first and change nothing in their content logic.
+  - Some chrome colours may be read by tests (StoryUiFoundationTest asserts accent
+    ARRAY LENGTHS, not values). If an existing test asserts a value that moved,
+    update it in the same commit (allowed).
+  - BuildTagPalette fills on dark plates: confirm contrast of tag text. If a tag colour
+    fails 4.5:1 against UI_PANEL, draw the tag label in UI_INK_BLACK on the chip
+    instead of changing the tag colour.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/visual-identity-order-5.md exists on the branch, committed
+       and pushed.
+  CP1  UiKit.screenHeader + UiKit.card + UI_PANEL_ALPHA_SCREEN exist, and the chrome
+       colour blocks named in TECHNICAL NOTES are re-pointed at ArtDirection (values
+       change, every reader compiles); `./gradlew build` green.
+  CP2  InventoryOverlayRenderer, ItemGridPanel, WeaponSlotsPanel and BuildPagePanel
+       restyled (R3-R6, R10, R11). A1/A2/A3 hold for the inventory; `./gradlew build`
+       green.
+  CP3  ItemWindow, AbilityWindow and WeaponInspectOverlayRenderer restyled. A1/A3 hold
+       for them; `./gradlew build` green.
+  CP4  LevelUpOverlayRenderer and RelicOfferOverlayRenderer restyled (R2, R8). A1/A2/A3
+       hold; `./gradlew build` green.
+  CP5  CodexOverlayRenderer restyled (R9, R7). A5 holds; `./gradlew build` green.
+  CP6  A4, A6 and A7 sweep done across all eleven classes. Docs (step 6) updated.
+       `./gradlew build` + `./gradlew test` green. Ready for reviewer.
+
+
+ASSUMPTIONS
+-----------
+  AS1  The codex is a suit screen (ORA's archive, opened from the inventory), not a
+       facility one.
+  AS2  Rarity/tier colours are learned semantics and must not move. Framing cards with
+       them strengthens the existing language without changing it.
+  AS3  Brackets on the outer panel only. Nested brackets would turn the signature into
+       clutter.
+  AS4  Unifying scrims at 0.75 is imperceptibly different from today's 0.78 on the
+       relic offer and makes every suit screen feel like the same layer.
+  AS5  Screen panels use 0.94 alpha (nearly opaque) because their text is long. The HUD
+       keeps 0.82 because the world should show through during play.
+
+
+DECISIONS
+---------
+  D1  Owner instruction: decide by default and ask nothing.  ->  All choices are the
+      designer's.  (2026-10-19)
+  D2  Rarity colour placement  ->  Card frame ink only, never card fills or titles.
+      Fills stay neutral, so text contrast is identical on every card.  (2026-10-19)
+  D3  Square NEW markers instead of dots  ->  Matches the chamfer/bracket geometry.
+      (2026-10-19)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  visual-identity.txt, visual-identity-order-3/4.txt, inventory-menu-order-1..6,
+          relics-run-changing-artifacts.txt, xp-level-progression-system.txt,
+          story-ui-order-6.txt (codex), weapon-compare-rework.txt
+  Docs:   docs/art-direction.txt, docs/relic-system.txt, docs/story-ui-system.txt,
+          docs/xp-level-progression.txt
