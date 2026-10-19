@@ -183,7 +183,7 @@ public enum Perk {
 
     Perk(BuildTag tag, int maxRank, String displayName, String effectLine,
          Attribute attributeGrant, int attributeGrantPerRank, PerkEffect... effects) {
-        this.tag                   = tag;
+        this.tag                   = java.util.Objects.requireNonNull(tag, "Perk tag");
         this.maxRank               = Math.max(1, Math.min(BalanceConfig.PERK_MAX_RANK, maxRank));
         this.displayName           = displayName;
         this.effectLine            = effectLine;

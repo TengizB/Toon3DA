@@ -342,6 +342,16 @@ class BalanceAuditTest {
         assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.REGION));
     }
 
+    /**
+     * C-CONSTANT (K18): every numeric BalanceConfig field is the subject of a schema rule (CONSTANT_SUBJECTS), listed
+     * in UNBANDED with a reason, or in the shrink-only GRANDFATHERED list of pre-order-8 fields; a name listed
+     * anywhere that is no longer a field fails as stale. A new BalanceConfig number with no home fails here.
+     */
+    @Test
+    void everyBalanceNumberIsBandedOrDeclaredUnbanded() {
+        assertAdmitted(BalanceSchema.admissionResults(BalanceSchema.AdmissionRule.CONSTANT));
+    }
+
     // R-GEARGATE (region gear step + golden-ratio gate) was RETIRED by balance-overhaul order 1 and REPLACED
     // by R-LADDER L2/L4 (per-floor lag multipliers, level felt), asserted by
     // thePowerLadderHoldsAtEveryDepthToTheRunEnd — a stronger, per-floor version of the same property.

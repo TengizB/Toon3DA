@@ -54,7 +54,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
       DONE WHEN: both gates green.
 - [x] **CP4** — C-NODE, C-EVENT, C-SHOP, C-REGION live; BalanceReport ADMISSION table prints.
       DONE WHEN: A1, A7 hold; both gates green.
-- [ ] **CP5** — declaration hardening (E3); C-CONSTANT with GRANDFATHERED / UNBANDED.
+- [x] **CP5** — declaration hardening (E3); C-CONSTANT with GRANDFATHERED / UNBANDED.
       DONE WHEN: A3, A4 hold; both gates green.
 - [ ] **CP6** — negative drill for all 18 C-rules, messages recorded in the handover below.
       DONE WHEN: A2 holds (nothing from the drill committed).
@@ -122,3 +122,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   (Region E has no ELITE row); BossTable.rowForDepth falls back, so C-REGION matches rows() by exact depth; StoryRegion
   via fromRouteRegionIndex (clamps) so the check is index < StoryRegion.values().length. An affix with budgetScale > 1
   must declare a reward. A1 completes at CP5 (C-CONSTANT is the 18th rule).
+- **CP5 handover (A1, A3, A4 hold):** all 18 AdmissionRule constants implemented. E3: `EnemyType.heavyWindUp()` and
+  `moveSet()` are now ABSTRACT (every constant states them; values unchanged); `Weapon` already compile-enforced
+  (damageClass / getItemType / isMelee abstract, ammo type a required constructor argument); WeaponAbility / Perk /
+  Keystone constructors `Objects.requireNonNull` their tag (and ability family / trigger / rank); RoomBlueprint
+  `supplyStance()` since CP3. C-CONSTANT: 1066 public numeric BalanceConfig fields scanned by reflection;
+  `GRANDFATHERED` (1066 names, sorted, SHRINK-ONLY, at the end of BalanceSchema), `CONSTANT_SUBJECTS` and `UNBANDED`
+  empty with javadoc; results = one per offending / stale name + a `C-CONSTANT: GRANDFATHERED` summary row.
+  Test `everyBalanceNumberIsBandedOrDeclaredUnbanded`. NOTE for order 7: any number it ADDS must go in
+  CONSTANT_SUBJECTS or UNBANDED (never GRANDFATHERED).

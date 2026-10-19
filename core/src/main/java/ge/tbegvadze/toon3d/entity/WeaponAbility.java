@@ -176,11 +176,11 @@ public enum WeaponAbility {
     WeaponAbility(Family family, Trigger trigger, Rank rank, BuildTag buildTag,
                   String displayName, char hudGlyph,
                   String shortHint, String fullDescription, String[] affectsLines) {
-        this.family          = family;
-        this.trigger         = trigger;
-        this.rank            = rank;
+        this.family          = java.util.Objects.requireNonNull(family, "WeaponAbility family");
+        this.trigger         = java.util.Objects.requireNonNull(trigger, "WeaponAbility trigger");
+        this.rank            = java.util.Objects.requireNonNull(rank, "WeaponAbility rank");
         this.legendaryOnly   = rank == Rank.SIGNATURE;
-        this.buildTag        = buildTag;
+        this.buildTag        = java.util.Objects.requireNonNull(buildTag, "WeaponAbility buildTag");
         this.displayName     = displayName;
         this.hudGlyph        = hudGlyph;
         this.shortHint       = shortHint;

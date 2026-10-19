@@ -93,7 +93,7 @@ public enum Keystone {
 
     Keystone(BuildTag tag, String displayName, String gainLine, String costLine,
              PerkEffect[] gains, PerkEffect[] costs) {
-        this.tag         = tag;
+        this.tag         = java.util.Objects.requireNonNull(tag, "Keystone tag");
         this.displayName = displayName;
         this.gainLine    = gainLine;
         this.costLine    = costLine;
