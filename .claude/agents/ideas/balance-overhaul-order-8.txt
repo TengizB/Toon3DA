@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Systems
 TITLE: The Content Balance Contract — how new content enters
 CREATED: 2026-09-30
