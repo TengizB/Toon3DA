@@ -66,7 +66,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP5** — HUNTED runtime (PlayerTrail, HuntedPursuit + listener, trail branch R11a-g,
       DoorManager.forceOpenForEnemy, bounty, texts + voice, amber frame) in World + SimWorld;
       `./gradlew build` + `./gradlew test` green.
-- [ ] **CP6** — route console third confirm-bar line (R14, eight rule lines); `./gradlew build` green.
+- [x] **CP6** — route console third confirm-bar line (R14, eight rule lines); `./gradlew build` green.
 - [ ] **CP7** — three TeachingTopic rows + strings; World requests them on twist arrival; `./gradlew build` + `./gradlew test` green.
 - [ ] **CP8** — S-TWIST (ST1/ST2), per-floor twist id in the sim ledger, TWIST REPORT, BalanceSimTest
       extended; `./gradlew balanceSim` green, no existing band changes status; sample sizes recorded.
@@ -175,3 +175,14 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   costs exactly one turn and plays one open sound, player-opened-door count unchanged (A10), engages on sight, kill ->
   10 ammo boxes, state DONE. **NOT verified on device:** the amber health-bar frame and the two event texts (xdotool
   is absent, so 40 turns of touch input cannot be scripted under Xvfb) — build-verified only; reviewer should look.
+- **CP6 handover:** `RouteMapOverlayRenderer.buildHeaderText` (runs on focus change, never per frame) builds
+  `twistLineText` = `affix.displayName() + LEGEND_TWIST_SEPARATOR + definition.ruleLine()` for ANY revealed focused
+  node with an affix row that has a rule line (five ELITE affixes + three twists — read from the row, so A12 holds),
+  truncated to `LEGEND_TWIST_MAX_WIDTH` (640). Drawn in `palette.hazardAmber` at `LEGEND_TWIST_OFFSET_Y` (now -20);
+  with the line present the two promise lines move to `LEGEND_PROMISE_THREAT/REWARD_OFFSET_Y_WITH_TWIST` (24 / 2) so
+  all three sit inside the bar (y 12..92). **Decision:** separator is " - ", not the spec's em dash — the console's
+  default BitmapFont (lsans-15) has no U+2014 glyph (it does have the "·" the rule lines use). **Verified (A3):**
+  temporary uncommitted hacks (Main RESPAWN start; World end-of-initial-build `startRoomChoiceResolved=true;
+  runPhase=PLAYING; onDescentRequested()` behind -Dtoon3d.forceRoute; overlay `present()` giving candidate 0 the
+  -Dtoon3d.forceTwist affix token, revealed + focused) -> Xvfb screenshot: "RESISTANCE / STANDARD SUPPLY / HUNTED - A
+  HUNTER WALKS YOUR TRAIL" stacked legibly in the bar. Hacks reverted from pre-hack copies before commit.

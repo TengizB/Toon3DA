@@ -356,10 +356,18 @@ public final class RouteMapConstants {
     public static final float LEGEND_PROMISE_THREAT_OFFSET_Y = 22f;
     public static final float LEGEND_PROMISE_REWARD_OFFSET_Y = -6f;
     /**
-     * Floor-twists R14: the focused node's affix / twist line ("HUNTED — A HUNTER WALKS YOUR TRAIL", hazard
+     * Floor-twists R14: the focused node's affix / twist line ("HUNTED - A HUNTER WALKS YOUR TRAIL", hazard
      * amber), a third stacked line under the threat and reward promise. Offset from the bar's vertical middle.
+     * With the third line present the two promise lines move up to the _WITH_TWIST offsets so all three fit
+     * inside the bar (y 12..92; the default font's line height is 18 at scale 1).
      */
-    public static final float LEGEND_TWIST_OFFSET_Y = -30f;
+    public static final float LEGEND_TWIST_OFFSET_Y = -20f;
+    public static final float LEGEND_PROMISE_THREAT_OFFSET_Y_WITH_TWIST = 24f;
+    public static final float LEGEND_PROMISE_REWARD_OFFSET_Y_WITH_TWIST = 2f;
+    /** Name / rule separator. A plain hyphen: the console's default BitmapFont has no em-dash glyph. */
+    public static final String LEGEND_TWIST_SEPARATOR = " - ";
+    /** The widest the twist line may draw: the confirm bar's centre gap between CANCEL and ENGAGE, less padding. */
+    public static final float LEGEND_TWIST_MAX_WIDTH = 640f;
     public static final float CONFIRM_LABEL_SCALE = 1.1f;
 
     // =========================================================================
