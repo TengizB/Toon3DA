@@ -4,6 +4,26 @@ TITLE: Floor Twists — rule-changing floor modifiers on the map
 CREATED: 2026-10-18
 IMPLEMENTED: -
 ---
+IMPLEMENTATION NOTE (2026-10-19, CP0-CP9 built; reviewer gate pending) — where the build diverged from this plan:
+  - BLACKOUT wake perception ships at 3 / 6, not 2 / 4 (SECTION 27). At 2 / 4 the sim flipped an EXISTING band
+    (S-RELIC SR3, 1.01 -> 0.99); per the gate protocol the twist number moved, not the band. A6 therefore reads: a
+    dormant enemy 4 tiles away in open sight does not wake on BLACKOUT; the same enemy wakes at 3.
+  - HUNTED numbers tuned at CP3 into R-TWIST: TWIST_HUNTED_THREAT_SHARE 0.40 -> 0.78, bounty 3 -> 10 owned-ammo boxes
+    (A9 / AS15 read 10), TWIST_WEIGHT_HUNTED 1.0 -> 0.5.
+  - The bounty is placed by EnemyManager.killEnemy (same owned-aware even spread as the cache, nearest free tiles within
+    TWIST_HUNTED_BOUNTY_SEARCH_RADIUS_TILES 8), not fulfilled by World — so World and SimWorld share it with no mirror;
+    World sees the boxes through the existing DropPlacedListener.
+  - The hunter clock and trail are advanced INSIDE EnemyManager.takeTurn (trail first, clock last), which is "the same
+    call site that advances EnemyManager's turn"; no extra tick subscriber.
+  - Confirm-bar third line uses " - " (the console's default font has no em-dash glyph); with it present the promise
+    lines move up (LEGEND_PROMISE_*_OFFSET_Y_WITH_TWIST 24 / 2, LEGEND_TWIST_OFFSET_Y -20).
+  - ORA's three lines were rewritten to the existing two-line bark cap (2 x 40 chars) and without the em dash; the
+    shipped text is in docs/story-ui-system.txt (THE COMPETENCE MODEL).
+  - R-TRAJECTORY needed no code: the trajectory walk already folds affixRowFor(node), so setTwistPool on the audit
+    generator is the whole fold.
+  - SimWorld never fulfilled ANY plan's ammo-cache request (pre-existing gap); it now stamps them only on twisted floors
+    so no existing band moved.
+  - Twist -> TeachingTopic pairing is by name (TeachingTopic.forFloorTwist), so World names no twist (A12).
 
 OVERVIEW
 --------

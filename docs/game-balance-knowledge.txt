@@ -563,6 +563,29 @@ THE TUNING LICENCE (D7): only SECTION 26 magnitudes and MYSTERY_WEIGHT_RELIC_CAC
   cache weight re-checks R-RELIC-STACK d25 and R-MYSTERY-EV.
 
 ================================================================================
+SECTION 6C — FLOOR TWISTS (floor-twists; BalanceConfig SECTION 27)
+================================================================================
+A FLOOR TWIST is a FLOOR_TWIST-scoped row of route/NodeAffixRegistry rolled onto an eligible COMBAT node at map-gen
+(TWIST_ROLL_CHANCE_COMBAT 0.30, then a weighted pick among rows with minDepth <= depth; ELITE rolls unchanged). Every
+balance-bearing number is in BalanceConfig SECTION 27:
+  roll + weights        TWIST_ROLL_CHANCE_COMBAT 0.30; TWIST_WEIGHT_BLACKOUT 1.0 / _SALVAGE 1.0 / _HUNTED 0.5;
+                        TWIST_MIN_DEPTH_BLACKOUT 2 / _SALVAGE 2 / _HUNTED 4
+  BLACKOUT              TWIST_BLACKOUT_WAKE_RADIUS_TILES 3 / _SIGHT_TILES 6 (defaults 4 / 8; dormant-WAKE check only)
+                        — the light 0.45 and enemy min shade 0.35 are COSMETIC RenderConstants
+  SALVAGE               TWIST_SALVAGE_BUDGET_MULT 1.30 (EnemyBudgetOverride, like SWARM), _AMMO_BOXES 4 (owned types,
+                        scattered), _STIMS 1 '+', _ARMOUR_SHARDS 1 'a'
+  HUNTED                TWIST_HUNTED_ARRIVAL_TURNS 40, _WARNING_TURNS 5, _MIN_SPAWN_DISTANCE_TILES 5 (Manhattan from the
+                        arrival tile), _BOUNTY_AMMO_BOXES 10, _THREAT_SHARE 0.78 (the hunter priced as ALWAYS arriving)
+  audit / sim           TWIST_NEUTRAL_EV_TOLERANCE 0.10 (T2), TWIST_SIM_MAX_DEATH_RATE_RATIO 1.50, TWIST_SIM_MIN_FLOORS 60
+Ledger rows (route/RouteEconomics, Kind.TWIST): blackout budgetScale 1.0 / no payoff; salvage 1.30 + 4 boxes + stim +
+armour-shard heal; hunted 1 + 0.78 + 10 boxes. Priced by R-TWIST T1-T3; banded by S-TWIST ST1/ST2.
+KNOWN PROBLEMS: (1) HUNTED is priced by scaling the roster, which also scales planned supply the hunter does not bring;
+(2) the sim cannot see BLACKOUT's missing map — it reads only the wake change, so BLACKOUT is priced neutral; (3) folding
+twists into the trajectory walk pushed DEADLIEST / BALANCED cumulative scarcity S to 1.65 / 1.66 (band top 1.70); (4)
+TACTICAL dies near floor 3, so S-TWIST is under-sampled (13 / 12 / 1 floors) and the hunter never arrives in the sim.
+See docs/game-balance-authority.txt (R-TWIST, S-TWIST) and docs/route-map-system.txt (FLOOR TWISTS).
+
+================================================================================
 SECTION 7 — ENEMIES: STATS, ROLES, THREAT POINTS (the numerator)
 ================================================================================
 File: BalanceConfig SECTION 2 (stats) + SECTION 9 (bands). enemy/EnemyType.role().

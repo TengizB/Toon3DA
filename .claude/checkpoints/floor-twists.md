@@ -70,7 +70,7 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP7** — three TeachingTopic rows + strings; World requests them on twist arrival; `./gradlew build` + `./gradlew test` green.
 - [x] **CP8** — S-TWIST (ST1/ST2), per-floor twist id in the sim ledger, TWIST REPORT, BalanceSimTest
       extended; `./gradlew balanceSim` green, no existing band changes status; sample sizes recorded.
-- [ ] **CP9** — docs (route-map, balance authority incl. SECTION 6 + CHANGELOG, balance knowledge,
+- [x] **CP9** — docs (route-map, balance authority incl. SECTION 6 + CHANGELOG, balance knowledge,
       enemy-system, story-ui, tick-system, CLAUDE.md); `./gradlew build` + `./gradlew test` green; ready for `reviewer`.
 
 ## NOTES CARRIED FORWARD
@@ -211,3 +211,15 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   first thing to watch when samples grow. ROUND SUMMARY before -> after (CP3 -> CP8): T4 exit health 0.90 -> 0.91 OUT;
   T4 no-heal deaths 0.27 -> 0.28 IN; T6 SPREAD 0.63 -> 0.64 OUT; T7 dominant tag 0.47 -> 0.48 OUT; T7 keystone 0.43 ->
   0.50 IN; T9 offers/visit 1.12 -> 1.11 OUT; all others identical.
+- **CP9 handover:** docs updated — route-map-system.txt (FLOOR TWISTS under COMBAT, AffixScope note, confirm-bar third
+  line, ledger Kind.TWIST, catalog line, ADD A FLOOR TWIST recipe); game-balance-authority.txt (R-TWIST in SECTION 3
+  with both model gaps, S-TWIST, band list, SECTION 5 ROUTE line, SECTION 6 regenerated from `util.BalanceReport.main`
+  — run with `-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8` and classpath core/build/classes/java/main +
+  core/build/resources/main + gdx-1.14.1.jar — SECTION 8 replaced with the CP8 balanceSim summary + floor-twists NOTES,
+  CHANGELOG line); game-balance-knowledge.txt (new SECTION 6C); enemy-system.txt (wake override + THE HUNTED TRAIL
+  HUNTER); tick-system.txt (the clock rides takeTurn); CLAUDE.md (route row, TeachingTopic list = 22, S-TWIST in the sim
+  row). story-ui-system.txt was done at CP7. Idea file: IMPLEMENTATION NOTE added under the header; STATUS stays IN
+  PROGRESS. `./gradlew build` + `./gradlew test` green except the pre-existing StoryBarkTest failure. **READY FOR
+  `reviewer`.** Look first at: the trajectory scarcity S jump (DEADLIEST/BALANCED 0.69/0.72 -> 1.65/1.66, band top
+  1.70); S-TWIST under-sampling (hunter never arrives in the sim); EnemyManager computeTrailPlan / executeTrailStep;
+  placeHunterBounty; the on-device visuals never watched (amber hunter frame, HUNTED texts, ORA arrival lines).
