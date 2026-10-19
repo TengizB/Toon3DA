@@ -41,7 +41,7 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — EnemySpriteSheets (R1 cut, R2 session cache, R3 log); EnemyRenderer uses it, no longer disposes
       sheets; Main.dispose → disposeAll. DONE WHEN: A1-A3 hold on run; build green.
-- [ ] **CP2** — EnemyRenderer contact shadows (R4-R6, hover + lunge). DONE WHEN: A5, A6 by code/run; build green.
+- [x] **CP2** — EnemyRenderer contact shadows (R4-R6, hover + lunge). DONE WHEN: A5, A6 by code/run; build green.
 - [ ] **CP3** — PropRenderer + ShopMachineRenderer contact shadows. DONE WHEN: A4 holds; build green.
 - [ ] **CP4** — MuzzleLightCatalog, GameMath.muzzleLightFalloff, AtmosphereGrade light term + clock, PlayerController
       weapon-fired listener wired by World; walls + floor/ceiling read it (props/enemies deliberately not yet).
@@ -64,3 +64,9 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   opaque). Offline composites (scratchpad/halo/*.png: original | cut 0.50 | cut 0.98 over a lit grey) show those are
   anti-aliased EDGE texels with body colour, not a dark glow: 0.50 gives a crisp silhouette with no outline, while a
   near-opaque cut chews the edges ragged. No per-path override table needed.
+- **CP2 handover:** `render/ContactShadow` (static): `buildTexture()` (renderer owns + disposes), `alphaAtDepth(mood,
+  depthTiles)`, `draw(batch, tex, wallRenderer, projectionColumnCount, projectionColumnWidth, centerWorldX,
+  floorLineY, shadowWidth (already × WIDTH_FRACTION_*), depth, alpha)` — per-column quads, same z-test as sprites,
+  LEAVES batch colour set (caller restores). `GameMath.contactShadowAlpha(r)`. RenderConstants.CONTACT_SHADOW_*.
+  Enemy: floor line captured pre-hover/pre-lunge, width pre-lunge-scale, EYE_TYRANT × 0.55, afterimages unshadowed,
+  dead enemies culled before this loop. A5/A6 by code read.

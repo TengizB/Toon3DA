@@ -77,6 +77,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final Texture                       whitePixelTexture;
     // Heavy danger-tile floor marker (balance-overhaul order 4, H15): procedural ring, built once.
     private final Texture                       heavyMarkerTexture;
+    /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
+    private final Texture                       contactShadowTexture;
     private final SpriteBatch                   batch;
     private final ShapeRenderer                 shapeRenderer;
 
@@ -270,6 +272,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         this.whitePixelTexture    = buildWhitePixelTexture();
         this.heavyMarkerTexture   = buildHeavyMarkerTexture();
+        this.contactShadowTexture = ContactShadow.buildTexture();
         this.nameTagFont          = new BitmapFont();
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout        = new GlyphLayout();
@@ -429,6 +432,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float aspectRatio        = (float) regionWidth / regionHeight;
             float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
 
+            // R5: the shadow width is taken BEFORE the lunge scale so it never pulses with the swing.
+            float shadowBodyWidth = spriteScreenWidth;
+
             // Melee lunge: scale sprite up during attack animation
             float lungeCurve = 0f;
             if (!enemy.type.isRanged() && attackAnimStrength > 0f) {
@@ -447,6 +453,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (columnSpan <= 0) continue;
 
             float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+            // R5: the FLOOR LINE is this value before any hover or lunge offset is applied below.
+            float floorLineY = drawBottom;
             // EYE_TYRANT hovers; all other enemies (including MIRE_WRAITH) stand on the floor.
             if (enemy.type == EnemyType.EYE_TYRANT) {
                 drawBottom += fullWallLineHeight * EYE_TYRANT_HOVER_OFFSET_FRACTION;
@@ -701,6 +709,18 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 drawBossAfterimageTrail(enemy, region, heightMultiplier,
                         spriteRed, spriteGreen, spriteBlue);
             }
+
+            // R4-R6 contact shadow: drawn BEFORE the sprite, same per-column z-test, never graded.
+            // Live upright enemies only (dead enemies are skipped at the cull, ghosts are separate).
+            float shadowAlpha = ContactShadow.alphaAtDepth(
+                    atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth);
+            if (enemy.type == EnemyType.EYE_TYRANT) {
+                shadowAlpha *= CONTACT_SHADOW_HOVER_ALPHA_SCALE;
+            }
+            ContactShadow.draw(batch, contactShadowTexture, wallRenderer,
+                    projectionColumnCount, projectionColumnWidth,
+                    worldCenterX, floorLineY, shadowBodyWidth * CONTACT_SHADOW_WIDTH_FRACTION_ENEMY,
+                    depth, shadowAlpha);
 
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
@@ -2306,6 +2326,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         shapeRenderer.dispose();
         whitePixelTexture.dispose();
         heavyMarkerTexture.dispose();
+        contactShadowTexture.dispose();
         nameTagFont.dispose();
         // Sheet textures are owned by EnemySpriteSheets (disposed in Main.dispose()), not here.
     }

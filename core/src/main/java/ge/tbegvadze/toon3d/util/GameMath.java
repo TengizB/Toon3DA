@@ -1189,6 +1189,23 @@ public final class GameMath {
     }
 
     /*
+     * Formula: contactShadowAlpha
+     * Derivation:
+     *   The shadow texture is an ellipse inscribed in its rectangle. For a texel centre mapped to
+     *   [-1,1] on both axes, the normalised elliptical radius is r = sqrt(nx^2 + ny^2).
+     *   Alpha falls smoothly to zero at the rim: alpha = (1 - r^2)^2 for r in [0,1], 0 beyond.
+     *   (Zero value and zero slope at r = 1, so the ellipse has no visible edge.)
+     * Edge cases:
+     *   r >= 1 (or NaN-free negative input is squared) returns 0; r = 0 returns 1.
+     */
+    public static float contactShadowAlpha(float normalisedRadius) {
+        float radiusSquared = normalisedRadius * normalisedRadius;
+        if (radiusSquared >= 1f) return 0f;
+        float falloff = 1f - radiusSquared;
+        return falloff * falloff;
+    }
+
+    /*
      * Formula: applyRgbShadeToPackedRGBA
      * Derivation:
      *   Per-channel twin of applyShadeToPackedRGBA. The scalar shade becomes one shade per channel

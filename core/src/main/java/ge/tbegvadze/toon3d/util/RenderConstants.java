@@ -604,4 +604,23 @@ public final class RenderConstants {
     public static final float TWIST_BLACKOUT_LIGHT_MULTIPLIER = 0.45f;
     /** R7c: enemy billboards on a BLACKOUT floor never shade below this, so a body in the dark is a silhouette. */
     public static final float TWIST_BLACKOUT_ENEMY_MIN_SHADE  = 0.35f;
+
+    // -------------------------------------------------------------------------
+    // Contact shadows (visual-identity-order-2 R5/R6) — soft ellipse under every upright billboard
+    // -------------------------------------------------------------------------
+    public static final int   CONTACT_SHADOW_TEXTURE_WIDTH        = 64;
+    public static final int   CONTACT_SHADOW_TEXTURE_HEIGHT       = 32;
+    /** Shadow width as a fraction of the projected billboard width. */
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_ENEMY = 0.70f;
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_PROP   = 0.85f;
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_PICKUP = 0.60f;
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_SHOP   = 0.90f;
+    /** Shadow height = shadow width x this ratio. */
+    public static final float CONTACT_SHADOW_HEIGHT_RATIO         = 0.22f;
+    /** Peak alpha before the fog fade. */
+    public static final float CONTACT_SHADOW_ALPHA                = 0.50f;
+    /** Fraction of the alpha removed at full fog: alpha x (1 - fade x fog). */
+    public static final float CONTACT_SHADOW_FOG_FADE             = 0.80f;
+    /** Extra alpha scale for a hovering enemy so the gap to the body reads as height. */
+    public static final float CONTACT_SHADOW_HOVER_ALPHA_SCALE    = 0.55f;
 }
