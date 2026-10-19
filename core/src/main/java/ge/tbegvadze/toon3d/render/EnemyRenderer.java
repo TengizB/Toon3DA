@@ -240,20 +240,23 @@ public final class EnemyRenderer implements Renderable, Disposable {
         // forces this batch to reallocate.
         this.batch               = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
 
-        // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
-        this.blightSheetTexture   = loadSheetOrFallback(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
-        this.infernalSheetTexture = loadSheetOrFallback(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
+        // Sheets come from the session-lifetime EnemySpriteSheets cache (alpha-cut once per app session);
+        // the batch bracket makes the one-per-session timing log fire on the first construction only.
+        EnemySpriteSheets.beginLoadBatch();
+        this.blightSheetTexture   = EnemySpriteSheets.get(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
+        this.infernalSheetTexture = EnemySpriteSheets.get(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
         // Elemental golems — amber/gold fallback if the shared sheet is absent.
-        this.elementalGolemSheetTexture = loadSheetOrFallback(ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH,
+        this.elementalGolemSheetTexture = EnemySpriteSheets.get(ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH,
                 0.85f, 0.65f, 0.20f);
         // Necrotic faction — each archetype is a single standalone PNG drawn full-frame.
-        this.blightCorruptorTexture = loadSheetOrFallback(ENEMY_BLIGHT_CORRUPTOR_PATH, 0.40f, 0.60f, 0.20f);
-        this.vortexEyeTexture       = loadSheetOrFallback(ENEMY_VORTEX_EYE_PATH,       0.55f, 0.25f, 0.70f);
-        this.ghoulTexture           = loadSheetOrFallback(ENEMY_GHOUL_PATH,            0.45f, 0.55f, 0.35f);
-        this.crawlerTexture         = loadSheetOrFallback(ENEMY_CRAWLER_PATH,          0.55f, 0.45f, 0.30f);
-        this.revenantTexture        = loadSheetOrFallback(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
+        this.blightCorruptorTexture = EnemySpriteSheets.get(ENEMY_BLIGHT_CORRUPTOR_PATH, 0.40f, 0.60f, 0.20f);
+        this.vortexEyeTexture       = EnemySpriteSheets.get(ENEMY_VORTEX_EYE_PATH,       0.55f, 0.25f, 0.70f);
+        this.ghoulTexture           = EnemySpriteSheets.get(ENEMY_GHOUL_PATH,            0.45f, 0.55f, 0.35f);
+        this.crawlerTexture         = EnemySpriteSheets.get(ENEMY_CRAWLER_PATH,          0.55f, 0.45f, 0.30f);
+        this.revenantTexture        = EnemySpriteSheets.get(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
         // Overseer boss portrait — its own full-frame texture (ORDER 8), cyan-tinted fallback if absent.
-        this.overseerBossTexture    = loadSheetOrFallback(ENEMY_BOSS_OVERSEER_PATH,     0.55f, 0.80f, 0.95f);
+        this.overseerBossTexture    = EnemySpriteSheets.get(ENEMY_BOSS_OVERSEER_PATH,     0.55f, 0.80f, 0.95f);
+        EnemySpriteSheets.endLoadBatch();
         this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture,
                                                        elementalGolemSheetTexture);
         // Map the standalone PNGs as full-frame regions (one whole image per archetype).
@@ -2301,18 +2304,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
     public void dispose() {
         batch.dispose();
         shapeRenderer.dispose();
-        blightSheetTexture.dispose();
-        infernalSheetTexture.dispose();
-        elementalGolemSheetTexture.dispose();
-        blightCorruptorTexture.dispose();
-        vortexEyeTexture.dispose();
-        ghoulTexture.dispose();
-        crawlerTexture.dispose();
-        revenantTexture.dispose();
-        overseerBossTexture.dispose();
         whitePixelTexture.dispose();
         heavyMarkerTexture.dispose();
         nameTagFont.dispose();
+        // Sheet textures are owned by EnemySpriteSheets (disposed in Main.dispose()), not here.
     }
 
     // -------------------------------------------------------------------------
@@ -2371,45 +2366,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.HELL_BARON,  bossPlaceholder);
 
         return map;
-    }
-
-    private static Texture loadSheetOrFallback(String assetPath, float red, float green, float blue) {
-        if (Gdx.files.internal(assetPath).exists()) {
-            Texture loaded = new Texture(Gdx.files.internal(assetPath));
-            loaded.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-            return loaded;
-        }
-        return generateFallbackSheet(red, green, blue);
-    }
-
-    private static Texture generateFallbackSheet(float red, float green, float blue) {
-        // 2×2 grid fallback: 128×128 total, each quadrant 64×64 with simple eye pattern
-        Pixmap pixmap = new Pixmap(128, 128, Pixmap.Format.RGBA8888);
-        pixmap.setColor(red, green, blue, 1f);
-        pixmap.fill();
-        pixmap.setColor(1f, 1f, 0f, 1f);
-        // Simple eye dots in each quadrant
-        for (int quadrantRow = 0; quadrantRow < 2; quadrantRow++) {
-            for (int quadrantColumn = 0; quadrantColumn < 2; quadrantColumn++) {
-                int offsetX = quadrantColumn * 64;
-                int offsetY = quadrantRow    * 64;
-                pixmap.fillRectangle(offsetX + 12, offsetY + 20, 12, 12);
-                pixmap.fillRectangle(offsetX + 40, offsetY + 20, 12, 12);
-            }
-        }
-        pixmap.setColor(0f, 0f, 0f, 1f);
-        for (int quadrantRow = 0; quadrantRow < 2; quadrantRow++) {
-            for (int quadrantColumn = 0; quadrantColumn < 2; quadrantColumn++) {
-                int offsetX = quadrantColumn * 64;
-                int offsetY = quadrantRow    * 64;
-                pixmap.fillRectangle(offsetX + 15, offsetY + 23, 6, 6);
-                pixmap.fillRectangle(offsetX + 43, offsetY + 23, 6, 6);
-            }
-        }
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
     }
 
     private static Texture buildWhitePixelTexture() {

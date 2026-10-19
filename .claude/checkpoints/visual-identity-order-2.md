@@ -39,7 +39,7 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — EnemySpriteSheets (R1 cut, R2 session cache, R3 log); EnemyRenderer uses it, no longer disposes
+- [x] **CP1** — EnemySpriteSheets (R1 cut, R2 session cache, R3 log); EnemyRenderer uses it, no longer disposes
       sheets; Main.dispose → disposeAll. DONE WHEN: A1-A3 hold on run; build green.
 - [ ] **CP2** — EnemyRenderer contact shadows (R4-R6, hover + lunge). DONE WHEN: A5, A6 by code/run; build green.
 - [ ] **CP3** — PropRenderer + ShopMachineRenderer contact shadows. DONE WHEN: A4 holds; build green.
@@ -56,3 +56,11 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   session scratchpad; on-screen checks via the scratchpad capture harness (`:capture:capture` with `-Dcap.script`,
   Xvfb :77 + openbox; title needs two taps at world (640,330), boot card CONTINUE at (640,576), forward at (1084,327)).
   Both are scratchpad-only and must be recreated in a fresh container.
+- **CP1 handover:** `render/EnemySpriteSheets.get(path, r, g, b)` + `beginLoadBatch()/endLoadBatch()` (EnemyRenderer
+  brackets its 9 gets; logs once per session when something was conditioned) + `disposeAll()` (Main.dispose after
+  world.dispose). EnemyRenderer no longer owns `loadSheetOrFallback`/`generateFallbackSheet`. Measured on screen:
+  "conditioned 9 sheets in 379 ms" (Xvfb/llvmpipe container, incl. PNG decode) — under R3's 400.
+  DECISION: cut stays 0.50 for all sheets. The spoke flagged that 4.5-16% of texels sit at alpha 128-254 (they turn
+  opaque). Offline composites (scratchpad/halo/*.png: original | cut 0.50 | cut 0.98 over a lit grey) show those are
+  anti-aliased EDGE texels with body colour, not a dark glow: 0.50 gives a crisp silhouette with no outline, while a
+  near-opaque cut chews the edges ragged. No per-path override table needed.

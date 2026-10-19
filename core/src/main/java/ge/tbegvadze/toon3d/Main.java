@@ -93,5 +93,7 @@ public class Main extends ApplicationAdapter {
             Gdx.app.log("StoryTelemetry", world.getStoryTelemetry().describeComprehensionProxies());
         }
         world.dispose();
+        // Session-lifetime enemy sheets outlive every World; freed only here (visual-identity-order-2 R2).
+        ge.tbegvadze.toon3d.render.EnemySpriteSheets.disposeAll();
     }
 }
