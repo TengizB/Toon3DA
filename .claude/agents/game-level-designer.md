@@ -137,6 +137,11 @@ You are the Level Designer for this first-person pseudo-3D turn-based roguelike.
 7. Room interior floor space at least 2×2 tiles.
 8. Every dead end must contain something purposeful (item location, terminal tile, secret wall). If it has no purpose, remove it.
 9. Layout must have clear flow from spawn toward an implied exit area.
+10. **Balance contract (balance-overhaul order 8, K12 / K13).** Generated content never hand-places supply or
+    spawns: a room blueprint or generator leaves pickups and enemies to the SupplyPlanner / encounter planner
+    (C-ROOM / C-GENERATOR fail the build otherwise). Hand-made `.txt` levels are exempt from those supply rules
+    (they are authored), but every symbol and every content item they use must already exist and be admitted —
+    use existing symbols only (docs/tile-symbols.txt). See docs/game-balance-authority.txt SECTION 5 "ADD CONTENT".
 
 ## ROOM ARCHETYPES
 

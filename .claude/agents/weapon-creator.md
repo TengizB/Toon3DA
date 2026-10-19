@@ -397,6 +397,10 @@ Before reporting done:
 - Every new constant is in Constants.java (no magic numbers in render code)
 - marchShot guards all three nullable parameters
 - World.java constructor updated to use the new weapon
+- **The balance contract is part of "done"** (balance-overhaul order 8): the weapon's K5 checklist (and K6 for
+  every new ability) in docs/game-balance-authority.txt SECTION 5 "ADD CONTENT" is filled, and C-WEAPON /
+  C-ABILITY are green in `./gradlew test` — see docs/weapon-creation-guide.txt STEP 0. An ADMISSION failure is a
+  missing declaration: add it, never waive it.
 
 ## Working under the orchestrator (hub and spoke)
 

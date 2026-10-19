@@ -74,6 +74,15 @@ of it lands in BalanceConfig / BalanceSchema / GameBalance / a balance-bearing
 GameMath formula / sim/ - that decides the TESTS step below.
 
 
+BALANCE ADMISSION
+-----------------
+The content balance contract (docs/game-balance-authority.txt SECTION 5 "ADD CONTENT", balance-overhaul
+order 8). For EACH balance-bearing content item this idea adds, copy its K checklist (K1-K18) and fill
+every part - DECLARE / BAND / PRICE / REGISTER / COMMUNICATE / DONE - with the decided values, never
+"the builder will tune it". Its DONE always includes "C-<KIND> green". Or write:
+  None - adds no balance-bearing content.
+
+
 INTERACTIONS
 ------------
 How this meets existing systems (at least 2-3): tick bus, enemies, doors,

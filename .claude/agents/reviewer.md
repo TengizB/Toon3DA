@@ -63,6 +63,14 @@ Judge discipline, not cosmetics: renumbered or merged checkpoints are not findin
 - no tile symbol used that is not in `docs/tile-symbols.txt`; a new FIXED symbol has all five parts
   of the STRICT RULE in one commit.
 
+**Balance admission (balance-overhaul order 8)** — docs/game-balance-authority.txt SECTION 5 "ADD CONTENT":
+- An idea that adds balance-bearing content (an enemy, family, verb, boss, weapon, ability, perk, item, ammo
+  type, status, hazard, room that places supply or spawns, generator, node type, event, shop offer, region, or a
+  new BalanceConfig number) with a MISSING or UNFILLED BALANCE ADMISSION block is **blocking**.
+- Any K-checklist DONE item unmet — its C-rule red, the content absent from its BalanceReport table — is
+  **blocking**. A waiver registered against RuleKind.ADMISSION, or a new number added to GRANDFATHERED, is
+  **blocking** (G5; GRANDFATHERED only ever shrinks).
+
 **Correctness** — tick ordering, action lock, off-by-one on tile coordinates, Y-up / bottom-left
 errors, angle units, null after lookup, dead-enemy/dead-player same-turn races, floor transitions,
 app pause/resume, persistence migration (a `SCHEMA_VERSION` bump that forgets a migration).

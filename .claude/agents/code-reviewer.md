@@ -20,6 +20,10 @@ Flag any code that assumes top-left origin, uses raw screen pixels as world coor
 6. **Naming**: math variables should be descriptive (not `x1`, but `playerVelocityX`)
 7. **Null checks**: especially after AssetManager.get() calls
 8. **Performance**: no `new` allocations inside render() loop (use pools or pre-allocate)
+9. **Balance contract** (balance-overhaul order 8): flag a balance-bearing literal (damage, HP, supply, threat, XP,
+   credits, price, run shape) written outside `util/BalanceConfig` / `GameBalance`, a literal shop price instead of
+   `GameMath.shopPrice`, and any pickup placed outside `level/SupplyPlanner` (or a room blueprint stamping supply).
+   Point at docs/game-balance-authority.txt SECTION 5 "ADD CONTENT".
 
 **Never recommend adding a test** outside game balance (`BalanceConfig`, `BalanceSchema`, `GameBalance`, balance `GameMath` formulas, `sim/`) — it is a HARD RULE in CLAUDE.md, so "needs a unit test" is never a finding.
 

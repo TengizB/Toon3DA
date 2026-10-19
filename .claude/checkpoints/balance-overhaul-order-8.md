@@ -61,7 +61,7 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
 - [x] **CP7** — authority doc ADD CONTENT (G, K, X), knowledge doc, weapon guide, enemy doc,
       route/tileset/story cross-links.
       DONE WHEN: A5 holds.
-- [ ] **CP8** — CLAUDE.md rule + row, the seven agent files, _TEMPLATE.txt.
+- [x] **CP8** — CLAUDE.md rule + row, the seven agent files, _TEMPLATE.txt.
       DONE WHEN: A6, A8 hold; both gates green.
 - [ ] **CP9** — reviewer PASS; STATUS IMPLEMENTED.
 
@@ -175,3 +175,12 @@ one into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   guide STEP 0, enemy-system ADD AN ENEMY (new section at the end) + COVERAGE -> C-VERB, route-map EXTENSIBILITY
   RECIPES balance half, story-ui ADD AN ENEMY, relic-system COVERAGE -> R-RELIC-SOURCE; tileset RECIPE B since CP3.
   Docs only — no code moved, so no gate re-run (last green: CP6 `db88b5d`).
+- **CP8 handover (A6 holds; A8 = the gate run recorded in this commit's message):** CLAUDE.md — Two Lanes
+  full-lane trigger "balance-bearing content ... must pass the content contract" (B2) + the short-lane room
+  allowance narrowed to supply- and spawn-neutral blueprints (G4 override) + a "Where to Find Info" row. Agents:
+  weapon-creator(+fable) QUALITY GATES (K5/K6 + C-WEAPON/C-ABILITY green = done), creative-game-designer step 6b
+  (BALANCE ADMISSION block, decide the band), game-level-designer rule 10 (K12/K13; hand .txt exempt but existing
+  symbols only), reviewer "Balance admission" dimension (missing/unfilled block, unmet DONE, ADMISSION waiver, a
+  GRANDFATHERED addition = blocking), code-reviewer item 9 (balance literals outside BalanceConfig, literal shop
+  price, pickups outside SupplyPlanner), orchestrator VERIFY step ("C-<KIND> green" in content checkpoints).
+  _TEMPLATE.txt: BALANCE ADMISSION section after BALANCE NOTES (B5). NEXT: CP9 = reviewer.

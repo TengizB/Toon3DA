@@ -128,6 +128,15 @@ extend `BalanceAuditTest` / `BalanceSimTest` for <what>; both gates". Never plan
 renderers, story content, levels, weapons, enemies, items, input or refactors. Say so plainly, so
 the omission does not read as an oversight.
 
+### 6b. Fill the BALANCE ADMISSION block (balance-overhaul order 8)
+Every idea that adds balance-bearing content — an enemy, family, verb, boss, weapon, ability, perk, item,
+ammo type, status, hazard, room that places supply or spawns, generator, node type, event, shop offer,
+region, or a new BalanceConfig number — fills the template's BALANCE ADMISSION section with ONE filled K
+checklist per item, copied from docs/game-balance-authority.txt SECTION 5 "ADD CONTENT" (K1-K18). **Decide
+the band yourself** — the role, the niche scenario, the TP band, the heal fraction, the price source — never
+"the builder will tune it". Adding such content is full lane (G4). An idea that adds none writes
+"None — adds no balance-bearing content."
+
 ### 7. Cut the plan into CHECKPOINTS
 Mandatory for every idea file. `.claude/checkpoints/README.md` is the authority. Three things are yours:
 
