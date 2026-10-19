@@ -223,3 +223,14 @@ into `CPna`/`CPnb` rather than holding it. Never `git add -A`.
   `reviewer`.** Look first at: the trajectory scarcity S jump (DEADLIEST/BALANCED 0.69/0.72 -> 1.65/1.66, band top
   1.70); S-TWIST under-sampling (hunter never arrives in the sim); EnemyManager computeTrailPlan / executeTrailStep;
   placeHunterBounty; the on-device visuals never watched (amber hunter frame, HUNTED texts, ORA arrival lines).
+- **reviewer r1: PASS WITH FIXES.** Blocking #1 (trail hunter could step diagonally / jump through walls via the
+  R11e portal fallback when it had left its trail entry) FIXED: R11e now requires the hunter to stand on entry
+  `trailSequence` (`isStandingOnTrailEntry`), and `executeTrailStep` refuses any goal that is not a one-tile cardinal
+  step or that verified portal hop. Also fixed: non-blocking #4 (a statically blocked trail tile — barrel/prop — now
+  counts toward `TWIST_HUNTED_BLOCKED_WAIT_TURNS` and falls back to greedy, so it can no longer stall forever); nits
+  #1-#3 (orphaned Javadocs in DoorManager/SimWorld; confirm bar tests `!ruleLine().isEmpty()`). `./gradlew build`/test:
+  464 tests, only the pre-existing StoryBarkTest failure; `balanceSim` exit 0, 0 FAIL, band status identical to CP8.
+  OPEN (not fixed, owner's call): non-blocking #2 (S-TWIST under-sampled — balance-scope, owes both gates), #3
+  (trajectory scarcity near ceiling — recorded), #5 (bounty boxes have no reachability check), nit #4 (sim ammo-cache
+  mirror). Owed before IMPLEMENTED: reviewer re-review of #1 + the on-device checks (amber frame, HUNTED texts, ORA
+  twist lines, BLACKOUT silhouettes/exit glow).

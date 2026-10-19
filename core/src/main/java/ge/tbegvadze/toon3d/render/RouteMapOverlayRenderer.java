@@ -484,7 +484,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         twistLineText = "";
         if (focusNode != null && focusNode.revealed && focusNode.affix != null) {
             NodeAffixDefinition affixDefinition = RouteRegistries.affixes().definition(focusNode.affix.id());
-            if (affixDefinition != null && affixDefinition.ruleLine() != null) {
+            if (affixDefinition != null && !affixDefinition.ruleLine().isEmpty()) {
                 twistLineText = truncateToWidth(focusNode.affix.displayName()
                                 + RouteMapConstants.LEGEND_TWIST_SEPARATOR + affixDefinition.ruleLine(),
                         RouteMapConstants.LEGEND_TEXT_SCALE, RouteMapConstants.LEGEND_TWIST_MAX_WIDTH);

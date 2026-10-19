@@ -957,7 +957,8 @@ public final class EnemyManager implements EnemyHitTarget {
                 break;
             }
         }
-        if (targetSequence < 0 && trail.holds(enemy.trailSequence) && trail.holds(enemy.trailSequence + 1)) {
+        if (targetSequence < 0 && isStandingOnTrailEntry(enemy, trail, enemy.trailSequence)
+                && trail.holds(enemy.trailSequence + 1)) {
             targetSequence = enemy.trailSequence + 1;   // R11e: the player took a portal — it knows the way
         }
         if (targetSequence < 0) {
@@ -966,7 +967,9 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         int targetColumn = trail.columnAt(targetSequence);
         int targetRow    = trail.rowAt(targetSequence);
-        if (occupancy[targetColumn][targetRow]) {
+        boolean staticallyBlocked = !Level.isDoor(level.getCell(targetColumn, targetRow))
+                && level.isBlockedAt(targetColumn, targetRow, doorManager);
+        if (occupancy[targetColumn][targetRow] || staticallyBlocked) {
             enemy.trailBlockedTurns++;
             if (enemy.trailBlockedTurns >= EnemyConstants.TWIST_HUNTED_BLOCKED_WAIT_TURNS) {
                 enemy.trailBlockedTurns = 0;
@@ -989,6 +992,12 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeTrailStep(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow) {
         int goalColumn = plan.targetColumn;
         int goalRow    = plan.targetRow;
+        // Only a one-tile cardinal step, or the verified R11e portal hop from the hunter's own trail entry.
+        boolean cardinalStep = GameMath.manhattanDistanceTiles(enemy.tileColumn, enemy.tileRow, goalColumn, goalRow) == 1;
+        boolean portalHop    = playerTrail != null
+                && enemy.trailTargetSequence == enemy.trailSequence + 1
+                && isStandingOnTrailEntry(enemy, playerTrail, enemy.trailSequence);
+        if (!cardinalStep && !portalHop) return;
         if (Level.isDoor(level.getCell(goalColumn, goalRow)) && !doorManager.isPassable(goalColumn, goalRow)) {
             if (doorManager.isLockedAgainstForcing(goalColumn, goalRow)) return;
             boolean alreadyPaid = enemy.forcedDoorColumn == goalColumn && enemy.forcedDoorRow == goalRow;
@@ -1004,6 +1013,13 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.trailSequence    = enemy.trailTargetSequence;
         enemy.forcedDoorColumn = -1;
         enemy.forcedDoorRow    = -1;
+    }
+
+    /** True when the hunter stands exactly on trail entry {@code sequence} (and the trail still holds it). */
+    private static boolean isStandingOnTrailEntry(Enemy enemy, PlayerTrail trail, int sequence) {
+        return trail.holds(sequence)
+                && trail.columnAt(sequence) == enemy.tileColumn
+                && trail.rowAt(sequence)    == enemy.tileRow;
     }
 
     /**

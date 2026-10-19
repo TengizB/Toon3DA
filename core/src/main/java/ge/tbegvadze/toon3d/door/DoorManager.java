@@ -268,7 +268,6 @@ public class DoorManager {
         }
     }
 
-    /** Wires the relic door hook (fired on a player's CLOSED -> OPENING request). Null clears it. */
     /**
      * Floor-twists R11c: the HUNTED trail hunter forces a door on the player's trail. CLOSED / CLOSING / OPENING
      * -> OPEN immediately (passable for the hunter regardless of animation timing), with the door-movement
@@ -301,6 +300,7 @@ public class DoorManager {
         return (lockedDoorColors.containsKey(key) && !unlockedDoors.contains(key)) || arenaLockedDoors.contains(key);
     }
 
+    /** Wires the relic door hook (fired on a player's CLOSED -> OPENING request). Null clears it. */
     public void setDoorOpenedListener(DoorOpenedListener listener) {
         this.doorOpenedListener = listener;
     }

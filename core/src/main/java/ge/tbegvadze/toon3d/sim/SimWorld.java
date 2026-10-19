@@ -603,13 +603,13 @@ public final class SimWorld implements LevelTransitionListener {
                 });
     }
 
-    /** Runs the node -&gt; floor pipeline (mirrors World.buildFloorForNode); falls back to depth-driven. */
     /**
      * The FLOOR TWIST id the floor being played was built with (floor-twists), or {@code null}. Set by
      * {@link #generateLevel}; read by the runtime-modifier mirror and the TWIST REPORT.
      */
     private String currentTwistId;
 
+    /** Runs the node -&gt; floor pipeline (mirrors World.buildFloorForNode); falls back to depth-driven. */
     private Level generateLevel(long seed) {
         currentTwistId = null;
         if (pendingNode == null) {
