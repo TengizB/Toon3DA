@@ -69,9 +69,8 @@ public final class EventTextRenderer implements Disposable {
         this.eventTextSystem = eventTextSystem;
         this.batch           = new SpriteBatch();
         this.shapes          = new ShapeRenderer();
-        this.font            = new BitmapFont();
+        this.font            = GameFonts.newFont(FontFace.HEAVY);
         this.font.getData().setScale(LEGACY_FONT_SCALE);
-        this.font.getData().markupEnabled = false;
         this.layout          = new GlyphLayout();
     }
 

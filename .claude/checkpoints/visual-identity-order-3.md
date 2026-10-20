@@ -42,7 +42,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: they exist, nothing reads them yet, build green.
 - [x] **CP2** — GameFonts (atlas, both faces, fallback, R5 metric match + log line, R6 sharing), Main wiring,
       StoryPanelRenderer as pilot. DONE WHEN: a bark shows in the pixel font on screen; build green.
-- [ ] **CP3** — HUD-layer swaps (HudRenderer, BossHudRenderer, EventTextRenderer, ImpactEffectRenderer,
+- [x] **CP3** — HUD-layer swaps (HudRenderer, BossHudRenderer, EventTextRenderer, ImpactEffectRenderer,
       EnemyRenderer, FadeOverlayRenderer) with R7 faces. DONE WHEN: A5 holds; build green.
 - [ ] **CP4** — all remaining swap sites. DONE WHEN: A1 + A2 hold; build green.
 - [ ] **CP5** — R9 overflow sweep (3 text sizes), docs (step 6). DONE WHEN: A3, A4, A7, A8 seen on screen; build +
@@ -62,3 +62,8 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   the reprint card's SYSTEM + ORA panels (both StoryPanelRenderer) in the pixel font, no overflow. A live bark did
   NOT appear in the first 20 s of run 1 (no bark fired), so the bark itself is re-checked in the CP5 sweep.
   `setGlyphRegion(missingGlyph)` is called explicitly after construction (BitmapFont.load may skip it).
+- **CP3:** HudRenderer gained `ammoDigitsFont` (HEAVY) + face-taking overloads of drawValueRight /
+  drawTextWithShadow (the old signatures delegate with the REGULAR font). A5 holds by construction: digits 0-9 are
+  all 5 font px wide in both faces (HEAVY 6), advance identical. Seen: HUD left panel + CREDITS in the pixel font,
+  HEAVY "0/1" ammo. Swap helper used for every site: scratchpad `swap.py` (deletes the font setFilter calls and the
+  `markupEnabled = false` lines — the default is already false).

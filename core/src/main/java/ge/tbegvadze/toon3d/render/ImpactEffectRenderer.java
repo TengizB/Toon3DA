@@ -3,7 +3,6 @@ package ge.tbegvadze.toon3d.render;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
@@ -48,10 +47,7 @@ public final class ImpactEffectRenderer implements Disposable {
         this.system = system;
         this.shapes = new ShapeRenderer();
         this.batch  = new SpriteBatch();
-        this.font   = new BitmapFont();
-        this.font.getData().markupEnabled = false;
-        this.font.getRegion().getTexture().setFilter(
-                Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        this.font   = GameFonts.newFont(FontFace.HEAVY);
     }
 
     // -------------------------------------------------------------------------

@@ -4,7 +4,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -16,6 +15,8 @@ import ge.tbegvadze.toon3d.entity.Player;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.render.FontFace;
+import ge.tbegvadze.toon3d.render.GameFonts;
 import ge.tbegvadze.toon3d.render.MatchupGlyphs;
 import ge.tbegvadze.toon3d.render.Renderable;
 import ge.tbegvadze.toon3d.render.WeaponLevelTag;
@@ -123,6 +124,8 @@ public class HudRenderer implements Renderable, Disposable {
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** HEAVY face for the ammo readout's digits (visual-identity-order-3 R7); everything else uses {@link #font}. */
+    private final BitmapFont    ammoDigitsFont;
 
     // -------------------------------------------------------------------------
     // Inputs
@@ -152,11 +155,8 @@ public class HudRenderer implements Renderable, Disposable {
         this.hudState = hudState;
         this.shapes   = new ShapeRenderer();
         this.batch    = new SpriteBatch();
-        this.font     = new BitmapFont();
-        this.font.getData().markupEnabled = false;
-        // Linear filtering keeps the scaled bitmap font from looking jagged.
-        this.font.getRegion().getTexture().setFilter(
-                Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        this.font     = GameFonts.newFont(FontFace.REGULAR);
+        this.ammoDigitsFont = GameFonts.newFont(FontFace.HEAVY);
     }
 
     /**
@@ -589,7 +589,7 @@ public class HudRenderer implements Renderable, Disposable {
                 stringBuilder.append(hudState.reserveAmmo);
                 stringBuilder.append(']');
             }
-            drawValueRight(stringBuilder, HudConstants.HUD_CLIP_BAR_Y,
+            drawValueRight(ammoDigitsFont, stringBuilder, HudConstants.HUD_CLIP_BAR_Y,
                     isDead ? TEXT_DIM : TEXT_PRIMARY, HudConstants.HUD_CLIP_VALUE_SCALE);
         }
 
@@ -610,11 +610,16 @@ public class HudRenderer implements Renderable, Disposable {
 
     /** Right-aligned vital value, vertically centred on its bar, with a drop-shadow. */
     private void drawValueRight(CharSequence text, float barY, Color color, float scale) {
+        drawValueRight(font, text, barY, color, scale);
+    }
+
+    /** {@link #drawValueRight(CharSequence, float, Color, float)} in a given face. */
+    private void drawValueRight(BitmapFont valueFont, CharSequence text, float barY, Color color, float scale) {
         float baseline = barLabelBaseline(text, barY, scale);
-        font.getData().setScale(scale);
-        glyphLayout.setText(font, text);
+        valueFont.getData().setScale(scale);
+        glyphLayout.setText(valueFont, text);
         float x = HudConstants.HUD_VALUE_RIGHT_X - glyphLayout.width;
-        drawTextWithShadow(text, x, baseline, color, scale);
+        drawTextWithShadow(valueFont, text, x, baseline, color, scale);
     }
 
     /** Baseline that vertically centres {@code text} (at {@code scale}) on the bar at {@code barY}. */
@@ -626,12 +631,18 @@ public class HudRenderer implements Renderable, Disposable {
 
     /** Draws text twice — a dark offset shadow then the foreground color — for legibility. */
     private void drawTextWithShadow(CharSequence text, float x, float baselineY, Color color, float scale) {
+        drawTextWithShadow(font, text, x, baselineY, color, scale);
+    }
+
+    /** {@link #drawTextWithShadow(CharSequence, float, float, Color, float)} in a given face. */
+    private void drawTextWithShadow(BitmapFont textFont, CharSequence text, float x, float baselineY,
+                                    Color color, float scale) {
         float offset = HudConstants.HUD_TEXT_SHADOW_OFFSET;
-        font.getData().setScale(scale);
-        font.setColor(TEXT_SHADOW);
-        font.draw(batch, text, x + offset, baselineY - offset);
-        font.setColor(color);
-        font.draw(batch, text, x, baselineY);
+        textFont.getData().setScale(scale);
+        textFont.setColor(TEXT_SHADOW);
+        textFont.draw(batch, text, x + offset, baselineY - offset);
+        textFont.setColor(color);
+        textFont.draw(batch, text, x, baselineY);
     }
 
     // =========================================================================
@@ -916,5 +927,6 @@ public class HudRenderer implements Renderable, Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        ammoDigitsFont.dispose();
     }
 }
