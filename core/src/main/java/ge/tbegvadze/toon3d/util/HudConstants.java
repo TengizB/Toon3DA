@@ -137,7 +137,17 @@ public final class HudConstants {
     public static final String WEAPON_CARD_NO_MATCHUP_LABEL  = "-";
     public static final float  WEAPON_CARD_TRAIT_GLYPH_SIZE  = 22f;
     public static final float  WEAPON_CARD_TRAIT_GLYPH_GAP   = 12f;
-    public static final float WEAPON_CARD_PANEL_ALPHA    = 0.96f;
+    // Weapon inspect card text / rule offsets (visual-identity-order-5 named the literals it touched)
+    public static final float WEAPON_CARD_TITLE_INSET_X     = 68f;   // title left edge, clear of the tier icon
+    public static final float WEAPON_CARD_TIER_ICON_INSET   = 40f;   // tier icon centre from the card's left
+    public static final float WEAPON_CARD_TIER_ICON_SIZE    = 15f;
+    public static final float WEAPON_CARD_COLUMN_RULE_1_X   = 300f;  // stat column rules from the card's left
+    public static final float WEAPON_CARD_COLUMN_RULE_2_X   = 600f;
+    public static final float WEAPON_CARD_COLUMN_RULE_INSET = 6f;
+    public static final float WEAPON_CARD_DELTA_OFFSET_X    = 58f;   // "+n" delta right of the FOUND value
+    public static final float WEAPON_SLOT_ROW_NAME_DROP     = 24f;   // slot-row name top below the row top
+    public static final float WEAPON_SLOT_ROW_STATS_RISE    = 22f;   // slot-row stat line top above the row bottom
+    public static final float WEAPON_SLOT_ROW_TEXT_INSET    = 18f;
     // Base body font scale; individual text elements scale relative to this (see renderer).
     public static final float WEAPON_CARD_FONT_SCALE     = 1.5f;
     // Zone heights inside the card (from top): header, abilities, action, footer.

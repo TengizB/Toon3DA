@@ -46,7 +46,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: they exist, every reader compiles, build green.
 - [x] **CP2** — InventoryOverlayRenderer, ItemGridPanel, WeaponSlotsPanel, BuildPagePanel restyled.
       DONE WHEN: A1/A2/A3 hold for the inventory on run; build green.
-- [ ] **CP3** — ItemWindow, AbilityWindow, WeaponInspectOverlayRenderer restyled.
+- [x] **CP3** — ItemWindow, AbilityWindow, WeaponInspectOverlayRenderer restyled.
       DONE WHEN: A1/A3 hold for them on run; build green.
 - [ ] **CP4** — LevelUpOverlayRenderer, RelicOfferOverlayRenderer restyled (R2, R8).
       DONE WHEN: A1/A2/A3 hold on run; build green.
@@ -101,3 +101,16 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   quest items" flash), ability row -> ability window, its X. NOT tapped: BUILD page UP/DOWN (needs > 11 rows;
   handleTouch unchanged), EQUIP on a grid weapon.
   Build: 480 tests, the 1 known failure.
+- **CP3:** WeaponInspectOverlayRenderer in one Filled pass: scrim .75 (was .72); the card is a UiKit CARD in the found
+  weapon's TIER ink + SUIT_AMBER_DIM brackets (outermost panel); the old 5-unit tier stripe and the tier-coloured
+  title / "LV n - TIER" tag are gone (D2: tier colour in the frame only; the tag reads secondary, the tier ICON keeps
+  its colour as an icon); title = R1 header (HEAVY HEADING) whose rule doubles as the header edge (the separate
+  header line 9 units below it was dropped as clutter); zone/column rules are UI_LINE dividers / 1-unit rects; zone
+  background fills dropped (the card fill is uniform). EQUIP/CHOOSE, CLOSE, CONVERT, SWAP are IDLE plates;
+  full-loadout slot rows are weapon CARDS in their own tier ink, the active slot SELECTED. Deltas: HEALTH_GREEN
+  better / CombatPalette.DAMAGE worse; matchup glyphs untouched (MatchupGlyphs and WeaponLevelTag draw no chrome -
+  not edited). FS_* -> TYPE_* (title HEADING, stats LABEL, button HEADING, slot name BODY, deltas/slot stats
+  CAPTION, footer LABEL). HudConstants.WEAPON_CARD_PANEL_ALPHA deleted (card() uses UI_PANEL_ALPHA_SCREEN); the
+  touched literals are named WEAPON_CARD_* / WEAPON_SLOT_ROW_*. Taps: CLOSE (closed), CHOOSE THIS WEAPON (equipped
+  the chaingun, single-button mode). Full-loadout rows were SEEN rendered (CP3 shot) but a SWAP row was not tapped
+  (handleTap untouched); CONVERT is not offered in the start room - not seen.
