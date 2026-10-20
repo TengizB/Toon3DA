@@ -137,7 +137,17 @@ public final class HudConstants {
     public static final String WEAPON_CARD_NO_MATCHUP_LABEL  = "-";
     public static final float  WEAPON_CARD_TRAIT_GLYPH_SIZE  = 22f;
     public static final float  WEAPON_CARD_TRAIT_GLYPH_GAP   = 12f;
-    public static final float WEAPON_CARD_PANEL_ALPHA    = 0.96f;
+    // Weapon inspect card text / rule offsets (visual-identity-order-5 named the literals it touched)
+    public static final float WEAPON_CARD_TITLE_INSET_X     = 68f;   // title left edge, clear of the tier icon
+    public static final float WEAPON_CARD_TIER_ICON_INSET   = 40f;   // tier icon centre from the card's left
+    public static final float WEAPON_CARD_TIER_ICON_SIZE    = 15f;
+    public static final float WEAPON_CARD_COLUMN_RULE_1_X   = 300f;  // stat column rules from the card's left
+    public static final float WEAPON_CARD_COLUMN_RULE_2_X   = 600f;
+    public static final float WEAPON_CARD_COLUMN_RULE_INSET = 6f;
+    public static final float WEAPON_CARD_DELTA_OFFSET_X    = 58f;   // "+n" delta right of the FOUND value
+    public static final float WEAPON_SLOT_ROW_NAME_DROP     = 24f;   // slot-row name top below the row top
+    public static final float WEAPON_SLOT_ROW_STATS_RISE    = 22f;   // slot-row stat line top above the row bottom
+    public static final float WEAPON_SLOT_ROW_TEXT_INSET    = 18f;
     // Base body font scale; individual text elements scale relative to this (see renderer).
     public static final float WEAPON_CARD_FONT_SCALE     = 1.5f;
     // Zone heights inside the card (from top): header, abilities, action, footer.
@@ -329,9 +339,9 @@ public final class HudConstants {
     public static final float[] RELIC_RARITY_COLOR_G = {0.70f, 0.42f, 0.70f, 0.12f};
     public static final float[] RELIC_RARITY_COLOR_B = {0.78f, 0.95f, 0.20f, 0.12f};
     /** The cost line of a CURSED card: the CURSED red. */
-    public static final float RELIC_COST_TEXT_COLOR_R = 0.85f;
-    public static final float RELIC_COST_TEXT_COLOR_G = 0.12f;
-    public static final float RELIC_COST_TEXT_COLOR_B = 0.12f;
+    public static final float RELIC_COST_TEXT_COLOR_R = CombatPalette.DAMAGE_RED;
+    public static final float RELIC_COST_TEXT_COLOR_G = CombatPalette.DAMAGE_GREEN;
+    public static final float RELIC_COST_TEXT_COLOR_B = CombatPalette.DAMAGE_BLUE;
 
     // --- RELIC FEEDBACK TEXT (relics-run-changing-artifacts): UI event text, not story strings ---
     /** Event text on bonding a relic: prefix + the relic's name. */
@@ -352,20 +362,14 @@ public final class HudConstants {
     /** Title of a QUARANTINE_LOCKER offer, drawn in the CURSED red. */
     public static final String RELIC_OFFER_TITLE_QUARANTINE_TEXT = "QUARANTINED - EACH ONE COSTS";
     public static final String RELIC_OFFER_LEAVE_TEXT            = "LEAVE IT";
-    public static final float  RELIC_OFFER_SCRIM_ALPHA           = 0.78f;
+    public static final float  RELIC_OFFER_SCRIM_ALPHA           = ArtDirection.UI_SCRIM_ALPHA;
     public static final float  RELIC_OFFER_GLOW_INSET            = 10f;
     public static final float  RELIC_OFFER_GLOW_ALPHA            = 0.22f;
     /** LEGENDARY glow pulse: period in seconds and the alpha swing around RELIC_OFFER_GLOW_ALPHA. */
     public static final float  RELIC_OFFER_LEGENDARY_PULSE_SECONDS = 1.5f;
     public static final float  RELIC_OFFER_LEGENDARY_PULSE_SWING   = 0.18f;
-    public static final float  RELIC_OFFER_BORDER_THICKNESS      = 3f;
     public static final float  RELIC_OFFER_HEADER_HEIGHT         = 62f;
     public static final float  RELIC_OFFER_TEXT_PAD              = 24f;
-    public static final float  RELIC_OFFER_SHADOW_OFFSET         = 2.5f;
-    /** Depth of the CURSED inner vignette (inset band, in steps) and its colour alpha at the outermost step. */
-    public static final int    RELIC_OFFER_VIGNETTE_STEPS        = 5;
-    public static final float  RELIC_OFFER_VIGNETTE_STEP_SIZE    = 6f;
-    public static final float  RELIC_OFFER_VIGNETTE_ALPHA        = 0.30f;
     // Offsets measured DOWN from the card top (text baselines) / UP from the card bottom.
     public static final float  RELIC_OFFER_BADGE_ROW_DROP        = 94f;   // chip bottom below the card top (rarity label + trigger badge row)
     public static final float  RELIC_OFFER_BADGE_HEIGHT          = 24f;
@@ -375,14 +379,13 @@ public final class HudConstants {
     public static final float  RELIC_OFFER_COST_RISE             = 100f;  // cost text top, above the card bottom
     public static final float  RELIC_OFFER_TAG_CHIP_RISE         = 14f;   // affinity chip bottom above the card bottom
     public static final float  RELIC_OFFER_TAG_CHIP_HEIGHT       = 26f;
-    public static final float  RELIC_OFFER_SCALE_TITLE           = 2.2f;
-    public static final float  RELIC_OFFER_SCALE_NAME            = 1.7f;
-    public static final float  RELIC_OFFER_SCALE_BADGE           = 1.05f;
-    public static final float  RELIC_OFFER_SCALE_EFFECT          = 1.4f;
-    public static final float  RELIC_OFFER_SCALE_LEAVE           = 1.6f;
-    /** Dim steel LEAVE IT plate and its text. */
-    public static final float  RELIC_OFFER_LEAVE_R = 0.20f, RELIC_OFFER_LEAVE_G = 0.23f, RELIC_OFFER_LEAVE_B = 0.28f;
-    public static final float  RELIC_OFFER_LEAVE_TEXT_R = 0.78f, RELIC_OFFER_LEAVE_TEXT_G = 0.82f, RELIC_OFFER_LEAVE_TEXT_B = 0.88f;
+    public static final float  RELIC_OFFER_SCALE_NAME            = ArtDirection.TYPE_LABEL;
+    public static final float  RELIC_OFFER_SCALE_BADGE           = ArtDirection.TYPE_CAPTION;
+    public static final float  RELIC_OFFER_SCALE_EFFECT          = ArtDirection.TYPE_BODY;
+    public static final float  RELIC_OFFER_SCALE_LEAVE           = ArtDirection.TYPE_LABEL;
+    /** LEAVE IT label ink (the plate itself is a UiKit IDLE plate, visual-identity-order-5 R8). */
+    public static final float  RELIC_OFFER_LEAVE_TEXT_R = ArtDirection.UI_TEXT_SECONDARY_RED,
+            RELIC_OFFER_LEAVE_TEXT_G = ArtDirection.UI_TEXT_SECONDARY_GREEN, RELIC_OFFER_LEAVE_TEXT_B = ArtDirection.UI_TEXT_SECONDARY_BLUE;
 
     // --- BUILD page RELICS section (render/BuildPagePanel) ---
     public static final String RELIC_BUILD_HEADER_PREFIX = "RELICS (";

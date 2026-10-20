@@ -1,9 +1,57 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Visual Identity 5 — Suit screens: inventory, cards, codex
 CREATED: 2026-10-19
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
 ---
+
+IMPLEMENTATION NOTE (2026-10-20) — where the build diverged from the plan, and why
+  1. R1 is two calls: UiKit.screenHeaderTitle (glyphs, SpriteBatch pass) + screenHeaderRule (ShapeRenderer pass),
+     because a ShapeRenderer and a SpriteBatch cannot be active at once; screenHeaderRuleY gives the default rule
+     position. Where a header band already has an edge, the rule IS that edge: the codex's rule runs along the
+     header band's bottom (so it also sits under BACK), the ability window's on its header line, the inspect card's
+     replaces the old header line (two lines 9 units apart read as clutter).
+  2. Level-up and relic offer titles were centred; R1 says left-aligned, so they now start at the card row's left
+     edge, at their old height, with the rule across the row (the subtitle follows, left-aligned, at its old Y).
+  3. The inventory has no single outer panel: its SUIT_AMBER_DIM brackets frame the bounding rect of the header
+     bar + both body panels (brackets only, no extra fill). The BUILD page replaces the two body panels while open.
+     The card-choice screens (level-up, keystone, relic offer) have no outer panel either: their brackets frame
+     the title + card row (+ LEAVE IT on the relic offer), UI_SCREEN_FRAME_MARGIN outside it (reviewer r1 B1).
+     The level-up titles lost their asterisks ("LEVEL UP!", "KEYSTONE"): the HEAVY face turns "*" into a blob.
+     The inventory's "n / 12" counter moved to the strip under the grid (inside the tab bar it crossed the
+     MISC plate's new border); text anchor only.
+  4. R3 "never stacked": the inventory's popup dims (INV_BASE_DIM_FACTOR / INV_ITEM_WIN_DIM_FACTOR) are removed;
+     the item and ability windows are bracketed .94 panels straight over the layer below.
+  5. D2 (rarity / tier colour on frames only) removed coloured TEXT and FILLS that the old screens had: the inspect
+     card's tier stripe, tier-coloured title and LV/TIER tag; the level-up header strips, gradients and rank text;
+     the relic header strips, gradients and rarity label colour; the BUILD page's rarity-coloured relic names (the
+     rarity now frames the rarity label). Icons (tier icon, matchup glyphs, item icons, LV arrows) keep colour.
+  6. Level-up: keystone cards are framed in their TAG ink (R2) - the gold double frame is gone, the gold halo
+     stays; the SYNERGY corner ribbon is gone (it poked through the chamfer) and the amber word SYNERGY remains;
+     the rank line is TYPE_LABEL (at the old 1.86 / TYPE_HEADING its glyphs ran into the pip row).
+  7. Relic offer: the CURSED dark-red inner vignette is gone (a fill gradient); CURSED reads from its blood-red
+     frame, its CURSED label and its red cost line. The quarantine title is primary like every R1 title. The
+     trigger badge is an outline chip. Glow colour, LEGENDARY pulse and the 0.4 s lockout are unchanged.
+  8. Codex: it has no list selection state, so R9's "selected row" is the LAST-OPENED entry (the row you return to
+     from BACK); a read-only CodexSystem.getVisibleEntry(int) exposes the row's entry (pinned flag, identity) -
+     no behaviour change. The close X sits on a 38-unit plate inside the panel; its touch rect is unchanged (larger).
+     ORA's take keeps her speaker accent (a voice, not chrome).
+  9. Text roles (R6) were applied where they fit the fixed rects; where they do not, dense data stays TYPE_CAPTION
+     (weapon slot stat lines, item window stat rows and descriptions, keystone gain lines, the ability AFFECTS
+     list). Red DAMAGE text is TYPE_BODY or larger (relic / keystone cost lines, the inspect card's deltas):
+     DAMAGE is 4.1:1 on UI_PANEL, "large text only" in the order-4 contrast table.
+ 10. Semantic greens that were not health became suit amber: the grid's equipped star and "CURRENTLY EQUIPPED /
+     ACTIVE" (in use) - and the PASSIVE badge is secondary / ACTIVE amber. The ability window's blue border is gone.
+ 11. Item category colours (grid dots, the item window's glyph-box frame) are semantic and kept, read from
+     ItemConstants.INV_CAT_DOT_* through one helper (ItemGridPanel.writeCategoryColor).
+ 12. UiKit additions beyond R1/R2/R7: an alpha overload of plate (the codex fades in). Fix: screenHeaderTitle
+     must restore the font's LOGICAL scale (GameFonts multiplies its base scale in again on setScale).
+ 13. Checkpoint shape: ItemWindow / AbilityWindow (CP3 scope) landed in the CP2 commit, because the coordinator
+     constructs them with the new HEAVY font; CP3 is the inspect card.
+ 14. Capture driver (dev tooling): `additem:TYPE:QTY` and `inspectweapon` steps (SKILL.md).
+ 15. Not seen on screen: CURSED / RARE / LEGENDARY relic cards and the quarantine title (floor 1 only offers
+     RUN_START COMMONs), pause over the offer, a completed codex tab, a long scrolled codex entry, the BUILD page
+     UP/DOWN plates (needs > 11 rows), CONVERT on the inspect card (not offered in the start room), a SWAP row tap.
 
 OVERVIEW
 --------

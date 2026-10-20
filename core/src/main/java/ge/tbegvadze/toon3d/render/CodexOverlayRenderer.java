@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -11,10 +10,12 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.narrative.CodexCategory;
+import ge.tbegvadze.toon3d.narrative.CodexEntry;
 import ge.tbegvadze.toon3d.narrative.CodexSystem;
 import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.narrative.StorySettings;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
@@ -29,11 +30,17 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  * headlessly by {@link CodexSystem}; the renderer asks it and draws the answer.
  *
  * <h3>Readability, which is the whole point of this screen</h3>
- * Big tap targets (tabs and rows are thumb-sized plates), generous line pitch, light text on a dark
- * panel, and NO horizontal scrolling ever — long text is wrapped to fit, never clipped sideways.
+ * Big tap targets (tabs are thumb-sized plates, rows full-width bands), generous line pitch, light text
+ * on a dark panel, and NO horizontal scrolling ever — long text is wrapped to fit, never clipped sideways.
  * The body scrolls vertically under a thumb drag and is CLAMPED to real content, so it can never be
  * flung into empty space.  The accessibility strip along the bottom changes text size, the boot
  * card's reveal pacing, and decorative motion, and every change applies immediately.
+ *
+ * <h3>Paint (visual-identity-order-5)</h3>
+ * A suit screen: UI_INK_BLACK scrim, a UiKit panel with SUIT_AMBER_DIM brackets, the R1 header (HEAVY title,
+ * amber-ticked rule), plates for the tabs (open tab SELECTED), BACK, the close X and the settings strip; flat
+ * entry rows split by dividers (amber tick under the pinned page), an amber bar on the last-opened row and
+ * square amber NEW markers.  Text is unshadowed; the body keeps the story text-size multiplier.
  *
  * <h3>How the body is clipped</h3>
  * Scrolled content is drawn first and may overflow its band; the header and footer bands are then
@@ -52,8 +59,11 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** The HEAVY face for the archive's R1 title. */
+    private final BitmapFont    headingFont;
     private final GlyphLayout   layout;
-    private final Color         scratchColor = new Color();
+    /** The entry most recently opened: its row wears R9's amber selection bar when the list returns. */
+    private CodexEntry          lastOpenedEntry;
 
     private CodexSystem codexSystem;
 
@@ -78,6 +88,7 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         this.shapes = new ShapeRenderer();
         this.batch  = new SpriteBatch();
         this.font   = GameFonts.newFont(FontFace.REGULAR);
+        this.headingFont = GameFonts.newFont(FontFace.HEAVY);
         this.layout = new GlyphLayout();
         for (int labelIndex = 0; labelIndex < settingValues.length; labelIndex++) {
             settingValues[labelIndex] = "";
@@ -143,6 +154,8 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
     public void render(OrthographicCamera camera) {
         if (codexSystem == null || !codexSystem.isOpen()) return;
         float fade = MathUtils.clamp(codexSystem.getVisibleFraction(), 0f, 1f);
+        // Remember the entry on screen, so the list can mark the row it came from (R9's selected row).
+        if (codexSystem.isShowingEntry()) lastOpenedEntry = codexSystem.getOpenEntry();
 
         drawBodyShapes(camera, fade);
         drawBodyText(camera, fade);
@@ -151,52 +164,62 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Pass 1 — the scrim, the panel, and the scrolled body's plates.
+    // Pass 1 — the scrim, the panel, and the scrolled list's dividers / markers.
     // -------------------------------------------------------------------------
 
     private void drawBodyShapes(OrthographicCamera camera, float fade) {
         beginShapes(camera);
 
+        // R3: one UI_INK_BLACK scrim at UI_SCRIM_ALPHA.
         shapes.setColor(StoryUiConstants.STORY_CODEX_SCRIM_R, StoryUiConstants.STORY_CODEX_SCRIM_G,
                         StoryUiConstants.STORY_CODEX_SCRIM_B,
                         StoryUiConstants.STORY_CODEX_SCRIM_ALPHA * fade);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
-        // The panel: an accent-tinted border with the dark story-panel fill inset, exactly like the
-        // bark and boot card, so the archive is visibly part of the same interface.
-        float border = StoryUiConstants.STORY_PANEL_BORDER_THICKNESS;
-        setAccentColor(StoryUiConstants.STORY_PANEL_BORDER_ALPHA * fade);
-        shapes.rect(StoryUiConstants.STORY_CODEX_X, StoryUiConstants.STORY_CODEX_Y,
-                    StoryUiConstants.STORY_CODEX_WIDTH, StoryUiConstants.STORY_CODEX_HEIGHT);
-        setPanelFillColor(fade);
-        shapes.rect(StoryUiConstants.STORY_CODEX_X + border, StoryUiConstants.STORY_CODEX_Y + border,
-                    StoryUiConstants.STORY_CODEX_WIDTH  - border * 2f,
-                    StoryUiConstants.STORY_CODEX_HEIGHT - border * 2f);
+        // R4: the archive is a suit screen - a UiKit panel with SUIT_AMBER_DIM brackets (its outermost panel).
+        UiKit.panel(shapes, StoryUiConstants.STORY_CODEX_X, StoryUiConstants.STORY_CODEX_Y,
+                    StoryUiConstants.STORY_CODEX_WIDTH, StoryUiConstants.STORY_CODEX_HEIGHT, ArtDirection.UI_CHAMFER,
+                    ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                    ArtDirection.UI_PANEL_ALPHA_SCREEN * fade,
+                    ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, fade,
+                    ArtDirection.UI_BORDER_THICKNESS);
 
-        if (!codexSystem.isShowingEntry()) drawEntryRowPlates(fade);
+        if (!codexSystem.isShowingEntry()) drawEntryRowShapes(fade);
 
         endShapes();
     }
 
-    /** One plate per listed entry, scrolled.  Overflow is masked by the chrome pass. */
-    private void drawEntryRowPlates(float fade) {
+    /**
+     * R9: rows are flat - a UiKit divider under each (its tick SUIT_AMBER under the PINNED page, UI_LINE
+     * otherwise), a 3-unit SUIT_AMBER bar on the selected row's left edge, and R7's amber NEW square.
+     * Overflow is masked by the chrome pass.
+     */
+    private void drawEntryRowShapes(float fade) {
         int rowCount = codexSystem.getVisibleEntryCount();
         for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
             float rowBottom = entryRowBottomY(rowIndex, codexSystem.getScrollOffset());
             if (isFarOutsideBody(rowBottom, StoryUiConstants.STORY_CODEX_ROW_HEIGHT)) continue;
-            drawPlate(StoryUiConstants.STORY_CODEX_BODY_X, rowBottom,
-                      StoryUiConstants.STORY_CODEX_BODY_WIDTH,
-                      StoryUiConstants.STORY_CODEX_ROW_HEIGHT,
-                      StoryUiConstants.STORY_CODEX_PLATE_FILL_ALPHA, fade);
+            CodexEntry entry = codexSystem.getVisibleEntry(rowIndex);
+            boolean pinned = entry != null && entry.isPinned();
+            float dividerY = rowBottom - StoryUiConstants.STORY_CODEX_ROW_GAP / 2f;
+            UiKit.divider(shapes, StoryUiConstants.STORY_CODEX_BODY_X, dividerY,
+                          StoryUiConstants.STORY_CODEX_BODY_WIDTH,
+                          pinned ? ArtDirection.SUIT_AMBER_RED : ArtDirection.UI_LINE_RED,
+                          pinned ? ArtDirection.SUIT_AMBER_GREEN : ArtDirection.UI_LINE_GREEN,
+                          pinned ? ArtDirection.SUIT_AMBER_BLUE : ArtDirection.UI_LINE_BLUE, fade);
+            if (entry != null && entry == lastOpenedEntry) {
+                shapes.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN,
+                                ArtDirection.SUIT_AMBER_BLUE, fade);
+                shapes.rect(StoryUiConstants.STORY_CODEX_BODY_X, rowBottom,
+                            ArtDirection.UI_SELECTION_BAR_WIDTH, StoryUiConstants.STORY_CODEX_ROW_HEIGHT);
+            }
             if (codexSystem.isVisibleEntryNew(rowIndex)) {
-                // The NEW dot: an invitation, in the same amber as ORA's voice.  It is drawn as a
-                // dot AND labelled in the row's text, so it never depends on colour alone.
-                setAccentColor(fade);
-                shapes.circle(StoryUiConstants.STORY_CODEX_BODY_X
-                                      + StoryUiConstants.STORY_CODEX_BODY_WIDTH
-                                      - StoryUiConstants.STORY_CODEX_NEW_DOT_INSET,
-                              rowBottom + StoryUiConstants.STORY_CODEX_ROW_HEIGHT / 2f,
-                              StoryUiConstants.STORY_CODEX_NEW_DOT_RADIUS, 12);
+                // R7: the NEW marker, an amber square.  It is also labelled in the row's text, so it never
+                // depends on colour alone.
+                UiKit.newMarker(shapes, StoryUiConstants.STORY_CODEX_BODY_X
+                                        + StoryUiConstants.STORY_CODEX_BODY_WIDTH
+                                        - StoryUiConstants.STORY_CODEX_NEW_DOT_INSET,
+                                rowBottom + StoryUiConstants.STORY_CODEX_ROW_HEIGHT / 2f, fade);
             }
         }
     }
@@ -215,17 +238,16 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         } else {
             drawEntryRowText(fade);
         }
-        font.getData().setScale(1f);
-        font.setColor(Color.WHITE);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         batch.end();
     }
 
     private void drawEmptyTabText(float fade) {
         font.getData().setScale(StoryUiConstants.STORY_CODEX_ROW_TEXT_SIZE);
-        drawDimText(emptyLabel,
-                    StoryUiConstants.STORY_CODEX_BODY_X,
-                    StoryUiConstants.STORY_CODEX_BODY_TOP_Y - StoryUiConstants.STORY_CODEX_ROW_HEIGHT / 2f,
-                    fade);
+        drawSecondaryText(emptyLabel,
+                          StoryUiConstants.STORY_CODEX_BODY_X,
+                          StoryUiConstants.STORY_CODEX_BODY_TOP_Y - StoryUiConstants.STORY_CODEX_ROW_HEIGHT / 2f,
+                          fade);
     }
 
     private void drawEntryRowText(float fade) {
@@ -236,14 +258,21 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
             float textLeft = StoryUiConstants.STORY_CODEX_BODY_X + StoryUiConstants.STORY_PANEL_PADDING;
 
             font.getData().setScale(StoryUiConstants.STORY_CODEX_ROW_TEXT_SIZE);
-            drawBodyColouredText(codexSystem.getVisibleEntryTitle(rowIndex), textLeft,
-                                 rowBottom + StoryUiConstants.STORY_CODEX_ROW_HEIGHT - 12f, fade);
+            drawPrimaryText(codexSystem.getVisibleEntryTitle(rowIndex), textLeft,
+                            rowBottom + StoryUiConstants.STORY_CODEX_ROW_HEIGHT - 12f, fade);
 
+            // The source caption, led by the NEW label (amber) while the entry is unread.  Drawn as two
+            // runs rather than one concatenated string, so the draw path builds no string.
             font.getData().setScale(StoryUiConstants.STORY_CODEX_ROW_SOURCE_TEXT_SIZE);
-            drawDimText(codexSystem.isVisibleEntryNew(rowIndex)
-                                ? newLabel + "  -  " + codexSystem.getVisibleEntrySource(rowIndex)
-                                : codexSystem.getVisibleEntrySource(rowIndex),
-                        textLeft, rowBottom + 22f, fade);
+            float sourceLeft = textLeft;
+            if (codexSystem.isVisibleEntryNew(rowIndex)) {
+                drawColouredText(newLabel, textLeft, rowBottom + 22f,
+                                 ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN,
+                                 ArtDirection.SUIT_AMBER_BLUE, fade);
+                layout.setText(font, newLabel);
+                sourceLeft += layout.width + StoryUiConstants.STORY_CODEX_NEW_LABEL_GAP;
+            }
+            drawSecondaryText(codexSystem.getVisibleEntrySource(rowIndex), sourceLeft, rowBottom + 22f, fade);
         }
     }
 
@@ -268,34 +297,36 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
             switch (codexSystem.getDetailLineStyle(lineIndex)) {
                 case TITLE:
                     font.getData().setScale(StoryUiConstants.STORY_CODEX_TITLE_TEXT_SIZE);
-                    drawAccentText(line, textLeft, lineTopY, fade);
+                    drawPrimaryText(line, textLeft, lineTopY, fade);
                     break;
                 case SOURCE:
                 case TAKE_LABEL:
                     font.getData().setScale(StoryUiConstants.STORY_CODEX_ROW_SOURCE_TEXT_SIZE);
-                    drawDimText(line, textLeft, lineTopY, fade);
+                    drawSecondaryText(line, textLeft, lineTopY, fade);
                     break;
                 case TAKE:
+                    // ORA's own words keep her speaker accent (a voice, not chrome).
                     font.getData().setScale(codexScale);
-                    drawAccentText(line, textLeft, lineTopY, fade);
+                    drawOraText(line, textLeft, lineTopY, fade);
                     break;
                 default:
                     font.getData().setScale(codexScale);
-                    drawBodyColouredText(line, textLeft, lineTopY, fade);
+                    drawPrimaryText(line, textLeft, lineTopY, fade);
                     break;
             }
         }
     }
 
     // -------------------------------------------------------------------------
-    // Pass 3 — the mask bands, then the chrome: tabs, back/close, settings plates.
+    // Pass 3 — the mask bands, then the chrome: header rule, tabs, back/close, settings plates.
     // -------------------------------------------------------------------------
 
     private void drawChromeShapes(OrthographicCamera camera, float fade) {
         beginShapes(camera);
 
         // MASK: repaint the header and footer bands over anything the scrolled body spilled into.
-        setPanelFillColor(1f);   // opaque against the body text, then the panel's own fade applies
+        // Opaque on purpose: a mask, not a panel, so no scrolled text ghosts through the bands.
+        shapes.setColor(ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE, 1f);
         float maskLeft  = StoryUiConstants.STORY_CODEX_BODY_X - StoryUiConstants.STORY_CODEX_BODY_GAP / 2f;
         float maskWidth = StoryUiConstants.STORY_CODEX_RIGHT_X - maskLeft
                 - StoryUiConstants.STORY_PANEL_BORDER_THICKNESS;
@@ -308,46 +339,64 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
                     StoryUiConstants.STORY_CODEX_BODY_BOTTOM_Y - StoryUiConstants.STORY_CODEX_Y
                             - StoryUiConstants.STORY_PANEL_BORDER_THICKNESS);
 
+        // The outer brackets go on after the mask, so a masked band never paints over them.
+        UiKit.brackets(shapes, StoryUiConstants.STORY_CODEX_X, StoryUiConstants.STORY_CODEX_Y,
+                       StoryUiConstants.STORY_CODEX_WIDTH, StoryUiConstants.STORY_CODEX_HEIGHT,
+                       ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN,
+                       ArtDirection.SUIT_AMBER_DIM_BLUE, fade);
+
+        // R1: the header rule along the bottom of the header band (under the title, and under BACK).
+        UiKit.screenHeaderRule(shapes, StoryUiConstants.STORY_CODEX_X + StoryUiConstants.STORY_PANEL_PADDING,
+                               StoryUiConstants.STORY_CODEX_HEADER_Y,
+                               StoryUiConstants.STORY_CODEX_WIDTH - StoryUiConstants.STORY_PANEL_PADDING * 2f, fade);
+
         drawCategoryTabPlates(fade);
         drawSettingPlates(fade);
         if (codexSystem.isShowingEntry()) {
             drawPlate(StoryUiConstants.STORY_CODEX_BACK_X, StoryUiConstants.STORY_CODEX_BACK_Y,
                       StoryUiConstants.STORY_CODEX_BACK_WIDTH, StoryUiConstants.STORY_CODEX_BACK_HEIGHT,
-                      StoryUiConstants.STORY_CODEX_PLATE_FILL_ALPHA, fade);
+                      PlateState.IDLE, fade);
         }
-        drawCloseGlyph(fade);
+        drawCloseButton(fade);
 
         endShapes();
     }
 
+    /** R9 / R5: the tab column is plates - the open tab SELECTED in SUIT_AMBER, the others IDLE. */
     private void drawCategoryTabPlates(float fade) {
         for (CodexCategory category : CodexCategory.values()) {
             boolean selected = category == codexSystem.getSelectedCategory();
             drawPlate(StoryUiConstants.STORY_CODEX_TAB_X, categoryTabBottomY(category.ordinal()),
                       StoryUiConstants.STORY_CODEX_TAB_WIDTH, StoryUiConstants.STORY_CODEX_TAB_HEIGHT,
-                      selected ? StoryUiConstants.STORY_CODEX_PLATE_SELECTED_ALPHA
-                               : StoryUiConstants.STORY_CODEX_PLATE_FILL_ALPHA,
-                      fade);
+                      selected ? PlateState.SELECTED : PlateState.IDLE, fade);
         }
     }
 
+    /** R9: the footer settings strip is plates. */
     private void drawSettingPlates(float fade) {
         for (int settingIndex = 0; settingIndex < StoryUiConstants.STORY_CODEX_SETTING_COUNT; settingIndex++) {
             drawPlate(settingButtonX(settingIndex), StoryUiConstants.STORY_CODEX_FOOTER_Y,
                       StoryUiConstants.STORY_CODEX_SETTING_WIDTH,
-                      StoryUiConstants.STORY_CODEX_FOOTER_HEIGHT,
-                      StoryUiConstants.STORY_CODEX_PLATE_FILL_ALPHA, fade);
+                      StoryUiConstants.STORY_CODEX_FOOTER_HEIGHT, PlateState.IDLE, fade);
         }
     }
 
-    /** The close X, in the body's light colour so it reads as a control rather than as decoration. */
-    private void drawCloseGlyph(float fade) {
-        shapes.setColor(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                        StoryUiConstants.STORY_BODY_B, fade);
-        float half   = StoryUiConstants.STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
-        float stroke = StoryUiConstants.STORY_BARK_CLOSE_STROKE;
+    /**
+     * R5: the close X on an IDLE plate.  The plate is drawn inside the panel; the touch rect it stands for
+     * ({@link #isInsideCloseButton}) is unchanged and generously larger.
+     */
+    private void drawCloseButton(float fade) {
+        float plateSize = StoryUiConstants.STORY_CODEX_CLOSE_PLATE_SIZE;
         float centerX = StoryUiConstants.STORY_CODEX_CLOSE_CENTER_X;
         float centerY = StoryUiConstants.STORY_CODEX_CLOSE_CENTER_Y;
+        UiKit.plate(shapes, centerX - plateSize / 2f, centerY - plateSize / 2f, plateSize, plateSize,
+                    ArtDirection.UI_CHAMFER, ArtDirection.UI_BRACKET_LENGTH_COMPACT, PlateState.IDLE,
+                    ArtDirection.UI_PANEL_ALPHA_SCREEN,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, fade);
+        shapes.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                        ArtDirection.UI_TEXT_PRIMARY_BLUE, fade);
+        float half   = StoryUiConstants.STORY_BARK_CLOSE_GLYPH_SIZE / 2f;
+        float stroke = StoryUiConstants.STORY_BARK_CLOSE_STROKE;
         shapes.rectLine(centerX - half, centerY - half, centerX + half, centerY + half, stroke);
         shapes.rectLine(centerX - half, centerY + half, centerX + half, centerY - half, stroke);
     }
@@ -356,29 +405,32 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
 
-        // Header: the archive's name, or BACK once an entry is open.
-        font.getData().setScale(StoryUiConstants.STORY_CODEX_TITLE_TEXT_SIZE);
+        // Header: the archive's name as the R1 screen title, or BACK once an entry is open.
         if (codexSystem.isShowingEntry()) {
+            font.getData().setScale(StoryUiConstants.STORY_CODEX_TITLE_TEXT_SIZE);
             drawCenteredInPlate(backLabel, StoryUiConstants.STORY_CODEX_BACK_X,
                                 StoryUiConstants.STORY_CODEX_BACK_Y,
                                 StoryUiConstants.STORY_CODEX_BACK_WIDTH,
-                                StoryUiConstants.STORY_CODEX_BACK_HEIGHT, fade, true);
+                                StoryUiConstants.STORY_CODEX_BACK_HEIGHT, fade);
         } else {
-            drawAccentText(titleLabel, StoryUiConstants.STORY_CODEX_X + StoryUiConstants.STORY_PANEL_PADDING,
-                           StoryUiConstants.STORY_CODEX_TOP_Y - StoryUiConstants.STORY_CODEX_PADDING, fade);
+            // screenHeaderTitle draws in UI_TEXT_PRIMARY and keeps only the font's alpha: fade it with the screen.
+            headingFont.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                                 ArtDirection.UI_TEXT_PRIMARY_BLUE, fade);
+            UiKit.screenHeaderTitle(batch, headingFont, titleLabel,
+                                    StoryUiConstants.STORY_CODEX_X + StoryUiConstants.STORY_PANEL_PADDING,
+                                    StoryUiConstants.STORY_CODEX_TOP_Y - StoryUiConstants.STORY_CODEX_PADDING);
         }
 
         drawCategoryTabText(fade);
         drawSettingText(fade);
 
-        font.getData().setScale(1f);
-        font.setColor(Color.WHITE);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         batch.end();
     }
 
     /**
-     * A tab's name plus its recovered count.  The count is dim and never a score; a filled tab wears
-     * the completion mark instead, which is the whole of order-6's "completion perk" on this screen.
+     * A tab's name plus its recovered count.  The count is secondary and never a score; a filled tab wears
+     * the completion mark in amber instead, which is the whole of order-6's "completion perk" here.
      */
     private void drawCategoryTabText(float fade) {
         for (CodexCategory category : CodexCategory.values()) {
@@ -386,17 +438,16 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
             float textLeft  = StoryUiConstants.STORY_CODEX_TAB_X + StoryUiConstants.STORY_PANEL_PADDING;
 
             font.getData().setScale(StoryUiConstants.STORY_CODEX_TAB_TEXT_SIZE);
-            drawBodyColouredText(categoryLabels[category.ordinal()], textLeft,
-                                 tabBottom + StoryUiConstants.STORY_CODEX_TAB_HEIGHT - 14f, fade);
+            drawPrimaryText(categoryLabels[category.ordinal()], textLeft,
+                            tabBottom + StoryUiConstants.STORY_CODEX_TAB_HEIGHT - 14f, fade);
 
-            // A filled tab wears its completion mark in ORA's accent; a partial one stays dim, so
-            // progress reads as information rather than as a score being kept on the player.
             font.getData().setScale(StoryUiConstants.STORY_CODEX_TAB_COUNT_TEXT_SIZE);
             String progressLabel = tabProgressLabels[category.ordinal()];
             if (codexSystem.isCategoryComplete(category)) {
-                drawAccentText(progressLabel, textLeft, tabBottom + 24f, fade);
+                drawColouredText(progressLabel, textLeft, tabBottom + 24f, ArtDirection.SUIT_AMBER_RED,
+                                 ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, fade);
             } else {
-                drawDimText(progressLabel, textLeft, tabBottom + 24f, fade);
+                drawSecondaryText(progressLabel, textLeft, tabBottom + 24f, fade);
             }
         }
     }
@@ -405,11 +456,11 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         font.getData().setScale(StoryUiConstants.STORY_CODEX_FOOTER_TEXT_SIZE);
         for (int settingIndex = 0; settingIndex < StoryUiConstants.STORY_CODEX_SETTING_COUNT; settingIndex++) {
             float buttonX = settingButtonX(settingIndex);
-            drawDimText(settingNames[settingIndex], buttonX + 14f,
-                        StoryUiConstants.STORY_CODEX_FOOTER_Y
-                                + StoryUiConstants.STORY_CODEX_FOOTER_HEIGHT - 10f, fade);
-            drawBodyColouredText(settingValues[settingIndex] != null ? settingValues[settingIndex] : "",
-                                 buttonX + 14f, StoryUiConstants.STORY_CODEX_FOOTER_Y + 24f, fade);
+            drawSecondaryText(settingNames[settingIndex], buttonX + 14f,
+                              StoryUiConstants.STORY_CODEX_FOOTER_Y
+                                      + StoryUiConstants.STORY_CODEX_FOOTER_HEIGHT - 10f, fade);
+            drawPrimaryText(settingValues[settingIndex] != null ? settingValues[settingIndex] : "",
+                            buttonX + 14f, StoryUiConstants.STORY_CODEX_FOOTER_Y + 24f, fade);
         }
     }
 
@@ -541,15 +592,12 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    /** An accent border with a dim fill inset — the same plate language as the exchange answers. */
+    /** A UiKit plate in the suit's amber ink, faded with the screen. */
     private void drawPlate(float plateX, float plateY, float plateWidth, float plateHeight,
-                           float fillAlpha, float fade) {
-        float border = StoryUiConstants.STORY_CODEX_PLATE_BORDER;
-        setAccentColor(fade);
-        shapes.rect(plateX, plateY, plateWidth, plateHeight);
-        setAccentColor(fade, fillAlpha);
-        shapes.rect(plateX + border, plateY + border,
-                    plateWidth - border * 2f, plateHeight - border * 2f);
+                           PlateState state, float fade) {
+        UiKit.plate(shapes, plateX, plateY, plateWidth, plateHeight, ArtDirection.UI_PLATE_CHAMFER,
+                    ArtDirection.UI_BRACKET_LENGTH, state, ArtDirection.UI_PANEL_ALPHA_SCREEN,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, fade);
     }
 
     /**
@@ -562,67 +610,40 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
             || bandBottomY > StoryUiConstants.STORY_CODEX_BODY_TOP_Y + bandHeight;
     }
 
-    private void setAccentColor(float fade) {
-        setAccentColor(fade, 1f);
+    private void drawPrimaryText(String text, float textX, float textTopY, float fade) {
+        drawColouredText(text, textX, textTopY, ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                         ArtDirection.UI_TEXT_PRIMARY_BLUE, fade);
     }
 
-    /** ORA's amber is the archive's accent: this is her record of the descent, not the facility's. */
-    private void setAccentColor(float fade, float brightness) {
+    private void drawSecondaryText(String text, float textX, float textTopY, float fade) {
+        drawColouredText(text, textX, textTopY, ArtDirection.UI_TEXT_SECONDARY_RED,
+                         ArtDirection.UI_TEXT_SECONDARY_GREEN, ArtDirection.UI_TEXT_SECONDARY_BLUE, fade);
+    }
+
+    /** ORA's take keeps her speaker accent: it is her voice in the archive, not interface chrome. */
+    private void drawOraText(String text, float textX, float textTopY, float fade) {
         int speakerIndex = Speaker.AI.ordinal();
-        shapes.setColor(StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex] * brightness,
-                        StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex] * brightness,
-                        StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex] * brightness,
-                        fade);
+        drawColouredText(text, textX, textTopY,
+                         StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex],
+                         StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex],
+                         StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex], fade);
     }
 
-    private void setPanelFillColor(float fade) {
-        shapes.setColor(StoryUiConstants.STORY_PANEL_BG_R, StoryUiConstants.STORY_PANEL_BG_G,
-                        StoryUiConstants.STORY_PANEL_BG_B,
-                        StoryUiConstants.STORY_PANEL_ALPHA * fade);
-    }
-
-    private void drawBodyColouredText(String text, float textX, float textTopY, float fade) {
-        drawWithShadow(text, textX, textTopY,
-                       StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                       StoryUiConstants.STORY_BODY_B, fade);
-    }
-
-    private void drawAccentText(String text, float textX, float textTopY, float fade) {
-        int speakerIndex = Speaker.AI.ordinal();
-        drawWithShadow(text, textX, textTopY,
-                       StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex],
-                       StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex],
-                       StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex], fade);
-    }
-
-    private void drawDimText(String text, float textX, float textTopY, float fade) {
-        drawWithShadow(text, textX, textTopY,
-                       StoryUiConstants.STORY_BOOT_COUNTER_R, StoryUiConstants.STORY_BOOT_COUNTER_G,
-                       StoryUiConstants.STORY_BOOT_COUNTER_B, fade);
-    }
-
-    /** Centres a label in a plate, vertically and (optionally) horizontally. */
+    /** Centres a label in a plate, both ways. */
     private void drawCenteredInPlate(String text, float plateX, float plateY,
-                                     float plateWidth, float plateHeight, float fade,
-                                     boolean centerHorizontally) {
+                                     float plateWidth, float plateHeight, float fade) {
         layout.setText(font, text);
-        float textX = centerHorizontally ? plateX + (plateWidth - layout.width) / 2f : plateX + 14f;
+        float textX = plateX + (plateWidth - layout.width) / 2f;
         // BitmapFont.draw anchors a line by its TOP, so a glyph box of height h centred in a plate
         // spanning [Y, Y+H] has its top at Y + (H + h) / 2 — equal margins above and below.
         float textTopY = plateY + (plateHeight + layout.height) / 2f;
-        drawBodyColouredText(text, textX, textTopY, fade);
+        drawPrimaryText(text, textX, textTopY, fade);
     }
 
-    /** Draws one string with a dark drop-shadow beneath the coloured glyphs. */
-    private void drawWithShadow(String text, float textX, float textTopY,
-                                float red, float green, float blue, float fade) {
-        float shadow = StoryUiConstants.STORY_TEXT_SHADOW_OFFSET;
-        scratchColor.set(0f, 0f, 0f, StoryUiConstants.STORY_TEXT_SHADOW_ALPHA * fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX + shadow, textTopY - shadow);
-
-        scratchColor.set(red, green, blue, fade);
-        font.setColor(scratchColor);
+    /** Draws one string, unshadowed (screen text never sits on the 3D view), faded with the screen. */
+    private void drawColouredText(String text, float textX, float textTopY,
+                                  float red, float green, float blue, float fade) {
+        font.setColor(red, green, blue, fade);
         font.draw(batch, text, textX, textTopY);
     }
 
@@ -631,5 +652,6 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        headingFont.dispose();
     }
 }

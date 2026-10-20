@@ -11,7 +11,9 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.PlayerInventory;
 import ge.tbegvadze.toon3d.entity.Weapon;
+import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.Inventory;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -27,6 +29,10 @@ import java.util.function.IntConsumer;
  *   Gun slot 3 (LOCKED)          — y = INV_WEAPON_GUN_SLOT_3_Y = 295
  *   Section divider               — y = INV_WEAPON_SECTION_DIVIDER_Y = 280
  *   Melee slot                    — y = INV_WEAPON_MELEE_SLOT_Y  = 145
+ *
+ * Visual identity order 5 (R10, R2): a filled slot is a UiKit CARD inked by its weapon's tier colour (the
+ * equipped slot is the SELECTED card, so its brackets take that ink too); an empty slot is an IDLE plate and
+ * the locked slot a DISABLED one. Section rules are UiKit dividers.
  *
  * Data sources set via setPlayerInventory() / setWeaponHudRenderer() after construction.
  *
@@ -51,25 +57,9 @@ final class WeaponSlotsPanel implements Disposable {
         ItemConstants.INV_WEAPON_MELEE_SLOT_Y
     };
 
-    // -------------------------------------------------------------------------
-    // Color palette — amber-on-steel, consistent with Part 1
-    // -------------------------------------------------------------------------
-    private static final Color SLOT_BG_NORMAL     = new Color(0.10f, 0.10f, 0.12f, 1f);
-    private static final Color SLOT_BG_FILLED     = new Color(0.11f, 0.10f, 0.09f, 1f);
-    private static final Color SLOT_BG_ACTIVE     = new Color(0.14f, 0.12f, 0.05f, 1f);
-    private static final Color SLOT_BG_LOCKED     = new Color(0.08f, 0.08f, 0.09f, 1f);
-    private static final Color BORDER_NORMAL      = new Color(0.22f, 0.22f, 0.30f, 1f);
-    private static final Color BORDER_FILLED      = new Color(0.50f, 0.36f, 0.00f, 1f);
-    private static final Color BORDER_ACTIVE      = new Color(1.00f, 0.72f, 0.00f, 1f);
-    private static final Color BORDER_LOCKED      = new Color(0.20f, 0.20f, 0.22f, 1f);
-    private static final Color BADGE_FILL         = new Color(1.00f, 0.72f, 0.00f, 0.90f);
-    private static final Color BADGE_TEXT         = new Color(0.00f, 0.00f, 0.00f, 1.00f);
-    private static final Color TEXT_PRIMARY       = new Color(1.00f, 0.75f, 0.10f, 1f);
-    private static final Color TEXT_SECONDARY     = new Color(0.50f, 0.50f, 0.55f, 1f);
-    private static final Color TEXT_DISABLED      = new Color(0.20f, 0.20f, 0.22f, 1f);
-    private static final Color LOCK_COLOR         = new Color(0.20f, 0.20f, 0.22f, 1f);
-    private static final Color DIVIDER_COLOR      = new Color(0.22f, 0.22f, 0.30f, 1f);
-    private static final Color ACCENT_LINE_COLOR  = new Color(1.00f, 0.72f, 0.00f, 0.30f);
+    /** Section labels ("RANGED" / "MELEE"); their rules start just past the label's measured width. */
+    private static final String RANGED_LABEL = "RANGED";
+    private static final String MELEE_LABEL  = "MELEE";
 
     // -------------------------------------------------------------------------
     // Shared rendering resources (owned by InventoryOverlayRenderer coordinator)
@@ -137,9 +127,8 @@ final class WeaponSlotsPanel implements Disposable {
     // -------------------------------------------------------------------------
 
     void render(OrthographicCamera camera, float animationClock) {
-        renderPassFilled(camera, animationClock);
-        renderPassLine(camera, animationClock);
-        renderPassSprites(camera, animationClock);
+        renderPassFilled(camera);
+        renderPassSprites(camera);
     }
 
     // -------------------------------------------------------------------------
@@ -164,55 +153,20 @@ final class WeaponSlotsPanel implements Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Pass A — filled shapes
+    // Pass A — one Filled pass: slot cards / plates, badge, lock icon, section rules
     // -------------------------------------------------------------------------
 
-    private void renderPassFilled(OrthographicCamera camera, float animationClock) {
+    private void renderPassFilled(OrthographicCamera camera) {
+        // Section rules start past their labels' TYPE_LABEL width, measured before the shape pass begins.
+        font.getData().setScale(ArtDirection.TYPE_LABEL);
+        glyphLayout.setText(font, RANGED_LABEL);
+        float rangedRuleX = ItemConstants.INV_WEAPON_SLOT_X + glyphLayout.width + ItemConstants.INV_WEAPON_SECTION_RULE_GAP;
+        glyphLayout.setText(font, MELEE_LABEL);
+        float meleeRuleX = ItemConstants.INV_WEAPON_SLOT_X + glyphLayout.width + ItemConstants.INV_WEAPON_SECTION_RULE_GAP;
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
+
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-
-        for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
-            SlotState state = getSlotState(slotIndex);
-            float slotY = SLOT_Y[slotIndex];
-
-            shapeRenderer.setColor(slotBgColor(state));
-            shapeRenderer.rect(ItemConstants.INV_WEAPON_SLOT_X, slotY,
-                               ItemConstants.INV_WEAPON_SLOT_WIDTH, ItemConstants.INV_WEAPON_SLOT_HEIGHT);
-
-            if (state == SlotState.ACTIVE) {
-                float badgeX = ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_SLOT_WIDTH
-                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_WIDTH
-                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_MARGIN;
-                float badgeY = slotY + ItemConstants.INV_WEAPON_SLOT_HEIGHT
-                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_HEIGHT
-                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_MARGIN;
-                shapeRenderer.setColor(BADGE_FILL);
-                shapeRenderer.rect(badgeX, badgeY,
-                                   ItemConstants.INV_WEAPON_ACTIVE_BADGE_WIDTH,
-                                   ItemConstants.INV_WEAPON_ACTIVE_BADGE_HEIGHT);
-            }
-
-            if (state == SlotState.LOCKED) {
-                float lockCenterX = ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_LOCK_CENTER_X_OFFSET;
-                float lockCenterY = slotY + ItemConstants.INV_WEAPON_LOCK_CENTER_Y_OFFSET;
-                shapeRenderer.setColor(LOCK_COLOR);
-                shapeRenderer.rect(lockCenterX - ItemConstants.INV_WEAPON_LOCK_BODY_WIDTH  / 2f,
-                                   lockCenterY - ItemConstants.INV_WEAPON_LOCK_BODY_HEIGHT / 2f,
-                                   ItemConstants.INV_WEAPON_LOCK_BODY_WIDTH,
-                                   ItemConstants.INV_WEAPON_LOCK_BODY_HEIGHT);
-            }
-        }
-
-        shapeRenderer.end();
-    }
-
-    // -------------------------------------------------------------------------
-    // Pass B — line shapes (borders, divider, accent lines, shackle arc)
-    // -------------------------------------------------------------------------
-
-    private void renderPassLine(OrthographicCamera camera, float animationClock) {
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
 
         for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
             SlotState state = getSlotState(slotIndex);
@@ -221,75 +175,103 @@ final class WeaponSlotsPanel implements Disposable {
             float slotW = ItemConstants.INV_WEAPON_SLOT_WIDTH;
             float slotH = ItemConstants.INV_WEAPON_SLOT_HEIGHT;
 
-            if (state == SlotState.ACTIVE) {
-                float pulseAlpha = ItemConstants.INV_WEAPON_ACTIVE_PULSE_MIN
-                        + (1f - ItemConstants.INV_WEAPON_ACTIVE_PULSE_MIN) * 0.5f
-                        * (1f + MathUtils.sin(animationClock * MathUtils.PI2
-                                              * ItemConstants.INV_WEAPON_ACTIVE_PULSE_HZ));
-                shapeRenderer.setColor(BORDER_ACTIVE.r, BORDER_ACTIVE.g, BORDER_ACTIVE.b, pulseAlpha);
-                shapeRenderer.rect(slotX, slotY, slotW, slotH);
-            } else if (state == SlotState.LOCKED) {
-                shapeRenderer.setColor(BORDER_LOCKED);
-                drawDashedRect(slotX, slotY, slotW, slotH,
-                               ItemConstants.INV_WEAPON_LOCKED_DASH_LENGTH,
-                               ItemConstants.INV_WEAPON_LOCKED_GAP_LENGTH);
-
-                // Shackle arc — top semi-circle above lock body
-                float lockCenterX  = slotX + ItemConstants.INV_WEAPON_LOCK_CENTER_X_OFFSET;
-                float shackleBaseY = slotY + ItemConstants.INV_WEAPON_LOCK_CENTER_Y_OFFSET
-                                     + ItemConstants.INV_WEAPON_LOCK_BODY_HEIGHT / 2f;
-                shapeRenderer.setColor(LOCK_COLOR);
-                drawSemiCircleArc(lockCenterX, shackleBaseY, ItemConstants.INV_WEAPON_LOCK_SHACKLE_RADIUS);
+            if (state == SlotState.FILLED || state == SlotState.ACTIVE) {
+                // R2: the card's frame takes the weapon's tier colour; the equipped one is SELECTED.
+                WeaponTier tier = getWeaponForSlot(slotIndex).getTier();
+                if (tier == null) tier = WeaponTier.COMMON;
+                UiKit.card(shapeRenderer, slotX, slotY, slotW, slotH, tier.colorRed, tier.colorGreen, tier.colorBlue,
+                           state == SlotState.ACTIVE ? PlateState.SELECTED : PlateState.IDLE);
             } else {
-                shapeRenderer.setColor(state == SlotState.FILLED ? BORDER_FILLED : BORDER_NORMAL);
-                shapeRenderer.rect(slotX, slotY, slotW, slotH);
+                UiKit.plate(shapeRenderer, slotX, slotY, slotW, slotH,
+                            state == SlotState.LOCKED ? PlateState.DISABLED : PlateState.IDLE,
+                            ItemConstants.INV_PANEL_ALPHA,
+                            ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
+            }
+
+            if (state == SlotState.ACTIVE) {
+                float badgeX = slotX + slotW
+                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_WIDTH
+                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_MARGIN;
+                float badgeY = slotY + slotH
+                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_HEIGHT
+                               - ItemConstants.INV_WEAPON_ACTIVE_BADGE_MARGIN;
+                shapeRenderer.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN,
+                                       ArtDirection.SUIT_AMBER_BLUE, 1f);
+                shapeRenderer.rect(badgeX, badgeY,
+                                   ItemConstants.INV_WEAPON_ACTIVE_BADGE_WIDTH,
+                                   ItemConstants.INV_WEAPON_ACTIVE_BADGE_HEIGHT);
+            }
+
+            if (state == SlotState.LOCKED) {
+                drawLockIcon(slotX + ItemConstants.INV_WEAPON_LOCK_CENTER_X_OFFSET,
+                             slotY + ItemConstants.INV_WEAPON_LOCK_CENTER_Y_OFFSET);
             }
         }
 
-        // Section divider — dashed horizontal line between gun slots and melee slot
-        shapeRenderer.setColor(DIVIDER_COLOR);
-        drawDashedHorizontalLine(ItemConstants.INV_WEAPON_SLOT_X,
-                                 ItemConstants.INV_WEAPON_SECTION_DIVIDER_Y,
-                                 ItemConstants.INV_WEAPON_SLOT_WIDTH,
-                                 ItemConstants.INV_WEAPON_DIVIDER_DASH_LENGTH,
-                                 ItemConstants.INV_WEAPON_DIVIDER_GAP_LENGTH);
-
-        // Section label accent lines — thin amber horizontal lines to the right of each label
-        shapeRenderer.setColor(ACCENT_LINE_COLOR);
-        float rangedAccentX = ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_RANGED_ACCENT_X_OFFSET;
-        float rangedAccentY = ItemConstants.INV_WEAPON_RANGED_LABEL_Y + ItemConstants.INV_WEAPON_ACCENT_LINE_Y_OFFSET;
-        shapeRenderer.line(rangedAccentX, rangedAccentY,
-                           ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_SLOT_WIDTH,
-                           rangedAccentY);
-
-        float meleeAccentX = ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_MELEE_ACCENT_X_OFFSET;
-        float meleeAccentY = ItemConstants.INV_WEAPON_MELEE_LABEL_Y + ItemConstants.INV_WEAPON_ACCENT_LINE_Y_OFFSET;
-        shapeRenderer.line(meleeAccentX, meleeAccentY,
-                           ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_SLOT_WIDTH,
-                           meleeAccentY);
+        // Section divider between the gun slots and the melee slot, and the rules beside each section label
+        UiKit.divider(shapeRenderer, ItemConstants.INV_WEAPON_SLOT_X, ItemConstants.INV_WEAPON_SECTION_DIVIDER_Y,
+                      ItemConstants.INV_WEAPON_SLOT_WIDTH,
+                      ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f);
+        float slotRightX = ItemConstants.INV_WEAPON_SLOT_X + ItemConstants.INV_WEAPON_SLOT_WIDTH;
+        float rangedRuleY = ItemConstants.INV_WEAPON_RANGED_LABEL_Y + ItemConstants.INV_WEAPON_ACCENT_LINE_Y_OFFSET;
+        UiKit.divider(shapeRenderer, rangedRuleX, rangedRuleY, slotRightX - rangedRuleX,
+                      ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
+        float meleeRuleY = ItemConstants.INV_WEAPON_MELEE_LABEL_Y + ItemConstants.INV_WEAPON_ACCENT_LINE_Y_OFFSET;
+        UiKit.divider(shapeRenderer, meleeRuleX, meleeRuleY, slotRightX - meleeRuleX,
+                      ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
         shapeRenderer.end();
+    }
+
+    /**
+     * The locked slot's padlock (an icon): a filled body and a shackle arc of short thick segments, in
+     * UI_TEXT_DISABLED. Filled-pass only.
+     */
+    private void drawLockIcon(float lockCenterX, float lockCenterY) {
+        shapeRenderer.setColor(ArtDirection.UI_TEXT_DISABLED_RED, ArtDirection.UI_TEXT_DISABLED_GREEN,
+                               ArtDirection.UI_TEXT_DISABLED_BLUE, 1f);
+        shapeRenderer.rect(lockCenterX - ItemConstants.INV_WEAPON_LOCK_BODY_WIDTH  / 2f,
+                           lockCenterY - ItemConstants.INV_WEAPON_LOCK_BODY_HEIGHT / 2f,
+                           ItemConstants.INV_WEAPON_LOCK_BODY_WIDTH,
+                           ItemConstants.INV_WEAPON_LOCK_BODY_HEIGHT);
+        float shackleBaseY = lockCenterY + ItemConstants.INV_WEAPON_LOCK_BODY_HEIGHT / 2f;
+        float radius = ItemConstants.INV_WEAPON_LOCK_SHACKLE_RADIUS;
+        float angleStep = MathUtils.PI / ItemConstants.INV_WEAPON_LOCK_SHACKLE_SEGMENTS;
+        float previousX = lockCenterX + radius;
+        float previousY = shackleBaseY;
+        for (int segment = 1; segment <= ItemConstants.INV_WEAPON_LOCK_SHACKLE_SEGMENTS; segment++) {
+            float angle    = segment * angleStep;
+            float currentX = lockCenterX + radius * MathUtils.cos(angle);
+            float currentY = shackleBaseY + radius * MathUtils.sin(angle);
+            shapeRenderer.rectLine(previousX, previousY, currentX, currentY,
+                                   ItemConstants.INV_WEAPON_LOCK_SHACKLE_THICKNESS);
+            previousX = currentX;
+            previousY = currentY;
+        }
     }
 
     // -------------------------------------------------------------------------
     // Pass C — sprites and text
     // -------------------------------------------------------------------------
 
-    private void renderPassSprites(OrthographicCamera camera, float animationClock) {
+    private void renderPassSprites(OrthographicCamera camera) {
         for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
             glyphStanding[slotIndex] = WeaponLevelTag.STANDING_NORMAL;
         }
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
-        // Section labels
-        font.setColor(TEXT_SECONDARY);
-        font.draw(spriteBatch, "RANGED",
+        // Section labels (R6: TYPE_LABEL, secondary)
+        font.getData().setScale(ArtDirection.TYPE_LABEL);
+        setSecondary();
+        font.draw(spriteBatch, RANGED_LABEL,
                   ItemConstants.INV_WEAPON_SLOT_X,
                   ItemConstants.INV_WEAPON_RANGED_LABEL_Y + ItemConstants.INV_WEAPON_SECTION_LABEL_H);
-        font.draw(spriteBatch, "MELEE",
+        font.draw(spriteBatch, MELEE_LABEL,
                   ItemConstants.INV_WEAPON_SLOT_X,
                   ItemConstants.INV_WEAPON_MELEE_LABEL_Y + ItemConstants.INV_WEAPON_SECTION_LABEL_H);
+        // Slot text is dense data in a fixed 182-unit info zone: TYPE_CAPTION keeps it inside the card.
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
 
         for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
             SlotState state  = getSlotState(slotIndex);
@@ -301,7 +283,7 @@ final class WeaponSlotsPanel implements Disposable {
             switch (state) {
                 case EMPTY:
                     glyphLayout.setText(font, "— EMPTY —");
-                    font.setColor(TEXT_DISABLED);
+                    setDisabled();
                     font.draw(spriteBatch, "— EMPTY —",
                               slotX + (slotW - glyphLayout.width)  / 2f,
                               slotY + (slotH + glyphLayout.height) / 2f);
@@ -341,7 +323,9 @@ final class WeaponSlotsPanel implements Disposable {
         for (int slotIndex = 0; slotIndex < TOTAL_SLOT_COUNT; slotIndex++) {
             int standing = glyphStanding[slotIndex];
             if (!WeaponLevelTag.hasGlyph(standing)) continue;
-            WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, tagColor);
+            tagColor.set(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                         ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+            WeaponLevelTag.colorFor(standing, tagColor, tagColor);
             shapeRenderer.setColor(tagColor);
             WeaponLevelTag.drawGlyph(shapeRenderer, glyphX[slotIndex], glyphY[slotIndex], standing);
         }
@@ -374,15 +358,6 @@ final class WeaponSlotsPanel implements Disposable {
         if (slotIndex == MELEE_SLOT_INDEX) return playerInventory.isMeleeSelected();
         if (playerInventory.isMeleeSelected()) return false;
         return playerInventory.getLoadout().getActiveSlotIndex() == slotIndex;
-    }
-
-    private static Color slotBgColor(SlotState state) {
-        switch (state) {
-            case FILLED: return SLOT_BG_FILLED;
-            case ACTIVE: return SLOT_BG_ACTIVE;
-            case LOCKED: return SLOT_BG_LOCKED;
-            default:     return SLOT_BG_NORMAL;
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -419,15 +394,18 @@ final class WeaponSlotsPanel implements Disposable {
         float lineStep = ItemConstants.INV_WEAPON_INFO_LINE_STEP;
         boolean isMelee = (slotIndex == MELEE_SLOT_INDEX);
 
-        // Weapon name — amber when active, secondary otherwise
-        font.setColor(state == SlotState.ACTIVE ? TEXT_PRIMARY : TEXT_SECONDARY);
+        // Weapon name — primary (R6); the stats under it are secondary
+        font.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                      ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
         font.draw(spriteBatch, weapon.getDisplayName(), textX, textY);
         glyphLayout.setText(font, weapon.getDisplayName());
         float tagX = textX + glyphLayout.width + ItemConstants.INV_WEAPON_LEVEL_TAG_GAP;
 
         // "LV n" after the name, coloured by the gap to the floor threat level (R14 d).
         int standing = WeaponLevelTag.standing(weapon, threatLevel);
-        WeaponLevelTag.colorFor(standing, TEXT_SECONDARY, tagColor);
+        tagColor.set(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                     ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
+        WeaponLevelTag.colorFor(standing, tagColor, tagColor);
         font.setColor(tagColor);
         String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
         font.draw(spriteBatch, tagLabel, tagX, textY);
@@ -440,7 +418,7 @@ final class WeaponSlotsPanel implements Disposable {
         textY -= lineStep;
 
         // Ammo type
-        font.setColor(TEXT_SECONDARY);
+        setSecondary();
         String ammoLabel = isMelee ? "Melee"
                 : (weapon.getAmmoType() != null ? weapon.getAmmoType().getDisplayName() : "—");
         font.draw(spriteBatch, ammoLabel, textX, textY);
@@ -471,7 +449,8 @@ final class WeaponSlotsPanel implements Disposable {
                        - ItemConstants.INV_WEAPON_ACTIVE_BADGE_HEIGHT
                        - ItemConstants.INV_WEAPON_ACTIVE_BADGE_MARGIN;
         glyphLayout.setText(font, "ACTIVE");
-        font.setColor(BADGE_TEXT);
+        font.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                      ArtDirection.UI_INK_BLACK_BLUE, 1f);
         font.draw(spriteBatch, "ACTIVE",
                   badgeX + (ItemConstants.INV_WEAPON_ACTIVE_BADGE_WIDTH  - glyphLayout.width)  / 2f,
                   badgeY + (ItemConstants.INV_WEAPON_ACTIVE_BADGE_HEIGHT + glyphLayout.height) / 2f);
@@ -482,7 +461,7 @@ final class WeaponSlotsPanel implements Disposable {
 
         // "LOCKED" centered below lock body
         glyphLayout.setText(font, "LOCKED");
-        font.setColor(TEXT_DISABLED);
+        setDisabled();
         font.draw(spriteBatch, "LOCKED",
                   lockCenterX - glyphLayout.width / 2f,
                   slotY + ItemConstants.INV_WEAPON_LOCK_LABEL_Y_OFFSET);
@@ -495,64 +474,14 @@ final class WeaponSlotsPanel implements Disposable {
                   slotY + ItemConstants.INV_WEAPON_LOCK_HINT_Y_OFFSET);
     }
 
-    // -------------------------------------------------------------------------
-    // Private — dashed line helpers (all called within ShapeRenderer.Line begin/end)
-    // -------------------------------------------------------------------------
-
-    private void drawDashedRect(float x, float y, float width, float height,
-                                float dashLength, float gapLength) {
-        drawDashedHorizontalLine(x,         y,          width,  dashLength, gapLength);
-        drawDashedVerticalLine  (x + width, y,          height, dashLength, gapLength);
-        drawDashedHorizontalLine(x + width, y + height, -width, dashLength, gapLength);
-        drawDashedVerticalLine  (x,         y + height, -height, dashLength, gapLength);
+    private void setSecondary() {
+        font.setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                      ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
     }
 
-    private void drawDashedHorizontalLine(float startX, float y, float length,
-                                          float dashLength, float gapLength) {
-        float sign      = length >= 0f ? 1f : -1f;
-        float remaining = Math.abs(length);
-        float pos       = startX;
-        boolean drawing = true;
-        while (remaining > 0f) {
-            float segLen = Math.min(drawing ? dashLength : gapLength, remaining);
-            float endPos = pos + sign * segLen;
-            if (drawing) shapeRenderer.line(pos, y, endPos, y);
-            pos       = endPos;
-            remaining -= segLen;
-            drawing   = !drawing;
-        }
-    }
-
-    private void drawDashedVerticalLine(float x, float startY, float length,
-                                        float dashLength, float gapLength) {
-        float sign      = length >= 0f ? 1f : -1f;
-        float remaining = Math.abs(length);
-        float pos       = startY;
-        boolean drawing = true;
-        while (remaining > 0f) {
-            float segLen = Math.min(drawing ? dashLength : gapLength, remaining);
-            float endPos = pos + sign * segLen;
-            if (drawing) shapeRenderer.line(x, pos, x, endPos);
-            pos       = endPos;
-            remaining -= segLen;
-            drawing   = !drawing;
-        }
-    }
-
-    /** Draws a top semi-circle (0 to π radians) as line segments. */
-    private void drawSemiCircleArc(float centerX, float centerY, float radius) {
-        int   segments = 14;
-        float angleStep = MathUtils.PI / segments;
-        float previousX = centerX + radius;
-        float previousY = centerY;
-        for (int seg = 1; seg <= segments; seg++) {
-            float angle    = seg * angleStep;
-            float currentX = centerX + radius * MathUtils.cos(angle);
-            float currentY = centerY + radius * MathUtils.sin(angle);
-            shapeRenderer.line(previousX, previousY, currentX, currentY);
-            previousX = currentX;
-            previousY = currentY;
-        }
+    private void setDisabled() {
+        font.setColor(ArtDirection.UI_TEXT_DISABLED_RED, ArtDirection.UI_TEXT_DISABLED_GREEN,
+                      ArtDirection.UI_TEXT_DISABLED_BLUE, 1f);
     }
 
     // -------------------------------------------------------------------------

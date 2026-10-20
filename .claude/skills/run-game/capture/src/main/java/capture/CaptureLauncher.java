@@ -159,6 +159,12 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
                     break;
+                case "inspectweapon":
+                    inspectFirstGroundWeapon();
+                    break;
+                case "additem":
+                    addInventoryItem(step[2], Integer.parseInt(step[3]));
+                    break;
                 case "timestart":
                     timing = true;
                     frameNanosTotal = 0;
@@ -304,6 +310,67 @@ public class CaptureLauncher extends ApplicationAdapter {
             loadout.getClass().getMethod("tryEquip", weaponType).invoke(loadout, weapon);
             inventory.getClass().getMethod("selectLoadoutWeapon", weaponType).invoke(inventory, weapon);
             System.out.println("[capture] equipped arsenal weapon " + arsenalIndex);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code inspectweapon} — records the first weapon lying on the floor as the one the player stands on
+     * ({@code PlayerController.standingOnWeapon}) and opens the weapon inspect card for it
+     * ({@code World.openWeaponInspectOverlay}), so the card can be captured without walking onto a weapon whose
+     * position is random every run. A dev hook for reaching a screen, never game logic.
+     */
+    private void inspectFirstGroundWeapon() {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field groundField = findField(world.getClass(), "groundItems");
+            groundField.setAccessible(true);
+            Object chosen = null;
+            for (Object groundItem : (Iterable<?>) groundField.get(world)) {
+                Field stackField = findField(groundItem.getClass(), "stack");
+                stackField.setAccessible(true);
+                Object stack = stackField.get(groundItem);
+                Object type = stack.getClass().getMethod("getType").invoke(stack);
+                Object category = type.getClass().getMethod("getCategory").invoke(type);
+                if (String.valueOf(category).equals("WEAPON")) { chosen = groundItem; break; }
+            }
+            if (chosen == null) { System.out.println("[capture] inspectweapon: no weapon on the floor"); return; }
+            Field controllerField = findField(world.getClass(), "playerController");
+            controllerField.setAccessible(true);
+            Object controller = controllerField.get(world);
+            Field standingField = findField(controller.getClass(), "standingOnWeapon");
+            standingField.setAccessible(true);
+            standingField.set(controller, chosen);
+            java.lang.reflect.Method open = world.getClass().getDeclaredMethod("openWeaponInspectOverlay");
+            open.setAccessible(true);
+            open.invoke(world);
+            System.out.println("[capture] inspectweapon opened");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code additem:ITEM_TYPE:QUANTITY} — puts QUANTITY of an {@code ItemType} into the bag
+     * ({@code World.itemInventory.tryAdd}), so the inventory grid and its item windows can be captured with
+     * content. A dev hook for reaching a screen, never game logic.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void addInventoryItem(String itemTypeName, int quantity) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field inventoryField = findField(world.getClass(), "itemInventory");
+            inventoryField.setAccessible(true);
+            Object inventory = inventoryField.get(world);
+            Class itemType = Class.forName("ge.tbegvadze.toon3d.item.ItemType");
+            Object added = inventory.getClass().getMethod("tryAdd", itemType, int.class)
+                    .invoke(inventory, Enum.valueOf(itemType, itemTypeName), quantity);
+            System.out.println("[capture] additem " + itemTypeName + " x" + quantity + " -> " + added);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

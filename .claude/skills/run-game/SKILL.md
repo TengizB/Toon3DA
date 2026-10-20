@@ -63,6 +63,8 @@ count events with `grep -c Pause FILE`.
 | `damagenumber:AMOUNT[:true]` | reflection: a floating damage number two tiles ahead (`true` = the kill variant) |
 | `eventtext:CODE:TEXT` | reflection: `EventTextSystem.spawnWithColor(TEXT, CODE)` (0 white, 1 green, 2 red, 3 grey, 4 gold, 5 credit, 6 blue, 7 armour, 8 amber; TEXT without `;` or `:`) |
 | `status:STATUS_TYPE:TURNS` | reflection: activate one of the player's status effects (e.g. `status:BURNING:3`) — the HUD status icons + debuff list |
+| `additem:ITEM_TYPE:QTY` | reflection: `World.itemInventory.tryAdd` — puts items in the bag so the inventory grid and item windows have content (e.g. `additem:MEDKIT_SMALL:3`) |
+| `inspectweapon` | reflection: marks the first weapon lying on the floor as the one the player stands on and opens the weapon inspect card (start-room weapons sit at random spots, so walking onto one is not repeatable) |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 

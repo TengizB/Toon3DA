@@ -219,4 +219,23 @@ public final class ArtDirection {
     public static final float UI_PLATE_DISABLED_ALPHA_SCALE = 0.5f;
     /** Boss health meter segment count (R12). */
     public static final int   BOSS_HEALTH_SEGMENTS = 20;
+
+    // -------------------------------------------------------------------------
+    // SUIT SCREENS (visual-identity-order-5): the inventory family, weapon inspect, level-up, relic offer,
+    // codex. render/UiKit.screenHeaderTitle / screenHeaderRule / card / newMarker. World units.
+    // -------------------------------------------------------------------------
+    /** Full-screen suit-screen panel opacity (R4); the HUD's 0.82 is for in-play chrome only. */
+    public static final float UI_PANEL_ALPHA_SCREEN = 0.94f;
+    /** R1: gap between a screen title's glyph bottom (TYPE_HEADING cap height) and its divider. */
+    public static final float UI_SCREEN_HEADER_RULE_GAP = 8f;
+    /** R7: the NEW marker - a SUIT_AMBER square this wide, framed by a UI_INK_BLACK edge this thick. */
+    public static final float UI_NEW_MARKER_SIZE = 6f;
+    public static final float UI_NEW_MARKER_EDGE = 1f;
+    /** R9: the selected list row's SUIT_AMBER left-edge bar width. */
+    public static final float UI_SELECTION_BAR_WIDTH = 3f;
+    /** R10: the UI_LINE border around a tag chip, and the chip's chamfer. */
+    public static final float UI_CHIP_BORDER_THICKNESS = 1f;
+    public static final float UI_CHIP_CHAMFER = 6f;
+    /** A card-choice screen has no outer panel: its brackets frame header + cards, this far outside them. */
+    public static final float UI_SCREEN_FRAME_MARGIN = 18f;
 }
