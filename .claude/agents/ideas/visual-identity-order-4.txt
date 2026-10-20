@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Visual Identity 4 — UI kit and the in-play HUD layer
 CREATED: 2026-10-19
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
 ---
 IMPLEMENTATION NOTE (2026-10-20, branch ccr-eb246ad6-ypyqrt; live record in
 .claude/checkpoints/visual-identity-order-4.md). Where the build differs from the text below:
@@ -21,7 +21,8 @@ IMPLEMENTATION NOTE (2026-10-20, branch ccr-eb246ad6-ypyqrt; live record in
     then CombatPalette.DAMAGE. There is no SUIT_AMBER low state.
   - The colour table R13 describes is in EventTextRenderer (EventTextSystem holds only the byte codes);
     EventTextSystem is unchanged. COLOR_CREDIT_CYAN, which R13 does not list, maps to CREDITS_GOLD (AS4).
-  - R15: old scales moved to the NEAREST type step. Event text goes 1.8 -> HEADING. Banners go 2.0 and
+  - R15: old scales moved to a type step that keeps their hierarchy. Event text goes 1.8 -> LABEL, one step
+    below the banners (reviewer r1 NB-1: nearest-step put it level with them). Banners go 2.0 and
     2.6 -> HEADING (SLAM keeps its punch-in and underline) and 3.2 -> DISPLAY. Damage numbers go 1.4 ->
     LABEL, growing with the hit to LABEL x DAMAGE_NUMBER_MAX_EMPHASIS (2.0, keeping the old 3.0 ceiling).
     The HUD level tag goes 0.66 -> CAPTION, the HP value 1.2 -> BODY, credits 1.4 -> LABEL. Boss intro
@@ -38,7 +39,10 @@ IMPLEMENTATION NOTE (2026-10-20, branch ccr-eb246ad6-ypyqrt; live record in
   - Touch: the unused CAPSULE shape is no longer drawn specially (the enum stays). The icon halo is
     UI_INK_BLACK, replacing dim phosphor. The first-press glow carries the rim toward SUIT_AMBER.
   - PRE-EXISTING layout faults (same at 682fd6d, SCOPE OUT): the boss bar overlaps the mini-map, and the
-    mini-map's bottom edge overlaps the INVENTORY button.
+    mini-map's bottom edge overlaps the INVENTORY button. Because the boss state label now sits under the
+    boss panel, it lands on the mini-map, which makes the overlap slightly worse. Layout follow-up for
+    orders 5/6.
+  - TouchButton.Shape.CAPSULE stays in the enum but nothing draws it specially (no button uses it).
 
 OVERVIEW
 --------

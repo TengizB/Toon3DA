@@ -135,7 +135,6 @@ toon3D/
 │   │   ├── PropRenderer.java            # Billboard prop sprites
 │   │   ├── EnemyRenderer.java           # Enemy billboard sprites + health bars
 │   │   ├── WeaponHudRenderer.java       # Procedural weapon sprite (FrameBuffer)
-│   │   ├── HudRenderer.java             # Left/right HUD chrome panels
 │   │   ├── LevelRenderer.java           # 2D mini-map overlay
 │   │   ├── ImpactEffectSystem.java      # Screen shake, kill flash, particles
 │   │   ├── ImpactEffectRenderer.java    # Draws impact effect sprites
@@ -147,6 +146,8 @@ toon3D/
 │   │   ├── HitVignetteRenderer.java
 │   │   ├── EventTextRenderer.java / EventTextSystem.java
 │   │   └── RayCaster.java / RayCastResult.java / Renderable.java
+│   ├── hud/
+│   │   └── HudRenderer.java             # The left vitals HUD panel (UiKit chrome)
 │   ├── input/
 │   │   ├── PlayerController.java        # IDLE→MOVING/ROTATING state machine
 │   │   └── touch/
@@ -484,7 +485,7 @@ Doom-style 3D view, full 1280×720 world-unit screen. Ray-column count is runtim
 See `docs/wall-renderer-guide.txt` for pipeline details, GameMath methods, and extension guide.
 
 ### `render/LevelRenderer.java`
-2D mini-map overlay using `ShapeRenderer`. Three passes: filled walls, grid lines, ray fan. Mini-map at `(0,0)–(MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE)`. Call `setRayResults(RayCastResult[])` before `render()`.
+2D mini-map overlay using `ShapeRenderer`, ONE Filled pass (visual-identity-order-4): the UiKit frame fill, tiles + markers, the grid as 1-unit rects (every rect clipped to the chamfered frame via `GameMath.clipPolygonToHalfPlane`), then the frame border + amber brackets. Mini-map at `(0,0)–(MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE)`. Call `setRayResults(RayCastResult[])` before `render()`.
 
 ### `render/RayCaster.java`
 Casts `RAY_COUNT` rays across FOV using DDA. All math in tile space. Pre-allocates `RayCastResult[]` — never hold across frames. Signature: `castRays(playerWorldX, playerWorldY, playerDirX, playerDirY, fieldOfViewRadians, level)`.
@@ -805,6 +806,8 @@ run to draw, so `World.render` draws `FramingScreenRenderer.renderTitle()` (plus
 settings screen, if one is open over it) and returns before the 3D view.
 
 ### HUD Layout (HudRenderer)
+
+> **Current state (visual-identity-order-4):** `hud/HudRenderer` draws ONE left panel (x 0..420, y 0..206: HP / AR / AMMO / XP rows, the weapon-slot strip, status icons); there is no right panel and no face box any more. The layout below is the original design, kept for history; `docs/procedural-vitals-hud.txt` is current.
 
 Two semi-transparent chrome panels; centre gap left clear so the weapon sprite is never occluded.
 

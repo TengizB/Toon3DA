@@ -66,7 +66,10 @@ count events with `grep -c Pause FILE`.
 | `exit` | quit (always end with it) |
 
 `--mood` passes `-Dtoon3d.forceMood` (cool_steel, clinical_white, amber_hot, corrupted_violet, core_white_violet)
-so every region can be checked from floor 1. Look at the PNGs with the Read tool; send them to the owner with
+so every region can be checked from floor 1. Shots keep the framebuffer's ALPHA, so a translucent UI pixel
+composited onto a white/grey canvas reads far lighter than it renders: add `-alpha off` to every
+`montage`/`convert` that builds a comparison sheet, and judge colour from the RGBA originals.
+Look at the PNGs with the Read tool; send them to the owner with
 SendUserFile. ImageMagick (`convert`, `montage`) and Python PIL are installed — use `montage -tile 2x5` for
 before/after sheets and `convert X.png -crop WxH+X+Y +repage` for close-ups.
 

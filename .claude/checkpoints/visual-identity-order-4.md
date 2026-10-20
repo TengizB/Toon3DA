@@ -46,7 +46,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP4** — LevelRenderer (R11) + BossHudRenderer (R12). DONE WHEN: A5 seen on run; build green.
 - [x] **CP5** — EventText (R13) + ImpactEffect damage numbers (R14), docs. DONE WHEN: A6, A7, A8 hold; build + test
       at baseline.
-- [ ] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -112,3 +112,11 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   white/gold/red event text shadowed and readable; kill number "-24!" amber HEAVY shadowed; NAV OFFLINE cyan.
   NOT seen: ability banners (PROC/SLAM/LEGENDARY), heal '+' particles, a plain hit number on screen (it faded
   before the shot). Build + test: 480 tests, the 1 known failure.
+- **CP6:** reviewer r1 = PASS, no blocking findings (`visual-identity-order-4.reviewer-r1.md`; its first run hit a
+  session limit and was resumed). Applied with this commit: NB-1 (legacy event text -> TYPE_LABEL, under the
+  banners again; stale "1.8f" comment fixed), NB-2 (art-direction line: the damage-number growth is continuous on
+  purpose), NB-3 (SKILL.md: `-alpha off` when composing sheets — the framebuffer alpha made translucent UI look
+  light in the r1 sheets), NB-4 noted (the boss state label lands on the mini-map; layout follow-up), nits 1-4
+  (HudRenderer javadoc, the unused HUD_BAR_SEGMENT_GAP removed, CLAUDE.md LevelRenderer/tree/HUD-layout, cx/cy ->
+  centerX/centerY in TouchControllerRenderer). Nit 5 (CAPSULE) recorded in the IMPLEMENTATION NOTE.
+  STATUS: IMPLEMENTED 2026-10-20.

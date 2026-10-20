@@ -173,9 +173,12 @@ public final class EffectConstants {
 
     // ─── Ability Event Feedback — banner tiers, animations, and world accents ───
     // Banner font scales per tier (Tier 1 = no banner; tag suffix only in Phase 2)
-    // PROC must exceed LEGACY_FONT_SCALE (1.8f) so ability banners read larger than info text.
-    /** Legacy event text (THREAT LV, region announces, pickups): the old 1.8 moved to its nearest type step. */
-    public static final float EVENT_TEXT_FONT_SCALE              = ArtDirection.TYPE_HEADING;
+    // PROC must exceed EVENT_TEXT_FONT_SCALE so ability banners read larger than info text.
+    /**
+     * Legacy event text (THREAT LV, region announces, pickups): TYPE_LABEL, one step BELOW the banners, so the
+     * old info-text < banner hierarchy survives the move to the type scale (was 1.8).
+     */
+    public static final float EVENT_TEXT_FONT_SCALE              = ArtDirection.TYPE_LABEL;
     // Banner type steps (visual-identity-order-4 R15): each tier's old scale moved to its NEAREST type step
     // (2.0 / 2.6 -> HEADING, 3.2 -> DISPLAY); SLAM still reads louder than PROC through its punch-in + underline.
     public static final float ABILITY_BANNER_PROC_SCALE          = ArtDirection.TYPE_HEADING;

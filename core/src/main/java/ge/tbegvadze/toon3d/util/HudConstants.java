@@ -29,9 +29,9 @@ public final class HudConstants {
     public static final float HUD_VALUE_RIGHT_X               = 406f;   // right edge for right-aligned value text
     public static final float HUD_BAR_LERP_RATE              = 3.5f;    // bar fill glide speed (fraction units/sec)
     // Bars are split into small rectangles (segments). HP/AR/XP use a fixed tick count; the ammo
-    // bar draws one tick per round (falling back to the fixed count for oversized magazines).
+    // bar draws one tick per round (falling back to the fixed count for oversized magazines). The gap
+    // between ticks is ArtDirection.UI_METER_GAP (UiKit.meter, visual-identity-order-4).
     public static final int   HUD_BAR_SEGMENT_COUNT           = 20;
-    public static final float HUD_BAR_SEGMENT_GAP             = 2f;
 
     // Vital row bar Y (bottom edge); bars span y: barY .. barY + HUD_BAR_HEIGHT. Row pitch = 28px.
     public static final float HUD_HP_BAR_Y                    = 172f;

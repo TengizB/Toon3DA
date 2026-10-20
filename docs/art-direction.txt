@@ -459,10 +459,15 @@ WHERE IT IS USED (order 4 — the in-play layer; overlays and menus are orders 5
   render/EventTextRenderer      every line through UiKit.text; colour table by code (WHITE primary, GREY
                                 secondary, GOLD/AMBER SUIT_AMBER, GREEN HEALTH_GREEN, BLUE DEFENSE, ARMOUR
                                 ARMOUR_BLUE, RED DAMAGE, CREDIT CREDITS_GOLD).
+                                The boss state label sits under the boss panel; with the boss bar's
+                                pre-existing overlap of the mini-map it lands on the map (layout follow-up).
   render/ImpactEffectRenderer   damage numbers HEAVY + shadow: hit UI_TEXT_PRIMARY, kill SUIT_AMBER.
 TYPE SCALE ADOPTION (R15): every text draw on these screens is a TYPE_* step (via a named constant); no
-  raw literal reaches setScale. Old scales moved to their NEAREST step (event text 1.8 -> HEADING, ability
-  banners 2.0/2.6 -> HEADING and 3.2 -> DISPLAY, damage numbers 1.4 -> LABEL growing to 2x LABEL).
+  raw literal reaches setScale. Old scales moved to a step that keeps their hierarchy: event text 1.8 ->
+  LABEL (one step below the banners, so an ability banner still reads louder than "THREAT LV"), ability
+  banners 2.0/2.6 -> HEADING (SLAM louder through its punch-in + underline) and 3.2 -> DISPLAY. Damage numbers
+  start at LABEL and grow CONTINUOUSLY with the hit to 2x LABEL (DAMAGE_NUMBER_MAX_EMPHASIS) — deliberately
+  off-step: the size itself carries how hard the hit was.
 CONTRAST (WCAG ratio, opaque; a HUD panel at 0.82 over the world reads slightly lower):
                        on UI_PANEL   on UI_INK_BLACK
   UI_TEXT_PRIMARY        13.8:1        15.0:1

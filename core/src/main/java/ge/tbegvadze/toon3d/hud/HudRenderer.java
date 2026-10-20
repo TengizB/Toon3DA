@@ -43,11 +43,13 @@ import ge.tbegvadze.toon3d.world.HudState;
  * near full health). The ammo bar draws one tick per round in the clip. Below the bars sit a
  * numbered weapon-slot strip and a thin status-effect icon row in its own clear band.
  *
- * Every glyph is drawn with a dark drop-shadow for contrast against the busy 3D view behind it.
+ * Every glyph is drawn through UiKit.text (a UI_INK_BLACK drop-shadow) for contrast against the busy
+ * 3D view behind it. Chrome, meters and slot plates are render/UiKit primitives in SUIT ink
+ * (visual-identity-order-4).
  *
  * Render order per frame:
- *   Pass A — ShapeRenderer.Filled  (panel chrome, segmented bars, slots — alpha-blended)
- *   Pass B — ShapeRenderer.Line    (bevels, bar/slot outlines)
+ *   Pass A — ShapeRenderer.Filled  (UiKit panel + brackets, meters, slot plates, status icons — alpha-blended)
+ *   Pass B — ShapeRenderer.Line    (only the slot strip's level arrows)
  *   Pass C — SpriteBatch + BitmapFont (labels, values, slot text, status counts)
  */
 public class HudRenderer implements Renderable, Disposable {
