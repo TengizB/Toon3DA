@@ -629,4 +629,38 @@ public final class RenderConstants {
     public static final float CONTACT_SHADOW_FOG_FADE             = 0.80f;
     /** Extra alpha scale for a hovering enemy so the gap to the body reads as height. */
     public static final float CONTACT_SHADOW_HOVER_ALPHA_SCALE    = 0.55f;
+
+    // =========================================================================
+    // PERFORMANCE PROBE (render-performance-full-hd R10-R12) — a DEV tool, never shipped on.
+    // render/RenderPerformanceProbe times each World.render pass. Off unless the system property
+    // PERF_PROBE_PROPERTY_KEY is "cpu" (timing only) or "sync" (glFinish after every pass, for GPU
+    // attribution — inflates the total), or PERF_PROBE_FORCE_ON is flipped for a phone measurement build.
+    // Readout strings are dev-only and deliberately not localised.
+    // =========================================================================
+    public static final boolean PERF_PROBE_FORCE_ON              = false;
+    public static final String  PERF_PROBE_PROPERTY_KEY          = "toon3d.perfProbe";
+    public static final String  PERF_PROBE_MODE_CPU              = "cpu";
+    public static final String  PERF_PROBE_MODE_SYNC             = "sync";
+    /** Rolling window for the averages and the worst frame. */
+    public static final int     PERF_PROBE_WINDOW_FRAMES         = 120;
+    public static final float   PERF_PROBE_LOG_INTERVAL_SECONDS  = 5f;
+    /** How often the on-screen readout text is rebuilt (a steadier read than every frame). */
+    public static final float   PERF_PROBE_READOUT_REFRESH_SECONDS = 0.25f;
+    public static final String  PERF_PROBE_LOG_TAG               = "perf";
+    /** Readout plate, top centre: clear of the mini-map (top-left), the HUD panels and every touch button. */
+    public static final float   PERF_PROBE_PLATE_WIDTH           = 420f;
+    public static final float   PERF_PROBE_PLATE_HEIGHT          = 44f;
+    public static final float   PERF_PROBE_PLATE_TOP_MARGIN      = 4f;
+    public static final float   PERF_PROBE_PLATE_ALPHA           = 0.6f;
+    public static final float   PERF_PROBE_TEXT_PADDING          = 6f;
+    public static final float   PERF_PROBE_TEXT_SCALE            = 1f;
+    public static final String  PERF_PROBE_LABEL_AVERAGE         = "AVG ";
+    public static final String  PERF_PROBE_LABEL_WORST           = " WORST ";
+    public static final String  PERF_PROBE_LABEL_FPS             = " FPS ";
+    public static final String  PERF_PROBE_LABEL_FLOOR           = "FLOOR ";
+    public static final String  PERF_PROBE_LABEL_WALLS           = " WALL ";
+    public static final String  PERF_PROBE_LABEL_DRAW_CALLS      = " DC ";
+    public static final String  PERF_PROBE_UNIT_MILLISECONDS     = "MS";
+    /** Fixed decimals for readout and log numbers. */
+    public static final int     PERF_PROBE_DECIMALS              = 2;
 }

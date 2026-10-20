@@ -440,6 +440,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         }
     }
 
+    /** Bytes uploaded to the GPU by the last render() — the probe's floor upload counter (R10). */
+    public long getUploadBytesLastFrame() {
+        return (long) backdropWidth * backdropHeight * 4L;
+    }
+
     @Override
     public void dispose() {
         batch.dispose();

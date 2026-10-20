@@ -7882,4 +7882,23 @@ public final class GameMath {
     public static final int MATCHUP_CLASS_NEUTRAL   = 0;
     /** {@link #classifyMatchup} result: the multiplier is at or below the resisted threshold. */
     public static final int MATCHUP_CLASS_RESISTED  = -1;
+
+    // =========================================================================
+    // RENDER PERFORMANCE PROBE (render-performance-full-hd R10) — dev measurement helpers
+    // =========================================================================
+
+    /*
+     * Formula: rollingAverage
+     * Derivation: arithmetic mean of count consecutive ring entries starting at offset:
+     *     mean = (sum_{index=0}^{count-1} values[offset + index]) / count
+     *   Accumulated in double so 120 frames of millisecond floats lose no precision.
+     *   Order does not matter for a mean, so a ring buffer's wrap point is irrelevant.
+     * Edge cases: count <= 0 returns 0 (an empty window). The caller guarantees offset + count is in range.
+     */
+    public static float rollingAverage(float[] values, int offset, int count) {
+        if (count <= 0) return 0f;
+        double sum = 0.0;
+        for (int index = 0; index < count; index++) sum += values[offset + index];
+        return (float) (sum / count);
+    }
 }

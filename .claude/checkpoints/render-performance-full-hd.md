@@ -42,7 +42,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — the performance probe.
+- [x] **CP1** — the performance probe.
       DONE WHEN: `RenderPerformanceProbe` exists and is wired into `World.render`; with `-Dtoon3d.perfProbe=cpu` the
       log prints per-pass ms + draw calls every 5 s and the readout draws top-centre; with the property absent
       nothing is drawn or logged; `run.sh` accepts `--probe`; build green.
@@ -73,4 +73,16 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 
 ## NOTES CARRIED FORWARD
 
-(none yet)
+**CP1 (closed).** Baseline at `a46876f`: mirror `:core:build` = 480 tests, 1 failure
+(`narrative.StoryBarkTest`, pre-existing — same as the render-quality checkpoint). That is the A17 baseline.
+- Probe API (World owns one, `final`, constructed with the World): `beginFrame()` / `begin(Pass)` / `end(Pass)` /
+  `addUploadBytes(long)` / `endFrame(camera)` / `dispose()` (calls `GLProfiler.disable()` so the next World's probe
+  does not wrap ours). `World.render` is now `beginFrame(); renderFrame(camera); endFrame(camera)`.
+- Passes: floor, walls, props, shop, enemies (enemy + attack effects + impact world effects), vignette, weapon,
+  screenfx (impact overlays + guard + hit/status vignettes), minimap, hud, overlays (touch, text, all modals, fade).
+- `FloorCeilingRenderer.getUploadBytesLastFrame()` reports the backdrop bytes (2,073,600 at FULL_HD); CP4 makes it 0.
+- Log line: `[perf] cpu frames 120 | frame avg A worst W ms | pass ms floor=... | pass dc floor=... | draws D binds B
+  shaders S verts V upload U B/frame`. `run.sh --probe cpu|sync`, `--gclog FILE` (count with `grep -c Pause`).
+- First look (cool_steel P1, cpu mode): World.render CPU 5.9 ms of which floor 3.3, walls 1.05; capture frame
+  (with glFinish) 14.7 ms ⇒ most of the frame is llvmpipe GPU work after submission — sync mode is needed to
+  attribute it (CP2). Draw calls 59/frame: walls 5, props 19, shop 26 (!), floor 1.
