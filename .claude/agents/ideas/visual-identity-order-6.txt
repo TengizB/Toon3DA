@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: UI
 TITLE: Visual Identity 6 — Facility, story and first impression
 CREATED: 2026-10-19
