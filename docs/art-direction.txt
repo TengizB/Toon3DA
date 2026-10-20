@@ -446,8 +446,9 @@ INK RULE (R8). The in-play layer is SUIT ink: accents SUIT_AMBER, secondary acce
   Green is health or a buff and nothing else.
 WHERE IT IS USED (order 4 — the in-play layer; overlays and menus are orders 5 and 6):
   hud/HudRenderer               panel + SUIT_AMBER_DIM brackets; labels UI_TEXT_SECONDARY, values
-                                UI_TEXT_PRIMARY; weapon slots are plates (active SELECTED in amber with
-                                compact brackets, filled IDLE, empty DISABLED); NAV OFFLINE plate.
+                                UI_TEXT_PRIMARY; a WP row names only the equipped weapon and shows one
+                                small numbered slot tab per slot (equipped PRESSED in amber, filled IDLE,
+                                empty DISABLED); NAV OFFLINE plate.
   input/touch/TouchControllerRenderer  each button a chamfered panel (TOUCH_BUTTON_CHAMFER 16 — drawing
                                 only; TouchButton.contains is a plain rect): idle UI_PANEL + UI_LINE rim +
                                 bone icon, pressed UI_PANEL_RAISED + SUIT_AMBER rim + amber icon, locked

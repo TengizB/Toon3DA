@@ -560,17 +560,28 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     // =========================================================================
-    // Weapon slot strip — Pass A, B, C
+    // Weapon row — Pass A, B, C. A fifth vital row in the same grammar as HP/AR/AM/XP:
+    //   [WP]  [class glyph + EQUIPPED weapon's full name ........ LV n]  [slot tabs 1 2 3]
+    // Only the equipped weapon is named, so its name is never squeezed; the tabs (right-aligned in the
+    // value column) show which slot is equipped (amber), which are filled (neutral, with a class-colour
+    // bar) and which are empty (dimmed).
     // =========================================================================
 
-    private float slotWidth(int slotCount) {
-        float padding = HudConstants.HUD_SLOT_SIDE_PADDING;
-        float gap     = HudConstants.HUD_SLOT_GAP;
-        return (LEFT_WIDTH - 2f * padding - (slotCount - 1) * gap) / slotCount;
+    /** Left edge of display tab {@code displayIndex} when {@code tabCount} tabs are right-aligned. */
+    private static float tabX(int displayIndex, int tabCount) {
+        float rowWidth = tabCount * HudConstants.HUD_WEAPON_TAB_WIDTH + (tabCount - 1) * HudConstants.HUD_WEAPON_TAB_GAP;
+        return HudConstants.HUD_VALUE_RIGHT_X - rowWidth
+                + displayIndex * (HudConstants.HUD_WEAPON_TAB_WIDTH + HudConstants.HUD_WEAPON_TAB_GAP);
     }
 
-    private float slotX(int slotIndex, float slotBoxWidth) {
-        return HudConstants.HUD_SLOT_SIDE_PADDING + slotIndex * (slotBoxWidth + HudConstants.HUD_SLOT_GAP);
+    /** Display index of the equipped weapon, or -1 when none is shown. */
+    private int activeDisplayIndex(PlayerInventory inventory, int slotCount) {
+        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
+            if (displaySlotWeapon(inventory, displayIndex) != null && displaySlotActive(inventory, displayIndex)) {
+                return displayIndex;
+            }
+        }
+        return -1;
     }
 
     // -------------------------------------------------------------------------
@@ -617,119 +628,117 @@ public class HudRenderer implements Renderable, Disposable {
     }
 
     private void drawSlotStripFilled(PlayerInventory inventory) {
-        float originY       = HudConstants.HUD_SLOT_STRIP_Y;
-        float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = displaySlotCount(inventory.getLoadout());
-        float slotBoxWidth  = slotWidth(slotCount);
+        float rowY      = HudConstants.HUD_WEAPON_ROW_Y;
+        float tabHeight = HudConstants.HUD_BAR_HEIGHT;
+        int   slotCount = displaySlotCount(inventory.getLoadout());
+        boolean isDead  = player.isDead();
 
+        // Slot tabs: equipped = PRESSED plate in SUIT_AMBER (a 24-unit tab is too small for brackets), filled =
+        // IDLE with a class-colour bar along its foot, empty = DISABLED.
         for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
-            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
-            boolean filled        = displaySlotWeapon(inventory, displayIndex) != null;
-            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
-
-            // R9: active = SELECTED plate in SUIT_AMBER, filled = IDLE, empty = DISABLED.
-            PlateState state = isActive ? PlateState.SELECTED : (filled ? PlateState.IDLE : PlateState.DISABLED);
-            UiKit.plate(shapes, slotPositionX, originY, slotBoxWidth, slotBoxHeight, ArtDirection.UI_CHAMFER,
-                    ArtDirection.UI_BRACKET_LENGTH_COMPACT, state, HudConstants.HUD_SLOT_PLATE_ALPHA,
+            Weapon  weapon   = displaySlotWeapon(inventory, displayIndex);
+            boolean filled   = weapon != null;
+            boolean isActive = filled && displaySlotActive(inventory, displayIndex);
+            float   tabLeft  = tabX(displayIndex, slotCount);
+            PlateState state = isActive ? PlateState.PRESSED : (filled ? PlateState.IDLE : PlateState.DISABLED);
+            UiKit.plate(shapes, tabLeft, rowY, HudConstants.HUD_WEAPON_TAB_WIDTH, tabHeight,
+                    HudConstants.HUD_WEAPON_TAB_CHAMFER, state, HudConstants.HUD_WEAPON_TAB_ALPHA,
                     ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
-
-            // Damage-class glyph (balance-overhaul order 3, C3): top row, right of the slot number, in the
-            // class colour — the equipped slot at full strength, the carried ones dimmed.
-            Weapon glyphWeapon = displaySlotWeapon(inventory, displayIndex);
-            if (glyphWeapon != null && !player.isDead()) {
-                DamageClass damageClass = glyphWeapon.damageClass();
-                matchupGlyphs.drawClass(shapes, damageClass,
-                        slotPositionX + HudConstants.HUD_CLASS_GLYPH_LEFT_INSET,
-                        originY + slotBoxHeight - HudConstants.HUD_CLASS_GLYPH_TOP_INSET
-                                - HudConstants.HUD_CLASS_GLYPH_SIZE,
-                        HudConstants.HUD_CLASS_GLYPH_SIZE,
-                        damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(),
+            if (filled && !isDead) {
+                DamageClass damageClass = weapon.damageClass();
+                shapes.setColor(damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(),
                         isActive ? 1f : HudConstants.HUD_CLASS_GLYPH_INACTIVE_ALPHA);
+                float barInset = HudConstants.HUD_WEAPON_TAB_CHAMFER;
+                shapes.rect(tabLeft + barInset, rowY + ArtDirection.UI_BORDER_THICKNESS,
+                        HudConstants.HUD_WEAPON_TAB_WIDTH - 2f * barInset, HudConstants.HUD_WEAPON_TAB_CLASS_BAR_HEIGHT);
             }
+        }
+
+        // Damage-class glyph (balance-overhaul order 3, C3) of the equipped weapon, at the head of the row.
+        int activeIndex = activeDisplayIndex(inventory, slotCount);
+        if (activeIndex >= 0 && !isDead) {
+            DamageClass damageClass = displaySlotWeapon(inventory, activeIndex).damageClass();
+            float glyphSize = HudConstants.HUD_CLASS_GLYPH_SIZE;
+            matchupGlyphs.drawClass(shapes, damageClass, HudConstants.HUD_BAR_X,
+                    rowY + (tabHeight - glyphSize) / 2f, glyphSize,
+                    damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(), 1f);
         }
     }
 
+    /** LV tag arrow glyph (R14 a) of the equipped weapon, at the right end of the name column. */
     private void drawSlotStripLines(PlayerInventory inventory) {
-        float originY       = HudConstants.HUD_SLOT_STRIP_Y;
-        float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = displaySlotCount(inventory.getLoadout());
-        float slotBoxWidth  = slotWidth(slotCount);
-
-        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
-            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
-
-            // LV tag arrow glyph (R14 a): right-hand end of the slot's top row, beside the tag text.
-            Weapon weapon = displaySlotWeapon(inventory, displayIndex);
-            if (weapon != null && !player.isDead()) {
-                int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
-                if (WeaponLevelTag.hasGlyph(standing)) {
-                    WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
-                    shapes.setColor(temporaryColor);
-                    float glyphX = slotPositionX + slotBoxWidth - HudConstants.HUD_LEVEL_TAG_SLOT_INSET
-                            - HudConstants.HUD_LEVEL_CHEVRON_WIDTH;
-                    float glyphY = originY + slotBoxHeight - HudConstants.HUD_LEVEL_TAG_TOP_INSET
-                            - HudConstants.HUD_LEVEL_CHEVRON_HEIGHT;
-                    WeaponLevelTag.drawGlyph(shapes, glyphX, glyphY, standing);
-                }
-            }
-        }
+        int slotCount   = displaySlotCount(inventory.getLoadout());
+        int activeIndex = activeDisplayIndex(inventory, slotCount);
+        if (activeIndex < 0 || player.isDead()) return;
+        Weapon weapon = displaySlotWeapon(inventory, activeIndex);
+        int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
+        if (!WeaponLevelTag.hasGlyph(standing)) return;
+        WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
+        shapes.setColor(temporaryColor);
+        float glyphX = HudConstants.HUD_BAR_X + HudConstants.HUD_BAR_WIDTH - HudConstants.HUD_LEVEL_CHEVRON_WIDTH;
+        float glyphY = HudConstants.HUD_WEAPON_ROW_Y
+                + (HudConstants.HUD_BAR_HEIGHT - HudConstants.HUD_LEVEL_CHEVRON_HEIGHT) / 2f;
+        WeaponLevelTag.drawGlyph(shapes, glyphX, glyphY, standing);
     }
 
     private void drawSlotStripText(PlayerInventory inventory, boolean isDead) {
-        float originY       = HudConstants.HUD_SLOT_STRIP_Y;
-        float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = displaySlotCount(inventory.getLoadout());
-        float slotBoxWidth  = slotWidth(slotCount);
+        float rowY      = HudConstants.HUD_WEAPON_ROW_Y;
+        int   slotCount = displaySlotCount(inventory.getLoadout());
 
+        drawLabel("WP", rowY, isDead ? TEXT_DIM : TEXT_SECONDARY);
+
+        // Tab numbers, centred in each tab.
+        font.getData().setScale(HudConstants.HUD_SLOT_NUMBER_SCALE);
         for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
-            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
-            Weapon  weapon        = displaySlotWeapon(inventory, displayIndex);
-            boolean filled        = weapon != null;
-            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
-
-            // Slot number, top-left corner of the slot.
+            Weapon  weapon   = displaySlotWeapon(inventory, displayIndex);
+            boolean filled   = weapon != null;
+            boolean isActive = filled && displaySlotActive(inventory, displayIndex);
             stringBuilder.setLength(0);
             stringBuilder.append(displayIndex + 1);
-            Color numberColor = isDead ? TEXT_DIM : (isActive ? SUIT_AMBER : TEXT_SECONDARY);
-            drawTextWithShadow(stringBuilder, slotPositionX + HudConstants.HUD_SLOT_NUMBER_INSET_X,
-                    originY + slotBoxHeight - HudConstants.HUD_SLOT_NUMBER_TOP_INSET,
+            glyphLayout.setText(font, stringBuilder);
+            float numberX = tabX(displayIndex, slotCount) + (HudConstants.HUD_WEAPON_TAB_WIDTH - glyphLayout.width) / 2f;
+            Color numberColor = isDead || !filled ? TEXT_DIM : (isActive ? SUIT_AMBER : TEXT_PRIMARY);
+            drawTextWithShadow(stringBuilder, numberX,
+                    barLabelBaseline(stringBuilder, rowY, HudConstants.HUD_SLOT_NUMBER_SCALE),
                     numberColor, HudConstants.HUD_SLOT_NUMBER_SCALE);
-
-            // Weapon name, truncated to fit the slot, vertically centred under the number.
-            if (filled && !isDead) {
-                appendTruncatedName(weapon.getDisplayName(),
-                        slotBoxWidth - 2f * HudConstants.HUD_SLOT_NAME_SIDE_INSET, HudConstants.HUD_SLOT_NAME_SCALE);
-                font.getData().setScale(HudConstants.HUD_SLOT_NAME_SCALE);
-                glyphLayout.setText(font, stringBuilder);
-                float nameX = slotPositionX + (slotBoxWidth - glyphLayout.width) / 2f;
-                float nameY = originY + HudConstants.HUD_SLOT_NAME_TOP_Y;
-                drawTextWithShadow(stringBuilder, nameX, nameY,
-                        isActive ? SUIT_AMBER : TEXT_PRIMARY, HudConstants.HUD_SLOT_NAME_SCALE);
-            }
-
-            // "LV n" tag, top-right of the slot, coloured by the gap to the floor threat level.
-            if (filled && !isDead) {
-                int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
-                WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
-                String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
-                font.getData().setScale(HudConstants.HUD_LEVEL_TAG_SCALE);
-                glyphLayout.setText(font, tagLabel);
-                float rightEdge = slotPositionX + slotBoxWidth - HudConstants.HUD_LEVEL_TAG_SLOT_INSET;
-                if (WeaponLevelTag.hasGlyph(standing)) {
-                    rightEdge -= HudConstants.HUD_LEVEL_CHEVRON_WIDTH + HudConstants.HUD_LEVEL_TAG_CHEVRON_GAP;
-                }
-                drawTextWithShadow(tagLabel, rightEdge - glyphLayout.width,
-                        originY + slotBoxHeight - HudConstants.HUD_LEVEL_TAG_TOP_INSET,
-                        temporaryColor, HudConstants.HUD_LEVEL_TAG_SCALE);
-            }
         }
+
+        int activeIndex = activeDisplayIndex(inventory, slotCount);
+        if (activeIndex < 0 || isDead) {
+            font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
+            return;
+        }
+        Weapon weapon = displaySlotWeapon(inventory, activeIndex);
+
+        // "LV n" tag, right-aligned at the end of the name column, coloured by the gap to the floor threat level.
+        int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
+        WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
+        String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
+        font.getData().setScale(HudConstants.HUD_LEVEL_TAG_SCALE);
+        glyphLayout.setText(font, tagLabel);
+        float tagRight = HudConstants.HUD_BAR_X + HudConstants.HUD_BAR_WIDTH;
+        if (WeaponLevelTag.hasGlyph(standing)) {
+            tagRight -= HudConstants.HUD_LEVEL_CHEVRON_WIDTH + HudConstants.HUD_LEVEL_TAG_CHEVRON_GAP;
+        }
+        float tagLeft = tagRight - glyphLayout.width;
+        drawTextWithShadow(tagLabel, tagLeft,
+                barLabelBaseline(tagLabel, rowY, HudConstants.HUD_LEVEL_TAG_SCALE),
+                temporaryColor, HudConstants.HUD_LEVEL_TAG_SCALE);
+
+        // The equipped weapon's name: bone-white, after the class glyph, truncated only if it would reach the tag.
+        float nameX = HudConstants.HUD_BAR_X + HudConstants.HUD_CLASS_GLYPH_SIZE + HudConstants.HUD_WEAPON_NAME_GAP;
+        appendTruncatedName(weapon.getDisplayName(), tagLeft - HudConstants.HUD_WEAPON_NAME_GAP - nameX,
+                HudConstants.HUD_SLOT_NAME_SCALE);
+        drawTextWithShadow(stringBuilder, nameX,
+                barLabelBaseline(stringBuilder, rowY, HudConstants.HUD_SLOT_NAME_SCALE),
+                TEXT_PRIMARY, HudConstants.HUD_SLOT_NAME_SCALE);
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
     /**
      * Writes {@code name} into stringBuilder, dropping trailing characters (and adding a '.') until
-     * it measures no wider than {@code maxWidth} at {@code scale}. Guarantees the slot name never
-     * overflows its box, so names can never overlap neighbouring slots or the bars above.
+     * it measures no wider than {@code maxWidth} at {@code scale}. Guarantees the weapon name never
+     * runs into its LV tag.
      */
     private void appendTruncatedName(String name, float maxWidth, float scale) {
         font.getData().setScale(scale);

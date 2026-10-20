@@ -39,17 +39,21 @@ util/CombatPalette. Palette by element:
   ammo pips / melee meter   SUIT_AMBER (the player's own resource), track UI_INK_BLACK
   ammo digits               HEAVY face
   XP meter                  CREDITS_GOLD (earned), track UI_INK_BLACK
-  weapon slots              UiKit plates, UI_CHAMFER + UI_BRACKET_LENGTH_COMPACT: active SELECTED
-                            in SUIT_AMBER, filled IDLE, empty DISABLED; slot text inset to clear
-                            the brackets (HUD_SLOT_NUMBER_*, HUD_SLOT_NAME_*, HUD_CLASS_GLYPH_*,
-                            HUD_LEVEL_TAG_* insets); level tag at TYPE_CAPTION
+  weapon row (WP)           a fifth vital row (HUD_WEAPON_ROW_Y 60, same grid as the bars): label
+                            "WP"; in the bar column the EQUIPPED weapon's class glyph, its full name
+                            (UI_TEXT_PRIMARY, TYPE_CAPTION, truncated only if it would reach the tag)
+                            and its LV tag right-aligned at the column end (standing colour + arrow);
+                            in the value column one 24x20 numbered tab per slot, right-aligned:
+                            equipped = PRESSED plate in SUIT_AMBER, filled = IDLE with a class-colour
+                            foot bar, empty = DISABLED. Only the equipped weapon is named — the old
+                            per-slot name plates were too cramped to read (owner redesign, 2026-10-20)
   status LED                SUIT_AMBER at rest, pulsing DAMAGE on alert
   credits readout           CREDITS_GOLD, TYPE_LABEL; debuff list keeps its status colours
   NAV OFFLINE (BLACKOUT)    UiKit panel + brackets in the mini-map's rectangle, FACILITY_CYAN text
   ground weapon / medkit    SUIT_AMBER (medkit warning lerps DAMAGE <-> SUIT_AMBER)
 Every glyph is drawn through UiKit.text (UI_INK_BLACK shadow that scales with the
-type step). Render passes: A Filled (UiKit chrome, meters, plates, icons, NAV
-plate), B Line (only the slot strip's level arrows), C text. There is no face box
+type step). Render passes: A Filled (UiKit chrome, meters, slot tabs, icons, NAV
+plate), B Line (only the equipped weapon's level arrow), C text. There is no face box
 and no right panel in this renderer. Layout/scale/colour values live in
 HudConstants.java (HUD_BAR_*, HUD_*_BAR_Y, HUD_SLOT_*, HUD_*_SCALE) and the UI kit
 in docs/art-direction.txt UI KIT.

@@ -39,27 +39,22 @@ public final class HudConstants {
     public static final float HUD_CLIP_BAR_Y                  = 116f;
     public static final float HUD_XP_BAR_Y                    = 88f;
 
-    // Weapon-slot strip — numbered slots with active highlight, below the XP row
-    /** Damage-class glyph in each weapon slot's top row (balance-overhaul order 3, C3). */
+    // Weapon row — a fifth vital row (bar Y 60, the 28-unit row pitch below XP): "WP" label, the EQUIPPED
+    // weapon's class glyph + full name + LV tag in the bar column, and one small numbered tab per weapon slot
+    // right-aligned in the value column (owner redesign after visual-identity-order-4).
+    public static final float HUD_WEAPON_ROW_Y                = 60f;
+    /** Damage-class glyph before the equipped weapon's name (balance-overhaul order 3, C3). */
     public static final float HUD_CLASS_GLYPH_SIZE            = 9f;
-    public static final float HUD_CLASS_GLYPH_LEFT_INSET      = 24f;    // right of the slot number
-    public static final float HUD_CLASS_GLYPH_TOP_INSET       = 8f;
+    /** Alpha of a carried (not equipped) weapon's class-colour bar on its tab. */
     public static final float HUD_CLASS_GLYPH_INACTIVE_ALPHA  = 0.65f;
-    public static final float HUD_SLOT_STRIP_Y                = 42f;
-    public static final float HUD_SLOT_STRIP_HEIGHT           = 38f;
-    public static final float HUD_SLOT_SIDE_PADDING           = 14f;
-    public static final float HUD_SLOT_GAP                    = 6f;
-    /** Slot plate fill alpha (UiKit plate; DISABLED halves it). */
-    public static final float HUD_SLOT_PLATE_ALPHA            = 0.92f;
-    /**
-     * Slot number position: inset from the slot's left edge and down from its top. With the class glyph and
-     * level-tag insets below, it clears the SELECTED plate's corner brackets (UiKit, visual-identity-order-4).
-     */
-    public static final float HUD_SLOT_NUMBER_INSET_X         = 12f;
-    public static final float HUD_SLOT_NUMBER_TOP_INSET       = 7.5f;
-    /** Slot name: text top above the slot's bottom, and the side inset it is truncated to (clear of the brackets). */
-    public static final float HUD_SLOT_NAME_TOP_Y             = 18f;
-    public static final float HUD_SLOT_NAME_SIDE_INSET        = 9f;
+    /** Gap between the class glyph and the name, and the name's minimum clearance from the LV tag. */
+    public static final float HUD_WEAPON_NAME_GAP             = 6f;
+    /** Slot tabs: size (height = HUD_BAR_HEIGHT), gap, chamfer, fill alpha and the class-colour foot bar. */
+    public static final float HUD_WEAPON_TAB_WIDTH            = 24f;
+    public static final float HUD_WEAPON_TAB_GAP              = 4f;
+    public static final float HUD_WEAPON_TAB_CHAMFER          = 4f;
+    public static final float HUD_WEAPON_TAB_ALPHA            = 0.92f;
+    public static final float HUD_WEAPON_TAB_CLASS_BAR_HEIGHT = 2f;
 
     // Text scales — every HUD text draw uses a step of the type scale (visual-identity-order-4 R15; the
     // pixel font at setScale(1) has the old default font's cap height). Every glyph is shadowed (UiKit.text).
@@ -281,11 +276,8 @@ public final class HudConstants {
     public static final float  HUD_LEVEL_TAG_SCALE           = ArtDirection.TYPE_CAPTION;
     /** Levels 0..this have a pre-built label string; higher levels fall back to a concatenation. */
     public static final int    HUD_LEVEL_TAG_CACHE_MAX       = 99;
-    /** Gap between the tag text and the arrow glyph, and the tag's inset from the slot's right edge. */
+    /** Gap between the tag text and the arrow glyph. */
     public static final float  HUD_LEVEL_TAG_CHEVRON_GAP     = 3f;
-    public static final float  HUD_LEVEL_TAG_SLOT_INSET      = 12f;
-    /** Baseline of the HUD tag, measured down from the top of the slot (mirrors the slot number). */
-    public static final float  HUD_LEVEL_TAG_TOP_INSET       = 7.5f;
     /** Arrow glyph: 3 strokes (stem + two head strokes) in a 10 x 8 box. */
     public static final float  HUD_LEVEL_CHEVRON_WIDTH       = 10f;
     public static final float  HUD_LEVEL_CHEVRON_HEIGHT      = 8f;
