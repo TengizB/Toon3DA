@@ -9,9 +9,10 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
-import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
@@ -19,14 +20,14 @@ import ge.tbegvadze.toon3d.util.GameMath;
  *
  * Legacy slots (bannerTier == 0):
  *   Centred horizontally, rise by EVENT_TEXT_RISE_PIXELS over their lifetime, fade to
- *   transparent.  A one-pixel dark shadow improves readability.  Stacking keeps
+ *   transparent.  Drawn through UiKit.text (the kit's drop shadow).  Stacking keeps
  *   concurrent texts from overlapping.
  *
  * Banner slots (bannerTier == TIER_PROC / SLAM / LEGENDARY):
- *   Tier 2 (PROC)      — scale 1.6×, pop-in at ABILITY_BANNER_PROC_ANCHOR_Y.
- *   Tier 3 (SLAM)      — scale 2.4×, punch-in at ABILITY_BANNER_SLAM_ANCHOR_Y, plus a
+ *   Tier 2 (PROC)      — TYPE_HEADING, pop-in at ABILITY_BANNER_PROC_ANCHOR_Y.
+ *   Tier 3 (SLAM)      — TYPE_HEADING, punch-in at ABILITY_BANNER_SLAM_ANCHOR_Y, plus a
  *                         1-pixel underline drawn with ShapeRenderer before the text pass.
- *   Tier 4 (LEGENDARY) — scale 3.0×, punch-in at ABILITY_BANNER_LEGENDARY_ANCHOR_Y,
+ *   Tier 4 (LEGENDARY) — TYPE_DISPLAY, punch-in at ABILITY_BANNER_LEGENDARY_ANCHOR_Y,
  *                         plus underline.  Holds at full opacity for LEGENDARY_HOLD_SEC
  *                         before fading.
  *
@@ -35,7 +36,7 @@ import ge.tbegvadze.toon3d.util.GameMath;
  */
 public final class EventTextRenderer implements Disposable {
 
-    private static final float LEGACY_FONT_SCALE = 1.8f;
+    private static final float LEGACY_FONT_SCALE = EffectConstants.EVENT_TEXT_FONT_SCALE;
     // Underline vertical offset below the text baseline
     private static final float UNDERLINE_BELOW_BASELINE = 6f;
     // Underline height in world units
@@ -43,19 +44,28 @@ public final class EventTextRenderer implements Disposable {
     // Underline horizontal padding beyond text width
     private static final float UNDERLINE_PADDING = 8f;
 
-    // Base palette — never mutated; per-frame alpha is written into temporaryColor only.
-    private static final Color BASE_SHADOW       = new Color(0f,    0f,    0f,    1f);
-    private static final Color BASE_WHITE        = new Color(1f,    1f,    1f,    1f);
-    private static final Color BASE_GREEN        = new Color(0.25f, 1f,    0.25f, 1f);
-    private static final Color BASE_RED          = new Color(1f,    0.18f, 0.18f, 1f);
-    private static final Color BASE_GREY         = new Color(0.8f,  0.8f,  0.8f,  1f);
-    private static final Color BASE_GOLD         = new Color(1f,    0.69f, 0.125f, 1f);
-    private static final Color BASE_CREDIT_CYAN  = new Color(0.55f, 0.85f, 0.80f, 1f);
-    private static final Color BASE_BLUE         = new Color(0.45f, 0.72f, 1f,    1f);
-    /** Equal to HudRenderer's AR_LABEL — the armour bar's blue. */
-    private static final Color BASE_ARMOUR       = new Color(0.55f, 0.85f, 1.00f, 1f);
-    private static final Color BASE_AMBER        = new Color(HudConstants.TWIST_AMBER_RED,
-            HudConstants.TWIST_AMBER_GREEN, HudConstants.TWIST_AMBER_BLUE, 1f);
+    // Colour table indexed by EventTextSystem's colour codes (visual-identity-order-4 R13): SUIT ink for neutrals
+    // and the player's own things, semantic colours only where they carry their meaning. Never mutated.
+    private static final Color BASE_WHITE        = new Color(ArtDirection.UI_TEXT_PRIMARY_RED,
+            ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+    private static final Color BASE_GREEN        = new Color(ArtDirection.HEALTH_GREEN_RED,
+            ArtDirection.HEALTH_GREEN_GREEN, ArtDirection.HEALTH_GREEN_BLUE, 1f);
+    private static final Color BASE_RED          = new Color(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN,
+            CombatPalette.DAMAGE_BLUE, 1f);
+    private static final Color BASE_GREY         = new Color(ArtDirection.UI_TEXT_SECONDARY_RED,
+            ArtDirection.UI_TEXT_SECONDARY_GREEN, ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
+    private static final Color BASE_GOLD         = new Color(ArtDirection.SUIT_AMBER_RED,
+            ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
+    /** Credits are earned, so the credit code reads CREDITS_GOLD (AS4), like the HUD's credits readout. */
+    private static final Color BASE_CREDIT_CYAN  = new Color(ArtDirection.CREDITS_GOLD_RED,
+            ArtDirection.CREDITS_GOLD_GREEN, ArtDirection.CREDITS_GOLD_BLUE, 1f);
+    private static final Color BASE_BLUE         = new Color(CombatPalette.DEFENSE_RED, CombatPalette.DEFENSE_GREEN,
+            CombatPalette.DEFENSE_BLUE, 1f);
+    /** The armour meter's blue (HudRenderer). */
+    private static final Color BASE_ARMOUR       = new Color(ArtDirection.ARMOUR_BLUE_RED,
+            ArtDirection.ARMOUR_BLUE_GREEN, ArtDirection.ARMOUR_BLUE_BLUE, 1f);
+    private static final Color BASE_AMBER        = new Color(ArtDirection.SUIT_AMBER_RED,
+            ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
 
     private final EventTextSystem eventTextSystem;
     private final SpriteBatch     batch;
@@ -187,13 +197,7 @@ public final class EventTextRenderer implements Disposable {
             layout.setText(font, text);
             float textX = (Constants.WORLD_WIDTH - layout.width) / 2f;
 
-            // Shadow (one pixel offset)
-            temporaryColor.set(BASE_SHADOW);
-            temporaryColor.a = alpha * 0.7f;
-            font.setColor(temporaryColor);
-            font.draw(batch, text, textX + 1f, baseY - 1f);
-
-            // Main text color
+            // Main text color — drawn through UiKit.text, so every line carries the kit's drop shadow (R13)
             if (tier != 0) {
                 temporaryColor.set(
                     eventTextSystem.getBannerRed(slotIndex),
@@ -205,8 +209,8 @@ public final class EventTextRenderer implements Disposable {
                 temporaryColor.set(resolveBaseColor(eventTextSystem.getColorType(slotIndex)));
                 temporaryColor.a = alpha;
             }
-            font.setColor(temporaryColor);
-            font.draw(batch, text, textX, baseY);
+            UiKit.text(batch, font, text, textX, baseY,
+                    temporaryColor.r, temporaryColor.g, temporaryColor.b, temporaryColor.a);
         }
 
         // Restore font to default so other users of shared BitmapFont state are unaffected.

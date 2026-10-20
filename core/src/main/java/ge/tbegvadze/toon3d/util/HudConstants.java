@@ -400,7 +400,7 @@ public final class HudConstants {
     public static final float  TWIST_AMBER_BLUE  = 0.16f;
     /** R7a: the plate drawn in the mini-map's rectangle on a BLACKOUT floor — a UiKit panel at the HUD alpha. */
     public static final float  TWIST_NAV_OFFLINE_PLATE_ALPHA = HUD_PANEL_ALPHA;
-    /** R7a: the plate's centred label (FACILITY_CYAN_DIM, visual-identity-order-4 R8) and its type step. */
+    /** R7a: the plate's centred label (FACILITY_CYAN, visual-identity-order-4 R8) and its type step. */
     public static final String TWIST_NAV_OFFLINE_TEXT        = "NAV OFFLINE";
     public static final float  TWIST_NAV_OFFLINE_TEXT_SCALE  = ArtDirection.TYPE_BODY;
     /** R9a: the HUNTED warning, TWIST_HUNTED_WARNING_TURNS before the arrival (amber event text). */

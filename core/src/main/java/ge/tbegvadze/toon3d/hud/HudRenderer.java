@@ -243,15 +243,19 @@ public class HudRenderer implements Renderable, Disposable {
                 ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
     }
 
-    /** The facility is speaking (R8): its NAV OFFLINE notice is in FACILITY_CYAN_DIM. */
+    /**
+     * The facility is speaking (R8): its NAV OFFLINE notice is in FACILITY_CYAN. (R9 asked for FACILITY_CYAN_DIM,
+     * which is 3.3:1 on UI_PANEL — below the 4.5:1 text floor — so the full ink is used; see the idea's
+     * IMPLEMENTATION NOTE.)
+     */
     private void drawNavOfflinePlateText() {
         font.getData().setScale(HudConstants.TWIST_NAV_OFFLINE_TEXT_SCALE);
         glyphLayout.setText(font, HudConstants.TWIST_NAV_OFFLINE_TEXT);
         float drawX = Constants.MINI_MAP_ORIGIN_X + (Constants.MINI_MAP_WORLD_SIZE - glyphLayout.width) / 2f;
         float drawY = Constants.MINI_MAP_ORIGIN_Y + (Constants.MINI_MAP_WORLD_SIZE + glyphLayout.height) / 2f;
         UiKit.text(batch, font, HudConstants.TWIST_NAV_OFFLINE_TEXT, drawX, drawY,
-                ArtDirection.FACILITY_CYAN_DIM_RED, ArtDirection.FACILITY_CYAN_DIM_GREEN,
-                ArtDirection.FACILITY_CYAN_DIM_BLUE, 1f);
+                ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                ArtDirection.FACILITY_CYAN_BLUE, 1f);
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 

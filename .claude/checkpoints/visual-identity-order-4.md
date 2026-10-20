@@ -44,7 +44,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP2** — HudRenderer restyled (R9 + R15). DONE WHEN: A2 (HUD), A3 (HUD), A9 seen on run; build green.
 - [x] **CP3** — TouchControllerRenderer restyled (R10), constant renamed. DONE WHEN: A4 incl. tap spot-check; build green.
 - [x] **CP4** — LevelRenderer (R11) + BossHudRenderer (R12). DONE WHEN: A5 seen on run; build green.
-- [ ] **CP5** — EventText (R13) + ImpactEffect damage numbers (R14), docs. DONE WHEN: A6, A7, A8 hold; build + test
+- [x] **CP5** — EventText (R13) + ImpactEffect damage numbers (R14), docs. DONE WHEN: A6, A7, A8 hold; build + test
       at baseline.
 - [ ] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -98,3 +98,17 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   text and phase banner. PRE-EXISTING (identical at 682fd6d): the boss bar (x 80..1200, y 572..596) overlaps the
   mini-map; the mini-map's bottom edge overlaps the INVENTORY button — layout is SCOPE OUT.
   Build: 480 tests, the 1 known failure.
+- **CP5:** the event text colour TABLE lives in EventTextRenderer (BASE_*), not EventTextSystem (which only
+  holds the byte codes) — codes and call sites untouched. COLOR_CREDIT_CYAN (not in R13's list) -> CREDITS_GOLD
+  (AS4). Scales moved to the NEAREST type step: legacy event text 1.8 -> TYPE_HEADING (new
+  EffectConstants.EVENT_TEXT_FONT_SCALE), PROC 2.0 / SLAM 2.6 -> HEADING, LEGENDARY 3.2 -> DISPLAY, damage numbers
+  1.4 -> TYPE_LABEL growing to `TYPE_LABEL * DAMAGE_NUMBER_MAX_EMPHASIS` (2.0, keeps the 3.0 ceiling), heal '+'
+  1.6 -> LABEL in HEALTH_GREEN; every `setScale(1f)` restore -> TYPE_CAPTION. A8 grep: no literal reaches
+  setScale in the six renderers. Damage numbers: hit UI_TEXT_PRIMARY, kill SUIT_AMBER (the only two categories),
+  HEAVY + UiKit.text. DIVERGENCE: NAV OFFLINE text is FACILITY_CYAN, not R9's FACILITY_CYAN_DIM (3.3:1 on
+  UI_PANEL; R8 and A9 both say cyan; V8). Docs: art-direction SECTION 13 UI KIT (+ contrast table),
+  procedural-vitals-hud SUIT-INK RESKIN, CLAUDE.md hud row + UiKit key-class + HUD_PANEL_ALPHA note. Capture
+  driver: `damagenumber:AMOUNT[:true]`, `eventtext:CODE:TEXT`. Seen on run (clinical_white mood, bright wall):
+  white/gold/red event text shadowed and readable; kill number "-24!" amber HEAVY shadowed; NAV OFFLINE cyan.
+  NOT seen: ability banners (PROC/SLAM/LEGENDARY), heal '+' particles, a plain hit number on screen (it faded
+  before the shot). Build + test: 480 tests, the 1 known failure.

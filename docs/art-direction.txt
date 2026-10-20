@@ -399,3 +399,83 @@ TYPE SCALE (ArtDirection TYPE_*, setScale multipliers over the metric-matched ba
 ADD A GLYPH: one glyph(...) row in PixelFontGlyphs (every row the same length; pick the baseline offset
   so it sits on the grid above), and its character in the COVERAGE line above. The atlas sizes itself;
   GameFonts throws at startup if it would exceed 512x512.
+
+
+13. UI KIT (visual-identity-order-4)
+------------------------------------
+The interface vocabulary, defined ONCE in render/UiKit (static, stateless, no `new` in any primitive) and
+coloured from SECTION 2. Every ShapeRenderer primitive expects begin(ShapeType.Filled) — outlines are
+filled quads, so a screen never churns Line/Filled — and caller-enabled blending. Pieces never overlap,
+so a translucent panel shows no darker seams. Geometry constants (ArtDirection UI_*): UI_CHAMFER 8,
+UI_PLATE_CHAMFER 12, UI_BORDER_THICKNESS 2, UI_BRACKET_LENGTH 14 (UI_BRACKET_LENGTH_COMPACT 7 for plates
+too small for 14 beside their text), UI_BRACKET_THICKNESS 3, UI_BRACKET_INSET 4, UI_METER_GAP 2,
+UI_DIVIDER_THICKNESS 1 / UI_DIVIDER_TICK_LENGTH 6 / UI_DIVIDER_TICK_THICKNESS 3, UI_TEXT_SHADOW_OFFSET
+1.5, UI_TEXT_SHADOW_ALPHA 0.85, UI_PANEL_ALPHA_HUD 0.82 (HudConstants.HUD_PANEL_ALPHA references it),
+UI_SCRIM_ALPHA 0.75 (used from order 5), UI_PLATE_DISABLED_ALPHA_SCALE 0.5, BOSS_HEALTH_SEGMENTS 20.
+PRIMITIVES
+  panel     R1  rectangle with all four corners cut at 45 degrees by UI_CHAMFER, filled, with a
+                UI_BORDER_THICKNESS border band (the gap between the outer octagon and the octagon inset
+                by the thickness; GameMath.insetChamfer keeps the diagonal band as thick as the straight
+                edges). A general overload takes chamfer, border alpha and thickness; a zero alpha or
+                thickness skips that part (the mini-map draws its fill first and its border last).
+                fillOctagon draws just a chamfered fill.
+  brackets  R2  THE SIGNATURE: four L-shaped corner marks, arms UI_BRACKET_LENGTH, UI_BRACKET_THICKNESS
+                thick, inset UI_BRACKET_INSET. Short enough to read as a frame, not a box.
+  plate     R3  anything tappable, chamfered by UI_PLATE_CHAMFER (an overload takes chamfer + bracket arm).
+                render/PlateState carries each state's choice as per-constant data (no switch):
+                  IDLE      fill UI_PANEL at the caller's alpha, border UI_LINE
+                  PRESSED   fill UI_PANEL_RAISED at the caller's (pressed) alpha, border = ink, full alpha
+                  SELECTED  fill UI_PANEL_RAISED, border = ink, plus brackets in the ink
+                  DISABLED  fill UI_PANEL and border UI_LINE, both at 0.5x alpha
+  meter     R4  `segments` cells separated by UI_METER_GAP; lit cells in the on-colour, the partial last
+                cell lit from its left edge, the track drawn only where a cell is NOT lit (no double
+                blend). Fraction 0 draws only the track. A caller that must light whole ticks only (the
+                HUD's fixed-tick bars) passes a whole-tick fraction.
+  divider   R5  a UI_LINE rule with a short ink tick at its left end.
+  text      R6  a UI_INK_BLACK drop shadow at UI_TEXT_SHADOW_ALPHA, offset down-right by
+                UI_TEXT_SHADOW_OFFSET x (capHeight / PIXEL_FONT_TARGET_CAP_HEIGHT) — i.e. it grows with the
+                type step — then the text; restores the font's colour. An aligned/wrapped overload takes
+                targetWidth + Align (there is no GlyphLayout overload: a layout bakes its colours, so it
+                cannot be tinted for the shadow).
+INK RULE (R8). The in-play layer is SUIT ink: accents SUIT_AMBER, secondary accents SUIT_AMBER_DIM,
+  neutrals UI_*. Amber appears in exactly three roles: brackets, the active/pressed state, and the
+  player's own resources (ammo pips, melee meter, player marker, weapon dots). FACILITY_CYAN only where
+  the facility speaks: the mini-map EXIT marker and the BLACKOUT NAV OFFLINE text. Semantic colours only
+  where they carry their meaning: the HP ramp (CombatPalette.DAMAGE -> HEALTH_GREEN), ARMOUR_BLUE, earned
+  things CREDITS_GOLD (XP meter, credits, the shop marker), harm DAMAGE (enemies, low HP, an empty clip).
+  Green is health or a buff and nothing else.
+WHERE IT IS USED (order 4 — the in-play layer; overlays and menus are orders 5 and 6):
+  hud/HudRenderer               panel + SUIT_AMBER_DIM brackets; labels UI_TEXT_SECONDARY, values
+                                UI_TEXT_PRIMARY; weapon slots are plates (active SELECTED in amber with
+                                compact brackets, filled IDLE, empty DISABLED); NAV OFFLINE plate.
+  input/touch/TouchControllerRenderer  each button a chamfered panel (TOUCH_BUTTON_CHAMFER 16 — drawing
+                                only; TouchButton.contains is a plain rect): idle UI_PANEL + UI_LINE rim +
+                                bone icon, pressed UI_PANEL_RAISED + SUIT_AMBER rim + amber icon, locked
+                                dimmed icon. USE keeps permanent amber brackets. Icon halo UI_INK_BLACK.
+  render/LevelRenderer (+ Player.render's marker)  UI_INK_BLACK 0.70 frame, every tile and grid line
+                                clipped to the chamfer (GameMath.clipPolygonToHalfPlane), border + brackets
+                                on top.
+  render/BossHudRenderer        panel + brackets round a 20-cell DAMAGE meter, SUIT_AMBER phase tick.
+  render/EventTextRenderer      every line through UiKit.text; colour table by code (WHITE primary, GREY
+                                secondary, GOLD/AMBER SUIT_AMBER, GREEN HEALTH_GREEN, BLUE DEFENSE, ARMOUR
+                                ARMOUR_BLUE, RED DAMAGE, CREDIT CREDITS_GOLD).
+  render/ImpactEffectRenderer   damage numbers HEAVY + shadow: hit UI_TEXT_PRIMARY, kill SUIT_AMBER.
+TYPE SCALE ADOPTION (R15): every text draw on these screens is a TYPE_* step (via a named constant); no
+  raw literal reaches setScale. Old scales moved to their NEAREST step (event text 1.8 -> HEADING, ability
+  banners 2.0/2.6 -> HEADING and 3.2 -> DISPLAY, damage numbers 1.4 -> LABEL growing to 2x LABEL).
+CONTRAST (WCAG ratio, opaque; a HUD panel at 0.82 over the world reads slightly lower):
+                       on UI_PANEL   on UI_INK_BLACK
+  UI_TEXT_PRIMARY        13.8:1        15.0:1
+  UI_TEXT_SECONDARY       6.7:1         7.3:1
+  SUIT_AMBER             11.1:1        12.1:1
+  FACILITY_CYAN          11.4:1        12.4:1
+  CREDITS_GOLD           12.4:1        13.5:1
+  HEALTH_GREEN           11.2:1        12.2:1
+  ARMOUR_BLUE             6.6:1         7.1:1
+  DAMAGE                  4.1:1         4.4:1   (large text only: low-HP value, empty clip)
+  UI_TEXT_DISABLED        3.1:1         3.4:1   (never for something the player must read)
+  SUIT_AMBER_DIM          3.5:1         3.8:1   (brackets/chrome only, never text)
+  FACILITY_CYAN_DIM       3.3:1         3.6:1   (chrome only, never text)
+  Text the player must read clears 4.5:1, or 3:1 when it is large (TYPE_BODY+ / HEAVY).
+ADD A UI ELEMENT: build it from these primitives and the palette; a new geometry number goes in the
+  ArtDirection UI_* block, never inline. A new primitive is a UiKit method with no `new` in it, listed here.

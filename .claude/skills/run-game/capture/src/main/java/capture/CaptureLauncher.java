@@ -147,6 +147,12 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "engage":
                     engageFirstRouteNode();
                     break;
+                case "damagenumber":
+                    spawnDamageNumber(Integer.parseInt(step[2]), step.length > 3 && Boolean.parseBoolean(step[3]));
+                    break;
+                case "eventtext":
+                    spawnEventText(Byte.parseByte(step[2]), step[3]);
+                    break;
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
                     break;
@@ -420,6 +426,59 @@ public class CaptureLauncher extends ApplicationAdapter {
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }
+    }
+
+    /**
+     * {@code damagenumber:AMOUNT[:KILL]} — spawns a floating damage number (ImpactEffectSystem.onEnemyHit, or
+     * onEnemyKilled when KILL is true) two tiles in front of the player. A dev hook, never game logic.
+     */
+    private void spawnDamageNumber(int amount, boolean kill) {
+        try {
+            Object world = worldObject();
+            Object player = fieldValue(world, "player");
+            float cellSize = Class.forName("ge.tbegvadze.toon3d.util.Constants").getField("CELL_SIZE").getFloat(null);
+            float worldX = fieldFloat(player, "positionX") + fieldFloat(player, "directionX") * 2f * cellSize;
+            float worldY = fieldFloat(player, "positionY") + fieldFloat(player, "directionY") * 2f * cellSize;
+            Object system = fieldValue(world, "impactEffectSystem");
+            system.getClass().getMethod(kill ? "onEnemyKilled" : "onEnemyHit", float.class, float.class, float.class,
+                    int.class).invoke(system, worldX, worldY, 1f, amount);
+            System.out.println("[capture] damage number " + amount + (kill ? " (kill)" : ""));
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code eventtext:COLOR_CODE:TEXT} — EventTextSystem.spawnWithColor(TEXT, code) with the system's byte colour
+     * code (0 white, 1 green, 2 red, 3 grey, 4 gold, 5 credit, 6 blue, 7 armour, 8 amber). TEXT may not contain
+     * ';' or ':'. A dev hook, never game logic.
+     */
+    private void spawnEventText(byte colorCode, String text) {
+        try {
+            Object system = fieldValue(worldObject(), "eventTextSystem");
+            system.getClass().getMethod("spawnWithColor", String.class, byte.class).invoke(system, text, colorCode);
+            System.out.println("[capture] event text " + text);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    private Object worldObject() throws ReflectiveOperationException {
+        Field worldField = Main.class.getDeclaredField("world");
+        worldField.setAccessible(true);
+        return worldField.get(main);
+    }
+
+    private static Object fieldValue(Object target, String name) throws ReflectiveOperationException {
+        Field field = findField(target.getClass(), name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    private static float fieldFloat(Object target, String name) throws ReflectiveOperationException {
+        Field field = findField(target.getClass(), name);
+        field.setAccessible(true);
+        return field.getFloat(target);
     }
 
     private static Field findField(Class<?> type, String name) throws NoSuchFieldException {

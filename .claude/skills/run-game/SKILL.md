@@ -60,6 +60,8 @@ count events with `grep -c Pause FILE`.
 | `bosshud:PERCENT[:STATE]` | reflection: attach a BossHudRenderer with a stand-in boss at PERCENT health (optional `BossVisualState` constant name for the state label) — the boss bar from floor 1 |
 | `alertall` | reflection: `alert()` every enemy, so the mini-map shows their threat markers |
 | `engage` | reflection: commit the route map's first selectable node (the map is time-seeded, so node taps are not repeatable) — open the map first, then `engage` lands on floor 1 proper |
+| `damagenumber:AMOUNT[:true]` | reflection: a floating damage number two tiles ahead (`true` = the kill variant) |
+| `eventtext:CODE:TEXT` | reflection: `EventTextSystem.spawnWithColor(TEXT, CODE)` (0 white, 1 green, 2 red, 3 grey, 4 gold, 5 credit, 6 blue, 7 armour, 8 amber; TEXT without `;` or `:`) |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 
