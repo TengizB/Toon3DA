@@ -51,7 +51,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: every reader compiles; StoryUiFoundationTest green; build + test at baseline.
 - [x] **CP2** — StoryPanelRenderer + StoryExchangeRenderer restyled (R3, R4); bark panel inherits.
       DONE WHEN: A1 and A2 hold on run; build green.
-- [ ] **CP3** — BootCardRenderer, InstanceReportRenderer, FadeOverlayRenderer restyled (R5, R7, R11).
+- [x] **CP3** — BootCardRenderer, InstanceReportRenderer, FadeOverlayRenderer restyled (R5, R7, R11).
       DONE WHEN: A3 and A7 hold on run; build green.
 - [ ] **CP4** — FramingScreenRenderer: title, pause, settings, confirmation, terminal RETURN, death stroke (R6).
       DONE WHEN: A4 holds on run; build green.
@@ -101,3 +101,18 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   3 lines but a bark holds 2 (the third line is dropped) and the fixed 30-unit line pitch makes the two lines touch;
   the floor-entry event text ("ENTERING: OUTER FACILITY") shows through the bottom of the exchange prompt panel.
   /tmp/claude-0/mkprefs.sh N writes a printed save with story text size N (0/1/2). Build + test: 480, 1 known failure.
+- **CP3:** BootCardRenderer: SYSTEM block = StoryPanelRenderer general overload with FACILITY_CYAN brackets + HEAVY
+  name (R5); ORA's panel default (amber); counter HEAVY at STORY_BOOT_COUNTER_TEXT_SIZE = TYPE_BODY (was 1.1) in
+  FACILITY_CYAN_DIM; CONTINUE = SELECTED SUIT plate (the card's one way on - an IDLE plate has no amber), label
+  TYPE_LABEL; removed STORY_BOOT_CONTINUE_CORNER/BORDER. InstanceReportRenderer (R7): kit panel at
+  UI_PANEL_ALPHA_SCREEN + FACILITY_CYAN brackets; title = UiKit.screenHeaderTitle (HEAVY HEADING) + NEW UiKit overload
+  `screenHeaderRule(shapes, x, y, width, inkRed, inkGreen, inkBlue, alpha)` with a FACILITY_CYAN tick (an overload,
+  not a new primitive - CP5/CP6 use it for the shop and event console); values HEAVY; lines STORY_REPORT_TEXT_SIZE =
+  TYPE_BODY (was 1.0; the longest autopsy line ~57 chars fits the 780 text width); a FACILITY_CYAN_DIM rule on the
+  blank row between stats and autopsy; REPORT + BACK = UiKit.card IDLE in FACILITY_CYAN_DIM ("FACILITY plate").
+  STORY_REPORT_TITLE_TEXT_SIZE removed. FadeOverlayRenderer (R11): HEAVY TYPE_HEADING (was 2.2), label "SUBLEVEL"
+  FACILITY_CYAN_DIM + number UI_TEXT_PRIMARY at the old anchor; constants EffectConstants.FADE_DEPTH_READOUT_*;
+  the black is UI_INK_BLACK. NEW render(camera, alpha, depth, showDepthReadout): World's death beat and MERGE hold
+  pass false - the old banner sat on top of THIS BODY DIED in every death (before shots), against A4 and World's own
+  "nothing else is drawn" comment (World.java: 2 call sites, paint only). Seen: first-print card, reprint card
+  with REPORT, report page, fade readout, stroke alone. Taps: CONTINUE, REPORT (opened), BACK (closed).

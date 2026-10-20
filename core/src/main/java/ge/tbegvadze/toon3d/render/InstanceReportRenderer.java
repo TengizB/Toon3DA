@@ -11,8 +11,8 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 
-import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
@@ -36,15 +36,16 @@ import ge.tbegvadze.toon3d.world.RunStats;
  *
  * <p>All layout is computed in {@link #show}, once per death — {@link #render} measures only what it
  * centres, through the shared {@link GlyphLayout}.  Owns a {@link ShapeRenderer}, a
- * {@link SpriteBatch} and a {@link BitmapFont}; all three disposed in {@link #dispose()}.
+ * {@link SpriteBatch} and two {@link BitmapFont}s; all disposed in {@link #dispose()}.
  */
 public final class InstanceReportRenderer implements Disposable {
 
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** HEAVY face: the R1 title and the number column (visual-identity-order-6 R7). */
+    private final BitmapFont    heavyFont;
     private final GlyphLayout   layout;
-    private final Color         scratchColor = new Color();
 
     // Resolved once in setStrings() — localisation rule: never a literal in a renderer.
     private String titleLabel  = "";
@@ -70,6 +71,7 @@ public final class InstanceReportRenderer implements Disposable {
         this.shapes = new ShapeRenderer();
         this.batch  = new SpriteBatch();
         this.font   = GameFonts.newFont(FontFace.REGULAR);
+        this.heavyFont = GameFonts.newFont(FontFace.HEAVY);
         this.layout = new GlyphLayout();
     }
 
@@ -155,9 +157,9 @@ public final class InstanceReportRenderer implements Disposable {
         float clampedFade = MathUtils.clamp(fade, 0f, 1f);
 
         beginShapes(camera);
-        drawPlate(StoryUiConstants.STORY_REPORT_OPEN_X, StoryUiConstants.STORY_REPORT_OPEN_Y,
-                  StoryUiConstants.STORY_REPORT_OPEN_WIDTH, StoryUiConstants.STORY_REPORT_OPEN_HEIGHT,
-                  clampedFade);
+        drawFacilityPlate(StoryUiConstants.STORY_REPORT_OPEN_X, StoryUiConstants.STORY_REPORT_OPEN_Y,
+                          StoryUiConstants.STORY_REPORT_OPEN_WIDTH, StoryUiConstants.STORY_REPORT_OPEN_HEIGHT,
+                          clampedFade);
         endShapes();
 
         batch.setProjectionMatrix(camera.combined);
@@ -182,9 +184,8 @@ public final class InstanceReportRenderer implements Disposable {
                         StoryUiConstants.STORY_FRAME_BACKDROP_ALPHA);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         drawPanel();
-        drawPlate(StoryUiConstants.STORY_REPORT_BACK_X, StoryUiConstants.STORY_REPORT_BACK_Y,
-                  StoryUiConstants.STORY_REPORT_BACK_WIDTH, StoryUiConstants.STORY_REPORT_BACK_HEIGHT,
-                  1f);
+        drawFacilityPlate(StoryUiConstants.STORY_REPORT_BACK_X, StoryUiConstants.STORY_REPORT_BACK_Y,
+                          StoryUiConstants.STORY_REPORT_BACK_WIDTH, StoryUiConstants.STORY_REPORT_BACK_HEIGHT, 1f);
         endShapes();
 
         batch.setProjectionMatrix(camera.combined);
@@ -204,11 +205,8 @@ public final class InstanceReportRenderer implements Disposable {
         float valueLeft = StoryUiConstants.STORY_REPORT_PANEL_X
                 + StoryUiConstants.STORY_REPORT_VALUE_INSET_X;
 
-        font.getData().setScale(StoryUiConstants.STORY_REPORT_TITLE_TEXT_SIZE);
-        drawText(shownTitleLabel, textLeft,
-                 StoryUiConstants.STORY_REPORT_PANEL_TOP_Y - StoryUiConstants.STORY_REPORT_TITLE_INSET_Y,
-                 StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                 StoryUiConstants.STORY_BODY_B);
+        // R7: the machine's record has a screen header - HEAVY title, the rule under it in the panel pass.
+        UiKit.screenHeaderTitle(batch, heavyFont, shownTitleLabel, textLeft, titleTopY());
 
         font.getData().setScale(StoryUiConstants.STORY_REPORT_TEXT_SIZE);
         float lineTopY = StoryUiConstants.STORY_REPORT_PANEL_TOP_Y
@@ -218,11 +216,13 @@ public final class InstanceReportRenderer implements Disposable {
                      StoryUiConstants.STORY_REPORT_R, StoryUiConstants.STORY_REPORT_G,
                      StoryUiConstants.STORY_REPORT_B);
             if (lineValues[lineIndex] != null) {
-                drawText(lineValues[lineIndex], valueLeft, lineTopY,
-                         StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                         StoryUiConstants.STORY_BODY_B);
+                // R7: the number column is HEAVY (the font's digits are tabular, so a column stays a column).
+                heavyFont.getData().setScale(StoryUiConstants.STORY_REPORT_TEXT_SIZE);
+                heavyFont.setColor(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
+                                   StoryUiConstants.STORY_BODY_B, 1f);
+                heavyFont.draw(batch, lineValues[lineIndex], valueLeft, lineTopY);
                 if (lineRecords[lineIndex]) {
-                    layout.setText(font, lineValues[lineIndex]);
+                    layout.setText(heavyFont, lineValues[lineIndex]);
                     drawText(recordLabel,
                              valueLeft + layout.width + StoryUiConstants.STORY_CHIP_ELEMENT_GAP * 2f,
                              lineTopY,
@@ -280,48 +280,69 @@ public final class InstanceReportRenderer implements Disposable {
     private void endBatch() {
         font.getData().setScale(1f);
         font.setColor(Color.WHITE);
+        heavyFont.getData().setScale(1f);
+        heavyFont.setColor(Color.WHITE);
         batch.end();
     }
 
-    private void drawPanel() {
-        int speakerIndex = Speaker.SYSTEM.ordinal();
-        float border     = StoryUiConstants.STORY_PANEL_BORDER_THICKNESS;
-        shapes.setColor(StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex],
-                        StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex],
-                        StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex],
-                        StoryUiConstants.STORY_PANEL_BORDER_ALPHA);
-        shapes.rect(StoryUiConstants.STORY_REPORT_PANEL_X, StoryUiConstants.STORY_REPORT_PANEL_Y,
-                    StoryUiConstants.STORY_REPORT_PANEL_WIDTH,
-                    StoryUiConstants.STORY_REPORT_PANEL_HEIGHT);
-        shapes.setColor(StoryUiConstants.STORY_PANEL_BG_R, StoryUiConstants.STORY_PANEL_BG_G,
-                        StoryUiConstants.STORY_PANEL_BG_B, StoryUiConstants.STORY_PANEL_ALPHA);
-        shapes.rect(StoryUiConstants.STORY_REPORT_PANEL_X + border,
-                    StoryUiConstants.STORY_REPORT_PANEL_Y + border,
-                    StoryUiConstants.STORY_REPORT_PANEL_WIDTH  - border * 2f,
-                    StoryUiConstants.STORY_REPORT_PANEL_HEIGHT - border * 2f);
+    /** Top of the R1 title, at the panel's existing title inset. */
+    private static float titleTopY() {
+        return StoryUiConstants.STORY_REPORT_PANEL_TOP_Y - StoryUiConstants.STORY_REPORT_TITLE_INSET_Y;
     }
 
-    private void drawPlate(float plateX, float plateY, float plateWidth, float plateHeight, float fade) {
-        int speakerIndex = Speaker.AI.ordinal();
-        float accentRed   = StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex];
-        float accentGreen = StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex];
-        float accentBlue  = StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex];
-        float border      = StoryUiConstants.STORY_FRAME_MENU_BORDER;
-        float fillAlpha   = StoryUiConstants.STORY_FRAME_MENU_FILL_ALPHA;
+    /**
+     * R7: the record is the FACILITY's — a kit panel at the screen alpha with FACILITY_CYAN brackets, the R1
+     * header rule with a cyan tick, and a FACILITY_CYAN_DIM rule on the blank row that separates the stats from
+     * the RUN AUTOPSY.
+     */
+    private void drawPanel() {
+        float panelX = StoryUiConstants.STORY_REPORT_PANEL_X;
+        float panelY = StoryUiConstants.STORY_REPORT_PANEL_Y;
+        float panelWidth = StoryUiConstants.STORY_REPORT_PANEL_WIDTH;
+        float panelHeight = StoryUiConstants.STORY_REPORT_PANEL_HEIGHT;
+        UiKit.panel(shapes, panelX, panelY, panelWidth, panelHeight,
+                    ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                    ArtDirection.UI_PANEL_ALPHA_SCREEN,
+                    ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+        UiKit.brackets(shapes, panelX, panelY, panelWidth, panelHeight,
+                       ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                       ArtDirection.FACILITY_CYAN_BLUE, 1f);
 
-        shapes.setColor(accentRed, accentGreen, accentBlue, fade);
-        shapes.rect(plateX, plateY, plateWidth, plateHeight);
-        shapes.setColor(accentRed * fillAlpha, accentGreen * fillAlpha, accentBlue * fillAlpha, fade);
-        shapes.rect(plateX + border, plateY + border,
-                    plateWidth - border * 2f, plateHeight - border * 2f);
+        float textLeft = panelX + StoryUiConstants.STORY_REPORT_TEXT_INSET_X;
+        float ruleWidth = panelWidth - StoryUiConstants.STORY_REPORT_TEXT_INSET_X * 2f;
+        UiKit.screenHeaderRule(shapes, textLeft, UiKit.screenHeaderRuleY(titleTopY()), ruleWidth,
+                               ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                               ArtDirection.FACILITY_CYAN_BLUE, 1f);
+
+        // Section divider: centred in each blank row (a label-less, value-less line).
+        float lineTopY = StoryUiConstants.STORY_REPORT_PANEL_TOP_Y - StoryUiConstants.STORY_REPORT_FIRST_LINE_INSET_Y;
+        float capHeight = ArtDirection.PIXEL_FONT_TARGET_CAP_HEIGHT * StoryUiConstants.STORY_REPORT_TEXT_SIZE;
+        shapes.setColor(ArtDirection.FACILITY_CYAN_DIM_RED, ArtDirection.FACILITY_CYAN_DIM_GREEN,
+                        ArtDirection.FACILITY_CYAN_DIM_BLUE, 1f);
+        for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
+            if (lineLabels[lineIndex].isEmpty() && lineValues[lineIndex] == null) {
+                shapes.rect(textLeft, lineTopY - capHeight * 0.5f, ruleWidth, ArtDirection.UI_DIVIDER_THICKNESS);
+            }
+            lineTopY -= StoryUiConstants.STORY_REPORT_LINE_PITCH;
+        }
+    }
+
+    /**
+     * A FACILITY plate (visual-identity-order-6 R5): an IDLE card inked FACILITY_CYAN_DIM, so the machine's
+     * controls read as the machine's even before they are touched.  Nothing here has a pressed state (a tap
+     * commits on touch).
+     */
+    private void drawFacilityPlate(float plateX, float plateY, float plateWidth, float plateHeight, float fade) {
+        UiKit.card(shapes, plateX, plateY, plateWidth, plateHeight, ArtDirection.UI_PLATE_CHAMFER,
+                   ArtDirection.FACILITY_CYAN_DIM_RED, ArtDirection.FACILITY_CYAN_DIM_GREEN,
+                   ArtDirection.FACILITY_CYAN_DIM_BLUE, PlateState.IDLE, fade);
     }
 
     private void drawCenteredInPlate(String text, float plateX, float plateY,
                                      float plateWidth, float plateHeight, float fade) {
         layout.setText(font, text);
-        scratchColor.set(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                         StoryUiConstants.STORY_BODY_B, fade);
-        font.setColor(scratchColor);
+        font.setColor(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
+                      StoryUiConstants.STORY_BODY_B, fade);
         // BitmapFont.draw anchors a line by its TOP: a glyph box of height h centred in a plate
         // spanning [Y, Y+H] has its top at Y + (H + h) / 2 — equal margins above and below.
         font.draw(batch, text, plateX + (plateWidth - layout.width) / 2f,
@@ -330,8 +351,7 @@ public final class InstanceReportRenderer implements Disposable {
 
     private void drawText(String text, float textX, float textTopY,
                           float red, float green, float blue) {
-        scratchColor.set(red, green, blue, 1f);
-        font.setColor(scratchColor);
+        font.setColor(red, green, blue, 1f);
         font.draw(batch, text, textX, textTopY);
     }
 
@@ -340,5 +360,6 @@ public final class InstanceReportRenderer implements Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        heavyFont.dispose();
     }
 }

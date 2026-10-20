@@ -13,6 +13,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.narrative.BootCardSystem;
 import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
@@ -41,9 +42,9 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  * just died, so it stays calm and is fast to dismiss.
  *
  * <p>Nothing is allocated on the draw path: the lines arrive pre-resolved and pre-wrapped from the
- * system, the button label is measured once in {@link #setStrings}, and the scratch {@link Color} and
- * {@link GlyphLayout} are pre-allocated.  Owns a {@link StoryPanelRenderer}, a {@link ShapeRenderer},
- * a {@link SpriteBatch} and a {@link BitmapFont} — all disposed in {@link #dispose()}.  The
+ * system, the button label is measured once in {@link #setStrings}, and the {@link GlyphLayout} is
+ * pre-allocated.  Owns a {@link StoryPanelRenderer}, a {@link ShapeRenderer}, a {@link SpriteBatch} and
+ * two {@link BitmapFont}s — all disposed in {@link #dispose()}.  The
  * {@link StoryAudio} it plays through is world-owned and shared with every other story channel
  * (order-7 Part D), so it is injected rather than constructed, and disposed by the world.
  */
@@ -53,8 +54,9 @@ public final class BootCardRenderer implements Renderable, Disposable {
     private final ShapeRenderer      shapes;
     private final SpriteBatch        batch;
     private final BitmapFont         font;
+    /** HEAVY face for the instance counter (visual-identity-order-6 R5): the machine's own stamp. */
+    private final BitmapFont         heavyFont;
     private final GlyphLayout        layout;
-    private final Color              scratchColor = new Color();
 
     private BootCardSystem bootCardSystem;
     private StoryAudio     storyAudio;
@@ -77,6 +79,7 @@ public final class BootCardRenderer implements Renderable, Disposable {
         this.shapes        = new ShapeRenderer();
         this.batch         = new SpriteBatch();
         this.font          = GameFonts.newFont(FontFace.REGULAR);
+        this.heavyFont     = GameFonts.newFont(FontFace.HEAVY);
         this.layout        = new GlyphLayout();
     }
 
@@ -157,14 +160,18 @@ public final class BootCardRenderer implements Renderable, Disposable {
 
         drawBackdropAndButton(camera, fade);
 
-        // 1. SYSTEM status lines — revealed progressively, so the card wakes up rather than pops.
+        // 1. SYSTEM status lines — revealed progressively, so the card wakes up rather than pops.  This is the
+        //    reprint MACHINE's own frame (visual-identity-order-6 R5): FACILITY_CYAN brackets, not the SYSTEM
+        //    speaker's bone, and its header in the HEAVY face.
         panelRenderer.drawPanel(camera, Speaker.SYSTEM,
                 systemSpeakerName,
                 bootCardSystem.getSystemLines(),
                 bootCardSystem.getRevealedSystemLineCount(),
                 StoryUiConstants.STORY_BOOT_PANEL_X, StoryUiConstants.STORY_BOOT_SYSTEM_Y,
                 StoryUiConstants.STORY_BOOT_PANEL_WIDTH, StoryUiConstants.STORY_BOOT_SYSTEM_PANEL_HEIGHT,
-                fade, bootCardSystem.getElapsedSeconds());
+                fade, bootCardSystem.getElapsedSeconds(), false,
+                ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN, ArtDirection.FACILITY_CYAN_BLUE,
+                true);
 
         // 2 + 3. The counter and ORA both wait for the machine to finish talking.
         boolean revealComplete = bootCardSystem.isRevealComplete();
@@ -207,32 +214,22 @@ public final class BootCardRenderer implements Renderable, Disposable {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    /** The CONTINUE plate: an AI-amber border with a dim fill inset, matching the panel language. */
+    /**
+     * The CONTINUE plate (visual-identity-order-6 R5): going on is the player's act, so it is a SUIT plate, and
+     * the card's one way onward, so it is SELECTED (raised fill, SUIT_AMBER border and brackets).
+     */
     private void drawContinuePlate(float fade) {
-        int   speakerIndex = Speaker.AI.ordinal();
-        float accentRed    = StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex];
-        float accentGreen  = StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex];
-        float accentBlue   = StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex];
-        float border       = StoryUiConstants.STORY_BOOT_CONTINUE_BORDER;
-
-        shapes.setColor(accentRed, accentGreen, accentBlue, fade);
-        shapes.rect(StoryUiConstants.STORY_BOOT_CONTINUE_X, StoryUiConstants.STORY_BOOT_CONTINUE_Y,
-                    StoryUiConstants.STORY_BOOT_CONTINUE_WIDTH,
-                    StoryUiConstants.STORY_BOOT_CONTINUE_HEIGHT);
-        shapes.setColor(accentRed * StoryUiConstants.STORY_BOOT_CONTINUE_FILL_ALPHA,
-                        accentGreen * StoryUiConstants.STORY_BOOT_CONTINUE_FILL_ALPHA,
-                        accentBlue * StoryUiConstants.STORY_BOOT_CONTINUE_FILL_ALPHA,
-                        fade);
-        shapes.rect(StoryUiConstants.STORY_BOOT_CONTINUE_X + border,
-                    StoryUiConstants.STORY_BOOT_CONTINUE_Y + border,
-                    StoryUiConstants.STORY_BOOT_CONTINUE_WIDTH  - border * 2f,
-                    StoryUiConstants.STORY_BOOT_CONTINUE_HEIGHT - border * 2f);
+        UiKit.plate(shapes, StoryUiConstants.STORY_BOOT_CONTINUE_X, StoryUiConstants.STORY_BOOT_CONTINUE_Y,
+                    StoryUiConstants.STORY_BOOT_CONTINUE_WIDTH, StoryUiConstants.STORY_BOOT_CONTINUE_HEIGHT,
+                    ArtDirection.UI_PLATE_CHAMFER, ArtDirection.UI_BRACKET_LENGTH, PlateState.SELECTED,
+                    StoryUiConstants.STORY_BOOT_CONTINUE_FILL_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, fade);
     }
 
     /**
      * Pass 2 — the instance counter and the CONTINUE label.  Both are plain text in one batch; the
-     * counter is deliberately small and dim, because the number climbing is the horror and
-     * annotating it would spoil it.
+     * counter is deliberately small and dim — the machine's own stamp, HEAVY in its dim cyan, tabular
+     * digits — because the number climbing is the horror and annotating it would spoil it.
      */
     private void drawInstanceCounter(OrthographicCamera camera, float fade) {
         String counterText = bootCardSystem.getInstanceCounterText();
@@ -243,31 +240,29 @@ public final class BootCardRenderer implements Renderable, Disposable {
         batch.begin();
 
         if (counterText != null) {
-            font.getData().setScale(StoryUiConstants.STORY_BOOT_COUNTER_TEXT_SIZE);
-            scratchColor.set(StoryUiConstants.STORY_BOOT_COUNTER_R,
-                             StoryUiConstants.STORY_BOOT_COUNTER_G,
-                             StoryUiConstants.STORY_BOOT_COUNTER_B, fade);
-            font.setColor(scratchColor);
+            heavyFont.getData().setScale(StoryUiConstants.STORY_BOOT_COUNTER_TEXT_SIZE);
+            heavyFont.setColor(StoryUiConstants.STORY_BOOT_COUNTER_R, StoryUiConstants.STORY_BOOT_COUNTER_G,
+                               StoryUiConstants.STORY_BOOT_COUNTER_B, fade);
             // Left-aligned with the panels' content gutter so the stack reads as one card. The
             // gutter is the same geometry StoryPanelRenderer draws its body text from.
             float contentLeft = StoryUiConstants.STORY_BOOT_PANEL_X
                     + StoryUiConstants.STORY_PANEL_PADDING
                     + StoryUiConstants.STORY_CHIP_ACCENT_BAR_WIDTH
                     + StoryUiConstants.STORY_CHIP_ELEMENT_GAP;
-            font.draw(batch, counterText, contentLeft, StoryUiConstants.STORY_BOOT_COUNTER_TOP_Y);
+            heavyFont.draw(batch, counterText, contentLeft, StoryUiConstants.STORY_BOOT_COUNTER_TOP_Y);
         }
 
         if (drawsButtonLabel) {
             font.getData().setScale(StoryUiConstants.STORY_BOOT_CONTINUE_TEXT_SIZE);
-            scratchColor.set(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                             StoryUiConstants.STORY_BODY_B, fade);
-            font.setColor(scratchColor);
+            font.setColor(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
+                          StoryUiConstants.STORY_BODY_B, fade);
             font.draw(batch, continueLabel, continueLabelX, continueLabelTopY);
         }
 
         // Restore shared font state for other renderers.
         font.getData().setScale(1f);
         font.setColor(Color.WHITE);
+        heavyFont.getData().setScale(1f);
         batch.end();
     }
 
@@ -288,5 +283,6 @@ public final class BootCardRenderer implements Renderable, Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        heavyFont.dispose();
     }
 }

@@ -481,4 +481,19 @@ public final class EffectConstants {
     public static final float MUZZLE_LIGHT_PEAK_WARM   = 1.50f;
     public static final float MUZZLE_LIGHT_PEAK_ENERGY = 1.50f;
     public static final float MUZZLE_LIGHT_PEAK_FIRE   = 1.70f;
+
+    // =========================================================================
+    // FLOOR-TRANSITION DEPTH READOUT (render/FadeOverlayRenderer; visual-identity-order-6 R11): the elevator is
+    // the facility's, so its label is FACILITY_CYAN_DIM and the depth number UI_TEXT_PRIMARY, both HEAVY (large
+    // text: the dim label reads at 3.6:1 on black). Anchor and threshold unchanged from the old banner.
+    // =========================================================================
+    /** The readout appears once the black is this opaque, fading in over the rest of the fade. */
+    public static final float FADE_DEPTH_READOUT_THRESHOLD = 0.60f;
+    public static final float FADE_DEPTH_READOUT_SCALE     = ArtDirection.TYPE_HEADING;
+    /** Left edge of the readout, measured from the screen's centre (the old banner anchor). */
+    public static final float FADE_DEPTH_READOUT_OFFSET_X  = 110f;
+    /** Top of the readout, measured from the screen's centre. */
+    public static final float FADE_DEPTH_READOUT_OFFSET_Y  = 20f;
+    /** Machine label, not story prose (the same chrome rule as the reprint card's counter). */
+    public static final String FADE_DEPTH_READOUT_LABEL    = "SUBLEVEL";
 }

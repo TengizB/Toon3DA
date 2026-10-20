@@ -440,7 +440,8 @@ public final class StoryUiConstants {
     // small: the number climbing over a long session is its own horror and is never annotated.
     public static final float STORY_BOOT_COUNTER_GAP       = 34f;
     public static final float STORY_BOOT_COUNTER_TOP_Y     = STORY_BOOT_SYSTEM_Y - STORY_BOOT_COUNTER_GAP;
-    public static final float STORY_BOOT_COUNTER_TEXT_SIZE = 1.1f;
+    /** HEAVY at TYPE_BODY (visual-identity-order-6 R5): large text, so the dim ink still reads. */
+    public static final float STORY_BOOT_COUNTER_TEXT_SIZE = ArtDirection.TYPE_BODY;
     /** visual-identity-order-6 R5: the reprint machine's own dim cyan, drawn HEAVY (large text, 3.6:1 on black). */
     public static final float STORY_BOOT_COUNTER_R = ArtDirection.FACILITY_CYAN_DIM_RED,
                               STORY_BOOT_COUNTER_G = ArtDirection.FACILITY_CYAN_DIM_GREEN,
@@ -463,10 +464,9 @@ public final class StoryUiConstants {
     public static final float STORY_BOOT_CONTINUE_X      =
             (Constants.WORLD_WIDTH - STORY_BOOT_CONTINUE_WIDTH) / 2f;
     public static final float STORY_BOOT_CONTINUE_Y      = 96f;
-    public static final float STORY_BOOT_CONTINUE_CORNER = 12f;
-    public static final float STORY_BOOT_CONTINUE_BORDER = 2f;
-    public static final float STORY_BOOT_CONTINUE_TEXT_SIZE = 1.5f;
-    public static final float STORY_BOOT_CONTINUE_FILL_ALPHA = 0.28f;
+    public static final float STORY_BOOT_CONTINUE_TEXT_SIZE = ArtDirection.TYPE_LABEL;
+    /** visual-identity-order-6 R5: CONTINUE is a SELECTED SUIT plate at the screen panel alpha. */
+    public static final float STORY_BOOT_CONTINUE_FILL_ALPHA = ArtDirection.UI_PANEL_ALPHA_SCREEN;
     /** Localisation id of the button label (localisation rule: never a literal in the renderer). */
     public static final String STORY_BOOT_CONTINUE_LABEL_ID = "story.boot.continue";
 
@@ -852,8 +852,8 @@ public final class StoryUiConstants {
     public static final float STORY_REPORT_PANEL_TOP_Y  = 656f;
     public static final float STORY_REPORT_PANEL_Y      =
             STORY_REPORT_PANEL_TOP_Y - STORY_REPORT_PANEL_HEIGHT;
-    public static final float STORY_REPORT_TITLE_TEXT_SIZE = 1.5f;
-    public static final float STORY_REPORT_TEXT_SIZE       = 1.0f;
+    /** visual-identity-order-6 R7: the title is UiKit.screenHeaderTitle (HEAVY TYPE_HEADING); the lines TYPE_BODY. */
+    public static final float STORY_REPORT_TEXT_SIZE       = ArtDirection.TYPE_BODY;
     public static final float STORY_REPORT_LINE_PITCH      = 30f;
     /** Distance from the panel's top edge to the heading, and from the heading to the first line. */
     public static final float STORY_REPORT_TITLE_INSET_Y   = 28f;

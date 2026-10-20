@@ -3116,7 +3116,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase == RunPhase.DEAD) {
             float deathFadeAlpha = Math.min(1f,
                     deathBeatTimerSeconds / ProgressionConstants.DEATH_BEAT_DURATION_SECONDS);
-            fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth);
+            fadeOverlayRenderer.render(camera, deathFadeAlpha, currentDepth, false);
             framingScreenRenderer.renderDeathStroke(camera, deathStrokeWordsFade());
         }
 
@@ -3125,7 +3125,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (runPhase == RunPhase.ENDING_HOLD) {
             float holdFraction = Math.min(1f,
                     endingHoldSeconds / StoryUiConstants.STORY_ENDING_MERGE_HOLD_SECONDS);
-            fadeOverlayRenderer.render(camera, holdFraction, currentDepth);
+            fadeOverlayRenderer.render(camera, holdFraction, currentDepth, false);
         }
         renderPerformanceProbe.end(RenderPerformanceProbe.Pass.OVERLAYS);
     }

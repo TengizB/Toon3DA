@@ -10,7 +10,8 @@ import ge.tbegvadze.toon3d.util.GameMath;
 /**
  * The game's interface vocabulary (visual-identity-order-4): a chamfered panel, corner brackets, a plate
  * with four states, a segmented meter, a divider and shadowed text; order 5 adds the inked card, the suit
- * screen header (title + amber-ticked rule) and the NEW marker. Static, stateless, allocation-free.
+ * screen header (title + amber-ticked rule) and the NEW marker; order 6 lets the header rule take the
+ * facility's ink. Static, stateless, allocation-free.
  *
  * <p>Every ShapeRenderer primitive here expects the renderer to be inside {@code begin(ShapeType.Filled)}
  * (outlines are filled quads, so a frame never churns begin/end between fill and line) with GL blending
@@ -243,8 +244,17 @@ public final class UiKit {
 
     /** Order 5 R1, divider half: a {@link #divider} the header's width with its tick in SUIT_AMBER. */
     public static void screenHeaderRule(ShapeRenderer shapes, float x, float y, float width, float alpha) {
-        divider(shapes, x, y, width,
+        screenHeaderRule(shapes, x, y, width,
                 ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, alpha);
+    }
+
+    /**
+     * Order 6: the divider half with its tick in the screen's INK — FACILITY_CYAN on a facility screen (the run
+     * report, the shop, the event console), SUIT_AMBER on a suit screen.
+     */
+    public static void screenHeaderRule(ShapeRenderer shapes, float x, float y, float width,
+                                        float inkRed, float inkGreen, float inkBlue, float alpha) {
+        divider(shapes, x, y, width, inkRed, inkGreen, inkBlue, alpha);
     }
 
     /**
