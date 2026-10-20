@@ -170,15 +170,20 @@ public final class HudConstants {
     public static final float BOSS_HP_BAR_HEIGHT            = 24f;
     public static final float BOSS_HP_BAR_ABOVE_GAP         = 4f;   // gap between letterbox base and HP bar top
     public static final float BOSS_HP_BAR_NAME_GAP          = 4f;   // gap between HP bar top and name baseline
+    /** UiKit panel padding around the boss meter (visual-identity-order-4 R12); the phase tick spans it. */
+    public static final float BOSS_HP_PANEL_PADDING         = 6f;
+    public static final float BOSS_PHASE_TICK_WIDTH         = 3f;
+    /** Boss name inset from the meter's left edge, so it clears the panel's corner brackets. */
+    public static final float BOSS_HP_NAME_INSET_X          = 10f;
     public static final float BOSS_LETTERBOX_HEIGHT         = 120f;
     public static final float BOSS_BANNER_DURATION_SECONDS  = 1.2f;
     public static final float BOSS_BANNER_FADE_IN_FRACTION  = 0.20f; // first 20% of banner duration fades in
     public static final float BOSS_BANNER_FADE_OUT_START    = 0.70f; // last 30% fades out
     // Font scales used by BossHudRenderer
-    public static final float BOSS_INTRO_NAME_FONT_SCALE    = 2.0f;
-    public static final float BOSS_INTRO_EPITHET_FONT_SCALE = 1.2f;
-    public static final float BOSS_HP_NAME_FONT_SCALE       = 0.80f;
-    public static final float BOSS_BANNER_FONT_SCALE        = 1.6f;
+    public static final float BOSS_INTRO_NAME_FONT_SCALE    = ArtDirection.TYPE_HEADING;
+    public static final float BOSS_INTRO_EPITHET_FONT_SCALE = ArtDirection.TYPE_CAPTION;
+    public static final float BOSS_HP_NAME_FONT_SCALE       = ArtDirection.TYPE_LABEL;
+    public static final float BOSS_BANNER_FONT_SCALE        = ArtDirection.TYPE_LABEL;
     // Intro letterbox slide-in occupies the first 40% of the total intro duration
     public static final float BOSS_INTRO_SLIDE_FRACTION     = 0.40f;
     // Alpha ramp for name text: fully visible after this fraction of the slide duration
@@ -190,7 +195,7 @@ public final class HudConstants {
     // State label (ORDER 8) — a small tag under the boss name on the HP bar reading the current beat
     // (STALKING / CHARGING / SUMMONING / CASTING / REPAIRING / ENRAGED). Unobtrusive; sits just below
     // the name baseline. Colour is a dim white, or the boss accent when hot (enraged).
-    public static final float BOSS_STATE_LABEL_FONT_SCALE   = 0.62f;
+    public static final float BOSS_STATE_LABEL_FONT_SCALE   = ArtDirection.TYPE_CAPTION;
     public static final float BOSS_STATE_LABEL_Y_GAP        = 6f;    // gap below the name baseline
     public static final float BOSS_STATE_LABEL_R            = 0.78f;
     public static final float BOSS_STATE_LABEL_G            = 0.82f;

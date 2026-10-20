@@ -57,6 +57,9 @@ count events with `grep -c Pause FILE`.
 | `set:PATH:VALUE` | reflection: set a boolean/int field reached from `Main.world` (e.g. `set:startRoomChoiceResolved:true`, then `call:.:onDescentRequested` opens the route map from the start room) |
 | `equip:INDEX` | reflection: put arsenal weapon INDEX into the loadout and select it (start room arsenal: 0 shotgun, 1 double barrel, 2 plasma, 3 chaingun, ...) — a HUD with a ranged weapon and ammo |
 | `hittest:X:Y` | prints which touch buttons' hit areas contain world (X, Y), each tested as if visible (contextual INSPECT / USE too) — proves a tap area without the context that shows the button |
+| `bosshud:PERCENT[:STATE]` | reflection: attach a BossHudRenderer with a stand-in boss at PERCENT health (optional `BossVisualState` constant name for the state label) — the boss bar from floor 1 |
+| `alertall` | reflection: `alert()` every enemy, so the mini-map shows their threat markers |
+| `engage` | reflection: commit the route map's first selectable node (the map is time-seeded, so node taps are not repeatable) — open the map first, then `engage` lands on floor 1 proper |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 

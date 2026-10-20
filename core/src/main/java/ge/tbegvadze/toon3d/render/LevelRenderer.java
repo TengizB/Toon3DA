@@ -17,6 +17,8 @@ import ge.tbegvadze.toon3d.hazard.ExplosiveBarrelManager;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.level.KeycardColor;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.Collections;
@@ -28,21 +30,32 @@ import static ge.tbegvadze.toon3d.util.RenderConstants.*;
 
 public class LevelRenderer implements Renderable, Disposable {
 
-    private static final Color GRID_COLOR        = new Color(0.2f, 0.2f, 0.2f, 1f);
-    private static final Color WALL_COLOR        = Color.WHITE;
-    private static final Color BORDER_COLOR      = new Color(0.6f, 0.6f, 0.6f, 1f);
-    private static final Color WEAPON_DOT_COLOR  = new Color(1.0f, 0.75f, 0.1f, 1f);
+    // SUIT ink (visual-identity-order-4 R11): neutrals and the player's own things from ArtDirection, harm in
+    // CombatPalette.DAMAGE, the facility's exit in FACILITY_CYAN. Keycard doors keep their key colours.
+    private static final Color WALL_COLOR        = new Color(ArtDirection.UI_TEXT_SECONDARY_RED,
+            ArtDirection.UI_TEXT_SECONDARY_GREEN, ArtDirection.UI_TEXT_SECONDARY_BLUE, MINIMAP_WALL_ALPHA);
+    private static final Color GRID_COLOR        = new Color(ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN,
+            ArtDirection.UI_LINE_BLUE, MINIMAP_GRID_ALPHA);
+    private static final Color WEAPON_DOT_COLOR  = new Color(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN,
+            ArtDirection.SUIT_AMBER_BLUE, 1f);
 
     // Overlay marker palette — full visibility pass (props, hazards, pickups, exit, threats)
-    private static final Color EXIT_COLOR          = new Color(MINIMAP_EXIT_R, MINIMAP_EXIT_G, MINIMAP_EXIT_B, 1f);
-    private static final Color PROP_COLOR          = new Color(MINIMAP_PROP_R, MINIMAP_PROP_G, MINIMAP_PROP_B, 1f);
+    private static final Color EXIT_COLOR          = new Color(ArtDirection.FACILITY_CYAN_RED,
+            ArtDirection.FACILITY_CYAN_GREEN, ArtDirection.FACILITY_CYAN_BLUE, 1f);
+    private static final Color PROP_COLOR          = new Color(ArtDirection.UI_TEXT_DISABLED_RED,
+            ArtDirection.UI_TEXT_DISABLED_GREEN, ArtDirection.UI_TEXT_DISABLED_BLUE, 1f);
     private static final Color BARREL_COLOR        = new Color(MINIMAP_BARREL_R, MINIMAP_BARREL_G, MINIMAP_BARREL_B, 1f);
-    private static final Color BARREL_DOT_COLOR    = new Color(MINIMAP_BARREL_DOT_R, MINIMAP_BARREL_DOT_G, MINIMAP_BARREL_DOT_B, 1f);
-    private static final Color SHOP_COLOR          = new Color(MINIMAP_SHOP_R, MINIMAP_SHOP_G, MINIMAP_SHOP_B, 1f);
-    private static final Color HEALTH_PICKUP_COLOR = new Color(MINIMAP_HEALTH_PICKUP_R, MINIMAP_HEALTH_PICKUP_G, MINIMAP_HEALTH_PICKUP_B, 1f);
-    private static final Color ARMOR_PICKUP_COLOR  = new Color(MINIMAP_ARMOR_PICKUP_R, MINIMAP_ARMOR_PICKUP_G, MINIMAP_ARMOR_PICKUP_B, 1f);
+    private static final Color BARREL_DOT_COLOR    = new Color(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN,
+            CombatPalette.DAMAGE_BLUE, 1f);
+    private static final Color SHOP_COLOR          = new Color(ArtDirection.CREDITS_GOLD_RED,
+            ArtDirection.CREDITS_GOLD_GREEN, ArtDirection.CREDITS_GOLD_BLUE, 1f);
+    private static final Color HEALTH_PICKUP_COLOR = new Color(ArtDirection.HEALTH_GREEN_RED,
+            ArtDirection.HEALTH_GREEN_GREEN, ArtDirection.HEALTH_GREEN_BLUE, 1f);
+    private static final Color ARMOR_PICKUP_COLOR  = new Color(ArtDirection.ARMOUR_BLUE_RED,
+            ArtDirection.ARMOUR_BLUE_GREEN, ArtDirection.ARMOUR_BLUE_BLUE, 1f);
     private static final Color AMMO_PICKUP_COLOR   = new Color(MINIMAP_AMMO_PICKUP_R, MINIMAP_AMMO_PICKUP_G, MINIMAP_AMMO_PICKUP_B, 1f);
-    private static final Color ENEMY_THREAT_COLOR  = new Color(MINIMAP_ENEMY_THREAT_R, MINIMAP_ENEMY_THREAT_G, MINIMAP_ENEMY_THREAT_B, 1f);
+    private static final Color ENEMY_THREAT_COLOR  = new Color(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN,
+            CombatPalette.DAMAGE_BLUE, 1f);
     private static final Color KEYCARD_RED_COLOR    = new Color(KEYCARD_AURA_RED_R, KEYCARD_AURA_RED_G, KEYCARD_AURA_RED_B, 1f);
     private static final Color KEYCARD_YELLOW_COLOR = new Color(KEYCARD_AURA_YELLOW_R, KEYCARD_AURA_YELLOW_G, KEYCARD_AURA_YELLOW_B, 1f);
     private static final Color KEYCARD_BLUE_COLOR   = new Color(KEYCARD_AURA_BLUE_R, KEYCARD_AURA_BLUE_G, KEYCARD_AURA_BLUE_B, 1f);
@@ -53,6 +66,13 @@ public class LevelRenderer implements Renderable, Disposable {
     private final Level level;
     private final DoorManager doorManager;
     private final ShapeRenderer shapes;
+
+    // Octagon clip scratch (a rect clipped by four diagonal half-planes has at most 8 vertices) — no allocation.
+    private static final int CLIP_VERTEX_CAPACITY = 12;
+    private final float[] clipFirstX  = new float[CLIP_VERTEX_CAPACITY];
+    private final float[] clipFirstY  = new float[CLIP_VERTEX_CAPACITY];
+    private final float[] clipSecondX = new float[CLIP_VERTEX_CAPACITY];
+    private final float[] clipSecondY = new float[CLIP_VERTEX_CAPACITY];
 
     private float playerWorldX = 0f;
     private float playerWorldY = 0f;
@@ -117,6 +137,10 @@ public class LevelRenderer implements Renderable, Disposable {
         Gdx.gl.glEnable(GL20.GL_BLEND); // heavy danger fill is translucent
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
+        // R11 frame fill: a UI_INK_BLACK chamfered slab under the map (its border is drawn last, on top).
+        UiKit.panel(shapes, miniMapLeft, miniMapBottom, MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE, ArtDirection.UI_CHAMFER,
+                ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE,
+                MINIMAP_FRAME_FILL_ALPHA, 0f, 0f, 0f, 0f, 0f);
         for (int deltaRow = -RENDER_TILE_RADIUS; deltaRow <= RENDER_TILE_RADIUS; deltaRow++) {
             for (int deltaColumn = -RENDER_TILE_RADIUS; deltaColumn <= RENDER_TILE_RADIUS; deltaColumn++) {
                 int levelColumn = baseTileColumn + deltaColumn;
@@ -242,37 +266,73 @@ public class LevelRenderer implements Renderable, Disposable {
                     miniMapLeft, miniMapBottom, miniMapRight, miniMapTop);
         }
 
-        shapes.end();
-
-        // Line pass — scrolling grid clipped to mini-map bounds, then border
-        shapes.begin(ShapeRenderer.ShapeType.Line);
+        // Scrolling grid — thin filled rects (clipped to the chamfered frame like every tile), then the frame's
+        // UI_LINE border and SUIT_AMBER_DIM corner brackets on top.
         shapes.setColor(GRID_COLOR);
         for (int deltaColumn = -RENDER_TILE_RADIUS; deltaColumn <= RENDER_TILE_RADIUS + 1; deltaColumn++) {
             float lineX = miniMapCenterX - subTileOffsetX + deltaColumn * MINI_MAP_CELL_SIZE;
             if (lineX >= miniMapLeft && lineX <= miniMapRight) {
-                shapes.line(lineX, miniMapBottom, lineX, miniMapTop);
+                drawClippedRect(lineX, miniMapBottom, MINIMAP_GRID_LINE_THICKNESS, MINI_MAP_WORLD_SIZE,
+                        miniMapLeft, miniMapBottom, miniMapRight, miniMapTop);
             }
         }
         for (int deltaRow = -RENDER_TILE_RADIUS; deltaRow <= RENDER_TILE_RADIUS + 1; deltaRow++) {
             float lineY = miniMapCenterY - subTileOffsetY + deltaRow * MINI_MAP_CELL_SIZE;
             if (lineY >= miniMapBottom && lineY <= miniMapTop) {
-                shapes.line(miniMapLeft, lineY, miniMapRight, lineY);
+                drawClippedRect(miniMapLeft, lineY, MINI_MAP_WORLD_SIZE, MINIMAP_GRID_LINE_THICKNESS,
+                        miniMapLeft, miniMapBottom, miniMapRight, miniMapTop);
             }
         }
-        shapes.setColor(BORDER_COLOR);
-        shapes.rect(miniMapLeft, miniMapBottom, MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE);
+        UiKit.panel(shapes, miniMapLeft, miniMapBottom, MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE, ArtDirection.UI_CHAMFER,
+                0f, 0f, 0f, 0f,
+                ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f,
+                ArtDirection.UI_BORDER_THICKNESS);
+        UiKit.brackets(shapes, miniMapLeft, miniMapBottom, MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE,
+                ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
         shapes.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    /** Clips an axis-aligned rect to the mini-map bounds and draws it, skipping degenerate results. */
+    /**
+     * Clips an axis-aligned rect to the mini-map's chamfered frame (the bounds, then the four UI_CHAMFER corner
+     * cuts) and draws it, skipping degenerate results. A rect clear of every cut is drawn as a plain rect; one
+     * that crosses a cut is clipped to a convex polygon and fan-triangulated.
+     */
     private void drawClippedRect(float left, float bottom, float width, float height,
                                   float miniMapLeft, float miniMapBottom, float miniMapRight, float miniMapTop) {
         float clippedLeft   = Math.max(miniMapLeft,   left);
         float clippedBottom = Math.max(miniMapBottom, bottom);
         float clippedRight  = Math.min(miniMapRight,  left   + width);
         float clippedTop    = Math.min(miniMapTop,    bottom + height);
-        if (clippedRight > clippedLeft && clippedTop > clippedBottom) {
+        if (clippedRight <= clippedLeft || clippedTop <= clippedBottom) return;
+
+        float chamfer = ArtDirection.UI_CHAMFER;
+        float bottomLeftThreshold  = miniMapLeft + miniMapBottom + chamfer;    //  x + y
+        float bottomRightThreshold = -miniMapRight + miniMapBottom + chamfer;  // -x + y
+        float topRightThreshold    = -miniMapRight - miniMapTop + chamfer;     // -x - y
+        float topLeftThreshold     = miniMapLeft - miniMapTop + chamfer;       //  x - y
+        if (clippedLeft + clippedBottom >= bottomLeftThreshold
+                && -clippedRight + clippedBottom >= bottomRightThreshold
+                && -clippedRight - clippedTop >= topRightThreshold
+                && clippedLeft - clippedTop >= topLeftThreshold) {
             shapes.rect(clippedLeft, clippedBottom, clippedRight - clippedLeft, clippedTop - clippedBottom);
+            return;
+        }
+        clipFirstX[0] = clippedLeft;  clipFirstY[0] = clippedBottom;
+        clipFirstX[1] = clippedRight; clipFirstY[1] = clippedBottom;
+        clipFirstX[2] = clippedRight; clipFirstY[2] = clippedTop;
+        clipFirstX[3] = clippedLeft;  clipFirstY[3] = clippedTop;
+        int vertexCount = GameMath.clipPolygonToHalfPlane(clipFirstX, clipFirstY, 4, 1f, 1f,
+                bottomLeftThreshold, clipSecondX, clipSecondY);
+        vertexCount = GameMath.clipPolygonToHalfPlane(clipSecondX, clipSecondY, vertexCount, -1f, 1f,
+                bottomRightThreshold, clipFirstX, clipFirstY);
+        vertexCount = GameMath.clipPolygonToHalfPlane(clipFirstX, clipFirstY, vertexCount, -1f, -1f,
+                topRightThreshold, clipSecondX, clipSecondY);
+        vertexCount = GameMath.clipPolygonToHalfPlane(clipSecondX, clipSecondY, vertexCount, 1f, -1f,
+                topLeftThreshold, clipFirstX, clipFirstY);
+        for (int vertexIndex = 1; vertexIndex + 1 < vertexCount; vertexIndex++) {
+            shapes.triangle(clipFirstX[0], clipFirstY[0], clipFirstX[vertexIndex], clipFirstY[vertexIndex],
+                    clipFirstX[vertexIndex + 1], clipFirstY[vertexIndex + 1]);
         }
     }
 
@@ -292,7 +352,7 @@ public class LevelRenderer implements Renderable, Disposable {
     }
 
     /**
-     * Bright pulsing magenta square with a dim outer glow halo, marking a shop vending machine
+     * Bright pulsing CREDITS_GOLD square with a dim outer glow halo, marking a shop vending machine
      * ('@') distinctly from generic solid props (which render in dull grey via drawPropMarker).
      * No GL blending is enabled in this render pass, so the "glow" is an opaque, dimmer square
      * beneath a smaller pulsing bright core rather than a translucent overlay.
@@ -315,7 +375,7 @@ public class LevelRenderer implements Renderable, Disposable {
         shapes.circle(centerX, centerY, MINI_MAP_MARKER_SIZE / 2f);
     }
 
-    /** Pulsing green diamond marking the level exit — caller guarantees the tile is fully on-map. */
+    /** Pulsing FACILITY_CYAN diamond marking the level exit (the facility's way out, R8) — caller guarantees the tile is fully on-map. */
     private void drawExitMarker(float centerX, float centerY, float pulseBrightness) {
         float half = MINI_MAP_MARKER_SIZE / 2f;
         shapes.setColor(EXIT_COLOR.r * pulseBrightness, EXIT_COLOR.g * pulseBrightness, EXIT_COLOR.b * pulseBrightness, 1f);

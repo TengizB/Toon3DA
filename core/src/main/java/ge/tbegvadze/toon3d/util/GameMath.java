@@ -8050,4 +8050,48 @@ public final class GameMath {
     public static float insetChamfer(float chamfer, float insetDistance) {
         return Math.max(0f, chamfer - insetDistance * (2f - (float) Math.sqrt(2.0)));
     }
+
+    /*
+     * Formula: clipPolygonToHalfPlane (one Sutherland-Hodgman stage)
+     * Derivation: keep the part of a convex polygon where  normalX*x + normalY*y >= threshold. Walk the edges
+     *   (previous -> current); with signed distances d = normal.p - threshold:
+     *     both inside (d >= 0)      -> emit current
+     *     inside -> outside         -> emit the crossing point
+     *     outside -> inside         -> emit the crossing point, then current
+     *     both outside              -> emit nothing
+     *   The crossing on segment p0 -> p1 is p0 + (p1 - p0) * d0 / (d0 - d1), which lies on the line because the
+     *   distance varies linearly along the segment. A convex input gives a convex output, so a later fan
+     *   triangulation is valid. Used by the mini-map to clip its tiles to the UiKit chamfered frame.
+     * Edge cases: d0 - d1 is never 0 on a crossing (the signs differ). Output holds at most count + 1 vertices;
+     *   the caller's arrays must be that large. A fully-outside polygon returns 0. No allocation.
+     */
+    public static int clipPolygonToHalfPlane(float[] inputX, float[] inputY, int vertexCount,
+                                             float normalX, float normalY, float threshold,
+                                             float[] outputX, float[] outputY) {
+        int outputCount = 0;
+        if (vertexCount == 0) return 0;
+        float previousX = inputX[vertexCount - 1];
+        float previousY = inputY[vertexCount - 1];
+        float previousDistance = normalX * previousX + normalY * previousY - threshold;
+        for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+            float currentX = inputX[vertexIndex];
+            float currentY = inputY[vertexIndex];
+            float currentDistance = normalX * currentX + normalY * currentY - threshold;
+            if ((previousDistance >= 0f) != (currentDistance >= 0f)) {
+                float crossingFraction = previousDistance / (previousDistance - currentDistance);
+                outputX[outputCount] = previousX + (currentX - previousX) * crossingFraction;
+                outputY[outputCount] = previousY + (currentY - previousY) * crossingFraction;
+                outputCount++;
+            }
+            if (currentDistance >= 0f) {
+                outputX[outputCount] = currentX;
+                outputY[outputCount] = currentY;
+                outputCount++;
+            }
+            previousX = currentX;
+            previousY = currentY;
+            previousDistance = currentDistance;
+        }
+        return outputCount;
+    }
 }

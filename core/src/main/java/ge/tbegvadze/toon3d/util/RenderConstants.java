@@ -33,36 +33,20 @@ public final class RenderConstants {
 
     // Mini-map overlay marker palette — props, hazards, pickups, exit, and enemy threat chevrons.
     // Keycard pickups and locked-door tinting reuse KEYCARD_AURA_RED/YELLOW/BLUE below.
-    public static final float MINIMAP_EXIT_R           = 0.10f;
-    public static final float MINIMAP_EXIT_G           = 1.00f;
-    public static final float MINIMAP_EXIT_B           = 0.55f;
-    public static final float MINIMAP_PROP_R           = 0.42f;
-    public static final float MINIMAP_PROP_G           = 0.42f;
-    public static final float MINIMAP_PROP_B           = 0.46f;
+    // Mini-map frame and layers (visual-identity-order-4 R11): every other marker colour now comes from
+    // ArtDirection / CombatPalette; the barrel prop square and ammo pickup keep their hazard / ammo colours.
+    public static final float MINIMAP_FRAME_FILL_ALPHA = 0.70f;
+    public static final float MINIMAP_WALL_ALPHA       = 0.85f;
+    public static final float MINIMAP_GRID_ALPHA       = 0.35f;
+    public static final float MINIMAP_GRID_LINE_THICKNESS = 1f;
     public static final float MINIMAP_BARREL_R         = 1.00f;
     public static final float MINIMAP_BARREL_G         = 0.48f;
     public static final float MINIMAP_BARREL_B         = 0.09f;
-    // Sapper r1 (balance-overhaul order 5): the pulsing dot that marks a barrel — brighter than the tile square.
-    public static final float MINIMAP_BARREL_DOT_R     = 1.00f;
-    public static final float MINIMAP_BARREL_DOT_G     = 0.85f;
-    public static final float MINIMAP_BARREL_DOT_B     = 0.25f;
-    public static final float MINIMAP_HEALTH_PICKUP_R  = 0.20f;
-    public static final float MINIMAP_HEALTH_PICKUP_G  = 0.90f;
-    public static final float MINIMAP_HEALTH_PICKUP_B  = 0.20f;
-    public static final float MINIMAP_ARMOR_PICKUP_R   = 0.09f;
-    public static final float MINIMAP_ARMOR_PICKUP_G   = 0.75f;
-    public static final float MINIMAP_ARMOR_PICKUP_B   = 0.88f;
     public static final float MINIMAP_AMMO_PICKUP_R    = 0.75f;
     public static final float MINIMAP_AMMO_PICKUP_G    = 0.45f;
     public static final float MINIMAP_AMMO_PICKUP_B    = 0.10f;
-    public static final float MINIMAP_ENEMY_THREAT_R   = 1.00f;
-    public static final float MINIMAP_ENEMY_THREAT_G   = 0.16f;
-    public static final float MINIMAP_ENEMY_THREAT_B   = 0.16f;
-    // Shop (vending machine, '@') marker — bright glowing magenta, distinct from generic props
-    // so it reads at a glance on the mini-map instead of blending in with grey obstacles.
-    public static final float MINIMAP_SHOP_R           = 0.85f;
-    public static final float MINIMAP_SHOP_G           = 0.25f;
-    public static final float MINIMAP_SHOP_B           = 1.00f;
+    // Shop (vending machine, '@') marker — bright glowing CREDITS_GOLD (LevelRenderer), distinct from
+    // generic props so it reads at a glance on the mini-map instead of blending in with grey obstacles.
     // Outer glow square drawn under the pulsing shop marker core, sized as a multiple of
     // MINI_MAP_PROP_SIZE and rendered dimmer (opaque) to read as a soft halo without GL blending.
     // Kept below CELL_SIZE / PROP_SIZE (~1.67) so the glow never exceeds the tile's own bounds —

@@ -138,6 +138,15 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "hittest":
                     hitTest(Float.parseFloat(step[2]), Float.parseFloat(step[3]));
                     break;
+                case "bosshud":
+                    showBossHud(Integer.parseInt(step[2]), step.length > 3 ? step[3] : null);
+                    break;
+                case "alertall":
+                    alertAllEnemies();
+                    break;
+                case "engage":
+                    engageFirstRouteNode();
+                    break;
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
                     break;
@@ -322,6 +331,92 @@ public class CaptureLauncher extends ApplicationAdapter {
                 if (hit) hits.append(actionField.get(button)).append(' ');
             }
             System.out.println("[capture] hittest (" + worldX + "," + worldY + ") -> " + hits);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code bosshud:PERCENT[:VISUAL_STATE]} — attaches a BossHudRenderer to the World with a stand-in Boss (first
+     * EnemyType, a fixed name/epithet/accent) at PERCENT health, so the boss bar can be seen from floor 1. The World
+     * disposes the renderer on teardown as it does a real one. A dev hook for reaching a screen, never game logic.
+     */
+    private void showBossHud(int healthPercent, String visualStateName) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Class<?> enemyTypeClass = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyType");
+            Class<?> patternClass = Class.forName("ge.tbegvadze.toon3d.entity.boss.BossAttackPattern");
+            Class<?> bossClass = Class.forName("ge.tbegvadze.toon3d.entity.boss.Boss");
+            Object enemyType = enemyTypeClass.getEnumConstants()[0];
+            Object boss = bossClass.getConstructor(enemyTypeClass, int.class, int.class, String.class, String.class,
+                    String.class, float.class, float.class, float.class, float.class, patternClass, patternClass)
+                    .newInstance(enemyType, 0, 0, "THE WARDEN", "KEEPER OF THE OUTER LOCKS", "", 0.95f, 0.55f, 0.2f,
+                            1f, null, null);
+            Field maxHealthField = findField(bossClass, "maxHealth");
+            Field healthField = findField(bossClass, "health");
+            int maxHealth = Math.max(100, maxHealthField.getInt(boss));
+            maxHealthField.setInt(boss, maxHealth);
+            healthField.setInt(boss, maxHealth * healthPercent / 100);
+            if (visualStateName != null) {
+                Class<?> stateClass = Class.forName("ge.tbegvadze.toon3d.entity.boss.BossVisualState");
+                findField(bossClass, "visualState").set(boss, stateClass.getField(visualStateName).get(null));
+            }
+            Class<?> rendererClass = Class.forName("ge.tbegvadze.toon3d.render.BossHudRenderer");
+            Object renderer = rendererClass.getConstructor().newInstance();
+            rendererClass.getMethod("setBoss", bossClass).invoke(renderer, boss);
+            Field rendererField = findField(world.getClass(), "bossHudRenderer");
+            rendererField.setAccessible(true);
+            rendererField.set(world, renderer);
+            System.out.println("[capture] boss hud at " + healthPercent + "%");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code alertall} — calls {@code alert()} on every enemy of World.enemyManager, so the mini-map draws their
+     * threat markers without a scripted hunt. A dev hook for reaching a screen, never game logic.
+     */
+    private void alertAllEnemies() {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field managerField = findField(world.getClass(), "enemyManager");
+            managerField.setAccessible(true);
+            Object manager = managerField.get(world);
+            java.util.List<?> enemies = (java.util.List<?>) manager.getClass().getMethod("getEnemies").invoke(manager);
+            for (Object enemy : enemies) enemy.getClass().getMethod("alert").invoke(enemy);
+            System.out.println("[capture] alerted " + enemies.size() + " enemies");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code engage} — commits the route map's first selectable next node (World.commitRouteNode), the same path
+     * a tap on a node + ENGAGE takes. The map is seeded by time, so tapping a fixed spot is not repeatable; this
+     * is. Open the map first ({@code set:startRoomChoiceResolved:true} + {@code call:.:onDescentRequested}).
+     * A dev hook for reaching a screen, never game logic.
+     */
+    private void engageFirstRouteNode() {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field mapField = findField(world.getClass(), "routeMap");
+            mapField.setAccessible(true);
+            Object routeMap = mapField.get(world);
+            Object node = ((java.util.List<?>) routeMap.getClass().getMethod("getSelectableNext").invoke(routeMap)).get(0);
+            for (java.lang.reflect.Method method : world.getClass().getDeclaredMethods()) {
+                if (!method.getName().equals("commitRouteNode")) continue;
+                method.setAccessible(true);
+                method.invoke(world, node);
+                System.out.println("[capture] engaged " + node);
+                return;
+            }
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

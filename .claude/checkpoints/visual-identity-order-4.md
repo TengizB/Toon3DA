@@ -43,7 +43,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: they exist, nothing reads them yet, build green.
 - [x] **CP2** — HudRenderer restyled (R9 + R15). DONE WHEN: A2 (HUD), A3 (HUD), A9 seen on run; build green.
 - [x] **CP3** — TouchControllerRenderer restyled (R10), constant renamed. DONE WHEN: A4 incl. tap spot-check; build green.
-- [ ] **CP4** — LevelRenderer (R11) + BossHudRenderer (R12). DONE WHEN: A5 seen on run; build green.
+- [x] **CP4** — LevelRenderer (R11) + BossHudRenderer (R12). DONE WHEN: A5 seen on run; build green.
 - [ ] **CP5** — EventText (R13) + ImpactEffect damage numbers (R14), docs. DONE WHEN: A6, A7, A8 hold; build + test
       at baseline.
 - [ ] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
@@ -80,3 +80,21 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   matching plate in amber and did the action for FORWARD/BACK/ROTATE x2/STRAFE x2/FIRE ("Whiff!")/RELOAD/SKIP
   ("Turn skipped")/SWITCH (to FIST)/GUARD/HEAL ("NO MEDKITS")/PAUSE (menu)/INVENTORY (overlay)/INSPECT (standing on
   a start-room weapon, card reopened). USE was NOT tapped for real (no fabricator on floor 1) — hit-test only.
+- **CP4:** mini-map is ONE Filled pass now: UiKit frame fill (UI_INK_BLACK 0.70), tiles, markers, grid as 1-unit
+  filled rects, then the UiKit border + SUIT_AMBER_DIM brackets on top. Every tile/grid rect is clipped to the
+  chamfered frame (`GameMath.clipPolygonToHalfPlane`, preallocated scratch arrays) so the corner cuts survive.
+  Markers (circles/triangles) are not clipped (a corner-tile marker can graze a cut by < 1 unit). Health/armour
+  pickup dots moved to HEALTH_GREEN / ARMOUR_BLUE (semantic); ammo pickup and the barrel prop square keep their
+  RenderConstants colours; the MINIMAP_EXIT/PROP/BARREL_DOT/SHOP/ENEMY_THREAT/HEALTH/ARMOR RGB constants were
+  deleted (replaced by palette reads) and MINIMAP_FRAME_FILL_ALPHA / WALL_ALPHA / GRID_ALPHA / GRID_LINE_THICKNESS
+  added. Player marker (entity/Player.render) SUIT_AMBER. No fog of war exists in LevelRenderer (nothing to keep).
+  Boss bar: panel + brackets around a 20-cell DAMAGE meter (`BOSS_HP_PANEL_PADDING` 6), SUIT_AMBER phase tick
+  across the panel, name primary HEAVY TYPE_LABEL (inset `BOSS_HP_NAME_INSET_X` 10 to clear the bracket), state
+  label TYPE_CAPTION under the panel, intro name TYPE_HEADING (keeps the boss accent), intro epithet secondary
+  TYPE_CAPTION, banner TYPE_LABEL primary; every boss text is shadowed. Capture driver gained `bosshud:PCT[:STATE]`,
+  `alertall`, `engage` (SKILL.md). Seen on run: boss bar at 60% CHARGING (stand-in boss, floor 1); mini-map on a
+  real combat floor with an alerted enemy (red), amber player + weapon dots, health/armour pickups, a tinted
+  door. NOT seen: exit (cyan) and shop (gold) markers, keycard doors, barrel Sapper dot, the boss intro letterbox
+  text and phase banner. PRE-EXISTING (identical at 682fd6d): the boss bar (x 80..1200, y 572..596) overlaps the
+  mini-map; the mini-map's bottom edge overlaps the INVENTORY button — layout is SCOPE OUT.
+  Build: 480 tests, the 1 known failure.
