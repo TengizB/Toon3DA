@@ -55,7 +55,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
       blocks), FloorCeilingRenderer builds + disposes the 4-level Repeat/Nearest material Textures per floor (not
       yet drawn); build green; the game looks exactly like B0.
 - [x] **CP4a** — GPU floor/ceiling in place (compiles, renders, 0 upload, no pool); criteria checks open → CP4b.
-- [ ] **CP4** — the span floor/ceiling (CP4b: the A-criteria evidence).
+- [x] **CP4** — the span floor/ceiling (CP4b: the A-criteria evidence).
       DONE WHEN: floor + ceiling drawn as spans (R1-R9); backbuffer/Pixmap/backdrop Texture/upload/thread pool
       gone; RenderResolution carries only the row count; A2, A3, A4, A7, A9, A10, A11, A12, A14 hold (numbers
       recorded here); build green.
@@ -172,3 +172,23 @@ So the geometry changed, the look rules did not:
   `FLOOR_BACKDROP_SCALE_DIVISOR(_FULL_HD)` deleted; `applyRgbShade(AndLight)ToPackedRGBA` deleted (unused).
 NEXT (CP4b): A9 PIL means vs B0 (5 moods), A10 on P1×5 + P2×4, A11/A12 crops + P4 splash, A14 HD captures, A2/A3/A4/A7.
 Quality capture runs: `/tmp/claude-0/after/C4F-<mood>-r1` (FULL_HD) and `C4H-` (HD); checks `scripts/quality.py`.
+
+**CP4b (closed) — evidence** (captures in scratchpad `cp4/`, runs in `/tmp/claude-0/after/C4F-*`, `C4H-*`):
+- A2 PASS: floor CPU (probe cpu, P1-P4 windows) 0.50 / 0.55 / 0.54 / 0.61 ms vs B0 3.15 → 16-19% (≤ 25%).
+- A3 PASS: no Texture.draw / Pixmap write in render(); probe upload 0 B/frame in every window.
+- A4 PASS: floor+ceiling draw calls 10.0 (P1-P3), 10.1 (P4 with the muzzle additive layer) ≤ 20.
+- A7 PASS: FloorCeilingRenderer owns no ExecutorService / thread / Phaser (code) → 3 fewer render workers than B0.
+- A9 PASS: mean RGB of ceiling rect (300-980, 560-700) and floor rect (100-400, 140-330) vs B0, every mood within
+  ±1.04/255 (worst: cool_steel ceiling blue -1.04). `python3 scripts/quality.py a9 baseline/B0 after/C4F`.
+- A10 PASS: 0 exact clear-colour (38,38,51) pixels in the 3D view of the 5 FULL_HD P1 captures and 4 P2 frames;
+  the HD core_white_violet capture has 2 such pixels at (823,378) inside a smooth floor-texture gradient
+  ((36,35,48) → (38,38,51) → (39,39,53)) — a coincidental texel value, not a gap.
+- A11 PARTIAL: muzzle splash PASS — near floor gain B0 (+5.8,+5.3,+4.3) vs AFTER (+5.8,+6.2,+4.8), near ceiling
+  (+10.8,+10.1,+9.0) vs (+9.4,+9.9,+7.5) (`splash-B0-AFTER.png`). Lit/unlit/flicker same-tile comparison NOT
+  STAGEABLE: the start room has no l/u/f tiles and generated floors are clock-seeded (B0 and AFTER never show the same
+  tiles; the route map layout is random, so fixed taps cannot descend reliably). Logic is unchanged: the same
+  `Level.getTileBrightness(column, row, time)` per tile feeds the same adjusted-shade formula.
+- A12 PASS: close-ups (`closeups-B0-left-AFTER-right.png`): floor dashes and ceiling light-strip slant run the same way.
+- A14 PASS: HD P1 per mood renders correctly (`montage-HD-B1-left-AFTER-right.png`).
+- Interim timing (single run each, not the A1 measurement): FULL_HD P1 11.3-13.1 ms (B0 14.1-14.8, B1 9.7-10.4).
+NEXT: CP5 = `git apply /tmp/claude-0/scripts/cp5.patch` (R16 opacity flag + unblended base pass) + build R18 W-MERGE.
