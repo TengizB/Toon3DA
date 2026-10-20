@@ -62,7 +62,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP5** — walls.
       DONE WHEN: opaque-level base pass unblended (R16); R17/R18 built iff CP2 said go; A5 + A13 vs CP4 captures
       hold; build green.
-- [ ] **CP6** — billboards + allocations.
+- [x] **CP6** — billboards + allocations.
       DONE WHEN: occluder/aura loops range-ordered (R19); CP2's render-path allocations removed (R20); A6 (if
       stageable), A8, A13 vs CP5 hold; build green.
 - [ ] **CP7** — AFTER numbers + docs.
@@ -215,3 +215,17 @@ quad (door columns stay single).
 NEXT: CP6 = `git apply /tmp/claude-0/scripts/cp6.patch` (R19 range-ordered occluder redraws: Enemy, Prop ×3 loops,
 ShopMachine body). R20: CP2 found no render-path allocation by GC (4 events/run at both tiers); code-read the touched
 render() paths.
+
+**CP6 (closed).** R19: `SpriteOccluderBuffer.redrawInFrontRange(batch, first, last, depth, columnWidth, wallRenderer)`
+(same wall z-skip as the draw loop). EnemyRenderer body: all slices, then one range redraw. PropRenderer credit chip,
+weapon pickup and dynamic-prop loops, and ShopMachineRenderer's body layer: all slices, then a second loop doing
+redraw + record per column (record after redraw, as before). Pixel-identical BY CONSTRUCTION: redraw(c) reads only
+column c's occluder records, record(c) writes only column c, and quads of other columns never cover column c.
+PropRenderer's keycard/credit aura loops were already one texture inside one blend switch (no interleave) — unchanged.
+- A6 NOT STAGEABLE: no pose puts an enemy or the shop cabinet behind a nearer occluder on floor 1 (P6 as in CP2).
+  Probe (cpu): props draw calls 19 / 4.66 in P1/P2 vs B0 19 / 5.09 (the 19 are per-prop texture switches).
+- A8 PASS: GC events per whole run 2 (AFTER, every run) = B0 2; code read: no allocation in render() of
+  FloorCeilingRenderer, WallRenderer, Enemy/Prop/ShopMachine renderers, SpriteOccluderBuffer (the probe allocates
+  one log String every 5 s only when enabled). R20: no render-path allocation was found by measurement in CP2.
+- A13 at CP6: by construction (above); a same-run toggle was not built for these loops (it would need a parallel
+  legacy branch in four renderers).
