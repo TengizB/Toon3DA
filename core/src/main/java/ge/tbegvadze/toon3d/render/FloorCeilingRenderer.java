@@ -49,7 +49,7 @@ import static ge.tbegvadze.toon3d.util.RenderConstants.*;
  * Resolution:
  *   Backdrop size is runtime-switchable via {@code util.RenderResolution} (see
  *   {@link #setRenderResolution}) — HD reproduces the historic fixed 320×180 backdrop
- *   (= WORLD_WIDTH/4 × WORLD_HEIGHT/4) byte-identically; FULL_HD raises it to 480×270.
+ *   (= WORLD_WIDTH/4 × WORLD_HEIGHT/4) byte-identically; FULL_HD raises it to 960×540 (per-tier divisor).
  *   SpriteBatch upscales it to the full viewport regardless of tier, for a retro pixel
  *   look and significant CPU savings.
  */
@@ -67,9 +67,9 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     /*
      * Formula: full-screen pixel rows per backdrop row
      * Derivation: the backdrop row count no longer always divides WORLD_HEIGHT evenly (FULL_HD:
-     *   720 / 270 = 2.667), so the old integer FLOOR_BACKDROP_SCALE_DIVISOR (always 4) is replaced by
+     *   720 / 540 = 1.333), so the old integer FLOOR_BACKDROP_SCALE_DIVISOR (always 4; now per tier) is replaced by
      *   this runtime float ratio, recomputed whenever the backdrop is (re)allocated.
-     *   HD: 720 / 180 = 4.0 exactly (byte-identical to the old constant). FULL_HD: 720 / 270 ≈ 2.667.
+     *   HD: 720 / 180 = 4.0 exactly (byte-identical to the old constant). FULL_HD: 720 / 540 ≈ 1.333.
      * Edge cases: backdropHeight is always a positive RenderResolution-derived value, never zero.
      */
     private float rowsPerBackdropRow = WORLD_HEIGHT / (float) backdropHeight;
@@ -79,13 +79,12 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
 
     // Floor/ceiling materials (R8): shared read-only arrays from SurfaceMaterials, never written here.
     private final LightingMood mood;
-    private final int[] floorTexelsPacked;
-    private final int   floorTextureWidth;
-    private final int   floorTextureHeight;
-
-    private final int[] ceilingTexelsPacked;
-    private final int   ceilingTextureWidth;
-    private final int   ceilingTextureHeight;
+    // Material LOD: the full mip chain per surface (level 0 = 64x64, then 32, 16, 8), fetched once at
+    // construction and only READ by workers. Level L has edge SURFACE_MATERIAL_SIZE >> L.
+    private final int[][] floorMipChain;
+    private final int[][] ceilingMipChain;
+    // Per-row mip level (player-independent, rebuilt with the tint table).
+    private int[] rowMipLevelTable;
 
     // R13: graded tint per backdrop row (red, green, blue per row index, floor and its mirrored ceiling row
     // share it). Row distance depends only on the row and resolution, so the table is rebuilt only when the
@@ -133,13 +132,12 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         backdropTexture = new Texture(backdropPixmap);
         backbuffer      = new int[backdropWidth * backdropHeight];
 
-        floorTextureWidth    = SURFACE_MATERIAL_SIZE;
-        floorTextureHeight   = SURFACE_MATERIAL_SIZE;
-        floorTexelsPacked    = SurfaceMaterials.registry().getPixels(mood.floorMaterialId());
-
-        ceilingTextureWidth  = SURFACE_MATERIAL_SIZE;
-        ceilingTextureHeight = SURFACE_MATERIAL_SIZE;
-        ceilingTexelsPacked  = SurfaceMaterials.registry().getPixels(mood.ceilingMaterialId());
+        floorMipChain   = new int[SURFACE_MATERIAL_MIP_LEVELS][];
+        ceilingMipChain = new int[SURFACE_MATERIAL_MIP_LEVELS][];
+        for (int mipLevel = 0; mipLevel < SURFACE_MATERIAL_MIP_LEVELS; mipLevel++) {
+            floorMipChain[mipLevel]   = SurfaceMaterials.registry().getPixels(mood.floorMaterialId(), mipLevel);
+            ceilingMipChain[mipLevel] = SurfaceMaterials.registry().getPixels(mood.ceilingMaterialId(), mipLevel);
+        }
 
         rebuildRowTintTable();
 
@@ -189,15 +187,45 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         int rowCount = backdropHeight / 2;
         rowTintTable = new float[rowCount * 3];
         rowLightFalloffTable = new float[rowCount];
+        rowMipLevelTable = new int[rowCount];
+        // Camera plane width at unit distance = 2 * planeScale = 2 * tan(halfFov); the table uses the
+        // default player FOV (FOV is constant in play, and the level only picks a blur step).
+        float planeWidthAtUnitDistance = 2f * (float) Math.tan(PLAYER_FIELD_OF_VIEW_RADIANS / 2.0);
+        // Clamped row distance per row, using exactly the mapping fillRows uses; the depth footprint needs the
+        // neighbouring row's distance, so all distances are computed first.
+        float[] rowDistances = new float[rowCount];
         for (int drawY = 0; drawY < rowCount; drawY++) {
             float pixelOffset = GameMath.floorPixelOffsetBelowHorizon(drawY * rowsPerBackdropRow, WORLD_HEIGHT);
-            float rowDistance = Math.min(GameMath.floorRowDistance(pixelOffset, WORLD_HEIGHT),
-                                         FLOOR_MAX_VISIBLE_DISTANCE_CELLS);
+            rowDistances[drawY] = Math.min(GameMath.floorRowDistance(pixelOffset, WORLD_HEIGHT),
+                                           FLOOR_MAX_VISIBLE_DISTANCE_CELLS);
+        }
+        float previousDepthFootprintTexels = 0f;
+        for (int drawY = 0; drawY < rowCount; drawY++) {
+            float rowDistance = rowDistances[drawY];
             AtmosphereGrade.evaluateInto(mood, rowDistance, ArtDirection.GRADE_STRENGTH_ENVIRONMENT,
                                          rowTintTable, drawY * 3);
             rowLightFalloffTable[drawY] = GameMath.muzzleLightFalloff(rowDistance,
                     EffectConstants.MUZZLE_LIGHT_RADIUS_TILES);
+            // Last row has no neighbour above it: reuse the previous difference.
+            float depthFootprintTexels = drawY + 1 < rowCount
+                    ? GameMath.floorDepthFootprintTexels(rowDistance, rowDistances[drawY + 1], SURFACE_MATERIAL_SIZE)
+                    : previousDepthFootprintTexels;
+            previousDepthFootprintTexels = depthFootprintTexels;
+            float screenFootprintTexels = GameMath.floorScreenFootprintTexels(rowDistance,
+                    planeWidthAtUnitDistance, backdropWidth, SURFACE_MATERIAL_SIZE);
+            rowMipLevelTable[drawY] = GameMath.surfaceMaterialMipLevel(screenFootprintTexels,
+                    depthFootprintTexels, SURFACE_MATERIAL_MIP_BIAS, SURFACE_MATERIAL_MIP_LEVELS);
+            // Rows only get farther up the screen, so never fall back to a sharper level: the clamped band
+            // past FLOOR_MAX_VISIBLE_DISTANCE_CELLS has zero depth difference and would otherwise un-blur.
+            if (drawY > 0 && rowMipLevelTable[drawY] < rowMipLevelTable[drawY - 1]) {
+                rowMipLevelTable[drawY] = rowMipLevelTable[drawY - 1];
+            }
         }
+    }
+
+    /** Test/diagnostic read-out: the mip level used for backdrop floor row {@code drawY} at the current tier. */
+    public int getRowMipLevel(int drawY) {
+        return rowMipLevelTable[drawY];
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -295,12 +323,6 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
      * row range so no synchronisation is needed on backbuffer writes.
      */
     private void fillRows(int startRow, int endRow) {
-        // Texture dimensions are powers of 2 (64), so bitmask wrapping is safe and branchless.
-        final int floorTexWidthMask  = floorTextureWidth  - 1;
-        final int floorTexHeightMask = floorTextureHeight - 1;
-        final int ceilTexWidthMask   = ceilingTextureWidth  - 1;
-        final int ceilTexHeightMask  = ceilingTextureHeight - 1;
-
         for (int drawY = startRow; drawY < endRow; drawY++) {
             // Float-safe row->full-screen mapping (checkpoint contract C5): rowsPerBackdropRow =
             // WORLD_HEIGHT / backdropHeight, which is no longer always an integer at a non-HD tier (the
@@ -337,6 +359,14 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
             }
             final boolean rowLit = lightAddRed + lightAddGreen + lightAddBlue > 0f;
 
+            // Material LOD: this row's mip level picks the texel arrays; edge = 64 >> level (power of two,
+            // so the bitmask wrap below stays valid). Floor and ceiling share the row's level.
+            final int mipLevel = rowMipLevelTable[drawY];
+            final int[] floorTexelsPacked   = floorMipChain[mipLevel];
+            final int[] ceilingTexelsPacked = ceilingMipChain[mipLevel];
+            final int textureSize = SURFACE_MATERIAL_SIZE >> mipLevel;
+            final int textureMask = textureSize - 1;
+
             // Pre-compute base backbuffer offsets for this row pair to avoid repeated multiplications.
             int floorRowOffset   = (backdropHeight - 1 - drawY) * backdropWidth;
             int ceilingRowOffset = drawY * backdropWidth;
@@ -351,13 +381,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
 
                 // Bitmask wrap is equivalent to modulo for power-of-2 sizes and avoids
                 // clamping: (int)(frac * 64) can be 64 for frac==1.0, but 64 & 63 = 0.
-                int floorTexelColumn = (int)(fracX * floorTextureWidth)  & floorTexWidthMask;
-                int floorTexelRow    = (int)(fracY * floorTextureHeight) & floorTexHeightMask;
-                int floorRawPixel    = floorTexelsPacked[floorTexelRow * floorTextureWidth + floorTexelColumn];
-
-                int ceilTexelColumn  = (int)(fracX * ceilingTextureWidth)  & ceilTexWidthMask;
-                int ceilTexelRow     = (int)(fracY * ceilingTextureHeight) & ceilTexHeightMask;
-                int ceilRawPixel     = ceilingTexelsPacked[ceilTexelRow * ceilingTextureWidth + ceilTexelColumn];
+                int texelColumn = (int)(fracX * textureSize) & textureMask;
+                int texelRow    = (int)(fracY * textureSize) & textureMask;
+                int texelIndex  = texelRow * textureSize + texelColumn;
+                int floorRawPixel = floorTexelsPacked[texelIndex];
+                int ceilRawPixel  = ceilingTexelsPacked[texelIndex];
 
                 // Tile brightness is the same for both the floor and its mirrored ceiling row.
                 float tileBrightness     = level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds);

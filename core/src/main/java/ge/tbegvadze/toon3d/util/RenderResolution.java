@@ -15,9 +15,9 @@ package ge.tbegvadze.toon3d.util;
  * 1280×720 world/UI space it is composited into.
  *
  * <p>At {@link #HD} the numbers are today's fixed behaviour, byte-identical
- * (1280 ray columns, floor backdrop 320×180).
- * {@link #FULL_HD} raises the column count to 1920 (floor backdrop 480×270), keeping the floor's
- * existing 1:4 ratio of the projection column count.
+ * (1280 ray columns, floor backdrop 320×180) - the performance tier.
+ * {@link #FULL_HD} raises the column count to 1920 and the floor backdrop to 960×540 (divisor 2) - the
+ * quality tier and the default.
  *
  * <p>Headless: no LibGDX imports. Persisted by ordinal — see
  * {@code RenderConstants.RENDER_RESOLUTION_SETTING_KEY}; a stored ordinal outside this enum's range
@@ -25,8 +25,10 @@ package ge.tbegvadze.toon3d.util;
  */
 public enum RenderResolution {
 
-    HD(RenderConstants.RENDER_RESOLUTION_HD_COLUMNS, "story.codex.setting.resolution.0"),
-    FULL_HD(RenderConstants.RENDER_RESOLUTION_FULL_HD_COLUMNS, "story.codex.setting.resolution.1");
+    HD(RenderConstants.RENDER_RESOLUTION_HD_COLUMNS, RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR,
+       "story.codex.setting.resolution.0"),
+    FULL_HD(RenderConstants.RENDER_RESOLUTION_FULL_HD_COLUMNS, RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR_FULL_HD,
+       "story.codex.setting.resolution.1");
 
     /**
      * The tier a save gets until the player picks one (owner decision, 2026-10-20): FULL HD, so the floor and
@@ -36,10 +38,12 @@ public enum RenderResolution {
     public static final RenderResolution DEFAULT = FULL_HD;
 
     private final int    projectionColumnCount;
+    private final int    floorBackdropScaleDivisor;
     private final String labelStringId;
 
-    RenderResolution(int projectionColumnCount, String labelStringId) {
+    RenderResolution(int projectionColumnCount, int floorBackdropScaleDivisor, String labelStringId) {
         this.projectionColumnCount = projectionColumnCount;
+        this.floorBackdropScaleDivisor = floorBackdropScaleDivisor;
         this.labelStringId         = labelStringId;
     }
 
@@ -55,17 +59,22 @@ public enum RenderResolution {
         return projectionColumnCount;
     }
 
+    /** This tier's backdrop divisor: HD 4 (performance tier), FULL_HD 2 (quality tier). */
+    public int getFloorBackdropScaleDivisor() {
+        return floorBackdropScaleDivisor;
+    }
+
     /*
      * Formula: floor/ceiling backdrop width
-     * Derivation: the backdrop keeps the same 1:FLOOR_BACKDROP_SCALE_DIVISOR ratio of the
-     *   projection column count that the fixed HD path always used:
-     *     backdropWidth = projectionColumnCount / FLOOR_BACKDROP_SCALE_DIVISOR
-     *   HD: 1280 / 4 = 320. FULL_HD: 1920 / 4 = 480. Both divide evenly.
-     * Edge cases: relies on projectionColumnCount being an exact multiple of the divisor for both
-     *   tiers (true for 1280 and 1920 against divisor 4); a future tier must preserve that.
+     * Derivation: the backdrop is a fixed 1:divisor fraction of the projection column count, where the
+     *   divisor is carried per tier (HD 4, FULL_HD 2):
+     *     backdropWidth = projectionColumnCount / floorBackdropScaleDivisor
+     *   HD: 1280 / 4 = 320. FULL_HD: 1920 / 2 = 960. Both divide evenly.
+     * Edge cases: relies on projectionColumnCount being an exact multiple of the tier's divisor
+     *   (true for both); a future tier must preserve that.
      */
     public int getFloorBackdropWidth() {
-        return getProjectionColumnCount() / RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR;
+        return getProjectionColumnCount() / floorBackdropScaleDivisor;
     }
 
     /*
@@ -74,16 +83,16 @@ public enum RenderResolution {
      *   the width formula uses, computed with integer math in an order that stays exact for both
      *   tiers:
      *     backdropHeight = (Constants.WORLD_HEIGHT * projectionColumnCount / Constants.WORLD_WIDTH)
-     *                      / FLOOR_BACKDROP_SCALE_DIVISOR
+     *                      / floorBackdropScaleDivisor
      *   HD:      (720 * 1280 / 1280) / 4 = 720 / 4 = 180.
-     *   FULL_HD: (720 * 1920 / 1280) / 4 = 1080 / 4 = 270.
+     *   FULL_HD: (720 * 1920 / 1280) / 2 = 1080 / 2 = 540.
      * Edge cases: the inner multiply-then-divide must happen before the outer divide (as written)
      *   so both tiers land on exact integers with no truncation error; a future tier must verify the
      *   same exactness before shipping.
      */
     public int getFloorBackdropHeight() {
         return (Constants.WORLD_HEIGHT * getProjectionColumnCount() / Constants.WORLD_WIDTH)
-                / RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR;
+                / floorBackdropScaleDivisor;
     }
 
     /** Localisation id of this tier's label on the settings strip ("HD" / "FULL HD"). */

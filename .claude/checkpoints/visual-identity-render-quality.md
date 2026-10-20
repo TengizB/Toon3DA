@@ -12,9 +12,9 @@ the owner's request is the spec; decisions recorded below. Order 1/2 are IMPLEME
 - [x] **Q1** — RenderResolution.DEFAULT = FULL_HD; StorySettings falls back to it. Renderer field defaults stay HD
       (their comment ties them to a byte-identical rule; World always pushes the setting). DONE WHEN: a fresh save
       renders 1920 columns; build green.
-- [ ] **Q2** — per-tier floor backdrop divisor (HD 4 = performance tier, FULL_HD 2 = quality tier).
+- [x] **Q2** — per-tier floor backdrop divisor (HD 4 = performance tier, FULL_HD 2 = quality tier).
       DONE WHEN: Full HD backdrop is 960x540; frame cost measured; build green.
-- [ ] **Q3** — material LOD (box-filtered mip chain 64/32/16/8 per material, level chosen per backdrop ROW from the
+- [x] **Q3** — material LOD (box-filtered mip chain 64/32/16/8 per material, level chosen per backdrop ROW from the
       texel footprint). DONE WHEN: far floor/ceiling no longer speckle in captures; build green.
 - [ ] **Q4** — screens of all five moods at the new default, docs updated, reviewer PASS.
 
@@ -25,3 +25,12 @@ the owner's request is the spec; decisions recorded below. Order 1/2 are IMPLEME
   phone has a cheaper tier. Root cause of the owner's "too pixelated": the floor/ceiling backdrop is CPU-filled at
   1/4 resolution (HD 320x180, FULL_HD 480x270) and Nearest-upscaled; plus no mipmapping, so the fine order-1
   materials speckle at distance.
+- **Q2+Q3 (one commit — both edit FloorCeilingRenderer's table builder, not separable):** `RenderResolution` tiers
+  carry `floorBackdropScaleDivisor` (HD 4 / FULL_HD 2 = `FLOOR_BACKDROP_SCALE_DIVISOR_FULL_HD`). Mip chain 64/32/16/8
+  per material in `SurfaceMaterialRegistry.getPixels(id, level)` (2x2 box filter, cached). Per-ROW level table from
+  `GameMath.surfaceMaterialMipLevel(max(screen-X footprint, DEPTH footprint) × bias 1.0)`; the depth term is what
+  matters (first cut used screen-X only and stayed level 0 everywhere — rejected). Table forced non-decreasing toward
+  the horizon (the 15-tile clamp band has zero depth delta and would otherwise snap back sharp). FULL_HD levels:
+  rows 0-176 L0 (to 2.9 tiles), L1 to 4.0, L2 to 5.7, L3 beyond. Frame cost with LOD: 18.5 ms (vs 18.2 without).
+  Captured: shots/q_<mood>.png, cmp3.png (HD before vs FULL_HD after). Near rows keep crisp level-0 texels on
+  purpose: the 64-texel materials are pixel art, matching the nearest-sampled walls.

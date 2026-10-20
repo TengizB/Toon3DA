@@ -111,15 +111,21 @@ public final class RenderConstants {
     // Floor & Ceiling texture rendering — see docs/dda-raycasting-math.txt
     // The backdrop's actual pixel size is runtime-switchable — see util.RenderResolution
     // (getFloorBackdropWidth()/getFloorBackdropHeight()) and FloorCeilingRenderer.setRenderResolution().
-    // SCALE_DIVISOR=4 is the ratio both tiers keep of their own projection column count (HD: 320×180,
-    // ~16× cheaper than full-res; FULL_HD: 480×270), stretched to the full screen by SpriteBatch either way.
+    // Each tier keeps 1/divisor of its own projection column count, stretched to the full screen by SpriteBatch.
+    // HD = performance tier: divisor 4 -> 320x180. FULL_HD = quality tier: divisor 2 -> 960x540 (measured
+    // about +2 ms/frame over divisor 4 on the 4-core capture VM, because the fill is worker-threaded).
     public static final int    FLOOR_BACKDROP_SCALE_DIVISOR    = 4;
+    public static final int    FLOOR_BACKDROP_SCALE_DIVISOR_FULL_HD = 2;
     // FLOOR_CAMERA_Z = 0.5 → camera exactly centred (horizon at screen centre)
     public static final float  FLOOR_CAMERA_Z                   = 0.5f;
     public static final float  FLOOR_SHADING_FALLOFF            = 0.05f;
     public static final float  FLOOR_MAX_VISIBLE_DISTANCE_CELLS = 15.0f;
     /** Edge length in texels of every floor/ceiling surface material (power of two, tileable). */
     public static final int    SURFACE_MATERIAL_SIZE            = 64;
+    /** Mip chain length per material: level 0 = 64, then 32, 16, 8 (2x2 box filtered). */
+    public static final int    SURFACE_MATERIAL_MIP_LEVELS      = 4;
+    /** Multiplies the texel footprint before the level is chosen; above 1 blurs earlier, below 1 stays crisp longer. */
+    public static final float  SURFACE_MATERIAL_MIP_BIAS        = 1.0f;
     // Placeholder procedural textures generated at runtime when these assets are absent
     public static final String LAB_FLOOR_TEXTURE_PATH   = "textures/lab/lab_floor_concrete.png";
     public static final String LAB_CEILING_TEXTURE_PATH = "textures/lab/lab_ceiling_panel.png";

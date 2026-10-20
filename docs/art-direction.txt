@@ -151,6 +151,29 @@ ceiling always sit below the walls.
   ceiling_lattice        diagonal lattice beams with crossing nodes
 
 
+Mip chain and LOD (render-quality follow-up): SurfaceMaterialRegistry caches, per material, 4 levels
+(RenderConstants.SURFACE_MATERIAL_MIP_LEVELS): level 0 = the 64x64 texels, levels 1..3 = 32, 16, 8, each a
+2x2 box filter (per-channel R,G,B,A average, rounded) of the previous level, same row-major layout and
+orientation. getPixels(id) = level 0; getPixels(id, level) the rest. Built once, shared, read-only.
+FloorCeilingRenderer picks ONE level per backdrop ROW (row distance is player-independent, so the table is
+rebuilt only with the tint table on construction / resolution change) with GameMath.surfaceMaterialMipLevel:
+  screenTexels = rowDistance * (2*tan(halfFov)) / backdropWidth * 64        (GameMath.floorScreenFootprintTexels)
+  depthTexels  = |rowDistance(row) - rowDistance(row+1)| * 64               (GameMath.floorDepthFootprintTexels)
+  level = clamp(floor(log2(max(1, max(screenTexels, depthTexels) * SURFACE_MATERIAL_MIP_BIAS))), 0, 3)
+The DEPTH footprint is what causes distant floor speckle (one backdrop row spans a long stretch of floor far
+away) and dominates the screen-X term. Row distances are the clamped values fillRows uses; the last row reuses
+the previous difference. The table is then forced non-decreasing up the screen, so the clamped far band
+(zero depth difference) keeps the last level instead of un-blurring.
+Near rows stay level 0 (crisp pixel-art texels); only distant rows blur. The table uses the default player FOV.
+Sampling at level L: edge = 64 >> L, texel = (int)(frac * edge) & (edge - 1).
+
+RENDER RESOLUTION TIERS
+Full HD (the default) is the QUALITY tier: 1920 ray columns, floor/ceiling backdrop 960x540 (divisor 2).
+HD is the PERFORMANCE tier: 1280 columns, backdrop 320x180 (divisor 4). The divisor is carried per tier in
+util/RenderResolution (RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR / _FULL_HD). Measured on the 4-core
+capture VM: divisor 2 at Full HD costs about +2 ms/frame over divisor 4 (the fill is worker-threaded).
+
+
 7. RECIPE C — add a mood or a material
 --------------------------------------
 Add a MATERIAL: one `register(id, generator)` row in SurfaceMaterials.bootstrap() plus its

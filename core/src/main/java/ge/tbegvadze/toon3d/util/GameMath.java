@@ -1061,6 +1061,59 @@ public final class GameMath {
     }
 
     /*
+     * Formula: floorScreenFootprintTexels
+     * Derivation: one backdrop pixel on a floor row spans, in tiles,
+     *     rowDistance * planeWidthAtUnitDistance / backdropWidth
+     *   because floorStepTileComponent steps rowDistance * (rayDirRight - rayDirLeft) / backdropWidth and the
+     *   two edge rays differ by the whole camera plane, 2 * planeScale = 2 * tan(halfFov). One tile is
+     *   materialSize texels, so footprintTexels = that * materialSize.
+     * Edge cases: backdropWidth > 0 guaranteed by the caller. A clamped (far) rowDistance just yields the
+     *   footprint at the clamp.
+     */
+    public static float floorScreenFootprintTexels(float rowDistance, float planeWidthAtUnitDistance,
+                                                   int backdropWidth, int materialSize) {
+        return rowDistance * planeWidthAtUnitDistance / backdropWidth * materialSize;
+    }
+
+    /*
+     * Formula: floorDepthFootprintTexels
+     * Derivation: moving one backdrop row up the screen moves the sampled floor point from rowDistance to
+     *   adjacentRowDistance along the view direction, so one backdrop pixel covers
+     *     |rowDistance - adjacentRowDistance| tiles of depth = that * materialSize texels.
+     *   Far away this dominates the screen-X footprint (distance ~ 1/pixelOffset grows super-linearly toward
+     *   the horizon), and it is what makes distant floor speckle.
+     * Edge cases: both distances are the same clamped values the row fill uses, so two rows both past the
+     *   clamp give 0 (the whole clamped band samples one distance). The caller handles the last row by
+     *   reusing the previous row's difference.
+     */
+    public static float floorDepthFootprintTexels(float rowDistance, float adjacentRowDistance, int materialSize) {
+        return Math.abs(rowDistance - adjacentRowDistance) * materialSize;
+    }
+
+    /*
+     * Formula: surfaceMaterialMipLevel
+     * Derivation: a mip level L averages 2^L texels per axis, so the matching level is log2 of the texels one
+     *   backdrop pixel covers. The pixel is a screenX x depth rectangle on the floor; the coarser axis decides:
+     *     footprintTexels = max(screenFootprintTexels, depthFootprintTexels) * mipBias
+     *     level = clamp(floor(log2(max(1, footprintTexels))), 0, levelCount - 1).
+     *   floor(log2(x)) for x >= 1 is the float's binary exponent (Math.getExponent, exact on powers of two).
+     * Edge cases: footprint <= 1 texel (near rows) -> level 0 (crisp). Beyond the last level -> clamped to
+     *   levelCount - 1. Infinite positive -> last level; NaN or non-positive -> level 0.
+     */
+    public static int surfaceMaterialMipLevel(float screenFootprintTexels, float depthFootprintTexels,
+                                              float mipBias, int levelCount) {
+        float footprintTexels = Math.max(screenFootprintTexels, depthFootprintTexels) * mipBias;
+        if (Float.isInfinite(footprintTexels) && footprintTexels > 0f) {
+            return levelCount - 1;
+        }
+        if (!(footprintTexels > 1f)) {
+            return 0;
+        }
+        int level = Math.getExponent(footprintTexels);
+        return Math.max(0, Math.min(level, levelCount - 1));
+    }
+
+    /*
      * Formula: floorStepTileComponent
      * Derivation:
      *   The leftmost ray at column 0 has direction rayDirLeft and the rightmost
