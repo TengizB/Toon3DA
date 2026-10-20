@@ -50,8 +50,8 @@ Performance:
 The ray-column count is RUNTIME state, set by the player's RESOLUTION setting (settings screen
 and codex strip; persisted as `story.setting.render.resolution`). `util/RenderResolution`:
 
-  HD       1280 columns, columnWidth 1.0 world unit,   floor backdrop 320x180  (default)
-  FULL_HD  1920 columns, columnWidth 0.667 world unit, floor backdrop 480x270
+  HD       1280 columns, columnWidth 1.0 world unit,   floor backdrop 320x180  (performance tier)
+  FULL_HD  1920 columns, columnWidth 0.667 world unit, floor backdrop 960x540  (default, quality tier)
 
 World units stay 1280x720 — only the 3D view's internal resolution changes. HUD, text and menus
 are already drawn at the device's native pixels.

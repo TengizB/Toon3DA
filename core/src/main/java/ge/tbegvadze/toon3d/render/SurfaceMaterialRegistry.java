@@ -82,14 +82,14 @@ public final class SurfaceMaterialRegistry {
         for (int row = 0; row < targetSize; row++) {
             for (int column = 0; column < targetSize; column++) {
                 int sourceIndex = (row * 2) * sourceSize + column * 2;
-                int a = source[sourceIndex];
-                int b = source[sourceIndex + 1];
-                int c = source[sourceIndex + sourceSize];
-                int d = source[sourceIndex + sourceSize + 1];
+                int bottomLeftTexel  = source[sourceIndex];
+                int bottomRightTexel = source[sourceIndex + 1];
+                int topLeftTexel     = source[sourceIndex + sourceSize];
+                int topRightTexel    = source[sourceIndex + sourceSize + 1];
                 int packed = 0;
                 for (int shift = 0; shift <= 24; shift += 8) {
-                    int sum = ((a >>> shift) & 0xFF) + ((b >>> shift) & 0xFF)
-                            + ((c >>> shift) & 0xFF) + ((d >>> shift) & 0xFF);
+                    int sum = ((bottomLeftTexel >>> shift) & 0xFF) + ((bottomRightTexel >>> shift) & 0xFF)
+                            + ((topLeftTexel >>> shift) & 0xFF) + ((topRightTexel >>> shift) & 0xFF);
                     packed |= ((sum + 2) >> 2) << shift;
                 }
                 target[row * targetSize + column] = packed;

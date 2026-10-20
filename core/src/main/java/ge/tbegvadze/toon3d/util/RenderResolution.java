@@ -14,7 +14,7 @@ package ge.tbegvadze.toon3d.util;
  * (and the backdrop it feeds) raises the fidelity of that raycast image, independent of the fixed
  * 1280×720 world/UI space it is composited into.
  *
- * <p>At {@link #HD} the numbers are today's fixed behaviour, byte-identical
+ * <p>At {@link #HD} the dimensions are the historic fixed ones
  * (1280 ray columns, floor backdrop 320×180) - the performance tier.
  * {@link #FULL_HD} raises the column count to 1920 and the floor backdrop to 960×540 (divisor 2) - the
  * quality tier and the default.

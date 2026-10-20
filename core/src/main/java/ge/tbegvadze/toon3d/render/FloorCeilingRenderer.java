@@ -49,7 +49,7 @@ import static ge.tbegvadze.toon3d.util.RenderConstants.*;
  * Resolution:
  *   Backdrop size is runtime-switchable via {@code util.RenderResolution} (see
  *   {@link #setRenderResolution}) — HD reproduces the historic fixed 320×180 backdrop
- *   (= WORLD_WIDTH/4 × WORLD_HEIGHT/4) byte-identically; FULL_HD raises it to 960×540 (per-tier divisor).
+ *   (= WORLD_WIDTH/4 × WORLD_HEIGHT/4, the historic dimensions — the pixels differ since material LOD); FULL_HD raises it to 960×540 (per-tier divisor).
  *   SpriteBatch upscales it to the full viewport regardless of tier, for a retro pixel
  *   look and significant CPU savings.
  */
@@ -60,7 +60,7 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     // Backdrop resolution is runtime-switchable (util/RenderResolution, checkpoint contract C5), so
     // these are rebuilt (old disposed, new allocated) by setRenderResolution() only on a CHANGE —
     // never per frame. Default HD before any set call, so a renderer that never has the setting pushed
-    // into it (e.g. a headless caller) reproduces today's fixed 320x180 behaviour byte-identically.
+    // into it (e.g. a headless caller) gets the historic 320x180 dimensions (pixels now differ: distant rows sample the material mip levels).
     private RenderResolution renderResolution = RenderResolution.HD;
     private int   backdropWidth  = renderResolution.getFloorBackdropWidth();
     private int   backdropHeight = renderResolution.getFloorBackdropHeight();
@@ -69,7 +69,7 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
      * Derivation: the backdrop row count no longer always divides WORLD_HEIGHT evenly (FULL_HD:
      *   720 / 540 = 1.333), so the old integer FLOOR_BACKDROP_SCALE_DIVISOR (always 4; now per tier) is replaced by
      *   this runtime float ratio, recomputed whenever the backdrop is (re)allocated.
-     *   HD: 720 / 180 = 4.0 exactly (byte-identical to the old constant). FULL_HD: 720 / 540 ≈ 1.333.
+     *   HD: 720 / 180 = 4.0 exactly (the old constant). FULL_HD: 720 / 540 ≈ 1.333.
      * Edge cases: backdropHeight is always a positive RenderResolution-derived value, never zero.
      */
     private float rowsPerBackdropRow = WORLD_HEIGHT / (float) backdropHeight;
@@ -221,11 +221,6 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                 rowMipLevelTable[drawY] = rowMipLevelTable[drawY - 1];
             }
         }
-    }
-
-    /** Test/diagnostic read-out: the mip level used for backdrop floor row {@code drawY} at the current tier. */
-    public int getRowMipLevel(int drawY) {
-        return rowMipLevelTable[drawY];
     }
 
     public void setPlayerState(float worldX, float worldY,
