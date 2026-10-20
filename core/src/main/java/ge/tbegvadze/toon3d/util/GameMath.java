@@ -8036,4 +8036,18 @@ public final class GameMath {
         if (maximumFactor <= 1f) return 1f;
         return maximumTexelChannel * maximumFactor <= 255f ? maximumFactor : 1f;
     }
+
+    /*
+     * Formula: insetChamfer
+     * Derivation: a 45-degree chamfer of size c cuts a corner along x + y = c (corner at the origin). Insetting
+     *   every edge by t moves the straight edges to x = t, y = t and the diagonal along its normal (1,1)/sqrt2 by
+     *   t, i.e. to x + y = c + t*sqrt2. Measured from the inset corner (t, t), the cut is then
+     *     c' = c + t*sqrt2 - 2t = c - t*(2 - sqrt2)
+     *   which keeps a border of thickness t uniform along the diagonals (UiKit's chamfered outline).
+     * Edge cases: a border thicker than the chamfer can absorb gives c' < 0 -> clamped to 0 (a square inner
+     *   corner). t = 0 returns c.
+     */
+    public static float insetChamfer(float chamfer, float insetDistance) {
+        return Math.max(0f, chamfer - insetDistance * (2f - (float) Math.sqrt(2.0)));
+    }
 }

@@ -188,4 +188,33 @@ public final class ArtDirection {
     public static final float TYPE_LABEL   = 1.50f;
     public static final float TYPE_HEADING = 2.00f;
     public static final float TYPE_DISPLAY = 3.50f;
+
+    // -------------------------------------------------------------------------
+    // UI KIT GEOMETRY (visual-identity-order-4, R7): render/UiKit's primitives. World units.
+    // -------------------------------------------------------------------------
+    /** 45-degree corner cut of a panel. */
+    public static final float UI_CHAMFER = 8f;
+    /** 45-degree corner cut of a tappable plate. */
+    public static final float UI_PLATE_CHAMFER = 12f;
+    public static final float UI_BORDER_THICKNESS = 2f;
+    /** Corner bracket arm length: short enough to read as a frame, not a box. */
+    public static final float UI_BRACKET_LENGTH = 14f;
+    public static final float UI_BRACKET_THICKNESS = 3f;
+    public static final float UI_BRACKET_INSET = 4f;
+    public static final float UI_METER_GAP = 2f;
+    /** Divider line thickness and the ink tick at its left end (R5). */
+    public static final float UI_DIVIDER_THICKNESS = 1f;
+    public static final float UI_DIVIDER_TICK_LENGTH = 6f;
+    public static final float UI_DIVIDER_TICK_THICKNESS = 3f;
+    /** Down-right text shadow offset at TYPE_CAPTION; grows with the font's scale (R6). */
+    public static final float UI_TEXT_SHADOW_OFFSET = 1.5f;
+    public static final float UI_TEXT_SHADOW_ALPHA = 0.85f;
+    /** HUD panel opacity; HudConstants.HUD_PANEL_ALPHA references it. */
+    public static final float UI_PANEL_ALPHA_HUD = 0.82f;
+    /** Full-screen scrim opacity behind overlays (used from order 5). */
+    public static final float UI_SCRIM_ALPHA = 0.75f;
+    /** DISABLED plate: fill and border alpha multiplier (R3). */
+    public static final float UI_PLATE_DISABLED_ALPHA_SCALE = 0.5f;
+    /** Boss health meter segment count (R12). */
+    public static final int   BOSS_HEALTH_SEGMENTS = 20;
 }

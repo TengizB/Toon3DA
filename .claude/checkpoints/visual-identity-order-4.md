@@ -39,7 +39,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — UiKit + PlateState + ArtDirection R7 constants (deliberately unused).
+- [x] **CP1** — UiKit + PlateState + ArtDirection R7 constants (deliberately unused).
       DONE WHEN: they exist, nothing reads them yet, build green.
 - [ ] **CP2** — HudRenderer restyled (R9 + R15). DONE WHEN: A2 (HUD), A3 (HUD), A9 seen on run; build green.
 - [ ] **CP3** — TouchControllerRenderer restyled (R10), constant renamed. DONE WHEN: A4 incl. tap spot-check; build green.
@@ -49,3 +49,12 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [ ] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
+
+- **CP1:** baseline on the mirror: 480 tests, 1 failure (StoryBarkTest, pre-existing). `UiKit` expects
+  `ShapeType.Filled` for EVERY primitive (borders are filled quads, so no Line/Filled churn) and caller-enabled
+  blending; pieces never overlap (no double-blend seams). Added beyond R1-R7: `UiKit.fillOctagon`, a full
+  `panel(..., chamfer, ..., borderAlpha, borderThickness)` overload, `plate(..., chamfer, ...)` for small plates,
+  alpha overloads of `meter`, an aligned/wrapped `text` overload (instead of a GlyphLayout one — a layout bakes its
+  colours, so it cannot be shadow-tinted), `GameMath.insetChamfer`, `ArtDirection.UI_DIVIDER_*`,
+  `UI_PLATE_DISABLED_ALPHA_SCALE`, `BOSS_HEALTH_SEGMENTS` (in ArtDirection). Shadow offset scales by
+  `capHeight / PIXEL_FONT_TARGET_CAP_HEIGHT` (getScaleX includes GameFonts' base scale).
