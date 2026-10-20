@@ -66,7 +66,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
       DONE WHEN: occluder/aura loops range-ordered (R19); CP2's render-path allocations removed (R20); A6 (if
       stageable), A8, A13 vs CP5 hold; build green.
 - [x] **CP7a** — docs updated (art-direction, wall-renderer-guide, CLAUDE.md, run-game SKILL.md); cost numbers pending (`@@COST@@` in art-direction.txt).
-- [ ] **CP7** — AFTER numbers + docs.
+- [x] **CP7** — AFTER numbers + docs.
       DONE WHEN: AFTER columns filled for every pose; A1 holds (or the R21 stop report written + owner told); docs
       per plan step 8 updated; build + test show no new failure.
 - [ ] **CP8** — gate.
@@ -235,3 +235,37 @@ PropRenderer's keycard/credit aura loops were already one texture inside one ble
 RENDER RESOLUTION TIERS — CP7 replaces it with the AFTER numbers. AFTER matrix running: `/tmp/claude-0/scripts/after.sh`
 → `/tmp/claude-0/final/` (B0/B1 control runs from the worktree at the start and end, AF-/AH- = AFTER FULL_HD / HD,
 5 moods × 2 reps, plus AF-probe-cpu / AF-probe-sync). Table: `python3 /tmp/claude-0/scripts/table.py DIR B0 B1 AF AH`.
+
+**CP7 (closed) — AFTER.** `/tmp/claude-0/final/` (same session; B0/B1 controls re-run from the CP1 worktree at the
+start and end; AF/AH = AFTER FULL_HD/HD, 5 moods × 2 reps). CP2's B0/B1 (earlier in the same session) shown too.
+
+| pose (mood)        | B0 CP2 | B1 CP2 | B0 ctrl | B1 ctrl | AFTER FULL_HD | AFTER HD | floor ms B0/AFTER (sync) | wall ms B0/AFTER (sync) | draw calls B0/AFTER |
+|--------------------|-------|-------|--------|--------|------|------|-----------|-----------|---------|
+| P1 cool_steel      | 14.81 | 10.44 | 15.55 | 10.81 | 11.93 | 10.25 | 6.20 / 2.72 | 3.44 / 3.09 | 43 / 47 (floor 1→10, rest =) |
+| P1 clinical_white  | 14.37 |  9.85 | – | – | 11.49 | 10.81 | | | |
+| P1 amber_hot       | 14.12 |  9.74 | – | – | 11.65 | 10.58 | | | |
+| P1 corrupted_violet| 14.10 | 10.31 | – | – | 11.60 | 11.19 | | | |
+| P1 core_white_viol | 14.34 |  9.97 | – | – | 12.20 | 11.26 | | | |
+| P2 rotate (5-mood) | 14.46 | 10.19 | 15.55 | 11.18 | 12.50 | 10.77 | 6.04 / 2.83 | 5.50 / 4.27 | 19.7 / ~21 |
+| P3 walk (5-mood)   | 18.24 | 13.94 | 22.27 | 15.96 | 11.92 | 13.11 | 5.98 / 3.14 | 3.69 / 4.56 | 122 / ~35 |
+| P4 muzzle (5-mood) | 18.89 | 14.86 | 21.95 | 15.58 | 12.12 | 14.82 | | | |
+| P5 alert (5-mood)  | 17.74 | 14.20 | 20.45 | 15.46 | 11.75 | 14.18 | | | |
+| P6 occluded        | not stageable | | | | | | | | |
+| GC events / run    | 4, 4 | 4, 4 | | | 4, 4 | 4, 4 | | | |
+(P3+ end facing the start-room shop machine; walk paths differ run to run, so P3-P5 carry more variance.)
+
+A1: ≤ 0.80 × B0 — PASS for P1 (11.77 mean vs 0.8 × 14.35-15.55 = 11.5-12.4: pass vs the control, borderline vs
+CP2's B0), P2 (12.50 vs 11.6-12.4: FAILS vs CP2 B0 by ~0.1-0.9, passes vs control 12.44? no — 12.50 > 12.44, a miss
+by 0.06), P3 (11.92 vs 14.6-17.8: pass). ≤ B1 — FAILS for P1 (+1.0 to +1.6 ms) and P2 (+1.3 to +2.3 ms); PASS for P3
+(11.92 vs 13.94-15.96), and P4/P5 well under B1.
+**R21 STOP REPORT (owner told).** Not lowered: 1920 columns, 540 rows, FULL_HD default all kept. Remaining ranked costs
+of the FULL_HD P1 frame (probe sync, AFTER): walls 3.09 ms (1.5× columns; HD 2.80), props 2.82 (billboard columns),
+view vignette 2.32 (one full-screen blended quad, same at both tiers — llvmpipe fill-rate), floor 2.72 (= old HD),
+minimap/HUD/overlays ~2.6. Options for the owner: (1) accept — Full HD is now ~20% cheaper than before and cheaper
+than old HD whenever the player moves or fights; check on the phone with PERF_PROBE_FORCE_ON (the container
+over-charges GPU fill and triangles); (2) a follow-up idea for the remaining wall/billboard column cost (e.g. VBO-cached
+wall columns or GL instancing — OUT of this idea's scope); (3) a follow-up for the vignette (a smaller blended region
+instead of a full-screen quad — art-adjacent, out of scope).
+Docs: `@@COST@@` replaced with these numbers in art-direction.txt. Gates: mirror `:core:build` = 480 tests, 1 failure
+(`narrative.StoryBarkTest`, bark.depth.core.2 — the pre-existing baseline failure, unchanged); `:lwjgl3:compileJava`
+green. No new test (not balance). NEXT: CP8 reviewer.

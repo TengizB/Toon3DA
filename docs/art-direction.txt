@@ -201,7 +201,16 @@ Full HD (the default) is the QUALITY tier: 1920 ray columns, 540 floor/ceiling r
 HD is the lighter tier: 1280 columns, 180 rows (RenderResolution.getFloorCeilingRowCount(); RenderConstants
 RENDER_RESOLUTION_*_FLOOR_CEILING_ROWS). Both sample the floor at the device's native horizontal resolution.
 COST (render-performance-full-hd CP7, the 4-core capture VM - llvmpipe shares the CPUs, so only RELATIVE numbers
-in one session mean anything, never phone numbers): @@COST@@
+in one session mean anything, never phone numbers): one session, two interleaved reps, mean frame ms.
+    pose                 old FULL_HD (B0)   old HD (B1)   now FULL_HD   now HD
+    P1 standing, 5 moods   14.1-15.6          9.7-10.8      11.5-12.2     10.3-11.3
+    P2 rotating            14.5-15.6          10.2-11.2     12.5          10.8
+    P3 walking             18.2-22.3          13.9-16.0     11.9          13.1
+    P4 muzzle flash        18.9-22.0          14.9-15.6     12.1          14.8
+  Floor/ceiling pass: CPU 3.15 -> 0.56 ms; GPU-attributed (probe sync) 6.20 -> 2.72 ms (old HD 2.72);
+  upload 2 MB/frame -> 0; draw calls ~10. Full HD now costs about 20% less than before and less than old HD
+  while moving and fighting; standing still it is still ~1 ms over old HD (1.5x wall + billboard columns, and
+  the full-screen view vignette, ~2.3 ms on this software GPU, is the same at both tiers).
 The phone check is the owner's: build with RenderConstants.PERF_PROBE_FORCE_ON = true and read the probe readout.
 
 
