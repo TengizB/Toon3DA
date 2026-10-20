@@ -15,11 +15,11 @@ public final class HudConstants {
     // =====================================================================
     public static final float HUD_HEIGHT                      = 206f;
     public static final float HUD_LEFT_PANEL_WIDTH            = 420f;
-    public static final float HUD_PANEL_INSET                 = 6f;
-    public static final float HUD_RIVET_RADIUS                = 2.5f;
     public static final float HUD_LED_RADIUS                  = 3f;
-    // Slightly more opaque than the old 0.82 so text reads cleanly over the busy 3D view.
-    public static final float HUD_PANEL_ALPHA                 = 0.88f;
+    /** Status LED centre, inset from the panel's top-right corner (inside the corner bracket). */
+    public static final float HUD_LED_INSET                   = 14f;
+    // The panel is a UiKit chamfered slab (visual-identity-order-4 R9); its opacity is the kit's HUD alpha.
+    public static final float HUD_PANEL_ALPHA                 = ArtDirection.UI_PANEL_ALPHA_HUD;
 
     // Vital row columns (panel-local X)
     public static final float HUD_ROW_LABEL_X                 = 14f;    // left-aligned 2-letter label
@@ -42,23 +42,41 @@ public final class HudConstants {
     // Weapon-slot strip — numbered slots with active highlight, below the XP row
     /** Damage-class glyph in each weapon slot's top row (balance-overhaul order 3, C3). */
     public static final float HUD_CLASS_GLYPH_SIZE            = 9f;
-    public static final float HUD_CLASS_GLYPH_LEFT_INSET      = 17f;    // right of the slot number
-    public static final float HUD_CLASS_GLYPH_TOP_INSET       = 3f;
+    public static final float HUD_CLASS_GLYPH_LEFT_INSET      = 24f;    // right of the slot number
+    public static final float HUD_CLASS_GLYPH_TOP_INSET       = 8f;
     public static final float HUD_CLASS_GLYPH_INACTIVE_ALPHA  = 0.65f;
     public static final float HUD_SLOT_STRIP_Y                = 42f;
     public static final float HUD_SLOT_STRIP_HEIGHT           = 38f;
     public static final float HUD_SLOT_SIDE_PADDING           = 14f;
     public static final float HUD_SLOT_GAP                    = 6f;
+    /** Slot plate fill alpha (UiKit plate; DISABLED halves it). */
+    public static final float HUD_SLOT_PLATE_ALPHA            = 0.92f;
+    /**
+     * Slot number position: inset from the slot's left edge and down from its top. With the class glyph and
+     * level-tag insets below, it clears the SELECTED plate's corner brackets (UiKit, visual-identity-order-4).
+     */
+    public static final float HUD_SLOT_NUMBER_INSET_X         = 12f;
+    public static final float HUD_SLOT_NUMBER_TOP_INSET       = 7.5f;
+    /** Slot name: text top above the slot's bottom, and the side inset it is truncated to (clear of the brackets). */
+    public static final float HUD_SLOT_NAME_TOP_Y             = 18f;
+    public static final float HUD_SLOT_NAME_SIDE_INSET        = 9f;
 
-    // Text scales — the pixel font at setScale(1) has the old 15px default font's cap height (GameFonts); we never shrink the hero numbers below ~0.9 so
-    // glyphs stay legible, and every glyph gets a dark drop-shadow for contrast.
-    public static final float HUD_LABEL_SCALE                 = 1.00f; // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
-    public static final float HUD_VALUE_SCALE                 = 1.05f;
-    public static final float HUD_HP_VALUE_SCALE              = 1.20f;
-    public static final float HUD_CLIP_VALUE_SCALE            = 0.90f;
-    public static final float HUD_SLOT_NUMBER_SCALE           = 0.80f;
-    public static final float HUD_SLOT_NAME_SCALE             = 0.78f;
-    public static final float HUD_TEXT_SHADOW_OFFSET          = 1.5f;
+    // Text scales — every HUD text draw uses a step of the type scale (visual-identity-order-4 R15; the
+    // pixel font at setScale(1) has the old default font's cap height). Every glyph is shadowed (UiKit.text).
+    public static final float HUD_LABEL_SCALE                 = ArtDirection.TYPE_CAPTION;
+    public static final float HUD_VALUE_SCALE                 = ArtDirection.TYPE_CAPTION;
+    public static final float HUD_HP_VALUE_SCALE              = ArtDirection.TYPE_BODY;
+    public static final float HUD_CLIP_VALUE_SCALE            = ArtDirection.TYPE_CAPTION;
+    public static final float HUD_SLOT_NUMBER_SCALE           = ArtDirection.TYPE_CAPTION;
+    public static final float HUD_SLOT_NAME_SCALE             = ArtDirection.TYPE_CAPTION;
+    /** Turns/stack count inside a status icon, and its inset from the icon's top-left corner. */
+    public static final float HUD_STATUS_COUNT_SCALE          = ArtDirection.TYPE_CAPTION;
+    public static final float HUD_STATUS_COUNT_INSET          = 2f;
+    /** Centre-gap ground weapon name and its pulsing "[ INSPECT ]" hint. */
+    public static final float HUD_GROUND_WEAPON_LABEL_SCALE   = ArtDirection.TYPE_CAPTION;
+    public static final float HUD_GROUND_WEAPON_HINT_SCALE    = ArtDirection.TYPE_CAPTION;
+    /** Centre-gap "LOW HP! TAP HEAL TO USE MEDKIT" reminder. */
+    public static final float HUD_MEDKIT_WARN_SCALE           = ArtDirection.TYPE_BODY;
 
     // HUD animation
     public static final float HUD_PULSE_HZ                    = 4f;
@@ -86,14 +104,14 @@ public final class HudConstants {
     // (top-left) and the bottom HUD chrome. World units, screen 1280x720, Y-up.
     public static final float HUD_CREDITS_RIGHT_INSET_X = 24f;    // gap from the right screen edge
     public static final float HUD_CREDITS_TOP_INSET_Y   = 28f;    // gap from the top screen edge to the text top
-    public static final float HUD_CREDITS_SCALE         = 1.40f;
+    public static final float HUD_CREDITS_SCALE         = ArtDirection.TYPE_LABEL;
 
     // Debuff text list — stacked lines beneath the credits readout, top-right corner.
     // Each active status effect draws as "NAME (turnsRemaining)  <detail>", counting down every turn,
     // where <detail> is the effect's concrete per-turn/per-hit potency (e.g. "-6 HP/TURN", "-25% DMG DEALT").
     public static final float HUD_DEBUFF_LIST_TOP_GAP   = 48f;    // gap below the credits text top for the first line
     public static final float HUD_DEBUFF_LIST_LINE_STEP = 34f;    // vertical spacing between stacked debuff lines
-    public static final float HUD_DEBUFF_LIST_SCALE     = 1.10f;
+    public static final float HUD_DEBUFF_LIST_SCALE     = ArtDirection.TYPE_CAPTION;
 
     // Legacy weapon inspect constants — kept for compilation; renderer will be replaced
     public static final float WEAPON_INSPECT_CARD_WIDTH      = 640f;
@@ -254,15 +272,15 @@ public final class HudConstants {
     // how far it trails the floor's THREAT LEVEL, plus a procedural up/down arrow glyph.
     // -------------------------------------------------------------------------
     public static final String HUD_LEVEL_TAG_PREFIX          = "LV ";
-    /** One step smaller than HUD_SLOT_NAME_SCALE. */
-    public static final float  HUD_LEVEL_TAG_SCALE           = 0.66f;
+    /** The type scale's smallest step, like the slot name (visual-identity-order-4 R15; was 0.66). */
+    public static final float  HUD_LEVEL_TAG_SCALE           = ArtDirection.TYPE_CAPTION;
     /** Levels 0..this have a pre-built label string; higher levels fall back to a concatenation. */
     public static final int    HUD_LEVEL_TAG_CACHE_MAX       = 99;
     /** Gap between the tag text and the arrow glyph, and the tag's inset from the slot's right edge. */
     public static final float  HUD_LEVEL_TAG_CHEVRON_GAP     = 3f;
-    public static final float  HUD_LEVEL_TAG_SLOT_INSET      = 4f;
+    public static final float  HUD_LEVEL_TAG_SLOT_INSET      = 12f;
     /** Baseline of the HUD tag, measured down from the top of the slot (mirrors the slot number). */
-    public static final float  HUD_LEVEL_TAG_TOP_INSET       = 3f;
+    public static final float  HUD_LEVEL_TAG_TOP_INSET       = 7.5f;
     /** Arrow glyph: 3 strokes (stem + two head strokes) in a 10 x 8 box. */
     public static final float  HUD_LEVEL_CHEVRON_WIDTH       = 10f;
     public static final float  HUD_LEVEL_CHEVRON_HEIGHT      = 8f;
@@ -371,20 +389,15 @@ public final class HudConstants {
     public static final String RELIC_REPORT_NONE   = "RELICS: none";
 
     // ---- FLOOR TWISTS (floor-twists) — HUD strings (the ELITE_STING_TEXT precedent, AS20) + the NAV OFFLINE plate ----
-    /** The twist amber (route palette hazardAmber) — arrival sting, HUNTED warning, the NAV OFFLINE text + frame. */
+    /** The twist amber (route palette hazardAmber) — arrival sting, HUNTED warning. */
     public static final float  TWIST_AMBER_RED   = 0.98f;
     public static final float  TWIST_AMBER_GREEN = 0.72f;
     public static final float  TWIST_AMBER_BLUE  = 0.16f;
-    /** R7a: the plate drawn in the mini-map's rectangle on a BLACKOUT floor (0x0A0A0C at the HUD panel alpha). */
-    public static final float  TWIST_NAV_OFFLINE_PLATE_RED   = 0x0A / 255f;
-    public static final float  TWIST_NAV_OFFLINE_PLATE_GREEN = 0x0A / 255f;
-    public static final float  TWIST_NAV_OFFLINE_PLATE_BLUE  = 0x0C / 255f;
+    /** R7a: the plate drawn in the mini-map's rectangle on a BLACKOUT floor — a UiKit panel at the HUD alpha. */
     public static final float  TWIST_NAV_OFFLINE_PLATE_ALPHA = HUD_PANEL_ALPHA;
-    /** R7a: the plate's amber frame thickness (world units). */
-    public static final float  TWIST_NAV_OFFLINE_FRAME_THICKNESS = 1f;
-    /** R7a: the plate's centred label and its glyph scale. */
+    /** R7a: the plate's centred label (FACILITY_CYAN_DIM, visual-identity-order-4 R8) and its type step. */
     public static final String TWIST_NAV_OFFLINE_TEXT        = "NAV OFFLINE";
-    public static final float  TWIST_NAV_OFFLINE_TEXT_SCALE  = 1.2f;
+    public static final float  TWIST_NAV_OFFLINE_TEXT_SCALE  = ArtDirection.TYPE_BODY;
     /** R9a: the HUNTED warning, TWIST_HUNTED_WARNING_TURNS before the arrival (amber event text). */
     public static final String TWIST_HUNTED_WARNING_TEXT = "SOMETHING IS ON THE STAIRS BEHIND YOU";
     /** R9a: the HUNTED arrival (red event text). */

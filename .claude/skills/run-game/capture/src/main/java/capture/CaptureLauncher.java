@@ -135,6 +135,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "set":
                     setOnWorld(step);
                     break;
+                case "equip":
+                    equipArsenalWeapon(Integer.parseInt(step[2]));
+                    break;
                 case "timestart":
                     timing = true;
                     frameNanosTotal = 0;
@@ -255,6 +258,31 @@ public class CaptureLauncher extends ApplicationAdapter {
             if (field.getType() == boolean.class) field.setBoolean(target, Boolean.parseBoolean(step[3]));
             else field.setInt(target, Integer.parseInt(step[3]));
             System.out.println("[capture] set " + String.join(":", step));
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code equip:INDEX} — puts arsenal weapon INDEX (World.inventory's arsenal: 0 shotgun, 1 double barrel,
+     * 2 plasma, 3 chaingun, ... on the start room) into the loadout and selects it, so a HUD shot can show a
+     * ranged weapon with ammo. A dev hook for reaching a screen, never game logic.
+     */
+    private void equipArsenalWeapon(int arsenalIndex) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field inventoryField = findField(world.getClass(), "inventory");
+            inventoryField.setAccessible(true);
+            Object inventory = inventoryField.get(world);
+            Object weapon = ((java.util.List<?>) inventory.getClass().getMethod("getArsenal").invoke(inventory))
+                    .get(arsenalIndex);
+            Object loadout = inventory.getClass().getMethod("getLoadout").invoke(inventory);
+            Class<?> weaponType = Class.forName("ge.tbegvadze.toon3d.entity.Weapon");
+            loadout.getClass().getMethod("tryEquip", weaponType).invoke(loadout, weapon);
+            inventory.getClass().getMethod("selectLoadoutWeapon", weaponType).invoke(inventory, weapon);
+            System.out.println("[capture] equipped arsenal weapon " + arsenalIndex);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

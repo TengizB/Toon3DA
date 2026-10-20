@@ -199,6 +199,8 @@ public final class ArtDirection {
     public static final float UI_BORDER_THICKNESS = 2f;
     /** Corner bracket arm length: short enough to read as a frame, not a box. */
     public static final float UI_BRACKET_LENGTH = 14f;
+    /** Bracket arm on a plate too small for UI_BRACKET_LENGTH beside its text (the HUD's weapon slots). */
+    public static final float UI_BRACKET_LENGTH_COMPACT = 7f;
     public static final float UI_BRACKET_THICKNESS = 3f;
     public static final float UI_BRACKET_INSET = 4f;
     public static final float UI_METER_GAP = 2f;

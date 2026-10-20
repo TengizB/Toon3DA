@@ -119,8 +119,14 @@ public final class UiKit {
     /** R2: four L-shaped corner marks, arms UI_BRACKET_LENGTH, UI_BRACKET_THICKNESS thick, inset UI_BRACKET_INSET. */
     public static void brackets(ShapeRenderer shapes, float x, float y, float width, float height,
                                 float inkRed, float inkGreen, float inkBlue, float alpha) {
+        brackets(shapes, x, y, width, height, ArtDirection.UI_BRACKET_LENGTH, inkRed, inkGreen, inkBlue, alpha);
+    }
+
+    /** R2 with a caller-chosen arm length, for plates too small for UI_BRACKET_LENGTH (UI_BRACKET_LENGTH_COMPACT). */
+    public static void brackets(ShapeRenderer shapes, float x, float y, float width, float height, float armLength,
+                                float inkRed, float inkGreen, float inkBlue, float alpha) {
         float inset = ArtDirection.UI_BRACKET_INSET;
-        float arm = Math.min(ArtDirection.UI_BRACKET_LENGTH, Math.min(width, height) * 0.5f - inset);
+        float arm = Math.min(armLength, Math.min(width, height) * 0.5f - inset);
         float thickness = ArtDirection.UI_BRACKET_THICKNESS;
         if (arm <= thickness) return;
         float left = x + inset, bottom = y + inset;
@@ -154,6 +160,17 @@ public final class UiKit {
     /** R3 with a caller-chosen chamfer, for plates too small for UI_PLATE_CHAMFER (e.g. the HUD's weapon slots). */
     public static void plate(ShapeRenderer shapes, float x, float y, float width, float height, float chamfer,
                              PlateState state, float fillAlpha, float inkRed, float inkGreen, float inkBlue) {
+        plate(shapes, x, y, width, height, chamfer, ArtDirection.UI_BRACKET_LENGTH, state, fillAlpha,
+                inkRed, inkGreen, inkBlue);
+    }
+
+    /**
+     * R3 with a caller-chosen chamfer and bracket arm, for plates too small for UI_PLATE_CHAMFER and
+     * UI_BRACKET_LENGTH (the HUD's 38-unit weapon slots).
+     */
+    public static void plate(ShapeRenderer shapes, float x, float y, float width, float height, float chamfer,
+                             float bracketLength, PlateState state, float fillAlpha,
+                             float inkRed, float inkGreen, float inkBlue) {
         boolean ink = state.usesInkBorder();
         panel(shapes, x, y, width, height, chamfer,
                 state.fillRed(), state.fillGreen(), state.fillBlue(), fillAlpha * state.fillAlphaScale(),
@@ -162,7 +179,7 @@ public final class UiKit {
                 ink ? inkBlue : ArtDirection.UI_LINE_BLUE,
                 state.borderAlpha(), ArtDirection.UI_BORDER_THICKNESS);
         if (state.drawsInkBrackets()) {
-            brackets(shapes, x, y, width, height, inkRed, inkGreen, inkBlue, 1f);
+            brackets(shapes, x, y, width, height, bracketLength, inkRed, inkGreen, inkBlue, 1f);
         }
     }
 

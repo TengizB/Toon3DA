@@ -41,7 +41,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — UiKit + PlateState + ArtDirection R7 constants (deliberately unused).
       DONE WHEN: they exist, nothing reads them yet, build green.
-- [ ] **CP2** — HudRenderer restyled (R9 + R15). DONE WHEN: A2 (HUD), A3 (HUD), A9 seen on run; build green.
+- [x] **CP2** — HudRenderer restyled (R9 + R15). DONE WHEN: A2 (HUD), A3 (HUD), A9 seen on run; build green.
 - [ ] **CP3** — TouchControllerRenderer restyled (R10), constant renamed. DONE WHEN: A4 incl. tap spot-check; build green.
 - [ ] **CP4** — LevelRenderer (R11) + BossHudRenderer (R12). DONE WHEN: A5 seen on run; build green.
 - [ ] **CP5** — EventText (R13) + ImpactEffect damage numbers (R14), docs. DONE WHEN: A6, A7, A8 hold; build + test
@@ -58,3 +58,15 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   colours, so it cannot be shadow-tinted), `GameMath.insetChamfer`, `ArtDirection.UI_DIVIDER_*`,
   `UI_PLATE_DISABLED_ALPHA_SCALE`, `BOSS_HEALTH_SEGMENTS` (in ArtDirection). Shadow offset scales by
   `capHeight / PIXEL_FONT_TARGET_CAP_HEIGHT` (getScaleX includes GameFonts' base scale).
+- **CP2:** the HUD is the LEFT panel only (x 0..420, y 0..206): there is no right panel and no face box in
+  `hud/HudRenderer` (CLAUDE.md's HUD Layout section is stale), so R9's right-panel / face-box items have nothing
+  to restyle — record in the IMPLEMENTATION NOTE. `HUD_PANEL_ALPHA` was 0.88 in code (not 0.82): it now references
+  `UI_PANEL_ALPHA_HUD` 0.82 per R7 (slightly more see-through). No low-ammo threshold exists, so ammo digits are
+  primary until empty (DAMAGE). Weapon slots (38 tall) cannot hold UI_PLATE_CHAMFER + 14-unit brackets beside two
+  TYPE_CAPTION lines: they use `UiKit.plate(..., UI_CHAMFER, UI_BRACKET_LENGTH_COMPACT 7, ...)` and the slot text
+  insets moved inward (HUD_SLOT_NUMBER_*, HUD_SLOT_NAME_*, HUD_CLASS_GLYPH_*, HUD_LEVEL_TAG_* insets). All HUD
+  scales are TYPE_* now (HUD_LEVEL_TAG_SCALE .66 -> CAPTION, credits LABEL, HP value BODY, ...). Rivets and bevel
+  lines are gone; the alert LED is SUIT_AMBER at rest. Capture driver gained `equip:INDEX` (SKILL.md documents
+  it). Seen on run: HUD full HP + low HP (pulsing DAMAGE value), plasma equipped (4/4 [0]), NAV OFFLINE plate
+  (via `set:minimapOffline:true` + `set:hudRenderer.navOffline:true`, not a real BLACKOUT floor). NOT seen: dead
+  state, status icons/debuff list, ground-weapon label, medkit warning.
