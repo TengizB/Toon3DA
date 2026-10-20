@@ -29,7 +29,13 @@ public final class SurfaceMaterialTextures implements Disposable {
     private final Texture[] levelTextures = new Texture[SURFACE_MATERIAL_MIP_LEVELS];
     private final Pixmap[]  levelPixmaps  = new Pixmap[SURFACE_MATERIAL_MIP_LEVELS];
 
-    public SurfaceMaterialTextures(String materialId) {
+    /**
+     * @param channelScales per-channel bake scales (red, green, blue), each >= 1, from
+     *        {@code GameMath.materialChannelBakeScale}; every texel channel is multiplied by its scale before upload,
+     *        so a vertex colour of factor / scale reproduces a factor above 1 without an additive pass. The caller
+     *        only passes a scale that keeps every texel within 255 ({@link #maximumChannel}).
+     */
+    public SurfaceMaterialTextures(String materialId, float[] channelScales) {
         for (int mipLevel = 0; mipLevel < SURFACE_MATERIAL_MIP_LEVELS; mipLevel++) {
             int[] texelsPacked = SurfaceMaterials.registry().getPixels(materialId, mipLevel);
             int edge = SURFACE_MATERIAL_SIZE >> mipLevel;
@@ -37,7 +43,9 @@ public final class SurfaceMaterialTextures implements Disposable {
             // RGBA8888 bytes; a big-endian int view writes 0xRRGGBBAA as R, G, B, A (the old backdrop upload).
             IntBuffer pixelBuffer = pixmap.getPixels().asIntBuffer();
             pixelBuffer.position(0);
-            pixelBuffer.put(texelsPacked, 0, edge * edge);
+            for (int texelIndex = 0; texelIndex < edge * edge; texelIndex++) {
+                pixelBuffer.put(bake(texelsPacked[texelIndex], channelScales));
+            }
             pixelBuffer.position(0);
             Texture texture = new Texture(new PixmapTextureData(pixmap, null, false, false, true));
             texture.setWrap(Texture.TextureWrap.Repeat, Texture.TextureWrap.Repeat);
@@ -45,6 +53,26 @@ public final class SurfaceMaterialTextures implements Disposable {
             levelPixmaps[mipLevel]  = pixmap;
             levelTextures[mipLevel] = texture;
         }
+    }
+
+    private static int bake(int packed, float[] channelScales) {
+        int red   = Math.min(255, Math.round(((packed >>> 24) & 0xFF) * channelScales[0]));
+        int green = Math.min(255, Math.round(((packed >>> 16) & 0xFF) * channelScales[1]));
+        int blue  = Math.min(255, Math.round(((packed >>> 8)  & 0xFF) * channelScales[2]));
+        return (red << 24) | (green << 16) | (blue << 8) | (packed & 0xFF);
+    }
+
+    /**
+     * The brightest value of one channel (0 = red, 1 = green, 2 = blue) over the material's level-0 texels (the
+     * box-filtered levels can only be darker or equal), for the bake-scale check.
+     */
+    public static int maximumChannel(String materialId, int channel) {
+        int shift = 24 - 8 * channel;
+        int maximum = 0;
+        for (int packed : SurfaceMaterials.registry().getPixels(materialId, 0)) {
+            maximum = Math.max(maximum, (packed >>> shift) & 0xFF);
+        }
+        return maximum;
     }
 
     /** The Texture of a mip level (0 = 64x64 ... SURFACE_MATERIAL_MIP_LEVELS - 1). */

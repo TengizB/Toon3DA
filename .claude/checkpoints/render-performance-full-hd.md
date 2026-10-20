@@ -54,7 +54,8 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
       DONE WHEN: GameMath holds the span-walk, span-factor, base/excess-split and UV-rebase methods (comment
       blocks), FloorCeilingRenderer builds + disposes the 4-level Repeat/Nearest material Textures per floor (not
       yet drawn); build green; the game looks exactly like B0.
-- [ ] **CP4** — the span floor/ceiling.
+- [x] **CP4a** — GPU floor/ceiling in place (compiles, renders, 0 upload, no pool); criteria checks open → CP4b.
+- [ ] **CP4** — the span floor/ceiling (CP4b: the A-criteria evidence).
       DONE WHEN: floor + ceiling drawn as spans (R1-R9); backbuffer/Pixmap/backdrop Texture/upload/thread pool
       gone; RenderResolution carries only the row count; A2, A3, A4, A7, A9, A10, A11, A12, A14 hold (numbers
       recorded here); build green.
@@ -149,3 +150,25 @@ light)`, `colourFactorBase(f)`, `colourFactorExcessLayer(f, layer)`, `floorSpanU
 context-loss reload, freed in dispose), Repeat/Nearest, `getLevel(mip)`. FloorCeilingRenderer builds floor + ceiling
 sets and disposes them, not drawn yet (deliberate temporary state, CP4 draws them). Verified: mirror compile green;
 P1 cool_steel floor strip vs B0 reference max per-channel diff 0.
+
+**CP4a (closed, PLAN DEVIATION).** The R1-R3 row spans were built first (draft kept at
+`/tmp/claude-0/scripts/FCR.span.java`) and MEASURED: floor CPU 3.15 -> 1.2 ms, upload 0, but floor sync 6.2 -> 10.3 ms
+and capture frame 14.8 -> 19.0 ms (worse than B0). Cause, isolated by experiment: (1) 202/270 rows needed the R6
+additive pass (cool_steel far tint up to 1.128 on G/B); without it floor sync 7.2 ms; (2) llvmpipe is
+triangle/binning-bound on ~2,500 one-pixel-tall full-width quads: same pixels at 1/4 the rows -> 3.6 ms, 1/16 -> 2.7.
+So the geometry changed, the look rules did not:
+- NEAR region (depth <= 15-tile clamp): ONE QUAD PER TILE drawn as a perspective PLANE through SpriteBatch's
+  DEFAULT shader — `GameMath.floorPlaneClipMatrix` (projective u_projTrans, w = depth, GPU clips at near 0.05 and at
+  the clamp 15). UVs are each tile's own 0..1 (no large coordinates; R3 moot here). Colour = the same R5/R7 factor at
+  each tile corner (lattice of corners: depth -> floorShade, AtmosphereGrade tint, muzzle falloff), interpolated
+  perspective-correctly (linear in world). Material level = row table at the tile's centre depth (`floorRowAtDepth`).
+- FAR band (rows at/past the clamp, all one distance in the CPU caster): ONE span strip (the R2 walk) from
+  `bandStartRow - FLOOR_BAND_OVERLAP_ROWS`, drawn first; tiles cover the overlap → no seam.
+- Tint > 1: baked into the per-floor material textures per channel (`materialChannelBakeScale`, only when the
+  brightest texel stays <= 255), colours divided by the scale; leftover excess + muzzle light → additive layers.
+- Measured (cool_steel P1, sync): floor 2.78 ms (B0 6.20, B1 2.72), frame 13.89 (B0 18.50, B1 13.75), floor draw
+  calls 10, upload 0. Visual P1 cool_steel side by side with B0: indistinguishable at a glance; A10 clear pixels 0.
+- `RenderResolution.getFloorCeilingRowCount()` (HD 180 / FULL_HD 540) replaced the backdrop width/height/divisor;
+  `FLOOR_BACKDROP_SCALE_DIVISOR(_FULL_HD)` deleted; `applyRgbShade(AndLight)ToPackedRGBA` deleted (unused).
+NEXT (CP4b): A9 PIL means vs B0 (5 moods), A10 on P1×5 + P2×4, A11/A12 crops + P4 splash, A14 HD captures, A2/A3/A4/A7.
+Quality capture runs: `/tmp/claude-0/after/C4F-<mood>-r1` (FULL_HD) and `C4H-` (HD); checks `scripts/quality.py`.
