@@ -368,14 +368,8 @@ public final class HudConstants {
     /** LEGENDARY glow pulse: period in seconds and the alpha swing around RELIC_OFFER_GLOW_ALPHA. */
     public static final float  RELIC_OFFER_LEGENDARY_PULSE_SECONDS = 1.5f;
     public static final float  RELIC_OFFER_LEGENDARY_PULSE_SWING   = 0.18f;
-    public static final float  RELIC_OFFER_BORDER_THICKNESS      = 3f;
     public static final float  RELIC_OFFER_HEADER_HEIGHT         = 62f;
     public static final float  RELIC_OFFER_TEXT_PAD              = 24f;
-    public static final float  RELIC_OFFER_SHADOW_OFFSET         = 2.5f;
-    /** Depth of the CURSED inner vignette (inset band, in steps) and its colour alpha at the outermost step. */
-    public static final int    RELIC_OFFER_VIGNETTE_STEPS        = 5;
-    public static final float  RELIC_OFFER_VIGNETTE_STEP_SIZE    = 6f;
-    public static final float  RELIC_OFFER_VIGNETTE_ALPHA        = 0.30f;
     // Offsets measured DOWN from the card top (text baselines) / UP from the card bottom.
     public static final float  RELIC_OFFER_BADGE_ROW_DROP        = 94f;   // chip bottom below the card top (rarity label + trigger badge row)
     public static final float  RELIC_OFFER_BADGE_HEIGHT          = 24f;
@@ -385,16 +379,13 @@ public final class HudConstants {
     public static final float  RELIC_OFFER_COST_RISE             = 100f;  // cost text top, above the card bottom
     public static final float  RELIC_OFFER_TAG_CHIP_RISE         = 14f;   // affinity chip bottom above the card bottom
     public static final float  RELIC_OFFER_TAG_CHIP_HEIGHT       = 26f;
-    public static final float  RELIC_OFFER_SCALE_TITLE           = 2.2f;
-    public static final float  RELIC_OFFER_SCALE_NAME            = 1.7f;
-    public static final float  RELIC_OFFER_SCALE_BADGE           = 1.05f;
-    public static final float  RELIC_OFFER_SCALE_EFFECT          = 1.4f;
-    public static final float  RELIC_OFFER_SCALE_LEAVE           = 1.6f;
-    /** Dim steel LEAVE IT plate and its text. */
-    public static final float  RELIC_OFFER_LEAVE_R = ArtDirection.UI_PANEL_RED, RELIC_OFFER_LEAVE_G = ArtDirection.UI_PANEL_GREEN,
-            RELIC_OFFER_LEAVE_B = ArtDirection.UI_PANEL_BLUE;
-    public static final float  RELIC_OFFER_LEAVE_TEXT_R = ArtDirection.UI_TEXT_PRIMARY_RED,
-            RELIC_OFFER_LEAVE_TEXT_G = ArtDirection.UI_TEXT_PRIMARY_GREEN, RELIC_OFFER_LEAVE_TEXT_B = ArtDirection.UI_TEXT_PRIMARY_BLUE;
+    public static final float  RELIC_OFFER_SCALE_NAME            = ArtDirection.TYPE_LABEL;
+    public static final float  RELIC_OFFER_SCALE_BADGE           = ArtDirection.TYPE_CAPTION;
+    public static final float  RELIC_OFFER_SCALE_EFFECT          = ArtDirection.TYPE_BODY;
+    public static final float  RELIC_OFFER_SCALE_LEAVE           = ArtDirection.TYPE_LABEL;
+    /** LEAVE IT label ink (the plate itself is a UiKit IDLE plate, visual-identity-order-5 R8). */
+    public static final float  RELIC_OFFER_LEAVE_TEXT_R = ArtDirection.UI_TEXT_SECONDARY_RED,
+            RELIC_OFFER_LEAVE_TEXT_G = ArtDirection.UI_TEXT_SECONDARY_GREEN, RELIC_OFFER_LEAVE_TEXT_B = ArtDirection.UI_TEXT_SECONDARY_BLUE;
 
     // --- BUILD page RELICS section (render/BuildPagePanel) ---
     public static final String RELIC_BUILD_HEADER_PREFIX = "RELICS (";

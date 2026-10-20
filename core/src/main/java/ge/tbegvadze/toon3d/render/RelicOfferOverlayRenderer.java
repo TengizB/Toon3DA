@@ -15,6 +15,7 @@ import ge.tbegvadze.toon3d.relic.RelicDefinition;
 import ge.tbegvadze.toon3d.relic.RelicOffer;
 import ge.tbegvadze.toon3d.relic.RelicRarity;
 import ge.tbegvadze.toon3d.relic.RelicSource;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -22,12 +23,13 @@ import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.ProgressionConstants;
 
 /**
- * The RELIC_OFFER card screen (relics-run-changing-artifacts R14/R15, VISUAL DESIGN). Same card pipeline as
- * {@code LevelUpOverlayRenderer}: scrim, soft glow, drop shadow, gradient body, rarity header strip carrying the
- * NAME, border, drop-shadowed Linear-filtered text. Each card also carries a rarity label (top-left), a trigger
- * badge chip (top-right), the word-wrapped effect line, for CURSED a divider + red cost line, and for an affine
- * relic its {@link BuildTag} chip in {@link BuildTagPalette}'s colour. LEGENDARY glows with a slow pulse and
- * CURSED wears a dark-red inner vignette; both run off the {@code openSeconds} World passes in (cosmetic only).
+ * The RELIC_OFFER card screen (relics-run-changing-artifacts R14/R15). Visual identity order 5: the same suit
+ * screen as the level-up offer - UI_INK_BLACK scrim, the R1 screen header (HEAVY title + amber-ticked rule), and
+ * one UiKit CARD per relic whose frame takes the RARITY colour (R2: the only place it appears in chrome) over a
+ * soft rarity glow (R8). Inside: the NAME (HEAVY) over a plain rule, the rarity label (top-left) and an outline
+ * trigger badge chip (top-right), the word-wrapped effect line, for a cost a rule + the DAMAGE-red cost line, and
+ * for an affine relic its {@link BuildTag} chip in {@link BuildTagPalette}'s colour. LEGENDARY's glow pulses off
+ * the {@code openSeconds} World passes in (cosmetic only). LEAVE IT is a quiet IDLE plate.
  *
  * <h2>No allocation in render()</h2>
  * Every text layout (names, rarity labels, trigger badges, wrapped effect and cost lines, tag chips, both titles,
@@ -53,34 +55,26 @@ public final class RelicOfferOverlayRenderer implements Disposable {
     private static final float LEAVE_X     = (Constants.WORLD_WIDTH - HudConstants.RELIC_OFFER_LEAVE_WIDTH) / 2f;
     private static final float PULSE_HERTZ = 1f / HudConstants.RELIC_OFFER_LEGENDARY_PULSE_SECONDS;
 
-    private static final Color SCRIM        = new Color(0.02f, 0.02f, 0.04f, HudConstants.RELIC_OFFER_SCRIM_ALPHA);
-    private static final Color CARD_SHADOW  = new Color(0f, 0f, 0f, 0.50f);
-    private static final Color TEXT_SHADOW  = new Color(0f, 0f, 0f, 0.72f);
-    private static final Color WHITE        = new Color(0.97f, 0.97f, 0.98f, 1f);
-    private static final Color GOLD         = new Color(1.00f, 0.88f, 0.20f, 1f);
-    private static final Color INNER_EDGE   = new Color(1f, 1f, 1f, 0.16f);
-    private static final Color DIVIDER      = new Color(1f, 1f, 1f, 0.20f);
+    private static final Color PRIMARY      = new Color(ArtDirection.UI_TEXT_PRIMARY_RED,
+            ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+    private static final Color SECONDARY    = new Color(ArtDirection.UI_TEXT_SECONDARY_RED,
+            ArtDirection.UI_TEXT_SECONDARY_GREEN, ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
     private static final Color COST_RED     = new Color(HudConstants.RELIC_COST_TEXT_COLOR_R,
             HudConstants.RELIC_COST_TEXT_COLOR_G, HudConstants.RELIC_COST_TEXT_COLOR_B, 1f);
     private static final Color CHIP_TEXT    = new Color(ProgressionConstants.BUILD_CHIP_TEXT_RED,
             ProgressionConstants.BUILD_CHIP_TEXT_GREEN, ProgressionConstants.BUILD_CHIP_TEXT_BLUE, 1f);
-    private static final Color LEAVE_FILL   = new Color(HudConstants.RELIC_OFFER_LEAVE_R,
-            HudConstants.RELIC_OFFER_LEAVE_G, HudConstants.RELIC_OFFER_LEAVE_B, 1f);
     private static final Color LEAVE_TEXT   = new Color(HudConstants.RELIC_OFFER_LEAVE_TEXT_R,
             HudConstants.RELIC_OFFER_LEAVE_TEXT_G, HudConstants.RELIC_OFFER_LEAVE_TEXT_B, 1f);
 
-    // Per-rarity colours, indexed by RelicRarity ordinal (HudConstants arrays; never a switch).
+    // Per-rarity frame / glow ink, indexed by RelicRarity ordinal (HudConstants arrays; never a switch).
     private final Color[] rarityAccent      = new Color[RARITY_COUNT];
-    private final Color[] rarityBodyTop     = new Color[RARITY_COUNT];
-    private final Color[] rarityBodyBottom  = new Color[RARITY_COUNT];
-    private final Color[] rarityStripTop    = new Color[RARITY_COUNT];
-    private final Color[] rarityStripBottom = new Color[RARITY_COUNT];
     private final Color   glowColor         = new Color();
-    private final Color   vignetteColor     = new Color();
 
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** The HEAVY face: the screen title (R1) and the relic names. Name layouts are built AND drawn with it. */
+    private final BitmapFont    headingFont;
 
     // ---- Cache of the offer these layouts were built for (identity compare, allocation-free) ----
     private RelicSource cachedSource = null;
@@ -89,25 +83,17 @@ public final class RelicOfferOverlayRenderer implements Disposable {
 
     // ---- Pre-built text, one slot per card ----
     private final GlyphLayout[] nameLayouts    = newLayouts(MAX_CARDS);
-    private final GlyphLayout[] nameShadows    = newLayouts(MAX_CARDS);
     private final GlyphLayout[] rarityLayouts  = newLayouts(MAX_CARDS);
     private final GlyphLayout[] badgeLayouts   = newLayouts(MAX_CARDS);
     private final GlyphLayout[] effectLayouts  = newLayouts(MAX_CARDS);
-    private final GlyphLayout[] effectShadows  = newLayouts(MAX_CARDS);
     private final GlyphLayout[] costLayouts    = newLayouts(MAX_CARDS);
-    private final GlyphLayout[] costShadows    = newLayouts(MAX_CARDS);
     private final GlyphLayout[] tagLayouts     = newLayouts(MAX_CARDS);
     private final boolean[]     hasCost        = new boolean[MAX_CARDS];
     private final boolean[]     hasTag         = new boolean[MAX_CARDS];
     private final int[]         rarityOrdinal  = new int[MAX_CARDS];
-    private final boolean[]     cardCursed     = new boolean[MAX_CARDS];
     private final boolean[]     cardPulses     = new boolean[MAX_CARDS];
     private final Color[]       tagColors      = new Color[MAX_CARDS];
 
-    private final GlyphLayout titleLayout            = new GlyphLayout();
-    private final GlyphLayout titleShadow            = new GlyphLayout();
-    private final GlyphLayout quarantineTitleLayout  = new GlyphLayout();
-    private final GlyphLayout quarantineTitleShadow  = new GlyphLayout();
     private final GlyphLayout leaveLayout            = new GlyphLayout();
     private boolean quarantineTitle = false;
 
@@ -116,26 +102,18 @@ public final class RelicOfferOverlayRenderer implements Disposable {
         batch  = new SpriteBatch();
         font   = GameFonts.newFont(FontFace.REGULAR);
         font.setUseIntegerPositions(false);
+        headingFont = GameFonts.newFont(FontFace.HEAVY);
+        headingFont.setUseIntegerPositions(false);
 
         for (int rarityIndex = 0; rarityIndex < RARITY_COUNT; rarityIndex++) {
-            Color accent = new Color(HudConstants.RELIC_RARITY_COLOR_R[rarityIndex],
+            rarityAccent[rarityIndex] = new Color(HudConstants.RELIC_RARITY_COLOR_R[rarityIndex],
                     HudConstants.RELIC_RARITY_COLOR_G[rarityIndex], HudConstants.RELIC_RARITY_COLOR_B[rarityIndex], 1f);
-            rarityAccent[rarityIndex]      = accent;
-            rarityBodyTop[rarityIndex]     = new Color(accent.r * 0.20f, accent.g * 0.20f, accent.b * 0.20f, 0.98f);
-            rarityBodyBottom[rarityIndex]  = new Color(accent.r * 0.07f, accent.g * 0.07f, accent.b * 0.07f, 0.98f);
-            rarityStripTop[rarityIndex]    = new Color(accent.r * 0.92f, accent.g * 0.92f, accent.b * 0.92f, 1f);
-            rarityStripBottom[rarityIndex] = new Color(accent.r * 0.57f, accent.g * 0.57f, accent.b * 0.57f, 1f);
         }
 
-        // Fixed texts: built once, here.
-        font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_TITLE);
-        titleLayout.setText(font, HudConstants.RELIC_OFFER_TITLE_TEXT, GOLD, 0f, Align.left, false);
-        titleShadow.setText(font, HudConstants.RELIC_OFFER_TITLE_TEXT, TEXT_SHADOW, 0f, Align.left, false);
-        quarantineTitleLayout.setText(font, HudConstants.RELIC_OFFER_TITLE_QUARANTINE_TEXT, COST_RED, 0f, Align.left, false);
-        quarantineTitleShadow.setText(font, HudConstants.RELIC_OFFER_TITLE_QUARANTINE_TEXT, TEXT_SHADOW, 0f, Align.left, false);
+        // Fixed text: built once, here.
         font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_LEAVE);
         leaveLayout.setText(font, HudConstants.RELIC_OFFER_LEAVE_TEXT, LEAVE_TEXT, 0f, Align.left, false);
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
     }
 
     private static GlyphLayout[] newLayouts(int count) {
@@ -193,27 +171,23 @@ public final class RelicOfferOverlayRenderer implements Disposable {
             RelicDefinition relic = offer.cards[cardIndex];
             cachedCards[cardIndex] = relic;
             RelicRarity rarity = relic.rarity();
-            int ordinal = rarity.ordinal();
-            rarityOrdinal[cardIndex] = ordinal;
-            cardCursed[cardIndex]    = rarity.isCursed();
+            rarityOrdinal[cardIndex] = rarity.ordinal();
             cardPulses[cardIndex]    = rarity.glowPulses();
 
-            font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_NAME);
-            nameLayouts[cardIndex].setText(font, relic.name(), WHITE, 0f, Align.left, false);
-            nameShadows[cardIndex].setText(font, relic.name(), TEXT_SHADOW, 0f, Align.left, false);
+            headingFont.getData().setScale(HudConstants.RELIC_OFFER_SCALE_NAME);
+            nameLayouts[cardIndex].setText(headingFont, relic.name(), PRIMARY, 0f, Align.left, false);
 
+            // The rarity reads as a WORD here; its colour lives in the card's frame only (R2 / D2).
             font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_BADGE);
-            rarityLayouts[cardIndex].setText(font, rarity.label(), rarityAccent[ordinal], 0f, Align.left, false);
-            badgeLayouts[cardIndex].setText(font, relic.trigger().badgeLabel(), CHIP_TEXT, 0f, Align.left, false);
+            rarityLayouts[cardIndex].setText(font, rarity.label(), SECONDARY, 0f, Align.left, false);
+            badgeLayouts[cardIndex].setText(font, relic.trigger().badgeLabel(), PRIMARY, 0f, Align.left, false);
 
             font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_EFFECT);
-            effectLayouts[cardIndex].setText(font, relic.effectText(), WHITE, textWidth, Align.left, true);
-            effectShadows[cardIndex].setText(font, relic.effectText(), TEXT_SHADOW, textWidth, Align.left, true);
+            effectLayouts[cardIndex].setText(font, relic.effectText(), PRIMARY, textWidth, Align.left, true);
             String cost = relic.costText();
             hasCost[cardIndex] = cost != null && !cost.isEmpty();
             if (hasCost[cardIndex]) {
                 costLayouts[cardIndex].setText(font, cost, COST_RED, textWidth, Align.left, true);
-                costShadows[cardIndex].setText(font, cost, TEXT_SHADOW, textWidth, Align.left, true);
             }
 
             BuildTag affinity = relic.affinity();
@@ -224,7 +198,8 @@ public final class RelicOfferOverlayRenderer implements Disposable {
                 tagColors[cardIndex] = BuildTagPalette.colorOf(affinity);
             }
         }
-        font.getData().setScale(1f);
+        headingFont.getData().setScale(ArtDirection.TYPE_CAPTION);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
     }
 
     // -------------------------------------------------------------------------
@@ -242,6 +217,7 @@ public final class RelicOfferOverlayRenderer implements Disposable {
         shapes.setProjectionMatrix(camera.combined);
         batch.setProjectionMatrix(camera.combined);
         float leftX = rowLeftX(offer.count);
+        float rowWidth = offer.count * CARD_WIDTH + (offer.count - 1) * CARD_GAP;
         float pulse = GameMath.pulseMultiplier(openSeconds, PULSE_HERTZ,
                 HudConstants.RELIC_OFFER_GLOW_ALPHA - HudConstants.RELIC_OFFER_LEGENDARY_PULSE_SWING,
                 HudConstants.RELIC_OFFER_GLOW_ALPHA + HudConstants.RELIC_OFFER_LEGENDARY_PULSE_SWING);
@@ -249,96 +225,75 @@ public final class RelicOfferOverlayRenderer implements Disposable {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
-        // ---- Pass A: filled shapes ----
+        // ---- one Filled pass ----
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(SCRIM);
+        shapes.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                ArtDirection.UI_INK_BLACK_BLUE, HudConstants.RELIC_OFFER_SCRIM_ALPHA);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
+        UiKit.screenHeaderRule(shapes, leftX, UiKit.screenHeaderRuleY(HudConstants.RELIC_OFFER_TITLE_Y), rowWidth, 1f);
+
+        float stripY = CARD_TOP_Y - HudConstants.RELIC_OFFER_HEADER_HEIGHT;
         for (int cardIndex = 0; cardIndex < offer.count; cardIndex++) {
-            int ordinal = rarityOrdinal[cardIndex];
+            Color accent = rarityAccent[rarityOrdinal[cardIndex]];
             float cardX = leftX + cardIndex * (CARD_WIDTH + CARD_GAP);
-            Color accent = rarityAccent[ordinal];
             float glowInset = HudConstants.RELIC_OFFER_GLOW_INSET;
 
+            // R8: the rarity glow keeps its colour and its LEGENDARY pulse; it is chamfered like the card.
             glowColor.set(accent.r, accent.g, accent.b, cardPulses[cardIndex] ? pulse : HudConstants.RELIC_OFFER_GLOW_ALPHA);
             shapes.setColor(glowColor);
-            shapes.rect(cardX - glowInset, CARD_Y - glowInset, CARD_WIDTH + glowInset * 2f, CARD_HEIGHT + glowInset * 2f);
+            UiKit.fillOctagon(shapes, cardX - glowInset, CARD_Y - glowInset, CARD_WIDTH + glowInset * 2f,
+                    CARD_HEIGHT + glowInset * 2f, ArtDirection.UI_PLATE_CHAMFER + glowInset);
 
-            shapes.setColor(CARD_SHADOW);
-            shapes.rect(cardX + 7f, CARD_Y - 7f, CARD_WIDTH, CARD_HEIGHT);
+            // R2: the card's frame is the rarity colour (the only place it appears in chrome).
+            UiKit.card(shapes, cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT, accent.r, accent.g, accent.b, PlateState.IDLE);
+            drawPlainRule(cardX + HudConstants.RELIC_OFFER_TEXT_PAD, stripY,
+                    CARD_WIDTH - HudConstants.RELIC_OFFER_TEXT_PAD * 2f);
 
-            Color bodyTop = rarityBodyTop[ordinal];
-            Color bodyBottom = rarityBodyBottom[ordinal];
-            shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT, bodyBottom, bodyBottom, bodyTop, bodyTop);
-
-            float stripY = CARD_TOP_Y - HudConstants.RELIC_OFFER_HEADER_HEIGHT;
-            Color stripTop = rarityStripTop[ordinal];
-            Color stripBottom = rarityStripBottom[ordinal];
-            shapes.rect(cardX, stripY, CARD_WIDTH, HudConstants.RELIC_OFFER_HEADER_HEIGHT,
-                    stripBottom, stripBottom, stripTop, stripTop);
-
-            // CURSED: dark-red vignette, a few concentric bands whose alpha fades toward the middle.
-            if (cardCursed[cardIndex]) drawVignette(cardX, stripY);
-
-            // Trigger badge chip, top-right of the badge row (rounded: rect + end caps).
+            // Trigger badge: an outline chip, top-right of the badge row.
             float badgeWidth = badgeLayouts[cardIndex].width + HudConstants.RELIC_OFFER_BADGE_PAD * 2f;
             float badgeLeft = cardX + CARD_WIDTH - HudConstants.RELIC_OFFER_TEXT_PAD - badgeWidth;
             float badgeBottom = CARD_TOP_Y - HudConstants.RELIC_OFFER_BADGE_ROW_DROP;
-            drawChip(badgeLeft, badgeBottom, badgeWidth, HudConstants.RELIC_OFFER_BADGE_HEIGHT, accent);
+            drawChip(badgeLeft, badgeBottom, badgeWidth, HudConstants.RELIC_OFFER_BADGE_HEIGHT,
+                    ArtDirection.UI_PANEL_RAISED_RED, ArtDirection.UI_PANEL_RAISED_GREEN, ArtDirection.UI_PANEL_RAISED_BLUE);
 
-            if (hasTag[cardIndex]) {
-                float tagWidth = tagLayouts[cardIndex].width + ProgressionConstants.BUILD_CHIP_TEXT_PAD * 2f;
-                drawChip(cardX + (CARD_WIDTH - tagWidth) / 2f, CARD_Y + HudConstants.RELIC_OFFER_TAG_CHIP_RISE,
-                        tagWidth, HudConstants.RELIC_OFFER_TAG_CHIP_HEIGHT, tagColors[cardIndex]);
-            }
-        }
-        // LEAVE IT plate.
-        shapes.setColor(LEAVE_FILL);
-        shapes.rect(LEAVE_X, HudConstants.RELIC_OFFER_LEAVE_Y,
-                HudConstants.RELIC_OFFER_LEAVE_WIDTH, HudConstants.RELIC_OFFER_LEAVE_HEIGHT);
-        shapes.end();
-
-        // ---- Pass B: line work ----
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        Gdx.gl.glLineWidth(HudConstants.RELIC_OFFER_BORDER_THICKNESS);
-        for (int cardIndex = 0; cardIndex < offer.count; cardIndex++) {
-            float cardX = leftX + cardIndex * (CARD_WIDTH + CARD_GAP);
-            shapes.setColor(INNER_EDGE);
-            shapes.rect(cardX + 3f, CARD_Y + 3f, CARD_WIDTH - 6f, CARD_HEIGHT - 6f);
-            shapes.setColor(rarityAccent[rarityOrdinal[cardIndex]]);
-            shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
             if (hasCost[cardIndex]) {
-                shapes.setColor(DIVIDER);
-                float dividerY = CARD_Y + HudConstants.RELIC_OFFER_DIVIDER_RISE;
-                shapes.line(cardX + HudConstants.RELIC_OFFER_TEXT_PAD, dividerY,
-                        cardX + CARD_WIDTH - HudConstants.RELIC_OFFER_TEXT_PAD, dividerY);
+                drawPlainRule(cardX + HudConstants.RELIC_OFFER_TEXT_PAD, CARD_Y + HudConstants.RELIC_OFFER_DIVIDER_RISE,
+                        CARD_WIDTH - HudConstants.RELIC_OFFER_TEXT_PAD * 2f);
+            }
+            if (hasTag[cardIndex]) {
+                // Affinity chip: the tag's fill inside a 1-unit UI_LINE border (R10), over the old pill footprint.
+                float tagWidth = tagLayouts[cardIndex].width + ProgressionConstants.BUILD_CHIP_TEXT_PAD * 2f;
+                float capRadius = HudConstants.RELIC_OFFER_TAG_CHIP_HEIGHT / 2f;
+                Color tagColor = tagColors[cardIndex];
+                drawChip(cardX + (CARD_WIDTH - tagWidth) / 2f - capRadius, CARD_Y + HudConstants.RELIC_OFFER_TAG_CHIP_RISE,
+                        tagWidth + capRadius * 2f, HudConstants.RELIC_OFFER_TAG_CHIP_HEIGHT,
+                        tagColor.r, tagColor.g, tagColor.b);
             }
         }
-        shapes.setColor(DIVIDER);
-        shapes.rect(LEAVE_X, HudConstants.RELIC_OFFER_LEAVE_Y,
-                HudConstants.RELIC_OFFER_LEAVE_WIDTH, HudConstants.RELIC_OFFER_LEAVE_HEIGHT);
-        Gdx.gl.glLineWidth(1f);
+        // R8: LEAVE IT is a quiet IDLE plate (UI_PANEL + UI_LINE), so it never competes with the cards.
+        UiKit.plate(shapes, LEAVE_X, HudConstants.RELIC_OFFER_LEAVE_Y,
+                HudConstants.RELIC_OFFER_LEAVE_WIDTH, HudConstants.RELIC_OFFER_LEAVE_HEIGHT, PlateState.IDLE,
+                ArtDirection.UI_PANEL_ALPHA_SCREEN,
+                ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
         shapes.end();
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
-        // ---- Pass C: text (pre-built layouts only) ----
+        // ---- text (pre-built layouts only; screen text is unshadowed) ----
         // NOTE: BitmapFontCache sizes each glyph quad from the font's scale AT DRAW TIME while the layout's
         // positions were fixed when it was built, so every draw below re-applies the scale its layout used.
         batch.begin();
-        font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_TITLE);
-        GlyphLayout title = quarantineTitle ? quarantineTitleLayout : titleLayout;
-        GlyphLayout titleBack = quarantineTitle ? quarantineTitleShadow : titleShadow;
-        float titleX = (Constants.WORLD_WIDTH - title.width) / 2f;
-        drawShadowed(titleBack, title, titleX, HudConstants.RELIC_OFFER_TITLE_Y);
+        UiKit.screenHeaderTitle(batch, headingFont,
+                quarantineTitle ? HudConstants.RELIC_OFFER_TITLE_QUARANTINE_TEXT : HudConstants.RELIC_OFFER_TITLE_TEXT,
+                leftX, HudConstants.RELIC_OFFER_TITLE_Y);
 
         for (int cardIndex = 0; cardIndex < offer.count; cardIndex++) {
             float cardX = leftX + cardIndex * (CARD_WIDTH + CARD_GAP);
             float padX = cardX + HudConstants.RELIC_OFFER_TEXT_PAD;
-            font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_NAME);
-            // NAME centred in the header strip (a glyph box of height h centred in [Y, Y+H] has its top at Y + (H + h) / 2).
+            headingFont.getData().setScale(HudConstants.RELIC_OFFER_SCALE_NAME);
+            // NAME centred in the header band (a glyph box of height h centred in [Y, Y+H] has its top at Y + (H + h) / 2).
             GlyphLayout name = nameLayouts[cardIndex];
-            float stripY = CARD_TOP_Y - HudConstants.RELIC_OFFER_HEADER_HEIGHT;
-            drawShadowed(nameShadows[cardIndex], name, cardX + (CARD_WIDTH - name.width) / 2f,
+            headingFont.draw(batch, name, cardX + (CARD_WIDTH - name.width) / 2f,
                     stripY + (HudConstants.RELIC_OFFER_HEADER_HEIGHT + name.height) / 2f);
 
             // Badge row: rarity label left, trigger badge right.
@@ -352,11 +307,9 @@ public final class RelicOfferOverlayRenderer implements Disposable {
                     + HudConstants.RELIC_OFFER_BADGE_PAD, badgeBottom + (HudConstants.RELIC_OFFER_BADGE_HEIGHT + badge.height) / 2f);
 
             font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_EFFECT);
-            drawShadowed(effectShadows[cardIndex], effectLayouts[cardIndex], padX,
-                    CARD_TOP_Y - HudConstants.RELIC_OFFER_EFFECT_DROP);
+            font.draw(batch, effectLayouts[cardIndex], padX, CARD_TOP_Y - HudConstants.RELIC_OFFER_EFFECT_DROP);
             if (hasCost[cardIndex]) {
-                drawShadowed(costShadows[cardIndex], costLayouts[cardIndex], padX,
-                        CARD_Y + HudConstants.RELIC_OFFER_COST_RISE);
+                font.draw(batch, costLayouts[cardIndex], padX, CARD_Y + HudConstants.RELIC_OFFER_COST_RISE);
             }
             if (hasTag[cardIndex]) {
                 font.getData().setScale(ProgressionConstants.BUILD_CHIP_FONT_SCALE);
@@ -367,44 +320,26 @@ public final class RelicOfferOverlayRenderer implements Disposable {
                                 + (HudConstants.RELIC_OFFER_TAG_CHIP_HEIGHT + tag.height) / 2f);
             }
         }
+        headingFont.getData().setScale(ArtDirection.TYPE_CAPTION);
         font.getData().setScale(HudConstants.RELIC_OFFER_SCALE_LEAVE);
         font.draw(batch, leaveLayout, LEAVE_X + (HudConstants.RELIC_OFFER_LEAVE_WIDTH - leaveLayout.width) / 2f,
                 HudConstants.RELIC_OFFER_LEAVE_Y + (HudConstants.RELIC_OFFER_LEAVE_HEIGHT + leaveLayout.height) / 2f);
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         batch.end();
     }
 
-    /** Dark-red inner vignette: concentric inset bands, strongest at the border and fading inward. */
-    private void drawVignette(float cardX, float stripY) {
-        float stepSize = HudConstants.RELIC_OFFER_VIGNETTE_STEP_SIZE;
-        float bodyTop = stripY;
-        for (int step = 0; step < HudConstants.RELIC_OFFER_VIGNETTE_STEPS; step++) {
-            float fraction = 1f - (float) step / HudConstants.RELIC_OFFER_VIGNETTE_STEPS;
-            vignetteColor.set(COST_RED.r * 0.6f, 0f, 0f, HudConstants.RELIC_OFFER_VIGNETTE_ALPHA * fraction);
-            shapes.setColor(vignetteColor);
-            float inset = step * stepSize;
-            float bandLeft = cardX + inset;
-            float bandBottom = CARD_Y + inset;
-            float bandWidth = CARD_WIDTH - inset * 2f;
-            float bandHeight = bodyTop - CARD_Y - inset;
-            // four strips of thickness stepSize around the (inset) body rectangle
-            shapes.rect(bandLeft, bandBottom, bandWidth, stepSize);                              // bottom
-            shapes.rect(bandLeft, bandBottom + stepSize, stepSize, bandHeight - stepSize);       // left
-            shapes.rect(bandLeft + bandWidth - stepSize, bandBottom + stepSize, stepSize, bandHeight - stepSize); // right
-        }
+    private void drawPlainRule(float x, float y, float width) {
+        UiKit.divider(shapes, x, y, width, ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN,
+                ArtDirection.UI_LINE_BLUE, 1f);
     }
 
-    private void drawChip(float chipLeft, float chipBottom, float chipWidth, float chipHeight, Color color) {
-        float capRadius = chipHeight / 2f;
-        shapes.setColor(color);
-        shapes.rect(chipLeft, chipBottom, chipWidth, chipHeight);
-        shapes.circle(chipLeft, chipBottom + capRadius, capRadius);
-        shapes.circle(chipLeft + chipWidth, chipBottom + capRadius, capRadius);
-    }
-
-    private void drawShadowed(GlyphLayout shadow, GlyphLayout main, float textX, float textTopY) {
-        font.draw(batch, shadow, textX + HudConstants.RELIC_OFFER_SHADOW_OFFSET, textTopY - HudConstants.RELIC_OFFER_SHADOW_OFFSET);
-        font.draw(batch, main, textX, textTopY);
+    /** A chip: the given fill inside a 1-unit UI_LINE border, chamfered (Filled pass). */
+    private void drawChip(float chipLeft, float chipBottom, float chipWidth, float chipHeight,
+                          float fillRed, float fillGreen, float fillBlue) {
+        UiKit.panel(shapes, chipLeft, chipBottom, chipWidth, chipHeight, ArtDirection.UI_CHIP_CHAMFER,
+                fillRed, fillGreen, fillBlue, 1f,
+                ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f,
+                ArtDirection.UI_CHIP_BORDER_THICKNESS);
     }
 
     @Override
@@ -412,5 +347,6 @@ public final class RelicOfferOverlayRenderer implements Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        headingFont.dispose();
     }
 }

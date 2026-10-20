@@ -48,7 +48,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A1/A2/A3 hold for the inventory on run; build green.
 - [x] **CP3** — ItemWindow, AbilityWindow, WeaponInspectOverlayRenderer restyled.
       DONE WHEN: A1/A3 hold for them on run; build green.
-- [ ] **CP4** — LevelUpOverlayRenderer, RelicOfferOverlayRenderer restyled (R2, R8).
+- [x] **CP4** — LevelUpOverlayRenderer, RelicOfferOverlayRenderer restyled (R2, R8).
       DONE WHEN: A1/A2/A3 hold on run; build green.
 - [ ] **CP5** — CodexOverlayRenderer restyled (R9, R7). DONE WHEN: A5 holds on run; build green.
 - [ ] **CP6** — A4/A6/A7 sweep, docs. DONE WHEN: build + test at baseline; ready for reviewer.
@@ -114,3 +114,24 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   touched literals are named WEAPON_CARD_* / WEAPON_SLOT_ROW_*. Taps: CLOSE (closed), CHOOSE THIS WEAPON (equipped
   the chaingun, single-button mode). Full-loadout rows were SEEN rendered (CP3 shot) but a SWAP row was not tapped
   (handleTap untouched); CONVERT is not offered in the start room - not seen.
+- **CP4:** LevelUpOverlayRenderer: scrim UI_INK_BLACK .75 (was .84); R1 header LEFT-aligned at the card row's left
+  edge (title top TITLE_Y unchanged, rule across the row, subtitle TYPE_LABEL secondary left-aligned at its old Y);
+  each card = UiKit CARD in its BuildTag ink (keystones too - the gold double frame is gone, the gold HALO stays,
+  chamfered); gradients, drop shadows, inner highlight and the header strip fill are gone (a plain rule marks the
+  name band); chips = tag fill + UI_LINE border; pips drawn filled; the SYNERGY corner ribbon is gone (it poked
+  through the chamfer) - the amber SYNERGY word stays; name HEAVY TYPE_LABEL primary, rank line TYPE_LABEL primary
+  (the old 1.86 already ran into the pip row - LABEL clears it), effects TYPE_CAPTION (a keystone gain must stay
+  above its cost line), tap hint caption secondary; no text shadows. RelicOfferOverlayRenderer: scrim .75; R1 header
+  left-aligned on the card row; cards = UiKit CARD in RARITY ink over the rarity glow (colour + LEGENDARY pulse
+  unchanged, now chamfered); name built AND drawn with the HEAVY font; rarity label = a secondary WORD (colour only
+  in the frame, D2); trigger badge = outline chip (raised fill, UI_LINE border, primary text); affinity chip = tag
+  fill + UI_LINE border; cost line keeps DAMAGE red; the CURSED dark-red inner vignette is GONE (a fill gradient;
+  CURSED still reads from its red frame, its CURSED label and the red cost line - divergence for the note); LEAVE
+  IT = IDLE plate with a SECONDARY label (R8). The 0.4 s lockout / glow / pulse constants untouched. Scales:
+  RELIC_OFFER_SCALE_NAME LABEL, BADGE CAPTION, EFFECT BODY, LEAVE LABEL; dead constants removed (SCALE_TITLE,
+  VIGNETTE_*, SHADOW_OFFSET, BORDER_THICKNESS, LEAVE_R/G/B, LEVEL_UP_TAG_*, SYNERGY_RIBBON_SIZE,
+  KEYSTONE_INNER_FRAME_INSET, CHIP_TEXT_RISE). Seen on run: perk offer (levels 2 and 6), KEYSTONE offer (level 5:
+  IRON BULWARK / DEMOLITIONIST / STORM CONDUIT), RUN_START relic offer (3 COMMON), BUILD page with a relic row,
+  perks under three tags and a keystone card. Taps: perk cards (picked), keystone card (picked), relic card
+  (bonded FIELD DRESSING), LEAVE IT (closed the offer). NOT seen: a CURSED / RARE / LEGENDARY card (only RUN_START
+  COMMONs are reachable from floor 1), the quarantine title, pause opened over the offer.

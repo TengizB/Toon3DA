@@ -99,17 +99,11 @@ public final class ProgressionConstants {
 
     // ---- Level-up perk plates (progression/LevelUpOverlayRenderer), order-5 additions ----
     public static final float LEVEL_UP_CHIP_TOP_OFFSET    = 72f;   // tag chip top edge below the card top
-    public static final float LEVEL_UP_CHIP_TEXT_RISE    = 19f;   // chip text baseline above the chip bottom
     public static final float LEVEL_UP_PIP_CENTER_Y      = 160f;  // rank pip row, below the card top
     public static final float LEVEL_UP_PIP_RADIUS        = 8f;
     public static final float LEVEL_UP_PIP_SPACING       = 30f;
     public static final float LEVEL_UP_PIP_NEXT_RING     = 3f;    // extra ring radius around the highlighted next pip
     public static final float LEVEL_UP_TAP_BOTTOM_OFFSET = 22f;   // "TAP TO CHOOSE" baseline above the card bottom
-    public static final float LEVEL_UP_SYNERGY_RIBBON_SIZE = 46f; // right-angle corner triangle legs
     public static final float LEVEL_UP_SYNERGY_LABEL_EXTRA_WIDTH = 12f;
-    public static final float LEVEL_UP_KEYSTONE_INNER_FRAME_INSET = 8f;
     public static final float LEVEL_UP_KEYSTONE_GLOW_ALPHA = 0.30f;
-    public static final float LEVEL_UP_TAG_BODY_BRIGHTNESS = 0.20f;
-    public static final float LEVEL_UP_TAG_BODY_ALPHA      = 0.98f;
-    public static final float LEVEL_UP_TAG_STRIP_BRIGHTNESS = 0.92f;
 }
