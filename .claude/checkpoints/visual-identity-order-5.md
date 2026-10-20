@@ -51,7 +51,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP4** — LevelUpOverlayRenderer, RelicOfferOverlayRenderer restyled (R2, R8).
       DONE WHEN: A1/A2/A3 hold on run; build green.
 - [x] **CP5** — CodexOverlayRenderer restyled (R9, R7). DONE WHEN: A5 holds on run; build green.
-- [ ] **CP6** — A4/A6/A7 sweep, docs. DONE WHEN: build + test at baseline; ready for reviewer.
+- [x] **CP6** — A4/A6/A7 sweep, docs. DONE WHEN: build + test at baseline; ready for reviewer.
 - [ ] **CP7** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -152,3 +152,16 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   (opens entry), BACK, TEXT setting x3 (cycles NORMAL -> LARGE -> LARGEST -> NORMAL), PEOPLE tab, close X. Not
   seen: a completed tab, an empty tab with no pinned page (the pinned page appears in every tab), a long scrolled
   entry (drag scroll not exercised; scroll code untouched).
+- **CP6:** A4 grep over the twelve files (11 classes + WeaponLevelTag/MatchupGlyphs, which draw no chrome and were
+  not edited): no colour literal left except two SpriteBatch tint resets in ItemGridPanel (icon routine, commented);
+  no literal reaches setScale; the only Line pass left is WeaponLevelTag's LV arrow glyph (an icon). A6: every
+  scrim is UI_SCRIM_ALPHA 0.75 (INV_SCRIM_ALPHA, RELIC_OFFER_SCRIM_ALPHA, STORY_CODEX_SCRIM_ALPHA, inspect and
+  level-up read UI_SCRIM_ALPHA); the inventory's popup dims (INV_BASE_DIM_FACTOR .40 / INV_ITEM_WIN_DIM_FACTOR
+  .50) are REMOVED - R3 "never stacked". A7: only the codex follows the story text size; its entry was seen at
+  NORMAL / LARGE / LARGEST (CP5) with no overflow. CONTRAST: DAMAGE is 4.1:1 on UI_PANEL ("large text only"), so
+  the BUILD page cost rows, the keystone card's cost line and the inspect card's "-n" deltas moved to TYPE_BODY.
+  A3 diff check: no panel rect, card position, row height, scroll metric or touch target constant changed (only
+  colours, alphas, scales and dead visual constants). Docs: art-direction SECTION 14 SCREENS (new), relic-system
+  "WHAT THE PLAYER SEES", story-ui-system CODEX PAINT, xp-level-progression (level-up + BUILD page lines), CLAUDE.md
+  docs table + UiKit entry. Final AFTER shots: /tmp/claude-0/shots/after (same scripts as /tmp/claude-0/shots/before).
+  Build + test: 480 tests, the 1 known failure (StoryBarkTest bark.depth.core.2).

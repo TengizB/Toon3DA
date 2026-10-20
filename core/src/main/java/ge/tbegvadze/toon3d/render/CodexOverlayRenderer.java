@@ -413,7 +413,9 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
                                 StoryUiConstants.STORY_CODEX_BACK_WIDTH,
                                 StoryUiConstants.STORY_CODEX_BACK_HEIGHT, fade);
         } else {
-            headingFont.setColor(1f, 1f, 1f, fade);
+            // screenHeaderTitle draws in UI_TEXT_PRIMARY and keeps only the font's alpha: fade it with the screen.
+            headingFont.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                                 ArtDirection.UI_TEXT_PRIMARY_BLUE, fade);
             UiKit.screenHeaderTitle(batch, headingFont, titleLabel,
                                     StoryUiConstants.STORY_CODEX_X + StoryUiConstants.STORY_PANEL_PADDING,
                                     StoryUiConstants.STORY_CODEX_TOP_Y - StoryUiConstants.STORY_CODEX_PADDING);

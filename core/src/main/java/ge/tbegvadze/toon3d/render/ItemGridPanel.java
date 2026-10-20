@@ -314,9 +314,9 @@ final class ItemGridPanel implements Disposable {
         float drawX          = slotX + (ItemConstants.INV_GRID_SLOT_SIZE - drawWidth)  / 2f;
         float drawY          = slotY + (ItemConstants.INV_GRID_SLOT_SIZE - drawHeight) / 2f;
 
-        spriteBatch.setColor(1f, 1f, 1f, alphaScale);
+        spriteBatch.setColor(1f, 1f, 1f, alphaScale);   // icon routine: an untinted sprite, faded by the filter
         spriteBatch.draw(iconTexture, drawX, drawY, drawWidth, drawHeight);
-        spriteBatch.setColor(Color.WHITE);
+        spriteBatch.setColor(Color.WHITE);              // restore the batch tint (not a chrome colour)
     }
 
     // -------------------------------------------------------------------------

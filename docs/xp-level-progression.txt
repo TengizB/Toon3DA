@@ -53,10 +53,12 @@ PlayerBuild.java / BuildStats.java  (progression/)
     MULTIPLY after them (IRONHIDE + Field Medic: (1 + medic) x 0.80).
 
 LevelUpOverlayRenderer.java  (progression/) + render/BuildTagPalette, render/BuildPagePanel
-  - Full-screen hard-pause overlay over the frozen game: three thumb-sized plates, each
-    with its tag chip, an amber SYNERGY corner ribbon when it matches a carried weapon or
-    ability, rank pips (next pip white) and a one-line effect. Keystone mode: gold double
-    frame, gain line, cost line in red. Pure rendering; World does the input.
+  - Full-screen hard-pause overlay over the frozen game: three thumb-sized cards (UiKit cards
+    framed in their tag's BuildTagPalette colour, visual-identity-order-5), each with its tag
+    chip, the amber word SYNERGY when it matches a carried weapon or ability, rank pips (the
+    pip this pick buys in primary inside a tag ring) and a one-line effect. Keystone mode: the
+    same tag-framed card over a soft gold halo, gain line, cost line in red. Pure rendering;
+    World does the input.
   - BuildPagePanel: the inventory BUILD page (header button left of CODEX).
 
 KillXpListener.java  (progression/)
@@ -193,9 +195,9 @@ each; the cost is drawn in red. Live magnitudes: BalanceConfig KEYSTONE_*.
 
 THE BUILD PAGE
 --------------
-Inventory header -> BUILD (left of CODEX): a RELICS (n) section at the top (each held relic by name in its rarity
-colour plus its effect line, cursed costs in red; "RELICS - none" when empty), then every picked perk grouped
-under its tag chip with its rank pips, then the keystones in the gold frame. Tap UP / DOWN pages when it
+Inventory header -> BUILD (left of CODEX): a RELICS (n) section at the top (each held relic by name, its rarity label
+framed in the rarity colour, plus its effect line, cursed costs in red; "RELICS - none" when empty), then every picked perk
+grouped under its tag chip with its rank pips, then each keystone as a card framed in its tag colour. Tap UP / DOWN pages when it
 overflows. An empty build shows a one-line empty state.
 
 

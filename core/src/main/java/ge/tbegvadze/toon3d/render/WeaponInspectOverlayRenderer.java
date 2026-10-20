@@ -66,7 +66,8 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     private static final float FS_TIER_TAG = ArtDirection.TYPE_BODY;
     private static final float FS_COL_HEAD = ArtDirection.TYPE_BODY;
     private static final float FS_STAT     = ArtDirection.TYPE_LABEL;
-    private static final float FS_DELTA    = ArtDirection.TYPE_CAPTION;
+    /** TYPE_BODY: a "-n" delta is DAMAGE red, which reads only as large text (art-direction CONTRAST). */
+    private static final float FS_DELTA    = ArtDirection.TYPE_BODY;
     private static final float FS_ABILITY  = ArtDirection.TYPE_BODY;
     private static final float FS_BUTTON   = ArtDirection.TYPE_HEADING;
     private static final float FS_SLOT_NAME= ArtDirection.TYPE_BODY;

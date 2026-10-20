@@ -87,6 +87,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
     /** Effect lines are captions: a keystone's gain must fit above its cost line in the fixed card. */
     private static final float SCALE_DESC     = ArtDirection.TYPE_CAPTION;
     private static final float SCALE_TAP      = ArtDirection.TYPE_CAPTION;
+    private static final float SCALE_COST     = ArtDirection.TYPE_BODY;
 
     // ---- Palette: ArtDirection / semantic constants only ---------------------
     private static final Color PRIMARY     = new Color(ArtDirection.UI_TEXT_PRIMARY_RED,
@@ -407,8 +408,10 @@ public final class LevelUpOverlayRenderer implements Disposable {
         font.draw(batch, plateDescriptions[cardIndex], cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
                 CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, Align.center, true);
 
-        // A keystone's COST line — near the plate bottom, in the cost colour (a harm, R6)
+        // A keystone's COST line — near the plate bottom, in the cost colour (a harm, R6). DAMAGE red reads only
+        // as large text (4.1:1 on UI_PANEL), so the cost line is TYPE_BODY.
         if (plateCostLines[cardIndex] != null) {
+            font.getData().setScale(SCALE_COST);
             font.setColor(COST_RED);
             font.draw(batch, plateCostLines[cardIndex], cardX + TEXT_HORIZONTAL_PAD, CARD_Y + COST_LINE_BOTTOM_OFFSET,
                     CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, Align.center, true);

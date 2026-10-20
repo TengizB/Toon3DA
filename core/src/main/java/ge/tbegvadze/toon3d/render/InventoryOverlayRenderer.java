@@ -25,8 +25,8 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  * Coordinator for a layered window system:
  *   Layer 0 — full-screen UI_INK_BLACK scrim at UI_SCRIM_ALPHA (visual-identity-order-5 R3)
  *   Layer 1 — base inventory screen: header + left weapon panel + right item grid
- *   Layer 2 — ItemWindow popup (optional); dims layer 1 by INV_BASE_DIM_FACTOR
- *   Layer 3 — AbilityWindow popup (optional, stub); dims layer 2 by INV_ITEM_WIN_DIM_FACTOR
+ *   Layer 2 — ItemWindow popup (optional), drawn straight over layer 1 (one scrim per screen)
+ *   Layer 3 — AbilityWindow popup (optional), drawn straight over layer 2
  *
  * Public API (World.java calls setPlayerInventory and setWeaponHudRenderer after construction):
  *   new InventoryOverlayRenderer(Inventory)
@@ -327,15 +327,12 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         }
         renderHeader(camera);
 
-        // Layer 2 — dim base then draw ItemWindow
+        // Layer 2 — ItemWindow. Layer 3 — AbilityWindow. No extra dim under either: a suit screen has ONE
+        // scrim, never stacked (visual-identity-order-5 R3); each window is its own bracketed .94 panel.
         if (itemWindow.isOpen()) {
-            renderDimOverlay(camera, ItemConstants.INV_BASE_DIM_FACTOR);
             itemWindow.render(camera, animationClock);
         }
-
-        // Layer 3 — dim ItemWindow then draw AbilityWindow
         if (abilityWindow.isOpen()) {
-            renderDimOverlay(camera, ItemConstants.INV_ITEM_WIN_DIM_FACTOR);
             abilityWindow.render(camera, animationClock);
         }
     }
@@ -471,20 +468,6 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private void drawPlateLabel(String label, float x, float y, float width, float height) {
         glyphLayout.setText(font, label);
         font.draw(spriteBatch, label, x + (width - glyphLayout.width) / 2f, y + (height + glyphLayout.height) / 2f);
-    }
-
-    /**
-     * Draws a semi-transparent UI_INK_BLACK rectangle over the entire screen to dim
-     * lower layers under a popup WINDOW (not a second screen scrim: it marks a window layer).
-     * Used instead of modifying SpriteBatch colors mid-frame.
-     */
-    private void renderDimOverlay(OrthographicCamera camera, float dimAlpha) {
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
-                               ArtDirection.UI_INK_BLACK_BLUE, dimAlpha);
-        shapeRenderer.rect(0, 0, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
-        shapeRenderer.end();
     }
 
     // -------------------------------------------------------------------------

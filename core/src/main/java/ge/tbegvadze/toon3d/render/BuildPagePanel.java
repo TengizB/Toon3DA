@@ -68,6 +68,7 @@ final class BuildPagePanel {
     private static final float SCALE_CHIP   = ProgressionConstants.BUILD_CHIP_FONT_SCALE;
     private static final float SCALE_PLATE  = ProgressionConstants.BUILD_PAGE_SCALE_PLATE;
     private static final float SCALE_SECTION = ArtDirection.TYPE_LABEL;
+    private static final float SCALE_COST    = ArtDirection.TYPE_BODY;
 
     private static final float PLATE_WIDTH  = ProgressionConstants.BUILD_PAGE_PLATE_WIDTH;
     private static final float PLATE_HEIGHT = ProgressionConstants.BUILD_PAGE_PLATE_HEIGHT;
@@ -344,7 +345,7 @@ final class BuildPagePanel {
                         frameBottom + (CHIP_HEIGHT + font.getCapHeight()) / 2f);
                 drawEffect(rowEffects[rowIndex], baseline, TEXT_MAIN);
             } else if (kind == RowKind.RELIC_COST) {
-                drawEffect(rowEffects[rowIndex], baseline, COST_RED);
+                drawCost(rowEffects[rowIndex], baseline);
             } else if (kind == RowKind.NOTE) {
                 font.getData().setScale(SCALE_EFFECT);
                 font.setColor(TEXT_DIM);
@@ -355,7 +356,7 @@ final class BuildPagePanel {
                 font.draw(spriteBatch, rowNames[rowIndex], NAME_X, baseline);
                 drawEffect(rowEffects[rowIndex], baseline, TEXT_MAIN);
             } else {
-                drawEffect(rowEffects[rowIndex], baseline, COST_RED);
+                drawCost(rowEffects[rowIndex], baseline);
             }
         }
         if (canScroll()) {
@@ -386,6 +387,16 @@ final class BuildPagePanel {
         UiKit.plate(shapeRenderer, plateX, PLATE_Y, PLATE_WIDTH, PLATE_HEIGHT, PlateState.IDLE,
                 ArtDirection.UI_PANEL_ALPHA_SCREEN,
                 ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
+    }
+
+    /**
+     * A cost line: DAMAGE red is 4.1:1 on UI_PANEL, readable only as large text (art-direction CONTRAST), so cost
+     * lines draw at TYPE_BODY while effect lines stay captions.
+     */
+    private void drawCost(String text, float baseline) {
+        font.getData().setScale(SCALE_COST);
+        font.setColor(COST_RED);
+        font.draw(spriteBatch, text, EFFECT_X, baseline, EFFECT_WIDTH, Align.left, true);
     }
 
     private void drawEffect(String text, float baseline, Color color) {

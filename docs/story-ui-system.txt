@@ -77,6 +77,20 @@ Per channel:
   | Framing   | TitleScreenSystem | FramingStrings     | FramingScreenRenderer   |
   |           | + FramingMenu     | (chrome only)      | + InstanceReportRenderer|
 
+CODEX PAINT (visual-identity-order-5). The codex is a SUIT screen (ORA's archive, opened from the
+inventory), so it is drawn with render/UiKit like the inventory, not with StoryPanelRenderer: a UI_INK_BLACK
+scrim at UI_SCRIM_ALPHA 0.75 (STORY_CODEX_SCRIM_*), one UiKit panel (UI_PANEL at UI_PANEL_ALPHA_SCREEN 0.94,
+UI_LINE border) with SUIT_AMBER_DIM brackets, the R1 header (the title in the HEAVY face at TYPE_HEADING,
+UI_TEXT_PRIMARY, and an amber-ticked rule along the header band's bottom, under BACK too), the category tabs
+as plates (the open tab SELECTED in SUIT_AMBER), BACK / the close X / the six settings knobs as IDLE plates
+(the close X's touch rect stays the glyph + STORY_BARK_CLOSE_TOUCH_PADDING), and FLAT entry rows: a UiKit
+divider under each row (its tick SUIT_AMBER under the pinned WHERE AM I page, UI_LINE otherwise), a 3-unit
+SUIT_AMBER bar on the last-opened row, and the NEW marker as a 6-unit SUIT_AMBER square with a UI_INK_BLACK
+edge plus the amber word NEW (never colour alone). Text is unshadowed; ORA's take keeps her speaker accent;
+the body text is TYPE_BODY x the story text-size multiplier (NORMAL 1.0 / LARGE 1.2 / LARGEST 1.45), and it
+still wraps sooner rather than overflowing. Behaviour (unlocks, tabs, NEW, scroll, the mask bands) is
+unchanged. See docs/art-direction.txt SECTION 14 SCREENS.
+
 Shared render pieces: `StoryPanelRenderer` (the one panel primitive every channel draws with),
 `StoryAudio` (all seven sounds, ONE world-owned instance), `StoryStringsLoader` (the one place the
 string asset is read).

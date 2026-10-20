@@ -409,18 +409,27 @@ every term is zero or the identity and the game plays exactly as before.
 
 7. WHAT THE PLAYER SEES
 =======================
-  RELIC_OFFER overlay (render/RelicOfferOverlayRenderer; same card pipeline as LevelUpOverlayRenderer)
-    Full-screen scrim at alpha 0.78 over the frozen 3D view; title "RELIC RECOVERED - CHOOSE ONE" (on a
-    QUARANTINE_LOCKER offer "QUARANTINED - EACH ONE COSTS", in CURSED red). 2 or 3 cards, 340 x 300, gap 24,
-    centred. Each card: a rarity-coloured header strip carrying the NAME; the rarity label top-left; the trigger
-    badge chip top-right; the effect line word-wrapped; for CURSED a thin divider and the cost line in red; for an
-    affine relic the BuildTag chip in BuildTagPalette's colour. LEGENDARY glows with a slow 1.5 s pulse; CURSED
-    wears a dark-red inner vignette (both cosmetic, run off the overlay's own clock). A LEAVE IT plate 280 x 76
-    at y = 40; every touch target is >= 76 px tall. Rarity colours: COMMON steel, RARE violet, LEGENDARY amber,
-    CURSED blood (HudConstants RELIC_RARITY_COLOR_*). NO allocation in render(): every layout is built once when
-    a new offer is seen. No textures and no per-relic glyphs — procedural layout and colour only.
-  BUILD page (render/BuildPagePanel): a "RELICS (n)" section at the top — each held relic as its name in rarity
-    colour plus the effect line, the cost line in red for CURSED; "RELICS - none" when empty. Sized for the cap of 8.
+  RELIC_OFFER overlay (render/RelicOfferOverlayRenderer; the same suit-screen language as the level-up offer —
+  visual-identity-order-5, docs/art-direction.txt SECTION 14 SCREENS; every overlay colour comes from
+  ArtDirection / CombatPalette, the rarity colours are unchanged)
+    UI_INK_BLACK scrim at UI_SCRIM_ALPHA 0.75 (HudConstants.RELIC_OFFER_SCRIM_ALPHA; was 0.78) over the frozen 3D
+    view; the R1 screen header, left-aligned over the card row: title "RELIC RECOVERED - CHOOSE ONE" (on a
+    QUARANTINE_LOCKER offer "QUARANTINED - EACH ONE COSTS") in the HEAVY face, UI_TEXT_PRIMARY, with an
+    amber-ticked rule under it. 2 or 3 cards, 340 x 300, gap 24, centred. Each card is a UiKit CARD: a neutral
+    fill whose FRAME takes the rarity colour (the only place a rarity colour appears in chrome), over the rarity
+    glow (colour and LEGENDARY's slow 1.5 s pulse unchanged, cosmetic, run off the overlay's own clock). Inside:
+    the NAME (HEAVY) over a plain rule, the rarity label as a secondary WORD top-left, the trigger badge as an
+    outline chip top-right, the effect line word-wrapped (TYPE_BODY, primary), for a cost a rule and the cost
+    line in CombatPalette.DAMAGE red, for an affine relic the BuildTag chip in BuildTagPalette's colour with a
+    1-unit UI_LINE border. CURSED reads from its blood-red frame, its CURSED label and its red cost line (the old
+    dark-red inner vignette is gone). LEAVE IT is a quiet IDLE plate (UI_PANEL + UI_LINE, secondary label) 280 x 76
+    at y = 40, so it never competes with the cards; every touch target is >= 76 px tall and none moved. Rarity
+    colours: COMMON steel, RARE violet, LEGENDARY amber, CURSED blood (HudConstants RELIC_RARITY_COLOR_*). NO
+    allocation in render(): every layout is built once when a new offer is seen. No textures and no per-relic
+    glyphs — procedural layout and colour only. The 0.4 s input lockout is unchanged.
+  BUILD page (render/BuildPagePanel): a "RELICS (n)" section at the top — each held relic as its name
+    (primary) with its rarity label framed in the rarity colour, the effect line, the cost line in DAMAGE red
+    for CURSED; "RELICS - none" when empty. Sized for the cap of 8.
   Run report (render/InstanceReportRenderer): "RELICS: <names>" or "RELICS: none" (trimmed with an ellipsis if
     it would overrun the panel). Death lists the relics and they are gone; the next run starts with none.
   In-play feedback: arrival heal / armour / ammo as event text ("+9 HP - RELIC"); a spent shield "SHIELD - HIT

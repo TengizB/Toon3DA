@@ -485,3 +485,79 @@ CONTRAST (WCAG ratio, opaque; a HUD panel at 0.82 over the world reads slightly 
   Text the player must read clears 4.5:1, or 3:1 when it is large (TYPE_BODY+ / HEAVY).
 ADD A UI ELEMENT: build it from these primitives and the palette; a new geometry number goes in the
   ArtDirection UI_* block, never inline. A new primitive is a UiKit method with no `new` in it, listed here.
+
+
+14. SCREENS (visual-identity-order-5)
+-------------------------------------
+The player's own full-screen overlays — the SUIT screens: the inventory family (grid, weapon slots, BUILD
+page, item window, ability window), weapon inspect, the level-up / keystone offer, the relic offer and the
+codex (ORA's archive). Facility and story screens (route map, shop, event console, story panels, boot card,
+title, pause/settings, report) are order 6. Every suit screen, top to bottom:
+  scrim -> outer panel with SUIT_AMBER_DIM brackets -> R1 header -> body panels WITHOUT brackets -> plates
+  for anything tappable. Rarity / tier / tag colour lives on card frames only. No gradients except the
+  scrim, no drop shadows on panels, and no text shadows (screen text never sits on the 3D view).
+PRIMITIVES ADDED TO render/UiKit (SECTION 13 rules hold: Filled pass, caller blending, no `new`)
+  screenHeaderTitle  R1  the screen title in the HEAVY face at TYPE_HEADING, UI_TEXT_PRIMARY, left-aligned,
+                         unshadowed; keeps only the font's alpha (a fading screen sets it) and restores the
+                         font's LOGICAL scale (getData().scaleX already includes GameFonts' base scale, and
+                         setScale multiplies it in again — restoring the raw value compounds to zero).
+  screenHeaderRule   R1  a divider the header's width, its tick SUIT_AMBER. screenHeaderRuleY(titleTopY) =
+                         one TYPE_HEADING cap height + UI_SCREEN_HEADER_RULE_GAP (8) below the title's top.
+                         Title and rule are two calls because a ShapeRenderer and a SpriteBatch cannot be
+                         active at once.
+  card               R2  a plate whose BORDER is always the given ink (a relic's rarity, a perk's / keystone's
+                         BuildTag colour, a weapon's WeaponTier colour) and whose brackets, SELECTED, take the
+                         ink too. Fill = the state's neutral fill at UI_PANEL_ALPHA_SCREEN, so text contrast is
+                         identical on every card. The ONLY place a rarity or tier colour appears in chrome.
+  newMarker          R7  a 6-unit SUIT_AMBER square with a 1-unit UI_INK_BLACK edge (not a circle).
+  plate (+alpha)         an overall alpha multiplier for a screen that fades in (the codex).
+GEOMETRY (ArtDirection): UI_PANEL_ALPHA_SCREEN 0.94 (the HUD's 0.82 is for in-play chrome only),
+  UI_SCREEN_HEADER_RULE_GAP 8, UI_NEW_MARKER_SIZE 6 / UI_NEW_MARKER_EDGE 1, UI_SELECTION_BAR_WIDTH 3,
+  UI_CHIP_BORDER_THICKNESS 1, UI_CHIP_CHAMFER 6.
+RULES
+  SCRIM   one full-screen UI_INK_BLACK scrim at UI_SCRIM_ALPHA 0.75 per screen, never stacked: the inventory's
+          item and ability windows no longer dim the layer under them — each is its own bracketed panel.
+  PANELS  UiKit.panel in UI_PANEL at UI_PANEL_ALPHA_SCREEN, border UI_LINE. Brackets on the OUTERMOST panel
+          only. The inventory has no single outer panel, so its brackets frame the bounding rect of the
+          header bar + both body panels (brackets alone, no extra fill); the BUILD page replaces the two body
+          panels while it is open rather than stacking on them.
+  PLATES  every tappable control is a UiKit plate with its four states mapped from existing logic: a tab
+          row's open tab SELECTED in SUIT_AMBER, the others IDLE; an unavailable action DISABLED; a filled
+          inventory slot the active filter hides DISABLED. Nothing here has a pressed state (taps commit on
+          touch), so PRESSED is unused. Tab plates may be drawn inset inside their touch rects; no touch rect
+          moved.
+  TEXT    title R1; section labels TYPE_LABEL UI_TEXT_SECONDARY; body TYPE_BODY UI_TEXT_PRIMARY; captions,
+          hints, footnotes TYPE_CAPTION UI_TEXT_SECONDARY; disabled UI_TEXT_DISABLED; credits CREDITS_GOLD;
+          costs / harm CombatPalette.DAMAGE — and because DAMAGE is 4.1:1 on UI_PANEL, a red line is always
+          TYPE_BODY or larger (relic / keystone cost lines, the inspect card's "-n" deltas). Dense data in a
+          fixed rect (weapon slot stat lines, item window stat rows and descriptions, keystone gain lines) is
+          TYPE_CAPTION so it stays inside its box; nothing is drawn below TYPE_CAPTION.
+  CHIPS   a tag chip keeps its BuildTagPalette fill inside a 1-unit UI_LINE border, chamfered, over the old
+          pill's footprint, dark UI_INK_BLACK text centred by cap height. Badges (trigger, PASSIVE / ACTIVE)
+          are outline chips: raised fill, ink border, ink text.
+  ICONS   item icons, the ASCII glyph fallback, the tier icon, matchup glyphs, LV-tag arrows and the padlock
+          keep their own colours — they are art, not chrome.
+WHO DRAWS WHAT
+  InventoryOverlayRenderer   scrim, header bar + body panels, outer brackets, R1 "INVENTORY", BUILD (SELECTED
+                             while its page is open) / CODEX / EXIT plates, credits CREDITS_GOLD.
+  ItemGridPanel              tab plates; slot plates IDLE / SELECTED / DISABLED; category dots; amber
+                             equipped star.
+  WeaponSlotsPanel           filled slot = card in WeaponTier ink (the equipped one SELECTED); empty IDLE;
+                             locked DISABLED + padlock; section rules = dividers.
+  BuildPagePanel             one panel; tag chips; keystone blocks = cards in the keystone's tag ink; a
+                             relic's rarity only as the ink framing its rarity label; UP / DOWN plates.
+  ItemWindow / AbilityWindow panel + brackets, R1 title (item / ability name), X / ability rows / footer
+                             actions as plates, outline type badges.
+  WeaponInspectOverlay       the card itself in the found weapon's tier ink + brackets; R1 title; zone rules;
+                             EQUIP / CHOOSE / CLOSE / CONVERT / SWAP plates; full-loadout rows = tier cards.
+  LevelUpOverlayRenderer     R1 header over the card row; perk / keystone cards in their tag ink; a keystone
+                             keeps a soft gold halo; the word SYNERGY in amber.
+  RelicOfferOverlayRenderer  R1 header; cards in rarity ink over the (unchanged) rarity glow; LEAVE IT an IDLE
+                             plate with a secondary label.
+  CodexOverlayRenderer       panel + brackets, R1 header, tab / BACK / close / settings plates, flat rows with
+                             dividers (amber tick under the pinned page), amber selection bar, NEW markers.
+SUIT vs FACILITY (so far)
+  SUIT (order 5): everything above — the player's own suit display: gunmetal panels, SUIT_AMBER brackets
+    and ticks, the player's resources in their semantic colours.
+  FACILITY (order 6): route map, shop, event console, story panels, boot card, title, pause / settings,
+    report — the facility's screens, in FACILITY_CYAN where the facility speaks.
