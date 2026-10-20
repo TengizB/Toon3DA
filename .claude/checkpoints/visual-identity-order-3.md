@@ -44,7 +44,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       StoryPanelRenderer as pilot. DONE WHEN: a bark shows in the pixel font on screen; build green.
 - [x] **CP3** — HUD-layer swaps (HudRenderer, BossHudRenderer, EventTextRenderer, ImpactEffectRenderer,
       EnemyRenderer, FadeOverlayRenderer) with R7 faces. DONE WHEN: A5 holds; build green.
-- [ ] **CP4** — all remaining swap sites. DONE WHEN: A1 + A2 hold; build green.
+- [x] **CP4** — all remaining swap sites. DONE WHEN: A1 + A2 hold; build green.
 - [ ] **CP5** — R9 overflow sweep (3 text sizes), docs (step 6). DONE WHEN: A3, A4, A7, A8 seen on screen; build +
       test at baseline; reviewer PASS.
 
@@ -67,3 +67,11 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   all 5 font px wide in both faces (HEAVY 6), advance identical. Seen: HUD left panel + CREDITS in the pixel font,
   HEAVY "0/1" ammo. Swap helper used for every site: scratchpad `swap.py` (deletes the font setFilter calls and the
   `markupEnabled = false` lines — the default is already false).
+- **CP4:** A1/A2 hold (grep: `new BitmapFont(` only in GameFonts; no font setFilter left; no markupEnabled left).
+  FramingScreenRenderer gained `displayFont` (HEAVY: title + death stroke) with face-taking overloads of
+  drawCentered / drawWithShadow. DIVERGENCE (R7): BootCardRenderer's own font draws only the counter and CONTINUE;
+  the "status header" (SYSTEM block) is drawn by the shared StoryPanelRenderer, which also draws every bark, so it
+  stays REGULAR — a per-panel face is a layout/structure change left to order 4/5. Glyph fixes after on-screen read:
+  A round-topped (square A read as R), M/W redrawn with a centre stem (7-wide diagonals blurred into N/H).
+  Seen: title, title settings, title archive, HUD, pause, pause settings, inventory (— EMPTY — now renders the em
+  dash; before it showed boxes), build page, inventory codex, weapon inspect.

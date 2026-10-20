@@ -4,7 +4,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -94,11 +93,8 @@ public final class EventChoiceOverlayRenderer implements Disposable {
     public EventChoiceOverlayRenderer() {
         this.shapes      = new ShapeRenderer();
         this.batch       = new SpriteBatch();
-        this.font        = new BitmapFont();
+        this.font        = GameFonts.newFont(FontFace.REGULAR);
         this.glyphLayout = new GlyphLayout();
-        this.font.getData().markupEnabled = false;
-        this.font.getRegion().getTexture().setFilter(
-                Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
         this.font.setUseIntegerPositions(false);
     }
 

@@ -4,7 +4,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -226,10 +225,8 @@ public final class WeaponInspectOverlayRenderer implements Renderable, Disposabl
     public WeaponInspectOverlayRenderer() {
         shapeRenderer = new ShapeRenderer();
         spriteBatch   = new SpriteBatch();
-        font          = new BitmapFont();
-        // Linear filtering keeps the bitmap glyphs smooth when scaled up — this is the
-        // single biggest fix for the old "low resolution" look.
-        font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        font          = GameFonts.newFont(FontFace.REGULAR);
+        // Sub-pixel positioning keeps scaled text smooth (the atlas filter is GameFonts').
         font.setUseIntegerPositions(false);
         glyphLayout   = new GlyphLayout();
     }

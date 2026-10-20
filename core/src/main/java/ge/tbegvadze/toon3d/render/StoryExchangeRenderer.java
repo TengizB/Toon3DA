@@ -67,8 +67,7 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
         this.panelRenderer = new StoryPanelRenderer();
         this.shapes        = new ShapeRenderer();
         this.batch         = new SpriteBatch();
-        this.font          = new BitmapFont();
-        this.font.getData().markupEnabled = false;
+        this.font          = GameFonts.newFont(FontFace.REGULAR);
         this.layout        = new GlyphLayout();
     }
 

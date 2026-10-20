@@ -49,6 +49,8 @@ public final class FramingScreenRenderer implements Disposable {
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** HEAVY face for the title and the death stroke (visual-identity-order-3 R7). */
+    private final BitmapFont    displayFont;
     private final GlyphLayout   layout;
     private final Color         scratchColor = new Color();
 
@@ -71,8 +73,8 @@ public final class FramingScreenRenderer implements Disposable {
     public FramingScreenRenderer() {
         this.shapes = new ShapeRenderer();
         this.batch  = new SpriteBatch();
-        this.font   = new BitmapFont();
-        this.font.getData().markupEnabled = false;
+        this.font   = GameFonts.newFont(FontFace.REGULAR);
+        this.displayFont = GameFonts.newFont(FontFace.HEAVY);
         this.layout = new GlyphLayout();
     }
 
@@ -110,9 +112,9 @@ public final class FramingScreenRenderer implements Disposable {
         if (strings == null || wordsFade <= 0f) return;
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        font.getData().setScale(StoryUiConstants.STORY_DEATH_STROKE_TEXT_SIZE);
-        layout.setText(font, deathStrokeLabel);
-        drawWithShadow(deathStrokeLabel,
+        displayFont.getData().setScale(StoryUiConstants.STORY_DEATH_STROKE_TEXT_SIZE);
+        layout.setText(displayFont, deathStrokeLabel);
+        drawWithShadow(displayFont, deathStrokeLabel,
                        Constants.WORLD_WIDTH / 2f - layout.width / 2f,
                        StoryUiConstants.STORY_DEATH_STROKE_TOP_Y,
                        StoryUiConstants.STORY_DEATH_STROKE_R, StoryUiConstants.STORY_DEATH_STROKE_G,
@@ -153,7 +155,7 @@ public final class FramingScreenRenderer implements Disposable {
         batch.begin();
         drawLaunchStatusLines(fade);
         if (titleVisible) {
-            drawCentered(gameTitleLabel, StoryUiConstants.STORY_TITLE_GAME_TOP_Y,
+            drawCentered(displayFont, gameTitleLabel, StoryUiConstants.STORY_TITLE_GAME_TOP_Y,
                          StoryUiConstants.STORY_TITLE_GAME_TEXT_SIZE,
                          StoryUiConstants.STORY_TITLE_GAME_R, StoryUiConstants.STORY_TITLE_GAME_G,
                          StoryUiConstants.STORY_TITLE_GAME_B, fade);
@@ -504,9 +506,15 @@ public final class FramingScreenRenderer implements Disposable {
     /** Draws one line centred on the screen's vertical axis at the given text scale. */
     private void drawCentered(String text, float textTopY, float textScale,
                               float red, float green, float blue, float fade) {
-        font.getData().setScale(textScale);
-        layout.setText(font, text);
-        drawWithShadow(text, Constants.WORLD_WIDTH / 2f - layout.width / 2f, textTopY,
+        drawCentered(font, text, textTopY, textScale, red, green, blue, fade);
+    }
+
+    /** {@link #drawCentered(String, float, float, float, float, float, float)} in a given face. */
+    private void drawCentered(BitmapFont textFont, String text, float textTopY, float textScale,
+                              float red, float green, float blue, float fade) {
+        textFont.getData().setScale(textScale);
+        layout.setText(textFont, text);
+        drawWithShadow(textFont, text, Constants.WORLD_WIDTH / 2f - layout.width / 2f, textTopY,
                        red, green, blue, fade);
     }
 
@@ -527,14 +535,20 @@ public final class FramingScreenRenderer implements Disposable {
     /** Draws one string with a dark drop-shadow beneath the coloured glyphs. */
     private void drawWithShadow(String text, float textX, float textTopY,
                                 float red, float green, float blue, float fade) {
+        drawWithShadow(font, text, textX, textTopY, red, green, blue, fade);
+    }
+
+    /** {@link #drawWithShadow(String, float, float, float, float, float, float)} in a given face. */
+    private void drawWithShadow(BitmapFont textFont, String text, float textX, float textTopY,
+                                float red, float green, float blue, float fade) {
         float shadow = StoryUiConstants.STORY_TEXT_SHADOW_OFFSET;
         scratchColor.set(0f, 0f, 0f, StoryUiConstants.STORY_TEXT_SHADOW_ALPHA * fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX + shadow, textTopY - shadow);
+        textFont.setColor(scratchColor);
+        textFont.draw(batch, text, textX + shadow, textTopY - shadow);
 
         scratchColor.set(red, green, blue, fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX, textTopY);
+        textFont.setColor(scratchColor);
+        textFont.draw(batch, text, textX, textTopY);
     }
 
     @Override
@@ -542,5 +556,6 @@ public final class FramingScreenRenderer implements Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        displayFont.dispose();
     }
 }

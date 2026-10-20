@@ -142,9 +142,8 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
     public ShopOverlayRenderer() {
         shapes = new ShapeRenderer();
         batch  = new SpriteBatch();
-        font   = new BitmapFont();
+        font   = GameFonts.newFont(FontFace.REGULAR);
         layout = new GlyphLayout();
-        font.getData().markupEnabled = false;
 
         float closeWidth  = HudConstants.SHOP_OVERLAY_CLOSE_WIDTH;
         float closeHeight = HudConstants.SHOP_OVERLAY_CLOSE_HEIGHT;

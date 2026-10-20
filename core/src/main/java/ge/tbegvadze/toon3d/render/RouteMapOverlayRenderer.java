@@ -189,7 +189,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         // painter throws "autoShapeType must be enabled" the instant the console opens on portal entry.
         shapes.setAutoShapeType(true);
         batch   = new SpriteBatch();
-        font    = new BitmapFont();
+        font    = GameFonts.newFont(FontFace.REGULAR);
         layout  = new GlyphLayout();
         palette = new RouteMapColorPalette();
         nodeTypes = RouteRegistries.nodeTypes();
@@ -197,7 +197,6 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         RouteIconBootstrap.registerIconPainters(iconPainters);
         regionCrests = new RegionCrestPainterRegistry();
         RouteIconBootstrap.registerRegionCrests(regionCrests);
-        font.getData().markupEnabled = false;
         regionTint = palette.holoCyan;
         precomputeStaticText();
     }
