@@ -28,7 +28,6 @@ public final class EnemySpriteSheets {
     /** Reused by applyAlphaCut; load-time only, render thread only. */
     private static final byte[] ALPHA_CUT_SCRATCH = new byte[EnemyConstants.ENEMY_SPRITE_ALPHA_CUT_CHUNK_BYTES];
 
-
     private static final Map<String, Texture> CACHE = new HashMap<>();
 
     private static boolean logged;
@@ -109,13 +108,13 @@ public final class EnemySpriteSheets {
     }
 
     /**
-     * R1: one bulk pass over the RGBA8888 bytes. Alpha is the 4th byte of each texel regardless of the
+     * R1: one pass, in 16 KB chunks, over the RGBA8888 bytes. Alpha is the 4th byte of each texel regardless of the
      * buffer's byte order (RGBA8888 is R,G,B,A in memory). A texel is cut when alpha / 255 is below the
      * threshold; kept texels are made fully opaque.
      */
     private static void applyAlphaCut(Pixmap rgba) {
         // In place on the Pixmap's own buffer, in CHUNKS through one small reused scratch array: per-byte
-        // absolute get/put on a direct buffer measured ~5x slower (2040 ms vs 379 ms for 9 sheets), while a
+        // absolute get/put on a direct buffer measured 2040 ms for 9 sheets (chunked: 476-582 ms), while a
         // whole-sheet byte[] is a ~6-9 MB GC spike on phones. Relative bulk get/put on a duplicate() view (the
         // absolute bulk overloads need Android API 34), so the Pixmap's own position/limit are never touched.
         ByteBuffer pixels = rgba.getPixels().duplicate();

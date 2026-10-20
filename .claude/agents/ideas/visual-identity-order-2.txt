@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Visual Identity 2 — Grounded sprites: halo, shadows, light
 CREATED: 2026-10-19
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
 ---
 
 IMPLEMENTATION NOTE (2026-10-20, reviewer-approved deviations)
@@ -27,8 +27,9 @@ IMPLEMENTATION NOTE (2026-10-20, reviewer-approved deviations)
   - R4/R6 extension: every FLOATING billboard pickup (weapon pickups, credit chips, and the medical /
     armour / ammo / keycard tile pickups) gets its floor shadow at CONTACT_SHADOW_HOVER_ALPHA_SCALE (0.55),
     R6's own reasoning for the hovering eye; at full alpha they read as stray blobs.
-  - R3: the alpha cut runs in place on the sheet's pixel buffer at load; measured 9 sheets in 379 ms
-    (desktop/llvmpipe). The 0.50 cut is kept for every sheet: the 4.5-16% mid-alpha texels are
+  - R3: the alpha cut runs in place on the sheet's pixel buffer, in 16 KB chunks. Measured 379 ms with
+    the earlier whole-copy pass on a quiet machine; the chunked pass is ~2x faster than that version in a
+    same-session comparison (476-582 ms vs 1209 ms on a noisy VM). The 0.50 cut is kept for every sheet: the 4.5-16% mid-alpha texels are
     anti-aliased edges in body colour, not a dark glow (offline composites).
   - Verified on screen: halo cut, prop/pickup shadows, the forced-pulse light in warm/cyan/orange.
     Verified by code read only: enemy shadows (A5/A6), enemy lighting (A7), chaingun refresh (A8).

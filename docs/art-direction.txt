@@ -174,7 +174,7 @@ lwjgl3:run` — never commit it. It is the only way to check regions C-E without
 ------------------------------------------------
 render/EnemySpriteSheets is a static, session-lifetime holder of the enemy textures. Each enemy PNG
 (9 sheets under assets/textures/enemies; the PNG files are never edited) is decoded into a Pixmap
-(converted to RGBA8888 if needed), then hard-alpha-cut in ONE bulk pass over its bytes
+(converted to RGBA8888 if needed), then hard-alpha-cut in one pass, in 16 KB chunks, over its bytes
 (EnemyConstants.ENEMY_SPRITE_ALPHA_CUT = 0.50): a texel with alpha/255 below the cut becomes RGBA 0,
 every other texel becomes fully opaque with its RGB kept. The Pixmap is uploaded (Nearest filter) and
 disposed. The procedural fallback sheet (file missing) is already opaque, is not conditioned, and is
@@ -185,8 +185,9 @@ cached the same way.
   Cache: get(path, fallbackRed, fallbackGreen, fallbackBlue) returns the cached Texture.
   EnemyRenderer brackets its nine gets with beginLoadBatch()/endLoadBatch(); the end call logs
   "EnemySpriteSheets conditioned N sheets in M ms" once per app session (a `logged` flag), later floors
-  and runs only hit the cache. Measured: 9 sheets in 379 ms on the Xvfb/llvmpipe dev container, PNG
-  decode included (budget 400 ms).
+  and runs only hit the cache. Measured (PNG decode included, budget 400 ms): 379 ms with the earlier whole-copy
+  pass on a quiet machine; the in-place chunked pass is ~2x faster than that version in a same-session
+  comparison (476-582 ms vs 1209 ms on a noisy Xvfb/llvmpipe VM).
   Lifetime: World is rebuilt per run, so the cache is static. EnemyRenderer.dispose() does NOT dispose
   the sheets; Main.dispose() calls EnemySpriteSheets.disposeAll() after the world is disposed.
   Textures are unmanaged (Pixmap-built), like every procedural texture here.

@@ -48,7 +48,7 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
       DONE WHEN: build green.
 - [x] **CP5** — props, shop machine, enemies apply the light term; docs. DONE WHEN: A7-A9 on run; build + test at
       baseline; ready for reviewer.
-- [ ] **CP6** — reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP6** — reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -102,3 +102,4 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   overloads need Android API 34). Per-byte absolute access was tried and measured 2040 ms — rejected. Same-machine
   comparison now (noisy VM): old whole-copy 1209 ms vs chunked 476-582 ms. Nits fixed. Session cut by usage limit
   between round 1 and these fixes; spoke had saved nothing, redone from scratch.
+- **CP6:** reviewer round 2 PASS (after 45f26be + be462e6); timing wording corrected in the close-out. STATUS IMPLEMENTED 2026-10-20. Next: visual-identity-order-3 (typography).
