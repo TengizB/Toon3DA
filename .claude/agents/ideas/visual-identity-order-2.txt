@@ -5,6 +5,34 @@ CREATED: 2026-10-19
 IMPLEMENTED: -
 ---
 
+IMPLEMENTATION NOTE (2026-10-20, reviewer-approved deviations)
+--------------------------------------------------------------
+  - R8 formula replaced. clamp01(s x tint + light) clamped the light away (near surfaces already sit at
+    multiplier ~1.0; measured +2..3/255). The light is added AFTER the clamp, as albedo x light: walls,
+    doors, columns, props, pickups, the shop body and enemy bodies get a second draw of the same texture
+    slice with blend (GL_SRC_ALPHA, GL_ONE), colour = lightAdd, alpha 1, using the same wall z-test and
+    skipping columns a nearer recorded sprite covers. Floor/ceiling use
+    GameMath.applyRgbShadeAndLightToPackedRGBA (only the final channel clamps). A door-panel column lights
+    the panel only (deliberate).
+  - R7 peaks raised: WARM 0.35 -> 1.50, ENERGY 0.35 -> 1.50, FIRE 0.40 -> 1.70 — the materials are dark
+    (order-1 R9), so a multiplier on albedo needs a peak above 1 to be visible. Colours, duration (0.10 s),
+    radius (4 tiles) and falloff unchanged. VISUAL DESIGN's "+35%" is superseded: a surface at the
+    player's feet briefly reaches ~2.5x its lit colour.
+  - R10 superseded: while a pulse is active, each lit wall column and lit sprite slice costs one extra
+    additive quad (two blend switches per frame for walls, two per lit sprite). At intensity 0 everything
+    is skipped by a branch, as specified.
+  - AS6 restated: the peak is no longer 0.35. The flash is local (squared falloff to 4 tiles), never
+    full-screen, lasts 0.10 s and never stacks; repeated chaingun fire repeats the pulse. Revisit if
+    photosensitivity is raised.
+  - R4/R6 extension: every FLOATING billboard pickup (weapon pickups, credit chips, and the medical /
+    armour / ammo / keycard tile pickups) gets its floor shadow at CONTACT_SHADOW_HOVER_ALPHA_SCALE (0.55),
+    R6's own reasoning for the hovering eye; at full alpha they read as stray blobs.
+  - R3: the alpha cut runs in place on the sheet's pixel buffer at load; measured 9 sheets in 379 ms
+    (desktop/llvmpipe). The 0.50 cut is kept for every sheet: the 4.5-16% mid-alpha texels are
+    anti-aliased edges in body colour, not a dark glow (offline composites).
+  - Verified on screen: halo cut, prop/pickup shadows, the forced-pulse light in warm/cyan/orange.
+    Verified by code read only: enemy shadows (A5/A6), enemy lighting (A7), chaingun refresh (A8).
+
 OVERVIEW
 --------
 Makes the billboards look like they are in the same room as the walls. Three changes,
