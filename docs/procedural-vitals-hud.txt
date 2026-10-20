@@ -6,7 +6,7 @@ Status:  IMPLEMENTED (branch claude/procedural-vitals-hud-5IQfh)
 LEFT-HUD REWORK (current)
 -------------------------
 The HUD is now a single LEFT panel anchored to the bottom-left corner
-(x 0..420, y 0..206) — the old centre/right strip panels are gone. It is a
+(x 0..420, y 0..160 since the 2026-10-20 compaction; it was 206) — the old centre/right strip panels are gone. It is a
 vertical stack of four "vital rows" (HP, AR, AMMO, XP), each one:
   [2-letter label]  [segmented bar]  [right-aligned value]
 Label sits LEFT of the bar and value sits RIGHT of the bar, so text is never
@@ -20,11 +20,48 @@ count (HUD_BAR_SEGMENT_COUNT); the AMMO bar draws one tick per round in the clip
 (falling back to the fixed count for oversized magazines). The HP bar still reads
 as a GREEN→RED gradient: each filled tick is coloured by its position on a
 red→yellow→green ramp, so green ticks appear only near full health (green =
-healthy, red = critical). The HP number is tinted by the same ramp.
+healthy, red = critical).
 
-All text is drawn at scale >= 0.9 (never shrunk) with a dark drop-shadow behind
-every glyph for legibility over the busy 3D view. Layout/scale/colour values
-live in HudConstants.java (HUD_BAR_*, HUD_*_BAR_Y, HUD_SLOT_*, HUD_*_SCALE).
+SUIT-INK RESKIN (visual-identity-order-4, current look)
+------------------------------------------------------
+The panel is a render/UiKit chamfered slab (UI_PANEL at HUD_PANEL_ALPHA =
+ArtDirection.UI_PANEL_ALPHA_HUD 0.82, UI_LINE border) with four SUIT_AMBER_DIM
+corner brackets; the old bevel lines, rivets and steel palette are gone, and so
+is every private Color constant — colours are read from util/ArtDirection and
+util/CombatPalette. Palette by element:
+  labels (HP AR AM XP)      UI_TEXT_SECONDARY, TYPE_CAPTION
+  values                    UI_TEXT_PRIMARY (HP value TYPE_BODY, others TYPE_CAPTION);
+                            low HP pulses CombatPalette.DAMAGE; an EMPTY clip is DAMAGE
+                            (no low-ammo threshold exists)
+  HP meter                  fixed tick count, each lit tick on the ramp
+                            CombatPalette.DAMAGE -> (warm midpoint) -> HEALTH_GREEN; track UI_INK_BLACK
+  AR meter                  ARMOUR_BLUE, track UI_INK_BLACK (UiKit.meter, whole ticks)
+  ammo pips / melee meter   SUIT_AMBER (the player's own resource), track UI_INK_BLACK
+  ammo digits               HEAVY face
+  XP meter                  CREDITS_GOLD (earned), track UI_INK_BLACK
+  weapon row (WP)           a fifth vital row (HUD_WEAPON_ROW_Y 60, same grid as the bars): label
+                            "WP"; in the bar column the EQUIPPED weapon's class glyph, its full name
+                            (UI_TEXT_PRIMARY, TYPE_CAPTION, truncated only if it would reach the tag)
+                            and its LV tag right-aligned at the column end (standing colour + arrow);
+                            in the value column one 24x20 numbered tab per slot, right-aligned:
+                            equipped = PRESSED plate in SUIT_AMBER, filled = IDLE with a class-colour
+                            foot bar, empty = DISABLED. Only the equipped weapon is named — the old
+                            per-slot name plates were too cramped to read (owner redesign, 2026-10-20)
+  panel height              HUD_HEIGHT 160: five rows at a 28 pitch with HUD_PANEL_PADDING 14 above
+                            HP and below WP, so the panel carries no empty band
+  status icons              float just ABOVE the panel (HUD_STATUS_ROW_LOCAL_Y = HUD_HEIGHT + 6),
+                            drawn only while an effect is active
+  status LED                SUIT_AMBER at rest, pulsing DAMAGE on alert; centred in the top padding,
+                            30 left of the right edge (clear of the HP value and the corner bracket)
+  credits readout           CREDITS_GOLD, TYPE_LABEL; debuff list keeps its status colours
+  NAV OFFLINE (BLACKOUT)    UiKit panel + brackets in the mini-map's rectangle, FACILITY_CYAN text
+  ground weapon / medkit    SUIT_AMBER (medkit warning lerps DAMAGE <-> SUIT_AMBER)
+Every glyph is drawn through UiKit.text (UI_INK_BLACK shadow that scales with the
+type step). Render passes: A Filled (UiKit chrome, meters, slot tabs, icons, NAV
+plate), B Line (only the equipped weapon's level arrow), C text. There is no face box
+and no right panel in this renderer. Layout/scale/colour values live in
+HudConstants.java (HUD_BAR_*, HUD_*_BAR_Y, HUD_SLOT_*, HUD_*_SCALE) and the UI kit
+in docs/art-direction.txt UI KIT.
 The notes below describe the earlier 3-panel design and are kept for history.
 
 

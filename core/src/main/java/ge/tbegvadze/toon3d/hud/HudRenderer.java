@@ -18,20 +18,22 @@ import ge.tbegvadze.toon3d.entity.Weapon;
 import ge.tbegvadze.toon3d.render.FontFace;
 import ge.tbegvadze.toon3d.render.GameFonts;
 import ge.tbegvadze.toon3d.render.MatchupGlyphs;
+import ge.tbegvadze.toon3d.render.PlateState;
 import ge.tbegvadze.toon3d.render.Renderable;
+import ge.tbegvadze.toon3d.render.UiKit;
 import ge.tbegvadze.toon3d.render.WeaponLevelTag;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
-import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.world.HudState;
 
 /**
- * Left chrome HUD panel only (x 0..420, y 0..206 — bottom-left corner).
+ * Left chrome HUD panel only (x 0..420, y 0..HUD_HEIGHT 160 — bottom-left corner).
  *
  * Reworked vitals layout: four "vital rows" (HP, AR, AMMO, XP) stacked top-to-bottom, each one a
  * left-aligned label, a segmented bar (split into small rectangles), and a right-aligned numeric
@@ -41,57 +43,38 @@ import ge.tbegvadze.toon3d.world.HudState;
  * near full health). The ammo bar draws one tick per round in the clip. Below the bars sit a
  * numbered weapon-slot strip and a thin status-effect icon row in its own clear band.
  *
- * Every glyph is drawn with a dark drop-shadow for contrast against the busy 3D view behind it.
+ * Every glyph is drawn through UiKit.text (a UI_INK_BLACK drop-shadow) for contrast against the busy
+ * 3D view behind it. Chrome, meters and slot plates are render/UiKit primitives in SUIT ink
+ * (visual-identity-order-4).
  *
  * Render order per frame:
- *   Pass A — ShapeRenderer.Filled  (panel chrome, segmented bars, slots — alpha-blended)
- *   Pass B — ShapeRenderer.Line    (bevels, bar/slot outlines)
+ *   Pass A — ShapeRenderer.Filled  (UiKit panel + brackets, meters, slot plates, status icons — alpha-blended)
+ *   Pass B — ShapeRenderer.Line    (only the slot strip's level arrows)
  *   Pass C — SpriteBatch + BitmapFont (labels, values, slot text, status counts)
  */
 public class HudRenderer implements Renderable, Disposable {
 
     // -------------------------------------------------------------------------
-    // Palette
+    // Palette (visual-identity-order-4 R9): SUIT ink, read from ArtDirection. Pre-built once at class load
+    // for the text paths that take a Color; shapes read the ArtDirection floats directly.
     // -------------------------------------------------------------------------
-    private static final Color STEEL_DARK     = new Color(0.102f, 0.102f, 0.122f, 1f);
-    private static final Color STEEL_BLACK    = new Color(0.055f, 0.055f, 0.071f, 1f);
-    private static final Color BEVEL_LIGHT    = new Color(0.290f, 0.290f, 0.333f, 1f);
-    private static final Color BEVEL_DARK     = new Color(0.031f, 0.031f, 0.039f, 1f);
-    private static final Color BAR_BORDER     = new Color(0.000f, 0.000f, 0.000f, 0.55f);
-
-    private static final Color TEXT_PRIMARY   = new Color(0.93f, 0.96f, 0.98f, 1f);
-    private static final Color TEXT_DIM       = new Color(0.45f, 0.48f, 0.52f, 1f);
-    private static final Color TEXT_SHADOW    = new Color(0.00f, 0.00f, 0.00f, 0.80f);
-
-    // HP green→red ramp: filled ticks are sampled from healthRampColor; empty ticks use HP_TRACK_LOW.
-    private static final Color HP_LABEL       = new Color(0.55f, 0.95f, 0.60f, 1f);
-    private static final Color HP_TRACK_LOW   = new Color(0.18f, 0.03f, 0.03f, 1f);
-
-    // Armor (blue), ammo (amber), XP (gold) — single-hue glossy gradients
-    private static final Color AR_LABEL       = new Color(0.55f, 0.85f, 1.00f, 1f);
-    private static final Color AR_BRIGHT      = new Color(0.20f, 0.78f, 0.95f, 1f);
-    private static final Color AR_TRACK       = new Color(0.04f, 0.11f, 0.15f, 1f);
-
-    private static final Color CLIP_LABEL     = new Color(1.00f, 0.90f, 0.35f, 1f);
-    private static final Color CLIP_BRIGHT    = new Color(1.00f, 0.78f, 0.05f, 1f);
-    private static final Color CLIP_TRACK     = new Color(0.16f, 0.12f, 0.02f, 1f);
-    private static final Color MELEE_BRIGHT   = new Color(0.25f, 0.85f, 0.35f, 1f);
-    private static final Color MELEE_TRACK    = new Color(0.04f, 0.14f, 0.05f, 1f);
-
-    private static final Color XP_LABEL       = new Color(1.00f, 0.85f, 0.45f, 1f);
-    private static final Color XP_BRIGHT      = new Color(1.00f, 0.80f, 0.10f, 1f);
-    private static final Color XP_TRACK       = new Color(0.14f, 0.10f, 0.01f, 1f);
-
-    private static final Color WARN_YELLOW    = new Color(1.000f, 0.878f, 0.000f, 1f);
-    private static final Color ALERT_RED      = new Color(1.000f, 0.165f, 0.165f, 1f);
-    private static final Color LED_GREEN      = new Color(0.188f, 1.000f, 0.376f, 1f);
-    private static final Color HP_RED         = new Color(0.95f, 0.20f, 0.20f, 1f);
-
-    // Weapon slot strip
-    private static final Color SLOT_ACTIVE    = new Color(1.000f, 0.720f, 0.000f, 1f);
-    private static final Color SLOT_FILLED    = new Color(0.230f, 0.190f, 0.060f, 0.92f);
-    private static final Color SLOT_EMPTY     = new Color(0.060f, 0.060f, 0.080f, 0.85f);
-    private static final Color SLOT_BORDER    = new Color(0.220f, 0.220f, 0.260f, 1f);
+    private static final Color TEXT_PRIMARY   = new Color(ArtDirection.UI_TEXT_PRIMARY_RED,
+            ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+    private static final Color TEXT_SECONDARY = new Color(ArtDirection.UI_TEXT_SECONDARY_RED,
+            ArtDirection.UI_TEXT_SECONDARY_GREEN, ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
+    private static final Color TEXT_DIM       = new Color(ArtDirection.UI_TEXT_DISABLED_RED,
+            ArtDirection.UI_TEXT_DISABLED_GREEN, ArtDirection.UI_TEXT_DISABLED_BLUE, 1f);
+    private static final Color SUIT_AMBER     = new Color(ArtDirection.SUIT_AMBER_RED,
+            ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
+    private static final Color DAMAGE         = new Color(CombatPalette.DAMAGE_RED,
+            CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE, 1f);
+    private static final Color HEALTH_GREEN   = new Color(ArtDirection.HEALTH_GREEN_RED,
+            ArtDirection.HEALTH_GREEN_GREEN, ArtDirection.HEALTH_GREEN_BLUE, 1f);
+    /** Midpoint of the HP ramp: the brighter channel of each endpoint, so the ramp passes through a warm yellow. */
+    private static final Color HEALTH_RAMP_MIDDLE = new Color(
+            Math.max(CombatPalette.DAMAGE_RED, ArtDirection.HEALTH_GREEN_RED),
+            Math.max(CombatPalette.DAMAGE_GREEN, ArtDirection.HEALTH_GREEN_GREEN),
+            (CombatPalette.DAMAGE_BLUE + ArtDirection.HEALTH_GREEN_BLUE) * 0.5f, 1f);
 
     // Status icon colors — indexed by StatusType ordinal
     // BURNING=0 POISONED=1 BLEED=2 STUNNED=3 BLINDED=4 SLOWED=5 EMPOWERED=6 VULNERABLE=7 WEAK=8 EXPOSED=9
@@ -218,18 +201,17 @@ public class HudRenderer implements Renderable, Disposable {
         drawArmorBarFilled(isDead);
         drawClipBarFilled(isDead);
         drawXpBarFilled(isDead);
-        if (playerInventory != null) drawSlotStripFilled(playerInventory, pulse);
+        if (playerInventory != null) drawSlotStripFilled(playerInventory);
         if (!isDead) drawStatusIconsFilled();
         if (navOffline) drawNavOfflinePlateFilled();
         shapes.end();
 
-        // ---- Pass B: Line ----
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        drawPanelChromeLines(0f, 0f, LEFT_WIDTH, PANEL_HEIGHT);
-        drawBarBorders();
-        if (playerInventory != null) drawSlotStripLines(playerInventory);
-        if (navOffline) drawNavOfflinePlateFrame();
-        shapes.end();
+        // ---- Pass B: Line (only the slot strip's level arrows are strokes; the chrome is filled UiKit) ----
+        if (playerInventory != null) {
+            shapes.begin(ShapeRenderer.ShapeType.Line);
+            drawSlotStripLines(playerInventory);
+            shapes.end();
+        }
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
         // ---- Pass C: Text ----
@@ -254,29 +236,28 @@ public class HudRenderer implements Renderable, Disposable {
     // =========================================================================
 
     private void drawNavOfflinePlateFilled() {
-        shapes.setColor(HudConstants.TWIST_NAV_OFFLINE_PLATE_RED, HudConstants.TWIST_NAV_OFFLINE_PLATE_GREEN,
-                HudConstants.TWIST_NAV_OFFLINE_PLATE_BLUE, HudConstants.TWIST_NAV_OFFLINE_PLATE_ALPHA);
-        shapes.rect(Constants.MINI_MAP_ORIGIN_X, Constants.MINI_MAP_ORIGIN_Y,
-                Constants.MINI_MAP_WORLD_SIZE, Constants.MINI_MAP_WORLD_SIZE);
+        float x = Constants.MINI_MAP_ORIGIN_X, y = Constants.MINI_MAP_ORIGIN_Y, size = Constants.MINI_MAP_WORLD_SIZE;
+        UiKit.panel(shapes, x, y, size, size,
+                ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                HudConstants.TWIST_NAV_OFFLINE_PLATE_ALPHA,
+                ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+        UiKit.brackets(shapes, x, y, size, size,
+                ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
     }
 
-    private void drawNavOfflinePlateFrame() {
-        shapes.setColor(HudConstants.TWIST_AMBER_RED, HudConstants.TWIST_AMBER_GREEN,
-                HudConstants.TWIST_AMBER_BLUE, 1f);
-        float inset = HudConstants.TWIST_NAV_OFFLINE_FRAME_THICKNESS / 2f;
-        shapes.rect(Constants.MINI_MAP_ORIGIN_X + inset, Constants.MINI_MAP_ORIGIN_Y + inset,
-                Constants.MINI_MAP_WORLD_SIZE - HudConstants.TWIST_NAV_OFFLINE_FRAME_THICKNESS,
-                Constants.MINI_MAP_WORLD_SIZE - HudConstants.TWIST_NAV_OFFLINE_FRAME_THICKNESS);
-    }
-
+    /**
+     * The facility is speaking (R8): its NAV OFFLINE notice is in FACILITY_CYAN. (R9 asked for FACILITY_CYAN_DIM,
+     * which is 3.3:1 on UI_PANEL — below the 4.5:1 text floor — so the full ink is used; see the idea's
+     * IMPLEMENTATION NOTE.)
+     */
     private void drawNavOfflinePlateText() {
         font.getData().setScale(HudConstants.TWIST_NAV_OFFLINE_TEXT_SCALE);
-        font.setColor(HudConstants.TWIST_AMBER_RED, HudConstants.TWIST_AMBER_GREEN,
-                HudConstants.TWIST_AMBER_BLUE, 1f);
         glyphLayout.setText(font, HudConstants.TWIST_NAV_OFFLINE_TEXT);
         float drawX = Constants.MINI_MAP_ORIGIN_X + (Constants.MINI_MAP_WORLD_SIZE - glyphLayout.width) / 2f;
         float drawY = Constants.MINI_MAP_ORIGIN_Y + (Constants.MINI_MAP_WORLD_SIZE + glyphLayout.height) / 2f;
-        font.draw(batch, glyphLayout, drawX, drawY);
+        UiKit.text(batch, font, HudConstants.TWIST_NAV_OFFLINE_TEXT, drawX, drawY,
+                ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                ArtDirection.FACILITY_CYAN_BLUE, 1f);
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
@@ -286,14 +267,13 @@ public class HudRenderer implements Renderable, Disposable {
 
     private void drawCreditsReadout() {
         font.getData().setScale(HudConstants.HUD_CREDITS_SCALE);
-        font.setColor(ItemConstants.INVENTORY_CREDITS_COLOR_R, ItemConstants.INVENTORY_CREDITS_COLOR_G,
-                      ItemConstants.INVENTORY_CREDITS_COLOR_B, 1f);
         stringBuilder.setLength(0);
         stringBuilder.append("CREDITS ").append(hudState.credits);
         glyphLayout.setText(font, stringBuilder);
         float drawX = Constants.WORLD_WIDTH - HudConstants.HUD_CREDITS_RIGHT_INSET_X - glyphLayout.width;
         float drawY = Constants.WORLD_HEIGHT - HudConstants.HUD_CREDITS_TOP_INSET_Y;
-        font.draw(batch, stringBuilder, drawX, drawY);
+        UiKit.text(batch, font, stringBuilder, drawX, drawY,
+                ArtDirection.CREDITS_GOLD_RED, ArtDirection.CREDITS_GOLD_GREEN, ArtDirection.CREDITS_GOLD_BLUE, 1f);
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
@@ -305,16 +285,14 @@ public class HudRenderer implements Renderable, Disposable {
         for (int typeIndex = 0; typeIndex < STATUS_TYPES.length; typeIndex++) {
             StatusEffect effect = player.getActiveEffects().get(STATUS_TYPES[typeIndex]);
             if (effect == null || !effect.isActive()) continue;
-            temporaryColor.set(STATUS_ICON_RED[typeIndex], STATUS_ICON_GREEN[typeIndex],
-                                STATUS_ICON_BLUE[typeIndex], 1f);
-            font.setColor(temporaryColor);
             stringBuilder.setLength(0);
             stringBuilder.append(STATUS_TYPES[typeIndex].name()).append(" (")
                           .append(effect.getRemainingTurns()).append(")  ")
                           .append(debuffDetailText(STATUS_TYPES[typeIndex], effect));
             glyphLayout.setText(font, stringBuilder);
             float drawX = Constants.WORLD_WIDTH - HudConstants.HUD_CREDITS_RIGHT_INSET_X - glyphLayout.width;
-            font.draw(batch, stringBuilder, drawX, drawY - lineIndex * HudConstants.HUD_DEBUFF_LIST_LINE_STEP);
+            UiKit.text(batch, font, stringBuilder, drawX, drawY - lineIndex * HudConstants.HUD_DEBUFF_LIST_LINE_STEP,
+                    STATUS_ICON_RED[typeIndex], STATUS_ICON_GREEN[typeIndex], STATUS_ICON_BLUE[typeIndex], 1f);
             lineIndex++;
         }
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
@@ -358,124 +336,83 @@ public class HudRenderer implements Renderable, Disposable {
     // PASS A: Panel chrome
     // =========================================================================
 
+    /**
+     * R9: the panel is a UiKit chamfered slab with SUIT_AMBER_DIM brackets (replacing the old bevel lines and
+     * rivets). The status LED stays: SUIT_AMBER at rest, pulsing CombatPalette.DAMAGE on alert.
+     */
     private void drawPanelChromeFilled(float panelX, float panelY, float panelW, float panelH,
                                         boolean alert, float pulse) {
-        float inset = HudConstants.HUD_PANEL_INSET;
-        float alpha = HudConstants.HUD_PANEL_ALPHA;
+        UiKit.panel(shapes, panelX, panelY, panelW, panelH,
+                ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                HudConstants.HUD_PANEL_ALPHA,
+                ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+        UiKit.brackets(shapes, panelX, panelY, panelW, panelH,
+                ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
-        shapes.setColor(STEEL_DARK.r, STEEL_DARK.g, STEEL_DARK.b, alpha);
-        shapes.rect(panelX, panelY, panelW, panelH);
-        shapes.setColor(STEEL_BLACK.r, STEEL_BLACK.g, STEEL_BLACK.b, alpha);
-        shapes.rect(panelX + inset, panelY + inset, panelW - inset * 2f, panelH - inset * 2f);
-
-        shapes.setColor(BEVEL_LIGHT);
-        float rivetRadius = HudConstants.HUD_RIVET_RADIUS;
-        float rivetOffset = 8f;
-        shapes.circle(panelX + rivetOffset,          panelY + rivetOffset,          rivetRadius, 8);
-        shapes.circle(panelX + panelW - rivetOffset, panelY + rivetOffset,          rivetRadius, 8);
-        shapes.circle(panelX + rivetOffset,          panelY + panelH - rivetOffset, rivetRadius, 8);
-        shapes.circle(panelX + panelW - rivetOffset, panelY + panelH - rivetOffset, rivetRadius, 8);
-
-        float ledRadius = HudConstants.HUD_LED_RADIUS;
-        float ledX      = panelX + panelW - 14f;
-        float ledY      = panelY + panelH - 14f;
+        float ledX = panelX + panelW - HudConstants.HUD_LED_INSET;
+        float ledY = panelY + panelH - HudConstants.HUD_PANEL_PADDING / 2f;
         if (alert) {
-            temporaryColor.set(ALERT_RED).mul(pulse, pulse, pulse, 1f);
-            shapes.setColor(temporaryColor);
+            shapes.setColor(CombatPalette.DAMAGE_RED * pulse, CombatPalette.DAMAGE_GREEN * pulse,
+                    CombatPalette.DAMAGE_BLUE * pulse, 1f);
         } else {
-            shapes.setColor(LED_GREEN);
+            shapes.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
         }
-        shapes.circle(ledX, ledY, ledRadius, 8);
-    }
-
-    private void drawPanelChromeLines(float panelX, float panelY, float panelW, float panelH) {
-        float inset = HudConstants.HUD_PANEL_INSET;
-        shapes.setColor(BEVEL_LIGHT);
-        shapes.line(panelX,          panelY + panelH, panelX + panelW, panelY + panelH);
-        shapes.line(panelX,          panelY,          panelX,          panelY + panelH);
-        shapes.setColor(BEVEL_DARK);
-        shapes.line(panelX,          panelY,          panelX + panelW, panelY);
-        shapes.line(panelX + panelW, panelY,          panelX + panelW, panelY + panelH);
-        float innerX      = panelX + inset;
-        float innerY      = panelY + inset;
-        float innerWidth  = panelW - inset * 2f;
-        float innerHeight = panelH - inset * 2f;
-        shapes.setColor(BEVEL_DARK);
-        shapes.line(innerX,              innerY + innerHeight, innerX + innerWidth, innerY + innerHeight);
-        shapes.line(innerX,              innerY,               innerX,              innerY + innerHeight);
-        shapes.setColor(BEVEL_LIGHT);
-        shapes.line(innerX,              innerY,               innerX + innerWidth, innerY);
-        shapes.line(innerX + innerWidth, innerY,               innerX + innerWidth, innerY + innerHeight);
-        float rivetRadius = HudConstants.HUD_RIVET_RADIUS;
-        float rivetOffset = 8f;
-        shapes.setColor(BEVEL_DARK);
-        shapes.circle(panelX + rivetOffset,          panelY + rivetOffset,          rivetRadius, 8);
-        shapes.circle(panelX + panelW - rivetOffset, panelY + rivetOffset,          rivetRadius, 8);
-        shapes.circle(panelX + rivetOffset,          panelY + panelH - rivetOffset, rivetRadius, 8);
-        shapes.circle(panelX + panelW - rivetOffset, panelY + panelH - rivetOffset, rivetRadius, 8);
+        shapes.circle(ledX, ledY, HudConstants.HUD_LED_RADIUS, 8);
     }
 
     // =========================================================================
     // PASS A: Segmented vital bars — each bar is split into small rectangles
     // =========================================================================
 
-    /**
-     * Draws one segment rectangle of a vital bar. The caller sets the fill color first; this only
-     * computes the segment geometry. Segment width divides the bar width evenly, minus the gaps.
-     */
-    private void drawBarSegment(float barY, int index, int segmentCount, float gap) {
-        float segmentWidth = (HudConstants.HUD_BAR_WIDTH - (segmentCount - 1) * gap) / segmentCount;
-        float x            = HudConstants.HUD_BAR_X + index * (segmentWidth + gap);
-        shapes.rect(x, barY, segmentWidth, HudConstants.HUD_BAR_HEIGHT);
+    /** The HP / AR / XP bars keep their fixed tick count (AS5); a meter fraction lights whole ticks only. */
+    private static float wholeTickFraction(float fraction, int segmentCount) {
+        return GameMath.segmentFillCount(fraction, segmentCount) / (float) segmentCount;
     }
 
     private void drawHpBarFilled(float pulse, boolean lowHp, boolean isDead) {
         float fraction     = isDead ? 0f : displayedHealthFraction;
         int   segmentCount = HudConstants.HUD_BAR_SEGMENT_COUNT;
-        float gap          = HudConstants.HUD_BAR_SEGMENT_GAP;
+        float gap          = ArtDirection.UI_METER_GAP;
         int   fillCount    = GameMath.segmentFillCount(fraction, segmentCount);
+        float segmentWidth = (HudConstants.HUD_BAR_WIDTH - (segmentCount - 1) * gap) / segmentCount;
 
         for (int index = 0; index < segmentCount; index++) {
             if (index < fillCount) {
-                // Colour each filled segment by its position along the red→green ramp, so the row of
-                // rectangles reads as a green→red gradient (green ticks appear only near full health).
+                // Colour each filled segment by its position along the DAMAGE -> HEALTH_GREEN ramp, so the row
+                // reads as a green -> red gradient (green ticks appear only near full health).
                 healthRampColor(index / (float) (segmentCount - 1), temporaryColor);
                 if (lowHp && !isDead) temporaryColor.mul(pulse, pulse, pulse, 1f);
                 shapes.setColor(temporaryColor);
             } else {
-                shapes.setColor(HP_TRACK_LOW);
+                shapes.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                        ArtDirection.UI_INK_BLACK_BLUE, 1f);
             }
-            drawBarSegment(HudConstants.HUD_HP_BAR_Y, index, segmentCount, gap);
+            shapes.rect(HudConstants.HUD_BAR_X + index * (segmentWidth + gap), HudConstants.HUD_HP_BAR_Y,
+                    segmentWidth, HudConstants.HUD_BAR_HEIGHT);
         }
     }
 
     private void drawArmorBarFilled(boolean isDead) {
-        float fraction     = isDead ? 0f : displayedArmorFraction;
+        float fraction = isDead ? 0f : displayedArmorFraction;
         int   segmentCount = HudConstants.HUD_BAR_SEGMENT_COUNT;
-        float gap          = HudConstants.HUD_BAR_SEGMENT_GAP;
-        int   fillCount    = GameMath.segmentFillCount(fraction, segmentCount);
-
-        for (int index = 0; index < segmentCount; index++) {
-            if (index < fillCount) {
-                temporaryColor.set(AR_BRIGHT).lerp(AR_LABEL, index / (float) (segmentCount - 1));
-                shapes.setColor(temporaryColor);
-            } else {
-                shapes.setColor(AR_TRACK);
-            }
-            drawBarSegment(HudConstants.HUD_AR_BAR_Y, index, segmentCount, gap);
-        }
+        UiKit.meter(shapes, HudConstants.HUD_BAR_X, HudConstants.HUD_AR_BAR_Y,
+                HudConstants.HUD_BAR_WIDTH, HudConstants.HUD_BAR_HEIGHT,
+                wholeTickFraction(fraction, segmentCount), segmentCount,
+                ArtDirection.ARMOUR_BLUE_RED, ArtDirection.ARMOUR_BLUE_GREEN, ArtDirection.ARMOUR_BLUE_BLUE,
+                ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE);
     }
 
     private void drawClipBarFilled(boolean isDead) {
-        float gap         = HudConstants.HUD_BAR_SEGMENT_GAP;
-        int   maxSegments = HudConstants.HUD_BAR_SEGMENT_COUNT;
+        int maxSegments = HudConstants.HUD_BAR_SEGMENT_COUNT;
 
-        // clipSize <= 0 is the sentinel for "melee selected — no ammo concept": fill every tick green.
+        // clipSize <= 0 is the sentinel for "melee selected — no ammo concept": every tick lit in SUIT_AMBER
+        // (the player's own resource; green is reserved for health and buffs).
         if (hudState.clipSize <= 0) {
-            for (int index = 0; index < maxSegments; index++) {
-                shapes.setColor(isDead ? MELEE_TRACK : MELEE_BRIGHT);
-                drawBarSegment(HudConstants.HUD_CLIP_BAR_Y, index, maxSegments, gap);
-            }
+            UiKit.meter(shapes, HudConstants.HUD_BAR_X, HudConstants.HUD_CLIP_BAR_Y,
+                    HudConstants.HUD_BAR_WIDTH, HudConstants.HUD_BAR_HEIGHT,
+                    isDead ? 0f : 1f, maxSegments,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE,
+                    ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE);
             return;
         }
 
@@ -483,7 +420,7 @@ public class HudRenderer implements Renderable, Disposable {
         int segmentCount;
         int fillCount;
         if (clipSize <= maxSegments) {
-            // One tick per round in the clip.
+            // One tick (pip) per round in the clip.
             segmentCount = clipSize;
             fillCount    = isDead ? 0 : Math.min(hudState.currentAmmo, clipSize);
         } else {
@@ -492,80 +429,59 @@ public class HudRenderer implements Renderable, Disposable {
             float fraction = isDead ? 0f : hudState.currentAmmo / (float) clipSize;
             fillCount      = GameMath.segmentFillCount(fraction, segmentCount);
         }
-
-        for (int index = 0; index < segmentCount; index++) {
-            shapes.setColor(index < fillCount ? CLIP_BRIGHT : CLIP_TRACK);
-            drawBarSegment(HudConstants.HUD_CLIP_BAR_Y, index, segmentCount, gap);
-        }
+        UiKit.meter(shapes, HudConstants.HUD_BAR_X, HudConstants.HUD_CLIP_BAR_Y,
+                HudConstants.HUD_BAR_WIDTH, HudConstants.HUD_BAR_HEIGHT,
+                fillCount / (float) segmentCount, segmentCount,
+                ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE,
+                ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE);
     }
 
+    /** XP is earned, so it is CREDITS_GOLD (AS4). */
     private void drawXpBarFilled(boolean isDead) {
-        float fraction     = isDead ? 0f : displayedXpFraction;
+        float fraction = isDead ? 0f : displayedXpFraction;
         int   segmentCount = HudConstants.HUD_BAR_SEGMENT_COUNT;
-        float gap          = HudConstants.HUD_BAR_SEGMENT_GAP;
-        int   fillCount    = GameMath.segmentFillCount(fraction, segmentCount);
-
-        for (int index = 0; index < segmentCount; index++) {
-            if (index < fillCount) {
-                temporaryColor.set(XP_BRIGHT).lerp(XP_LABEL, index / (float) (segmentCount - 1));
-                shapes.setColor(temporaryColor);
-            } else {
-                shapes.setColor(XP_TRACK);
-            }
-            drawBarSegment(HudConstants.HUD_XP_BAR_Y, index, segmentCount, gap);
-        }
-    }
-
-    /** Thin dark outline around every vital bar so each reads as a distinct, crisp element. */
-    private void drawBarBorders() {
-        shapes.setColor(BAR_BORDER);
-        barBorder(HudConstants.HUD_HP_BAR_Y);
-        barBorder(HudConstants.HUD_AR_BAR_Y);
-        barBorder(HudConstants.HUD_CLIP_BAR_Y);
-        barBorder(HudConstants.HUD_XP_BAR_Y);
-    }
-
-    private void barBorder(float barY) {
-        shapes.rect(HudConstants.HUD_BAR_X, barY, HudConstants.HUD_BAR_WIDTH, HudConstants.HUD_BAR_HEIGHT);
+        UiKit.meter(shapes, HudConstants.HUD_BAR_X, HudConstants.HUD_XP_BAR_Y,
+                HudConstants.HUD_BAR_WIDTH, HudConstants.HUD_BAR_HEIGHT,
+                wholeTickFraction(fraction, segmentCount), segmentCount,
+                ArtDirection.CREDITS_GOLD_RED, ArtDirection.CREDITS_GOLD_GREEN, ArtDirection.CREDITS_GOLD_BLUE,
+                ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE);
     }
 
     /**
-     * Samples the health color ramp red(0) → yellow(0.5) → green(1) into {@code out}.
-     * (Channel ramp kept local to the renderer to avoid allocating a Color in GameMath.)
+     * Samples the health ramp CombatPalette.DAMAGE (0) -> HEALTH_RAMP_MIDDLE (0.5) -> ArtDirection.HEALTH_GREEN (1)
+     * into {@code out}. Same two-segment shape as before; only the endpoints moved to the palette.
      */
     private static void healthRampColor(float fraction, Color out) {
         float clamped = MathUtils.clamp(fraction, 0f, 1f);
-        float red, green;
         if (clamped < 0.5f) {
-            red   = 1f;
-            green = clamped * 2f;          // 0 → 1 over [0, 0.5]
+            out.set(DAMAGE).lerp(HEALTH_RAMP_MIDDLE, clamped * 2f);
         } else {
-            red   = (1f - clamped) * 2f;   // 1 → 0 over [0.5, 1]
-            green = 1f;
+            out.set(HEALTH_RAMP_MIDDLE).lerp(HEALTH_GREEN, (clamped - 0.5f) * 2f);
         }
-        out.set(red, green, 0.10f, 1f);
     }
 
     // =========================================================================
     // PASS C: Vital labels + values
     // =========================================================================
 
+    /** R9: labels UI_TEXT_SECONDARY, values UI_TEXT_PRIMARY; harm (low HP, an empty clip) in DAMAGE. */
     private void drawVitalsText(boolean lowHp, float pulse, boolean isDead) {
+        Color labelColor = isDead ? TEXT_DIM : TEXT_SECONDARY;
         // HP
-        drawLabel("HP", HudConstants.HUD_HP_BAR_Y, isDead ? TEXT_DIM : HP_LABEL);
+        drawLabel("HP", HudConstants.HUD_HP_BAR_Y, labelColor);
         if (lowHp && !isDead) {
-            temporaryColor.set(HP_RED).mul(pulse, pulse, pulse, 1f);
+            temporaryColor.set(DAMAGE).mul(pulse, pulse, pulse, 1f);
         } else if (isDead) {
             temporaryColor.set(TEXT_DIM);
         } else {
-            healthRampColor(player.getHealthFraction(), temporaryColor);
+            temporaryColor.set(TEXT_PRIMARY);
         }
         stringBuilder.setLength(0);
         stringBuilder.append(player.getHealth());
         drawValueRight(stringBuilder, HudConstants.HUD_HP_BAR_Y, temporaryColor, HudConstants.HUD_HP_VALUE_SCALE);
 
         // AR
-        drawLabel("AR", HudConstants.HUD_AR_BAR_Y, isDead ? TEXT_DIM : AR_LABEL);
+        drawLabel("AR", HudConstants.HUD_AR_BAR_Y, labelColor);
         stringBuilder.setLength(0);
         stringBuilder.append(player.getArmor());
         drawValueRight(stringBuilder, HudConstants.HUD_AR_BAR_Y,
@@ -573,13 +489,13 @@ public class HudRenderer implements Renderable, Disposable {
 
         // AMMO / MELEE
         if (hudState.clipSize <= 0) {
-            drawLabel("ML", HudConstants.HUD_CLIP_BAR_Y, isDead ? TEXT_DIM : MELEE_BRIGHT);
+            drawLabel("ML", HudConstants.HUD_CLIP_BAR_Y, labelColor);
             stringBuilder.setLength(0);
             stringBuilder.append("MELEE");
             drawValueRight(stringBuilder, HudConstants.HUD_CLIP_BAR_Y,
-                    isDead ? TEXT_DIM : MELEE_BRIGHT, HudConstants.HUD_CLIP_VALUE_SCALE);
+                    isDead ? TEXT_DIM : SUIT_AMBER, HudConstants.HUD_CLIP_VALUE_SCALE);
         } else {
-            drawLabel("AM", HudConstants.HUD_CLIP_BAR_Y, isDead ? TEXT_DIM : CLIP_LABEL);
+            drawLabel("AM", HudConstants.HUD_CLIP_BAR_Y, labelColor);
             stringBuilder.setLength(0);
             stringBuilder.append(isDead ? 0 : hudState.currentAmmo);
             stringBuilder.append('/');
@@ -589,17 +505,19 @@ public class HudRenderer implements Renderable, Disposable {
                 stringBuilder.append(hudState.reserveAmmo);
                 stringBuilder.append(']');
             }
+            // No low-ammo threshold exists in the game, so the digits are primary until the clip is empty.
+            Color ammoColor = isDead ? TEXT_DIM : (hudState.currentAmmo <= 0 ? DAMAGE : TEXT_PRIMARY);
             drawValueRight(ammoDigitsFont, stringBuilder, HudConstants.HUD_CLIP_BAR_Y,
-                    isDead ? TEXT_DIM : TEXT_PRIMARY, HudConstants.HUD_CLIP_VALUE_SCALE);
+                    ammoColor, HudConstants.HUD_CLIP_VALUE_SCALE);
         }
 
         // XP
-        drawLabel("XP", HudConstants.HUD_XP_BAR_Y, isDead ? TEXT_DIM : XP_LABEL);
+        drawLabel("XP", HudConstants.HUD_XP_BAR_Y, labelColor);
         stringBuilder.setLength(0);
         stringBuilder.append("LV.");
         stringBuilder.append(hudState.playerLevel);
         drawValueRight(stringBuilder, HudConstants.HUD_XP_BAR_Y,
-                isDead ? TEXT_DIM : XP_LABEL, HudConstants.HUD_VALUE_SCALE);
+                isDead ? TEXT_DIM : TEXT_PRIMARY, HudConstants.HUD_VALUE_SCALE);
     }
 
     /** Left-aligned vital label, vertically centred on its bar, with a drop-shadow. */
@@ -629,7 +547,7 @@ public class HudRenderer implements Renderable, Disposable {
         return barY + (HudConstants.HUD_BAR_HEIGHT + glyphLayout.height) / 2f;
     }
 
-    /** Draws text twice — a dark offset shadow then the foreground color — for legibility. */
+    /** Shadowed text (UiKit R6) — a dark offset shadow then the foreground color — for legibility. */
     private void drawTextWithShadow(CharSequence text, float x, float baselineY, Color color, float scale) {
         drawTextWithShadow(font, text, x, baselineY, color, scale);
     }
@@ -637,26 +555,33 @@ public class HudRenderer implements Renderable, Disposable {
     /** {@link #drawTextWithShadow(CharSequence, float, float, Color, float)} in a given face. */
     private void drawTextWithShadow(BitmapFont textFont, CharSequence text, float x, float baselineY,
                                     Color color, float scale) {
-        float offset = HudConstants.HUD_TEXT_SHADOW_OFFSET;
         textFont.getData().setScale(scale);
-        textFont.setColor(TEXT_SHADOW);
-        textFont.draw(batch, text, x + offset, baselineY - offset);
-        textFont.setColor(color);
-        textFont.draw(batch, text, x, baselineY);
+        UiKit.text(batch, textFont, text, x, baselineY, color.r, color.g, color.b, color.a);
     }
 
     // =========================================================================
-    // Weapon slot strip — Pass A, B, C
+    // Weapon row — Pass A, B, C. A fifth vital row in the same grammar as HP/AR/AM/XP:
+    //   [WP]  [class glyph + EQUIPPED weapon's full name ........ LV n]  [slot tabs 1 2 3]
+    // Only the equipped weapon is named, so its name is never squeezed; the tabs (right-aligned in the
+    // value column) show which slot is equipped (amber), which are filled (neutral, with a class-colour
+    // bar) and which are empty (dimmed).
     // =========================================================================
 
-    private float slotWidth(int slotCount) {
-        float padding = HudConstants.HUD_SLOT_SIDE_PADDING;
-        float gap     = HudConstants.HUD_SLOT_GAP;
-        return (LEFT_WIDTH - 2f * padding - (slotCount - 1) * gap) / slotCount;
+    /** Left edge of display tab {@code displayIndex} when {@code tabCount} tabs are right-aligned. */
+    private static float tabX(int displayIndex, int tabCount) {
+        float rowWidth = tabCount * HudConstants.HUD_WEAPON_TAB_WIDTH + (tabCount - 1) * HudConstants.HUD_WEAPON_TAB_GAP;
+        return HudConstants.HUD_VALUE_RIGHT_X - rowWidth
+                + displayIndex * (HudConstants.HUD_WEAPON_TAB_WIDTH + HudConstants.HUD_WEAPON_TAB_GAP);
     }
 
-    private float slotX(int slotIndex, float slotBoxWidth) {
-        return HudConstants.HUD_SLOT_SIDE_PADDING + slotIndex * (slotBoxWidth + HudConstants.HUD_SLOT_GAP);
+    /** Display index of the equipped weapon, or -1 when none is shown. */
+    private int activeDisplayIndex(PlayerInventory inventory, int slotCount) {
+        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
+            if (displaySlotWeapon(inventory, displayIndex) != null && displaySlotActive(inventory, displayIndex)) {
+                return displayIndex;
+            }
+        }
+        return -1;
     }
 
     // -------------------------------------------------------------------------
@@ -702,128 +627,118 @@ public class HudRenderer implements Renderable, Disposable {
         return rangedSlot >= 0 && inventory.getLoadout().getActiveSlotIndex() == rangedSlot;
     }
 
-    private void drawSlotStripFilled(PlayerInventory inventory, float pulse) {
-        float originY       = HudConstants.HUD_SLOT_STRIP_Y;
-        float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = displaySlotCount(inventory.getLoadout());
-        float slotBoxWidth  = slotWidth(slotCount);
+    private void drawSlotStripFilled(PlayerInventory inventory) {
+        float rowY      = HudConstants.HUD_WEAPON_ROW_Y;
+        float tabHeight = HudConstants.HUD_BAR_HEIGHT;
+        int   slotCount = displaySlotCount(inventory.getLoadout());
+        boolean isDead  = player.isDead();
 
+        // Slot tabs: equipped = PRESSED plate in SUIT_AMBER (a 24-unit tab is too small for brackets), filled =
+        // IDLE with a class-colour bar along its foot, empty = DISABLED.
         for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
-            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
-            boolean filled        = displaySlotWeapon(inventory, displayIndex) != null;
-            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
-
-            if (isActive) {
-                float brightness = 0.35f + 0.20f * pulse;
-                shapes.setColor(SLOT_ACTIVE.r * brightness, SLOT_ACTIVE.g * brightness,
-                                SLOT_ACTIVE.b * brightness, 0.95f);
-            } else if (filled) {
-                shapes.setColor(SLOT_FILLED);
-            } else {
-                shapes.setColor(SLOT_EMPTY);
-            }
-            shapes.rect(slotPositionX, originY, slotBoxWidth, slotBoxHeight);
-
-            // Damage-class glyph (balance-overhaul order 3, C3): top row, right of the slot number, in the
-            // class colour — the equipped slot at full strength, the carried ones dimmed.
-            Weapon glyphWeapon = displaySlotWeapon(inventory, displayIndex);
-            if (glyphWeapon != null && !player.isDead()) {
-                DamageClass damageClass = glyphWeapon.damageClass();
-                matchupGlyphs.drawClass(shapes, damageClass,
-                        slotPositionX + HudConstants.HUD_CLASS_GLYPH_LEFT_INSET,
-                        originY + slotBoxHeight - HudConstants.HUD_CLASS_GLYPH_TOP_INSET
-                                - HudConstants.HUD_CLASS_GLYPH_SIZE,
-                        HudConstants.HUD_CLASS_GLYPH_SIZE,
-                        damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(),
+            Weapon  weapon   = displaySlotWeapon(inventory, displayIndex);
+            boolean filled   = weapon != null;
+            boolean isActive = filled && displaySlotActive(inventory, displayIndex);
+            float   tabLeft  = tabX(displayIndex, slotCount);
+            PlateState state = isActive ? PlateState.PRESSED : (filled ? PlateState.IDLE : PlateState.DISABLED);
+            UiKit.plate(shapes, tabLeft, rowY, HudConstants.HUD_WEAPON_TAB_WIDTH, tabHeight,
+                    HudConstants.HUD_WEAPON_TAB_CHAMFER, state, HudConstants.HUD_WEAPON_TAB_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
+            if (filled && !isDead) {
+                DamageClass damageClass = weapon.damageClass();
+                shapes.setColor(damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(),
                         isActive ? 1f : HudConstants.HUD_CLASS_GLYPH_INACTIVE_ALPHA);
+                float barInset = HudConstants.HUD_WEAPON_TAB_CHAMFER;
+                shapes.rect(tabLeft + barInset, rowY + ArtDirection.UI_BORDER_THICKNESS,
+                        HudConstants.HUD_WEAPON_TAB_WIDTH - 2f * barInset, HudConstants.HUD_WEAPON_TAB_CLASS_BAR_HEIGHT);
             }
+        }
+
+        // Damage-class glyph (balance-overhaul order 3, C3) of the equipped weapon, at the head of the row.
+        int activeIndex = activeDisplayIndex(inventory, slotCount);
+        if (activeIndex >= 0 && !isDead) {
+            DamageClass damageClass = displaySlotWeapon(inventory, activeIndex).damageClass();
+            float glyphSize = HudConstants.HUD_CLASS_GLYPH_SIZE;
+            matchupGlyphs.drawClass(shapes, damageClass, HudConstants.HUD_BAR_X,
+                    rowY + (tabHeight - glyphSize) / 2f, glyphSize,
+                    damageClass.colorRed(), damageClass.colorGreen(), damageClass.colorBlue(), 1f);
         }
     }
 
+    /** LV tag arrow glyph (R14 a) of the equipped weapon, at the right end of the name column. */
     private void drawSlotStripLines(PlayerInventory inventory) {
-        float originY       = HudConstants.HUD_SLOT_STRIP_Y;
-        float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = displaySlotCount(inventory.getLoadout());
-        float slotBoxWidth  = slotWidth(slotCount);
-
-        for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
-            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
-            boolean filled        = displaySlotWeapon(inventory, displayIndex) != null;
-            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
-            shapes.setColor(isActive ? SLOT_ACTIVE : SLOT_BORDER);
-            shapes.rect(slotPositionX, originY, slotBoxWidth, slotBoxHeight);
-
-            // LV tag arrow glyph (R14 a): right-hand end of the slot's top row, beside the tag text.
-            Weapon weapon = displaySlotWeapon(inventory, displayIndex);
-            if (weapon != null && !player.isDead()) {
-                int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
-                if (WeaponLevelTag.hasGlyph(standing)) {
-                    WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
-                    shapes.setColor(temporaryColor);
-                    float glyphX = slotPositionX + slotBoxWidth - HudConstants.HUD_LEVEL_TAG_SLOT_INSET
-                            - HudConstants.HUD_LEVEL_CHEVRON_WIDTH;
-                    float glyphY = originY + slotBoxHeight - HudConstants.HUD_LEVEL_TAG_TOP_INSET
-                            - HudConstants.HUD_LEVEL_CHEVRON_HEIGHT;
-                    WeaponLevelTag.drawGlyph(shapes, glyphX, glyphY, standing);
-                }
-            }
-        }
+        int slotCount   = displaySlotCount(inventory.getLoadout());
+        int activeIndex = activeDisplayIndex(inventory, slotCount);
+        if (activeIndex < 0 || player.isDead()) return;
+        Weapon weapon = displaySlotWeapon(inventory, activeIndex);
+        int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
+        if (!WeaponLevelTag.hasGlyph(standing)) return;
+        WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
+        shapes.setColor(temporaryColor);
+        float glyphX = HudConstants.HUD_BAR_X + HudConstants.HUD_BAR_WIDTH - HudConstants.HUD_LEVEL_CHEVRON_WIDTH;
+        float glyphY = HudConstants.HUD_WEAPON_ROW_Y
+                + (HudConstants.HUD_BAR_HEIGHT - HudConstants.HUD_LEVEL_CHEVRON_HEIGHT) / 2f;
+        WeaponLevelTag.drawGlyph(shapes, glyphX, glyphY, standing);
     }
 
     private void drawSlotStripText(PlayerInventory inventory, boolean isDead) {
-        float originY       = HudConstants.HUD_SLOT_STRIP_Y;
-        float slotBoxHeight = HudConstants.HUD_SLOT_STRIP_HEIGHT;
-        int   slotCount     = displaySlotCount(inventory.getLoadout());
-        float slotBoxWidth  = slotWidth(slotCount);
+        float rowY      = HudConstants.HUD_WEAPON_ROW_Y;
+        int   slotCount = displaySlotCount(inventory.getLoadout());
 
+        drawLabel("WP", rowY, isDead ? TEXT_DIM : TEXT_SECONDARY);
+
+        // Tab numbers, centred in each tab.
+        font.getData().setScale(HudConstants.HUD_SLOT_NUMBER_SCALE);
         for (int displayIndex = 0; displayIndex < slotCount; displayIndex++) {
-            float   slotPositionX = slotX(displayIndex, slotBoxWidth);
-            Weapon  weapon        = displaySlotWeapon(inventory, displayIndex);
-            boolean filled        = weapon != null;
-            boolean isActive      = displaySlotActive(inventory, displayIndex) && filled;
-
-            // Slot number, top-left corner of the slot.
+            Weapon  weapon   = displaySlotWeapon(inventory, displayIndex);
+            boolean filled   = weapon != null;
+            boolean isActive = filled && displaySlotActive(inventory, displayIndex);
             stringBuilder.setLength(0);
             stringBuilder.append(displayIndex + 1);
-            Color numberColor = isDead ? TEXT_DIM : (isActive ? SLOT_ACTIVE : TEXT_DIM);
-            drawTextWithShadow(stringBuilder, slotPositionX + 4f, originY + slotBoxHeight - 3f,
+            glyphLayout.setText(font, stringBuilder);
+            float numberX = tabX(displayIndex, slotCount) + (HudConstants.HUD_WEAPON_TAB_WIDTH - glyphLayout.width) / 2f;
+            Color numberColor = isDead || !filled ? TEXT_DIM : (isActive ? SUIT_AMBER : TEXT_PRIMARY);
+            drawTextWithShadow(stringBuilder, numberX,
+                    barLabelBaseline(stringBuilder, rowY, HudConstants.HUD_SLOT_NUMBER_SCALE),
                     numberColor, HudConstants.HUD_SLOT_NUMBER_SCALE);
-
-            // Weapon name, truncated to fit the slot, vertically centred under the number.
-            if (filled && !isDead) {
-                appendTruncatedName(weapon.getDisplayName(),
-                        slotBoxWidth - 8f, HudConstants.HUD_SLOT_NAME_SCALE);
-                font.getData().setScale(HudConstants.HUD_SLOT_NAME_SCALE);
-                glyphLayout.setText(font, stringBuilder);
-                float nameX = slotPositionX + (slotBoxWidth - glyphLayout.width) / 2f;
-                float nameY = originY + slotBoxHeight * 0.42f;
-                drawTextWithShadow(stringBuilder, nameX, nameY,
-                        isActive ? SLOT_ACTIVE : TEXT_PRIMARY, HudConstants.HUD_SLOT_NAME_SCALE);
-            }
-
-            // "LV n" tag, top-right of the slot, coloured by the gap to the floor threat level.
-            if (filled && !isDead) {
-                int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
-                WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
-                String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
-                font.getData().setScale(HudConstants.HUD_LEVEL_TAG_SCALE);
-                glyphLayout.setText(font, tagLabel);
-                float rightEdge = slotPositionX + slotBoxWidth - HudConstants.HUD_LEVEL_TAG_SLOT_INSET;
-                if (WeaponLevelTag.hasGlyph(standing)) {
-                    rightEdge -= HudConstants.HUD_LEVEL_CHEVRON_WIDTH + HudConstants.HUD_LEVEL_TAG_CHEVRON_GAP;
-                }
-                drawTextWithShadow(tagLabel, rightEdge - glyphLayout.width,
-                        originY + slotBoxHeight - HudConstants.HUD_LEVEL_TAG_TOP_INSET,
-                        temporaryColor, HudConstants.HUD_LEVEL_TAG_SCALE);
-            }
         }
+
+        int activeIndex = activeDisplayIndex(inventory, slotCount);
+        if (activeIndex < 0 || isDead) {
+            font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
+            return;
+        }
+        Weapon weapon = displaySlotWeapon(inventory, activeIndex);
+
+        // "LV n" tag, right-aligned at the end of the name column, coloured by the gap to the floor threat level.
+        int standing = WeaponLevelTag.standing(weapon, hudState.threatLevel);
+        WeaponLevelTag.colorFor(standing, TEXT_PRIMARY, temporaryColor);
+        String tagLabel = WeaponLevelTag.label(weapon.getWeaponLevel());
+        font.getData().setScale(HudConstants.HUD_LEVEL_TAG_SCALE);
+        glyphLayout.setText(font, tagLabel);
+        float tagRight = HudConstants.HUD_BAR_X + HudConstants.HUD_BAR_WIDTH;
+        if (WeaponLevelTag.hasGlyph(standing)) {
+            tagRight -= HudConstants.HUD_LEVEL_CHEVRON_WIDTH + HudConstants.HUD_LEVEL_TAG_CHEVRON_GAP;
+        }
+        float tagLeft = tagRight - glyphLayout.width;
+        drawTextWithShadow(tagLabel, tagLeft,
+                barLabelBaseline(tagLabel, rowY, HudConstants.HUD_LEVEL_TAG_SCALE),
+                temporaryColor, HudConstants.HUD_LEVEL_TAG_SCALE);
+
+        // The equipped weapon's name: bone-white, after the class glyph, truncated only if it would reach the tag.
+        float nameX = HudConstants.HUD_BAR_X + HudConstants.HUD_CLASS_GLYPH_SIZE + HudConstants.HUD_WEAPON_NAME_GAP;
+        appendTruncatedName(weapon.getDisplayName(), tagLeft - HudConstants.HUD_WEAPON_NAME_GAP - nameX,
+                HudConstants.HUD_SLOT_NAME_SCALE);
+        drawTextWithShadow(stringBuilder, nameX,
+                barLabelBaseline(stringBuilder, rowY, HudConstants.HUD_SLOT_NAME_SCALE),
+                TEXT_PRIMARY, HudConstants.HUD_SLOT_NAME_SCALE);
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
     /**
      * Writes {@code name} into stringBuilder, dropping trailing characters (and adding a '.') until
-     * it measures no wider than {@code maxWidth} at {@code scale}. Guarantees the slot name never
-     * overflows its box, so names can never overlap neighbouring slots or the bars above.
+     * it measures no wider than {@code maxWidth} at {@code scale}. Guarantees the weapon name never
+     * runs into its LV tag.
      */
     private void appendTruncatedName(String name, float maxWidth, float scale) {
         font.getData().setScale(scale);
@@ -867,8 +782,7 @@ public class HudRenderer implements Renderable, Disposable {
         float size  = HudConstants.HUD_STATUS_ICON_SIZE;
         float gap   = HudConstants.HUD_STATUS_ICON_GAP;
         int activeCount = 0;
-        font.getData().setScale(0.6f);
-        font.setColor(Color.WHITE);
+        font.getData().setScale(HudConstants.HUD_STATUS_COUNT_SCALE);
         for (int typeIndex = 0; typeIndex < STATUS_TYPES.length; typeIndex++) {
             StatusEffect effect = player.getActiveEffects().get(STATUS_TYPES[typeIndex]);
             if (effect == null || !effect.isActive()) continue;
@@ -881,7 +795,9 @@ public class HudRenderer implements Renderable, Disposable {
             } else {
                 stringBuilder.append(effect.getRemainingTurns());
             }
-            font.draw(batch, stringBuilder, drawX + 2f, iconY + size - 2f);
+            UiKit.text(batch, font, stringBuilder, drawX + HudConstants.HUD_STATUS_COUNT_INSET,
+                    iconY + size - HudConstants.HUD_STATUS_COUNT_INSET,
+                    ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
             activeCount++;
         }
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
@@ -892,33 +808,32 @@ public class HudRenderer implements Renderable, Disposable {
     // =========================================================================
 
     private void drawGroundWeaponLabel(String label) {
-        float centreX = 640f; // world centre — HUD gap spans X 420..860
+        float centreX = Constants.WORLD_WIDTH / 2f; // HUD gap spans X 420..860
 
-        font.getData().setScale(1.0f);
-        font.setColor(WARN_YELLOW);
+        font.getData().setScale(HudConstants.HUD_GROUND_WEAPON_LABEL_SCALE);
         glyphLayout.setText(font, label);
-        font.draw(batch, label, centreX - glyphLayout.width / 2f,
-                  HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height + font.getLineHeight() * 0.3f);
+        UiKit.text(batch, font, label, centreX - glyphLayout.width / 2f,
+                HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height + font.getLineHeight() * 0.3f,
+                SUIT_AMBER.r, SUIT_AMBER.g, SUIT_AMBER.b, 1f);
 
         float subPulse = 0.5f + 0.5f * MathUtils.sin(animationClockSeconds * MathUtils.PI2 * 1.5f);
-        temporaryColor.set(WARN_YELLOW.r * subPulse, WARN_YELLOW.g * subPulse, WARN_YELLOW.b * subPulse, 1f);
-        font.setColor(temporaryColor);
-        font.getData().setScale(0.85f);
+        font.getData().setScale(HudConstants.HUD_GROUND_WEAPON_HINT_SCALE);
         String subLabel = "[ INSPECT ]";
         glyphLayout.setText(font, subLabel);
-        font.draw(batch, subLabel, centreX - glyphLayout.width / 2f,
-                  HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height);
+        UiKit.text(batch, font, subLabel, centreX - glyphLayout.width / 2f,
+                HudConstants.WEAPON_NAME_LABEL_Y + glyphLayout.height,
+                SUIT_AMBER.r * subPulse, SUIT_AMBER.g * subPulse, SUIT_AMBER.b * subPulse, 1f);
 
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 
     private void drawMedkitWarning(float pulse) {
-        float centreX = 640f;
-        font.getData().setScale(1.1f);
-        temporaryColor.set(HP_RED).lerp(WARN_YELLOW, pulse);
-        font.setColor(temporaryColor);
+        float centreX = Constants.WORLD_WIDTH / 2f;
+        font.getData().setScale(HudConstants.HUD_MEDKIT_WARN_SCALE);
+        temporaryColor.set(DAMAGE).lerp(SUIT_AMBER, pulse);
         glyphLayout.setText(font, MEDKIT_WARN_TEXT);
-        font.draw(batch, MEDKIT_WARN_TEXT, centreX - glyphLayout.width / 2f, HudConstants.HUD_MEDKIT_WARN_Y);
+        UiKit.text(batch, font, MEDKIT_WARN_TEXT, centreX - glyphLayout.width / 2f, HudConstants.HUD_MEDKIT_WARN_Y,
+                temporaryColor.r, temporaryColor.g, temporaryColor.b, 1f);
         font.getData().setScale(HudConstants.HUD_LABEL_SCALE);
     }
 

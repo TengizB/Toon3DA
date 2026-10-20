@@ -10,7 +10,8 @@ public final class TouchConstants {
     // Grid rows   (center Y): row1(BACK)=200, row2(FIRE/ROT)=296, row3(FWD/STR)=392, row4(RELOAD/SKIP)=488
     // Safe zone: x 956..1244, y 152..536; above HUD (y 0..130), avoids mini-map (top-left)
     public static final float TOUCH_BUTTON_SIZE          = 96f;
-    public static final float TOUCH_BUTTON_CORNER_RADIUS = 16f;
+    /** 45-degree corner cut of every button plate (visual-identity-order-4 R10; was the rounded-corner radius). Drawing only: hit testing never reads it. */
+    public static final float TOUCH_BUTTON_CHAMFER       = 16f;
     public static final float TOUCH_GRID_CENTER_X        = 1100f;  // center-column X of right combat cluster
     public static final float TOUCH_GRID_LEFT_CENTER_X  = 180f;   // center X of left secondary cluster (heal, inventory)
     public static final float TOUCH_GRID_BASE_Y          = 200f;   // center Y of bottom row (BACK)
@@ -27,6 +28,9 @@ public final class TouchConstants {
     public static final float TOUCH_TAP_BUFFER_SECONDS   = 0.15f;
     public static final float TOUCH_ICON_EXTENT          = 22f;
     public static final float TOUCH_RIM_THICKNESS        = 3f;
+    /** Icon legibility halo: UI_INK_BLACK, this much larger than the icon, at this fraction of the icon alpha. */
+    public static final float TOUCH_ICON_HALO_GROWTH     = 3f;
+    public static final float TOUCH_ICON_HALO_ALPHA_SCALE = 0.55f;
     public static final int   TOUCH_ARC_SEGMENTS         = 8;
 
     // Contextual INSPECT button — left secondary cluster, row 1 (base Y), starts hidden

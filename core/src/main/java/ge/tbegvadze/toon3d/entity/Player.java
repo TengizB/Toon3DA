@@ -1,6 +1,6 @@
 package ge.tbegvadze.toon3d.entity;
 
-import com.badlogic.gdx.graphics.Color;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
@@ -608,7 +608,8 @@ public class Player implements Renderable, Disposable, StatusHost {
         shapes.setProjectionMatrix(camera.combined);
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(Color.GREEN);
+        // The player marker is the player's own: SUIT_AMBER (visual-identity-order-4 R11).
+        shapes.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
         shapes.circle(dotX, dotY, Constants.MINI_MAP_PLAYER_DOT_RADIUS);
 
         // Facing wedge — a large filled triangle pointing in directionX/directionY.
@@ -623,7 +624,6 @@ public class Player implements Renderable, Disposable, StatusHost {
                 Constants.MINI_MAP_FACING_WEDGE_BACK, Constants.MINI_MAP_FACING_WEDGE_HALF_WIDTH);
         float wedgeBaseRightY = GameMath.facingWedgeBaseRightY(dotY, directionX, directionY,
                 Constants.MINI_MAP_FACING_WEDGE_BACK, Constants.MINI_MAP_FACING_WEDGE_HALF_WIDTH);
-        shapes.setColor(Color.GREEN);
         shapes.triangle(wedgeTipX, wedgeTipY, wedgeBaseLeftX, wedgeBaseLeftY, wedgeBaseRightX, wedgeBaseRightY);
         shapes.end();
     }

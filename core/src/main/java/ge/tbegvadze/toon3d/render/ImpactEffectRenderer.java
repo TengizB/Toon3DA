@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -280,23 +281,23 @@ public final class ImpactEffectRenderer implements Disposable {
             float riseOffset       = EffectConstants.DAMAGE_NUMBER_RISE_SPEED * age;
             float screenY          = spriteTop + riseOffset + 10f;
 
-            // Colour: kill = bold gold, hit = orange-red
-            if (system.numberIsKill[numberIndex]) {
-                font.setColor(1f, 0.85f, 0.10f, alpha);
-            } else {
-                font.setColor(1f, 0.40f, 0.15f, alpha);
-            }
+            // Colour (R14): the two existing categories map 1:1 — a hit is UI_TEXT_PRIMARY, a kill (the heavy
+            // one) SUIT_AMBER. HEAVY face, drawn through UiKit.text for the kit's drop shadow.
+            boolean isKill = system.numberIsKill[numberIndex];
+            float numberRed   = isKill ? ArtDirection.SUIT_AMBER_RED   : ArtDirection.UI_TEXT_PRIMARY_RED;
+            float numberGreen = isKill ? ArtDirection.SUIT_AMBER_GREEN : ArtDirection.UI_TEXT_PRIMARY_GREEN;
+            float numberBlue  = isKill ? ArtDirection.SUIT_AMBER_BLUE  : ArtDirection.UI_TEXT_PRIMARY_BLUE;
 
             // Build "-N" (and "-N!" for kills) without String allocation
             stringBuilder.setLength(0);
             stringBuilder.append('-');
             stringBuilder.append(system.numberAmount[numberIndex]);
             if (system.numberIsKill[numberIndex]) stringBuilder.append('!');
-            font.draw(batch, stringBuilder, screenColumn, screenY);
+            UiKit.text(batch, font, stringBuilder, screenColumn, screenY, numberRed, numberGreen, numberBlue, alpha);
         }
 
         // Restore font state so other renderers using BitmapFont are not affected
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         font.setColor(1f, 1f, 1f, 1f);
         batch.end();
     }
@@ -331,11 +332,12 @@ public final class ImpactEffectRenderer implements Disposable {
             }
             alpha = Math.max(0f, Math.min(1f, alpha)) * 0.85f;
 
-            font.setColor(0.25f, 1f, 0.25f, alpha);
+            font.setColor(ArtDirection.HEALTH_GREEN_RED, ArtDirection.HEALTH_GREEN_GREEN,
+                    ArtDirection.HEALTH_GREEN_BLUE, alpha);
             font.draw(batch, "+", system.healParticleX[index], system.healParticleY[index]);
         }
 
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         font.setColor(1f, 1f, 1f, 1f);
         batch.end();
     }

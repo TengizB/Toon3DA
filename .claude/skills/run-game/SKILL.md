@@ -55,11 +55,22 @@ count events with `grep -c Pause FILE`.
 | `pulse:ITEM_TYPE` | reflection into `World.atmosphereGrade.pulseMuzzleLight` (see muzzle light, below) |
 | `call:PATH:METHOD[:INT]` | reflection: invoke a no-arg/int-arg method on `Main.world` (PATH `.`) or a field path from it (`player`, `playerProgress`) — e.g. `call:.:onDescentRequested` (route map), `call:player:applyDamage:9999` (death), `call:playerProgress:addXp:500` (level-up), `call:.:openShop` |
 | `set:PATH:VALUE` | reflection: set a boolean/int field reached from `Main.world` (e.g. `set:startRoomChoiceResolved:true`, then `call:.:onDescentRequested` opens the route map from the start room) |
+| `equip:INDEX` | reflection: put arsenal weapon INDEX into the loadout and select it (start room arsenal: 0 shotgun, 1 double barrel, 2 plasma, 3 chaingun, ...) — a HUD with a ranged weapon and ammo |
+| `hittest:X:Y` | prints which touch buttons' hit areas contain world (X, Y), each tested as if visible (contextual INSPECT / USE too) — proves a tap area without the context that shows the button |
+| `bosshud:PERCENT[:STATE]` | reflection: attach a BossHudRenderer with a stand-in boss at PERCENT health (optional `BossVisualState` constant name for the state label) — the boss bar from floor 1 |
+| `alertall` | reflection: `alert()` every enemy, so the mini-map shows their threat markers |
+| `engage` | reflection: commit the route map's first selectable node (the map is time-seeded, so node taps are not repeatable) — open the map first, then `engage` lands on floor 1 proper |
+| `damagenumber:AMOUNT[:true]` | reflection: a floating damage number two tiles ahead (`true` = the kill variant) |
+| `eventtext:CODE:TEXT` | reflection: `EventTextSystem.spawnWithColor(TEXT, CODE)` (0 white, 1 green, 2 red, 3 grey, 4 gold, 5 credit, 6 blue, 7 armour, 8 amber; TEXT without `;` or `:`) |
+| `status:STATUS_TYPE:TURNS` | reflection: activate one of the player's status effects (e.g. `status:BURNING:3`) — the HUD status icons + debuff list |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 
 `--mood` passes `-Dtoon3d.forceMood` (cool_steel, clinical_white, amber_hot, corrupted_violet, core_white_violet)
-so every region can be checked from floor 1. Look at the PNGs with the Read tool; send them to the owner with
+so every region can be checked from floor 1. Shots keep the framebuffer's ALPHA, so a translucent UI pixel
+composited onto a white/grey canvas reads far lighter than it renders: add `-alpha off` to every
+`montage`/`convert` that builds a comparison sheet, and judge colour from the RGBA originals.
+Look at the PNGs with the Read tool; send them to the owner with
 SendUserFile. ImageMagick (`convert`, `montage`) and Python PIL are installed — use `montage -tile 2x5` for
 before/after sheets and `convert X.png -crop WxH+X+Y +repage` for close-ups.
 

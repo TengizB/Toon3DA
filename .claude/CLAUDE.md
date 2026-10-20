@@ -135,7 +135,6 @@ toon3D/
 │   │   ├── PropRenderer.java            # Billboard prop sprites
 │   │   ├── EnemyRenderer.java           # Enemy billboard sprites + health bars
 │   │   ├── WeaponHudRenderer.java       # Procedural weapon sprite (FrameBuffer)
-│   │   ├── HudRenderer.java             # Left/right HUD chrome panels
 │   │   ├── LevelRenderer.java           # 2D mini-map overlay
 │   │   ├── ImpactEffectSystem.java      # Screen shake, kill flash, particles
 │   │   ├── ImpactEffectRenderer.java    # Draws impact effect sprites
@@ -147,6 +146,8 @@ toon3D/
 │   │   ├── HitVignetteRenderer.java
 │   │   ├── EventTextRenderer.java / EventTextSystem.java
 │   │   └── RayCaster.java / RayCastResult.java / Renderable.java
+│   ├── hud/
+│   │   └── HudRenderer.java             # The left vitals HUD panel (UiKit chrome)
 │   ├── input/
 │   │   ├── PlayerController.java        # IDLE→MOVING/ROTATING state machine
 │   │   └── touch/
@@ -212,6 +213,7 @@ Root package (`ge.tbegvadze.toon3d`) is reserved for `Main.java` only.
 | `…toon3d.enemy` | Enemy manager, types, AI state |
 | `…toon3d.hazard` | Explosive barrels and environmental hazards |
 | `…toon3d.audio` | GAMEPLAY sound — every weapon, damage, impact, enemy and explosion sound, SYNTHESISED from code at first launch (no .wav/.ogg assets, ever). Split headless/LibGDX like the tileset subsystem. **Headless:** `GameSoundId` (the call-site vocabulary), `SoundCategory` (the five mix buses), `WaveformKind` (oscillators with per-constant `sampleAt` bodies — the `EnemyType` idiom, so the synthesiser holds no switch), `SoundLayer` + `SoundDefinition` (+ Builders — a sound is DATA), `SoundRegistry` (ordinal-indexed; weapon→fire, weapon→impact and enemy-family×moment→voice bindings — six FAMILY voices, never per `EnemyType`, fired through `enemy/EnemyVoiceListener` + `enemy/EnemyVoiceMoment` so `EnemyManager` never imports audio; doors likewise through `door/DoorStateListener`). There is NO cap on the number of sounds (removed by order 7 at the owner's request) — a new sound is a new id plus one `register()` call. Order 7 made every action, menu, world event and the boss fight audible. Order 6 added `WaveformKind.METAL` (struck metal) and a per-definition room echo (`SoundDefinition.Builder.roomEcho`) for the Half-Life-inspired facility sound, `GameSoundCatalog.bootstrap()` (THE CONTENT FILE — adding a sound is ONE `register()` call), `SoundMixer` (the turn-based anti-mush rules), `SfxVolumeSetting` (ON/QUIET/OFF), `NoiseListener` (the noise-propagation seam — every sound reports its `loudness` at its tile BEFORE any volume/mute/pause gate, so muting never changes what enemies hear; no consumer yet). **LibGDX:** `PcmWavWriter` (PCM→RIFF/WAVE→local cache→`Gdx.audio.newSound`, SHARED with `render/StoryAudio`, which was refactored onto it), `SoundSynthesizer`, `GameAudio` (the `Disposable` facade, one owner in `World`). Deliberately NOT in `render`: gameplay sound is fired from the SIMULATION, and putting it there would force `input`/`enemy` to import a renderer — the exact coupling `ImpactEventListener`/`EnemyAttackListener` exist to prevent. Degrades to total silence when `Gdx.audio` is null, which is what keeps `sim/` and the test suite working. Separate from `render/StoryAudio` (ORA's voice) and separately switchable. See `docs/sound-system.txt`. |
+| `…toon3d.hud` | The in-play HUD renderer (`HudRenderer`: the left vitals panel — HP/AR/AM/XP rows plus the WP row (equipped weapon name + numbered slot tabs), credits/debuff readouts, the BLACKOUT NAV OFFLINE plate), drawn with `render/UiKit` |
 | `…toon3d.progression` | Player stats, XP, attributes, level-up rewards |
 | `…toon3d.route` | Branching route-map subsystem: node/generator registries, run-seeded map data model, plus the PRICED map — `NodeEconomics`/`NodeEconomicsRegistry`/`RouteEconomics` (the node EV ledger) and `RouteEconomicsModel` (pricing, path policies, route guarantees). Also `BossTable` (balance-overhaul order 6: the five boss floors of the finite run as data), and FLOOR TWISTS (floor-twists): `AffixScope` gives `NodeAffixRegistry` a second scope, so BLACKOUT / SALVAGE / HUNTED are `register()` rows rolled onto COMBAT nodes (one rule change per floor, shown on the card), folded by `DefaultCombatProfile`, applied at runtime by `World.applyTwistRuntimeModifiers` (HUNTED's trail hunter lives in `enemy/PlayerTrail` + `HuntedPursuit`), priced by R-TWIST and banded by S-TWIST — numbers in `BalanceConfig` SECTION 27. Headless, no LibGDX imports |
 | `…toon3d.relic` | RELICS (relics-run-changing-artifacts): rare, named, RUN-SCOPED artifacts that each rewrite one rule for the rest of the run — kills heal you, doors you open explode, the first hit each floor does nothing, enemies arrive weaker. 36 rows (10 COMMON / 11 RARE / 9 LEGENDARY / 6 CURSED). Headless, no LibGDX imports; dependencies point one way (`route` -> `relic` -> `progression`/`util`, `relic` never imports `route`). **A relic is 1-3 `PerkEffect` rows folded into the SAME `BuildStats` that perks and keystones use** (`PlayerBuild.recompute`: perks -> relics at rank 1 -> keystones) — there is NO parallel effect system, which is why every runtime seam is already wired in World and SimWorld and why the balance valuation prices a relic with the machinery that prices a build. Classes: `RelicRarity`/`RelicTrigger`/`RelicValuation`/`RelicSource` (enums with per-constant data — never a switch), `RelicDefinition` + Builder, `RelicRegistry`, `RelicCatalog` (THE CONTENT FILE — a new relic is ONE `register()` call plus its `RELIC_<ID>_<KIND>` magnitudes in `BalanceConfig` SECTION 26; card text is built from those constants so it can never drift), `RelicHand` (the run's held relics, cap 8), `RelicOffer` + `RelicOfferRoller` (seeded, deterministic: RUN_START 3 COMMON, BOSS 3 cards after bosses 1-4 with >= 1 RARE+ and never CURSED, MYSTERY_CACHE 2 cards, QUARANTINE_LOCKER 2 CURSED), `RelicRuntime` (the per-run trigger runner and `DoorOpenedListener`) and `RelicFeedbackListener`. An offer is the `RunPhase.RELIC_OFFER` hard-pause overlay (no turn cost, 0.4 s tap lockout, LEAVE IT plate); relics are never on the floor, never dropped or swapped, and never persisted. **Balance:** every relic is priced by `util/RelicValuationModel` (the R-CARRY measurement of its effects alone) into a rarity band at depths 5/15/25 (R-RELIC, R-RELIC-CURSE), the hand a run is expected to hold is capped below one committed perk build (R-RELIC-STACK), the pool structure is audited (R-RELIC-SOURCE), and the simulator's S-RELIC band checks no relic is a trap and none is mandatory. **Read `docs/relic-system.txt` before touching any of it, and update that doc in the same commit.** |
@@ -483,7 +485,7 @@ Doom-style 3D view, full 1280×720 world-unit screen. Ray-column count is runtim
 See `docs/wall-renderer-guide.txt` for pipeline details, GameMath methods, and extension guide.
 
 ### `render/LevelRenderer.java`
-2D mini-map overlay using `ShapeRenderer`. Three passes: filled walls, grid lines, ray fan. Mini-map at `(0,0)–(MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE)`. Call `setRayResults(RayCastResult[])` before `render()`.
+2D mini-map overlay using `ShapeRenderer`, ONE Filled pass (visual-identity-order-4): the UiKit frame fill, tiles + markers, the grid as 1-unit rects (every rect clipped to the chamfered frame via `GameMath.clipPolygonToHalfPlane`), then the frame border + amber brackets. Mini-map at `(0,0)–(MINI_MAP_WORLD_SIZE, MINI_MAP_WORLD_SIZE)`. Call `setRayResults(RayCastResult[])` before `render()`.
 
 ### `render/RayCaster.java`
 Casts `RAY_COUNT` rays across FOV using DDA. All math in tile space. Pre-allocates `RayCastResult[]` — never hold across frames. Signature: `castRays(playerWorldX, playerWorldY, playerDirX, playerDirY, fieldOfViewRadians, level)`.
@@ -493,6 +495,9 @@ Reads `.txt` asset via `Gdx.files.internal()`. First line = top of world. Shorte
 
 ### `render/Renderable.java`
 Interface: `void render(OrthographicCamera camera)`. All renderers also implement `Disposable`.
+
+### `render/UiKit.java` + `render/PlateState.java` (visual-identity-order-4)
+The interface vocabulary: `panel` (45-degree chamfered slab + border), `brackets` (the four amber corner marks — the series' signature), `plate` (anything tappable; `PlateState` IDLE / PRESSED / SELECTED / DISABLED as per-constant data), `meter` (segmented), `divider`, `text` (shadowed). Static, stateless, no `new` in any primitive; ShapeRenderer primitives expect `ShapeType.Filled`. Geometry in `ArtDirection` UI_*. Two inks: SUIT_AMBER is the player's (HUD, touch buttons, player marker), FACILITY_CYAN is the facility's. Build new UI from these, never from raw rects. See `docs/art-direction.txt` → UI KIT.
 
 ### `render/WeaponHudRenderer.java`
 Draws the current weapon sprite procedurally with a FrameBuffer pipeline. Each weapon has its own draw method inside this class. See `docs/weapon-creation-guide.txt` for the full pipeline.
@@ -673,7 +678,7 @@ All 20 reference docs — read these before implementing anything in their domai
 | File | Lines | What it covers |
 |---|---|---|
 | `tile-symbols.txt` | 231 | Complete tile character reference — walls, doors, floors, props, pickups, enemies + the FIXED/FLEXIBLE model. **Single source of truth for level format.** |
-| `art-direction.txt` | 160 | The style bible (visual-identity series): pillars V1-V8, the palette, the five lighting moods, the grade pipeline and where each renderer applies it, the emissive exemption list, the ten floor/ceiling materials, RECIPE C (add a mood / material), the dev mood override, TYPOGRAPHY (the one procedural pixel font: grid, coverage, faces, type scale, sharing rule, add a glyph). **Single source of truth; update on any visual-identity change.** |
+| `art-direction.txt` | 160 | The style bible (visual-identity series): pillars V1-V8, the palette, the five lighting moods, the grade pipeline and where each renderer applies it, the emissive exemption list, the ten floor/ceiling materials, RECIPE C (add a mood / material), the dev mood override, TYPOGRAPHY (the one procedural pixel font: grid, coverage, faces, type scale, sharing rule, add a glyph), UI KIT (render/UiKit primitives, plate states, the ink rule, the contrast table). **Single source of truth; update on any visual-identity change.** |
 | `environment-tileset-system.txt` | 850 | Symbol/sprite-reuse subsystem: categories, sprite registry, symbol budget, per-level palette, allocator, room blueprints, texture realization, render integration, and RECIPE A (add a sprite) / RECIPE B (add a room). **Single source of truth; update on any tileset/room/palette change.** |
 | `route-map-system.txt` | 939 | Branching route-map subsystem: data model + registries, DAG generation & regions, node->floor pipeline, overlay/interaction, special-level profiles, ROUTE ECONOMICS (the priced map: node EV ledger, derived pips, map-gen guarantees, trajectory audit), node/region catalogs, and the extensibility recipes. **Single source of truth; update on any route change.** |
 | `relic-system.txt` | 655 | The relic layer: the model (run-scoped, rule-changing, folded into BuildStats via PerkEffect), the `relic` package, the SHIPPED 36-relic catalog (rarity/trigger/valuation/affinity/effects/cost text/gain), the runtime seams (Player shield + multiplier, EnemyManager kill terms/spawn HP/corpse burst, RelicBlastTarget, DoorOpenedListener, RelicRuntime), the four sources and the RELIC_OFFER phase rules (R7/R14/R15), pricing (bands, R-RELIC / R-RELIC-CURSE / R-RELIC-STACK / R-RELIC-SOURCE, valuation assumptions, S-RELIC), ADD A RELIC, and the deliberate exclusions. **Single source of truth; update on any relic change.** |
@@ -802,6 +807,8 @@ settings screen, if one is open over it) and returns before the 3D view.
 
 ### HUD Layout (HudRenderer)
 
+> **Current state (visual-identity-order-4):** `hud/HudRenderer` draws ONE left panel (x 0..420, y 0..160: HP / AR / AM / XP / WP rows; status-effect icons float just above it while active); there is no right panel and no face box any more. The layout below is the original design, kept for history; `docs/procedural-vitals-hud.txt` is current.
+
 Two semi-transparent chrome panels; centre gap left clear so the weapon sprite is never occluded.
 
 ```
@@ -814,7 +821,7 @@ X:  0 ──────── 420    420 ──────── 860    860 �
 - **Left panel** (0–420): face box (88×88), HP bar (200px), AR bar (200px), status line.
 - **Right panel** (860–1280): large ammo digits, weapon name / max-ammo.
 - **Centre gap** (420–860): 440px empty. Weapon sprite is 380px wide, centred at X=450..830 — 30px clear of each panel.
-- Panel backgrounds use `HUD_PANEL_ALPHA = 0.82f` (18% see-through).
+- Panel backgrounds use `HUD_PANEL_ALPHA = 0.82f` (18% see-through) — it references `ArtDirection.UI_PANEL_ALPHA_HUD` (visual-identity-order-4); the panels are `UiKit` chamfered slabs with amber corner brackets.
 - No compass; no centre panel.
 
 HUD constants (HudConstants.java):

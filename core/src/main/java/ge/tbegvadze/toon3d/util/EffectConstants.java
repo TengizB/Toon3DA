@@ -58,11 +58,16 @@ public final class EffectConstants {
     // Floating damage numbers: "-N" text rising above the enemy on contact
     public static final float DAMAGE_NUMBER_DURATION_SECONDS = 0.65f;
     public static final float DAMAGE_NUMBER_RISE_SPEED       = 55f;  // world units/s upward
-    public static final float DAMAGE_NUMBER_FONT_SCALE       = 1.4f;
+    /**
+     * Damage numbers start at TYPE_LABEL and grow with the hit up to this multiple of it (visual-identity-order-4
+     * R15: the growth is the screen's emphasis factor over a type-scale step; 2.0 keeps the old 3.0 ceiling).
+     */
+    public static final float DAMAGE_NUMBER_MAX_EMPHASIS     = 2.0f;
+    public static final float DAMAGE_NUMBER_FONT_SCALE       = ArtDirection.TYPE_LABEL;
     // Damage numbers grow above this threshold: scale = base + (amount - threshold + 1) * perPoint
     public static final int   DAMAGE_NUMBER_SCALE_THRESHOLD  = 8;
     public static final float DAMAGE_NUMBER_SCALE_PER_POINT  = 0.04f;
-    public static final float DAMAGE_NUMBER_MAX_FONT_SCALE   = 3.0f;
+    public static final float DAMAGE_NUMBER_MAX_FONT_SCALE   = ArtDirection.TYPE_LABEL * DAMAGE_NUMBER_MAX_EMPHASIS;
 
     // Explosive barrel hazard — chain limit (damage is a fraction, BalanceConfig SECTION 23 HAZARD_BARREL_*)
     public static final int   EXPLOSION_CHAIN_MAX = BalanceConfig.EXPLOSION_CHAIN_MAX;
@@ -168,10 +173,17 @@ public final class EffectConstants {
 
     // ─── Ability Event Feedback — banner tiers, animations, and world accents ───
     // Banner font scales per tier (Tier 1 = no banner; tag suffix only in Phase 2)
-    // PROC must exceed LEGACY_FONT_SCALE (1.8f) so ability banners read larger than info text.
-    public static final float ABILITY_BANNER_PROC_SCALE          = 2.0f;
-    public static final float ABILITY_BANNER_SLAM_SCALE          = 2.6f;
-    public static final float ABILITY_BANNER_LEGENDARY_SCALE     = 3.2f;
+    // PROC must exceed EVENT_TEXT_FONT_SCALE so ability banners read larger than info text.
+    /**
+     * Legacy event text (THREAT LV, region announces, pickups): TYPE_LABEL, one step BELOW the banners, so the
+     * old info-text < banner hierarchy survives the move to the type scale (was 1.8).
+     */
+    public static final float EVENT_TEXT_FONT_SCALE              = ArtDirection.TYPE_LABEL;
+    // Banner type steps (visual-identity-order-4 R15): each tier's old scale moved to its NEAREST type step
+    // (2.0 / 2.6 -> HEADING, 3.2 -> DISPLAY); SLAM still reads louder than PROC through its punch-in + underline.
+    public static final float ABILITY_BANNER_PROC_SCALE          = ArtDirection.TYPE_HEADING;
+    public static final float ABILITY_BANNER_SLAM_SCALE          = ArtDirection.TYPE_HEADING;
+    public static final float ABILITY_BANNER_LEGENDARY_SCALE     = ArtDirection.TYPE_DISPLAY;
     // Screen-space Y anchors for each tier band (world units, Y-up)
     public static final float ABILITY_BANNER_PROC_ANCHOR_Y       = 470f;
     public static final float ABILITY_BANNER_SLAM_ANCHOR_Y       = 540f;
@@ -206,7 +218,7 @@ public final class EffectConstants {
     public static final float HEAL_PARTICLE_LIFE_SECONDS         = 0.85f;
     public static final float HEAL_PARTICLE_RISE_SPEED           = 65f;
     public static final float HEAL_PARTICLE_SPREAD_X             = 32f;
-    public static final float HEAL_PARTICLE_FONT_SCALE           = 1.6f;
+    public static final float HEAL_PARTICLE_FONT_SCALE           = ArtDirection.TYPE_LABEL;
     public static final float HEAL_PARTICLE_SPAWN_CENTER_X       = 640f;
     public static final float HEAL_PARTICLE_SPAWN_BASE_Y         = 170f;
     public static final float HEAL_PARTICLE_SPAWN_Y_VARIANCE     = 20f;

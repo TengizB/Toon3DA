@@ -1,9 +1,48 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Visual Identity 4 — UI kit and the in-play HUD layer
 CREATED: 2026-10-19
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
 ---
+IMPLEMENTATION NOTE (2026-10-20, branch ccr-eb246ad6-ypyqrt; live record in
+.claude/checkpoints/visual-identity-order-4.md). Where the build differs from the text below:
+  - hud/HudRenderer has NO right panel and NO face box (the HUD became one left panel before this
+    order; CLAUDE.md's old layout text was stale). R9's right-panel and face-box items had nothing to
+    restyle; A2's "face box" is satisfied vacuously.
+  - HUD_PANEL_ALPHA was 0.88 in code, not 0.82. It now references UI_PANEL_ALPHA_HUD 0.82 as R7 says,
+    so the HUD panel is slightly more see-through than before.
+  - NAV OFFLINE text is FACILITY_CYAN, not R9's FACILITY_CYAN_DIM. DIM is 3.3:1 on UI_PANEL, under the
+    4.5:1 text floor. R8 and A9 both say cyan, and V8 says readability wins.
+  - HUD weapon slots are 38 units tall, which is too short for UI_PLATE_CHAMFER plus 14-unit brackets
+    beside two TYPE_CAPTION lines. They are plates with UI_CHAMFER and UI_BRACKET_LENGTH_COMPACT (7, new),
+    and the slot number / name / class glyph / level tag were inset to clear the brackets. Weapon names
+    are truncated to the slot width minus the bracket inset.
+  - The game has no low-ammo threshold, so the ammo digits are UI_TEXT_PRIMARY until the clip is empty,
+    then CombatPalette.DAMAGE. There is no SUIT_AMBER low state.
+  - The colour table R13 describes is in EventTextRenderer (EventTextSystem holds only the byte codes);
+    EventTextSystem is unchanged. COLOR_CREDIT_CYAN, which R13 does not list, maps to CREDITS_GOLD (AS4).
+  - R15: old scales moved to a type step that keeps their hierarchy. Event text goes 1.8 -> LABEL, one step
+    below the banners (reviewer r1 NB-1: nearest-step put it level with them). Banners go 2.0 and
+    2.6 -> HEADING (SLAM keeps its punch-in and underline) and 3.2 -> DISPLAY. Damage numbers go 1.4 ->
+    LABEL, growing with the hit to LABEL x DAMAGE_NUMBER_MAX_EMPHASIS (2.0, keeping the old 3.0 ceiling).
+    The HUD level tag goes 0.66 -> CAPTION, the HP value 1.2 -> BODY, credits 1.4 -> LABEL. Boss intro
+    name 2.0 -> HEADING (it keeps the boss accent, as cinematic text). Boss intro epithet 1.2 -> CAPTION,
+    following R12.
+  - UiKit additions beyond R1-R6: fillOctagon; panel / brackets / plate overloads that take chamfer,
+    border alpha and thickness, or bracket arm; meter overloads with alpha; an aligned/wrapped text
+    overload in place of a GlyphLayout one (a layout bakes its colours, so its shadow cannot be tinted).
+    GameMath.insetChamfer and clipPolygonToHalfPlane were added; the mini-map clips every tile and grid
+    line to the chamfered frame. BOSS_HEALTH_SEGMENTS lives in ArtDirection.
+  - Mini-map: the health and armour pickup dots moved to HEALTH_GREEN / ARMOUR_BLUE. The ammo pickup and
+    the barrel prop square keep their colours. The grid is drawn as 1-unit filled rects, so the map is
+    one Filled pass. There is no fog of war in LevelRenderer to preserve.
+  - Touch: the unused CAPSULE shape is no longer drawn specially (the enum stays). The icon halo is
+    UI_INK_BLACK, replacing dim phosphor. The first-press glow carries the rim toward SUIT_AMBER.
+  - PRE-EXISTING layout faults (same at 682fd6d, SCOPE OUT): the boss bar overlaps the mini-map, and the
+    mini-map's bottom edge overlaps the INVENTORY button. Because the boss state label now sits under the
+    boss panel, it lands on the mini-map, which makes the overlap slightly worse. Layout follow-up for
+    orders 5/6.
+  - TouchButton.Shape.CAPSULE stays in the enum but nothing draws it specially (no button uses it).
 
 OVERVIEW
 --------

@@ -135,6 +135,30 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "set":
                     setOnWorld(step);
                     break;
+                case "hittest":
+                    hitTest(Float.parseFloat(step[2]), Float.parseFloat(step[3]));
+                    break;
+                case "bosshud":
+                    showBossHud(Integer.parseInt(step[2]), step.length > 3 ? step[3] : null);
+                    break;
+                case "alertall":
+                    alertAllEnemies();
+                    break;
+                case "engage":
+                    engageFirstRouteNode();
+                    break;
+                case "damagenumber":
+                    spawnDamageNumber(Integer.parseInt(step[2]), step.length > 3 && Boolean.parseBoolean(step[3]));
+                    break;
+                case "eventtext":
+                    spawnEventText(Byte.parseByte(step[2]), step[3]);
+                    break;
+                case "status":
+                    setPlayerStatus(step[2], Integer.parseInt(step[3]));
+                    break;
+                case "equip":
+                    equipArsenalWeapon(Integer.parseInt(step[2]));
+                    break;
                 case "timestart":
                     timing = true;
                     frameNanosTotal = 0;
@@ -258,6 +282,229 @@ public class CaptureLauncher extends ApplicationAdapter {
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }
+    }
+
+    /**
+     * {@code equip:INDEX} — puts arsenal weapon INDEX (World.inventory's arsenal: 0 shotgun, 1 double barrel,
+     * 2 plasma, 3 chaingun, ... on the start room) into the loadout and selects it, so a HUD shot can show a
+     * ranged weapon with ammo. A dev hook for reaching a screen, never game logic.
+     */
+    private void equipArsenalWeapon(int arsenalIndex) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field inventoryField = findField(world.getClass(), "inventory");
+            inventoryField.setAccessible(true);
+            Object inventory = inventoryField.get(world);
+            Object weapon = ((java.util.List<?>) inventory.getClass().getMethod("getArsenal").invoke(inventory))
+                    .get(arsenalIndex);
+            Object loadout = inventory.getClass().getMethod("getLoadout").invoke(inventory);
+            Class<?> weaponType = Class.forName("ge.tbegvadze.toon3d.entity.Weapon");
+            loadout.getClass().getMethod("tryEquip", weaponType).invoke(loadout, weapon);
+            inventory.getClass().getMethod("selectLoadoutWeapon", weaponType).invoke(inventory, weapon);
+            System.out.println("[capture] equipped arsenal weapon " + arsenalIndex);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code hittest:X:Y} — prints which touch buttons' hit areas contain world point (X, Y), testing every button
+     * as if visible (contextual INSPECT / USE included) and restoring visibility after. Proves a tap area without
+     * needing the context that shows the button. A dev hook, never game logic.
+     */
+    private void hitTest(float worldX, float worldY) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field stateField = findField(world.getClass(), "touchInputState");
+            stateField.setAccessible(true);
+            Object state = stateField.get(world);
+            Field buttonsField = findField(state.getClass(), "buttons");
+            buttonsField.setAccessible(true);
+            Object[] buttons = (Object[]) buttonsField.get(state);
+            StringBuilder hits = new StringBuilder();
+            for (Object button : buttons) {
+                Field visibleField = findField(button.getClass(), "visible");
+                Field actionField = findField(button.getClass(), "action");
+                visibleField.setAccessible(true);
+                actionField.setAccessible(true);
+                boolean wasVisible = visibleField.getBoolean(button);
+                visibleField.setBoolean(button, true);
+                java.lang.reflect.Method contains = button.getClass().getDeclaredMethod("contains", float.class, float.class);
+                contains.setAccessible(true);
+                boolean hit = (Boolean) contains.invoke(button, worldX, worldY);
+                visibleField.setBoolean(button, wasVisible);
+                if (hit) hits.append(actionField.get(button)).append(' ');
+            }
+            System.out.println("[capture] hittest (" + worldX + "," + worldY + ") -> " + hits);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code bosshud:PERCENT[:VISUAL_STATE]} — attaches a BossHudRenderer to the World with a stand-in Boss (first
+     * EnemyType, a fixed name/epithet/accent) at PERCENT health, so the boss bar can be seen from floor 1. The World
+     * disposes the renderer on teardown as it does a real one. A dev hook for reaching a screen, never game logic.
+     */
+    private void showBossHud(int healthPercent, String visualStateName) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Class<?> enemyTypeClass = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyType");
+            Class<?> patternClass = Class.forName("ge.tbegvadze.toon3d.entity.boss.BossAttackPattern");
+            Class<?> bossClass = Class.forName("ge.tbegvadze.toon3d.entity.boss.Boss");
+            Object enemyType = enemyTypeClass.getEnumConstants()[0];
+            Object boss = bossClass.getConstructor(enemyTypeClass, int.class, int.class, String.class, String.class,
+                    String.class, float.class, float.class, float.class, float.class, patternClass, patternClass)
+                    .newInstance(enemyType, 0, 0, "THE WARDEN", "KEEPER OF THE OUTER LOCKS", "", 0.95f, 0.55f, 0.2f,
+                            1f, null, null);
+            Field maxHealthField = findField(bossClass, "maxHealth");
+            Field healthField = findField(bossClass, "health");
+            int maxHealth = Math.max(100, maxHealthField.getInt(boss));
+            maxHealthField.setInt(boss, maxHealth);
+            healthField.setInt(boss, maxHealth * healthPercent / 100);
+            if (visualStateName != null) {
+                Class<?> stateClass = Class.forName("ge.tbegvadze.toon3d.entity.boss.BossVisualState");
+                findField(bossClass, "visualState").set(boss, stateClass.getField(visualStateName).get(null));
+            }
+            Class<?> rendererClass = Class.forName("ge.tbegvadze.toon3d.render.BossHudRenderer");
+            Object renderer = rendererClass.getConstructor().newInstance();
+            rendererClass.getMethod("setBoss", bossClass).invoke(renderer, boss);
+            Field rendererField = findField(world.getClass(), "bossHudRenderer");
+            rendererField.setAccessible(true);
+            rendererField.set(world, renderer);
+            System.out.println("[capture] boss hud at " + healthPercent + "%");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code alertall} — calls {@code alert()} on every enemy of World.enemyManager, so the mini-map draws their
+     * threat markers without a scripted hunt. A dev hook for reaching a screen, never game logic.
+     */
+    private void alertAllEnemies() {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field managerField = findField(world.getClass(), "enemyManager");
+            managerField.setAccessible(true);
+            Object manager = managerField.get(world);
+            java.util.List<?> enemies = (java.util.List<?>) manager.getClass().getMethod("getEnemies").invoke(manager);
+            for (Object enemy : enemies) enemy.getClass().getMethod("alert").invoke(enemy);
+            System.out.println("[capture] alerted " + enemies.size() + " enemies");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code engage} — commits the route map's first selectable next node (World.commitRouteNode), the same path
+     * a tap on a node + ENGAGE takes. The map is seeded by time, so tapping a fixed spot is not repeatable; this
+     * is. Open the map first ({@code set:startRoomChoiceResolved:true} + {@code call:.:onDescentRequested}).
+     * A dev hook for reaching a screen, never game logic.
+     */
+    private void engageFirstRouteNode() {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field mapField = findField(world.getClass(), "routeMap");
+            mapField.setAccessible(true);
+            Object routeMap = mapField.get(world);
+            Object node = ((java.util.List<?>) routeMap.getClass().getMethod("getSelectableNext").invoke(routeMap)).get(0);
+            for (java.lang.reflect.Method method : world.getClass().getDeclaredMethods()) {
+                if (!method.getName().equals("commitRouteNode")) continue;
+                method.setAccessible(true);
+                method.invoke(world, node);
+                System.out.println("[capture] engaged " + node);
+                return;
+            }
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code damagenumber:AMOUNT[:KILL]} — spawns a floating damage number (ImpactEffectSystem.onEnemyHit, or
+     * onEnemyKilled when KILL is true) two tiles in front of the player. A dev hook, never game logic.
+     */
+    private void spawnDamageNumber(int amount, boolean kill) {
+        try {
+            Object world = worldObject();
+            Object player = fieldValue(world, "player");
+            float cellSize = Class.forName("ge.tbegvadze.toon3d.util.Constants").getField("CELL_SIZE").getFloat(null);
+            float worldX = fieldFloat(player, "positionX") + fieldFloat(player, "directionX") * 2f * cellSize;
+            float worldY = fieldFloat(player, "positionY") + fieldFloat(player, "directionY") * 2f * cellSize;
+            Object system = fieldValue(world, "impactEffectSystem");
+            system.getClass().getMethod(kill ? "onEnemyKilled" : "onEnemyHit", float.class, float.class, float.class,
+                    int.class).invoke(system, worldX, worldY, 1f, amount);
+            System.out.println("[capture] damage number " + amount + (kill ? " (kill)" : ""));
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code eventtext:COLOR_CODE:TEXT} — EventTextSystem.spawnWithColor(TEXT, code) with the system's byte colour
+     * code (0 white, 1 green, 2 red, 3 grey, 4 gold, 5 credit, 6 blue, 7 armour, 8 amber). TEXT may not contain
+     * ';' or ':'. A dev hook, never game logic.
+     */
+    private void spawnEventText(byte colorCode, String text) {
+        try {
+            Object system = fieldValue(worldObject(), "eventTextSystem");
+            system.getClass().getMethod("spawnWithColor", String.class, byte.class).invoke(system, text, colorCode);
+            System.out.println("[capture] event text " + text);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code status:STATUS_TYPE:TURNS} — makes the player's StatusEffect of that type active for TURNS turns
+     * (magnitude 5, one stack) by setting its fields, so the HUD's status icons and debuff list can be seen.
+     * A dev hook for reaching a screen, never game logic.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void setPlayerStatus(String typeName, int turns) {
+        try {
+            Object player = fieldValue(worldObject(), "player");
+            Class statusType = Class.forName("ge.tbegvadze.toon3d.status.StatusType");
+            Object effects = player.getClass().getMethod("getActiveEffects").invoke(player);
+            Object effect = ((java.util.Map) effects).get(Enum.valueOf(statusType, typeName));
+            for (String name : new String[] {"remainingTurns", "magnitude", "stacks"}) {
+                Field field = findField(effect.getClass(), name);
+                field.setAccessible(true);
+                field.setInt(effect, name.equals("remainingTurns") ? turns : name.equals("magnitude") ? 5 : 1);
+            }
+            System.out.println("[capture] status " + typeName + " " + turns);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    private Object worldObject() throws ReflectiveOperationException {
+        Field worldField = Main.class.getDeclaredField("world");
+        worldField.setAccessible(true);
+        return worldField.get(main);
+    }
+
+    private static Object fieldValue(Object target, String name) throws ReflectiveOperationException {
+        Field field = findField(target.getClass(), name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    private static float fieldFloat(Object target, String name) throws ReflectiveOperationException {
+        Field field = findField(target.getClass(), name);
+        field.setAccessible(true);
+        return field.getFloat(target);
     }
 
     private static Field findField(Class<?> type, String name) throws NoSuchFieldException {

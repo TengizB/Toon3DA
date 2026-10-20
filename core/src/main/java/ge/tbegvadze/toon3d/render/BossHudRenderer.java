@@ -1,6 +1,8 @@
 package ge.tbegvadze.toon3d.render;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -11,6 +13,8 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.BossVisualState;
+import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.HudConstants;
@@ -19,7 +23,9 @@ import ge.tbegvadze.toon3d.util.HudConstants;
  * Renders the boss encounter HUD overlay:
  *   1. Intro letterbox — black bar slides in from the top for the first 40% of BOSS_INTRO_DURATION_SECONDS.
  *   2. Boss name/epithet banners — shown inside the letterbox during the intro; separately on phase 2.
- *   3. Full-screen HP bar — runs just below the letterbox, tinted with the boss accent color.
+ *   3. Full-screen HP bar — runs just below the letterbox: a UiKit panel + brackets around a segmented
+ *      CombatPalette.DAMAGE meter (visual-identity-order-4 R12). The boss accent stays on the intro name
+ *      and the hot state label.
  *
  * Call update(deltaTime) every frame while a boss encounter is active.
  * Call showIntro() when the boss awakens; showPhaseBanner(text) on phase transition.
@@ -164,18 +170,18 @@ public final class BossHudRenderer implements Renderable, Disposable {
             float nameX = (WORLD_WIDTH - nameWidth) / 2f;
             float nameY = WORLD_HEIGHT - HudConstants.BOSS_LETTERBOX_HEIGHT / 2f
                           + nameHeight * 0.5f + HudConstants.BOSS_INTRO_NAME_Y_OFFSET;
-            nameFont.setColor(currentBoss.accentRed, currentBoss.accentGreen,
-                              currentBoss.accentBlue, textAlpha);
-            nameFont.draw(batch, currentBoss.bossName, nameX, nameY);
-            nameFont.getData().setScale(1f); // restore default scale
+            UiKit.text(batch, nameFont, currentBoss.bossName, nameX, nameY,
+                    currentBoss.accentRed, currentBoss.accentGreen, currentBoss.accentBlue, textAlpha);
+            nameFont.getData().setScale(ArtDirection.TYPE_CAPTION); // restore the base step
 
             epithetFont.getData().setScale(HudConstants.BOSS_INTRO_EPITHET_FONT_SCALE);
             glyphLayout.setText(epithetFont, currentBoss.bossEpithet);
             float epithetX = (WORLD_WIDTH - glyphLayout.width) / 2f;
             float epithetY = nameY - nameHeight - HudConstants.BOSS_INTRO_EPITHET_Y_GAP;
-            epithetFont.setColor(0.8f, 0.8f, 0.8f, textAlpha);
-            epithetFont.draw(batch, currentBoss.bossEpithet, epithetX, epithetY);
-            epithetFont.getData().setScale(1f); // restore default scale
+            UiKit.text(batch, epithetFont, currentBoss.bossEpithet, epithetX, epithetY,
+                    ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                    ArtDirection.UI_TEXT_SECONDARY_BLUE, textAlpha);
+            epithetFont.getData().setScale(ArtDirection.TYPE_CAPTION); // restore the base step
 
             batch.end();
         }
@@ -191,32 +197,37 @@ public final class BossHudRenderer implements Renderable, Disposable {
         float healFlash = healFlashTimer > 0f
                 ? healFlashTimer / HudConstants.BOSS_HEAL_FLASH_DURATION_SECONDS
                 : 0f;
-        float fillRed   = GameMath.lerp(currentBoss.accentRed,   HudConstants.BOSS_HEAL_FLASH_R, healFlash);
-        float fillGreen = GameMath.lerp(currentBoss.accentGreen, HudConstants.BOSS_HEAL_FLASH_G, healFlash);
-        float fillBlue  = GameMath.lerp(currentBoss.accentBlue,  HudConstants.BOSS_HEAL_FLASH_B, healFlash);
 
+        // R12: a UiKit panel + brackets framing a BOSS_HEALTH_SEGMENTS-cell meter in CombatPalette.DAMAGE (blended
+        // toward the heal flash on a repair turn), with the phase threshold ticked in SUIT_AMBER.
+        float fillRed   = GameMath.lerp(CombatPalette.DAMAGE_RED,   HudConstants.BOSS_HEAL_FLASH_R, healFlash);
+        float fillGreen = GameMath.lerp(CombatPalette.DAMAGE_GREEN, HudConstants.BOSS_HEAL_FLASH_G, healFlash);
+        float fillBlue  = GameMath.lerp(CombatPalette.DAMAGE_BLUE,  HudConstants.BOSS_HEAL_FLASH_B, healFlash);
+        float padding = HudConstants.BOSS_HP_PANEL_PADDING;
+        float panelX = HP_BAR_X - padding, panelY = HP_BAR_Y - padding;
+        float panelWidth = HP_BAR_W + 2f * padding, panelHeight = HudConstants.BOSS_HP_BAR_HEIGHT + 2f * padding;
+
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        UiKit.panel(shapeRenderer, panelX, panelY, panelWidth, panelHeight,
+                ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                ArtDirection.UI_PANEL_ALPHA_HUD,
+                ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+        UiKit.brackets(shapeRenderer, panelX, panelY, panelWidth, panelHeight,
+                ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
+        UiKit.meter(shapeRenderer, HP_BAR_X, HP_BAR_Y, HP_BAR_W, HudConstants.BOSS_HP_BAR_HEIGHT,
+                fillFraction, ArtDirection.BOSS_HEALTH_SEGMENTS,
+                fillRed, fillGreen, fillBlue,
+                ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE);
 
-        // Track background
-        shapeRenderer.setColor(0.08f, 0.04f, 0.04f, 0.90f);
-        shapeRenderer.rect(HP_BAR_X, HP_BAR_Y, HP_BAR_W, HudConstants.BOSS_HP_BAR_HEIGHT);
-
-        // Fill tinted with boss accent colour (flashed green on a heal tick)
-        shapeRenderer.setColor(fillRed, fillGreen, fillBlue, 1f);
-        shapeRenderer.rect(HP_BAR_X, HP_BAR_Y, HP_BAR_W * fillFraction,
-                           HudConstants.BOSS_HP_BAR_HEIGHT);
-
-        // Phase-2 threshold marker at 50%
+        // Phase-2 threshold tick, standing proud of the meter by the panel padding
         float markerX = HP_BAR_X + HP_BAR_W * Constants.BOSS_PHASE2_HP_THRESHOLD;
-        shapeRenderer.setColor(1f, 1f, 1f, 0.6f);
-        shapeRenderer.rect(markerX - 1f, HP_BAR_Y, 2f, HudConstants.BOSS_HP_BAR_HEIGHT);
-
-        // Top and bottom borders
-        shapeRenderer.setColor(0f, 0f, 0f, 1f);
-        shapeRenderer.rect(HP_BAR_X - 1f, HP_BAR_Y - 1f, HP_BAR_W + 2f, 1f);
-        shapeRenderer.rect(HP_BAR_X - 1f, HP_BAR_Y + HudConstants.BOSS_HP_BAR_HEIGHT, HP_BAR_W + 2f, 1f);
-
+        shapeRenderer.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
+        shapeRenderer.rect(markerX - HudConstants.BOSS_PHASE_TICK_WIDTH / 2f, panelY,
+                HudConstants.BOSS_PHASE_TICK_WIDTH, panelHeight);
         shapeRenderer.end();
+        Gdx.gl.glDisable(GL20.GL_BLEND);
 
         // Boss name label to the left of the HP bar
         batch.begin();
@@ -224,10 +235,9 @@ public final class BossHudRenderer implements Renderable, Disposable {
         glyphLayout.setText(nameFont, currentBoss.bossName);
         float nameLabelY = HP_BAR_Y + HudConstants.BOSS_HP_BAR_HEIGHT * 0.5f
                            + glyphLayout.height * 0.5f;
-        nameFont.setColor(currentBoss.accentRed, currentBoss.accentGreen,
-                          currentBoss.accentBlue, 1f);
-        nameFont.draw(batch, currentBoss.bossName, HP_BAR_X, nameLabelY);
-        nameFont.getData().setScale(1f); // restore default scale
+        UiKit.text(batch, nameFont, currentBoss.bossName, HP_BAR_X + HudConstants.BOSS_HP_NAME_INSET_X, nameLabelY,
+                ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+        nameFont.getData().setScale(ArtDirection.TYPE_CAPTION); // restore the base step
 
         // State label (ORDER 8) — the current tactical beat under the boss name. Hot (enraged) states
         // borrow the boss accent; the rest use a dim neutral so the label never competes with the name.
@@ -235,16 +245,16 @@ public final class BossHudRenderer implements Renderable, Disposable {
         if (visualState != null && !visualState.label.isEmpty()) {
             epithetFont.getData().setScale(HudConstants.BOSS_STATE_LABEL_FONT_SCALE);
             glyphLayout.setText(epithetFont, visualState.label);
-            float stateLabelY = nameLabelY - glyphLayout.height - HudConstants.BOSS_STATE_LABEL_Y_GAP;
+            float stateLabelY = HP_BAR_Y - HudConstants.BOSS_HP_PANEL_PADDING - HudConstants.BOSS_STATE_LABEL_Y_GAP;
             if (visualState.hot) {
-                epithetFont.setColor(currentBoss.accentRed, currentBoss.accentGreen,
-                                     currentBoss.accentBlue, 1f);
+                UiKit.text(batch, epithetFont, visualState.label, HP_BAR_X, stateLabelY,
+                        currentBoss.accentRed, currentBoss.accentGreen, currentBoss.accentBlue, 1f);
             } else {
-                epithetFont.setColor(HudConstants.BOSS_STATE_LABEL_R, HudConstants.BOSS_STATE_LABEL_G,
-                                     HudConstants.BOSS_STATE_LABEL_B, 1f);
+                UiKit.text(batch, epithetFont, visualState.label, HP_BAR_X, stateLabelY,
+                        HudConstants.BOSS_STATE_LABEL_R, HudConstants.BOSS_STATE_LABEL_G,
+                        HudConstants.BOSS_STATE_LABEL_B, 1f);
             }
-            epithetFont.draw(batch, visualState.label, HP_BAR_X, stateLabelY);
-            epithetFont.getData().setScale(1f); // restore default scale
+            epithetFont.getData().setScale(ArtDirection.TYPE_CAPTION); // restore the base step
         }
 
         batch.end();
@@ -267,9 +277,9 @@ public final class BossHudRenderer implements Renderable, Disposable {
         glyphLayout.setText(epithetFont, bannerText);
         float bannerX = (WORLD_WIDTH - glyphLayout.width) / 2f;
         float bannerY = WORLD_HEIGHT * 0.55f;
-        epithetFont.setColor(1f, 1f, 1f, alpha);
-        epithetFont.draw(batch, bannerText, bannerX, bannerY);
-        epithetFont.getData().setScale(1f); // restore default scale
+        UiKit.text(batch, epithetFont, bannerText, bannerX, bannerY,
+                ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE, alpha);
+        epithetFont.getData().setScale(ArtDirection.TYPE_CAPTION); // restore the base step
         batch.end();
     }
 
