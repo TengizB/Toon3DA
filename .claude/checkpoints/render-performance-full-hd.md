@@ -50,7 +50,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
       DONE WHEN: this file holds the B0/B1 table for P1-P4 (P5/P6 filled or marked not stageable), the per-pass
       breakdown, GC counts, C1-C8 ranked by measured share, the R17/R18 go/no-go decisions, and the names of the
       saved B0 reference captures. No game code changed.
-- [ ] **CP3** — formulas + material textures.
+- [x] **CP3** — formulas + material textures.
       DONE WHEN: GameMath holds the span-walk, span-factor, base/excess-split and UV-rebase methods (comment
       blocks), FloorCeilingRenderer builds + disposes the 4-level Repeat/Nearest material Textures per floor (not
       yet drawn); build green; the game looks exactly like B0.
@@ -138,3 +138,14 @@ B0 reference captures (scratchpad `b0-reference/`): `p1-<mood>.png` ×5 (B0 FULL
 CP3-CP6 drafts were written while the matrix ran and parked as patches in `/tmp/claude-0/scripts/cp{3,5,6}.patch`
 (+ the CP4 draft `FloorCeilingRenderer.java`, `SurfaceMaterialTextures.java`) — scratch only; the tree was kept
 clean so CP2 contains no game code.
+
+**CP3 (closed).** GameMath (end of file, "FLOOR / CEILING SPANS"): `floorSpanAxisCrossingParameter(origin, delta,
+cellIndex)` (+Inf on delta 0), `floorSpanAdjustedShade(rowShade, tileBrightness, maxShade)`,
+`floorSpanRedFactor(shadeRed, alertBoost, alertPulse, lightRed)`, `floorSpanGreenBlueFactor(shade, dampen, pulse,
+light)`, `colourFactorBase(f)`, `colourFactorExcessLayer(f, layer)`, `floorSpanUvRebaseShift(left)`,
+`floorMipReferenceColumnCount(rowCount, worldW, worldH)` (keeps the mip table byte-identical: 540 -> 960, 180 -> 320).
+`applyRgbShade(AndLight)ToPackedRGBA` now call the two factor methods (R5 one home; CP4 deletes them if unused).
+`render/SurfaceMaterialTextures` (Disposable): 4 MANAGED Textures (PixmapTextureData managed=true, pixmaps kept for
+context-loss reload, freed in dispose), Repeat/Nearest, `getLevel(mip)`. FloorCeilingRenderer builds floor + ceiling
+sets and disposes them, not drawn yet (deliberate temporary state, CP4 draws them). Verified: mirror compile green;
+P1 cool_steel floor strip vs B0 reference max per-channel diff 0.

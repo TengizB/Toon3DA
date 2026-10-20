@@ -83,6 +83,10 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     // construction and only READ by workers. Level L has edge SURFACE_MATERIAL_SIZE >> L.
     private final int[][] floorMipChain;
     private final int[][] ceilingMipChain;
+    // render-performance-full-hd R4: the same chains realised as Repeat/Nearest Textures for the span pipeline.
+    // CP3: built and disposed but deliberately not drawn yet (CP4 draws them).
+    private final SurfaceMaterialTextures floorMaterialTextures;
+    private final SurfaceMaterialTextures ceilingMaterialTextures;
     // Per-row mip level (player-independent, rebuilt with the tint table).
     private int[] rowMipLevelTable;
 
@@ -138,6 +142,9 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
             floorMipChain[mipLevel]   = SurfaceMaterials.registry().getPixels(mood.floorMaterialId(), mipLevel);
             ceilingMipChain[mipLevel] = SurfaceMaterials.registry().getPixels(mood.ceilingMaterialId(), mipLevel);
         }
+
+        floorMaterialTextures   = new SurfaceMaterialTextures(mood.floorMaterialId());
+        ceilingMaterialTextures = new SurfaceMaterialTextures(mood.ceilingMaterialId());
 
         rebuildRowTintTable();
 
@@ -448,6 +455,8 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        floorMaterialTextures.dispose();
+        ceilingMaterialTextures.dispose();
         backdropPixmap.dispose();
         backdropTexture.dispose();
         if (workerPool != null) {

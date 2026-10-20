@@ -1294,9 +1294,9 @@ public final class GameMath {
         int inG = (pixel >>> 16) & 0xFF;
         int inB = (pixel >>>  8) & 0xFF;
 
-        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost));
-        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen);
-        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen);
+        float redFactor   = floorSpanRedFactor(shadeRed, alertBoost, alertPulse, 0f);
+        float greenFactor = floorSpanGreenBlueFactor(shadeGreen, alertDampen, alertPulse, 0f);
+        float blueFactor  = floorSpanGreenBlueFactor(shadeBlue, alertDampen, alertPulse, 0f);
 
         int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
         int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
@@ -1327,9 +1327,9 @@ public final class GameMath {
         int inG = (pixel >>> 16) & 0xFF;
         int inB = (pixel >>>  8) & 0xFF;
 
-        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost)) + lightRed;
-        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen) + lightGreen;
-        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen) + lightBlue;
+        float redFactor   = floorSpanRedFactor(shadeRed, alertBoost, alertPulse, lightRed);
+        float greenFactor = floorSpanGreenBlueFactor(shadeGreen, alertDampen, alertPulse, lightGreen);
+        float blueFactor  = floorSpanGreenBlueFactor(shadeBlue, alertDampen, alertPulse, lightBlue);
 
         int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
         int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
@@ -7900,5 +7900,120 @@ public final class GameMath {
         double sum = 0.0;
         for (int index = 0; index < count; index++) sum += values[offset + index];
         return (float) (sum / count);
+    }
+
+    // =========================================================================
+    // FLOOR / CEILING SPANS (render-performance-full-hd R1-R7) — GPU-sampled horizontal spans
+    // =========================================================================
+
+    /*
+     * Formula: floorSpanAxisCrossingParameter (one axis of a 2D DDA along a floor row)
+     * Derivation: a floor row at constant depth maps screen X linearly onto a world segment
+     *     P(s) = origin + s * delta,  s in [0, 1]  (s = 0 at screen x = 0, s = 1 at x = WORLD_WIDTH),
+     *   per tile axis. While P(s) is inside cell cellIndex on this axis, the next integer grid line it meets is
+     *   cellIndex + 1 when moving forward (delta > 0) and cellIndex when moving backward (delta < 0):
+     *     delta > 0:  s = (cellIndex + 1 - origin) / delta
+     *     delta < 0:  s = (cellIndex     - origin) / delta
+     *   The walk takes the smaller of the X and Y crossings each step - the DDA of docs/dda-raycasting-math.txt
+     *   applied to the row segment instead of a ray.
+     * Edge cases: delta == 0 (the row runs exactly along a grid axis, e.g. a cardinal facing) never crosses on
+     *   this axis -> +Infinity, which the walk treats as "never". The result is always >= the current
+     *   parameter for a consistent cellIndex = floor(P(current)); float rounding at an exact grid line can give
+     *   a value equal to the current parameter, which the walk handles by stepping the cell anyway.
+     */
+    public static float floorSpanAxisCrossingParameter(float origin, float delta, int cellIndex) {
+        if (delta > 0f) return (cellIndex + 1 - origin) / delta;
+        if (delta < 0f) return (cellIndex - origin) / delta;
+        return Float.POSITIVE_INFINITY;
+    }
+
+    /*
+     * Formula: floorSpanAdjustedShade
+     * Derivation: the per-texel light term of the CPU floor caster, moved here as its one home (R5):
+     *     adjustedShade = min(rowShade * tileBrightness, maxShade)
+     *   rowShade is floorShade(rowDistance); tileBrightness is Level.getTileBrightness of the tile the span
+     *   covers (lit / unlit / flicker / blackout multiplier). A span is a run of tiles with equal brightness,
+     *   so the value is constant across it.
+     * Edge cases: tileBrightness 0 (blackout) -> 0 (black). maxShade caps lit tiles near the camera.
+     */
+    public static float floorSpanAdjustedShade(float rowShade, float tileBrightness, float maxShade) {
+        return Math.min(rowShade * tileBrightness, maxShade);
+    }
+
+    /*
+     * Formula: floorSpanRedFactor
+     * Derivation: the red channel multiplier the CPU caster applied to a material texel
+     *   (applyRgbShadeAndLightToPackedRGBA):
+     *     factorRed = min(1, shadeRed * (1 + alertPulse * alertBoost)) + lightRed
+     *   with shadeRed = adjustedShade * rowTintRed. The alert term is clamped to 1 BEFORE the muzzle light is
+     *   added (visual-identity-order-2 R8): the light is never clamped with it, only the final pixel clamps.
+     * Edge cases: alertPulse 0 -> min(1, shadeRed) + lightRed. The result may exceed 1 (light), which the
+     *   base/excess split carries in the additive pass.
+     */
+    public static float floorSpanRedFactor(float shadeRed, float alertBoost, float alertPulse, float lightRed) {
+        return Math.min(1f, shadeRed * (1f + alertPulse * alertBoost)) + lightRed;
+    }
+
+    /*
+     * Formula: floorSpanGreenBlueFactor
+     * Derivation: the green/blue channel multiplier of the CPU caster:
+     *     factor = shadeChannel * (1 - alertPulse * alertDampen) + lightChannel
+     *   NOT clamped to 1: a mood tint above 1.0 (e.g. MOOD_CORE_WHITE_VIOLET_FAR_B = 1.85) brightens the channel,
+     *   and the CPU path only clamped the final 8-bit value.
+     * Edge cases: a dampen overshoot (alertPulse * alertDampen > 1) gives a negative factor; the base/excess
+     *   split clamps it to 0, exactly where the CPU path's final clamp did.
+     */
+    public static float floorSpanGreenBlueFactor(float shadeChannel, float alertDampen, float alertPulse,
+                                                 float lightChannel) {
+        return shadeChannel * (1f - alertPulse * alertDampen) + lightChannel;
+    }
+
+    /*
+     * Formula: colourFactorBase (the opaque pass of the base/excess split, R6)
+     * Derivation: a SpriteBatch vertex colour multiplies the texel and cannot exceed 1. A channel factor f is
+     *   split into f = base + excess with base = clamp(f, 0, 1). The base pass draws texel * base.
+     * Edge cases: negative f -> 0 (black, the CPU final clamp). NaN propagates as NaN -> caller never passes it.
+     */
+    public static float colourFactorBase(float factor) {
+        return Math.max(0f, Math.min(1f, factor));
+    }
+
+    /*
+     * Formula: colourFactorExcessLayer (the additive passes of the base/excess split, R6)
+     * Derivation: excess = max(0, f - 1). Because an additive layer's colour is also capped at 1, the excess is
+     *   drawn as layers 0, 1, 2, ... each carrying clamp(f - 1 - layer, 0, 1), blended (SRC_ALPHA, ONE):
+     *     texel * base + sum_layer texel * layerValue = texel * (min(1, f) + (f - 1)) = texel * f   for f > 1,
+     *   so the framebuffer gets texel * f before its own clamp - the CPU formula, to within 8-bit rounding of
+     *   the passes.
+     * Edge cases: f <= 1 + layer -> 0 (nothing to add on that layer). layer < 0 is not a valid input.
+     */
+    public static float colourFactorExcessLayer(float factor, int layer) {
+        return Math.max(0f, Math.min(1f, factor - 1f - layer));
+    }
+
+    /*
+     * Formula: floorSpanUvRebaseShift (R3)
+     * Derivation: on a GL_REPEAT texture, UV and UV + n (integer n) sample the same texel, so a quad's UVs may
+     *   be shifted by any integer. Subtracting floor(leftCoordinate) from BOTH edges of a span keeps the left
+     *   edge in [0, 1) and, with spans capped at FLOOR_SPAN_MAX_TILES, every coordinate within
+     *   [-maxTiles - 1, maxTiles + 1]: small enough for a mediump varying to stay sub-texel. The shift is
+     *   per axis (U uses tile X, V uses tile Y).
+     * Edge cases: negative coordinates floor toward -infinity (floor(-0.25) = -1 -> rebased -0.25 + 1 = 0.75),
+     *   which is the correct wrap.
+     */
+    public static float floorSpanUvRebaseShift(float leftCoordinate) {
+        return (float) Math.floor(leftCoordinate);
+    }
+
+    /*
+     * Formula: floorMipReferenceColumnCount
+     * Derivation: the per-row material level (render-quality Q3) was chosen for a backdrop whose width kept the
+     *   world's aspect ratio: width = rowCount * WORLD_WIDTH / WORLD_HEIGHT (540 rows -> 960, 180 -> 320). The
+     *   span pipeline samples natively, but R1 keeps the row tables byte-identical, so the screen-footprint term
+     *   still uses this reference width.
+     * Edge cases: integer maths is exact for both tiers (540 * 1280 / 720 = 960, 180 * 1280 / 720 = 320).
+     */
+    public static int floorMipReferenceColumnCount(int floorCeilingRowCount, int worldWidth, int worldHeight) {
+        return floorCeilingRowCount * worldWidth / worldHeight;
     }
 }
