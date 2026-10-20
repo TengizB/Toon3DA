@@ -49,7 +49,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — R1 accents, StoryUiConstants chrome colours, R2 RouteMapColorPalette sourcing.
       DONE WHEN: every reader compiles; StoryUiFoundationTest green; build + test at baseline.
-- [ ] **CP2** — StoryPanelRenderer + StoryExchangeRenderer restyled (R3, R4); bark panel inherits.
+- [x] **CP2** — StoryPanelRenderer + StoryExchangeRenderer restyled (R3, R4); bark panel inherits.
       DONE WHEN: A1 and A2 hold on run; build green.
 - [ ] **CP3** — BootCardRenderer, InstanceReportRenderer, FadeOverlayRenderer restyled (R5, R7, R11).
       DONE WHEN: A3 and A7 hold on run; build green.
@@ -87,3 +87,17 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   y 526/450/374/298; REPORT plate (170,148); report BACK (640,138); exchange answers x=640 y~450/362/274, the reply's
   acknowledge at (640,450); relic offer LEAVE IT (644,100). Opening for in-run shots: `2:tap:640:600;3:tap:640:390;
   6:tap:640:600;7:tap:640:144` (on a printed save). Build + test: 480, the 1 known failure.
+- **CP2:** StoryPanelRenderer: UiKit.panel (STORY_PANEL_BG = UI_PANEL at STORY_PANEL_ALPHA .82, UI_LINE border) +
+  UiKit.brackets; new general overload `drawPanel(..., drawCloseGlyph, bracketRed, bracketGreen, bracketBlue,
+  heavySpeakerName)` - the boot card's SYSTEM block passes FACILITY_CYAN brackets + true (CP3). It owns a HEAVY font
+  now. Text through UiKit.text (kit shadow); name STORY_NAME_TEXT_SIZE = TYPE_CAPTION (same 1.0). Close X: an IDLE
+  plate STORY_BARK_CLOSE_PLATE_SIZE 38 (visual) + UI_TEXT_SECONDARY glyph; touch rect unchanged. Removed
+  STORY_PANEL_CORNER_RADIUS (no readers). StoryExchangeRenderer: answers + acknowledge = UiKit.plate IDLE / PRESSED in
+  SUIT_AMBER (fill alphas = UI_PANEL_ALPHA_SCREEN), labels UiKit.text, STORY_EXCHANGE_OPTION_TEXT_SIZE 1.4 -> TYPE_LABEL
+  (34 chars still fit the 604 plate); STORY_EXCHANGE_BUTTON_BORDER removed. Seen: ORA / Overseer / Planet barks at
+  NORMAL, LARGE, LARGEST; exchange IDLE, PRESSED (held), reply + acknowledge IDLE and PRESSED; prompt at LARGE and
+  LARGEST (wraps to 3 lines, fits). Taps: answer 1 (reply came), acknowledge (closed), bark X (dismissed). Swipe NOT
+  exercised (input code untouched). PRE-EXISTING, same in base (follow-up, not this order): at LARGEST a bark wraps to
+  3 lines but a bark holds 2 (the third line is dropped) and the fixed 30-unit line pitch makes the two lines touch;
+  the floor-entry event text ("ENTERING: OUTER FACILITY") shows through the bottom of the exchange prompt panel.
+  /tmp/claude-0/mkprefs.sh N writes a printed save with story text size N (0/1/2). Build + test: 480, 1 known failure.

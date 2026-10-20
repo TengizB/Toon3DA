@@ -42,7 +42,7 @@ public final class StoryUiConstants {
     // on a phone.  ~24px effective.  Never shrink text to fit; wrap instead.
     public static final float STORY_TEXT_SIZE          = 1.6f;
     // Speaker-name text scale inside the chip (a touch smaller than the body).
-    public static final float STORY_NAME_TEXT_SIZE     = 1.0f;
+    public static final float STORY_NAME_TEXT_SIZE     = ArtDirection.TYPE_CAPTION;
     // Max characters per wrapped line (narrative/StoryText.wrapToMaxChars).  ~40, wrap only.
     public static final int   STORY_LINE_MAX_CHARS     = 40;
     // Delivery caps: a bark is at most 2 lines; an exchange prompt at most 3 short lines.
@@ -66,7 +66,6 @@ public final class StoryUiConstants {
     public static final float STORY_PANEL_ALPHA        = ArtDirection.UI_PANEL_ALPHA_HUD;
     public static final float STORY_PANEL_BG_R = ArtDirection.UI_PANEL_RED, STORY_PANEL_BG_G = ArtDirection.UI_PANEL_GREEN,
                               STORY_PANEL_BG_B = ArtDirection.UI_PANEL_BLUE;
-    public static final float STORY_PANEL_CORNER_RADIUS = 14f;
     // Inner padding from panel edge to content (text / chip).
     public static final float STORY_PANEL_PADDING       = 18f;
     // Thin accent-tinted border drawn around the panel (uses the speaker accent colour).
@@ -178,6 +177,8 @@ public final class StoryUiConstants {
     public static final float STORY_BARK_CLOSE_STROKE         = 3f;
     public static final float STORY_BARK_CLOSE_MARGIN         = 14f;
     public static final float STORY_BARK_CLOSE_TOUCH_PADDING  = 18f;
+    /** visual-identity-order-6 R3: the IDLE plate the X sits on (visual only; the touch rect is unchanged). */
+    public static final float STORY_BARK_CLOSE_PLATE_SIZE     = 38f;
     /** Drag this far (world units) starting inside the panel to swipe a bark away. */
     public static final float STORY_BARK_SWIPE_DISMISS_DISTANCE = 60f;
     /** Centre of the close glyph, derived from the panel rect (top-right corner, inside padding). */
@@ -232,14 +233,14 @@ public final class StoryUiConstants {
     public static final float STORY_EXCHANGE_Y      = STORY_EXCHANGE_BUTTONS_BOTTOM_Y;
     public static final float STORY_EXCHANGE_HEIGHT = STORY_EXCHANGE_PROMPT_TOP_Y - STORY_EXCHANGE_Y;
 
-    // Button plate styling — an accent border with a dim fill, matching the boot card's CONTINUE.
-    // The PRESSED fill is much brighter: a tap must be visibly acknowledged before the panel changes,
-    // or a player who has just committed to an answer cannot tell whether the game heard them.
-    public static final float STORY_EXCHANGE_BUTTON_BORDER        = 2f;
-    public static final float STORY_EXCHANGE_BUTTON_FILL_ALPHA    = 0.22f;
-    public static final float STORY_EXCHANGE_BUTTON_PRESSED_ALPHA = 0.55f;
-    /** Answer text scale — a touch under the body size so one short line always fits the plate. */
-    public static final float STORY_EXCHANGE_OPTION_TEXT_SIZE     = 1.4f;
+    // Button plate styling (visual-identity-order-6 R4): a UiKit SUIT plate, IDLE / PRESSED in SUIT_AMBER,
+    // matching the boot card's CONTINUE.  A tap must be visibly acknowledged before the panel changes, or a
+    // player who has just committed to an answer cannot tell whether the game heard them: PRESSED raises the
+    // fill and lights the border amber.
+    public static final float STORY_EXCHANGE_BUTTON_FILL_ALPHA    = ArtDirection.UI_PANEL_ALPHA_SCREEN;
+    public static final float STORY_EXCHANGE_BUTTON_PRESSED_ALPHA = ArtDirection.UI_PANEL_ALPHA_SCREEN;
+    /** Answer text scale — under the body size so one short line (34 characters) always fits the plate. */
+    public static final float STORY_EXCHANGE_OPTION_TEXT_SIZE     = ArtDirection.TYPE_LABEL;
     /** Hard cap on an answer's length.  ONE short line per button; a test enforces it. */
     public static final int   STORY_EXCHANGE_OPTION_MAX_CHARS     = 34;
 
