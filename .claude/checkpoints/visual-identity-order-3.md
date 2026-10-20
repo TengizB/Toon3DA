@@ -38,7 +38,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — ArtDirection typography constants, FontFace, PixelFontGlyphs (full R2 coverage).
+- [x] **CP1** — ArtDirection typography constants, FontFace, PixelFontGlyphs (full R2 coverage).
       DONE WHEN: they exist, nothing reads them yet, build green.
 - [ ] **CP2** — GameFonts (atlas, both faces, fallback, R5 metric match + log line, R6 sharing), Main wiring,
       StoryPanelRenderer as pilot. DONE WHEN: a bark shows in the pixel font on screen; build green.
@@ -50,3 +50,10 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 
 ## NOTES CARRIED FORWARD
 
+- **Baseline (CP1):** mirror `:core:build` = only `narrative.StoryBarkTest` fails (pre-existing), ~56 s.
+- **CP1:** default font in LibGDX 1.14.1 is `lsans-15` (not Arial): capHeight 11, lineHeight 18, xHeight 8,
+  ascent 3, space 4 — measured from its BitmapFontData (scratch program, not committed). So
+  `PIXEL_FONT_TARGET_CAP_HEIGHT = 11f`. R2 scan of shipped strings found — · … × ▶ ◀ → ● • ◇ ±; all in the table.
+  ▶/◀ are 4x7 (a true 7-tall triangle is 4 wide), not 5x7 as VISUAL DESIGN says.
+- **CP2 plan:** glyph metrics in atlas TEXELS; `PixelFontData.setScale` multiplies by base 11/28, so
+  `setScale(1)` = cap 11. Consequence: `getScaleX()` is base-inclusive (no project code reads it — grep).

@@ -157,4 +157,35 @@ public final class ArtDirection {
     public static final float MUZZLE_FIRE_RED    = 1.00f;
     public static final float MUZZLE_FIRE_GREEN  = 0.55f;
     public static final float MUZZLE_FIRE_BLUE   = 0.20f;
+
+    // -------------------------------------------------------------------------
+    // TYPOGRAPHY (visual-identity-order-3): the one procedural pixel font (render/GameFonts,
+    // glyphs in render/PixelFontGlyphs). Grid numbers are in FONT PIXELS (R1).
+    // -------------------------------------------------------------------------
+    /** Atlas texels per font pixel, each axis (R4). */
+    public static final int   PIXEL_FONT_ATLAS_TEXELS_PER_PIXEL = 4;
+    /** Largest atlas side in texels (R4); GameFonts refuses to build a bigger one. */
+    public static final int   PIXEL_FONT_ATLAS_MAX_SIDE_TEXELS = 512;
+    /** Transparent font pixels kept between glyphs in the atlas, so Linear filtering never bleeds (R4). */
+    public static final int   PIXEL_FONT_ATLAS_PADDING_PIXELS = 1;
+    /**
+     * Cap height, in world units at setScale(1), of the LibGDX 1.14.1 default font (lsans-15) that the
+     * pixel font replaces: measured from its BitmapFontData (capHeight 11, lineHeight 18). R5 scales the
+     * pixel font to this, so every existing setScale keeps its cap height.
+     */
+    public static final float PIXEL_FONT_TARGET_CAP_HEIGHT = 11f;
+    public static final int   PIXEL_FONT_CAP_HEIGHT_PIXELS = 7;
+    public static final int   PIXEL_FONT_X_HEIGHT_PIXELS = 5;
+    public static final int   PIXEL_FONT_DESCENDER_PIXELS = 2;
+    public static final int   PIXEL_FONT_LINE_HEIGHT_PIXELS = 11;
+    public static final int   PIXEL_FONT_LETTER_SPACING_PIXELS = 1;
+    public static final int   PIXEL_FONT_SPACE_ADVANCE_PIXELS = 3;
+
+    // TYPE SCALE (R8): setScale multipliers over the metric-matched base. Adopted screen by screen in
+    // orders 4-6. Nothing shipped is drawn below TYPE_CAPTION.
+    public static final float TYPE_CAPTION = 1.00f;
+    public static final float TYPE_BODY    = 1.25f;
+    public static final float TYPE_LABEL   = 1.50f;
+    public static final float TYPE_HEADING = 2.00f;
+    public static final float TYPE_DISPLAY = 3.50f;
 }
