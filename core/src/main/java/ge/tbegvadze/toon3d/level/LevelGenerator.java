@@ -2914,8 +2914,11 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
      * area unreachable. This floods from the spawn and, while any walkable floor tile is still
      * unreachable, carves a blocker-clearing corridor from the spawn to one such tile, reconnecting
      * that whole region. It repeats until every floor tile is reachable, so the player can always reach
-     * all loot, enemies, and the exit. Deterministic (no RNG use) — the seeded draw sequence is
-     * untouched; only genuinely-stranded seeds gain carved tiles.
+     * all loot, enemies, and the exit. "Walkable" is the in-game movement rule (isBfsPassable), NOT just
+     * the four plain floor chars: a pocket made only of decals (stains, scorch, corpses, observatory
+     * plating), pickups or doors that props walled off is still a stranded walkway and must be reopened.
+     * Deterministic (no RNG use) — the seeded draw sequence is untouched; only genuinely-stranded seeds
+     * gain carved tiles.
      */
     private void repairUnreachableFloorRegions(char[][] grid, int spawnColumn, int spawnRow) {
         int safetyCap = LevelGenConstants.LEVEL_GEN_GRID_WIDTH + LevelGenConstants.LEVEL_GEN_GRID_HEIGHT;
@@ -2925,14 +2928,14 @@ public class LevelGenerator implements ILevelGenerator, SupplySlotProvider {
             int targetRow    = -1;
             for (int tileRow = 0; tileRow < LevelGenConstants.LEVEL_GEN_GRID_HEIGHT && targetColumn < 0; tileRow++) {
                 for (int tileColumn = 0; tileColumn < LevelGenConstants.LEVEL_GEN_GRID_WIDTH; tileColumn++) {
-                    if (!reachable[tileRow][tileColumn] && isWalkableFloor(grid, tileColumn, tileRow)) {
+                    if (!reachable[tileRow][tileColumn] && isBfsPassable(grid[tileRow][tileColumn])) {
                         targetColumn = tileColumn;
                         targetRow    = tileRow;
                         break;
                     }
                 }
             }
-            if (targetColumn < 0) return; // every floor tile is reachable
+            if (targetColumn < 0) return; // every walkable tile is reachable
             carveEmergencyCorridor(grid, spawnColumn, spawnRow, targetColumn, targetRow);
         }
     }
