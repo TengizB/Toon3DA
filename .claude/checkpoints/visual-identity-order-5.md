@@ -165,3 +165,10 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   "WHAT THE PLAYER SEES", story-ui-system CODEX PAINT, xp-level-progression (level-up + BUILD page lines), CLAUDE.md
   docs table + UiKit entry. Final AFTER shots: /tmp/claude-0/shots/after (same scripts as /tmp/claude-0/shots/before).
   Build + test: 480 tests, the 1 known failure (StoryBarkTest bark.depth.core.2).
+- **CP7 (in progress):** reviewer r1 = PASS WITH FIXES (no report file; findings in the session). Fixed: B1 (outer
+  SUIT_AMBER_DIM brackets on level-up / keystone / relic offer around title + card row (+ LEAVE IT),
+  ArtDirection.UI_SCREEN_FRAME_MARGIN 18; recorded in NOTE 3), NB1 (codex mask bands opaque again), NB2 (slot
+  counter moved under the grid), NB4 (CLAUDE.md relic scrim 0.75), nit 1 (no asterisks in the level-up titles).
+  NB3 captured after the fixes: /tmp/claude-0/shots/fix (keystone offer with BODY cost lines clear of TAP TO
+  CHOOSE, ability window over item window with no dim, inventory counter, level-up and relic frames). Nits 2
+  (pip/rank touch) and 3 (NEW marker size = spec) left as is.

@@ -236,4 +236,6 @@ public final class ArtDirection {
     /** R10: the UI_LINE border around a tag chip, and the chip's chamfer. */
     public static final float UI_CHIP_BORDER_THICKNESS = 1f;
     public static final float UI_CHIP_CHAMFER = 6f;
+    /** A card-choice screen has no outer panel: its brackets frame header + cards, this far outside them. */
+    public static final float UI_SCREEN_FRAME_MARGIN = 18f;
 }

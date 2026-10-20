@@ -325,8 +325,8 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
         beginShapes(camera);
 
         // MASK: repaint the header and footer bands over anything the scrolled body spilled into.
-        shapes.setColor(ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
-                        ArtDirection.UI_PANEL_ALPHA_SCREEN);
+        // Opaque on purpose: a mask, not a panel, so no scrolled text ghosts through the bands.
+        shapes.setColor(ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE, 1f);
         float maskLeft  = StoryUiConstants.STORY_CODEX_BODY_X - StoryUiConstants.STORY_CODEX_BODY_GAP / 2f;
         float maskWidth = StoryUiConstants.STORY_CODEX_RIGHT_X - maskLeft
                 - StoryUiConstants.STORY_PANEL_BORDER_THICKNESS;

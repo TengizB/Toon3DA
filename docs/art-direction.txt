@@ -513,14 +513,16 @@ PRIMITIVES ADDED TO render/UiKit (SECTION 13 rules hold: Filled pass, caller ble
   plate (+alpha)         an overall alpha multiplier for a screen that fades in (the codex).
 GEOMETRY (ArtDirection): UI_PANEL_ALPHA_SCREEN 0.94 (the HUD's 0.82 is for in-play chrome only),
   UI_SCREEN_HEADER_RULE_GAP 8, UI_NEW_MARKER_SIZE 6 / UI_NEW_MARKER_EDGE 1, UI_SELECTION_BAR_WIDTH 3,
-  UI_CHIP_BORDER_THICKNESS 1, UI_CHIP_CHAMFER 6.
+  UI_CHIP_BORDER_THICKNESS 1, UI_CHIP_CHAMFER 6, UI_SCREEN_FRAME_MARGIN 18.
 RULES
   SCRIM   one full-screen UI_INK_BLACK scrim at UI_SCRIM_ALPHA 0.75 per screen, never stacked: the inventory's
           item and ability windows no longer dim the layer under them — each is its own bracketed panel.
   PANELS  UiKit.panel in UI_PANEL at UI_PANEL_ALPHA_SCREEN, border UI_LINE. Brackets on the OUTERMOST panel
           only. The inventory has no single outer panel, so its brackets frame the bounding rect of the
           header bar + both body panels (brackets alone, no extra fill); the BUILD page replaces the two body
-          panels while it is open rather than stacking on them.
+          panels while it is open rather than stacking on them. The card-choice screens (level-up, keystone,
+          relic offer) have no panel either: their brackets frame the title + card row (+ LEAVE IT),
+          UI_SCREEN_FRAME_MARGIN 18 outside it.
   PLATES  every tappable control is a UiKit plate with its four states mapped from existing logic: a tab
           row's open tab SELECTED in SUIT_AMBER, the others IDLE; an unavailable action DISABLED; a filled
           inventory slot the active filter hides DISABLED. Nothing here has a pressed state (taps commit on
@@ -541,7 +543,7 @@ WHO DRAWS WHAT
   InventoryOverlayRenderer   scrim, header bar + body panels, outer brackets, R1 "INVENTORY", BUILD (SELECTED
                              while its page is open) / CODEX / EXIT plates, credits CREDITS_GOLD.
   ItemGridPanel              tab plates; slot plates IDLE / SELECTED / DISABLED; category dots; amber
-                             equipped star.
+                             equipped star; the "n / 12" counter in the strip under the grid.
   WeaponSlotsPanel           filled slot = card in WeaponTier ink (the equipped one SELECTED); empty IDLE;
                              locked DISABLED + padlock; section rules = dividers.
   BuildPagePanel             one panel; tag chips; keystone blocks = cards in the keystone's tag ink; a

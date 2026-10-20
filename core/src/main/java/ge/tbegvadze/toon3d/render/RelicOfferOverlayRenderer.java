@@ -231,6 +231,12 @@ public final class RelicOfferOverlayRenderer implements Disposable {
                 ArtDirection.UI_INK_BLACK_BLUE, HudConstants.RELIC_OFFER_SCRIM_ALPHA);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         UiKit.screenHeaderRule(shapes, leftX, UiKit.screenHeaderRuleY(HudConstants.RELIC_OFFER_TITLE_Y), rowWidth, 1f);
+        // The screen's outer frame (R4): no panel, so SUIT_AMBER_DIM brackets frame header, cards and LEAVE IT.
+        float frameMargin = ArtDirection.UI_SCREEN_FRAME_MARGIN;
+        float frameBottom = HudConstants.RELIC_OFFER_LEAVE_Y - frameMargin;
+        UiKit.brackets(shapes, leftX - frameMargin, frameBottom, rowWidth + frameMargin * 2f,
+                HudConstants.RELIC_OFFER_TITLE_Y + frameMargin - frameBottom,
+                ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
         float stripY = CARD_TOP_Y - HudConstants.RELIC_OFFER_HEADER_HEIGHT;
         for (int cardIndex = 0; cardIndex < offer.count; cardIndex++) {

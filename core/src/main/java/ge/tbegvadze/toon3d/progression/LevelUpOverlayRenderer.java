@@ -291,6 +291,12 @@ public final class LevelUpOverlayRenderer implements Disposable {
                 ArtDirection.UI_INK_BLACK_BLUE, ArtDirection.UI_SCRIM_ALPHA);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
+        // The screen's outer frame (R4): no panel, so SUIT_AMBER_DIM brackets frame the header + card row.
+        float frameMargin = ArtDirection.UI_SCREEN_FRAME_MARGIN;
+        UiKit.brackets(shapes, CARDS_LEFT_X - frameMargin, CARD_Y - frameMargin,
+                TOTAL_CARDS_WIDTH + frameMargin * 2f, TITLE_Y - CARD_Y + frameMargin * 2f,
+                ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
+
         // Header rule under the title, across the card row (R1)
         UiKit.screenHeaderRule(shapes, CARDS_LEFT_X, UiKit.screenHeaderRuleY(TITLE_Y), TOTAL_CARDS_WIDTH, 1f);
 
@@ -360,7 +366,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
         // ---- text (screen text never sits on the 3D view: unshadowed) ----
         batch.begin();
 
-        UiKit.screenHeaderTitle(batch, headingFont, keystoneMode ? "*** KEYSTONE ***" : "*** LEVEL UP! ***",
+        UiKit.screenHeaderTitle(batch, headingFont, keystoneMode ? "KEYSTONE" : "LEVEL UP!",
                 CARDS_LEFT_X, TITLE_Y);
 
         font.getData().setScale(SCALE_SUBTITLE);

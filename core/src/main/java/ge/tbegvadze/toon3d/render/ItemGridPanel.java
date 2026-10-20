@@ -226,7 +226,8 @@ final class ItemGridPanel implements Disposable {
                       tabCenterY + glyphLayout.height / 2f);
         }
 
-        // Slot usage counter — right-aligned inside the tab bar (a caption)
+        // Slot usage counter — a caption right-aligned in the strip under the grid (inside the tab bar it ran into
+        // the MISC tab plate's border)
         font.getData().setScale(ArtDirection.TYPE_CAPTION);
         int usedCount = countUsedSlots();
         textBuilder.setLength(0);
@@ -238,8 +239,8 @@ final class ItemGridPanel implements Disposable {
                                       - ItemConstants.INV_PANEL_PADDING;
         font.draw(spriteBatch, textBuilder,
                   usageCounterRightEdge - glyphLayout.width,
-                  ItemConstants.INV_GRID_TAB_BAR_Y + ItemConstants.INV_GRID_TAB_BAR_HEIGHT / 2f
-                  + glyphLayout.height / 2f);
+                  ItemConstants.INV_PANEL_Y_BOTTOM
+                  + (ItemConstants.INV_GRID_ORIGIN_Y - ItemConstants.INV_PANEL_Y_BOTTOM + glyphLayout.height) / 2f);
 
         // Slot contents (glyph, quantity, equipped star)
         for (int gridRow = 0; gridRow < ItemConstants.INV_GRID_ROWS; gridRow++) {

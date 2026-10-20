@@ -796,7 +796,7 @@ Render order each frame (World.render):
 ```
 
 The RELIC_OFFER overlay (relics-run-changing-artifacts) sits at the LEVEL-UP OVERLAY tier: `RelicOfferOverlayRenderer`
-brings its own 0.78 scrim over the frozen 3D view and is drawn only in `RunPhase.RELIC_OFFER`, above the HUD and
+brings its own 0.75 scrim (`UI_SCRIM_ALPHA`) over the frozen 3D view and is drawn only in `RunPhase.RELIC_OFFER`, above the HUD and
 every in-run overlay and below the story/boot modals and the fade. It is a hard-pause overlay: barks queue, no
 exchange opens, the thumb clusters and the event text are NOT drawn, and the pause button still works (PAUSE_MENU
 returns to the same offer).

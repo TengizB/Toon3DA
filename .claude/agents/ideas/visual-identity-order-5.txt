@@ -15,6 +15,11 @@ IMPLEMENTATION NOTE (2026-10-20) — where the build diverged from the plan, and
      edge, at their old height, with the rule across the row (the subtitle follows, left-aligned, at its old Y).
   3. The inventory has no single outer panel: its SUIT_AMBER_DIM brackets frame the bounding rect of the header
      bar + both body panels (brackets only, no extra fill). The BUILD page replaces the two body panels while open.
+     The card-choice screens (level-up, keystone, relic offer) have no outer panel either: their brackets frame
+     the title + card row (+ LEAVE IT on the relic offer), UI_SCREEN_FRAME_MARGIN outside it (reviewer r1 B1).
+     The level-up titles lost their asterisks ("LEVEL UP!", "KEYSTONE"): the HEAVY face turns "*" into a blob.
+     The inventory's "n / 12" counter moved to the strip under the grid (inside the tab bar it crossed the
+     MISC plate's new border); text anchor only.
   4. R3 "never stacked": the inventory's popup dims (INV_BASE_DIM_FACTOR / INV_ITEM_WIN_DIM_FACTOR) are removed;
      the item and ability windows are bracketed .94 panels straight over the layer below.
   5. D2 (rarity / tier colour on frames only) removed coloured TEXT and FILLS that the old screens had: the inspect
