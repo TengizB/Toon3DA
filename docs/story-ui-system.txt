@@ -676,7 +676,7 @@ is CRITICAL; all three have threshold 0 — never re-taught. The pairing twist -
 (`TeachingTopic.forFloorTwist("hunted")` -> `TWIST_HUNTED`), so World's arrival code names no twist; a
 fourth twist is taught by adding its `TWIST_<ID>` row and string. The idea file's draft lines were
 rewritten to the two-line bark cap (`STORY_BARK_MAX_LINES` x `STORY_LINE_MAX_CHARS`) and without the em
-dash the story font has no glyph for:
+dash (a content choice of the WRITING RULES; the pixel font has had the glyph since visual-identity-order-3):
     twist_blackout  "Power's out. No map. Nothing down here sees far in the dark either. Go quiet."
     twist_salvage   "Nobody cleared this floor. More supplies here, and more of what stopped them."
     twist_hunted    "Sensors: something's coming down behind us. It walks your path. Keep moving."

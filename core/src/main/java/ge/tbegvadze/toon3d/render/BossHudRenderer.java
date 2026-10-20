@@ -63,8 +63,8 @@ public final class BossHudRenderer implements Renderable, Disposable {
     public BossHudRenderer() {
         this.batch         = new SpriteBatch();
         this.shapeRenderer = new ShapeRenderer();
-        this.nameFont      = new BitmapFont();
-        this.epithetFont   = new BitmapFont();
+        this.nameFont      = GameFonts.newFont(FontFace.HEAVY);
+        this.epithetFont   = GameFonts.newFont(FontFace.REGULAR);
         this.glyphLayout   = new GlyphLayout();
     }
 

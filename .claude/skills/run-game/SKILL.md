@@ -48,6 +48,8 @@ cd /tmp/toon3d-runtime/mirror && ./gradlew -q :core:build :lwjgl3:compileJava
 | `hold:X:Y:SECONDS` | press and hold (held movement repeats) |
 | `shot:NAME` | write `DIR/NAME.png` (the real GL back buffer) after that frame |
 | `pulse:ITEM_TYPE` | reflection into `World.atmosphereGrade.pulseMuzzleLight` (see muzzle light, below) |
+| `call:PATH:METHOD[:INT]` | reflection: invoke a no-arg/int-arg method on `Main.world` (PATH `.`) or a field path from it (`player`, `playerProgress`) — e.g. `call:.:onDescentRequested` (route map), `call:player:applyDamage:9999` (death), `call:playerProgress:addXp:500` (level-up), `call:.:openShop` |
+| `set:PATH:VALUE` | reflection: set a boolean/int field reached from `Main.world` (e.g. `set:startRoomChoiceResolved:true`, then `call:.:onDescentRequested` opens the route map from the start room) |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 

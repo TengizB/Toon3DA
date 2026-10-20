@@ -273,7 +273,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
         this.whitePixelTexture    = buildWhitePixelTexture();
         this.heavyMarkerTexture   = buildHeavyMarkerTexture();
         this.contactShadowTexture = ContactShadow.buildTexture();
-        this.nameTagFont          = new BitmapFont();
+        this.nameTagFont          = GameFonts.newFont(FontFace.REGULAR);
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout        = new GlyphLayout();
         this.hpTextLayout         = new GlyphLayout();

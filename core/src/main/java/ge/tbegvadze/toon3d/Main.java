@@ -7,6 +7,7 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import ge.tbegvadze.toon3d.render.EnemySpriteSheets;
+import ge.tbegvadze.toon3d.render.GameFonts;
 import ge.tbegvadze.toon3d.world.StartMode;
 import ge.tbegvadze.toon3d.world.World;
 
@@ -23,6 +24,8 @@ public class Main extends ApplicationAdapter {
     public void create() {
         camera = new OrthographicCamera();
         viewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, camera);
+        // The one pixel font (visual-identity-order-3): every renderer the World builds takes its font from it.
+        GameFonts.initialise();
         world = new World(System.currentTimeMillis());
         world.initTouchControls(viewport);
         camera.position.set(WORLD_WIDTH / 2f, WORLD_HEIGHT / 2f, 0);
@@ -96,5 +99,7 @@ public class Main extends ApplicationAdapter {
         world.dispose();
         // Session-lifetime enemy sheets outlive every World; freed only here (visual-identity-order-2 R2).
         EnemySpriteSheets.disposeAll();
+        // The font atlas outlives every World too; freed once, after the World's fonts (R6).
+        GameFonts.dispose();
     }
 }

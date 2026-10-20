@@ -50,8 +50,7 @@ public final class StoryPanelRenderer implements Disposable {
     public StoryPanelRenderer() {
         this.batch  = new SpriteBatch();
         this.shapes = new ShapeRenderer();
-        this.font   = new BitmapFont();
-        this.font.getData().markupEnabled = false;
+        this.font   = GameFonts.newFont(FontFace.REGULAR);
         this.layout = new GlyphLayout();
     }
 

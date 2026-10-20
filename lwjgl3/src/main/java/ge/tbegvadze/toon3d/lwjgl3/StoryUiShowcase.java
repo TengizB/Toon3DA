@@ -19,6 +19,8 @@ import ge.tbegvadze.toon3d.narrative.StoryLine;
 import ge.tbegvadze.toon3d.narrative.StorySampleLines;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
 import ge.tbegvadze.toon3d.narrative.StoryText;
+import ge.tbegvadze.toon3d.render.FontFace;
+import ge.tbegvadze.toon3d.render.GameFonts;
 import ge.tbegvadze.toon3d.render.StoryPanelRenderer;
 import ge.tbegvadze.toon3d.render.StoryAudio;
 import ge.tbegvadze.toon3d.render.StoryStringsLoader;
@@ -71,6 +73,7 @@ public final class StoryUiShowcase extends ApplicationAdapter {
 
     @Override
     public void create() {
+        GameFonts.initialise(); // every renderer below takes its font from it (visual-identity-order-3)
         camera   = new OrthographicCamera();
         viewport = new FitViewport(Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT, camera);
         camera.position.set(Constants.WORLD_WIDTH / 2f, Constants.WORLD_HEIGHT / 2f, 0f);
@@ -78,7 +81,7 @@ public final class StoryUiShowcase extends ApplicationAdapter {
 
         backdrop      = new ShapeRenderer();
         captionBatch  = new SpriteBatch();
-        captionFont   = new BitmapFont();
+        captionFont   = GameFonts.newFont(FontFace.REGULAR);
         panelRenderer = new StoryPanelRenderer();
         stings        = new StoryAudio();
         // Order-2 added StoryStringsLoader as the ONE place the string asset is read (with the
@@ -207,5 +210,6 @@ public final class StoryUiShowcase extends ApplicationAdapter {
         captionFont.dispose();
         panelRenderer.dispose();
         stings.dispose();
+        GameFonts.dispose();
     }
 }

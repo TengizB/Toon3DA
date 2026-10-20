@@ -18,6 +18,8 @@ import ge.tbegvadze.toon3d.narrative.BarkSystem;
 import ge.tbegvadze.toon3d.narrative.BarkTrigger;
 import ge.tbegvadze.toon3d.narrative.StoryProgress;
 import ge.tbegvadze.toon3d.narrative.StoryRegion;
+import ge.tbegvadze.toon3d.render.FontFace;
+import ge.tbegvadze.toon3d.render.GameFonts;
 import ge.tbegvadze.toon3d.render.StoryAudio;
 import ge.tbegvadze.toon3d.render.StoryBarkRenderer;
 import ge.tbegvadze.toon3d.render.StoryStringsLoader;
@@ -93,6 +95,7 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
 
     @Override
     public void create() {
+        GameFonts.initialise(); // every renderer below takes its font from it (visual-identity-order-3)
         camera   = new OrthographicCamera();
         viewport = new FitViewport(Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT, camera);
         camera.position.set(Constants.WORLD_WIDTH / 2f, Constants.WORLD_HEIGHT / 2f, 0f);
@@ -100,7 +103,7 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
 
         backdrop     = new ShapeRenderer();
         captionBatch = new SpriteBatch();
-        captionFont  = new BitmapFont();
+        captionFont  = GameFonts.newFont(FontFace.REGULAR);
 
         progress     = new StoryProgress();   // in-memory: the showcase always starts a clean story
         barkSystem   = new BarkSystem(BarkCatalog.defaultRegistry(), StoryStringsLoader.load(),
@@ -255,5 +258,6 @@ public final class StoryBarkShowcase extends ApplicationAdapter {
         captionFont.dispose();
         barkRenderer.dispose();
         storyAudio.dispose();
+        GameFonts.dispose();
     }
 }

@@ -129,6 +129,12 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "pulse":
                     pulseMuzzleLight(step[2]);
                     break;
+                case "call":
+                    callOnWorld(step);
+                    break;
+                case "set":
+                    setOnWorld(step);
+                    break;
                 case "timestart":
                     timing = true;
                     frameNanosTotal = 0;
@@ -191,6 +197,78 @@ public class CaptureLauncher extends ApplicationAdapter {
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }
+    }
+
+    /**
+     * {@code call:FIELD_PATH:METHOD[:INT]} — invokes a (private or public) no-arg or int-arg method on the object
+     * reached from {@code Main.world} through the dot-separated field path ({@code .} = the World itself).
+     * Examples: {@code call:.:onDescentRequested}, {@code call:player:applyDamage:9999},
+     * {@code call:playerProgress:addXp:500}. A dev hook for reaching a screen, never game logic.
+     */
+    private void callOnWorld(String[] step) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object target = worldField.get(main);
+            if (!step[2].equals(".")) {
+                for (String fieldName : step[2].split("\\.")) {
+                    Field field = findField(target.getClass(), fieldName);
+                    field.setAccessible(true);
+                    target = field.get(target);
+                }
+            }
+            boolean hasArgument = step.length > 4;
+            for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
+                for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                    if (!method.getName().equals(step[3])) continue;
+                    if (method.getParameterCount() != (hasArgument ? 1 : 0)) continue;
+                    method.setAccessible(true);
+                    Object result = hasArgument ? method.invoke(target, Integer.parseInt(step[4])) : method.invoke(target);
+                    System.out.println("[capture] called " + String.join(":", step) + " -> " + result);
+                    return;
+                }
+            }
+            System.out.println("[capture] no method for " + String.join(":", step));
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code set:FIELD_PATH:VALUE} — sets a boolean or int field reached from {@code Main.world} by a dot-separated
+     * path (last segment = the field). E.g. {@code set:startRoomChoiceResolved:true} lets the start-room portal open
+     * without the random weapon walk. A dev hook for reaching a screen, never game logic.
+     */
+    private void setOnWorld(String[] step) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object target = worldField.get(main);
+            String[] path = step[2].split("\\.");
+            for (int index = 0; index < path.length - 1; index++) {
+                Field field = findField(target.getClass(), path[index]);
+                field.setAccessible(true);
+                target = field.get(target);
+            }
+            Field field = findField(target.getClass(), path[path.length - 1]);
+            field.setAccessible(true);
+            if (field.getType() == boolean.class) field.setBoolean(target, Boolean.parseBoolean(step[3]));
+            else field.setInt(target, Integer.parseInt(step[3]));
+            System.out.println("[capture] set " + String.join(":", step));
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                // keep walking up
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private void writeShot(String shotName) {

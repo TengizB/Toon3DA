@@ -77,8 +77,7 @@ public final class CodexOverlayRenderer implements Renderable, Disposable {
     public CodexOverlayRenderer() {
         this.shapes = new ShapeRenderer();
         this.batch  = new SpriteBatch();
-        this.font   = new BitmapFont();
-        this.font.getData().markupEnabled = false;
+        this.font   = GameFonts.newFont(FontFace.REGULAR);
         this.layout = new GlyphLayout();
         for (int labelIndex = 0; labelIndex < settingValues.length; labelIndex++) {
             settingValues[labelIndex] = "";

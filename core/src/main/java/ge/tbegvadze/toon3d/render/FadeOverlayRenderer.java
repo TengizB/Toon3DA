@@ -36,9 +36,7 @@ public class FadeOverlayRenderer implements Disposable {
         pixmap.fill();
         pixelTexture = new Texture(pixmap);
         pixmap.dispose();
-        font = new BitmapFont();
-        font.getRegion().getTexture().setFilter(
-                Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        font = GameFonts.newFont(FontFace.REGULAR);
     }
 
     /**

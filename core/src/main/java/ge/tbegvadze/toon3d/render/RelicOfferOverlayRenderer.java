@@ -4,7 +4,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -115,10 +114,7 @@ public final class RelicOfferOverlayRenderer implements Disposable {
     public RelicOfferOverlayRenderer() {
         shapes = new ShapeRenderer();
         batch  = new SpriteBatch();
-        font   = new BitmapFont();
-        font.getData().markupEnabled = false;
-        // Crisp text when scaled up (same technique as LevelUpOverlayRenderer).
-        font.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        font   = GameFonts.newFont(FontFace.REGULAR);
         font.setUseIntegerPositions(false);
 
         for (int rarityIndex = 0; rarityIndex < RARITY_COUNT; rarityIndex++) {

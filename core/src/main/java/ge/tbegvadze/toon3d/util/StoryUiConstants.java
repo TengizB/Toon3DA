@@ -38,7 +38,7 @@ public final class StoryUiConstants {
     // =====================================================================
     // TYPOGRAPHY & READABILITY (hard requirements)
     // =====================================================================
-    // Body text scale of the default 15px BitmapFont.  Err BIG — must read at arm's length
+    // Body text scale over the metric-matched pixel font (GameFonts; setScale(1) = the old 15px default's cap height).  Err BIG — must read at arm's length
     // on a phone.  ~24px effective.  Never shrink text to fit; wrap instead.
     public static final float STORY_TEXT_SIZE          = 1.6f;
     // Speaker-name text scale inside the chip (a touch smaller than the body).
@@ -549,7 +549,7 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_TABS_TOP_Y    = STORY_CODEX_CONTENT_TOP_Y;
     public static final float STORY_CODEX_TAB_TEXT_SIZE = 1.15f;
     /** Progress readout under a tab's name ("3/5") — dim, never a score. */
-    public static final float STORY_CODEX_TAB_COUNT_TEXT_SIZE = 0.95f;
+    public static final float STORY_CODEX_TAB_COUNT_TEXT_SIZE = 1.0f; // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
 
     // 3. BODY — the entry list, and the entry detail that replaces it.  Both scroll inside it.
     public static final float STORY_CODEX_BODY_GAP    = 20f;
@@ -584,7 +584,7 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_ROW_GAP        = 8f;
     public static final float STORY_CODEX_ROW_TEXT_SIZE  = 1.2f;
     /** Source line under a row's title (where the entry came from) — dim and small. */
-    public static final float STORY_CODEX_ROW_SOURCE_TEXT_SIZE = 0.9f;
+    public static final float STORY_CODEX_ROW_SOURCE_TEXT_SIZE = 1.0f; // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.9)
     /** The "NEW" dot: an invitation to look, never a badge that nags.  Cleared once read. */
     public static final float STORY_CODEX_NEW_DOT_RADIUS = 7f;
     public static final float STORY_CODEX_NEW_DOT_INSET  = 22f;

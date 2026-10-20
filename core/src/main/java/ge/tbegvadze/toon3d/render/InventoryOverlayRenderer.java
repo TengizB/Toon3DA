@@ -147,7 +147,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         this.inventory    = inventory;
         shapeRenderer     = new ShapeRenderer();
         spriteBatch       = new SpriteBatch();
-        font              = new BitmapFont();
+        font              = GameFonts.newFont(FontFace.REGULAR);
         glyphLayout       = new GlyphLayout();
         textBuilder       = new StringBuilder(32);
 

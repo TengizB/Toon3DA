@@ -338,7 +338,7 @@ public final class RouteMapConstants {
 
     // ---- Text scales -------------------------------------------------------
     public static final float TITLE_TEXT_SCALE   = 1.2f;
-    public static final float DEPTH_TEXT_SCALE   = 0.95f;
+    public static final float DEPTH_TEXT_SCALE   = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
     /**
      * NAV header (balance-overhaul order 6, F6): "FLOOR n / 25" — n is the floor the console is about to
      * send the player to (the staging room reads FLOOR 1), out of BalanceConfig.RUN_FINAL_DEPTH.
@@ -346,8 +346,8 @@ public final class RouteMapConstants {
     public static final String NAV_FLOOR_HEADER_PREFIX    = "FLOOR ";
     public static final String NAV_FLOOR_HEADER_SEPARATOR = " / ";
     public static final float REGION_TEXT_SCALE  = 1.0f;
-    public static final float NODE_LABEL_SCALE   = 0.9f;
-    public static final float LEGEND_TEXT_SCALE  = 0.95f;
+    public static final float NODE_LABEL_SCALE   = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.9)
+    public static final float LEGEND_TEXT_SCALE  = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
     /**
      * The focused node's C1 supply promise (balance-overhaul order 2): two stacked lines in the confirm
      * bar's centre gap — the threat word above (node accent colour), the reward promise below (grey).
@@ -364,7 +364,7 @@ public final class RouteMapConstants {
     public static final float LEGEND_TWIST_OFFSET_Y = -20f;
     public static final float LEGEND_PROMISE_THREAT_OFFSET_Y_WITH_TWIST = 24f;
     public static final float LEGEND_PROMISE_REWARD_OFFSET_Y_WITH_TWIST = 2f;
-    /** Name / rule separator. A plain hyphen: the console's default BitmapFont has no em-dash glyph. */
+    /** Name / rule separator. A plain hyphen (a copy choice; the pixel font has had an em-dash glyph since visual-identity-order-3). */
     public static final String LEGEND_TWIST_SEPARATOR = " - ";
     /** The widest the twist line may draw: the confirm bar's centre gap between CANCEL and ENGAGE, less padding. */
     public static final float LEGEND_TWIST_MAX_WIDTH = 640f;

@@ -3,13 +3,14 @@ package ge.tbegvadze.toon3d.progression;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import ge.tbegvadze.toon3d.render.FontFace;
+import ge.tbegvadze.toon3d.render.GameFonts;
 import ge.tbegvadze.toon3d.render.BuildTagPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
@@ -93,7 +94,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final float RANK_TEXT_SCALE_FRACTION = 0.6f;
     private static final float SCALE_LABEL    = 1.35f;
     private static final float SCALE_DESC     = 1.02f;
-    private static final float SCALE_TAP      = 0.95f;
+    private static final float SCALE_TAP      = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
 
     private static final float SHADOW_OFFSET = 2.5f;
 
@@ -196,13 +197,9 @@ public final class LevelUpOverlayRenderer implements Disposable {
         this.progress    = progress;
         this.shapes      = new ShapeRenderer();
         this.batch       = new SpriteBatch();
-        this.font        = new BitmapFont();
+        this.font        = GameFonts.newFont(FontFace.REGULAR);
         this.glyphLayout = new GlyphLayout();
-        this.font.getData().markupEnabled = false;
-        // Crisp text when scaled up: Linear filtering + sub-pixel positioning.
-        // (Same technique used by FadeOverlayRenderer / ImpactEffectRenderer.)
-        this.font.getRegion().getTexture().setFilter(
-                Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        // Sub-pixel positioning keeps scaled text smooth (the atlas filter is GameFonts').
         this.font.setUseIntegerPositions(false);
     }
 
