@@ -40,7 +40,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — ArtDirection typography constants, FontFace, PixelFontGlyphs (full R2 coverage).
       DONE WHEN: they exist, nothing reads them yet, build green.
-- [ ] **CP2** — GameFonts (atlas, both faces, fallback, R5 metric match + log line, R6 sharing), Main wiring,
+- [x] **CP2** — GameFonts (atlas, both faces, fallback, R5 metric match + log line, R6 sharing), Main wiring,
       StoryPanelRenderer as pilot. DONE WHEN: a bark shows in the pixel font on screen; build green.
 - [ ] **CP3** — HUD-layer swaps (HudRenderer, BossHudRenderer, EventTextRenderer, ImpactEffectRenderer,
       EnemyRenderer, FadeOverlayRenderer) with R7 faces. DONE WHEN: A5 holds; build green.
@@ -57,3 +57,8 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   ▶/◀ are 4x7 (a true 7-tall triangle is 4 wide), not 5x7 as VISUAL DESIGN says.
 - **CP2 plan:** glyph metrics in atlas TEXELS; `PixelFontData.setScale` multiplies by base 11/28, so
   `setScale(1)` = cap 11. Consequence: `getScaleX()` is base-inclusive (no project code reads it — grep).
+- **CP2:** log line: `pixel font atlas 512x512, REGULAR capHeight at setScale(1) = 11.0, target = 11.0, owns atlas =
+  false` (A6, and R6's ownsTexture confirmed false on the BitmapFont(data, region, integer) path). Seen on screen:
+  the reprint card's SYSTEM + ORA panels (both StoryPanelRenderer) in the pixel font, no overflow. A live bark did
+  NOT appear in the first 20 s of run 1 (no bark fired), so the bark itself is re-checked in the CP5 sweep.
+  `setGlyphRegion(missingGlyph)` is called explicitly after construction (BitmapFont.load may skip it).
