@@ -172,15 +172,22 @@ public final class UiKit {
     public static void plate(ShapeRenderer shapes, float x, float y, float width, float height, float chamfer,
                              float bracketLength, PlateState state, float fillAlpha,
                              float inkRed, float inkGreen, float inkBlue) {
+        plate(shapes, x, y, width, height, chamfer, bracketLength, state, fillAlpha, inkRed, inkGreen, inkBlue, 1f);
+    }
+
+    /** R3 with an overall alpha multiplier on fill, border and brackets (a screen fading in, order 5). */
+    public static void plate(ShapeRenderer shapes, float x, float y, float width, float height, float chamfer,
+                             float bracketLength, PlateState state, float fillAlpha,
+                             float inkRed, float inkGreen, float inkBlue, float alpha) {
         boolean ink = state.usesInkBorder();
         panel(shapes, x, y, width, height, chamfer,
-                state.fillRed(), state.fillGreen(), state.fillBlue(), fillAlpha * state.fillAlphaScale(),
+                state.fillRed(), state.fillGreen(), state.fillBlue(), fillAlpha * state.fillAlphaScale() * alpha,
                 ink ? inkRed : ArtDirection.UI_LINE_RED,
                 ink ? inkGreen : ArtDirection.UI_LINE_GREEN,
                 ink ? inkBlue : ArtDirection.UI_LINE_BLUE,
-                state.borderAlpha(), ArtDirection.UI_BORDER_THICKNESS);
+                state.borderAlpha() * alpha, ArtDirection.UI_BORDER_THICKNESS);
         if (state.drawsInkBrackets()) {
-            brackets(shapes, x, y, width, height, bracketLength, inkRed, inkGreen, inkBlue, 1f);
+            brackets(shapes, x, y, width, height, bracketLength, inkRed, inkGreen, inkBlue, alpha);
         }
     }
 

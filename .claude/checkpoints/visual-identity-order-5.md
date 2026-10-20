@@ -50,7 +50,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A1/A3 hold for them on run; build green.
 - [x] **CP4** — LevelUpOverlayRenderer, RelicOfferOverlayRenderer restyled (R2, R8).
       DONE WHEN: A1/A2/A3 hold on run; build green.
-- [ ] **CP5** — CodexOverlayRenderer restyled (R9, R7). DONE WHEN: A5 holds on run; build green.
+- [x] **CP5** — CodexOverlayRenderer restyled (R9, R7). DONE WHEN: A5 holds on run; build green.
 - [ ] **CP6** — A4/A6/A7 sweep, docs. DONE WHEN: build + test at baseline; ready for reviewer.
 - [ ] **CP7** — reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -135,3 +135,20 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   perks under three tags and a keystone card. Taps: perk cards (picked), keystone card (picked), relic card
   (bonded FIELD DRESSING), LEAVE IT (closed the offer). NOT seen: a CURSED / RARE / LEGENDARY card (only RUN_START
   COMMONs are reachable from floor 1), the quarantine title, pause opened over the offer.
+- **CP5:** CodexOverlayRenderer: scrim UI_INK_BLACK .75 (was .86); panel = UiKit panel (UI_PANEL .94, UI_LINE) with
+  SUIT_AMBER_DIM brackets drawn AFTER the mask bands; R1 header = HEAVY title at its old anchor, the amber-ticked
+  rule along the header band's bottom (STORY_CODEX_HEADER_Y) so it also sits under BACK; tabs = plates (open tab
+  SELECTED amber), BACK / settings strip = IDLE plates, close X on a 38-unit IDLE plate (touch rect unchanged:
+  glyph + 18 padding); rows FLAT with a divider under each (SUIT_AMBER tick under the PINNED page, UI_LINE
+  otherwise), the R9 3-unit amber bar on the LAST-OPENED row (the list has no other selection state: the renderer
+  remembers CodexSystem.getOpenEntry(); new read-only `CodexSystem.getVisibleEntry(int)` for pinned/identity),
+  NEW = UiKit.newMarker amber square + the amber NEW word (the per-frame `newLabel + " - " + source` concatenation
+  is gone - two draw runs). Text unshadowed; ORA's take keeps her speaker accent (a voice, not chrome); detail
+  title TYPE_LABEL primary. Scales: TITLE 1.5 -> LABEL (same value), TAB 1.15 -> BODY, ROW 1.2 -> BODY, DETAIL 1.3
+  -> BODY (x the story text multiplier, unchanged), counts / sources / footer CAPTION. UiKit.plate gained an alpha
+  overload (the codex fades in). Removed STORY_CODEX_PLATE_* and NEW_DOT_RADIUS (no readers). Seen on run: list with
+  NEW marker; an open entry at NORMAL / LARGE / LARGEST (wraps, no overflow); list with the selection bar; PEOPLE
+  tab still listing the pinned WHERE WE'D GOT TO first (A5); close back to the inventory. Taps: CODEX button, row
+  (opens entry), BACK, TEXT setting x3 (cycles NORMAL -> LARGE -> LARGEST -> NORMAL), PEOPLE tab, close X. Not
+  seen: a completed tab, an empty tab with no pinned page (the pinned page appears in every tab), a long scrolled
+  entry (drag scroll not exercised; scroll code untouched).

@@ -318,6 +318,11 @@ public final class CodexSystem {
         return isValidListIndex(listIndex) ? visibleSources.get(listIndex) : "";
     }
 
+    /** The listed entry itself (read-only, for presentation: pinned flag, identity), or null out of range. */
+    public CodexEntry getVisibleEntry(int listIndex) {
+        return isValidListIndex(listIndex) ? visibleEntries.get(listIndex) : null;
+    }
+
     /** True while a listed entry still wears its NEW dot (unlocked, never opened). */
     public boolean isVisibleEntryNew(int listIndex) {
         if (!isValidListIndex(listIndex)) return false;

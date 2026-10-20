@@ -525,7 +525,7 @@ public final class StoryUiConstants {
     // 1. HEADER — the archive title (or BACK, in an entry) and the close X.
     public static final float STORY_CODEX_HEADER_HEIGHT   = 62f;
     public static final float STORY_CODEX_HEADER_Y        = STORY_CODEX_TOP_Y - STORY_CODEX_HEADER_HEIGHT;
-    public static final float STORY_CODEX_TITLE_TEXT_SIZE = 1.5f;
+    public static final float STORY_CODEX_TITLE_TEXT_SIZE = ArtDirection.TYPE_LABEL;
     /** Everything under the header — the tab column and the body share this top edge. */
     public static final float STORY_CODEX_CONTENT_TOP_Y   = STORY_CODEX_HEADER_Y - STORY_CODEX_PADDING;
     // The close X reuses the bark's glyph geometry so every dismissable panel closes the same way.
@@ -547,9 +547,9 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_TAB_GAP       = 8f;
     public static final float STORY_CODEX_TAB_X         = STORY_CODEX_X + STORY_CODEX_PADDING;
     public static final float STORY_CODEX_TABS_TOP_Y    = STORY_CODEX_CONTENT_TOP_Y;
-    public static final float STORY_CODEX_TAB_TEXT_SIZE = 1.15f;
+    public static final float STORY_CODEX_TAB_TEXT_SIZE = ArtDirection.TYPE_BODY;
     /** Progress readout under a tab's name ("3/5") — dim, never a score. */
-    public static final float STORY_CODEX_TAB_COUNT_TEXT_SIZE = 1.0f; // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
+    public static final float STORY_CODEX_TAB_COUNT_TEXT_SIZE = ArtDirection.TYPE_CAPTION; // order-3 R8: was 0.95
 
     // 3. BODY — the entry list, and the entry detail that replaces it.  Both scroll inside it.
     public static final float STORY_CODEX_BODY_GAP    = 20f;
@@ -563,7 +563,7 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_FOOTER_HEIGHT     = 56f;
     public static final float STORY_CODEX_FOOTER_GAP        = 14f;
     public static final float STORY_CODEX_FOOTER_Y          = STORY_CODEX_Y + STORY_CODEX_PADDING;
-    public static final float STORY_CODEX_FOOTER_TEXT_SIZE  = 1.0f;
+    public static final float STORY_CODEX_FOOTER_TEXT_SIZE  = ArtDirection.TYPE_CAPTION;
     /**
      * How many settings buttons the strip holds — text size, reveal pacing, motion, story audio,
      * gameplay SFX volume, render resolution.
@@ -582,17 +582,18 @@ public final class StoryUiConstants {
     // a wall of "???" is a chore list, and the codex must never feel like homework.
     public static final float STORY_CODEX_ROW_HEIGHT     = 66f;
     public static final float STORY_CODEX_ROW_GAP        = 8f;
-    public static final float STORY_CODEX_ROW_TEXT_SIZE  = 1.2f;
+    public static final float STORY_CODEX_ROW_TEXT_SIZE  = ArtDirection.TYPE_BODY;
     /** Source line under a row's title (where the entry came from) — dim and small. */
-    public static final float STORY_CODEX_ROW_SOURCE_TEXT_SIZE = 1.0f; // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.9)
+    public static final float STORY_CODEX_ROW_SOURCE_TEXT_SIZE = ArtDirection.TYPE_CAPTION; // order-3 R8: was 0.9
     /** The "NEW" dot: an invitation to look, never a badge that nags.  Cleared once read. */
-    public static final float STORY_CODEX_NEW_DOT_RADIUS = 7f;
+    /** Gap between the amber NEW label and the row's source caption (visual-identity-order-5). */
+    public static final float STORY_CODEX_NEW_LABEL_GAP  = 12f;
     public static final float STORY_CODEX_NEW_DOT_INSET  = 22f;
 
     // ENTRY DETAIL — the long text.  Generous line pitch; the whole point of this screen is that it
     // is comfortable to read for a long time on a phone.
     public static final float STORY_CODEX_DETAIL_LINE_PITCH   = 32f;
-    public static final float STORY_CODEX_DETAIL_TEXT_SIZE    = 1.3f;
+    public static final float STORY_CODEX_DETAIL_TEXT_SIZE    = ArtDirection.TYPE_BODY;
     /** Wrap width in characters at the default text size; scaled down as the size setting grows. */
     public static final int   STORY_CODEX_LINE_MAX_CHARS      = 62;
     /** Blank-line pitch between the detail's blocks (title / source / ORA's take / body). */
@@ -605,10 +606,8 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_TAP_SLOP          = 12f;
 
     // Plate styling, shared by tabs, rows and setting buttons (the exchange plates' language).
-    public static final float STORY_CODEX_PLATE_BORDER          = 2f;
-    public static final float STORY_CODEX_PLATE_FILL_ALPHA      = 0.16f;
-    public static final float STORY_CODEX_PLATE_SELECTED_ALPHA  = 0.46f;
-    public static final float STORY_CODEX_PLATE_CORNER          = 10f;
+    /** The close X's IDLE plate (visual; the touch rect stays glyph + STORY_BARK_CLOSE_TOUCH_PADDING). */
+    public static final float STORY_CODEX_CLOSE_PLATE_SIZE      = 38f;
 
     /** Seconds the codex panel takes to fade in / out — a menu, so brisk. */
     public static final float STORY_CODEX_FADE_SECONDS = 0.18f;
