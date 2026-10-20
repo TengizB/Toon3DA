@@ -1,0 +1,555 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Render performance - Full HD smooth again (floor, walls)
+CREATED: 2026-10-20
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+The owner-directed render-quality follow-up to visual-identity orders 1-2 (checkpoint file
+.claude/checkpoints/visual-identity-render-quality.md, commits 4e6f86a / dc8a37f / f3696dc) made FULL HD
+the default and raised the floor/ceiling backdrop from 480x270 to 960x540. Since then the game has
+stopped feeling smooth on the phone. This idea first MEASURES where the frame goes, then makes the
+floor/ceiling and wall passes cheap without lowering the quality the owner asked for: FULL HD stays
+the default, and the floor and ceiling come out sharper than they are now, not blurrier.
+
+  WHAT THE OWNER SAID: "Full HD default + more detailed floor/ceiling made the game lag; investigate,
+  optimise floor, ceiling and walls, fix the lag; a little texture quality may go, but keep it."
+  WHAT IS NEEDED: the frame time at the Full HD default back to (or under) what the old HD default
+  cost, mainly by taking the floor/ceiling off the CPU, with measured proof and side-by-side
+  screenshots per lighting mood showing no visible loss. One sentence: "make Full HD cost what HD used
+  to cost, and prove it with numbers and pictures."
+
+WHAT THE CODE SAYS (the suspected causes, ranked; CP2 confirms or re-ranks them by measurement)
+
+  C1  CPU floor casting at 9x the pixels. FloorCeilingRenderer.fillRows (FloorCeilingRenderer.java:320-421)
+      shades every backdrop pixel on the CPU. At FULL_HD the backdrop is 960x540 (RenderResolution.java:36
+      DEFAULT = FULL_HD; RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR_FULL_HD = 2) = 518,400 pixels =
+      259,200 floor/ceiling pixel PAIRS per frame, vs 57,600 pixels at the old HD 320x180 - 9x. Each pair
+      does two MathUtils.floor calls, one Level.getTileBrightness (Level.java:433: a getCell lookup and,
+      on an 'f' tile, GameMath.flickerMultiplier = a hash and TWO sines, GameMath.java:1812) and two
+      packed-shade evaluations with three clamps each (GameMath.applyRgbShadeToPackedRGBA, :1291). The
+      per-row alert factors (1 + pulse*boost, 1 - pulse*dampen) are recomputed per pixel although they
+      are constant per frame.
+  C2  A 2 MB texture upload every frame. FloorCeilingRenderer.render (:300-305) copies the whole int[]
+      backbuffer into the Pixmap's ByteBuffer and calls backdropTexture.draw(pixmap) = glTexSubImage2D of
+      960*540*4 = 2,073,600 bytes per frame (~124 MB/s at 60 fps through the phone's shared memory bus),
+      on the GL thread, after the fill barrier - it cannot overlap anything. HD uploaded 230 KB.
+  C3  The result is STILL nearest-upscaled. The 960x540 image is stretched over the whole 1280x720 view
+      (:310), so all that CPU work buys a 1.33x-upscaled floor. The quality the owner wanted is bounded
+      by the backdrop, not by the materials.
+  C4  Thread contention and serialisation. FloorCeilingRenderer and WallRenderer each own a fixed pool
+      of up to 3 extra threads (FloorCeilingRenderer.java:145-157, WallRenderer.java:253) and each blocks
+      on its own Phaser barrier (:287), so the floor fill and the wall DDA run back-to-back, never
+      together, with 6 worker threads plus the GL thread competing for a phone's big.LITTLE cores.
+      Sustained near-100% CPU is also what triggers thermal throttling on phones ("it lost its
+      performance" over a session).
+  C5  1.5x more wall columns. 1920 ray columns (RenderConstants.RENDER_RESOLUTION_FULL_HD_COLUMNS) =
+      1920 DDA casts + 1920 SpriteBatch quads in the base pass (WallRenderer.java:2234-2264), plus the
+      muzzle-light additive pass (:2266-2296). SpriteBatch blending is left ON for the opaque wall base
+      pass, and every change of wall texture between neighbouring columns is a batch flush (one draw
+      call each) because every wall sprite is its own Texture.
+  C6  Billboard texture ping-pong. EnemyRenderer interleaves, PER COLUMN, the enemy slice and
+      SpriteOccluderBuffer.redrawInFront (EnemyRenderer.java:758, SpriteOccluderBuffer.java:106-122): an
+      enemy standing behind a prop alternates two textures every column = up to ~2 draw calls per
+      column, now over 1.5x more columns. PropRenderer's keycard aura per-column loop (:570-581) does the
+      same with a blend switch around it.
+  C7  Load-time double allocation. Every floor builds FloorCeilingRenderer at HD (:64, :131-133) and then
+      immediately reallocates at FULL_HD in setRenderResolution (:167-180): an extra Pixmap + Texture +
+      int[] pair per floor (a GC spike on Android at floor arrival).
+  C8  Smaller, to be measured: full-screen blended quads (FloorCeilingRenderer's own quad with blending
+      on, ViewVignetteRenderer, hit/status vignettes) cost fill-rate on a phone; per-frame allocations
+      anywhere in a render() path would show as GC stutter, which reads as "not smooth" even when the
+      average frame time is fine.
+
+THE CORE FIX (decided, see RULES R1-R9): draw the floor and ceiling as GPU-sampled HORIZONTAL SPANS
+through the SpriteBatch DEFAULT shader. A horizontal row of floor is at one constant depth, so its
+world-space texture coordinates are LINEAR across the screen - exactly what the GPU interpolates for
+free. Each backdrop row becomes a few textured quads (split where tile brightness changes) whose UVs
+are tile coordinates on a GL_REPEAT material texture. The CPU does a few thousand operations per frame
+instead of a quarter of a million pixels, nothing is uploaded per frame, the floor is sampled at the
+phone's NATIVE horizontal resolution (sharper than today), and the vertical look is identical to today
+(same rows, same per-row distance, tint, fog, mip level). No custom ShaderProgram, so visual-identity
+series rule V2 is kept.
+
+
+SCOPE
+-----
+IN
+  - A dev-only PERFORMANCE PROBE: per-pass GL-thread times, draw calls, texture binds, per-frame upload
+    bytes, rolling averages; off by default, zero cost when off, usable on the phone by flipping one
+    constant (R10-R12).
+  - An INVESTIGATION with a fixed measurement method and a baseline table (R13-R15), recorded in the
+    checkpoint file, ranking C1-C8 by measured cost.
+  - FloorCeilingRenderer rewritten to the span-quad pipeline (R1-R9); its CPU backbuffer, Pixmap,
+    per-frame upload and worker thread pool deleted.
+  - Floor/ceiling material textures realised per floor from SurfaceMaterialRegistry's existing mip chain
+    (one Texture per mip level per surface, GL_REPEAT, Nearest), disposed with the renderer.
+  - WallRenderer: EXACT (pixel-identical) cost cuts - blending off for the opaque base pass when the
+    level's surfaces are opaque (R16); the conditional levers W-ATLAS and W-MERGE, applied only if the
+    investigation's numbers trip their decision rules (R17-R18).
+  - EnemyRenderer / PropRenderer: the occluder redraw and per-column aura loops reordered so an enemy
+    costs O(1) texture switches, not O(columns) - pixel-identical (R19).
+  - Any per-frame allocation the investigation finds in a render() path: removed (R20).
+  - The C7 load-time double allocation gone (falls out of R1: the renderer has no backdrop to realloc).
+  - RenderResolution's floor accessors reduced to what the span renderer uses (the row count); the
+    stale fromOrdinal comment ("falls back to HD" - it returns DEFAULT = FULL_HD) corrected.
+  - Docs: art-direction.txt, wall-renderer-guide.txt, CLAUDE.md, the run-game skill (probe flag).
+
+OUT (deliberately not doing now)
+  - A custom ShaderProgram / GLSL floor caster. It would be the fastest option, but it breaks series rule
+    V2 (art-direction.txt:20) and brings fragment-precision risk on older GLES2 GPUs; the span approach
+    gets nearly all of the win without it. If the owner ever wants a shader, that is a new idea that
+    revisits V2 for the whole series.
+  - Changing the FULL HD default or lowering FULL HD below 1920 wall columns. The owner asked for Full HD;
+    if the targets cannot be met without that, the orchestrator STOPS and reports numbers (R21) - it
+    never silently trades the owner's choice away.
+  - Making the vertical floor resolution finer than today's 540 rows (it would cost little now, but it is
+    a look change; a later polish idea can do it with screenshots).
+  - Non-continuous rendering / an idle frame-rate cap for battery. Real, but a separate concern
+    (animations, flicker and the HUD would all need auditing).
+  - GL 3.0 / instancing / VBO caching of the wall columns.
+  - Any change to the materials' art, the mood numbers, the fog curve, the muzzle light or the red alert.
+  - Any gameplay, balance, tile symbol, persistence key, touch control or story change.
+  - Visual-identity orders 4-6 (NOT IMPLEMENTED): untouched; they keep V2 and their own scope.
+  - Measuring on a real phone inside the container (impossible); the phone check is the owner's (see
+    OWNER CHECK after the acceptance criteria).
+
+
+GAMEPLAY LOOP
+-------------
+None. This is render-only: no turn cost, no action, no rule, no input change. The player sees the same
+game, which should now hold 60 fps on the phone at the Full HD default, including during the 0.12 s
+move/rotate animations (where every pass runs every frame and the lag was felt).
+
+
+RULES
+-----
+FLOOR / CEILING - the span pipeline
+
+  R1  ROWS. The renderer keeps today's row model: the floor half has backdropHeight/2 rows (FULL_HD 270,
+      HD 90; i.e. the tier's existing backdrop height 540 / 180), row r covering world Y
+      [r*k, (r+1)*k) with k = WORLD_HEIGHT / backdropHeight (FULL_HD 1.333, HD 4.0), and the ceiling row r
+      covering the mirrored band [720-(r+1)*k, 720-r*k). Each row's distance, tint (rowTintTable),
+      muzzle-light falloff (rowLightFalloffTable) and mip level (rowMipLevelTable) come from the SAME
+      tables and formulas as today (FloorCeilingRenderer.rebuildRowTintTable), so the vertical look is
+      unchanged. The exact-horizon row (when present) is one flat quad in mood.horizonFloorPacked(), as
+      today (:293-298).
+  R2  SPANS. For each row, the world-space segment from the left ray hit to the right ray hit (the same
+      origin/step GameMath.floorOriginTileComponent / floorStepTileComponent produce today, evaluated at
+      screen x = 0 and x = WORLD_WIDTH) is walked across the tile grid. Consecutive tiles with the SAME
+      Level.getTileBrightness value merge into one span; a change of brightness starts a new span at the
+      exact crossing point. Each span is drawn as one quad of the row's height, with the span's start/end
+      tile coordinates as its left/right UVs (identical for the quad's bottom and top edges - the row is
+      flat, as today).
+  R3  UV RANGE. Every quad's UVs are rebased by subtracting floor() of its left UV (integer shifts do not
+      change GL_REPEAT sampling), and a span longer than RenderConstants.FLOOR_SPAN_MAX_TILES (= 8 tiles)
+      is split. This keeps every texture coordinate small enough that the default shader's mediump
+      varying stays sub-texel on phone GPUs.
+  R4  MATERIALS. Each surface (floor, ceiling) is realised per floor as SURFACE_MATERIAL_MIP_LEVELS (4)
+      Textures - levels 64/32/16/8 from SurfaceMaterialRegistry.getPixels(id, level), the existing box-
+      filtered chain - each with wrap Repeat/Repeat and filter Nearest/Nearest (no GL mipmaps: the
+      per-row level choice of today is kept, which also avoids GLES2 mip-completeness rules). Texel
+      (column, row) of the registry array maps to UV (column/size, row/size) exactly as the CPU path
+      indexed it - the material is not flipped or rotated relative to today. A row draws with the texture
+      of its rowMipLevelTable level. Rows are monotonic in level, so a frame binds at most 4 textures per
+      surface.
+  R5  COLOUR. A span's colour is computed by the SAME expression the CPU path uses for a texel factor:
+      adjustedShade = min(shade * tileBrightness, MAX_LIGHTING_SHADE), times the row tint, through the
+      alert terms (floor: ALERT_WALL_RED_BOOST / ALERT_WALL_GB_DAMPEN; ceiling: ALERT_CEILING_TINT_STRENGTH
+      / ALERT_WALL_GB_DAMPEN). That factor expression moves into one GameMath method (one home for the
+      formula; applyRgbShadeToPackedRGBA becomes its packed-pixel caller or is deleted if unused).
+  R6  FACTORS ABOVE 1.0. Mood tints exceed 1.0 per channel (e.g. MOOD_AMBER_HOT_NEAR_R = 1.10,
+      MOOD_CORE_WHITE_VIOLET_FAR_B = 1.85) and the CPU path let the factor exceed 1 before the final
+      clamp. A SpriteBatch colour cannot exceed 1. So each channel factor f is split: the base pass draws
+      min(1, f); the ADDITIVE pass (blend SRC_ALPHA, ONE) draws max(0, f - 1) PLUS the row's muzzle-light
+      add. texel*min(1,f) + texel*(f-1) = texel*f, so the composed result equals the CPU formula to
+      within 8-bit rounding of two passes. The additive pass draws only spans whose add is non-zero, and
+      is skipped entirely when no row needs it.
+  R7  MUZZLE LIGHT (visual-identity-order-2 R8) keeps its exact meaning: added to the factor AFTER the
+      alert maths, never clamped with it, final channel clamped by the framebuffer.
+  R8  WHAT GOES AWAY. FloorCeilingRenderer no longer owns a backbuffer int[], a backdrop Pixmap, a backdrop
+      Texture, an ExecutorService, workers or a Phaser. Nothing is uploaded to the GPU per frame. The
+      batch is one pre-allocated SpriteBatch sized for the worst-case span count (cap 8191, the
+      SpriteBatch maximum; it auto-flushes beyond that) plus one pre-allocated float[] vertex scratch -
+      no allocation in render().
+  R9  TIERS. HD and FULL_HD differ only in row count (180 vs 540 rows - today's backdrop heights) and the
+      wall column count. The backdrop WIDTH stops existing; RenderResolution keeps only what is used and
+      its docs say so.
+
+THE PERFORMANCE PROBE (dev tool, not a test)
+
+  R10 A render-package class (name it RenderPerformanceProbe) times each World.render pass on the GL thread
+      (floor/ceiling, walls, props, shop machine, enemies + attack effects, vignette, weapon, mini-map,
+      HUD, overlays, total) with System.nanoTime, reads LibGDX GLProfiler (draw calls, texture bindings,
+      shader switches, vertex count) per frame, and counts per-frame texture-upload bytes reported by the
+      floor renderer (must read 0 after CP4). Rolling averages over RenderConstants.PERF_PROBE_WINDOW_FRAMES
+      (= 120) frames plus the worst frame in the window.
+  R11 Enabled by the system property toon3d.perfProbe (cpu = timing only; sync = additionally glFinish
+      after every pass so GPU work is attributed to the pass that queued it - inflates the total, use
+      for attribution only) or, for a PHONE build, by RenderConstants.PERF_PROBE_FORCE_ON (= false; the
+      owner flips it to true for a measurement build). When off: no GLProfiler, no nanoTime calls, no
+      text - one boolean check per pass.
+  R12 When on, it writes one line to Gdx.app.log every RenderConstants.PERF_PROBE_LOG_INTERVAL_SECONDS
+      (= 5) and draws a small two-line readout (avg / worst frame ms, fps, floor ms, wall ms, draw calls)
+      at the top centre of the screen, above the mini-map's row and clear of the HUD panels and every
+      touch button, using GameFonts REGULAR and a reused StringBuilder (no allocation). Readout strings
+      live in RenderConstants (dev-only, not localised - they never ship on).
+
+THE INVESTIGATION (CP1-CP2)
+
+  R13 POSES. Run via .claude/skills/run-game/run.sh, --fps 0, the standard opening, then:
+        P1 STATIC   - start room, no input, timestart at 14 s, timestop at 24 s.
+        P2 ROTATE   - hold ROTATE_RIGHT (1196,296) for 10 s, timed.
+        P3 WALK     - hold FORWARD (1100,392) for 10 s, timed (blocked steps still render).
+        P4 MUZZLE   - pulse:WEAPON_SHOTGUN once a second for 10 s, timed (the additive passes).
+        P5 ALERT    - red alert on (reflection set on the World's gameState, if reachable; best-effort).
+        P6 OCCLUDED - an enemy behind a prop (best-effort; floor 1 is random - record if not stageable).
+      Each pose in each of the 5 moods for P1 (via --mood); P2-P4 in cool_steel only.
+  R14 BASELINES, all on the SAME session, each run twice interleaved (A B A B), per the skill's honesty
+      rules (llvmpipe, +-1.5 ms noise; desktop numbers are a PROXY for the phone and are never presented as
+      phone performance):
+        B0 = HEAD before this idea at FULL_HD (the current default)
+        B1 = HEAD before this idea at HD (temporarily DEFAULT = HD, reverted) - "what HD costs"
+      Plus, per pose, the probe's per-pass breakdown (cpu mode and sync mode), draw calls, texture binds,
+      and a JVM GC log (-Xlog:gc) over P2+P3 counting GC events.
+  R15 FINDINGS. The checkpoint file records the filled table below and a ranked list of C1-C8 with each
+      one's measured share of the frame, plus the decisions for the conditional levers (R17, R18). The same
+      table is filled again for AFTER at CP7 and copied into this file's IMPLEMENTATION NOTE at close.
+
+      | pose (mood)      | B0 FULL_HD ms | B1 HD ms | AFTER FULL_HD ms | AFTER HD ms | floor ms B0/AFTER | wall ms B0/AFTER | draw calls B0/AFTER |
+      |------------------|---------------|----------|------------------|-------------|-------------------|------------------|---------------------|
+      | P1 cool_steel    |               |          |                  |             |                   |                  |                     |
+      | P1 clinical_white|               |          |                  |             |                   |                  |                     |
+      | P1 amber_hot     |               |          |                  |             |                   |                  |                     |
+      | P1 corrupted_vio |               |          |                  |             |                   |                  |                     |
+      | P1 core_white_vi |               |          |                  |             |                   |                  |                     |
+      | P2 rotate        |               |          |                  |             |                   |                  |                     |
+      | P3 walk          |               |          |                  |             |                   |                  |                     |
+      | P4 muzzle        |               |          |                  |             |                   |                  |                     |
+      | P5 alert (b-e)   |               |          |                  |             |                   |                  |                     |
+      | P6 occluded (b-e)|               |          |                  |             |                   |                  |                     |
+      | GC events P2+P3  |               |          |                  |             |                   |                  |                     |
+
+WALLS AND BILLBOARDS
+
+  R16 OPAQUE BASE PASS. When EnvironmentTextureSet realises a level's textures it records whether every
+      wall, column and door texture the WallRenderer can draw is fully opaque (every texel alpha 255) -
+      one boolean per level, computed once at load. If true, the wall BASE pass runs with blending
+      disabled (re-enabled before the additive pass and before batch.end returns state). If false,
+      behaviour is unchanged. Pixel-identical by construction.
+  R17 W-ATLAS (conditional). If the investigation's median wall-pass draw calls across P1-P3 exceed
+      RenderConstants.WALL_DRAW_CALL_ATLAS_THRESHOLD (= 12), the level's wall + column textures are packed
+      into one per-level atlas page inside EnvironmentTextureSet (nearest filtering, 1-texel source
+      columns, so no bleeding) and the WallRenderer's char-indexed arrays hold atlas regions instead of
+      Textures; door textures join the page. Must be pixel-identical. If the threshold is not tripped,
+      this is NOT built and the checkpoint file says so.
+  R18 W-MERGE (conditional). If the investigation shows the WallRenderer's GL-thread draw submission
+      (base pass, cpu mode) above 25% of its total pass time, adjacent columns whose results are EXACTLY
+      equal (same texture, texColumn, srcY, srcHeight, drawBottom, drawTop and colour) are submitted as
+      one wider quad. Pixel-identical by construction. Otherwise NOT built.
+  R19 BILLBOARD ORDER. EnemyRenderer draws an enemy's column slices first and THEN the occluder redraws
+      for those columns (and the muzzle-light pass after that, unchanged), instead of interleaving per
+      column. Columns are disjoint x-ranges, so the result is pixel-identical; the enemy costs O(1)
+      texture switches instead of up to 2 per column. PropRenderer's per-column blended loops get the
+      same treatment where they interleave textures or blend modes. Draw order BETWEEN sprites
+      (far-to-near) is unchanged.
+  R20 ALLOCATIONS. Every allocation the investigation's GC log / allocation sampling attributes to a
+      render() path is removed (pre-allocate or reuse). The AFTER GC count over P2+P3 must not exceed B0's;
+      zero is the goal.
+  R21 STOP RULE. If after CP6 the AFTER FULL_HD numbers miss A1/A2 below, the orchestrator does NOT lower
+      the column count, the row count or the default tier. It records the numbers and the remaining
+      ranked costs in the checkpoint file and reports to the owner with options.
+
+
+PLAYER EXPERIENCE
+-----------------
+The game feels like it did before Full HD - smooth turns, smooth steps - while looking the way the
+owner asked for: floor and ceiling texels are now drawn at the phone's own horizontal resolution
+instead of a 960-wide image stretched over the screen, so the floor is slightly CRISPER horizontally and
+identical vertically. Nothing to teach: no control, no setting and no line of story changes. The HD
+setting still exists as the "even lighter" tier.
+
+
+TECHNICAL NOTES
+---------------
+  render/FloorCeilingRenderer  rewritten per R1-R9 (same class, same public API: constructor(level,
+                               mood), setRenderResolution, setPlayerState, setAtmosphereGrade,
+                               setAlertPulse, setLightingTime, render, dispose). World wiring unchanged
+                               except that setRenderResolution no longer reallocates GPU resources.
+  render/SurfaceMaterialRegistry  unchanged data; a render-side helper (in FloorCeilingRenderer or a small
+                               render/SurfaceMaterialTextures, Disposable) realises the per-level Textures
+                               (R4) per floor and disposes them with the renderer.
+  util/GameMath                (math-expert) - with the mandatory comment block each:
+                               - the span walk: the parameter along a row segment at which it next crosses
+                                 an integer tile line in X or in Y (a 2D DDA along the row);
+                               - the per-span shade factor (R5) - the one home of the expression the CPU
+                                 path used;
+                               - the base/excess split (R6);
+                               - the UV rebase (R3).
+  util/RenderConstants         FLOOR_SPAN_MAX_TILES = 8, FLOOR_SPAN_BATCH_SIZE = 8191,
+                               PERF_PROBE_FORCE_ON = false, PERF_PROBE_PROPERTY_KEY = "toon3d.perfProbe",
+                               PERF_PROBE_WINDOW_FRAMES = 120, PERF_PROBE_LOG_INTERVAL_SECONDS = 5,
+                               PERF_PROBE readout geometry + strings, WALL_DRAW_CALL_ATLAS_THRESHOLD = 12.
+                               FLOOR_BACKDROP_SCALE_DIVISOR(_FULL_HD) removed if nothing reads them after
+                               R9 (row count stays derived from the tier).
+  util/RenderResolution        floor accessors reduced to the row count (R9); comment fixes.
+  render/RenderPerformanceProbe  new (R10-R12). Owned by World (one instance, Disposable if it owns a
+                               font); World.render brackets each pass with probe.begin(pass)/end(pass)
+                               calls that are a single boolean check when off.
+  render/WallRenderer          R16 (+ R17/R18 only if tripped). No change to its public contract
+                               (getProjectionColumnCount, getColumnWidth, z-buffer) - billboards keep
+                               working untouched.
+  render/tilesetgfx/EnvironmentTextureSet  the per-level opacity flag (R16); the atlas page only if R17
+                               trips.
+  render/EnemyRenderer, render/PropRenderer, render/SpriteOccluderBuffer  R19 (an occluder method that
+                               redraws a column RANGE after the enemy's slices).
+  .claude/skills/run-game      run.sh gains --probe cpu|sync (passes -Dtoon3d.perfProbe) and a way to pass
+                               -Xlog:gc; SKILL.md documents both. (Orchestrator edit, dev tooling.)
+  No tile symbol, no registry row, no persistence key, no story string id, no tick subscriber.
+
+
+VISUAL DESIGN
+-------------
+  - The floor and ceiling must look like B0 (today's Full HD) at every mood: same rows, same tint ramp,
+    same fog, same mip bands, same lit/unlit/flicker tile pattern, same muzzle splash, same red alert.
+    Horizontally they become sharper (native sampling). That is the only intended difference.
+  - No seams, cracks or one-pixel gaps between spans or rows; the clear colour (Main.render's
+    ScreenUtils.clear 0.15/0.15/0.20) must never show through the 3D view.
+  - No texture swimming or crawling while stepping or rotating beyond what B0 shows.
+  - Walls and billboards: pixel-identical to B0.
+  - Probe readout (dev only): two lines of small REGULAR text, top centre, UI_TEXT_SECONDARY on a
+    UI_INK_BLACK 0.6-alpha plate; never drawn unless enabled.
+
+
+BALANCE NOTES
+-------------
+None. Nothing here touches BalanceConfig, BalanceSchema, GameBalance, a balance-bearing GameMath
+formula (eHP/DPT/TTK/TP) or sim/. The new GameMath methods are render geometry/colour formulas.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Visual-identity order 1 (IMPLEMENTED): R13 per-row tint/fog kept verbatim (same tables); the five
+    moods and their horizons unchanged; V2 kept (no custom shader).
+  - Visual-identity order 2 (IMPLEMENTED): R8 muzzle light kept with identical maths (R7); the occluder
+    and contact-shadow paths reordered only where pixel-identical (R19).
+  - The render-quality follow-up (checkpoint visual-identity-render-quality.md): its FULL_HD default and
+    its per-row material LOD are KEPT; its 960x540 CPU backdrop is replaced by spans of the same 540 rows.
+  - Floor twists (IMPLEMENTED): BLACKOUT's light multiplier arrives through Level.getTileBrightness, which
+    the span walk reads per tile - unchanged behaviour, exit tile still exempt.
+  - Red alert (emergency-red-alert-pulse, IMPLEMENTED): alert terms evaluated per span per frame (R5).
+  - BLINDED status (narrow FOV): the span endpoints are computed per frame from the effective FOV, as the
+    CPU path did; the row mip table keeps using the default FOV, as today.
+  - Screen shake: the floor is still drawn in world coordinates through the shaken camera.
+  - Settings: the RESOLUTION knob still cycles HD / FULL_HD; switching it rebuilds only row tables
+    (no GPU realloc).
+  - lighting-system-overhaul / game-refinement-polish (NOT IMPLEMENTED) both want per-tile floor light;
+    the span walk is already per-tile, so they get cheaper, not harder. Not contradicted.
+  - Hand levels and generated levels: identical treatment.
+
+
+EDGE CASES
+----------
+  - Player on the edge of the map / looking out of bounds: Level.getTileBrightness / getCell already handle
+    out-of-range tiles; the span walk must terminate (bounded by FLOOR_MAX_VISIBLE_DISTANCE_CELLS * 2 * tan
+    span and by the row's crossing count) - never loop on a degenerate direction (a ray component of 0 =
+    no crossings on that axis).
+  - Mid-animation (MOVING/ROTATING): non-cardinal direction vectors every frame - spans must be correct for
+    any direction, not just the four cardinals.
+  - Rows past the 15-tile clamp: identical spans every row (same distance) - correct, matches today.
+  - A checkerboard of lit/unlit tiles: worst-case span count; the batch cap (8191) auto-flushes, never
+    overflows; measure it in P1 if such a room exists, else note it.
+  - Muzzle light at zero intensity / no grade (null AtmosphereGrade): the additive pass carries only the
+    R6 excess, or is skipped.
+  - Resolution switched in settings mid-run: tables rebuilt, no texture realloc, no frame with a stale row
+    count (rebuilt before the next render, on the GL thread).
+  - Floor transition / World dispose and rebuild after death: the per-floor material Textures are disposed
+    with the renderer; the probe survives only as long as its World.
+  - App paused / GL context loss on Android: material Textures are Pixmap-backed managed Textures (LibGDX
+    reloads them) - no per-frame texture exists any more to lose.
+  - Title screen (no run): no floor renderer runs; the probe still times the frame if on.
+  - Probe on + hard-pause overlays: it keeps timing (overlay frames are frames).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+Performance (desktop capture VM - a proxy; numbers are same-session, two interleaved runs, mean):
+  A1  P1, P2 and P3 at the FULL_HD default AFTER are each <= B1 (HEAD-before at HD) - Full HD now costs no
+      more than HD did - and each <= 0.80 x B0.
+  A2  The floor/ceiling pass's GL-thread time (probe, cpu mode) in P1-P3 AFTER is <= 25% of its B0 value.
+  A3  FloorCeilingRenderer.render performs no texture upload (no Texture.draw, no glTexSubImage2D, no Pixmap
+      write) and the probe's floor upload counter reads 0 bytes per frame.
+  A4  Floor + ceiling together issue <= 20 draw calls per frame in P1-P4 (base + additive passes).
+  A5  The wall pass issues no more draw calls than in B0 in any pose; if R17 was built, <= 3 in P1-P3.
+  A6  P6 (if stageable): an enemy behind a prop costs <= 6 draw calls for its body + occluder redraws.
+  A7  FloorCeilingRenderer owns no ExecutorService/thread; the process's render worker threads are 3 fewer
+      than in B0 (thread dump or code read).
+  A8  GC events over P2+P3 AFTER <= B0, and no allocation remains in any render() path this idea touched
+      (code read; reviewer checks render() of every changed class).
+
+Quality:
+  A9  Five-mood P1 montage (B0 left, AFTER right, same pose) plus a floor close-up crop near and far is
+      delivered; mean RGB of the ceiling sample rect (world x 300-980, y 560-700) and of the floor sample
+      rect (world x 100-400, y 140-330 - adjust ONLY if the start room occludes it, and use the same rect
+      for both) is within +-4/255 per channel of B0 in every mood.
+  A10 No pixel of the 3D view region (world y 130-720, excluding HUD panels and the weapon) equals the
+      clear colour in any AFTER capture (no gaps/seams) - PIL check over the five P1 captures and four
+      frames sampled during P2.
+  A11 Lit ('l'), unlit ('u') and flickering ('f') floor tiles visible in a capture show their brightness on
+      the same tiles as in B0 (side-by-side), and the shotgun pulse (P4) shows the splash on the floor and
+      ceiling as in B0.
+  A12 The material orientation matches B0 (a recognisable material feature - e.g. a grate line or chevron -
+      runs the same way in the close-up crop).
+  A13 Every wall/billboard checkpoint (CP5, CP6) shows a full-frame max per-channel difference <= 1/255 vs
+      the capture taken at the end of the previous checkpoint, P1 in all five moods and P4.
+  A14 The HD tier still renders correctly (one P1 capture per mood at HD AFTER, no gaps).
+
+Engineering:
+  A15 Every new Texture, SpriteBatch, font and the probe are disposed in their owner's dispose(); no
+      Disposable is left to the GC.
+  A16 Every new formula is a GameMath static method with the Formula/Derivation/Edge cases block; no
+      hard-coded numbers outside the constants files; naming follows CLAUDE.md.
+  A17 ./gradlew build is green; ./gradlew test shows no new failure vs the baseline (the pre-existing
+      StoryBarkTest failure recorded in the render-quality checkpoint does not count, but must not grow).
+  A18 docs/art-direction.txt, docs/wall-renderer-guide.txt, CLAUDE.md and the run-game SKILL.md describe
+      the span pipeline, the probe and the new cost numbers; the "18-19.4 ms" cost note in
+      art-direction.txt is replaced by the AFTER numbers.
+
+OWNER CHECK (after IMPLEMENTED; not part of the reviewer gate, because only the owner has the phone)
+  Build with PERF_PROBE_FORCE_ON = true, play 5 minutes on the phone (walking and turning), and read the
+  overlay: the target is a steady 60 fps (avg <= 16.7 ms, worst frame <= 25 ms) at the FULL_HD default,
+  with no drop after the first minutes (thermal). Report the two lines back; the designer records them
+  under DECISIONS and, if the phone misses, a follow-up idea starts from those numbers.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. PROBE              (libgdx-specialist)  RenderPerformanceProbe + RenderConstants rows + World.render
+                                             brackets; run-game skill --probe / GC flag (orchestrator).
+  2. INVESTIGATION      (orchestrator, run-game skill)  R13-R15; table + ranked causes + R17/R18 decisions
+                                             into the checkpoint file; B0 captures saved as the visual
+                                             reference for every later comparison.
+  3. FORMULAS           (math-expert)        GameMath span walk, span factor, base/excess split, UV rebase.
+  4. FLOOR/CEILING      (libgdx-specialist)  material Textures (R4), then the span renderer (R1-R9),
+                                             deleting the CPU backdrop, upload and pool; RenderResolution
+                                             trim (R9).
+  5. WALLS              (libgdx-specialist)  R16; R17 / R18 only if CP2 tripped them.
+  6. BILLBOARDS         (libgdx-specialist)  R19, R20.
+  7. TESTS              None. Not balance-bearing; verified by ./gradlew build + ./gradlew lwjgl3:run (in
+                        the container: the run-game skill's frame timing and captures). No new test file
+                        and no new test method - rendering is outside the balance budget, so the omission
+                        is deliberate. The probe is a dev tool, not a test harness.
+  8. DOCS               docs/art-direction.txt (floor pipeline section + mip/LOD section + cost note; V2
+                        stated as still honoured), docs/wall-renderer-guide.txt (tier table: rows not
+                        backdrop; floor pipeline; opaque base pass; atlas/merge if built), CLAUDE.md (the
+                        FloorCeilingRenderer key-class line and Rendering Architecture step 1 say "GPU-sampled
+                        floor/ceiling spans", the RenderResolution description, the probe flag in Build),
+                        .claude/skills/run-game/SKILL.md (probe usage, honest-measurement note).
+
+RISKS AND UNKNOWNS
+  - SpriteBatch.draw(Texture, float[] vertices, offset, count) with arbitrary UVs on a GL_REPEAT texture
+    is standard LibGDX, but confirm the first thing in CP4 with one row drawn on screen before building
+    the rest.
+  - mediump varyings on phone GPUs: mitigated by R3; if the owner's phone shows shimmering in the far
+    floor, lower FLOOR_SPAN_MAX_TILES (a constant, no redesign).
+  - llvmpipe does GPU work on the same 4 CPUs, so moving the floor to the GPU will look SMALLER in the
+    container than it is on a phone (where the GPU is separate). The container proves the CPU side; the
+    OWNER CHECK proves the phone.
+  - The two-pass R6 split doubles the 8-bit rounding: A9's +-4/255 allows for it; if a mood exceeds it,
+    the cause is reported, not hidden by widening the tolerance.
+  - If the investigation shows the floor is NOT the dominant cost (C1-C3 small), CP3-CP4 still ship (the
+    upload and the threads are a phone cost the container under-reports) but the CP2 note must say where
+    the frame actually goes, and R17/R18 decisions follow the numbers.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN - a state that can be CHECKED, never an action
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/render-performance-full-hd.md exists on the branch, committed and pushed.
+  CP1  RenderPerformanceProbe exists and is wired into World.render; with -Dtoon3d.perfProbe=cpu the log
+       prints per-pass ms + draw calls every 5 s and the readout draws top-centre; with the property absent
+       nothing is drawn or logged; run.sh accepts --probe; ./gradlew build is green.
+  CP2  The checkpoint file holds the filled B0/B1 table for P1-P4 (P5/P6 filled or marked not stageable),
+       the per-pass breakdown, the GC counts, C1-C8 ranked by measured share, and the R17/R18 go/no-go
+       decisions; the B0 reference captures (five moods P1, P2 frames, P4) are saved under the capture
+       output directory and named in the file. No game code changed in this checkpoint.
+  CP3  GameMath holds the span-walk, span-factor, base/excess-split and UV-rebase methods with their
+       comment blocks, and FloorCeilingRenderer builds the four-level Repeat/Nearest material Textures per
+       floor and disposes them - not yet drawn (deliberately unwired; CP4 draws them); ./gradlew build green
+       and the game looks exactly like B0.
+  CP4  FloorCeilingRenderer draws the floor and ceiling as spans (R1-R9); its backbuffer, Pixmap, backdrop
+       Texture, upload and thread pool are gone; RenderResolution carries only the row count; A2, A3, A4,
+       A7, A9, A10, A11, A12 and A14 hold (montage + PIL numbers recorded in the checkpoint file);
+       ./gradlew build green.
+  CP5  WallRenderer's base pass runs unblended on opaque levels (R16), and R17/R18 are built if and only if
+       CP2 said go; A5 and A13 (vs CP4's captures) hold; ./gradlew build green.
+  CP6  Enemy/prop occluder and aura loops are range-ordered (R19) and every render-path allocation listed in
+       CP2 is removed (R20); A6 (if stageable), A8 and A13 (vs CP5's captures) hold; ./gradlew build green.
+  CP7  The AFTER columns of the table are filled for every pose; A1 holds (or the R21 stop report is written
+       and the owner has been told); docs per plan step 8 are updated; ./gradlew build and ./gradlew test
+       show no new failure.
+  CP8  reviewer returns PASS (or PASS WITH FIXES, fixes committed); IMPLEMENTATION NOTE with the final
+       table added under the header; STATUS: IMPLEMENTED with the date.
+
+
+ASSUMPTIONS
+-----------
+  AS1  FULL HD stays the default - the owner asked for it and this idea's job is to make it affordable.
+  AS2  Target on the phone: a steady 60 fps (<= 16.7 ms avg) at FULL_HD, with headroom for thermal
+       throttling; the container target is "Full HD costs no more than HD did" (A1), because absolute
+       container numbers do not transfer to a phone.
+  AS3  No custom ShaderProgram (series rule V2 kept). The span approach is chosen precisely because it
+       needs only SpriteBatch's default shader.
+  AS4  "A little quality loss is OK" is NOT spent: the plan aims for zero visible loss vertically and a
+       gain horizontally; tolerances (A9 +-4/255) only absorb 8-bit rounding.
+  AS5  Today's 540 / 180 row counts are kept so the vertical look and every row table stay byte-for-byte
+       the same; finer rows are a later polish idea.
+  AS6  Today's per-row material LOD (render-quality Q3) is kept instead of switching to GPU mipmaps -
+       identical look, no GLES2 mip-completeness risk, max 4 texture binds per surface.
+  AS7  FLOOR_SPAN_MAX_TILES = 8 is enough for mediump varyings; it is a constant if the phone disagrees.
+  AS8  The wall atlas and column merge are built only if measured to matter (R17/R18 thresholds 12 draw
+       calls / 25% submit share) - not speculatively.
+  AS9  The probe stays in the codebase, off by default, so the owner can measure a phone build by flipping
+       one constant; it is a dev tool, not a test, and adds no dependency (GLProfiler is LibGDX core).
+  AS10 The investigation baseline is HEAD-before-this-idea at FULL_HD (B0) and at HD (B1); the older
+       57abdbc state is not rebuilt - B1 differs from it only by the material LOD (+0.3 ms measured in the
+       render-quality checkpoint).
+  AS11 P5/P6 are best-effort in the container (floor 1 is random); not being able to stage them does not
+       block the idea, but must be written down.
+  AS12 HD keeps its 1280 columns and 180 rows; after this idea it is simply the lighter tier, not a
+       different look.
+  AS13 The stale fromOrdinal comment and the HD-then-FULL_HD per-floor reallocation are fixed here
+       because they live in the files being rewritten; nothing else is tidied.
+  AS14 Non-continuous rendering / idle frame caps are out (battery is a separate idea).
+  AS15 Desktop timings are reported as a proxy only, everywhere, per the run-game skill.
+
+
+DECISIONS
+---------
+  (none yet - no questions were needed; see ASSUMPTIONS)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  visual-identity.txt, visual-identity-order-1.txt (IMPLEMENTED: moods, grade, R13 per-row tint),
+          visual-identity-order-2.txt (IMPLEMENTED: muzzle light R8, occluder/contact shadows),
+          visual-identity-order-4..6 (NOT IMPLEMENTED; untouched, V2 kept),
+          floor-ceiling-texture-rendering.txt (IMPLEMENTED: the original CPU floor caster this replaces),
+          lighting-system-overhaul.txt, game-refinement-polish.txt (NOT IMPLEMENTED; per-tile floor light -
+          compatible), emergency-red-alert-pulse.txt, floor-twists (BLACKOUT light multiplier).
+  Checkpoints: .claude/checkpoints/visual-identity-render-quality.md (the change that caused this).
+  Docs:   docs/art-direction.txt (V2, floor materials, mip/LOD, cost note), docs/wall-renderer-guide.txt,
+          docs/dda-raycasting-math.txt, .claude/skills/run-game/SKILL.md (measurement method).
