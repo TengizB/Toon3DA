@@ -1,9 +1,22 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Visual Identity 3 — Typography: one procedural pixel font
 CREATED: 2026-10-19
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
 ---
+IMPLEMENTATION NOTE (2026-10-20): built as specified, with these divergences (details in
+.claude/checkpoints/visual-identity-order-3.md):
+  - R7: the reprint card's SYSTEM status block is drawn by the shared StoryPanelRenderer (which also
+    draws every bark), so it stays REGULAR; BootCardRenderer's own font draws only the counter and
+    CONTINUE. A per-panel face is left to orders 4/5.
+  - VISUAL DESIGN: the solid triangles \u25B6/\u25C0 are 4x7 (a true 7-tall triangle is 4 wide), not 5x7. A is
+    round-topped and M/W carry a centre stem: the square A read as R and 7-wide diagonals blurred
+    into N/H at small scale.
+  - R9: the story text sizes are NORMAL / LARGE / LARGEST (the spec's SMALL / MEDIUM / LARGE).
+    Layout faults found in the sweep are identical on the baseline and were left (layout is SCOPE OUT).
+  - R8: seven sites raised to TYPE_CAPTION; the rest are listed as deferred in the checkpoint.
+  - The default font measured was LibGDX 1.14.1's lsans-15 (not Arial): capHeight 11.
+  - The three lwjgl3 story showcases initialise/dispose GameFonts themselves (reviewer fix).
 
 OVERVIEW
 --------

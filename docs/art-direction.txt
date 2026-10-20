@@ -338,7 +338,9 @@ ATLAS: each font pixel rasterised as a solid 4x4-texel white square (PIXEL_FONT_
   1 font pixel of transparent padding between glyphs, both faces + fallback shelf-packed into ONE
   power-of-two atlas at most 512x512 (currently 512x512), Linear min/mag (crisp-chunky at FitViewport's
   non-integer scales; Nearest would shimmer). Built from a Pixmap at initialise; the Pixmap is freed after
-  upload.
+  upload. KNOWN LIMITATION: like every Pixmap-built texture here it is unmanaged, so a lost Android GL
+  context does not rebuild it (LibGDX preserves the EGL context on pause by default; the old default
+  font's file texture was managed).
 METRIC MATCH: glyph metrics are in atlas texels; each font's data multiplies every setScale by
   PIXEL_FONT_TARGET_CAP_HEIGHT / (7 x 4) = 11 / 28, so setScale(1) gives cap height 11 — the measured cap
   height of the LibGDX 1.14.1 default font (lsans-15) the pixel font replaced. Every existing setScale
@@ -350,7 +352,8 @@ SHARING RULE: all text comes from GameFonts.newFont(face) — NEVER `new BitmapF
   over the SHARED atlas region; the font does not own the atlas (ownsTexture false), so a renderer's
   font.dispose() never frees it. Never call setFilter on a font's texture — it is the shared atlas.
   GameFonts.dispose() frees the atlas exactly once. newFont before initialise throws
-  IllegalStateException. The atlas outlives every World (rebuilt per run), like EnemySpriteSheets.
+  IllegalStateException — a standalone launcher (the lwjgl3 story showcases) calls initialise()/dispose()
+  itself. The atlas outlives every World (rebuilt per run), like EnemySpriteSheets.
 TYPE SCALE (ArtDirection TYPE_*, setScale multipliers over the metric-matched base; adopted screen by
   screen in orders 4-6): CAPTION 1.00, BODY 1.25, LABEL 1.50, HEADING 2.00, DISPLAY 3.50. Nothing shipped
   is drawn below CAPTION once its screen adopts the scale; the sites still below it are listed in the

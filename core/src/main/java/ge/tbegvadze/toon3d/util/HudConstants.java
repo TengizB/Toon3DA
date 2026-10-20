@@ -50,7 +50,7 @@ public final class HudConstants {
     public static final float HUD_SLOT_SIDE_PADDING           = 14f;
     public static final float HUD_SLOT_GAP                    = 6f;
 
-    // Text scales — the default BitmapFont is 15px; we never shrink the hero numbers below ~0.9 so
+    // Text scales — the pixel font at setScale(1) has the old 15px default font's cap height (GameFonts); we never shrink the hero numbers below ~0.9 so
     // glyphs stay legible, and every glyph gets a dark drop-shadow for contrast.
     public static final float HUD_LABEL_SCALE                 = 1.00f; // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
     public static final float HUD_VALUE_SCALE                 = 1.05f;

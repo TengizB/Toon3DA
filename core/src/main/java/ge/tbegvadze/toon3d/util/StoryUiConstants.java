@@ -38,7 +38,7 @@ public final class StoryUiConstants {
     // =====================================================================
     // TYPOGRAPHY & READABILITY (hard requirements)
     // =====================================================================
-    // Body text scale of the default 15px BitmapFont.  Err BIG — must read at arm's length
+    // Body text scale over the metric-matched pixel font (GameFonts; setScale(1) = the old 15px default's cap height).  Err BIG — must read at arm's length
     // on a phone.  ~24px effective.  Never shrink text to fit; wrap instead.
     public static final float STORY_TEXT_SIZE          = 1.6f;
     // Speaker-name text scale inside the chip (a touch smaller than the body).

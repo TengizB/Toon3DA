@@ -47,7 +47,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP4** — all remaining swap sites. DONE WHEN: A1 + A2 hold; build green.
 - [x] **CP5** — R9 overflow sweep (3 text sizes), docs (step 6). DONE WHEN: A3, A4, A7, A8 seen on screen; build +
       test at baseline (480 tests, 1 pre-existing failure).
-- [ ] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -102,3 +102,9 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - **Capture driver:** added `call:` and `set:` reflection steps (SKILL.md documents them) to reach the route map,
   death, level-up, relic offer. Baseline comparisons ran from a detached worktree at 15ac0af
   (`TOON3D_RUNTIME_DIR=/tmp/toon3d-base`).
+- **CP6:** reviewer PASS WITH FIXES. BLOCKING fixed: the lwjgl3 storyUiShowcase / bootCardShowcase /
+  storyBarkShowcase threw IllegalStateException (no GameFonts.initialise) — each now initialises/disposes GameFonts
+  and takes its caption font from it; all three launched without exception. NON-BLOCKING done: IMPLEMENTATION NOTE in
+  the idea file; unmanaged-atlas limitation recorded in docs/art-direction.txt. Nits done: stale "default
+  BitmapFont" comments in HudConstants / StoryUiConstants / EnemyConstants / RouteMapConstants. Left: raised scales
+  use 1.0f, not ArtDirection.TYPE_CAPTION (orders 4-6 adopt TYPE_*); the slashed zero should be checked on a phone.

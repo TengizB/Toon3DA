@@ -364,7 +364,7 @@ public final class RouteMapConstants {
     public static final float LEGEND_TWIST_OFFSET_Y = -20f;
     public static final float LEGEND_PROMISE_THREAT_OFFSET_Y_WITH_TWIST = 24f;
     public static final float LEGEND_PROMISE_REWARD_OFFSET_Y_WITH_TWIST = 2f;
-    /** Name / rule separator. A plain hyphen: the console's default BitmapFont has no em-dash glyph. */
+    /** Name / rule separator. A plain hyphen (a copy choice; the pixel font has had an em-dash glyph since visual-identity-order-3). */
     public static final String LEGEND_TWIST_SEPARATOR = " - ";
     /** The widest the twist line may draw: the confirm bar's centre gap between CANCEL and ENGAGE, less padding. */
     public static final float LEGEND_TWIST_MAX_WIDTH = 640f;

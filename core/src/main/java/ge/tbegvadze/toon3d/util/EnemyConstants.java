@@ -483,7 +483,7 @@ public final class EnemyConstants {
 
     // Enemy name tag — shown above health bar only when close enough
     public static final float ENEMY_NAME_TAG_MAX_DISTANCE_TILES = 8f;
-    // Name tag font scale applied to the default BitmapFont — sized up for at-a-glance legibility.
+    // Name tag font scale applied to the pixel font (GameFonts) — sized up for at-a-glance legibility.
     public static final float ENEMY_NAME_TAG_FONT_SCALE         = 1.15f;
     // Vertical gap between name tag baseline and top of health bar (screen pixels)
     public static final float ENEMY_NAME_TAG_BAR_GAP            = 4f;
