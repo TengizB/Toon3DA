@@ -94,7 +94,7 @@ public final class LevelUpOverlayRenderer implements Disposable {
     private static final float RANK_TEXT_SCALE_FRACTION = 0.6f;
     private static final float SCALE_LABEL    = 1.35f;
     private static final float SCALE_DESC     = 1.02f;
-    private static final float SCALE_TAP      = 0.95f;
+    private static final float SCALE_TAP      = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
 
     private static final float SHADOW_OFFSET = 2.5f;
 

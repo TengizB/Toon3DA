@@ -308,3 +308,53 @@ Firing a gun briefly lights the nearby world in the weapon's colour, through the
   plasma bolts or enemy attacks).
   Clock: AtmosphereGrade.update(deltaTime) runs in World.update only while the world is PLAYING, so it
   pauses with every hard-pause overlay and resumes after; resetLight() runs on floor build.
+
+
+12. TYPOGRAPHY (visual-identity-order-3)
+----------------------------------------
+ONE procedural pixel font for every word in the game. No TTF/OTF/.fnt asset and no FreeType (V1): the
+font is code.
+  render/PixelFontGlyphs   the glyph table, DATA ONLY: codepoint + rows ('#' ink, '.' empty, '/' between
+                           rows, top row first) + baseline offset (font-pixel row the glyph's bottom
+                           sits on; 0 = baseline, negative = descender, positive = raised punctuation).
+  render/FontFace          REGULAR (shift 0) / HEAVY (shift 1).
+  render/GameFonts         session holder: initialise() (Main.create, before the World), newFont(face),
+                           dispose() (Main.dispose, after the World).
+GRID (font pixels; ArtDirection PIXEL_FONT_*): cap height 7, x-height 5, descender 2, line height 11
+  (7 + 2 + 2 leading above the cap), letter spacing 1, space advance 3. Capitals 5 wide (I 3, M and W 7,
+  both with a centre stem), A round-topped so it never reads as R. Lowercase true x-height with clear
+  ascenders/descenders. Digits 0-9 are TABULAR (all 5 wide, same advance in each face), so HUD counters
+  never jitter; the zero is slashed.
+COVERAGE (both faces): printable ASCII 32-126 plus — · … × ▶ ◀ → ● • ◇ ± ≈ ° ‘ ’ “ ” (scanned from every
+  shipped string, 2026-10-19). Any other character draws the FALLBACK glyph (BitmapFontData.missingGlyph):
+  a hollow 5x7 box. Never blank, never a crash. The em dash exists as a glyph; whether copy USES it is the
+  narrative authority's call (docs/narrative-authority.txt), not art direction's.
+FACES: HEAVY = each REGULAR glyph OR-ed with itself shifted 1 px right (ink width +1, advance +1),
+  derived in GameFonts, never a second table. HEAVY is used for: FramingScreenRenderer's title and death
+  stroke, BossHudRenderer.nameFont, HudRenderer's ammo readout, EventTextRenderer, ImpactEffectRenderer
+  (damage numbers). Everything else is REGULAR. (The reprint card's SYSTEM block is drawn by the shared
+  StoryPanelRenderer, which also draws every bark, so it is REGULAR until a later order styles panels.)
+ATLAS: each font pixel rasterised as a solid 4x4-texel white square (PIXEL_FONT_ATLAS_TEXELS_PER_PIXEL),
+  1 font pixel of transparent padding between glyphs, both faces + fallback shelf-packed into ONE
+  power-of-two atlas at most 512x512 (currently 512x512), Linear min/mag (crisp-chunky at FitViewport's
+  non-integer scales; Nearest would shimmer). Built from a Pixmap at initialise; the Pixmap is freed after
+  upload.
+METRIC MATCH: glyph metrics are in atlas texels; each font's data multiplies every setScale by
+  PIXEL_FONT_TARGET_CAP_HEIGHT / (7 x 4) = 11 / 28, so setScale(1) gives cap height 11 — the measured cap
+  height of the LibGDX 1.14.1 default font (lsans-15) the pixel font replaced. Every existing setScale
+  constant therefore keeps its cap height; only advance widths differ. Initialise logs both numbers.
+  Consequence: getScaleX() reports the base-inclusive scale, and BitmapFontData.scale(amount) must not be
+  used (nothing does).
+SHARING RULE: all text comes from GameFonts.newFont(face) — NEVER `new BitmapFont()` anywhere else. Each
+  call returns a NEW BitmapFont with its own BitmapFontData (each renderer keeps its own scale and colour)
+  over the SHARED atlas region; the font does not own the atlas (ownsTexture false), so a renderer's
+  font.dispose() never frees it. Never call setFilter on a font's texture — it is the shared atlas.
+  GameFonts.dispose() frees the atlas exactly once. newFont before initialise throws
+  IllegalStateException. The atlas outlives every World (rebuilt per run), like EnemySpriteSheets.
+TYPE SCALE (ArtDirection TYPE_*, setScale multipliers over the metric-matched base; adopted screen by
+  screen in orders 4-6): CAPTION 1.00, BODY 1.25, LABEL 1.50, HEADING 2.00, DISPLAY 3.50. Nothing shipped
+  is drawn below CAPTION once its screen adopts the scale; the sites still below it are listed in the
+  visual-identity-order-3 checkpoint handover.
+ADD A GLYPH: one glyph(...) row in PixelFontGlyphs (every row the same length; pick the baseline offset
+  so it sits on the grid above), and its character in the COVERAGE line above. The atlas sizes itself;
+  GameFonts throws at startup if it would exceed 512x512.

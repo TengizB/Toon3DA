@@ -45,8 +45,9 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP3** — HUD-layer swaps (HudRenderer, BossHudRenderer, EventTextRenderer, ImpactEffectRenderer,
       EnemyRenderer, FadeOverlayRenderer) with R7 faces. DONE WHEN: A5 holds; build green.
 - [x] **CP4** — all remaining swap sites. DONE WHEN: A1 + A2 hold; build green.
-- [ ] **CP5** — R9 overflow sweep (3 text sizes), docs (step 6). DONE WHEN: A3, A4, A7, A8 seen on screen; build +
-      test at baseline; reviewer PASS.
+- [x] **CP5** — R9 overflow sweep (3 text sizes), docs (step 6). DONE WHEN: A3, A4, A7, A8 seen on screen; build +
+      test at baseline (480 tests, 1 pre-existing failure).
+- [ ] **CP6** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -75,3 +76,29 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   A round-topped (square A read as R), M/W redrawn with a centre stem (7-wide diagonals blurred into N/H).
   Seen: title, title settings, title archive, HUD, pause, pause settings, inventory (— EMPTY — now renders the em
   dash; before it showed boxes), build page, inventory codex, weapon inspect.
+- **CP5 sweep (A3/A4/A7/A8):** story text sizes are NORMAL / LARGE / LARGEST (the spec's SMALL/MEDIUM/LARGE).
+  Seen in the pixel font at all three: reprint card, bark, codex list + entry detail, title settings. Seen at
+  NORMAL: title, title archive, HUD, pause, pause settings, inventory, build page, weapon inspect, level-up, relic
+  offer, route map, exchange (+ reply), death stroke, instance report, damage number (-9997). NOT seen on screen
+  (unreachable in a scripted run; same one-line swap): shop, event console, boss bar, enemy name tags.
+  A4: route map title "FACILITY NAV — SELECT VECTOR", "◀ CANCEL", "ENGAGE ▶", inventory "— EMPTY —", weapon
+  inspect "— NO SPECIAL ABILITIES —" and "LV 1 • COMMON" render the glyphs (baseline: boxes).
+  A7: no text crosses a panel/plate edge because of the font, at any size. PRE-EXISTING layout faults (identical on
+  the baseline worktree at 15ac0af, so NOT fixed here — layout is SCOPE OUT, for orders 4-6): the death stroke
+  overlaps FadeOverlayRenderer's "SUBLEVEL N" banner; level-up rank pips overlap "RANK n / m"; at LARGEST the bark
+  drops its third line and the SYSTEM block's lines nearly touch; the title's last status line touches the title.
+  A8: die -> card -> CONTINUE -> new run: text correct, no GL/disposed error, GameFonts logs once per session.
+- **R8 raised to TYPE_CAPTION (verified to fit on screen):** HUD_LABEL_SCALE 0.95, STORY_CODEX_TAB_COUNT_TEXT_SIZE
+  0.95, STORY_CODEX_ROW_SOURCE_TEXT_SIZE 0.9, RouteMapConstants DEPTH_TEXT_SCALE 0.95 / NODE_LABEL_SCALE 0.9 /
+  LEGEND_TEXT_SCALE 0.95, LevelUpOverlayRenderer.SCALE_TAP 0.95 -> all 1.0.
+  **R8 DEFERRED to orders 4-6** (below 1.0; unreachable screen or would not fit without layout): BOSS_STATE_LABEL_
+  FONT_SCALE .62, ENEMY_BLOCK_NUMBER_FONT_SCALE .62, INTENT_DAMAGE_NUMBER_SCALE .62, ENEMY_HP_TEXT_FONT_SCALE .65,
+  HUD_LEVEL_TAG_SCALE .66, HudRenderer literal setScale(0.6f) (slot index) and (0.85f) (medkit warn),
+  HUD_SLOT_NAME_SCALE .78, BOSS_HP_NAME_FONT_SCALE .80, ENEMY_MATCHUP_WORD_FONT_SCALE .8,
+  FRAMING_TOGGLE_LABEL_SCALE .8, SHOP_CARD_DESC_SCALE .80, SHOP_CONFIRM_PROMPT_SCALE .84, SHOP_FOOTER_FLAVOR_SCALE
+  .85, SHOP_CONFIRM_LABEL_SCALE .86, SHOP_CARD_NAME_SCALE / SHOP_CARD_TAG_SCALE .92,
+  EventChoiceOverlayRenderer.SCALE_TAP .95, ItemWindow 0.80-0.85 x FONT_SCALE literals. (Composite scales built
+  from multipliers were not audited.)
+- **Capture driver:** added `call:` and `set:` reflection steps (SKILL.md documents them) to reach the route map,
+  death, level-up, relic offer. Baseline comparisons ran from a detached worktree at 15ac0af
+  (`TOON3D_RUNTIME_DIR=/tmp/toon3d-base`).

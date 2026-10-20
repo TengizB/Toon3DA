@@ -31,7 +31,8 @@ The notes below describe the earlier 3-panel design and are kept for history.
 OVERVIEW
 --------
 A bottom-strip HUD drawn entirely with LibGDX ShapeRenderer primitives and the
-built-in BitmapFont.  Zero textures loaded — every pixel is a hardcoded
+game's procedural pixel font (render/GameFonts — REGULAR for labels, HEAVY for the
+ammo readout; see docs/art-direction.txt TYPOGRAPHY).  Zero textures loaded — every pixel is a hardcoded
 rectangle, ellipse, polyline, or text string.  Doom-RPG game-feel DNA: segmented
 HP/armor bars, synthetic marine face, phosphor-green readouts, dirty-steel chrome.
 
@@ -43,7 +44,8 @@ NEW FILES
 ---------
   core/src/main/java/ge/tbegvadze/toon3d/hud/HudRenderer.java
       Implements Renderable + Disposable.
-      Owns ONE ShapeRenderer, ONE SpriteBatch, ONE BitmapFont.
+      Owns ONE ShapeRenderer, ONE SpriteBatch, TWO BitmapFonts from GameFonts
+      (REGULAR + HEAVY ammo digits) over the shared atlas.
       No-allocation render: all Colors pre-allocated, StringBuilder/GlyphLayout reused.
       Three ordered render passes per frame (see RENDER PASSES below).
 
