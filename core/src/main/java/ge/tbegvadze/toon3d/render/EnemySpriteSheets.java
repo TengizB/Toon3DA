@@ -25,6 +25,9 @@ import java.util.Map;
  * cache, conditions nothing and logs nothing.
  */
 public final class EnemySpriteSheets {
+    /** Reused by applyAlphaCut; load-time only, render thread only. */
+    private static final byte[] ALPHA_CUT_SCRATCH = new byte[EnemyConstants.ENEMY_SPRITE_ALPHA_CUT_CHUNK_BYTES];
+
 
     private static final Map<String, Texture> CACHE = new HashMap<>();
 
@@ -111,26 +114,32 @@ public final class EnemySpriteSheets {
      * threshold; kept texels are made fully opaque.
      */
     private static void applyAlphaCut(Pixmap rgba) {
-        ByteBuffer pixels = rgba.getPixels();
+        // In place on the Pixmap's own buffer, in CHUNKS through one small reused scratch array: per-byte
+        // absolute get/put on a direct buffer measured ~5x slower (2040 ms vs 379 ms for 9 sheets), while a
+        // whole-sheet byte[] is a ~6-9 MB GC spike on phones. Relative bulk get/put on a duplicate() view (the
+        // absolute bulk overloads need Android API 34), so the Pixmap's own position/limit are never touched.
+        ByteBuffer pixels = rgba.getPixels().duplicate();
         int byteCount = rgba.getWidth() * rgba.getHeight() * 4;
-        byte[] data = new byte[byteCount];
-        pixels.position(0);
-        pixels.get(data, 0, byteCount);
-        float cut = EnemyConstants.ENEMY_SPRITE_ALPHA_CUT;
-        for (int texelStart = 0; texelStart < byteCount; texelStart += 4) {
-            int alpha = data[texelStart + 3] & 0xFF;
-            if (alpha / 255f < cut) {
-                data[texelStart]     = 0;
-                data[texelStart + 1] = 0;
-                data[texelStart + 2] = 0;
-                data[texelStart + 3] = 0;
-            } else {
-                data[texelStart + 3] = (byte) 0xFF;
+        int alphaCutThreshold = (int) Math.ceil(EnemyConstants.ENEMY_SPRITE_ALPHA_CUT * 255f);
+        byte[] chunk = ALPHA_CUT_SCRATCH;
+        for (int chunkStart = 0; chunkStart < byteCount; chunkStart += chunk.length) {
+            int chunkLength = Math.min(chunk.length, byteCount - chunkStart);
+            pixels.position(chunkStart);
+            pixels.get(chunk, 0, chunkLength);
+            for (int texelStart = 0; texelStart < chunkLength; texelStart += 4) {
+                int alpha = chunk[texelStart + 3] & 0xFF;
+                if (alpha < alphaCutThreshold) {
+                    chunk[texelStart]     = 0;
+                    chunk[texelStart + 1] = 0;
+                    chunk[texelStart + 2] = 0;
+                    chunk[texelStart + 3] = 0;
+                } else {
+                    chunk[texelStart + 3] = (byte) 0xFF;
+                }
             }
+            pixels.position(chunkStart);
+            pixels.put(chunk, 0, chunkLength);
         }
-        pixels.position(0);
-        pixels.put(data, 0, byteCount);
-        pixels.position(0);
     }
 
     private static Texture generateFallbackSheet(float red, float green, float blue) {

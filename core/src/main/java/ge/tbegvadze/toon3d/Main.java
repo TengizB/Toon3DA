@@ -6,6 +6,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import ge.tbegvadze.toon3d.render.EnemySpriteSheets;
 import ge.tbegvadze.toon3d.world.StartMode;
 import ge.tbegvadze.toon3d.world.World;
 
@@ -94,6 +95,6 @@ public class Main extends ApplicationAdapter {
         }
         world.dispose();
         // Session-lifetime enemy sheets outlive every World; freed only here (visual-identity-order-2 R2).
-        ge.tbegvadze.toon3d.render.EnemySpriteSheets.disposeAll();
+        EnemySpriteSheets.disposeAll();
     }
 }

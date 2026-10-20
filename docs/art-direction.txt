@@ -211,8 +211,9 @@ Every upright billboard gets a soft ellipse on the floor so nothing floats.
   Classification (by the predicates the loops already use, no symbol switch):
     enemies (incl. bosses, live and upright)           WIDTH_FRACTION_ENEMY 0.70, width taken BEFORE the
                                                         lunge scale; EYE_TYRANT alpha x HOVER_ALPHA_SCALE 0.55
-    Level.isPropSolid tiles (incl. generated props)     PROP 0.85
-    medical / armour / ammo / keycard pickup tiles      PICKUP 0.60
+    Level.isPropSolid tiles (incl. generated props)     PROP 0.85 (alpha 1: they stand on the floor)
+    medical / armour / ammo / keycard pickup tiles      PICKUP 0.60 x HOVER_ALPHA_SCALE (they float with a
+                                                        bob above the floor line, like a hovering enemy)
     weapon pickups + credit chips (ground items)        PICKUP 0.60 x HOVER_ALPHA_SCALE (they float at eye
                                                         height, so the shadow sits well below the sprite)
     shop machine                                        SHOP 0.90
@@ -233,7 +234,7 @@ Firing a gun briefly lights the nearby world in the weapon's colour, through the
     FIRE (1.00,0.55,0.20) peak 1.70   incinerator
     none (peak 0: no pulse)           fist, knife, hammer, chainsaw
   Peaks were raised from the spec's 0.35/0.40 after the on-screen check: the light scales the surface's
-  own albedo (additive pass), and this game's materials are deliberately dark (R9), so 0.35 added only
+  own albedo (additive pass), and this game's materials are deliberately dark (order-1 R9), so 0.35 added only
   +2..4/255. At 1.5 a surface at the player's feet briefly reaches ~2.5x its lit colour.
   Formula (R8): intensity i = peak x (1 - elapsed / MUZZLE_LIGHT_DURATION_SECONDS 0.10), floored at 0;
   for a surface d tiles away  light = GameMath.muzzleLightFalloff(d, MUZZLE_LIGHT_RADIUS_TILES 4.0) x i
@@ -250,7 +251,8 @@ Firing a gun briefly lights the nearby world in the weapon's colour, through the
                            (gradeScratch[3..5] -> surfaceLight* / doorPanelLight*). A separate PHASE 3 in
                            WallRenderer.render re-draws the same column slices with additive blending
                            (GL_SRC_ALPHA, GL_ONE), colour = light add, alpha 1 so the texture still masks.
-                           A door-panel column re-draws the panel only. Blend func switches exactly twice
+                           A door-panel column re-draws the panel only (DELIBERATE: the surface behind
+                           it is covered, and lighting both would double-light the panel). Blend func switches exactly twice
                            per frame (to additive, back), and the pass is skipped at intensity 0.
     props / pickups / chips / weapon pickups / decals (PropRenderer.drawMuzzleLightPass)
                            after each lit sprite's base column loop: additive re-draw of the same columns

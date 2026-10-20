@@ -27,6 +27,8 @@ public final class EnemyConstants {
     // visual-identity-order-2 R1: enemy sheet texels with alpha below this become fully transparent;
     // all others become fully opaque. Applied once per app session by render/EnemySpriteSheets.
     public static final float   ENEMY_SPRITE_ALPHA_CUT           = 0.50f;
+    /** Bytes per bulk chunk of the load-time alpha cut (a small reused scratch, never a sheet-sized copy). */
+    public static final int     ENEMY_SPRITE_ALPHA_CUT_CHUNK_BYTES = 16384;
 
     // Boss texture — not used in regular combat; reserved for the boss encounter.
     public static final String  ENEMY_BOSS_OVERSEER_PATH         = "textures/enemies/enemy_boss_overseer.png";

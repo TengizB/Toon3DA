@@ -1769,9 +1769,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // reload resets the count, since the player just did the right thing.
         playerController.setEmptyFireAttemptListener(teachingSystem::onEmptyFireAttempt);
         playerController.setWeaponReloadStartedListener(teachingSystem::onWeaponReloaded);
-        // order-10 B comprehension proxy: how many deaths it took to reach the first GUARD use.
         // MUZZLE LIGHT (visual-identity-order-2): a shot lights the world through the grade (melee rows are peak 0).
         playerController.setWeaponFiredListener(atmosphereGrade::pulseMuzzleLight);
+        // order-10 B comprehension proxy: how many deaths it took to reach the first GUARD use.
         playerController.setGuardUsedListener(() -> storyTelemetry.recordGuardFirstUsed(persistentStats.totalDeaths));
         playerController.setWeaponSwitchCallback(() -> {
             weaponHudRenderer.setEquippedWeapon(inventory.getEquippedWeapon());

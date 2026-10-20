@@ -181,12 +181,12 @@ public class PlayerController {
         this.weaponReloadStartedListener = listener;
     }
 
-    /** Injects the GUARD-used listener (narrative-rework order-10 B comprehension-proxy telemetry). Nullable. */
     /** Notified with the weapon's ItemType each time a shot is actually fired (same beat as the fire sound). */
     public void setWeaponFiredListener(java.util.function.Consumer<ItemType> listener) {
         this.weaponFiredListener = listener;
     }
 
+    /** Injects the GUARD-used listener (narrative-rework order-10 B comprehension-proxy telemetry). Nullable. */
     public void setGuardUsedListener(Runnable listener) {
         this.guardUsedListener = listener;
     }

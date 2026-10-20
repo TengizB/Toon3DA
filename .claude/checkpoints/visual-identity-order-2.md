@@ -96,3 +96,9 @@ Never more than one checkpoint uncommitted. Never `git add -A`.
   capture harness (shots/L_sheet.png): visible warm / cyan / orange splash on near floor+ceiling, no whiteout.
   NOT verified on screen: an actual fire tap (start-room weapons are random per run), enemies lit (A7 enemy part),
   chaingun refresh (A8, code read: restart-not-stack), A9 by construction (HUD/overlays never read the grade).
+- **CP6b (reviewer round-1 fixes):** AtmosphereGrade javadoc corrected; floating tile pickups (medical/armour/ammo/
+  keycard) shadow at HOVER_ALPHA_SCALE via `contactShadowAlphaScaleForTile`; applyAlphaCut now chunked (16 KB reused
+  scratch, `ENEMY_SPRITE_ALPHA_CUT_CHUNK_BYTES`) on a `duplicate()` view with RELATIVE bulk get/put (absolute bulk
+  overloads need Android API 34). Per-byte absolute access was tried and measured 2040 ms — rejected. Same-machine
+  comparison now (noisy VM): old whole-copy 1209 ms vs chunked 476-582 ms. Nits fixed. Session cut by usage limit
+  between round 1 and these fixes; spoke had saved nothing, redone from scratch.

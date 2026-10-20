@@ -29,8 +29,13 @@ import ge.tbegvadze.toon3d.util.GameMath;
  * before worker tasks are dispatched; the executor hand-off publishes it). Workers and render code only
  * READ it, via {@link #lightAddInto} (pure, thread-safe given that contract) or the render-thread fields
  * written by {@link #evaluate}. While the world is hard-paused update() is not called, so the snapshot
- * simply holds its last value. The term is additive to the colour MULTIPLIER:
- * {@code channel = clamp01(shade x tint + lightAdd)}.
+ * simply holds its last value. The light is NOT folded into the clamped colour multiplier (near
+ * surfaces already sit at ~1.0, so it would be clamped away). The base colour stays
+ * {@code clamp01(shade x tint)}; the light is applied AFTER that clamp as an additive albedo pass,
+ * {@code albedo x lightAdd}: a second draw with additive blending (GL_SRC_ALPHA, GL_ONE) for walls, doors,
+ * props, the shop body and enemies, and, for the CPU-drawn floor and ceiling,
+ * {@code GameMath.applyRgbShadeAndLightToPackedRGBA}. Only the final colour clamps. See
+ * docs/art-direction.txt section 11.
  */
 public final class AtmosphereGrade {
 
