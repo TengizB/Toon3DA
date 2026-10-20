@@ -91,8 +91,8 @@ public final class ItemConstants {
     public static final int   INVENTORY_GRID_COLUMNS        = 4;
     public static final float INV_SLOT_SIZE                  = 96f;
     public static final float INV_SLOT_GAP                   = 12f;
-    public static final float INV_SCRIM_ALPHA                = 0.60f;
-    public static final float INV_PANEL_ALPHA                = 0.95f;
+    public static final float INV_SCRIM_ALPHA                = ArtDirection.UI_SCRIM_ALPHA;
+    public static final float INV_PANEL_ALPHA                = ArtDirection.UI_PANEL_ALPHA_SCREEN;
     public static final float INV_SELECT_BORDER_THICKNESS    = 3f;
     public static final float INV_FLASH_SECONDS              = 0.45f;
 
@@ -271,9 +271,9 @@ public final class ItemConstants {
     // Inventory header — credits readout position and colour
     public static final float INVENTORY_CREDITS_LABEL_X    = 40f;
     public static final float INVENTORY_CREDITS_GLYPH_SIZE = 16f;
-    public static final float INVENTORY_CREDITS_COLOR_R    = 1.00f;
-    public static final float INVENTORY_CREDITS_COLOR_G    = 0.85f;
-    public static final float INVENTORY_CREDITS_COLOR_B    = 0.10f;
+    public static final float INVENTORY_CREDITS_COLOR_R    = ArtDirection.CREDITS_GOLD_RED;
+    public static final float INVENTORY_CREDITS_COLOR_G    = ArtDirection.CREDITS_GOLD_GREEN;
+    public static final float INVENTORY_CREDITS_COLOR_B    = ArtDirection.CREDITS_GOLD_BLUE;
 
     // ItemWindow footer action buttons (Part 4 redesign — two buttons in footer zone)
     public static final float INV_ACTION_BTN_WIDTH  = 180f;

@@ -42,7 +42,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — UiKit.screenHeader + UiKit.card + UI_PANEL_ALPHA_SCREEN; chrome colour blocks re-pointed.
+- [x] **CP1** — UiKit.screenHeader + UiKit.card + UI_PANEL_ALPHA_SCREEN; chrome colour blocks re-pointed.
       DONE WHEN: they exist, every reader compiles, build green.
 - [ ] **CP2** — InventoryOverlayRenderer, ItemGridPanel, WeaponSlotsPanel, BuildPagePanel restyled.
       DONE WHEN: A1/A2/A3 hold for the inventory on run; build green.
@@ -59,3 +59,18 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - **CP0:** order 4's branch ccr-eb246ad6-ypyqrt is merged into master (PR #314), so this branch starts at
   origin/master 077152d. Order-3 R8 deferred sites inside this order's classes: ItemWindow 0.80-0.85 x FONT_SCALE
   literals (+ any sub-caption scales found in BuildPagePanel / LevelUp / RelicOffer / Codex) move to TYPE_* here.
+- **CP1:** `UiKit.card` (border ALWAYS the ink, brackets in the ink when SELECTED, fill = state fill at
+  UI_PANEL_ALPHA_SCREEN), `UiKit.screenHeaderTitle(batch, heavyFont, title, x, topY)` + `screenHeaderRule(shapes,
+  x, y, width, alpha)` + `screenHeaderRuleY(titleTopY)` (R1 split in two: a ShapeRenderer and a SpriteBatch cannot
+  be active at once; title is UNSHADOWED - screen text never sits on the 3D view), `UiKit.newMarker` (R7).
+  ArtDirection: UI_PANEL_ALPHA_SCREEN 0.94, UI_SCREEN_HEADER_RULE_GAP, UI_NEW_MARKER_SIZE/EDGE,
+  UI_SELECTION_BAR_WIDTH, UI_CHIP_BORDER_THICKNESS/CHAMFER. Re-pointed: ItemConstants INV_SCRIM_ALPHA (.60->.75),
+  INV_PANEL_ALPHA (.95->.94), INVENTORY_CREDITS_COLOR (CREDITS_GOLD); HudConstants RELIC_OFFER_SCRIM_ALPHA
+  (.78->.75), RELIC_OFFER_LEAVE (UI_PANEL / UI_TEXT_PRIMARY), RELIC_COST_TEXT_COLOR (CombatPalette.DAMAGE);
+  StoryUiConstants STORY_CODEX_SCRIM (UI_INK_BLACK @ .75, was .86); ProgressionConstants BUILD_PAGE_* chrome,
+  BUILD_CHIP_TEXT / PIP (ink black / UI_LINE), BUILD_COST (DAMAGE), BUILD_SYNERGY (SUIT_AMBER) - KEYSTONE_GOLD and
+  the BUILD_TAG_* colours stay (semantic). Capture driver: `additem:TYPE:QTY`, `inspectweapon` (SKILL.md).
+  BEFORE shots are in /tmp/claude-0/shots/before (base worktree /tmp/claude-0/base, mirror /tmp/toon3d-base).
+  Screen coordinates: inventory BUILD (1011,685) CODEX (1143,685) EXIT (1245,685); level-up card centre y 330;
+  codex first row (700,547). The RUN_START relic offer opens right after `engage` (no exchange on a fresh save).
+  Build: 480 tests, the 1 known failure.

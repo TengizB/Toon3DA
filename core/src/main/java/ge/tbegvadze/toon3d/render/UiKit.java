@@ -9,7 +9,8 @@ import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * The game's interface vocabulary (visual-identity-order-4): a chamfered panel, corner brackets, a plate
- * with four states, a segmented meter, a divider and shadowed text. Static, stateless, allocation-free.
+ * with four states, a segmented meter, a divider and shadowed text; order 5 adds the inked card, the suit
+ * screen header (title + amber-ticked rule) and the NEW marker. Static, stateless, allocation-free.
  *
  * <p>Every ShapeRenderer primitive here expects the renderer to be inside {@code begin(ShapeType.Filled)}
  * (outlines are filled quads, so a frame never churns begin/end between fill and line) with GL blending
@@ -181,6 +182,84 @@ public final class UiKit {
         if (state.drawsInkBrackets()) {
             brackets(shapes, x, y, width, height, bracketLength, inkRed, inkGreen, inkBlue, 1f);
         }
+    }
+
+    // ------------------------------------------------------------------ order 5: card, screen header, marker
+
+    /**
+     * Order 5 R2: a CARD - a plate whose border is always the given INK (a relic's rarity, a perk's tag, a
+     * weapon's tier) and whose brackets, in the SELECTED state, take that ink too. The fill is the state's
+     * neutral fill at UI_PANEL_ALPHA_SCREEN, so text contrast is the same on every card. The only place a
+     * rarity or tier colour appears in chrome.
+     */
+    public static void card(ShapeRenderer shapes, float x, float y, float width, float height,
+                            float inkRed, float inkGreen, float inkBlue, PlateState state) {
+        card(shapes, x, y, width, height, ArtDirection.UI_PLATE_CHAMFER, inkRed, inkGreen, inkBlue, state, 1f);
+    }
+
+    /** Order 5 R2 with a caller-chosen chamfer and an overall alpha multiplier (a dimmed card). */
+    public static void card(ShapeRenderer shapes, float x, float y, float width, float height, float chamfer,
+                            float inkRed, float inkGreen, float inkBlue, PlateState state, float alpha) {
+        panel(shapes, x, y, width, height, chamfer,
+                state.fillRed(), state.fillGreen(), state.fillBlue(),
+                ArtDirection.UI_PANEL_ALPHA_SCREEN * state.fillAlphaScale() * alpha,
+                inkRed, inkGreen, inkBlue, state.borderAlpha() * alpha, ArtDirection.UI_BORDER_THICKNESS);
+        if (state.drawsInkBrackets()) {
+            brackets(shapes, x, y, width, height, inkRed, inkGreen, inkBlue, alpha);
+        }
+    }
+
+    /**
+     * Order 5 R1, glyph half: a suit screen's title in the HEAVY face at TYPE_HEADING, UI_TEXT_PRIMARY,
+     * left-aligned with its top at {@code topY}. Unshadowed (screen text never sits on the 3D view). The
+     * font must be a HEAVY font; its scale is restored. The divider half is {@link #screenHeaderRule}, drawn
+     * in the ShapeRenderer pass (a ShapeRenderer and a SpriteBatch cannot be active at once).
+     */
+    public static void screenHeaderTitle(Batch batch, BitmapFont heavyFont, CharSequence title, float x, float topY) {
+        if (title == null || title.length() == 0) return;
+        float previousScaleX = heavyFont.getData().scaleX, previousScaleY = heavyFont.getData().scaleY;
+        Color fontColor = heavyFont.getColor();
+        float previousRed = fontColor.r, previousGreen = fontColor.g;
+        float previousBlue = fontColor.b, previousAlpha = fontColor.a;
+        heavyFont.getData().setScale(ArtDirection.TYPE_HEADING);
+        heavyFont.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                ArtDirection.UI_TEXT_PRIMARY_BLUE, previousAlpha);
+        heavyFont.draw(batch, title, x, topY);
+        heavyFont.setColor(previousRed, previousGreen, previousBlue, previousAlpha);
+        heavyFont.getData().setScale(previousScaleX, previousScaleY);
+    }
+
+    /** Order 5 R1, divider half: a {@link #divider} the header's width with its tick in SUIT_AMBER. */
+    public static void screenHeaderRule(ShapeRenderer shapes, float x, float y, float width, float alpha) {
+        divider(shapes, x, y, width,
+                ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, alpha);
+    }
+
+    /**
+     * Order 5 R1: where the divider goes under a title whose top is {@code titleTopY} - one TYPE_HEADING
+     * cap height, then UI_SCREEN_HEADER_RULE_GAP.
+     */
+    public static float screenHeaderRuleY(float titleTopY) {
+        return titleTopY - ArtDirection.PIXEL_FONT_TARGET_CAP_HEIGHT * ArtDirection.TYPE_HEADING
+                - ArtDirection.UI_SCREEN_HEADER_RULE_GAP;
+    }
+
+    /**
+     * Order 5 R7: the NEW marker - a SUIT_AMBER square of UI_NEW_MARKER_SIZE centred on (centerX, centerY),
+     * framed outside by a UI_INK_BLACK edge of UI_NEW_MARKER_EDGE. Five non-overlapping rects.
+     */
+    public static void newMarker(ShapeRenderer shapes, float centerX, float centerY, float alpha) {
+        float half = ArtDirection.UI_NEW_MARKER_SIZE * 0.5f;
+        float edge = ArtDirection.UI_NEW_MARKER_EDGE;
+        float left = centerX - half, bottom = centerY - half, size = ArtDirection.UI_NEW_MARKER_SIZE;
+        shapes.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE,
+                alpha);
+        shapes.rect(left - edge, bottom - edge, size + 2f * edge, edge);
+        shapes.rect(left - edge, bottom + size, size + 2f * edge, edge);
+        shapes.rect(left - edge, bottom, edge, size);
+        shapes.rect(left + size, bottom, edge, size);
+        shapes.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, alpha);
+        shapes.rect(left, bottom, size, size);
     }
 
     // ------------------------------------------------------------------ R4 meter

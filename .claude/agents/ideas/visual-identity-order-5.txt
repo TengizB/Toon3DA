@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: UI
 TITLE: Visual Identity 5 — Suit screens: inventory, cards, codex
 CREATED: 2026-10-19

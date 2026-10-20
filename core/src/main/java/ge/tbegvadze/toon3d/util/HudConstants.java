@@ -329,9 +329,9 @@ public final class HudConstants {
     public static final float[] RELIC_RARITY_COLOR_G = {0.70f, 0.42f, 0.70f, 0.12f};
     public static final float[] RELIC_RARITY_COLOR_B = {0.78f, 0.95f, 0.20f, 0.12f};
     /** The cost line of a CURSED card: the CURSED red. */
-    public static final float RELIC_COST_TEXT_COLOR_R = 0.85f;
-    public static final float RELIC_COST_TEXT_COLOR_G = 0.12f;
-    public static final float RELIC_COST_TEXT_COLOR_B = 0.12f;
+    public static final float RELIC_COST_TEXT_COLOR_R = CombatPalette.DAMAGE_RED;
+    public static final float RELIC_COST_TEXT_COLOR_G = CombatPalette.DAMAGE_GREEN;
+    public static final float RELIC_COST_TEXT_COLOR_B = CombatPalette.DAMAGE_BLUE;
 
     // --- RELIC FEEDBACK TEXT (relics-run-changing-artifacts): UI event text, not story strings ---
     /** Event text on bonding a relic: prefix + the relic's name. */
@@ -352,7 +352,7 @@ public final class HudConstants {
     /** Title of a QUARANTINE_LOCKER offer, drawn in the CURSED red. */
     public static final String RELIC_OFFER_TITLE_QUARANTINE_TEXT = "QUARANTINED - EACH ONE COSTS";
     public static final String RELIC_OFFER_LEAVE_TEXT            = "LEAVE IT";
-    public static final float  RELIC_OFFER_SCRIM_ALPHA           = 0.78f;
+    public static final float  RELIC_OFFER_SCRIM_ALPHA           = ArtDirection.UI_SCRIM_ALPHA;
     public static final float  RELIC_OFFER_GLOW_INSET            = 10f;
     public static final float  RELIC_OFFER_GLOW_ALPHA            = 0.22f;
     /** LEGENDARY glow pulse: period in seconds and the alpha swing around RELIC_OFFER_GLOW_ALPHA. */
@@ -381,8 +381,10 @@ public final class HudConstants {
     public static final float  RELIC_OFFER_SCALE_EFFECT          = 1.4f;
     public static final float  RELIC_OFFER_SCALE_LEAVE           = 1.6f;
     /** Dim steel LEAVE IT plate and its text. */
-    public static final float  RELIC_OFFER_LEAVE_R = 0.20f, RELIC_OFFER_LEAVE_G = 0.23f, RELIC_OFFER_LEAVE_B = 0.28f;
-    public static final float  RELIC_OFFER_LEAVE_TEXT_R = 0.78f, RELIC_OFFER_LEAVE_TEXT_G = 0.82f, RELIC_OFFER_LEAVE_TEXT_B = 0.88f;
+    public static final float  RELIC_OFFER_LEAVE_R = ArtDirection.UI_PANEL_RED, RELIC_OFFER_LEAVE_G = ArtDirection.UI_PANEL_GREEN,
+            RELIC_OFFER_LEAVE_B = ArtDirection.UI_PANEL_BLUE;
+    public static final float  RELIC_OFFER_LEAVE_TEXT_R = ArtDirection.UI_TEXT_PRIMARY_RED,
+            RELIC_OFFER_LEAVE_TEXT_G = ArtDirection.UI_TEXT_PRIMARY_GREEN, RELIC_OFFER_LEAVE_TEXT_B = ArtDirection.UI_TEXT_PRIMARY_BLUE;
 
     // --- BUILD page RELICS section (render/BuildPagePanel) ---
     public static final String RELIC_BUILD_HEADER_PREFIX = "RELICS (";

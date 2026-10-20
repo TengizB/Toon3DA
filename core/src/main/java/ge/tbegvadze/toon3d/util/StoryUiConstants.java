@@ -518,9 +518,9 @@ public final class StoryUiConstants {
     public static final float STORY_CODEX_PADDING = 18f;
     // Backdrop behind the panel: dark, but NOT the boot card's blackout — the codex is a menu the
     // player chose to open, not a beat that happened to them.
-    public static final float STORY_CODEX_SCRIM_ALPHA = 0.86f;
-    public static final float STORY_CODEX_SCRIM_R = 0.02f, STORY_CODEX_SCRIM_G = 0.02f,
-                              STORY_CODEX_SCRIM_B = 0.03f;
+    public static final float STORY_CODEX_SCRIM_ALPHA = ArtDirection.UI_SCRIM_ALPHA;
+    public static final float STORY_CODEX_SCRIM_R = ArtDirection.UI_INK_BLACK_RED,
+            STORY_CODEX_SCRIM_G = ArtDirection.UI_INK_BLACK_GREEN, STORY_CODEX_SCRIM_B = ArtDirection.UI_INK_BLACK_BLUE;
 
     // 1. HEADER — the archive title (or BACK, in an entry) and the close X.
     public static final float STORY_CODEX_HEADER_HEIGHT   = 62f;
