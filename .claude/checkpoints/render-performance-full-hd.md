@@ -70,7 +70,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
       DONE WHEN: AFTER columns filled for every pose; A1 holds (or the R21 stop report written + owner told); docs
       per plan step 8 updated; build + test show no new failure.
 - [x] **CP8a** — reviewer r1 PASS WITH FIXES; fixes applied, A9/A10 re-verified (`/tmp/claude-0/recheck/`), build = baseline (480 tests, 1 pre-existing StoryBarkTest failure).
-- [ ] **CP8** — gate.
+- [x] **CP8** — gate.
       DONE WHEN: reviewer PASS (or PASS WITH FIXES, fixes committed); IMPLEMENTATION NOTE with final table under
       the idea header; STATUS: IMPLEMENTED with the date.
 
@@ -279,3 +279,7 @@ wall-renderer-guide "default-HD renderers" reworded. (NB1) AS6 change in the IMP
 comment. (NB3) isFullyOpaque scans RGBA8888 alpha bytes directly. (NB4) GC wording reconciled. Nits: probe batch /
 builder capacities named, `far` -> `clampDepthTiles`, CLAUDE.md render-order step 2. A9/A10 re-check after the
 depth change: `/tmp/claude-0/recheck/`. (B1) OPEN: owner decision on A1 / R21 → DECISIONS, then STATUS: IMPLEMENTED.
+
+**CP8 (closed).** Owner decision on the R21 stop report: option 1 — accept A1 as partial, check on the phone
+(recorded as D1 in the idea file's DECISIONS). Reviewer r1 PASS WITH FIXES; every fix landed in CP8a (`9a6338a`) and
+was re-verified (splash, A9, A10, build = baseline). STATUS: IMPLEMENTED 2026-10-20. Work complete.

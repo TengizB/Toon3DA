@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Render performance - Full HD smooth again (floor, walls)
 CREATED: 2026-10-20
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
 ---
 IMPLEMENTATION NOTE (2026-10-20, orchestrator; live record .claude/checkpoints/render-performance-full-hd.md)
   DEVIATION 1 - floor/ceiling geometry (R1-R3, AS5/AS6). The R1-R3 row spans were built first and MEASURED slower
@@ -29,7 +29,7 @@ IMPLEMENTATION NOTE (2026-10-20, orchestrator; live record .claude/checkpoints/r
     calls; GC: 2 events per run, both during startup, none in play, at B0 and AFTER alike. A9 within 1.04/255.
   A1 PARTIAL: P3-P5 below old HD; P1/P2 still ~1-2 ms above old HD and at the 0.80 x B0 line. R21 followed - columns,
     rows and the FULL_HD default unchanged; stop report + options in the checkpoint file, owner decision pending
-    (see DECISIONS). A6 and A11's lit/unlit same-tile check not stageable in the container (reasons in the checkpoint).
+    (owner decided: accept - see DECISIONS D1). A6 and A11's lit/unlit same-tile check not stageable in the container (reasons in the checkpoint).
 ---
 
 OVERVIEW
@@ -561,7 +561,11 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-  (none yet - no questions were needed; see ASSUMPTIONS)
+  D1 (2026-10-20, owner, after the R21 stop report): A1 is ACCEPTED AS PARTIAL - P3-P5 are below old HD, P1/P2
+     remain ~1-2 ms above old HD in the container. No further optimisation in this idea; the owner checks on the
+     phone (build with RenderConstants.PERF_PROBE_FORCE_ON = true and read the readout - see OWNER CHECK). If the
+     phone misses 60 fps, a follow-up idea starts from those numbers (candidates: the wall/billboard column cost,
+     the full-screen view vignette).
 
 
 OPEN QUESTIONS
