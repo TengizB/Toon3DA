@@ -10,7 +10,7 @@
 # Moved from: .claude/CLAUDE.md
 # WallRenderer implementation details — reference for agents extending the renderer.
 
-=== PER-FRAME PIPELINE (2 GPU draw calls total) ===
+=== PER-FRAME PIPELINE (historic outline: steps 1-2 are now FloorCeilingRenderer's own GPU pass) ===
 
 1. Ceiling rect (top half, dark navy 0.1,0.1,0.2) via 1×1 white pixel texture tinted.
 2. Floor rect (bottom half, dark gray 0.12,0.12,0.12) — same approach.
@@ -39,8 +39,21 @@ Shading: batch.setColor(red, green, blue, 1f) before each draw — embeds tint i
   light add, skipped entirely at intensity 0, blend func switched exactly twice. A column with a door
   panel lights the panel only. See docs/art-direction.txt section 11.
 
+BASE-PASS COST CUTS (render-performance-full-hd, both pixel-identical):
+  R16 OPAQUE BASE PASS - every wall/column/door texture goes through finalizeWallTexture(pixmap), which
+      records whether every texel is opaque (OPAQUE_WALL_TEXTURES; pruned by forgetWallTextureOpacity on
+      dispose). resolveLevelWallAndColumnTextures() folds the level's set into levelSurfacesOpaque; when true the
+      base pass runs with batch.disableBlending() (re-enabled before Phase 3), which saves fill-rate for nothing
+      blending would have changed. A level with any non-opaque wall texture keeps blending.
+  R18 COLUMN MERGE - neighbouring columns whose surface slice is EXACTLY equal (texture, texColumn, srcY,
+      srcHeight, drawBottom, drawTop, colour; no door panel) are submitted as one wider quad sampling the same
+      1-texel source column (isSameSurfaceSlice). Built because the base-pass submission measured ~31% (median)
+      of the CPU wall pass. A W-ATLAS (one atlas page for the level's wall textures) was measured NOT to be worth
+      it (median 3 wall draw calls) and is not built.
+  The muzzle-light Phase 3 still draws per column.
+
 Performance:
-  Ceiling + floor  → 0 GL calls (batched, same texture)
+  Ceiling + floor  → drawn by FloorCeilingRenderer (its own batch), not here
   Texture switch   → 1 GL call  (whitePixelTexture → wallTexture)
   all wall cols    → 1 GL call  (at batch.end())
   Total: 2 GL draw calls regardless of resolution or texture size.
@@ -50,8 +63,10 @@ Performance:
 The ray-column count is RUNTIME state, set by the player's RESOLUTION setting (settings screen
 and codex strip; persisted as `story.setting.render.resolution`). `util/RenderResolution`:
 
-  HD       1280 columns, columnWidth 1.0 world unit,   floor backdrop 320x180  (performance tier)
-  FULL_HD  1920 columns, columnWidth 0.667 world unit, floor backdrop 960x540  (default, quality tier)
+  HD       1280 columns, columnWidth 1.0 world unit,   180 floor/ceiling rows  (lighter tier)
+  FULL_HD  1920 columns, columnWidth 0.667 world unit, 540 floor/ceiling rows  (default, quality tier)
+  (The floor/ceiling is GPU-drawn - perspective tile quads + a far span band, sampled at native resolution;
+   the row count only fixes its per-row tables. See docs/art-direction.txt -> FLOOR / CEILING PIPELINE.)
 
 World units stay 1280x720 — only the 3D view's internal resolution changes. HUD, text and menus
 are already drawn at the device's native pixels.
@@ -61,8 +76,8 @@ getProjectionColumnCount(), getColumnWidth(). World.applyStoryAccessibilitySetti
 setting into it and into FloorCeilingRenderer.setRenderResolution() at startup, on every knob
 tap and after every floor rebuild (rebuildForLevel builds fresh default-HD renderers).
 Arrays and SpriteBatches are sized for RenderConstants.RENDER_RESOLUTION_MAX_COLUMNS, so a
-change never allocates on the render path; only the floor backdrop Pixmap/Texture is rebuilt,
-and only when the tier actually changes.
+change never allocates on the render path; FloorCeilingRenderer only rebuilds its row tables
+(no GPU resource depends on the tier), and only when the tier actually changes.
 
 COLUMN SPACE vs WORLD X — the rule every billboard renderer must follow:
   - GameMath.spriteScreenColumnCenter(..., projectionColumnCount) returns a COLUMN.

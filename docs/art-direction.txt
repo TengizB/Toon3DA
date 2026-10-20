@@ -17,8 +17,9 @@ Semantic combat colours are reserved and never decorate chrome.
 
 Series rules (repeated by every order):
   V1  No new image/font/audio ASSET files, no new dependency. Everything new is generated in code.
-  V2  No custom ShaderProgram. SpriteBatch / ShapeRenderer colour multiplication and the CPU floor
-      backbuffer only, so every GLES2 phone behaves the same.
+  V2  No custom ShaderProgram. SpriteBatch / ShapeRenderer colour multiplication (and, since
+      render-performance-full-hd, the floor/ceiling as vertex colours on textured quads through the
+      default shader) only, so every GLES2 phone behaves the same.
   V3  No allocation in any render() path.
   V4  The 2D game is untouched: no symbol, rule, turn cost, balance number, persistence key or touch
       hit area changes.
@@ -92,8 +93,12 @@ bodies — threats read warmer and cleaner than the haze behind them), GRADE_STR
 Where it runs:
   WallRenderer          per column, on WORKER threads → static AtmosphereGrade.evaluateInto into the
                         column's own `gradeScratch` (never the shared evaluate() fields).
-  FloorCeilingRenderer  per backdrop ROW, precomputed into `rowTintTable` (ctor + setRenderResolution;
-                        row distance is player-independent); per pixel GameMath.applyRgbShadeToPackedRGBA.
+  FloorCeilingRenderer  on the GPU (render-performance-full-hd): per TILE CORNER of the view lattice for the
+                        near region (AtmosphereGrade.evaluateInto at the corner's depth, interpolated
+                        perspective-correctly across the tile) and per ROW of the far band (`rowTintTable`,
+                        ctor + setRenderResolution). The texel factor is GameMath.floorSpanAdjustedShade /
+                        floorSpanRedFactor / floorSpanGreenBlueFactor - the CPU caster's expression, now the
+                        vertex colour. See "FLOOR / CEILING PIPELINE" below.
   PropRenderer          per sprite (render thread, grade.evaluate()); depth in tiles. The muzzle-light add
                         is read right after evaluate() (bodyLightAdd*), zeroed for emissive draws, and drawn as an additive
                         re-draw of the body.
@@ -155,26 +160,49 @@ Mip chain and LOD (render-quality follow-up): SurfaceMaterialRegistry caches, pe
 (RenderConstants.SURFACE_MATERIAL_MIP_LEVELS): level 0 = the 64x64 texels, levels 1..3 = 32, 16, 8, each a
 2x2 box filter (per-channel R,G,B,A average, rounded) of the previous level, same row-major layout and
 orientation. getPixels(id) = level 0; getPixels(id, level) the rest. Built once, shared, read-only.
-FloorCeilingRenderer picks ONE level per backdrop ROW (row distance is player-independent, so the table is
-rebuilt only with the tint table on construction / resolution change) with GameMath.surfaceMaterialMipLevel:
-  screenTexels = rowDistance * (2*tan(halfFov)) / backdropWidth * 64        (GameMath.floorScreenFootprintTexels)
+FloorCeilingRenderer keeps ONE level per ROW of the tier's row model (row distance is player-independent, so the
+table is rebuilt only with the tint table on construction / resolution change) with
+GameMath.surfaceMaterialMipLevel; a near-region TILE uses the level of the row at its centre depth
+(GameMath.floorRowAtDepth), the far band uses its row's level. The screen term keeps the old backdrop width as a
+reference (GameMath.floorMipReferenceColumnCount: 540 rows -> 960, 180 -> 320), so the table is byte-identical:
+  screenTexels = rowDistance * (2*tan(halfFov)) / referenceColumns * 64     (GameMath.floorScreenFootprintTexels)
   depthTexels  = |rowDistance(row) - rowDistance(row+1)| * 64               (GameMath.floorDepthFootprintTexels)
   level = clamp(floor(log2(max(1, max(screenTexels, depthTexels) * SURFACE_MATERIAL_MIP_BIAS))), 0, 3)
 The DEPTH footprint is what causes distant floor speckle (one backdrop row spans a long stretch of floor far
-away) and dominates the screen-X term. Row distances are the clamped values fillRows uses; the last row reuses
+away) and dominates the screen-X term. Row distances are the clamped row values; the last row reuses
 the previous difference. The table is then forced non-decreasing up the screen, so the clamped far band
 (zero depth difference) keeps the last level instead of un-blurring.
 Near rows stay level 0 (crisp pixel-art texels); only distant rows blur. The table uses the default player FOV.
-Sampling at level L: edge = 64 >> L, texel = (int)(frac * edge) & (edge - 1).
+Sampling at level L: one GL Texture per level (render/SurfaceMaterialTextures: wrap Repeat, filter Nearest, no GL
+mipmaps), texel = frac(tile coordinate) * edge - the CPU caster's index, same orientation.
+
+FLOOR / CEILING PIPELINE (render-performance-full-hd) - GPU, SpriteBatch DEFAULT shader only (V2 honoured)
+Nothing is shaded per pixel on the CPU and nothing is uploaded per frame (the old 960x540 CPU backdrop, its 2 MB
+per-frame upload and its worker pool are gone). One batch, per frame:
+  1. FAR BAND - the rows at or past FLOOR_MAX_VISIBLE_DISTANCE_CELLS (all one clamped distance) as ONE strip of
+     horizontal spans: the clamp-depth row walked across the tile grid (GameMath.floorSpanAxisCrossingParameter),
+     runs of equal tile brightness merged, split at FLOOR_SPAN_MAX_TILES, UVs rebased (floorSpanUvRebaseShift).
+     It starts FLOOR_BAND_OVERLAP_ROWS below the clamp row and is drawn first, so no seam can show.
+  2. NEAR REGION - one quad per visible floor tile, in TILE coordinates, through a projective batch matrix
+     (GameMath.floorPlaneClipMatrix: w = depth, near clip FLOOR_PLANE_NEAR_TILES, far clip = the clamp). The GPU
+     interpolates the tile's own 0..1 UVs and its four corner colours perspective-correctly; the plane is the
+     exact inverse of the floor-row mapping, so it meets the walls as the CPU caster did. Tiles are culled to the
+     view wedge and grouped by material level (at most 4 binds per surface).
+  3. Base pass with blending off; ADDITIVE layers (SRC_ALPHA, ONE) only for factors above 1: a mood tint above 1.0
+     is first BAKED into the per-floor material textures per channel when the brightest texel stays <= 255
+     (GameMath.materialChannelBakeScale; every colour of that surface is divided by the scale), so in practice the
+     additive layer only carries the muzzle light (GameMath.colourFactorExcessLayer).
+Why tiles and not one quad per row: CP4 of render-performance-full-hd measured the row version (540 one-pixel-tall
+full-width quads) and the software GPU was triangle-bound on them - slower than the CPU backdrop. A few hundred
+tile quads cost about what HD's old backdrop did. Draw calls: about 10 per frame (2 band + up to 4 per surface).
 
 RENDER RESOLUTION TIERS
-Full HD (the default) is the QUALITY tier: 1920 ray columns, floor/ceiling backdrop 960x540 (divisor 2).
-HD is the PERFORMANCE tier: 1280 columns, backdrop 320x180 (divisor 4). The divisor is carried per tier in
-util/RenderResolution (RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR / _FULL_HD). Measured on the 4-core
-capture VM (software GPU on the same 4 cores, so only indicative): the new default (Full HD, 960x540 backdrop,
-9x the floor pixels and a 2 MB backdrop upload per frame) runs 18-19.4 ms/frame vs 13-14.5 ms for the old HD
-default — about +4.5 ms, of which the finer backdrop alone is about +2 ms (divisor 2 vs 4 at Full HD).
-NOT yet measured on a real Android phone; HD stays selectable in SETTINGS as the fallback.
+Full HD (the default) is the QUALITY tier: 1920 ray columns, 540 floor/ceiling rows.
+HD is the lighter tier: 1280 columns, 180 rows (RenderResolution.getFloorCeilingRowCount(); RenderConstants
+RENDER_RESOLUTION_*_FLOOR_CEILING_ROWS). Both sample the floor at the device's native horizontal resolution.
+COST (render-performance-full-hd CP7, the 4-core capture VM - llvmpipe shares the CPUs, so only RELATIVE numbers
+in one session mean anything, never phone numbers): @@COST@@
+The phone check is the owner's: build with RenderConstants.PERF_PROBE_FORCE_ON = true and read the probe readout.
 
 
 7. RECIPE C — add a mood or a material
@@ -271,9 +299,10 @@ Firing a gun briefly lights the nearby world in the weapon's colour, through the
   multiplier and clamped it; near surfaces already sit at multiplier ~1.0 (MAX_LIGHTING_SHADE), so the light
   was clamped away and measured +2..3/255. Decision: the light must be able to exceed the clamp.)
   How each surface does it:
-    floor + ceiling (CPU)  GameMath.applyRgbShadeAndLightToPackedRGBA: base factor (alert maths and its red
-                           min(1,..) exactly as before) PLUS the row's light add, final channel clamped.
-                           Rows with no light use the old function.
+    floor + ceiling (GPU)  GameMath.floorSpanRedFactor / floorSpanGreenBlueFactor: base factor (alert maths
+                           and its red min(1,..) exactly as before) PLUS the corner's light add (falloff at
+                           the corner depth); the part above 1 is drawn by the additive layer
+                           (colourFactorExcessLayer), only for tiles whose corners carry it.
     walls / doors / columns  the base column draws are unchanged. Workers fill the per-column light add
                            (gradeScratch[3..5] -> surfaceLight* / doorPanelLight*). A separate PHASE 3 in
                            WallRenderer.render re-draws the same column slices with additive blending
@@ -297,7 +326,7 @@ Firing a gun briefly lights the nearby world in the weapon's colour, through the
   intensity 0.
   Threading contract: the light state is a per-frame SNAPSHOT mutated only by pulseMuzzleLight, update
   and resetLight, all on the render thread inside World.update before any renderer starts its frame.
-  Worker threads (WallRenderer columns, floor rows) read it only through lightAddInto / precomputed
+  Worker threads (WallRenderer columns) read it only through lightAddInto / precomputed
   tables; render-thread code reads atmosphereGrade.lightAddRed/Green/Blue right AFTER evaluate()
   (never after evaluateWeaponTint). Walls carry it in gradeScratch[3..5]; the floor uses a per-row
   falloff table x the frame intensity x colour.

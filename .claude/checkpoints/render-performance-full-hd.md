@@ -65,6 +65,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP6** — billboards + allocations.
       DONE WHEN: occluder/aura loops range-ordered (R19); CP2's render-path allocations removed (R20); A6 (if
       stageable), A8, A13 vs CP5 hold; build green.
+- [x] **CP7a** — docs updated (art-direction, wall-renderer-guide, CLAUDE.md, run-game SKILL.md); cost numbers pending (`@@COST@@` in art-direction.txt).
 - [ ] **CP7** — AFTER numbers + docs.
       DONE WHEN: AFTER columns filled for every pose; A1 holds (or the R21 stop report written + owner told); docs
       per plan step 8 updated; build + test show no new failure.
@@ -229,3 +230,8 @@ PropRenderer's keycard/credit aura loops were already one texture inside one ble
   one log String every 5 s only when enabled). R20: no render-path allocation was found by measurement in CP2.
 - A13 at CP6: by construction (above); a same-run toggle was not built for these loops (it would need a parallel
   legacy branch in four renderers).
+
+**CP7a (closed).** Docs drafted for plan step 8. `docs/art-direction.txt` carries the placeholder `@@COST@@` in
+RENDER RESOLUTION TIERS — CP7 replaces it with the AFTER numbers. AFTER matrix running: `/tmp/claude-0/scripts/after.sh`
+→ `/tmp/claude-0/final/` (B0/B1 control runs from the worktree at the start and end, AF-/AH- = AFTER FULL_HD / HD,
+5 moods × 2 reps, plus AF-probe-cpu / AF-probe-sync). Table: `python3 /tmp/claude-0/scripts/table.py DIR B0 B1 AF AH`.
