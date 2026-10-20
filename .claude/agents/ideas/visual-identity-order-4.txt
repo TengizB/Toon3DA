@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: UI
 TITLE: Visual Identity 4 — UI kit and the in-play HUD layer
 CREATED: 2026-10-19
