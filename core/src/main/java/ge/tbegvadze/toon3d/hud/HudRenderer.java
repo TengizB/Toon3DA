@@ -33,7 +33,7 @@ import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.world.HudState;
 
 /**
- * Left chrome HUD panel only (x 0..420, y 0..206 — bottom-left corner).
+ * Left chrome HUD panel only (x 0..420, y 0..HUD_HEIGHT 160 — bottom-left corner).
  *
  * Reworked vitals layout: four "vital rows" (HP, AR, AMMO, XP) stacked top-to-bottom, each one a
  * left-aligned label, a segmented bar (split into small rectangles), and a right-aligned numeric
@@ -350,7 +350,7 @@ public class HudRenderer implements Renderable, Disposable {
                 ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN, ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
         float ledX = panelX + panelW - HudConstants.HUD_LED_INSET;
-        float ledY = panelY + panelH - HudConstants.HUD_LED_INSET;
+        float ledY = panelY + panelH - HudConstants.HUD_PANEL_PADDING / 2f;
         if (alert) {
             shapes.setColor(CombatPalette.DAMAGE_RED * pulse, CombatPalette.DAMAGE_GREEN * pulse,
                     CombatPalette.DAMAGE_BLUE * pulse, 1f);

@@ -62,6 +62,7 @@ count events with `grep -c Pause FILE`.
 | `engage` | reflection: commit the route map's first selectable node (the map is time-seeded, so node taps are not repeatable) — open the map first, then `engage` lands on floor 1 proper |
 | `damagenumber:AMOUNT[:true]` | reflection: a floating damage number two tiles ahead (`true` = the kill variant) |
 | `eventtext:CODE:TEXT` | reflection: `EventTextSystem.spawnWithColor(TEXT, CODE)` (0 white, 1 green, 2 red, 3 grey, 4 gold, 5 credit, 6 blue, 7 armour, 8 amber; TEXT without `;` or `:`) |
+| `status:STATUS_TYPE:TURNS` | reflection: activate one of the player's status effects (e.g. `status:BURNING:3`) — the HUD status icons + debuff list |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 

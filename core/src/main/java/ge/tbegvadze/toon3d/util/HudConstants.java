@@ -9,15 +9,22 @@ public final class HudConstants {
     // Left vitals panel — anchored to the bottom-left corner (x 0..WIDTH, y 0..HEIGHT).
     // A vertical stack of "vital rows": each row is [label] [gradient bar] [value] where the
     // label sits to the LEFT of the bar and the value to the RIGHT — text is never drawn on top
-    // of a bar, so bars and numbers can never overlap. Bars are smooth per-vertex gradients
-    // (no chunky segments) so they read crisply at any device resolution. Below the bars sit the
-    // numbered weapon-slot strip and a thin status-effect icon row.
+    // of a bar, so bars and numbers can never overlap. Five rows (HP, AR, AM, XP, WP) at a 28-unit
+    // pitch fill the panel exactly, with HUD_PANEL_PADDING above the first and below the last; the
+    // status-effect icons float just ABOVE the panel, and only while an effect is active, so the
+    // panel never carries an empty band.
     // =====================================================================
-    public static final float HUD_HEIGHT                      = 206f;
+    /** Panel padding above the HP row and below the WP row. */
+    public static final float HUD_PANEL_PADDING               = 14f;
+    /** 5 rows: 2 x padding + 4 x 28 pitch + one 20-unit row = 160. */
+    public static final float HUD_HEIGHT                      = 160f;
     public static final float HUD_LEFT_PANEL_WIDTH            = 420f;
     public static final float HUD_LED_RADIUS                  = 3f;
-    /** Status LED centre, inset from the panel's top-right corner (inside the corner bracket). */
-    public static final float HUD_LED_INSET                   = 14f;
+    /**
+     * Status LED centre: this far left of the panel's right edge (clear of the top-right corner bracket), and
+     * centred in the top padding band, so it never touches the HP value below it.
+     */
+    public static final float HUD_LED_INSET                   = 30f;
     // The panel is a UiKit chamfered slab (visual-identity-order-4 R9); its opacity is the kit's HUD alpha.
     public static final float HUD_PANEL_ALPHA                 = ArtDirection.UI_PANEL_ALPHA_HUD;
 
@@ -34,15 +41,15 @@ public final class HudConstants {
     public static final int   HUD_BAR_SEGMENT_COUNT           = 20;
 
     // Vital row bar Y (bottom edge); bars span y: barY .. barY + HUD_BAR_HEIGHT. Row pitch = 28px.
-    public static final float HUD_HP_BAR_Y                    = 172f;
-    public static final float HUD_AR_BAR_Y                    = 144f;
-    public static final float HUD_CLIP_BAR_Y                  = 116f;
-    public static final float HUD_XP_BAR_Y                    = 88f;
+    public static final float HUD_HP_BAR_Y                    = 126f;
+    public static final float HUD_AR_BAR_Y                    = 98f;
+    public static final float HUD_CLIP_BAR_Y                  = 70f;
+    public static final float HUD_XP_BAR_Y                    = 42f;
 
-    // Weapon row — a fifth vital row (bar Y 60, the 28-unit row pitch below XP): "WP" label, the EQUIPPED
+    // Weapon row — a fifth vital row (the bottom row, 28-unit pitch below XP): "WP" label, the EQUIPPED
     // weapon's class glyph + full name + LV tag in the bar column, and one small numbered tab per weapon slot
     // right-aligned in the value column (owner redesign after visual-identity-order-4).
-    public static final float HUD_WEAPON_ROW_Y                = 60f;
+    public static final float HUD_WEAPON_ROW_Y                = HUD_PANEL_PADDING;
     /** Damage-class glyph before the equipped weapon's name (balance-overhaul order 3, C3). */
     public static final float HUD_CLASS_GLYPH_SIZE            = 9f;
     /** Alpha of a carried (not equipped) weapon's class-colour bar on its tab. */
@@ -81,19 +88,19 @@ public final class HudConstants {
     // the low-HP pulse threshold so the warning appears a little before the situation is critical.
     public static final float HUD_MEDKIT_WARN_HP_THRESHOLD    = 0.40f;
     // Baseline Y (world units) for the centred medkit-reminder text, just above the HUD chrome.
-    public static final float HUD_MEDKIT_WARN_Y               = HUD_HEIGHT + 70f;
+    public static final float HUD_MEDKIT_WARN_Y               = 276f;   // fixed: clear of WEAPON_NAME_LABEL_Y
 
     // The full-screen death report used to live here.  Story UI order-8 folded it into the
     // death -> reprint framing: the run's numbers are now a PAGE of the reprint card's screen
     // (render/InstanceReportRenderer), so its geometry lives with the other framing screens in
     // util/StoryUiConstants (STORY_REPORT_*) rather than in the HUD's constants.
 
-    // Status-effect icon row — small procedural squares along the bottom of the left panel,
-    // in the clear band beneath the weapon-slot strip (no overlap with the slots).
+    // Status-effect icon row — small procedural squares floating just ABOVE the left panel, drawn only
+    // while an effect is active (so the panel itself never reserves an empty band for them).
     public static final float HUD_STATUS_ICON_SIZE      = 16f;
     public static final float HUD_STATUS_ICON_GAP       = 5f;
     public static final float HUD_STATUS_ROW_LOCAL_X    = 16f;
-    public static final float HUD_STATUS_ROW_LOCAL_Y    = 14f;
+    public static final float HUD_STATUS_ROW_LOCAL_Y    = HUD_HEIGHT + 6f;
 
     // Always-on credits readout — top-right corner of the screen, clear of the mini-map
     // (top-left) and the bottom HUD chrome. World units, screen 1280x720, Y-up.
@@ -155,7 +162,7 @@ public final class HudConstants {
     public static final float WEAPON_CONVERT_BUTTON_WIDTH  = 300f;
     public static final float WEAPON_CONVERT_BUTTON_HEIGHT = 64f;
     // Ground-weapon name label shown in HUD when card is closed but player is on weapon tile
-    public static final float WEAPON_NAME_LABEL_Y        = 224f;   // HUD_HEIGHT + 18
+    public static final float WEAPON_NAME_LABEL_Y        = 224f;   // centre gap, above the weapon sprite
     // Stat bar normalisers — only affect visual fill, not game logic
     public static final int   WEAPON_STAT_BAR_MAX_DAMAGE = 60;
     public static final int   WEAPON_STAT_BAR_MAX_RANGE  = 20;

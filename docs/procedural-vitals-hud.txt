@@ -6,7 +6,7 @@ Status:  IMPLEMENTED (branch claude/procedural-vitals-hud-5IQfh)
 LEFT-HUD REWORK (current)
 -------------------------
 The HUD is now a single LEFT panel anchored to the bottom-left corner
-(x 0..420, y 0..206) — the old centre/right strip panels are gone. It is a
+(x 0..420, y 0..160 since the 2026-10-20 compaction; it was 206) — the old centre/right strip panels are gone. It is a
 vertical stack of four "vital rows" (HP, AR, AMMO, XP), each one:
   [2-letter label]  [segmented bar]  [right-aligned value]
 Label sits LEFT of the bar and value sits RIGHT of the bar, so text is never
@@ -47,7 +47,12 @@ util/CombatPalette. Palette by element:
                             equipped = PRESSED plate in SUIT_AMBER, filled = IDLE with a class-colour
                             foot bar, empty = DISABLED. Only the equipped weapon is named — the old
                             per-slot name plates were too cramped to read (owner redesign, 2026-10-20)
-  status LED                SUIT_AMBER at rest, pulsing DAMAGE on alert
+  panel height              HUD_HEIGHT 160: five rows at a 28 pitch with HUD_PANEL_PADDING 14 above
+                            HP and below WP, so the panel carries no empty band
+  status icons              float just ABOVE the panel (HUD_STATUS_ROW_LOCAL_Y = HUD_HEIGHT + 6),
+                            drawn only while an effect is active
+  status LED                SUIT_AMBER at rest, pulsing DAMAGE on alert; centred in the top padding,
+                            30 left of the right edge (clear of the HP value and the corner bracket)
   credits readout           CREDITS_GOLD, TYPE_LABEL; debuff list keeps its status colours
   NAV OFFLINE (BLACKOUT)    UiKit panel + brackets in the mini-map's rectangle, FACILITY_CYAN text
   ground weapon / medkit    SUIT_AMBER (medkit warning lerps DAMAGE <-> SUIT_AMBER)

@@ -153,6 +153,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "eventtext":
                     spawnEventText(Byte.parseByte(step[2]), step[3]);
                     break;
+                case "status":
+                    setPlayerStatus(step[2], Integer.parseInt(step[3]));
+                    break;
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
                     break;
@@ -458,6 +461,29 @@ public class CaptureLauncher extends ApplicationAdapter {
             Object system = fieldValue(worldObject(), "eventTextSystem");
             system.getClass().getMethod("spawnWithColor", String.class, byte.class).invoke(system, text, colorCode);
             System.out.println("[capture] event text " + text);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code status:STATUS_TYPE:TURNS} — makes the player's StatusEffect of that type active for TURNS turns
+     * (magnitude 5, one stack) by setting its fields, so the HUD's status icons and debuff list can be seen.
+     * A dev hook for reaching a screen, never game logic.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void setPlayerStatus(String typeName, int turns) {
+        try {
+            Object player = fieldValue(worldObject(), "player");
+            Class statusType = Class.forName("ge.tbegvadze.toon3d.status.StatusType");
+            Object effects = player.getClass().getMethod("getActiveEffects").invoke(player);
+            Object effect = ((java.util.Map) effects).get(Enum.valueOf(statusType, typeName));
+            for (String name : new String[] {"remainingTurns", "magnitude", "stacks"}) {
+                Field field = findField(effect.getClass(), name);
+                field.setAccessible(true);
+                field.setInt(effect, name.equals("remainingTurns") ? turns : name.equals("magnitude") ? 5 : 1);
+            }
+            System.out.println("[capture] status " + typeName + " " + turns);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

@@ -807,7 +807,7 @@ settings screen, if one is open over it) and returns before the 3D view.
 
 ### HUD Layout (HudRenderer)
 
-> **Current state (visual-identity-order-4):** `hud/HudRenderer` draws ONE left panel (x 0..420, y 0..206: HP / AR / AMMO / XP rows, the weapon-slot strip, status icons); there is no right panel and no face box any more. The layout below is the original design, kept for history; `docs/procedural-vitals-hud.txt` is current.
+> **Current state (visual-identity-order-4):** `hud/HudRenderer` draws ONE left panel (x 0..420, y 0..160: HP / AR / AM / XP / WP rows; status-effect icons float just above it while active); there is no right panel and no face box any more. The layout below is the original design, kept for history; `docs/procedural-vitals-hud.txt` is current.
 
 Two semi-transparent chrome panels; centre gap left clear so the weapon sprite is never occluded.
 
