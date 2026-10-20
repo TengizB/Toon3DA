@@ -56,6 +56,7 @@ count events with `grep -c Pause FILE`.
 | `call:PATH:METHOD[:INT]` | reflection: invoke a no-arg/int-arg method on `Main.world` (PATH `.`) or a field path from it (`player`, `playerProgress`) — e.g. `call:.:onDescentRequested` (route map), `call:player:applyDamage:9999` (death), `call:playerProgress:addXp:500` (level-up), `call:.:openShop` |
 | `set:PATH:VALUE` | reflection: set a boolean/int field reached from `Main.world` (e.g. `set:startRoomChoiceResolved:true`, then `call:.:onDescentRequested` opens the route map from the start room) |
 | `equip:INDEX` | reflection: put arsenal weapon INDEX into the loadout and select it (start room arsenal: 0 shotgun, 1 double barrel, 2 plasma, 3 chaingun, ...) — a HUD with a ranged weapon and ammo |
+| `hittest:X:Y` | prints which touch buttons' hit areas contain world (X, Y), each tested as if visible (contextual INSPECT / USE too) — proves a tap area without the context that shows the button |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 

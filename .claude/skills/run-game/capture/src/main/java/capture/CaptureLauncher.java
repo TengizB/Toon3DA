@@ -135,6 +135,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "set":
                     setOnWorld(step);
                     break;
+                case "hittest":
+                    hitTest(Float.parseFloat(step[2]), Float.parseFloat(step[3]));
+                    break;
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
                     break;
@@ -283,6 +286,42 @@ public class CaptureLauncher extends ApplicationAdapter {
             loadout.getClass().getMethod("tryEquip", weaponType).invoke(loadout, weapon);
             inventory.getClass().getMethod("selectLoadoutWeapon", weaponType).invoke(inventory, weapon);
             System.out.println("[capture] equipped arsenal weapon " + arsenalIndex);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code hittest:X:Y} — prints which touch buttons' hit areas contain world point (X, Y), testing every button
+     * as if visible (contextual INSPECT / USE included) and restoring visibility after. Proves a tap area without
+     * needing the context that shows the button. A dev hook, never game logic.
+     */
+    private void hitTest(float worldX, float worldY) {
+        try {
+            Field worldField = Main.class.getDeclaredField("world");
+            worldField.setAccessible(true);
+            Object world = worldField.get(main);
+            Field stateField = findField(world.getClass(), "touchInputState");
+            stateField.setAccessible(true);
+            Object state = stateField.get(world);
+            Field buttonsField = findField(state.getClass(), "buttons");
+            buttonsField.setAccessible(true);
+            Object[] buttons = (Object[]) buttonsField.get(state);
+            StringBuilder hits = new StringBuilder();
+            for (Object button : buttons) {
+                Field visibleField = findField(button.getClass(), "visible");
+                Field actionField = findField(button.getClass(), "action");
+                visibleField.setAccessible(true);
+                actionField.setAccessible(true);
+                boolean wasVisible = visibleField.getBoolean(button);
+                visibleField.setBoolean(button, true);
+                java.lang.reflect.Method contains = button.getClass().getDeclaredMethod("contains", float.class, float.class);
+                contains.setAccessible(true);
+                boolean hit = (Boolean) contains.invoke(button, worldX, worldY);
+                visibleField.setBoolean(button, wasVisible);
+                if (hit) hits.append(actionField.get(button)).append(' ');
+            }
+            System.out.println("[capture] hittest (" + worldX + "," + worldY + ") -> " + hits);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

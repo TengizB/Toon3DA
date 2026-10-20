@@ -42,7 +42,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP1** — UiKit + PlateState + ArtDirection R7 constants (deliberately unused).
       DONE WHEN: they exist, nothing reads them yet, build green.
 - [x] **CP2** — HudRenderer restyled (R9 + R15). DONE WHEN: A2 (HUD), A3 (HUD), A9 seen on run; build green.
-- [ ] **CP3** — TouchControllerRenderer restyled (R10), constant renamed. DONE WHEN: A4 incl. tap spot-check; build green.
+- [x] **CP3** — TouchControllerRenderer restyled (R10), constant renamed. DONE WHEN: A4 incl. tap spot-check; build green.
 - [ ] **CP4** — LevelRenderer (R11) + BossHudRenderer (R12). DONE WHEN: A5 seen on run; build green.
 - [ ] **CP5** — EventText (R13) + ImpactEffect damage numbers (R14), docs. DONE WHEN: A6, A7, A8 hold; build + test
       at baseline.
@@ -70,3 +70,13 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   it). Seen on run: HUD full HP + low HP (pulsing DAMAGE value), plasma equipped (4/4 [0]), NAV OFFLINE plate
   (via `set:minimapOffline:true` + `set:hudRenderer.navOffline:true`, not a real BLACKOUT floor). NOT seen: dead
   state, status icons/debuff list, ground-weapon label, medkit warning.
+- **CP3:** `TouchButton.contains` (a plain rect, unchanged) is the only hit test; nothing reads the renamed
+  `TOUCH_BUTTON_CHAMFER`. Positions/sizes in TouchConstants untouched. The old rounded fill was a cross of two
+  overlapping translucent rects (a lighter inner square artefact) — the UiKit octagon has no overlap. The CAPSULE
+  shape (enum kept, no button uses it) is no longer drawn specially. The icon halo is now UI_INK_BLACK
+  (TOUCH_ICON_HALO_*), not dim phosphor. First-press glow lerps the rim toward SUIT_AMBER. A4 spot-check (build
+  at baseline: 480 tests, the 1 known failure): capture-driver `hittest:X:Y` (new, in SKILL.md) maps all 16 points
+  to the right action (USE_MACHINE at 640,360 and INSPECT at 180,200 tested as if visible); real held taps lit the
+  matching plate in amber and did the action for FORWARD/BACK/ROTATE x2/STRAFE x2/FIRE ("Whiff!")/RELOAD/SKIP
+  ("Turn skipped")/SWITCH (to FIST)/GUARD/HEAL ("NO MEDKITS")/PAUSE (menu)/INVENTORY (overlay)/INSPECT (standing on
+  a start-room weapon, card reopened). USE was NOT tapped for real (no fabricator on floor 1) — hit-test only.
