@@ -29,6 +29,8 @@ import ge.tbegvadze.toon3d.entity.boss.Boss;
 import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
+import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
@@ -75,6 +77,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private final Texture                       whitePixelTexture;
     // Heavy danger-tile floor marker (balance-overhaul order 4, H15): procedural ring, built once.
     private final Texture                       heavyMarkerTexture;
+    /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
+    private final Texture                       contactShadowTexture;
     private final SpriteBatch                   batch;
     private final ShapeRenderer                 shapeRenderer;
 
@@ -238,20 +242,23 @@ public final class EnemyRenderer implements Renderable, Disposable {
         // forces this batch to reallocate.
         this.batch               = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
 
-        // Load sprite sheets; fall back to a solid-colour placeholder when the file is absent
-        this.blightSheetTexture   = loadSheetOrFallback(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
-        this.infernalSheetTexture = loadSheetOrFallback(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
+        // Sheets come from the session-lifetime EnemySpriteSheets cache (alpha-cut once per app session);
+        // the batch bracket makes the one-per-session timing log fire on the first construction only.
+        EnemySpriteSheets.beginLoadBatch();
+        this.blightSheetTexture   = EnemySpriteSheets.get(ENEMY_SHEET_BLIGHT_PATH,   0.60f, 0.20f, 0.60f);
+        this.infernalSheetTexture = EnemySpriteSheets.get(ENEMY_SHEET_INFERNAL_PATH, 0.70f, 0.25f, 0.10f);
         // Elemental golems — amber/gold fallback if the shared sheet is absent.
-        this.elementalGolemSheetTexture = loadSheetOrFallback(ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH,
+        this.elementalGolemSheetTexture = EnemySpriteSheets.get(ENEMY_SHEET_ELEMENTAL_GOLEMS_PATH,
                 0.85f, 0.65f, 0.20f);
         // Necrotic faction — each archetype is a single standalone PNG drawn full-frame.
-        this.blightCorruptorTexture = loadSheetOrFallback(ENEMY_BLIGHT_CORRUPTOR_PATH, 0.40f, 0.60f, 0.20f);
-        this.vortexEyeTexture       = loadSheetOrFallback(ENEMY_VORTEX_EYE_PATH,       0.55f, 0.25f, 0.70f);
-        this.ghoulTexture           = loadSheetOrFallback(ENEMY_GHOUL_PATH,            0.45f, 0.55f, 0.35f);
-        this.crawlerTexture         = loadSheetOrFallback(ENEMY_CRAWLER_PATH,          0.55f, 0.45f, 0.30f);
-        this.revenantTexture        = loadSheetOrFallback(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
+        this.blightCorruptorTexture = EnemySpriteSheets.get(ENEMY_BLIGHT_CORRUPTOR_PATH, 0.40f, 0.60f, 0.20f);
+        this.vortexEyeTexture       = EnemySpriteSheets.get(ENEMY_VORTEX_EYE_PATH,       0.55f, 0.25f, 0.70f);
+        this.ghoulTexture           = EnemySpriteSheets.get(ENEMY_GHOUL_PATH,            0.45f, 0.55f, 0.35f);
+        this.crawlerTexture         = EnemySpriteSheets.get(ENEMY_CRAWLER_PATH,          0.55f, 0.45f, 0.30f);
+        this.revenantTexture        = EnemySpriteSheets.get(ENEMY_REVENANT_PATH,         0.50f, 0.50f, 0.55f);
         // Overseer boss portrait — its own full-frame texture (ORDER 8), cyan-tinted fallback if absent.
-        this.overseerBossTexture    = loadSheetOrFallback(ENEMY_BOSS_OVERSEER_PATH,     0.55f, 0.80f, 0.95f);
+        this.overseerBossTexture    = EnemySpriteSheets.get(ENEMY_BOSS_OVERSEER_PATH,     0.55f, 0.80f, 0.95f);
+        EnemySpriteSheets.endLoadBatch();
         this.textureRegions       = buildTextureRegions(blightSheetTexture, infernalSheetTexture,
                                                        elementalGolemSheetTexture);
         // Map the standalone PNGs as full-frame regions (one whole image per archetype).
@@ -265,6 +272,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         this.whitePixelTexture    = buildWhitePixelTexture();
         this.heavyMarkerTexture   = buildHeavyMarkerTexture();
+        this.contactShadowTexture = ContactShadow.buildTexture();
         this.nameTagFont          = new BitmapFont();
         this.nameTagFont.getData().setScale(ENEMY_NAME_TAG_FONT_SCALE);
         this.nameTagLayout        = new GlyphLayout();
@@ -296,6 +304,26 @@ public final class EnemyRenderer implements Renderable, Disposable {
     /** Sets the floor light multiplier enemy billboards are dimmed by (never below the silhouette floor). */
     public void setLightMultiplier(float multiplier) {
         this.lightMultiplier = multiplier;
+    }
+
+    // ATMOSPHERE GRADE + TILE LIGHT (visual-identity-order-1). Render thread only. Null grade = no tint.
+    private AtmosphereGrade atmosphereGrade;
+    private Level           level;
+    private float           lightingTimeSeconds = 0f;
+
+    /** Sets the floor's colour grade (R1, applied at enemy strength to the body only). Null disables it. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
+    }
+
+    /** Sets the level whose tile brightness lights enemy bodies (R5). Null = full light. */
+    public void setLevel(Level level) {
+        this.level = level;
+    }
+
+    /** Facility clock driving flickering tile brightness (same clock PropRenderer uses). */
+    public void setLightingTime(float timeSeconds) {
+        this.lightingTimeSeconds = timeSeconds;
     }
 
     public void setAlertPulse(float pulse) {
@@ -404,6 +432,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float aspectRatio        = (float) regionWidth / regionHeight;
             float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
 
+            // R5: the shadow width is taken BEFORE the lunge scale so it never pulses with the swing.
+            float shadowBodyWidth = spriteScreenWidth;
+
             // Melee lunge: scale sprite up during attack animation
             float lungeCurve = 0f;
             if (!enemy.type.isRanged() && attackAnimStrength > 0f) {
@@ -422,6 +453,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (columnSpan <= 0) continue;
 
             float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+            // R5: the FLOOR LINE is this value before any hover or lunge offset is applied below.
+            float floorLineY = drawBottom;
             // EYE_TYRANT hovers; all other enemies (including MIRE_WRAITH) stand on the floor.
             if (enemy.type == EnemyType.EYE_TYRANT) {
                 drawBottom += fullWallLineHeight * EYE_TYRANT_HOVER_OFFSET_FRACTION;
@@ -450,8 +483,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // Base shade: apply distance falloff then clamp to min so sprites sit in the world.
             // Active enemies use ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS; dormant enemies are additionally
             // darkened so they visibly "light up" when alerted.
-            float baseShade = Math.max(GameMath.wallShade(depth, WALL_SHADING_FALLOFF),
-                                       ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
+            // R5 (visual-identity-order-1): the body also takes the tile light it stands in (as props do),
+            // BEFORE the minimum-brightness clamp, so an unlit tile darkens it but never below the floor.
+            float enemyTileBrightness = (level != null)
+                    ? level.getTileBrightness(enemy.tileColumn, enemy.tileRow, lightingTimeSeconds)
+                    : 1f;
+            float baseShade = Math.max(
+                    Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * enemyTileBrightness,
+                             MAX_LIGHTING_SHADE),
+                    ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
             if (enemy.state == EnemyState.DORMANT) {
                 baseShade *= DORMANT_SHADE_DAMPEN;
             }
@@ -459,9 +499,29 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // Health bars and intent icons are drawn by their own passes and are never dimmed.
             baseShade = GameMath.darkenedShadeWithFloor(baseShade, lightMultiplier,
                     RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
-            float baseRed   = Math.min(1f, baseShade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float baseGreen = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float baseBlue  = baseShade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            // R1/R2: grade the BODY shade at enemy strength (half), then the red-alert wash on top. Every
+            // status / boss / telegraph tint below lerps over this and is never graded (R4).
+            float bodyLightRed   = 0f;
+            float bodyLightGreen = 0f;
+            float bodyLightBlue  = 0f;
+            float gradedRed   = baseShade;
+            float gradedGreen = baseShade;
+            float gradedBlue  = baseShade;
+            if (atmosphereGrade != null) {
+                atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENEMY);
+                gradedRed   = Math.min(1f, baseShade * atmosphereGrade.red);
+                gradedGreen = Math.min(1f, baseShade * atmosphereGrade.green);
+                gradedBlue  = Math.min(1f, baseShade * atmosphereGrade.blue);
+                // R8: the player's muzzle light on the BODY, at full strength (not the 0.5 grade strength).
+                // It is NOT folded into the clamped colour: it is re-drawn as an additive pass after the
+                // sprite columns (albedo x light), so a near, already-bright enemy still lights up.
+                bodyLightRed   = atmosphereGrade.lightAddRed;
+                bodyLightGreen = atmosphereGrade.lightAddGreen;
+                bodyLightBlue  = atmosphereGrade.lightAddBlue;
+            }
+            float baseRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float baseGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float baseBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
 
             float hitFlashStrength = enemy.getHitFlashStrength();
             float spriteRed   = GameMath.lerpTowardWhite(baseRed,   hitFlashStrength);
@@ -659,6 +719,18 @@ public final class EnemyRenderer implements Renderable, Disposable {
                         spriteRed, spriteGreen, spriteBlue);
             }
 
+            // R4-R6 contact shadow: drawn BEFORE the sprite, same per-column z-test, never graded.
+            // Live upright enemies only (dead enemies are skipped at the cull, ghosts are separate).
+            float shadowAlpha = ContactShadow.alphaAtDepth(
+                    atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth);
+            if (enemy.type == EnemyType.EYE_TYRANT) {
+                shadowAlpha *= CONTACT_SHADOW_HOVER_ALPHA_SCALE;
+            }
+            ContactShadow.draw(batch, contactShadowTexture, wallRenderer,
+                    projectionColumnCount, projectionColumnWidth,
+                    worldCenterX, floorLineY, shadowBodyWidth * CONTACT_SHADOW_WIDTH_FRACTION_ENEMY,
+                    depth, shadowAlpha);
+
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
@@ -685,6 +757,26 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 if (occluderBuffer != null) {
                     occluderBuffer.redrawInFront(batch, screenColumn, depth, projectionColumnWidth);
                 }
+            }
+
+            // R8 muzzle-light additive pass over the same columns (body only; tints, bars and shadows
+            // never take it). Same wall z-test; columns hidden behind a nearer recorded prop are skipped.
+            // Two blend switches, only for a lit enemy.
+            if (bodyLightRed + bodyLightGreen + bodyLightBlue > 0f) {
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
+                for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                    if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                    if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+                    int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
+                    localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
+                    batch.draw(region.getTexture(),
+                               screenColumn * projectionColumnWidth, clampedBottom,
+                               projectionColumnWidth, clampedTop - clampedBottom,
+                               region.getRegionX() + localSrcX, texSrcY, 1, texSrcHeight,
+                               false, false);
+                }
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             }
 
             // ---- Floating UI cluster geometry (health bar + name tag + intent icon) ----
@@ -2261,18 +2353,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
     public void dispose() {
         batch.dispose();
         shapeRenderer.dispose();
-        blightSheetTexture.dispose();
-        infernalSheetTexture.dispose();
-        elementalGolemSheetTexture.dispose();
-        blightCorruptorTexture.dispose();
-        vortexEyeTexture.dispose();
-        ghoulTexture.dispose();
-        crawlerTexture.dispose();
-        revenantTexture.dispose();
-        overseerBossTexture.dispose();
         whitePixelTexture.dispose();
         heavyMarkerTexture.dispose();
+        contactShadowTexture.dispose();
         nameTagFont.dispose();
+        // Sheet textures are owned by EnemySpriteSheets (disposed in Main.dispose()), not here.
     }
 
     // -------------------------------------------------------------------------
@@ -2331,45 +2416,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.HELL_BARON,  bossPlaceholder);
 
         return map;
-    }
-
-    private static Texture loadSheetOrFallback(String assetPath, float red, float green, float blue) {
-        if (Gdx.files.internal(assetPath).exists()) {
-            Texture loaded = new Texture(Gdx.files.internal(assetPath));
-            loaded.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-            return loaded;
-        }
-        return generateFallbackSheet(red, green, blue);
-    }
-
-    private static Texture generateFallbackSheet(float red, float green, float blue) {
-        // 2×2 grid fallback: 128×128 total, each quadrant 64×64 with simple eye pattern
-        Pixmap pixmap = new Pixmap(128, 128, Pixmap.Format.RGBA8888);
-        pixmap.setColor(red, green, blue, 1f);
-        pixmap.fill();
-        pixmap.setColor(1f, 1f, 0f, 1f);
-        // Simple eye dots in each quadrant
-        for (int quadrantRow = 0; quadrantRow < 2; quadrantRow++) {
-            for (int quadrantColumn = 0; quadrantColumn < 2; quadrantColumn++) {
-                int offsetX = quadrantColumn * 64;
-                int offsetY = quadrantRow    * 64;
-                pixmap.fillRectangle(offsetX + 12, offsetY + 20, 12, 12);
-                pixmap.fillRectangle(offsetX + 40, offsetY + 20, 12, 12);
-            }
-        }
-        pixmap.setColor(0f, 0f, 0f, 1f);
-        for (int quadrantRow = 0; quadrantRow < 2; quadrantRow++) {
-            for (int quadrantColumn = 0; quadrantColumn < 2; quadrantColumn++) {
-                int offsetX = quadrantColumn * 64;
-                int offsetY = quadrantRow    * 64;
-                pixmap.fillRectangle(offsetX + 15, offsetY + 23, 6, 6);
-                pixmap.fillRectangle(offsetX + 43, offsetY + 23, 6, 6);
-            }
-        }
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
     }
 
     private static Texture buildWhitePixelTexture() {

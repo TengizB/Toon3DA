@@ -23,6 +23,15 @@ Read first: **the idea file this work implements** (it defines "done") and **its
 (`.claude/checkpoints/<idea-basename>.md`). Open a `docs/*.txt` only when a specific claim in the
 diff needs checking against it. `.claude/CLAUDE.md` is already in your context — do not re-read it.
 
+## Building and running the game (cloud containers) — read `.claude/skills/run-game/SKILL.md`
+Never run `./gradlew` at the repo root in a cloud container (it cannot resolve the Android Gradle plugin) and never
+try to click `lwjgl3:run` (desktop ignores all input: no multitouch, so touch controls never enable). Run
+`.claude/skills/run-game/setup.sh` once, build/test from `/tmp/toon3d-runtime/mirror`, and drive the real game
+with `.claude/skills/run-game/run.sh` (scripted taps at world coordinates, PNG shots, forced lighting mood, frame
+timing). The skill lists every button's coordinates and the known traps. It is a dev tool, not a test.
+For any visual acceptance criterion, read the PNGs the hub provides; if none exist for that criterion, ask for
+a specific capture (state the script) rather than passing it on code read alone, or record it as code-read-only.
+
 ## Method
 
 1. **Establish the diff.** `git log --oneline` since the checkpoint file's BASELINE, then

@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
@@ -14,6 +15,7 @@ import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderResolution;
 import ge.tbegvadze.toon3d.util.TilesetConstants;
@@ -132,6 +134,10 @@ public class WallRenderer implements Renderable, Disposable {
 
     // --- Structured concurrency: parallel DDA compute phase ---
     private final WallColumnResult[] columnResults;
+
+    // ATMOSPHERE GRADE (visual-identity-order-1, R1): per-floor colour grade. Null = no tint (old behaviour).
+    // Set by World before the floor's first frame and never while workers run, so workers only read it.
+    private AtmosphereGrade atmosphereGrade;
     private final int                workerCount;
     private final ExecutorService    workerPool;
     private final WallColumnWorker[] workers;
@@ -142,6 +148,11 @@ public class WallRenderer implements Renderable, Disposable {
     // GL-thread draw pass. Static so it carries no implicit outer-class reference.
     // -------------------------------------------------------------------------
     private static final class WallColumnResult {
+        // Per-column grade scratch (red, green, blue): each column is owned by one worker at a time, and
+        // AtmosphereGrade.evaluateInto is the thread-safe variant, so no shared mutable state is touched.
+        // [0..2] = graded tint, [3..5] = muzzle light-add (visual-identity-order-2 R8).
+        final float[] gradeScratch = new float[6];
+
         // Wall or cylinder surface drawn behind any door panel.
         boolean drawSurface;
         Texture surfaceTexture;
@@ -153,6 +164,11 @@ public class WallRenderer implements Renderable, Disposable {
         float   surfaceRed;
         float   surfaceGreen;
         float   surfaceBlue;
+        // Muzzle-light add for the surface (R8): drawn as a separate ADDITIVE pass, never clamped into the
+        // multiplier above. All zero when no pulse is active.
+        float   surfaceLightRed;
+        float   surfaceLightGreen;
+        float   surfaceLightBlue;
 
         // Door panel composited on top of the surface (present when door is mid-animation).
         boolean drawDoorPanel;
@@ -165,6 +181,9 @@ public class WallRenderer implements Renderable, Disposable {
         float   doorPanelRed;
         float   doorPanelGreen;
         float   doorPanelBlue;
+        float   doorPanelLightRed;
+        float   doorPanelLightGreen;
+        float   doorPanelLightBlue;
     }
 
     // -------------------------------------------------------------------------
@@ -2055,6 +2074,32 @@ public class WallRenderer implements Renderable, Disposable {
         return columnWidth;
     }
 
+    /** Sets the floor's colour grade (R1). Null disables the tint. Call before the floor's first frame. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
+    }
+
+    /**
+     * Writes the R1 environment tint for a surface {@code perpWallDistanceTiles} tiles away into
+     * {@code result.gradeScratch} (white when no grade is set). Thread-safe; allocation-free.
+     */
+    private void evaluateEnvironmentGrade(WallColumnResult result, float perpWallDistanceTiles) {
+        AtmosphereGrade grade = atmosphereGrade;
+        if (grade == null) {
+            result.gradeScratch[0] = 1f;
+            result.gradeScratch[1] = 1f;
+            result.gradeScratch[2] = 1f;
+            result.gradeScratch[3] = 0f;
+            result.gradeScratch[4] = 0f;
+            result.gradeScratch[5] = 0f;
+            return;
+        }
+        AtmosphereGrade.evaluateInto(grade.getMood(), perpWallDistanceTiles,
+                ArtDirection.GRADE_STRENGTH_ENVIRONMENT, result.gradeScratch, 0);
+        // Muzzle light: read-only on the frame snapshot (AtmosphereGrade threading contract).
+        grade.lightAddInto(perpWallDistanceTiles, result.gradeScratch, 3);
+    }
+
     public void setAlertPulse(float pulse) {
         this.alertPulse = pulse;
     }
@@ -2211,6 +2256,43 @@ public class WallRenderer implements Renderable, Disposable {
                            false, false);
             }
         }
+
+        // Phase 3 - MUZZLE LIGHT additive pass (visual-identity-order-2 R8). The base pass above is exactly
+        // the pre-light grade (clamped multiplier). The light is ADDED in a second pass, albedo x lightAdd,
+        // so it can exceed the multiplier clamp: only the final framebuffer colour clamps. The blend func
+        // switches exactly twice (to additive, back to normal) and the whole pass is skipped at intensity
+        // 0. A column carrying a door panel lights the panel only (the surface it overlaps is covered).
+        AtmosphereGrade grade = atmosphereGrade;
+        if (grade != null && grade.isLightActive()) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+            for (int screenColumn = 0; screenColumn < projectionColumnCount; screenColumn++) {
+                WallColumnResult result = columnResults[screenColumn];
+                if (result.drawDoorPanel) {
+                    if (result.doorPanelLightRed + result.doorPanelLightGreen + result.doorPanelLightBlue > 0f) {
+                        batch.setColor(result.doorPanelLightRed, result.doorPanelLightGreen,
+                                       result.doorPanelLightBlue, 1f);
+                        batch.draw(result.doorPanelTexture,
+                                   screenColumn * columnWidth, result.doorPanelDrawBottom,
+                                   columnWidth, result.doorPanelDrawTop - result.doorPanelDrawBottom,
+                                   result.doorPanelTexColumn, result.doorPanelTexSrcY,
+                                   1, result.doorPanelTexSrcHeight,
+                                   false, false);
+                    }
+                } else if (result.drawSurface
+                        && result.surfaceLightRed + result.surfaceLightGreen + result.surfaceLightBlue > 0f) {
+                    batch.setColor(result.surfaceLightRed, result.surfaceLightGreen,
+                                   result.surfaceLightBlue, 1f);
+                    batch.draw(result.surfaceTexture,
+                               screenColumn * columnWidth, result.surfaceDrawBottom,
+                               columnWidth, result.surfaceDrawTop - result.surfaceDrawBottom,
+                               result.surfaceTexColumn, result.surfaceTexSrcY,
+                               1, result.surfaceTexSrcHeight,
+                               false, false);
+                }
+            }
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        }
+
         // Reset to white so no alert tint leaks into other renderers that share GL state.
         batch.setColor(Color.WHITE);
         batch.end();
@@ -2379,9 +2461,17 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
-                result.surfaceRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                result.surfaceGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                result.surfaceBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                evaluateEnvironmentGrade(result, perpWallDistance);
+                float[] columnGrade = result.gradeScratch;
+                float gradedRed   = clampUnit(shade * columnGrade[0]);
+                float gradedGreen = clampUnit(shade * columnGrade[1]);
+                float gradedBlue  = clampUnit(shade * columnGrade[2]);
+                result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceLightRed   = columnGrade[3];
+                result.surfaceLightGreen = columnGrade[4];
+                result.surfaceLightBlue  = columnGrade[5];
             } else {
                 float wallHitFraction         = GameMath.wallHitPosition(playerTileX, playerTileY,
                                                                          rayDirectionX, rayDirectionY,
@@ -2424,9 +2514,17 @@ public class WallRenderer implements Renderable, Disposable {
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
-                result.surfaceRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                result.surfaceGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                result.surfaceBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                evaluateEnvironmentGrade(result, perpWallDistance);
+                float[] wallGrade = result.gradeScratch;
+                float gradedRed   = clampUnit(shade * wallGrade[0]);
+                float gradedGreen = clampUnit(shade * wallGrade[1]);
+                float gradedBlue  = clampUnit(shade * wallGrade[2]);
+                result.surfaceRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                result.surfaceGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                result.surfaceLightRed   = wallGrade[3];
+                result.surfaceLightGreen = wallGrade[4];
+                result.surfaceLightBlue  = wallGrade[5];
             }
         }
 
@@ -2491,9 +2589,17 @@ public class WallRenderer implements Renderable, Disposable {
                     result.doorPanelTexSrcHeight  = doorTexSrcHeight;
                     result.doorPanelDrawBottom    = clampedPanelBottom;
                     result.doorPanelDrawTop       = clampedPanelTop;
-                    result.doorPanelRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                    result.doorPanelGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                    result.doorPanelBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    evaluateEnvironmentGrade(result, doorPerpWallDistance);
+                    float[] doorGrade = result.gradeScratch;
+                    float doorGradedRed   = clampUnit(shade * doorGrade[0]);
+                    float doorGradedGreen = clampUnit(shade * doorGrade[1]);
+                    float doorGradedBlue  = clampUnit(shade * doorGrade[2]);
+                    result.doorPanelRed   = Math.min(1f, doorGradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                    result.doorPanelGreen = doorGradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    result.doorPanelBlue  = doorGradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                    result.doorPanelLightRed   = doorGrade[3];
+                    result.doorPanelLightGreen = doorGrade[4];
+                    result.doorPanelLightBlue  = doorGrade[5];
                 }
             }
         }

@@ -1,0 +1,332 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Visual Identity 3 — Typography: one procedural pixel font
+CREATED: 2026-10-19
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+Replaces LibGDX's default 15 px Arial, which 20 renderers each create with
+`new BitmapFont()` and scale ad hoc, with ONE procedural pixel font. It is built from
+a glyph table in code at startup, has two faces (REGULAR and HEAVY) and complete glyph
+coverage for every character the game prints, the em dash included. The font is owned
+by one session holder, render/GameFonts. Its metrics are matched to the default font,
+so the ~250 existing setScale calls keep their sizes and the swap is mechanical.
+
+What was SAID: "HUD and menus ... a consistent art direction". What is NEEDED: scaled
+Arial says "prototype" on every screen at once. The missing em dash has already made
+two shipped specs rewrite copy or substitute " - " (floor-twists IMPLEMENTATION NOTE;
+docs/story-ui-system.txt THE COMPETENCE MODEL). One crisp, chunky font is the cheapest
+change that makes every screen look made by the same hands, and it fits the "procedural
+pixels" voice.
+
+
+SCOPE
+-----
+IN
+  - render/PixelFontGlyphs: the glyph table (data only).
+  - render/GameFonts: builds the atlas + BitmapFontData for both faces once per app
+    session; hands out BitmapFont instances that share the atlas; disposed by Main.
+  - Every `new BitmapFont()` in core (20 sites, listed in TECHNICAL NOTES) is replaced.
+    Per-renderer atlas filter calls (`getRegion().getTexture().setFilter`) are deleted.
+  - Face assignment per renderer (R7).
+  - An overflow sweep: every screen checked for text spilling out of its panel at all
+    three story text sizes, fixed by scale constants only.
+  - docs/art-direction.txt TYPOGRAPHY section; docs/story-ui-system.txt corrected
+    where it says the font has no em-dash glyph.
+
+OUT (deliberately not doing now)
+  - FreeType or any TTF/OTF/.fnt asset (V1). The font is code.
+  - Re-laying out screens, new type-scale roles applied per screen, colours, text
+    shadows: orders 4-6 (they restyle each screen and adopt the type scale defined
+    here).
+  - Changing any copy. The narrative WRITING RULES' avoidance of the em dash is a
+    content rule and stays. This order only makes the glyph exist, so strings that
+    already contain it (about 288 Java string literals, plus one in the shipped
+    properties) stop rendering as missing glyphs.
+  - Non-Latin scripts. Localisation beyond the current English table is not in scope.
+    The fallback glyph makes a missing character visible.
+  - Kerning tables. The font is proportional, without kerning pairs.
+
+
+GAMEPLAY LOOP
+-------------
+None. Text rendering only.
+  1. Main.create() calls GameFonts.initialise() before the World is built.
+  2. Every renderer that drew text obtains its font(s) in its constructor from
+     GameFonts.newFont(FontFace.REGULAR | HEAVY) and keeps its own setScale/colour
+     state exactly as before.
+  3. Main.dispose() calls GameFonts.dispose() after the World is disposed.
+
+
+RULES
+-----
+  R1  GLYPH GRID (in font pixels). Cap height 7, x-height 5, ascender 7, descender 2,
+      line height 11 (7 + 2 + 2 leading), letter spacing 1, space advance 3. Glyph ink
+      widths are 1-7: most capitals 5, M and W 7, I 3, lowercase i/l 1-2, punctuation
+      1-3. Digits 0-9 are TABULAR: all 5 wide with the same advance, so HUD counters
+      never jitter.
+  R2  COVERAGE. REGULAR and HEAVY both cover printable ASCII 32-126 plus:
+        —  (U+2014 em dash)      ·  (U+00B7 middle dot)    …  (U+2026 ellipsis)
+        ×  (U+00D7)              ▶  (U+25B6)               ◀  (U+25C0)
+        →  (U+2192)              ●  (U+25CF)               •  (U+2022)
+        ◇  (U+25C7)              ±  (U+00B1)               ≈  (U+2248)
+        °  (U+00B0)              ‘ ’ “ ”  (U+2018/2019/201C/201D)
+      Any other character renders the FALLBACK glyph (BitmapFontData.missingGlyph): a
+      hollow 5x7 box. Never blank, never a crash.
+  R3  HEAVY FACE. Each REGULAR glyph is OR-ed with itself shifted 1 font pixel right.
+      Ink width + 1, advance + 1. It is derived in code, never a second table.
+  R4  ATLAS. Each font pixel is rasterised as a solid square of
+      PIXEL_FONT_ATLAS_TEXELS_PER_PIXEL (4) x 4 texels in white, with 1 font pixel of
+      transparent padding around every glyph. Both faces share one atlas,
+      power-of-two, at most 512x512, Linear min/mag filter (crisp-chunky at the
+      non-integer device scales FitViewport produces; Nearest would shimmer). It is
+      built from a Pixmap at initialise, and the Pixmap is disposed after upload.
+  R5  METRIC MATCH. GameFonts scales the font data so that, at setScale(1), its
+      capHeight equals the LibGDX default font's capHeight (measured once by the
+      builder and recorded as ArtDirection.PIXEL_FONT_TARGET_CAP_HEIGHT; the measured
+      value goes in the handover note). lineHeight then follows R1's 11:7 ratio. An
+      existing `font.getData().setScale(x)` therefore produces about the same cap
+      height as before, and only advance widths differ.
+  R6  SHARING. GameFonts.newFont(face) returns a NEW BitmapFont over the SHARED atlas
+      region and a per-instance copy of the face's BitmapFontData (each renderer keeps
+      its own scale). It is constructed so that BitmapFont.dispose() does NOT dispose
+      the atlas (ownsTexture false). markupEnabled false. useIntegerPositions keeps
+      the LibGDX default (unchanged behaviour). GameFonts.dispose() disposes the atlas
+      exactly once. Calling newFont before initialise throws IllegalStateException
+      with a clear message.
+  R7  FACE ASSIGNMENT. HEAVY: FramingScreenRenderer's title and death-stroke text,
+      BootCardRenderer's status header, BossHudRenderer.nameFont, HudRenderer's ammo
+      digits, EventTextRenderer, ImpactEffectRenderer (damage numbers). Everything
+      else: REGULAR. A renderer that needs both faces holds two instances (a second
+      field). That is the only structural change allowed to a renderer here.
+  R8  TYPE SCALE (defined now; adopted screen by screen in orders 4-6): ArtDirection
+      TYPE_CAPTION 1.00, TYPE_BODY 1.25, TYPE_LABEL 1.50, TYPE_HEADING 2.00,
+      TYPE_DISPLAY 3.50, as setScale multipliers over the metric-matched base.
+      Minimum legibility: no shipped text may be drawn below TYPE_CAPTION. Any site
+      currently below it is raised to it in the overflow sweep (CP5) only if it still
+      fits; otherwise it is listed in the handover note for order 4/5/6.
+  R9  OVERFLOW SWEEP. Every screen is opened at story text size SMALL, MEDIUM and
+      LARGE, checking for text crossing its panel or plate edge. Fixes are made ONLY
+      by adjusting that site's existing scale constant, or by GameFonts metric
+      constants, never by layout changes. Story text wraps by character count
+      (StoryText.wrapToMaxChars + STORY_LINE_MAX_CHARS). If the pixel font's average
+      advance makes a 40-char line overflow its panel, the fix is the story panel's
+      glyph scale constant in StoryUiConstants, never the wrap count (the wrap count
+      is a content contract).
+
+
+PLAYER EXPERIENCE
+-----------------
+Every word in the game, from the HP number to ORA's lines to the title, is set in the
+same blocky, deliberate face. Numbers stop wobbling as they count. The em dash finally
+appears where the code always asked for it. Nothing to teach.
+
+
+TECHNICAL NOTES
+---------------
+New classes (package render)
+  - PixelFontGlyphs: one row per glyph: codepoint + rows as a compact string ("#" ink,
+    "." empty, "/" row separator, top row first, descender rows included where the
+    glyph has them) + baseline offset. Data only, no logic.
+  - FontFace: enum REGULAR, HEAVY (the per-constant data is the shift amount: 0 / 1;
+    no switch).
+  - GameFonts: initialise(), newFont(FontFace), dispose(), and package-private
+    accessors for the atlas metrics. Builds Glyph objects (srcX/srcY/width/height/
+    xoffset/yoffset/xadvance) and sets lineHeight/capHeight/ascent/descent/down on
+    BitmapFontData by hand.
+Constants (util/ArtDirection): PIXEL_FONT_ATLAS_TEXELS_PER_PIXEL 4,
+  PIXEL_FONT_TARGET_CAP_HEIGHT (measured, R5), PIXEL_FONT_CAP_HEIGHT_PIXELS 7,
+  PIXEL_FONT_LINE_HEIGHT_PIXELS 11, PIXEL_FONT_LETTER_SPACING_PIXELS 1,
+  PIXEL_FONT_SPACE_ADVANCE_PIXELS 3, TYPE_* (R8).
+Swap sites (20, from `grep -rn "new BitmapFont()" core/`):
+  hud/HudRenderer, progression/LevelUpOverlayRenderer,
+  render/InventoryOverlayRenderer, RelicOfferOverlayRenderer, RouteMapOverlayRenderer,
+  InstanceReportRenderer, BossHudRenderer (x2: name + epithet), ShopOverlayRenderer,
+  EventTextRenderer, EnemyRenderer (name tags), EventChoiceOverlayRenderer,
+  BootCardRenderer, FadeOverlayRenderer, CodexOverlayRenderer, StoryExchangeRenderer,
+  ImpactEffectRenderer, WeaponInspectOverlayRenderer, StoryPanelRenderer,
+  FramingScreenRenderer. (ItemWindow, ItemGridPanel, AbilityWindow, WeaponSlotsPanel,
+  BuildPagePanel receive a font from their owner and change only if they construct
+  one.)
+Delete in the same pass: every `font.getRegion().getTexture().setFilter(...)` (it would
+  mutate the shared atlas) and every `font.getData().markupEnabled = false` that is now
+  redundant.
+Main: GameFonts.initialise() in create() before World; GameFonts.dispose() in dispose()
+  after World.
+Tile symbols, persistence, sound, balance: none.
+
+
+VISUAL DESIGN
+-------------
+The face: square-shouldered, industrial and monoline, closer to a military stencil
+terminal than a rounded console font. Capitals are 5x7 with flat tops. The zero has a
+dot or slash (the builder picks one, legibility first) so 0 never reads as O. Lowercase
+is a true x-height 5 with clear ascenders, readable in ORA's two-line barks. The "1" has
+a flag and a foot. Punctuation sits on the baseline. The em dash is 6 wide, centred at
+x-height 3. ▶/◀ are solid 5x7 triangles; ● is a 5x5 disc; ◇ is a 5x5 diamond outline.
+
+
+BALANCE NOTES
+-------------
+None.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Story accessibility text size (StorySettings / StoryTextSize): unchanged. It still
+    multiplies the story renderers' scale. The R9 sweep checks all three sizes.
+  - World.applyStoryAccessibilitySettings: pushes glyph scale to renderers as before.
+    R5 keeps its numbers meaningful.
+  - Enemy name tags (EnemyRenderer): same font swap. Positions unchanged.
+  - Route map, codex and every overlay: font swap only. Restyling comes in orders 5/6.
+  - Android context pause/resume: the atlas is a Pixmap-built Texture like every
+    procedural texture here. Behaviour matches existing practice.
+
+
+EDGE CASES
+----------
+  - A string with a character outside R2: the fallback box, visible (tester can force
+    one with a temporary local string; not committed).
+  - Text at scale < 1 (if any site uses it): Linear filtering keeps it legible. R8
+    flags it.
+  - Very large DISPLAY text (title, death stroke): each font pixel becomes a large
+    block. Linear filtering softens block edges by about 1 screen px at most. That is
+    accepted (Nearest would shimmer at non-integer scales).
+  - Two renderers changing scale on their own instance never affect each other (R6).
+  - World disposed and recreated (death -> new run): the per-renderer fonts are
+    disposed with their renderers, and the atlas survives (session holder).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  `grep -rn "new BitmapFont(" core/src/main/java` returns hits only inside
+      render/GameFonts.
+  A2  No `getRegion().getTexture().setFilter` call remains on any font outside
+      GameFonts.
+  A3  Every screen (title, boot card, HUD, inventory, weapon inspect, level-up, relic
+      offer, shop, route map, event console, codex, exchange, bark, pause, settings,
+      death stroke, instance report, boss bar, damage numbers, enemy name tags) renders
+      text in the pixel font. None shows Arial.
+  A4  A string containing — · … × → ▶ renders those glyphs, not boxes or blanks (any
+      shipped Java string literal that already contains an em dash, found by grep and
+      displayed in game, is the check).
+  A5  HUD ammo digits keep their width when the count changes from 8 to 9 to 10 per
+      digit (tabular, R1).
+  A6  Unscaled capHeight of GameFonts' REGULAR equals PIXEL_FONT_TARGET_CAP_HEIGHT
+      (code read + one log line at initialise printing both).
+  A7  R9 sweep done: no text crosses a panel or plate edge at SMALL, MEDIUM or LARGE
+      story text size. The handover note lists every scale constant changed and every
+      R8 site deferred.
+  A8  Disposing and recreating the World (die, start a new run) shows correct text on
+      the new run. No "texture disposed" GL error in the log.
+  A9  `./gradlew build` + `./gradlew test` green. No new test file or method.
+  A10 docs/art-direction.txt has TYPOGRAPHY (grid, coverage, faces, type scale,
+      sharing rule, "add a glyph" recipe), and docs/story-ui-system.txt no longer
+      claims the font lacks an em dash (the writing rule itself is unchanged).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (libgdx-specialist)  ArtDirection typography constants; FontFace;
+     PixelFontGlyphs (the glyph table, both cases, digits, punctuation, R2 extras).
+  2. LOGIC  (libgdx-specialist)  GameFonts (atlas, BitmapFontData construction, R3
+     derivation, R5 metric match, R6 sharing); Main wiring.
+  3. RENDER  (libgdx-specialist)  the 20 swap sites + R7 faces + filter-call deletion.
+  4. CONTENT  the glyph table itself (libgdx-specialist; legibility over cleverness).
+  5. TESTS  None. Not balance-bearing; verified by `./gradlew build` + `./gradlew
+     lwjgl3:run`. `./gradlew test` must stay green.
+  6. DOCS  docs/art-direction.txt TYPOGRAPHY; docs/story-ui-system.txt (the em-dash
+     sentence); docs/procedural-vitals-hud.txt (HUD font source); .claude/CLAUDE.md
+     key-classes note: "all text comes from render/GameFonts; never `new
+     BitmapFont()`" (a Critical Rules bullet).
+
+RISKS AND UNKNOWNS
+  - BitmapFontData built by hand: set `imagePaths` to an empty array and supply the
+    TextureRegion directly via the BitmapFont(BitmapFontData, TextureRegion,
+    integer) constructor. Confirm ownsTexture is false on that path (LibGDX 1.14.1)
+    before the swap, so per-renderer dispose never frees the atlas.
+  - Proportional advances run wider than Arial for some strings. R9 is the safety net,
+    and the fix is scale only.
+  - LevelUpOverlayRenderer lives in progression/ (not render/). It still calls
+    GameFonts. progression -> render import is acceptable for a renderer class that
+    already imports LibGDX.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/visual-identity-order-3.md exists on the branch, committed
+       and pushed.
+  CP1  ArtDirection typography constants, FontFace and PixelFontGlyphs (full R2
+       coverage for REGULAR) exist; nothing reads them yet (DELIBERATELY unused, CP2
+       wires them); `./gradlew build` green.
+  CP2  GameFonts exists (atlas, both faces, fallback glyph, R5 metric match with its
+       log line, R6 sharing) and Main initialises/disposes it. Exactly ONE renderer,
+       StoryPanelRenderer, uses it as the pilot. Run shows a bark in the pixel font.
+       The measured target cap height is in the handover note. `./gradlew build`
+       green.
+  CP3  HUD-layer swaps done: HudRenderer, BossHudRenderer, EventTextRenderer,
+       ImpactEffectRenderer, EnemyRenderer, FadeOverlayRenderer (R7 faces). A5 holds.
+       `./gradlew build` green.
+  CP4  All remaining swap sites done and A1 + A2 hold. `./gradlew build` green.
+  CP5  R9 overflow sweep done across every screen at three text sizes, with scale-only
+       fixes (A3, A4, A7, A8). Docs (step 6) updated. `./gradlew build` + `./gradlew
+       test` green. Ready for reviewer.
+
+
+ASSUMPTIONS
+-----------
+  AS1  A code-defined pixel font fits the "procedural pixels, chunky grid" identity
+       and avoids font licensing entirely. FreeType + a TTF would be a new dependency
+       and an asset (V1).
+  AS2  Matching the default font's cap height (R5) makes the swap safe to do
+       mechanically. Each screen is restyled to the type scale later, in its own
+       order.
+  AS3  Linear filtering on a 4x-rasterised atlas is the right trade for FitViewport's
+       non-integer scaling on phones.
+  AS4  Tabular digits matter more than proportional digits in a game whose HUD
+       numbers change every turn.
+  AS5  A per-renderer BitmapFont instance over a shared atlas preserves every
+       renderer's independent setScale and colour state, so no renderer logic
+       changes.
+  AS6  The coverage list (R2) came from scanning every Java string literal and the
+       shipped properties file for non-ASCII characters on 2026-10-19. The curly
+       quotes and degree sign are added defensively for future copy.
+  AS7  GameFonts is a static session holder like order 2's EnemySpriteSheets. World is
+       rebuilt per run, and the font must outlive it.
+
+
+DECISIONS
+---------
+  D1  Owner instruction: decide by default and ask nothing.  ->  All choices are the
+      designer's.  (2026-10-19)
+  D2  Procedural pixel font vs bundled TTF via FreeType  ->  Procedural (V1, AS1).
+      (2026-10-19)
+  D3  Monospace vs proportional  ->  Proportional with tabular digits. Monospace wastes
+      width in ORA's 40-character lines and reads "terminal toy". Tabular digits give
+      monospace's one real benefit where it matters.  (2026-10-19)
+  D4  Swap now, restyle later  ->  Yes. R5's metric match turns 20 risky rewrites into
+      20 one-line swaps, and orders 4-6 adopt the type scale screen by screen.
+      (2026-10-19)
+  D5  Em-dash writing rule  ->  Unchanged. The glyph exists now, but whether copy uses
+      it is the narrative authority's call, not the art direction's.  (2026-10-19)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  visual-identity.txt, visual-identity-order-4/5/6 (adopt the type scale),
+          floor-twists.txt (em-dash workaround noted), procedural-hud-no-textures.txt
+  Docs:   docs/art-direction.txt, docs/story-ui-system.txt, docs/procedural-vitals-hud.txt

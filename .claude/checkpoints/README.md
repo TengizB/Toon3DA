@@ -109,6 +109,8 @@ Closing a checkpoint means writing, in the same commit, what the NEXT one cannot
 - a dead end already ruled out, so it is not walked into twice;
 - something learned about the ENVIRONMENT that cost time (a Gradle quirk, a missing SDK, a slow
   `balanceSim` run);
+  — but an environment lesson that holds for EVERY task (building, running, tapping or screenshotting the
+  game in a cloud container) goes into `.claude/skills/run-game/SKILL.md` instead, so it is found up front;
 - a deliberate temporary state, and which checkpoint resolves it.
 
 Not worth writing: a narration of what the diff already shows.

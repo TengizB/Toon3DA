@@ -47,6 +47,43 @@ public final class GameMath {
     }
 
     /*
+     * Formula: vignetteNormalisedRadius - centre-relative elliptical radius of a point in a view
+     * Derivation:
+     *   Scale each axis so the view edge is +-1:  nx = 2 * (pointX / viewWidth - 0.5),
+     *   ny = 2 * (pointY / viewHeight - 0.5). The corner is (+-1, +-1), at Euclidean distance sqrt(2), so
+     *       radius = sqrt(nx^2 + ny^2) / sqrt(2) = sqrt((nx^2 + ny^2) / 2).
+     *   The centre is 0 and every view corner is exactly 1 whatever the aspect ratio; iso-lines are
+     *   ellipses matching the view. A point outside the view (e.g. the shake margin) may exceed 1.
+     * Edge cases: viewWidth or viewHeight of 0 is a caller error (division by zero).
+     */
+    public static float vignetteNormalisedRadius(float pointX, float pointY, float viewWidth, float viewHeight) {
+        float normalisedX = (pointX / viewWidth  - 0.5f) * 2f;
+        float normalisedY = (pointY / viewHeight - 0.5f) * 2f;
+        return (float) Math.sqrt((normalisedX * normalisedX + normalisedY * normalisedY) * 0.5);
+    }
+
+    /*
+     * Formula: vignetteAlpha - quadratic radial vignette ramp (visual-identity-order-1, R10)
+     * Derivation:
+     *   normalisedRadius is the distance from the view centre divided by the half-diagonal, measured in
+     *   the view's own normalised space (each axis scaled so its edge is 1, then divided by sqrt(2)), so
+     *   the centre is 0 and every corner is exactly 1 whatever the aspect ratio; iso-lines are ellipses
+     *   matching the 16:9 view.
+     *       rampFraction = clamp((normalisedRadius - clearFraction) / (1 - clearFraction), 0, 1)
+     *       alpha        = rampFraction^2
+     *   Zero inside clearFraction, a soft quadratic onset, 1 at the corners.
+     * Edge cases: clearFraction >= 1 has no ramp, so the result is 0 for radius < 1 and 1 at or beyond 1;
+     *   a negative radius is treated as 0.
+     */
+    public static float vignetteAlpha(float normalisedRadius, float clearFraction) {
+        if (clearFraction >= 1f) return normalisedRadius >= 1f ? 1f : 0f;
+        float rampFraction = (normalisedRadius - clearFraction) / (1f - clearFraction);
+        if (rampFraction <= 0f) return 0f;
+        if (rampFraction >= 1f) return 1f;
+        return rampFraction * rampFraction;
+    }
+
+    /*
      * Formula: easeTowardLinear — frame-rate-independent constant-rate approach to a target
      * Derivation:
      *   A cosmetic value that must take a FIXED wall-clock time to travel the full [0, 1] range,
@@ -1024,6 +1061,59 @@ public final class GameMath {
     }
 
     /*
+     * Formula: floorScreenFootprintTexels
+     * Derivation: one backdrop pixel on a floor row spans, in tiles,
+     *     rowDistance * planeWidthAtUnitDistance / backdropWidth
+     *   because floorStepTileComponent steps rowDistance * (rayDirRight - rayDirLeft) / backdropWidth and the
+     *   two edge rays differ by the whole camera plane, 2 * planeScale = 2 * tan(halfFov). One tile is
+     *   materialSize texels, so footprintTexels = that * materialSize.
+     * Edge cases: backdropWidth > 0 guaranteed by the caller. A clamped (far) rowDistance just yields the
+     *   footprint at the clamp.
+     */
+    public static float floorScreenFootprintTexels(float rowDistance, float planeWidthAtUnitDistance,
+                                                   int backdropWidth, int materialSize) {
+        return rowDistance * planeWidthAtUnitDistance / backdropWidth * materialSize;
+    }
+
+    /*
+     * Formula: floorDepthFootprintTexels
+     * Derivation: moving one backdrop row up the screen moves the sampled floor point from rowDistance to
+     *   adjacentRowDistance along the view direction, so one backdrop pixel covers
+     *     |rowDistance - adjacentRowDistance| tiles of depth = that * materialSize texels.
+     *   Far away this dominates the screen-X footprint (distance ~ 1/pixelOffset grows super-linearly toward
+     *   the horizon), and it is what makes distant floor speckle.
+     * Edge cases: both distances are the same clamped values the row fill uses, so two rows both past the
+     *   clamp give 0 (the whole clamped band samples one distance). The caller handles the last row by
+     *   reusing the previous row's difference.
+     */
+    public static float floorDepthFootprintTexels(float rowDistance, float adjacentRowDistance, int materialSize) {
+        return Math.abs(rowDistance - adjacentRowDistance) * materialSize;
+    }
+
+    /*
+     * Formula: surfaceMaterialMipLevel
+     * Derivation: a mip level L averages 2^L texels per axis, so the matching level is log2 of the texels one
+     *   backdrop pixel covers. The pixel is a screenX x depth rectangle on the floor; the coarser axis decides:
+     *     footprintTexels = max(screenFootprintTexels, depthFootprintTexels) * mipBias
+     *     level = clamp(floor(log2(max(1, footprintTexels))), 0, levelCount - 1).
+     *   floor(log2(x)) for x >= 1 is the float's binary exponent (Math.getExponent, exact on powers of two).
+     * Edge cases: footprint <= 1 texel (near rows) -> level 0 (crisp). Beyond the last level -> clamped to
+     *   levelCount - 1. Infinite positive -> last level; NaN or non-positive -> level 0.
+     */
+    public static int surfaceMaterialMipLevel(float screenFootprintTexels, float depthFootprintTexels,
+                                              float mipBias, int levelCount) {
+        float footprintTexels = Math.max(screenFootprintTexels, depthFootprintTexels) * mipBias;
+        if (Float.isInfinite(footprintTexels) && footprintTexels > 0f) {
+            return levelCount - 1;
+        }
+        if (!(footprintTexels > 1f)) {
+            return 0;
+        }
+        int level = Math.getExponent(footprintTexels);
+        return Math.max(0, Math.min(level, levelCount - 1));
+    }
+
+    /*
      * Formula: floorStepTileComponent
      * Derivation:
      *   The leftmost ray at column 0 has direction rayDirLeft and the rightmost
@@ -1121,6 +1211,125 @@ public final class GameMath {
         float redFactor   = Math.min(1f, shade * (1f + alertPulse * alertRedBoost));
         float greenFactor = shade * (1f - alertPulse * alertGbDampen);
         float blueFactor  = shade * (1f - alertPulse * alertGbDampen);
+
+        int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
+        int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
+        int outB = MathUtils.clamp((int) (blueFactor  * inB), 0, 255);
+
+        return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
+    }
+
+    /*
+     * Formula: atmosphereFogFactor
+     * Derivation:
+     *   Normalised position in the fog band:
+     *       u = clamp((distanceTiles - fogStartTiles) / (fogEndTiles - fogStartTiles), 0, 1)
+     *   Smoothstep (zero slope at both ends so the hue shift has no visible seam):
+     *       fog = u * u * (3 - 2u)
+     *   0 at or before fogStart, 1 at or after fogEnd.
+     * Edge cases:
+     *   fogEndTiles <= fogStartTiles degenerates to a step at fogStart (0 below, 1 at or above).
+     *   Negative distance clamps to 0.
+     */
+    public static float atmosphereFogFactor(float distanceTiles, float fogStartTiles, float fogEndTiles) {
+        if (fogEndTiles <= fogStartTiles) {
+            return distanceTiles >= fogStartTiles ? 1f : 0f;
+        }
+        float normalised = (distanceTiles - fogStartTiles) / (fogEndTiles - fogStartTiles);
+        if (normalised <= 0f) return 0f;
+        if (normalised >= 1f) return 1f;
+        return normalised * normalised * (3f - 2f * normalised);
+    }
+
+    /*
+     * Formula: muzzleLightFalloff
+     * Derivation:
+     *   Linear distance ratio to the light radius: u = distanceTiles / radiusTiles.
+     *   Squared quadratic falloff (bright at the muzzle, soft tail, exactly 0 at the radius):
+     *       falloff = max(0, 1 - u)^2
+     * Edge cases:
+     *   radiusTiles <= 0 returns 0 (no light). Negative distance is treated as 0 (full falloff = 1).
+     *   Distance at or beyond the radius returns 0.
+     */
+    public static float muzzleLightFalloff(float distanceTiles, float radiusTiles) {
+        if (radiusTiles <= 0f) return 0f;
+        float remaining = 1f - Math.max(0f, distanceTiles) / radiusTiles;
+        if (remaining <= 0f) return 0f;
+        return remaining * remaining;
+    }
+
+    /*
+     * Formula: contactShadowAlpha
+     * Derivation:
+     *   The shadow texture is an ellipse inscribed in its rectangle. For a texel centre mapped to
+     *   [-1,1] on both axes, the normalised elliptical radius is r = sqrt(nx^2 + ny^2).
+     *   Alpha falls smoothly to zero at the rim: alpha = (1 - r^2)^2 for r in [0,1], 0 beyond.
+     *   (Zero value and zero slope at r = 1, so the ellipse has no visible edge.)
+     * Edge cases:
+     *   r >= 1 (or NaN-free negative input is squared) returns 0; r = 0 returns 1.
+     */
+    public static float contactShadowAlpha(float normalisedRadius) {
+        float radiusSquared = normalisedRadius * normalisedRadius;
+        if (radiusSquared >= 1f) return 0f;
+        float falloff = 1f - radiusSquared;
+        return falloff * falloff;
+    }
+
+    /*
+     * Formula: applyRgbShadeToPackedRGBA
+     * Derivation:
+     *   Per-channel twin of applyShadeToPackedRGBA. The scalar shade becomes one shade per channel
+     *   (shade x graded tint), and the same alert maths is applied to each channel:
+     *       outR = min(1, shadeRed * (1 + alertPulse * alertBoost)) * inR
+     *       outG = shadeGreen * (1 - alertPulse * alertDampen) * inG
+     *       outB = shadeBlue  * (1 - alertPulse * alertDampen) * inB
+     *   Every channel is clamped to [0,255] before repacking (alpha = 0xFF), so a tint above 1
+     *   multiplied by a bright shade can never wrap.
+     * Edge cases:
+     *   Negative shade (or dampen overshoot) clamps to 0. alertPulse outside [0,1] is not guarded.
+     */
+    public static int applyRgbShadeToPackedRGBA(int pixel, float shadeRed, float shadeGreen, float shadeBlue,
+                                                float alertBoost, float alertDampen, float alertPulse) {
+        int inR = (pixel >>> 24) & 0xFF;
+        int inG = (pixel >>> 16) & 0xFF;
+        int inB = (pixel >>>  8) & 0xFF;
+
+        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost));
+        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen);
+        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen);
+
+        int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
+        int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
+        int outB = MathUtils.clamp((int) (blueFactor  * inB), 0, 255);
+
+        return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
+    }
+
+    /*
+     * Formula: applyRgbShadeAndLightToPackedRGBA
+     * Derivation:
+     *   applyRgbShadeToPackedRGBA, plus an ADDITIVE light multiplier applied AFTER the alert maths:
+     *       factorR = min(1, shadeRed * (1 + alertPulse * alertBoost)) + lightRed
+     *       factorG = shadeGreen * (1 - alertPulse * alertDampen)      + lightGreen
+     *       factorB = shadeBlue  * (1 - alertPulse * alertDampen)      + lightBlue
+     *       outC    = clamp(factorC * inC, 0, 255)
+     *   i.e. colour = albedo x base + albedo x light. Only the FINAL channel is clamped, so a surface
+     *   already at multiplier 1.0 can still brighten (the muzzle-light splash); with light = 0 this is
+     *   exactly applyRgbShadeToPackedRGBA.
+     * Edge cases:
+     *   Negative light is not guarded beyond the final clamp to 0.
+     */
+    public static int applyRgbShadeAndLightToPackedRGBA(int pixel, float shadeRed, float shadeGreen,
+                                                        float shadeBlue, float lightRed, float lightGreen,
+                                                        float lightBlue, float alertBoost,
+                                                        float alertDampen, float alertPulse) {
+        int inR = (pixel >>> 24) & 0xFF;
+        int inG = (pixel >>> 16) & 0xFF;
+        int inB = (pixel >>>  8) & 0xFF;
+
+        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost)) + lightRed;
+        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen) + lightGreen;
+        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen) + lightBlue;
 
         int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
         int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);

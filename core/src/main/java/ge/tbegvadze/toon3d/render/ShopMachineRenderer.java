@@ -10,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.RenderResolution;
@@ -69,6 +70,11 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     private float planeY       = 1f;
     private float lightingTimeSeconds = 0f;
     private float alertPulse          = 0f;
+    private AtmosphereGrade atmosphereGrade;
+    /** True only during the muzzle-light re-draw of the body (it is recorded at its own depth). */
+    private boolean ownBodyRecorded;
+    /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
+    private final Texture contactShadowTexture = ContactShadow.buildTexture();
 
     // Runtime render-resolution authority (util/RenderResolution via WallRenderer) — cached once per
     // render() call, read by drawMachine()/drawLayer() below. Every layer is drawn per-column (mirrors
@@ -115,6 +121,9 @@ public class ShopMachineRenderer implements Renderable, Disposable {
         this.planeX       = GameMath.cameraPlaneX(playerDirectionY, planeScale);
         this.planeY       = GameMath.cameraPlaneY(playerDirectionX, planeScale);
     }
+
+    /** Sets the floor's colour grade (R1, body sprite only). Null disables the tint. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) { this.atmosphereGrade = grade; }
 
     public void setLightingTime(float timeSeconds) { this.lightingTimeSeconds = timeSeconds; }
     public void setAlertPulse(float pulse)         { this.alertPulse = pulse; }
@@ -222,11 +231,48 @@ public class ShopMachineRenderer implements Renderable, Disposable {
 
         // ── 2. Tier-A body (alpha blend, ground-anchored, writes prop z-buffer for enemy occlusion) ──
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        float bodyRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-        float bodyGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-        float bodyBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        // R1: grade the BODY sprite only; aura / window / status / drop / holo layers are emissive (R4).
+        float bodyGradeRed   = 1f;
+        float bodyGradeGreen = 1f;
+        float bodyGradeBlue  = 1f;
+        float bodyLightRed   = 0f;
+        float bodyLightGreen = 0f;
+        float bodyLightBlue  = 0f;
+        if (atmosphereGrade != null) {
+            atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
+            bodyGradeRed   = atmosphereGrade.red;
+            bodyGradeGreen = atmosphereGrade.green;
+            bodyGradeBlue  = atmosphereGrade.blue;
+            // R8: muzzle light on the BODY only (read right after evaluate(); zero when idle).
+            bodyLightRed   = atmosphereGrade.lightAddRed;
+            bodyLightGreen = atmosphereGrade.lightAddGreen;
+            bodyLightBlue  = atmosphereGrade.lightAddBlue;
+        }
+        float gradedRed   = Math.min(1f, shade * bodyGradeRed);
+        float gradedGreen = Math.min(1f, shade * bodyGradeGreen);
+        float gradedBlue  = Math.min(1f, shade * bodyGradeBlue);
+        float bodyRed   = Math.min(1f, gradedRed * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+        float bodyGreen = gradedGreen * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        float bodyBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+        // R4/R5: contact shadow under the cabinet, before the body (same per-column wall z-test). The
+        // wall renderer is the shared z-buffer authority; the shadow is never recorded as an occluder.
+        ContactShadow.draw(batch, contactShadowTexture, wallRenderer, projectionColumnCount, columnWidth,
+                screenCenterColumn * columnWidth, drawBottom, spriteWidth * CONTACT_SHADOW_WIDTH_FRACTION_SHOP,
+                depth, ContactShadow.alphaAtDepth(
+                        atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth));
         batch.setColor(bodyRed, bodyGreen, bodyBlue, 1f);
         drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, true);
+
+        // R8 muzzle light: an ADDITIVE re-draw of the body, colour = light add, so the light is not lost
+        // to the clamped shade multiplier. No blend restore is needed: the very next statement switches
+        // to additive for the window glow anyway, so the whole pass costs zero extra blend changes.
+        if (bodyLightRed + bodyLightGreen + bodyLightBlue > 0f) {
+            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+            batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
+            ownBodyRecorded = true;   // the body just recorded itself at this depth; do not skip on that
+            drawLayer(bodyTexture, screenCenterColumn, bodyCenterY, spriteWidth, spriteHeight, depth, false);
+            ownBodyRecorded = false;
+        }
 
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
 
@@ -326,7 +372,8 @@ public class ShopMachineRenderer implements Renderable, Disposable {
             // Additive glow layers are simply hidden behind a nearer prop; re-drawing a prop over
             // additive light would not undo it.
             if (!writeOccluder && occluderBuffer != null
-                    && depth >= occluderBuffer.getNearestDepth(screenColumn)) continue;
+                    && (ownBodyRecorded ? depth > occluderBuffer.getNearestDepth(screenColumn)
+                                        : depth >= occluderBuffer.getNearestDepth(screenColumn))) continue;
             int texSrcX = (screenColumn - leftColumn) * textureWidth / columnSpan;
             texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
             batch.draw(texture,
@@ -357,6 +404,7 @@ public class ShopMachineRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        contactShadowTexture.dispose();
         bodyTexture.dispose();
         glowTexture.dispose();
         holoSignTexture.dispose();

@@ -7,6 +7,15 @@ model: fable
 
 You are the Weapon Creator for toon3D — a first-person pseudo-3D dungeon-crawler roguelike (Doom RPG aesthetic, LibGDX, tile-based movement).
 
+## Building and running the game (cloud containers) — read `.claude/skills/run-game/SKILL.md`
+Never run `./gradlew` at the repo root in a cloud container (it cannot resolve the Android Gradle plugin) and never
+try to click `lwjgl3:run` (desktop ignores all input: no multitouch, so touch controls never enable). Run
+`.claude/skills/run-game/setup.sh` once, build/test from `/tmp/toon3d-runtime/mirror`, and drive the real game
+with `.claude/skills/run-game/run.sh` (scripted taps at world coordinates, PNG shots, forced lighting mood, frame
+timing). The skill lists every button's coordinates and the known traps. It is a dev tool, not a test.
+Verify the weapon sprite and its muzzle light on screen: equip via the start room or use a `pulse:` step, and
+capture fire frames.
+
 ## PRIMARY REFERENCE
 
 Read `docs/weapon-creation-guide.txt` first before doing any work. It contains:

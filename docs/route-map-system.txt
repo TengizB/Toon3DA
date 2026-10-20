@@ -868,7 +868,9 @@ REGION THEMING / ACTS (RegionAmbienceRegistry)
   overlayThemeId (order-4 tint), wallPalette (the wall symbols its generators lean on), enemyFactionId
   (which faction dominates — a hook EnemyManager reads later), the AMBIENCE HOOKS (redAlertFrequency,
   lightingMoodId, musicId — ids/flags the audio + red-alert systems read LATER; NO audio assets added
-  here), bossId, and gateFlavour (the REGION_GATE announce copy). v1 regions: outer_facility (cool
+  here; lightingMoodId is now CONSUMED by World.resolveLightingMood -> render/LightingMoodRegistry
+  (visual-identity-order-1): a new region MUST name a registered mood or LightingMoods.bootstrap()
+  throws — see docs/art-direction.txt), bossId, and gateFlavour (the REGION_GATE announce copy). v1 regions: outer_facility (cool
   steel, baseline demons), research_wing (clinical, lab horrors), reactor_depths (amber-hot, reactor
   brutes, red-alert common), the_breach (corrupted violet, necrotic), the_core (deep violet-white, core
   wardens, red-alert most common — the finale, and the fallback).

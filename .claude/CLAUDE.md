@@ -404,6 +404,7 @@ Never hardcode a value anywhere. Always add to the matching constant file first,
 | `ProgressionConstants.java` | XP, death beat, stats preferences key |
 | `TouchConstants.java` | On-screen button sizes, positions, alpha values |
 | `SoundConstants.java` | GAMEPLAY audio: synthesis format (22050 Hz, minimum attack, WAV cache directory, the METAL partial damping, the room-echo silence floor + end fade, the low-health warning threshold, the boss enrage-roar size), the variation cycle (pitch cycle/jitter/clamps), distance + direction perception (reference/max/taper tiles, pan strength, rear volume & pitch), the mixing rules (per-turn enemy cap, turn window, stack falloff, voice pressure, story duck), per-category priorities, and the three-state SFX volume setting. Per-sound RECIPES are NOT here — they are content, and live in `audio/GameSoundCatalog` |
+| `ArtDirection.java` | THE ART DIRECTION (visual-identity-order-1, "LIT BY THE MACHINE"): the master palette (UI neutrals, the two inks SUIT_AMBER / FACILITY_CYAN, semantic extras — combat colours stay in `CombatPalette`), the five LIGHTING MOODS' numbers (`MOOD_<ID>_*`: near/far tints, fog start/end, horizon colours, vignette alpha), mood + material ids, grade strengths (environment 1.0 / enemy 0.5 / weapon 0.6) and the view-vignette geometry. Rows live in `render/LightingMoods` + `render/SurfaceMaterials`. See `docs/art-direction.txt` |
 | `TilesetConstants.java` | Symbol/sprite-reuse partition: FIXED vs FLEXIBLE symbol tables per category, fixed-sprite exceptions, palette-seed salt |
 | `StoryUiConstants.java` | Story UI visual language (order-1): panel rects/anchors (bark, exchange, boot card, codex), `STORY_TEXT_SIZE`/`STORY_LINE_MAX_CHARS`, panel alpha, fade timing, per-speaker accent colours + chip geometry, choice-button size, HUD/touch safe zones, speaker-sting audio params, string-asset path. **Bark layer (order-2):** close-X geometry + swipe distance, min-interval, queue capacity + staleness, no-repeat memory, kill/floor-arrival chances, low-health fraction, idle seconds, backtrack steps, deep-strata interval, per-`BarkTrigger` cooldown table, lore/levity weights, seed salts. **Boot card (order-3):** full-bleed backdrop, the top-down card stack (status panel → counter → ORA panel → CONTINUE), counter prefix + digit padding, reveal/fade timing, `STORY_TEXT_HOLD_SCALE_REDUCED`. **Exchanges (order-4):** the prompt panel + top-anchored answer-plate stack (`STORY_EXCHANGE_PROMPT_TOP_Y` re-spaces the whole modal), min/max option count, plate height + press-state alphas, answer text size + `STORY_EXCHANGE_OPTION_MAX_CHARS`, world-dim colour/alpha, fade timing, selection seed salt. **Moment schedule (order-5):** `STORY_LOG_TERMINAL_SYMBOL` + `STORY_LOG_TAKES_PER_FLOOR`, `STORY_QUIET_MOMENT_MIN_STEPS`, `STORY_ORGANIZATION_ORDER_FLOOR_DELAY`, and the `RUN_START`/`CONTROL_HINT`/`LOG_FOUND` cooldown rows. **Codex + wrap-up (order-6):** the whole `STORY_CODEX_*` frame (panel, header, tab column, body band, footer settings strip, row/detail metrics, scroll drag scale + tap slop, plate styling, chrome string ids), `STORY_TEXT_SIZE_MULTIPLIER` + the three `STORY_SETTING_*` keys, `STORY_COMBAT_SPIKE_AWAKE_ENEMIES`, `STORY_TELEMETRY_FAST_DISMISS_SECONDS`, and the `CODEX_COMPLETE` cooldown row. **Engine backbone (order-7):** the `STORY_CUE_*` interface-cue table (panel open / choice picked / reveal tick) beside the speaker stings, `STORY_SETTING_STORY_AUDIO` + `STORY_CODEX_SETTING_AUDIO_ID`, and the fourth slot in `STORY_CODEX_SETTING_COUNT`. **Framing screens (order-8):** the shared `STORY_FRAME_*` backdrop/scrim + menu-plate geometry, the `STORY_TITLE_*` launch stack (status lines, reveal pacing, the title and its menu anchor), the confirmation panel + PROCEED/CANCEL plates, `STORY_FRAME_RETURN_*` and `STORY_ENDING_MERGE_HOLD_SECONDS` (the two ways an ending resolves), the `STORY_REPORT_*` reprint-report page (which replaced the deleted `HudConstants.DEATH_OVERLAY_*` block), and `STORY_ENDING_OUTCOME_ID`. **The first ten minutes (narrative-rework order-2):** `STORY_BOOT_SYSTEM_MAX_LINES` = 4 (the first-print block), the four-line `STORY_TITLE_STATUS_*` launch notice, a queue capacity sized for floor one's mandatory burst (a `STORY_CRITICAL` beat that finds the queue full of other criticals is DROPPED, so this is a floor, not a pacing knob), and the `STORY_DEATH_STROKE_*` block (hold, fade, anchor, colour, `STORY_DEATH_STROKE_ID`). **The bestiary voice (narrative-rework order-5):** the four new zero rows in the per-trigger cooldown table — `ENEMY_ABILITY_RESOLVED`, `BOSS_ARENA_ENTERED`, `BOSS_DEFEATED` are all one-shot moments, and `ENEMY_FAMILY_FIRST_SEEN` now carries the archetype grain too. **The lore drip (narrative-rework order-8):** the per-floor CEILING — `STORY_BARK_FLOOR_BUDGET` (two non-critical lines a floor, then silence), `STORY_PLANET_LINES_PER_FLOOR` (one, in any region, on any trigger) and `STORY_BARK_DEEP_FLOOR_SILENCE_CHANCE` (deliberate silence from the Wound down) — plus the `MAP_OPENED` zero row in the cooldown table. **Re-entry & recovery (narrative-rework order-9):** `STORY_REENTRY_GAP_HOURS` (24 — a day is deliberately generous; below it, somebody who put the phone down after lunch gets told what they already know), `STORY_RECAP_RECENT_ENTRY_COUNT`, `STORY_MISSED_SHELF_CAPACITY`, the two permanent-record ids + separator the recap's rings are packed into (`STORY_RECENT_UNLOCK_RECORD_ID` / `STORY_MISSED_BEAT_RECORD_ID`, riding the order-4 outcome mechanism exactly as the ending does), the two composed-page entry ids, the recap's five chrome ids, and the `DEPTH_REACTION` cooldown row |
 
@@ -646,6 +647,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Story UI (barks, exchanges, boot card, codex, story persistence, localisation, story audio) | `docs/story-ui-system.txt` |
 | Relics (run-changing artifacts: model, shipped catalog, runtime seams, offers + the RELIC_OFFER phase, pricing/bands/R-RELIC rules, ADD A RELIC) | `docs/relic-system.txt` |
 | Narrative CONTENT contract: what a line may say, the doctrine, the joke policy, ORA's voice, the comprehension bar | `docs/narrative-authority.txt` |
+| Art direction: palette, the five region lighting moods, the atmosphere grade, emissive exemption, floor/ceiling materials, view vignette, `-Dtoon3d.forceMood` | `docs/art-direction.txt` |
 | Gameplay sound (procedural SFX: synthesis toolkit, catalog, mixing, firing sites, add-a-sound) | `docs/sound-system.txt` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Game balance — current state, every number/system/formula and known problems | `docs/game-balance-knowledge.txt` |
@@ -657,14 +659,16 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Roguelike design pillars | `docs/roguelike-design-pillars.txt` |
 | Feature ideas backlog + how to write one | `.claude/agents/ideas/` (start at `00-index-and-how-to-use-ideas.txt`) |
 | Resuming interrupted work (checkpoints) | `.claude/checkpoints/README.md` |
+| Building, running, tapping and screenshotting the game in a cloud container (mirror build, capture driver, button coordinates, frame timing, traps) | `.claude/skills/run-game/SKILL.md` |
 
 ## Docs Directory (`docs/`)
 
-All 19 reference docs — read these before implementing anything in their domain:
+All 20 reference docs — read these before implementing anything in their domain:
 
 | File | Lines | What it covers |
 |---|---|---|
 | `tile-symbols.txt` | 231 | Complete tile character reference — walls, doors, floors, props, pickups, enemies + the FIXED/FLEXIBLE model. **Single source of truth for level format.** |
+| `art-direction.txt` | 160 | The style bible (visual-identity series): pillars V1-V8, the palette, the five lighting moods, the grade pipeline and where each renderer applies it, the emissive exemption list, the ten floor/ceiling materials, RECIPE C (add a mood / material), the dev mood override. **Single source of truth; update on any visual-identity change.** |
 | `environment-tileset-system.txt` | 850 | Symbol/sprite-reuse subsystem: categories, sprite registry, symbol budget, per-level palette, allocator, room blueprints, texture realization, render integration, and RECIPE A (add a sprite) / RECIPE B (add a room). **Single source of truth; update on any tileset/room/palette change.** |
 | `route-map-system.txt` | 939 | Branching route-map subsystem: data model + registries, DAG generation & regions, node->floor pipeline, overlay/interaction, special-level profiles, ROUTE ECONOMICS (the priced map: node EV ledger, derived pips, map-gen guarantees, trajectory audit), node/region catalogs, and the extensibility recipes. **Single source of truth; update on any route change.** |
 | `relic-system.txt` | 655 | The relic layer: the model (run-scoped, rule-changing, folded into BuildStats via PerkEffect), the `relic` package, the SHIPPED 36-relic catalog (rarity/trigger/valuation/affinity/effects/cost text/gain), the runtime seams (Player shield + multiplier, EnemyManager kill terms/spawn HP/corpse burst, RelicBlastTarget, DoorOpenedListener, RelicRuntime), the four sources and the RELIC_OFFER phase rules (R7/R14/R15), pricing (bands, R-RELIC / R-RELIC-CURSE / R-RELIC-STACK / R-RELIC-SOURCE, valuation assumptions, S-RELIC), ADD A RELIC, and the deliberate exclusions. **Single source of truth; update on any relic change.** |
@@ -747,6 +751,11 @@ Render order each frame (World.render):
 2. WallRenderer.render()          — 3D perspective wall projection on top of backdrop
 3. PropRenderer.render()          — billboard prop sprites (barrels, crates, etc.)
 4. EnemyRenderer.render()         — enemy billboard sprites (drawn over props)
+   (enemy attack effects + impact world effects)
+4b. ViewVignetteRenderer.render() — per-mood corner vignette (visual-identity-order-1), after every
+                                    world pass and BEFORE the weapon, so the gun, HUD and overlays stay
+                                    crisp. Every world pass above is colour-graded by the floor's
+                                    lighting mood (render/AtmosphereGrade) — see docs/art-direction.txt
 5. WeaponHudRenderer.render()     — weapon sprite, bottom-centre of screen
 6. LevelRenderer.render()         — 2D mini-map overlay, top-left corner
 7. Player.render()                — player dot and direction indicator on mini-map
@@ -860,6 +869,13 @@ batch.draw(wallTexture,
 `srcY = 0` = top of image; LibGDX Y-up maps row 0 to visual top. No manual flip needed.
 
 ## Build
+
+> **In a cloud container (Claude Code on the web), read the `run-game` skill first:
+> `.claude/skills/run-game/SKILL.md`.** The repo-root `./gradlew` cannot resolve the Android Gradle plugin
+> there, and `lwjgl3:run` ignores every click (desktop has no multitouch, so touch controls never enable).
+> The skill's `setup.sh` builds a desktop-only mirror + a virtual display; `run.sh` plays the REAL game with
+> scripted taps at world coordinates, takes screenshots, forces a lighting mood and times frames. It also lists
+> every button's coordinates and the traps that already cost hours. It is a dev tool, not a test.
 
 ```bash
 ./gradlew lwjgl3:run    # Desktop run

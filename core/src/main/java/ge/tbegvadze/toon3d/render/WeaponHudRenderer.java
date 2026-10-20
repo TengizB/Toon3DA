@@ -51,6 +51,10 @@ public class WeaponHudRenderer implements Renderable, Disposable {
     // cause visual deformation + touch-coordinate misalignment for the rest of the frame.
     private final Map<Class<? extends Weapon>, Texture> weaponTextureCache;
     private Weapon              equippedWeapon;
+    // R6 frame tint (mood near tint x clamped tile light); default white. Set per frame by World.
+    private float               weaponTintRed   = 1f;
+    private float               weaponTintGreen = 1f;
+    private float               weaponTintBlue  = 1f;
     private Texture             normalTexture;
     private final SpriteBatch   batch;
     private final ShapeRenderer shapeRenderer;
@@ -3095,6 +3099,13 @@ public class WeaponHudRenderer implements Renderable, Disposable {
         return 1;
     }
 
+    /** R6: sets the frame tint (mood near tint x clamped tile light). Default white. Render thread only. */
+    public void setWeaponTint(float red, float green, float blue) {
+        this.weaponTintRed   = red;
+        this.weaponTintGreen = green;
+        this.weaponTintBlue  = blue;
+    }
+
     @Override
     public void render(OrthographicCamera camera) {
         if (equippedWeapon == null) return;
@@ -3122,6 +3133,9 @@ public class WeaponHudRenderer implements Renderable, Disposable {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
+        // R6: the frame (normal / fire / reload textures) takes the mood + tile-light tint. The muzzle and
+        // idle-pulse effect sprites below are emissive and stay untinted.
+        batch.setColor(weaponTintRed, weaponTintGreen, weaponTintBlue, 1f);
         if (equippedWeapon instanceof Chaingun) {
             // The chaingun texture is a horizontal rotation sprite sheet; sample the current
             // spin frame's sub-region so the barrels animate without any per-frame FrameBuffer work.
@@ -3135,6 +3149,7 @@ public class WeaponHudRenderer implements Renderable, Disposable {
             batch.draw(normalTexture, drawX, currentOffsetY,
                        WeaponConstants.WEAPON_HUD_WIDTH, WeaponConstants.WEAPON_HUD_HEIGHT);
         }
+        batch.setColor(1f, 1f, 1f, 1f);
         batch.end();
 
         if (state == WeaponVisualState.FIRING) {

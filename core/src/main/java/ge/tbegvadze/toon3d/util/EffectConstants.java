@@ -459,4 +459,14 @@ public final class EffectConstants {
     // -------------------------------------------------------------------------
     public static final float RELIC_BLAST_VISUAL_SCALE_DOOR   = 0.65f;
     public static final float RELIC_BLAST_VISUAL_SCALE_CORPSE = 0.45f;
+
+    // -------------------------------------------------------------------------
+    // MUZZLE LIGHT (visual-identity-order-2, R7/R8): the brief world-light splash of the player's shot.
+    // Cosmetic animation timing only; colours live in ArtDirection.MUZZLE_*.
+    // -------------------------------------------------------------------------
+    public static final float MUZZLE_LIGHT_DURATION_SECONDS = 0.10f;
+    public static final float MUZZLE_LIGHT_RADIUS_TILES     = 4.0f;
+    public static final float MUZZLE_LIGHT_PEAK_WARM   = 1.50f;
+    public static final float MUZZLE_LIGHT_PEAK_ENERGY = 1.50f;
+    public static final float MUZZLE_LIGHT_PEAK_FIRE   = 1.70f;
 }

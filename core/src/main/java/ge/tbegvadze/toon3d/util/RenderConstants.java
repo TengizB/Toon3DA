@@ -111,16 +111,21 @@ public final class RenderConstants {
     // Floor & Ceiling texture rendering — see docs/dda-raycasting-math.txt
     // The backdrop's actual pixel size is runtime-switchable — see util.RenderResolution
     // (getFloorBackdropWidth()/getFloorBackdropHeight()) and FloorCeilingRenderer.setRenderResolution().
-    // SCALE_DIVISOR=4 is the ratio both tiers keep of their own projection column count (HD: 320×180,
-    // ~16× cheaper than full-res; FULL_HD: 480×270), stretched to the full screen by SpriteBatch either way.
+    // Each tier keeps 1/divisor of its own projection column count, stretched to the full screen by SpriteBatch.
+    // HD = performance tier: divisor 4 -> 320x180. FULL_HD = quality tier: divisor 2 -> 960x540 (measured
+    // about +2 ms/frame over divisor 4 on the 4-core capture VM, because the fill is worker-threaded).
     public static final int    FLOOR_BACKDROP_SCALE_DIVISOR    = 4;
+    public static final int    FLOOR_BACKDROP_SCALE_DIVISOR_FULL_HD = 2;
     // FLOOR_CAMERA_Z = 0.5 → camera exactly centred (horizon at screen centre)
     public static final float  FLOOR_CAMERA_Z                   = 0.5f;
     public static final float  FLOOR_SHADING_FALLOFF            = 0.05f;
     public static final float  FLOOR_MAX_VISIBLE_DISTANCE_CELLS = 15.0f;
-    // Packed RGBA8888 ambient colours for max-distance / unshaded pixels
-    public static final int    FLOOR_AMBIENT_COLOUR_PACKED      = 0x141414FF;
-    public static final int    CEILING_AMBIENT_COLOUR_PACKED    = 0x10101CFF;
+    /** Edge length in texels of every floor/ceiling surface material (power of two, tileable). */
+    public static final int    SURFACE_MATERIAL_SIZE            = 64;
+    /** Mip chain length per material: level 0 = 64, then 32, 16, 8 (2x2 box filtered). */
+    public static final int    SURFACE_MATERIAL_MIP_LEVELS      = 4;
+    /** Multiplies the texel footprint before the level is chosen; above 1 blurs earlier, below 1 stays crisp longer. */
+    public static final float  SURFACE_MATERIAL_MIP_BIAS        = 1.0f;
     // Placeholder procedural textures generated at runtime when these assets are absent
     public static final String LAB_FLOOR_TEXTURE_PATH   = "textures/lab/lab_floor_concrete.png";
     public static final String LAB_CEILING_TEXTURE_PATH = "textures/lab/lab_ceiling_panel.png";
@@ -605,4 +610,23 @@ public final class RenderConstants {
     public static final float TWIST_BLACKOUT_LIGHT_MULTIPLIER = 0.45f;
     /** R7c: enemy billboards on a BLACKOUT floor never shade below this, so a body in the dark is a silhouette. */
     public static final float TWIST_BLACKOUT_ENEMY_MIN_SHADE  = 0.35f;
+
+    // -------------------------------------------------------------------------
+    // Contact shadows (visual-identity-order-2 R5/R6) — soft ellipse under every upright billboard
+    // -------------------------------------------------------------------------
+    public static final int   CONTACT_SHADOW_TEXTURE_WIDTH        = 64;
+    public static final int   CONTACT_SHADOW_TEXTURE_HEIGHT       = 32;
+    /** Shadow width as a fraction of the projected billboard width. */
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_ENEMY = 0.70f;
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_PROP   = 0.85f;
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_PICKUP = 0.60f;
+    public static final float CONTACT_SHADOW_WIDTH_FRACTION_SHOP   = 0.90f;
+    /** Shadow height = shadow width x this ratio. */
+    public static final float CONTACT_SHADOW_HEIGHT_RATIO         = 0.22f;
+    /** Peak alpha before the fog fade. */
+    public static final float CONTACT_SHADOW_ALPHA                = 0.50f;
+    /** Fraction of the alpha removed at full fog: alpha x (1 - fade x fog). */
+    public static final float CONTACT_SHADOW_FOG_FADE             = 0.80f;
+    /** Extra alpha scale for a hovering enemy so the gap to the body reads as height. */
+    public static final float CONTACT_SHADOW_HOVER_ALPHA_SCALE    = 0.55f;
 }

@@ -10,6 +10,12 @@ Quick lookup: find the right doc before starting any feature or fix.
 | `wall-renderer-guide.txt` | Modifying WallRenderer pipeline, texture mapping, or shade calculation. |
 | `tick-system.txt` | Adding a new turn-based subscriber, modifying game loop, or touching TickEventBus. |
 
+## Art Direction
+
+| File | When to read |
+|---|---|
+| `art-direction.txt` | Touching colour, lighting moods, the atmosphere grade, floor/ceiling materials, the view vignette, or any renderer's shade. **The style bible; update it in the same commit as any visual-identity change.** |
+
 ## Level & World
 
 | File | When to read |

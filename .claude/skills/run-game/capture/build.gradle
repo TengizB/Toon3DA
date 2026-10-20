@@ -1,0 +1,18 @@
+// DEV-ONLY capture driver module. Copied into the scratch mirror build by setup.sh; never part of the repo build.
+apply plugin: 'java'
+java.sourceCompatibility = 21
+dependencies {
+  implementation project(":core")
+  implementation "com.badlogicgames.gdx:gdx:$gdxVersion"
+  implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+  implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+tasks.register('capture', JavaExec) {
+  workingDir = rootProject.file('assets').path
+  classpath = sourceSets.main.runtimeClasspath
+  mainClass = 'capture.CaptureLauncher'
+  jvmArgs += "--enable-native-access=ALL-UNNAMED"
+  ['cap.script', 'cap.out', 'cap.fps', 'toon3d.forceMood'].each {
+    if (System.getProperty(it) != null) systemProperty it, System.getProperty(it)
+  }
+}

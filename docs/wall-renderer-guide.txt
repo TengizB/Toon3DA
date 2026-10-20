@@ -26,7 +26,18 @@ batch.draw per column:
              false, false);                     // no flip needed
   srcY=0 = top of image; LibGDX Y-up maps image row 0 to visual top without manual flip.
 
-Shading: batch.setColor(shade, shade, shade, 1f) before each draw — embeds tint in vertex data, no flush.
+Shading: batch.setColor(red, green, blue, 1f) before each draw — embeds tint in vertex data, no flush.
+  The scalar shade (falloff × face × tile brightness, clamped) is GRADED per column by the floor's
+  lighting mood (visual-identity-order-1): channel = clamp01(shade × tint), tint from
+  AtmosphereGrade.evaluateInto(mood, perpWallDistance, GRADE_STRENGTH_ENVIRONMENT, column.gradeScratch)
+  — the static, thread-safe variant, because columns run on worker threads. The red-alert boost/dampen
+  is applied after the grade. Walls, door panels and columns all take it. See docs/art-direction.txt.
+  MUZZLE LIGHT (visual-identity-order-2): NOT part of the clamped multiplier above. Workers compute the
+  per-column light add (AtmosphereGrade.lightAddInto into gradeScratch[3..5], zero unless a shot was fired
+  in the last 0.10 s) and store it on the column result. render() then runs an extra PHASE 3 after the
+  base draws: the same column slices re-drawn with additive blending (GL_SRC_ALPHA, GL_ONE), colour =
+  light add, skipped entirely at intensity 0, blend func switched exactly twice. A column with a door
+  panel lights the panel only. See docs/art-direction.txt section 11.
 
 Performance:
   Ceiling + floor  → 0 GL calls (batched, same texture)
@@ -39,8 +50,8 @@ Performance:
 The ray-column count is RUNTIME state, set by the player's RESOLUTION setting (settings screen
 and codex strip; persisted as `story.setting.render.resolution`). `util/RenderResolution`:
 
-  HD       1280 columns, columnWidth 1.0 world unit,   floor backdrop 320x180  (default)
-  FULL_HD  1920 columns, columnWidth 0.667 world unit, floor backdrop 480x270
+  HD       1280 columns, columnWidth 1.0 world unit,   floor backdrop 320x180  (performance tier)
+  FULL_HD  1920 columns, columnWidth 0.667 world unit, floor backdrop 960x540  (default, quality tier)
 
 World units stay 1280x720 — only the 3D view's internal resolution changes. HUD, text and menus
 are already drawn at the device's native pixels.

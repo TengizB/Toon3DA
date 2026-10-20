@@ -246,6 +246,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private Level                  level;
     private FloorCeilingRenderer   floorCeilingRenderer;
+    // Visual identity order-1: the floor's resolved lighting mood and the one grade evaluator every
+    // world renderer will share (renderers are wired to it in later checkpoints).
+    private final AtmosphereGrade  atmosphereGrade = new AtmosphereGrade();
+    private LightingMood           currentLightingMood;
+    private ViewVignetteRenderer   viewVignetteRenderer;
     private DoorManager            doorManager;
     private WallRenderer           wallRenderer;
     private PropRenderer           propRenderer;
@@ -628,6 +633,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // a level's EnvironmentTextureSet can realize just its palette's textures. Must run after the
         // catalog bootstrap above (the assertion cross-checks against it).
         TilesetGfxBootstrap.bootstrap();
+        // Visual identity order-1: floor/ceiling materials, then the five lighting moods (whose bootstrap
+        // cross-checks every region's lightingMoodId against RouteRegistries, bootstrapped above).
+        SurfaceMaterials.bootstrap();
+        LightingMoods.bootstrap();
         // Room-blueprint catalog (symbol/sprite-reuse order-5). Idempotent. Registers every v1 room as a
         // self-describing RoomBlueprint; nothing selects from it yet (generate() still uses the internal
         // RoomType tag until order-8), it exists so the registry seam is live and enumerable.
@@ -767,6 +776,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 eventTextSystem.spawnWithColor(text, positive ? EventTextSystem.COLOR_GREEN : EventTextSystem.COLOR_RED));
         eventTextRenderer   = new EventTextRenderer(eventTextSystem);
         hitVignetteRenderer = new HitVignetteRenderer();
+        viewVignetteRenderer = new ViewVignetteRenderer();
         abilityFeedback     = new AbilityFeedback(eventTextSystem, impactEffectSystem);
         abilityFeedback.setHealVignetteRenderer(hitVignetteRenderer);
         abilityFeedback.setLegendaryVignetteRenderer(hitVignetteRenderer);
@@ -1456,6 +1466,69 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         buildLevelDependentResources(targetLevel, null);
     }
 
+    /** The lighting mood of the floor being built (visual identity order-1). Never null after a build. */
+    public LightingMood getCurrentLightingMood() { return currentLightingMood; }
+
+    /** The shared colour-grade evaluator for this world's renderers. */
+    public AtmosphereGrade getAtmosphereGrade() { return atmosphereGrade; }
+
+    /**
+     * Resolves this floor's {@link LightingMood} and gives it to the {@link AtmosphereGrade}: the dev
+     * override system property {@code toon3d.forceMood} (R12) wins, otherwise the floor's region
+     * ambience {@code lightingMoodId} (R11), otherwise the registry fallback with one warning. Logs
+     * "Atmosphere mood=&lt;id&gt;" (or "(forced)").
+     */
+    private void resolveLightingMood() {
+        LightingMoodRegistry moods = LightingMoods.registry();
+        LightingMood resolved = null;
+        boolean forced = false;
+
+        String forcedId = null;
+        try {
+            forcedId = System.getProperty("toon3d.forceMood");
+        } catch (SecurityException ignored) {
+            // Property lookup unavailable: treat as unset.
+        }
+        if (forcedId != null) {
+            resolved = moods.get(forcedId);
+            if (resolved != null) {
+                forced = true;
+            } else if (Gdx.app != null) {
+                Gdx.app.log("Atmosphere", "toon3d.forceMood='" + forcedId + "' is not a registered mood - ignored");
+            }
+        }
+
+        if (resolved == null) {
+            String moodId = null;
+            if (routePlan != null) {
+                try {
+                    RegionSpec region = routePlan.regionForDepth(currentDepth);
+                    RegionAmbience ambience = region == null ? null
+                            : RouteRegistries.regionAmbience().get(region.themeId());
+                    moodId = ambience == null ? null : ambience.lightingMoodId();
+                } catch (IllegalArgumentException depthOutsidePlan) {
+                    moodId = null;
+                }
+            }
+            resolved = moods.get(moodId);
+            if (resolved == null) {
+                resolved = moods.getFallback();
+                if (Gdx.app != null) {
+                    Gdx.app.log("Atmosphere", "no region mood for depth=" + currentDepth + " - using fallback "
+                            + resolved.id());
+                }
+            }
+        }
+
+        currentLightingMood = resolved;
+        atmosphereGrade.setMood(resolved);
+        atmosphereGrade.resetLight();   // R9: a floor transition mid-pulse clears the light
+        viewVignetteRenderer.setMood(resolved);
+        if (Gdx.app != null) {
+            Gdx.app.log("Atmosphere", "Atmosphere mood=" + resolved.id() + (forced ? " (forced)" : ""));
+        }
+    }
+
     private void buildLevelDependentResources(Level targetLevel, StartGameLevelGenerator startRoomGen) {
         doorManager            = new DoorManager(targetLevel);
         // Doors are heard where they stand, so a door grinding shut behind the player is behind them.
@@ -1467,8 +1540,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 gameAudio.playAt(GameSoundId.DOOR_CLOSE, tileColumn, tileRow);
             }
         });
-        floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel);
+        resolveLightingMood();
+        floorCeilingRenderer   = new FloorCeilingRenderer(targetLevel, currentLightingMood);
+        floorCeilingRenderer.setAtmosphereGrade(atmosphereGrade);
         wallRenderer           = new WallRenderer(targetLevel, doorManager);
+        wallRenderer.setAtmosphereGrade(atmosphereGrade);
         propRenderer           = new PropRenderer(targetLevel, wallRenderer);
         // TILESET SYSTEM (order-6): realize ONLY this level's palette textures (subset per level, not
         // the whole library) and hand the set to the renderers. order-6 only wires the supply + dispose
@@ -1481,6 +1557,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         propRenderer.setWeaponTierMap(buildWeaponTierMap());
         shopMachineRenderer    = new ShopMachineRenderer(targetLevel, wallRenderer);
         shopMachineRenderer.setPropRenderer(propRenderer);
+        shopMachineRenderer.setAtmosphereGrade(atmosphereGrade);
+        propRenderer.setAtmosphereGrade(atmosphereGrade);
         levelRenderer          = new LevelRenderer(targetLevel, doorManager);
         // Seeded from the floor seed (new-game-balancr order 9): spawn/drop/effect rolls replay
         // identically for the same run seed + depth, so a shared seed is a shared run.
@@ -1543,6 +1621,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 propRenderer.addDynamicProp(tileColumn, tileRow, dropChar));
         explosiveBarrelManager.setImpactEventListener(impactEffectSystem);
         enemyRenderer.setPropRenderer(propRenderer);
+        enemyRenderer.setAtmosphereGrade(atmosphereGrade);
+        enemyRenderer.setLevel(targetLevel);
 
         enemyAttackEffectSystem = new EnemyAttackEffectSystem(wallRenderer);
         // The attack drives the existing visuals AND its sound, placed at the attacker so the
@@ -1689,6 +1769,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // reload resets the count, since the player just did the right thing.
         playerController.setEmptyFireAttemptListener(teachingSystem::onEmptyFireAttempt);
         playerController.setWeaponReloadStartedListener(teachingSystem::onWeaponReloaded);
+        // MUZZLE LIGHT (visual-identity-order-2): a shot lights the world through the grade (melee rows are peak 0).
+        playerController.setWeaponFiredListener(atmosphereGrade::pulseMuzzleLight);
         // order-10 B comprehension proxy: how many deaths it took to reach the first GUARD use.
         playerController.setGuardUsedListener(() -> storyTelemetry.recordGuardFirstUsed(persistentStats.totalDeaths));
         playerController.setWeaponSwitchCallback(() -> {
@@ -2237,6 +2319,12 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         gameAudio.update(deltaTime);
         playMenuTransitionSound();
 
+        // MUZZLE LIGHT clock (R9): cosmetic real-time animation, frozen by every hard-pause overlay. Runs
+        // before any renderer's frame, so the grade's light snapshot is valid for the whole render pass.
+        if (runPhase == RunPhase.PLAYING) {
+            atmosphereGrade.update(deltaTime);
+        }
+
         // TITLE phase (order-8 Part A) — the launch screen. Nothing is running: the world behind it
         // is built but frozen and not even drawn, and the descent begins only when the player picks
         // it. The screen opens on the game telling them they are already dead.
@@ -2756,6 +2844,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.setLightingTime(facilityTimeSeconds);
         wallRenderer.setLightingTime(facilityTimeSeconds);
         propRenderer.setLightingTime(facilityTimeSeconds);
+        enemyRenderer.setLightingTime(facilityTimeSeconds);
 
         if (gameState.redAlert) {
             alertTimeSeconds += Gdx.graphics.getDeltaTime();
@@ -2811,6 +2900,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyAttackEffectSystem.render(camera);
 
         impactEffectRenderer.renderWorldEffects(camera);
+
+        // R10: per-mood corner vignette, after every world-space pass and immediately before the weapon.
+        viewVignetteRenderer.render(camera);
+
+        // R6: weapon tint = mood near tint x clamped light of the tile the player stands on.
+        atmosphereGrade.evaluateWeaponTint(level.getTileBrightness(
+                getPlayerTileColumn(), getPlayerTileRow(), facilityTimeSeconds));
+        weaponHudRenderer.setWeaponTint(atmosphereGrade.red, atmosphereGrade.green, atmosphereGrade.blue);
         weaponHudRenderer.render(camera);
 
         if (isShaking) {
@@ -3037,6 +3134,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         // itself is headless — no GPU handles.
         codexOverlayRenderer.dispose();
         hitVignetteRenderer.dispose();
+        viewVignetteRenderer.dispose();
         guardShieldRenderer.dispose();
         levelUpOverlayRenderer.dispose();
         relicOfferOverlayRenderer.dispose();

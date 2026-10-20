@@ -18,6 +18,7 @@ import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.EnvironmentSpriteRegistry;
 import ge.tbegvadze.toon3d.tileset.TilesetRegistries;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 import java.util.ArrayList;
@@ -130,6 +131,8 @@ public class PropRenderer implements Renderable, Disposable {
     // ShopMachineRenderer and EnemyRenderer: a sprite drawn later but standing farther away draws
     // its full column, then re-draws the nearer slices on top (see SpriteOccluderBuffer).
     private final SpriteOccluderBuffer occluderBuffer;
+    /** Soft contact-shadow ellipse (visual-identity-order-2 R5); owned and disposed here. */
+    private final Texture contactShadowTexture;
 
     private float playerWorldX      = 0f;
     private float playerWorldY      = 0f;
@@ -138,6 +141,15 @@ public class PropRenderer implements Renderable, Disposable {
     private float planeX            = 0f;
     private float planeY            = 1f;
     private float alertPulse        = 0f;
+    // ATMOSPHERE GRADE (visual-identity-order-1): null = no tint. Render thread only (no workers here).
+    private AtmosphereGrade atmosphereGrade;
+    private float bodyTintRed   = 1f;
+    private float bodyTintGreen = 1f;
+    private float bodyTintBlue  = 1f;
+    // R8 muzzle-light add for the same body (zero for emissive draws and when no pulse is active).
+    private float bodyLightAddRed;
+    private float bodyLightAddGreen;
+    private float bodyLightAddBlue;
     private float lightingTimeSeconds = 0f;
 
     // TILESET SYSTEM (order-6): the per-level texture supply realized from this level's palette. Set
@@ -157,6 +169,7 @@ public class PropRenderer implements Renderable, Disposable {
         // knob at runtime never reallocates; only the columns below wallRenderer.getProjectionColumnCount()
         // are read/written each frame.
         this.occluderBuffer         = new SpriteOccluderBuffer(RENDER_RESOLUTION_MAX_COLUMNS);
+        this.contactShadowTexture   = ContactShadow.buildTexture();
         // SpriteBatch capacity = one sprite per screen column (1-pixel-wide column draws).
         this.batch                        = new SpriteBatch(RENDER_RESOLUTION_MAX_COLUMNS);
         this.textures                     = buildTextures();
@@ -302,6 +315,108 @@ public class PropRenderer implements Renderable, Disposable {
      */
     public SpriteOccluderBuffer getOccluderBuffer() {
         return occluderBuffer;
+    }
+
+    /** Sets the floor's colour grade (R1). Null disables the tint. */
+    public void setAtmosphereGrade(AtmosphereGrade grade) {
+        this.atmosphereGrade = grade;
+    }
+
+    /**
+     * R4 classification, by the predicates the draw loops already use: a SOLID prop gets the prop
+     * fraction, a floor pickup billboard (medical / armour / ammo / keycard body) gets the pickup
+     * fraction, everything else (walkable decals, hazard fire/toxic, stairs/portal, corpses) gets 0 =
+     * no shadow. Aura / glow draws never reach this: they are separate additive layers.
+     */
+    private static float contactShadowFractionForTile(char propChar) {
+        if (Level.isPropSolid(propChar)) return CONTACT_SHADOW_WIDTH_FRACTION_PROP;
+        if (Level.isMedicalPickup(propChar) || Level.isArmourPickup(propChar)
+                || Level.isAmmoPickup(propChar) || Level.isKeycardPickup(propChar)) {
+            return CONTACT_SHADOW_WIDTH_FRACTION_PICKUP;
+        }
+        return 0f;
+    }
+
+    /**
+     * Alpha scale for the same classification: solid props stand on the floor (1), but the floor pickups
+     * (medical / armour / ammo / keycard) float above it with a bob, so, like a hovering enemy, their
+     * shadow is fainter (CONTACT_SHADOW_HOVER_ALPHA_SCALE) and the gap reads as height.
+     */
+    private static float contactShadowAlphaScaleForTile(char propChar) {
+        if (Level.isPropSolid(propChar)) return 1f;
+        return CONTACT_SHADOW_HOVER_ALPHA_SCALE;
+    }
+
+    /**
+     * Draws one billboard's contact shadow BEFORE its sprite (same per-column wall z-test). The sprite
+     * loops afterwards re-draw nearer recorded slices via the occluder buffer; shadows themselves are
+     * never recorded as occluders. Leaves the batch colour set to the shadow colour - callers set
+     * their sprite colour next.
+     */
+    private void drawContactShadow(float centerColumn, float floorLineY, float billboardWidth,
+                                   float widthFraction, float alphaScale, float depth,
+                                   int projectionColumnCount, float columnWidth) {
+        if (widthFraction <= 0f) return;
+        float alpha = alphaScale * ContactShadow.alphaAtDepth(
+                atmosphereGrade != null ? atmosphereGrade.getMood() : null, depth);
+        ContactShadow.draw(batch, contactShadowTexture, wallRenderer, projectionColumnCount, columnWidth,
+                centerColumn * columnWidth, floorLineY, billboardWidth * widthFraction, depth, alpha);
+    }
+
+    /**
+     * R8 muzzle-light ADDITIVE pass for one sprite body: re-draws the same column slices with additive
+     * blending, colour = the body's light add (alpha 1 so the sprite's own alpha still masks), so the
+     * light can exceed the clamped shade multiplier (albedo x lightAdd, only the framebuffer clamps).
+     * Same per-column wall z-test and nearer-sprite test as the glow draws. Skipped when the body has
+     * no light (idle, out of radius, or an emissive draw, whose add is zeroed). The blend func switches
+     * to additive and straight back, once per lit sprite.
+     */
+    private void drawMuzzleLightPass(Texture texture, int firstColumn, int lastColumn, int leftScreenColumn,
+                                     int columnSpan, int textureWidth, int texSrcY, int texSrcHeight,
+                                     float clampedBottom, float clampedTop, float depth, float columnWidth) {
+        if (bodyLightAddRed + bodyLightAddGreen + bodyLightAddBlue <= 0f) return;
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+        batch.setColor(bodyLightAddRed, bodyLightAddGreen, bodyLightAddBlue, 1f);
+        for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+            if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+            if (depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+            int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+            texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
+            batch.draw(texture,
+                       screenColumn * columnWidth, clampedBottom,
+                       columnWidth, clampedTop - clampedBottom,
+                       texSrcX, texSrcY, 1, texSrcHeight,
+                       false, false);
+        }
+        batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    /**
+     * Fills bodyTint* with the R1 environment tint for a sprite BODY at {@code depthTiles}. Emissive sprites
+     * (hazard fire/toxic frames, the portal; R4) get white, i.e. are never graded.
+     */
+    private void evaluateBodyTint(boolean emissive, float depthTiles) {
+        if (emissive || atmosphereGrade == null) {
+            bodyTintRed = 1f;
+            bodyTintGreen = 1f;
+            bodyTintBlue = 1f;
+            bodyLightAddRed = 0f;
+            bodyLightAddGreen = 0f;
+            bodyLightAddBlue = 0f;
+            return;
+        }
+        atmosphereGrade.evaluate(depthTiles, ArtDirection.GRADE_STRENGTH_ENVIRONMENT);
+        bodyTintRed   = atmosphereGrade.red;
+        bodyTintGreen = atmosphereGrade.green;
+        bodyTintBlue  = atmosphereGrade.blue;
+        // R8: read straight after evaluate() (zero when idle). Applied at full strength to every graded body.
+        bodyLightAddRed   = atmosphereGrade.lightAddRed;
+        bodyLightAddGreen = atmosphereGrade.lightAddGreen;
+        bodyLightAddBlue  = atmosphereGrade.lightAddBlue;
+    }
+
+    private static float clampUnit(float value) {
+        return value < 0f ? 0f : (value > 1f ? 1f : value);
     }
 
     @Override
@@ -471,9 +586,14 @@ public class PropRenderer implements Renderable, Disposable {
                 }
             }
 
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            evaluateBodyTint(Level.isHazardDecal(prop.propChar) || Level.isStairsDown(prop.propChar), depth);
+            float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            drawContactShadow(screenCenterColumn,
+                    WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f, spriteScreenWidth,
+                    contactShadowFractionForTile(prop.propChar),
+                    contactShadowAlphaScaleForTile(prop.propChar), depth, projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             // Per-column draw loop with z-buffer occlusion test.
@@ -503,6 +623,9 @@ public class PropRenderer implements Renderable, Disposable {
                             texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 }
             }
+
+            drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
         }
 
         // Ground items: weapon pickups and credit chips spawned by the level generator.
@@ -606,9 +729,13 @@ public class PropRenderer implements Renderable, Disposable {
                         chipClampTop, chipClampBot, chipScreenHeight, chipTexH);
                 chipTexSrcH = Math.min(chipTexSrcH, chipTexH - chipTexSrcY);
                 chipTexSrcH = Math.max(1, chipTexSrcH);
-                float chipRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-                float chipGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-                float chipBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                evaluateBodyTint(false, renderDepth);
+                float chipRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+                float chipGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                float chipBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+                drawContactShadow(screenCenterColumn, chipFloorY, chipScreenHeight,
+                    CONTACT_SHADOW_WIDTH_FRACTION_PICKUP, CONTACT_SHADOW_HOVER_ALPHA_SCALE, renderDepth,
+                    projectionColumnCount, columnWidth);
                 batch.setColor(chipRed, chipGreen, chipBlue, 1f);
                 ColumnOpacityMask chipOpacityMask = COLUMN_OPACITY.get(chipTexture);
                 int chipFirstCol = Math.max(0, chipLeft);
@@ -628,6 +755,8 @@ public class PropRenderer implements Renderable, Disposable {
                     recordOccluderColumn(screenColumn, renderDepth, chipTexture, chipOpacityMask,
                             chipTexSrcX, chipTexSrcY, chipTexSrcH, chipClampBot, chipClampTop);
                 }
+                drawMuzzleLightPass(chipTexture, chipFirstCol, chipLastCol, chipLeft, chipSpan,
+                        chipTexW, chipTexSrcY, chipTexSrcH, chipClampBot, chipClampTop, renderDepth, columnWidth);
                 continue;
             }
 
@@ -709,9 +838,13 @@ public class PropRenderer implements Renderable, Disposable {
                 }
             }
 
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            evaluateBodyTint(false, renderDepth);
+            float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            drawContactShadow(screenCenterColumn, visualFloorY, spriteScreenWidth,
+                    CONTACT_SHADOW_WIDTH_FRACTION_PICKUP, CONTACT_SHADOW_HOVER_ALPHA_SCALE, renderDepth,
+                    projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             ColumnOpacityMask pickupOpacityMask = COLUMN_OPACITY.get(pickupTexture);
@@ -732,6 +865,8 @@ public class PropRenderer implements Renderable, Disposable {
                 recordOccluderColumn(screenColumn, renderDepth, pickupTexture, pickupOpacityMask,
                         texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
             }
+            drawMuzzleLightPass(pickupTexture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, renderDepth, columnWidth);
         }
 
         // Dynamic props: enemy drops placed after level load (ammo boxes, corpse decals).
@@ -807,9 +942,14 @@ public class PropRenderer implements Renderable, Disposable {
             float tileBrightness = level.getTileBrightness(prop.tileColumn, prop.tileRow, lightingTimeSeconds);
             float shade          = Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
                                             MAX_LIGHTING_SHADE);
-            float spriteRed   = Math.min(1f, shade * (1f + alertPulse * ALERT_WALL_RED_BOOST));
-            float spriteGreen = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
-            float spriteBlue  = shade * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            evaluateBodyTint(Level.isHazardDecal(prop.propChar) || Level.isStairsDown(prop.propChar), depth);
+            float spriteRed   = Math.min(1f, clampUnit(shade * bodyTintRed) * (1f + alertPulse * ALERT_WALL_RED_BOOST));
+            float spriteGreen = clampUnit(shade * bodyTintGreen) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            float spriteBlue  = clampUnit(shade * bodyTintBlue) * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
+            drawContactShadow(screenCenterColumn,
+                    WALL_PROJECTION_SCREEN_HEIGHT / 2f - fullWallLineHeight / 2f, spriteScreenWidth,
+                    contactShadowFractionForTile(prop.propChar),
+                    contactShadowAlphaScaleForTile(prop.propChar), depth, projectionColumnCount, columnWidth);
             batch.setColor(spriteRed, spriteGreen, spriteBlue, 1f);
 
             ColumnOpacityMask opacityMask = COLUMN_OPACITY.get(texture);
@@ -832,6 +972,8 @@ public class PropRenderer implements Renderable, Disposable {
                             texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 }
             }
+            drawMuzzleLightPass(texture, firstColumn, lastColumn, leftScreenColumn, columnSpan,
+                    textureWidth, texSrcY, texSrcHeight, clampedBottom, clampedTop, depth, columnWidth);
         }
 
         batch.setColor(Color.WHITE);
@@ -841,6 +983,7 @@ public class PropRenderer implements Renderable, Disposable {
     @Override
     public void dispose() {
         batch.dispose();
+        contactShadowTexture.dispose();
         disposeProp(genericWeaponFallbackTexture);
         disposeProp(weaponPickupGlowTexture);
         for (Texture texture : weaponPickupTextures.values()) {

@@ -1,0 +1,310 @@
+ART DIRECTION — "LIT BY THE MACHINE"
+=====================================
+The style bible. Single source of truth for the game's look: the palette, the five lighting
+moods, the atmosphere grade, what is exempt from it, and the floor/ceiling materials.
+Created by visual-identity-order-1; every later visual-identity order extends it in the same
+commit as its code. Ideas: .claude/agents/ideas/visual-identity*.txt.
+
+
+1. PILLARS
+----------
+Darkness is the canvas. Each of the five regions has ONE coloured atmosphere: a near light, a far
+haze, a horizon colour and a floor/ceiling material. One screenshot is enough to tell how deep you
+are. Things that glow and mean something are never tinted or fogged. Threats read above the world,
+and the world sits back. The interface uses exactly two inks: SUIT AMBER on gunmetal (the player's
+own suit, ORA's colour) and FACILITY CYAN on near-black (everything the facility shows you).
+Semantic combat colours are reserved and never decorate chrome.
+
+Series rules (repeated by every order):
+  V1  No new image/font/audio ASSET files, no new dependency. Everything new is generated in code.
+  V2  No custom ShaderProgram. SpriteBatch / ShapeRenderer colour multiplication and the CPU floor
+      backbuffer only, so every GLES2 phone behaves the same.
+  V3  No allocation in any render() path.
+  V4  The 2D game is untouched: no symbol, rule, turn cost, balance number, persistence key or touch
+      hit area changes.
+  V5  Semantic colours are sacred (red damage, blue defence, purple special, yellow movement intent,
+      green health/buff) — CombatPalette / ArtDirection, never decoration.
+  V6  Emissive exemption (SECTION 5).
+  V7  Not balance-bearing: zero new tests; verified by build + run.
+  V8  Readability beats mood. If a mood makes an enemy, pickup, number or button harder to read on a
+      phone, the mood loses.
+
+
+2. PALETTE — util/ArtDirection
+------------------------------
+Floats, `_RED/_GREEN/_BLUE` triples (the CombatPalette idiom, no LibGDX Color objects).
+  UI neutrals   UI_INK_BLACK (0.035,0.040,0.050)   UI_PANEL (0.075,0.085,0.105)
+                UI_PANEL_RAISED (0.120,0.135,0.160) UI_LINE (0.280,0.310,0.360)
+                UI_TEXT_PRIMARY (0.900,0.880,0.820) UI_TEXT_SECONDARY (0.600,0.620,0.640)
+                UI_TEXT_DISABLED (0.380,0.400,0.430)
+  inks          SUIT_AMBER (0.980,0.760,0.280)      SUIT_AMBER_DIM (0.550,0.400,0.140)
+                FACILITY_CYAN (0.420,0.860,0.980)   FACILITY_CYAN_DIM (0.240,0.440,0.520)
+  semantic      HEALTH_GREEN (0.360,0.900,0.460)    ARMOUR_BLUE (0.300,0.620,0.980)
+                CREDITS_GOLD (0.980,0.820,0.340)    PLANET_RED (0.800,0.170,0.150)
+                (damage/defence/special/move/buff/weak live in CombatPalette — never duplicated)
+  world         WORLD_SHADOW (0.020,0.020,0.030)
+The UI values are defined by order 1 and READ from order 4 on. Later orders may tune a value with a
+DECISIONS note but never add a third ink.
+
+
+3. THE FIVE MOODS — render/LightingMood + LightingMoodRegistry + LightingMoods.bootstrap()
+-----------------------------------------------------------------------------------------
+One mood per route region, keyed by RegionAmbience.lightingMoodId() (route-map order 10's hook, now
+CONSUMED). Numbers live in ArtDirection (MOOD_<ID>_*), rows in LightingMoods.bootstrap().
+Tints are RGB multipliers whose Rec.601 luminance is in [0.95, 1.05] — the grade shifts HUE with
+distance, never exposure. Fog distances in tiles.
+
+  id                 region             near tint           far tint            fog       vignette  floor / ceiling
+  cool_steel         A OUTER FACILITY   (0.92,1.00,1.10)    (0.62,1.08,1.40)    1.5-11.0  0.40      deck_grating_steel / ceiling_strip_lights
+  clinical_white     B RESEARCH WING    (1.00,1.00,0.98)    (0.80,1.12,0.92)    1.5-11.0  0.30      lab_tile_white / ceiling_panel_grid
+  amber_hot          C REACTOR DEPTHS   (1.10,0.98,0.80)    (1.55,0.86,0.40)    1.5-10.0  0.45      reactor_grate_hot / ceiling_pipes
+  corrupted_violet   D THE BREACH       (1.08,0.95,1.02)    (1.70,0.62,1.10)    1.0-8.0   0.55      breach_flesh_membrane / ceiling_torn_conduit
+  core_white_violet  E THE CORE         (0.98,0.98,1.12)    (1.05,0.80,1.85)    1.5-11.0  0.50      core_circuit_plate / ceiling_lattice
+Horizon colours (packed RGBA): see ArtDirection MOOD_<ID>_HORIZON_FLOOR_PACKED / _CEILING_PACKED.
+
+Resolution (World.resolveLightingMood, called in buildLevelDependentResources before any renderer is
+built): DEV override (SECTION 8) → routePlan.regionForDepth(currentDepth).themeId → RegionAmbience →
+lightingMoodId → registry. No plan / depth outside the plan / no ambience → fallback cool_steel with
+one log line. Logs "Atmosphere mood=<id>". Floors change behind a fade, so moods switch at level build
+(no blending).
+
+Fail-loud (R11): LightingMoods.bootstrap() throws IllegalStateException if any region of
+RegionPlan.defaultPlan() names a mood that is not registered, or a mood names an unregistered material.
+
+
+4. THE GRADE PIPELINE — render/AtmosphereGrade
+----------------------------------------------
+For a surface at distance d tiles with the existing scalar shade s (falloff × face × tile brightness,
+clamped exactly as before, including the minimum-brightness floor):
+  fog     = GameMath.atmosphereFogFactor(d, fogStart, fogEnd)      clamped smoothstep
+  tint    = lerp(near, far, fog)                                    per channel
+  tint    = lerp(WHITE, tint, strength(surface class))              per channel
+  channel = clamp01(s × tint.channel)
+then the red-alert boost/dampen exactly as before, on top. The muzzle-light splash (section 11, order 2)
+is NOT folded into that clamped multiplier: it is added afterwards (albedo × lightAdd), so only the final
+colour clamps. BLACKOUT, tile lighting and the shade floor
+all feed s, upstream of the grade.
+
+Strength by surface class (ArtDirection): GRADE_STRENGTH_ENVIRONMENT 1.00 (walls, doors, columns,
+floor, ceiling, props, decals, pickup bodies, shop machine body), GRADE_STRENGTH_ENEMY 0.50 (enemy
+bodies — threats read warmer and cleaner than the haze behind them), GRADE_STRENGTH_WEAPON 0.60.
+
+Where it runs:
+  WallRenderer          per column, on WORKER threads → static AtmosphereGrade.evaluateInto into the
+                        column's own `gradeScratch` (never the shared evaluate() fields).
+  FloorCeilingRenderer  per backdrop ROW, precomputed into `rowTintTable` (ctor + setRenderResolution;
+                        row distance is player-independent); per pixel GameMath.applyRgbShadeToPackedRGBA.
+  PropRenderer          per sprite (render thread, grade.evaluate()); depth in tiles. The muzzle-light add
+                        is read right after evaluate() (bodyLightAdd*), zeroed for emissive draws, and drawn as an additive
+                        re-draw of the body.
+                        Contact shadow BEFORE the body (section 10).
+  ShopMachineRenderer   body sprite only (+ additive muzzle-light re-draw of the body; contact shadow before it).
+  EnemyRenderer         body: shade × level.getTileBrightness(enemy tile) (R5, like props) → existing min
+                        clamp / dormant dampen / BLACKOUT floor → grade 0.5 → status and boss tints lerped
+                        ON TOP, ungraded. Muzzle light is added to the graded body colour at FULL strength
+                        (not 0.5) as an additive re-draw after the sprite columns; the status and boss tints are unaffected. Contact shadow BEFORE the body
+                        (section 10); enemy sheets are alpha-cut at load (section 9).
+  WeaponHudRenderer     no distance term: lerp(WHITE, near, 0.6) × clamp(player tile brightness,
+                        0.80, 1.15), channels capped at 1 (AtmosphereGrade.evaluateWeaponTint →
+                        setWeaponTint). Frame draws only; muzzle/idle effect sprites untinted.
+  ViewVignetteRenderer  radial alpha (clear inside 55% of the normalised elliptical radius, quadratic
+                        ramp reaching full alpha exactly at the VIEW corners — the ramp is measured in
+                        view coordinates even though the quad is oversized — GameMath.vignetteAlpha), colour = the mood's ceiling
+                        horizon colour, alpha = mood.vignetteAlpha. Drawn after every world pass
+                        (including impact particles) and immediately BEFORE WeaponHudRenderer.render;
+                        the weapon, hit vignette, mini-map, HUD, touch buttons and every overlay draw
+                        over it. Oversized by VIGNETTE_SHAKE_MARGIN_WORLD_UNITS so screen shake never
+                        exposes its edge.
+The mini-map is UI and is not graded.
+
+
+5. EMISSIVE EXEMPTION (V6)
+--------------------------
+Never graded (their tile light is unchanged from before this order — they keep the scalar
+shade they always had, so their colour is identical under every mood): enemy health bars, HP text, name tags, intent/telegraph
+icons, beam/affliction/shard/crust/haze overlays, boss enrage/repair tints and afterimages, the keycard
+aura, weapon-pickup tier glow, credit-chip aura, the shop machine's aura/window/status light/dispense
+drop/holo layers, hazard fire and toxic frames and the portal (PropRenderer: Level.isHazardDecal ||
+Level.isStairsDown — existing predicates, no symbol switch), enemy attack effects, impact particles, the
+guard shield, every vignette. Textures that mix body and glow in one image (AI core node, holo table)
+are graded as bodies.
+
+
+6. MATERIALS — render/SurfaceMaterialRegistry + SurfaceMaterials.bootstrap()
+----------------------------------------------------------------------------
+Ten 64×64 (RenderConstants.SURFACE_MATERIAL_SIZE) packed-RGBA8888 int[] textures, row-major
+`row*64+column`, row 0 = the tile's south edge, column 0 = west — the layout FloorCeilingRenderer
+samples. Generated on the CPU, deterministic (GameMath.combineHash, never java.util.Random), cached
+once and SHARED across floors (read-only).
+Value band (R9, pre-shade average luminance): floors 0.10-0.24, ceilings 0.06-0.18, so floor and
+ceiling always sit below the walls.
+  deck_grating_steel     steel plates, 32-texel seams, diamond tread, corner bolts
+  ceiling_strip_lights   32-texel panels with one fluorescent lens each (texture only, not a light)
+  lab_tile_white         16-texel tiles, value jitter, grout, the odd stain
+  ceiling_panel_grid     acoustic panels with a slim recessed light slot
+  reactor_grate_hot      coarse 16-texel grating (6-texel bars — an 8-texel period aliases into moire
+                         at backdrop distance), ember underglow in each cell, low-contrast chevron wear
+  ceiling_pipes          two pipes along X with highlight rows and clamp rings
+  breach_flesh_membrane  Worley-style cellular veins, wet specks, a stray deck-plate fragment
+  ceiling_torn_conduit   torn panel edges, hanging conduits, fleshy growth blobs
+  core_circuit_plate     orthogonal traces with node pads on an 8-grid
+  ceiling_lattice        diagonal lattice beams with crossing nodes
+
+
+Mip chain and LOD (render-quality follow-up): SurfaceMaterialRegistry caches, per material, 4 levels
+(RenderConstants.SURFACE_MATERIAL_MIP_LEVELS): level 0 = the 64x64 texels, levels 1..3 = 32, 16, 8, each a
+2x2 box filter (per-channel R,G,B,A average, rounded) of the previous level, same row-major layout and
+orientation. getPixels(id) = level 0; getPixels(id, level) the rest. Built once, shared, read-only.
+FloorCeilingRenderer picks ONE level per backdrop ROW (row distance is player-independent, so the table is
+rebuilt only with the tint table on construction / resolution change) with GameMath.surfaceMaterialMipLevel:
+  screenTexels = rowDistance * (2*tan(halfFov)) / backdropWidth * 64        (GameMath.floorScreenFootprintTexels)
+  depthTexels  = |rowDistance(row) - rowDistance(row+1)| * 64               (GameMath.floorDepthFootprintTexels)
+  level = clamp(floor(log2(max(1, max(screenTexels, depthTexels) * SURFACE_MATERIAL_MIP_BIAS))), 0, 3)
+The DEPTH footprint is what causes distant floor speckle (one backdrop row spans a long stretch of floor far
+away) and dominates the screen-X term. Row distances are the clamped values fillRows uses; the last row reuses
+the previous difference. The table is then forced non-decreasing up the screen, so the clamped far band
+(zero depth difference) keeps the last level instead of un-blurring.
+Near rows stay level 0 (crisp pixel-art texels); only distant rows blur. The table uses the default player FOV.
+Sampling at level L: edge = 64 >> L, texel = (int)(frac * edge) & (edge - 1).
+
+RENDER RESOLUTION TIERS
+Full HD (the default) is the QUALITY tier: 1920 ray columns, floor/ceiling backdrop 960x540 (divisor 2).
+HD is the PERFORMANCE tier: 1280 columns, backdrop 320x180 (divisor 4). The divisor is carried per tier in
+util/RenderResolution (RenderConstants.FLOOR_BACKDROP_SCALE_DIVISOR / _FULL_HD). Measured on the 4-core
+capture VM (software GPU on the same 4 cores, so only indicative): the new default (Full HD, 960x540 backdrop,
+9x the floor pixels and a 2 MB backdrop upload per frame) runs 18-19.4 ms/frame vs 13-14.5 ms for the old HD
+default — about +4.5 ms, of which the finer backdrop alone is about +2 ms (divisor 2 vs 4 at Full HD).
+NOT yet measured on a real Android phone; HD stays selectable in SETTINGS as the fallback.
+
+
+7. RECIPE C — add a mood or a material
+--------------------------------------
+Add a MATERIAL: one `register(id, generator)` row in SurfaceMaterials.bootstrap() plus its
+MATERIAL_ID_* constant in ArtDirection; keep it in the R9 band (measure the average luminance in a
+throwaway main — never a committed test); deterministic hashing only.
+Add a MOOD: the MOOD_<ID>_* constants in ArtDirection (near/far luminance in [0.95, 1.05]), one
+register() row in LightingMoods.bootstrap(), and name it from the region's RegionAmbience row
+(route/RouteRegistries). Bootstrap fails loud if either side is missing. No switch anywhere.
+A new REGION must name a registered mood (docs/route-map-system.txt).
+
+
+8. DEV MOOD OVERRIDE
+--------------------
+`-Dtoon3d.forceMood=<id>` (a JVM system property, read once per floor build) forces that mood on every
+floor and logs "Atmosphere mood=<id> (forced)"; an unknown id is ignored with a warning. Nothing sets
+it on Android. Pass it locally, e.g. `JAVA_TOOL_OPTIONS="-Dtoon3d.forceMood=amber_hot" ./gradlew
+lwjgl3:run` — never commit it. It is the only way to check regions C-E without a 20-floor run.
+
+
+9. SPRITE CONDITIONING (visual-identity-order-2)
+------------------------------------------------
+render/EnemySpriteSheets is a static, session-lifetime holder of the enemy textures. Each enemy PNG
+(9 sheets under assets/textures/enemies; the PNG files are never edited) is decoded into a Pixmap
+(converted to RGBA8888 if needed), then hard-alpha-cut in one pass, in 16 KB chunks, over its bytes
+(EnemyConstants.ENEMY_SPRITE_ALPHA_CUT = 0.50): a texel with alpha/255 below the cut becomes RGBA 0,
+every other texel becomes fully opaque with its RGB kept. The Pixmap is uploaded (Nearest filter) and
+disposed. The procedural fallback sheet (file missing) is already opaque, is not conditioned, and is
+cached the same way.
+  Why 0.50: the 4.5-16% of texels with mid alpha (128-254) are anti-aliased EDGE texels in body
+  colour, not a dark glow; turning them opaque gives a crisp silhouette with no outline, while a
+  near-opaque cut chews ragged edges. No per-path override exists or is needed.
+  Cache: get(path, fallbackRed, fallbackGreen, fallbackBlue) returns the cached Texture.
+  EnemyRenderer brackets its nine gets with beginLoadBatch()/endLoadBatch(); the end call logs
+  "EnemySpriteSheets conditioned N sheets in M ms" once per app session (a `logged` flag), later floors
+  and runs only hit the cache. Measured (PNG decode included, budget 400 ms): 379 ms with the earlier whole-copy
+  pass on a quiet machine; the in-place chunked pass is ~2x faster than that version in a same-session
+  comparison (476-582 ms vs 1209 ms on a noisy Xvfb/llvmpipe VM).
+  Lifetime: World is rebuilt per run, so the cache is static. EnemyRenderer.dispose() does NOT dispose
+  the sheets; Main.dispose() calls EnemySpriteSheets.disposeAll() after the world is disposed.
+  Textures are unmanaged (Pixmap-built), like every procedural texture here.
+
+
+10. CONTACT SHADOWS (visual-identity-order-2)
+---------------------------------------------
+Every upright billboard gets a soft ellipse on the floor so nothing floats.
+  render/ContactShadow (static helper):
+    buildTexture()   64x32 (RenderConstants.CONTACT_SHADOW_TEXTURE_*) white ellipse, alpha =
+                     GameMath.contactShadowAlpha(r) = (1 - r^2)^2, Linear filter. Each renderer owns and
+                     disposes its own copy.
+    alphaAtDepth(mood, depthTiles)  CONTACT_SHADOW_ALPHA 0.50 x (1 - CONTACT_SHADOW_FOG_FADE 0.80 x fog),
+                     fog = atmosphereFogFactor at the billboard depth (0 with no mood).
+    draw(batch, texture, wallRenderer, columnCount, columnWidth, centerWorldX, floorLineY, shadowWidth,
+         depth, alpha)  one quad per column with float UVs, skipping columns the wall z-buffer hides
+                     exactly like the sprite; colour = ArtDirection.WORLD_SHADOW (never graded). It
+                     leaves the batch colour set; the caller sets the sprite colour next.
+  Geometry: centred on the billboard's screen X, vertical centre ON THE FLOOR LINE (the wall-stripe draw
+  bottom at the billboard's depth, BEFORE any hover, bob or lunge offset); width = projected billboard
+  width x a fraction; height = width x CONTACT_SHADOW_HEIGHT_RATIO 0.22.
+  Classification (by the predicates the loops already use, no symbol switch):
+    enemies (incl. bosses, live and upright)           WIDTH_FRACTION_ENEMY 0.70, width taken BEFORE the
+                                                        lunge scale; EYE_TYRANT alpha x HOVER_ALPHA_SCALE 0.55
+    Level.isPropSolid tiles (incl. generated props)     PROP 0.85 (alpha 1: they stand on the floor)
+    medical / armour / ammo / keycard pickup tiles      PICKUP 0.60 x HOVER_ALPHA_SCALE (they float with a
+                                                        bob above the floor line, like a hovering enemy)
+    weapon pickups + credit chips (ground items)        PICKUP 0.60 x HOVER_ALPHA_SCALE (they float at eye
+                                                        height, so the shadow sits well below the sprite)
+    shop machine                                        SHOP 0.90
+    NONE: walkable decals, hazard fire/toxic, the portal (stairs), corpse/blood stains, boss afterimages,
+    aura/glow layers, runtime crystal spires.
+  Shadows are drawn BEFORE the sprite and are never recorded in the SpriteOccluderBuffer, so a nearer
+  prop's redrawInFront restores over them like over the sprite.
+
+
+11. MUZZLE LIGHT (visual-identity-order-2)
+------------------------------------------
+Firing a gun briefly lights the nearby world in the weapon's colour, through the same grade.
+  Catalog: render/MuzzleLightCatalog (ItemType-ordinal table, one register row per weapon, WARM fallback
+  for an unbound weapon). Colours in ArtDirection (MUZZLE_WARM / _ENERGY / _FIRE), peaks and timing in
+  EffectConstants:
+    WARM (1.00,0.82,0.55) peak 1.50   pistol, shotgun, double barrel, chaingun, assault rifle, rocket
+    ENERGY (0.60,0.90,1.00) peak 1.50 plasma, railgun, arc cannon
+    FIRE (1.00,0.55,0.20) peak 1.70   incinerator
+    none (peak 0: no pulse)           fist, knife, hammer, chainsaw
+  Peaks were raised from the spec's 0.35/0.40 after the on-screen check: the light scales the surface's
+  own albedo (additive pass), and this game's materials are deliberately dark (order-1 R9), so 0.35 added only
+  +2..4/255. At 1.5 a surface at the player's feet briefly reaches ~2.5x its lit colour.
+  Formula (R8): intensity i = peak x (1 - elapsed / MUZZLE_LIGHT_DURATION_SECONDS 0.10), floored at 0;
+  for a surface d tiles away  light = GameMath.muzzleLightFalloff(d, MUZZLE_LIGHT_RADIUS_TILES 4.0) x i
+  with falloff = max(0, 1 - d/radius)^2. The surface colour is
+        colour = albedo x clamp01(shade x tint)  [then red alert]  +  albedo x light x muzzle.colour
+  with ONLY the final framebuffer colour clamped. (The first implementation added the light to the shade
+  multiplier and clamped it; near surfaces already sit at multiplier ~1.0 (MAX_LIGHTING_SHADE), so the light
+  was clamped away and measured +2..3/255. Decision: the light must be able to exceed the clamp.)
+  How each surface does it:
+    floor + ceiling (CPU)  GameMath.applyRgbShadeAndLightToPackedRGBA: base factor (alert maths and its red
+                           min(1,..) exactly as before) PLUS the row's light add, final channel clamped.
+                           Rows with no light use the old function.
+    walls / doors / columns  the base column draws are unchanged. Workers fill the per-column light add
+                           (gradeScratch[3..5] -> surfaceLight* / doorPanelLight*). A separate PHASE 3 in
+                           WallRenderer.render re-draws the same column slices with additive blending
+                           (GL_SRC_ALPHA, GL_ONE), colour = light add, alpha 1 so the texture still masks.
+                           A door-panel column re-draws the panel only (DELIBERATE: the surface behind
+                           it is covered, and lighting both would double-light the panel). Blend func switches exactly twice
+                           per frame (to additive, back), and the pass is skipped at intensity 0.
+    props / pickups / chips / weapon pickups / decals (PropRenderer.drawMuzzleLightPass)
+                           after each lit sprite's base column loop: additive re-draw of the same columns
+                           with the same wall z-test and a "nearer recorded sprite" skip. Two blend
+                           switches per LIT sprite only (a sprite with no light, or an emissive one whose
+                           add is zeroed, costs nothing).
+    shop machine body      additive re-draw right after the body; the next layer is additive anyway, so no
+                           extra blend switch.
+    enemy body             additive re-draw of the sprite columns after the base loop, before health bars
+                           and the other overlays; two blend switches per lit enemy.
+  Applied at full strength regardless of the surface's grade strength (a lit enemy is the point) to walls,
+  doors, columns, floor, ceiling, props, decals, pickup bodies, the shop body and enemy bodies. NEVER to
+  emissive draws, overlays, health bars, shadows or the weapon sprite.
+  A new pulse restarts the clock (chaingun fire refreshes, never stacks). Skipped by a branch at
+  intensity 0.
+  Threading contract: the light state is a per-frame SNAPSHOT mutated only by pulseMuzzleLight, update
+  and resetLight, all on the render thread inside World.update before any renderer starts its frame.
+  Worker threads (WallRenderer columns, floor rows) read it only through lightAddInto / precomputed
+  tables; render-thread code reads atmosphereGrade.lightAddRed/Green/Blue right AFTER evaluate()
+  (never after evaluateWeaponTint). Walls carry it in gradeScratch[3..5]; the floor uses a per-row
+  falloff table x the frame intensity x colour.
+  Listener site: PlayerController.setWeaponFiredListener (a Consumer<ItemType>; input never imports
+  render) is invoked right after the only gameAudio.playPlayerWeapon call in tryFire, so a dry fire, a
+  railgun charge turn, a reload and every melee swing emit no light; World wires it to
+  AtmosphereGrade.pulseMuzzleLight. Only the player's own shot lights the world (no explosions, barrels,
+  plasma bolts or enemy attacks).
+  Clock: AtmosphereGrade.update(deltaTime) runs in World.update only while the world is PLAYING, so it
+  pauses with every hard-pause overlay and resumes after; resetLight() runs on floor build.

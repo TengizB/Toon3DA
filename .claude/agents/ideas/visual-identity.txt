@@ -1,0 +1,152 @@
+STATUS: SPLIT INTO ORDER FILES
+CATEGORY: Visual
+TITLE: Visual Identity & Polish Pass (series index)
+CREATED: 2026-10-19
+IMPLEMENTED: -
+---
+
+This is the MASTER INDEX of the visual-identity series. Nothing is built from this
+file. Each ordered file below has its own STATUS, spec and CHECKPOINTS, and they
+are built strictly in ascending order. Read this file first: it records the request,
+the diagnosis, and the series-wide rules every order repeats.
+
+
+THE REQUEST
+-----------
+What the owner SAID: "make the game look like a finished, cohesive commercial mobile
+game (store-screenshot quality): one art direction across walls, floors/ceilings,
+props, enemies, weapons, HUD and menus; everything stays procedural."
+
+What the owner NEEDS: right now every surface was built well, but each one was built
+on its own. What is missing is something that makes them belong together. Three
+problems are visible in any screenshot:
+  1. THE WORLD HAS NO LIGHT IDENTITY. All shading is grey (shade multiplies R, G and B
+     equally). Every region renders under the same neutral light. Floor and ceiling
+     are one flat 64x64 grey texture on all 25 floors, and they fill half the screen.
+     RegionAmbience.lightingMoodId ("cool_steel", "amber_hot", ...) has been
+     registered since route-map order 10, but nothing reads it.
+  2. TEXT LOOKS UNFINISHED. 20 renderers each call `new BitmapFont()`, which gives
+     LibGDX's default 15 px Arial, scaled by about 250 ad-hoc setScale calls. The font
+     has no em-dash glyph: two shipped specs record working around that. Nothing else
+     looks as much like a prototype.
+  3. THE UI SPEAKS FOUR DIALECTS. The HUD is steel with LED green. The touch buttons
+     use phosphor green. The route map is holo-cyan on navy. The story panels are
+     near-black with per-speaker accents. The shop, relic and level-up screens each
+     have their own colours. CombatPalette (util) fixed this for combat semantics
+     only.
+Also visible: the enemy sprites (painted PNGs) carry a baked translucent dark halo,
+and billboards float because nothing anchors them to the floor.
+
+The series fixes these in order of how much of a gameplay screenshot each one
+changes.
+
+
+THE ART DIRECTION IN ONE PARAGRAPH ("LIT BY THE MACHINE")
+---------------------------------------------------------
+Darkness is the canvas. Each of the five regions has ONE coloured atmosphere: a near
+light, a far haze, a horizon colour and a floor/ceiling material. One screenshot is
+enough to tell how deep you are. Things that glow and mean something (intent icons,
+health bars, pickup glows, hazards, muzzle light) are never tinted or fogged. Threats
+read above the world, and the world sits back. The interface uses exactly two inks:
+SUIT AMBER on gunmetal is the player's own suit (it is ORA's colour), and FACILITY
+CYAN on near-black is everything the facility shows you (nav console, fabricator,
+event consoles, the reprint machine, the Organization). Semantic combat colours
+(CombatPalette) are reserved and never decorate chrome. Pixels are chunky and crisp:
+one procedural pixel font, chamfered corners and corner brackets as the signature
+shape. The full style bible becomes docs/art-direction.txt (created by order 1,
+extended by every later order).
+
+
+THE ORDERS
+----------
+  order 1  ATMOSPHERE          util/ArtDirection (the master palette), five
+                                LightingMoods keyed by the existing lightingMoodId,
+                                one grade applied to walls, doors, floor, ceiling,
+                                props, enemies, shop machine and weapon, ten
+                                floor/ceiling materials (two per region), a
+                                per-mood view vignette, docs/art-direction.txt.
+                                Highest impact, self-contained.
+  order 2  GROUNDED SPRITES    enemy sprite halo removal (load-time alpha cut,
+                                session-cached sheets), contact shadows under every
+                                upright billboard, and muzzle light (firing briefly
+                                lights the nearby world through the order-1 grade).
+  order 3  TYPOGRAPHY          one procedural pixel font (REGULAR + HEAVY faces,
+                                full glyph coverage including the em dash) owned by
+                                render/GameFonts. All 20 `new BitmapFont()` sites
+                                are replaced, with metrics matched so existing
+                                scales keep their size.
+  order 4  UI KIT + HUD LAYER  render/UiKit (chamfered panel, brackets, plate
+                                states, segmented meter, shadowed text) applied to
+                                everything that is on screen during play: HUD,
+                                touch buttons, mini-map, boss bar, event text,
+                                damage numbers.
+  order 5  SUIT SCREENS        the player's own screens in SUIT ink: inventory
+                                family, weapon inspect, level-up, relic offer,
+                                codex.
+  order 6  FACILITY, STORY AND FIRST IMPRESSION
+                                FACILITY ink screens (route map, shop, event
+                                console), the story panel family with speaker
+                                accents taken from the palette, the framing screens
+                                (title, pause, settings, death stroke), boot card,
+                                report, fade text, and the Android launch colours
+                                (no white flash at launch, adaptive-icon
+                                background).
+
+Each order leaves the game building and playable, and each depends only on
+lower-numbered orders. Orders 2 and 3 do not depend on each other, but the
+numbering is binding.
+
+
+SERIES-WIDE RULES (every order repeats the ones it touches)
+-----------------------------------------------------------
+  V1  No new image, font or audio ASSET files and no new dependency (no FreeType, no
+      shader library). Everything new is generated from code at load time. The
+      existing PNG/JPG textures stay. Order 2 conditions the enemy PNGs at load and
+      does not edit them.
+  V2  No custom ShaderProgram. Everything uses SpriteBatch/ShapeRenderer colour
+      multiplication and the existing CPU floor backbuffer, so every GLES2 phone
+      behaves the same.
+  V3  No allocation in any render() path. Every new texture, pixmap and font is
+      built at construction or level load.
+  V4  The 2D game is untouched: no tile symbol, rule, turn cost, balance number,
+      persistence key or touch hit area changes. A touch button may change how it
+      LOOKS, never where it is or how big its hit area is.
+  V5  Semantic colours are sacred. Red = damage/threat, blue = defence/armour,
+      purple = special, yellow = movement intent, green = health/buff. These come
+      from CombatPalette / ArtDirection and are never used as decoration.
+  V6  Emissive exemption. Anything that is light or that communicates a rule is
+      never graded or fogged by the atmosphere: health bars, intent/telegraph icons,
+      name tags, pickup and keycard auras, hazard flames and gas, portals, muzzle
+      flashes, impact particles, boss enrage/repair tints.
+  V7  Testing Policy: nothing in this series is balance-bearing. Every order ships
+      with ZERO new tests and is verified by `./gradlew build` + `./gradlew
+      lwjgl3:run`. `./gradlew test` must stay green. Updating an existing test whose
+      asserted constant legitimately moved is allowed, in the same commit.
+  V8  Readability beats mood. If a mood or a UI colour makes an enemy, a pickup, a
+      number or a button harder to read on a phone, the mood loses.
+
+
+RELATIONSHIP TO EXISTING IDEA FILES
+-----------------------------------
+  - lighting-system-overhaul.txt (NOT IMPLEMENTED): layer 1 (props inherit tile
+    brightness) is already in the code (PropRenderer reads getTileBrightness).
+    Order 1 extends it to enemies, with the enemy minimum shade still binding.
+    Order 1's per-REGION fog tint supersedes its C1 "depth desaturation". Its
+    per-ZONE tint (lit/unlit/flicker tiles) and flicker warm-spike are NOT
+    contradicted and stay with that file.
+  - game-refinement-polish.txt (NOT IMPLEMENTED; much of it already in code):
+    order 1 delivers its 2.3 (ambient tint per area), 2.4 (horizon contrast) and 2.5
+    (enemy shading matches walls). Nothing else in that file is touched.
+  - scanline-crt-hud-marine-vitals.txt (NOT IMPLEMENTED, pre-dates the shipped
+    procedural HUD): not built here. This series deliberately adds no scanlines and
+    no chromatic aberration (order 4, D-decisions).
+  - weapon-ground-sprites.txt (NOT IMPLEMENTED): per-weapon pickup silhouettes stay
+    in that file. Order 2 only adds the contact shadow under whatever pickup sprite
+    exists.
+  - billboard-prop-sprites.txt (NOT IMPLEMENTED in its header, but props exist in
+    code): not touched.
+  - procedural-hud-no-textures.txt, touch-controller-thumb-cluster.txt,
+    route-map-visual-legibility-fixes.txt, floor-ceiling-texture-rendering.txt,
+    laboratory-lighting.txt, emergency-red-alert-pulse.txt (all IMPLEMENTED): their
+    geometry and behaviour are kept. This series only recolours, restyles and adds
+    layers on top.

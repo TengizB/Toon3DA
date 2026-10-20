@@ -84,7 +84,7 @@ public final class StorySettings {
                                      SfxVolumeSetting.ON.ordinal()))];
         this.renderResolution = RenderResolution.fromOrdinal(
                 store.loadSettingInt(RenderConstants.RENDER_RESOLUTION_SETTING_KEY,
-                                     RenderResolution.HD.ordinal()));
+                                     RenderResolution.DEFAULT.ordinal()));
     }
 
     /** A persisted ordinal that no longer exists (a downgrade, a corrupt save) falls back to ON. */

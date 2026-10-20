@@ -1,0 +1,343 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: UI
+TITLE: Visual Identity 6 — Facility, story and first impression
+CREATED: 2026-10-19
+IMPLEMENTED: -
+---
+
+OVERVIEW
+--------
+The last order. It applies the UiKit to every remaining screen, using the ink the
+fiction assigns. FACILITY CYAN is for what the facility shows you: the route map's
+nav console, the fabricator shop, event consoles, the reprint machine (title screen,
+boot card status, run report, depth readout). SUIT AMBER is for what is yours: the
+pause/settings menu, your answers in an exchange, CONTINUE. The story panels take
+their brackets from the speaker, whose accents now come from the palette (ORA = suit
+amber, the Organization = facility cyan). It also fixes the first impression before
+the game draws a frame: the Android launch window is white today (a white flash
+before a black horror title) and becomes near-black.
+
+What was SAID: "menus ... store-screenshot quality". What is NEEDED: the title screen,
+the boot card and the route map are the screenshots a store page leads with, and each
+still speaks its own dialect. The launch flash is the first thing every player sees.
+
+
+SCOPE
+-----
+IN
+  - Palette sourcing: RouteMapColorPalette base colours, StoryUiConstants speaker
+    accents + STORY_* chrome colours + the death-stroke colour re-pointed at
+    ArtDirection (R1, R2).
+  - Restyle with UiKit: StoryPanelRenderer (and through it StoryBarkRenderer,
+    StoryExchangeRenderer, BootCardRenderer's panels), StoryExchangeRenderer's answer
+    plates, BootCardRenderer, InstanceReportRenderer, FadeOverlayRenderer's text,
+    FramingScreenRenderer (title, pause, settings, confirmation, terminal RETURN,
+    death stroke), RouteMapOverlayRenderer's frame/header/text/confirm bar,
+    ShopOverlayRenderer, EventChoiceOverlayRenderer.
+  - Android: android/res/values/color.xml and styles.xml (R10).
+  - docs: art-direction.txt (FACILITY INK, STORY PANELS, FIRST IMPRESSION, and the
+    completed SUIT vs FACILITY table), story-ui-system.txt (accent sources),
+    route-map-system.txt (OVERLAY VISUAL SPEC frame/text lines).
+
+OUT (deliberately not doing now)
+  - Route-map node accents, danger pips, hazard amber, mystery violet, region crest and
+    node-icon painters (render/routeicons). route-map-visual-legibility-fixes.txt
+    (IMPLEMENTED) tuned them for contrast, and they are semantic map glyphs. Only the
+    console FRAME, header, text and plates change.
+  - Any layout, geometry, timing, reveal pacing, lockout or touch target in these
+    screens (V4). The death stroke's hold/fade/anchor constants stay.
+  - Any story copy. No string id or text changes.
+  - The app icon artwork (the existing foreground stays), the app's display name
+    ("Toon3DA" is the owner's branding call), and screen orientation
+    (sensorLandscape would be a reasonable follow-up, but it is not visual identity).
+  - Store listing assets (feature graphic, screenshots). This series makes the game
+    screenshot-ready; producing the listing is the owner's.
+  - Shop machine world sprite (a world billboard, graded in order 1).
+
+
+GAMEPLAY LOOP
+-------------
+None. Every screen opens, advances and closes exactly as before.
+
+
+RULES
+-----
+  R1  SPEAKER ACCENTS (StoryUiConstants SPEAKER_ACCENT_*, sourced from ArtDirection):
+        AI (ORA) ........ SUIT_AMBER       (0.98,0.76,0.28; was 0.98,0.78,0.30)
+        ORGANIZATION .... FACILITY_CYAN    (0.42,0.86,0.98; was 0.42,0.62,0.88)
+        PLANET .......... PLANET_RED       (0.80,0.17,0.15; unchanged value)
+        SYSTEM .......... UI_TEXT_PRIMARY  (0.90,0.88,0.82; was 0.82,0.85,0.88)
+      The chip still carries name + icon (colour is never the only cue, per the story
+      accessibility rules). Array lengths are unchanged (StoryUiFoundationTest).
+  R2  ROUTE PALETTE SOURCING. RouteMapColorPalette's holoCyan, holoDim, creditGold and
+      medGreen read ArtDirection FACILITY_CYAN, FACILITY_CYAN_DIM, CREDITS_GOLD and
+      HEALTH_GREEN (identical values today). scrimNavy and screenBlack read
+      UI_INK_BLACK. steel reads UI_PANEL_RAISED. textBright/textDim read
+      UI_TEXT_PRIMARY/UI_TEXT_SECONDARY. dangerRed, hazardAmber, mysteryViolet, rivet
+      and every per-node accent are UNCHANGED (OUT).
+  R3  STORY PANEL. StoryPanelRenderer draws the panel as UiKit.panel (UI_PANEL at the
+      existing STORY panel alpha, border UI_LINE), with UiKit.brackets in the
+      SPEAKER'S accent. The chip and accent bar are unchanged in geometry, coloured by
+      R1. Body text UI_TEXT_PRIMARY at the existing story scale x accessibility
+      multiplier. The bark's close-X becomes a small plate glyph in UI_TEXT_SECONDARY
+      (its hit area is unchanged).
+  R4  EXCHANGE ANSWERS are the player speaking, so they are SUIT ink: each answer is a
+      UiKit.plate (IDLE / PRESSED in SUIT_AMBER). The single acknowledge plate after a
+      reply uses the same style. The world dim is unchanged.
+  R5  BOOT CARD (the reprint machine). The status block uses the SYSTEM panel with
+      FACILITY_CYAN brackets (the machine's own frame, not the SYSTEM speaker accent).
+      The status header is HEAVY (order 3). The status lines are UI_TEXT_PRIMARY; the
+      instance counter is FACILITY_CYAN_DIM in the HEAVY face, tabular digits. ORA's
+      panel follows R3 (amber brackets). CONTINUE is a SUIT plate (the player's act).
+      The REPORT plate is a FACILITY plate (IDLE border FACILITY_CYAN_DIM, PRESSED
+      FACILITY_CYAN). Terminal ending cards: no CONTINUE (unchanged), dim RETURN plate
+      as a DISABLED-styled FACILITY plate until pressed.
+  R6  FRAMING SCREENS (FramingScreenRenderer):
+      - TITLE / LAUNCH: FACILITY. The status lines (the boot card's ids) are
+        UI_TEXT_PRIMARY on black. The title is HEAVY at TYPE_DISPLAY in
+        UI_TEXT_PRIMARY, with a FACILITY_CYAN divider under it. Menu items are FACILITY
+        plates; the first-run BEGIN DESCENT / CONTINUE DESCENT item is SELECTED. Reveal
+        pacing is unchanged.
+      - PAUSE / SETTINGS: SUIT. The panel has amber brackets and the header is R1 of
+        order 5 (screenHeader); items are SUIT plates.
+      - CONFIRMATION: takes the ink of the screen that opened it (title -> facility,
+        pause -> suit). PROCEED is a SELECTED plate in that ink; CANCEL is IDLE.
+      - DEATH STROKE: "THIS BODY DIED" in HEAVY at TYPE_DISPLAY, UI_TEXT_PRIMARY on the
+        finished black. No brackets, no panel, nothing else. STORY_DEATH_STROKE colour
+        constants re-point to UI_TEXT_PRIMARY.
+  R7  INSTANCE REPORT (the run's record): FACILITY. Header via screenHeader with a cyan
+      tick; number columns HEAVY tabular; RUN AUTOPSY lines UI_TEXT_PRIMARY; section
+      dividers FACILITY_CYAN_DIM.
+  R8  ROUTE MAP CONSOLE: the console frame becomes UiKit.panel + FACILITY_CYAN
+      brackets. The header (region name) is HEAVY. The confirm bar and its buttons are
+      FACILITY plates (the COMMIT action SELECTED). The legend and card text use the
+      TYPE_* roles. Node glyphs/pips/crests are untouched (OUT). FLOOR TWIST card text
+      keeps its amber sting colour (hazard semantics).
+  R9  SHOP (fabricator) and EVENT CONSOLE: FACILITY ink. Screen header with a cyan
+      tick; offers as cards inked FACILITY_CYAN_DIM (SELECTED = FACILITY_CYAN);
+      prices CREDITS_GOLD; an unaffordable price CombatPalette.DAMAGE with the plate
+      DISABLED; event choice plates are FACILITY plates; event cost/benefit text keeps
+      its semantic colours.
+  R10 ANDROID FIRST IMPRESSION:
+      - res/values/color.xml: `background` -> #090A0D (UI_INK_BLACK),
+        `ic_background_color` -> #FAC247 (SUIT_AMBER; replaces the LibGDX-default
+        orange #F5A623 with the brand ink, nearly the same hue, so the existing icon
+        foreground keeps its contrast).
+      - res/values/styles.xml: GdxTheme gains android:windowBackground =
+        @color/background, so the window before the first GL frame is near-black. The
+        parent theme is unchanged.
+  R11 FADE TEXT (FadeOverlayRenderer, the depth readout during floor transitions):
+      HEAVY, UI_TEXT_PRIMARY, with a FACILITY_CYAN_DIM label (the elevator is the
+      facility's).
+  R12 Same literal-colour discipline as order 5 R11 across every touched class.
+
+
+PLAYER EXPERIENCE
+-----------------
+Launch: black, then the machine's cold cyan-framed words telling you that you are
+already dead. In play: your amber suit. When the facility speaks (the nav console,
+the fabricator, an event terminal, the reprint machine), the frame turns cyan. When
+ORA speaks, her panel wears her amber. When the Organization speaks, theirs wears the
+facility's cyan, because it is the facility. None of this is explained; it is
+consistent enough to be learned.
+
+
+TECHNICAL NOTES
+---------------
+Touched (render): StoryPanelRenderer, StoryBarkRenderer (only if it draws its own
+  chrome), StoryExchangeRenderer, BootCardRenderer, InstanceReportRenderer,
+  FramingScreenRenderer, FadeOverlayRenderer, RouteMapOverlayRenderer,
+  RouteMapColorPalette, ShopOverlayRenderer, EventChoiceOverlayRenderer.
+Constants: StoryUiConstants (SPEAKER_ACCENT_* initialisers, STORY_PANEL_BG_*,
+  STORY_FRAME_* / STORY_TITLE_* / STORY_REPORT_* chrome colours,
+  STORY_DEATH_STROKE colour), RouteMapConstants chrome colours if any. Geometry
+  constants untouched.
+Android: android/res/values/color.xml, android/res/values/styles.xml (two files, no
+  manifest change).
+UiKit: no new primitive is expected. If a FACILITY plate variant is needed, it is the
+  existing plate() with ink = FACILITY_CYAN (no new method).
+Tile symbols, persistence, story strings, sound, balance: none.
+
+
+VISUAL DESIGN
+-------------
+Ink table (the completed SUIT vs FACILITY map, written into docs/art-direction.txt):
+  SUIT (amber)      HUD, touch controls, mini-map frame, inventory family, weapon
+                    inspect, level-up, relic offer, codex, pause, settings, exchange
+                    answers, CONTINUE, ORA's panel
+  FACILITY (cyan)   route map console, fabricator shop, event console, title/launch,
+                    boot card status, instance report, depth readout, Organization's
+                    panel, mini-map exit, BLACKOUT plate text
+  NEUTRAL           SYSTEM speaker, death stroke
+  SEMANTIC          health, armour, damage, defence, special, movement, buff, credits,
+                    rarity/tier frames
+
+
+BALANCE NOTES
+-------------
+None.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Narrative layer: purely paint. Channels, gating, one-shot rules, precedence and
+    the no-timer rule are untouched.
+  - Story accessibility (text size, reveal pacing, reduced motion, story audio):
+    unchanged and still applied.
+  - Route map legibility (route-map-visual-legibility-fixes.txt, IMPLEMENTED): its
+    border, CRT treatment and contrast choices remain. The console frame is the only
+    chrome replaced. If that fix's border IS the console frame, the kit panel replaces
+    it while keeping its contrast (A5 checks).
+  - Order 4: the bark panel joins the kit here, ending order 4's interim state.
+
+
+EDGE CASES
+----------
+  - First launch (never printed): BEGIN DESCENT is the selected plate (R6). The title's
+    first-run label logic is unchanged.
+  - Ending reached: the title prints that ending's status lines with the same
+    facility styling. The terminal card's RETURN works as before.
+  - MERGE ending (no card): nothing to restyle.
+  - A blocking exchange with 2 vs 3 answers: same plate style, existing spacing.
+  - Bark at LARGE text size: wraps as before (order 3 sweep).
+  - Android devices that ignore windowBackground for fullscreen themes: the GL clear
+    colour takes over at the first frame, so nothing gets worse.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  ORA's bark/exchange panels show amber brackets and chip, the Organization's show
+      cyan, the planet's red, SYSTEM's bone-white. StoryUiFoundationTest stays green.
+  A2  Exchange answers are amber-pressing SUIT plates. The acknowledge plate matches.
+  A3  Boot card: status block in a cyan-bracketed panel with HEAVY header, the counter
+      in HEAVY tabular cyan-dim, ORA's panel amber, CONTINUE amber plate, REPORT cyan
+      plate.
+  A4  Title screen: status lines on black, HEAVY title with cyan divider, menu as cyan
+      plates. Pause/settings: amber brackets, SUIT plates. Confirmation inks follow the
+      opening screen. The death stroke is HEAVY bone text alone on black.
+  A5  Route map: cyan-bracketed console frame, HEAVY header, FACILITY plates in the
+      confirm bar. Node colours, pips, crests and icons are pixel-identical to before
+      (compare a screenshot of the same seed's map before/after).
+  A6  Shop and event console: cyan-framed, prices gold, unaffordable offers DISABLED
+      with red price.
+  A7  Instance report and depth readout use the facility styling and HEAVY numbers.
+  A8  On an Android build, cold-launching the app shows no white frame before the
+      title. The adaptive icon background is amber #FAC247. (Desktop: verified by
+      reading the two XML files.)
+  A9  Every tap target on every screen in this order is unchanged (spot-check all
+      plates), and geometry/timing constants are unchanged in the diff.
+  A10 R12: no chrome colour literals remain in the touched classes outside icon art.
+  A11 SERIES CHECK (screenshot set): with the dev mood override (order 1 R12), six
+      screenshots can be taken that look like one game: a region-A corridor fight, a
+      region-C reactor corridor, a region-D Breach room, the route map, the boot card,
+      the inventory. All use one font, one chrome shape, two inks and no default
+      LibGDX visuals. The handover note lists any remaining off-style element found
+      as a follow-up, not a fix in this order.
+  A12 `./gradlew build` + `./gradlew test` green. No new test file or method.
+  A13 Docs updated (step 6). docs/art-direction.txt is complete for the series.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (libgdx-specialist)  R1 accents, StoryUiConstants chrome colours,
+     R2 RouteMapColorPalette sourcing.
+  2. LOGIC  none.
+  3. RENDER  (libgdx-specialist)  story panel family; boot card + report + fade text;
+     framing screens; route map frame; shop + event console.
+  4. CONTENT  Android XML (libgdx-specialist; two resource files).
+  5. TESTS  None. Not balance-bearing; verified by `./gradlew build` + `./gradlew
+     lwjgl3:run` (and an Android launch for A8 if a device/emulator is available,
+     otherwise by reading the XML). `./gradlew test` must stay green.
+  6. DOCS  docs/art-direction.txt (FACILITY INK, STORY PANELS, FIRST IMPRESSION, ink
+     table); docs/story-ui-system.txt (accent sources, framing-screen paint);
+     docs/route-map-system.txt (OVERLAY VISUAL SPEC: frame/header/plates from UiKit,
+     glyph colours unchanged); .claude/CLAUDE.md "Where to Find Info" art-direction row
+     mentions the ink table.
+
+RISKS AND UNKNOWNS
+  - RouteMapOverlayRenderer is 1754 lines. Isolate its frame/header/confirm-bar draw
+    routines before editing, and do not touch node, edge, pip or crest drawing.
+  - FramingScreenRenderer serves several phases. Keep each phase's draw path
+    separate so the ink choice per phase stays obvious in code.
+  - The Organization's accent changing from blue to cyan is the only identity colour
+    that visibly moves. That is intended (the facility speaks for them). The story
+    docs record it.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/visual-identity-order-6.md exists on the branch, committed
+       and pushed.
+  CP1  R1 speaker accents, StoryUiConstants chrome colours and R2 RouteMapColorPalette
+       sourcing re-pointed at ArtDirection. Every reader compiles and
+       StoryUiFoundationTest is green; `./gradlew build` + `./gradlew test` green.
+  CP2  StoryPanelRenderer + StoryExchangeRenderer restyled (R3, R4); the bark panel
+       inherits it. A1 and A2 hold on run; `./gradlew build` green.
+  CP3  BootCardRenderer, InstanceReportRenderer and FadeOverlayRenderer restyled (R5,
+       R7, R11). A3 and A7 hold; `./gradlew build` green.
+  CP4  FramingScreenRenderer restyled for title, pause, settings, confirmation, terminal
+       RETURN and death stroke (R6). A4 holds; `./gradlew build` green.
+  CP5  RouteMapOverlayRenderer frame/header/text/confirm bar restyled (R8). A5 holds,
+       including the before/after glyph comparison; `./gradlew build` green.
+  CP6  ShopOverlayRenderer and EventChoiceOverlayRenderer restyled (R9). A6 holds;
+       `./gradlew build` green.
+  CP7  Android color.xml + styles.xml changed (R10, A8). A9 and A10 sweep done. The A11
+       series screenshot check done and recorded in the handover note. Docs (step 6)
+       complete. `./gradlew build` + `./gradlew test` green. Ready for reviewer.
+
+
+ASSUMPTIONS
+-----------
+  AS1  The reprint machine, the nav console, the fabricator and event terminals are
+       "the facility". Pause/settings live "in-suit" (the pause menu's own name in
+       CLAUDE.md). That split decides every ink in this order.
+  AS2  The Organization speaks through the facility, so its accent becomes the
+       facility's cyan. This deliberately moves one existing identity colour (blue ->
+       cyan) for coherence.
+  AS3  ORA's accent moving from 0.78 to 0.76 green is imperceptible and lets her be
+       literally the suit ink.
+  AS4  The existing icon foreground stays. An amber background is the brand ink and
+       close to the orange it replaces, so contrast does not change.
+  AS5  The death stroke stays brutally plain: brackets or panels there would undercut
+       the moment.
+  AS6  A before/after screenshot of the same route seed is enough to prove node glyphs
+       did not change.
+
+
+DECISIONS
+---------
+  D1  Owner instruction: decide by default and ask nothing.  ->  All choices are the
+      designer's.  (2026-10-19)
+  D2  Ink per screen by DIEGESIS (who is showing it to you)  ->  Yes. See the ink table.
+      (2026-10-19)
+  D3  Exchange answers in suit ink, even inside a facility-speaker exchange  ->  Yes.
+      The answer is the player's voice. The prompt panel carries the speaker's colour.
+      (2026-10-19)
+  D4  Android launch background  ->  Near-black window background. A white flash
+      before a horror title is the single cheapest "unfinished" tell to remove.
+      (2026-10-19)
+  D5  App name / orientation / store listing  ->  Out of scope (owner branding /
+      not visual identity).  (2026-10-19)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  visual-identity.txt, visual-identity-order-3/4/5.txt, story-ui-order-1..9,
+          narrative-rework-order-2.txt (the first ten minutes, death stroke),
+          branching-facility-route-map-order-4.txt (overlay), route-map-visual-legibility-
+          fixes.txt, shop_order_5_shop_ui_overlay.txt, starting-room-route-select-first-
+          choice.txt
+  Docs:   docs/art-direction.txt, docs/story-ui-system.txt, docs/route-map-system.txt,
+          docs/narrative-authority.txt (no copy changes)

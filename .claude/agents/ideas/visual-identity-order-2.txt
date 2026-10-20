@@ -1,0 +1,395 @@
+STATUS: IMPLEMENTED
+CATEGORY: Visual
+TITLE: Visual Identity 2 — Grounded sprites: halo, shadows, light
+CREATED: 2026-10-19
+IMPLEMENTED: 2026-10-20
+---
+
+IMPLEMENTATION NOTE (2026-10-20, reviewer-approved deviations)
+--------------------------------------------------------------
+  - R8 formula replaced. clamp01(s x tint + light) clamped the light away (near surfaces already sit at
+    multiplier ~1.0; measured +2..3/255). The light is added AFTER the clamp, as albedo x light: walls,
+    doors, columns, props, pickups, the shop body and enemy bodies get a second draw of the same texture
+    slice with blend (GL_SRC_ALPHA, GL_ONE), colour = lightAdd, alpha 1, using the same wall z-test and
+    skipping columns a nearer recorded sprite covers. Floor/ceiling use
+    GameMath.applyRgbShadeAndLightToPackedRGBA (only the final channel clamps). A door-panel column lights
+    the panel only (deliberate).
+  - R7 peaks raised: WARM 0.35 -> 1.50, ENERGY 0.35 -> 1.50, FIRE 0.40 -> 1.70 — the materials are dark
+    (order-1 R9), so a multiplier on albedo needs a peak above 1 to be visible. Colours, duration (0.10 s),
+    radius (4 tiles) and falloff unchanged. VISUAL DESIGN's "+35%" is superseded: a surface at the
+    player's feet briefly reaches ~2.5x its lit colour.
+  - R10 superseded: while a pulse is active, each lit wall column and lit sprite slice costs one extra
+    additive quad (two blend switches per frame for walls, two per lit sprite). At intensity 0 everything
+    is skipped by a branch, as specified.
+  - AS6 restated: the peak is no longer 0.35. The flash is local (squared falloff to 4 tiles), never
+    full-screen, lasts 0.10 s and never stacks; repeated chaingun fire repeats the pulse. Revisit if
+    photosensitivity is raised.
+  - R4/R6 extension: every FLOATING billboard pickup (weapon pickups, credit chips, and the medical /
+    armour / ammo / keycard tile pickups) gets its floor shadow at CONTACT_SHADOW_HOVER_ALPHA_SCALE (0.55),
+    R6's own reasoning for the hovering eye; at full alpha they read as stray blobs.
+  - R3: the alpha cut runs in place on the sheet's pixel buffer, in 16 KB chunks. Measured 379 ms with
+    the earlier whole-copy pass on a quiet machine; the chunked pass is ~2x faster than that version in a
+    same-session comparison (476-582 ms vs 1209 ms on a noisy VM). The 0.50 cut is kept for every sheet: the 4.5-16% mid-alpha texels are
+    anti-aliased edges in body colour, not a dark glow (offline composites).
+  - Verified on screen: halo cut, prop/pickup shadows, the forced-pulse light in warm/cyan/orange.
+    Verified by code read only: enemy shadows (A5/A6), enemy lighting (A7), chaingun refresh (A8).
+
+OVERVIEW
+--------
+Makes the billboards look like they are in the same room as the walls. Three changes,
+all built on order 1's AtmosphereGrade:
+  (a) The enemy PNG sheets carry a baked translucent dark halo: 11-18% of their pixels
+      are partially transparent smudge. They are conditioned at load with a hard
+      alpha cut, so every enemy has a crisp pixel-art silhouette. The conditioned
+      sheets are cached for the app session instead of being reloaded every floor.
+  (b) A soft contact shadow sits under every upright billboard (enemies, solid props,
+      pickups, the shop machine), so nothing floats.
+  (c) Firing a gun briefly lights the nearby world (walls, floor, ceiling, props,
+      enemies) in the weapon's colour, through the same grade.
+
+What was SAID: "consistent art direction across ... props, enemies, weapons". What is
+NEEDED: sprites look pasted on. A halo around a monster against a lit wall, and a
+barrel with no contact with the floor, are the two clearest "not finished" signs left
+once order 1 has unified the colour.
+
+
+SCOPE
+-----
+IN
+  - Load-time alpha conditioning of every enemy texture loaded from
+    assets/textures/enemies (EnemyRenderer.loadSheetOrFallback path). The PNG files
+    are untouched (V1).
+  - render/EnemySpriteSheets: a session-lifetime holder of the conditioned enemy
+    textures, built lazily on first use and disposed in Main.dispose(). EnemyRenderer
+    stops loading and disposing them per floor.
+  - Contact shadows in EnemyRenderer, PropRenderer and ShopMachineRenderer.
+  - Muzzle light: a weapon-fired seam on PlayerController, a per-weapon light catalog,
+    and an additive light term in AtmosphereGrade read by every graded surface.
+  - docs/art-direction.txt sections: SPRITE CONDITIONING, CONTACT SHADOWS, MUZZLE LIGHT.
+
+OUT (deliberately not doing now)
+  - Outlines or rim light on enemies. A dilation pass on 1024-1536 px sheets is too
+    slow at load on phones. A draw-time outline needs 5x the draws. The halo cut plus
+    the half-strength grade (order 1) already separate enemies from the haze.
+  - Light from explosions, barrels, plasma bolts, hazards or enemy attacks. Only the
+    player's own shot lights the world. Point-light positions for other sources would
+    need world-space distance per column (cost, and it is not identity).
+  - Dynamic shadows, or shadows that react to light direction. A contact shadow is a
+    fixed soft blob.
+  - Shadows under decals, hazards (fire/toxic), the portal, wall-mounted props, glow
+    and aura sprites, and corpses drawn flat.
+  - Per-weapon ground sprites (weapon-ground-sprites.txt owns them).
+  - Replacing the boss placeholder sprite mapping or any enemy art.
+  - Weapon viewmodel re-authoring.
+
+
+GAMEPLAY LOOP
+-------------
+Purely visual. No turn, rule or input change.
+  1. First EnemyRenderer construction of the session: EnemySpriteSheets loads each
+     enemy PNG into a Pixmap, conditions it (R1), uploads a Texture, disposes the
+     Pixmap, and keeps the Texture for the session. Later floors reuse it.
+  2. Every frame, each upright billboard first draws its contact shadow (R4-R6), with
+     the same per-column z-buffer occlusion as its sprite, then draws the sprite.
+  3. The player taps FIRE and a shot is actually fired (ammo spent: the same moment
+     PlayerController plays the weapon's fire sound). PlayerController notifies its
+     weapon-fired listener with the weapon's ItemType. World calls
+     AtmosphereGrade.pulseMuzzleLight(itemType). For MUZZLE_LIGHT_DURATION_SECONDS of
+     real time (cosmetic animation, not a turn rule), every graded surface within
+     MUZZLE_LIGHT_RADIUS_TILES gains the light term (R8). An empty-click, a reload, a
+     railgun CHARGE turn and every melee swing emit no light.
+
+
+RULES
+-----
+  R1  ALPHA CUT. For each texel of an enemy sheet: if alpha < ENEMY_SPRITE_ALPHA_CUT
+      (0.50), the texel becomes fully transparent (RGBA 0). Otherwise alpha becomes 1.0
+      and RGB is kept. Applied in one pass over the Pixmap's ByteBuffer, no per-texel
+      allocation. Applies to every PNG the enemy layer loads. The procedural fallback
+      sheet (generateFallbackSheet) is already opaque and is skipped.
+  R2  SESSION CACHE. EnemySpriteSheets.get(path, fallbackRed, fallbackGreen,
+      fallbackBlue) returns the cached conditioned Texture (Nearest filter, as today).
+      EnemyRenderer's constructor gets its textures from it, and its dispose() no
+      longer disposes them. Main.dispose() calls EnemySpriteSheets.disposeAll(). The
+      cache must also survive World disposal and recreation (death -> new run), which
+      is the point: a floor build no longer reloads 9 large PNGs.
+  R3  LOAD-TIME BUDGET. Conditioning runs once per session. The holder logs
+      "EnemySpriteSheets conditioned N sheets in M ms". On desktop, M must be under
+      400 ms. If not, the builder optimises the loop (bulk IntBuffer read/write)
+      before moving on.
+  R4  WHICH BILLBOARDS GET A SHADOW. Every live enemy (bosses included) while its
+      sprite is drawn upright; every SOLID prop (the TileCategory solid-prop symbols
+      and the generator-placed props drawn by the same solid-prop path); every ground
+      item / pickup billboard; the shop machine. Never: decals, hazard fire/toxic
+      frames, the portal, aura/glow draws, corpse decals.
+  R5  SHADOW GEOMETRY. A shared procedural texture CONTACT_SHADOW_TEXTURE_WIDTH 64 x
+      HEIGHT 32: an ellipse whose alpha is (1 - r^2)^2 for normalised radius r in
+      [0,1] and 0 outside. Linear filter. Built once per renderer at construction and
+      disposed with it (each of the three renderers owns its copy; it is tiny).
+      Drawn centred on the billboard's screen X, with its vertical centre on the
+      billboard's FLOOR LINE: the sprite's draw bottom BEFORE any hover or lunge
+      offset (EnemyRenderer: the GameMath.wallStripeDrawBottom value at the sprite's
+      depth). Width = projected billboard width x CONTACT_SHADOW_WIDTH_FRACTION_ENEMY
+      0.70 / _PROP 0.85 / _PICKUP 0.60 / _SHOP 0.90. Height = width x
+      CONTACT_SHADOW_HEIGHT_RATIO 0.22.
+  R6  SHADOW TONE. Colour ArtDirection.WORLD_SHADOW. Alpha = CONTACT_SHADOW_ALPHA 0.50
+      x (1 - CONTACT_SHADOW_FOG_FADE 0.80 x fog), where fog is
+      GameMath.atmosphereFogFactor at the billboard's distance (order 1). Hovering
+      enemies (the eye-tyrant hover offset) use alpha x CONTACT_SHADOW_HOVER_ALPHA_SCALE
+      0.55, so the gap between body and shadow reads as height. The shadow is not
+      graded (it is already the darkest value) and it IS occluded per column by the
+      wall z-buffer, exactly like its sprite.
+  R7  MUZZLE LIGHT CATALOG. render/MuzzleLightCatalog maps weapon ItemType -> light
+      (r, g, b, peak), one register() row per binding. The fallback for an unbound
+      weapon is WARM, so a future gun is never dark. Rows:
+        WEAPON_PISTOL, WEAPON_SHOTGUN, WEAPON_DOUBLE_BARREL, WEAPON_CHAINGUN,
+        WEAPON_ASSAULT_RIFLE, WEAPON_ROCKET ........ MUZZLE_WARM   (1.00,0.82,0.55) peak 0.35
+        WEAPON_PLASMA, WEAPON_RAILGUN, WEAPON_ARC_CANNON  MUZZLE_ENERGY (0.60,0.90,1.00) peak 0.35
+        WEAPON_INCINERATOR ............................ MUZZLE_FIRE   (1.00,0.55,0.20) peak 0.40
+        WEAPON_FIST, WEAPON_KNIFE, WEAPON_HAMMER,
+        WEAPON_CHAINSAW ............................... NONE (peak 0: no pulse)
+      Colours live in ArtDirection, peaks and timing in EffectConstants.
+  R8  MUZZLE LIGHT TERM. While active, AtmosphereGrade holds intensity
+      i = peak x (1 - elapsed / MUZZLE_LIGHT_DURATION_SECONDS 0.10), floored at 0. For
+      a surface at distance d (tiles):
+        light = GameMath.muzzleLightFalloff(d, MUZZLE_LIGHT_RADIUS_TILES 4.0) x i
+                (falloff = max(0, 1 - d/radius)^2)
+        channel = clamp01(s x tint.channel + light x muzzle.channel)
+      It applies to walls, doors, columns, floor, ceiling, props, decals, pickup
+      bodies, the shop machine body and enemy bodies, all at full light regardless of
+      grade strength (a lit enemy is the point). It is never applied to emissive-exempt
+      draws (order-1 R4) or to the weapon sprite (its own frames carry the flash).
+      The floor renderer evaluates it per backdrop row, like the tint. A new pulse
+      restarts the clock (chaingun fire refreshes it, never stacks).
+  R9  The pulse clock advances in World.update with real deltaTime. It is cosmetic
+      animation timing (allowed: "animation timings are cosmetic"). It is paused
+      whenever the world is hard-paused (any overlay phase that freezes the world).
+      It resets to zero on floor build.
+  R10 PERFORMANCE. No allocation in render. The shadow is one extra quad per occluded
+      column run of each billboard (same draw strategy as the sprite). The light term
+      costs one multiply-add per channel and is skipped entirely (branch) when i == 0.
+
+
+PLAYER EXPERIENCE
+-----------------
+Monsters stop wearing a brown fog. Barrels, crates and pickups sit on the deck. Every
+shot throws a brief splash of light down the corridor: warm for slugs, cold cyan for
+energy weapons, orange for the incinerator. Firing into a dark corridor now briefly
+shows its shape, which is the most "Doom" moment a raycaster can have, and it costs
+nothing in rules. Nothing to teach.
+
+
+TECHNICAL NOTES
+---------------
+New classes
+  - render/EnemySpriteSheets: static session holder (get / disposeAll), conditioning
+    (R1), timing log (R3). It is a static holder, not World-owned, because World is
+    rebuilt per run and the cache is per process (D3).
+  - render/MuzzleLightCatalog: an ItemType-ordinal-indexed table with fallback, filled
+    by bootstrap() with the R7 rows. Same idiom as audio/SoundRegistry.bindWeapon.
+Touched
+  - render/EnemyRenderer: textures from EnemySpriteSheets; dispose no longer frees
+    them; contact shadow (R4-R6); light term (R8) on the body.
+  - render/PropRenderer, render/ShopMachineRenderer: contact shadow; light term on
+    graded draws.
+  - render/WallRenderer, render/FloorCeilingRenderer: light term via AtmosphereGrade.
+  - render/AtmosphereGrade: pulseMuzzleLight(ItemType), update(deltaTime),
+    resetLight(); evaluate() adds the light term into the same output fields
+    (callers pass distance; no API split).
+  - input/PlayerController: a weapon-fired listener (java.util.function.Consumer of
+    ItemType, the existing Runnable/IntConsumer listener idiom), invoked at the exact
+    site that calls gameAudio.playPlayerWeapon. input never imports render.
+  - world/World: sets the listener -> atmosphereGrade.pulseMuzzleLight; advances the
+    pulse clock in update (R9); resets on floor build.
+  - Main: EnemySpriteSheets.disposeAll() in dispose().
+  - GameMath: muzzleLightFalloff(distanceTiles, radiusTiles), with a comment block.
+    Not balance-bearing.
+  - Constants: EnemyConstants.ENEMY_SPRITE_ALPHA_CUT; RenderConstants.CONTACT_SHADOW_*;
+    EffectConstants.MUZZLE_LIGHT_DURATION_SECONDS / _RADIUS_TILES / _PEAK_WARM /
+    _PEAK_ENERGY / _PEAK_FIRE; ArtDirection.MUZZLE_WARM / MUZZLE_ENERGY / MUZZLE_FIRE
+    triples.
+Tile symbols, story, persistence, sound: none.
+
+
+VISUAL DESIGN
+-------------
+Shadow: a soft, near-black ellipse that is flat and wide, never a hard disc. At
+distance it fades with the haze. Muzzle light: a single 0.10 s splash, peak +35%
+toward the light colour at the player's feet, falling to zero 4 tiles out. It must
+never look like a screen flash: the HUD, mini-map and touch buttons are untouched,
+and the hit vignette is unrelated.
+
+
+BALANCE NOTES
+-------------
+None. No balance file is touched. The light is cosmetic and changes no visibility rule
+(enemy wake/perception is tile-space and unaffected).
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Order 1 AtmosphereGrade: extended, not replaced. Order-1 emissive exemptions
+    still hold.
+  - Audio: the light fires at the same site as the fire sound, so sight and sound are
+    one beat.
+  - Floor twists: BLACKOUT floors get the most out of muzzle light. That is
+    intentional and changes no rule.
+  - Railgun charge turn: plays its own charge sound, not playPlayerWeapon, so no
+    light.
+  - EnemyAttackEffectSystem / ImpactEffect particles: unchanged and ungraded.
+  - World recreation on death: EnemySpriteSheets survives it (R2).
+
+
+EDGE CASES
+----------
+  - Enemy texture missing: the procedural fallback sheet is used and cached like any
+    other.
+  - Enemy partially behind a wall: the shadow columns use the same z-test, so the
+    shadow is clipped where the sprite is.
+  - Enemy in its lunge animation: the shadow stays on the floor line (pre-lunge
+    bottom).
+  - Two billboards on adjacent tiles: shadows draw in the same back-to-front order as
+    the sprites. No sorting change.
+  - Fire during the last frame before an overlay opens: the clock pauses with the
+    world (R9) and resumes after.
+  - Floor transition mid-pulse: reset on build (R9).
+  - App pause/resume: EnemySpriteSheets textures are Pixmap-built (unmanaged), like
+    every procedural texture in the game. Behaviour on GL context loss matches
+    existing practice. Not in scope to change.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Running the game, no enemy shows a translucent dark halo or rectangle against a
+      lit wall. Every enemy edge is crisp (alpha 0 or 1 only: code read of R1).
+  A2  The log shows "EnemySpriteSheets conditioned N sheets in M ms" once per app
+      session, M < 400 on desktop. It does NOT appear again on the second floor or
+      after a death and new run.
+  A3  EnemyRenderer.dispose() no longer disposes the sheet textures.
+      EnemySpriteSheets.disposeAll() runs in Main.dispose().
+  A4  Every enemy, solid prop (barrel, crate, locker, terminal, ...), pickup and the
+      shop machine has a soft ellipse shadow on the floor line. Decals, fire/toxic
+      hazards and the portal have none.
+  A5  An enemy half hidden behind a wall corner has its shadow clipped at the same
+      column as its sprite.
+  A6  The hovering eye enemy's shadow is on the floor, lighter, with a visible gap to
+      the body.
+  A7  Firing the shotgun in a dark corridor briefly (about 0.1 s) warms walls, floor,
+      ceiling and any enemy within ~4 tiles. The plasma rifle does the same in cyan,
+      the incinerator in orange. Melee swings, an empty click and the railgun charge
+      turn produce no light.
+  A8  Holding fire with the chaingun keeps the light topped up (restarts) without
+      getting brighter than one pulse.
+  A9  The HUD, mini-map, touch buttons, health bars and intent icons do not change
+      colour when firing.
+  A10 `./gradlew build` + `./gradlew test` green. No new test file or method.
+  A11 docs/art-direction.txt has the three new sections, and docs/enemy-system.txt
+      notes the sprite conditioning + session cache.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect)  constants (EnemyConstants, RenderConstants,
+     EffectConstants, ArtDirection); render/MuzzleLightCatalog + bootstrap.
+  2. LOGIC  (math-expert: GameMath.muzzleLightFalloff; java-architect: PlayerController
+     listener, World wiring, AtmosphereGrade light term + clock, EnemySpriteSheets).
+  3. RENDER  (libgdx-specialist)  EnemyRenderer conditioning hookup + shadows + light
+     term; PropRenderer / ShopMachineRenderer shadows + light term; WallRenderer /
+     FloorCeilingRenderer light term.
+  4. CONTENT  none.
+  5. TESTS  None. Not balance-bearing; verified by `./gradlew build` + `./gradlew
+     lwjgl3:run`. `./gradlew test` must stay green.
+  6. DOCS  docs/art-direction.txt (SPRITE CONDITIONING, CONTACT SHADOWS, MUZZLE LIGHT);
+     docs/enemy-system.txt (conditioning + EnemySpriteSheets lifetime);
+     docs/wall-renderer-guide.txt (light term in the grade step).
+
+RISKS AND UNKNOWNS
+  - Painted edges: a 0.50 cut may chew thin soft details (wisps, glows) on some sheets,
+    notably vortex eye and boss overseer. If a sheet visibly loses detail, add a
+    per-path override ROW (ENEMY_SPRITE_ALPHA_CUT per path in a small table in
+    EnemyConstants, default 0.50), never an if on the path in code.
+  - Premultiplied fringe colours: some sheets carry dark RGB under low alpha. Those
+    texels become fully transparent, which is the goal.
+  - Confirm which PropRenderer loop draws "solid props" vs decals vs glows before
+    adding the shadow, so R4's exclusion list holds by construction.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/visual-identity-order-2.md exists on the branch, committed
+       and pushed.
+  CP1  render/EnemySpriteSheets exists with R1 conditioning, R2 cache and R3 log;
+       EnemyRenderer takes its sheets from it and no longer disposes them;
+       Main.dispose() calls disposeAll. A1, A2 and A3 hold on run; `./gradlew build`
+       green.
+  CP2  Contact shadows are drawn in EnemyRenderer per R4-R6, including hover and lunge
+       handling. A5 and A6 hold; `./gradlew build` green.
+  CP3  Contact shadows are drawn in PropRenderer and ShopMachineRenderer per R4-R6. A4
+       holds; `./gradlew build` green.
+  CP4  MuzzleLightCatalog (R7), GameMath.muzzleLightFalloff, the AtmosphereGrade light
+       term + clock (R8/R9), and the PlayerController weapon-fired listener wired by
+       World all exist. Walls and floor/ceiling read the light term. Props and enemies
+       DELIBERATELY not yet lit (CP5 finishes). `./gradlew build` green.
+  CP5  PropRenderer, ShopMachineRenderer and EnemyRenderer apply the light term. A7, A8
+       and A9 hold on run. Docs (step 6) updated. `./gradlew build` + `./gradlew test`
+       green. Ready for reviewer.
+
+
+ASSUMPTIONS
+-----------
+  AS1  The halo in the enemy PNGs is unwanted bake-in (soft drop-glow from the source
+       art tool), not intended atmosphere. It is 11-18% partial-alpha texels per
+       sheet (measured on the shipped files).
+  AS2  A hard 0.50 alpha cut suits the art: the sprites are drawn with Nearest
+       filtering, so they are pixel art by intent.
+  AS3  The shadow's floor line equals the existing wall-stripe draw bottom at the
+       billboard's depth (FLOOR_CAMERA_Z 0.5, horizon at screen centre), as
+       EnemyRenderer already computes it.
+  AS4  Each renderer owning a 64x32 shadow texture is cheaper to wire than sharing one,
+       and costs nothing measurable.
+  AS5  The light seam is the existing playPlayerWeapon call in PlayerController, so
+       "a shot was fired" means exactly what the audio layer already means by it.
+  AS6  MUZZLE_LIGHT_DURATION 0.10 s is short enough never to read as a strobe. Peak 0.35
+       stays below any photosensitivity concern (no full-screen luminance flash).
+  AS7  Grenade launcher (WEAPON_ROCKET) launch light is warm. The explosion itself
+       emits no light in this order (OUT).
+  AS8  A future weapon without a catalog row gets warm light, by design (never silent,
+       never dark: the SoundRegistry precedent).
+
+
+DECISIONS
+---------
+  D1  Owner instruction: decide by default and ask nothing.  ->  All choices are the
+      designer's.  (2026-10-19)
+  D2  Enemy outline  ->  Not built (cost on phones, see OUT). Halo cut + grade strength
+      do the separation job.  (2026-10-19)
+  D3  Conditioned-sheet ownership  ->  A static session holder disposed by Main. World
+      is rebuilt per run, so a World-owned cache would redo the work every run.
+      (2026-10-19)
+  D4  What emits light  ->  Only the player's shots. One source with a known
+      position (the player) keeps the per-column cost to one distance term.
+      (2026-10-19)
+  D5  Shadow occlusion  ->  Same per-column z-test as the sprite. Without it, shadows
+      would bleed through walls.  (2026-10-19)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  visual-identity.txt, visual-identity-order-1.txt (AtmosphereGrade),
+          weapon-ground-sprites.txt (pickup silhouettes; not touched),
+          enemy-health-bars-and-hit-reactions.txt, procedural-sound-effects-order-6.txt
+          (the fire-sound seam reused)
+  Docs:   docs/art-direction.txt, docs/enemy-system.txt, docs/wall-renderer-guide.txt,
+          docs/sound-system.txt (firing sites)
