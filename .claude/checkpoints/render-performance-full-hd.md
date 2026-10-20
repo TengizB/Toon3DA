@@ -59,7 +59,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
       DONE WHEN: floor + ceiling drawn as spans (R1-R9); backbuffer/Pixmap/backdrop Texture/upload/thread pool
       gone; RenderResolution carries only the row count; A2, A3, A4, A7, A9, A10, A11, A12, A14 hold (numbers
       recorded here); build green.
-- [ ] **CP5** — walls.
+- [x] **CP5** — walls.
       DONE WHEN: opaque-level base pass unblended (R16); R17/R18 built iff CP2 said go; A5 + A13 vs CP4 captures
       hold; build green.
 - [ ] **CP6** — billboards + allocations.
@@ -192,3 +192,26 @@ Quality capture runs: `/tmp/claude-0/after/C4F-<mood>-r1` (FULL_HD) and `C4H-` (
 - A14 PASS: HD P1 per mood renders correctly (`montage-HD-B1-left-AFTER-right.png`).
 - Interim timing (single run each, not the A1 measurement): FULL_HD P1 11.3-13.1 ms (B0 14.1-14.8, B1 9.7-10.4).
 NEXT: CP5 = `git apply /tmp/claude-0/scripts/cp5.patch` (R16 opacity flag + unblended base pass) + build R18 W-MERGE.
+
+**CP5 (closed).** R16: WallRenderer records opacity once per texture at creation (`finalizeWallTexture(pixmap)` —
+all 23 generator tails + `loadWallTexture` now go through it; RGB888/565 = opaque, else alpha scan); static identity
+set `OPAQUE_WALL_TEXTURES`, pruned by `forgetWallTextureOpacity` (called from WallRenderer.dispose for doors and from
+EnvironmentTextureSet.dispose). DEVIATION: the per-level flag is computed in
+`WallRenderer.resolveLevelWallAndColumnTextures` (it knows exactly which wall/column/door textures it can draw)
+rather than inside EnvironmentTextureSet (which cannot tell wall sprites from prop sprites). `isLevelSurfacesOpaque()`
+= true on the start room (verified via `call:wallRenderer:isLevelSurfacesOpaque`). Base pass `disableBlending()`,
+re-enabled before the muzzle pass. R17 not built (CP2 no-go). R18 built: `isSameSurfaceSlice` merges neighbouring
+columns with identical texture/texColumn/srcY/srcHeight/drawBottom/drawTop/colour and no door panel into one wider
+quad (door columns stay single).
+- A5 PASS: wall draw calls (probe cpu) 5.00 / 3.03 / 1.00 / 1.03 vs B0 5.00 / 3.11 / 1.00 / 1.06.
+- A13 PASS (method: within ONE run, a temporary uncommitted `devLegacyWallPath` toggle flipped the old path on for one
+  frame between two new-path frames; pixels that change between the two new-path frames, dilated 15 px, are
+  animation): outside animation the worst per-channel diff is 1/255 in P1 cool_steel/amber_hot/corrupted_violet and
+  P4 amber_hot/core_white_violet; the few residual pixels (clinical_white P1 84 px at 2/255, P4 267 px at 3/255,
+  core_white_violet P1 6 px at 2, corrupted_violet P4 1 px at 2, cool_steel P4 296 px up to 39) all lie on pickup
+  billboards whose aura pulse / muzzle-light decay changes frame to frame (inspected: `/tmp/claude-0/a13/res-cs.png`);
+  no wall pixel differs. Cross-run full-frame comparison is impossible (floor-1 weapons are random each run).
+- Wall CPU ms (probe cpu): 1.22 / 1.18 / 0.60 / 0.67 (B0 0.99 / 1.32 / 1.86 / 1.84).
+NEXT: CP6 = `git apply /tmp/claude-0/scripts/cp6.patch` (R19 range-ordered occluder redraws: Enemy, Prop ×3 loops,
+ShopMachine body). R20: CP2 found no render-path allocation by GC (4 events/run at both tiers); code-read the touched
+render() paths.

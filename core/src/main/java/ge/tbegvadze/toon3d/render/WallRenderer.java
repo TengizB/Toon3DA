@@ -21,6 +21,9 @@ import ge.tbegvadze.toon3d.util.RenderResolution;
 import ge.tbegvadze.toon3d.util.TilesetConstants;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -86,6 +89,8 @@ public class WallRenderer implements Renderable, Disposable {
     // cached in dedicated fields rather than the char array.
     private static final char COLUMN_SYMBOL = TilesetConstants.FLEXIBLE_COLUMN_SYMBOLS.charAt(0);
     private Texture levelColumnTexture;
+    // R16: true when every wall/column/door texture of this level is fully opaque (base pass unblended).
+    private boolean levelSurfacesOpaque;
     private int     levelColumnTextureWidth;
     private int     levelColumnTextureHeight;
 
@@ -265,9 +270,39 @@ public class WallRenderer implements Renderable, Disposable {
     }
 
     private static Texture loadWallTexture(String path) {
-        Texture texture = new Texture(Gdx.files.internal(path));
+        return finalizeWallTexture(new Pixmap(Gdx.files.internal(path)));
+    }
+
+    /*
+     * render-performance-full-hd R16: every texture this class can draw in the wall BASE pass is built here,
+     * so whether it is fully opaque (every texel alpha 255) is recorded once, while its pixels are still on
+     * the CPU. resolveLevelWallAndColumnTextures() folds the level's set into one flag. GL thread only.
+     */
+    private static final Set<Texture> OPAQUE_WALL_TEXTURES = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /** Uploads a generated/loaded wall pixmap (Nearest), records its opacity, and frees the pixmap. */
+    private static Texture finalizeWallTexture(Pixmap pixmap) {
+        Texture texture = new Texture(pixmap);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        if (isFullyOpaque(pixmap)) OPAQUE_WALL_TEXTURES.add(texture);
+        pixmap.dispose();
         return texture;
+    }
+
+    private static boolean isFullyOpaque(Pixmap pixmap) {
+        Pixmap.Format format = pixmap.getFormat();
+        if (format == Pixmap.Format.RGB888 || format == Pixmap.Format.RGB565) return true;
+        for (int row = 0; row < pixmap.getHeight(); row++) {
+            for (int column = 0; column < pixmap.getWidth(); column++) {
+                if ((pixmap.getPixel(column, row) & 0xFF) != 0xFF) return false;
+            }
+        }
+        return true;
+    }
+
+    /** Drops a disposed texture from the opacity record (called wherever a wall texture is disposed). */
+    public static void forgetWallTextureOpacity(Texture texture) {
+        OPAQUE_WALL_TEXTURES.remove(texture);
     }
 
     /**
@@ -471,10 +506,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -547,10 +579,7 @@ public class WallRenderer implements Renderable, Disposable {
         for (int row = COLUMN_MORTAR_SPACING; row < textureHeight; row += COLUMN_MORTAR_SPACING) {
             pixmap.fillRectangle(0, row, textureWidth, 4);
         }
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -599,10 +628,7 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(rivetInset, row - 4, 3, 3);
             pixmap.fillRectangle(textureWidth - rivetInset - 3, row - 4, 3, 3);
         }
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -669,10 +695,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -734,10 +757,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -798,10 +818,7 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(verticalSeamColumn + seam, seamRow - 3, 3, 3);
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -856,10 +873,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -909,10 +923,7 @@ public class WallRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(textureSize - rivetOffset - rivetSize,
                              textureSize - rivetOffset - rivetSize, rivetSize, rivetSize);
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1015,10 +1026,7 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(pitColumn, pitRow, 3, 3);
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1296,10 +1304,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1375,10 +1380,7 @@ public class WallRenderer implements Renderable, Disposable {
             if (indent > 0) pixmap.fillRectangle(stencilX + (indent - 1) * 2, stencilY + chevronRow, 2, 1);
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1479,10 +1481,7 @@ public class WallRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(28, 225, 200, 3);
         pixmap.fillRectangle(225, 28, 3, 200);
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1558,10 +1557,7 @@ public class WallRenderer implements Renderable, Disposable {
         // this texture's layers are position-driven rather than random-walk driven.
         random.nextInt();
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1627,10 +1623,7 @@ public class WallRenderer implements Renderable, Disposable {
         // Suppress unused variable warning — seeded for determinism
         random.nextInt();
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1687,10 +1680,7 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(fleckColumn, fleckRow, fleckSize, fleckSize);
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1814,10 +1804,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -1884,10 +1871,7 @@ public class WallRenderer implements Renderable, Disposable {
             pixmap.fillRectangle(dustColumn, dustRow, 2, 2);
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -2032,10 +2016,7 @@ public class WallRenderer implements Renderable, Disposable {
             }
         }
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     public void setPlayerState(float worldX, float worldY,
@@ -2174,6 +2155,22 @@ public class WallRenderer implements Renderable, Disposable {
             levelColumnTextureWidth  = textureSet.widthFor(columnSpriteId);
             levelColumnTextureHeight = textureSet.heightFor(columnSpriteId);
         }
+
+        // R16: one flag per level - the base pass may run unblended only if every wall, column and door
+        // texture it can draw is fully opaque (then blending is a no-op and costs fill-rate for nothing).
+        boolean opaque = OPAQUE_WALL_TEXTURES.contains(levelColumnTexture);
+        for (int charIndex = 0; charIndex < levelWallTextures.length && opaque; charIndex++) {
+            if (Level.isWall((char) charIndex)) opaque = OPAQUE_WALL_TEXTURES.contains(levelWallTextures[charIndex]);
+        }
+        for (int charIndex = 0; charIndex < doorTextureTable.length && opaque; charIndex++) {
+            opaque = OPAQUE_WALL_TEXTURES.contains(doorTextureTable[charIndex]);
+        }
+        levelSurfacesOpaque = opaque;
+    }
+
+    /** R16: whether this level's base pass runs with blending disabled (every drawable surface opaque). */
+    public boolean isLevelSurfacesOpaque() {
+        return levelSurfacesOpaque;
     }
 
     /** The current per-level texture set, or null before the first level is wired (order-6 plumbing). */
@@ -2232,15 +2229,33 @@ public class WallRenderer implements Renderable, Disposable {
         // Reads the fully-populated columnResults[] and issues SpriteBatch draw calls.
         // All OpenGL state changes happen on the GL thread only.
         batch.begin();
-        for (int screenColumn = 0; screenColumn < projectionColumnCount; screenColumn++) {
+        // R16: opaque level -> blending is a no-op in the base pass; skip its fill-rate cost (pixel-identical).
+        if (levelSurfacesOpaque) batch.disableBlending();
+        int baseColumn = 0;
+        while (baseColumn < projectionColumnCount) {
+            int screenColumn = baseColumn;
             WallColumnResult result = columnResults[screenColumn];
-            if (!result.drawSurface && !result.drawDoorPanel) continue;
+            if (!result.drawSurface && !result.drawDoorPanel) {
+                baseColumn++;
+                continue;
+            }
+
+            // R18 W-MERGE: neighbouring columns whose surface slice is EXACTLY equal (same texture, texel
+            // column, source rows, screen rows and colour) and that carry no door panel are one wider quad
+            // sampling the same 1-texel source column - the pixels are those of the separate columns.
+            int mergedColumnCount = 1;
+            if (result.drawSurface && !result.drawDoorPanel) {
+                while (screenColumn + mergedColumnCount < projectionColumnCount
+                        && isSameSurfaceSlice(result, columnResults[screenColumn + mergedColumnCount])) {
+                    mergedColumnCount++;
+                }
+            }
 
             if (result.drawSurface) {
                 batch.setColor(result.surfaceRed, result.surfaceGreen, result.surfaceBlue, 1f);
                 batch.draw(result.surfaceTexture,
                            screenColumn * columnWidth, result.surfaceDrawBottom,
-                           columnWidth, result.surfaceDrawTop - result.surfaceDrawBottom,
+                           mergedColumnCount * columnWidth, result.surfaceDrawTop - result.surfaceDrawBottom,
                            result.surfaceTexColumn, result.surfaceTexSrcY,
                            1, result.surfaceTexSrcHeight,
                            false, false);
@@ -2255,6 +2270,7 @@ public class WallRenderer implements Renderable, Disposable {
                            1, result.doorPanelTexSrcHeight,
                            false, false);
             }
+            baseColumn += mergedColumnCount;
         }
 
         // Phase 3 - MUZZLE LIGHT additive pass (visual-identity-order-2 R8). The base pass above is exactly
@@ -2262,6 +2278,7 @@ public class WallRenderer implements Renderable, Disposable {
         // so it can exceed the multiplier clamp: only the final framebuffer colour clamps. The blend func
         // switches exactly twice (to additive, back to normal) and the whole pass is skipped at intensity
         // 0. A column carrying a door panel lights the panel only (the surface it overlaps is covered).
+        batch.enableBlending();
         AtmosphereGrade grade = atmosphereGrade;
         if (grade != null && grade.isLightActive()) {
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
@@ -2296,6 +2313,20 @@ public class WallRenderer implements Renderable, Disposable {
         // Reset to white so no alert tint leaks into other renderers that share GL state.
         batch.setColor(Color.WHITE);
         batch.end();
+    }
+
+    /** R18: true when {@code next} would draw exactly the surface slice {@code first} draws, with no door panel. */
+    private static boolean isSameSurfaceSlice(WallColumnResult first, WallColumnResult next) {
+        return next.drawSurface && !next.drawDoorPanel
+                && next.surfaceTexture == first.surfaceTexture
+                && next.surfaceTexColumn == first.surfaceTexColumn
+                && next.surfaceTexSrcY == first.surfaceTexSrcY
+                && next.surfaceTexSrcHeight == first.surfaceTexSrcHeight
+                && next.surfaceDrawBottom == first.surfaceDrawBottom
+                && next.surfaceDrawTop == first.surfaceDrawTop
+                && next.surfaceRed == first.surfaceRed
+                && next.surfaceGreen == first.surfaceGreen
+                && next.surfaceBlue == first.surfaceBlue;
     }
 
     /**
@@ -2611,10 +2642,10 @@ public class WallRenderer implements Renderable, Disposable {
         // Wall + column textures are owned/disposed by the per-level EnvironmentTextureSet (World's dispose
         // chain), NOT here — order-7 moved that ownership to the set. Disposing them here would double-free.
         // WallRenderer still owns only the door textures and the 1×1 white pixel it builds itself.
-        doorTexture.dispose();
-        doorTextureRed.dispose();
-        doorTextureYellow.dispose();
-        doorTextureBlue.dispose();
+        for (Texture door : new Texture[] {doorTexture, doorTextureRed, doorTextureYellow, doorTextureBlue}) {
+            forgetWallTextureOpacity(door);
+            door.dispose();
+        }
         whitePixelTexture.dispose();
         if (workerPool != null) {
             workerPool.shutdown();
@@ -2694,10 +2725,7 @@ public class WallRenderer implements Renderable, Disposable {
         pixmap.fillRectangle(0,        0,        8,    size);
         pixmap.fillRectangle(size - 8, 0,        8,    size);
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /**
@@ -2774,10 +2802,7 @@ public class WallRenderer implements Renderable, Disposable {
         // Suppress unused variable warning — seeded for determinism
         random.nextInt();
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     // =========================================================================================
@@ -3013,10 +3038,7 @@ public class WallRenderer implements Renderable, Disposable {
         // ── 9. Corner vignette ──
         applyStellarCornerVignette(pixmap, size);
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /** Draws a small diamond-shaped junction LED (bright centre, dark bezel) centred at (centerX, centerY). */
@@ -3138,10 +3160,7 @@ public class WallRenderer implements Renderable, Disposable {
 
         applyStellarCornerVignette(pixmap, size);
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 
     /** Builds `divisions + 1` cell-boundary positions evenly dividing [0, size) into `divisions` cells. */
@@ -3277,9 +3296,6 @@ public class WallRenderer implements Renderable, Disposable {
         // position-driven rather than random-walk driven (same idiom as the Bio wall generator).
         random.nextInt();
 
-        Texture texture = new Texture(pixmap);
-        texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        pixmap.dispose();
-        return texture;
+        return finalizeWallTexture(pixmap);
     }
 }

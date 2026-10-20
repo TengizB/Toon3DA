@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.render.PropRenderer;
+import ge.tbegvadze.toon3d.render.WallRenderer;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 
 import java.util.HashMap;
@@ -119,6 +120,8 @@ public final class EnvironmentTextureSet implements Disposable {
     @Override
     public void dispose() {
         for (Texture texture : texturesBySpriteId.values()) {
+            // Wall/column textures also drop their render-performance R16 opacity record (no-op for props).
+            WallRenderer.forgetWallTextureOpacity(texture);
             PropRenderer.disposeGeneratedTexture(texture);
         }
         texturesBySpriteId.clear();
