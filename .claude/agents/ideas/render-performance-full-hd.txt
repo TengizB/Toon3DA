@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Render performance - Full HD smooth again (floor, walls)
 CREATED: 2026-10-20
