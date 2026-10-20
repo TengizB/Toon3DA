@@ -120,4 +120,19 @@ public final class SpriteOccluderBuffer {
         }
         batch.setPackedColor(callerPackedColor);
     }
+
+    /**
+     * render-performance-full-hd R19: {@link #redrawInFront} for a whole column RANGE, called once AFTER the
+     * caller has drawn all of its own slices in that range (instead of interleaving per column). Columns are
+     * disjoint x-ranges, so the composite is pixel-identical while the caller's texture is bound once instead
+     * of alternating with the occluders' every column. Columns the caller skipped behind a wall are skipped
+     * here too (redrawing an occluder there would blend it over itself).
+     */
+    public void redrawInFrontRange(SpriteBatch batch, int firstColumn, int lastColumn, float depth,
+                                   float columnWidth, WallRenderer wallRenderer) {
+        for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+            if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+            redrawInFront(batch, screenColumn, depth, columnWidth);
+        }
+    }
 }

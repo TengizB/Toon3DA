@@ -33,8 +33,8 @@ import ge.tbegvadze.toon3d.util.GameMath;
  * surfaces already sit at ~1.0, so it would be clamped away). The base colour stays
  * {@code clamp01(shade x tint)}; the light is applied AFTER that clamp as an additive albedo pass,
  * {@code albedo x lightAdd}: a second draw with additive blending (GL_SRC_ALPHA, GL_ONE) for walls, doors,
- * props, the shop body and enemies, and, for the CPU-drawn floor and ceiling,
- * {@code GameMath.applyRgbShadeAndLightToPackedRGBA}. Only the final colour clamps. See
+ * props, the shop body and enemies, and, for the GPU-span floor and ceiling (the same additive pass),
+ * {@code GameMath.floorSpanRedFactor} / {@code floorSpanGreenBlueFactor}. Only the final colour clamps. See
  * docs/art-direction.txt section 11.
  */
 public final class AtmosphereGrade {

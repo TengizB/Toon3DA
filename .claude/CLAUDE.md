@@ -129,7 +129,9 @@ toon3D/
 │   │   └── Loadout.java                 # Active weapon slots
 │   ├── render/
 │   │   ├── WallRenderer.java            # DDA 3D wall projection (runtime 1280/1920 columns)
-│   │   ├── FloorCeilingRenderer.java    # Textured floor & ceiling backdrop
+│   │   ├── FloorCeilingRenderer.java    # GPU floor & ceiling: perspective tile quads + far span band
+│   │   ├── SurfaceMaterialTextures.java # Per-floor Repeat/Nearest material textures (4 mip levels, tint bake)
+│   │   ├── RenderPerformanceProbe.java  # DEV-only per-pass frame probe (-Dtoon3d.perfProbe=cpu|sync)
 │   │   ├── PropRenderer.java            # Billboard prop sprites
 │   │   ├── EnemyRenderer.java           # Enemy billboard sprites + health bars
 │   │   ├── WeaponHudRenderer.java       # Procedural weapon sprite (FrameBuffer)
@@ -477,7 +479,7 @@ Fields: `positionX`, `positionY` (world units), `directionX`, `directionY` (unit
 State machine: `IDLE` → `MOVING` or `ROTATING` → `IDLE`. `actionProgress` (0→1) drives lerp. Only one action at a time.
 
 ### `render/WallRenderer.java`
-Doom-style 3D view, full 1280×720 world-unit screen. Ray-column count is runtime: 1280 (HD) or 1920 (FULL HD) from the player's RESOLUTION setting (`util/RenderResolution`); WallRenderer is the single authority (`setRenderResolution`, `getProjectionColumnCount()`, `getColumnWidth()`) — billboard renderers read it and must keep COLUMN space and WORLD X apart. Call `setPlayerState(worldX, worldY, dirX, dirY, fovRadians)` before each `render()`. Uses single `SpriteBatch`. Z-buffer: `getZBufferAt(int screenColumn)`. Owns `SpriteBatch`, `wallTexture`, `whitePixelTexture` — all disposed in `dispose()`.
+Doom-style 3D view, full 1280×720 world-unit screen. Ray-column count is runtime: 1280 (HD) or 1920 (FULL HD) from the player's RESOLUTION setting (`util/RenderResolution`, which also carries the floor/ceiling row count 180 / 540 — no backdrop size any more); the base pass runs unblended on levels whose wall/column/door textures are all opaque and merges exactly-equal neighbouring columns (render-performance-full-hd R16/R18, pixel-identical); WallRenderer is the single authority (`setRenderResolution`, `getProjectionColumnCount()`, `getColumnWidth()`) — billboard renderers read it and must keep COLUMN space and WORLD X apart. Call `setPlayerState(worldX, worldY, dirX, dirY, fovRadians)` before each `render()`. Uses single `SpriteBatch`. Z-buffer: `getZBufferAt(int screenColumn)`. Owns `SpriteBatch`, `wallTexture`, `whitePixelTexture` — all disposed in `dispose()`.
 See `docs/wall-renderer-guide.txt` for pipeline details, GameMath methods, and extension guide.
 
 ### `render/LevelRenderer.java`
@@ -496,7 +498,10 @@ Interface: `void render(OrthographicCamera camera)`. All renderers also implemen
 Draws the current weapon sprite procedurally with a FrameBuffer pipeline. Each weapon has its own draw method inside this class. See `docs/weapon-creation-guide.txt` for the full pipeline.
 
 ### `render/FloorCeilingRenderer.java`
-Draws the textured floor and ceiling backdrop before walls. Must run first in the render order.
+Draws the textured floor and ceiling before walls, entirely on the GPU through SpriteBatch's default shader (render-performance-full-hd): the near region (to the 15-tile clamp) is one quad per floor tile through a projective batch matrix (`GameMath.floorPlaneClipMatrix`, perspective-correct UVs and corner colours), the far band past the clamp is one strip of horizontal spans. No CPU pixel fill, no per-frame upload, no worker threads; ~10 draw calls. Per-row tables (shade, tint, material level) come from the tier's row count. Must run first in the render order. See `docs/art-direction.txt` → FLOOR / CEILING PIPELINE.
+
+### `render/RenderPerformanceProbe.java`
+DEV-only frame probe owned by `World`: per-pass GL-thread ms, draw calls, texture binds, upload bytes, rolling 120-frame averages + worst frame; a log line every 5 s and a top-centre readout. Off unless `-Dtoon3d.perfProbe=cpu|sync` or `RenderConstants.PERF_PROBE_FORCE_ON = true` (for a phone measurement build); when off every call is one boolean check. A measuring instrument, not a test.
 
 ### `render/PropRenderer.java`
 Billboard prop sprites (barrels, crates, etc.). Uses WallRenderer's Z-buffer to sort props.
@@ -748,8 +753,8 @@ No abbreviations, single letters, or opaque shorthand in any Java identifier.
 
 Render order each frame (World.render):
 ```
-1. FloorCeilingRenderer.render()  — textured floor & ceiling backdrop, full 1280×720
-2. WallRenderer.render()          — 3D perspective wall projection on top of backdrop
+1. FloorCeilingRenderer.render()  — GPU floor & ceiling (perspective tile quads + far span band), full 1280×720
+2. WallRenderer.render()          — 3D perspective wall projection on top of the floor/ceiling
 3. PropRenderer.render()          — billboard prop sprites (barrels, crates, etc.)
 4. EnemyRenderer.render()         — enemy billboard sprites (drawn over props)
    (enemy attack effects + impact world effects)
@@ -886,6 +891,10 @@ batch.draw(wallTexture,
                         # behavioural bands (run on any BalanceConfig change; see
                         # docs/game-balance-authority.txt SECTION 7 — THE CHANGE PROTOCOL)
 ```
+
+Frame-time probe (dev only, off by default): run with `-Dtoon3d.perfProbe=cpu` (per-pass timing) or `=sync`
+(glFinish after every pass, for GPU attribution) — in a container, `.claude/skills/run-game/run.sh --probe cpu`.
+For a phone measurement build flip `RenderConstants.PERF_PROBE_FORCE_ON` to `true` (never commit it on).
 
 Both gates RUN on every commit; new tests are only ever WRITTEN for balance (HARD RULE) — see
 **Testing Policy — MANDATORY** above. Non-balance work is verified with `./gradlew build`

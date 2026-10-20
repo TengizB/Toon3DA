@@ -1,8 +1,35 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Render performance - Full HD smooth again (floor, walls)
 CREATED: 2026-10-20
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-20
+---
+IMPLEMENTATION NOTE (2026-10-20, orchestrator; live record .claude/checkpoints/render-performance-full-hd.md)
+  DEVIATION 1 - floor/ceiling geometry (R1-R3, AS5/AS6). The R1-R3 row spans were built first and MEASURED slower
+    than the CPU backdrop on the capture VM (floor 6.2 -> 10.3 ms GPU-attributed): llvmpipe is triangle-bound on
+    ~2,500 one-pixel-tall full-width quads, and 75% of the rows needed the R6 additive pass. Shipped instead,
+    keeping R4-R9 and V2: the NEAR region (depth <= the 15-tile clamp) is one quad per floor tile through a
+    projective SpriteBatch matrix (GameMath.floorPlaneClipMatrix - default shader, w = depth, perspective-correct
+    UVs and colours); the FAR band past the clamp (all one distance in the CPU caster) is one strip of R2 spans.
+    Colours = the same R5/R7 factor at each tile corner; the material level is the row table's level at the tile's
+    CENTRE depth (per tile, not per row - AS6 changed); a tint above 1 is baked into the per-floor textures where
+    the brightest texel allows (GameMath.materialChannelBakeScale), the rest + the muzzle light go to additive
+    layers. Row tables (shade, tint, level) remain byte-identical; RenderResolution carries only the row count.
+  DEVIATION 2 - R16's opacity flag is computed in WallRenderer.resolveLevelWallAndColumnTextures (it knows which
+    wall/column/door textures it can draw), from an opacity record made when each wall texture is created.
+  R17 W-ATLAS not built (median 3 wall draw calls < 12). R18 W-MERGE built (base-pass submission ~31% > 25%).
+  RESULT (capture VM, llvmpipe - relative only, never phone numbers; same session, mean ms/frame):
+    pose            B0 FULL_HD   B1 HD        AFTER FULL_HD  AFTER HD
+    P1 static (5)   14.1-15.6    9.7-10.8     11.5-12.2      10.3-11.3
+    P2 rotate       14.5-15.6    10.2-11.2    12.5           10.8
+    P3 walk         18.2-22.3    13.9-16.0    11.9           13.1
+    P4 muzzle       18.9-22.0    14.9-15.6    12.1           14.8
+    P5 alert        17.7-20.5    14.2-15.5    11.8           14.2
+    floor pass: CPU 3.15 -> 0.56 ms, GPU-attributed 6.20 -> 2.72 (= old HD), upload 2 MB -> 0/frame, 1 -> ~10 draw
+    calls; GC: 2 events per run, both during startup, none in play, at B0 and AFTER alike. A9 within 1.04/255.
+  A1 PARTIAL: P3-P5 below old HD; P1/P2 still ~1-2 ms above old HD and at the 0.80 x B0 line. R21 followed - columns,
+    rows and the FULL_HD default unchanged; stop report + options in the checkpoint file, owner decision pending
+    (owner decided: accept - see DECISIONS D1). A6 and A11's lit/unlit same-tile check not stageable in the container (reasons in the checkpoint).
 ---
 
 OVERVIEW
@@ -534,7 +561,11 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-  (none yet - no questions were needed; see ASSUMPTIONS)
+  D1 (2026-10-20, owner, after the R21 stop report): A1 is ACCEPTED AS PARTIAL - P3-P5 are below old HD, P1/P2
+     remain ~1-2 ms above old HD in the container. No further optimisation in this idea; the owner checks on the
+     phone (build with RenderConstants.PERF_PROBE_FORCE_ON = true and read the readout - see OWNER CHECK). If the
+     phone misses 60 fps, a follow-up idea starts from those numbers (candidates: the wall/billboard column cost,
+     the full-screen view vignette).
 
 
 OPEN QUESTIONS

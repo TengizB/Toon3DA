@@ -108,14 +108,29 @@ public final class RenderConstants {
     // N/S faces darkened by this factor vs E/W faces to simulate directional lighting
     public static final float HORIZONTAL_FACE_SHADE_MULTIPLIER = 0.7f;
 
-    // Floor & Ceiling texture rendering — see docs/dda-raycasting-math.txt
-    // The backdrop's actual pixel size is runtime-switchable — see util.RenderResolution
-    // (getFloorBackdropWidth()/getFloorBackdropHeight()) and FloorCeilingRenderer.setRenderResolution().
-    // Each tier keeps 1/divisor of its own projection column count, stretched to the full screen by SpriteBatch.
-    // HD = performance tier: divisor 4 -> 320x180. FULL_HD = quality tier: divisor 2 -> 960x540 (measured
-    // about +2 ms/frame over divisor 4 on the 4-core capture VM, because the fill is worker-threaded).
-    public static final int    FLOOR_BACKDROP_SCALE_DIVISOR    = 4;
-    public static final int    FLOOR_BACKDROP_SCALE_DIVISOR_FULL_HD = 2;
+    // Floor & Ceiling texture rendering — see docs/dda-raycasting-math.txt and docs/art-direction.txt.
+    // GPU floor/ceiling (render-performance-full-hd): perspective tile quads to the 15-tile clamp plus one span
+    // band beyond it, sampled at the device's native resolution. The row count below is the tier's row model
+    // (floor half + mirrored ceiling half, the historic backdrop heights): it fixes every per-row table (shade,
+    // tint, material level) and the band's rows. Read through RenderResolution.getFloorCeilingRowCount().
+    public static final int    RENDER_RESOLUTION_HD_FLOOR_CEILING_ROWS      = 180;
+    public static final int    RENDER_RESOLUTION_FULL_HD_FLOOR_CEILING_ROWS = 540;
+    /** R3: a span longer than this many tiles is split so every UV stays small (mediump varyings). */
+    public static final float  FLOOR_SPAN_MAX_TILES             = 8f;
+    /** R8: the span batch — the SpriteBatch maximum; it auto-flushes beyond that, never overflows. */
+    public static final int    FLOOR_SPAN_BATCH_SIZE            = 8191;
+    /** Hard cap on grid crossings walked per row (a row crosses at most ~45 at the 15-tile clamp, FOV 90). */
+    public static final int    FLOOR_SPAN_MAX_CROSSINGS_PER_ROW = 512;
+    /** R6: additive layers for channel factors above 1 (tint excess + muzzle light); layer L adds min(1, f-1-L). */
+    public static final int    FLOOR_ADDITIVE_MAX_LAYERS        = 2;
+    /** Perspective tile plane: the near clip depth in tiles (well short of the nearest visible floor, 1 tile). */
+    public static final float  FLOOR_PLANE_NEAR_TILES           = 0.05f;
+    /** Largest tile lattice per frame, per axis (the 90-degree wedge to the 15-tile clamp spans 31 tiles). */
+    public static final int    FLOOR_TILE_LATTICE_MAX_EXTENT    = 48;
+    /** Depth samples (0..clamp) used once per floor to find each channel's largest tint for the texture bake. */
+    public static final int    FLOOR_BAKE_TINT_SAMPLES          = 60;
+    /** The far span band starts this many rows below the clamp row; the tiles cover the overlap (no seam). */
+    public static final int    FLOOR_BAND_OVERLAP_ROWS          = 1;
     // FLOOR_CAMERA_Z = 0.5 → camera exactly centred (horizon at screen centre)
     public static final float  FLOOR_CAMERA_Z                   = 0.5f;
     public static final float  FLOOR_SHADING_FALLOFF            = 0.05f;
@@ -629,4 +644,42 @@ public final class RenderConstants {
     public static final float CONTACT_SHADOW_FOG_FADE             = 0.80f;
     /** Extra alpha scale for a hovering enemy so the gap to the body reads as height. */
     public static final float CONTACT_SHADOW_HOVER_ALPHA_SCALE    = 0.55f;
+
+    // =========================================================================
+    // PERFORMANCE PROBE (render-performance-full-hd R10-R12) — a DEV tool, never shipped on.
+    // render/RenderPerformanceProbe times each World.render pass. Off unless the system property
+    // PERF_PROBE_PROPERTY_KEY is "cpu" (timing only) or "sync" (glFinish after every pass, for GPU
+    // attribution — inflates the total), or PERF_PROBE_FORCE_ON is flipped for a phone measurement build.
+    // Readout strings are dev-only and deliberately not localised.
+    // =========================================================================
+    public static final boolean PERF_PROBE_FORCE_ON              = false;
+    public static final String  PERF_PROBE_PROPERTY_KEY          = "toon3d.perfProbe";
+    public static final String  PERF_PROBE_MODE_CPU              = "cpu";
+    public static final String  PERF_PROBE_MODE_SYNC             = "sync";
+    /** Rolling window for the averages and the worst frame. */
+    public static final int     PERF_PROBE_WINDOW_FRAMES         = 120;
+    public static final float   PERF_PROBE_LOG_INTERVAL_SECONDS  = 5f;
+    /** How often the on-screen readout text is rebuilt (a steadier read than every frame). */
+    public static final float   PERF_PROBE_READOUT_REFRESH_SECONDS = 0.25f;
+    /** Probe readout batch (plate + glyphs) and the reused text builders' initial capacities. */
+    public static final int     PERF_PROBE_BATCH_SIZE            = 64;
+    public static final int     PERF_PROBE_READOUT_CAPACITY      = 160;
+    public static final int     PERF_PROBE_LOG_CAPACITY          = 640;
+    public static final String  PERF_PROBE_LOG_TAG               = "perf";
+    /** Readout plate, top centre: clear of the mini-map (top-left), the HUD panels and every touch button. */
+    public static final float   PERF_PROBE_PLATE_WIDTH           = 420f;
+    public static final float   PERF_PROBE_PLATE_HEIGHT          = 44f;
+    public static final float   PERF_PROBE_PLATE_TOP_MARGIN      = 4f;
+    public static final float   PERF_PROBE_PLATE_ALPHA           = 0.6f;
+    public static final float   PERF_PROBE_TEXT_PADDING          = 6f;
+    public static final float   PERF_PROBE_TEXT_SCALE            = 1f;
+    public static final String  PERF_PROBE_LABEL_AVERAGE         = "AVG ";
+    public static final String  PERF_PROBE_LABEL_WORST           = " WORST ";
+    public static final String  PERF_PROBE_LABEL_FPS             = " FPS ";
+    public static final String  PERF_PROBE_LABEL_FLOOR           = "FLOOR ";
+    public static final String  PERF_PROBE_LABEL_WALLS           = " WALL ";
+    public static final String  PERF_PROBE_LABEL_DRAW_CALLS      = " DC ";
+    public static final String  PERF_PROBE_UNIT_MILLISECONDS     = "MS";
+    /** Fixed decimals for readout and log numbers. */
+    public static final int     PERF_PROBE_DECIMALS              = 2;
 }

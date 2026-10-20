@@ -381,9 +381,15 @@ public class ShopMachineRenderer implements Renderable, Disposable {
                        columnWidth, clampedTop - clampedBottom,
                        texSrcX, texSrcY, 1, texSrcHeight,
                        false, false);
-            if (writeOccluder && occluderBuffer != null) {
-                // The body draws its whole column, then nearer props are restored over it, so the
-                // cabinet shows through their transparent pixels instead of being clipped away.
+        }
+        if (writeOccluder && occluderBuffer != null) {
+            // The body draws its whole column range, then nearer props are restored over it (after all of
+            // the body's slices - render-performance-full-hd R19, pixel-identical), so the cabinet shows
+            // through their transparent pixels instead of being clipped away; then each slice is recorded.
+            for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                int texSrcX = (screenColumn - leftColumn) * textureWidth / columnSpan;
+                texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 occluderBuffer.redrawInFront(batch, screenColumn, depth, columnWidth);
                 occluderBuffer.record(screenColumn, depth, texture, texSrcX, texSrcY, texSrcHeight,
                         clampedBottom, clampedTop, batch.getPackedColor());

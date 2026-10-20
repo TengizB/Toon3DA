@@ -750,13 +750,15 @@ public final class EnemyRenderer implements Renderable, Disposable {
                            projectionColumnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
+            }
 
-                // Props (and shop machines) were drawn before enemies. Where one stands nearer than
-                // this enemy, re-draw its column slice on top: its opaque pixels hide the enemy and its
-                // transparent pixels let the enemy show through — never a hole cut through the enemy.
-                if (occluderBuffer != null) {
-                    occluderBuffer.redrawInFront(batch, screenColumn, depth, projectionColumnWidth);
-                }
+            // Props (and shop machines) were drawn before enemies. Where one stands nearer than this enemy,
+            // re-draw its column slice on top: its opaque pixels hide the enemy and its transparent pixels
+            // let the enemy show through — never a hole cut through the enemy. After all of the enemy's
+            // slices (R19), so the enemy's sheet is bound once instead of alternating every column.
+            if (occluderBuffer != null) {
+                occluderBuffer.redrawInFrontRange(batch, firstColumn, lastColumn, depth,
+                        projectionColumnWidth, wallRenderer);
             }
 
             // R8 muzzle-light additive pass over the same columns (body only; tints, bars and shadows

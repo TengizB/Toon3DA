@@ -749,8 +749,14 @@ public class PropRenderer implements Renderable, Disposable {
                                columnWidth, chipClampTop - chipClampBot,
                                chipTexSrcX, chipTexSrcY, 1, chipTexSrcH,
                                false, false);
-                    // Ground items are drawn after the sorted prop pass, so a nearer prop already on
-                    // screen is restored over the chip instead of clipping the chip's whole column.
+                }
+                // Ground items are drawn after the sorted prop pass, so a nearer prop already on screen is
+                // restored over the chip instead of clipping the chip's whole column - after all of the
+                // chip's slices (R19), then the chip's own slices are recorded for later sprites.
+                for (int screenColumn = chipFirstCol; screenColumn <= chipLastCol; screenColumn++) {
+                    if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                    int chipTexSrcX = (screenColumn - chipLeft) * chipTexW / chipSpan;
+                    chipTexSrcX = MathUtils.clamp(chipTexSrcX, 0, chipTexW - 1);
                     occluderBuffer.redrawInFront(batch, screenColumn, renderDepth, columnWidth);
                     recordOccluderColumn(screenColumn, renderDepth, chipTexture, chipOpacityMask,
                             chipTexSrcX, chipTexSrcY, chipTexSrcH, chipClampBot, chipClampTop);
@@ -859,6 +865,12 @@ public class PropRenderer implements Renderable, Disposable {
                            columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
+            }
+            // R19: occluder restores after all of the pickup's slices, then the pickup's own record.
+            for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                if (renderDepth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+                texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                 occluderBuffer.redrawInFront(batch, screenColumn, renderDepth, columnWidth);
                 // Recorded with the texture's opacity mask: only columns with opaque pixels occlude,
                 // and an enemy behind sees through the pickup's transparent gaps.
@@ -964,10 +976,16 @@ public class PropRenderer implements Renderable, Disposable {
                            columnWidth, clampedTop - clampedBottom,
                            texSrcX, texSrcY, 1, texSrcHeight,
                            false, false);
-                // This pass is unsorted and runs after the others: restore any nearer sprite this
-                // column just painted over, then record this slice if it is an elevated billboard.
+            }
+            // This pass is unsorted and runs after the others: restore any nearer sprite these columns just
+            // painted over (after all of this prop's slices - R19), then record each slice if it is an
+            // elevated billboard.
+            for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
                 occluderBuffer.redrawInFront(batch, screenColumn, depth, columnWidth);
                 if (Level.isPropOccluder(prop.propChar)) {
+                    int texSrcX = (screenColumn - leftScreenColumn) * textureWidth / columnSpan;
+                    texSrcX = MathUtils.clamp(texSrcX, 0, textureWidth - 1);
                     recordOccluderColumn(screenColumn, depth, texture, opacityMask,
                             texSrcX, texSrcY, texSrcHeight, clampedBottom, clampedTop);
                 }

@@ -1275,69 +1275,6 @@ public final class GameMath {
         return falloff * falloff;
     }
 
-    /*
-     * Formula: applyRgbShadeToPackedRGBA
-     * Derivation:
-     *   Per-channel twin of applyShadeToPackedRGBA. The scalar shade becomes one shade per channel
-     *   (shade x graded tint), and the same alert maths is applied to each channel:
-     *       outR = min(1, shadeRed * (1 + alertPulse * alertBoost)) * inR
-     *       outG = shadeGreen * (1 - alertPulse * alertDampen) * inG
-     *       outB = shadeBlue  * (1 - alertPulse * alertDampen) * inB
-     *   Every channel is clamped to [0,255] before repacking (alpha = 0xFF), so a tint above 1
-     *   multiplied by a bright shade can never wrap.
-     * Edge cases:
-     *   Negative shade (or dampen overshoot) clamps to 0. alertPulse outside [0,1] is not guarded.
-     */
-    public static int applyRgbShadeToPackedRGBA(int pixel, float shadeRed, float shadeGreen, float shadeBlue,
-                                                float alertBoost, float alertDampen, float alertPulse) {
-        int inR = (pixel >>> 24) & 0xFF;
-        int inG = (pixel >>> 16) & 0xFF;
-        int inB = (pixel >>>  8) & 0xFF;
-
-        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost));
-        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen);
-        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen);
-
-        int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
-        int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
-        int outB = MathUtils.clamp((int) (blueFactor  * inB), 0, 255);
-
-        return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
-    }
-
-    /*
-     * Formula: applyRgbShadeAndLightToPackedRGBA
-     * Derivation:
-     *   applyRgbShadeToPackedRGBA, plus an ADDITIVE light multiplier applied AFTER the alert maths:
-     *       factorR = min(1, shadeRed * (1 + alertPulse * alertBoost)) + lightRed
-     *       factorG = shadeGreen * (1 - alertPulse * alertDampen)      + lightGreen
-     *       factorB = shadeBlue  * (1 - alertPulse * alertDampen)      + lightBlue
-     *       outC    = clamp(factorC * inC, 0, 255)
-     *   i.e. colour = albedo x base + albedo x light. Only the FINAL channel is clamped, so a surface
-     *   already at multiplier 1.0 can still brighten (the muzzle-light splash); with light = 0 this is
-     *   exactly applyRgbShadeToPackedRGBA.
-     * Edge cases:
-     *   Negative light is not guarded beyond the final clamp to 0.
-     */
-    public static int applyRgbShadeAndLightToPackedRGBA(int pixel, float shadeRed, float shadeGreen,
-                                                        float shadeBlue, float lightRed, float lightGreen,
-                                                        float lightBlue, float alertBoost,
-                                                        float alertDampen, float alertPulse) {
-        int inR = (pixel >>> 24) & 0xFF;
-        int inG = (pixel >>> 16) & 0xFF;
-        int inB = (pixel >>>  8) & 0xFF;
-
-        float redFactor   = Math.min(1f, shadeRed * (1f + alertPulse * alertBoost)) + lightRed;
-        float greenFactor = shadeGreen * (1f - alertPulse * alertDampen) + lightGreen;
-        float blueFactor  = shadeBlue  * (1f - alertPulse * alertDampen) + lightBlue;
-
-        int outR = MathUtils.clamp((int) (redFactor   * inR), 0, 255);
-        int outG = MathUtils.clamp((int) (greenFactor * inG), 0, 255);
-        int outB = MathUtils.clamp((int) (blueFactor  * inB), 0, 255);
-
-        return (outR << 24) | (outG << 16) | (outB << 8) | 0xFF;
-    }
-
     // =========================================================================
     // ALERT PULSE — emergency facility lighting
     // =========================================================================
@@ -7882,4 +7819,221 @@ public final class GameMath {
     public static final int MATCHUP_CLASS_NEUTRAL   = 0;
     /** {@link #classifyMatchup} result: the multiplier is at or below the resisted threshold. */
     public static final int MATCHUP_CLASS_RESISTED  = -1;
+
+    // =========================================================================
+    // RENDER PERFORMANCE PROBE (render-performance-full-hd R10) — dev measurement helpers
+    // =========================================================================
+
+    /*
+     * Formula: rollingAverage
+     * Derivation: arithmetic mean of count consecutive ring entries starting at offset:
+     *     mean = (sum_{index=0}^{count-1} values[offset + index]) / count
+     *   Accumulated in double so 120 frames of millisecond floats lose no precision.
+     *   Order does not matter for a mean, so a ring buffer's wrap point is irrelevant.
+     * Edge cases: count <= 0 returns 0 (an empty window). The caller guarantees offset + count is in range.
+     */
+    public static float rollingAverage(float[] values, int offset, int count) {
+        if (count <= 0) return 0f;
+        double sum = 0.0;
+        for (int index = 0; index < count; index++) sum += values[offset + index];
+        return (float) (sum / count);
+    }
+
+    // =========================================================================
+    // FLOOR / CEILING SPANS (render-performance-full-hd R1-R7) — GPU-sampled horizontal spans
+    // =========================================================================
+
+    /*
+     * Formula: floorSpanAxisCrossingParameter (one axis of a 2D DDA along a floor row)
+     * Derivation: a floor row at constant depth maps screen X linearly onto a world segment
+     *     P(s) = origin + s * delta,  s in [0, 1]  (s = 0 at screen x = 0, s = 1 at x = WORLD_WIDTH),
+     *   per tile axis. While P(s) is inside cell cellIndex on this axis, the next integer grid line it meets is
+     *   cellIndex + 1 when moving forward (delta > 0) and cellIndex when moving backward (delta < 0):
+     *     delta > 0:  s = (cellIndex + 1 - origin) / delta
+     *     delta < 0:  s = (cellIndex     - origin) / delta
+     *   The walk takes the smaller of the X and Y crossings each step - the DDA of docs/dda-raycasting-math.txt
+     *   applied to the row segment instead of a ray.
+     * Edge cases: delta == 0 (the row runs exactly along a grid axis, e.g. a cardinal facing) never crosses on
+     *   this axis -> +Infinity, which the walk treats as "never". The result is always >= the current
+     *   parameter for a consistent cellIndex = floor(P(current)); float rounding at an exact grid line can give
+     *   a value equal to the current parameter, which the walk handles by stepping the cell anyway.
+     */
+    public static float floorSpanAxisCrossingParameter(float origin, float delta, int cellIndex) {
+        if (delta > 0f) return (cellIndex + 1 - origin) / delta;
+        if (delta < 0f) return (cellIndex - origin) / delta;
+        return Float.POSITIVE_INFINITY;
+    }
+
+    /*
+     * Formula: floorSpanAdjustedShade
+     * Derivation: the per-texel light term of the CPU floor caster, moved here as its one home (R5):
+     *     adjustedShade = min(rowShade * tileBrightness, maxShade)
+     *   rowShade is floorShade(rowDistance); tileBrightness is Level.getTileBrightness of the tile the span
+     *   covers (lit / unlit / flicker / blackout multiplier). A span is a run of tiles with equal brightness,
+     *   so the value is constant across it.
+     * Edge cases: tileBrightness 0 (blackout) -> 0 (black). maxShade caps lit tiles near the camera.
+     */
+    public static float floorSpanAdjustedShade(float rowShade, float tileBrightness, float maxShade) {
+        return Math.min(rowShade * tileBrightness, maxShade);
+    }
+
+    /*
+     * Formula: floorSpanRedFactor
+     * Derivation: the red channel multiplier the CPU caster applied to a material texel
+     *   (the former per-pixel applyRgbShadeAndLightToPackedRGBA, removed with the CPU backdrop):
+     *     factorRed = min(1, shadeRed * (1 + alertPulse * alertBoost)) + lightRed
+     *   with shadeRed = adjustedShade * rowTintRed. The alert term is clamped to 1 BEFORE the muzzle light is
+     *   added (visual-identity-order-2 R8): the light is never clamped with it, only the final pixel clamps.
+     * Edge cases: alertPulse 0 -> min(1, shadeRed) + lightRed. The result may exceed 1 (light), which the
+     *   base/excess split carries in the additive pass.
+     */
+    public static float floorSpanRedFactor(float shadeRed, float alertBoost, float alertPulse, float lightRed) {
+        return Math.min(1f, shadeRed * (1f + alertPulse * alertBoost)) + lightRed;
+    }
+
+    /*
+     * Formula: floorSpanGreenBlueFactor
+     * Derivation: the green/blue channel multiplier of the CPU caster:
+     *     factor = shadeChannel * (1 - alertPulse * alertDampen) + lightChannel
+     *   NOT clamped to 1: a mood tint above 1.0 (e.g. MOOD_CORE_WHITE_VIOLET_FAR_B = 1.85) brightens the channel,
+     *   and the CPU path only clamped the final 8-bit value.
+     * Edge cases: a dampen overshoot (alertPulse * alertDampen > 1) gives a negative factor; the base/excess
+     *   split clamps it to 0, exactly where the CPU path's final clamp did.
+     */
+    public static float floorSpanGreenBlueFactor(float shadeChannel, float alertDampen, float alertPulse,
+                                                 float lightChannel) {
+        return shadeChannel * (1f - alertPulse * alertDampen) + lightChannel;
+    }
+
+    /*
+     * Formula: colourFactorBase (the opaque pass of the base/excess split, R6)
+     * Derivation: a SpriteBatch vertex colour multiplies the texel and cannot exceed 1. A channel factor f is
+     *   split into f = base + excess with base = clamp(f, 0, 1). The base pass draws texel * base.
+     * Edge cases: negative f -> 0 (black, the CPU final clamp). NaN propagates as NaN -> caller never passes it.
+     */
+    public static float colourFactorBase(float factor) {
+        return Math.max(0f, Math.min(1f, factor));
+    }
+
+    /*
+     * Formula: colourFactorExcessLayer (the additive passes of the base/excess split, R6)
+     * Derivation: excess = max(0, f - 1). Because an additive layer's colour is also capped at 1, the excess is
+     *   drawn as layers 0, 1, 2, ... each carrying clamp(f - 1 - layer, 0, 1), blended (SRC_ALPHA, ONE):
+     *     texel * base + sum_layer texel * layerValue = texel * (min(1, f) + (f - 1)) = texel * f   for f > 1,
+     *   so the framebuffer gets texel * f before its own clamp - the CPU formula, to within 8-bit rounding of
+     *   the passes.
+     * Edge cases: f <= 1 + layer -> 0 (nothing to add on that layer). layer < 0 is not a valid input.
+     */
+    public static float colourFactorExcessLayer(float factor, int layer) {
+        return Math.max(0f, Math.min(1f, factor - 1f - layer));
+    }
+
+    /*
+     * Formula: floorSpanUvRebaseShift (R3)
+     * Derivation: on a GL_REPEAT texture, UV and UV + n (integer n) sample the same texel, so a quad's UVs may
+     *   be shifted by any integer. Subtracting floor(leftCoordinate) from BOTH edges of a span keeps the left
+     *   edge in [0, 1) and, with spans capped at FLOOR_SPAN_MAX_TILES, every coordinate within
+     *   [-maxTiles - 1, maxTiles + 1]: small enough for a mediump varying to stay sub-texel. The shift is
+     *   per axis (U uses tile X, V uses tile Y).
+     * Edge cases: negative coordinates floor toward -infinity (floor(-0.25) = -1 -> rebased -0.25 + 1 = 0.75),
+     *   which is the correct wrap.
+     */
+    public static float floorSpanUvRebaseShift(float leftCoordinate) {
+        return (float) Math.floor(leftCoordinate);
+    }
+
+    /*
+     * Formula: floorMipReferenceColumnCount
+     * Derivation: the per-row material level (render-quality Q3) was chosen for a backdrop whose width kept the
+     *   world's aspect ratio: width = rowCount * WORLD_WIDTH / WORLD_HEIGHT (540 rows -> 960, 180 -> 320). The
+     *   span pipeline samples natively, but R1 keeps the row tables byte-identical, so the screen-footprint term
+     *   still uses this reference width.
+     * Edge cases: integer maths is exact for both tiers (540 * 1280 / 720 = 960, 180 * 1280 / 720 = 320).
+     */
+    public static int floorMipReferenceColumnCount(int floorCeilingRowCount, int worldWidth, int worldHeight) {
+        return floorCeilingRowCount * worldWidth / worldHeight;
+    }
+
+    /*
+     * Formula: floorPlaneClipMatrix (the floor/ceiling as a perspective plane through SpriteBatch's default shader)
+     * Derivation: SpriteBatch's default shader computes gl_Position = u_projTrans * (X, Y, 0, 1). Feeding it the
+     *   floor in TILE coordinates (X, Y) and a projective u_projTrans makes the GPU interpolate UVs and colours
+     *   perspective-correctly, so one quad per tile replaces hundreds of one-pixel rows. For r = (X, Y) - player:
+     *     depth           d = direction . r                                   (perpendicular distance, tiles)
+     *     lateral         q = (plane . r) / |plane|^2,   cameraParameter c = q / d
+     *     screen X        = W/2 (1 - c)              (cameraParameter = 1 - 2x/W, the Y-up convention)
+     *     screen Y floor  = H/2 - H*cameraZ/d,  ceiling = H/2 + H*cameraZ/d   (inverse of floorRowDistance)
+     *   Multiplying through by w = d keeps every term linear in (X, Y, 1):
+     *     X*w = W/2 (d - q),   Y*w = (H/2) d -/+ H*cameraZ
+     *   then the orthographic view of the shaken camera (centre camX, camY, size viewW x viewH):
+     *     x_clip = 2 (X*w - camX d) / viewW,   y_clip = 2 (Y*w - camY d) / viewH,   w_clip = d
+     *     z_clip = (d (far + near) - 2 far near) / (far - near)   -> clips exactly at d = near and d = far.
+     *   Each row is a.(X, Y) + constant; the translation by the player folds into the constant (-a.player).
+     *   Written column-major into out[16] (LibGDX Matrix4.val: index = column * 4 + row); column 2 (Z input) is 0.
+     * Edge cases: |plane| > 0 always (FOV > 0). Points behind the camera have w < 0 and z_clip < -w, so the GPU
+     *   clips them; nothing here divides by d. far > near > 0 is the caller's contract.
+     */
+    public static void floorPlaneClipMatrix(float[] out, float playerTileX, float playerTileY,
+                                            float directionX, float directionY, float planeX, float planeY,
+                                            boolean ceiling, float screenWidth, float screenHeight, float cameraZ,
+                                            float cameraCentreX, float cameraCentreY,
+                                            float viewWidth, float viewHeight, float near, float far) {
+        float planeLengthSquared = planeX * planeX + planeY * planeY;
+        float lateralX = planeX / planeLengthSquared;
+        float lateralY = planeY / planeLengthSquared;
+        // Homogeneous screen X: W/2 (d - q).
+        float screenXCoefficientX = screenWidth / 2f * (directionX - lateralX);
+        float screenXCoefficientY = screenWidth / 2f * (directionY - lateralY);
+        // Clip rows (coefficients on X, Y) before the player translation.
+        float clipXCoefficientX = 2f * (screenXCoefficientX - cameraCentreX * directionX) / viewWidth;
+        float clipXCoefficientY = 2f * (screenXCoefficientY - cameraCentreX * directionY) / viewWidth;
+        float clipYCoefficientX = 2f * ((screenHeight / 2f - cameraCentreY) * directionX) / viewHeight;
+        float clipYCoefficientY = 2f * ((screenHeight / 2f - cameraCentreY) * directionY) / viewHeight;
+        float clipYConstant     = 2f * ((ceiling ? 1f : -1f) * screenHeight * cameraZ) / viewHeight;
+        float depthScale        = (far + near) / (far - near);
+        float clipZConstant     = -2f * far * near / (far - near);
+
+        java.util.Arrays.fill(out, 0f);
+        out[0]  = clipXCoefficientX;
+        out[4]  = clipXCoefficientY;
+        out[12] = -(clipXCoefficientX * playerTileX + clipXCoefficientY * playerTileY);
+        out[1]  = clipYCoefficientX;
+        out[5]  = clipYCoefficientY;
+        out[13] = -(clipYCoefficientX * playerTileX + clipYCoefficientY * playerTileY) + clipYConstant;
+        out[2]  = directionX * depthScale;
+        out[6]  = directionY * depthScale;
+        out[14] = -(directionX * playerTileX + directionY * playerTileY) * depthScale + clipZConstant;
+        out[3]  = directionX;
+        out[7]  = directionY;
+        out[15] = -(directionX * playerTileX + directionY * playerTileY);
+    }
+
+    /*
+     * Formula: floorRowAtDepth
+     * Derivation: inverse of the row mapping the floor tables use. A floor point at depth d is drawn at
+     *     y = H/2 - H*cameraZ/d   (floorPixelOffsetBelowHorizon + floorRowDistance solved for y)
+     *   and row r covers [r*rowHeight, (r+1)*rowHeight), so its row is floor(y / rowHeight). Used to look up the
+     *   per-row material level for a tile from its centre depth (clamped to the visible range by the caller).
+     * Edge cases: d <= 0 is not a visible floor point; the caller clamps d to the nearest visible depth
+     *   (H*cameraZ/(H/2) = 1 tile at the screen bottom) first. The result is clamped by the caller to the table.
+     */
+    public static int floorRowAtDepth(float depthTiles, float screenHeight, float cameraZ, float rowHeight) {
+        float screenY = screenHeight / 2f - screenHeight * cameraZ / depthTiles;
+        return (int) Math.floor(screenY / rowHeight);
+    }
+
+    /*
+     * Formula: materialChannelBakeScale
+     * Derivation: a vertex colour cannot exceed 1, but a mood tint can (e.g. a far tint of 1.13 on green). If the
+     *   material's brightest texel in that channel still fits after scaling, the scale is baked INTO the texture
+     *   (texel' = round(texel * scale)) and the vertex colour carries factor / scale <= 1:
+     *     texel' * factor / scale = texel * factor   (to 8-bit rounding)
+     *   so no additive pass is needed for the tint. Otherwise the scale stays 1 and the excess goes to the
+     *   additive layers (colourFactorExcessLayer).
+     * Edge cases: maximumFactor <= 1 -> 1 (nothing to bake). A black channel (maximumTexel 0) bakes freely.
+     */
+    public static float materialChannelBakeScale(float maximumFactor, int maximumTexelChannel) {
+        if (maximumFactor <= 1f) return 1f;
+        return maximumTexelChannel * maximumFactor <= 255f ? maximumFactor : 1f;
+    }
 }

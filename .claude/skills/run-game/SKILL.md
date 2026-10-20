@@ -38,8 +38,13 @@ cd /tmp/toon3d-runtime/mirror && ./gradlew -q :core:build :lwjgl3:compileJava
 ## 3. Run the game and capture screens
 
 ```bash
-.claude/skills/run-game/run.sh [--out DIR] [--mood MOOD_ID] [--fps N] '<script>'
+.claude/skills/run-game/run.sh [--out DIR] [--mood MOOD_ID] [--fps N] [--probe cpu|sync] [--gclog FILE] '<script>'
 ```
+`--probe` turns on the dev `RenderPerformanceProbe` (`-Dtoon3d.perfProbe`): a `[perf]` log line every 5 s (rolling
+120-frame avg/worst frame ms, per-pass ms and draw calls, draws/binds/shaders/verts, floor upload bytes) and a
+two-line readout at the top centre. `cpu` = timing only; `sync` = glFinish after every pass so GPU work is charged
+to the pass that queued it (inflates the total — use for attribution only). `--gclog FILE` writes `-Xlog:gc`;
+count events with `grep -c Pause FILE`.
 `<script>` = `;`-separated steps `SECONDS:COMMAND[:ARGS]`, times since launch:
 
 | Step | Meaning |
@@ -98,6 +103,17 @@ splash ~1 frame after it fires. For other state, add a step to `capture/CaptureL
   sessions on this VM — compare against the old code in the same session (`git stash` it, run, `stash pop`).
 - **Measure pixels before calling a visual bug**: a faint dark shadow on a near-black floor looks "pale" in a
   downscaled view. Use PIL: `Image.open(a).convert('RGB').getpixel((x, y))` on before/after frames at the same spot.
+- **Per-pass costs**: `--probe sync` for attribution (which pass is expensive), `--probe cpu` for CPU-side cost, no
+  probe for the real frame time. llvmpipe is a CPU rasterizer: it is triangle/binning-bound, so thousands of thin
+  full-width quads cost far more here than on a phone GPU (render-performance-full-hd CP4 learned this the hard
+  way) — measure, do not assume.
+- **Same-session baselines**: measure the old code from a detached worktree (`git worktree add --detach DIR SHA`,
+  then `TOON3D_RUNTIME_DIR=/tmp/other DIR/.claude/skills/run-game/setup.sh` and that tree's `run.sh`), so editing the
+  repo cannot leak into the baseline mid-matrix. Reset `/root/.prefs/toon3d_records` before every run (the reprint
+  counter and intro beats otherwise change between runs).
+- **Pixel-identical checks** cannot compare two runs (floor-1 weapons are random each run): toggle the old path for
+  one frame inside ONE run (`set:` a boolean dev field) and mask out pixels that change between two new-path frames
+  (animation). Shots closer than one frame apart overwrite each other — space them >= 0.1 s at 30 fps.
 - Render resolution: Full HD is the default (`RenderResolution.DEFAULT`). To capture HD, temporarily set
   `DEFAULT = HD` in `util/RenderResolution.java`, run, and revert — or set the persisted key (below).
 

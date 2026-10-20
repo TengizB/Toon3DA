@@ -246,6 +246,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // -------------------------------------------------------------------------
     private Level                  level;
     private FloorCeilingRenderer   floorCeilingRenderer;
+    // render-performance-full-hd R10: dev-only frame probe (off unless -Dtoon3d.perfProbe / PERF_PROBE_FORCE_ON).
+    private final RenderPerformanceProbe renderPerformanceProbe = new RenderPerformanceProbe();
     // Visual identity order-1: the floor's resolved lighting mood and the one grade evaluator every
     // world renderer will share (renderers are wired to it in later checkpoints).
     private final AtmosphereGrade  atmosphereGrade = new AtmosphereGrade();
@@ -2827,17 +2829,26 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     @Override
     public void render(OrthographicCamera camera) {
+        // render-performance-full-hd R10: the dev probe brackets the frame; one boolean check each when off.
+        renderPerformanceProbe.beginFrame();
+        renderFrame(camera);
+        renderPerformanceProbe.endFrame(camera);
+    }
+
+    private void renderFrame(OrthographicCamera camera) {
         // FRAMING SCREENS (order-8): while the launch screen owns the app there is no run to look
         // at, so the 3D view, the HUD and every in-run overlay are skipped entirely — the screen is
         // black, a machine prints a death notice on it, and that is all. The archive and the
         // settings screen may sit on top of it, because both are reachable before a run exists.
         if (isTitleFramed()) {
+            renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.OVERLAYS);
             framingScreenRenderer.renderTitle(camera);
             if (runPhase == RunPhase.SETTINGS_MENU) {
                 framingScreenRenderer.renderMenu(camera, StoryUiConstants.STORY_SETTINGS_TITLE_ID,
                                                  settingsMenu);
             }
             if (runPhase == RunPhase.CODEX_OPEN) codexOverlayRenderer.render(camera);
+            renderPerformanceProbe.end(RenderPerformanceProbe.Pass.OVERLAYS);
             return;
         }
 
@@ -2872,16 +2883,23 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         floorCeilingRenderer.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, effectiveFovRadians);
         floorCeilingRenderer.setAlertPulse(currentAlertPulse);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.FLOOR_CEILING);
         floorCeilingRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.FLOOR_CEILING);
+        renderPerformanceProbe.addUploadBytes(floorCeilingRenderer.getUploadBytesLastFrame());
 
         wallRenderer.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, effectiveFovRadians);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.WALLS);
         wallRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.WALLS);
 
         propRenderer.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, effectiveFovRadians);
         propRenderer.setAlertPulse(currentAlertPulse);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.PROPS);
         propRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.PROPS);
 
         // Shop machines (shop_order_6) — animated fabricator billboards, drawn in the prop pass so
         // they are recorded in the shared occluder buffer and enemies/weapon HUD draw over them correctly.
@@ -2889,11 +2907,14 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 player.directionX, player.directionY, effectiveFovRadians);
         shopMachineRenderer.setLightingTime(facilityTimeSeconds);
         shopMachineRenderer.setAlertPulse(currentAlertPulse);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.SHOP_MACHINE);
         shopMachineRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.SHOP_MACHINE);
 
         enemyRenderer.setPlayerState(player.positionX, player.positionY,
                 player.directionX, player.directionY, effectiveFovRadians);
         enemyRenderer.setAlertPulse(currentAlertPulse);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.ENEMIES);
         enemyRenderer.render(camera);
 
         enemyAttackEffectSystem.setPlayerState(player.positionX, player.positionY,
@@ -2901,21 +2922,27 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyAttackEffectSystem.render(camera);
 
         impactEffectRenderer.renderWorldEffects(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.ENEMIES);
 
         // R10: per-mood corner vignette, after every world-space pass and immediately before the weapon.
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.VIGNETTE);
         viewVignetteRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.VIGNETTE);
 
         // R6: weapon tint = mood near tint x clamped light of the tile the player stands on.
         atmosphereGrade.evaluateWeaponTint(level.getTileBrightness(
                 getPlayerTileColumn(), getPlayerTileRow(), facilityTimeSeconds));
         weaponHudRenderer.setWeaponTint(atmosphereGrade.red, atmosphereGrade.green, atmosphereGrade.blue);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.WEAPON);
         weaponHudRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.WEAPON);
 
         if (isShaking) {
             camera.translate(-shakeOffsetX, -shakeOffsetY, 0f);
             camera.update();
         }
 
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.SCREEN_EFFECTS);
         impactEffectRenderer.renderScreenOverlays(camera);
 
         // Guard shield arc: translucent blue rim across the screen bottom while the player is braced.
@@ -2925,7 +2952,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         hitVignetteRenderer.render(camera);
         // Status effect vignettes: per-effect colored edge tints (burn orange, poison green, etc.)
         statusEffectVignetteRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.SCREEN_EFFECTS);
 
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.MINIMAP);
         levelRenderer.setPlayerWorldPosition(player.positionX, player.positionY);
         levelRenderer.setAnimationClock(facilityTimeSeconds);
         levelRenderer.setBarrelsHighlighted(playerBuild.stats().barrelsOnMinimap());
@@ -2934,6 +2963,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             levelRenderer.render(camera);
             player.render(camera);
         }
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.MINIMAP);
 
         // Populate HudState each frame so renderers read current values without polling Player directly
         hudState.alertActive    = false;
@@ -2955,7 +2985,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         float deltaTime = Gdx.graphics.getDeltaTime();
         hudRenderer.update(deltaTime);
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.HUD);
         hudRenderer.render(camera);
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.HUD);
+
+        renderPerformanceProbe.begin(RenderPerformanceProbe.Pass.OVERLAYS);
 
         // Level-up overlay and inventory overlay each take full control of the screen —
         // hide touch buttons so they don't obscure cards or inventory slots.
@@ -3093,6 +3127,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                     endingHoldSeconds / StoryUiConstants.STORY_ENDING_MERGE_HOLD_SECONDS);
             fadeOverlayRenderer.render(camera, holdFraction, currentDepth);
         }
+        renderPerformanceProbe.end(RenderPerformanceProbe.Pass.OVERLAYS);
     }
 
     // -------------------------------------------------------------------------
@@ -3101,6 +3136,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
 
     @Override
     public void dispose() {
+        renderPerformanceProbe.dispose();
         floorCeilingRenderer.dispose();
         wallRenderer.dispose();
         propRenderer.dispose();
