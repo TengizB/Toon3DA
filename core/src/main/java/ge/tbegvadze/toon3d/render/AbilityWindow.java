@@ -1,6 +1,5 @@
 package ge.tbegvadze.toon3d.render;
 
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
@@ -10,6 +9,7 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.entity.AbilityInstance;
 import ge.tbegvadze.toon3d.entity.WeaponAbility;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 
 /**
@@ -19,7 +19,8 @@ import ge.tbegvadze.toon3d.util.ItemConstants;
  * Uses a blue-white accent to visually distinguish itself from the amber
  * ItemWindow at Layer 2 — signals "deeper level of detail."
  *
- * Three render passes: Filled shapes → Line shapes → SpriteBatch text.
+ * Two render passes (visual-identity-order-5): one Filled pass (a UiKit panel with SUIT_AMBER_DIM brackets, the
+ * R1 amber-ticked rule under the title, an outline type badge, the X plate) → SpriteBatch text.
  * No allocations inside render() — all scratch objects pre-allocated.
  * Dynamic description strings are built once in open() and cached.
  *
@@ -44,27 +45,13 @@ final class AbilityWindow implements Disposable {
     private static final float EXIT_Y     = HEADER_Y + (HEADER_H - EXIT_SIZE) / 2f;
     private static final float BADGE_W    = ItemConstants.INV_ABILITY_BADGE_W;
     private static final float BADGE_H    = ItemConstants.INV_ABILITY_BADGE_H;
-    private static final float BADGE_X    = EXIT_X - BADGE_W - 8f;
+    private static final float BADGE_X    = EXIT_X - BADGE_W - ItemConstants.INV_ABILITY_WIN_BADGE_GAP;
     private static final float BADGE_Y    = HEADER_Y + (HEADER_H - BADGE_H) / 2f;
     private static final float DIVIDER_Y  = ItemConstants.INV_ABILITY_WIN_DIVIDER_Y;
-    private static final float FONT_SCALE = ItemConstants.INV_ABILITY_WIN_FONT_SCALE;
 
-    // -------------------------------------------------------------------------
-    // Palette — blue-white accent distinguishes from amber ItemWindow
-    // -------------------------------------------------------------------------
-
-    private static final Color WIN_BG            = new Color(0.06f, 0.07f, 0.10f, 0.98f);
-    private static final Color BORDER_BLUE       = new Color(0.60f, 0.72f, 1.00f, 0.85f);
-    private static final Color AMBER             = new Color(1.00f, 0.75f, 0.10f, 1.00f);
-    private static final Color BADGE_PASSIVE_BG  = new Color(0.10f, 0.30f, 0.10f, 0.85f);
-    private static final Color BADGE_PASSIVE_FG  = new Color(0.20f, 0.90f, 0.30f, 1.00f);
-    private static final Color BADGE_ACTIVE_BG   = new Color(0.30f, 0.20f, 0.05f, 0.85f);
-    private static final Color BADGE_ACTIVE_FG   = new Color(1.00f, 0.72f, 0.00f, 1.00f);
-    private static final Color EXIT_BG           = new Color(0.70f, 0.20f, 0.15f, 1.00f);
-    private static final Color EXIT_TEXT         = new Color(1.00f, 0.85f, 0.85f, 1.00f);
-    private static final Color OFF_WHITE         = new Color(0.82f, 0.82f, 0.87f, 1.00f);
-    private static final Color TEXT_DIM_AMBER    = new Color(0.75f, 0.55f, 0.10f, 1.00f);
-    private static final Color DIVIDER_DIM       = new Color(0.30f, 0.32f, 0.40f, 1.00f);
+    /** The title's top edge, placed so the R1 rule (UiKit.screenHeaderRuleY) lands on the header line. */
+    private static final float TITLE_TOP_Y = HEADER_Y + ArtDirection.PIXEL_FONT_TARGET_CAP_HEIGHT * ArtDirection.TYPE_HEADING
+            + ArtDirection.UI_SCREEN_HEADER_RULE_GAP;
 
     // -------------------------------------------------------------------------
     // Shared rendering resources (owned by coordinator, not disposed here)
@@ -73,6 +60,7 @@ final class AbilityWindow implements Disposable {
     private final ShapeRenderer shapeRenderer;
     private final SpriteBatch   spriteBatch;
     private final BitmapFont    font;
+    private final BitmapFont    headingFont;
     private final GlyphLayout   glyphLayout;
     private final StringBuilder textBuilder;
 
@@ -89,10 +77,11 @@ final class AbilityWindow implements Disposable {
     // -------------------------------------------------------------------------
 
     AbilityWindow(ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
-                  BitmapFont font, GlyphLayout glyphLayout) {
+                  BitmapFont font, BitmapFont headingFont, GlyphLayout glyphLayout) {
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
+        this.headingFont   = headingFont;
         this.glyphLayout   = glyphLayout;
         this.textBuilder   = new StringBuilder(16);
     }
@@ -143,7 +132,6 @@ final class AbilityWindow implements Disposable {
     void render(OrthographicCamera camera, float animationClock) {
         if (displayedInstance == null) return;
         renderFilled(camera);
-        renderLines(camera);
         renderText(camera);
     }
 
@@ -162,31 +150,35 @@ final class AbilityWindow implements Disposable {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        shapeRenderer.setColor(WIN_BG);
-        shapeRenderer.rect(WIN_X, WIN_Y, WIN_W, WIN_H);
+        UiKit.panel(shapeRenderer, WIN_X, WIN_Y, WIN_W, WIN_H,
+                    ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                    ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+        UiKit.brackets(shapeRenderer, WIN_X, WIN_Y, WIN_W, WIN_H,
+                       ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN,
+                       ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
-        boolean isPassive = displayedInstance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
-        shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
-        shapeRenderer.rect(BADGE_X, BADGE_Y, BADGE_W, BADGE_H);
-
-        shapeRenderer.setColor(EXIT_BG);
-        shapeRenderer.rect(EXIT_X, EXIT_Y, EXIT_SIZE, EXIT_SIZE);
-
-        shapeRenderer.end();
-    }
-
-    private void renderLines(OrthographicCamera camera) {
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-
-        shapeRenderer.setColor(BORDER_BLUE);
-        shapeRenderer.rect(WIN_X, WIN_Y, WIN_W, WIN_H);
-        shapeRenderer.line(WIN_X + PAD, HEADER_Y, WIN_X + WIN_W - PAD, HEADER_Y);
-
+        // The header line is the title's R1 rule (amber tick), running up to the type badge
+        UiKit.screenHeaderRule(shapeRenderer, WIN_X + PAD, HEADER_Y, BADGE_X - ItemConstants.INV_ABILITY_WIN_BADGE_GAP
+                               - WIN_X - PAD, 1f);
         if (cachedAffects != null && cachedAffects.length > 0) {
-            shapeRenderer.setColor(DIVIDER_DIM);
-            shapeRenderer.line(WIN_X + PAD, DIVIDER_Y, WIN_X + WIN_W - PAD, DIVIDER_Y);
+            UiKit.divider(shapeRenderer, WIN_X + PAD, DIVIDER_Y, WIN_W - PAD * 2f,
+                          ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f);
         }
+
+        // Type badge: an outline chip in the badge's ink (PASSIVE secondary, ACTIVE amber)
+        boolean isPassive = displayedInstance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
+        UiKit.panel(shapeRenderer, BADGE_X, BADGE_Y, BADGE_W, BADGE_H, ArtDirection.UI_CHIP_CHAMFER,
+                    ArtDirection.UI_PANEL_RAISED_RED, ArtDirection.UI_PANEL_RAISED_GREEN,
+                    ArtDirection.UI_PANEL_RAISED_BLUE, 1f,
+                    isPassive ? ArtDirection.UI_TEXT_SECONDARY_RED : ArtDirection.SUIT_AMBER_RED,
+                    isPassive ? ArtDirection.UI_TEXT_SECONDARY_GREEN : ArtDirection.SUIT_AMBER_GREEN,
+                    isPassive ? ArtDirection.UI_TEXT_SECONDARY_BLUE : ArtDirection.SUIT_AMBER_BLUE,
+                    1f, ArtDirection.UI_CHIP_BORDER_THICKNESS);
+
+        UiKit.plate(shapeRenderer, EXIT_X, EXIT_Y, EXIT_SIZE, EXIT_SIZE, ArtDirection.UI_CHAMFER, PlateState.IDLE,
+                    ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
 
         shapeRenderer.end();
     }
@@ -195,60 +187,64 @@ final class AbilityWindow implements Disposable {
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
-        // Ability name (amber, left-aligned in header) — explicitly scaled so it does not
-        // inherit a leaked scale from a previously-rendered window sharing this font.
-        font.getData().setScale(FONT_SCALE);
-        font.setColor(AMBER);
-        font.draw(spriteBatch, displayedInstance.ability.displayName,
-                  WIN_X + PAD,
-                  HEADER_Y + (HEADER_H + font.getLineHeight()) / 2f);
+        // Ability name — the window's R1 screen header (HEAVY, TYPE_HEADING, primary)
+        UiKit.screenHeaderTitle(spriteBatch, headingFont, displayedInstance.ability.displayName,
+                                WIN_X + PAD, TITLE_TOP_Y);
 
-        // Type badge text (PASSIVE / ACTIVE)
+        // Type badge text (PASSIVE secondary / ACTIVE amber)
         boolean isPassive = displayedInstance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
-        font.getData().setScale(0.65f * FONT_SCALE);
-        font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
+        if (isPassive) {
+            setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                     ArtDirection.UI_TEXT_SECONDARY_BLUE);
+        } else {
+            setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
+        }
         String typeLabel = displayedInstance.ability.getTypeLabel();
         glyphLayout.setText(font, typeLabel);
         font.draw(spriteBatch, typeLabel,
                   BADGE_X + (BADGE_W - glyphLayout.width)  / 2f,
                   BADGE_Y + (BADGE_H + glyphLayout.height) / 2f);
-        font.getData().setScale(1f);
 
-        // Exit button "X" — scaled to match window (previously drawn at base 1f, too small)
-        font.getData().setScale(FONT_SCALE);
-        font.setColor(EXIT_TEXT);
+        // Exit button "X"
+        font.getData().setScale(ArtDirection.TYPE_BODY);
+        setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE);
         glyphLayout.setText(font, "X");
         font.draw(spriteBatch, "X",
                   EXIT_X + (EXIT_SIZE - glyphLayout.width)  / 2f,
                   EXIT_Y + (EXIT_SIZE + glyphLayout.height) / 2f);
-        font.getData().setScale(1f);
 
-        // Full description text — pre-built with exact numbers in open()
+        // Full description text (body) — pre-built with exact numbers in open()
         float descX = WIN_X + PAD;
-        float descY = HEADER_Y - 10f;
+        float descY = HEADER_Y - ItemConstants.INV_ABILITY_WIN_DESC_DROP;
         float descW = WIN_W - 2f * PAD;
-        font.getData().setScale(0.80f * FONT_SCALE);
-        font.setColor(OFF_WHITE);
+        font.getData().setScale(ArtDirection.TYPE_BODY);
+        setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE);
         font.draw(spriteBatch, cachedDescription, descX, descY, descW, Align.left, true);
-        font.getData().setScale(1f);
 
-        // AFFECTS block — pre-built with exact numbers in open()
+        // AFFECTS block — pre-built with exact numbers in open(). The fixed 16-unit bullet pitch under the
+        // divider holds TYPE_CAPTION lines, so the label and bullets stay captions.
         if (cachedAffects != null && cachedAffects.length > 0) {
-            font.getData().setScale(0.75f * FONT_SCALE);
-            font.setColor(TEXT_DIM_AMBER);
-            font.draw(spriteBatch, "AFFECTS:", WIN_X + PAD, DIVIDER_Y - 4f);
+            font.getData().setScale(ArtDirection.TYPE_CAPTION);
+            setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                     ArtDirection.UI_TEXT_SECONDARY_BLUE);
+            font.draw(spriteBatch, "AFFECTS:", WIN_X + PAD, DIVIDER_Y - ItemConstants.INV_ABILITY_WIN_AFFECTS_DROP);
 
-            font.setColor(OFF_WHITE);
-            float bulletY = DIVIDER_Y - 20f;
+            setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN, ArtDirection.UI_TEXT_PRIMARY_BLUE);
+            float bulletY = DIVIDER_Y - ItemConstants.INV_ABILITY_WIN_BULLET_DROP;
             for (String line : cachedAffects) {
                 textBuilder.setLength(0);
                 textBuilder.append('●').append(' ').append(line);
-                font.draw(spriteBatch, textBuilder, WIN_X + PAD + 8f, bulletY);
-                bulletY -= 16f;
+                font.draw(spriteBatch, textBuilder, WIN_X + PAD + ItemConstants.INV_ABILITY_WIN_BULLET_INDENT, bulletY);
+                bulletY -= ItemConstants.INV_ABILITY_WIN_BULLET_PITCH;
             }
-            font.getData().setScale(1f);
         }
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
 
         spriteBatch.end();
+    }
+
+    private void setColor(float red, float green, float blue) {
+        font.setColor(red, green, blue, 1f);
     }
 }

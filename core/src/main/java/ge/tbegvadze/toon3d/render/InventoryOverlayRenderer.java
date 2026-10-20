@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -15,6 +14,7 @@ import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.progression.PlayerStats;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
@@ -23,7 +23,7 @@ import ge.tbegvadze.toon3d.util.WeaponConstants;
  * Full-screen inventory overlay drawn on top of the frozen world frame.
  *
  * Coordinator for a layered window system:
- *   Layer 0 — full-screen scrim (60% black)
+ *   Layer 0 — full-screen UI_INK_BLACK scrim at UI_SCRIM_ALPHA (visual-identity-order-5 R3)
  *   Layer 1 — base inventory screen: header + left weapon panel + right item grid
  *   Layer 2 — ItemWindow popup (optional); dims layer 1 by INV_BASE_DIM_FACTOR
  *   Layer 3 — AbilityWindow popup (optional, stub); dims layer 2 by INV_ITEM_WIN_DIM_FACTOR
@@ -70,19 +70,9 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private static final String BUILD_BUTTON_TEXT = "BUILD";
     private static final String ITEMS_BUTTON_TEXT = "ITEMS";
 
-    // -------------------------------------------------------------------------
-    // Palette — UAC military CRT amber on steel
-    // -------------------------------------------------------------------------
-    private static final Color SCRIM_COLOR   = new Color(0f, 0f, 0f, ItemConstants.INV_SCRIM_ALPHA);
-    private static final Color PANEL_BG      = new Color(0.071f, 0.071f, 0.086f, 0.95f);
-    private static final Color PANEL_BORDER  = new Color(0.22f,  0.22f,  0.30f,  1f);
-    private static final Color HEADER_BG     = new Color(0.06f,  0.06f,  0.08f,  1f);
-    private static final Color HEADER_ACCENT = new Color(1.00f,  0.72f,  0.00f,  1f);
-    private static final Color AMBER         = new Color(1.00f,  0.75f,  0.10f,  1f);
-    private static final Color EXIT_BTN_BG   = new Color(0.70f,  0.20f,  0.15f,  1f);
-    private static final Color EXIT_BTN_TEXT = new Color(1.00f,  0.85f,  0.85f,  1f);
-    private static final Color TEXT_DIM      = new Color(0.50f,  0.50f,  0.55f,  1f);
-    private static final Color CODEX_BTN_BG   = new Color(0.16f,  0.14f,  0.09f,  1f);
+    /** The header title's top edge; the amber-ticked rule sits under it (visual-identity-order-5 R1). */
+    private static final float HEADER_TEXT_TOP_Y = ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT
+            - ItemConstants.INV_HEADER_TEXT_TOP_INSET;
 
     // -------------------------------------------------------------------------
     // Header EXIT button position — derived from ItemConstants, computed once
@@ -114,6 +104,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     private final ShapeRenderer shapeRenderer;
     private final SpriteBatch   spriteBatch;
     private final BitmapFont    font;
+    /** The HEAVY face for the screen title (R1); the panels share the REGULAR {@link #font}. */
+    private final BitmapFont    headingFont;
     private final GlyphLayout   glyphLayout;
     private final StringBuilder textBuilder;
 
@@ -148,6 +140,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer     = new ShapeRenderer();
         spriteBatch       = new SpriteBatch();
         font              = GameFonts.newFont(FontFace.REGULAR);
+        headingFont       = GameFonts.newFont(FontFace.HEAVY);
         glyphLayout       = new GlyphLayout();
         textBuilder       = new StringBuilder(32);
 
@@ -158,8 +151,8 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         itemGridPanel     = new ItemGridPanel(inventory, shapeRenderer, spriteBatch,
                                               font, glyphLayout, this::openItemWindowForSlot, iconTextures);
         buildPagePanel    = new BuildPagePanel(shapeRenderer, spriteBatch, font, glyphLayout);
-        abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, glyphLayout);
-        itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, glyphLayout,
+        abilityWindow     = new AbilityWindow(shapeRenderer, spriteBatch, font, headingFont, glyphLayout);
+        itemWindow        = new ItemWindow(shapeRenderer, spriteBatch, font, headingFont, glyphLayout,
                                            instance -> abilityWindow.open(instance), iconTextures);
     }
 
@@ -356,6 +349,7 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
         shapeRenderer.dispose();
         spriteBatch.dispose();
         font.dispose();
+        headingFont.dispose();
         iconTextures.dispose();
         // Sub-panels and windows share resources from coordinator; dispose() is a no-op for them
         weaponSlotsPanel.dispose();
@@ -368,78 +362,76 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
     // Private — render helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * Layer 0 + layer 1 chrome, one Filled pass (visual-identity-order-5): the scrim, the header bar and the two
+     * body panels as UiKit panels, SUIT_AMBER_DIM brackets around the whole screen (header + panels) only, the
+     * header's amber-ticked rule, and the BUILD / CODEX / EXIT plates.
+     */
     private void renderBaseLayer(OrthographicCamera camera) {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Full-screen scrim
-        shapeRenderer.setColor(SCRIM_COLOR);
+        // Full-screen scrim (R3)
+        shapeRenderer.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                               ArtDirection.UI_INK_BLACK_BLUE, ItemConstants.INV_SCRIM_ALPHA);
         shapeRenderer.rect(0, 0, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
-        // Left and right content panels
-        shapeRenderer.setColor(PANEL_BG);
-        shapeRenderer.rect(ItemConstants.INV_LEFT_PANEL_X,  ItemConstants.INV_PANEL_Y_BOTTOM,
-                           ItemConstants.INV_LEFT_PANEL_WIDTH,  ItemConstants.INV_PANEL_HEIGHT);
-        shapeRenderer.rect(ItemConstants.INV_RIGHT_PANEL_X, ItemConstants.INV_PANEL_Y_BOTTOM,
-                           ItemConstants.INV_RIGHT_PANEL_WIDTH, ItemConstants.INV_PANEL_HEIGHT);
+        // Header bar and the left / right content panels (R4)
+        drawScreenPanel(0f, ItemConstants.INV_HEADER_Y, Constants.WORLD_WIDTH, ItemConstants.INV_HEADER_HEIGHT);
+        if (!buildPageOpen) {   // the BUILD page is its own panel over the same area: never stack the two
+            drawScreenPanel(ItemConstants.INV_LEFT_PANEL_X, ItemConstants.INV_PANEL_Y_BOTTOM,
+                            ItemConstants.INV_LEFT_PANEL_WIDTH, ItemConstants.INV_PANEL_HEIGHT);
+            drawScreenPanel(ItemConstants.INV_RIGHT_PANEL_X, ItemConstants.INV_PANEL_Y_BOTTOM,
+                            ItemConstants.INV_RIGHT_PANEL_WIDTH, ItemConstants.INV_PANEL_HEIGHT);
+        }
 
-        // Header bar
-        shapeRenderer.setColor(HEADER_BG);
-        shapeRenderer.rect(0, ItemConstants.INV_HEADER_Y,
-                           Constants.WORLD_WIDTH, ItemConstants.INV_HEADER_HEIGHT);
+        // The screen's outermost frame is the header + both panels: brackets there only (R4)
+        UiKit.brackets(shapeRenderer, 0f, ItemConstants.INV_PANEL_Y_BOTTOM,
+                       Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT - ItemConstants.INV_PANEL_Y_BOTTOM,
+                       ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN,
+                       ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
-        // Header BUILD button background (balance-overhaul order 5) — same plate as CODEX
-        shapeRenderer.setColor(CODEX_BTN_BG);
-        shapeRenderer.rect(HEADER_BUILD_X, HEADER_BUILD_Y,
-                           ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH,
-                           ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT);
+        // Header rule under the title, up to the BUILD plate (R1)
+        UiKit.screenHeaderRule(shapeRenderer, ItemConstants.INV_HEADER_TITLE_X,
+                               UiKit.screenHeaderRuleY(HEADER_TEXT_TOP_Y),
+                               HEADER_BUILD_X - ItemConstants.INV_HEADER_CODEX_GAP - ItemConstants.INV_HEADER_TITLE_X,
+                               1f);
 
-        // Header CODEX button background (order-6) — amber-tinted, so it reads as story chrome
-        // rather than as another inventory control.
-        shapeRenderer.setColor(CODEX_BTN_BG);
-        shapeRenderer.rect(HEADER_CODEX_X, HEADER_CODEX_Y,
-                           ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH,
-                           ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT);
-
-        // Header EXIT button background
-        shapeRenderer.setColor(EXIT_BTN_BG);
-        shapeRenderer.rect(HEADER_EXIT_X, HEADER_EXIT_Y,
-                           ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE,
-                           ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE);
-
-        shapeRenderer.end();
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-
-        // Panel borders
-        shapeRenderer.setColor(PANEL_BORDER);
-        shapeRenderer.rect(ItemConstants.INV_LEFT_PANEL_X,  ItemConstants.INV_PANEL_Y_BOTTOM,
-                           ItemConstants.INV_LEFT_PANEL_WIDTH,  ItemConstants.INV_PANEL_HEIGHT);
-        shapeRenderer.rect(ItemConstants.INV_RIGHT_PANEL_X, ItemConstants.INV_PANEL_Y_BOTTOM,
-                           ItemConstants.INV_RIGHT_PANEL_WIDTH, ItemConstants.INV_PANEL_HEIGHT);
-
-        // Amber accent line at bottom of header
-        shapeRenderer.setColor(HEADER_ACCENT);
-        shapeRenderer.line(0, ItemConstants.INV_HEADER_Y,
-                           Constants.WORLD_WIDTH, ItemConstants.INV_HEADER_Y);
+        // Header plates (R5): BUILD is SELECTED while its page is open; CODEX and EXIT have no state
+        drawHeaderPlate(HEADER_BUILD_X, HEADER_BUILD_Y, ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH,
+                        ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT,
+                        buildPageOpen ? PlateState.SELECTED : PlateState.IDLE);
+        drawHeaderPlate(HEADER_CODEX_X, HEADER_CODEX_Y, ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH,
+                        ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT, PlateState.IDLE);
+        drawHeaderPlate(HEADER_EXIT_X, HEADER_EXIT_Y, ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE,
+                        ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE, PlateState.IDLE);
 
         shapeRenderer.end();
+    }
+
+    private void drawScreenPanel(float x, float y, float width, float height) {
+        UiKit.panel(shapeRenderer, x, y, width, height,
+                    ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                    ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+    }
+
+    private void drawHeaderPlate(float x, float y, float width, float height, PlateState state) {
+        UiKit.plate(shapeRenderer, x, y, width, height, state, ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
     }
 
     private void renderHeader(OrthographicCamera camera) {
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
-        // Header labels are scaled up for phone readability; reset to 1f before end().
+        // "INVENTORY" title — the suit screen header (R1)
+        UiKit.screenHeaderTitle(spriteBatch, headingFont, "INVENTORY",
+                                ItemConstants.INV_HEADER_TITLE_X, HEADER_TEXT_TOP_Y);
+
         font.getData().setScale(ItemConstants.INV_HEADER_FONT_SCALE);
 
-        // "INVENTORY" title — left-aligned in header
-        font.setColor(AMBER);
-        font.draw(spriteBatch, "INVENTORY",
-                  ItemConstants.INV_HEADER_TITLE_X,
-                  ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
-
-        // Credits readout — centred in the header between the title and the sublevel label
+        // Credits readout — centred in the header between the title and the sublevel label (R6: CREDITS_GOLD)
         if (playerStats != null) {
             textBuilder.setLength(0);
             textBuilder.append("$ ").append(playerStats.getCredits());
@@ -448,54 +440,49 @@ public final class InventoryOverlayRenderer implements Renderable, Disposable {
                           ItemConstants.INVENTORY_CREDITS_COLOR_B, 1f);
             glyphLayout.setText(font, textBuilder);
             font.draw(spriteBatch, textBuilder,
-                      (Constants.WORLD_WIDTH - glyphLayout.width) / 2f,
-                      ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
+                      (Constants.WORLD_WIDTH - glyphLayout.width) / 2f, HEADER_TEXT_TOP_Y);
         }
 
         // "SUBLEVEL N" label — just left of the BUILD button
         textBuilder.setLength(0);
         textBuilder.append("SUBLEVEL ").append(currentDepth);
         glyphLayout.setText(font, textBuilder);
-        font.setColor(TEXT_DIM);
+        font.setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                      ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
         font.draw(spriteBatch, textBuilder,
-                  HEADER_BUILD_X - glyphLayout.width - 16f,
-                  ItemConstants.INV_HEADER_Y + ItemConstants.INV_HEADER_HEIGHT - 18f);
+                  HEADER_BUILD_X - glyphLayout.width - ItemConstants.INV_HEADER_SUBLEVEL_GAP, HEADER_TEXT_TOP_Y);
 
-        // BUILD / ITEMS toggle label — centered in its rect
-        String buildLabel = buildPageOpen ? ITEMS_BUTTON_TEXT : BUILD_BUTTON_TEXT;
-        font.setColor(AMBER);
-        glyphLayout.setText(font, buildLabel);
-        font.draw(spriteBatch, buildLabel,
-                  HEADER_BUILD_X + (ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH - glyphLayout.width) / 2f,
-                  HEADER_BUILD_Y + (ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT + glyphLayout.height) / 2f);
-
-        // CODEX button label — centered in its rect
-        font.setColor(AMBER);
-        glyphLayout.setText(font, "CODEX");
-        font.draw(spriteBatch, "CODEX",
-                  HEADER_CODEX_X + (ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH - glyphLayout.width) / 2f,
-                  HEADER_CODEX_Y + (ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT + glyphLayout.height) / 2f);
-
-        // EXIT button label — centered in the button rect
-        font.setColor(EXIT_BTN_TEXT);
-        glyphLayout.setText(font, "EXIT");
-        font.draw(spriteBatch, "EXIT",
-                  HEADER_EXIT_X + (ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE - glyphLayout.width)  / 2f,
-                  HEADER_EXIT_Y + (ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE + glyphLayout.height) / 2f);
+        // Plate labels — centred in their rects (TYPE_BODY: "EXIT" must fit the 50-unit plate)
+        font.getData().setScale(ItemConstants.INV_HEADER_PLATE_FONT_SCALE);
+        font.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                      ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+        drawPlateLabel(buildPageOpen ? ITEMS_BUTTON_TEXT : BUILD_BUTTON_TEXT, HEADER_BUILD_X, HEADER_BUILD_Y,
+                       ItemConstants.INV_HEADER_BUILD_BUTTON_WIDTH, ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT);
+        drawPlateLabel("CODEX", HEADER_CODEX_X, HEADER_CODEX_Y,
+                       ItemConstants.INV_HEADER_CODEX_BUTTON_WIDTH, ItemConstants.INV_HEADER_CODEX_BUTTON_HEIGHT);
+        drawPlateLabel("EXIT", HEADER_EXIT_X, HEADER_EXIT_Y,
+                       ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE, ItemConstants.INV_HEADER_EXIT_BUTTON_SIZE);
 
         // Reset so popups (ItemWindow / AbilityWindow) sharing this font are not oversized.
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         spriteBatch.end();
     }
 
+    private void drawPlateLabel(String label, float x, float y, float width, float height) {
+        glyphLayout.setText(font, label);
+        font.draw(spriteBatch, label, x + (width - glyphLayout.width) / 2f, y + (height + glyphLayout.height) / 2f);
+    }
+
     /**
-     * Draws a semi-transparent black rectangle over the entire screen to dim
-     * lower layers. Used instead of modifying SpriteBatch colors mid-frame.
+     * Draws a semi-transparent UI_INK_BLACK rectangle over the entire screen to dim
+     * lower layers under a popup WINDOW (not a second screen scrim: it marks a window layer).
+     * Used instead of modifying SpriteBatch colors mid-frame.
      */
     private void renderDimOverlay(OrthographicCamera camera, float dimAlpha) {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0f, 0f, 0f, dimAlpha);
+        shapeRenderer.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                               ArtDirection.UI_INK_BLACK_BLUE, dimAlpha);
         shapeRenderer.rect(0, 0, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
         shapeRenderer.end();
     }

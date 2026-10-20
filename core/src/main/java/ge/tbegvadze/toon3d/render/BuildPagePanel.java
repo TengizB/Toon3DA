@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.progression.Perk;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.relic.RelicDefinition;
 import ge.tbegvadze.toon3d.relic.RelicHand;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
 import ge.tbegvadze.toon3d.util.HudConstants;
 import ge.tbegvadze.toon3d.util.ItemConstants;
@@ -27,6 +28,10 @@ import ge.tbegvadze.toon3d.util.ProgressionConstants;
  * <p>The rows are flattened ONCE in {@link #open} into fixed arrays (worst case 9 tag rows + 26 perks + 1
  * keystone header + 4 x 2 keystone rows = 44), so {@link #render} allocates nothing. More rows than fit are
  * paged with two thumb-sized UP / DOWN plates (a tap, not a drag - the inventory only routes taps).</p>
+ *
+ * <p>Visual identity order 5: one Filled pass - the page is a UiKit panel, tag chips keep their BuildTagPalette
+ * fill inside a 1-unit UI_LINE border (R10), each keystone block is a UiKit card inked by its tag (R2), a relic's
+ * rarity shows only as the ink framing its rarity label, and the scroll controls are IDLE plates.</p>
  */
 final class BuildPagePanel {
 
@@ -62,6 +67,7 @@ final class BuildPagePanel {
     private static final float SCALE_EFFECT = ProgressionConstants.BUILD_PAGE_SCALE_EFFECT;
     private static final float SCALE_CHIP   = ProgressionConstants.BUILD_CHIP_FONT_SCALE;
     private static final float SCALE_PLATE  = ProgressionConstants.BUILD_PAGE_SCALE_PLATE;
+    private static final float SCALE_SECTION = ArtDirection.TYPE_LABEL;
 
     private static final float PLATE_WIDTH  = ProgressionConstants.BUILD_PAGE_PLATE_WIDTH;
     private static final float PLATE_HEIGHT = ProgressionConstants.BUILD_PAGE_PLATE_HEIGHT;
@@ -75,10 +81,6 @@ final class BuildPagePanel {
     private static final String PLATE_UP_TEXT = "UP";
     private static final String PLATE_DOWN_TEXT = "DOWN";
 
-    private static final Color PAGE_BG       = new Color(ProgressionConstants.BUILD_PAGE_BG_RED,
-            ProgressionConstants.BUILD_PAGE_BG_GREEN, ProgressionConstants.BUILD_PAGE_BG_BLUE, ProgressionConstants.BUILD_PAGE_BG_ALPHA);
-    private static final Color PAGE_BORDER   = new Color(ProgressionConstants.BUILD_PAGE_BORDER_RED,
-            ProgressionConstants.BUILD_PAGE_BORDER_GREEN, ProgressionConstants.BUILD_PAGE_BORDER_BLUE, ProgressionConstants.BUILD_PAGE_BORDER_ALPHA);
     private static final Color ROW_STRIPE    = new Color(ProgressionConstants.BUILD_PAGE_STRIPE_RED,
             ProgressionConstants.BUILD_PAGE_STRIPE_GREEN, ProgressionConstants.BUILD_PAGE_STRIPE_BLUE, ProgressionConstants.BUILD_PAGE_STRIPE_ALPHA);
     private static final Color TEXT_MAIN     = new Color(ProgressionConstants.BUILD_PAGE_TEXT_MAIN_RED,
@@ -91,14 +93,10 @@ final class BuildPagePanel {
             ProgressionConstants.BUILD_PIP_EMPTY_GREEN, ProgressionConstants.BUILD_PIP_EMPTY_BLUE, 1f);
     private static final Color PIP_RING      = new Color(ProgressionConstants.BUILD_PIP_RING_RED,
             ProgressionConstants.BUILD_PIP_RING_GREEN, ProgressionConstants.BUILD_PIP_RING_BLUE, 1f);
-    private static final Color PLATE_BG      = new Color(ProgressionConstants.BUILD_PAGE_PLATE_BG_RED,
-            ProgressionConstants.BUILD_PAGE_PLATE_BG_GREEN, ProgressionConstants.BUILD_PAGE_PLATE_BG_BLUE, 1f);
     private static final Color PLATE_TEXT    = new Color(ProgressionConstants.BUILD_PAGE_PLATE_TEXT_RED,
             ProgressionConstants.BUILD_PAGE_PLATE_TEXT_GREEN, ProgressionConstants.BUILD_PAGE_PLATE_TEXT_BLUE, 1f);
     private static final Color COST_RED      = new Color(ProgressionConstants.BUILD_COST_RED,
             ProgressionConstants.BUILD_COST_GREEN, ProgressionConstants.BUILD_COST_BLUE, 1f);
-    private static final Color GOLD          = new Color(ProgressionConstants.BUILD_KEYSTONE_GOLD_RED,
-            ProgressionConstants.BUILD_KEYSTONE_GOLD_GREEN, ProgressionConstants.BUILD_KEYSTONE_GOLD_BLUE, 1f);
 
     private final ShapeRenderer shapeRenderer;
     private final SpriteBatch   spriteBatch;
@@ -120,6 +118,8 @@ final class BuildPagePanel {
     /** Per row: the RelicRarity ordinal (RELIC rows) indexing the HudConstants rarity colours; unused otherwise. */
     private final int[]     rowRarityOrdinals = new int[MAX_ROWS];
     private final String[]  rowBadges  = new String[MAX_ROWS];
+    /** Per RELIC row: the rarity label's measured width (the rarity-inked frame around it), set in open(). */
+    private final float[]   rowBadgeWidths = new float[MAX_ROWS];
     private final Color[]   relicRarityColors = new Color[HudConstants.RELIC_RARITY_COLOR_R.length];
     private int rowCount   = 0;
     private int firstRow   = 0;
@@ -149,6 +149,7 @@ final class BuildPagePanel {
         rowCount = 0;
         firstRow = 0;
         if (playerBuild == null) return;
+        font.getData().setScale(SCALE_EFFECT);
         addRelicRows();
         if (playerBuild.keystoneCount() == 0 && !hasAnyPerk()) {
             addRow(RowKind.NOTE, null, EMPTY_TEXT, null, 0, 0);
@@ -172,7 +173,7 @@ final class BuildPagePanel {
                 addRow(RowKind.KEYSTONE_COST, keystone.tag, "", keystone.costLine, 0, 0);
             }
         }
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
     }
 
     private boolean hasAnyPerk() {
@@ -197,6 +198,8 @@ final class BuildPagePanel {
             addRow(RowKind.RELIC, null, relic.name(), relic.effectText(), 0, 0);
             rowRarityOrdinals[rowCount - 1] = relic.rarity().ordinal();
             rowBadges[rowCount - 1] = relic.rarity().label();
+            glyphLayout.setText(font, relic.rarity().label());
+            rowBadgeWidths[rowCount - 1] = glyphLayout.width + ProgressionConstants.BUILD_PAGE_BADGE_PAD * 2f;
             if (relic.costText() != null && !relic.costText().isEmpty()) {
                 addRow(RowKind.RELIC_COST, null, "", relic.costText(), 0, 0);
             }
@@ -244,67 +247,67 @@ final class BuildPagePanel {
         spriteBatch.setProjectionMatrix(camera.combined);
         int lastRow = Math.min(rowCount, firstRow + VISIBLE_ROWS);
 
-        // ---- filled: page, stripes, chips, pips, plates ----
+        // ---- one Filled pass: page, stripes, chips, pips, keystone cards, rarity frames, plates ----
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(PAGE_BG);
-        shapeRenderer.rect(PANEL_X, PANEL_BOTTOM, PANEL_WIDTH, PANEL_TOP - PANEL_BOTTOM);
+        UiKit.panel(shapeRenderer, PANEL_X, PANEL_BOTTOM, PANEL_WIDTH, PANEL_TOP - PANEL_BOTTOM,
+                ProgressionConstants.BUILD_PAGE_BG_RED, ProgressionConstants.BUILD_PAGE_BG_GREEN,
+                ProgressionConstants.BUILD_PAGE_BG_BLUE, ProgressionConstants.BUILD_PAGE_BG_ALPHA,
+                ProgressionConstants.BUILD_PAGE_BORDER_RED, ProgressionConstants.BUILD_PAGE_BORDER_GREEN,
+                ProgressionConstants.BUILD_PAGE_BORDER_BLUE);
         for (int rowIndex = firstRow; rowIndex < lastRow; rowIndex++) {
             int visibleIndex = rowIndex - firstRow;
             float bottom = rowBottom(visibleIndex);
-            if (rowKinds[rowIndex] == RowKind.PERK && (rowIndex % 2 == 0)) {
+            RowKind kind = rowKinds[rowIndex];
+            if (kind == RowKind.PERK && (rowIndex % 2 == 0)) {
                 shapeRenderer.setColor(ROW_STRIPE);
                 shapeRenderer.rect(PANEL_X + ProgressionConstants.BUILD_PAGE_ROW_INSET, bottom,
                         PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_ROW_INSET * 2f, ROW_HEIGHT);
             }
-            if (rowKinds[rowIndex] == RowKind.TAG_HEADER) {
+            if (kind == RowKind.TAG_HEADER) {
+                // R10: the tag's chip keeps its BuildTagPalette fill, framed by a 1-unit UI_LINE border. It
+                // covers the old pill's footprint (the rect plus its two end caps).
                 float chipBottom = bottom + (ROW_HEIGHT - CHIP_HEIGHT) / 2f;
                 float capRadius = CHIP_HEIGHT / 2f;
-                shapeRenderer.setColor(BuildTagPalette.colorOf(rowTags[rowIndex]));
-                shapeRenderer.rect(CHIP_X, chipBottom, rowChipWidths[rowIndex], CHIP_HEIGHT);
-                shapeRenderer.circle(CHIP_X, chipBottom + capRadius, capRadius);
-                shapeRenderer.circle(CHIP_X + rowChipWidths[rowIndex], chipBottom + capRadius, capRadius);
-            } else if (rowKinds[rowIndex] == RowKind.PERK) {
+                Color tagColor = BuildTagPalette.colorOf(rowTags[rowIndex]);
+                drawChip(CHIP_X - capRadius, chipBottom, rowChipWidths[rowIndex] + capRadius * 2f, CHIP_HEIGHT,
+                        tagColor.r, tagColor.g, tagColor.b);
+            } else if (kind == RowKind.PERK) {
                 Color accent = BuildTagPalette.colorOf(rowTags[rowIndex]);
                 float pipY = bottom + ROW_HEIGHT / 2f;
                 for (int pipIndex = 0; pipIndex < rowMaxRanks[rowIndex]; pipIndex++) {
-                    shapeRenderer.setColor(pipIndex < rowRanks[rowIndex] ? accent : PIP_EMPTY);
-                    shapeRenderer.circle(PIPS_LEFT_X + pipIndex * PIP_SPACING, pipY, PIP_RADIUS);
+                    float pipX = PIPS_LEFT_X + pipIndex * PIP_SPACING;
+                    if (pipIndex < rowRanks[rowIndex]) {
+                        shapeRenderer.setColor(accent);
+                        shapeRenderer.circle(pipX, pipY, PIP_RADIUS);
+                    } else {
+                        // An empty pip: a UI_LINE ring around a dark centre, both filled.
+                        shapeRenderer.setColor(PIP_RING);
+                        shapeRenderer.circle(pipX, pipY, PIP_RADIUS);
+                        shapeRenderer.setColor(PIP_EMPTY);
+                        shapeRenderer.circle(pipX, pipY, PIP_RADIUS - ProgressionConstants.BUILD_PIP_RING_THICKNESS);
+                    }
                 }
+            } else if (kind == RowKind.KEYSTONE_GAIN && rowIndex + 1 < lastRow) {
+                // R2: one card around the two-row keystone block (drawn from its gain row), inked by its tag.
+                Color tagColor = BuildTagPalette.colorOf(rowTags[rowIndex]);
+                UiKit.card(shapeRenderer, PANEL_X + ProgressionConstants.BUILD_PAGE_ROW_INSET,
+                        bottom - ROW_HEIGHT + ProgressionConstants.BUILD_PAGE_KEYSTONE_FRAME_INSET,
+                        PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_ROW_INSET * 2f,
+                        ROW_HEIGHT * 2f - ProgressionConstants.BUILD_PAGE_KEYSTONE_FRAME_INSET * 2f,
+                        tagColor.r, tagColor.g, tagColor.b, PlateState.IDLE);
+            } else if (kind == RowKind.RELIC) {
+                // The relic's rarity colour lives only in the frame around its rarity label (R2 / D2).
+                Color rarityColor = relicRarityColors[rowRarityOrdinals[rowIndex]];
+                float frameBottom = bottom + (ROW_HEIGHT - CHIP_HEIGHT) / 2f;
+                UiKit.panel(shapeRenderer, PIPS_LEFT_X - ProgressionConstants.BUILD_PAGE_BADGE_PAD, frameBottom,
+                        rowBadgeWidths[rowIndex], CHIP_HEIGHT, ArtDirection.UI_CHIP_CHAMFER,
+                        ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE, 1f,
+                        rarityColor.r, rarityColor.g, rarityColor.b, 1f, ArtDirection.UI_BORDER_THICKNESS);
             }
         }
         if (canScroll()) {
-            shapeRenderer.setColor(PLATE_BG);
-            shapeRenderer.rect(PLATE_UP_X, PLATE_Y, PLATE_WIDTH, PLATE_HEIGHT);
-            shapeRenderer.rect(PLATE_DOWN_X, PLATE_Y, PLATE_WIDTH, PLATE_HEIGHT);
-        }
-        shapeRenderer.end();
-
-        // ---- lines: border, empty pip rings, keystone frames ----
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        shapeRenderer.setColor(PAGE_BORDER);
-        shapeRenderer.rect(PANEL_X, PANEL_BOTTOM, PANEL_WIDTH, PANEL_TOP - PANEL_BOTTOM);
-        for (int rowIndex = firstRow; rowIndex < lastRow; rowIndex++) {
-            float bottom = rowBottom(rowIndex - firstRow);
-            if (rowKinds[rowIndex] == RowKind.PERK) {
-                shapeRenderer.setColor(PIP_RING);
-                for (int pipIndex = rowRanks[rowIndex]; pipIndex < rowMaxRanks[rowIndex]; pipIndex++) {
-                    shapeRenderer.circle(PIPS_LEFT_X + pipIndex * PIP_SPACING, bottom + ROW_HEIGHT / 2f, PIP_RADIUS);
-                }
-            } else if (rowKinds[rowIndex] == RowKind.KEYSTONE_GAIN || rowKinds[rowIndex] == RowKind.KEYSTONE_COST) {
-                // one gold frame around the two-row keystone block (drawn from its gain row)
-                if (rowKinds[rowIndex] == RowKind.KEYSTONE_GAIN && rowIndex + 1 < lastRow) {
-                    shapeRenderer.setColor(GOLD);
-                    shapeRenderer.rect(PANEL_X + ProgressionConstants.BUILD_PAGE_ROW_INSET,
-                            bottom - ROW_HEIGHT + ProgressionConstants.BUILD_PAGE_KEYSTONE_FRAME_INSET,
-                            PANEL_WIDTH - ProgressionConstants.BUILD_PAGE_ROW_INSET * 2f,
-                            ROW_HEIGHT * 2f - ProgressionConstants.BUILD_PAGE_KEYSTONE_FRAME_INSET * 2f);
-                }
-            }
-        }
-        if (canScroll()) {
-            shapeRenderer.setColor(PLATE_TEXT);
-            shapeRenderer.rect(PLATE_UP_X, PLATE_Y, PLATE_WIDTH, PLATE_HEIGHT);
-            shapeRenderer.rect(PLATE_DOWN_X, PLATE_Y, PLATE_WIDTH, PLATE_HEIGHT);
+            drawScrollPlate(PLATE_UP_X);
+            drawScrollPlate(PLATE_DOWN_X);
         }
         shapeRenderer.end();
 
@@ -316,23 +319,29 @@ final class BuildPagePanel {
             if (kind == RowKind.TAG_HEADER) {
                 font.getData().setScale(SCALE_CHIP);
                 font.setColor(CHIP_TEXT);
-                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X + CHIP_PAD, baseline - ProgressionConstants.BUILD_PAGE_CHIP_TEXT_DROP);
+                // Centred in the chip: a glyph box of cap height h centred in [Y, Y+H] has its top at Y + (H + h) / 2.
+                float chipBottom = rowBottom(rowIndex - firstRow) + (ROW_HEIGHT - CHIP_HEIGHT) / 2f;
+                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X + CHIP_PAD,
+                        chipBottom + (CHIP_HEIGHT + font.getCapHeight()) / 2f);
             } else if (kind == RowKind.PERK) {
                 font.getData().setScale(SCALE_NAME);
                 font.setColor(TEXT_MAIN);
                 font.draw(spriteBatch, rowNames[rowIndex], NAME_X, baseline);
                 drawEffect(rowEffects[rowIndex], baseline, TEXT_DIM);
-            } else if (kind == RowKind.RELICS_HEADER) {
-                font.getData().setScale(SCALE_NAME);
-                font.setColor(relicHand != null && relicHand.count() > 0 ? GOLD : TEXT_DIM);
+            } else if (kind == RowKind.RELICS_HEADER || kind == RowKind.KEYSTONES_HEADER) {
+                // R6: section labels are TYPE_LABEL secondary.
+                font.getData().setScale(SCALE_SECTION);
+                font.setColor(TEXT_DIM);
                 font.draw(spriteBatch, rowNames[rowIndex], CHIP_X, baseline);
             } else if (kind == RowKind.RELIC) {
-                Color rarityColor = relicRarityColors[rowRarityOrdinals[rowIndex]];
                 font.getData().setScale(SCALE_NAME);
-                font.setColor(rarityColor);
+                font.setColor(TEXT_MAIN);
                 font.draw(spriteBatch, rowNames[rowIndex], NAME_X, baseline);
                 font.getData().setScale(SCALE_EFFECT);
-                font.draw(spriteBatch, rowBadges[rowIndex], PIPS_LEFT_X, baseline);
+                font.setColor(TEXT_DIM);
+                float frameBottom = rowBottom(rowIndex - firstRow) + (ROW_HEIGHT - CHIP_HEIGHT) / 2f;
+                font.draw(spriteBatch, rowBadges[rowIndex], PIPS_LEFT_X,
+                        frameBottom + (CHIP_HEIGHT + font.getCapHeight()) / 2f);
                 drawEffect(rowEffects[rowIndex], baseline, TEXT_MAIN);
             } else if (kind == RowKind.RELIC_COST) {
                 drawEffect(rowEffects[rowIndex], baseline, COST_RED);
@@ -340,13 +349,9 @@ final class BuildPagePanel {
                 font.getData().setScale(SCALE_EFFECT);
                 font.setColor(TEXT_DIM);
                 font.draw(spriteBatch, rowNames[rowIndex], CHIP_X, baseline);
-            } else if (kind == RowKind.KEYSTONES_HEADER) {
-                font.getData().setScale(SCALE_NAME);
-                font.setColor(GOLD);
-                font.draw(spriteBatch, rowNames[rowIndex], CHIP_X, baseline);
             } else if (kind == RowKind.KEYSTONE_GAIN) {
                 font.getData().setScale(SCALE_NAME);
-                font.setColor(GOLD);
+                font.setColor(TEXT_MAIN);
                 font.draw(spriteBatch, rowNames[rowIndex], NAME_X, baseline);
                 drawEffect(rowEffects[rowIndex], baseline, TEXT_MAIN);
             } else {
@@ -360,12 +365,27 @@ final class BuildPagePanel {
             drawCentered(PLATE_DOWN_TEXT, PLATE_DOWN_X, PLATE_WIDTH);
             textBuilder.setLength(0);
             textBuilder.append(firstRow + 1).append('-').append(lastRow).append(" / ").append(rowCount);
+            font.getData().setScale(SCALE_EFFECT);
             font.setColor(TEXT_DIM);
             glyphLayout.setText(font, textBuilder);
             font.draw(spriteBatch, textBuilder, PLATE_UP_X - ProgressionConstants.BUILD_PAGE_COUNTER_OFFSET_X, PLATE_Y + (PLATE_HEIGHT + glyphLayout.height) / 2f);
         }
-        font.getData().setScale(1f);
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         spriteBatch.end();
+    }
+
+    /** A tag chip: the tag's fill inside a 1-unit UI_LINE border (R10). Filled pass. */
+    private void drawChip(float x, float y, float width, float height, float fillRed, float fillGreen, float fillBlue) {
+        UiKit.panel(shapeRenderer, x, y, width, height, ArtDirection.UI_CHIP_CHAMFER,
+                fillRed, fillGreen, fillBlue, 1f,
+                ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f,
+                ArtDirection.UI_CHIP_BORDER_THICKNESS);
+    }
+
+    private void drawScrollPlate(float plateX) {
+        UiKit.plate(shapeRenderer, plateX, PLATE_Y, PLATE_WIDTH, PLATE_HEIGHT, PlateState.IDLE,
+                ArtDirection.UI_PANEL_ALPHA_SCREEN,
+                ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
     }
 
     private void drawEffect(String text, float baseline, Color color) {

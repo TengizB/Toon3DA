@@ -39,11 +39,15 @@ public final class ProgressionConstants {
     public static final float BUILD_KEYSTONE_GOLD_BLUE  = 0.20f;
 
     // ---- Shared build-UI chip / pip styling (balance-overhaul order 5; BuildPagePanel + LevelUpOverlayRenderer) ----
-    public static final float BUILD_CHIP_FONT_SCALE = 1.0f;
+    public static final float BUILD_CHIP_FONT_SCALE = ArtDirection.TYPE_CAPTION;
     public static final float BUILD_CHIP_HEIGHT     = 26f;
     public static final float BUILD_CHIP_TEXT_PAD   = 14f;   // chip side padding around its text
     public static final float BUILD_PAGE_PIP_RADIUS = 7f;
     public static final float BUILD_PAGE_PIP_SPACING = 26f;
+    /** An empty pip's UI_LINE ring width (drawn filled: ring circle, then the dark centre inset by this). */
+    public static final float BUILD_PIP_RING_THICKNESS = 1.5f;
+    /** Side padding inside the rarity-inked frame around a relic's rarity label on the BUILD page. */
+    public static final float BUILD_PAGE_BADGE_PAD = 8f;
     /** Dark text drawn on a tag-coloured chip. */
     public static final float BUILD_CHIP_TEXT_RED = ArtDirection.UI_INK_BLACK_RED,
             BUILD_CHIP_TEXT_GREEN = ArtDirection.UI_INK_BLACK_GREEN, BUILD_CHIP_TEXT_BLUE = ArtDirection.UI_INK_BLACK_BLUE;
@@ -61,17 +65,15 @@ public final class ProgressionConstants {
     public static final float BUILD_PAGE_ROW_TEXT_RISE    = 12f;   // baseline above the row bottom
     public static final float BUILD_PAGE_ROW_BASELINE_EXTRA = 6f;  // extra lift on the text baseline
     public static final float BUILD_PAGE_ROW_INSET        = 10f;   // stripe / keystone frame side inset
-    public static final float BUILD_PAGE_KEYSTONE_FRAME_INSET = 3f; // keystone frame vertical shrink per side
+    public static final float BUILD_PAGE_KEYSTONE_FRAME_INSET = 3f; // keystone card vertical shrink per side
     public static final float BUILD_PAGE_NAME_OFFSET_X    = 40f;
     public static final float BUILD_PAGE_PIPS_OFFSET_X    = 330f;
     public static final float BUILD_PAGE_EFFECT_OFFSET_X  = 440f;
     public static final float BUILD_PAGE_EFFECT_RIGHT_MARGIN = 20f;
     public static final float BUILD_PAGE_CHIP_OFFSET_X    = 20f;
-    public static final float BUILD_PAGE_CHIP_TEXT_DROP   = 2f;    // chip text baseline drop below row baseline
-    public static final float BUILD_PAGE_SCALE_NAME       = 1.15f;
-    public static final float BUILD_PAGE_SCALE_EFFECT     = 0.9f;
-    public static final float BUILD_PAGE_SCALE_EMPTY      = 1.5f;
-    public static final float BUILD_PAGE_SCALE_PLATE      = 1.2f;
+    public static final float BUILD_PAGE_SCALE_NAME       = ArtDirection.TYPE_BODY;
+    public static final float BUILD_PAGE_SCALE_EFFECT     = ArtDirection.TYPE_CAPTION;
+    public static final float BUILD_PAGE_SCALE_PLATE      = ArtDirection.TYPE_BODY;
     public static final float BUILD_PAGE_PLATE_WIDTH      = 90f;
     public static final float BUILD_PAGE_PLATE_HEIGHT     = 46f;
     public static final float BUILD_PAGE_PLATE_GAP        = 12f;
@@ -83,7 +85,9 @@ public final class ProgressionConstants {
             BUILD_PAGE_BG_ALPHA = ArtDirection.UI_PANEL_ALPHA_SCREEN;
     public static final float BUILD_PAGE_BORDER_RED = ArtDirection.UI_LINE_RED,
             BUILD_PAGE_BORDER_GREEN = ArtDirection.UI_LINE_GREEN, BUILD_PAGE_BORDER_BLUE = ArtDirection.UI_LINE_BLUE, BUILD_PAGE_BORDER_ALPHA = 1f;
-    public static final float BUILD_PAGE_STRIPE_RED = 1f, BUILD_PAGE_STRIPE_GREEN = 1f, BUILD_PAGE_STRIPE_BLUE = 1f, BUILD_PAGE_STRIPE_ALPHA = 0.04f;
+    public static final float BUILD_PAGE_STRIPE_RED = ArtDirection.UI_PANEL_RAISED_RED,
+            BUILD_PAGE_STRIPE_GREEN = ArtDirection.UI_PANEL_RAISED_GREEN, BUILD_PAGE_STRIPE_BLUE = ArtDirection.UI_PANEL_RAISED_BLUE,
+            BUILD_PAGE_STRIPE_ALPHA = 0.6f;
     public static final float BUILD_PAGE_TEXT_MAIN_RED = ArtDirection.UI_TEXT_PRIMARY_RED,
             BUILD_PAGE_TEXT_MAIN_GREEN = ArtDirection.UI_TEXT_PRIMARY_GREEN, BUILD_PAGE_TEXT_MAIN_BLUE = ArtDirection.UI_TEXT_PRIMARY_BLUE;
     public static final float BUILD_PAGE_TEXT_DIM_RED = ArtDirection.UI_TEXT_SECONDARY_RED,

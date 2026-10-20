@@ -44,7 +44,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — UiKit.screenHeader + UiKit.card + UI_PANEL_ALPHA_SCREEN; chrome colour blocks re-pointed.
       DONE WHEN: they exist, every reader compiles, build green.
-- [ ] **CP2** — InventoryOverlayRenderer, ItemGridPanel, WeaponSlotsPanel, BuildPagePanel restyled.
+- [x] **CP2** — InventoryOverlayRenderer, ItemGridPanel, WeaponSlotsPanel, BuildPagePanel restyled.
       DONE WHEN: A1/A2/A3 hold for the inventory on run; build green.
 - [ ] **CP3** — ItemWindow, AbilityWindow, WeaponInspectOverlayRenderer restyled.
       DONE WHEN: A1/A3 hold for them on run; build green.
@@ -73,4 +73,31 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   BEFORE shots are in /tmp/claude-0/shots/before (base worktree /tmp/claude-0/base, mirror /tmp/toon3d-base).
   Screen coordinates: inventory BUILD (1011,685) CODEX (1143,685) EXIT (1245,685); level-up card centre y 330;
   codex first row (700,547). The RUN_START relic offer opens right after `engage` (no exchange on a fresh save).
+  Build: 480 tests, the 1 known failure.
+- **CP2:** inventory family restyled in ONE Filled pass each (no Line passes left): scrim UI_INK_BLACK .75; header bar +
+  both body panels UiKit panels (UI_PANEL @ .94, UI_LINE); the inventory has no single outer panel, so its
+  SUIT_AMBER_DIM brackets frame the bounding rect of header + panels (0,110)-(1280,720), brackets only (no extra
+  fill); BUILD (SELECTED while the page is open) / CODEX / EXIT are IDLE plates, labels TYPE_BODY (EXIT overflowed
+  its 50-unit plate at LABEL); the left/right panels are skipped while the BUILD page is open (two stacked .94
+  panels showed a seam). Grid: tab plates inset INV_TAB_PLATE_INSET (3) inside their unchanged touch rects,
+  selected SELECTED amber; slots IDLE / SELECTED / DISABLED (= a filled slot the filter hides); the selection
+  pulse is gone; equipped star SUIT_AMBER; category dots keep their semantic colours. Weapon slots: filled = card in
+  WeaponTier ink, equipped = SELECTED card; empty IDLE plate; locked DISABLED plate + a filled padlock; section
+  rules are UiKit dividers starting past the TYPE_LABEL label width (measured per frame). Dense slot/stat text
+  stays TYPE_CAPTION (fixed 182-unit info zone; the order-3 R8 sub-caption scales are gone everywhere here).
+  BUILD page: UiKit panel; chips = tag fill + 1-unit UI_LINE border over the old pill footprint, text centred by
+  cap height (it sat on the new border); empty pips drawn filled (ring + dark centre); keystone blocks are cards in
+  the keystone's TAG ink (gold frame gone; R2); relic rarity only as the ink of a frame around its rarity label;
+  section headers TYPE_LABEL secondary; names TYPE_BODY, effects TYPE_CAPTION. ItemWindow + AbilityWindow (CP3
+  scope, landed here because the coordinator passes them the new HEAVY font): UiKit panel + amber-dim brackets,
+  title = R1 header (HEAVY HEADING), X / ability rows / footer actions are plates (disabled actions DISABLED),
+  type badges are outline chips (PASSIVE secondary, ACTIVE amber), category glyph-box frame from the shared
+  `ItemGridPanel.writeCategoryColor`; descriptions TYPE_CAPTION (TYPE_BODY ran into the stat block). FIX in UiKit:
+  screenHeaderTitle restored the RAW font scale, which GameFonts multiplies by its base again -> shrank to 0 and
+  threw "scaleX cannot be 0"; it now restores the logical scale.
+  Tap spot-check (run.sh, real taps): tabs (AMMO, MISC), grid slot -> item window, weapon slot -> weapon window,
+  BUILD <-> ITEMS, CODEX (opens archive, close returns to the inventory), EXIT (closes; a pending level-up then
+  opened), item window X / USE (medkit consumed, +25 HP, closed with a turn) / DROP on a keycard ("Cannot drop
+  quest items" flash), ability row -> ability window, its X. NOT tapped: BUILD page UP/DOWN (needs > 11 rows;
+  handleTouch unchanged), EQUIP on a grid weapon.
   Build: 480 tests, the 1 known failure.

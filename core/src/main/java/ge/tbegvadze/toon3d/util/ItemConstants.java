@@ -109,9 +109,15 @@ public final class ItemConstants {
     public static final float INV_PANEL_GAP               = 20f;
     public static final float INV_PANEL_PADDING           = 15f;
     public static final float INV_HEADER_TITLE_X          = 40f;
-    // Header text scale — the inventory header was rendered at the default 1.0 scale, too small
-    // to read on a phone. All header labels (title, credits, sublevel, EXIT) use this scale.
-    public static final float INV_HEADER_FONT_SCALE       = 1.4f;
+    // Header text scale (visual-identity-order-5): the credits, sublevel and plate labels; the title is the
+    // R1 screen header (HEAVY, TYPE_HEADING).
+    public static final float INV_HEADER_FONT_SCALE       = ArtDirection.TYPE_LABEL;
+    /** Header plate labels (BUILD / ITEMS, CODEX, EXIT): TYPE_BODY, so "EXIT" fits its 50-unit plate. */
+    public static final float INV_HEADER_PLATE_FONT_SCALE = ArtDirection.TYPE_BODY;
+    /** Header text top edge below the header bar's top (title, credits, sublevel share it). */
+    public static final float INV_HEADER_TEXT_TOP_INSET   = 18f;
+    /** Gap between the "SUBLEVEL N" label and the BUILD plate. */
+    public static final float INV_HEADER_SUBLEVEL_GAP     = 16f;
     public static final float INV_HEADER_EXIT_BUTTON_SIZE = 50f;
     public static final float INV_HEADER_EXIT_MARGIN      = 10f;
     // CODEX button (Story UI order-6): the archive opens from the inventory header, which is the
@@ -131,8 +137,6 @@ public final class ItemConstants {
     public static final float INV_ITEM_WIN_HEIGHT             = 580f;
     public static final float INV_ITEM_WIN_CENTER_X           = 640f;
     public static final float INV_ITEM_WIN_CENTER_Y           = 370f;
-    // Font scale multiplier — all ItemWindow text is scaled by this factor for readability on mobile.
-    public static final float INV_ITEM_WIN_FONT_SCALE         = 1.3f;
     public static final float INV_ITEM_WIN_X                  = INV_ITEM_WIN_CENTER_X - INV_ITEM_WIN_WIDTH  / 2f;
     public static final float INV_ITEM_WIN_Y                  = INV_ITEM_WIN_CENTER_Y - INV_ITEM_WIN_HEIGHT / 2f;
     public static final float INV_ITEM_WIN_PADDING            = 18f;
@@ -162,6 +166,19 @@ public final class ItemConstants {
     public static final float INV_ITEM_WIN_BODY_RIGHT_X       = INV_ITEM_WIN_DIVIDER_X + 8f;
     public static final float INV_ITEM_WIN_BODY_RIGHT_WIDTH   = INV_ITEM_WIN_X + INV_ITEM_WIN_WIDTH - INV_ITEM_WIN_PADDING - INV_ITEM_WIN_BODY_RIGHT_X;
     public static final float INV_ITEM_WIN_STAT_ROW_H         = 22f;
+    // Item window text / rule offsets (visual-identity-order-5 named the literals it touched)
+    public static final float INV_ITEM_WIN_TITLE_TOP_INSET    = 10f;   // title top below the window top
+    public static final float INV_ITEM_WIN_RULE_INSET         = 10f;   // header / footer rule side inset
+    public static final float INV_ITEM_WIN_NOTICE_RISE        = 18f;   // "CURRENTLY EQUIPPED" above the body bottom
+    public static final float INV_ITEM_WIN_STAT_TEXT_INSET    = 4f;    // stat label / value side inset
+    public static final float INV_ITEM_WIN_BADGE_MARGIN       = 4f;    // ability type badge right margin
+    public static final float INV_ITEM_WIN_ABILITY_TEXT_X     = 28f;   // ability name / hint x in the row
+    public static final float INV_ITEM_WIN_ABILITY_NAME_DROP  = 10f;   // ability glyph + name top below the row top
+    public static final float INV_ITEM_WIN_ABILITY_HINT_DROP  = 26f;   // ability hint top below the row top
+    public static final float INV_ITEM_WIN_QUANTITY_LABEL_RISE = 70f;  // "QUANTITY IN BAG" above the body bottom
+    public static final float INV_ITEM_WIN_QUANTITY_VALUE_RISE = 50f;  // the big quantity above the body bottom
+    public static final float INV_ITEM_WIN_KEY_NOTE_DROP      = 32f;   // keycard persistence note below the guidance
+    public static final float INV_ITEM_WIN_FLASH_RISE         = 12f;   // flash message above the footer plates
 
     // Inventory Menu — Part 2: Weapon Slots Panel geometry
     public static final float INV_WEAPON_SLOT_X                 = 35f;
@@ -184,15 +201,10 @@ public final class ItemConstants {
     public static final float INV_WEAPON_LOCK_BODY_WIDTH        = 30f;
     public static final float INV_WEAPON_LOCK_BODY_HEIGHT       = 22f;
     public static final float INV_WEAPON_LOCK_SHACKLE_RADIUS    = 11f;
-    public static final float INV_WEAPON_ACTIVE_PULSE_HZ        = 4f;
-    public static final float INV_WEAPON_ACTIVE_PULSE_MIN       = 0.7f;
     public static final int   INV_WEAPON_LOCKED_UNLOCK_LEVEL    = 10;
     // Lock icon geometry — center offsets relative to slot origin
     public static final float INV_WEAPON_LOCK_CENTER_X_OFFSET  = 140f;
     public static final float INV_WEAPON_LOCK_CENTER_Y_OFFSET  = 50f;
-    // Section accent line X offsets (where the line starts after the label)
-    public static final float INV_WEAPON_RANGED_ACCENT_X_OFFSET = 68f;
-    public static final float INV_WEAPON_MELEE_ACCENT_X_OFFSET  = 54f;
     // Label Y offset from the section accent line center
     public static final float INV_WEAPON_ACCENT_LINE_Y_OFFSET   = 7f;
     // Locked slot text Y positions (relative to slot bottom)
@@ -205,10 +217,11 @@ public final class ItemConstants {
     public static final float INV_WEAPON_LEVEL_TAG_GAP          = 10f;
     public static final float INV_WEAPON_LEVEL_GLYPH_LIFT       = 1f;
     // Dashed line dash/gap lengths
-    public static final float INV_WEAPON_DIVIDER_DASH_LENGTH    = 12f;
-    public static final float INV_WEAPON_DIVIDER_GAP_LENGTH     = 6f;
-    public static final float INV_WEAPON_LOCKED_DASH_LENGTH     = 8f;
-    public static final float INV_WEAPON_LOCKED_GAP_LENGTH      = 4f;
+    /** The padlock icon's shackle: arc segment count and stroke thickness (drawn filled, order 5). */
+    public static final int   INV_WEAPON_LOCK_SHACKLE_SEGMENTS  = 14;
+    public static final float INV_WEAPON_LOCK_SHACKLE_THICKNESS = 2f;
+    /** Gap between a section label ("RANGED" / "MELEE") and the rule beside it. */
+    public static final float INV_WEAPON_SECTION_RULE_GAP       = 10f;
 
     // Inventory Menu — Part 3: Item Grid Panel geometry (4×3 grid, 148px slots)
     public static final float INV_GRID_SLOT_SIZE        = 148f;
@@ -222,7 +235,6 @@ public final class ItemConstants {
     public static final float INV_GRID_TAB_BAR_Y        = 609f;
     public static final int   INV_TAB_COUNT             = 5;
     public static final float INV_TAB_WIDTH             = 138f;
-    public static final float INV_TAB_ACTIVE_BG_ALPHA   = 0.20f;
     public static final float INV_TAB_DIM_ALPHA         = 0.40f;
     public static final float INV_GRID_CAT_DOT_SIZE       = 4f;
     public static final float INV_GRID_CAT_DOT_MARGIN_X   = 8f;
@@ -231,8 +243,8 @@ public final class ItemConstants {
     public static final float INV_GRID_QTY_LABEL_MARGIN   = 8f;
     public static final float INV_GRID_STAR_MARGIN_RIGHT  = 14f;
     public static final float INV_GRID_STAR_MARGIN_TOP    = 4f;
-    public static final float INV_GRID_ACTIVE_PULSE_HZ    = 4f;
-    public static final float INV_GRID_ACTIVE_PULSE_MIN   = 0.7f;
+    /** Tab plates are drawn this far inside their (unchanged) touch rects so neighbours do not share a border. */
+    public static final float INV_TAB_PLATE_INSET         = 3f;
     // Margin kept clear around a reused ground-pickup icon so it never touches the slot border
     public static final float INV_GRID_ICON_MARGIN        = 20f;
     // Category dot colors
@@ -304,9 +316,11 @@ public final class ItemConstants {
     public static final float INV_ABILITY_WIN_HEADER_H      = 40f;
     public static final float INV_ABILITY_WIN_EXIT_BTN_SIZE = 36f;
     public static final float INV_ABILITY_WIN_DIVIDER_Y     = INV_ABILITY_WIN_Y + 80f;
-    // Font scale multiplier — all AbilityWindow text scaled for mobile readability.
-    // At 2.2 the badge pill (18px tall) overflowed and bullet-line spacing (16px) was
-    // smaller than the scaled line height (~24px), causing text overlap. 1.4 is the
-    // maximum where badge text (~11px) and bullet lines (~13px) both fit their containers.
-    public static final float INV_ABILITY_WIN_FONT_SCALE    = 1.4f;
+    // Ability window text offsets (visual-identity-order-5 named the literals it touched)
+    public static final float INV_ABILITY_WIN_BADGE_GAP      = 8f;   // type badge left of the X
+    public static final float INV_ABILITY_WIN_DESC_DROP      = 10f;  // description top below the header line
+    public static final float INV_ABILITY_WIN_AFFECTS_DROP   = 4f;   // "AFFECTS:" top below the divider
+    public static final float INV_ABILITY_WIN_BULLET_DROP    = 20f;  // first bullet top below the divider
+    public static final float INV_ABILITY_WIN_BULLET_INDENT  = 8f;
+    public static final float INV_ABILITY_WIN_BULLET_PITCH   = 16f;
 }

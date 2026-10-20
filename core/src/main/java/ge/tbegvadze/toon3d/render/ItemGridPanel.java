@@ -7,11 +7,11 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemStack;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 
 import java.util.function.IntConsumer;
@@ -23,8 +23,9 @@ import java.util.function.IntConsumer;
  * Implemented per inventory-menu-order-3 spec:
  *   - 12 slots (was 10) in a 4-column × 3-row layout, 148×148px each.
  *   - 5 filter tabs: ALL / GUNS / AMMO / MEDS / MISC.
- *   - Slot visual states: EMPTY, FILLED, EQUIPPED (warm tint + amber border),
- *     SELECTED (pulsing amber border), DIMMED (40% alpha when filter active).
+ *   - Slot visual states (visual-identity-order-5 R10): UiKit plates - EMPTY and FILLED are IDLE (a filled
+ *     slot shows its icon), SELECTED is the SELECTED plate in SUIT_AMBER, a filled slot the active filter
+ *     hides is DISABLED (its icon at INV_TAB_DIM_ALPHA). The equipped weapon keeps its amber star.
  *   - Category dot (4×4px) in top-left corner of each filled slot.
  *   - Slot usage counter ("N / 12") right-aligned inside the tab bar.
  *   - Touch: tab bar changes active filter; slots open ItemWindow on tap.
@@ -53,22 +54,6 @@ final class ItemGridPanel implements Disposable {
                                                  + ItemConstants.INV_GRID_SLOT_GAP_ROW;
 
     // -------------------------------------------------------------------------
-    // Palette
-    // -------------------------------------------------------------------------
-    private static final Color SLOT_BG_NORMAL    = new Color(0.10f, 0.10f, 0.12f, 1f);
-    private static final Color SLOT_BG_EQUIPPED  = new Color(0.12f, 0.10f, 0.05f, 1f);
-    private static final Color SLOT_BG_SELECTED  = new Color(0.14f, 0.14f, 0.18f, 1f);
-    private static final Color SLOT_BORDER_DIM   = new Color(0.22f, 0.22f, 0.30f, 1f);
-    private static final Color SLOT_BORDER_FILL  = new Color(0.28f, 0.28f, 0.35f, 1f);
-    private static final Color SLOT_BORDER_EQUIP = new Color(0.50f, 0.36f, 0.00f, 1f);
-    private static final Color AMBER             = new Color(1.00f, 0.72f, 0.00f, 1f);
-    private static final Color AMBER_TEXT        = new Color(1.00f, 0.75f, 0.10f, 1f);
-    private static final Color TEXT_SECONDARY    = new Color(0.50f, 0.50f, 0.55f, 1f);
-    private static final Color GREEN_EQUIPPED    = new Color(0.20f, 0.90f, 0.30f, 1f);
-    private static final Color TAB_ACTIVE_BG     = new Color(1.00f, 0.72f, 0.00f,
-                                                              ItemConstants.INV_TAB_ACTIVE_BG_ALPHA);
-
-    // -------------------------------------------------------------------------
     // Dependencies (shared, not owned)
     // -------------------------------------------------------------------------
     private final Inventory     inventory;
@@ -91,7 +76,6 @@ final class ItemGridPanel implements Disposable {
     private int   activeFilterTab  = TAB_ALL;
     private int   selectedColumn   = -1;
     private int   selectedRow      = -1;
-    private float animationClock   = 0f;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -116,9 +100,7 @@ final class ItemGridPanel implements Disposable {
     // -------------------------------------------------------------------------
 
     void render(OrthographicCamera camera, float animationClock) {
-        this.animationClock = animationClock;
         renderPass_Filled(camera);
-        renderPass_Lines(camera);
         renderPass_Text(camera);
     }
 
@@ -165,22 +147,27 @@ final class ItemGridPanel implements Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Pass A — ShapeRenderer.Filled: backgrounds + tab highlights + category dots
+    // Pass A — ShapeRenderer.Filled: tab plates, slot plates, category dots (visual-identity-order-5)
     // -------------------------------------------------------------------------
 
     private void renderPass_Filled(OrthographicCamera camera) {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Tab bar active highlight
-        if (activeFilterTab >= 0 && activeFilterTab < ItemConstants.INV_TAB_COUNT) {
-            shapeRenderer.setColor(TAB_ACTIVE_BG);
-            float tabX = ItemConstants.INV_RIGHT_PANEL_X + activeFilterTab * ItemConstants.INV_TAB_WIDTH;
-            shapeRenderer.rect(tabX, ItemConstants.INV_GRID_TAB_BAR_Y,
-                               ItemConstants.INV_TAB_WIDTH, ItemConstants.INV_GRID_TAB_BAR_HEIGHT);
+        // Tab plates (R5): the active filter is SELECTED in SUIT_AMBER, the others IDLE
+        float tabInset = ItemConstants.INV_TAB_PLATE_INSET;
+        for (int tabIndex = 0; tabIndex < ItemConstants.INV_TAB_COUNT; tabIndex++) {
+            float tabX = ItemConstants.INV_RIGHT_PANEL_X + tabIndex * ItemConstants.INV_TAB_WIDTH;
+            UiKit.plate(shapeRenderer, tabX + tabInset, ItemConstants.INV_GRID_TAB_BAR_Y + tabInset,
+                        ItemConstants.INV_TAB_WIDTH - tabInset * 2f,
+                        ItemConstants.INV_GRID_TAB_BAR_HEIGHT - tabInset * 2f,
+                        ArtDirection.UI_CHAMFER, ArtDirection.UI_BRACKET_LENGTH_COMPACT,
+                        tabIndex == activeFilterTab ? PlateState.SELECTED : PlateState.IDLE,
+                        ItemConstants.INV_PANEL_ALPHA,
+                        ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
         }
 
-        // Slot backgrounds
+        // Slot plates (R10)
         for (int gridRow = 0; gridRow < ItemConstants.INV_GRID_ROWS; gridRow++) {
             for (int gridColumn = 0; gridColumn < ItemConstants.INV_GRID_COLUMNS; gridColumn++) {
                 int inventoryIndex = gridRowColumnToIndex(gridRow, gridColumn);
@@ -189,15 +176,12 @@ final class ItemGridPanel implements Disposable {
                 float slotY        = slotBottom(gridRow);
                 float alphaScale   = slotAlphaScale(slot);
 
-                Color background   = slotBackgroundColor(slot, inventoryIndex, gridColumn, gridRow);
-                temporaryColor.set(background.r, background.g, background.b,
-                                   background.a * alphaScale);
-                shapeRenderer.setColor(temporaryColor);
-                shapeRenderer.rect(slotX, slotY,
-                                   ItemConstants.INV_GRID_SLOT_SIZE,
-                                   ItemConstants.INV_GRID_SLOT_SIZE);
+                UiKit.plate(shapeRenderer, slotX, slotY,
+                            ItemConstants.INV_GRID_SLOT_SIZE, ItemConstants.INV_GRID_SLOT_SIZE,
+                            slotPlateState(slot, gridColumn, gridRow), ItemConstants.INV_PANEL_ALPHA,
+                            ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
 
-                // Category dot — top-left corner of filled slots
+                // Category dot — top-left corner of filled slots (semantic category colour)
                 // Y-up: bottom of dot = slotY + SLOT_SIZE - CAT_DOT_MARGIN_TOP → visually 15px from top
                 if (!slot.isEmpty()) {
                     setCategoryDotColor(slot.getType().getCategory(), alphaScale);
@@ -215,84 +199,6 @@ final class ItemGridPanel implements Disposable {
     }
 
     // -------------------------------------------------------------------------
-    // Pass B — ShapeRenderer.Line: borders + tab underline + tab dividers
-    // -------------------------------------------------------------------------
-
-    private void renderPass_Lines(OrthographicCamera camera) {
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-
-        // Active tab amber underline
-        if (activeFilterTab >= 0 && activeFilterTab < ItemConstants.INV_TAB_COUNT) {
-            shapeRenderer.setColor(AMBER);
-            float tabX = ItemConstants.INV_RIGHT_PANEL_X + activeFilterTab * ItemConstants.INV_TAB_WIDTH;
-            shapeRenderer.line(tabX, ItemConstants.INV_GRID_TAB_BAR_Y,
-                               tabX + ItemConstants.INV_TAB_WIDTH, ItemConstants.INV_GRID_TAB_BAR_Y);
-        }
-
-        // Vertical tab dividers (very dim)
-        temporaryColor.set(0.25f, 0.25f, 0.30f, 0.5f);
-        shapeRenderer.setColor(temporaryColor);
-        for (int tabIndex = 1; tabIndex < ItemConstants.INV_TAB_COUNT; tabIndex++) {
-            float dividerX = ItemConstants.INV_RIGHT_PANEL_X + tabIndex * ItemConstants.INV_TAB_WIDTH;
-            shapeRenderer.line(dividerX, ItemConstants.INV_GRID_TAB_BAR_Y,
-                               dividerX, ItemConstants.INV_GRID_TAB_BAR_Y + ItemConstants.INV_GRID_TAB_BAR_HEIGHT);
-        }
-
-        // Slot borders
-        for (int gridRow = 0; gridRow < ItemConstants.INV_GRID_ROWS; gridRow++) {
-            for (int gridColumn = 0; gridColumn < ItemConstants.INV_GRID_COLUMNS; gridColumn++) {
-                int inventoryIndex = gridRowColumnToIndex(gridRow, gridColumn);
-                ItemStack slot     = inventory.getSlot(inventoryIndex);
-                float slotX        = slotLeft(gridColumn);
-                float slotY        = slotBottom(gridRow);
-                float alphaScale   = slotAlphaScale(slot);
-                boolean isSelected = (gridColumn == selectedColumn && gridRow == selectedRow);
-
-                if (isSelected) {
-                    float pulse = ItemConstants.INV_GRID_ACTIVE_PULSE_MIN
-                            + (1f - ItemConstants.INV_GRID_ACTIVE_PULSE_MIN)
-                            * (MathUtils.sin(animationClock * ItemConstants.INV_GRID_ACTIVE_PULSE_HZ
-                                             * MathUtils.PI2) * 0.5f + 0.5f);
-                    temporaryColor.set(AMBER.r, AMBER.g, AMBER.b, pulse * alphaScale);
-                    shapeRenderer.setColor(temporaryColor);
-                    // Draw two-pixel border by drawing inner and outer rects
-                    shapeRenderer.rect(slotX, slotY,
-                                       ItemConstants.INV_GRID_SLOT_SIZE,
-                                       ItemConstants.INV_GRID_SLOT_SIZE);
-                    shapeRenderer.rect(slotX + 1f, slotY + 1f,
-                                       ItemConstants.INV_GRID_SLOT_SIZE - 2f,
-                                       ItemConstants.INV_GRID_SLOT_SIZE - 2f);
-                } else if (!slot.isEmpty()
-                        && inventory.getEquippedWeaponSlot() == inventoryIndex) {
-                    temporaryColor.set(SLOT_BORDER_EQUIP.r, SLOT_BORDER_EQUIP.g,
-                                       SLOT_BORDER_EQUIP.b, SLOT_BORDER_EQUIP.a * alphaScale);
-                    shapeRenderer.setColor(temporaryColor);
-                    shapeRenderer.rect(slotX, slotY,
-                                       ItemConstants.INV_GRID_SLOT_SIZE,
-                                       ItemConstants.INV_GRID_SLOT_SIZE);
-                } else if (!slot.isEmpty()) {
-                    temporaryColor.set(SLOT_BORDER_FILL.r, SLOT_BORDER_FILL.g,
-                                       SLOT_BORDER_FILL.b, SLOT_BORDER_FILL.a * alphaScale);
-                    shapeRenderer.setColor(temporaryColor);
-                    shapeRenderer.rect(slotX, slotY,
-                                       ItemConstants.INV_GRID_SLOT_SIZE,
-                                       ItemConstants.INV_GRID_SLOT_SIZE);
-                } else {
-                    temporaryColor.set(SLOT_BORDER_DIM.r, SLOT_BORDER_DIM.g,
-                                       SLOT_BORDER_DIM.b, SLOT_BORDER_DIM.a * alphaScale);
-                    shapeRenderer.setColor(temporaryColor);
-                    shapeRenderer.rect(slotX, slotY,
-                                       ItemConstants.INV_GRID_SLOT_SIZE,
-                                       ItemConstants.INV_GRID_SLOT_SIZE);
-                }
-            }
-        }
-
-        shapeRenderer.end();
-    }
-
-    // -------------------------------------------------------------------------
     // Pass C — SpriteBatch + BitmapFont: tab labels, usage counter, glyphs, qty, star
     // -------------------------------------------------------------------------
 
@@ -300,16 +206,19 @@ final class ItemGridPanel implements Disposable {
         spriteBatch.setProjectionMatrix(camera.combined);
         spriteBatch.begin();
 
-        // Tab labels
+        // Tab labels (R6: the selected tab's label primary, the others secondary)
+        font.getData().setScale(ArtDirection.TYPE_BODY);
         for (int tabIndex = 0; tabIndex < ItemConstants.INV_TAB_COUNT; tabIndex++) {
             float tabX   = ItemConstants.INV_RIGHT_PANEL_X + tabIndex * ItemConstants.INV_TAB_WIDTH;
             float tabCenterX = tabX + ItemConstants.INV_TAB_WIDTH / 2f;
             float tabCenterY = ItemConstants.INV_GRID_TAB_BAR_Y
                                + ItemConstants.INV_GRID_TAB_BAR_HEIGHT / 2f;
             if (tabIndex == activeFilterTab) {
-                font.setColor(AMBER_TEXT);
+                setTextColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                             ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
             } else {
-                font.setColor(TEXT_SECONDARY);
+                setTextColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                             ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
             }
             glyphLayout.setText(font, TAB_LABELS[tabIndex]);
             font.draw(spriteBatch, TAB_LABELS[tabIndex],
@@ -317,12 +226,14 @@ final class ItemGridPanel implements Disposable {
                       tabCenterY + glyphLayout.height / 2f);
         }
 
-        // Slot usage counter — right-aligned inside the tab bar
+        // Slot usage counter — right-aligned inside the tab bar (a caption)
+        font.getData().setScale(ArtDirection.TYPE_CAPTION);
         int usedCount = countUsedSlots();
         textBuilder.setLength(0);
         textBuilder.append(usedCount).append(" / ").append(ItemConstants.INVENTORY_SLOT_COUNT);
         glyphLayout.setText(font, textBuilder);
-        font.setColor(AMBER_TEXT);
+        setTextColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                     ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
         float usageCounterRightEdge = ItemConstants.INV_RIGHT_PANEL_X + ItemConstants.INV_RIGHT_PANEL_WIDTH
                                       - ItemConstants.INV_PANEL_PADDING;
         font.draw(spriteBatch, textBuilder,
@@ -361,7 +272,8 @@ final class ItemGridPanel implements Disposable {
 
                 // Quantity label — bottom-right corner
                 if (slot.getQuantity() > 1) {
-                    font.setColor(TEXT_SECONDARY.r, TEXT_SECONDARY.g, TEXT_SECONDARY.b, alphaScale);
+                    setTextColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                                 ArtDirection.UI_TEXT_SECONDARY_BLUE, alphaScale);
                     textBuilder.setLength(0);
                     textBuilder.append('×').append(slot.getQuantity());
                     glyphLayout.setText(font, textBuilder);
@@ -371,10 +283,11 @@ final class ItemGridPanel implements Disposable {
                               slotY + glyphLayout.height + ItemConstants.INV_GRID_QTY_LABEL_MARGIN);
                 }
 
-                // Equipped star — top-right corner (green)
+                // Equipped star — top-right corner (the suit's amber: "this one is in use")
                 if (slot.getType().getCategory() == ItemCategory.WEAPON
                         && inventory.getEquippedWeaponSlot() == inventoryIndex) {
-                    font.setColor(GREEN_EQUIPPED.r, GREEN_EQUIPPED.g, GREEN_EQUIPPED.b, alphaScale);
+                    setTextColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN,
+                                 ArtDirection.SUIT_AMBER_BLUE, alphaScale);
                     font.draw(spriteBatch, "*",
                               slotX + ItemConstants.INV_GRID_SLOT_SIZE
                                       - ItemConstants.INV_GRID_STAR_MARGIN_RIGHT,
@@ -445,14 +358,15 @@ final class ItemGridPanel implements Disposable {
     // Slot visual helpers
     // -------------------------------------------------------------------------
 
-    private Color slotBackgroundColor(ItemStack slot, int inventoryIndex,
-                                       int gridColumn, int gridRow) {
-        boolean isSelected = (gridColumn == selectedColumn && gridRow == selectedRow);
-        if (isSelected) return SLOT_BG_SELECTED;
-        if (!slot.isEmpty() && inventory.getEquippedWeaponSlot() == inventoryIndex) {
-            return SLOT_BG_EQUIPPED;
-        }
-        return SLOT_BG_NORMAL;
+    /** R10: SELECTED for the tapped slot, DISABLED for a filled slot the active filter hides, else IDLE. */
+    private PlateState slotPlateState(ItemStack slot, int gridColumn, int gridRow) {
+        if (gridColumn == selectedColumn && gridRow == selectedRow) return PlateState.SELECTED;
+        if (slotAlphaScale(slot) < 1f) return PlateState.DISABLED;
+        return PlateState.IDLE;
+    }
+
+    private void setTextColor(float red, float green, float blue, float alpha) {
+        font.setColor(red, green, blue, alpha);
     }
 
     private float slotAlphaScale(ItemStack slot) {
@@ -475,39 +389,33 @@ final class ItemGridPanel implements Disposable {
     }
 
     private void setCategoryDotColor(ItemCategory category, float alphaScale) {
+        writeCategoryColor(category, temporaryColor);
+        temporaryColor.a = alphaScale;
+        shapeRenderer.setColor(temporaryColor);
+    }
+
+    /** The item category's semantic colour (the grid's corner dot, the item window's glyph-box frame). */
+    static Color writeCategoryColor(ItemCategory category, Color out) {
         switch (category) {
             case WEAPON:
-                temporaryColor.set(ItemConstants.INV_CAT_DOT_WEAPON_R,
-                                   ItemConstants.INV_CAT_DOT_WEAPON_G,
-                                   ItemConstants.INV_CAT_DOT_WEAPON_B, alphaScale);
-                break;
+                return out.set(ItemConstants.INV_CAT_DOT_WEAPON_R, ItemConstants.INV_CAT_DOT_WEAPON_G,
+                               ItemConstants.INV_CAT_DOT_WEAPON_B, 1f);
             case CONSUMABLE:
-                temporaryColor.set(ItemConstants.INV_CAT_DOT_CONSUMABLE_R,
-                                   ItemConstants.INV_CAT_DOT_CONSUMABLE_G,
-                                   ItemConstants.INV_CAT_DOT_CONSUMABLE_B, alphaScale);
-                break;
+                return out.set(ItemConstants.INV_CAT_DOT_CONSUMABLE_R, ItemConstants.INV_CAT_DOT_CONSUMABLE_G,
+                               ItemConstants.INV_CAT_DOT_CONSUMABLE_B, 1f);
             case AMMO:
-                temporaryColor.set(ItemConstants.INV_CAT_DOT_AMMO_R,
-                                   ItemConstants.INV_CAT_DOT_AMMO_G,
-                                   ItemConstants.INV_CAT_DOT_AMMO_B, alphaScale);
-                break;
+                return out.set(ItemConstants.INV_CAT_DOT_AMMO_R, ItemConstants.INV_CAT_DOT_AMMO_G,
+                               ItemConstants.INV_CAT_DOT_AMMO_B, 1f);
             case KEY_ITEM:
-                temporaryColor.set(ItemConstants.INV_CAT_DOT_KEY_ITEM_R,
-                                   ItemConstants.INV_CAT_DOT_KEY_ITEM_G,
-                                   ItemConstants.INV_CAT_DOT_KEY_ITEM_B, alphaScale);
-                break;
+                return out.set(ItemConstants.INV_CAT_DOT_KEY_ITEM_R, ItemConstants.INV_CAT_DOT_KEY_ITEM_G,
+                               ItemConstants.INV_CAT_DOT_KEY_ITEM_B, 1f);
             case MOD:
-                temporaryColor.set(ItemConstants.INV_CAT_DOT_MOD_R,
-                                   ItemConstants.INV_CAT_DOT_MOD_G,
-                                   ItemConstants.INV_CAT_DOT_MOD_B, alphaScale);
-                break;
+                return out.set(ItemConstants.INV_CAT_DOT_MOD_R, ItemConstants.INV_CAT_DOT_MOD_G,
+                               ItemConstants.INV_CAT_DOT_MOD_B, 1f);
             default:
-                temporaryColor.set(ItemConstants.INV_CAT_DOT_MISC_R,
-                                   ItemConstants.INV_CAT_DOT_MISC_G,
-                                   ItemConstants.INV_CAT_DOT_MISC_B, alphaScale);
-                break;
+                return out.set(ItemConstants.INV_CAT_DOT_MISC_R, ItemConstants.INV_CAT_DOT_MISC_G,
+                               ItemConstants.INV_CAT_DOT_MISC_B, 1f);
         }
-        shapeRenderer.setColor(temporaryColor);
     }
 
     // -------------------------------------------------------------------------

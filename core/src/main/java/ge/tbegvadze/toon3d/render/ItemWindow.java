@@ -16,6 +16,8 @@ import ge.tbegvadze.toon3d.item.Inventory;
 import ge.tbegvadze.toon3d.item.ItemCategory;
 import ge.tbegvadze.toon3d.item.ItemStack;
 import ge.tbegvadze.toon3d.item.ItemType;
+import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.ItemConstants;
 import ge.tbegvadze.toon3d.util.WeaponConstants;
 import java.util.function.Consumer;
@@ -75,8 +77,8 @@ final class ItemWindow implements Disposable {
     private static final float BTN_W         = ItemConstants.INV_ACTION_BTN_WIDTH;
     private static final float BTN_H         = ItemConstants.INV_ACTION_BTN_HEIGHT;
 
-    // Font scale multiplier applied to all text drawn in this window for mobile readability.
-    private static final float FONT_SCALE    = ItemConstants.INV_ITEM_WIN_FONT_SCALE;
+    // Header: the title's top edge (the R1 rule sits under it)
+    private static final float TITLE_TOP_Y   = HEADER_Y + HEADER_H - ItemConstants.INV_ITEM_WIN_TITLE_TOP_INSET;
 
     // Body: fixed Y at which the description block begins (just below header rule)
     private static final float DESC_Y        = HEADER_Y - 10f;
@@ -91,40 +93,16 @@ final class ItemWindow implements Disposable {
     private static final float BADGE_H         = ItemConstants.INV_ABILITY_BADGE_H;
 
     // -------------------------------------------------------------------------
-    // Palette — UAC military CRT amber-on-steel
+    // Type roles (visual-identity-order-5 R6; the order-3 R8 sub-caption scales are gone)
     // -------------------------------------------------------------------------
 
-    private static final Color WINDOW_BG        = new Color(0.07f,  0.07f,  0.09f,  0.97f);
-    private static final Color HEADER_BG        = new Color(0.09f,  0.09f,  0.11f,  1.00f);
-    private static final Color SLOT_BG_NORMAL   = new Color(0.10f,  0.10f,  0.12f,  1.00f);
-    private static final Color ALT_ROW_BG       = new Color(0.105f, 0.105f, 0.13f,  1.00f);
-    private static final Color PANEL_BORDER     = new Color(0.22f,  0.22f,  0.30f,  1.00f);
-    private static final Color AMBER_BORDER     = new Color(1.00f,  0.72f,  0.00f,  0.85f);
-    private static final Color AMBER            = new Color(1.00f,  0.75f,  0.10f,  1.00f);
-    private static final Color TEXT_DIM         = new Color(0.50f,  0.50f,  0.55f,  1.00f);
-    private static final Color TEXT_DISABLED    = new Color(0.30f,  0.30f,  0.32f,  1.00f);
-    private static final Color OFF_WHITE        = new Color(0.80f,  0.80f,  0.85f,  1.00f);
-    private static final Color GREEN_EQUIPPED   = new Color(0.20f,  0.90f,  0.30f,  1.00f);
-    private static final Color EXIT_BTN_BG      = new Color(0.70f,  0.20f,  0.15f,  1.00f);
-    private static final Color EXIT_BTN_TEXT    = new Color(1.00f,  0.85f,  0.85f,  1.00f);
-    private static final Color BTN_BG_ON        = new Color(0.10f,  0.10f,  0.12f,  1.00f);
-    private static final Color BTN_BG_OFF       = new Color(0.07f,  0.07f,  0.09f,  1.00f);
-    private static final Color BTN_BORDER_ON    = new Color(0.50f,  0.50f,  0.55f,  1.00f);
-    private static final Color BTN_BORDER_OFF   = new Color(0.30f,  0.30f,  0.32f,  1.00f);
-    private static final Color RED_FLASH        = new Color(0.95f,  0.15f,  0.15f,  1.00f);
-    private static final Color ABILITY_ROW_BG   = new Color(0.08f,  0.08f,  0.10f,  1.00f);
-    private static final Color BADGE_PASSIVE_BG = new Color(0.10f,  0.30f,  0.10f,  0.85f);
-    private static final Color BADGE_PASSIVE_FG = new Color(0.20f,  0.90f,  0.30f,  1.00f);
-    private static final Color BADGE_ACTIVE_BG  = new Color(0.30f,  0.20f,  0.05f,  0.85f);
-    private static final Color BADGE_ACTIVE_FG  = new Color(1.00f,  0.72f,  0.00f,  1.00f);
-
-    // Category glyph-box border colors
-    private static final Color CAT_WEAPON       = new Color(1.00f, 0.72f, 0.00f, 1.00f);
-    private static final Color CAT_CONSUMABLE   = new Color(0.20f, 0.90f, 0.20f, 1.00f);
-    private static final Color CAT_AMMO         = new Color(0.75f, 0.45f, 0.10f, 1.00f);
-    private static final Color CAT_KEY_ITEM     = new Color(1.00f, 0.10f, 0.10f, 1.00f);
-    private static final Color CAT_MOD          = new Color(0.60f, 0.30f, 0.90f, 1.00f);
-    private static final Color CAT_MISC         = new Color(0.75f, 0.75f, 0.75f, 1.00f);
+    /** The window title is the R1 screen header; these are the other roles. */
+    private static final float SCALE_BODY     = ArtDirection.TYPE_BODY;
+    private static final float SCALE_CAPTION  = ArtDirection.TYPE_CAPTION;
+    private static final float SCALE_SECTION  = ArtDirection.TYPE_LABEL;
+    /** The big "quantity in bag" number and the ASCII fallback glyph are icon-sized. */
+    private static final float SCALE_QUANTITY = ArtDirection.TYPE_HEADING;
+    private static final float SCALE_GLYPH    = ArtDirection.TYPE_DISPLAY;
 
     // -------------------------------------------------------------------------
     // Shared rendering resources (owned by coordinator, not disposed here)
@@ -136,12 +114,15 @@ final class ItemWindow implements Disposable {
     private final ShapeRenderer            shapeRenderer;
     private final SpriteBatch              spriteBatch;
     private final BitmapFont               font;
+    private final BitmapFont               headingFont;
     private final GlyphLayout              glyphLayout;
     private final Consumer<AbilityInstance> onAbilityTap;
     private final ItemIconTextures         iconTextures;
 
     // Pre-allocated scratch buffer for dynamic stat value strings
     private final StringBuilder valueBuilder;
+    // Scratch colour for the glyph box's category border
+    private final Color glyphBoxBorder = new Color();
 
     // -------------------------------------------------------------------------
     // State
@@ -164,12 +145,13 @@ final class ItemWindow implements Disposable {
     // -------------------------------------------------------------------------
 
     ItemWindow(ShapeRenderer shapeRenderer, SpriteBatch spriteBatch,
-               BitmapFont font, GlyphLayout glyphLayout,
+               BitmapFont font, BitmapFont headingFont, GlyphLayout glyphLayout,
                Consumer<AbilityInstance> onAbilityTap,
                ItemIconTextures iconTextures) {
         this.shapeRenderer = shapeRenderer;
         this.spriteBatch   = spriteBatch;
         this.font          = font;
+        this.headingFont   = headingFont;
         this.glyphLayout   = glyphLayout;
         this.onAbilityTap  = onAbilityTap;
         this.iconTextures  = iconTextures;
@@ -294,7 +276,6 @@ final class ItemWindow implements Disposable {
 
     void render(OrthographicCamera camera, float animationClock) {
         renderFilled(camera);
-        renderLines(camera);
         renderText(camera);
     }
 
@@ -358,125 +339,115 @@ final class ItemWindow implements Disposable {
     // Private — render passes
     // =========================================================================
 
+    /**
+     * One Filled pass (visual-identity-order-5): the window is a UiKit panel with SUIT_AMBER_DIM brackets (the
+     * outermost panel of its layer), the header gets the R1 amber-ticked rule under the title, the header and
+     * footer rules are plain dividers, and every tappable thing (X, ability rows, footer actions) is a plate.
+     */
     private void renderFilled(OrthographicCamera camera) {
         shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Window background
-        shapeRenderer.setColor(WINDOW_BG);
-        shapeRenderer.rect(WINDOW_X, WINDOW_Y, WINDOW_W, WINDOW_H);
+        UiKit.panel(shapeRenderer, WINDOW_X, WINDOW_Y, WINDOW_W, WINDOW_H,
+                    ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                    ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE);
+        UiKit.brackets(shapeRenderer, WINDOW_X, WINDOW_Y, WINDOW_W, WINDOW_H,
+                       ArtDirection.SUIT_AMBER_DIM_RED, ArtDirection.SUIT_AMBER_DIM_GREEN,
+                       ArtDirection.SUIT_AMBER_DIM_BLUE, 1f);
 
-        // Header background (slightly lighter than window)
-        shapeRenderer.setColor(HEADER_BG);
-        shapeRenderer.rect(WINDOW_X, HEADER_Y, WINDOW_W, HEADER_H);
+        // Header: the title's amber-ticked rule, then the plain header and footer rules and the column divider
+        UiKit.screenHeaderRule(shapeRenderer, NAME_X, UiKit.screenHeaderRuleY(TITLE_TOP_Y),
+                               EXIT_X - ItemConstants.INV_ITEM_WIN_PADDING - NAME_X, 1f);
+        float ruleInset = ItemConstants.INV_ITEM_WIN_RULE_INSET;
+        drawPlainRule(WINDOW_X + ruleInset, HEADER_Y, WINDOW_W - ruleInset * 2f);
+        drawPlainRule(WINDOW_X + ruleInset, FOOTER_RULE_Y, WINDOW_W - ruleInset * 2f);
+        shapeRenderer.setColor(ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f);
+        shapeRenderer.rect(DIVIDER_X, BODY_Y + ruleInset, ArtDirection.UI_DIVIDER_THICKNESS,
+                           HEADER_Y - BODY_Y - ruleInset * 2f);
 
-        // Glyph box background
-        shapeRenderer.setColor(SLOT_BG_NORMAL);
-        shapeRenderer.rect(GLYPH_X, GLYPH_Y, GLYPH_SIZE, GLYPH_SIZE);
+        // Glyph box: a small raised panel framed in the item's (semantic) category colour
+        drawGlyphBox();
 
-        // Exit button background
-        shapeRenderer.setColor(EXIT_BTN_BG);
-        shapeRenderer.rect(EXIT_X, EXIT_Y, EXIT_SIZE, EXIT_SIZE);
+        // Exit X plate
+        UiKit.plate(shapeRenderer, EXIT_X, EXIT_Y, EXIT_SIZE, EXIT_SIZE, ArtDirection.UI_CHAMFER, PlateState.IDLE,
+                    ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
 
-        // Alternating stat row backgrounds (even rows = transparent = skip, odd = dim highlight)
+        // Alternating stat row backgrounds (even rows = transparent = skip, odd = raised)
+        ItemType statType = null;
         if (inventory != null && slotIndex >= 0) {
             ItemStack slot = inventory.getSlot(slotIndex);
-            if (!slot.isEmpty()) {
-                int rowCount = statRowCount(slot.getType());
-                for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-                    if (rowIndex % 2 == 1) {
-                        float rowY = STAT_Y - rowIndex * STAT_ROW_H - STAT_ROW_H;
-                        shapeRenderer.setColor(ALT_ROW_BG);
-                        shapeRenderer.rect(BODY_L_X, rowY, BODY_L_W, STAT_ROW_H);
-                    }
-                }
-
-                // Ability row backgrounds + badge pills (weapon only)
-                if (slot.getType().getCategory() == ItemCategory.WEAPON
-                        && cachedAbilities.length > 0) {
-                    renderAbilityRowBackgrounds();
-                }
+            if (!slot.isEmpty()) statType = slot.getType();
+        } else if (currentWeapon != null) {
+            statType = currentWeapon.getItemType();
+        }
+        if (statType != null) {
+            int rowCount = statRowCount(statType);
+            shapeRenderer.setColor(ArtDirection.UI_PANEL_RAISED_RED, ArtDirection.UI_PANEL_RAISED_GREEN,
+                                   ArtDirection.UI_PANEL_RAISED_BLUE, 1f);
+            for (int rowIndex = 1; rowIndex < rowCount; rowIndex += 2) {
+                float rowY = STAT_Y - rowIndex * STAT_ROW_H - STAT_ROW_H;
+                shapeRenderer.rect(BODY_L_X, rowY, BODY_L_W, STAT_ROW_H);
             }
-        } else if (currentWeapon != null && currentWeapon.getItemType() != null) {
-            int rowCount = statRowCount(currentWeapon.getItemType());
-            for (int rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-                if (rowIndex % 2 == 1) {
-                    float rowY = STAT_Y - rowIndex * STAT_ROW_H - STAT_ROW_H;
-                    shapeRenderer.setColor(ALT_ROW_BG);
-                    shapeRenderer.rect(BODY_L_X, rowY, BODY_L_W, STAT_ROW_H);
-                }
-            }
-            if (cachedAbilities.length > 0) {
+            // Ability row plates + type badges (weapons)
+            if (statType.getCategory() == ItemCategory.WEAPON && cachedAbilities.length > 0) {
                 renderAbilityRowBackgrounds();
             }
         }
 
-        // Footer action button backgrounds
-        boolean btn1On = isButton1Enabled();
-        shapeRenderer.setColor(btn1On ? BTN_BG_ON : BTN_BG_OFF);
-        shapeRenderer.rect(BTN1_X, BTN_Y, BTN_W, BTN_H);
-
-        boolean btn2On = isButton2Enabled();
-        shapeRenderer.setColor(btn2On ? BTN_BG_ON : BTN_BG_OFF);
-        shapeRenderer.rect(BTN2_X, BTN_Y, BTN_W, BTN_H);
+        // Footer action plates: IDLE when the action applies, DISABLED otherwise
+        drawActionPlate(BTN1_X, isButton1Enabled());
+        drawActionPlate(BTN2_X, isButton2Enabled());
 
         shapeRenderer.end();
     }
 
-    private void renderLines(OrthographicCamera camera) {
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+    private void drawPlainRule(float x, float y, float width) {
+        UiKit.divider(shapeRenderer, x, y, width,
+                      ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f);
+    }
 
-        // Window outer border (amber)
-        shapeRenderer.setColor(AMBER_BORDER);
-        shapeRenderer.rect(WINDOW_X, WINDOW_Y, WINDOW_W, WINDOW_H);
+    private void drawActionPlate(float plateX, boolean enabled) {
+        UiKit.plate(shapeRenderer, plateX, BTN_Y, BTN_W, BTN_H, ArtDirection.UI_CHAMFER,
+                    enabled ? PlateState.IDLE : PlateState.DISABLED, ItemConstants.INV_PANEL_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
+    }
 
-        // Header bottom rule (amber)
-        shapeRenderer.line(WINDOW_X + 10f, HEADER_Y, WINDOW_X + WINDOW_W - 10f, HEADER_Y);
-
-        // Footer top rule (amber)
-        shapeRenderer.line(WINDOW_X + 10f, FOOTER_RULE_Y, WINDOW_X + WINDOW_W - 10f, FOOTER_RULE_Y);
-
-        // Body column divider
-        shapeRenderer.setColor(PANEL_BORDER);
-        shapeRenderer.line(DIVIDER_X, BODY_Y + 8f, DIVIDER_X, HEADER_Y - 8f);
-
-        // Glyph box border (category color or dim if empty)
+    /** The header glyph box: a small raised panel framed in the item's (semantic) category colour. */
+    private void drawGlyphBox() {
+        glyphBoxBorder.set(ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, 1f);
         if (inventory != null && slotIndex >= 0) {
             ItemStack slot = inventory.getSlot(slotIndex);
-            shapeRenderer.setColor(slot.isEmpty() ? PANEL_BORDER : categoryColor(slot.getType().getCategory()));
+            if (!slot.isEmpty()) ItemGridPanel.writeCategoryColor(slot.getType().getCategory(), glyphBoxBorder);
         } else if (currentWeapon != null) {
-            shapeRenderer.setColor(CAT_WEAPON);
-        } else {
-            shapeRenderer.setColor(PANEL_BORDER);
+            ItemGridPanel.writeCategoryColor(ItemCategory.WEAPON, glyphBoxBorder);
         }
-        shapeRenderer.rect(GLYPH_X, GLYPH_Y, GLYPH_SIZE, GLYPH_SIZE);
-
-        // Exit button border
-        shapeRenderer.setColor(EXIT_BTN_TEXT);
-        shapeRenderer.rect(EXIT_X, EXIT_Y, EXIT_SIZE, EXIT_SIZE);
-
-        // Action button borders
-        shapeRenderer.setColor(isButton1Enabled() ? BTN_BORDER_ON : BTN_BORDER_OFF);
-        shapeRenderer.rect(BTN1_X, BTN_Y, BTN_W, BTN_H);
-        shapeRenderer.setColor(isButton2Enabled() ? BTN_BORDER_ON : BTN_BORDER_OFF);
-        shapeRenderer.rect(BTN2_X, BTN_Y, BTN_W, BTN_H);
-
-        shapeRenderer.end();
+        UiKit.panel(shapeRenderer, GLYPH_X, GLYPH_Y, GLYPH_SIZE, GLYPH_SIZE, ArtDirection.UI_CHAMFER,
+                    ArtDirection.UI_PANEL_RAISED_RED, ArtDirection.UI_PANEL_RAISED_GREEN,
+                    ArtDirection.UI_PANEL_RAISED_BLUE, 1f,
+                    glyphBoxBorder.r, glyphBoxBorder.g, glyphBoxBorder.b, 1f, ArtDirection.UI_BORDER_THICKNESS);
     }
 
     private void renderAbilityRowBackgrounds() {
         float abilityRowTop = DESC_Y - ABILITY_HDR_H;
         for (AbilityInstance instance : cachedAbilities) {
             float rowBottom = abilityRowTop - ABILITY_ROW_H;
-            shapeRenderer.setColor(ABILITY_ROW_BG);
-            shapeRenderer.rect(BODY_R_X, rowBottom, BODY_R_W, ABILITY_ROW_H);
+            UiKit.plate(shapeRenderer, BODY_R_X, rowBottom, BODY_R_W, ABILITY_ROW_H, ArtDirection.UI_CHAMFER,
+                        PlateState.IDLE, ItemConstants.INV_PANEL_ALPHA,
+                        ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE);
 
+            // Type badge: an outline chip in the badge's ink (PASSIVE secondary, ACTIVE amber)
             boolean isPassive = instance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
-            shapeRenderer.setColor(isPassive ? BADGE_PASSIVE_BG : BADGE_ACTIVE_BG);
-            float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
+            float badgeX = BODY_R_X + BODY_R_W - BADGE_W - ItemConstants.INV_ITEM_WIN_BADGE_MARGIN;
             float badgeY = rowBottom + (ABILITY_ROW_H - BADGE_H) / 2f;
-            shapeRenderer.rect(badgeX, badgeY, BADGE_W, BADGE_H);
+            UiKit.panel(shapeRenderer, badgeX, badgeY, BADGE_W, BADGE_H, ArtDirection.UI_CHIP_CHAMFER,
+                        ArtDirection.UI_PANEL_RAISED_RED, ArtDirection.UI_PANEL_RAISED_GREEN,
+                        ArtDirection.UI_PANEL_RAISED_BLUE, 1f,
+                        isPassive ? ArtDirection.UI_TEXT_SECONDARY_RED : ArtDirection.SUIT_AMBER_RED,
+                        isPassive ? ArtDirection.UI_TEXT_SECONDARY_GREEN : ArtDirection.SUIT_AMBER_GREEN,
+                        isPassive ? ArtDirection.UI_TEXT_SECONDARY_BLUE : ArtDirection.SUIT_AMBER_BLUE,
+                        1f, ArtDirection.UI_CHIP_BORDER_THICKNESS);
 
             abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
         }
@@ -496,13 +467,13 @@ final class ItemWindow implements Disposable {
         ItemStack slot = inventory.getSlot(slotIndex);
 
         if (slot.isEmpty()) {
-            font.getData().setScale(FONT_SCALE);
-            font.setColor(TEXT_DIM);
+            font.getData().setScale(SCALE_BODY);
+            setSecondary();
             glyphLayout.setText(font, "— EMPTY SLOT —");
             font.draw(spriteBatch, "— EMPTY SLOT —",
                       WINDOW_X + (WINDOW_W - glyphLayout.width) / 2f,
                       WINDOW_Y + WINDOW_H / 2f);
-            font.getData().setScale(1f);
+            font.getData().setScale(SCALE_CAPTION);
             renderFooterButtons(null, false);
             spriteBatch.end();
             return;
@@ -524,12 +495,12 @@ final class ItemWindow implements Disposable {
     private void renderTextForWeapon() {
         ItemType itemType = currentWeapon.getItemType();
         if (itemType == null) {
-            font.getData().setScale(FONT_SCALE);
-            font.setColor(TEXT_DIM);
+            font.getData().setScale(SCALE_BODY);
+            setSecondary();
             glyphLayout.setText(font, "— UNKNOWN WEAPON —");
             font.draw(spriteBatch, "— UNKNOWN WEAPON —",
                       WINDOW_X + (WINDOW_W - glyphLayout.width) / 2f, WINDOW_Y + WINDOW_H / 2f);
-            font.getData().setScale(1f);
+            font.getData().setScale(SCALE_CAPTION);
             return;
         }
         renderHeader(itemType, weaponIsActive);
@@ -540,21 +511,48 @@ final class ItemWindow implements Disposable {
     }
 
     private void renderBodyLeftForWeapon(ItemType itemType) {
-        font.getData().setScale(0.85f * FONT_SCALE);
-        font.setColor(OFF_WHITE);
-        font.draw(spriteBatch, itemType.getDescription(), BODY_L_X, DESC_Y, BODY_L_W, Align.left, true);
-        font.getData().setScale(1f);
+        drawDescription(itemType);
 
-        font.getData().setScale(0.80f * FONT_SCALE);
+        font.getData().setScale(SCALE_CAPTION);
         renderStatRowsForWeapon();
-        font.getData().setScale(1f);
 
-        if (weaponIsActive) {
-            font.getData().setScale(0.85f * FONT_SCALE);
-            font.setColor(GREEN_EQUIPPED);
-            font.draw(spriteBatch, "● CURRENTLY ACTIVE", BODY_L_X, BODY_Y + 18f);
-            font.getData().setScale(1f);
-        }
+        if (weaponIsActive) drawInUseNotice("● CURRENTLY ACTIVE");
+    }
+
+    /**
+     * The description, primary, at TYPE_CAPTION: the fixed 80-unit band above the stat block holds three
+     * caption lines of the longest description (81 chars), where TYPE_BODY would run into the stats.
+     */
+    private void drawDescription(ItemType itemType) {
+        font.getData().setScale(SCALE_CAPTION);
+        setPrimary();
+        font.draw(spriteBatch, itemType.getDescription(), BODY_L_X, DESC_Y, BODY_L_W, Align.left, true);
+    }
+
+    /** "Currently equipped / active" — the suit's amber marks the thing in use. */
+    private void drawInUseNotice(String notice) {
+        font.getData().setScale(SCALE_CAPTION);
+        setAmber();
+        font.draw(spriteBatch, notice, BODY_L_X, BODY_Y + ItemConstants.INV_ITEM_WIN_NOTICE_RISE);
+    }
+
+    private void setPrimary() {
+        font.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                      ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+    }
+
+    private void setSecondary() {
+        font.setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                      ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
+    }
+
+    private void setDisabled() {
+        font.setColor(ArtDirection.UI_TEXT_DISABLED_RED, ArtDirection.UI_TEXT_DISABLED_GREEN,
+                      ArtDirection.UI_TEXT_DISABLED_BLUE, 1f);
+    }
+
+    private void setAmber() {
+        font.setColor(ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, 1f);
     }
 
     private void renderStatRowsForWeapon() {
@@ -584,7 +582,8 @@ final class ItemWindow implements Disposable {
         if (iconTexture != null) {
             drawGlyphBoxIcon(iconTexture);
         } else {
-            font.getData().setScale(2.5f * FONT_SCALE);
+            font.getData().setScale(SCALE_GLYPH);
+            // Item art: the ASCII glyph in the item's own colour (an icon routine, not chrome).
             font.setColor(itemType.getGlyphRed(), itemType.getGlyphGreen(), itemType.getGlyphBlue(), 1f);
             valueBuilder.setLength(0);
             valueBuilder.append(itemType.getGlyph());
@@ -592,30 +591,25 @@ final class ItemWindow implements Disposable {
             font.draw(spriteBatch, valueBuilder,
                       GLYPH_X + (GLYPH_SIZE - glyphLayout.width)  / 2f,
                       GLYPH_Y + (GLYPH_SIZE + glyphLayout.height) / 2f);
-            font.getData().setScale(1f);
         }
 
-        // Item name (amber, slightly scaled up)
-        float nameY = HEADER_Y + HEADER_H - 10f;
-        font.getData().setScale(1.3f * FONT_SCALE);
-        font.setColor(AMBER);
-        font.draw(spriteBatch, itemType.getDisplayName(), NAME_X, nameY);
-        font.getData().setScale(1f);
+        // Item name — the window's R1 screen header (HEAVY, TYPE_HEADING, primary)
+        UiKit.screenHeaderTitle(spriteBatch, headingFont, itemType.getDisplayName(), NAME_X, TITLE_TOP_Y);
 
-        // Category badge (dim, small)
-        font.getData().setScale(0.85f * FONT_SCALE);
-        font.setColor(TEXT_DIM);
-        font.draw(spriteBatch, categoryBadge(itemType), NAME_X, nameY - ItemConstants.INV_ITEM_WIN_HEADER_NAME_GAP);
-        font.getData().setScale(1f);
+        // Category badge — a caption under the rule
+        font.getData().setScale(SCALE_CAPTION);
+        setSecondary();
+        font.draw(spriteBatch, categoryBadge(itemType), NAME_X,
+                  TITLE_TOP_Y - ItemConstants.INV_ITEM_WIN_HEADER_NAME_GAP);
 
-        // Exit button "X" — scaled to match the rest of the window (was drawn at base 1f, too small)
-        font.getData().setScale(FONT_SCALE);
-        font.setColor(EXIT_BTN_TEXT);
+        // Exit button "X"
+        font.getData().setScale(SCALE_BODY);
+        setPrimary();
         glyphLayout.setText(font, "X");
         font.draw(spriteBatch, "X",
                   EXIT_X + (EXIT_SIZE - glyphLayout.width)  / 2f,
                   EXIT_Y + (EXIT_SIZE + glyphLayout.height) / 2f);
-        font.getData().setScale(1f);
+        font.getData().setScale(SCALE_CAPTION);
     }
 
     // Draws a ground-pickup icon centered and aspect-fit inside the header glyph box.
@@ -635,24 +629,14 @@ final class ItemWindow implements Disposable {
     }
 
     private void renderBodyLeft(ItemType itemType, ItemStack slot, boolean isEquipped) {
-        // Description text (small, off-white, word-wrapped)
-        font.getData().setScale(0.85f * FONT_SCALE);
-        font.setColor(OFF_WHITE);
-        font.draw(spriteBatch, itemType.getDescription(), BODY_L_X, DESC_Y, BODY_L_W, Align.left, true);
-        font.getData().setScale(1f);
+        drawDescription(itemType);
 
-        // Stat block
-        font.getData().setScale(0.80f * FONT_SCALE);
+        // Stat block (dense label / value rows: TYPE_CAPTION)
+        font.getData().setScale(SCALE_CAPTION);
         renderStatRows(itemType, slot);
-        font.getData().setScale(1f);
 
         // Equipped notice (weapons only)
-        if (isEquipped) {
-            font.getData().setScale(0.85f * FONT_SCALE);
-            font.setColor(GREEN_EQUIPPED);
-            font.draw(spriteBatch, "● CURRENTLY EQUIPPED", BODY_L_X, BODY_Y + 18f);
-            font.getData().setScale(1f);
-        }
+        if (isEquipped) drawInUseNotice("● CURRENTLY EQUIPPED");
     }
 
     private void renderStatRows(ItemType itemType, ItemStack slot) {
@@ -695,11 +679,12 @@ final class ItemWindow implements Disposable {
     }
 
     private float drawStatRow(float rowY, CharSequence label, CharSequence value) {
-        font.setColor(TEXT_DIM);
-        font.draw(spriteBatch, label, BODY_L_X + 4f, rowY);
-        font.setColor(AMBER);
+        float inset = ItemConstants.INV_ITEM_WIN_STAT_TEXT_INSET;
+        setSecondary();
+        font.draw(spriteBatch, label, BODY_L_X + inset, rowY);
+        setPrimary();
         glyphLayout.setText(font, value);
-        font.draw(spriteBatch, value, BODY_L_X + BODY_L_W - glyphLayout.width - 4f, rowY);
+        font.draw(spriteBatch, value, BODY_L_X + BODY_L_W - glyphLayout.width - inset, rowY);
         return rowY - STAT_ROW_H;
     }
 
@@ -707,17 +692,17 @@ final class ItemWindow implements Disposable {
         float headerY = DESC_Y;
         ItemCategory category = itemType.getCategory();
 
-        font.getData().setScale(0.85f * FONT_SCALE);
-        font.setColor(AMBER);
+        // Section label (R6: TYPE_LABEL, secondary)
+        font.getData().setScale(SCALE_SECTION);
+        setSecondary();
         font.draw(spriteBatch, rightColumnTitle(category), BODY_R_X, headerY);
-        font.getData().setScale(1f);
 
         float contentY = headerY - ABILITY_HDR_H;
-        font.getData().setScale(0.80f * FONT_SCALE);
+        font.getData().setScale(SCALE_BODY);
 
         if (category == ItemCategory.WEAPON) {
             if (cachedAbilities.length == 0) {
-                font.setColor(TEXT_DIM);
+                setSecondary();
                 font.draw(spriteBatch, "No special abilities.", BODY_R_X, contentY);
             } else {
                 float abilityRowTop = contentY;
@@ -725,116 +710,114 @@ final class ItemWindow implements Disposable {
                     AbilityInstance instance = cachedAbilities[abilityIndex];
                     float rowBottom = abilityRowTop - ABILITY_ROW_H;
 
-                    // Hud glyph (amber, scaled up, left of row)
-                    font.getData().setScale(1.4f * FONT_SCALE);
-                    font.setColor(AMBER);
+                    // The ability's HUD glyph (an icon) in the suit's amber, left of the row
+                    font.getData().setScale(SCALE_SECTION);
+                    setAmber();
                     valueBuilder.setLength(0);
                     valueBuilder.append(instance.ability.hudGlyph);
                     font.draw(spriteBatch, valueBuilder,
-                              BODY_R_X + 4f,
-                              rowBottom + ABILITY_ROW_H - 10f);
-                    font.getData().setScale(1.0f * FONT_SCALE);
+                              BODY_R_X + ItemConstants.INV_ITEM_WIN_STAT_TEXT_INSET,
+                              rowBottom + ABILITY_ROW_H - ItemConstants.INV_ITEM_WIN_ABILITY_NAME_DROP);
 
-                    // Ability display name (amber, normal scale)
-                    float nameTextX = BODY_R_X + 28f;
-                    font.setColor(AMBER);
+                    // Ability display name (primary)
+                    font.getData().setScale(SCALE_BODY);
+                    float nameTextX = BODY_R_X + ItemConstants.INV_ITEM_WIN_ABILITY_TEXT_X;
+                    setPrimary();
                     font.draw(spriteBatch, instance.ability.displayName,
                               nameTextX,
-                              rowBottom + ABILITY_ROW_H - 10f);
+                              rowBottom + ABILITY_ROW_H - ItemConstants.INV_ITEM_WIN_ABILITY_NAME_DROP);
 
                     // Short hint — pre-built with exact numbers in open() / openWeapon()
-                    font.getData().setScale(0.75f * FONT_SCALE);
-                    font.setColor(OFF_WHITE);
-                    float hintWidth = BODY_R_W - 28f - BADGE_W - 8f;
+                    font.getData().setScale(SCALE_CAPTION);
+                    setSecondary();
+                    float hintWidth = BODY_R_W - ItemConstants.INV_ITEM_WIN_ABILITY_TEXT_X - BADGE_W
+                            - ItemConstants.INV_ITEM_WIN_BADGE_MARGIN * 2f;
                     font.draw(spriteBatch, cachedShortHints[abilityIndex],
                               nameTextX,
-                              rowBottom + ABILITY_ROW_H - 26f,
+                              rowBottom + ABILITY_ROW_H - ItemConstants.INV_ITEM_WIN_ABILITY_HINT_DROP,
                               hintWidth, Align.left, true);
-                    font.getData().setScale(1f);
 
-                    // Type badge text (PASSIVE / ACTIVE), centered in pill
+                    // Type badge text (PASSIVE secondary / ACTIVE amber), centred in its outline chip
                     boolean isPassive = instance.ability.trigger == WeaponAbility.Trigger.PASSIVE;
-                    font.getData().setScale(0.65f * FONT_SCALE);
-                    font.setColor(isPassive ? BADGE_PASSIVE_FG : BADGE_ACTIVE_FG);
+                    if (isPassive) setSecondary(); else setAmber();
                     String badgeLabel = instance.ability.getTypeLabel();
                     glyphLayout.setText(font, badgeLabel);
-                    float badgeX = BODY_R_X + BODY_R_W - BADGE_W - 4f;
+                    float badgeX = BODY_R_X + BODY_R_W - BADGE_W - ItemConstants.INV_ITEM_WIN_BADGE_MARGIN;
                     float badgeTextY = rowBottom + (ABILITY_ROW_H + glyphLayout.height) / 2f;
                     font.draw(spriteBatch, badgeLabel,
                               badgeX + (BADGE_W - glyphLayout.width) / 2f,
                               badgeTextY);
-                    font.getData().setScale(1f);
 
                     abilityRowTop -= (ABILITY_ROW_H + ABILITY_ROW_GAP);
                 }
             }
 
         } else if (category == ItemCategory.CONSUMABLE) {
-            font.setColor(OFF_WHITE);
+            setPrimary();
             font.draw(spriteBatch, consumableGuidance(itemType), BODY_R_X, contentY, BODY_R_W, Align.left, true);
-            font.getData().setScale(0.85f * FONT_SCALE);
-            font.setColor(TEXT_DIM);
-            font.draw(spriteBatch, "QUANTITY IN BAG", BODY_R_X, BODY_Y + 70f);
-            font.getData().setScale(1.8f * FONT_SCALE);
-            font.setColor(AMBER);
+            font.getData().setScale(SCALE_CAPTION);
+            setSecondary();
+            font.draw(spriteBatch, "QUANTITY IN BAG", BODY_R_X, BODY_Y + ItemConstants.INV_ITEM_WIN_QUANTITY_LABEL_RISE);
+            font.getData().setScale(SCALE_QUANTITY);
+            setPrimary();
             valueBuilder.setLength(0);
             valueBuilder.append(slot.getQuantity());
             glyphLayout.setText(font, valueBuilder);
             font.draw(spriteBatch, valueBuilder,
                       BODY_R_X + (BODY_R_W - glyphLayout.width) / 2f,
-                      BODY_Y + 50f);
+                      BODY_Y + ItemConstants.INV_ITEM_WIN_QUANTITY_VALUE_RISE);
 
         } else if (category == ItemCategory.AMMO) {
-            font.setColor(OFF_WHITE);
+            setPrimary();
             font.draw(spriteBatch, ammoCompatible(itemType), BODY_R_X, contentY, BODY_R_W, Align.left, true);
 
         } else if (category == ItemCategory.KEY_ITEM) {
-            font.setColor(OFF_WHITE);
+            setPrimary();
             font.draw(spriteBatch, "Opens doors marked with this keycard color.",
                       BODY_R_X, contentY, BODY_R_W, Align.left, true);
-            font.setColor(TEXT_DIM);
+            font.getData().setScale(SCALE_CAPTION);
+            setSecondary();
             font.draw(spriteBatch, "Persistent: keycards stay through level transitions.",
-                      BODY_R_X, contentY - 32f, BODY_R_W, Align.left, true);
+                      BODY_R_X, contentY - ItemConstants.INV_ITEM_WIN_KEY_NOTE_DROP, BODY_R_W, Align.left, true);
 
         } else {
-            font.setColor(OFF_WHITE);
+            setPrimary();
             font.draw(spriteBatch, "UAC standard currency. Accepted at facility terminals.",
                       BODY_R_X, contentY, BODY_R_W, Align.left, true);
         }
 
-        font.getData().setScale(1f);
+        font.getData().setScale(SCALE_CAPTION);
     }
 
     private void renderFooterButtons(ItemType itemType, boolean isEquipped) {
-        // Footer labels are scaled to match the window (previously drawn at base 1f, too small).
-        font.getData().setScale(FONT_SCALE);
+        font.getData().setScale(SCALE_BODY);
         boolean btn1On = isButton1Enabled();
         String  btn1Label = itemType != null ? button1Label(itemType.getCategory(), isEquipped) : "—";
 
-        font.setColor(btn1On ? AMBER : TEXT_DISABLED);
+        if (btn1On) setPrimary(); else setDisabled();
         glyphLayout.setText(font, btn1Label);
         font.draw(spriteBatch, btn1Label,
                   BTN1_X + (BTN_W - glyphLayout.width)  / 2f,
                   BTN_Y  + (BTN_H + glyphLayout.height) / 2f);
 
         boolean btn2On = isButton2Enabled();
-        font.setColor(btn2On ? AMBER : TEXT_DISABLED);
+        if (btn2On) setPrimary(); else setDisabled();
         glyphLayout.setText(font, "DROP");
         font.draw(spriteBatch, "DROP",
                   BTN2_X + (BTN_W - glyphLayout.width)  / 2f,
                   BTN_Y  + (BTN_H + glyphLayout.height) / 2f);
-        font.getData().setScale(1f);
+        font.getData().setScale(SCALE_CAPTION);
     }
 
     private void renderFlashMessage() {
         if (flashTimerSeconds <= 0f || flashMessage == null) return;
-        font.getData().setScale(FONT_SCALE);
-        font.setColor(RED_FLASH);
+        font.getData().setScale(SCALE_BODY);
+        font.setColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE, 1f);
         glyphLayout.setText(font, flashMessage);
         font.draw(spriteBatch, flashMessage,
                   WINDOW_X + (WINDOW_W - glyphLayout.width) / 2f,
-                  BTN_Y + BTN_H + 12f);
-        font.getData().setScale(1f);
+                  BTN_Y + BTN_H + ItemConstants.INV_ITEM_WIN_FLASH_RISE);
+        font.getData().setScale(SCALE_CAPTION);
     }
 
     // =========================================================================
@@ -1052,17 +1035,6 @@ final class ItemWindow implements Disposable {
             case AMMO:       return 3;
             case KEY_ITEM:   return 3;
             default:         return itemType == ItemType.CREDITS ? 2 : 1;
-        }
-    }
-
-    private static Color categoryColor(ItemCategory category) {
-        switch (category) {
-            case WEAPON:     return CAT_WEAPON;
-            case CONSUMABLE: return CAT_CONSUMABLE;
-            case AMMO:       return CAT_AMMO;
-            case KEY_ITEM:   return CAT_KEY_ITEM;
-            case MOD:        return CAT_MOD;
-            default:         return CAT_MISC;
         }
     }
 }

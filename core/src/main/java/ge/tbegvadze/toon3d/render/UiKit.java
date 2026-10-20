@@ -217,7 +217,12 @@ public final class UiKit {
      */
     public static void screenHeaderTitle(Batch batch, BitmapFont heavyFont, CharSequence title, float x, float topY) {
         if (title == null || title.length() == 0) return;
-        float previousScaleX = heavyFont.getData().scaleX, previousScaleY = heavyFont.getData().scaleY;
+        // getData().scaleX includes GameFonts' base scale, and setScale multiplies it in again: read the
+        // logical scale back as raw / raw-at-1 so the restore below does not compound.
+        float previousRawX = heavyFont.getData().scaleX, previousRawY = heavyFont.getData().scaleY;
+        heavyFont.getData().setScale(1f);
+        float previousScaleX = previousRawX / heavyFont.getData().scaleX;
+        float previousScaleY = previousRawY / heavyFont.getData().scaleY;
         Color fontColor = heavyFont.getColor();
         float previousRed = fontColor.r, previousGreen = fontColor.g;
         float previousBlue = fontColor.b, previousAlpha = fontColor.a;
