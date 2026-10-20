@@ -52,7 +52,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A1/A2/A3 hold on run; build green.
 - [x] **CP5** — CodexOverlayRenderer restyled (R9, R7). DONE WHEN: A5 holds on run; build green.
 - [x] **CP6** — A4/A6/A7 sweep, docs. DONE WHEN: build + test at baseline; ready for reviewer.
-- [ ] **CP7** — reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP7** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -172,3 +172,5 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   NB3 captured after the fixes: /tmp/claude-0/shots/fix (keystone offer with BODY cost lines clear of TAP TO
   CHOOSE, ability window over item window with no dim, inventory counter, level-up and relic frames). Nits 2
   (pip/rank touch) and 3 (NEW marker size = spec) left as is.
+- **CP7:** reviewer r2 = PASS, no findings (B1, NB1-NB4 and nit 1 confirmed fixed at 2a221ad). STATUS: IMPLEMENTED
+  2026-10-20.
