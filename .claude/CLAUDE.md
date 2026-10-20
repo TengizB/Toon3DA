@@ -754,7 +754,7 @@ No abbreviations, single letters, or opaque shorthand in any Java identifier.
 Render order each frame (World.render):
 ```
 1. FloorCeilingRenderer.render()  — GPU floor & ceiling (perspective tile quads + far span band), full 1280×720
-2. WallRenderer.render()          — 3D perspective wall projection on top of backdrop
+2. WallRenderer.render()          — 3D perspective wall projection on top of the floor/ceiling
 3. PropRenderer.render()          — billboard prop sprites (barrels, crates, etc.)
 4. EnemyRenderer.render()         — enemy billboard sprites (drawn over props)
    (enemy attack effects + impact world effects)

@@ -52,8 +52,12 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
 
     /** Floats per SpriteBatch quad: 4 vertices x (x, y, packed colour, u, v). */
     private static final int QUAD_FLOATS = 20;
-    /** Packed transparent black: an additive corner with no excess (adds nothing). */
-    private static final float NO_EXCESS_COLOUR = Color.toFloatBits(0f, 0f, 0f, 0f);
+    /**
+     * Packed OPAQUE black: an additive corner with no excess. Under (SRC_ALPHA, ONE) it adds nothing, and its alpha of
+     * 1 keeps a quad whose other corners do carry excess interpolating LINEARLY (alpha 0 here would scale the added
+     * light by the interpolated alpha too and fade the splash edge quadratically).
+     */
+    private static final float NO_EXCESS_COLOUR = Color.toFloatBits(0f, 0f, 0f, 1f);
     /** The base pass is "layer" -1; additive layers are 0, 1, ... */
     private static final int BASE_LAYER = -1;
     /** Nearest visible floor depth: the bottom screen row (pixelOffset = H/2 -> d = 2 * FLOOR_CAMERA_Z). */
@@ -321,11 +325,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
         float leftRayY  = directionY + framePlaneY;
         float rightRayX = directionX - framePlaneX;
         float rightRayY = directionY - framePlaneY;
-        float far = FLOOR_MAX_VISIBLE_DISTANCE_CELLS;
-        float minimumX = Math.min(framePlayerTileX, Math.min(framePlayerTileX + far * leftRayX, framePlayerTileX + far * rightRayX));
-        float maximumX = Math.max(framePlayerTileX, Math.max(framePlayerTileX + far * leftRayX, framePlayerTileX + far * rightRayX));
-        float minimumY = Math.min(framePlayerTileY, Math.min(framePlayerTileY + far * leftRayY, framePlayerTileY + far * rightRayY));
-        float maximumY = Math.max(framePlayerTileY, Math.max(framePlayerTileY + far * leftRayY, framePlayerTileY + far * rightRayY));
+        float clampDepthTiles = FLOOR_MAX_VISIBLE_DISTANCE_CELLS;
+        float minimumX = Math.min(framePlayerTileX, Math.min(framePlayerTileX + clampDepthTiles * leftRayX, framePlayerTileX + clampDepthTiles * rightRayX));
+        float maximumX = Math.max(framePlayerTileX, Math.max(framePlayerTileX + clampDepthTiles * leftRayX, framePlayerTileX + clampDepthTiles * rightRayX));
+        float minimumY = Math.min(framePlayerTileY, Math.min(framePlayerTileY + clampDepthTiles * leftRayY, framePlayerTileY + clampDepthTiles * rightRayY));
+        float maximumY = Math.max(framePlayerTileY, Math.max(framePlayerTileY + clampDepthTiles * leftRayY, framePlayerTileY + clampDepthTiles * rightRayY));
         latticeOriginColumn = MathUtils.floor(minimumX) - 1;
         latticeOriginRow    = MathUtils.floor(minimumY) - 1;
         tileColumnCount = Math.min(FLOOR_TILE_LATTICE_MAX_EXTENT, MathUtils.floor(maximumX) + 2 - latticeOriginColumn);
@@ -345,7 +349,10 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                 latticeDepth[index] = depth;
                 latticeInsideLeft[index]  = (leftRayX * offsetY - leftRayY * offsetX) * insideLeftSign >= 0f;
                 latticeInsideRight[index] = (rightRayX * offsetY - rightRayY * offsetX) * insideRightSign >= 0f;
-                float colourDepth = MathUtils.clamp(depth, NEAREST_VISIBLE_DEPTH, far);
+                // The TRUE corner depth (only clamped at 0 and the clamp depth): a corner in front of the nearest
+                // visible row must carry its own value, or interpolating toward it undershoots the near rows -
+                // exactly where the muzzle splash is brightest.
+                float colourDepth = MathUtils.clamp(depth, 0f, clampDepthTiles);
                 latticeShade[index] = GameMath.floorShade(colourDepth, FLOOR_SHADING_FALLOFF);
                 AtmosphereGrade.evaluateInto(mood, colourDepth, ArtDirection.GRADE_STRENGTH_ENVIRONMENT,
                                              latticeTint, index * 3);
@@ -369,11 +376,11 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
                         && !latticeInsideLeft[cornerUp] && !latticeInsideLeft[cornerUpRight];
                 boolean outsideRight = !latticeInsideRight[corner] && !latticeInsideRight[cornerRight]
                         && !latticeInsideRight[cornerUp] && !latticeInsideRight[cornerUpRight];
-                if (farthestDepth < NEAREST_VISIBLE_DEPTH || nearestDepth > far || outsideLeft || outsideRight) {
+                if (farthestDepth < NEAREST_VISIBLE_DEPTH || nearestDepth > clampDepthTiles || outsideLeft || outsideRight) {
                     tileMipLevel[tileIndex] = -1;
                     continue;
                 }
-                float centreDepth = MathUtils.clamp((nearestDepth + farthestDepth) / 2f, NEAREST_VISIBLE_DEPTH, far);
+                float centreDepth = MathUtils.clamp((nearestDepth + farthestDepth) / 2f, NEAREST_VISIBLE_DEPTH, clampDepthTiles);
                 int row = MathUtils.clamp(GameMath.floorRowAtDepth(centreDepth, WORLD_HEIGHT, FLOOR_CAMERA_Z,
                         rowHeightWorldUnits), 0, floorRowCount - 1);
                 tileMipLevel[tileIndex]   = rowMipLevelTable[row];
@@ -424,7 +431,7 @@ public class FloorCeilingRenderer implements Renderable, Disposable {
     /*
      * R5/R7 at one tile corner: the CPU caster's texel factor (shade x brightness, tint, alert, muzzle light),
      * divided by the surface's bake scale. Base layer: clamped to 1. Additive layer: that layer's excess, or
-     * NO_EXCESS_COLOUR (transparent black, adds nothing) when there is none.
+     * NO_EXCESS_COLOUR (opaque black, adds nothing) when there is none.
      */
     private float cornerColour(int latticeIndex, float brightness, float redBoost, float[] bakeScales, int layer) {
         float adjustedShade = GameMath.floorSpanAdjustedShade(latticeShade[latticeIndex], brightness, MAX_LIGHTING_SHADE);

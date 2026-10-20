@@ -74,7 +74,9 @@ are already drawn at the device's native pixels.
 WallRenderer is the SINGLE authority: setRenderResolution(RenderResolution),
 getProjectionColumnCount(), getColumnWidth(). World.applyStoryAccessibilitySettings() pushes the
 setting into it and into FloorCeilingRenderer.setRenderResolution() at startup, on every knob
-tap and after every floor rebuild (rebuildForLevel builds fresh default-HD renderers).
+tap and after every floor rebuild (rebuildForLevel builds fresh renderers: WallRenderer and the
+billboard renderers start at HD, FloorCeilingRenderer at RenderResolution.DEFAULT; the push then sets
+the player's tier, a no-op where it already matches).
 Arrays and SpriteBatches are sized for RenderConstants.RENDER_RESOLUTION_MAX_COLUMNS, so a
 change never allocates on the render path; FloorCeilingRenderer only rebuilds its row tables
 (no GPU resource depends on the tier), and only when the tier actually changes.

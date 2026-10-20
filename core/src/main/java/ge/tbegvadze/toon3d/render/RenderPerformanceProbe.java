@@ -61,8 +61,8 @@ public final class RenderPerformanceProbe implements Disposable {
     private SpriteBatch batch;
     private BitmapFont  font;
     private Texture     plateTexture;
-    private final StringBuilder readoutBuilder = new StringBuilder(160);
-    private final StringBuilder logBuilder     = new StringBuilder(640);
+    private final StringBuilder readoutBuilder = new StringBuilder(RenderConstants.PERF_PROBE_READOUT_CAPACITY);
+    private final StringBuilder logBuilder     = new StringBuilder(RenderConstants.PERF_PROBE_LOG_CAPACITY);
 
     private long frameStartNanos;
     private final long[] passStartNanos     = new long[PASSES.length];
@@ -96,7 +96,7 @@ public final class RenderPerformanceProbe implements Disposable {
 
         profiler = new GLProfiler(Gdx.graphics);
         profiler.enable();
-        batch = new SpriteBatch(8);
+        batch = new SpriteBatch(RenderConstants.PERF_PROBE_BATCH_SIZE);
         font  = GameFonts.newFont(FontFace.REGULAR);
         font.getData().setScale(RenderConstants.PERF_PROBE_TEXT_SCALE);
         Pixmap pixel = new Pixmap(1, 1, Pixmap.Format.RGBA8888);

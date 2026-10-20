@@ -661,6 +661,10 @@ public final class RenderConstants {
     public static final float   PERF_PROBE_LOG_INTERVAL_SECONDS  = 5f;
     /** How often the on-screen readout text is rebuilt (a steadier read than every frame). */
     public static final float   PERF_PROBE_READOUT_REFRESH_SECONDS = 0.25f;
+    /** Probe readout batch (plate + glyphs) and the reused text builders' initial capacities. */
+    public static final int     PERF_PROBE_BATCH_SIZE            = 64;
+    public static final int     PERF_PROBE_READOUT_CAPACITY      = 160;
+    public static final int     PERF_PROBE_LOG_CAPACITY          = 640;
     public static final String  PERF_PROBE_LOG_TAG               = "perf";
     /** Readout plate, top centre: clear of the mini-map (top-left), the HUD panels and every touch button. */
     public static final float   PERF_PROBE_PLATE_WIDTH           = 420f;

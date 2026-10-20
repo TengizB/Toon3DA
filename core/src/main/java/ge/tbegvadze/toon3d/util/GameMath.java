@@ -8013,7 +8013,7 @@ public final class GameMath {
      * Derivation: inverse of the row mapping the floor tables use. A floor point at depth d is drawn at
      *     y = H/2 - H*cameraZ/d   (floorPixelOffsetBelowHorizon + floorRowDistance solved for y)
      *   and row r covers [r*rowHeight, (r+1)*rowHeight), so its row is floor(y / rowHeight). Used to look up the
-     *   per-row material level for a tile from its nearest visible depth.
+     *   per-row material level for a tile from its centre depth (clamped to the visible range by the caller).
      * Edge cases: d <= 0 is not a visible floor point; the caller clamps d to the nearest visible depth
      *   (H*cameraZ/(H/2) = 1 tile at the screen bottom) first. The result is clamped by the caller to the table.
      */

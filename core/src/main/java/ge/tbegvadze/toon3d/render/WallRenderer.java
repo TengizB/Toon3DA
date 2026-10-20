@@ -292,10 +292,20 @@ public class WallRenderer implements Renderable, Disposable {
     private static boolean isFullyOpaque(Pixmap pixmap) {
         Pixmap.Format format = pixmap.getFormat();
         if (format == Pixmap.Format.RGB888 || format == Pixmap.Format.RGB565) return true;
-        for (int row = 0; row < pixmap.getHeight(); row++) {
-            for (int column = 0; column < pixmap.getWidth(); column++) {
-                if ((pixmap.getPixel(column, row) & 0xFF) != 0xFF) return false;
+        if (format != Pixmap.Format.RGBA8888) {
+            for (int row = 0; row < pixmap.getHeight(); row++) {
+                for (int column = 0; column < pixmap.getWidth(); column++) {
+                    if ((pixmap.getPixel(column, row) & 0xFF) != 0xFF) return false;
+                }
             }
+            return true;
+        }
+        // RGBA8888: scan the alpha bytes directly (one pass over the buffer, no per-texel JNI call).
+        java.nio.ByteBuffer pixels = pixmap.getPixels().duplicate();
+        pixels.position(0);
+        int byteCount = pixmap.getWidth() * pixmap.getHeight() * 4;
+        for (int alphaIndex = 3; alphaIndex < byteCount; alphaIndex += 4) {
+            if (pixels.get(alphaIndex) != (byte) 0xFF) return false;
         }
         return true;
     }

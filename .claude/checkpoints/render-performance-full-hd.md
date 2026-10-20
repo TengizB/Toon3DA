@@ -69,6 +69,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP7** — AFTER numbers + docs.
       DONE WHEN: AFTER columns filled for every pose; A1 holds (or the R21 stop report written + owner told); docs
       per plan step 8 updated; build + test show no new failure.
+- [x] **CP8a** — reviewer r1 PASS WITH FIXES; fixes applied, A9/A10 re-verified (`/tmp/claude-0/recheck/`), build = baseline (480 tests, 1 pre-existing StoryBarkTest failure).
 - [ ] **CP8** — gate.
       DONE WHEN: reviewer PASS (or PASS WITH FIXES, fixes committed); IMPLEMENTATION NOTE with final table under
       the idea header; STATUS: IMPLEMENTED with the date.
@@ -225,7 +226,7 @@ column c's occluder records, record(c) writes only column c, and quads of other 
 PropRenderer's keycard/credit aura loops were already one texture inside one blend switch (no interleave) — unchanged.
 - A6 NOT STAGEABLE: no pose puts an enemy or the shop cabinet behind a nearer occluder on floor 1 (P6 as in CP2).
   Probe (cpu): props draw calls 19 / 4.66 in P1/P2 vs B0 19 / 5.09 (the 19 are per-prop texture switches).
-- A8 PASS: GC events per whole run 2 (AFTER, every run) = B0 2; code read: no allocation in render() of
+- A8 PASS: GC events per whole run 2 (AFTER, every run) = B0 2 — both during startup (<1 s), none in play (the CP2/CP7 "4, 4" double-counted: each -Xlog:gc line contains "Pause" twice); code read: no allocation in render() of
   FloorCeilingRenderer, WallRenderer, Enemy/Prop/ShopMachine renderers, SpriteOccluderBuffer (the probe allocates
   one log String every 5 s only when enabled). R20: no render-path allocation was found by measurement in CP2.
 - A13 at CP6: by construction (above); a same-run toggle was not built for these loops (it would need a parallel
@@ -269,3 +270,12 @@ instead of a full-screen quad — art-adjacent, out of scope).
 Docs: `@@COST@@` replaced with these numbers in art-direction.txt. Gates: mirror `:core:build` = 480 tests, 1 failure
 (`narrative.StoryBarkTest`, bark.depth.core.2 — the pre-existing baseline failure, unchanged); `:lwjgl3:compileJava`
 green. No new test (not balance). NEXT: CP8 reviewer.
+
+**CP8 (in progress) — reviewer r1: PASS WITH FIXES.** Fixed: (B2) `NO_EXCESS_COLOUR` alpha 0 -> 1 (linear additive
+falloff); the measured splash shortfall was actually the corner COLOUR DEPTH being clamped to the nearest visible row
+(1 tile) — corners now carry their true depth (clamped at 0 and the clamp) → ceiling splash gain (10.8, 11.1, 8.7) vs
+B0 (10.8, 10.1, 9.0), floor (5.8, 6.2, 4.8) vs (5.8, 5.3, 4.3). (B3) art-direction muzzle-light threading line and
+wall-renderer-guide "default-HD renderers" reworded. (NB1) AS6 change in the IMPLEMENTATION NOTE. (NB2) floorRowAtDepth
+comment. (NB3) isFullyOpaque scans RGBA8888 alpha bytes directly. (NB4) GC wording reconciled. Nits: probe batch /
+builder capacities named, `far` -> `clampDepthTiles`, CLAUDE.md render-order step 2. A9/A10 re-check after the
+depth change: `/tmp/claude-0/recheck/`. (B1) OPEN: owner decision on A1 / R21 → DECISIONS, then STATUS: IMPLEMENTED.
