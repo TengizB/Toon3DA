@@ -28,6 +28,13 @@ public enum RenderResolution {
     HD(RenderConstants.RENDER_RESOLUTION_HD_COLUMNS, "story.codex.setting.resolution.0"),
     FULL_HD(RenderConstants.RENDER_RESOLUTION_FULL_HD_COLUMNS, "story.codex.setting.resolution.1");
 
+    /**
+     * The tier a save gets until the player picks one (owner decision, 2026-10-20): FULL HD, so the floor and
+     * ceiling backdrop and every billboard are drawn at the finer grid out of the box. Also the fallback for a
+     * persisted ordinal that no longer exists.
+     */
+    public static final RenderResolution DEFAULT = FULL_HD;
+
     private final int    projectionColumnCount;
     private final String labelStringId;
 
@@ -94,7 +101,7 @@ public enum RenderResolution {
     public static RenderResolution fromOrdinal(int ordinal) {
         RenderResolution[] values = values();
         if (ordinal < 0 || ordinal >= values.length) {
-            return HD;
+            return DEFAULT;
         }
         return values[ordinal];
     }
