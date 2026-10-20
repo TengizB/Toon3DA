@@ -53,7 +53,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A1 and A2 hold on run; build green.
 - [x] **CP3** — BootCardRenderer, InstanceReportRenderer, FadeOverlayRenderer restyled (R5, R7, R11).
       DONE WHEN: A3 and A7 hold on run; build green.
-- [ ] **CP4** — FramingScreenRenderer: title, pause, settings, confirmation, terminal RETURN, death stroke (R6).
+- [x] **CP4** — FramingScreenRenderer: title, pause, settings, confirmation, terminal RETURN, death stroke (R6).
       DONE WHEN: A4 holds on run; build green.
 - [ ] **CP5** — RouteMapOverlayRenderer frame/header/text/confirm bar (R8).
       DONE WHEN: A5 holds incl. the same-seed glyph comparison; build green.
@@ -116,3 +116,25 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   pass false - the old banner sat on top of THIS BODY DIED in every death (before shots), against A4 and World's own
   "nothing else is drawn" comment (World.java: 2 call sites, paint only). Seen: first-print card, reprint card
   with REPORT, report page, fade readout, stroke alone. Taps: CONTINUE, REPORT (opened), BACK (closed).
+- **CP4:** FramingScreenRenderer (R6), ink per screen: TITLE = FACILITY - rows are "FACILITY plates" (UiKit.card inked
+  FACILITY_CYAN_DIM IDLE, FACILITY_CYAN when PRESSED/SELECTED, DISABLED card for an unavailable row), row 0
+  (BEGIN / CONTINUE DESCENT) SELECTED; title HEAVY TYPE_DISPLAY (3.2 -> 3.5) + a FACILITY_CYAN-ticked
+  screenHeaderRule as wide as the title (measured once in setStrings) at titleRuleY(); status lines / tagline
+  TYPE_BODY. PAUSE / SETTINGS = SUIT - R1 header (screenHeaderTitle in the HEAVY font, left-aligned on the row
+  column at STORY_FRAME_HEADER_TOP_Y, amber-ticked rule the column's width), SUIT plates (IDLE / PRESSED / DISABLED),
+  SUIT_AMBER_DIM brackets round header + rows (UI_SCREEN_FRAME_MARGIN; no outer panel - the order-5 rule), values in
+  SUIT_AMBER. NEW renderMenu(..., overLaunchScreen): the settings screen opened from the title draws the launch
+  blackout (0.94) instead of the 0.75 scrim, or the title showed through (World.java: 1 call site). CONFIRMATION:
+  kit panel + brackets + SELECTED PROCEED in the opener's ink (title -> FACILITY_CYAN, pause -> SUIT_AMBER), CANCEL
+  IDLE in that ink's plate style; prose STORY_FRAME_CONFIRM_TEXT_SIZE = TYPE_BODY (new constant). RETURN = DISABLED
+  FACILITY plate, label UI_TEXT_SECONDARY. DEATH STROKE: HEAVY TYPE_DISPLAY (2.6 -> 3.5), unshadowed. No text on
+  these screens is shadowed any more. Constants: STORY_FRAME_MENU_TEXT_SIZE TYPE_LABEL (1.3), VALUE TYPE_BODY (1.1),
+  FILL_ALPHA = UI_PANEL_ALPHA_SCREEN; removed STORY_FRAME_MENU_CORNER/BORDER/PRESSED_ALPHA/DISABLED_ALPHA,
+  STORY_FRAME_RETURN_FILL_ALPHA, STORY_FRAME_HEADER_TEXT_SIZE, STORY_TEXT_SHADOW_OFFSET/ALPHA,
+  STORY_PANEL_BORDER_ALPHA (no readers). Seen: title reveal, title (fresh + printed), NEW OPERATOR confirmation,
+  title settings (TEXT cycled NORMAL->LARGE->LARGEST->NORMAL), pause, pause settings, ABANDON confirmation, terminal
+  ENDING_FREE card + RETURN, death stroke. Taps: BEGIN DESCENT, NEW OPERATOR, CANCEL (both confirmations), SETTINGS
+  (title and pause), TEXT x3, BACK (both), PAUSE, ABANDON RUN, RESUME, RETURN (went to the title). NOT tapped:
+  PROCEED (destructive; its rect is the unchanged static isInsideConfirmYes), ARCHIVE, QUIT, CONTINUE DESCENT.
+  PRE-EXISTING (follow-up): the title's settings header sits over the launch status lines' rows (now hidden by the
+  blackout).

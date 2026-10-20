@@ -2845,7 +2845,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             framingScreenRenderer.renderTitle(camera);
             if (runPhase == RunPhase.SETTINGS_MENU) {
                 framingScreenRenderer.renderMenu(camera, StoryUiConstants.STORY_SETTINGS_TITLE_ID,
-                                                 settingsMenu);
+                                                 settingsMenu, true);
             }
             if (runPhase == RunPhase.CODEX_OPEN) codexOverlayRenderer.render(camera);
             renderPerformanceProbe.end(RenderPerformanceProbe.Pass.OVERLAYS);

@@ -53,9 +53,8 @@ public final class StoryUiConstants {
     // visual-identity-order-6: the palette's primary text (UI_TEXT_PRIMARY), on every story panel.
     public static final float STORY_BODY_R = ArtDirection.UI_TEXT_PRIMARY_RED, STORY_BODY_G = ArtDirection.UI_TEXT_PRIMARY_GREEN,
                               STORY_BODY_B = ArtDirection.UI_TEXT_PRIMARY_BLUE;
-    // Drop-shadow behind body/name glyphs for extra contrast over any backdrop.
-    public static final float STORY_TEXT_SHADOW_OFFSET = 1.5f;
-    public static final float STORY_TEXT_SHADOW_ALPHA  = 0.75f;
+    // Story text over the 3D view is drawn through UiKit.text (the kit's ink-black drop shadow); framing
+    // screens on black or a scrim draw it unshadowed (visual-identity-order-6).
 
     // =====================================================================
     // PANEL STYLING (reused by every story panel — bark, exchange, boot card, codex)
@@ -68,9 +67,8 @@ public final class StoryUiConstants {
                               STORY_PANEL_BG_B = ArtDirection.UI_PANEL_BLUE;
     // Inner padding from panel edge to content (text / chip).
     public static final float STORY_PANEL_PADDING       = 18f;
-    // Thin accent-tinted border drawn around the panel (uses the speaker accent colour).
+    // Border thickness of the codex's frame (the story panels themselves use ArtDirection.UI_BORDER_THICKNESS).
     public static final float STORY_PANEL_BORDER_THICKNESS = 2f;
-    public static final float STORY_PANEL_BORDER_ALPHA     = 0.55f;
 
     // =====================================================================
     // SPEAKER CHIP GEOMETRY (colored accent bar + tiny icon + name)
@@ -727,20 +725,22 @@ public final class StoryUiConstants {
     /** Vertical pitch from one row's top edge to the next — the geometry hit-testing inverts. */
     public static final float STORY_FRAME_MENU_ROW_PITCH  =
             STORY_FRAME_MENU_ROW_HEIGHT + STORY_FRAME_MENU_ROW_GAP;
-    public static final float STORY_FRAME_MENU_CORNER     = 12f;
-    public static final float STORY_FRAME_MENU_BORDER     = 2f;
-    public static final float STORY_FRAME_MENU_FILL_ALPHA         = 0.20f;
-    public static final float STORY_FRAME_MENU_PRESSED_ALPHA      = 0.55f;
-    /** A row that is offered but not available (nothing to continue yet) reads as dimmed, not absent. */
-    public static final float STORY_FRAME_MENU_DISABLED_ALPHA     = 0.35f;
-    public static final float STORY_FRAME_MENU_TEXT_SIZE          = 1.3f;
-    /** A settings row shows its current value on the right, a shade smaller than its name. */
-    public static final float STORY_FRAME_MENU_VALUE_TEXT_SIZE    = 1.1f;
+    /**
+     * visual-identity-order-6 R6: every menu row is a UiKit plate (a FACILITY card on the launch screen, a SUIT
+     * plate on pause / settings) at the screen panel alpha; a row that is offered but not available reads as a
+     * DISABLED plate with secondary text — dimmed, not absent.
+     */
+    public static final float STORY_FRAME_MENU_FILL_ALPHA         = ArtDirection.UI_PANEL_ALPHA_SCREEN;
+    public static final float STORY_FRAME_MENU_TEXT_SIZE          = ArtDirection.TYPE_LABEL;
+    /** A settings row shows its current value on the right, a step smaller than its name. */
+    public static final float STORY_FRAME_MENU_VALUE_TEXT_SIZE    = ArtDirection.TYPE_BODY;
     /** Top edge of the first row on the pause / settings screens (the title screen sits lower). */
     public static final float STORY_FRAME_MENU_TOP_Y   = 560f;
-    /** The screen's own heading ("SUIT PAUSED", "SETTINGS"), centred above the rows. */
+    /**
+     * The screen's own heading ("SUIT PAUSED", "SETTINGS") above the rows: an R1 screen header
+     * (UiKit.screenHeaderTitle, HEAVY TYPE_HEADING) left-aligned on the row column (visual-identity-order-6 R6).
+     */
     public static final float STORY_FRAME_HEADER_TOP_Y   = 624f;
-    public static final float STORY_FRAME_HEADER_TEXT_SIZE = 1.7f;
 
     // --- LAUNCH SEQUENCE (the title screen's top-down stack) ----------------------------------
     // 1. the death notice types out, unhurried;  2. the title resolves quietly beneath it;
@@ -761,7 +761,7 @@ public final class StoryUiConstants {
      * above the title rather than leaving a hole under a short one.
      */
     public static final float STORY_TITLE_STATUS_TOP_Y        = 704f;
-    public static final float STORY_TITLE_STATUS_TEXT_SIZE    = 1.35f;
+    public static final float STORY_TITLE_STATUS_TEXT_SIZE    = ArtDirection.TYPE_BODY;
     public static final float STORY_TITLE_STATUS_LINE_PITCH   = 40f;
     /** Seconds between status lines printing.  Slower than the boot card's: nothing is happening yet. */
     public static final float STORY_TITLE_LINE_REVEAL_SECONDS = 0.90f;
@@ -772,9 +772,10 @@ public final class StoryUiConstants {
     /** The whole screen rises out of black this slowly — a low, quiet start, never a splash. */
     public static final float STORY_TITLE_FADE_IN_SECONDS     = 0.80f;
     public static final float STORY_TITLE_GAME_TOP_Y          = 560f;
-    public static final float STORY_TITLE_GAME_TEXT_SIZE      = 3.2f;
+    /** HEAVY at TYPE_DISPLAY (visual-identity-order-6 R6), with a FACILITY_CYAN rule under it. */
+    public static final float STORY_TITLE_GAME_TEXT_SIZE      = ArtDirection.TYPE_DISPLAY;
     public static final float STORY_TITLE_TAGLINE_TOP_Y       = 486f;
-    public static final float STORY_TITLE_TAGLINE_TEXT_SIZE   = 1.1f;
+    public static final float STORY_TITLE_TAGLINE_TEXT_SIZE   = ArtDirection.TYPE_BODY;
     /** Top edge of the title menu's first row: five rows clear the screen's bottom edge. */
     public static final float STORY_TITLE_MENU_TOP_Y          = 424f;
     /** The title itself is dim white, not accented: this screen is cold, not branded. */
@@ -797,6 +798,8 @@ public final class StoryUiConstants {
             STORY_FRAME_CONFIRM_TOP_Y - STORY_FRAME_CONFIRM_HEIGHT;
     /** Max wrapped lines of the question — it must be ONE plain sentence, so three is plenty. */
     public static final int   STORY_FRAME_CONFIRM_MAX_LINES = 3;
+    /** The question's prose (visual-identity-order-6: TYPE_BODY; the plates' labels use the menu's TYPE_LABEL). */
+    public static final float STORY_FRAME_CONFIRM_TEXT_SIZE = ArtDirection.TYPE_BODY;
     public static final float STORY_FRAME_CONFIRM_BUTTON_WIDTH  = 300f;
     public static final float STORY_FRAME_CONFIRM_BUTTON_HEIGHT = 84f;
     public static final float STORY_FRAME_CONFIRM_BUTTON_GAP    = 40f;
@@ -825,7 +828,8 @@ public final class StoryUiConstants {
     public static final float STORY_DEATH_STROKE_FADE_SECONDS = 0.55f;
     /** Centred, high on the screen's middle band — the only thing drawn. */
     public static final float STORY_DEATH_STROKE_TOP_Y        = 404f;
-    public static final float STORY_DEATH_STROKE_TEXT_SIZE    = 2.6f;
+    /** HEAVY at TYPE_DISPLAY (visual-identity-order-6 R6). */
+    public static final float STORY_DEATH_STROKE_TEXT_SIZE    = ArtDirection.TYPE_DISPLAY;
     /** Bone white, slightly cold.  Not red: this game does not shout at a player who just died. */
     public static final float STORY_DEATH_STROKE_R = ArtDirection.UI_TEXT_PRIMARY_RED,
                               STORY_DEATH_STROKE_G = ArtDirection.UI_TEXT_PRIMARY_GREEN,
@@ -836,8 +840,8 @@ public final class StoryUiConstants {
     // --- THE ENDING'S WAY OUT ------------------------------------------------------------------
     // A terminal card (FREE / KILL) draws no CONTINUE — that absence IS the ending (order-3).  What
     // order-8 adds is the way OFF that final screen, once the card has finished printing: a dim
-    // plate in the CONTINUE's place that returns to a title screen the ending has changed.
-    public static final float STORY_FRAME_RETURN_FILL_ALPHA = 0.14f;
+    // plate in the CONTINUE's place that returns to a title screen the ending has changed — a DISABLED-styled
+    // FACILITY plate (visual-identity-order-6 R5), quieter than any CONTINUE.
     /** MERGE presents no card at all; the frozen view holds this long, fading, then stands down. */
     public static final float STORY_ENDING_MERGE_HOLD_SECONDS = 6.0f;
 
