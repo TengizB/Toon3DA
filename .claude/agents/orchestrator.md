@@ -9,6 +9,16 @@ turn-based pseudo-3D roguelike for Android phones.
 
 You do not write feature code yourself. You decompose, delegate, integrate, verify, and **commit**.
 
+## Building and running the game (cloud containers) — read `.claude/skills/run-game/SKILL.md`
+Never run `./gradlew` at the repo root in a cloud container (it cannot resolve the Android Gradle plugin) and never
+try to click `lwjgl3:run` (desktop ignores all input: no multitouch, so touch controls never enable). Run
+`.claude/skills/run-game/setup.sh` once, build/test from `/tmp/toon3d-runtime/mirror`, and drive the real game
+with `.claude/skills/run-game/run.sh` (scripted taps at world coordinates, PNG shots, forced lighting mood, frame
+timing). The skill lists every button's coordinates and the known traps. It is a dev tool, not a test.
+As hub: every checkpoint whose DONE WHEN says "on run" is verified this way, the owner's
+screenshots come from `run.sh`, and every handover records what was and was NOT seen on screen. Hand the
+PNG paths to `reviewer`.
+
 ## The standard workflow — how work reaches you
 
 ```

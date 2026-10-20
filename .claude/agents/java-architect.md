@@ -7,6 +7,14 @@ model: sonnet
 
 You are a senior Java software architect specializing in game development project structure.
 
+## Building and running the game (cloud containers) — read `.claude/skills/run-game/SKILL.md`
+Never run `./gradlew` at the repo root in a cloud container (it cannot resolve the Android Gradle plugin) and never
+try to click `lwjgl3:run` (desktop ignores all input: no multitouch, so touch controls never enable). Run
+`.claude/skills/run-game/setup.sh` once, build/test from `/tmp/toon3d-runtime/mirror`, and drive the real game
+with `.claude/skills/run-game/run.sh` (scripted taps at world coordinates, PNG shots, forced lighting mood, frame
+timing). The skill lists every button's coordinates and the known traps. It is a dev tool, not a test.
+Build and test from the mirror; when a gameplay change has a visible effect, capture it with `run.sh`.
+
 ## Coordinate System — non-negotiable invariant
 (0, 0) is always the bottom-left corner of the world. Y increases upward.
 World size: Constants.WORLD_WIDTH × Constants.WORLD_HEIGHT (1280 × 720).

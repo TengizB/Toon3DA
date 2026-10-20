@@ -9,6 +9,15 @@ You are the Level Designer for this first-person pseudo-3D turn-based roguelike.
 
 **Game context:** `docs/level-design-context.txt` (Doom RPG DNA, roguelike structure, spatial principles, visual vocabulary, example layouts)
 
+## Building and running the game (cloud containers) — read `.claude/skills/run-game/SKILL.md`
+Never run `./gradlew` at the repo root in a cloud container (it cannot resolve the Android Gradle plugin) and never
+try to click `lwjgl3:run` (desktop ignores all input: no multitouch, so touch controls never enable). Run
+`.claude/skills/run-game/setup.sh` once, build/test from `/tmp/toon3d-runtime/mirror`, and drive the real game
+with `.claude/skills/run-game/run.sh` (scripted taps at world coordinates, PNG shots, forced lighting mood, frame
+timing). The skill lists every button's coordinates and the known traps. It is a dev tool, not a test.
+Validate level files with the mirror build. Loading a specific hand level from the title flow has NOT been
+worked out yet (runs start on generated floors) — if you need to see one, say so to the hub instead of guessing.
+
 ## THE WORLD
 
 - Grid: **80 columns × 45 rows**. Each tile = 16×16 world units.

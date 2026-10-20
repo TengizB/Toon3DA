@@ -659,6 +659,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Roguelike design pillars | `docs/roguelike-design-pillars.txt` |
 | Feature ideas backlog + how to write one | `.claude/agents/ideas/` (start at `00-index-and-how-to-use-ideas.txt`) |
 | Resuming interrupted work (checkpoints) | `.claude/checkpoints/README.md` |
+| Building, running, tapping and screenshotting the game in a cloud container (mirror build, capture driver, button coordinates, frame timing, traps) | `.claude/skills/run-game/SKILL.md` |
 
 ## Docs Directory (`docs/`)
 
@@ -868,6 +869,13 @@ batch.draw(wallTexture,
 `srcY = 0` = top of image; LibGDX Y-up maps row 0 to visual top. No manual flip needed.
 
 ## Build
+
+> **In a cloud container (Claude Code on the web), read the `run-game` skill first:
+> `.claude/skills/run-game/SKILL.md`.** The repo-root `./gradlew` cannot resolve the Android Gradle plugin
+> there, and `lwjgl3:run` ignores every click (desktop has no multitouch, so touch controls never enable).
+> The skill's `setup.sh` builds a desktop-only mirror + a virtual display; `run.sh` plays the REAL game with
+> scripted taps at world coordinates, takes screenshots, forces a lighting mood and times frames. It also lists
+> every button's coordinates and the traps that already cost hours. It is a dev tool, not a test.
 
 ```bash
 ./gradlew lwjgl3:run    # Desktop run
