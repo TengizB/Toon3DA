@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Enemy visual rework 1 - animation kit, Warden + Tick clips
 CREATED: 2026-10-21
