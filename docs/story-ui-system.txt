@@ -57,6 +57,27 @@ Four SPEAKERS carry all of it — ORA (the AI), the Planet, the Organization, SY
 name chip, an icon, a type style, an accent colour and an audio sting, so identity never rests on
 colour alone.
 
+ACCENT SOURCES (visual-identity-order-6 R1). StoryUiConstants.SPEAKER_ACCENT_* are read from util/ArtDirection,
+so a speaker IS one of the game's inks: ORA = SUIT_AMBER (she lives in the suit), the Organization =
+FACILITY_CYAN (it speaks through the facility's consoles — it was steel blue before order 6, the one identity
+colour that visibly moved), the Planet = PLANET_RED, SYSTEM = UI_TEXT_PRIMARY (bone). The accent colours the
+chip (bar, icon, name) and the panel's corner brackets; body text is always UI_TEXT_PRIMARY.
+
+STORY PAINT (visual-identity-order-6; docs/art-direction.txt SECTION 15). Every story panel is drawn by
+StoryPanelRenderer as a UiKit panel (UI_PANEL at STORY_PANEL_ALPHA 0.82, UI_LINE border) with UiKit brackets in
+the speaker's accent, text through UiKit.text (the kit shadow: a bark sits on the 3D view), and the bark's
+close X on a small IDLE plate (STORY_BARK_CLOSE_PLATE_SIZE; touch rect unchanged). Exchange answers and the
+reply's acknowledge are SUIT plates (IDLE / PRESSED in SUIT_AMBER) whoever is speaking — the answer is the
+player's voice. The reprint card's SYSTEM block takes FACILITY_CYAN brackets (the machine's frame) and a HEAVY
+header; its counter is HEAVY in FACILITY_CYAN_DIM; CONTINUE is a SELECTED SUIT plate; REPORT and the report
+page's BACK are facility plates. The FRAMING SCREENS: the launch screen is FACILITY (rows are facility plates,
+BEGIN / CONTINUE DESCENT SELECTED, a HEAVY TYPE_DISPLAY title over a cyan rule); pause and settings are SUIT
+(R1 header, SUIT plates, SUIT_AMBER_DIM brackets round header + rows; the settings screen opened from the title
+draws the launch blackout, not the in-run scrim); a confirmation takes the ink of the screen that opened it;
+the terminal RETURN is a DISABLED facility plate; the death stroke is HEAVY TYPE_DISPLAY bone text alone on the
+black — the floor-transition fade draws its SUBLEVEL readout everywhere EXCEPT the death beat and the MERGE
+hold. Framing text is unshadowed. Layout, timing, reveal pacing, lockouts and touch rects are unchanged.
+
 
 ARCHITECTURE — HEADLESS BRAIN, DUMB RENDERER
 ============================================

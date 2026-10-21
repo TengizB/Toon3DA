@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_background_color">#F5A623FF</color>
-    <color name="background">#FFFFFFFF</color>
+    <!-- visual-identity-order-6 R10: the adaptive icon's background is the brand ink, SUIT_AMBER (util/ArtDirection
+         0.98, 0.76, 0.28). Six-digit #RRGGBB = opaque; the old eight-digit "#F5A623FF" read as #AARRGGBB. -->
+    <color name="ic_background_color">#FAC247</color>
+    <!-- The window behind the first GL frame: UI_INK_BLACK (0.035, 0.040, 0.050), so a cold launch shows no white
+         flash before the black title. -->
+    <color name="background">#090A0D</color>
 </resources>

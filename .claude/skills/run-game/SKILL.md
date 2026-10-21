@@ -65,6 +65,11 @@ count events with `grep -c Pause FILE`.
 | `status:STATUS_TYPE:TURNS` | reflection: activate one of the player's status effects (e.g. `status:BURNING:3`) — the HUD status icons + debuff list |
 | `additem:ITEM_TYPE:QTY` | reflection: `World.itemInventory.tryAdd` — puts items in the bag so the inventory grid and item windows have content (e.g. `additem:MEDKIT_SMALL:3`) |
 | `inspectweapon` | reflection: marks the first weapon lying on the floor as the one the player stands on and opens the weapon inspect card (start-room weapons sit at random spots, so walking onto one is not repeatable) |
+| `seed:N` | reflection: overwrites `World.runSeed` and drops any generated route map, so the next `call:.:onDescentRequested` builds the SAME map every run (the map is otherwise time-seeded) — use it for before/after map comparisons |
+| `shop` | reflection: opens the fabricator on the floor's first vending machine (as `World.openShop` does for the machine in front); give credits first with `call:playerStats:addCredits:N` |
+| `event[:EVENT_ID]` | reflection: opens the FACILITY EVENT console on that registered event (the first one when omitted) |
+| `ending:VARIANT` | reflection: `World.presentEndingCard(BootCardVariant.VARIANT)` — `ENDING_FREE` / `ENDING_KILL` give the terminal card with the RETURN plate (constant names, not FREE/KILL) |
+| `barkspeaker:SPEAKER` | reflection: puts the first registered bark of `AI` / `ORGANIZATION` / `PLANET` on screen through BarkSystem's own `deliver` (no SYSTEM barks exist) — another speaker's panel without reaching their region |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 
@@ -81,6 +86,15 @@ before/after sheets and `convert X.png -crop WxH+X+Y +repage` for close-ups.
 2:tap:640:390;4:tap:640:390;9:tap:640:144;11:tap:640:144;13:shot:play;14:exit
 ```
 - **The title needs TWO taps on the first row**: the first only completes the paced text reveal.
+- NEW OPERATOR (640,314) is only offered on a PRINTED save (a fresh save has nothing to wipe — the tap
+  falls through). A printed save with a chosen story text size (0 NORMAL / 1 LARGE / 2 LARGEST) is a small
+  Preferences file: keys `story.reprintCount` 1, `story.schemaVersion` 5, `story.lastSession` (now, ms),
+  `story.setting.textSize` N in `/root/.prefs/toon3d_records`. On a printed save the opening is
+  `2:tap:640:600;3:tap:640:390;6:tap:640:600;7:tap:640:144`.
+- More coordinates (orders 5-6): confirmation PROCEED (470,242) / CANCEL (810,242); pause rows y 526/450/374/298
+  (RESUME / ARCHIVE / SETTINGS / ABANDON); settings BACK (640,70); reprint card REPORT (170,148), report BACK
+  (640,138); exchange answers x=640 y 450/362/274, the reply's acknowledge (640,450); bark close X (915,667);
+  relic offer LEAVE IT (644,100); route console ENGAGE (1113,52), CANCEL (167,52), MAP toggle (1160,586).
 - Row 1 is BEGIN DESCENT on a fresh save and CONTINUE DESCENT afterwards — same position.
 - `640:144` is the reprint card's CONTINUE (the second tap there is harmless slack).
 - Floor 1 is the start-weapon room: weapons on the floor are **random every run** (seeded by time), so a script

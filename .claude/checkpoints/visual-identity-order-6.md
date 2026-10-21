@@ -59,7 +59,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A5 holds incl. the same-seed glyph comparison; build green.
 - [x] **CP6** — ShopOverlayRenderer + EventChoiceOverlayRenderer (R9).
       DONE WHEN: A6 holds on run; build green.
-- [ ] **CP7** — Android XML (R10, A8), A9/A10 sweep, A11 series check, docs.
+- [x] **CP7** — Android XML (R10, A8), A9/A10 sweep, A11 series check, docs.
       DONE WHEN: build + test at baseline; handover lists A11 follow-ups; ready for reviewer.
 - [ ] **CP8** — reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -175,3 +175,24 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   CLOSE, event choice (applied: credits haul, console closed). PRE-EXISTING (follow-up): the floor's event text
   ("Bulkhead sealed...", "ENTERING: OUTER FACILITY", "THREAT LV 1") is drawn over the shop and the event console in
   both builds.
+- **CP7:** Android (R10): color.xml background #090A0D (UI_INK_BLACK), ic_background_color #FAC247 (SUIT_AMBER), six-digit
+  opaque form (the old "#F5A623FF" was eight digits = #AARRGGBB, i.e. a violet); styles.xml GdxTheme gains
+  android:windowBackground @color/background (parent unchanged). Verified by parsing both XML files and reading the
+  one consumer (drawable-anydpi-v26/ic_launcher.xml); NO Android build and NO cold launch was possible here (A8).
+  A10: grep of the 11 touched classes - no colour literal left except font/batch tint resets to white (state
+  restores) and the out-of-scope route glyph colours in RouteMapColorPalette; the only Line passes left are the
+  route map's node/conduit/icon passes (OUT). A9: the diff changes no touch rect, geometry or timing constant -
+  only deleted dead visual constants, the fade readout's constants moved to EffectConstants with the same values,
+  STORY_BARK_CLOSE_PLATE_SIZE (visual), and the event console's TAP_Y bug fix. Taps were spot-checked per CP (CP2-CP6
+  notes). A11 (/tmp/claude-0/shots/a11): cool_steel / amber_hot / corrupted_violet corridor (chaingun, enemies
+  alerted, a damage number), route map, boot card, inventory - one font, one chrome shape, two inks, no default
+  LibGDX visual. FOLLOW-UPS (not fixed here; all pre-existing, seen in the base build too): (1) the floor's event
+  text ("Bulkhead sealed...", "ENTERING: ...", "THREAT LV n") is drawn over the shop, the event console and through
+  the exchange prompt; (2) at LARGEST a bark wraps to 3 lines but holds 2 (the third is dropped) and its fixed
+  30-unit pitch makes the lines touch; (3) the route map's MAP framing truncates long node labels ("HOSTILE");
+  (4) the title's settings header sits where the launch status lines are (now hidden under the blackout); (5) the
+  HEAVY "#" glyph reads as a blob at TYPE_BODY (reprint counter); (6) the corridor scenes show no close enemy
+  (floor-1 enemies are far; a staged fight needs a capture step that spawns one). Docs: art-direction SECTION 15
+  (FACILITY INK, STORY PANELS, FRAMING SCREENS, FIRST IMPRESSION, THE INK TABLE) + HEAVY usage list; story-ui-system
+  ACCENT SOURCES + STORY PAINT; route-map-system CHROME PAINT + the ENGAGE line; CLAUDE.md docs rows; SKILL.md capture
+  steps + coordinates. Build + test: 480, the 1 known failure. Ready for reviewer.
