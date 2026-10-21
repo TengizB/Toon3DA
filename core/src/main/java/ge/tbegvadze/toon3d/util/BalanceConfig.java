@@ -2408,6 +2408,8 @@ public final class BalanceConfig {
     public static final float GROUP_MAX_SINGLE_TYPE_BODY_FRACTION = 0.30f;
     /** V7: no room holds more than this many of one archetype when the placer puts two groups in it. */
     public static final int   GROUP_ROOM_MAX_SAME_TYPE            = 3;
+    /** CALM floors: at most this many LOOKOUT groups (one soldier alone — the odd body a pairs-only floor cannot field). */
+    public static final int   GROUP_LOOKOUT_MAX_PER_FLOOR         = 1;
 
     // --- E5 FIRST CONTACT -------------------------------------------------------------------
     /** E5: the first group of >= 2 stands within this many walk tiles of the start. */
@@ -3249,6 +3251,8 @@ public final class BalanceConfig {
     public static final float RELIC_BOUNTY_CHIP_KILL_CREDIT_BONUS            = 0.21f;
     public static final float RELIC_THRESHOLD_STIM_DOOR_OPEN_HEAL            = 0.04f;
     public static final float RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP          = 1.00f;
+    /** mixed-encounter-groups: the re-composition docs/relic-system.txt 11 asked for (the CARRIER term is clamped at 1.00). */
+    public static final float RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS           = 0.03f;
     public static final float RELIC_MEDICS_GLOVE_HEAL_BONUS                  = 0.13f;
     public static final float RELIC_RECOIL_SPRING_KILL_AMMO_REFUND           = 0.50f;
     public static final float RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS          = 0.35f;

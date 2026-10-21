@@ -3458,6 +3458,9 @@ public final class BalanceSchema {
         CONSTANT_SUBJECTS.put("GROUP_MIXED_BEHAVIOUR_MIN_SIZE",      RuleKind.DENSITY);
         CONSTANT_SUBJECTS.put("GROUP_MAX_SINGLE_TYPE_BODY_FRACTION", RuleKind.DENSITY);
         CONSTANT_SUBJECTS.put("GROUP_ROOM_MAX_SAME_TYPE",            RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_LOOKOUT_MAX_PER_FLOOR",         RuleKind.DENSITY);
+        // ...and salvage_hook's re-composition (its CARRIER term sits at the 1.00 clamp), banded by R-RELIC.
+        CONSTANT_SUBJECTS.put("RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS", RuleKind.RELIC);
     }
 
     /** Fields deliberately banded by no rule: field name -> a one-line reason. Empty until a new field needs it. */

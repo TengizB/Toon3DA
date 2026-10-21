@@ -65,8 +65,9 @@ public final class RelicCatalog {
         registry.register(RelicDefinition.builder()
                 .id("salvage_hook").name("SALVAGE HOOK")
                 .rarity(RelicRarity.COMMON).trigger(RelicTrigger.ON_KILL).valuation(RelicValuation.SUPPLY)
-                .effects(PerkEffect.of(PerkModifier.CARRIER_EXTRA_DROP, BalanceConfig.RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP))
-                .effectText("Carriers drop a second item "+RelicText.percent(BalanceConfig.RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP)+" of the time")
+                .effects(PerkEffect.of(PerkModifier.CARRIER_EXTRA_DROP, BalanceConfig.RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP),
+                        PerkEffect.of(PerkModifier.KILL_CREDIT_BONUS, BalanceConfig.RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS))
+                .effectText("Carriers drop a second item "+RelicText.percent(BalanceConfig.RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP)+" of the time; kills pay +"+RelicText.percent(BalanceConfig.RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS)+" credits")
                 .build());
         registry.register(RelicDefinition.builder()
                 .id("medics_glove").name("MEDIC'S GLOVE")

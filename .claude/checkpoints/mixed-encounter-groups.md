@@ -43,9 +43,9 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP0** — this file + the idea file, committed and pushed before anything else changes.
 - [x] **CP1** — the seven GROUP_* numbers in BalanceConfig + CONSTANT_SUBJECTS -> DENSITY.
       DONE WHEN: `:core:test` shows only the baseline failure (C-CONSTANT green).
-- [ ] **CP2** — EncounterBehaviour, SlotFill, Slot.fill, 8 template rows, instantiate V1-V3.
+- [x] **CP2** — EncounterBehaviour, SlotFill, Slot.fill, 8 template rows, instantiate V1-V3.
       DONE WHEN: build green; no `sameType`, no PACK.
-- [ ] **CP3** — planner V4 / V5 / V6. DONE WHEN: scratch measurement meets A1-A5, A7-A8 (figures below).
+- [x] **CP3** — planner V4 / V5 / V6. DONE WHEN: scratch measurement meets A1-A5, A7-A8 (figures below).
 - [ ] **CP4** — placer V7 + brood first-contact skip; densityVarietyResults + "room variety"; the one test.
       DONE WHEN: `:core:test` shows only the baseline failure.
 - [ ] **CP5** — balanceSim green (tuning recorded), snapshot data regenerated.
@@ -55,3 +55,29 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 
 - Scratch measurement harness (not committed): /tmp/claude-0/meas/Measure.java — compile against
   `/tmp/toon3d-runtime/mirror/core/build/classes/java/main` + the gdx jar.
+- CP2+CP3 landed as ONE commit (the planner rewrite touched the same methods; splitting it was artificial).
+- DEVIATIONS FROM THE SPEC (record in the idea's IMPLEMENTATION NOTE at CP6):
+  * TEN template rows, not eight: PAIR (one chaff pair, CALM only) and LOOKOUT (one soldier alone, CALM only,
+    at most GROUP_LOOKOUT_MAX_PER_FLOOR = 1, a NEW 8th BalanceConfig number). Why: on CALM floors the per-group
+    TP cap (0.35 x cap ~= 45 TP at d1) cannot buy a 4-chaff RABBLE (cheapest mixed 44.6), so CACHE/SHOP floors
+    fell from 4.2 to 0.7 bodies; and pairs alone cannot reach an odd body target, which made FootprintPlanner
+    rank those layouts "unfielded" and broke "linear_corridor SHOP d1 footprint smallest (E6)". With PAIR +
+    LOOKOUT: CACHE d1 4.6 bodies (old 4.2), footprint green.
+  * Template.maximumPerFloor() (data, default 0 = unlimited) carries LOOKOUT's cap.
+  * V3 tie-break: when the variety caps (not the pool) block the missing behaviour, the draw FAILS (planner tries
+    another draw/shape) instead of dropping V3; V3 is dropped only when the pool truly lacks the behaviour.
+  * BROOD is eligible only when GROUP_BROOD_SIZE fits under the floor's V6 body cap (V6 binds before V4 on
+    small floors).
+  * The brood roll is consumed AFTER the "fields no enemies" early return, so enemy-free floors keep their stream.
+  * salvage_hook RE-COMPOSED (docs/relic-system.txt 11 predicted it): the new rosters moved its d25 SUPPLY gain
+    1.0603 -> 1.0586 (< COMMON floor 1.06; magnitude clamped at 1.00). Added KILL_CREDIT_BONUS 0.03
+    (RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS, CONSTANT_SUBJECTS -> RELIC): gain now 1.071 / 1.076 / 1.076; every
+    R-RELIC / CURSE / STACK / SOURCE row green. docs/relic-system.txt must be updated at CP6.
+- CP3 MEASUREMENT (planner, 300 seeds, seeds seed*97+depth):
+  COMBAT d1/5/10/25: over2 0, floors with a 4-same group 0%, mono 1/2/1/2%, distinct 2.38/2.35/2.37/2.33,
+    mix 100%, body-share fails 0, brood floors 5/7/6/11%, spent 94-95% of cap (unchanged), bodies 13.9/14.0 etc.
+  ELITE d3..25: over2 0, f4 0, mono <= 3%, distinct 2.45-2.78, mix 100%.
+  CACHE: over2 0, f4 0; mono share high (PAIR/LOOKOUT shapes — A3 is COMBAT-only); spent 69-80% of cap (old
+    37-62%: the old PACK underspent) — the gates judge it.
+- OPEN REDS carried into CP4/CP5: [HAZARD] linear_corridor COMBAT d5 barrel rooms (H14) shortfall 1 (worst floor);
+  LevelGeneratorSnapshotTest hash (legit regeneration at CP5).
