@@ -24,6 +24,7 @@ container), outside the Gradle build, never shipped. The game ships only the PNG
 | `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`). |
 | `bestiary.py` | The `CREATURES` table of (rig, clips) + the command line. A new creature = one `_rig.py` + one row. |
 | `sheet.py` | Contact sheet of a folder of sprites, nearest-neighbour upscaled, on the game's near-black. |
+| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`) + the shared `status` set — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
 
 Shipped per creature, in `assets/textures/enemies/generated/`: `<name>.atlas.png` (every frame of every
 clip, trimmed and packed, binary alpha, <= 2048x2048), `<name>.glow.png` (emissive pixels only, same
@@ -36,6 +37,7 @@ python3 bestiary.py ../../../assets/textures/enemies/generated            # ship
 python3 bestiary.py /tmp/out --preview /tmp/out/preview warden            # + one GIF per clip + strip sheet
 python3 bestiary.py /tmp/out --stills [--halo] warden                     # rest pose only, for contact sheets
 python3 sheet.py /tmp/out /tmp/out/sheet.png 3
+python3 effects.py ../../../assets/textures/enemies/generated [--preview /tmp/fx]   # ship: effect atlases + manifests (<1 s)
 ```
 Output is deterministic (every noise source is seeded, the grain hash is integer-only): the same script
 writes byte-identical files. Previews go to the owner and are never committed.

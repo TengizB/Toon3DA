@@ -1,0 +1,29 @@
+{
+ "version": 1,
+ "set": "insect",
+ "atlas": "insect.fx.png",
+ "atlasSize": [64,64],
+ "sprites": {
+  "ICHOR": {"emissive":true,"mode":"life","fps":12,"frames":[[{"rect":[7,32,3,5],"pivot":[1.5,3.5]},{"rect":[12,32,3,5],"pivot":[1.5,2.5]},{"rect":[34,32,3,3],"pivot":[1.5,1.5]}]]},
+  "FLECK": {"emissive":false,"mode":"loop","fps":14,"frames":[[{"rect":[32,23,7,5],"pivot":[3.5,2.5]},{"rect":[42,14,6,7],"pivot":[2.5,3.5]},{"rect":[0,23,5,7],"pivot":[2.5,3.5]},{"rect":[14,23,7,6],"pivot":[3.5,2.5]}]]},
+  "FLECK_DARK": {"emissive":false,"mode":"loop","fps":11,"frames":[[{"rect":[41,23,7,5],"pivot":[3.5,2.5]},{"rect":[50,14,6,7],"pivot":[2.5,3.5]},{"rect":[7,23,5,7],"pivot":[2.5,3.5]},{"rect":[23,23,7,6],"pivot":[3.5,2.5]}]]},
+  "GRIT": {"emissive":false,"mode":"loop","fps":8,"frames":[[{"rect":[50,23,5,5],"pivot":[2.5,2.5]},{"rect":[27,32,5,3],"pivot":[2.5,1.5]}]]},
+  "DRIP": {"emissive":true,"mode":"life","fps":12,"frames":[[{"rect":[39,32,3,3],"pivot":[1.5,1.5]},{"rect":[17,32,3,4],"pivot":[1.5,1.5]},{"rect":[22,32,3,4],"pivot":[1.5,1.5]}]]},
+  "MIST": {"emissive":true,"mode":"life","fps":12,"frames":[[{"rect":[57,23,5,5],"pivot":[2.5,2.5]},{"rect":[0,14,9,7],"pivot":[4.5,3.5]},{"rect":[16,0,11,9],"pivot":[5.5,4.5]},{"rect":[0,0,14,12],"pivot":[6.5,5.5]}]]},
+  "CHIP": {"emissive":false,"mode":"loop","fps":12,"frames":[[{"rect":[11,14,9,7],"pivot":[4.5,3.5]},{"rect":[48,0,9,8],"pivot":[4.5,4.5]},{"rect":[39,0,7,9],"pivot":[3.5,4.5]},{"rect":[29,0,8,9],"pivot":[3.5,4.5]}]]},
+  "DUST": {"emissive":false,"mode":"life","fps":12,"frames":[[{"rect":[0,32,5,5],"pivot":[2.5,2.5]},{"rect":[33,14,7,7],"pivot":[3.5,3.5]},{"rect":[22,14,9,7],"pivot":[4.5,3.5]}]]}
+ },
+ "bursts": {
+  "HIT": {"emitters":[{"sprite":"ICHOR","count":[5,7],"life":[0.3,0.5],"speed":[70,160],"angle":90.0,"spread":360,"toward":[20,60],"gravity":520,"drag":1.0,"radius":5},{"sprite":"FLECK","count":[2,3],"life":[0.4,0.6],"speed":[60,130],"angle":90.0,"spread":360,"toward":[10,40],"gravity":560,"drag":0.0,"radius":5}]},
+  "HIT_HEAVY": {"emitters":[{"sprite":"ICHOR","count":[9,12],"life":[0.35,0.6],"speed":[90,210],"angle":90.0,"spread":360,"toward":[30,90],"gravity":520,"drag":0.8,"radius":8},{"sprite":"FLECK","count":[3,4],"life":[0.45,0.7],"speed":[70,160],"angle":90.0,"spread":360,"toward":[10,50],"gravity":560,"drag":0.0,"radius":8},{"sprite":"FLECK_DARK","count":[2,3],"life":[0.45,0.7],"speed":[70,160],"angle":90.0,"spread":360,"toward":[0.0,0.0],"gravity":560,"drag":0.0,"radius":8}]},
+  "RESIST": {"emitters":[{"sprite":"CHIP","count":[1,1],"life":[0.4,0.5],"speed":[60,90],"angle":60,"spread":60,"toward":[20,30],"gravity":520,"drag":0.0,"radius":0.0},{"sprite":"DUST","count":[1,2],"life":[0.2,0.28],"speed":[5,15],"angle":90.0,"spread":360,"toward":[0.0,0.0],"gravity":0.0,"drag":0.0,"radius":2}]},
+  "KILL": {"emitters":[{"sprite":"ICHOR","count":[13,16],"life":[0.4,0.65],"speed":[110,250],"angle":90.0,"spread":360,"toward":[40,110],"gravity":520,"drag":0.8,"radius":10},{"sprite":"FLECK","count":[4,5],"life":[0.5,0.75],"speed":[80,180],"angle":90.0,"spread":360,"toward":[10,50],"gravity":560,"drag":0.0,"radius":10},{"sprite":"FLECK_DARK","count":[3,4],"life":[0.5,0.75],"speed":[80,180],"angle":90.0,"spread":360,"toward":[0.0,0.0],"gravity":560,"drag":0.0,"radius":10}]},
+  "DEATH": {"emitters":[{"sprite":"MIST","count":[4,5],"life":[0.45,0.65],"speed":[10,30],"angle":90,"spread":120,"toward":[0.0,0.0],"gravity":-40,"drag":0.0,"radius":22},{"sprite":"ICHOR","count":[6,8],"life":[0.4,0.6],"speed":[60,140],"angle":90,"spread":140,"toward":[0.0,0.0],"gravity":520,"drag":0.0,"radius":18}]},
+  "LEAK": {"emitters":[{"sprite":"DRIP","count":[1,1],"life":[0.4,0.55],"speed":[0,10],"angle":-90,"spread":20,"toward":[0.0,0.0],"gravity":420,"drag":0.0,"radius":1.5}],"interval":[0.35,0.9]},
+  "CHARGE": {"emitters":[{"sprite":"GRIT","count":[2,4],"life":[0.25,0.4],"speed":[40,100],"angle":90,"spread":110,"toward":[0.0,0.0],"gravity":480,"drag":0.0,"radius":44}],"interval":[0.06,0.12]},
+  "BLEED": {"emitters":[{"sprite":"DRIP","count":[1,1],"life":[0.4,0.55],"speed":[0,10],"angle":-90,"spread":20,"toward":[0.0,0.0],"gravity":420,"drag":0.0,"radius":10}],"interval":[0.22,0.45]}
+ },
+ "creatures": {
+  "harvest_tick": {"leak":{"anchor":"hit_centre","offset":[24.0,-50.0],"radius":1.5},"burn":{"anchor":"hit_centre","offset":[0.0,-66.0],"radius":34.0},"charge":{"anchor":"ground","offset":[0.0,-3.0],"radius":0.0},"stun":{"anchor":"eye","offset":[0.0,-26.0],"radius":17.0},"poison":{"anchor":"hit_centre","offset":[0.0,-40.0],"radius":30.0},"body":{"anchor":"hit_centre","offset":[0.0,-10.0],"radius":10.0}}
+ }
+}
