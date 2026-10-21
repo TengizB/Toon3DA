@@ -149,7 +149,7 @@ class LevelGeneratorSnapshotTest {
     // {0.85, 1.00, 1.25, 1.20, 1.30}, so every floor's Threat-Point budget outside region B changed and the
     // encounter planner rolls different rosters. A deliberate balance change.
     // RE-BASELINE (mixed-encounter-groups): the encounter planner fields MIXED groups (chaff in pairs of
-    // different archetypes, every group of three or more mixing behaviours, a rare BROOD rolled once per
+    // different archetypes, every group of four or more mixing behaviours, a rare BROOD rolled once per
     // floor), the placer caps any room at three of one archetype, and the barrel placer's eligibility applies
     // its passage guard — so every generated roster, spawn tile and barrel moved. A deliberate change.
     private static final String EXPECTED_DIGEST =

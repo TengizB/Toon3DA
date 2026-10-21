@@ -169,14 +169,12 @@ public final class EncounterPlacer {
             }
             Region target = free.isEmpty() ? leastCrowdedFor(group, regions) : free.get(random.nextInt(free.size()));
             // Every room with space would pass the V7 cap (a small floor whose rooms ran out): the group stands
-            // in the corridors instead, as a first contact already may ("corridor pockets", E3).
+            // in the corridors instead, as a first contact already may ("corridor pockets", E3). The corridors
+            // are not a room (a network the group spreads along), so only their free space is asked.
             if (target != null && free.isEmpty()
                     && target.mergedMaximumSameArchetype(group) > BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE) {
-                if (corridors == null) corridors = collectConnectorPocket(grid, survey, rule, Integer.MAX_VALUE);
-                if (corridors.freeTiles() >= group.size()
-                        && corridors.mergedMaximumSameArchetype(group) <= BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE) {
-                    target = corridors;
-                }
+                if (corridors == null) corridors = occupiedCorridors(grid, survey, rule, used);
+                if (corridors.freeTiles() >= group.size()) target = corridors;
             }
             if (target != null) placeGroup(group, index, target, Integer.MAX_VALUE, used, random, spawns, regions);
         }
@@ -263,6 +261,19 @@ public final class EncounterPlacer {
             }
         }
         return best;
+    }
+
+    /**
+     * Every corridor tile an enemy may stand on, with the tiles members ALREADY stand on (a first contact in the
+     * connector pocket) counted as used, so the V7 fallback asks the corridors' real free space.
+     */
+    private static Region occupiedCorridors(char[][] grid, SupplySlotSurvey survey, SpawnTileRule rule,
+                                            boolean[][] used) {
+        Region corridors = collectConnectorPocket(grid, survey, rule, Integer.MAX_VALUE);
+        for (int[] tile : corridors.tiles) {
+            if (used[tile[1]][tile[0]]) corridors.used++;
+        }
+        return corridors;
     }
 
     /** Whether the group was drawn from a BROOD shape (V4). */

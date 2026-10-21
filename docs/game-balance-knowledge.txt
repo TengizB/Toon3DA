@@ -848,7 +848,11 @@ GROUPS (E2, reshaped by mixed-encounter-groups). The roster is assembled from re
   each archetype in one slot; groups of GROUP_MIXED_BEHAVIOUR_MIN_SIZE 4+ mix RANGED / RUSHER / PLODDER;
   the top-up adds a different archetype; <= GROUP_MAX_SINGLE_TYPE_BODY_FRACTION 0.30 of a floor's bodies
   per archetype; <= GROUP_ROOM_MAX_SAME_TYPE 3 of one archetype in a room. Mixed-group synergy is NOT
-  priced in TP (known open question: a mixed room is harder per TP than a monoculture). A group is capped at GROUP_TP_FRACTION_CAP (0.35) of the floor cap
+  priced in TP (known open question: a mixed room is harder per TP than a monoculture).
+  What it moved (balanceSim ROUND SUMMARY vs the pre-change baseline, sim half only): BULLETS median reserve
+  leaving COMBAT 0.48 -> 0.64 and SLUGS 0.57 -> 0.07 (n=4) both left their 0.10-0.60 band; ROCKETS 0.19 -> 0.29,
+  NAIVE heavies answered 0.15 -> 0.20, floors 1-3 mean groups 4.23 -> 4.10; TACTICAL / NAIVE median depth
+  unchanged (3 / 2) after the step-1 + step-2 tuning. A group is capped at GROUP_TP_FRACTION_CAP (0.35) of the floor cap
   (the anchor exempt); groups shrink to fit, picks leave a fillable remainder (0 or >= 3), each pick
   reserves cap for the cheapest fill of the remaining bodies, 4 seeded draws per shape per pick.
 

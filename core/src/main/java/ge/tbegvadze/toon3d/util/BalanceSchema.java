@@ -5327,6 +5327,7 @@ public final class BalanceSchema {
                 int monoGroups  = 0, monoCandidates = 0;
                 int distinctSum = 0, distinctGroups = 0;
                 int bodyShareBreaches = 0;
+                int broodFloors = 0;
                 for (long seed = 0; seed < VARIETY_SEEDS; seed++) {
                     ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
                             new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
@@ -5356,6 +5357,7 @@ public final class BalanceSchema {
                         }
                     }
                     mostBroods = Math.max(mostBroods, broods);
+                    if (broods > 0) broodFloors++;
                     int bodyLimit = Math.max(BalanceConfig.GROUP_CHAFF_SLOT_MIN,
                             (int) Math.ceil(BalanceConfig.GROUP_MAX_SINGLE_TYPE_BODY_FRACTION * plan.bodyTarget()));
                     java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> bodies =
@@ -5373,7 +5375,8 @@ public final class BalanceSchema {
                         BalanceConfig.GROUP_BROOD_MAX_PER_FLOOR,
                         mostBroods <= BalanceConfig.GROUP_BROOD_MAX_PER_FLOOR
                                 && (worstBroodSize == 0 || worstBroodSize == BalanceConfig.GROUP_BROOD_SIZE),
-                        "broods per floor (max); largest brood " + worstBroodSize));
+                        "broods per floor (max); largest brood " + worstBroodSize + "; floors with one "
+                                + String.format(java.util.Locale.ROOT, "%.0f%%", 100f * broodFloors / VARIETY_SEEDS)));
                 float mixShare = mixCandidates == 0 ? 1f : mixedGroups / (float) mixCandidates;
                 results.add(new RuleResult(RuleKind.DENSITY, where + "mix (V3)", mixShare, 1f, 1f, mixShare >= 1f,
                         "share of non-BROOD groups of " + BalanceConfig.GROUP_MIXED_BEHAVIOUR_MIN_SIZE

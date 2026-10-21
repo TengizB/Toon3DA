@@ -49,7 +49,8 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP4** — placer V7 + brood first-contact skip; densityVarietyResults + "room variety"; the one test.
       DONE WHEN: `:core:test` shows only the baseline failure.
 - [x] **CP5** — balanceSim green (tuning recorded), snapshot data regenerated.
-- [x] **CP6** — docs updated; A13 run check noted. (reviewer gate + STATUS IMPLEMENTED follow as CP6b.)
+- [x] **CP6** — docs updated; A13 run check noted.
+- [x] **CP6b** — reviewer PASS WITH FIXES, every fix applied; both gates green on the final code; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -115,3 +116,12 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
   relic-system salvage_hook row + soft spots). A13: game launched via run-game skill, descended to a generated
   CACHE floor (5 enemies), screenshot /tmp/claude-0/run1/floor1.png (container-local) — rosters NOT inspected by
   eye; the room-variety sweep is the evidence.
+- CP6b (reviewer PASS WITH FIXES, applied): A13 per-room rosters of three depth-1 COMBAT floors logged through the
+  real generator path (idea N6 lists them; max same/room 2 on all three). BALANCE ADMISSION gained the two K18 rows
+  (GROUP_LOOKOUT_MAX_PER_FLOOR, RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS). V7 corridor fallback now counts the tiles
+  already taken in the corridors (occupiedCorridors) — free space only: gating it on a corridor archetype count
+  sent one d5 linear_corridor group back into a 4-same room, and the corridors are not a room. "brood (V4)" row prints the floors-with-a-brood rate.
+  Nits: snapshot comment "four or more", planner javadoc, EncounterGroup imports, docs 5-12%.
+  ROUND SUMMARY moved vs baseline (sim half, not gates): BULLETS median reserve 0.48 -> 0.64 (IN -> OUT), SLUGS
+  0.57 -> 0.07 (n=4, IN -> OUT), ROCKETS 0.19 -> 0.29, NAIVE heavies answered 0.15 -> 0.20, T3 groups 4.23 -> 4.10,
+  dominant-tag 0.49 -> 0.46, keystone 0.50 -> 0.33. Recorded in game-balance-knowledge too.

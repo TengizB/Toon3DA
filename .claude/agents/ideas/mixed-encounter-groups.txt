@@ -1,8 +1,8 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Mixed Encounter Groups - no more rooms of one enemy type
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
 
 IMPLEMENTATION NOTE (2026-10-21) — where the build departs from the spec below; the checkpoint file
@@ -26,9 +26,17 @@ IMPLEMENTATION NOTE (2026-10-21) — where the build departs from the spec below
   N5  Two side fixes the gates forced: salvage_hook re-composed (+1% kill credits; docs/relic-system.txt 11 had
       predicted it — +3% broke the R-MYSTERY-EV ceiling), and GroupBarrelPlacer's eligibility now applies the
       passage guard its placement already applied (H14 shortfall exposed by the new layouts).
-  N6  A13 (run): the real game was launched and descended to a generated floor without error; room rosters
-      were verified by the R-DENSITY generator sweep ("room variety (V7)": no room with > 3 of one archetype
-      over every generator x node type x depth x 30 seeds), not by eye.
+  N6  A13: the real game was launched and descended to a generated floor without error. The per-room rosters
+      of three consecutive depth-1 COMBAT floors were LOGGED through the real generator path (one per combat
+      layout; seeds GameMath.floorSeed(20261021+i, 1)); each group stands in one room:
+        rooms_mst       [2 GORE_BITER + REVENANT] [2 CRAWLER + BLIGHT_CORRUPTOR] [2 CRAWLER + RIMESHELL_LANCER]
+                        [2 VORTEX_EYE + RIMESHELL_LANCER] [2 VORTEX_EYE + BLIGHT_CORRUPTOR]   max same/room 2
+        linear_corridor [2 GHOUL + 2 GORE_BITER + REVENANT] [2 CRAWLER + MIRE_WRAITH + RIMESHELL_LANCER]
+                        [2 GHOUL + MIRE_WRAITH + RIMESHELL_LANCER]                             max same/room 2
+        cavern          [2 CRAWLER + 2 GHOUL + REVENANT] [2 GORE_BITER + BLIGHT_CORRUPTOR]
+                        [2 GORE_BITER + RIMESHELL_LANCER] [2 CRAWLER + 2 EYE_TYRANT]           max same/room 2
+      Every room shows at least two enemy types; no room holds 4+ identical (the R-DENSITY "room variety
+      (V7)" sweep backs it over every generator x node type x depth x 30 seeds).
 
 OVERVIEW
 --------
@@ -299,6 +307,21 @@ half plus the new variety half), R-SUPPLY and both gates. The seven new numbers 
                (ROOM_MAX_SAME_TYPE).
       DONE     C-CONSTANT green; R-DENSITY (all halves) green; ./gradlew test and ./gradlew balanceSim
                green.
+
+  (Added at implementation, N1 / N5.)
+  K18 ANY NEW BALANCE NUMBER - GROUP_LOOKOUT_MAX_PER_FLOOR (1)
+      DECLARE  BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.DENSITY. No variety row reads it directly: it is
+               judged through the CALM floors' R-DENSITY "bodies fewest/most (E1)" and "footprint (E6)" rows
+               on CACHE / SHOP cells (a LOOKOUT supplies the odd body pairs cannot) and R-SUPPLY.
+      DONE     C-CONSTANT green; R-DENSITY CACHE / SHOP body + footprint rows green; both gates green.
+  K18 ANY NEW BALANCE NUMBER - RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS (0.01), re-composing salvage_hook
+      DECLARE  BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.RELIC. salvage_hook's effect list becomes
+               CARRIER_EXTRA_DROP 1.00 + KILL_CREDIT_BONUS 0.01; card text built from both constants.
+      BAND     R-RELIC COMMON SUPPLY [1.06, 1.20] (measured 1.064 / 1.066 / 1.064 at d5/15/25) and, through
+               the MYSTERY table's RELIC_CACHE outcome, R-MYSTERY-EV <= 1.30 (measured 1.29998) — the reason
+               the bonus is 0.01, not 0.03 (0.03 read 1.30004). R-RELIC-STACK / -SOURCE / S-RELIC SR1-SR6.
+      DONE     C-CONSTANT, R-RELIC, R-RELIC-STACK, R-RELIC-SOURCE, R-MYSTERY-EV green; balanceSim green;
+               docs/relic-system.txt row + KNOWN SOFT SPOTS updated.
 
 
 INTERACTIONS

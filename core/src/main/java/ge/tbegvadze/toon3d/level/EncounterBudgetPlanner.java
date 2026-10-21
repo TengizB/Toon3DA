@@ -17,7 +17,8 @@ import java.util.Random;
  *
  * <p>A floor fills a BODY TARGET that grows with depth (E1: 12-16 bodies at depth 1 rising to 22-28 at
  * depth 25, times the node's body scale) out of registered GROUP TEMPLATES (E2, reshaped by
- * mixed-encounter-groups: RABBLE, SKIRMISH, FIRETEAM, ESCORT, BATTERY, WARBAND, HUNTER, BROOD). The depth-scaled Threat-Point budget — times the region danger dial, the
+ * mixed-encounter-groups: RABBLE, SKIRMISH, FIRETEAM, ESCORT, BATTERY, WARBAND, HUNTER, BROOD, and on CALM
+ * floors PAIR and LOOKOUT). The depth-scaled Threat-Point budget — times the region danger dial, the
  * node's threat scale and any extra multiplier the route hands over — is now a CAP on total threat, not
  * the thing being filled. Rules:
  * <ul>
@@ -27,7 +28,7 @@ import java.util.Random;
  *   <li>Each pick aims at the threat-per-body the floor still has to spend, so the roster ends near the
  *       cap at the body target: an ELITE's larger cap buys heavier groups, not a crowd.</li>
  *   <li>HUNTERs (lone bruisers / flankers) are at most {@link BalanceConfig#GROUP_HUNTER_MAX_FRACTION} of
- *       the groups; every other shape fields at least two members, chaff in PAIRS of one archetype.</li>
+ *       the groups; chaff come in PAIRS (two of one archetype, the pairs of a group all different).</li>
  *   <li>MIXED GROUPS (V1-V6): no archetype appears more than
  *       {@link BalanceConfig#GROUP_MAX_SAME_TYPE_PER_GROUP} times in a group or fills two slots of it; a
  *       group of {@link BalanceConfig#GROUP_MIXED_BEHAVIOUR_MIN_SIZE}+ mixes ranged / rusher / plodder; the

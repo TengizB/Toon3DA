@@ -2,7 +2,10 @@ package ge.tbegvadze.toon3d.level;
 
 import ge.tbegvadze.toon3d.enemy.EnemyType;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 
 /**
@@ -22,7 +25,7 @@ public final class EncounterGroup {
 
     EncounterGroup(String templateId, List<EnemyType> members, boolean anchor, float threat, int[] slotCounts) {
         this.templateId = templateId;
-        this.members    = Collections.unmodifiableList(new java.util.ArrayList<>(members));
+        this.members    = Collections.unmodifiableList(new ArrayList<>(members));
         this.anchor     = anchor;
         this.threat     = threat;
         this.slotCounts = slotCounts.clone();
@@ -30,7 +33,7 @@ public final class EncounterGroup {
 
     /** Most members any one archetype fields in this group (V1: 2, a BROOD 3). */
     public int maximumSameArchetype() {
-        java.util.EnumMap<EnemyType, Integer> counts = new java.util.EnumMap<>(EnemyType.class);
+        EnumMap<EnemyType, Integer> counts = new EnumMap<>(EnemyType.class);
         int most = 0;
         for (EnemyType type : members) most = Math.max(most, counts.merge(type, 1, Integer::sum));
         return most;
@@ -38,14 +41,14 @@ public final class EncounterGroup {
 
     /** Number of different archetypes in the group. */
     public int distinctArchetypes() {
-        java.util.EnumSet<EnemyType> archetypes = java.util.EnumSet.noneOf(EnemyType.class);
+        EnumSet<EnemyType> archetypes = EnumSet.noneOf(EnemyType.class);
         archetypes.addAll(members);
         return archetypes.size();
     }
 
     /** Number of different encounter behaviours (ranged / rusher / plodder) in the group. */
     public int distinctBehaviours() {
-        java.util.EnumSet<EncounterBehaviour> behaviours = java.util.EnumSet.noneOf(EncounterBehaviour.class);
+        EnumSet<EncounterBehaviour> behaviours = EnumSet.noneOf(EncounterBehaviour.class);
         for (EnemyType type : members) behaviours.add(EncounterBehaviour.of(type));
         return behaviours.size();
     }

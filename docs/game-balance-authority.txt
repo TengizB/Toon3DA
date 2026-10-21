@@ -676,7 +676,7 @@ R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
        (the threshold was 3; balanceSim tuning step 2 moved it to 4 — see TUNING below);
     V4 BROOD is eligible on GROUP_BROOD_FLOOR_CHANCE (0.25) of floors (rolled once per floor that
        fields enemies), at most GROUP_BROOD_MAX_PER_FLOOR (1), and only where 3 fits V6; never the
-       first contact while another group of 2+ exists; picked on ~5-11% of COMBAT floors;
+       first contact while another group of 2+ exists; picked on ~5-12% of COMBAT floors;
     V5 the top-up adds a DIFFERENT archetype (a new pair, then a new single), never a lone chaff;
     V6 no archetype past max(2, ceil(GROUP_MAX_SINGLE_TYPE_BODY_FRACTION 0.30 x body target))
        bodies while an alternative exists, beside the 0.40 TP share;
