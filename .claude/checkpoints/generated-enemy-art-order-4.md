@@ -55,7 +55,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       clip GIFs + in-engine burst GIFs (default + one mood) sent. DONE WHEN: the GIFs are sent and the build is green.
 - [x] **CP3** — owner approval recorded in the idea's DECISIONS (stop until it is).
 - [x] **CP4** — registry row wired; A2-A3 verified in-engine; build green.
-- [ ] **CP5** — docs (guide, art-direction 16, SKILL.md); reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP5** — docs (guide, art-direction 16, SKILL.md); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -101,3 +101,5 @@ between sessions -> "Unable to initialize GLFW"; re-run setup.sh. Build: only St
 committed-heavy hold, 9.1 plate spark, 9.2 per-creature overrides, lessons 12.14-12.16, recipe), art-direction 16
 roster, enemy-system visual moments, enemy-art + run-game SKILL.md, CLAUDE.md enemyvisual row; idea IMPLEMENTATION
 NOTE, STATUS IN PROGRESS. Next: reviewer, then STATUS IMPLEMENTED.
+
+**CP5:** reviewer r1 PASS, no required fixes (verdict: generated-enemy-art-order-4.reviewer-r1.md). STATUS: IMPLEMENTED.
