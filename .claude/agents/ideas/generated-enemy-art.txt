@@ -1,189 +1,136 @@
 STATUS: SPLIT INTO ORDER FILES
 CATEGORY: Visual
-TITLE: Generated enemy art - replace every enemy texture
+TITLE: Enemy visual rework - generated, animated, reactive
 CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
-MASTER INDEX of the generated-enemy-art series. The work itself lives in
-generated-enemy-art-order-1.txt .. generated-enemy-art-order-7.txt, built strictly in ascending
-order, each with its own STATUS and CHECKPOINTS. This file holds what every order shares: the need,
-the series rules, the roster plan, the owner decisions already taken and the lessons already paid for.
-An order that contradicts this file is wrong; change this file first (with the owner) instead.
+MASTER INDEX of the generated-enemy-art series. The work lives in generated-enemy-art-order-1.txt ..
+generated-enemy-art-order-9.txt, built strictly in ascending order, each with its own STATUS and
+CHECKPOINTS. This file holds what every order shares: the need, the series rules, the roster plan and
+the owner's decisions. An order that contradicts this file is wrong; change this file first (with the
+owner) instead.
+
+THE METHOD IS DOCUMENTED IN docs/sprite-art-creation-guide.txt. Every order reads it before starting
+and updates it in the same commit as any change to the kit, the clip set, the reaction rules or the
+engine contract. It outlives this series: it is how all future generated art is made.
 
 
 OVERVIEW
 --------
-Every enemy texture in assets/textures/enemies/ was made with image models. They share no light, no
-palette, no outline, no resolution and no shape language, so every enemy looks pasted into the
-facility from a different game. The owner's need: one bestiary that looks like it was made by one hand
-and belongs in the "LIT BY THE MACHINE" world, made the way the rest of the game's content is made -
-generated in code.
+The old enemies fail twice. Their textures were made by image models, so no two share a light, a
+palette, an outline or a resolution and each looks pasted in from another game. And they are STILL
+IMAGES: no idle, no walk, no attack, no flinch, no death - the renderer fakes life by scaling a picture
+up during a lunge and flashing it white when hit.
 
-On 2026-10-21 the approach was prototyped in a working session: a Python sprite kit that sculpts
-sprites from height-field shapes and renders all of them through one shared light rig, palette and
-outline rule. Two of its sprites - the WARDEN (machine) and the HARVEST TICK (insect) - were approved
-by the owner after in-engine screenshots and are already committed as textures. A third (a stone
-golem) was rejected. This series turns that prototype into the game's enemy-art pipeline and replaces
-all 20 enemy textures, family by family.
+Now that the art is generated in code we can fix both. This series REBUILDS THE ENEMY VISUAL LAYER: every
+enemy is re-designed from the story, sculpted by the kit, rigged and animated with a full clip set,
+and driven by a new runtime that reacts to every event the simulation produces - waking, moving,
+telegraphing, attacking, being hit, resisting, staggering, burning, dying - with effects generated
+from the creature's own materials. The goal is not "make the existing renderer use new textures"; the
+owner explicitly allows rewriting the enemy visual code from scratch (D8).
 
-
-THE TOOL (already committed)
-----------------------------
-  .claude/skills/enemy-art/            the enemy-art SKILL (read its SKILL.md first, every order)
-    kit.py                             the renderer: layers of signed height fields merged by smooth max,
-                                       gradient normals, one light rig, 6-step hue-shifted material ramps,
-                                       specular, cavity + cast occlusion, selective outline, cleanup pass
-    bestiary.py                        one function per sprite + the ENEMIES table
-    sheet.py                           contact sheets
-  assets/textures/enemies/generated/   the shipped PNGs: warden.png, harvest_tick.png (160x240, binary alpha)
-
-Python 3 + numpy + Pillow, outside Gradle, never shipped (a dev tool exactly like run-game). The game
-only ever sees the PNGs. Output is deterministic: re-running bestiary.py rewrites byte-identical files.
+On 2026-10-21 the method was prototyped: the WARDEN (machine) and the HARVEST TICK (insect) were
+approved as still images and committed; a stone golem was rejected.
 
 
-SERIES RULES (every order, repeated by reference)
--------------------------------------------------
-  G1  ORIGINALITY. The existing enemy textures (everything in assets/textures/enemies/ outside
-      generated/) are NOT reference material: never opened for inspiration, traced, recoloured,
-      "cleaned up" or re-created, not for shape, palette, pose or detail. A new sprite is designed only
-      from: the family's place in story/00-premise.md, the archetype's role() and tacticalVerb(), its
-      ORA bestiary line (story.bark.enemy.<type> in assets/story/story-strings.properties), its
-      mechanics (abilities, ranged or not, hover) and this file. The order's design brief says what the
-      creature IS; it never says "like the current one".
-  G2  GENERATED IN CODE. Every shipped enemy texture is the output of bestiary.py. No hand-painted pixel,
-      no image-model output, no manual edit of a PNG. To change a sprite, change its function and
-      regenerate.
-  G3  ONE STYLE LOCK. The kit's light rig (key upper-left-front, FACILITY_CYAN rim from the right),
-      outline rule, cleanup pass and dither are shared and never overridden per sprite. Materials are
-      added to kit.MATERIALS, never as one-off colours.
-  G4  CANVAS. Regular enemies 160x240 (2:3, the aspect the renderer already draws), feet near row 232,
-      centred on x = 80. Bosses 240x360 (2:3). A floating enemy the renderer does not hover bakes its
-      hover into the canvas (empty rows below it); EYE_TYRANT, which the renderer hovers, stands on the
-      canvas floor. heightMultiplier() values are NOT changed by this series; sprites are composed to
-      fit them.
-  G5  SEMANTIC COLOURS ARE SACRED (art-direction V5). No pure red / green / blue / purple / yellow as
-      decoration, and SUIT_AMBER is the player's ink - no enemy uses it. Glow inks are per family
-      (table below) and must stay visibly apart from those hues.
-  G6  SILHOUETTE FIRST. Each sprite reads as a black shape at two tiles, differs from every other
-      member of its family, and its size reads its role: CHAFF small, SOLDIER medium, BRUISER heavy,
-      MINI_ELITE spiked and larger, BOSS huge. The attack is on the body: a ranged enemy shows its
-      emitter, a charger its battering front, a flanker its reach.
-  G7  ONE STORY DETAIL per sprite at least - an Organization tag, a harvest port, a shackle, a stencilled
-      serial - that ties it to the premise (the moral geometry of who you fight is the plot).
-  G8  BINARY ALPHA. EnemySpriteSheets alpha-cuts at 0.50; shipped sprites are rendered without the
-      kit's --halo glow. Glow returns only through order 7's emissive layer.
-  G9  RENDERER STATE MUST STILL READ. Hit flash, matchup words, health bars, name tags, the Auric /
-      Cinderforge / Rimeshell state tints and the boss afterimage are drawn over the sprite by
-      EnemyRenderer. A sprite keeps mid-value body colours so every tint and flash still shows.
-  G10 NAMES, NUMBERS AND BEHAVIOUR DO NOT CHANGE. displayName(), stats, abilities, ORA lines, sounds,
-      spawn symbols: untouched. A sprite that would need its enemy renamed or re-written to make sense
-      is redesigned, not the enemy.
-  G11 OWNER APPROVAL GATE. Every order generates its sprites, sends the owner a contact sheet AND
-      in-engine screenshots (two tiles, default mood + one other mood), and STOPS. Nothing is wired into
-      EnemyRenderer until the owner says yes; the approval (or the requested changes) is written into
-      that order's DECISIONS. "It looks fine to me" from an agent is never the gate.
-  G12 NO TESTS (Testing Policy). Not balance-bearing; verified by ./gradlew build + run-game screenshots.
-      No balance gate is owed because no balance file is touched.
+WHAT IS ALREADY COMMITTED
+-------------------------
+  docs/sprite-art-creation-guide.txt   the method (technique, materials, design, animation, reactions,
+                                       effects, engine contract, verification, lessons, recipes)
+  .claude/skills/enemy-art/            the generator: kit.py, bestiary.py, sheet.py, SKILL.md
+  assets/textures/enemies/generated/   warden.png, harvest_tick.png (approved stills, not wired)
 
 
-FAMILY GLOW INKS (G5)
+SERIES RULES (every order, by reference)
+----------------------------------------
+  G1  ORIGINALITY (guide N2). The old enemy textures are not reference material - never opened for
+      inspiration, traced, recoloured or re-created. Designs come from story/00-premise.md, the type's
+      role(), tacticalVerb(), abilities, and ORA's line (story.bark.enemy.<type>).
+  G2  GENERATED IN CODE (guide N1). Every frame, glow layer, effect particle and manifest is written
+      by the enemy-art skill's scripts. Deterministic; no hand edits.
+  G3  ONE STYLE LOCK (guide N3, section 3). Never overridden per creature.
+  G4  CANVAS (guide section 6). 160x240 regular, 240x360 boss; heightMultiplier() is never changed to
+      fix art.
+  G5  SEMANTIC COLOURS SACRED; family inks per guide 4.4.
+  G6  SILHOUETTE FIRST; size reads role; the attack is on the body (guide 5.1).
+  G7  ONE STORY DETAIL per creature, on the body (guide N6).
+  G8  MOTION IS MANDATORY. A creature ships only with its full standard clip set (guide 7.3), its
+      ability clips, its reactions (guide 8) and its family effects (guide 9). A still image is not
+      a finished enemy.
+  G9  REACTIONS ARE COSMETIC. No clip, reaction or effect changes a rule, a number, a turn, the
+      action lock or input. The simulation stays headless; it talks to visuals only through a
+      listener seam (order 2), never by importing a renderer.
+  G10 NAMES, STATS, ABILITIES, SOUNDS, ORA LINES, SPAWN SYMBOLS DO NOT CHANGE.
+  G11 OWNER APPROVAL GATE (guide N7, section 11). Contact sheet + clip GIFs + in-engine captures, then
+      STOP until the owner answers; the answer goes into that order's DECISIONS.
+  G12 NO TESTS (Testing Policy). Not balance-bearing; verified by build + run-game captures.
+  G13 PERFORMANCE IS PART OF DONE. No allocation in render(); atlases load per floor and are disposed;
+      each runtime order measures frame time with run-game --probe against the order before it.
+
+
+ROSTER AND ORDER PLAN
 ---------------------
-  MACHINE      cyan     the Organization's own light (FACILITY_CYAN) - its machines glow like the facility
-  INSECT       ichor    coral-pink: harvested planet tissue, bred and butchered
-  ABERRATION   ichor    the same tissue escaped containment - told apart from insects by form, not colour
-  UNDEAD       soul     NEW in order 4: pale bone-white with a faint cold tint, saturation kept low so it
-                        never reads as the purple "special" colour - raw soul bleeding through the dead
-  GOLEM        magma    the planet's own heat; the elementals add their element (order 5)
-  DEMON        magma    the planet's immune response shares the planet's heat (order 6)
+  order  what
+  -----  ---------------------------------------------------------------------------------------
+  1      ANIMATION KIT (offline): rigs, poses, clips, atlases, glow atlases, manifests, GIF previews.
+         The Warden and the Harvest Tick re-built as rigs with their full clip sets.
+  2      THE NEW ENEMY VISUAL RUNTIME: render/enemyvisual (atlas + manifest loading per floor, the
+         animator, the dying-instance pool, the glow pass) and the enemy/EnemyVisualListener seam.
+         ACID_DRONE = Warden and SHELL_BRUTE = Harvest Tick go live, animated.
+  3      REACTIONS AND EFFECTS: damage tiers, recoil, resisted/blocked/absorbed reads, wounded layer,
+         stagger/knockback, status visuals, death -> corpse handover, generated family effect atlases
+         (machine + insect), projectiles and muzzle flashes for ranged enemies.
+  4      IRON_STALKER (insect complete).
+  5      ABERRATIONS: PLAGUE_HULK, EYE_TYRANT, GORE_BITER, MIRE_WRAITH (+ ichor/flesh effects).
+  6      UNDEAD: GHOUL, CRAWLER, REVENANT, VORTEX_EYE, BLIGHT_CORRUPTOR (humanoid rig, soul ink + effects).
+  7      GOLEMS: AURIC_SENTINEL, CINDERFORGE_COLOSSUS, RIMESHELL_LANCER, VERDANT_SPIRESOWER (stone done
+         right; rock/ember effects).
+  8      VOID_SHROUD + the bosses OVERSEER, CORRUPTOR, HELL_BARON (240x360, phase clips).
+  9      RETIRE THE OLD LAYER: delete the old textures, the legacy draw path, the sheet slicing, the
+         alpha-cut conditioning, the lunge-scale fake; final performance pass and docs.
+
+Why this order: orders 1-3 build and prove the whole pipeline on the two creatures the owner already
+likes, so every later order is "content only". Families then go from the kit's strongest material
+(chitin, flesh) to its hardest (humanoids, then stone, which already failed once), and the bosses come
+last with everything learnt. Until order 9 the game runs with a mix: migrated types on the new
+runtime, the rest on the legacy path - always building, always playable.
 
 
-ROSTER PLAN
------------
-  order  EnemyType              family      role        sprite
-  -----  ---------------------  ----------  ----------  ---------------------------------------------
-  1      ACID_DRONE             MACHINE     SOLDIER     warden.png        (approved 2026-10-21)
-  1      SHELL_BRUTE            INSECT      BRUISER     harvest_tick.png  (approved 2026-10-21)
-  2      IRON_STALKER           INSECT      MINI_ELITE  new
-  3      PLAGUE_HULK            ABERRATION  SOLDIER     new
-  3      EYE_TYRANT             ABERRATION  CHAFF       new  (renderer hovers it)
-  3      GORE_BITER             ABERRATION  CHAFF       new
-  3      MIRE_WRAITH            ABERRATION  SOLDIER     new
-  4      GHOUL                  UNDEAD      CHAFF       new
-  4      CRAWLER                UNDEAD      CHAFF       new
-  4      REVENANT               UNDEAD      BRUISER     new
-  4      VORTEX_EYE             UNDEAD      CHAFF       new
-  4      BLIGHT_CORRUPTOR       UNDEAD      SOLDIER     new
-  5      AURIC_SENTINEL         GOLEM       SOLDIER     new
-  5      CINDERFORGE_COLOSSUS   GOLEM       BRUISER     new
-  5      RIMESHELL_LANCER       GOLEM       SOLDIER     new
-  5      VERDANT_SPIRESOWER     GOLEM       SOLDIER     new
-  6      VOID_SHROUD            DEMON       SOLDIER     new
-  6      OVERSEER               MACHINE     BOSS        new  (240x360)
-  6      CORRUPTOR              ABERRATION  BOSS        new  (240x360; today a placeholder quadrant)
-  6      HELL_BARON             DEMON       BOSS        new  (240x360; today a placeholder quadrant)
-  7      -                      -           -           emissive layer, old textures deleted, series check
-
-Why this order: lowest risk first. Order 1 proves the wiring with sprites the owner already approved.
-Order 2 finishes a family the kit already handles (chitin). Order 3 is soft flesh, which the kit's
-smooth union does best. Order 4 needs a humanoid rig and cloth - new kit work. Order 5 is the stone
-the prototype FAILED at, so it comes after the kit has grown. Order 6 is the largest canvas and the
-most important sprites, built last with everything learnt. Order 7 cleans up.
-
-Every order leaves the game building and playable with a mix of old and new art; old textures stay
-on disk until order 7.
+DECISIONS (owner)
+-----------------
+  D1  Enemy textures are generated by Claude in code, not by image models.                (2026-10-21)
+  D2  The existing enemy textures must not be copied, recreated or used as inspiration.   (2026-10-21)
+  D3  The Warden and the Harvest Tick are approved and go into the game.                  (2026-10-21)
+  D4  The Harvest Tick has all six legs (the tag clamp sits on an intact front leg).       (2026-10-21)
+  D5  The golem prototype is dropped; golems are redesigned from scratch (order 7).       (2026-10-21)
+  D6  Every existing enemy texture is replaced.                                           (2026-10-21)
+  D7  Redesigned enemies have motion, animation, attack animations and effects, and react
+      to taking damage and to other events.                                               (2026-10-21)
+  D8  The enemy visual code may be rewritten completely; the goal is a reworked enemy
+      visual layer, not the old renderer pointed at new textures.                         (2026-10-21)
+  D9  The texture-creation knowledge lives in docs/sprite-art-creation-guide.txt, is
+      referenced by every idea of this series and is kept for future content sessions.    (2026-10-21)
 
 
-LESSONS ALREADY PAID FOR (2026-10-21 session)
----------------------------------------------
-  L1  Stacked shapes read as a toy. The first kit drew separate ellipses and capsules; legs looked
-      glued on. Smooth-max height fields (kit.py) fixed it - keep everything organic in one layer
-      and use layers only for parts that must read as IN FRONT.
-  L2  Rectangular stone slabs read as bricks. The rejected Mantle Sentinel golem was polygon slabs
-      over a glowing backing - the owner's weakest of the three. Mineral bodies need irregular sculpted
-      masses, fractures carved INTO them, and glow kept to seams and a core.
-  L3  Emissive intensity must come from the shape's own height, not the merged layer height, or glow
-      parts burn flat white (fixed in kit.py).
-  L4  Glow is easy to overdo; keep it to eyes, sacs, emitters, seams and cores.
-  L5  Pasted mock-ups lie (no mood grade, fog, contact shadow, name tag). Judge only in-engine.
-  L6  The owner reads story into anatomy: a missing leg read as a missing leg, not as a design
-      feature, and was asked back. Story details go on the body (tags, clamps, ports), not by
-      removing anatomy the creature should have.
-  L7  At 160x240 a 3x5 stencil is legible at close range and invisible at four tiles - right for a
-      story detail, never use it for anything the player must read.
-
-
-DECISIONS (owner, 2026-10-21)
------------------------------
-  D1  Enemy textures are generated by Claude in code, not by image models.
-  D2  The existing enemy textures must not be copied, recreated or used as inspiration.
-  D3  The WARDEN and the HARVEST TICK are approved and go into the game (order 1).
-  D4  The Harvest Tick must have all six legs (the prototype's clamped stump was removed; the
-      Organization tag clamp now sits as a band on an intact front leg).
-  D5  The golem prototype is dropped; golems are redesigned from scratch in order 5.
-  D6  The goal is to replace ALL existing enemy textures with generated ones.
-
-
-ASSUMPTIONS (series-wide; the owner objects cheaply here)
----------------------------------------------------------
-  AS1  The Warden becomes the ACID_DRONE texture (the only non-boss MACHINE, a ranged hovering
-       harasser - the Warden is a ranged hovering drone). Its name tag keeps reading "Acid Drone" (G10).
-  AS2  The Harvest Tick becomes the SHELL_BRUTE texture (INSECT BRUISER, a straight-line charger: a
-       heavy, low, front-facing body). Its name tag keeps reading "Shell Brute".
-  AS3  Single frame per enemy for the whole series. Idle / attack / death frames are a later series
-       (they need the renderer to pick frames, which is a separate design).
-  AS4  The kit stays Python and offline. Porting it to Java runtime generation was considered and left
-       out: it would duplicate ~400 lines of numerics in Java, add load time on phones, and buy nothing
-       the owner asked for; the PNGs are small (a 160x240 sprite is ~15-30 KB vs the 1024x1536 originals).
-  AS5  Enemy display names are not changed even where a new sprite would suggest a better one.
-  AS6  An order may grow the kit (new materials, primitives, a humanoid rig). It must regenerate every
-       earlier sprite and confirm they are unchanged (byte-identical) unless the owner approved a change.
+ASSUMPTIONS (series-wide)
+-------------------------
+  AS1  Warden -> ACID_DRONE (the only non-boss MACHINE: a hovering ranged harasser). Harvest Tick ->
+       SHELL_BRUTE (INSECT BRUISER, a heavy straight-line charger). Name tags keep the current names.
+  AS2  FRONT-FACING billboards only. Enemies are drawn facing the player, as in Doom RPG; directional
+       (4/8-angle) sprites would multiply every clip by 4-8 for little gain in a first-person,
+       turn-based crawler where enemies come at you. Revisit only if the owner asks.
+  AS3  Pre-rendered frames, not a runtime skeleton (guide 7.2).
+  AS4  The kit stays offline Python (guide 2).
+  AS5  Atlases are loaded per floor for the types that can appear on it (family-coherent floors make
+       that a handful), not all at app start.
+  AS6  A kit change regenerates every earlier creature byte-identical unless the owner approved a change.
 
 
 RELATED
 -------
-  Ideas:  generated-enemy-art-order-1.txt .. -order-7.txt; elemental-golem-*.txt (golem MECHANICS);
-          visual-identity-order-1..6 (the art direction this series must fit)
-  Docs:   docs/art-direction.txt (section 16 GENERATED ENEMY ART is created by order 1),
-          docs/enemy-system.txt, story/00-premise.md
+  Guide:  docs/sprite-art-creation-guide.txt   (THE method - read first)
+  Ideas:  generated-enemy-art-order-1.txt .. -order-9.txt; elemental-golem-*.txt (golem mechanics);
+          boss-fight-mobile-overseer-order-*.txt (boss mechanics); visual-identity-order-1..6 (art direction)
+  Docs:   docs/art-direction.txt, docs/enemy-system.txt, docs/tick-system.txt, story/00-premise.md
   Skills: .claude/skills/enemy-art/SKILL.md, .claude/skills/run-game/SKILL.md

@@ -1,100 +1,81 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Generated enemy art 4 - the Undead (humanoid rig)
+TITLE: Enemy visual rework 4 - Iron Stalker (insect complete)
 CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
-Part of the generated-enemy-art series. Requires orders 1-3. Read generated-enemy-art.txt and
-.claude/skills/enemy-art/SKILL.md first.
+Part of the generated-enemy-art series. Requires orders 1-3 (the animation kit, the runtime, reactions
+and effects). Read generated-enemy-art.txt and docs/sprite-art-creation-guide.txt (all of it - this is
+the first creature designed from a brief through the whole pipeline) before starting.
 
 
 OVERVIEW
 --------
-Replaces the five UNDEAD textures - Ghoul, Crawler, Revenant, Vortex Eye, Blight Corruptor. In the
-premise the undead are the facility's own staff, killed by the catastrophe and the Deepworks'
-conditions and dragged back into motion by raw soul bleeding through the galleries: victims, not
-monsters. They are people, so this order gives the kit a HUMANOID RIG and cloth, and introduces the
-family's new glow ink, SOUL.
+The first "content-only" order: one creature, the INSECT family's MINI_ELITE, from brief to a fully
+animated, reactive enemy in the game. It proves that a new enemy is now a brief, a rig, a clip set and a
+registry row - and sets the template every later family order follows.
 
 
 SCOPE
 -----
 IN
-  - Kit growth:
-      * humanoid(pose) helper: builds head, neck, torso, pelvis, two arms with hands, two legs with
-        feet as kit shapes from a small dict of joint positions - one rig, five poses, so the five
-        read as the same species of victim.
-      * cloth materials: Organization work overalls (desaturated slate), hazmat rubber (dull olive-grey,
-        NOT green - G5), lab white (reuse livery), security armour (reuse gunmetal / darkmetal).
-      * dead-skin ramp (ash grey with a cold undertone) and a cloth-fold helper (carved fold lines).
-      * the SOUL glow ramp: pale bone-white with a faint cold tint, saturation capped low so it never
-        reads as purple "special" (G5).
-  - Five briefs -> five functions -> generated/ghoul.png, crawler.png, revenant.png, vortex_eye.png,
-    blight_corruptor.png. Owner gate (G11), five registry rows.
-  - Regenerate every earlier sprite byte-identical. Docs.
+  - The brief below -> an iron_stalker rig in bestiary.py with the full standard clip set (guide 7.3),
+    DORMANT and WOUNDED idles, and its ability clips: BUFF_SELF (plates flare, the ichor seam brightens)
+    and AREA_STRIKE (a double-blade sweep).
+  - Kit growth it needs: a tapered SPIKE / blade primitive and a riveted armour-plate helper.
+  - Effects: the insect set from order 3 + an armour-plate spark for its resisted hits.
+  - Owner gate (G11): stills sheet, clip GIFs, in-engine burst captures.
+  - One EnemyVisualRegistry row: IRON_STALKER -> "iron_stalker". Earlier creatures regenerate byte-identical.
+  - Docs: guide (new primitives in the API, anything learnt), art-direction section 16 roster, SKILL.md.
 
 OUT
-  - Faces with expressions; gore; visible wounds as the main read (restraint - premise tone).
-  - Any change to SUMMON (the Corruptor's raised dead use the same types and therefore the new sprites).
-  - Animation; renaming.
+  - Other creatures. Changing BUFF_SELF / AREA_STRIKE rules. Reusing the Harvest Tick's body (G6).
 
 
 GAMEPLAY LOOP
 -------------
-Unchanged for all five.
+Rules unchanged.
 
 
 RULES
 -----
-  R1  Series rules G1-G12; order 1 R1-R4 for every new row.
-  R2  Every undead wears what that person wore to work - their JOB is the story detail (G7): an ID
-      badge, a uniform, a hazmat hood, security armour.
-  R3  Soul light leaks from eyes, mouth and the wounds it re-entered by - nowhere else.
+  R1  Series G1-G13; orders 2-3 runtime rules apply to the new row.
+  R2  Reads as INSECT (chitin, ichor ink, many legs) and as MINI_ELITE (taller and more armoured than every
+      non-boss insect, spiked).
 
 
 PLAYER EXPERIENCE
 -----------------
-Recognition before fear: a player should be able to say "that was a technician" about each one. ORA:
-  Ghoul             "Slow, and it never stops. Keep walking and never let it corner you."
-  Crawler           "Fast, thin. Drop it now, before the rest arrive."
-  Revenant          "Fast and heavy. Do not let that one reach you."
-  Vortex Eye        "Short range only. Break its line or get right on top of it."
-  Blight Corruptor  "Thick. Wear it down from range; don't stand in front of it."
+ORA: "That's a step up. Spend something on it or walk around it." The body says it first: armour, height,
+blades - and its BUFF_SELF flare is a visible "it just got worse" moment.
 
 
 TECHNICAL NOTES
 ---------------
-kit.py helpers + materials; bestiary.py functions; constants + five registry rows. Same as order 3.
+Content only: bestiary.py, kit.py primitives, effects.py additions, one registry row, the atlas files.
+If the runtime needs a change to support something here, it is named in the IMPLEMENTATION NOTE.
 
 
 VISUAL DESIGN
 -------------
-DESIGN BRIEF - GHOUL (CHAFF, 0.90 walls, melee shambler)
-  A labourer in torn work overalls, head lolled to one side, one arm reaching, the other hanging; a
-  lanyard ID badge swinging on the chest. Soul light in the eye sockets and the slack mouth. Upright,
-  thin, patient.
-
-DESIGN BRIEF - CRAWLER (CHAFF, 0.55 walls, fast scuttler)
-  A lab technician on all fours, spine arched high, head thrust forward, arms long and splayed - a
-  low, fast, wrong silhouette. Lab-white coat torn at the hem and dragging. Full anatomy (L6): it crawls
-  because the soul moves it that way, not because pieces are missing.
-
-DESIGN BRIEF - REVENANT (BRUISER, 1.05 walls, fast heavy melee)
-  Organization security in riot armour - broad pauldrons, a cracked visor with soul light behind it,
-  a shock baton gripped low - caught mid-lunge, weight on the front foot. The armour stencil (a unit
-  number) is the detail. The heaviest, most dangerous-looking humanoid.
-
-DESIGN BRIEF - VORTEX EYE (CHAFF, 0.55 walls, short-range caster, DEBUFF_PLAYER)
-  What is left of a researcher's head and shoulders, held aloft by a slow vortex of soul light that
-  pours from the eye sockets and coils around it. Hover baked into the canvas (the renderer does not
-  hover this type). Small, eerie, the one undead that is MOSTLY light - and the short reach of the
-  vortex should read as short.
-
-DESIGN BRIEF - BLIGHT CORRUPTOR (SOLDIER, 1.00 walls, durable carrier, SUMMON)
-  A quarantine worker in a full hazmat suit, swollen from inside by spore growth that has burst through
-  the suit in soft pods (soul-lit), a decontamination sprayer tank fused to its back. Thick and slow;
-  the pods are where the raised dead come from.
+BRIEF - IRON STALKER (INSECT, MINI_ELITE, 1.10 walls, melee, BUFF_SELF + AREA_STRIKE)
+  What it is: a harvest-line insect the Organization tried to use as a guard animal - bred from the
+  planet's tissue, then FITTED with riveted iron plates to survive the pens. It outgrew them; chitin has
+  grown around and over their edges.
+  Silhouette: TALL and upright, unlike the low, wide tick - reared on four rear legs, the front pair raised
+  as two long scythe blades. Narrow waist, plated thorax, small armoured head, ichor eyes set low.
+  Materials: chitin / chitin_dk, gunmetal + darkmetal riveted plates, bone-pale blade edges, ichor eyes,
+  a glowing ichor seam where chitin split around a plate.
+  Story detail: a stencilled pen number on the largest plate; a snapped restraint collar on the neck.
+MOTION
+  IDLE: weight shifts between rear legs, blades twitch and re-cross, head tilts as if listening.
+  ALERT: blades snap open wide. MOVE: a stalking high-stepping gait, body level, blades held.
+  WIND_UP (AREA_STRIKE): both blades drawn far back, body coiled. ATTACK: single blade stab.
+  AREA_STRIKE: a two-blade sweep with smear frames. BUFF_SELF: plates lift and lock, seam flares.
+  HURT: plates ring, body sways back; HEAVY: a plate tears half off. DEFEND: blades crossed in front.
+  WOUNDED: a blade drags, a plate hangs loose, ichor drips at the seam.
+  DEATH: blades drop first, legs buckle, it folds onto its plates.
 
 
 BALANCE NOTES / BALANCE ADMISSION
@@ -104,55 +85,47 @@ None - adds no balance-bearing content.
 
 INTERACTIONS
 ------------
-The Corruptor boss's minions and BLIGHT_CORRUPTOR's SUMMON spawn these types, so the new sprites appear
-there automatically. UNDEAD's BURNABLE trait and the incinerator's fire effects draw over them.
+Same as orders 2-3; AREA_STRIKE and BUFF_SELF effects from EnemyAttackEffectSystem play in step with the
+new clips (the clip owns the body, the system owns the strike area marker).
 
 
 EDGE CASES
 ----------
-Same as order 1.
+Order 2-3 edge cases. Thin blades at 4+ tiles: thick bases + rim light.
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  Owner approval of all five (family contact sheet + in-engine shots) recorded in DECISIONS.
-  A2  Each spawns in-engine showing its sprite; the five are told apart at three tiles.
-  A3  The soul ink reads as cold white, not purple, under corrupted_violet and core_white_violet moods.
-  A4  Each sprite's job is identifiable from its clothes (owner confirms at the gate).
-  A5  All earlier sprites regenerate byte-identical. Build green. G1 respected.
+  A1  Owner approval of the stills, the clips and the in-engine captures, recorded in DECISIONS.
+  A2  In-engine every standard clip, both ability clips, the four damage outcomes, wounded, a status and
+      death -> remains play correctly (burst captures).
+  A3  It is visibly taller than a Shell Brute spawned beside it.
+  A4  Earlier creatures regenerate byte-identical. G1 respected. Build green.
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. KIT              humanoid rig, cloth + skin materials, soul ramp, fold helper
-  2. SPRITES          five functions, family contact sheet, in-engine preview
-  3. OWNER GATE       stop; send; record
-  4. WIRE             (libgdx-specialist) constants + five registry rows
-  5. TESTS            None. Not balance-bearing; verified by build + run.
-  6. DOCS             art-direction section 16 (roster + the SOUL ink), SKILL.md (humanoid rig usage)
-
-RISKS AND UNKNOWNS
-  - Humanoids are where procedural art most easily looks like mannequins. Hands and heads carry the
-    read; prototype the rig on the Ghoul alone and show it to the owner early (CP2) before building
-    the other four.
-  - The soul ramp vs the two violet moods - test first.
+  1. KIT + RIG + CLIPS  (main thread, enemy-art skill)
+  2. EFFECTS            (main thread, effects.py)
+  3. OWNER GATE         stills + GIFs + in-engine bursts; stop; record
+  4. WIRE               (libgdx-specialist) one registry row + files
+  5. TESTS              None. Not balance-bearing; verified by build + run.
+  6. DOCS               guide, art-direction 16, SKILL.md
 
 
 CHECKPOINTS
 -----------
   CP0  checkpoint file committed and pushed
-  CP1  humanoid rig + materials + soul ramp in the kit; earlier sprites byte-identical
-  CP2  the Ghoul alone generated and previewed in-engine; owner's early read on the rig recorded
-  CP3  the other four generated; family sheet + in-engine shots sent
-  CP4  owner approval recorded in DECISIONS (stop here until it is)
-  CP5  five rows wired; A2-A3 verified in-engine; build green
-  CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
+  CP1  primitives + rig + stills; earlier creatures byte-identical; stills sent for an early read
+  CP2  full clip set + ability clips + effects generated; GIFs + in-engine bursts sent
+  CP3  owner approval recorded (stop until it is)
+  CP4  wired; A2-A3 verified; build green
+  CP5  docs; reviewer PASS; STATUS: IMPLEMENTED
 
 
 ASSUMPTIONS
 -----------
-  AS1  The SOUL ink is new to the series and becomes the UNDEAD family's glow.
-  AS2  The undead are drawn as recognisably human and not grotesque, per the premise ("victims").
+  AS1  Four walking legs + two blades = six limbs, true to the insect family.
 
 
 DECISIONS
@@ -167,5 +140,5 @@ None.
 
 RELATED
 -------
+  Guide:  docs/sprite-art-creation-guide.txt
   Ideas:  generated-enemy-art.txt, -order-1..3.txt
-  Docs:   story/00-premise.md (the system-as-story table), docs/art-direction.txt section 16

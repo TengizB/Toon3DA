@@ -1,0 +1,375 @@
+SPRITE ART CREATION GUIDE — HOW toon3D MAKES ITS ART IN CODE
+==============================================================
+PURPOSE: the permanent, single source of truth for HOW a sprite, an animation or a visual effect is
+         created for this game: the method, the rules, the tools, the engine constraints, the checks
+         and every lesson already paid for. Read it before creating or changing ANY generated sprite
+         - enemies first, but the same method applies to bosses, props, pickups, effect particles and
+         anything else that needs pixels.
+
+Created 2026-10-21 from the session that prototyped generated enemy art (three prototype enemies,
+two approved by the owner, one rejected). Update it in the SAME commit as any change to the kit, the
+style lock, the clip set, the reaction rules or the engine contract. A section marked [PLANNED: order N]
+describes something the generated-enemy-art series has designed but not built yet; when that order
+ships, it removes the marker.
+
+Related: .claude/skills/enemy-art/SKILL.md (the tool's quick reference),
+         .claude/agents/ideas/generated-enemy-art*.txt (the series that rebuilds every enemy),
+         docs/art-direction.txt (the game's style bible - this guide must never contradict it).
+
+
+CONTENTS
+  1.  Non-negotiables
+  2.  The tools and where things live
+  3.  The rendering technique, step by step
+  4.  Materials, palettes and inks
+  5.  Designing a creature (the brief and the build order)
+  6.  Composition: canvas, scale, ground line, hover
+  7.  Animation: rigs, poses, clips                           [PLANNED: order 1]
+  8.  Reactions: how an enemy answers every event             [PLANNED: orders 2-3]
+  9.  Effects: hits, deaths, projectiles, status              [PLANNED: order 3]
+  10. Engine contract (what the game does with the output)
+  11. Verification and the owner approval gate
+  12. Lessons already paid for
+  13. Recipes (add a sprite / a clip / a material / other content)
+
+
+====================================================================================================
+1. NON-NEGOTIABLES
+====================================================================================================
+  N1  GENERATED IN CODE. Every sprite pixel comes from a script. No hand-painted pixel, no
+      image-model output, no manual edit of an output PNG. To change art, change its code and
+      regenerate. Same input -> byte-identical output (every noise source is seeded).
+  N2  ORIGINALITY. The old enemy textures (assets/textures/enemies/ outside generated/) were made
+      by image models; they do not fit the game and are NOT reference material - never opened for
+      inspiration, traced, recoloured or re-created. Designs come from the story (story/00-premise.md),
+      the entity's mechanics and role, and ORA's lines about it. The same applies to any future
+      content: never "redo" an existing image-model asset, design the thing anew.
+  N3  ONE STYLE LOCK. One light rig, one outline rule, one cleanup pass, one dither, one material
+      library for everything. Never override them per sprite; extend the library instead.
+  N4  SEMANTIC COLOURS ARE SACRED (art-direction V5). No saturated red / green / blue / purple /
+      yellow as decoration. SUIT_AMBER belongs to the player and is never used on an enemy.
+  N5  READABILITY BEATS MOOD (art-direction V8). A threat must read at two tiles under the darkest
+      mood. Silhouette first; detail last.
+  N6  STORY ON THE BODY. Every creature carries at least one detail that ties it to the premise
+      (an Organization tag, a harvest port, a shackle, a stencilled serial). Story goes ON anatomy,
+      never by removing anatomy the creature should have (see lesson 12.6).
+  N7  OWNER APPROVAL GATE. Nothing generated enters the game until the owner has seen it - a
+      contact sheet, animated clips and in-engine screenshots - and said yes. The answer is written
+      into the idea file's DECISIONS. An agent's own opinion is never the gate.
+  N8  NO TESTS (CLAUDE.md Testing Policy). Art is verified by building and running the game and by
+      the checks in section 11.
+
+
+====================================================================================================
+2. THE TOOLS AND WHERE THINGS LIVE
+====================================================================================================
+  .claude/skills/enemy-art/            the generator (a dev tool, outside Gradle, never shipped)
+    kit.py                             the renderer: shapes -> height fields -> shading -> pixels
+    bestiary.py                        one function per sprite + the ENEMIES table
+    sheet.py                           contact sheets
+  assets/textures/enemies/generated/   shipped output (PNG, binary alpha)
+
+  Requirements: Python 3, numpy, Pillow (pre-installed in the cloud container). Nothing else.
+
+  Commands:
+    cd .claude/skills/enemy-art
+    python3 bestiary.py ../../../assets/textures/enemies/generated        # ship form, all sprites
+    python3 bestiary.py /tmp/out --halo warden                            # presentation form
+    python3 sheet.py /tmp/out /tmp/out/sheet.png 3                         # contact sheet at 3x
+
+  Why offline Python and not Java at runtime: the kit is ~400 lines of array numerics that would
+  have to be duplicated in Java, would add load time on phones, and buys nothing visible. The game
+  only needs the PNGs (and, from order 1, the clip manifests).
+
+
+====================================================================================================
+3. THE RENDERING TECHNIQUE, STEP BY STEP
+====================================================================================================
+The kit is a tiny offline "sculpt and light" renderer. It produces pixel art that looks hand-shaded
+because every pixel's value comes from a real surface normal lit by one consistent light.
+
+3.1 Shapes are HEIGHT FIELDS, not flat stickers.
+  Every primitive returns a signed height h(x, y): positive inside (the surface height above the
+  canvas), negative outside (minus the distance to its edge).
+    blob      ellipsoid dome: depth * sqrt(1 - q^2) inside, depth * (1 - q) outside (q = normalised radius)
+    limb      tapered capsule: the same profile around a segment, radius r1 -> r2
+    chain     a bent limb = consecutive limbs with a tapering radius
+    slab      bevelled plate: rises from the edge at `slope` to a plateau, optionally tilted
+  Why: a height field has a gradient, so lighting, occlusion and outlines all come for free and
+  stay consistent between every sprite.
+
+3.2 Shapes inside a LAYER merge with a SMOOTH MAXIMUM.
+  smax(a, b, k) = max(a, b) + h^2 * k / 4, h = max(k - |a - b|, 0) / k.
+  k is the blend radius in pixels. k ~ 4-10 makes a leg GROW out of a body (a fillet forms where
+  they meet); k = 0 is a hard union. Signed heights matter: because outside is negative, fillets only
+  form where shapes are close - empty canvas never fills up.
+  Shape operations: union (smooth max), add (raise a detail and paint it its own material: veins,
+  rivets, eyes, blisters), carve (subtract: grooves, panel seams, fractures).
+  Material at a pixel = the union shape with the highest (h + prio); `prio` decides overlaps.
+
+3.3 LAYERS are back to front, with hard edges between them.
+  A later layer always sits in front. Use a separate layer only when a part must read as IN FRONT
+  of another (a front leg over the thorax, an arm over the hull). Everything that should look like
+  one organic mass stays in ONE layer (lesson 12.1).
+
+3.4 Normals come from the gradient.
+  n = normalise(-dH/dx, -dH/dy, 1) by central differences inside each layer (a neighbour in a
+  different layer counts as the edge). Image y points DOWN; the light vectors are written in the
+  same convention.
+
+3.5 The light rig (shared, never per sprite).
+  Key light     upper-left-front  L = normalise(-0.50, -0.72, 0.48)
+  Wrap          v = 0.06 + 0.62 * wrap(n.L) + 0.30 * max(n.L, 0)   - a soft terminator, no harsh black side
+  Rim           FACILITY_CYAN from the right, strongest on silhouette edges - "LIT BY THE MACHINE":
+                the facility's light catches every creature, whatever it is
+  Specular      Blinn half-vector, per material (strength, shininess): metal and wet chitin shine,
+                stone does not. A specular hit replaces the pixel with the ramp's top step + white.
+  Cavity AO     a pixel lower than its blurred neighbourhood is darker (crevices, seams, joints)
+  Cast AO       a pixel just behind a nearer layer is darker (up to 3 px, fading)
+
+3.6 Quantise to the material RAMP.
+  Each material is a 6-step ramp (section 4). The lit value v picks the step; a 4x4 Bayer dither
+  of amplitude 0.08 breaks banding only at step boundaries. Surface variety comes from GRAIN (value
+  noise added to the height field per material), never from heavy dither (lesson 12.4).
+
+3.7 Emissives and translucency.
+  Emissive materials (cyan, ichor, magma, ...) ignore the light: value = 0.22 + 0.74 * I^1.4, where
+  I is the shape's OWN normalised height - so a glow part is hottest at its own centre (lesson 12.3).
+  Translucent materials (sac) are lit like a surface, then mixed toward a glow ramp by their own
+  thickness: a blister glows from inside, strongest where it is thickest.
+
+3.8 Cleanup.
+  A pixel whose four neighbours all agree on another shade takes that shade (two passes). This is
+  the step that separates "rendered" from "pixel art": no orphan pixels, no salt-and-pepper.
+
+3.9 Outlines.
+  Interior: where a nearer layer overlaps a farther one, the far side's edge pixel is darkened.
+  Exterior: a 1-px selective outline in the DARKEST step of the neighbouring material (slightly
+  lighter on the lit upper-left side), never one flat black for everything. Emissive neighbours get
+  their glow ramp's second step, so a glow has a coloured edge rather than a black one.
+
+3.10 Stencils and decals.
+  stencil(img, "W-07", x, y, colour): 3x5 pixel digits/letters painted only onto opaque pixels.
+  Legible at close range, invisible at four tiles - right for story detail, never for information
+  the player needs (lesson 12.7).
+
+3.11 Glow halo (presentation only).
+  --halo paints a soft translucent spill around emissives. The engine alpha-cuts enemy textures,
+  so shipped sprites are written WITHOUT it; in-game glow comes from the emissive layer
+  [PLANNED: order 2], drawn additively and exempt from the mood grade (art-direction V6).
+
+
+====================================================================================================
+4. MATERIALS, PALETTES AND INKS
+====================================================================================================
+4.1 A material is: a 6-step ramp (dark -> light), specular (strength, shininess), grain (amplitude,
+    cell size), and optionally emissive=True or glow=<emissive ramp> (translucent).
+4.2 Ramp rules: hue-shift - shadows cooler, lights warmer; no step pure black or pure white
+    (outlines and specular own the extremes); neighbouring steps clearly distinct at 1x; saturation
+    stays moderate (N4).
+4.3 The library (kit.py MATERIALS):
+    gunmetal, darkmetal, livery (Organization white)       Organization hardware
+    chitin, chitin_dk, bone, sac (translucent, ichor glow) creatures of harvested tissue
+    basalt, basalt_lt                                      stone (see lesson 12.2 before using)
+    cyan, ichor, magma                                     emissives
+4.4 Family glow inks (one per family, so a family reads at a glance):
+    MACHINE cyan (the Organization's light) | INSECT + ABERRATION ichor (harvested tissue, coral) |
+    UNDEAD soul [PLANNED: order 6: pale cold bone-white, low saturation] | GOLEM + DEMON magma
+    (the planet's heat; elemental golems add their element on the surface).
+4.5 Adding a material: add a row to MATERIALS, never tint one sprite by hand. Check it beside the
+    existing ramps on a contact sheet and under the darkest and the brightest mood.
+
+
+====================================================================================================
+5. DESIGNING A CREATURE
+====================================================================================================
+5.1 THE BRIEF (write it in the idea file before any code)
+    What it IS        its place in the story - who made it, what happened to it (premise table)
+    Role -> mass      CHAFF small | SOLDIER medium | BRUISER heavy | MINI_ELITE larger and spiked |
+                      BOSS huge
+    Verb -> pose      its tacticalVerb() as a body: a charger leans its battering front forward, a
+                      sniper points one line at you, a flanker reaches sideways, a tank plants wide
+    The attack        visible on the body (emitter, blades, fists, jaws, spout)
+    ORA's line        the sprite must say it before she does
+    Materials + ink   from section 4; the family ink
+    Story detail      at least one (N6)
+    Distinctness      how it differs from every other member of its family at two tiles
+    Motion character  [PLANNED: order 1] how it idles, moves, attacks, flinches and dies (section 7)
+5.2 BUILD ORDER (each step judged at 1x before the next)
+    a. Silhouette: big masses only, one layer, flat - does the black shape read the role and verb?
+    b. Masses merged with smooth max; limbs as chains; decide which parts need their own layer.
+    c. Materials and prio.
+    d. Detail as add/carve: seams, ridges, rivets, veins, eyes, teeth.
+    e. Story detail and stencil.
+    f. Contact sheet beside its family; then in-engine.
+5.3 Symmetry: design half with mirror(), then break it on purpose (a clamp, a torn hose, an arm
+    holding a weapon). Perfect symmetry reads as a toy.
+5.4 Distance: judge at 1x, 3x and in-engine at 2 and 4 tiles. Thin parts (antennae, blades) vanish
+    first - thicken their base and let the rim light catch them.
+
+
+====================================================================================================
+6. COMPOSITION: CANVAS, SCALE, GROUND LINE, HOVER
+====================================================================================================
+  - Regular enemies 160x240, bosses 240x360 (both 2:3, the aspect the renderer draws). Origin
+    top-left in the kit (y down); feet on row ~232 (regular) / ~352 (boss); centred on the middle column.
+  - The renderer scales the whole canvas to heightMultiplier() walls. Compose the creature to fill the
+    canvas for its role; never change heightMultiplier to fix art.
+  - A floating creature the renderer does NOT hover bakes its hover into the canvas (empty rows
+    under it, like the Warden); a creature the renderer hovers (EYE_TYRANT) stands on the canvas floor.
+  - Leave clear air where the renderer draws overlays on top (e.g. the Auric Sentinel's shard ring).
+  - Animation frames share ONE canvas and ONE ground line, so a creature never pops between clips
+    [PLANNED: order 1].
+
+
+====================================================================================================
+7. ANIMATION: RIGS, POSES, CLIPS                                           [PLANNED: order 1]
+====================================================================================================
+7.1 The model. A sprite function becomes a RIG: build(pose) -> layers, where `pose` is a dict of
+    named parameters (joint angles, offsets, squash, jaw open, lid closed, glow intensity, ...).
+    A CLIP is a list of keyframes (time, pose values) with easing; the kit renders each frame by
+    evaluating the rig at the interpolated pose. Because every frame is lit by the same rig, shading
+    is automatically consistent across frames - the core advantage of generating animation in code.
+7.2 Why pre-rendered frames and not a runtime skeleton: the smooth-max merging and per-pixel
+    lighting cannot be decomposed into rigid quads without losing the look. Frames keep the quality.
+7.3 THE STANDARD CLIP SET (every enemy; durations are real seconds, the game is turn-based)
+    IDLE        loop, 4-8 frames, 0.8-1.6 s: breathing, hover sway, antenna twitch, blister pulse.
+                Alive even when nothing happens. DORMANT plays it slowed, eyes dimmed.
+    ALERT       one-shot, 2-4 frames: the startle when it wakes (eyes ignite, rears up).
+    MOVE        loop, 4 frames, plays during the tile slide: a step cycle, a scuttle, a thrust surge.
+    WIND_UP     one-shot into a HELD last frame: the telegraph. It holds for the whole player turn,
+                so the anticipation pose IS the warning (pillar: readable threats).
+    ATTACK      one-shot, 3-5 frames within ENEMY_ATTACK_ANIM_DURATION (0.30 s today): anticipation ->
+                strike (smear frame allowed) -> recovery. Ranged: a muzzle/emit frame with an anchor.
+    HURT_LIGHT  2 frames: a flinch.     HURT_HEAVY  3-4 frames: a knock back, a stagger.
+    DEFEND      one-shot into a held brace.
+    DEATH       6-10 frames, 0.6-1.0 s: collapse / break apart / power down - in the creature's
+                own character - ending on the frame that becomes its corpse.
+    + ability clips where the type has one (SUMMON, AREA_STRIKE, SELF_DESTRUCT priming, the lance,
+      a shard absorb ...), named in the order that builds the type.
+7.4 Principles (they matter more at low frame counts): anticipation before every action; squash
+    and stretch on impacts; overlapping action (cables, antennae, tails lag a frame); hold the key
+    pose longer than the in-betweens; a clip must read in its first two frames.
+7.5 Texture must stick to the body. Grain noise is sampled in each SHAPE'S OWN coordinates, not
+    canvas coordinates, or the surface "swims" over a moving part. The Bayer dither is screen-fixed
+    and may shimmer slightly on moving edges - acceptable, keep it at 0.08.
+7.6 Output: one ATLAS PNG per creature (frames packed, trimmed to their bounds), one GLOW atlas
+    (emissive pixels only), and one MANIFEST (clip name -> frames, frame durations, loop/hold, and
+    per-frame ANCHORS: ground point, hit centre, eye, muzzle/emitter) the runtime reads.
+7.7 Previews for the owner: an animated GIF per clip (nearest-neighbour, 3x) plus a clip strip.
+
+
+====================================================================================================
+8. REACTIONS: HOW AN ENEMY ANSWERS EVERY EVENT                             [PLANNED: orders 2-3]
+====================================================================================================
+The simulation stays headless: EnemyManager fires visual MOMENTS through a listener seam (the same
+idiom as enemy/EnemyVoiceListener, so the enemy package never imports a renderer). The visual layer
+maps each moment to a clip and an effect. Minimum behaviour every creature must show:
+    woken               ALERT, eyes/emitters ignite
+    moves a tile        MOVE during the slide, then back to IDLE
+    telegraphs          WIND_UP, held through the player's turn
+    attacks             ATTACK synced to the hit; ranged emits from the muzzle anchor
+    takes damage        HURT_LIGHT or HURT_HEAVY by damage tier; a brief recoil AWAY from the hit;
+                        a family hit effect at the hit anchor; the white flash kept
+    resists / blocks    no flinch - an armour spark or a block shimmer instead (the matchup layer's
+                        RESISTED must look different from a hit that hurt)
+    staggered / knocked HURT_HEAVY + displacement
+    braces (DEFENDING)  DEFEND, held
+    low health          WOUNDED state: a damage layer generated by the kit (cracks, sparks, leaks,
+                        a limping idle) fades in below 50% HP
+    status effects      burning / poisoned / slowed tint and particles where the status applies
+    dies                DEATH plays even though the simulation already removed the enemy (the visual
+                        layer keeps a dying instance), then hands over to the corpse decal
+Nothing here changes a rule, a number or a turn: reactions are cosmetic and never block input.
+
+
+====================================================================================================
+9. EFFECTS                                                                  [PLANNED: order 3]
+====================================================================================================
+Effects are generated by the same kit, from the same materials, so a hit on a machine throws sparks
+in its own metal and a tick bleeds its own ichor:
+    machine   sparks + a cyan arc            insect / aberration   ichor droplets + chitin flecks
+    undead    soul wisps                     golem / demon         rock chips + embers
+  Kinds: hit burst, death burst (debris of the creature's own materials), muzzle/emit flash,
+  projectile and trail for every ranged enemy, status particles. Each is a small generated atlas;
+  the runtime draws them pooled (no allocation in render()).
+
+
+====================================================================================================
+10. ENGINE CONTRACT (what the game does with the output)
+====================================================================================================
+  - Textures load with the Nearest filter. Enemy textures are alpha-cut at 0.50 by EnemySpriteSheets
+    today, so output must be BINARY alpha (0 or 255).
+  - The billboard is drawn as heightMultiplier() wall heights tall from the floor line, per screen
+    column against the wall z-buffer; the contact shadow is drawn at the floor line.
+  - Every world pass is colour-graded by the floor's lighting mood at GRADE_STRENGTH_ENEMY 0.50 and
+    fogged by depth. Emissives belong in the glow layer so they escape the grade (V6).
+  - The renderer draws overlays OVER the sprite (hit flash, health bar, name tag, matchup words,
+    state tints - Auric exposed, Cinderforge crust, Rimeshell shell/frost - the shard ring, boss
+    afterimages). Keep body colours mid-value so every tint and flash reads.
+  - Memory: an atlas is a GPU texture. Budget per creature <= 2048x2048 RGBA, loaded per floor for the
+    types on that floor and disposed on floor teardown [PLANNED: order 2]. A 160x240 frame is 150 KB
+    in RGBA; trim frames to their bounds.
+  - Critical rules from CLAUDE.md hold: no allocation in render(), every Texture disposed, all GL work
+    on the render thread.
+
+
+====================================================================================================
+11. VERIFICATION AND THE OWNER APPROVAL GATE
+====================================================================================================
+  1. Contact sheet: the creature beside the rest of its family at 3x, on the game's near-black.
+  2. Clip previews: one GIF per clip + a strip (from order 1).
+  3. In-engine (run-game skill): spawn it two tiles ahead (`spawn:TYPE:FORWARD:RIGHT`, plus `alert`, `damage`,
+     `kill` and `burst` - added to run-game by series order 2), default mood + one other (`--mood amber_hot`); for reactions, capture a burst of
+     shots 0.05 s apart around a hit / a kill. Before a type is wired, preview by copying its PNG over
+     a similar-height type's texture in the WORKING TREE only and restoring with
+     `git checkout -- assets/textures/enemies/` - never commit a swap.
+  4. Regeneration: every earlier sprite must come out byte-identical after a kit change, unless the
+     owner approved the change.
+  5. Gate: send 1-3 to the owner; STOP; record the answer in DECISIONS; only then wire it.
+
+
+====================================================================================================
+12. LESSONS ALREADY PAID FOR
+====================================================================================================
+  12.1 Stacked shapes read as a toy. Separate ellipses and capsules look glued together; merge
+       organic parts in one layer with smooth max.
+  12.2 Rectangular slabs read as bricks. The rejected golem prototype (polygon slabs over a glowing
+       backing) was the owner's weakest. Stone needs irregular sculpted masses, fractures carved INTO
+       them, chipped edges, and glow only in seams and a core.
+  12.3 Glow intensity from the merged layer height burns glow parts flat white. It must come from
+       the shape's own height (fixed in kit.py - do not regress).
+  12.4 Bayer dither on flat areas turns into stipple. Keep dither low; get variety from grain.
+  12.5 Pasted mock-ups lie: no mood grade, fog, contact shadow or name tag. Judge in the engine.
+  12.6 The owner reads anatomy as anatomy: a clamped stump read as a missing leg and was asked back.
+       Put story details ON the body.
+  12.7 3x5 stencils are close-range story detail only.
+  12.8 Over-glowing a sprite kills its form. Emissives: eyes, sacs, emitters, seams, cores.
+  12.9 A translucent halo does not survive the engine's alpha cut. Glow is a separate layer.
+  12.10 What the owner liked: sculpted organic forms, wet/metal specular, visible Organization
+       hardware on creatures, an off-centre detail that breaks symmetry, restrained glow.
+
+
+====================================================================================================
+13. RECIPES
+====================================================================================================
+ADD AN ENEMY SPRITE
+  [ ] brief written in the idea file (5.1); N2 respected - no old texture opened
+  [ ] rig function + ENEMIES row in bestiary.py; new materials in kit.MATERIALS if needed
+  [ ] the full clip set (7.3) + its ability clips + its reactions (8) + family effects (9)
+  [ ] contact sheet, clip GIFs, in-engine screenshots (11)
+  [ ] owner approval recorded
+  [ ] registry row binding the EnemyType to its atlas (see the series order that owns the runtime)
+  [ ] earlier sprites regenerate byte-identical
+  [ ] docs: this guide if the method changed; art-direction section 16 roster
+
+ADD A CLIP
+  [ ] keyframes on the rig's pose parameters; principles 7.4; anchors for anything that emits
+  [ ] GIF preview; owner sees it with the rest of the set
+
+ADD A MATERIAL
+  [ ] ramp per 4.2; spec + grain; contact-sheet check beside existing ramps; both extreme moods
+
+OTHER CONTENT (props, pickups, effect particles, room dressing)
+  The same kit and the same rules apply. A new kind of content gets its own builder file beside
+  bestiary.py (e.g. props.py), its own output folder under assets/, and its own section here.

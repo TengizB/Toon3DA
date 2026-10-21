@@ -1,0 +1,173 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy visual rework 8 - the Void Shroud and the bosses
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-7. Read generated-enemy-art.txt and
+docs/sprite-art-creation-guide.txt before starting.
+
+
+OVERVIEW
+--------
+The last and most important creatures: the Void Shroud (the only regular DEMON) and the three bosses -
+the Overseer (MACHINE), the Corruptor (ABERRATION) and the Hell Baron (DEMON). Two bosses have never had
+their own art (the Corruptor and the Hell Baron draw a placeholder quadrant today). Bosses use the 240x360
+canvas, and because a boss fight is built on telegraphed phases, bosses get PHASE clips: the body itself
+shows which phase the fight is in and what is coming next.
+
+
+SCOPE
+-----
+IN
+  - Kit growth: a SHADOW material (near-black charcoal with ember undertones - readable only through its
+    rims and core, never violet), a smoke-taper helper (a body that dissolves into dithered wisps toward the
+    floor), 240x360 canvas support everywhere (packer, sheets, GIFs), atlas budget check for bosses (split
+    into a second atlas page if 2048x2048 is exceeded - the manifest supports pages).
+  - Void Shroud: rig + full clip set + effects (shadow wisps, embers).
+  - Each boss: rig + full clip set + PHASE clips (one idle and one telegraph pose per phase the boss has -
+    read the boss's design docs and BossVisualState for the phase list) + its signature attack clips +
+    effects + an ENRAGE/low-health variant + a death that lasts (1.5-2.5 s) and leaves boss remains.
+  - Owner gate PER BOSS (each boss is its own approval).
+  - Four registry rows (the boss rows replace today's placeholder/dedicated regions); docs.
+
+OUT
+  - Boss mechanics, phase rules, BossHudRenderer, arenas. Changing boss heightMultiplier (1.80/1.60/2.00).
+  - The boss afterimage trail is a renderer feature: it keeps working by drawing the CURRENT frame.
+
+
+GAMEPLAY LOOP
+-------------
+Rules unchanged. Visually: a boss's stance changes with its phase, and every telegraph is a held pose.
+
+
+RULES
+-----
+  R1  Series G1-G13; runtime rules of orders 2-3.
+  R2  STORY FIRST: before drawing a boss, read docs/story-ui-system.txt (THE ORGANIZATION and its LIE LEDGER)
+      and the boss's codex / bark strings. A boss may not contradict a line the game says.
+  R3  A boss reads as its family at a glance and as a boss by mass.
+  R4  Phase clips map to the boss's existing phase/visual state - the sim decides phases, the art shows them.
+
+
+PLAYER EXPERIENCE
+-----------------
+  Void Shroud  "It goes for your back. Turn and face it before it gets there."
+  Overseer     "It telegraphs everything. Watch one full cycle before you commit."
+  Corruptor    "It tells you what's coming before it does it. Learn that, then punish it."
+  Hell Baron   "Timing, not reflexes. Read the mark, then move."
+Every boss line is about READING it - so the bosses are where readable motion matters most.
+
+
+TECHNICAL NOTES
+---------------
+Content plus: the manifest's multi-page atlas support if a boss needs it (runtime change, named in the
+IMPLEMENTATION NOTE); capture steps to force a boss phase for gate screenshots (the run-game `bosshud`
+step is the starting point).
+
+
+VISUAL DESIGN
+-------------
+VOID SHROUD (DEMON, SOLDIER, 0.80 walls, melee flanker)
+  The planet's pain given a shape: a tall hooded drift of shadow-stuff, an ember core where a chest would
+  be, one long arm reaching out to the side - the flank - and a body thinning into smoke above the floor.
+  The outline does the work (cyan rim + ember core). MOTION: idle = the smoke churns, the reaching arm
+  drifts; move = it glides, smearing sideways; attack = the arm whips around; hurt = it tears and re-forms;
+  death = it unravels into embers.
+THE OVERSEER (MACHINE boss, 1.80 walls, ranged, telegraphed phases)
+  The story says the Overseer is not a person - "It's a desk, not a person"; the chair is the cruelty. So
+  the boss is the CHAIR made into a war machine: a monumental administrative chassis, a console-throne of
+  Organization gunmetal and livery panels, a bank of cyan screens and lenses where a face would be,
+  filing-arm manipulators, cables running up out of the canvas. Nobody sits in it. MOTION: screens cycle
+  text-like glyph patterns per phase, arms re-file and re-aim, the throne swivels for telegraphs; death =
+  screens go dark one by one, the chassis slumps, the cables fall.
+THE CORRUPTOR (ABERRATION boss, 1.60 walls, ranged, telegraphed)
+  Where the breach began: a towering mass of harvested tissue grown around the ruin of a containment tank,
+  the tank's ribs and glass shards still embedded. Rows of eyes (order 5's eyeball helper) down its front,
+  all aimed at the player - it "tells you what's coming" by looking where it will strike. MOTION: the eyes
+  track and converge on the telegraph, the mass heaves, pods birth minions; death = the eyes close in a
+  wave and the mass collapses into the tank's wreck.
+THE HELL BARON (DEMON boss, 2.00 walls, melee, read the mark)
+  The planet's immune champion - an antibody the size of a room, armoured in the planet's own crust
+  (order 7's stone method, never slabs), an ember core, immense forearms. Deliberately NOT a horned devil:
+  its menace is mass and patience. A broken-off Organization drill bit embedded in its shoulder - the wound
+  that woke the planet. MOTION: slow, enormous anticipation on every strike (the mark is its body), the
+  ground cracks under its steps, the core flares on enrage; death = it kneels and turns to stone.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+BossHudRenderer, boss phases/visual states, the afterimage trail, telegraph and attack effects, boss
+minions (orders 4-6 creatures), boss contact shadow, the final-boss victory flow (the death clip must finish
+before any ending card - verify the hand-off timing).
+
+
+EDGE CASES
+----------
+Orders 2-3 edge cases. A boss killed mid-telegraph; the victory/ending sequence starting while the death
+clip plays (the clip must not be cut by the fade - or the fade waits).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Owner approval of each of the four, individually, recorded in DECISIONS.
+  A2  In-engine: each boss in its fight (or forced via capture steps) shows its phase idles, its telegraph
+      poses, its attacks, its damage outcomes, enrage, and its death; the Void Shroud at 2 tiles.
+  A3  The Overseer's throne is empty (owner confirms the story read).
+  A4  The Corruptor and Hell Baron no longer draw a placeholder.
+  A5  Earlier creatures byte-identical. Build green. G1 respected. Frame time in a boss fight measured.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          shadow material, smoke taper, 240x360 + atlas pages
+  2. SHROUD       rig + clips + effects; gate
+  3. BOSSES       one at a time: rig + phase clips + effects; gate each
+  4. WIRE         (libgdx-specialist) four rows + files (+ atlas pages if needed)
+  5. TESTS        None. Not balance-bearing; verified by build + run.
+  6. DOCS         guide (boss canvas, phase clips), art-direction 16
+
+RISKS AND UNKNOWNS
+  - A 240x360 sprite drawn 2 walls tall shows every flaw; budget extra iteration.
+  - Boss atlases are the largest; measure texture memory on the boss floor.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit additions; earlier creatures byte-identical
+  CP2  Void Shroud complete; owner approval recorded
+  CP3  Overseer complete; owner approval recorded
+  CP4  Corruptor complete; owner approval recorded
+  CP5  Hell Baron complete; owner approval recorded
+  CP6  four rows wired; A2-A4 verified; build green
+  CP7  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  DEMON shares the magma ink with GOLEM (the planet defending itself).
+  AS2  The Overseer is drawn empty-throned because the story says the chair, not a person, is the enemy.
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Guide:  docs/sprite-art-creation-guide.txt
+  Ideas:  generated-enemy-art.txt, -order-1..7.txt, boss-fight-mobile-overseer-order-*.txt (mechanics)
+  Docs:   docs/story-ui-system.txt (THE ORGANIZATION)

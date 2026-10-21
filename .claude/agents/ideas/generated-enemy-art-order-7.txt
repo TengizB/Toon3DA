@@ -1,82 +1,109 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Generated enemy art 7 - emissive layer and cleanup
+TITLE: Enemy visual rework 7 - the elemental Golems
 CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
-Part of the generated-enemy-art series. Requires orders 1-6 (every EnemyType has a generated sprite).
-Read generated-enemy-art.txt first.
+Part of the generated-enemy-art series. Requires orders 1-6. Read generated-enemy-art.txt (decision D5)
+and docs/sprite-art-creation-guide.txt (above all lesson 12.2) before starting.
 
 
 OVERVIEW
 --------
-Finishes the series. Two jobs: (1) give the generated enemies back the light they lost - the kit's
-glow is translucent, the engine alpha-cuts it, and the mood grade + fog dim glowing eyes and cores
-like any surface, which breaks art-direction pillar V6 ("things that glow and mean something are never
-tinted"); (2) delete every trace of the old image-model textures.
+The four GOLEMS - Auric Sentinel, Cinderforge Colossus, Rimeshell Lancer, Verdant Spiresower - rebuilt as
+animated, reactive creatures. Golems are the planet's own crust and mantle rising to crush the infection:
+the player. This is the family the 2026-10-21 prototype FAILED at (slabs over a glow, read as bricks), so
+the order first fixes how the kit makes stone, proves it on one golem with the owner, then builds the rest.
+Stone that MOVES - grinding, cracking, re-hardening - is also where the reactions pay off most.
 
 
 SCOPE
 -----
 IN
-  - EMISSIVE LAYER:
-      * kit.py writes, beside each sprite, <sprite>_glow.png: the emissive pixels only (binary alpha,
-        same canvas) - generated from the same functions, so it can never drift from the body.
-      * GeneratedEnemySprites rows gain the glow path; EnemyRenderer draws it as an additive re-draw of
-        the visible sprite columns after the body (the same per-column pattern the muzzle light already
-        uses), at full colour, NOT graded and NOT fogged (V6), respecting the wall z-buffer and the
-        SpriteOccluderBuffer exactly as the body does.
-      * a per-depth glow fade constant in RenderConstants so a distant enemy's eyes are a point of
-        light, not a flare.
-  - CLEANUP:
-      * delete the nine old PNGs (enemy_sheet_blight, enemy_sheet_infernal, enemy_sheet_elemental_golems,
-        enemy_corruptor, enemy_vortex_eye, enemy_ghoul, enemy_crawler, enemy_revenant,
-        enemy_boss_overseer) and their EnemyConstants paths, the buildTextureRegions quadrant code, the
-        per-texture fields and the boss placeholder mapping. The registry becomes the ONLY source.
-      * EnemySpriteSheets: the hard alpha-cut existed to clean the image models' baked halos; generated
-        sprites are binary already, so the conditioning pass is removed (load time only drops). The
-        cache, Nearest filter and fallback stay.
-      * a load-time warning (Gdx.app.error) naming any EnemyType without a registry row.
-  - Series check and docs: art-direction section 9 rewritten, section 16 completed (emissive layer),
-    docs/enemy-system.txt texture notes, CLAUDE.md render/ list, the enemy-art SKILL.md, the series
-    master file's roster marked done.
+  - Kit growth (stone done right):
+      * SCULPTED ROCK: irregular masses (several merged ellipsoids, low k), fractures CARVED in by a seeded
+        crack-path helper, chipped silhouettes; no straight-edged rectangle as a body part.
+      * CRYSTAL material: faceted normals (a facet helper quantising the normal into planes), high specular,
+        translucent inner glow.
+      * element ramps: auric (metallic gold-brown, warm-white highlights - not the semantic yellow), rime
+        (frost white, grey-blue shadows, low saturation - not the defence blue, not FACILITY_CYAN), verdant
+        (olive and moss - not the health green), SAP glow (warm cream).
+  - The Cinderforge Colossus FIRST as the stone prototype (owner early read), then the other three.
+  - Each with the full clip set, DORMANT + WOUNDED idles and their mechanic clips:
+      Auric Sentinel        shard absorb (a jolt as a shard takes the hit), shard launch (arms fling out)
+      Cinderforge Colossus  AREA_STRIKE slam; a cooling/hardening loop and a crust-shatter reaction
+      Rimeshell Lancer      shell OPEN (the petals part on WIND_UP), lance fire, reseal
+      Verdant Spiresower    sowing (a spire-bud flung down), healing pulse when a spire heals it
+  - Effects: rock chips + dust (hit), ember spray (Cinderforge), frost shards (Rimeshell), gold crystal
+    shards (Auric), sap motes + leaf grit (Verdant); death bursts of their own stone.
+  - Owner gate, four registry rows, earlier creatures byte-identical, docs.
 
 OUT
-  - Animation (series AS3 - a separate future series), new enemies, renderer overlays other than glow.
-  - Soft/translucent halos (no custom shader, V2; the glow is binary + additive).
+  - The renderer's golem overlays stay and the art is designed AROUND them, not baked in: the Auric shard
+    ring, the Cinderforge crust plates/seams/heat haze, the Rimeshell open/frost tints, the Auric exposed
+    tint. (Order 9 may fold them into the new layer if that reads better - not this order.)
+  - The Spiresower's spires are runtime TILES with their own prop texture - not enemy art.
+  - Mechanics, numbers, names (G10).
 
 
 GAMEPLAY LOOP
 -------------
-Unchanged.
+Rules unchanged.
 
 
 RULES
 -----
-  R1  Emissive pixels draw unshaded and unfogged; everything else about the enemy is graded as before.
-  R2  No enemy texture remains that was not written by bestiary.py.
-  R3  No allocation in render(); the glow pass adds no per-frame objects.
+  R1  Series G1-G13; runtime rules of orders 2-3.
+  R2  No golem body part is a straight-edged slab (guide 12.2).
+  R3  A sprite never bakes what the renderer already draws on top of it; it leaves the space and the mid
+      values those overlays need.
+  R4  All four share the magma core ink; the element lives on the surface.
+  R5  Before designing, read the four elemental-golem-*.txt idea files for MECHANICS and OVERLAYS only;
+      their "SPRITE / SOURCE ART" sections describe the old textures and are not to be followed (G1).
 
 
 PLAYER EXPERIENCE
 -----------------
-In a dark far corridor the first thing you see of an enemy is its eyes, its emitter or its core - the
-"threats read above the world" pillar, finally true for enemies.
+ORA's lines are the contract:
+  Auric Sentinel        "Those shards are its armour and its ammo. Strip them fast."
+  Cinderforge Colossus  "It re-hardens the second you stop shooting. Don't stop shooting."
+  Rimeshell Lancer      "Armoured until it fires. Bait the lance, step off the lane, then hit it."
+  Verdant Spiresower    "The spires heal it. Break those first or it never dies."
+The motion makes each mechanic legible: the shell visibly opens, the crust visibly cools, a shard visibly
+takes the hit.
 
 
 TECHNICAL NOTES
 ---------------
-  - EnemyRenderer: one extra pass per visible enemy over its columns (blend GL_SRC_ALPHA, GL_ONE), batched
-    with the existing muzzle-light additive pass where possible to keep blend switches at two.
-  - Measure with run-game --probe cpu before and after (same session, docs/art-direction section 11
-    method); the glow pass must not add more than the muzzle light's measured cost.
-  - The kit change must leave every body PNG byte-identical (only new _glow files appear).
+Content only, plus whatever capture steps are needed to put an enemy into a state (shell open, crust
+stacked) for the gate screenshots.
 
 
 VISUAL DESIGN
 -------------
-No new art. The glow files are derived from the approved sprites.
+CINDERFORGE COLOSSUS (BRUISER, 1.15 walls, melee, AREA_STRIKE, crust re-hardens) - the prototype
+  A hunched forge of the planet's mantle: a slumped body of molten rock, heaviest at the shoulders, a few
+  cooled basalt ridges; two thick arms ending in fused club hands; a broken Organization shackle on one
+  wrist. The body is the HOT state (mid-orange, not white-hot) so the renderer's crust can darken it.
+  MOTION: idle = a slow seething, molten surface creeping; move = ground-shaking steps; slam = both clubs
+  up, down, with a squash; hurt = splashes of melt; death = it cools to black and cracks apart.
+AURIC SENTINEL (SOLDIER, 1.00 walls, ranged; shards = armour and ammo)
+  A geode the planet split open: a rough dark-rock outer body cracked down the front, the inside lined with
+  auric crystal, a hot core deep in the split; upright, arms held out as if holding the shard ring the
+  renderer draws. NO shards in the sprite; clear air around head and shoulders.
+  MOTION: idle = the core pulses, the arms hold the ring; attack = arms fling forward; absorb = a jolt
+  through the crystal; death = the geode closes, then shatters.
+RIMESHELL LANCER (SOLDIER, 0.85 walls, ranged lance; armoured until it fires)
+  A closed shell of frost-rime plates (sculpted) folded over its front like shut petals, a slit down the
+  middle where the magma lance-core shows. MOTION: idle = frost breath, plates creak; WIND_UP = the petals
+  part and the core blazes (held - this IS the opening the player must exploit); attack = the lance fires
+  from the core anchor; reseal = petals close; death = the shell shatters into frost.
+VERDANT SPIRESOWER (SOLDIER, 0.80 walls, melee; spires heal it)
+  Stone overgrown: a squat rock body furred with moss and lichen, crystalline spire-buds pushing out of its
+  back (SAP glow at their tips), roots trailing from its feet into the floor line.
+  MOTION: idle = buds sway, roots flex; sow = it hurls a bud down; heal = the buds pulse in time with a
+  spire's heal; death = moss withers, the stone crumbles.
 
 
 BALANCE NOTES / BALANCE ADMISSION
@@ -86,58 +113,61 @@ None - adds no balance-bearing content.
 
 INTERACTIONS
 ------------
-Mood grade (AtmosphereGrade), fog, muzzle light, wall z-buffer, SpriteOccluderBuffer, hit flash (glow
-stays on during the flash), death (the glow goes with the body), boss afterimages (no glow - they are
-memories, not light).
+Every golem overlay in EnemyRenderer (verify each live state in-engine), the matchup PLATED trait (the
+RESISTED read from order 3 matters most here), the Auric absorb flash (ABSORBED outcome).
 
 
 EDGE CASES
 ----------
-A missing _glow file means no glow for that enemy, never a crash. GL context loss: same unmanaged-
-texture path as the bodies. A frozen-world overlay (pause, codex): glow is drawn with the body as usual.
+Orders 2-3 edge cases. Overlay positions are relative to the sprite rect - confirm the shard ring and crust
+plates still sit on the new bodies (a renderer constant may need adjusting; name it in the IMPLEMENTATION NOTE).
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  At 8+ tiles in cool_steel and corrupted_violet, an enemy's emissives are visibly brighter than its
-      body and the same colour under every mood (screenshots of the Warden and the Harvest Tick).
-  A2  `ls assets/textures/enemies/` shows only generated/; no EnemyConstants path names an old file.
-  A3  Every EnemyType draws its generated sprite; the load log has no missing-row warning.
-  A4  Frame cost of the glow pass measured and recorded in the IMPLEMENTATION NOTE.
-  A5  Every body PNG is byte-identical to its order's approved version. Build green.
+  A1  The Cinderforge prototype was shown alone and the owner's read is recorded before the other three.
+  A2  Owner approval of all four recorded.
+  A3  In-engine: every standard clip and mechanic clip; the shard ring orbits clear air; crust plates and
+      seams read; the shell visibly opens on WIND_UP; damage outcomes incl. RESISTED; death -> remains.
+  A4  No straight-edged slab body parts (R2). Element ramps pass G5.
+  A5  Earlier creatures byte-identical. Build green. G1 respected.
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. KIT          (main thread)       _glow output; bodies unchanged
-  2. RENDER       (libgdx-specialist) glow pass, fade constant, registry glow path
-  3. CLEANUP      (libgdx-specialist) old files, constants, fields, quadrant code, alpha-cut pass
-  4. VERIFY       (main thread)       run-game shots, probe measurement
-  5. TESTS        None. Not balance-bearing; verified by build + run.
-  6. DOCS         art-direction 9 + 16, enemy-system.txt, CLAUDE.md, SKILL.md, series master
+  1. KIT          sculpted rock, crack + chip helpers, facets, crystal, element + sap ramps
+  2. PROTOTYPE    Cinderforge: rig + clips + in-engine (both crust states); owner's early read
+  3. REST         three rigs + clips; effects
+  4. GATE         GIFs + in-engine state bursts; stop; record
+  5. WIRE         (libgdx-specialist) four rows + files
+  6. TESTS        None. Not balance-bearing; verified by build + run.
+  7. DOCS         guide (the stone method replaces lesson 12.2's warning with the recipe), art-direction 16
 
 RISKS AND UNKNOWNS
-  - Additive glow on the brightest mood (clinical_white) may wash out; the fade constant is the knob.
+  - The kit already failed at stone once. If the Cinderforge prototype is rejected twice, STOP and bring
+    the owner alternatives (e.g. crystal-first bodies) instead of iterating blind.
 
 
 CHECKPOINTS
 -----------
   CP0  checkpoint file committed and pushed
-  CP1  kit writes _glow files for every sprite; bodies byte-identical
-  CP2  the glow pass draws in-engine; A1 screenshots; probe measured; build green
-  CP3  old textures, constants, fields and the alpha-cut pass removed; A2-A3 hold; build green
-  CP4  docs; reviewer PASS; STATUS: IMPLEMENTED; master file roster marked complete
+  CP1  kit stone/crystal/element additions; earlier creatures byte-identical
+  CP2  Cinderforge complete + in-engine; owner's read recorded
+  CP3  the other three + effects; GIFs + state bursts sent
+  CP4  owner approval recorded (stop until it is)
+  CP5  four rows wired; A3 verified; build green
+  CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
 
 
 ASSUMPTIONS
 -----------
-  AS1  Removing the alpha-cut is safe because every input is binary alpha by construction (kit G8).
-  AS2  The glow is part of the same approved art; it needs no new owner gate unless it changes a body.
+  AS1  Golems keep the magma core ink; elements live on the surface.
+  AS2  Today's golem overlays remain part of each golem's look in this order.
 
 
 DECISIONS
 ---------
-(none yet)
+  D1  The 2026-10-21 Mantle Sentinel prototype is dropped and must not be reused (series D5).
 
 
 OPEN QUESTIONS
@@ -147,5 +177,5 @@ None.
 
 RELATED
 -------
-  Ideas:  generated-enemy-art.txt, -order-1..6.txt, visual-identity-order-2.txt (conditioning, muzzle light)
-  Docs:   docs/art-direction.txt sections 5, 9, 11, 16
+  Guide:  docs/sprite-art-creation-guide.txt (12.2)
+  Ideas:  generated-enemy-art.txt, -order-1..6.txt, elemental-golem-*.txt (mechanics only)

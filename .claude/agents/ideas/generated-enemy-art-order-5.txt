@@ -1,104 +1,99 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Generated enemy art 5 - the elemental Golems
+TITLE: Enemy visual rework 5 - the Aberrations
 CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
-Part of the generated-enemy-art series. Requires orders 1-4. Read generated-enemy-art.txt (above all
-lesson L2 and decision D5) and .claude/skills/enemy-art/SKILL.md first.
+Part of the generated-enemy-art series. Requires orders 1-4. Read generated-enemy-art.txt and
+docs/sprite-art-creation-guide.txt before starting.
 
 
 OVERVIEW
 --------
-Replaces the four GOLEM textures - Auric Sentinel, Cinderforge Colossus, Rimeshell Lancer, Verdant
-Spiresower. In the premise golems are the planet's own crust and mantle rising to wall off and crush
-the infection - the player. This is the family the 2026-10-21 prototype FAILED at (the Mantle Sentinel:
-polygon slabs over a glowing backing, read as bricks, rejected as the weakest sprite). So this order
-first fixes HOW the kit makes stone, proves it on one golem with the owner, then builds the rest.
+The four regular ABERRATIONS - Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith - rebuilt as animated,
+reactive creatures. Aberrations are the containment breach: harvested planet tissue that escaped the
+tanks and kept growing. Soft, fused, wet flesh is what the kit's smooth union does best, and flesh moves
+beautifully (jiggle, sag, pulse), so this family should be the series' most alive. (The Corruptor boss is
+order 8.)
 
 
 SCOPE
 -----
 IN
-  - Kit growth (stone done right):
-      * SCULPTED ROCK: rock masses as irregular blobs (several merged ellipsoids with low k), with
-        fracture lines CARVED into them (a seeded crack-path helper producing carve chains) and chipped
-        edges (small carved bites along the silhouette). No straight-edged rectangles as body parts.
-      * CRYSTAL material: faceted (a facet helper that quantises the normal into a few planes per
-        crystal), high specular, translucent inner glow like the `sac` material.
-      * element ramps: auric (metallic gold-brown with warm-white highlights - must not read as the
-        UI/semantic yellow), rime (frost white with grey-blue shadows, low saturation - not the
-        defence blue, not FACILITY_CYAN), verdant (olive and moss, desaturated - not the health green),
-        plus a SAP glow ramp (warm cream) for the Spiresower.
-  - The Cinderforge Colossus FIRST as the stone prototype (owner early read), then the other three.
-  - Owner gate (G11); four registry rows; earlier sprites byte-identical; docs.
+  - Four briefs -> four rigs with the full standard clip set, DORMANT + WOUNDED idles and ability clips:
+      Plague Hulk   AREA_STRIKE (two-fisted slam) + SELF_DESTRUCT priming (it swells, skin stretches, glow
+                    rising each countdown turn) and the detonation as its DEATH variant when self-destructed
+      Eye Tyrant    DEBUFF_PLAYER (the iris contracts to a pinpoint, the lids peel back) + its beam's
+                    emit frame on the eye anchor (the renderer's beam stays, launched from the anchor)
+      Mire Wraith   DEBUFF_PLAYER (the acid volley: the belly contracts, the spout spits)
+      Gore Biter    none - its pack behaviour is its motion
+  - Kit growth: flesh materials (pale bruised + darker raw; desaturated rose-grey and violet-grey, never
+    saturated red - G5), a wet-sheen setting, an EYEBALL helper (sclera, iris, pupil, glint, lid params),
+    a TEETH-ROW helper, and secondary-motion helpers (jiggle: a damped offset that lags its parent mass).
+  - Effects (effects.py): the aberration set - ichor splashes, flesh flecks, acid spit projectile + trail
+    and its splash, the self-destruct burst. Ichor ink shared with insects (series inks).
+  - Owner gate, four registry rows, earlier creatures byte-identical, docs.
 
 OUT
-  - The renderer's golem overlays - they stay and the sprites are designed AROUND them (see VISUAL
-    DESIGN): the Auric shard ring, the Cinderforge crust plates + molten seams + heat haze, the
-    Rimeshell shell-open and frost tints, the Auric exposed tint.
-  - The Spiresower's SPIRES: they are runtime tiles (':') with their own prop texture, not part of the
-    enemy texture. Out of scope for this series.
-  - Mechanics, numbers, names (G10).
+  - The Corruptor (order 8). Changing the Eye Tyrant's hover, beam rules or the self-destruct rules.
+  - Gore (premise tone): wrong anatomy and wet tissue, not blood. Red is reserved anyway.
 
 
 GAMEPLAY LOOP
 -------------
-Unchanged for all four.
+Rules unchanged.
 
 
 RULES
 -----
-  R1  Series rules G1-G12; order 1 R1-R4 for every new row.
-  R2  No golem body part is a straight-edged slab (L2). Stone is sculpted.
-  R3  A sprite never bakes what the renderer already draws on top of it (shards, crust plates, seams,
-      state tints); it leaves the space and the mid values those overlays need (G9).
-  R4  All four share the magma ink for their core and differ by element on the surface.
+  R1  Series G1-G13; runtime rules of orders 2-3.
+  R2  One family: ichor ink + flesh ramps on all four; four completely different silhouettes.
+  R3  EYE_TYRANT stands on its canvas floor (the renderer hovers it, guide 6).
+  R4  The Plague Hulk's priming must read as DIFFERENT from DEFEND (EnemyState says so: SELF_DESTRUCTING
+      has no Block) - swelling and rising glow, never the brace pose.
 
 
 PLAYER EXPERIENCE
 -----------------
-ORA's lines are the brief's contract:
-  Auric Sentinel        "Those shards are its armour and its ammo. Strip them fast."
-  Cinderforge Colossus  "It re-hardens the second you stop shooting. Don't stop shooting."
-  Rimeshell Lancer      "Armoured until it fires. Bait the lance, step off the lane, then hit it."
-  Verdant Spiresower    "The spires heal it. Break those first or it never dies."
+  Plague Hulk  "Big one. Don't trade punches - shoot it while it's walking."  (and: when it swells, back off)
+  Eye Tyrant   "It only fires straight down a row or a column. Step off its line."
+  Gore Biter   "They come as a pack. Find a doorway and make them queue."
+  Mire Wraith  "The acid stacks. Kill it first, argue later."
 
 
 TECHNICAL NOTES
 ---------------
-kit.py: rock/crack/chip helpers, facet helper, crystal + element ramps. bestiary.py: four functions.
-Java: constants + four registry rows. Before designing, read the four elemental-golem-*.txt idea files
-for their MECHANICS and their renderer overlays only - their "SPRITE / SOURCE ART" sections describe
-the OLD textures and are NOT to be followed (G1).
+Content only (bestiary.py, kit.py, effects.py, four registry rows, atlases). The old blight/infernal
+sheet regions for these types stay on disk until order 9.
 
 
 VISUAL DESIGN
 -------------
-DESIGN BRIEF - CINDERFORGE COLOSSUS (BRUISER, 1.15 walls, melee, AREA_STRIKE; crust re-hardens)
-  The prototype golem. A hunched forge of the planet's mantle: a body of molten rock, sculpted and
-  slumped, heaviest at the shoulders, with a few cooled basalt ridges. The renderer lays dark crust
-  plates over it as it hardens and burns seams between them - so the BODY is mostly the hot state:
-  mid-orange molten surfaces, not white-hot (the crust tint must still darken it). Two thick arms
-  ending in fused, club-like hands for the area slam. A broken Organization shackle on one wrist.
-
-DESIGN BRIEF - AURIC SENTINEL (SOLDIER, 1.00 walls, ranged; shards = armour and ammo)
-  A geode the planet split open: a rough dark-rock outer body cracked down the front, the inside lined
-  with auric crystal, a hot core deep in the split. Upright and symmetrical, arms held out from the body
-  - as if holding the ring of shards the renderer draws around it. NO shards in the sprite (R3); leave
-  clear air around the head and shoulders where the ring orbits.
-
-DESIGN BRIEF - RIMESHELL LANCER (SOLDIER, 0.85 walls, ranged lance; armoured until it fires)
-  A cold body around a hot core: a closed shell of frost-rime plates (sculpted, not slabs) folded over
-  its front like shut petals, a slit down the middle where the magma lance-core shows through, the lance
-  emitter as a molten point in that slit. Low, braced stance. The shell-open tint the renderer adds
-  must read against the frost.
-
-DESIGN BRIEF - VERDANT SPIRESOWER (SOLDIER, 0.80 walls, melee; spires heal it)
-  Stone overgrown: a squat rock body furred with moss and lichen, crystalline spire-buds pushing out of
-  its back and shoulders (the spires it sows - SAP glow at their tips), roots trailing from its feet into
-  the floor line. Slow and rooted; the only golem that looks alive in the plant sense.
+PLAGUE HULK (SOLDIER, 0.95 walls, melee tank, AREA_STRIKE, self-destruct finisher)
+  A mass of tissue that grew in a containment tank until it burst it; it still wears the tank's broken
+  steel collar ring around its middle, flesh bulging over and under it. Wide, no neck, two enormous
+  forearms knuckled on the floor. Ichor blisters across one shoulder.
+  MOTION: idle = heavy breathing, flesh rolling over the collar; move = a lurching knuckle-walk with
+  jiggle; slam = both fists high (wind-up) then down with a squash; hurt = the mass ripples; priming =
+  swelling, blisters brightening each turn; death = it sags and spreads; self-destruct death = it bursts.
+EYE TYRANT (CHAFF, 0.55 walls, ranged straight-line sniper, DEBUFF_PLAYER, renderer-hovered)
+  One huge eye that was being studied, hanging in a cradle of fleshy lids and petals; a surgical speculum
+  (gunmetal) still holds the lids open; nerve tendrils trail beneath. The ichor iris points at the player.
+  MOTION: idle = the pupil saccades, petals breathe, tendrils sway; alert = the iris snaps onto you;
+  wind-up = the pupil narrows to a line; attack = the iris flares on the emit frame; hurt = the lids try to
+  close against the speculum; death = the eye clouds over and the cradle wilts.
+GORE BITER (CHAFF, 0.85 walls, melee swarmer)
+  A lean runner that is mostly mouth: the head splits vertically into a toothed jaw, a low forward crouch on
+  long digitigrade legs, ribs through thin flesh, a pen ear-tag. Built to be seen five at a time: simple.
+  MOTION: idle = twitchy, the jaw clacking; move = a fast loping run (the pack must not sync - R3 phase
+  offsets); attack = a lunging bite with the jaw splitting wide; death = it skids and folds.
+MIRE WRAITH (SOLDIER, 0.80 walls, ranged acid artillery, DEBUFF_PLAYER)
+  A drooping half-liquid thing from the facility sump: a translucent sagging belly of glowing acid glands,
+  a hunched draped body, a long spout aimed forward, a length of drainage hose fused into its back.
+  MOTION: idle = the belly sloshes and the glands pulse; wind-up = the belly draws up, glands brighten;
+  attack = the spout spits (emit anchor); hurt = it splashes and re-forms; death = it slumps into a puddle
+  that stays as its remains.
 
 
 BALANCE NOTES / BALANCE ADMISSION
@@ -108,67 +103,59 @@ None - adds no balance-bearing content.
 
 INTERACTIONS
 ------------
-The shard ring, crust plates, molten seams, heat haze, shell-open and frost tints (EnemyRenderer) draw
-over these sprites - each must be verified in-engine in its live state (spawn, then put the enemy into
-the state with a capture reflection step if needed).
+EYE_TYRANT's beam cache and hover; the self-destruct telegraph and hazard listener (onEnemyDied with
+selfDestructMassive picks the burst variant); the Mire Wraith's acid status visuals on the player are
+unchanged.
 
 
 EDGE CASES
 ----------
-Same as order 1. The renderer's overlays are positioned relative to the sprite rect - confirm the
-shard ring and crust plates still sit on the body, not in empty canvas.
+Orders 2-3 edge cases. A self-destructing Hulk killed before detonation plays its normal DEATH.
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  The Cinderforge prototype was shown to the owner alone, and the owner's read is in DECISIONS,
-      before the other three were built.
-  A2  Owner approval of all four recorded in DECISIONS.
-  A3  In-engine: the Auric shard ring orbits clear air around the new body; the Cinderforge crust plates
-      and seams read on it; the Rimeshell shell-open state reads; screenshots of each state sent.
-  A4  No golem body part is a straight-edged slab (R2), checked on the contact sheet.
-  A5  Element ramps do not read as the semantic yellow / blue / green or as FACILITY_CYAN (G5).
-  A6  Earlier sprites byte-identical. Build green. G1 respected (the old SOURCE ART text unused).
+  A1  Owner approval of the four (family stills sheet, clip GIFs, in-engine bursts) recorded in DECISIONS;
+      a rejected creature is redesigned and re-gated, never wired.
+  A2  In-engine for each: every standard clip, its ability clips, the damage outcomes, wounded, a status,
+      death -> remains.
+  A3  A pack of three Gore Biters reads as a pack and does not move in unison.
+  A4  The Hulk's priming is visibly not its DEFEND pose; its self-destruct plays the burst death.
+  A5  The Eye Tyrant hovers and its beam leaves from the eye anchor.
+  A6  No saturated red/green/blue/purple/yellow (G5). Earlier creatures byte-identical. Build green.
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. KIT          sculpted rock, crack + chip helpers, facets, crystal, element + sap ramps
-  2. PROTOTYPE    Cinderforge alone; in-engine (both crust states); owner's early read
-  3. SPRITES      the other three; family sheet; in-engine state shots
-  4. OWNER GATE   stop; send; record
-  5. WIRE         (libgdx-specialist) constants + four registry rows
-  6. TESTS        None. Not balance-bearing; verified by build + run.
-  7. DOCS         art-direction section 16 (roster, element inks, the stone rule), SKILL.md
-
-RISKS AND UNKNOWNS
-  - This is the family the kit has already failed at once. If the Cinderforge prototype is rejected
-    twice, STOP and bring the owner options (e.g. a crystal-first look instead of rock-first) rather
-    than iterating blind.
-  - Overlay positions may assume the old art's proportions; a renderer constant may need adjusting
-    (that is a render change, allowed, and must be named in the IMPLEMENTATION NOTE).
+  1. KIT      flesh materials, wet sheen, eyeball, teeth row, jiggle helper
+  2. RIGS     four rigs + clips; family stills sheet first for an early read
+  3. EFFECTS  aberration set in effects.py
+  4. GATE     GIFs + in-engine bursts; stop; record
+  5. WIRE     (libgdx-specialist) four registry rows + files
+  6. TESTS    None. Not balance-bearing; verified by build + run.
+  7. DOCS     guide (helpers, lessons), art-direction 16, SKILL.md
 
 
 CHECKPOINTS
 -----------
   CP0  checkpoint file committed and pushed
-  CP1  kit stone/crystal/element additions; earlier sprites byte-identical
-  CP2  Cinderforge prototype generated + in-engine shots; owner's read recorded
-  CP3  the other three generated; family sheet + state shots sent
-  CP4  owner approval recorded in DECISIONS (stop here until it is)
-  CP5  four rows wired; overlays verified in-engine; build green
+  CP1  kit additions; earlier creatures byte-identical
+  CP2  four rigs; family stills sheet sent for an early read
+  CP3  all clips + effects; GIFs + in-engine bursts sent
+  CP4  owner approval recorded (stop until it is)
+  CP5  four rows wired; A2-A5 verified; build green
   CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
 
 
 ASSUMPTIONS
 -----------
-  AS1  Golems keep the magma core ink; elements live on the surface.
-  AS2  The overlays the renderer draws today are part of each golem's look and stay.
+  AS1  Aberrations share the insect ichor ink (both are harvested planet tissue).
+  AS2  Each Organization detail is equipment that held or studied the creature.
 
 
 DECISIONS
 ---------
-  D1  The 2026-10-21 Mantle Sentinel prototype is dropped and must not be reused (series D5).
+(none yet)
 
 
 OPEN QUESTIONS
@@ -178,5 +165,6 @@ None.
 
 RELATED
 -------
-  Ideas:  generated-enemy-art.txt, -order-1..4.txt, elemental-golem-*.txt (mechanics only)
-  Docs:   docs/art-direction.txt section 16, docs/enemy-system.txt
+  Guide:  docs/sprite-art-creation-guide.txt
+  Ideas:  generated-enemy-art.txt, -order-1..4.txt
+  Docs:   docs/enemy-system.txt, story/00-premise.md

@@ -659,6 +659,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 | Narrative CONTENT contract: what a line may say, the doctrine, the joke policy, ORA's voice, the comprehension bar | `docs/narrative-authority.txt` |
 | Art direction: palette, the five region lighting moods, the atmosphere grade, emissive exemption, floor/ceiling materials, view vignette, `-Dtoon3d.forceMood`, the UI kit, the SUIT vs FACILITY ink table (which ink a screen uses) | `docs/art-direction.txt` |
 | Gameplay sound (procedural SFX: synthesis toolkit, catalog, mixing, firing sites, add-a-sound) | `docs/sound-system.txt` |
+| Creating ANY generated art (enemy sprites first; props, pickups, effects later): the method, materials, creature design, animation clips, reactions, effects, engine contract, verification, lessons, recipes — plus the generator skill | `docs/sprite-art-creation-guide.txt` + `.claude/skills/enemy-art/SKILL.md` |
 | Turn/tick system architecture | `docs/tick-system.txt` |
 | Game balance — current state, every number/system/formula and known problems | `docs/game-balance-knowledge.txt` |
 | Balance CONTRACT: the schema, the waivers, the behavioural bands, THE CHANGE PROTOCOL | `docs/game-balance-authority.txt` |
@@ -673,7 +674,7 @@ Reads/writes persistent run statistics via LibGDX `Preferences`. Used for permad
 
 ## Docs Directory (`docs/`)
 
-All 20 reference docs — read these before implementing anything in their domain:
+All 21 reference docs — read these before implementing anything in their domain:
 
 | File | Lines | What it covers |
 |---|---|---|
@@ -690,6 +691,7 @@ All 20 reference docs — read these before implementing anything in their domai
 | `procedural-level-generation.txt` | 208 | Dungeon generator algorithm, room types, wall distribution logic |
 | `procedural-vitals-hud.txt` | 202 | HUD rendering pipeline — procedural shapes, no sprite textures |
 | `enemy-system.txt` | 401 | Enemy types, AI turn logic, pathfinding, attack resolution |
+| `sprite-art-creation-guide.txt` | 375 | HOW generated art is made (generated-enemy-art series): non-negotiables (generated in code, never copy the old image-model textures, one style lock, owner approval gate), the kit's rendering technique (height fields, smooth max, light rig, ramps, outlines, cleanup), materials + family inks, creature design briefs, canvas/scale, animation (rigs, poses, the standard clip set), reactions to every event, effects, the engine contract, verification, lessons, recipes. **Read before creating or changing any generated sprite.** |
 | `sound-system.txt` | 290 | The gameplay SFX layer: why it is procedural, the package split, the `GameMath` synthesis toolkit (noise, one-pole filters, percussive envelope, correctly-integrated chirps, ring mod, soft clip), the sound catalog and its design rule, variation without repetition fatigue, distance/pan/rear, the five mixing rules + the time-detected turn boundary, ownership & dispose, every firing site, the EFFECTS setting, ADD A SOUND, and what is deliberately not built yet. **Single source of truth; update on any audio change.** |
 | `tick-system.txt` | 167 | Turn-based game loop, TickEventBus, TickSubscriber pattern |
 | `xp-level-progression.txt` | 269 | Player leveling curve, attribute rewards, tagged perks + keystones (the build system) |

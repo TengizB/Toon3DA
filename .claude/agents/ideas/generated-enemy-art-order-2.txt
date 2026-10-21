@@ -1,142 +1,205 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Generated enemy art 2 - Iron Stalker (insect complete)
+TITLE: Enemy visual rework 2 - the animated enemy runtime
 CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
-Part of the generated-enemy-art series. Requires order 1 (the GeneratedEnemySprites registry and the
-run-game `spawn` step). Read generated-enemy-art.txt and .claude/skills/enemy-art/SKILL.md first.
+Part of the generated-enemy-art series. Requires order 1 (atlases, glow atlases, clip manifests for the
+Warden and the Harvest Tick). Read generated-enemy-art.txt and docs/sprite-art-creation-guide.txt
+(sections 7, 8, 10) before starting.
 
 
 OVERVIEW
 --------
-Completes the INSECT family: the Iron Stalker, the insect MINI_ELITE, gets a generated sprite that
-sits beside the approved Harvest Tick (Shell Brute) as clearly the same family and clearly the bigger
-threat. It is also the first sprite designed from a brief rather than approved in a session, so this
-order proves the full G11 loop: brief -> generate -> owner approval -> wire.
+Builds the new enemy visual layer and puts the first two animated creatures into the game. Instead of
+drawing one still region per type and faking life with a lunge scale, enemies are now drawn by an
+ANIMATOR that plays clips from a generated atlas, chosen by what the simulation is doing: idling,
+waking, sliding a tile, winding up, striking, flinching, bracing, dying. The simulation tells the visual
+layer what happened through a new listener seam; it never imports a renderer. Types not yet migrated
+keep the legacy draw path until order 9 deletes it.
 
 
 SCOPE
 -----
 IN
-  - A design brief (below) turned into iron_stalker() in bestiary.py and generated/iron_stalker.png.
-  - Kit growth it needs: a tapered SPIKE / blade primitive (a capsule whose end radius reaches 0 with a
-    sharpened tip normal) and a riveted armour-plate helper (a slab plus a row of rivet bumps).
-  - Owner approval gate (G11), then one GeneratedEnemySprites row: IRON_STALKER -> generated/iron_stalker.png.
-  - Regenerate warden.png and harvest_tick.png and confirm byte-identical (series AS6).
-  - docs/art-direction.txt section 16 roster line; enemy-art SKILL.md API table rows for the new primitives.
+  - NEW subpackage `ge.tbegvadze.toon3d.render.enemyvisual` (documented in the CLAUDE.md package table):
+      EnemyVisualRegistry    EnemyType -> creature id (register() rows + bootstrap, never a switch).
+                             Rows this order: ACID_DRONE -> "warden", SHELL_BRUTE -> "harvest_tick".
+      EnemyClipManifest      parsed clips.json (clips, frames, durations, loop mode, trim offsets, anchors);
+                             load-time only, immutable.
+      EnemyAtlasCache        per-FLOOR load of the body + glow atlases for the types that can appear on
+                             the floor (and boss/minion types), disposed on floor teardown; Nearest filter.
+      EnemyAnimator          per-enemy visual state: current clip, clip time, queued one-shot, held frame;
+                             pooled by enemy id, no allocation in render().
+      EnemyAnimationRules    the clip-selection table (moment / state -> clip, priorities, what interrupts
+                             what), as data rows - the documented state machine below.
+      DyingEnemyPool         visual instances that keep playing DEATH after the simulation has removed the
+                             enemy (position, depth, creature id captured at death); pooled, capped.
+      EnemyBodyDrawer        draws an animated frame as a billboard, per screen column against the wall
+                             z-buffer and the SpriteOccluderBuffer exactly like today's body, using the frame's
+                             trim offset on the 160x240 canvas so the ground line never moves; then the GLOW
+                             pass: the glow atlas re-drawn additively, NOT graded and NOT fogged (art-direction
+                             V6), with a per-depth fade constant.
+  - NEW seam in the enemy package: `enemy/EnemyVisualListener` + `enemy/EnemyVisualMoment` (enum with
+    per-constant data, the EnemyVoiceMoment idiom) + a reused, pre-allocated event payload. EnemyManager /
+    Enemy fire moments at the commit sites: ALERTED, MOVE_STARTED, WIND_UP_STARTED, ATTACK_COMMITTED,
+    ABILITY_USED, DAMAGED (amount, max-HP fraction, outcome, source direction), STAGGERED, KNOCKED_BACK,
+    DEFEND_STARTED, STATUS_APPLIED, DIED (cause). This order implements the WHOLE seam; it maps the core
+    clips, and order 3 maps the rest (outcomes, wounded, status, effects).
+  - EnemyRenderer: for a type with a registry row, the body is drawn by EnemyBodyDrawer and the legacy
+    lunge scale/drop is skipped (the ATTACK clip does that job); health bars, name tags, matchup words,
+    hit flash, contact shadow, muzzle light and state tints still draw as today, positioned from the
+    canvas rect. Types without a row: untouched.
+  - World wiring: the listener implementation, per-floor atlas load/unload, animation clock update in
+    the update path (frozen while a hard-pause overlay owns the screen, like the world).
+  - run-game capture driver additions (dev tool): `spawn:TYPE:FORWARD:RIGHT`, `alert:INDEX`,
+    `damage:INDEX:AMOUNT` (through the real damage path), `kill:INDEX`, and `burst:NAME:COUNT:INTERVAL`
+    (a numbered shot series) + a script that turns a burst into a GIF for the owner. Documented in
+    run-game SKILL.md.
+  - Docs: guide sections 8 and 10 (the real runtime contract), art-direction new section 16 ENEMY VISUAL
+    LAYER, docs/enemy-system.txt (the seam), CLAUDE.md (package row, render order note, the guide and the
+    enemy-art skill in "Where to Find Info" if not already there).
 
 OUT
-  - Any other enemy. Animation. Renaming. Changing BUFF_SELF / AREA_STRIKE visuals (EnemyAttackEffectSystem
-    already draws them).
-  - Reusing the Harvest Tick's body with new parts - the Stalker must have its own silhouette (G6).
+  - Hit effects, death bursts, projectiles, wounded/status visuals, resisted/blocked/absorbed reads
+    (order 3). Any other creature (orders 4-8). Deleting the legacy path (order 9).
+  - Any change to simulation rules, timing, turn order or the action lock (G9).
 
 
 GAMEPLAY LOOP
 -------------
-Unchanged. The Iron Stalker spawns as a mid-floor spike, buffs itself and area-strikes as today.
+Unchanged in rules. Visually: a dormant Shell Brute breathes in the dark; when it wakes it rears (ALERT),
+scuttles as it slides each tile (MOVE), loads its charge through the player's turn (WIND_UP held),
+lunges (ATTACK), flinches when shot (HURT), curls up and dies (DEATH) - then the corpse decal remains.
 
 
 RULES
 -----
-  R1  Series rules G1-G12 apply. R1-R4 of order 1 apply to the new row.
-  R2  The Stalker reads as INSECT (chitin + ichor ink, many legs) and as MINI_ELITE (taller and more
-      armoured than every non-boss insect, spiked).
+  R1  CLIP SELECTION (EnemyAnimationRules, highest priority first):
+        DEATH (from DIED; never interrupted) >
+        HURT_HEAVY / HURT_LIGHT (from DAMAGED / STAGGERED / KNOCKED_BACK; heavy when the hit is >= 25% of
+          max HP or a stagger/knockback; interrupts anything below) >
+        ATTACK / ability clip (from ATTACK_COMMITTED / ABILITY_USED) >
+        WIND_UP (from WIND_UP_STARTED; holds its last frame while state == WINDING_UP) >
+        DEFEND (from DEFEND_STARTED; holds while DEFENDING) >
+        ALERT (from ALERTED) >
+        MOVE (while the visual slide runs) >
+        IDLE (DORMANT variant while state == DORMANT).
+      A finished one-shot falls back to the highest-priority ongoing condition (held state, slide, idle).
+  R2  The animator only READS simulation state and timers and RECEIVES moments; it never writes to
+      Enemy, EnemyManager or World (G9).
+  R3  Idle loops start at a per-enemy phase offset (from the enemy id) so a pack never breathes in unison.
+  R4  Death plays from the DyingEnemyPool at the enemy's last visual position; if the pool is full the
+      oldest dying instance is dropped (never an allocation).
+  R5  Atlases for a type are loaded before its first spawn on a floor; a type whose atlas fails to load
+      falls back to the legacy path (never a crash, an error log line).
+  R6  No allocation in render() or the per-frame update; no GL calls off the render thread.
 
 
 PLAYER EXPERIENCE
 -----------------
-ORA says "That's a step up. Spend something on it or walk around it." The sprite must say the same
-before she does: armour, height, blades - a thing to respect, not chaff.
+The first enemies in the game that are alive: they breathe, look around, wind up where you can see it,
+strike, flinch and die. The telegraph becomes a body pose, which is the most readable telegraph there is.
 
 
 TECHNICAL NOTES
 ---------------
-  - bestiary.py: one function + one ENEMIES row. kit.py: the spike primitive and the plate helper; no
-    change to the light rig, ramps or outline (G3).
-  - EnemyConstants path constant + one registry row. No other Java.
+  - Read EnemyRenderer, EnemySpriteSheets, ContactShadow, AtmosphereGrade and the muzzle-light pass
+    before designing EnemyBodyDrawer; reuse the per-column machinery, do not fork it.
+  - The listener follows enemy/EnemyVoiceListener exactly (World owns the implementation, a no-op default
+    keeps sim/ and tests working). The payload object is reused per fire (no allocation).
+  - Glow pass: batch with the muzzle-light additive pass to keep blend switches at two.
+  - Measure (G13): run-game --probe cpu, same session, a room with 6 animated enemies vs the same room on
+    the legacy path; record both numbers in the IMPLEMENTATION NOTE.
 
 
 VISUAL DESIGN
 -------------
-DESIGN BRIEF - IRON STALKER (INSECT, MINI_ELITE, 1.10 walls, melee, BUFF_SELF + AREA_STRIKE)
-  What it is: a harvest-line insect the Organization tried to use as a guard animal - bred from the
-  planet's tissue, then FITTED with riveted iron plates to make it survive the pens. It outgrew the
-  plates; chitin has grown around and over their edges.
-  Silhouette: TALL and upright, unlike the low, wide tick - a reared-up stance on four rear legs, the
-  front pair raised as two long scythe blades (the AREA_STRIKE is a sweep of both). Narrow waist, a
-  plated thorax, a small armoured head with a cluster of ichor eyes low on it.
-  Materials: chitin / chitin_dk body, gunmetal + darkmetal riveted plates bolted across the thorax and
-  the blade bases, bone-pale blade edges, ichor eyes and a glowing ichor seam where chitin has split
-  around a plate (BUFF_SELF reads as that seam - nothing animates, it is a static promise).
-  Story detail: a stencilled pen number on the largest plate, and a snapped restraint collar on the
-  neck.
-  Must differ from the Harvest Tick at two tiles: vertical vs horizontal mass, blades vs mandibles,
-  plates vs blisters.
+No new art - order 1's clips. The runtime must reproduce the GIFs the owner approved, frame for frame,
+at the right timing.
 
 
 BALANCE NOTES / BALANCE ADMISSION
 ---------------------------------
-None - adds no balance-bearing content.
+None - adds no balance-bearing content. (The headless balance simulator never sees the visual layer;
+the listener's no-op default keeps it that way.)
 
 
 INTERACTIONS
 ------------
-EnemyRenderer overlays and grade (order 1 R4); AREA_STRIKE and BUFF_SELF effects drawn by
-EnemyAttackEffectSystem over the sprite; the insect ORA family line and sound voice are unchanged.
+Tick bus / enemy turns (moments fire inside the turn; visuals play in real time after), the action lock
+(unaffected), boss fights (minions of migrated types animate), floor transitions (atlas load/unload),
+pause/resume and GL context loss (unmanaged textures reloaded like the existing enemy sheets), story
+overlays (animation clock frozen with the world), the corpse decal (stamped by the sim at death - order 3
+refines the handover).
 
 
 EDGE CASES
 ----------
-Same as order 1 (missing PNG -> fallback; pause; per-run world rebuild).
+Enemy dies the same turn it was damaged (DEATH wins, R1); damaged while winding up (HURT plays, then the
+hold resumes); knocked into a wall; enemy spawned mid-floor by a summon (atlas preloaded, R5); floor
+change while a death plays (the pool is cleared); app paused mid-clip (clock frozen, resumes).
 
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  The owner has seen the contact sheet (Stalker beside the Harvest Tick) and in-engine screenshots,
-      and approved them; the approval is recorded in DECISIONS.
-  A2  `spawn:IRON_STALKER:2:0` shows the approved sprite; it is visibly taller than the Shell Brute
-      spawned beside it.
-  A3  Under cool_steel and amber_hot it reads; its BUFF_SELF and AREA_STRIKE effects are visible over it.
-  A4  bestiary.py regenerates all three sprites; warden.png and harvest_tick.png are byte-identical.
-  A5  The sprite was designed from the brief only (G1): no existing enemy PNG was opened.
-  A6  Build green.
+  A1  In-engine, a spawned ACID_DRONE plays the Warden's IDLE; `alert` plays ALERT then IDLE; stepping
+      toward it plays MOVE during its slides; it attacks with its ATTACK clip; `damage` plays HURT_LIGHT /
+      HURT_HEAVY by the 25% rule; `kill` plays DEATH and leaves the corpse.
+  A2  The same for SHELL_BRUTE (Harvest Tick), including WIND_UP held for the whole player turn before
+      its charge.
+  A3  A burst-capture GIF of each of A1-A2 was sent to the owner, and the owner's approval is recorded.
+  A4  Two Harvest Ticks side by side do not idle in unison (R3).
+  A5  Glow (eyes, plume, blisters) is the same colour under cool_steel and corrupted_violet at 6+ tiles.
+  A6  Every non-migrated type draws exactly as before (spot-check four types).
+  A7  Frame time with 6 animated enemies measured and recorded; no per-frame allocation (checked with
+      run-game --gclog: no added GC pauses over 30 s idle in the room).
+  A8  enemy/ imports nothing from render/ (grep).
+  A9  Build green; docs updated (guide 8 + 10, art-direction 16, enemy-system, CLAUDE.md).
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. KIT + SPRITE     (main thread, enemy-art skill)   primitives, iron_stalker(), contact sheet
-  2. PREVIEW          (main thread, run-game)          in-engine screenshots via the texture-swap preview
-  3. OWNER GATE       stop; send sheet + screenshots; record the answer
-  4. WIRE             (libgdx-specialist)              constant + registry row
-  5. TESTS            None. Not balance-bearing; verified by build + run.
-  6. DOCS             art-direction section 16 roster; SKILL.md API rows
+  1. SEAM            (java-architect)     EnemyVisualListener/Moment/payload; fire sites in EnemyManager/Enemy
+  2. DATA            (libgdx-specialist)  registry, manifest parser, atlas cache (per-floor lifecycle)
+  3. ANIMATOR        (java-architect)     EnemyAnimator + EnemyAnimationRules + DyingEnemyPool
+  4. DRAW            (libgdx-specialist)  EnemyBodyDrawer + glow pass; EnemyRenderer integration
+  5. WORLD           (java-architect)     listener impl, clock, floor lifecycle
+  6. TOOLING         (main thread)        capture steps + burst-to-GIF
+  7. VERIFY + GATE   (main thread)        captures; owner approval
+  8. TESTS           None. Not balance-bearing; verified by build + run.
+  9. DOCS            guide 8 + 10, art-direction 16, enemy-system.txt, CLAUDE.md
 
 RISKS AND UNKNOWNS
-  - Scythe blades are thin; at 4+ tiles they may vanish. Keep their base thick and give them the cyan
-    rim light; check at three tiles.
+  - EnemyRenderer is ~2400 lines with many special cases (Eye Tyrant beam, shard ring, crust plates,
+    afterimages). Integrate at the body draw only; do not refactor the rest in this order.
+  - Moments fired at the wrong site (e.g. ATTACK before the hit resolves) desync the clip from the
+    damage number - verify with burst captures.
 
 
 CHECKPOINTS
 -----------
   CP0  checkpoint file committed and pushed
-  CP1  kit primitives + iron_stalker() exist; generated/iron_stalker.png written; the two earlier sprites
-       regenerate byte-identical; contact sheet + in-engine preview shots saved
-  CP2  owner approval recorded in DECISIONS (implementation stops at CP1 until it is)
-  CP3  IRON_STALKER draws the generated sprite in-engine; build green
-  CP4  docs updated; reviewer PASS; STATUS: IMPLEMENTED
+  CP1  the seam exists with a no-op default, fired at every site; build green; sim/ unchanged
+  CP2  registry + manifest parser + per-floor atlas cache load the two creatures; build green
+  CP3  animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types
+  CP4  every core clip plays from its moment in-engine; glow pass; legacy types unchanged
+  CP5  capture tooling; burst GIFs sent; owner approval recorded (stop until it is)
+  CP6  performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED
 
 
 ASSUMPTIONS
 -----------
-  AS1  Four walking legs + two blades = six limbs, true to the insect family.
-  AS2  The pen-number stencil is a story detail only (L7), not something the player must read.
+  AS1  Package name render/enemyvisual.
+  AS2  The 25%-of-max-HP heavy-hurt threshold is a cosmetic constant in EffectConstants.
+  AS3  Health bars and name tags keep their current geometry, anchored to the canvas rect.
 
 
 DECISIONS
 ---------
-(none yet - the owner's approval of the sprite is recorded here at CP2)
+  D1  The enemy visual code may be rewritten from scratch (series D8); this order builds the new layer
+      beside the legacy one and order 9 removes the legacy one.
 
 
 OPEN QUESTIONS
@@ -146,5 +209,6 @@ None.
 
 RELATED
 -------
-  Ideas:  generated-enemy-art.txt, generated-enemy-art-order-1.txt
-  Docs:   docs/art-direction.txt section 16
+  Guide:  docs/sprite-art-creation-guide.txt (sections 7, 8, 10)
+  Ideas:  generated-enemy-art.txt, -order-1.txt, visual-identity-order-2.txt (conditioning, shadows, muzzle light)
+  Docs:   docs/art-direction.txt, docs/enemy-system.txt, docs/tick-system.txt

@@ -1,0 +1,137 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy visual rework 9 - retire the old enemy visual layer
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-8 (every EnemyType has a generated, animated
+creature). Read generated-enemy-art.txt and docs/sprite-art-creation-guide.txt before starting.
+
+
+OVERVIEW
+--------
+Finishes the series by deleting everything the old enemies needed and nothing else does: the image-model
+textures, the 2x2 sheet slicing, the per-texture fields, the boss placeholder mapping, the alpha-cut
+conditioning that cleaned image-model halos, the lunge-scale fake, and the legacy body-draw path. After
+this order the new enemy visual layer is the only one, and the game ships only generated enemy art.
+
+
+SCOPE
+-----
+IN
+  - Delete the nine old PNGs (enemy_sheet_blight, enemy_sheet_infernal, enemy_sheet_elemental_golems,
+    enemy_corruptor, enemy_vortex_eye, enemy_ghoul, enemy_crawler, enemy_revenant, enemy_boss_overseer),
+    their EnemyConstants paths and fallback colours, EnemyRenderer's per-texture fields, buildTextureRegions'
+    quadrant code and the boss placeholder mapping.
+  - Delete the legacy body-draw path in EnemyRenderer and the lunge scale/drop constants it used.
+  - EnemySpriteSheets: remove the alpha-cut conditioning pass (every input is binary by construction) or
+    fold the class into EnemyAtlasCache - whichever leaves less code.
+  - Consider folding the renderer's golem overlays (shard ring, crust plates, state tints) into the new
+    layer where an animated clip now does the job better; keep any that still read best as overlays.
+    Each change is named in the IMPLEMENTATION NOTE.
+  - A load-time error log naming any EnemyType without an EnemyVisualRegistry row (no type may be invisible).
+  - Final performance pass (G13): frame time and texture memory on the busiest floor of each region and on
+    each boss floor, compared with the pre-series numbers recorded in order 2.
+  - Docs: guide (all [PLANNED] markers gone), art-direction section 9 rewritten and 16 completed,
+    docs/enemy-system.txt, CLAUDE.md (render/ structure: the enemyvisual package as THE enemy renderer,
+    EnemySpriteSheets entry updated), the series master marked complete.
+
+OUT
+  - New creatures, new clips, new effects. Directional sprites (series AS2).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged.
+
+
+RULES
+-----
+  R1  After this order no enemy pixel in the game was made by anything but the enemy-art scripts (G2).
+  R2  Nothing is deleted that a non-enemy system still reads (grep every constant and path before removing).
+  R3  No visual regression: every creature looks and moves exactly as its order approved.
+
+
+PLAYER EXPERIENCE
+-----------------
+None directly - a smaller install and one consistent bestiary.
+
+
+TECHNICAL NOTES
+---------------
+Grep first: EnemyConstants paths, EnemySpriteSheets callers, EnemyRenderer fields. The headless sim and
+tests must not reference any deleted symbol. APK size before/after recorded.
+
+
+VISUAL DESIGN
+-------------
+None.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+Everything that draws enemies: EnemyRenderer, boss afterimages, BossHudRenderer (portrait, if any),
+minimap markers (unaffected), the Overseer's dedicated texture path.
+
+
+EDGE CASES
+----------
+A stale Preferences/cache entry referring to an old texture path (none expected - verify); GL context loss
+(the new cache already handles it).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  `ls assets/textures/enemies/` shows only generated/.
+  A2  No code references an old enemy texture path or the deleted fields (grep).
+  A3  Every EnemyType draws its creature; the load log has no missing-row error.
+  A4  A run through every region (run-game, forced moods) shows every family with no visual regression.
+  A5  Performance and texture memory recorded vs order 2's baseline; APK size recorded.
+  A6  Docs complete; build green.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. AUDIT    (main thread)        grep map of everything to delete
+  2. DELETE   (libgdx-specialist)  textures, constants, fields, legacy path, conditioning
+  3. OVERLAYS (libgdx-specialist)  optional folding, each named
+  4. VERIFY   (main thread)        region sweep captures, performance, memory, APK
+  5. TESTS    None. Not balance-bearing; verified by build + run.
+  6. DOCS     guide, art-direction 9 + 16, enemy-system.txt, CLAUDE.md, series master
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  audit list written into the checkpoint file
+  CP2  old textures, constants, fields and placeholder mapping removed; build green; A3 holds
+  CP3  legacy draw path and conditioning removed; build green; region sweep A4 captured
+  CP4  measurements recorded; docs; reviewer PASS; STATUS: IMPLEMENTED; master marked complete
+
+
+ASSUMPTIONS
+-----------
+  AS1  No owner gate is needed: no art changes. If folding an overlay changes how a golem looks, that one
+       change goes to the owner.
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Guide:  docs/sprite-art-creation-guide.txt
+  Ideas:  generated-enemy-art.txt, -order-1..8.txt, visual-identity-order-2.txt (conditioning)
