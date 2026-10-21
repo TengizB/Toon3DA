@@ -362,7 +362,7 @@ because every pixel's value comes from a real surface normal lit by one consiste
     that owns the runtime - never by growing the limit.
 
 ====================================================================================================
-8. REACTIONS: HOW AN ENEMY ANSWERS EVERY EVENT                             [PLANNED: orders 2-3]
+8. REACTIONS: HOW AN ENEMY ANSWERS EVERY EVENT              [order 2: core clips; order 3: the rest]
 ====================================================================================================
 The simulation stays headless: EnemyManager fires visual MOMENTS through a listener seam (the same
 idiom as enemy/EnemyVoiceListener, so the enemy package never imports a renderer). The visual layer
@@ -384,6 +384,31 @@ maps each moment to a clip and an effect. Minimum behaviour every creature must 
                         layer keeps a dying instance), then hands over to the corpse decal
 Nothing here changes a rule, a number or a turn: reactions are cosmetic and never block input.
 
+8.1 THE SEAM (shipped, order 2). enemy/EnemyVisualListener.onEnemyVisualMoment(EnemyVisualEvent), set on
+    EnemyManager (null by default - sim/ and the tests never see it). EnemyVisualEvent is ONE reused payload
+    (never keep it); EnemyVisualMoment's per-constant data says which fields a moment fills. Fire sites:
+      ALERTED           perception, chain alert, the HUNTED hunter, any spawn (a summon arrives awake)
+      MOVE_STARTED      a real tile step (from/to tiles); a charge's whole rush is ONE move
+      WIND_UP_STARTED   every committed wind-up (announceWindUp)
+      ATTACK_COMMITTED  melee, ranged (after the shard check), charge, lance, sow
+      ABILITY_USED      executeSpecial (ability named) - never also ATTACK_COMMITTED
+      DAMAGED           every player hit (amount, healthFraction, matchup outcome, absorbed, blocked, source)
+      STAGGERED / KNOCKED_BACK / DEFEND_STARTED / STATUS_APPLIED
+      DIED              killEnemy(enemy, cause) - FIRST, while the enemy still stands on its tile
+    Not fired yet: damage-over-time ticks (order 3). Bosses are moved by BossFloorController (unmigrated).
+8.2 CLIP SELECTION (shipped, order 2) - render/enemyvisual/EnemyAnimationRules, data rows, highest wins:
+      DEATH 7 > HURT_HEAVY / HURT_LIGHT 6 > ATTACK 5 > WIND_UP (held) 4 > DEFEND (held) 3 > ALERT 2 >
+      MOVE 1 > IDLE / DORMANT 0
+    HURT_HEAVY when the hit cost >= EffectConstants.ENEMY_VISUAL_HURT_HEAVY_HEALTH_FRACTION (25%) of max HP,
+    and always for a stagger or knockback; a hit a shard absorbed or Block swallowed does not flinch.
+    WIND_UP is held while the enemy is WINDING_UP / SELF_DESTRUCTING, DEFEND while DEFENDING (a state
+    table, not a timer). A finished one-shot falls back to the best ongoing condition every frame.
+    MOVE: the simulation moves an enemy instantly; the visual layer slides a migrated body one MOVE cycle
+    per tile (ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE 0.33 s, max 0.5 s), never snapping back mid-slide.
+    Idle phase = frac(enemyId x 0.618) x IDLE duration, so a pack never breathes in unison.
+    DEATH plays from DyingEnemyPool (8 slots, oldest dropped) at the body's last visual position, holds
+    its corpse frame ENEMY_VISUAL_DEATH_HOLD_SECONDS and hands over to the corpse decal.
+
 
 ====================================================================================================
 9. EFFECTS                                                                  [PLANNED: order 3]
@@ -400,17 +425,27 @@ in its own metal and a tick bleeds its own ichor:
 ====================================================================================================
 10. ENGINE CONTRACT (what the game does with the output)
 ====================================================================================================
-  - Textures load with the Nearest filter. Enemy textures are alpha-cut at 0.50 by EnemySpriteSheets
-    today, so output must be BINARY alpha (0 or 255).
-  - The billboard is drawn as heightMultiplier() wall heights tall from the floor line, per screen
-    column against the wall z-buffer; the contact shadow is drawn at the floor line.
+  - Textures load with the Nearest filter. Generated atlases are loaded as-is (no alpha cut - that is
+    the legacy EnemySpriteSheets path), so output must already be BINARY alpha (0 or 255).
+  - Wiring a creature is ONE row in render/enemyvisual/EnemyVisualRegistry.bootstrap() (EnemyType ->
+    creature id); files come from EnemyConstants.ENEMY_GENERATED_DIRECTORY. A type without a row keeps
+    the legacy sprite (until order 9).
+  - The billboard is the whole CANVAS: heightMultiplier() wall heights tall, bottom on the floor line,
+    canvas width x the same scale. Each frame is drawn at its manifest offset inside it (y-down canvas,
+    flipped once in EnemyBodyDrawer), per screen column against the wall z-buffer; the contact shadow
+    is drawn at the floor line. Health bar / name tag / intent sit above the canvas top. The legacy
+    melee lunge (scale + drop) is skipped for a migrated type - its ATTACK clip does that job.
   - Every world pass is colour-graded by the floor's lighting mood at GRADE_STRENGTH_ENEMY 0.50 and
-    fogged by depth. Emissives belong in the glow layer so they escape the grade (V6).
+    fogged by depth. Emissives belong in the glow layer so they escape the grade (V6): the glow atlas
+    holds the emissive pixels' BAKED colour and is laid over the graded body with NORMAL alpha blending
+    at opacity 1 up to ENEMY_GLOW_FADE_START_TILES (10), easing to ENEMY_GLOW_MIN_ALPHA (0.6) at 20 tiles.
+    (Not additive: the glow pixels are a copy of the body's, so adding them doubles them to white.)
   - The renderer draws overlays OVER the sprite (hit flash, health bar, name tag, matchup words,
     state tints - Auric exposed, Cinderforge crust, Rimeshell shell/frost - the shard ring, boss
     afterimages). Keep body colours mid-value so every tint and flash reads.
   - Memory: an atlas is a GPU texture. Budget per creature <= 2048x2048 RGBA, loaded per floor for the
-    types on that floor and disposed on floor teardown [PLANNED: order 2]. A 160x240 frame is 150 KB
+    types on that floor (and what they summon; an unforeseen arrival loads on first sight) and disposed on
+    floor teardown - render/enemyvisual/EnemyAtlasCache, owned by the per-floor EnemyVisualLayer. A 160x240 frame is 150 KB
     in RGBA; trim frames to their bounds.
   - Critical rules from CLAUDE.md hold: no allocation in render(), every Texture disposed, all GL work
     on the render thread.

@@ -790,3 +790,31 @@ a POSITIONAL_MULT_* multiplier, TP + hit bands for its role, XP derived from TP 
 unique spawn symbol (a new FIXED symbol follows the CLAUDE.md STRICT RULE in one commit), an
 EncounterGroupTemplate slot that admits it, and its ORA archetype line (docs/story-ui-system.txt, ADD AN
 ENEMY). R-ENEMY / R-LADDER / R-HEAVY then judge the numbers; tune the enemy's own constants only.
+
+
+## Visual Moments — the animated enemy seam (generated-enemy-art order 2)
+
+EnemyManager reports what an enemy DID to the visual layer through enemy/EnemyVisualListener, the
+same idiom as EnemyVoiceListener / EnemyAttackListener: the enemy package names a moment
+(enemy/EnemyVisualMoment) and never imports a renderer. World sets the listener to the floor's
+render/enemyvisual/EnemyVisualLayer; with no listener (sim/, tests) nothing changes.
+
+The payload, enemy/EnemyVisualEvent, is ONE pre-allocated object reset on every fire — a listener reads
+it inside the call and never keeps it. Moments and where they fire:
+  ALERTED           phaseA perception + chain alert, the HUNTED hunter, spawnEnemyInternal
+  MOVE_STARTED      executeMove after a real step (fromColumn/Row -> toColumn/Row); performCharge
+                    fires ONE move for the whole rush after its loop
+  WIND_UP_STARTED   announceWindUp (charger, lancer, sower, self-destruct first prime, heavy specials)
+  ATTACK_COMMITTED  executeMeleeAttack, executeRangedAttack (after the shard check), performCharge,
+                    executeLanceBeam, executeSow
+  ABILITY_USED      executeSpecial, before dispatch (ability named)
+  DAMAGED           applyDamageTo (incl. the shard-absorbed early return), lance ally splash, reflect
+  STAGGERED         tryStaggerEnemy, applyGuardRiposte
+  KNOCKED_BACK      tryPushEnemy (from/to tiles)
+  DEFEND_STARTED    executeDefend
+  STATUS_APPLIED    burn, burn stack, vulnerable, exposed, empowered
+  DIED              killEnemy(enemy, cause) — first thing, while the enemy still stands on its tile;
+                    cause WEAPON / HAZARD / STATUS / SELF_DESTRUCT / OTHER
+Rule (series G9): the visual layer never writes back to an enemy, the manager or the world. Adding a fire
+site is one fireVisual...(…) call; adding a moment is one enum constant plus its rule row in
+render/enemyvisual/EnemyAnimationRules (the rule table refuses to load with a moment unmapped).

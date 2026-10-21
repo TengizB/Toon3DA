@@ -617,3 +617,24 @@ SUIT vs FACILITY — THE INK TABLE (the series' map; a new screen picks its row 
   SEMANTIC          health, armour, damage, defence, special, movement, buff, credits, rarity / tier / tag
                     frames, the Planet's red, the route map's node accents / pips / hazard amber / violet
 
+
+16. ENEMY VISUAL LAYER (generated-enemy-art order 2)
+----------------------------------------------------
+Migrated enemy types (EnemyVisualRegistry rows: ACID_DRONE = warden, SHELL_BRUTE = harvest_tick) are drawn
+from generated clip atlases by render/enemyvisual, inside EnemyRenderer's pass 1; every other type keeps the
+legacy region path untouched until generated-enemy-art order 9.
+  BODY      the frame from the body atlas, at its manifest offset on the 160x240 canvas, under EXACTLY the
+            legacy body colour: distance shade x tile light, dormant dampen, BLACKOUT floor, the mood grade
+            at GRADE_STRENGTH_ENEMY, the red-alert wash, then every state tint and the hit flash.
+  GLOW      the glow atlas (the emissive pixels in their baked colour) laid over the body with NORMAL alpha
+            blending — the V6 emissive exemption: never graded, never fogged, never dimmed by BLACKOUT; only
+            faded with depth (1 to 10 tiles, 0.6 at 20+). Same colour under every mood (checked: cool_steel
+            vs corrupted_violet at 6-7 tiles). No extra blend switch.
+  MUZZLE    the R8 muzzle light adds over the body atlas as for any body.
+  SHADOW    the contact shadow is placed by the canvas width at the floor line, as before.
+  DYING     a dying instance (DEATH clip after the enemy is removed) takes the body shade and grade but no
+            tints, bars or shadow; it is merged into pass 1 in depth order with the live enemies.
+  NO LUNGE  the legacy melee lunge (scale + drop) is skipped — the ATTACK clip carries the strike.
+Measured (llvmpipe, same session, 6 enemies alerted in one room, 8 s each, two interleaved runs): animated
+10.6 / 11.0 ms vs legacy sprites 10.9 / 10.9 ms per frame — no measurable cost; no GC pause during 30 s idle
+in the room on either.

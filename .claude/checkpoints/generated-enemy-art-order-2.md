@@ -115,3 +115,10 @@ OWNER GATE: GIFs + key-frame sheets in the scratchpad `gifs/` (warden|harvest_ti
 labelled) sent; WAITING for approval. CP5 is ticked only when the answer is recorded in the idea's DECISIONS.
 
 **CP5 (gate):** owner approved 2026-10-21 -> idea DECISIONS D2. Proceed with CP6.
+
+**CP6a (perf + docs):** A7 — llvmpipe, `--fps 0`, 6 enemies (3 Warden + 3 Tick) alerted in one room, 8 s timing,
+interleaved with master a99b493 (legacy sprites for the same types): new 10.62 / 11.00 ms, master 10.87 / 10.89 ms.
+GC (`--gclog`, 30 s idle in that room): 2 startup pauses (0.4 s, 0.6 s) on both, none in the room. A8 — enemy/ adds no
+render import (the one hit, render.EventTextSystem in EnemyManager, is pre-existing on master). Docs: guide 8 (8.1 seam,
+8.2 clip selection) + 10, art-direction 16, enemy-system "Visual Moments", CLAUDE.md (structure, package row, render
+order, docs line counts). Build: 480 tests, only StoryBarkTest red. Next: reviewer gate, then STATUS.
