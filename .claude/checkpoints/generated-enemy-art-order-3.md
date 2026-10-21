@@ -148,3 +148,5 @@ the 32-remains cap note; `Arrays` import. Build: only StoryBarkTest red. Next: r
 
 **CP6 (gate):** reviewer r2 PASS (report .reviewer-r2.md). Its optional nit applied: a shot still pending when the
 Warden dies is launched from beginDying. STATUS: IMPLEMENTED 2026-10-21.
+
+**CLOSED (2026-10-21):** owner marked the order complete; the remaining gaps are deferred to a later order (idea D3).
