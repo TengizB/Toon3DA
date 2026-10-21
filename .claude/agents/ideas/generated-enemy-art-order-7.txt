@@ -1,0 +1,181 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy visual rework 7 - the elemental Golems
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-6. Read generated-enemy-art.txt (decision D5)
+and docs/sprite-art-creation-guide.txt (above all lesson 12.2) before starting.
+
+
+OVERVIEW
+--------
+The four GOLEMS - Auric Sentinel, Cinderforge Colossus, Rimeshell Lancer, Verdant Spiresower - rebuilt as
+animated, reactive creatures. Golems are the planet's own crust and mantle rising to crush the infection:
+the player. This is the family the 2026-10-21 prototype FAILED at (slabs over a glow, read as bricks), so
+the order first fixes how the kit makes stone, proves it on one golem with the owner, then builds the rest.
+Stone that MOVES - grinding, cracking, re-hardening - is also where the reactions pay off most.
+
+
+SCOPE
+-----
+IN
+  - Kit growth (stone done right):
+      * SCULPTED ROCK: irregular masses (several merged ellipsoids, low k), fractures CARVED in by a seeded
+        crack-path helper, chipped silhouettes; no straight-edged rectangle as a body part.
+      * CRYSTAL material: faceted normals (a facet helper quantising the normal into planes), high specular,
+        translucent inner glow.
+      * element ramps: auric (metallic gold-brown, warm-white highlights - not the semantic yellow), rime
+        (frost white, grey-blue shadows, low saturation - not the defence blue, not FACILITY_CYAN), verdant
+        (olive and moss - not the health green), SAP glow (warm cream).
+  - The Cinderforge Colossus FIRST as the stone prototype (owner early read), then the other three.
+  - Each with the full clip set, DORMANT + WOUNDED idles and their mechanic clips:
+      Auric Sentinel        shard absorb (a jolt as a shard takes the hit), shard launch (arms fling out)
+      Cinderforge Colossus  AREA_STRIKE slam; a cooling/hardening loop and a crust-shatter reaction
+      Rimeshell Lancer      shell OPEN (the petals part on WIND_UP), lance fire, reseal
+      Verdant Spiresower    sowing (a spire-bud flung down), healing pulse when a spire heals it
+  - Effects: rock chips + dust (hit), ember spray (Cinderforge), frost shards (Rimeshell), gold crystal
+    shards (Auric), sap motes + leaf grit (Verdant); death bursts of their own stone.
+  - Owner gate, four registry rows, earlier creatures byte-identical, docs.
+
+OUT
+  - The renderer's golem overlays stay and the art is designed AROUND them, not baked in: the Auric shard
+    ring, the Cinderforge crust plates/seams/heat haze, the Rimeshell open/frost tints, the Auric exposed
+    tint. (Order 9 may fold them into the new layer if that reads better - not this order.)
+  - The Spiresower's spires are runtime TILES with their own prop texture - not enemy art.
+  - Mechanics, numbers, names (G10).
+
+
+GAMEPLAY LOOP
+-------------
+Rules unchanged.
+
+
+RULES
+-----
+  R1  Series G1-G13; runtime rules of orders 2-3.
+  R2  No golem body part is a straight-edged slab (guide 12.2).
+  R3  A sprite never bakes what the renderer already draws on top of it; it leaves the space and the mid
+      values those overlays need.
+  R4  All four share the magma core ink; the element lives on the surface.
+  R5  Before designing, read the four elemental-golem-*.txt idea files for MECHANICS and OVERLAYS only;
+      their "SPRITE / SOURCE ART" sections describe the old textures and are not to be followed (G1).
+
+
+PLAYER EXPERIENCE
+-----------------
+ORA's lines are the contract:
+  Auric Sentinel        "Those shards are its armour and its ammo. Strip them fast."
+  Cinderforge Colossus  "It re-hardens the second you stop shooting. Don't stop shooting."
+  Rimeshell Lancer      "Armoured until it fires. Bait the lance, step off the lane, then hit it."
+  Verdant Spiresower    "The spires heal it. Break those first or it never dies."
+The motion makes each mechanic legible: the shell visibly opens, the crust visibly cools, a shard visibly
+takes the hit.
+
+
+TECHNICAL NOTES
+---------------
+Content only, plus whatever capture steps are needed to put an enemy into a state (shell open, crust
+stacked) for the gate screenshots.
+
+
+VISUAL DESIGN
+-------------
+CINDERFORGE COLOSSUS (BRUISER, 1.15 walls, melee, AREA_STRIKE, crust re-hardens) - the prototype
+  A hunched forge of the planet's mantle: a slumped body of molten rock, heaviest at the shoulders, a few
+  cooled basalt ridges; two thick arms ending in fused club hands; a broken Organization shackle on one
+  wrist. The body is the HOT state (mid-orange, not white-hot) so the renderer's crust can darken it.
+  MOTION: idle = a slow seething, molten surface creeping; move = ground-shaking steps; slam = both clubs
+  up, down, with a squash; hurt = splashes of melt; death = it cools to black and cracks apart.
+AURIC SENTINEL (SOLDIER, 1.00 walls, ranged; shards = armour and ammo)
+  A geode the planet split open: a rough dark-rock outer body cracked down the front, the inside lined with
+  auric crystal, a hot core deep in the split; upright, arms held out as if holding the shard ring the
+  renderer draws. NO shards in the sprite; clear air around head and shoulders.
+  MOTION: idle = the core pulses, the arms hold the ring; attack = arms fling forward; absorb = a jolt
+  through the crystal; death = the geode closes, then shatters.
+RIMESHELL LANCER (SOLDIER, 0.85 walls, ranged lance; armoured until it fires)
+  A closed shell of frost-rime plates (sculpted) folded over its front like shut petals, a slit down the
+  middle where the magma lance-core shows. MOTION: idle = frost breath, plates creak; WIND_UP = the petals
+  part and the core blazes (held - this IS the opening the player must exploit); attack = the lance fires
+  from the core anchor; reseal = petals close; death = the shell shatters into frost.
+VERDANT SPIRESOWER (SOLDIER, 0.80 walls, melee; spires heal it)
+  Stone overgrown: a squat rock body furred with moss and lichen, crystalline spire-buds pushing out of its
+  back (SAP glow at their tips), roots trailing from its feet into the floor line.
+  MOTION: idle = buds sway, roots flex; sow = it hurls a bud down; heal = the buds pulse in time with a
+  spire's heal; death = moss withers, the stone crumbles.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+Every golem overlay in EnemyRenderer (verify each live state in-engine), the matchup PLATED trait (the
+RESISTED read from order 3 matters most here), the Auric absorb flash (ABSORBED outcome).
+
+
+EDGE CASES
+----------
+Orders 2-3 edge cases. Overlay positions are relative to the sprite rect - confirm the shard ring and crust
+plates still sit on the new bodies (a renderer constant may need adjusting; name it in the IMPLEMENTATION NOTE).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  The Cinderforge prototype was shown alone and the owner's read is recorded before the other three.
+  A2  Owner approval of all four recorded.
+  A3  In-engine: every standard clip and mechanic clip; the shard ring orbits clear air; crust plates and
+      seams read; the shell visibly opens on WIND_UP; damage outcomes incl. RESISTED; death -> remains.
+  A4  No straight-edged slab body parts (R2). Element ramps pass G5.
+  A5  Earlier creatures byte-identical. Build green. G1 respected.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          sculpted rock, crack + chip helpers, facets, crystal, element + sap ramps
+  2. PROTOTYPE    Cinderforge: rig + clips + in-engine (both crust states); owner's early read
+  3. REST         three rigs + clips; effects
+  4. GATE         GIFs + in-engine state bursts; stop; record
+  5. WIRE         (libgdx-specialist) four rows + files
+  6. TESTS        None. Not balance-bearing; verified by build + run.
+  7. DOCS         guide (the stone method replaces lesson 12.2's warning with the recipe), art-direction 16
+
+RISKS AND UNKNOWNS
+  - The kit already failed at stone once. If the Cinderforge prototype is rejected twice, STOP and bring
+    the owner alternatives (e.g. crystal-first bodies) instead of iterating blind.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit stone/crystal/element additions; earlier creatures byte-identical
+  CP2  Cinderforge complete + in-engine; owner's read recorded
+  CP3  the other three + effects; GIFs + state bursts sent
+  CP4  owner approval recorded (stop until it is)
+  CP5  four rows wired; A3 verified; build green
+  CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  Golems keep the magma core ink; elements live on the surface.
+  AS2  Today's golem overlays remain part of each golem's look in this order.
+
+
+DECISIONS
+---------
+  D1  The 2026-10-21 Mantle Sentinel prototype is dropped and must not be reused (series D5).
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Guide:  docs/sprite-art-creation-guide.txt (12.2)
+  Ideas:  generated-enemy-art.txt, -order-1..6.txt, elemental-golem-*.txt (mechanics only)

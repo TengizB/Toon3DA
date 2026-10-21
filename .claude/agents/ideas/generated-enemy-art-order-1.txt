@@ -1,0 +1,187 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy visual rework 1 - animation kit, Warden + Tick clips
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Read generated-enemy-art.txt (rules G1-G13, decisions D1-D9)
+and docs/sprite-art-creation-guide.txt (sections 3-7, 11-12) before starting.
+
+
+OVERVIEW
+--------
+Teaches the offline kit to ANIMATE, and proves it on the two creatures the owner already approved.
+A sprite function becomes a rig driven by pose parameters; clips are keyframed poses; the kit renders
+every frame through the same light rig, packs them into an atlas with a glow atlas and a manifest, and
+writes GIF previews for the owner. No game code changes in this order - order 2 builds the runtime that
+plays what this order produces.
+
+
+SCOPE
+-----
+IN
+  - kit.py:
+      * RIG: a creature is build(pose) -> layers; pose = dict of named parameters with defaults.
+      * CLIP: keyframes (time, {param: value}) with easing (linear, ease-in, ease-out, ease-in-out,
+        hold); frames sampled at a per-clip frame rate; loop / one-shot / hold-last flags.
+      * shape-local GRAIN: noise sampled in each shape's own coordinates so texture sticks to moving
+        parts (guide 7.5). Static output must stay visually equivalent (it will NOT be byte-identical
+        to the committed stills - that is expected once; the owner re-approves the stills at the gate).
+      * ANCHORS: named points a rig reports per frame (ground, hit_centre, eye, muzzle/emitter).
+      * PACKING: frames trimmed to bounds, packed into <creature>.atlas.png (<= 2048x2048) and
+        <creature>.glow.png (emissive pixels only, same packing), plus <creature>.clips.json: for each
+        clip its frames (atlas rect + trim offset on the 160x240 canvas), frame durations, loop mode,
+        per-frame anchors.
+      * PREVIEW: per-clip animated GIF (3x, nearest) + one strip sheet of every clip.
+  - bestiary.py: warden and harvest_tick rebuilt as rigs, each with the full standard clip set
+    (guide 7.3): IDLE, ALERT, MOVE, WIND_UP, ATTACK, HURT_LIGHT, HURT_HEAVY, DEFEND, DEATH, plus a
+    DORMANT variant of IDLE (slowed, emissives dimmed) and a WOUNDED variant of IDLE (see VISUAL DESIGN).
+  - Output in assets/textures/enemies/generated/: warden.atlas.png, warden.glow.png, warden.clips.json,
+    and the same three for harvest_tick. The old single-frame warden.png / harvest_tick.png are replaced
+    by the atlases (removed).
+  - docs/sprite-art-creation-guide.txt section 7: the [PLANNED] marker removed, the real API and the
+    manifest schema written down. SKILL.md API table updated.
+
+OUT
+  - Any Java / runtime (order 2). Effects and particles (order 3 generates them).
+  - Other creatures. Directional sprites (series AS2).
+  - Changing the approved LOOK of either creature - poses only. If a rig forces a visible change in the
+    rest pose, it goes to the owner at the gate.
+
+
+GAMEPLAY LOOP
+-------------
+None - offline tooling and content only.
+
+
+RULES
+-----
+  R1  Every frame of every clip is rendered by the shared light rig (G3); nothing is post-edited.
+  R2  All clips of one creature share one canvas and one ground line; no frame pops.
+  R3  Clip durations fit the game's timing: ATTACK within ENEMY_ATTACK_ANIM_DURATION_SECONDS (0.30 s);
+      MOVE loops across the tile slide; WIND_UP ends on a frame that can be HELD indefinitely.
+  R4  Output is deterministic: running the script twice gives byte-identical files.
+
+
+PLAYER EXPERIENCE
+-----------------
+Nothing yet in game. For the owner: the two creatures they approved, now alive in GIFs.
+
+
+TECHNICAL NOTES
+---------------
+  - The manifest is JSON (LibGDX reads it with its own JsonReader in order 2; no new dependency).
+  - Pose parameters are plain floats; a rig reads them with defaults so a clip only names what moves.
+  - Frame rate: 12 fps default (pixel-art standard, keeps atlases small); a clip may override.
+  - Atlas budget check in the packer: refuse (error) if a creature exceeds 2048x2048.
+
+
+VISUAL DESIGN
+-------------
+WARDEN (machine, hovering harasser - "It keeps backing off. Corner it.")
+  IDLE      slow hover bob (2 px), antenna sways and lags a frame, the slit eye's pupil sweeps left-right,
+            thrust plume flickers in length.
+  DORMANT   hull lower, eye dark except a dim pupil, plume nearly out.
+  ALERT     eye snaps to centre and flares, arms unfold, plume flares.
+  MOVE      hull tilts toward travel, plume stretches; it backs off - give it a recoil drift.
+  WIND_UP   stun prod raised and crackling, claw opens, eye narrows. Held.
+  ATTACK    the prod levels at the player, the tip flares and FIRES (the Acid Drone is ranged: the
+            emit frame carries the muzzle anchor that order 3's corrosive-glob projectile leaves from),
+            the hull kicks back with the recoil.
+  HURT_LIGHT hull jolts, eye flickers. HURT_HEAVY hull spins a few degrees, a panel pops, sparks.
+  DEFEND    arms fold in front of the visor.
+  WOUNDED   idle with a cracked visor, a dangling arm and an intermittent plume.
+  DEATH     eye dies, plume cuts, the hull drops and bounces once, a panel falls away; last frame is
+            the wreck on the floor (the corpse frame).
+HARVEST TICK (insect charger - "It charges in a straight line. Step aside, then hit it while it recovers.")
+  IDLE      blisters pulse with ichor light, legs shift weight in sequence, mandibles flex, the torn hose
+            drips.
+  DORMANT   body sunk low, legs tucked, blisters dim.
+  ALERT     rears up on the rear legs, mandibles open wide, eyes ignite.
+  MOVE      a scuttle cycle - legs in alternating tripods (true to six legs).
+  WIND_UP   body lowered and drawn back, front legs dug in, abdomen raised: the charge loading. Held.
+  ATTACK    lunge with a squash-and-stretch smear, mandibles snap shut on the impact frame, recoil.
+  HURT_LIGHT body twitches, one blister flinches. HURT_HEAVY knocked back, legs splay, a blister bursts.
+  DEFEND    legs fold, abdomen tucked over the head.
+  WOUNDED   idle with a burst blister leaking, one leg dragging.
+  DEATH     legs curl inward, the body drops, blisters dim one by one; last frame is the curled carcass.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+None in game yet. Order 2 consumes the manifest schema defined here - it must be written down in the
+guide before this order closes.
+
+
+EDGE CASES
+----------
+  - A pose that pushes a part outside the canvas: the packer warns; clamp the pose, never grow the canvas.
+  - Smear frames must still obey the binary-alpha rule.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  For each creature: an atlas, a glow atlas and a manifest exist; every clip of the standard set
+      plus DORMANT and WOUNDED is present in the manifest with frame rects, durations, loop mode and
+      anchors.
+  A2  GIF previews of every clip and a strip sheet were sent to the owner, and the owner's approval of
+      the motion (and of the re-rendered stills) is recorded in DECISIONS.
+  A3  Running bestiary.py twice produces byte-identical outputs.
+  A4  Each atlas is within 2048x2048; alpha is binary in every output PNG.
+  A5  The guide section 7 documents the real API and manifest schema; SKILL.md updated.
+  A6  No game code changed; ./gradlew build unaffected.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          (main thread)  rig/pose/clip/easing, shape-local grain, anchors, packer, manifest, GIFs
+  2. CREATURES    (main thread)  warden + harvest_tick rigs and clips
+  3. OWNER GATE   send GIFs + strips; STOP; record
+  4. TESTS        None. Not balance-bearing; verified by previews (no game code).
+  5. DOCS         guide section 7 (+ schema), SKILL.md
+
+RISKS AND UNKNOWNS
+  - Render time: ~0.3 s per frame today; two creatures x ~60 frames is fine; later orders may need a
+    cache (only re-render clips whose rig/keys changed).
+  - Shape-local grain changes the stills slightly; budget a re-approval.
+
+
+CHECKPOINTS
+-----------
+  CP0  .claude/checkpoints/generated-enemy-art-order-1.md committed and pushed
+  CP1  kit renders a rig at a pose; shape-local grain; anchors reported; a single test clip renders
+  CP2  packer + manifest + glow atlas + GIF preview work on a test clip
+  CP3  warden rig + full clip set generated; GIFs saved
+  CP4  harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner
+  CP5  owner approval recorded in DECISIONS (stop here until it is)
+  CP6  outputs committed; guide section 7 + SKILL.md updated; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  12 fps default frame rate.
+  AS2  JSON manifest (LibGDX JsonReader exists; no dependency).
+  AS3  The corpse frame is the last DEATH frame; order 3 decides how it hands over to the floor decal.
+
+
+DECISIONS
+---------
+  D1  The Warden and the Harvest Tick (six legs) are approved as stills (series D3, D4).
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Guide:  docs/sprite-art-creation-guide.txt (sections 3-7, 11-12)
+  Ideas:  generated-enemy-art.txt
+  Skills: .claude/skills/enemy-art/SKILL.md

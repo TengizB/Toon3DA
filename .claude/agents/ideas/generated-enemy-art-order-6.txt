@@ -1,0 +1,173 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy visual rework 6 - the Undead (humanoid rig)
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-5. Read generated-enemy-art.txt and
+docs/sprite-art-creation-guide.txt before starting.
+
+
+OVERVIEW
+--------
+The five UNDEAD - Ghoul, Crawler, Revenant, Vortex Eye, Blight Corruptor - rebuilt as animated, reactive
+creatures. In the premise they are the facility's own staff, killed by the catastrophe and the Deepworks'
+conditions and dragged back into motion by raw soul bleeding through the galleries: victims, not monsters.
+They are people, so the kit gets a HUMANOID RIG (one skeleton, five bodies, five ways of moving wrong),
+cloth, and the family's new glow ink, SOUL.
+
+
+SCOPE
+-----
+IN
+  - Kit growth:
+      * humanoid rig: head, neck, torso, pelvis, arms with hands, legs with feet, driven by joint-angle pose
+        parameters - so walk cycles, reaches and collapses are keyframes, not new drawings.
+      * cloth: Organization work overalls (desaturated slate), hazmat rubber (dull olive-grey - not green,
+        G5), lab white (livery), security armour (gunmetal/darkmetal); a cloth-fold carve helper; cloth
+        that lags its limb by a frame (secondary motion).
+      * dead-skin ramp (ash grey, cold undertone); the SOUL emissive ramp (pale bone-white, faint cold tint,
+        low saturation so it never reads as the purple "special" colour - G5).
+  - Five briefs -> five rigs with the full clip set, DORMANT + WOUNDED idles, and ability clips:
+      Vortex Eye        DEBUFF_PLAYER (the vortex tightens and lashes)
+      Blight Corruptor  SUMMON (spore pods split and the raised dead are "released" from them)
+  - Effects (effects.py): soul wisps (hit), cloth scraps + soul burst (death), the Vortex Eye's soul bolt
+    projectile, spore puffs for the Corruptor.
+  - Owner gate (the Ghoul alone first - see RISKS), five registry rows, earlier creatures byte-identical, docs.
+
+OUT
+  - Facial expressions as acting; gore; wounds as the main read (tone: restraint).
+  - SUMMON rules (the raised dead use these same types and therefore these sprites automatically).
+
+
+GAMEPLAY LOOP
+-------------
+Rules unchanged.
+
+
+RULES
+-----
+  R1  Series G1-G13; runtime rules of orders 2-3.
+  R2  Every undead wears what that person wore to work - the JOB is the story detail (G7).
+  R3  Soul light leaks only from eyes, mouth and the wounds it re-entered by.
+  R4  They move WRONG, each differently: the motion is the horror, not the injuries.
+
+
+PLAYER EXPERIENCE
+-----------------
+Recognition before fear - "that was a technician". ORA:
+  Ghoul             "Slow, and it never stops. Keep walking and never let it corner you."
+  Crawler           "Fast, thin. Drop it now, before the rest arrive."
+  Revenant          "Fast and heavy. Do not let that one reach you."
+  Vortex Eye        "Short range only. Break its line or get right on top of it."
+  Blight Corruptor  "Thick. Wear it down from range; don't stand in front of it."
+
+
+TECHNICAL NOTES
+---------------
+Content only (kit rig + materials, bestiary.py, effects.py, five rows, atlases).
+
+
+VISUAL DESIGN
+-------------
+GHOUL (CHAFF, 0.90 walls, melee shambler)
+  A labourer in torn overalls, head lolled, a lanyard ID badge on the chest, soul light in the eyes and the
+  slack mouth. MOTION: idle = swaying, head rolling; move = a dragging, patient shamble, one foot scuffing;
+  attack = a clumsy two-handed grab; hurt = it rocks back and keeps coming; death = folds at the knees.
+CRAWLER (CHAFF, 0.55 walls, fast scuttler)
+  A lab technician on all fours, spine arched high, head thrust forward, long splayed arms, a torn lab coat
+  dragging. Full anatomy (guide 12.6). MOTION: idle = a twitching crouch; move = a fast, unnatural
+  scuttle; attack = a leap-swipe; death = it skids flat.
+REVENANT (BRUISER, 1.05 walls, fast heavy melee)
+  Organization security in riot armour - pauldrons, a cracked visor with soul light behind it, a shock
+  baton, a stencilled unit number. MOTION: idle = an alert combat stance; move = a heavy charging stride;
+  wind-up = the baton raised high; attack = an overhead smash; hurt = armour sparks, barely rocks; death =
+  drops to its knees, then forward.
+VORTEX EYE (CHAFF, 0.55 walls, short-range caster, DEBUFF_PLAYER)
+  A researcher's head and shoulders held aloft by a slow vortex of soul light pouring from the eye sockets.
+  Hover baked into the canvas. MOTION: idle = the vortex turning, the head bobbing; attack = the vortex
+  tightens and lashes (soul bolt from the eye anchor, short reach); death = the vortex unravels and the
+  head drops.
+BLIGHT CORRUPTOR (SOLDIER, 1.00 walls, durable carrier, SUMMON)
+  A quarantine worker in a full hazmat suit, swollen from inside by spore growth bursting through in soft
+  soul-lit pods, a decontamination sprayer tank fused to its back. MOTION: idle = laboured breathing, pods
+  pulsing; move = a slow heavy trudge; summon = pods split and puff; death = it collapses and the pods burst.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+UNDEAD's BURNABLE trait: the incinerator's burning visual on undead is part of this order's status visuals.
+The Corruptor boss's minions (order 8 context) and BLIGHT_CORRUPTOR's SUMMON spawn these types.
+
+
+EDGE CASES
+----------
+Orders 2-3 edge cases. A summoned enemy appears mid-turn: it plays ALERT from the summoner's pod position
+look (its first frame), not a pop-in.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  The Ghoul alone was shown early and the owner's read on the humanoid rig is recorded before the other
+      four were built.
+  A2  Owner approval of all five recorded.
+  A3  In-engine for each: every standard clip, ability clips, damage outcomes, wounded, burning, death ->
+      remains.
+  A4  The five are told apart at three tiles; each one's job is identifiable (owner confirms).
+  A5  The soul ink reads as cold white under corrupted_violet and core_white_violet.
+  A6  Earlier creatures byte-identical. Build green. G1 respected.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT      humanoid rig, cloth + skin materials, soul ramp, fold helper, cloth lag
+  2. GHOUL    rig + clips; in-engine; early owner read
+  3. REST     four rigs + clips; effects
+  4. GATE     GIFs + in-engine bursts; stop; record
+  5. WIRE     (libgdx-specialist) five rows + files
+  6. TESTS    None. Not balance-bearing; verified by build + run.
+  7. DOCS     guide (humanoid rig, soul ink), art-direction 16, SKILL.md
+
+RISKS AND UNKNOWNS
+  - Procedural humanoids easily look like mannequins; hands, head tilt and the WRONG motion carry them.
+    Hence the Ghoul-first gate.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  humanoid rig, materials, soul ramp; earlier creatures byte-identical
+  CP2  the Ghoul complete (clips + in-engine); owner's early read recorded
+  CP3  the other four + effects; GIFs + bursts sent
+  CP4  owner approval recorded (stop until it is)
+  CP5  five rows wired; A3-A5 verified; build green
+  CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  SOUL becomes the UNDEAD family ink (guide 4.4).
+  AS2  The undead are recognisably human and not grotesque (premise: victims).
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Guide:  docs/sprite-art-creation-guide.txt
+  Ideas:  generated-enemy-art.txt, -order-1..5.txt
+  Docs:   story/00-premise.md

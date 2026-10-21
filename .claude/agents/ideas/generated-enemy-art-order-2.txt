@@ -1,0 +1,214 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Enemy visual rework 2 - the animated enemy runtime
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires order 1 (atlases, glow atlases, clip manifests for the
+Warden and the Harvest Tick). Read generated-enemy-art.txt and docs/sprite-art-creation-guide.txt
+(sections 7, 8, 10) before starting.
+
+
+OVERVIEW
+--------
+Builds the new enemy visual layer and puts the first two animated creatures into the game. Instead of
+drawing one still region per type and faking life with a lunge scale, enemies are now drawn by an
+ANIMATOR that plays clips from a generated atlas, chosen by what the simulation is doing: idling,
+waking, sliding a tile, winding up, striking, flinching, bracing, dying. The simulation tells the visual
+layer what happened through a new listener seam; it never imports a renderer. Types not yet migrated
+keep the legacy draw path until order 9 deletes it.
+
+
+SCOPE
+-----
+IN
+  - NEW subpackage `ge.tbegvadze.toon3d.render.enemyvisual` (documented in the CLAUDE.md package table):
+      EnemyVisualRegistry    EnemyType -> creature id (register() rows + bootstrap, never a switch).
+                             Rows this order: ACID_DRONE -> "warden", SHELL_BRUTE -> "harvest_tick".
+      EnemyClipManifest      parsed clips.json (clips, frames, durations, loop mode, trim offsets, anchors);
+                             load-time only, immutable.
+      EnemyAtlasCache        per-FLOOR load of the body + glow atlases for the types that can appear on
+                             the floor (and boss/minion types), disposed on floor teardown; Nearest filter.
+      EnemyAnimator          per-enemy visual state: current clip, clip time, queued one-shot, held frame;
+                             pooled by enemy id, no allocation in render().
+      EnemyAnimationRules    the clip-selection table (moment / state -> clip, priorities, what interrupts
+                             what), as data rows - the documented state machine below.
+      DyingEnemyPool         visual instances that keep playing DEATH after the simulation has removed the
+                             enemy (position, depth, creature id captured at death); pooled, capped.
+      EnemyBodyDrawer        draws an animated frame as a billboard, per screen column against the wall
+                             z-buffer and the SpriteOccluderBuffer exactly like today's body, using the frame's
+                             trim offset on the 160x240 canvas so the ground line never moves; then the GLOW
+                             pass: the glow atlas re-drawn additively, NOT graded and NOT fogged (art-direction
+                             V6), with a per-depth fade constant.
+  - NEW seam in the enemy package: `enemy/EnemyVisualListener` + `enemy/EnemyVisualMoment` (enum with
+    per-constant data, the EnemyVoiceMoment idiom) + a reused, pre-allocated event payload. EnemyManager /
+    Enemy fire moments at the commit sites: ALERTED, MOVE_STARTED, WIND_UP_STARTED, ATTACK_COMMITTED,
+    ABILITY_USED, DAMAGED (amount, max-HP fraction, outcome, source direction), STAGGERED, KNOCKED_BACK,
+    DEFEND_STARTED, STATUS_APPLIED, DIED (cause). This order implements the WHOLE seam; it maps the core
+    clips, and order 3 maps the rest (outcomes, wounded, status, effects).
+  - EnemyRenderer: for a type with a registry row, the body is drawn by EnemyBodyDrawer and the legacy
+    lunge scale/drop is skipped (the ATTACK clip does that job); health bars, name tags, matchup words,
+    hit flash, contact shadow, muzzle light and state tints still draw as today, positioned from the
+    canvas rect. Types without a row: untouched.
+  - World wiring: the listener implementation, per-floor atlas load/unload, animation clock update in
+    the update path (frozen while a hard-pause overlay owns the screen, like the world).
+  - run-game capture driver additions (dev tool): `spawn:TYPE:FORWARD:RIGHT`, `alert:INDEX`,
+    `damage:INDEX:AMOUNT` (through the real damage path), `kill:INDEX`, and `burst:NAME:COUNT:INTERVAL`
+    (a numbered shot series) + a script that turns a burst into a GIF for the owner. Documented in
+    run-game SKILL.md.
+  - Docs: guide sections 8 and 10 (the real runtime contract), art-direction new section 16 ENEMY VISUAL
+    LAYER, docs/enemy-system.txt (the seam), CLAUDE.md (package row, render order note, the guide and the
+    enemy-art skill in "Where to Find Info" if not already there).
+
+OUT
+  - Hit effects, death bursts, projectiles, wounded/status visuals, resisted/blocked/absorbed reads
+    (order 3). Any other creature (orders 4-8). Deleting the legacy path (order 9).
+  - Any change to simulation rules, timing, turn order or the action lock (G9).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged in rules. Visually: a dormant Shell Brute breathes in the dark; when it wakes it rears (ALERT),
+scuttles as it slides each tile (MOVE), loads its charge through the player's turn (WIND_UP held),
+lunges (ATTACK), flinches when shot (HURT), curls up and dies (DEATH) - then the corpse decal remains.
+
+
+RULES
+-----
+  R1  CLIP SELECTION (EnemyAnimationRules, highest priority first):
+        DEATH (from DIED; never interrupted) >
+        HURT_HEAVY / HURT_LIGHT (from DAMAGED / STAGGERED / KNOCKED_BACK; heavy when the hit is >= 25% of
+          max HP or a stagger/knockback; interrupts anything below) >
+        ATTACK / ability clip (from ATTACK_COMMITTED / ABILITY_USED) >
+        WIND_UP (from WIND_UP_STARTED; holds its last frame while state == WINDING_UP) >
+        DEFEND (from DEFEND_STARTED; holds while DEFENDING) >
+        ALERT (from ALERTED) >
+        MOVE (while the visual slide runs) >
+        IDLE (DORMANT variant while state == DORMANT).
+      A finished one-shot falls back to the highest-priority ongoing condition (held state, slide, idle).
+  R2  The animator only READS simulation state and timers and RECEIVES moments; it never writes to
+      Enemy, EnemyManager or World (G9).
+  R3  Idle loops start at a per-enemy phase offset (from the enemy id) so a pack never breathes in unison.
+  R4  Death plays from the DyingEnemyPool at the enemy's last visual position; if the pool is full the
+      oldest dying instance is dropped (never an allocation).
+  R5  Atlases for a type are loaded before its first spawn on a floor; a type whose atlas fails to load
+      falls back to the legacy path (never a crash, an error log line).
+  R6  No allocation in render() or the per-frame update; no GL calls off the render thread.
+
+
+PLAYER EXPERIENCE
+-----------------
+The first enemies in the game that are alive: they breathe, look around, wind up where you can see it,
+strike, flinch and die. The telegraph becomes a body pose, which is the most readable telegraph there is.
+
+
+TECHNICAL NOTES
+---------------
+  - Read EnemyRenderer, EnemySpriteSheets, ContactShadow, AtmosphereGrade and the muzzle-light pass
+    before designing EnemyBodyDrawer; reuse the per-column machinery, do not fork it.
+  - The listener follows enemy/EnemyVoiceListener exactly (World owns the implementation, a no-op default
+    keeps sim/ and tests working). The payload object is reused per fire (no allocation).
+  - Glow pass: batch with the muzzle-light additive pass to keep blend switches at two.
+  - Measure (G13): run-game --probe cpu, same session, a room with 6 animated enemies vs the same room on
+    the legacy path; record both numbers in the IMPLEMENTATION NOTE.
+
+
+VISUAL DESIGN
+-------------
+No new art - order 1's clips. The runtime must reproduce the GIFs the owner approved, frame for frame,
+at the right timing.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content. (The headless balance simulator never sees the visual layer;
+the listener's no-op default keeps it that way.)
+
+
+INTERACTIONS
+------------
+Tick bus / enemy turns (moments fire inside the turn; visuals play in real time after), the action lock
+(unaffected), boss fights (minions of migrated types animate), floor transitions (atlas load/unload),
+pause/resume and GL context loss (unmanaged textures reloaded like the existing enemy sheets), story
+overlays (animation clock frozen with the world), the corpse decal (stamped by the sim at death - order 3
+refines the handover).
+
+
+EDGE CASES
+----------
+Enemy dies the same turn it was damaged (DEATH wins, R1); damaged while winding up (HURT plays, then the
+hold resumes); knocked into a wall; enemy spawned mid-floor by a summon (atlas preloaded, R5); floor
+change while a death plays (the pool is cleared); app paused mid-clip (clock frozen, resumes).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  In-engine, a spawned ACID_DRONE plays the Warden's IDLE; `alert` plays ALERT then IDLE; stepping
+      toward it plays MOVE during its slides; it attacks with its ATTACK clip; `damage` plays HURT_LIGHT /
+      HURT_HEAVY by the 25% rule; `kill` plays DEATH and leaves the corpse.
+  A2  The same for SHELL_BRUTE (Harvest Tick), including WIND_UP held for the whole player turn before
+      its charge.
+  A3  A burst-capture GIF of each of A1-A2 was sent to the owner, and the owner's approval is recorded.
+  A4  Two Harvest Ticks side by side do not idle in unison (R3).
+  A5  Glow (eyes, plume, blisters) is the same colour under cool_steel and corrupted_violet at 6+ tiles.
+  A6  Every non-migrated type draws exactly as before (spot-check four types).
+  A7  Frame time with 6 animated enemies measured and recorded; no per-frame allocation (checked with
+      run-game --gclog: no added GC pauses over 30 s idle in the room).
+  A8  enemy/ imports nothing from render/ (grep).
+  A9  Build green; docs updated (guide 8 + 10, art-direction 16, enemy-system, CLAUDE.md).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. SEAM            (java-architect)     EnemyVisualListener/Moment/payload; fire sites in EnemyManager/Enemy
+  2. DATA            (libgdx-specialist)  registry, manifest parser, atlas cache (per-floor lifecycle)
+  3. ANIMATOR        (java-architect)     EnemyAnimator + EnemyAnimationRules + DyingEnemyPool
+  4. DRAW            (libgdx-specialist)  EnemyBodyDrawer + glow pass; EnemyRenderer integration
+  5. WORLD           (java-architect)     listener impl, clock, floor lifecycle
+  6. TOOLING         (main thread)        capture steps + burst-to-GIF
+  7. VERIFY + GATE   (main thread)        captures; owner approval
+  8. TESTS           None. Not balance-bearing; verified by build + run.
+  9. DOCS            guide 8 + 10, art-direction 16, enemy-system.txt, CLAUDE.md
+
+RISKS AND UNKNOWNS
+  - EnemyRenderer is ~2400 lines with many special cases (Eye Tyrant beam, shard ring, crust plates,
+    afterimages). Integrate at the body draw only; do not refactor the rest in this order.
+  - Moments fired at the wrong site (e.g. ATTACK before the hit resolves) desync the clip from the
+    damage number - verify with burst captures.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  the seam exists with a no-op default, fired at every site; build green; sim/ unchanged
+  CP2  registry + manifest parser + per-floor atlas cache load the two creatures; build green
+  CP3  animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types
+  CP4  every core clip plays from its moment in-engine; glow pass; legacy types unchanged
+  CP5  capture tooling; burst GIFs sent; owner approval recorded (stop until it is)
+  CP6  performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  Package name render/enemyvisual.
+  AS2  The 25%-of-max-HP heavy-hurt threshold is a cosmetic constant in EffectConstants.
+  AS3  Health bars and name tags keep their current geometry, anchored to the canvas rect.
+
+
+DECISIONS
+---------
+  D1  The enemy visual code may be rewritten from scratch (series D8); this order builds the new layer
+      beside the legacy one and order 9 removes the legacy one.
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Guide:  docs/sprite-art-creation-guide.txt (sections 7, 8, 10)
+  Ideas:  generated-enemy-art.txt, -order-1.txt, visual-identity-order-2.txt (conditioning, shadows, muzzle light)
+  Docs:   docs/art-direction.txt, docs/enemy-system.txt, docs/tick-system.txt
