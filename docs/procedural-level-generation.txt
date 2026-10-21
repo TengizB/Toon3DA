@@ -41,10 +41,13 @@ LINEAR_CORRIDOR, CAVERN, BOSS_ARENA, MED_BAY, EVENT_ROOM and GATE_AIRLOCK all fi
     -> SupplySlotSurvey      walk distance from the start (with / without keycards), the exit path,
                              the room / chamber / connector id of every candidate tile (each generator
                              implements level/SupplySlotProvider; bespoke rooms use PocketSupplyRegions)
-    -> EncounterBudgetPlanner a BODY TARGET filled with EncounterGroupTemplate rows (PACK, FIRETEAM,
-                             ESCORT, BATTERY, WARBAND, HUNTER) under the Threat-Point CAP
+    -> EncounterBudgetPlanner a BODY TARGET filled with EncounterGroupTemplate rows (RABBLE, SKIRMISH,
+                             FIRETEAM, ESCORT, BATTERY, WARBAND, HUNTER, BROOD; CALM: PAIR, LOOKOUT)
+                             under the Threat-Point CAP — MIXED groups: <= 2 of one archetype (a rare
+                             BROOD of 3), groups of 4+ mix ranged / rusher / plodder
     -> EncounterPlacer       one group per room; first contact <= 18 walk tiles (12 on floor 1), never
-                             in the start room; the anchor group in the deepest room
+                             in the start room; the anchor group in the deepest room; no room holds
+                             more than 3 of one archetype
     -> SupplyPlanner.plan    ammo / heals / armour / credits / weapons from the roster's demand and the
                              node's NodeSupplySpec (carried by LevelGenConfig.supplySpec; default COMBAT)
     -> SupplyPlanner.place   ground slots (spread cap, heal floor reachable without a keycard and

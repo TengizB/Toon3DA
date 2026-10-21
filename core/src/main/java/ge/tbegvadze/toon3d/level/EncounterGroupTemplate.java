@@ -16,23 +16,34 @@ import java.util.Set;
  */
 public final class EncounterGroupTemplate {
 
-    /** One slot: a role, how many members fill it, and whether they all share one archetype. */
+    /** One slot: a role, how many members fill it, and how they are filled (pairs, singles, a brood). */
     public static final class Slot {
         public final EncounterGroupRole role;
         public final int                minimumCount;
         public final int                maximumCount;
-        /** Every member of the slot is the same archetype (a pack, a chaff screen). */
-        public final boolean            sameType;
+        /** How the slot's members are drawn; counts are whole multiples of its step. */
+        public final SlotFill           fill;
 
-        public Slot(EncounterGroupRole role, int minimumCount, int maximumCount, boolean sameType) {
+        public Slot(EncounterGroupRole role, int minimumCount, int maximumCount, SlotFill fill) {
             if (minimumCount < 1 || maximumCount < minimumCount) {
                 throw new IllegalArgumentException("slot count range " + minimumCount + ".." + maximumCount);
+            }
+            this.fill         = Objects.requireNonNull(fill, "fill");
+            int step = fill.membersPerArchetype();
+            if (minimumCount % step != 0 || maximumCount % step != 0) {
+                throw new IllegalArgumentException("slot count range " + minimumCount + ".." + maximumCount
+                        + " is not a multiple of " + fill + "'s step " + step);
             }
             this.role         = Objects.requireNonNull(role, "role");
             this.minimumCount = minimumCount;
             this.maximumCount = maximumCount;
-            this.sameType     = sameType;
         }
+
+        /** Fewest archetypes the slot draws. */
+        public int minimumArchetypes() { return minimumCount / fill.membersPerArchetype(); }
+
+        /** Most archetypes the slot draws. */
+        public int maximumArchetypes() { return maximumCount / fill.membersPerArchetype(); }
     }
 
     private final String                            id;
@@ -42,10 +53,19 @@ public final class EncounterGroupTemplate {
     private final boolean                           anchorCapable;
     private final boolean                           lone;
     private final float                             weight;
+    private final int                               maximumPerFloor;
 
     public EncounterGroupTemplate(String id, List<Slot> slots, int minimumDepth,
                                   Set<NodeSupplySpec.EncounterKind> kinds, boolean anchorCapable, boolean lone,
                                   float weight) {
+        this(id, slots, minimumDepth, kinds, anchorCapable, lone, weight, 0);
+    }
+
+    /** As above, with at most {@code maximumPerFloor} groups of this shape per floor (0 = unlimited). */
+    public EncounterGroupTemplate(String id, List<Slot> slots, int minimumDepth,
+                                  Set<NodeSupplySpec.EncounterKind> kinds, boolean anchorCapable, boolean lone,
+                                  float weight, int maximumPerFloor) {
+        this.maximumPerFloor = Math.max(0, maximumPerFloor);
         this.id            = Objects.requireNonNull(id, "id");
         this.slots         = Collections.unmodifiableList(new java.util.ArrayList<>(slots));
         this.minimumDepth  = Math.max(1, minimumDepth);
@@ -66,6 +86,17 @@ public final class EncounterGroupTemplate {
     public boolean    lone()          { return lone; }
     /** Relative selection weight among eligible shapes. */
     public float      weight()        { return weight; }
+
+    /** At most this many groups of this shape on one floor (0 = unlimited). */
+    public int        maximumPerFloor() { return maximumPerFloor; }
+
+    /** A BROOD shape (V4): rolled once per floor, never topped up, never first contact when avoidable. */
+    public boolean brood() {
+        for (Slot slot : slots) {
+            if (slot.fill.isBrood()) return true;
+        }
+        return false;
+    }
 
     /** Whether this shape may appear on a floor of this encounter kind at this depth. */
     public boolean isEligible(NodeSupplySpec.EncounterKind kind, int depth) {

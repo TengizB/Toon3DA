@@ -1006,6 +1006,22 @@ class BalanceAuditTest {
         assertNoViolations(BalanceSchema.densitySweepResults("footprint"));
     }
 
+    /**
+     * R-DENSITY, variety half (mixed-encounter-groups, A1-A8): over COMBAT / ELITE / CACHE x depths
+     * 1/5/10/15/20/25 x 100 planner seeds, no group fields more than two of one archetype (a BROOD is
+     * exactly three, at most one a floor), every non-BROOD group of four or more mixes two behaviours, no
+     * archetype passes its share of a floor's bodies, COMBAT keeps single-archetype groups to 10% and
+     * COMBAT / ELITE average 2.3+ archetypes a group; and in the generator sweep no room holds more than
+     * three of one archetype.
+     */
+    @Test
+    void encounterGroupsMixArchetypesAndBehaviours() {
+        assertNoViolations(BalanceSchema.densityVarietyResults());
+        java.util.List<BalanceSchema.RuleResult> roomVariety = BalanceSchema.densitySweepResults("room variety");
+        assertTrue(!roomVariety.isEmpty(), "the generator sweep checks room variety");
+        assertNoViolations(roomVariety);
+    }
+
     /** The full sweep — belt-and-braces over the per-kind tests (catches rule kinds added later). */
     @Test
     void fullSchemaSweepHasNoViolations() {

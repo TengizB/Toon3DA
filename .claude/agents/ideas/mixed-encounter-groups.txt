@@ -1,0 +1,499 @@
+STATUS: IMPLEMENTED
+CATEGORY: Enemies
+TITLE: Mixed Encounter Groups - no more rooms of one enemy type
+CREATED: 2026-10-21
+IMPLEMENTED: 2026-10-21
+---
+
+IMPLEMENTATION NOTE (2026-10-21) — where the build departs from the spec below; the checkpoint file
+(.claude/checkpoints/mixed-encounter-groups.md) has the measurements.
+  N1  TEN template rows, not eight (A12): CALM-only PAIR (one chaff pair) and LOOKOUT (one soldier alone,
+      at most GROUP_LOOKOUT_MAX_PER_FLOOR = 1 — an EIGHTH new BalanceConfig number, carried as data by
+      EncounterGroupTemplate.maximumPerFloor()). A CALM floor's per-group cap (~45 TP at depth 1) cannot buy a
+      4-chaff RABBLE, so CACHE floors fell from 4.2 to 0.7 bodies; and pairs alone cannot reach an odd body
+      target, which made FootprintPlanner rank SHOP layouts "unfielded" (E6 broke). Now CACHE d1 4.6 bodies.
+  N2  GROUP_MIXED_BEHAVIOUR_MIN_SIZE is 4, not 3 (BALANCE NOTES step 2), with step 1's weights (RABBLE 3.5,
+      SKIRMISH 1.5, BATTERY 1.5). Step 3 (fill target 0.90) was tried and rejected: R-MYSTERY-EV and the HUNTED
+      twist's T3 are priced off the fill fraction. A5 therefore reads "every non-BROOD group of >= 4". The
+      top-up (V5) also honours V3.
+  N3  V3 tie-break: when the variety caps (not the pool) block the missing behaviour, the draw fails and the
+      planner tries another shape; V3 is dropped only when the pool truly lacks the behaviour. BROOD is eligible
+      only where GROUP_BROOD_SIZE fits V6. The brood roll is consumed only on floors that field enemies.
+      BROOD is picked on ~5-12% of COMBAT floors (A7's 15-35% guess was a roll rate, not a pick rate).
+  N4  V7 fallback adds a corridor stand: when every room with space would pass 3 of one archetype (small
+      corridor floors whose rooms ran out), the group stands in the corridors; placeGroup's overflow spills
+      member by member into the room with the fewest of that archetype.
+  N5  Two side fixes the gates forced: salvage_hook re-composed (+1% kill credits; docs/relic-system.txt 11 had
+      predicted it — +3% broke the R-MYSTERY-EV ceiling), and GroupBarrelPlacer's eligibility now applies the
+      passage guard its placement already applied (H14 shortfall exposed by the new layouts).
+  N6  A13: the real game was launched and descended to a generated floor without error. The per-room rosters
+      of three consecutive depth-1 COMBAT floors were LOGGED through the real generator path (one per combat
+      layout; seeds GameMath.floorSeed(20261021+i, 1)); each group stands in one room:
+        rooms_mst       [2 GORE_BITER + REVENANT] [2 CRAWLER + BLIGHT_CORRUPTOR] [2 CRAWLER + RIMESHELL_LANCER]
+                        [2 VORTEX_EYE + RIMESHELL_LANCER] [2 VORTEX_EYE + BLIGHT_CORRUPTOR]   max same/room 2
+        linear_corridor [2 GHOUL + 2 GORE_BITER + REVENANT] [2 CRAWLER + MIRE_WRAITH + RIMESHELL_LANCER]
+                        [2 GHOUL + MIRE_WRAITH + RIMESHELL_LANCER]                             max same/room 2
+        cavern          [2 CRAWLER + 2 GHOUL + REVENANT] [2 GORE_BITER + BLIGHT_CORRUPTOR]
+                        [2 GORE_BITER + RIMESHELL_LANCER] [2 CRAWLER + 2 EYE_TYRANT]           max same/room 2
+      Every room shows at least two enemy types; no room holds 4+ identical (the R-DENSITY "room variety
+      (V7)" sweep backs it over every generator x node type x depth x 30 seeds).
+
+OVERVIEW
+--------
+The encounter planner fills most rooms with one archetype: five Vortex Eyes, four Ghouls. The cause is
+in the templates. Every chaff slot is same-type, PACK (3-5 chaff of ONE type) is the heaviest-weighted
+shape, the top-up step grows those same-type slots to their maximum, and the only variety rule (0.40 of
+the floor's Threat Points) is per FLOOR and is priced in TP, so cheap chaff never trips it. This idea
+rebuilds the group shapes so that every group mixes archetypes AND behaviours (ranged / fast melee /
+slow melee). Each room then asks a tactical question: which one first, which lane to avoid, how to
+move. Budget accounting (TP cap, body target, anchor, HUNTER cap, first contact) is unchanged.
+
+What the owner said: "do not spawn same-type enemies in large numbers; make different enemies spawn
+together; take balance into account."
+What the owner wants: fights in which the player has to prioritise, because each enemy in the room
+attacks differently. A monoculture is fine as an occasional texture ("ok if it happens by chance"),
+but never the norm and never 4-5 of one type.
+
+Measured today (planner, COMBAT, 300 seeds per depth). These are the numbers this idea must move:
+  depth  1: monoType groups 36%  avgMaxSameInGroup 2.87  avgDistinct 1.74  floors with a >=4-same group 87%
+  depth  5: monoType 51%  avgMaxSame 3.12  avgDistinct 1.53  floors >=4-same 95%
+  depth 12: monoType 10%  avgMaxSame 2.33  avgDistinct 2.23  floors >=4-same 42%
+  depth 25: monoType 41%  avgMaxSame 2.89  avgDistinct 1.72  floors >=4-same 95%
+
+
+SCOPE
+-----
+IN
+  - Slot model: EncounterGroupTemplate.Slot's `sameType` boolean is replaced by a SlotFill enum
+    (PAIRS / SINGLES / BROOD). Each constant carries its own data, so there is no switch.
+  - A behaviour classifier, the EncounterBehaviour enum (RANGED / RUSHER / PLODDER). It is derived
+    only from EnemyType data (isRanged, moveEveryNTurns).
+  - Template catalog reshaped. PACK is deleted. RABBLE, SKIRMISH and BROOD are added. FIRETEAM, ESCORT,
+    BATTERY and WARBAND are re-slotted. HUNTER is unchanged.
+  - Planner rules V1-V7 (RULES): per-group same-type cap, one slot per archetype, behaviour mix, the
+    rare brood, a top-up that adds a DIFFERENT archetype, a floor body-share cap, and placement that
+    keeps any one room to at most 3 of one archetype.
+  - Seven new BalanceConfig numbers, declared in BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.DENSITY.
+  - R-DENSITY gains a VARIETY half (planner sweep + generator-sweep room check). It is asserted by ONE
+    new method in the existing BalanceAuditTest.
+  - Docs updated (IMPLEMENTATION PLAN step 6).
+
+OUT (deliberately not doing now)
+  - Pricing the synergy. Mixed groups are harder per Threat Point than monocultures, because ranged
+    covers melee. We do NOT add a synergy factor to TP or XP. TP accounting stays identical and both
+    balance gates judge the outcome. If the gates go red, the tuning order is in BALANCE NOTES. A real
+    synergy price would be a follow-up idea.
+  - Hand-made levels (assets/levels/*.txt), boss arenas and their adds, Containment Lockdown waves, the
+    HUNTED twist's trail hunter, Verdant Spiresower spawns. None of them use the template planner.
+  - New enemies, new AI, group tactics or formations. Members still act on their own. "Mixed" means
+    who is in the room, not coordinated behaviour.
+  - Any change to body targets, the TP cap, GROUP_TP_FRACTION_CAP, the anchor rule, the HUNTER cap, the
+    first-contact rule (E5), cluster radius, or which room the anchor / first contact uses.
+  - New ORA lines or a teaching topic. The bestiary voice (one archetype line per EnemyType) and
+    READ_INTENT / BREAK_LANE already teach each behaviour. Mixing them is the content.
+  - Changes to the 0.40 TP single-type fraction (GROUP_MAX_SINGLE_TYPE_FRACTION). It stays, with the
+    new body-share cap beside it.
+
+
+GAMEPLAY LOOP
+-------------
+There is no new player action. The change is what the player finds behind a door:
+  1. The player opens a room. Instead of five Vortex Eyes, they find e.g. two Gore Biters (fast melee)
+     rushing in and two Eye Tyrants (ranged) holding the far row.
+  2. The player chooses: break line of sight with the eyes (strafe out of their row/column, since ranged
+     attacks need the same cardinal line) and kill the biters at the door, or push through the biters'
+     charge to reach the eyes. Each action costs one turn, as today.
+  3. A slow melee member (a Ghoul, a Plague Hulk) can be outpaced and left for later. A fast one cannot.
+     Movement decisions now matter inside a single room.
+  4. About one floor in four, a BROOD appears: three of one chaff archetype, alone. It is a deliberate,
+     recognisable "nest" moment, never larger than three.
+
+
+RULES
+-----
+  BEHAVIOURS (EncounterBehaviour, level package, per-constant matches(EnemyType)):
+    RANGED   isRanged()
+    RUSHER   !isRanged() && moveEveryNTurns() == 1
+    PLODDER  !isRanged() && moveEveryNTurns() >= 2
+  Classification for the current pool: RANGED = Eye Tyrant, Vortex Eye, Mire Wraith, Acid Drone, Auric
+  Sentinel, Rimeshell Lancer; RUSHER = Gore Biter, Crawler, Void Shroud, Shell Brute, Revenant, Iron
+  Stalker; PLODDER = Ghoul, Plague Hulk, Blight Corruptor, Cinderforge Colossus.
+
+  SLOT FILL (SlotFill enum, per-constant membersPerArchetype()):
+    PAIRS    every archetype in the slot appears exactly GROUP_CHAFF_SLOT_MIN (2) times; the slot's
+             count range must be a multiple of 2; pairs within one slot are distinct archetypes.
+    SINGLES  every member is a distinct archetype (1 each).
+    BROOD    the whole slot is ONE archetype, exactly GROUP_BROOD_SIZE (3).
+  Slot count ranges, random rolls, the instantiate "grow / shrink to leave a fillable remainder" step and
+  the shrink-to-fit-threat step all move in membersPerArchetype() units. A pair is never split.
+
+  TEMPLATES (EncounterGroupTemplates.registerAll, one register() row each):
+    id        slots                                               kinds          anchor  lone  weight minDepth
+    RABBLE    CHAFF PAIRS 4..6 (2-3 different pairs)              COMBAT/ELITE/CALM  no   no    3      1
+    SKIRMISH  SOLDIER SINGLES 1..2 + CHAFF PAIRS 2                COMBAT/ELITE/CALM  no   no    2      1
+    FIRETEAM  SOLDIER SINGLES 2 + CHAFF PAIRS 2                   COMBAT/ELITE/CALM  no   no    2      1
+    ESCORT    BRUISER SINGLES 1 + CHAFF PAIRS 2..4                COMBAT/ELITE       YES  no    1      1
+    BATTERY   RANGED_SOLDIER SINGLES 1..2 + MELEE_CHAFF PAIRS 2   COMBAT/ELITE       no   no    2      1
+    WARBAND   MINI_ELITE SINGLES 1 + SOLDIER SINGLES 2            ELITE              YES  no    1      GROUP_WARBAND_MIN_DEPTH
+    HUNTER    HUNTER SINGLES 1                                    COMBAT/ELITE       no   YES   1      1
+    BROOD     CHAFF BROOD 3                                       COMBAT/ELITE/CALM  no   no    1      1
+  (PACK is deleted. RABBLE takes its weight and its CALM eligibility. SKIRMISH is the new 3-body shape
+  that keeps "a remainder of >= 3 is always fillable" true on CALM floors.)
+
+  V1  PER-GROUP CAP. No archetype appears more than GROUP_MAX_SAME_TYPE_PER_GROUP (2) times in a group.
+      The only exception is a BROOD group (exactly GROUP_BROOD_SIZE = 3). It follows that a group of size
+      n holds at least ceil(n / 2) distinct archetypes.
+  V2  ONE SLOT PER ARCHETYPE. When drawing a slot, archetypes already in the group are excluded. If that
+      leaves the slot no admissible archetype, the slot shrinks to its minimum. If even the minimum
+      cannot be filled, instantiate returns null (the shape is skipped for this pick, exactly like
+      today's "no admissible archetype" path). This is deterministic, with no retries beyond
+      GROUP_INSTANTIATION_ATTEMPTS.
+  V3  BEHAVIOUR MIX. A group of >= GROUP_MIXED_BEHAVIOUR_MIN_SIZE (3) members, BROOD excepted, spans at
+      least two EncounterBehaviours. Constructive rule: when drawing the group's LAST slot, if every
+      member so far shares one behaviour, that slot's candidates are restricted to archetypes of another
+      behaviour. If that restriction is empty, it is dropped (pool too thin) and the draw proceeds.
+      Never a reroll loop.
+  V4  THE BROOD (the owner's "by chance"). Once per floor, at plan start, the planner rolls
+      random.nextFloat() < GROUP_BROOD_FLOOR_CHANCE (0.25). Only if it hits does BROOD become eligible
+      for that floor, and at most GROUP_BROOD_MAX_PER_FLOOR (1) BROOD is picked. A BROOD is never
+      topped up, is never the anchor and is never the first-contact group if another group of >= 2
+      exists (EncounterPlacer already picks the LIGHTEST group of >= 2; if the brood is lightest, the
+      placer skips it in favour of the next-lightest).
+  V5  TOP-UP ADDS A DIFFERENT ARCHETYPE. Bodies short of the target after the main loop are added in
+      this order, each step obeying V1, V2, V6 and the TP cap, and never touching a BROOD, HUNTER or
+      WARBAND group:
+        a. remaining >= 2: add one PAIR of a chaff archetype NOT in the group, to a PAIRS slot below
+           its maximum (RABBLE's third pair, ESCORT's second pair);
+        b. remaining >= 1: add one SINGLE of an archetype NOT in the group, to a SINGLES slot below its
+           maximum (BATTERY's second gun, SKIRMISH's second soldier);
+        c. otherwise stop. The floor may end one body short of the roll. This already happens today
+           when no slot has headroom, and R-DENSITY's body band stays the judge.
+      Groups are visited in plan order (the anchor first), as today. A chaff archetype never appears as
+      a lone member of any group (no "stragglers").
+  V6  FLOOR BODY SHARE. While an admissible alternative exists, no archetype may exceed
+      max(GROUP_CHAFF_SLOT_MIN, ceil(GROUP_MAX_SINGLE_TYPE_BODY_FRACTION x bodyTarget)) bodies on the
+      floor (0.30: 4 bodies on a 12-body floor, 9 on a 28-body floor). This is applied as a second
+      preference filter in `admitted()`, beside the existing TP filter: the preferred set is the
+      archetypes passing BOTH. If none pass both, those passing the body filter; then those passing the
+      TP filter; then all.
+  V7  ROOM CAP (EncounterPlacer). A LARGE room takes a second group only if the merged roster holds no
+      archetype more than GROUP_ROOM_MAX_SAME_TYPE (3) times. Otherwise that room is not "free" for this
+      group. When rooms run out (today's `roomiest(regions)` fallback), the fallback picks, among rooms
+      with enough free tiles, the one whose merged max-same count is lowest; ties go to the roomiest.
+  V8  UNCHANGED. TP cap, per-group TP cap (anchor exempt), fill aim, cheapest-body reserve, body target,
+      HUNTER fraction, the anchor choice (heaviest eligible anchor shape), E4 shape rules, E5 first
+      contact, GROUP_MAX_SINGLE_TYPE_FRACTION, threat and XP per archetype.
+  V9  PACK COHERENCE HOLDS. Every chaff archetype on a floor appears >= GROUP_CHAFF_SLOT_MIN times. This
+      follows from PAIRS / BROOD and from V5 never adding a lone chaff.
+      BalanceAuditTest.chaffAlwaysSpawnsInPacksOverAHundredSeeds stays untouched and green.
+
+
+PLAYER EXPERIENCE
+-----------------
+Every room is a small puzzle with a priority order. Eyes on the far row plus biters at the door means
+"leave the lane first". A Ghoul pair plus a Void Shroud means "the fast one reaches you alone, kill it,
+then kite the slow ones". A player who never reads learns it the way Doom RPG teaches: the first
+mixed room punishes standing in the eyes' row while the biters chew on you, and the death is legible
+because the mini-map shows the eyes in-lane. ORA's existing archetype lines (ENEMY_FAMILY_FIRST_SEEN,
+keyed by type) and the READ_INTENT / BREAK_LANE topics already say exactly this. There are no new lines.
+The occasional brood of three reads as a nest: a moment of relief, or of dread.
+
+
+TECHNICAL NOTES
+---------------
+Package `ge.tbegvadze.toon3d.level` (headless, no LibGDX):
+  - NEW `EncounterBehaviour` enum (RANGED / RUSHER / PLODDER), each with `matches(EnemyType)` and a
+    static `of(EnemyType)`. No switch.
+  - NEW `SlotFill` enum (PAIRS / SINGLES / BROOD): `membersPerArchetype()` (PAIRS ->
+    BalanceConfig.GROUP_CHAFF_SLOT_MIN, SINGLES -> 1, BROOD -> BalanceConfig.GROUP_BROOD_SIZE) and
+    `sharesOneArchetype()` (BROOD only). Each is a per-constant body.
+  - `EncounterGroupTemplate.Slot`: `boolean sameType` -> `SlotFill fill`. The constructor rejects a
+    count range that is not a multiple of fill.membersPerArchetype(). `EncounterGroupTemplate` gains
+    `boolean brood()` (any slot with fill BROOD), used by V4/V5. Everything else is unchanged.
+  - `EncounterGroupTemplates`: constants RABBLE, SKIRMISH, BROOD added and PACK removed. The 8 rows
+    are as in the RULES table. Class javadoc rewritten ("chaff come in PAIRS of different archetypes").
+  - `EncounterBudgetPlanner`:
+      plan(): the V4 brood roll (consumed from `random` right after the body-target roll, so every floor
+        consumes it whatever the outcome); a broodsPicked counter gating BROOD eligibility; a per-type
+        BODY count (EnumMap<EnemyType,Integer>) beside spentByType; top-up rewritten to V5.
+      instantiate(): V1/V2/V3. Per-slot draw by fill: PAIRS draws k distinct archetypes x 2; SINGLES
+        draws k distinct; BROOD draws one x 3. Exclusion set = archetypes already in the group.
+        Last-slot behaviour restriction per V3. Grow / shrink in membersPerArchetype() steps.
+      admitted(): add the V6 body-share filter (signature gains the body-count map and the body target).
+      Class javadoc: rules list updated (V1-V7 summarised).
+  - `EncounterPlacer`: V7 in the "everyone else" loop and in the roomiest fallback (a per-Region
+    EnumMap of placed archetype counts, or a small int[] indexed by EnemyType.ordinal(), filled by
+    placeGroup). V4's first-contact brood skip. The Placement gains `maxSameArchetypeInOneRoom()` for
+    the audit.
+  - `FloorContentReport` (whatever builds it from the generator) records that value so
+    BalanceSchema.densitySweepResults can band it. If the report cannot reach the Placement through
+    the existing path, carry the value on the same object the report already reads groupIds / lone
+    counts from. No new test fixture.
+  - `util/BalanceReport` line ~698 prints the first 4 chars of the template id: RABBLE -> "RABB",
+    SKIRMISH -> "SKIR", BROOD -> "BROO". This is acceptable and needs no change.
+
+`util/BalanceConfig` (E2 block, after GROUP_MAX_SINGLE_TYPE_FRACTION):
+    GROUP_MAX_SAME_TYPE_PER_GROUP        = 2
+    GROUP_BROOD_SIZE                     = 3
+    GROUP_BROOD_FLOOR_CHANCE             = 0.25f
+    GROUP_BROOD_MAX_PER_FLOOR            = 1
+    GROUP_MIXED_BEHAVIOUR_MIN_SIZE       = 3
+    GROUP_MAX_SINGLE_TYPE_BODY_FRACTION  = 0.30f
+    GROUP_ROOM_MAX_SAME_TYPE             = 3
+  (That is seven names. GROUP_BROOD_SIZE doubles as the brood's per-group cap, and the room cap equals
+  it on purpose, so that "a brood is the largest same-type cluster the player ever meets" holds.)
+  Each one goes into BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.DENSITY, never into GRANDFATHERED
+  (shrink-only).
+
+`util/BalanceSchema` (R-DENSITY):
+  - NEW `densityVarietyResults()`: a planner sweep (no generator, so it is cheap): specs combat(),
+    elite(), cache() (the three the chaff test uses) x depths {1, 5, 10, 15, 20, 25} x 100 seeds, seeded
+    `new Random(seed * 97L + depth)` like the chaff test. One RuleResult per check per spec x depth,
+    worst case / mean as noted:
+      "variety group cap"      max same-archetype count in any non-BROOD group      <= 2
+      "variety brood"          BROOD groups per floor (max) <= 1; brood size == 3
+      "variety mix"            share of groups size >= 3 (non-BROOD) spanning >= 2 behaviours == 1.00
+      "variety distinct"       mean distinct archetypes per group (HUNTER excluded) >= 2.3 (COMBAT, ELITE)
+      "variety mono"           share of groups (size >= 2) with one archetype       <= 0.10
+      "variety body share"     floors where any archetype exceeds the V6 limit       == 0
+  - densitySweepResults gains "room variety": max same-archetype count in one room per floor <= 3,
+    COMBAT/ELITE cells.
+  - CONSTANT_SUBJECTS: the seven names -> RuleKind.DENSITY.
+
+No GameMath change, no new formula. No tile symbol, no strings, no persistence, no tick subscriber.
+
+
+VISUAL DESIGN
+-------------
+None. Rooms simply hold different sprites. Every archetype already renders (legacy billboard or
+generated animated art).
+
+
+BALANCE NOTES
+-------------
+Balance-bearing: yes (BalanceConfig numbers, planner rules, a BalanceSchema rule half).
+  - TP spent per floor is unchanged in expectation. The planner still aims at fillTarget under the same
+    cap. Per-group threat shifts slightly: RABBLE averages ~5 chaff (PACK averaged ~4), and SKIRMISH puts
+    a soldier into small groups. R-SUPPLY / R-XP-PACE read spent TP, so they should not move.
+  - Difficulty does move, on purpose: a mixed group is harder per TP (ranged covers melee). We judge
+    that through the gates rather than by pricing it in advance.
+  - If `./gradlew balanceSim` goes red (expected candidates: S-FAIR run outcomes / early death depth,
+    S-NAVIGATION unaffected), tune IN THIS ORDER and stop at the first that passes:
+      1. Template weights (data rows, not BalanceConfig): BATTERY 2 -> 1.5, SKIRMISH 2 -> 1.5, RABBLE
+         3 -> 3.5. This makes fewer ranged-plus-melee shapes and more chaff-only mixes.
+      2. GROUP_MIXED_BEHAVIOUR_MIN_SIZE 3 -> 4. Three-body groups may then be single-behaviour (still
+         two archetypes).
+      3. ENCOUNTER_BUDGET_FILL_TARGET_FRACTION 0.95 -> 0.90 (an existing number; owes both gates).
+    Record what moved in the checkpoint file's handover note and in BALANCE NOTES of the knowledge doc.
+    Never loosen V1, V6 or V7 to make a gate pass. Those three ARE the owner's request.
+  - If R-DENSITY's "bodies fewest" goes red because V5c leaves floors one body short: first add
+    headroom (SKIRMISH SOLDIER SINGLES 1..2 is already there; FIRETEAM SINGLES 2 -> 2..3 is the next
+    lever). Do not reintroduce same-type growth.
+
+
+BALANCE ADMISSION
+-----------------
+The new templates are not an ADD CONTENT kind (no K row covers a group shape). They introduce no new
+archetype, item, verb or node. They are covered by R-DENSITY (existing body / shape / first-contact
+half plus the new variety half), R-SUPPLY and both gates. The seven new numbers each take K18:
+
+  K18 ANY NEW BALANCE NUMBER - GROUP_MAX_SAME_TYPE_PER_GROUP (2), GROUP_BROOD_SIZE (3),
+      GROUP_BROOD_FLOOR_CHANCE (0.25), GROUP_BROOD_MAX_PER_FLOOR (1), GROUP_MIXED_BEHAVIOUR_MIN_SIZE (3),
+      GROUP_MAX_SINGLE_TYPE_BODY_FRACTION (0.30), GROUP_ROOM_MAX_SAME_TYPE (3)
+      DECLARE  each listed in BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.DENSITY. The bands that read
+               them: "variety group cap" (MAX_SAME_TYPE_PER_GROUP), "variety brood" (BROOD_SIZE,
+               BROOD_MAX_PER_FLOOR; BROOD_FLOOR_CHANCE through the mono share <= 0.10), "variety mix"
+               (MIXED_BEHAVIOUR_MIN_SIZE), "variety body share" (BODY_FRACTION), "room variety"
+               (ROOM_MAX_SAME_TYPE).
+      DONE     C-CONSTANT green; R-DENSITY (all halves) green; ./gradlew test and ./gradlew balanceSim
+               green.
+
+  (Added at implementation, N1 / N5.)
+  K18 ANY NEW BALANCE NUMBER - GROUP_LOOKOUT_MAX_PER_FLOOR (1)
+      DECLARE  BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.DENSITY. No variety row reads it directly: it is
+               judged through the CALM floors' R-DENSITY "bodies fewest/most (E1)" and "footprint (E6)" rows
+               on CACHE / SHOP cells (a LOOKOUT supplies the odd body pairs cannot) and R-SUPPLY.
+      DONE     C-CONSTANT green; R-DENSITY CACHE / SHOP body + footprint rows green; both gates green.
+  K18 ANY NEW BALANCE NUMBER - RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS (0.01), re-composing salvage_hook
+      DECLARE  BalanceSchema.CONSTANT_SUBJECTS -> RuleKind.RELIC. salvage_hook's effect list becomes
+               CARRIER_EXTRA_DROP 1.00 + KILL_CREDIT_BONUS 0.01; card text built from both constants.
+      BAND     R-RELIC COMMON SUPPLY [1.06, 1.20] (measured 1.064 / 1.066 / 1.064 at d5/15/25) and, through
+               the MYSTERY table's RELIC_CACHE outcome, R-MYSTERY-EV <= 1.30 (measured 1.29998) — the reason
+               the bonus is 0.01, not 0.03 (0.03 read 1.30004). R-RELIC-STACK / -SOURCE / S-RELIC SR1-SR6.
+      DONE     C-CONSTANT, R-RELIC, R-RELIC-STACK, R-RELIC-SOURCE, R-MYSTERY-EV green; balanceSim green;
+               docs/relic-system.txt row + KNOWN SOFT SPOTS updated.
+
+
+INTERACTIONS
+------------
+  - Route affixes / twists: SWARM (AFFIX_SWARM_BUDGET_MULT) and OVERCLOCKED scale budgetScale. A bigger
+    body target means more RABBLE / SKIRMISH picks, so variety holds by construction. HUNTED's trail
+    hunter is outside the planner. SALVAGE / BLACKOUT are unaffected.
+  - ELITE nodes: the anchor stays WARBAND (depth >= 3) or ESCORT. A WARBAND's two soldiers are now
+    distinct (V2), and V3 holds because the Iron Stalker is a RUSHER, so at least one of the soldiers is
+    RANGED or PLODDER, pool permitting.
+  - EncounterPlacer: first contact is still the lightest group of >= 2, now usually a SKIRMISH or a
+    two-pair RABBLE, so the first fight of a floor is also mixed. The anchor is still placed deepest.
+  - Supply: S6 carriers are picked from placed enemies, so they are unaffected. SUPPLY_GROUP_ROOM_BONUS
+    is per room with a group, so it is unaffected.
+  - Hazards: HAZARD_GROUP_MIN_SIZE reads group size, and groups get slightly larger on average, so a
+    few more group rooms qualify for barrels. R-HAZARD stays the judge.
+  - Narrative: ENEMY_FAMILY_FIRST_SEEN fires per archetype. Mixed rooms surface more archetypes earlier,
+    and the existing per-floor bark ceiling (STORY_BARK_FLOOR_BUDGET) and the combat-spike hold already
+    stop a pile-up. No change.
+  - Sim: SimWorld plays the real generator, so the variety reaches balanceSim with no sim/ edit.
+
+
+EDGE CASES
+----------
+  - Thin pool (a future depth band or region that removes archetypes): V2 shrinks or skips the shape,
+    V3 drops its restriction, V6 falls back to "all". The planner never loops and never throws. A floor
+    may then be less varied, which the audit's depth sweep would show.
+  - CALM floors (no anchor, small body targets ~7): RABBLE 4 + SKIRMISH 3 = 7. If V4 rolls a brood on
+    a CALM floor, BROOD 3 + RABBLE 4 = 7. Both fill exactly.
+  - Body target 1-2 left with no headroom anywhere: V5c stops short (as today). The HUNTER lone shape
+    still takes a single body in the main loop when the HUNTER fraction allows.
+  - Two groups in a LARGE room that share a chaff pair: 2 + 2 = 4 > 3, so V7 refuses the pairing and the
+    second group goes elsewhere.
+  - All rooms full (tiny floors): the V7 fallback picks the lowest merged max-same. A 4-same room is
+    then theoretically possible but must not appear in the R-DENSITY generator sweep (A6).
+  - Determinism: same seed gives the same plan. The brood roll is consumed on every floor, so the
+    sequence never depends on the roll's outcome.
+  - Hand-made levels keep their authored spawns unchanged.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+Metrics are read from the R-DENSITY variety results (printed by the balance report) over COMBAT /
+ELITE / CACHE x depths 1, 5, 10, 15, 20, 25 x 100 seeds. "monoType" = a group of size >= 2 with one
+archetype; HUNTER groups are excluded from distinct / mono means.
+
+  A1  No group anywhere has more than 2 of one archetype, except BROOD groups, which have exactly 3.
+  A2  Floors with any group holding >= 4 of one archetype: 0% at every audited depth (was 87-95%).
+  A3  monoType group share <= 10% at every audited depth for COMBAT (was 36-51% at depths 1/5/25).
+  A4  Mean distinct archetypes per group >= 2.3 at every audited depth for COMBAT and ELITE (was
+      1.53-2.23).
+  A5  Every non-BROOD group of >= 3 members spans >= 2 EncounterBehaviours (100%).
+  A6  In the R-DENSITY generator sweep, no room on any COMBAT / ELITE floor holds more than 3 enemies of
+      one archetype.
+  A7  No floor has more than one BROOD. Roughly a quarter of floors have one (between 15% and 35% over
+      the COMBAT sweep; this is reported, not banded).
+  A8  No archetype exceeds max(2, ceil(0.30 x bodyTarget)) bodies on any audited floor.
+  A9  BalanceAuditTest.chaffAlwaysSpawnsInPacksOverAHundredSeeds passes unmodified.
+  A10 The existing R-DENSITY checks (bodies, grouped, big groups, lone, first contact, start room,
+      footprint), R-SUPPLY and C-CONSTANT are green.
+  A11 `./gradlew test` and `./gradlew balanceSim` are both green. Any tuning applied is recorded in
+      the checkpoint handover and the knowledge doc.
+  A12 EncounterGroupTemplates has no `sameType` anywhere, no PACK row, and 8 register() rows. There is
+      no switch on template id, SlotFill or EncounterBehaviour in the planner or placer.
+  A13 In `./gradlew lwjgl3:run`, three consecutive generated depth-1 floors show rooms with at least
+      two different enemy types. A room of 4+ identical enemies is never seen.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (java-architect)  The seven BalanceConfig numbers + CONSTANT_SUBJECTS entries.
+     EncounterBehaviour, SlotFill, Slot.fill, EncounterGroupTemplate.brood(), and the 8-row
+     EncounterGroupTemplates.
+  2. LOGIC             (java-architect)  EncounterBudgetPlanner instantiate (V1-V3), plan (V4, V5, the
+     V6 body counts), admitted (V6). EncounterPlacer V7 + the first-contact brood skip +
+     maxSameArchetypeInOneRoom(), carried into FloorContentReport.
+  3. RENDER            None.
+  4. CONTENT           None (templates are step 1).
+  5. TESTS             Balance-bearing: extend util/BalanceAuditTest with ONE method,
+                       `encounterGroupsMixArchetypesAndBehaviours()`, asserting
+                       BalanceSchema.densityVarietyResults() and densitySweepResults("room variety").
+                       No new test file. Both gates (./gradlew test + ./gradlew balanceSim).
+                       LevelGeneratorSnapshotTest's expected rosters change legitimately: regenerate
+                       its snapshot data in the same commit (updating an existing test for changed
+                       behaviour is allowed; weakening it is not).
+  6. DOCS              docs/game-balance-authority.txt: the R-DENSITY section (~line 640: the template
+                       list, plus a new VARIETY paragraph with V1-V7 and an OVERRIDE RECORD "PACK 3-5
+                       of one type -> RABBLE pairs"), and the ADD CONTENT K1 / example text that names
+                       "PACK (3-5)" (~lines 1346, 1554, 1560). docs/game-balance-knowledge.txt: the
+                       GROUPS (E2) and PLACEMENT paragraphs (~line 840-850) and the new numbers.
+                       docs/procedural-level-generation.txt (~line 44: template names).
+                       docs/enemy-system.txt (~line 175 groups; ~line 791 "add an enemy -> which slot
+                       admits it", now also which EncounterBehaviour it falls in).
+
+RISKS AND UNKNOWNS
+  - balanceSim may read the mixed rooms as harder. The tuning order is in BALANCE NOTES, so confirm
+    early by running balanceSim right after CP3.
+  - FloorContentReport plumbing for the room cap: confirm at CP4 where the report gets group data. If
+    it is awkward, compute the per-room max in the placer and carry one int.
+  - The R-DENSITY "bodies fewest" band could tighten through V5c. The lever is listed in BALANCE NOTES.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/mixed-encounter-groups.md exists on the branch, committed and pushed.
+  CP1  The seven GROUP_* numbers exist in BalanceConfig and are listed in BalanceSchema.CONSTANT_SUBJECTS
+       -> DENSITY. `./gradlew test` is green (C-CONSTANT green). Nothing reads them yet; the rules
+       arrive in CP2-CP4 (a deliberate temporary state).
+  CP2  EncounterBehaviour and SlotFill exist. Slot has `fill`, not `sameType`. EncounterGroupTemplates
+       registers the 8 rows of the RULES table (no PACK). The planner's instantiate honours V1-V3 with
+       pair-step grow/shrink. `./gradlew build` is green. TEMPORARY: the old top-up is still in place,
+       but rewritten to skip PAIRS slots so that it cannot break V1. CP3 replaces it.
+  CP3  The planner implements V4 (brood roll + cap), V5 (top-up) and V6 (body share). A scratchpad
+       measurement (not committed) of the overview table's metrics meets A1-A5 and A7-A8 at depths
+       1/5/12/25. `./gradlew build` is green. The figures are pasted into the handover note.
+  CP4  EncounterPlacer implements V7 and the first-contact brood skip, and FloorContentReport carries
+       the per-room max same count. BalanceSchema has densityVarietyResults() and the "room variety"
+       check. BalanceAuditTest has the one new method. `./gradlew test` is green (A1-A6, A8-A10).
+  CP5  `./gradlew balanceSim` is green, with any tuning (BALANCE NOTES order) applied and recorded.
+       LevelGeneratorSnapshotTest data is regenerated and `./gradlew test` is green (A11).
+  CP6  The four docs listed in IMPLEMENTATION PLAN step 6 describe the new shapes and V1-V7, and no doc
+       still describes PACK as "3-5 chaff of one type" except in an override record. `./gradlew build`
+       is green, and the A13 run check is done and noted.
+
+
+ASSUMPTIONS
+-----------
+  AS1  "Large numbers" means 3+ of one type in a group and 4+ in a room. A pair is fine and is the
+       basic chaff unit.
+  AS2  The owner's "by chance" is honoured by the BROOD: a 25% floor chance, at most one per floor,
+       exactly 3, never larger.
+  AS3  Behaviour (ranged / fast melee / slow melee) is the axis that creates "prioritise, avoid, think
+       how you move". Family is cosmetic for this purpose and is not used.
+  AS4  The synergy is not priced in TP or XP. The gates judge it, and pricing is a follow-up if needed.
+  AS5  PACK is removed outright, not kept at a low weight. Its role (cheap chaff bodies) moves to RABBLE.
+  AS6  RABBLE keeps PACK's weight (3) and CALM eligibility, so the body/TP profile stays close.
+  AS7  SKIRMISH (1-2 soldiers + a chaff pair) is added because every CALM floor needs a 3-body mixed
+       shape now that PACK's 3-body option is gone.
+  AS8  ESCORT's screen becomes 1-2 pairs (3-5 bodies), up from 2-3 same-type (3-4 bodies). The anchor is
+       TP-exempt, so its slightly larger size is acceptable.
+  AS9  WARBAND and HUNTER are effectively unchanged. WARBAND only gains distinct soldiers.
+  AS10 The room cap equals the brood size (3), so a brood is the largest same-type cluster in the game.
+  AS11 The floor body-share cap is 0.30 of bodies (with a floor of 2), beside the unchanged 0.40 TP cap.
+  AS12 A floor one body short of its rolled target is acceptable (today's behaviour); a lone straggler
+       chaff is not.
+  AS13 The audit runs on the planner (cheap) for group metrics and on the existing generator sweep only
+       for the room cap.
+  AS14 Hand levels, bosses, lockdown waves and twist hunters are out of scope (they do not use the
+       planner).
+  AS15 No ORA line is needed. The bestiary voice already covers every archetype.
+  AS16 Template weights stay as inline data in the register() rows (today's idiom), not BalanceConfig.
+
+
+DECISIONS
+---------
+  D1  Pre-approved by the owner for immediate implementation ("write a new idea, then start the
+      implementation"). Every question was decided by default; see ASSUMPTIONS.  (2026-10-21)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  balance-overhaul-order-2.txt (E1-E7: body targets, templates, placer; this idea amends E2),
+          encounter-density-and-corpse-semantics.txt, floor-twists.txt (SWARM/HUNTED interactions)
+  Docs:   docs/game-balance-authority.txt (R-DENSITY, K18, SECTION 7 change protocol),
+          docs/game-balance-knowledge.txt, docs/procedural-level-generation.txt, docs/enemy-system.txt
+  Code:   level/EncounterBudgetPlanner, EncounterGroupTemplate(s), EncounterGroupRole, EncounterPlacer,
+          FloorContentReport, util/BalanceConfig (E2 block), util/BalanceSchema (R-DENSITY,
+          CONSTANT_SUBJECTS), test util/BalanceAuditTest

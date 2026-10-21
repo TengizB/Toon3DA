@@ -243,9 +243,22 @@ public final class FloorPopulator {
             if (walk >= 0 && (firstContact < 0 || walk < firstContact)) firstContact = walk;
             if (startRegion >= 0 && survey.regionAt(spawn.tileColumn, spawn.tileRow) == startRegion) inStart = true;
         }
+        // V7 (mixed-encounter-groups): the most enemies of ONE archetype standing in any one room (corridor
+        // tiles are not a room and are not counted).
+        Map<Integer, Map<Character, Integer>> archetypesByRoom = new HashMap<>();
+        int roomMaximumSameArchetype = 0;
+        for (EnemySpawnPoint spawn : spawns) {
+            if (EnemyType.fromSpawnChar(spawn.spawnChar) == null) continue;
+            int room = survey.regionAt(spawn.tileColumn, spawn.tileRow);
+            if (room < 0) continue;
+            int count = archetypesByRoom.computeIfAbsent(room, key -> new HashMap<>())
+                    .merge(spawn.spawnChar, 1, Integer::sum);
+            roomMaximumSameArchetype = Math.max(roomMaximumSameArchetype, count);
+        }
         return new FloorContentReport(generatorName, spec, depth, survey.walkableTileCount(),
                 facts.targetWalkableTiles, enemies, facts.threatSpent, facts.threatCap, facts.bodyTarget,
-                groupSizes, lone, firstContact, inStart, anchorRegion, anchorWalk, plan, placement);
+                groupSizes, lone, firstContact, inStart, anchorRegion, anchorWalk, roomMaximumSameArchetype,
+                plan, placement);
     }
 
     private static boolean hasSlotInRegion(List<SupplySlot> slots, int region) {

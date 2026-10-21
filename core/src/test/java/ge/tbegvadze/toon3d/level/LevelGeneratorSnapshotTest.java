@@ -148,8 +148,12 @@ class LevelGeneratorSnapshotTest {
     // RE-BASELINE (balance-overhaul order 6, CP4 — THE REGION DIAL, F7): REGION_TP_BUDGET_MULTIPLIER moved to
     // {0.85, 1.00, 1.25, 1.20, 1.30}, so every floor's Threat-Point budget outside region B changed and the
     // encounter planner rolls different rosters. A deliberate balance change.
+    // RE-BASELINE (mixed-encounter-groups): the encounter planner fields MIXED groups (chaff in pairs of
+    // different archetypes, every group of four or more mixing behaviours, a rare BROOD rolled once per
+    // floor), the placer caps any room at three of one archetype, and the barrel placer's eligibility applies
+    // its passage guard — so every generated roster, spawn tile and barrel moved. A deliberate change.
     private static final String EXPECTED_DIGEST =
-            "61306b280120285f10b10274560ed22325e5e8d8046f29d4fd98abb411bc0336";
+            "5f3baeb81664b4fabd927cb47b74514cdc0e36cb59b36dc673efdfaede57a060";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

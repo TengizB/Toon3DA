@@ -946,6 +946,7 @@ public final class BalanceSchema {
         results.addAll(supplySweepResults());
         results.addAll(eliteRewardResults());
         results.addAll(densitySweepResults());
+        results.addAll(densityVarietyResults());
         results.addAll(hazardPlacementResults());
         return results;
     }
@@ -3447,8 +3448,21 @@ public final class BalanceSchema {
     // GRANDFATHERED (the end of this file) holds every field that existed before order 8; it is SHRINK-ONLY.
     // -------------------------------------------------------------------------------------
 
-    /** Fields a rule bands: field name -> the {@link RuleKind} that reads it. Empty until a new field is added. */
+    /** Fields a rule bands: field name -> the {@link RuleKind} that reads it. */
     private static final Map<String, RuleKind> CONSTANT_SUBJECTS = new java.util.LinkedHashMap<>();
+    static {
+        // mixed-encounter-groups: the group-variety numbers, banded by R-DENSITY's variety half.
+        CONSTANT_SUBJECTS.put("GROUP_MAX_SAME_TYPE_PER_GROUP",       RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_BROOD_SIZE",                    RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_BROOD_FLOOR_CHANCE",            RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_BROOD_MAX_PER_FLOOR",           RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_MIXED_BEHAVIOUR_MIN_SIZE",      RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_MAX_SINGLE_TYPE_BODY_FRACTION", RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_ROOM_MAX_SAME_TYPE",            RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_LOOKOUT_MAX_PER_FLOOR",         RuleKind.DENSITY);
+        // ...and salvage_hook's re-composition (its CARRIER term sits at the 1.00 clamp), banded by R-RELIC.
+        CONSTANT_SUBJECTS.put("RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS", RuleKind.RELIC);
+    }
 
     /** Fields deliberately banded by no rule: field name -> a one-line reason. Empty until a new field needs it. */
     private static final Map<String, String> UNBANDED = new java.util.LinkedHashMap<>();
@@ -5267,6 +5281,121 @@ public final class BalanceSchema {
                     missingContact == 0 ? "worst floor" : missingContact + " floors had no group of two or more"));
             results.add(new RuleResult(RuleKind.DENSITY, where + "group in start room (E5)", inStartRoom, 0f, 0f,
                     inStartRoom == 0, null));
+            // V7 (mixed-encounter-groups): no room holds more than GROUP_ROOM_MAX_SAME_TYPE of one archetype.
+            int crowdedRoom = 0;
+            for (ge.tbegvadze.toon3d.level.FloorContentReport report : reports) {
+                crowdedRoom = Math.max(crowdedRoom, report.roomMaximumSameArchetype);
+            }
+            results.add(new RuleResult(RuleKind.DENSITY, where + "room variety (V7)", crowdedRoom, 0f,
+                    BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE, crowdedRoom <= BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE,
+                    "most of one archetype in one room, worst floor"));
+        }
+        return results;
+    }
+
+    // =====================================================================================
+    // R-DENSITY VARIETY (mixed-encounter-groups, V1-V6) — what the PLANNER fields per group: no archetype
+    // past a pair in a group (a BROOD of exactly GROUP_BROOD_SIZE excepted, at most one a floor), every group
+    // of GROUP_MIXED_BEHAVIOUR_MIN_SIZE+ mixing behaviours, few single-archetype groups, several archetypes
+    // per group, and no archetype past its share of a floor's bodies. A planner sweep (no layouts), so cheap.
+    // =====================================================================================
+
+    /** Depths the variety sweep audits. */
+    private static final int[] VARIETY_DEPTHS = {1, 5, 10, 15, 20, 25};
+    /** Seeds per spec x depth cell of the variety sweep. */
+    private static final int   VARIETY_SEEDS  = 100;
+    /** A3: at most this share of groups (size >= 2) field a single archetype on a COMBAT floor. */
+    private static final float VARIETY_MONO_SHARE_MAX     = 0.10f;
+    /** A4: at least this many distinct archetypes per group, on average, on COMBAT / ELITE floors. */
+    private static final float VARIETY_DISTINCT_MEAN_MIN  = 2.3f;
+
+    /** R-DENSITY's variety half over the planner: one result per check per spec x depth cell. */
+    public static List<RuleResult> densityVarietyResults() {
+        List<RuleResult> results = new ArrayList<>();
+        ge.tbegvadze.toon3d.route.NodeSupplySpec[] specs = {
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.combat(),
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.elite(),
+                ge.tbegvadze.toon3d.route.NodeSupplySpecs.cache()};
+        for (ge.tbegvadze.toon3d.route.NodeSupplySpec spec : specs) {
+            boolean combat  = spec.encounterKind() == ge.tbegvadze.toon3d.route.NodeSupplySpec.EncounterKind.COMBAT;
+            boolean fights  = combat || spec.encounterKind() == ge.tbegvadze.toon3d.route.NodeSupplySpec.EncounterKind.ELITE;
+            for (int depth : VARIETY_DEPTHS) {
+                int worstSameInGroup = 0;
+                int worstBroodSize   = 0;
+                int mostBroods       = 0;
+                int mixedGroups = 0, mixCandidates = 0;
+                int monoGroups  = 0, monoCandidates = 0;
+                int distinctSum = 0, distinctGroups = 0;
+                int bodyShareBreaches = 0;
+                int broodFloors = 0;
+                for (long seed = 0; seed < VARIETY_SEEDS; seed++) {
+                    ge.tbegvadze.toon3d.level.EncounterBudgetPlanner.Plan plan =
+                            new ge.tbegvadze.toon3d.level.EncounterBudgetPlanner(
+                                    depth, new java.util.Random(seed * 97L + depth), 1f, spec).plan();
+                    int broods = 0;
+                    for (ge.tbegvadze.toon3d.level.EncounterGroup group : plan.groups()) {
+                        ge.tbegvadze.toon3d.level.EncounterGroupTemplate template =
+                                ge.tbegvadze.toon3d.level.EncounterGroupTemplateRegistry.shared().get(group.templateId);
+                        boolean brood = template != null && template.brood();
+                        if (brood) {
+                            broods++;
+                            worstBroodSize = Math.max(worstBroodSize, group.size());
+                        } else {
+                            worstSameInGroup = Math.max(worstSameInGroup, group.maximumSameArchetype());
+                            if (group.size() >= BalanceConfig.GROUP_MIXED_BEHAVIOUR_MIN_SIZE) {
+                                mixCandidates++;
+                                if (group.distinctBehaviours() >= 2) mixedGroups++;
+                            }
+                        }
+                        if (group.size() >= 2) {
+                            monoCandidates++;
+                            if (group.distinctArchetypes() == 1) monoGroups++;
+                        }
+                        if (template == null || !template.lone()) {
+                            distinctSum += group.distinctArchetypes();
+                            distinctGroups++;
+                        }
+                    }
+                    mostBroods = Math.max(mostBroods, broods);
+                    if (broods > 0) broodFloors++;
+                    int bodyLimit = Math.max(BalanceConfig.GROUP_CHAFF_SLOT_MIN,
+                            (int) Math.ceil(BalanceConfig.GROUP_MAX_SINGLE_TYPE_BODY_FRACTION * plan.bodyTarget()));
+                    java.util.EnumMap<ge.tbegvadze.toon3d.enemy.EnemyType, Integer> bodies =
+                            new java.util.EnumMap<>(ge.tbegvadze.toon3d.enemy.EnemyType.class);
+                    for (ge.tbegvadze.toon3d.enemy.EnemyType type : plan.enemies()) {
+                        if (bodies.merge(type, 1, Integer::sum) == bodyLimit + 1) bodyShareBreaches++;
+                    }
+                }
+                String where = "variety " + spec.type() + " d" + depth + " ";
+                results.add(new RuleResult(RuleKind.DENSITY, where + "group cap (V1)", worstSameInGroup, 0f,
+                        BalanceConfig.GROUP_MAX_SAME_TYPE_PER_GROUP,
+                        worstSameInGroup <= BalanceConfig.GROUP_MAX_SAME_TYPE_PER_GROUP,
+                        "most of one archetype in a non-BROOD group"));
+                results.add(new RuleResult(RuleKind.DENSITY, where + "brood (V4)", mostBroods, 0f,
+                        BalanceConfig.GROUP_BROOD_MAX_PER_FLOOR,
+                        mostBroods <= BalanceConfig.GROUP_BROOD_MAX_PER_FLOOR
+                                && (worstBroodSize == 0 || worstBroodSize == BalanceConfig.GROUP_BROOD_SIZE),
+                        "broods per floor (max); largest brood " + worstBroodSize + "; floors with one "
+                                + String.format(java.util.Locale.ROOT, "%.0f%%", 100f * broodFloors / VARIETY_SEEDS)));
+                float mixShare = mixCandidates == 0 ? 1f : mixedGroups / (float) mixCandidates;
+                results.add(new RuleResult(RuleKind.DENSITY, where + "mix (V3)", mixShare, 1f, 1f, mixShare >= 1f,
+                        "share of non-BROOD groups of " + BalanceConfig.GROUP_MIXED_BEHAVIOUR_MIN_SIZE
+                                + "+ spanning two behaviours"));
+                results.add(new RuleResult(RuleKind.DENSITY, where + "body share (V6)", bodyShareBreaches, 0f, 0f,
+                        bodyShareBreaches == 0, "floors x archetypes past their share of the bodies"));
+                if (combat) {
+                    float monoShare = monoCandidates == 0 ? 0f : monoGroups / (float) monoCandidates;
+                    results.add(new RuleResult(RuleKind.DENSITY, where + "mono (A3)", monoShare, 0f,
+                            VARIETY_MONO_SHARE_MAX, monoShare <= VARIETY_MONO_SHARE_MAX,
+                            "share of groups of 2+ with one archetype"));
+                }
+                if (fights) {
+                    float distinctMean = distinctGroups == 0 ? 0f : distinctSum / (float) distinctGroups;
+                    results.add(new RuleResult(RuleKind.DENSITY, where + "distinct (A4)", distinctMean,
+                            VARIETY_DISTINCT_MEAN_MIN, Float.POSITIVE_INFINITY,
+                            distinctMean >= VARIETY_DISTINCT_MEAN_MIN, "mean archetypes per group (lone excluded)"));
+                }
+            }
         }
         return results;
     }

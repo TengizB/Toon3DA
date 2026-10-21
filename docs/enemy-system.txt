@@ -174,6 +174,11 @@ ENEMY_AMMO_DROP_CHANCE / MELEE_KILL_AMMO_DROP_CHANCE and the random drop table a
 
 Spawn points also carry a groupId (the EncounterGroup they were placed with); the encounter planner
 and placer are described in docs/procedural-level-generation.txt (SHARED FLOOR PIPELINE).
+Groups are MIXED (mixed-encounter-groups): at most two of one archetype in a group (chaff come in
+pairs of different archetypes; a rare BROOD is three of one chaff), groups of four or more mix
+behaviours — level/EncounterBehaviour sorts every archetype by its DATA into RANGED (isRanged),
+RUSHER (melee, moves every turn) or PLODDER (slower melee) — and no room holds more than three of
+one archetype. The rules live in docs/game-balance-authority.txt (R-DENSITY, VARIETY).
 
 ## Rendering
 
@@ -788,7 +793,8 @@ positionalMultiplier(), attackCadenceTurns(), spawnChar(), tacticalVerb(), heavy
 heavy) and moveSet() (MOVESET_NONE = no specials). What the build then checks (C-ENEMY): positive stats,
 a POSITIONAL_MULT_* multiplier, TP + hit bands for its role, XP derived from TP (never hand-set), a
 unique spawn symbol (a new FIXED symbol follows the CLAUDE.md STRICT RULE in one commit), an
-EncounterGroupTemplate slot that admits it, and its ORA archetype line (docs/story-ui-system.txt, ADD AN
+EncounterGroupTemplate slot that admits it (its EncounterBehaviour follows from isRanged() and
+moveEveryNTurns(), no row to add), and its ORA archetype line (docs/story-ui-system.txt, ADD AN
 ENEMY). R-ENEMY / R-LADDER / R-HEAVY then judge the numbers; tune the enemy's own constants only.
 
 

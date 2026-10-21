@@ -164,6 +164,9 @@ final class GroupBarrelPlacer {
                 if (SupplySlotSurvey.isAdjacentToDoor(grid, tileColumn, tileRow)) continue;
                 int walk = survey.walkDistanceWithKeycards(tileColumn, tileRow);
                 if (walk == SupplySlotSurvey.UNREACHABLE || walk < BalanceConfig.FIRST_CONTACT_MIN_WALK_TILES) continue;
+                // The same two guards placeInRoom applies, so a room whose every tile would plug a passage is
+                // never counted as able to host a barrel it can never receive.
+                if (plugsAPassage(grid, tileColumn, tileRow)) continue;
                 if (!keepsEverythingReachable(grid, survey, tileColumn, tileRow)) continue;
                 hostable.add(new int[]{tileColumn, tileRow});
             }

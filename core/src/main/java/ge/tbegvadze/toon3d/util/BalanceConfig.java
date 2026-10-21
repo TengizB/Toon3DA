@@ -2391,6 +2391,26 @@ public final class BalanceConfig {
     /** E2: no single archetype may spend more than this fraction of the cap (variety, when alternatives exist). */
     public static final float GROUP_MAX_SINGLE_TYPE_FRACTION = 0.40f;
 
+    // --- MIXED ENCOUNTER GROUPS (mixed-encounter-groups, V1-V7) --------------------------------
+    // Chaff come in PAIRS of different archetypes and every group mixes behaviours (ranged / rusher /
+    // plodder), so a room asks "which one first". A monoculture survives only as the rare BROOD.
+    /** V1: no archetype appears more than this many times in one group (a BROOD excepted). */
+    public static final int   GROUP_MAX_SAME_TYPE_PER_GROUP       = 2;
+    /** V4: a BROOD group is exactly this many of ONE chaff archetype (the only same-type cluster above V1). */
+    public static final int   GROUP_BROOD_SIZE                    = 3;
+    /** V4: chance, rolled once per floor, that BROOD is eligible on that floor. */
+    public static final float GROUP_BROOD_FLOOR_CHANCE            = 0.25f;
+    /** V4: at most this many BROOD groups on one floor. */
+    public static final int   GROUP_BROOD_MAX_PER_FLOOR           = 1;
+    /** V3: a non-BROOD group of at least this many members spans at least two encounter behaviours. */
+    public static final int   GROUP_MIXED_BEHAVIOUR_MIN_SIZE      = 4;
+    /** V6: no archetype exceeds this fraction of a floor's body target (floor GROUP_CHAFF_SLOT_MIN) while alternatives exist. */
+    public static final float GROUP_MAX_SINGLE_TYPE_BODY_FRACTION = 0.30f;
+    /** V7: no room holds more than this many of one archetype when the placer puts two groups in it. */
+    public static final int   GROUP_ROOM_MAX_SAME_TYPE            = 3;
+    /** CALM floors: at most this many LOOKOUT groups (one soldier alone — the odd body a pairs-only floor cannot field). */
+    public static final int   GROUP_LOOKOUT_MAX_PER_FLOOR         = 1;
+
     // --- E5 FIRST CONTACT -------------------------------------------------------------------
     /** E5: the first group of >= 2 stands within this many walk tiles of the start. */
     public static final int   FIRST_CONTACT_MAX_WALK_TILES             = 18;
@@ -3231,6 +3251,8 @@ public final class BalanceConfig {
     public static final float RELIC_BOUNTY_CHIP_KILL_CREDIT_BONUS            = 0.21f;
     public static final float RELIC_THRESHOLD_STIM_DOOR_OPEN_HEAL            = 0.04f;
     public static final float RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP          = 1.00f;
+    /** mixed-encounter-groups: the re-composition docs/relic-system.txt 11 asked for (the CARRIER term is clamped at 1.00). */
+    public static final float RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS           = 0.01f;
     public static final float RELIC_MEDICS_GLOVE_HEAL_BONUS                  = 0.13f;
     public static final float RELIC_RECOIL_SPRING_KILL_AMMO_REFUND           = 0.50f;
     public static final float RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS          = 0.35f;
