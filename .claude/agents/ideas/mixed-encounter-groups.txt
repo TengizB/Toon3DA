@@ -5,6 +5,31 @@ CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
+IMPLEMENTATION NOTE (2026-10-21) — where the build departs from the spec below; the checkpoint file
+(.claude/checkpoints/mixed-encounter-groups.md) has the measurements.
+  N1  TEN template rows, not eight (A12): CALM-only PAIR (one chaff pair) and LOOKOUT (one soldier alone,
+      at most GROUP_LOOKOUT_MAX_PER_FLOOR = 1 — an EIGHTH new BalanceConfig number, carried as data by
+      EncounterGroupTemplate.maximumPerFloor()). A CALM floor's per-group cap (~45 TP at depth 1) cannot buy a
+      4-chaff RABBLE, so CACHE floors fell from 4.2 to 0.7 bodies; and pairs alone cannot reach an odd body
+      target, which made FootprintPlanner rank SHOP layouts "unfielded" (E6 broke). Now CACHE d1 4.6 bodies.
+  N2  GROUP_MIXED_BEHAVIOUR_MIN_SIZE is 4, not 3 (BALANCE NOTES step 2), with step 1's weights (RABBLE 3.5,
+      SKIRMISH 1.5, BATTERY 1.5). Step 3 (fill target 0.90) was tried and rejected: R-MYSTERY-EV and the HUNTED
+      twist's T3 are priced off the fill fraction. A5 therefore reads "every non-BROOD group of >= 4". The
+      top-up (V5) also honours V3.
+  N3  V3 tie-break: when the variety caps (not the pool) block the missing behaviour, the draw fails and the
+      planner tries another shape; V3 is dropped only when the pool truly lacks the behaviour. BROOD is eligible
+      only where GROUP_BROOD_SIZE fits V6. The brood roll is consumed only on floors that field enemies.
+      BROOD is picked on ~5-12% of COMBAT floors (A7's 15-35% guess was a roll rate, not a pick rate).
+  N4  V7 fallback adds a corridor stand: when every room with space would pass 3 of one archetype (small
+      corridor floors whose rooms ran out), the group stands in the corridors; placeGroup's overflow spills
+      member by member into the room with the fewest of that archetype.
+  N5  Two side fixes the gates forced: salvage_hook re-composed (+1% kill credits; docs/relic-system.txt 11 had
+      predicted it — +3% broke the R-MYSTERY-EV ceiling), and GroupBarrelPlacer's eligibility now applies the
+      passage guard its placement already applied (H14 shortfall exposed by the new layouts).
+  N6  A13 (run): the real game was launched and descended to a generated floor without error; room rosters
+      were verified by the R-DENSITY generator sweep ("room variety (V7)": no room with > 3 of one archetype
+      over every generator x node type x depth x 30 seeds), not by eye.
+
 OVERVIEW
 --------
 The encounter planner fills most rooms with one archetype: five Vortex Eyes, four Ghouls. The cause is

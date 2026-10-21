@@ -10,8 +10,8 @@ import java.util.EnumSet;
  * The shipped encounter GROUP shapes (balance-overhaul order 2, E2; reshaped by mixed-encounter-groups)
  * — one {@code register()} row each. Chaff come in PAIRS of DIFFERENT archetypes (so chaff still never
  * spawns alone: every chaff archetype fields at least {@link BalanceConfig#GROUP_CHAFF_SLOT_MIN}), soldiers
- * and heavies as SINGLES of different archetypes, and every group mixes behaviours, so a room asks which
- * one to kill first. The only same-type cluster above a pair is the rare BROOD of
+ * and heavies as SINGLES of different archetypes, and every group of
+ * {@link BalanceConfig#GROUP_MIXED_BEHAVIOUR_MIN_SIZE}+ mixes behaviours, so a room asks which one to kill first. The only same-type cluster above a pair is the rare BROOD of
  * {@link BalanceConfig#GROUP_BROOD_SIZE}.
  */
 public final class EncounterGroupTemplates {

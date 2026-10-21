@@ -166,9 +166,9 @@ damage rider; the MARKSMAN affinity is kept. Magnitudes are the CP5 tuning (D7),
     threshold_stim      THRESHOLD STIM      ON_DOOR_OPEN    CARRY  -              1.049 / 1.043 / 1.039
         effects: DOOR_OPEN_HEAL 0.04
         text   : Each door you open heals 4% max HP (once per door)
-    salvage_hook        SALVAGE HOOK        ON_KILL         SUPPLY -              1.064 / 1.063 / 1.060
-        effects: CARRIER_EXTRA_DROP 1.00
-        text   : Carriers drop a second item 100% of the time
+    salvage_hook        SALVAGE HOOK        ON_KILL         SUPPLY -              1.064 / 1.066 / 1.064
+        effects: CARRIER_EXTRA_DROP 1.00, KILL_CREDIT_BONUS 0.01
+        text   : Carriers drop a second item 100% of the time; kills pay +1% credits
     medics_glove        MEDIC'S GLOVE       ALWAYS          CARRY  -              1.037 / 1.046 / 1.051
         effects: HEAL_BONUS 0.13
         text   : Medkits and treatments heal +13%
@@ -653,9 +653,13 @@ TUNING ORDER IF A RULE FAILS (decision D7)
 11. KNOWN SOFT SPOTS
 ====================
   - RELIC-STACK d25 slack is thin (section 8). Any COMMON/RARE magnitude raise can break it.
-  - R-MYSTERY-EV margin with the cache at weight 3 is 0.0004 of the 1.30 ceiling.
-  - salvage_hook sits AT its 1.00 clamp (CARRIER_EXTRA_DROP cannot exceed 100%): its SUPPLY gain 1.060-1.064 has a
-    margin of 0.0003 over the COMMON SUPPLY floor 1.06. It cannot be tuned up; if the supply model moves, re-compose it.
+  - R-MYSTERY-EV margin with the cache at weight 3 is ~0.00003 of the 1.30 ceiling (1.29998 after
+    mixed-encounter-groups).
+  - salvage_hook sits AT its 1.00 clamp (CARRIER_EXTRA_DROP cannot exceed 100%). RE-COMPOSED by mixed-encounter-groups:
+    the mixed rosters moved its d25 SUPPLY gain 1.0603 -> 1.0586 (< the COMMON floor 1.06), so it gained
+    KILL_CREDIT_BONUS 0.01 (RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS): 1.064 / 1.066 / 1.064. Only +1% because every relic
+    gain also lifts the MYSTERY table's RELIC_CACHE outcome: +3% pushed R-MYSTERY-EV to 1.30004 (ceiling 1.30). The
+    two soft spots are now coupled — raising this relic needs room under the mystery ceiling first.
   - S-RELIC SR6 is thin (it reads one wiring path) and the depth bands are weak by construction (section 8).
   - The valuation's zero-value halves (section 8) under-price six effects.
   - The sim does not play the quarantine_locker (SimWorld applies no EVENT choices); the locker is priced and

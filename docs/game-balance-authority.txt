@@ -637,10 +637,13 @@ R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
   ELITE's extra threat is carried by its 1.6x Threat-Point cap (heavier groups), which E1
   already intended, so the body count stays near COMBAT's.
   HOW THE PLANNER MEETS IT: level/EncounterBudgetPlanner fills the body target with
-  registered GROUP TEMPLATES (level/EncounterGroupTemplates: PACK 3-5 chaff of one type,
-  FIRETEAM 2 soldiers + 2 chaff, ESCORT bruiser + 2-3 chaff [COMBAT anchor], BATTERY 1-2
-  ranged soldiers + 2 melee chaff, WARBAND mini-elite + 2 soldiers [ELITE anchor, depth
-  >= 3], HUNTER a lone bruiser / flanker [<= 20% of groups]); the Threat-Point budget
+  registered GROUP TEMPLATES (level/EncounterGroupTemplates, reshaped by mixed-encounter-
+  groups: RABBLE 2-3 PAIRS of different chaff, SKIRMISH 1-2 different soldiers + a chaff pair,
+  FIRETEAM 2 different soldiers + a chaff pair, ESCORT bruiser + 1-2 chaff pairs [COMBAT
+  anchor], BATTERY 1-2 ranged soldiers + a melee chaff pair, WARBAND mini-elite + 2 different
+  soldiers [ELITE anchor, depth >= 3], HUNTER a lone bruiser / flanker [<= 20% of groups],
+  BROOD 3 of ONE chaff [rare, see VARIETY], and CALM-only PAIR one chaff pair / LOOKOUT one
+  soldier alone [<= 1 a floor]); the Threat-Point budget
   (x the region dial x the node's threat scale) is the CAP, and each pick aims at the
   threat-per-body still to spend, so an ELITE's 1.6x cap buys heavier groups (measured
   ~1.6x COMBAT's spent TP at every depth), not a crowd. level/EncounterPlacer puts each
@@ -659,6 +662,48 @@ R-DENSITY (RuleKind.DENSITY) — full floors (balance-overhaul order 2)
   planner's aim; R-XP-PACE reads it). The linear generator's entrance room is now always
   small (LEVEL_GEN_SPINE_ENTRANCE_MAX_DIM 7): a 19x11 entrance put every non-start tile
   beyond 12 walk tiles, making E5 on depth 1 geometrically impossible.
+  VARIETY (mixed-encounter-groups, owner request 2026-10-21: "rooms full of one enemy type,
+  e.g. 5 Vortex Eyes, almost every time"). Measured before: 36-51% of COMBAT groups were one
+  archetype and 82-95% of floors had a group of 4+ of one type. The rules (level/SlotFill +
+  level/EncounterBehaviour carry them as per-constant data):
+    V1 no archetype more than GROUP_MAX_SAME_TYPE_PER_GROUP (2) times in a group — chaff come in
+       PAIRS, soldiers and heavies as SINGLES — except a BROOD (exactly GROUP_BROOD_SIZE 3);
+    V2 an archetype fills one slot of one group only;
+    V3 a non-BROOD group of GROUP_MIXED_BEHAVIOUR_MIN_SIZE (4)+ spans two EncounterBehaviours
+       (RANGED / RUSHER = melee moving every turn / PLODDER = slower melee): the group's last
+       draw is restricted to a missing behaviour; if the variety caps (not the pool) block it the
+       draw fails and the planner tries another shape; the top-up keeps a grown group mixed
+       (the threshold was 3; balanceSim tuning step 2 moved it to 4 — see TUNING below);
+    V4 BROOD is eligible on GROUP_BROOD_FLOOR_CHANCE (0.25) of floors (rolled once per floor that
+       fields enemies), at most GROUP_BROOD_MAX_PER_FLOOR (1), and only where 3 fits V6; never the
+       first contact while another group of 2+ exists; picked on ~5-11% of COMBAT floors;
+    V5 the top-up adds a DIFFERENT archetype (a new pair, then a new single), never a lone chaff;
+    V6 no archetype past max(2, ceil(GROUP_MAX_SINGLE_TYPE_BODY_FRACTION 0.30 x body target))
+       bodies while an alternative exists, beside the 0.40 TP share;
+    V7 no room holds more than GROUP_ROOM_MAX_SAME_TYPE (3) of one archetype: a LARGE room's
+       second group must respect it, the full-floor fallback picks the room it crowds least, and
+       a floor out of rooms stands the group in the corridors; overflow spills per member.
+  CALM floors' per-group cap (~45 TP at depth 1) cannot buy a 4-chaff RABBLE, so PAIR and
+  LOOKOUT (GROUP_LOOKOUT_MAX_PER_FLOOR 1, the odd body pairs cannot field) keep CACHE / SHOP
+  floors at their old body counts (CACHE d1 4.6, was 4.2). Budget accounting is unchanged
+  (COMBAT spends 94-96% of its cap, as before); the synergy of a mixed group is NOT priced in
+  TP — the gates judge it. Banded by R-DENSITY's variety half (BalanceSchema.densityVariety
+  Results: group cap, brood, mix, body share, COMBAT mono share <= 10%, COMBAT / ELITE mean
+  distinct archetypes >= 2.3) and the generator sweep's "room variety (V7)"; asserted by
+  BalanceAuditTest.encounterGroupsMixArchetypesAndBehaviours. Measured after (planner, 300
+  seeds): 0% of floors with a 4-same group, mono 0-3%, 2.35-2.79 distinct archetypes a group.
+  TUNING (balanceSim, the idea's order): the first run read mixed rooms as harder (TACTICAL-NO-
+  RELIC mean depth 3.14 -> 2.98, NAIVE median 2 -> 1; SR3 / SR4 relic probes missed). Step 1
+  shape weights RABBLE 3.5 / SKIRMISH 1.5 / BATTERY 1.5; step 2 GROUP_MIXED_BEHAVIOUR_MIN_SIZE
+  3 -> 4: green, NAIVE median depth 2 again. ENCOUNTER_BUDGET_FILL_TARGET_FRACTION 0.90 was
+  tried and REJECTED: R-MYSTERY-EV (1.32) and TWIST T3 are priced off it.
+  SIDE EFFECTS: salvage_hook was re-composed (docs/relic-system.txt); GroupBarrelPlacer's
+  eligibility now applies the same passage guard as its placement (a room every tile of which
+  would plug a passage no longer counts toward H14's 40%).
+  OVERRIDE RECORD (mixed-encounter-groups): "PACK 3-5 chaff of ONE type" and "every chaff slot
+  fields at least GROUP_CHAFF_SLOT_MIN of ONE archetype" -> chaff PAIRS of DIFFERENT archetypes
+  (GROUP_CHAFF_SLOT_MIN 2 is now the pair size; "chaff never spawns alone" still holds, its test
+  unmodified); the top-up "grows a group's same-type chaff slot" -> adds a different archetype.
 
 R-SCARCITY-DEPTH (RuleKind.SCARCITY_DEPTH) — RETIRED by balance-overhaul order 2 (CP3c)
   OVERRIDE RECORD: S in [0.75, 0.95] at every depth on the model floor's dice curve is
@@ -1551,13 +1596,14 @@ THE WORKED EXAMPLES (hypothetical; numbers illustrative — real ones must pass 
       DECLARE  role CHAFF; family MACHINE (trait SHIELDED, inherited); base HP 30,
                damage 10, cadence 1, melee, positional 1.15 (fast melee);
                move-set: none; HEAVY: none; min depth 6 (region B); template
-               slots: PACK (3-5), ESCORT chaff slot.
+               slots: every CHAFF slot (RABBLE / SKIRMISH / FIRETEAM / ESCORT pairs,
+               BROOD, CALM PAIR); behaviour RUSHER (EncounterBehaviour, from its data).
       BAND     TP ~22 inside the CHAFF band; depth-1 targets met for CHAFF
                (1-2 on-curve hits vs FLESH-equivalent; SHIELDED makes the
                Assault Rifle take 2-3, an ENERGY weapon 1).
       PRICE    TP from baseThreatPoints; XP derived.
       REGISTER EnemyType row; needs a spawn symbol -> STRICT RULE commit (check
-               docs/tile-symbols.txt for a free one); PACK/ESCORT pools.
+               docs/tile-symbols.txt for a free one); joins the chaff slots by its role.
       COMMUNICATE SHIELDED hexagon on its bar; MACHINE family voice; ORA line
                story.bestiary.type.scrap_hound (no numbers).
       DONE     C-ENEMY green; ENEMIES + LADDER tables list it; sim FLOOR REPORT

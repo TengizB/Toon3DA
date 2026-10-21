@@ -49,7 +49,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP4** — placer V7 + brood first-contact skip; densityVarietyResults + "room variety"; the one test.
       DONE WHEN: `:core:test` shows only the baseline failure.
 - [x] **CP5** — balanceSim green (tuning recorded), snapshot data regenerated.
-- [ ] **CP6** — docs updated; A13 run check noted; reviewer gate; STATUS IMPLEMENTED.
+- [x] **CP6** — docs updated; A13 run check noted. (reviewer gate + STATUS IMPLEMENTED follow as CP6b.)
 
 ## NOTES CARRIED FORWARD
 
@@ -110,3 +110,8 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
     archetypes by V1); the top-up honours V3 too (a group grown to 4+ must mix — needed once the threshold
     moved, else 1% of 4+ groups grew single-behaviour).
   * LevelGeneratorSnapshotTest EXPECTED_DIGEST re-baselined -> 5f3baeb8... with a RE-BASELINE comment.
+- CP6: docs updated (game-balance-authority R-DENSITY VARIETY + TUNING + override record + K1 example;
+  game-balance-knowledge GROUPS/PLACEMENT; procedural-level-generation pipeline; enemy-system groups + add-an-enemy;
+  relic-system salvage_hook row + soft spots). A13: game launched via run-game skill, descended to a generated
+  CACHE floor (5 enemies), screenshot /tmp/claude-0/run1/floor1.png (container-local) — rosters NOT inspected by
+  eye; the room-variety sweep is the evidence.

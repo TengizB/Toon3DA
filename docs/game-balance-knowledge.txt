@@ -837,18 +837,27 @@ WHAT A FLOOR FIELDS. The planner fills a BODY TARGET, not a Threat-Point budget:
   threat. Each pick aims at the threat-per-body still to spend, so ELITE's 1.6x cap buys HEAVIER groups
   (~1.6x COMBAT's spent TP, R-SUPPLY's ELITE PROMISE), not a crowd. The enemy COUNT now grows with depth.
 
-GROUPS (E2). The roster is assembled from registered EncounterGroupTemplate rows: PACK 3-5 chaff of one
-  type, FIRETEAM 2 soldiers + 2 chaff, ESCORT bruiser + 2-3 chaff (COMBAT anchor), BATTERY 1-2 ranged
-  soldiers + 2 melee chaff, WARBAND mini-elite + 2 soldiers (ELITE anchor, depth >= 3), HUNTER a lone
-  bruiser / flanker (<= 20% of groups). A group is capped at GROUP_TP_FRACTION_CAP (0.35) of the floor cap
+GROUPS (E2, reshaped by mixed-encounter-groups). The roster is assembled from registered
+  EncounterGroupTemplate rows: RABBLE 2-3 pairs of DIFFERENT chaff, SKIRMISH 1-2 soldiers + a chaff pair,
+  FIRETEAM 2 soldiers + a chaff pair, ESCORT bruiser + 1-2 chaff pairs (COMBAT anchor), BATTERY 1-2 ranged
+  soldiers + a melee chaff pair, WARBAND mini-elite + 2 soldiers (ELITE anchor, depth >= 3), HUNTER a lone
+  bruiser / flanker (<= 20% of groups), BROOD 3 of one chaff (rare), and on CALM floors only PAIR (one chaff
+  pair) and LOOKOUT (one soldier, <= GROUP_LOOKOUT_MAX_PER_FLOOR 1). VARIETY (V1-V7, authority doc
+  R-DENSITY): <= GROUP_MAX_SAME_TYPE_PER_GROUP 2 of one archetype per group (BROOD exactly
+  GROUP_BROOD_SIZE 3, eligible on GROUP_BROOD_FLOOR_CHANCE 0.25 of floors, <= GROUP_BROOD_MAX_PER_FLOOR 1);
+  each archetype in one slot; groups of GROUP_MIXED_BEHAVIOUR_MIN_SIZE 4+ mix RANGED / RUSHER / PLODDER;
+  the top-up adds a different archetype; <= GROUP_MAX_SINGLE_TYPE_BODY_FRACTION 0.30 of a floor's bodies
+  per archetype; <= GROUP_ROOM_MAX_SAME_TYPE 3 of one archetype in a room. Mixed-group synergy is NOT
+  priced in TP (known open question: a mixed room is harder per TP than a monoculture). A group is capped at GROUP_TP_FRACTION_CAP (0.35) of the floor cap
   (the anchor exempt); groups shrink to fit, picks leave a fillable remainder (0 or >= 3), each pick
   reserves cap for the cheapest fill of the remaining bodies, 4 seeded draws per shape per pick.
 
 PLACEMENT (E3 / E5). level/EncounterPlacer puts each group in ONE room (cluster radius LEVEL_GEN_PACK_
   CLUSTER_RADIUS): first contact in the nearest room off the start (or a corridor pocket within the
   limit, >= FIRST_CONTACT_MIN_WALK_TILES 5 from the start) — <= 18 walk tiles, <= 12 on the run's first
-  floor, never in the start room; the anchor group in the deepest room; every other group in a room no
-  group holds (a LARGE room may take two). Shape (E4): >= 75% of enemies in groups of >= 2, >= 2 groups
+  floor, never in the start room (never a BROOD while another group of 2+ exists); the anchor group in the
+  deepest room; every other group in a room no group holds (a LARGE room may take two if no archetype there
+  passes 3; a floor out of rooms puts the group where it crowds least, else in the corridors). Shape (E4): >= 75% of enemies in groups of >= 2, >= 2 groups
   of >= 3, <= 3 lone enemies.
 
 FOOTPRINT (E6, owner override 2026-10-01). The three combat layouts (ROOMS_MST, LINEAR_CORRIDOR,
@@ -862,7 +871,8 @@ WHAT IT REPLACED (override record in the authority doc, R-DENSITY): "enemy COUNT
   the anchor budget fractions, the elite-anchor floor chance, the per-room TP cap + room-geometry
   multipliers, chaff pack min/max + the remainder pass. ENCOUNTER_BUDGET_FILL_TARGET_FRACTION (0.95)
   survives as the planner's aim (R-XP-PACE reads it); the 0.40 single-type cap survives as
-  GROUP_MAX_SINGLE_TYPE_FRACTION.
+  GROUP_MAX_SINGLE_TYPE_FRACTION. mixed-encounter-groups then replaced PACK (3-5 of one type) and the
+  same-type top-up with pairs of different archetypes (V1-V7).
 
 ================================================================================
 SECTION 12 — RESOURCE MANAGEMENT: THE SUPPLY PLANNER (rewritten by balance-overhaul order 2)
