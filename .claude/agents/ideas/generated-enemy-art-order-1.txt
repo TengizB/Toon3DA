@@ -1,0 +1,202 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 1 - pipeline + Warden and Harvest Tick
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Read generated-enemy-art.txt (series rules G1-G12, inks,
+roster, decisions D1-D6, lessons L1-L7) and .claude/skills/enemy-art/SKILL.md before starting.
+
+
+OVERVIEW
+--------
+Puts the first two generated enemies into the game and builds everything the later orders reuse:
+a data-driven EnemyType -> generated-texture binding, the run-game `spawn` step that lets a sprite be
+judged in the engine, and the art-direction section that makes the style lock binding. The two sprites
+are already approved by the owner (D3, D4) and committed in assets/textures/enemies/generated/, so
+this order makes no art decisions - it wires, verifies and documents.
+
+
+SCOPE
+-----
+IN
+  - render/GeneratedEnemySprites: a registry of EnemyType -> texture path (register() rows, a bootstrap,
+    no switch). Rows: ACID_DRONE -> generated/warden.png, SHELL_BRUTE -> generated/harvest_tick.png.
+  - EnemyRenderer: after it builds its current regions, every registered row REPLACES that type's
+    region with a full-frame region of its generated texture, loaded through EnemySpriteSheets.get
+    (cached, Nearest, alpha-cut - harmless on binary alpha). One loop over the registry.
+  - EnemyConstants: ENEMY_GENERATED_DIR plus one path constant per generated sprite, and the fallback
+    colour each row passes to EnemySpriteSheets.get.
+  - run-game capture driver: the `spawn:TYPE:FORWARD:RIGHT` step (spawns an EnemyType FORWARD tiles ahead
+    and RIGHT tiles to the side of the player via EnemyManager.spawnEnemy, depth 1), documented in the
+    run-game SKILL.md step table. A dev hook, never game logic.
+  - docs/art-direction.txt: new section 16 GENERATED ENEMY ART (the style lock, canvas, family ink
+    table, the pipeline, the approval gate, the registry); section 9 notes that generated sprites are
+    binary-alpha and pass through the same conditioning.
+  - .claude/CLAUDE.md: the enemy-art skill in the "Where to Find Info" table and GeneratedEnemySprites in
+    the project structure list (render/).
+
+OUT (deliberately not doing now)
+  - Renaming ACID_DRONE / SHELL_BRUTE to Warden / Harvest Tick (G10, AS1, AS2).
+  - Any other enemy's texture (orders 2-6).
+  - Deleting the old textures or the 2x2 sheet region code - the other types still use them (order 7).
+  - Animation frames (AS3), the emissive glow layer (order 7), a Java port of the kit (AS4).
+  - Changing any heightMultiplier, stat, ability, sound or ORA line.
+  - Editing the two approved sprites. If they look wrong in a mood, report it to the owner; do not
+    "fix" them silently.
+
+
+GAMEPLAY LOOP
+-------------
+None changes. An Acid Drone spawns, hovers, harasses and dies exactly as today; it is now drawn as
+the Warden. A Shell Brute charges as today; it is now drawn as the Harvest Tick.
+
+
+RULES
+-----
+  R1  A type with a GeneratedEnemySprites row is drawn ONLY from its generated texture; a type without
+      one is drawn exactly as before (byte-for-byte the same region).
+  R2  The registry is the single place a type is bound to generated art. No `if (type == ...)` anywhere.
+  R3  Every texture the registry names exists under assets/textures/enemies/generated/ and is a direct,
+      unedited output of .claude/skills/enemy-art/bestiary.py (G2).
+  R4  All renderer overlays (hit flash, health bar, name tag, matchup words, contact shadow, muzzle light,
+      the mood grade at GRADE_STRENGTH_ENEMY) apply to generated sprites unchanged (G9).
+
+
+PLAYER EXPERIENCE
+-----------------
+The first two enemies that look like they belong in the facility: the Organization's own drone with
+its scanning cyan slit, and a harvest-bred tick still carrying the facility's feeding port. Nothing to
+learn; ORA's existing lines already describe what they do.
+
+
+TECHNICAL NOTES
+---------------
+  - New class render/GeneratedEnemySprites (render package: it names texture paths for a renderer).
+    API: register(EnemyType, String path, float fallbackRed, float fallbackGreen, float fallbackBlue),
+    a read-only iteration over rows, bootstrap() holding the rows, idempotent like the other bootstraps.
+  - EnemyRenderer constructor: inside the existing EnemySpriteSheets.beginLoadBatch()/endLoadBatch()
+    bracket, after textureRegions is built: for each row, textureRegions.put(row.type,
+    new TextureRegion(EnemySpriteSheets.get(row.path, ...))). Textures are owned by the
+    EnemySpriteSheets cache (disposed by Main.dispose -> disposeAll), so the renderer keeps no field.
+  - Load-time only; no allocation in render() (critical rule).
+  - The capture step lives in .claude/skills/run-game/capture/src/main/java/capture/CaptureLauncher.java
+    (reflection on Main.world -> player position/direction, CELL_SIZE, enemyManager.spawnEnemy). A
+    working version was written and used in the 2026-10-21 session; re-create it from the description
+    above. Re-run setup.sh after editing capture/.
+  - No persistence, no story strings, no tile symbols, no balance file.
+
+
+VISUAL DESIGN
+-------------
+Already designed and approved:
+  warden.png        MACHINE, cyan ink. Hovering hull with an off-centre scanning slit eye, a grabbing
+                    claw, a cyan stun prod, torn cabling under the belly, a thrust plume, stencil "W-07".
+                    The hover is baked into the canvas (empty rows below the plume).
+  harvest_tick.png  INSECT, ichor ink. Six-legged tick, three translucent glowing blisters on the abdomen,
+                    the Organization's feeding port bolted into its back with a torn dripping hose, bone
+                    mandibles, a tag clamp "K7" on its right front leg.
+
+
+BALANCE NOTES
+-------------
+None. No balance-bearing file is touched.
+
+
+BALANCE ADMISSION
+-----------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - EnemyRenderer overlays and the per-mood grade (R4) - verify on screen.
+  - Contact shadow: drawn at the floor line, so the Warden's baked hover shows a shadow below it -
+    the intended read.
+  - Boss fights: ACID_DRONE / SHELL_BRUTE may appear as minions; the registry applies there too.
+  - The story layer is untouched (ORA's ENEMY_FAMILY_FIRST_SEEN lines fire as before).
+
+
+EDGE CASES
+----------
+  - Generated PNG missing on disk: EnemySpriteSheets' existing fallback (procedural tinted sheet) is
+    used with the row's fallback colour - the game never crashes.
+  - App pause / GL context loss: same path as every other enemy texture (unmanaged, Pixmap-built).
+  - World rebuilt per run: the cache is static; the registry bootstrap is idempotent.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  run-game `spawn:ACID_DRONE:2:0` on floor 1 shows the Warden two tiles ahead, with its name tag,
+      health bar and contact shadow.
+  A2  `spawn:SHELL_BRUTE:2:0` shows the Harvest Tick with six legs, standing on the floor line.
+  A3  Both read correctly under all five moods (--mood cool_steel, clinical_white, amber_hot,
+      corrupted_violet, core_white_violet); screenshots saved and sent to the owner.
+  A4  Every other EnemyType draws from exactly the region it used before (spot-check GHOUL, IRON_STALKER,
+      AURIC_SENTINEL, OVERSEER in-engine).
+  A5  `python3 .claude/skills/enemy-art/bestiary.py <tmp>` writes PNGs byte-identical to the committed ones.
+  A6  `grep -rn "EnemyType.ACID_DRONE\|EnemyType.SHELL_BRUTE" render/` shows no new type checks; the
+      binding is only GeneratedEnemySprites' rows.
+  A7  docs/art-direction.txt section 16 exists; run-game SKILL.md documents `spawn`; CLAUDE.md lists the
+      enemy-art skill.
+  A8  ./gradlew build (mirror: :core:build :lwjgl3:compileJava) is green with no new test failures.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. DATA / CONSTANTS  (libgdx-specialist)  EnemyConstants paths + fallback colours; GeneratedEnemySprites
+                                             + bootstrap.
+  2. RENDER            (libgdx-specialist)  the registry loop in EnemyRenderer's constructor.
+  3. TOOLING           (main thread)        the capture `spawn` step + run-game SKILL.md row.
+  4. VERIFY            (main thread)        A1-A4 screenshots via run-game; send them to the owner.
+  5. TESTS             None. Not balance-bearing; verified by build + run.
+  6. DOCS              docs/art-direction.txt section 16 + section 9 note; CLAUDE.md rows;
+                       enemy-art SKILL.md ("Seeing a sprite in the real game" now points at the
+                       registry instead of the texture-swap trick).
+
+RISKS AND UNKNOWNS
+  - The Shell Brute is 1.05 walls tall; the tick fills its canvas edge to edge, so it may read larger
+    than the old brute. Acceptable (a bruiser should be big); if the owner disagrees, the fix is the
+    sprite's composition in a later approved change, never the heightMultiplier.
+  - Boss-afterimage / lunge code paths draw from the same region map - confirm nothing assumes the
+    sheet quadrant size.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/generated-enemy-art-order-1.md exists, committed and pushed
+  CP1  GeneratedEnemySprites + EnemyConstants paths exist, EnemyRenderer draws ACID_DRONE and
+       SHELL_BRUTE from generated/, every other type unchanged, and the build is green
+  CP2  run-game has the `spawn` step (SKILL.md documents it) and A1-A4 screenshots are saved under
+       the scratchpad and sent to the owner
+  CP3  docs/art-direction.txt section 16, CLAUDE.md rows and the enemy-art SKILL.md update are committed
+  CP4  reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  Warden -> ACID_DRONE, Harvest Tick -> SHELL_BRUTE (series AS1/AS2).
+  AS2  Name tags keep the existing display names.
+  AS3  The registry lives in render/ (it binds paths for a renderer; no headless code needs it).
+  AS4  The old shared-sheet quadrants for ACID_DRONE / SHELL_BRUTE stay in the PNG sheets unused until
+       order 7 deletes the sheets.
+
+
+DECISIONS
+---------
+  D1  The two sprites are approved as they are (owner, 2026-10-21; series D3, D4).
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt (series), visual-identity-order-2.txt (sprite conditioning)
+  Docs:   docs/art-direction.txt, docs/enemy-system.txt
+  Skills: .claude/skills/enemy-art/SKILL.md, .claude/skills/run-game/SKILL.md

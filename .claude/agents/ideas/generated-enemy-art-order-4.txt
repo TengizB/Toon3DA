@@ -1,0 +1,171 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 4 - the Undead (humanoid rig)
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-3. Read generated-enemy-art.txt and
+.claude/skills/enemy-art/SKILL.md first.
+
+
+OVERVIEW
+--------
+Replaces the five UNDEAD textures - Ghoul, Crawler, Revenant, Vortex Eye, Blight Corruptor. In the
+premise the undead are the facility's own staff, killed by the catastrophe and the Deepworks'
+conditions and dragged back into motion by raw soul bleeding through the galleries: victims, not
+monsters. They are people, so this order gives the kit a HUMANOID RIG and cloth, and introduces the
+family's new glow ink, SOUL.
+
+
+SCOPE
+-----
+IN
+  - Kit growth:
+      * humanoid(pose) helper: builds head, neck, torso, pelvis, two arms with hands, two legs with
+        feet as kit shapes from a small dict of joint positions - one rig, five poses, so the five
+        read as the same species of victim.
+      * cloth materials: Organization work overalls (desaturated slate), hazmat rubber (dull olive-grey,
+        NOT green - G5), lab white (reuse livery), security armour (reuse gunmetal / darkmetal).
+      * dead-skin ramp (ash grey with a cold undertone) and a cloth-fold helper (carved fold lines).
+      * the SOUL glow ramp: pale bone-white with a faint cold tint, saturation capped low so it never
+        reads as purple "special" (G5).
+  - Five briefs -> five functions -> generated/ghoul.png, crawler.png, revenant.png, vortex_eye.png,
+    blight_corruptor.png. Owner gate (G11), five registry rows.
+  - Regenerate every earlier sprite byte-identical. Docs.
+
+OUT
+  - Faces with expressions; gore; visible wounds as the main read (restraint - premise tone).
+  - Any change to SUMMON (the Corruptor's raised dead use the same types and therefore the new sprites).
+  - Animation; renaming.
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged for all five.
+
+
+RULES
+-----
+  R1  Series rules G1-G12; order 1 R1-R4 for every new row.
+  R2  Every undead wears what that person wore to work - their JOB is the story detail (G7): an ID
+      badge, a uniform, a hazmat hood, security armour.
+  R3  Soul light leaks from eyes, mouth and the wounds it re-entered by - nowhere else.
+
+
+PLAYER EXPERIENCE
+-----------------
+Recognition before fear: a player should be able to say "that was a technician" about each one. ORA:
+  Ghoul             "Slow, and it never stops. Keep walking and never let it corner you."
+  Crawler           "Fast, thin. Drop it now, before the rest arrive."
+  Revenant          "Fast and heavy. Do not let that one reach you."
+  Vortex Eye        "Short range only. Break its line or get right on top of it."
+  Blight Corruptor  "Thick. Wear it down from range; don't stand in front of it."
+
+
+TECHNICAL NOTES
+---------------
+kit.py helpers + materials; bestiary.py functions; constants + five registry rows. Same as order 3.
+
+
+VISUAL DESIGN
+-------------
+DESIGN BRIEF - GHOUL (CHAFF, 0.90 walls, melee shambler)
+  A labourer in torn work overalls, head lolled to one side, one arm reaching, the other hanging; a
+  lanyard ID badge swinging on the chest. Soul light in the eye sockets and the slack mouth. Upright,
+  thin, patient.
+
+DESIGN BRIEF - CRAWLER (CHAFF, 0.55 walls, fast scuttler)
+  A lab technician on all fours, spine arched high, head thrust forward, arms long and splayed - a
+  low, fast, wrong silhouette. Lab-white coat torn at the hem and dragging. Full anatomy (L6): it crawls
+  because the soul moves it that way, not because pieces are missing.
+
+DESIGN BRIEF - REVENANT (BRUISER, 1.05 walls, fast heavy melee)
+  Organization security in riot armour - broad pauldrons, a cracked visor with soul light behind it,
+  a shock baton gripped low - caught mid-lunge, weight on the front foot. The armour stencil (a unit
+  number) is the detail. The heaviest, most dangerous-looking humanoid.
+
+DESIGN BRIEF - VORTEX EYE (CHAFF, 0.55 walls, short-range caster, DEBUFF_PLAYER)
+  What is left of a researcher's head and shoulders, held aloft by a slow vortex of soul light that
+  pours from the eye sockets and coils around it. Hover baked into the canvas (the renderer does not
+  hover this type). Small, eerie, the one undead that is MOSTLY light - and the short reach of the
+  vortex should read as short.
+
+DESIGN BRIEF - BLIGHT CORRUPTOR (SOLDIER, 1.00 walls, durable carrier, SUMMON)
+  A quarantine worker in a full hazmat suit, swollen from inside by spore growth that has burst through
+  the suit in soft pods (soul-lit), a decontamination sprayer tank fused to its back. Thick and slow;
+  the pods are where the raised dead come from.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+The Corruptor boss's minions and BLIGHT_CORRUPTOR's SUMMON spawn these types, so the new sprites appear
+there automatically. UNDEAD's BURNABLE trait and the incinerator's fire effects draw over them.
+
+
+EDGE CASES
+----------
+Same as order 1.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Owner approval of all five (family contact sheet + in-engine shots) recorded in DECISIONS.
+  A2  Each spawns in-engine showing its sprite; the five are told apart at three tiles.
+  A3  The soul ink reads as cold white, not purple, under corrupted_violet and core_white_violet moods.
+  A4  Each sprite's job is identifiable from its clothes (owner confirms at the gate).
+  A5  All earlier sprites regenerate byte-identical. Build green. G1 respected.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT              humanoid rig, cloth + skin materials, soul ramp, fold helper
+  2. SPRITES          five functions, family contact sheet, in-engine preview
+  3. OWNER GATE       stop; send; record
+  4. WIRE             (libgdx-specialist) constants + five registry rows
+  5. TESTS            None. Not balance-bearing; verified by build + run.
+  6. DOCS             art-direction section 16 (roster + the SOUL ink), SKILL.md (humanoid rig usage)
+
+RISKS AND UNKNOWNS
+  - Humanoids are where procedural art most easily looks like mannequins. Hands and heads carry the
+    read; prototype the rig on the Ghoul alone and show it to the owner early (CP2) before building
+    the other four.
+  - The soul ramp vs the two violet moods - test first.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  humanoid rig + materials + soul ramp in the kit; earlier sprites byte-identical
+  CP2  the Ghoul alone generated and previewed in-engine; owner's early read on the rig recorded
+  CP3  the other four generated; family sheet + in-engine shots sent
+  CP4  owner approval recorded in DECISIONS (stop here until it is)
+  CP5  five rows wired; A2-A3 verified in-engine; build green
+  CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  The SOUL ink is new to the series and becomes the UNDEAD family's glow.
+  AS2  The undead are drawn as recognisably human and not grotesque, per the premise ("victims").
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt, -order-1..3.txt
+  Docs:   story/00-premise.md (the system-as-story table), docs/art-direction.txt section 16

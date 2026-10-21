@@ -1,0 +1,182 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 5 - the elemental Golems
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-4. Read generated-enemy-art.txt (above all
+lesson L2 and decision D5) and .claude/skills/enemy-art/SKILL.md first.
+
+
+OVERVIEW
+--------
+Replaces the four GOLEM textures - Auric Sentinel, Cinderforge Colossus, Rimeshell Lancer, Verdant
+Spiresower. In the premise golems are the planet's own crust and mantle rising to wall off and crush
+the infection - the player. This is the family the 2026-10-21 prototype FAILED at (the Mantle Sentinel:
+polygon slabs over a glowing backing, read as bricks, rejected as the weakest sprite). So this order
+first fixes HOW the kit makes stone, proves it on one golem with the owner, then builds the rest.
+
+
+SCOPE
+-----
+IN
+  - Kit growth (stone done right):
+      * SCULPTED ROCK: rock masses as irregular blobs (several merged ellipsoids with low k), with
+        fracture lines CARVED into them (a seeded crack-path helper producing carve chains) and chipped
+        edges (small carved bites along the silhouette). No straight-edged rectangles as body parts.
+      * CRYSTAL material: faceted (a facet helper that quantises the normal into a few planes per
+        crystal), high specular, translucent inner glow like the `sac` material.
+      * element ramps: auric (metallic gold-brown with warm-white highlights - must not read as the
+        UI/semantic yellow), rime (frost white with grey-blue shadows, low saturation - not the
+        defence blue, not FACILITY_CYAN), verdant (olive and moss, desaturated - not the health green),
+        plus a SAP glow ramp (warm cream) for the Spiresower.
+  - The Cinderforge Colossus FIRST as the stone prototype (owner early read), then the other three.
+  - Owner gate (G11); four registry rows; earlier sprites byte-identical; docs.
+
+OUT
+  - The renderer's golem overlays - they stay and the sprites are designed AROUND them (see VISUAL
+    DESIGN): the Auric shard ring, the Cinderforge crust plates + molten seams + heat haze, the
+    Rimeshell shell-open and frost tints, the Auric exposed tint.
+  - The Spiresower's SPIRES: they are runtime tiles (':') with their own prop texture, not part of the
+    enemy texture. Out of scope for this series.
+  - Mechanics, numbers, names (G10).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged for all four.
+
+
+RULES
+-----
+  R1  Series rules G1-G12; order 1 R1-R4 for every new row.
+  R2  No golem body part is a straight-edged slab (L2). Stone is sculpted.
+  R3  A sprite never bakes what the renderer already draws on top of it (shards, crust plates, seams,
+      state tints); it leaves the space and the mid values those overlays need (G9).
+  R4  All four share the magma ink for their core and differ by element on the surface.
+
+
+PLAYER EXPERIENCE
+-----------------
+ORA's lines are the brief's contract:
+  Auric Sentinel        "Those shards are its armour and its ammo. Strip them fast."
+  Cinderforge Colossus  "It re-hardens the second you stop shooting. Don't stop shooting."
+  Rimeshell Lancer      "Armoured until it fires. Bait the lance, step off the lane, then hit it."
+  Verdant Spiresower    "The spires heal it. Break those first or it never dies."
+
+
+TECHNICAL NOTES
+---------------
+kit.py: rock/crack/chip helpers, facet helper, crystal + element ramps. bestiary.py: four functions.
+Java: constants + four registry rows. Before designing, read the four elemental-golem-*.txt idea files
+for their MECHANICS and their renderer overlays only - their "SPRITE / SOURCE ART" sections describe
+the OLD textures and are NOT to be followed (G1).
+
+
+VISUAL DESIGN
+-------------
+DESIGN BRIEF - CINDERFORGE COLOSSUS (BRUISER, 1.15 walls, melee, AREA_STRIKE; crust re-hardens)
+  The prototype golem. A hunched forge of the planet's mantle: a body of molten rock, sculpted and
+  slumped, heaviest at the shoulders, with a few cooled basalt ridges. The renderer lays dark crust
+  plates over it as it hardens and burns seams between them - so the BODY is mostly the hot state:
+  mid-orange molten surfaces, not white-hot (the crust tint must still darken it). Two thick arms
+  ending in fused, club-like hands for the area slam. A broken Organization shackle on one wrist.
+
+DESIGN BRIEF - AURIC SENTINEL (SOLDIER, 1.00 walls, ranged; shards = armour and ammo)
+  A geode the planet split open: a rough dark-rock outer body cracked down the front, the inside lined
+  with auric crystal, a hot core deep in the split. Upright and symmetrical, arms held out from the body
+  - as if holding the ring of shards the renderer draws around it. NO shards in the sprite (R3); leave
+  clear air around the head and shoulders where the ring orbits.
+
+DESIGN BRIEF - RIMESHELL LANCER (SOLDIER, 0.85 walls, ranged lance; armoured until it fires)
+  A cold body around a hot core: a closed shell of frost-rime plates (sculpted, not slabs) folded over
+  its front like shut petals, a slit down the middle where the magma lance-core shows through, the lance
+  emitter as a molten point in that slit. Low, braced stance. The shell-open tint the renderer adds
+  must read against the frost.
+
+DESIGN BRIEF - VERDANT SPIRESOWER (SOLDIER, 0.80 walls, melee; spires heal it)
+  Stone overgrown: a squat rock body furred with moss and lichen, crystalline spire-buds pushing out of
+  its back and shoulders (the spires it sows - SAP glow at their tips), roots trailing from its feet into
+  the floor line. Slow and rooted; the only golem that looks alive in the plant sense.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+The shard ring, crust plates, molten seams, heat haze, shell-open and frost tints (EnemyRenderer) draw
+over these sprites - each must be verified in-engine in its live state (spawn, then put the enemy into
+the state with a capture reflection step if needed).
+
+
+EDGE CASES
+----------
+Same as order 1. The renderer's overlays are positioned relative to the sprite rect - confirm the
+shard ring and crust plates still sit on the body, not in empty canvas.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  The Cinderforge prototype was shown to the owner alone, and the owner's read is in DECISIONS,
+      before the other three were built.
+  A2  Owner approval of all four recorded in DECISIONS.
+  A3  In-engine: the Auric shard ring orbits clear air around the new body; the Cinderforge crust plates
+      and seams read on it; the Rimeshell shell-open state reads; screenshots of each state sent.
+  A4  No golem body part is a straight-edged slab (R2), checked on the contact sheet.
+  A5  Element ramps do not read as the semantic yellow / blue / green or as FACILITY_CYAN (G5).
+  A6  Earlier sprites byte-identical. Build green. G1 respected (the old SOURCE ART text unused).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          sculpted rock, crack + chip helpers, facets, crystal, element + sap ramps
+  2. PROTOTYPE    Cinderforge alone; in-engine (both crust states); owner's early read
+  3. SPRITES      the other three; family sheet; in-engine state shots
+  4. OWNER GATE   stop; send; record
+  5. WIRE         (libgdx-specialist) constants + four registry rows
+  6. TESTS        None. Not balance-bearing; verified by build + run.
+  7. DOCS         art-direction section 16 (roster, element inks, the stone rule), SKILL.md
+
+RISKS AND UNKNOWNS
+  - This is the family the kit has already failed at once. If the Cinderforge prototype is rejected
+    twice, STOP and bring the owner options (e.g. a crystal-first look instead of rock-first) rather
+    than iterating blind.
+  - Overlay positions may assume the old art's proportions; a renderer constant may need adjusting
+    (that is a render change, allowed, and must be named in the IMPLEMENTATION NOTE).
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit stone/crystal/element additions; earlier sprites byte-identical
+  CP2  Cinderforge prototype generated + in-engine shots; owner's read recorded
+  CP3  the other three generated; family sheet + state shots sent
+  CP4  owner approval recorded in DECISIONS (stop here until it is)
+  CP5  four rows wired; overlays verified in-engine; build green
+  CP6  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  Golems keep the magma core ink; elements live on the surface.
+  AS2  The overlays the renderer draws today are part of each golem's look and stay.
+
+
+DECISIONS
+---------
+  D1  The 2026-10-21 Mantle Sentinel prototype is dropped and must not be reused (series D5).
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt, -order-1..4.txt, elemental-golem-*.txt (mechanics only)
+  Docs:   docs/art-direction.txt section 16, docs/enemy-system.txt

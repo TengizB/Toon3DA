@@ -1,0 +1,171 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 6 - the Void Shroud and the bosses
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-5. Read generated-enemy-art.txt and
+.claude/skills/enemy-art/SKILL.md first.
+
+
+OVERVIEW
+--------
+The last four textures and the most important ones: the Void Shroud (the only regular DEMON) and the
+three bosses - the Overseer (MACHINE), the Corruptor (ABERRATION) and the Hell Baron (DEMON). Two of
+the bosses have never had their own art at all: the Corruptor and the Hell Baron draw a placeholder
+quadrant of the blight sheet today. Bosses use the large 240x360 canvas (G4) because they are drawn
+1.6-2.0 walls tall.
+
+
+SCOPE
+-----
+IN
+  - Four briefs -> void_shroud.png (160x240), overseer.png, corruptor.png, hell_baron.png (240x360).
+  - Kit growth: a SHADOW material (near-black charcoal with ember undertones - readable only through
+    its rims and core, never violet), smoke-taper helper (a body that dissolves into dithered wisps
+    toward the floor line), and canvas-size support for 240x360 (the stencil and every helper take
+    absolute pixel coordinates already; sheet.py must handle mixed sizes).
+  - Owner gate (G11) - the bosses are gated INDIVIDUALLY, each with an in-engine boss-arena shot.
+  - Four registry rows (the boss rows replace today's placeholder regions).
+  - Earlier sprites byte-identical; docs.
+
+OUT
+  - Boss mechanics, phases, the BossHudRenderer, the boss afterimage trail (it draws from the region,
+    so it inherits the new art for free), arena levels.
+  - Changing boss heightMultiplier values (1.80 / 1.60 / 2.00).
+  - Multiple boss frames per phase (AS3 - single frame).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged.
+
+
+RULES
+-----
+  R1  Series rules G1-G12; order 1 R1-R4.
+  R2  Each boss is designed against its STORY first: read docs/story-ui-system.txt (THE ORGANIZATION
+      and its LIE LEDGER) and the boss's codex / bark strings before drawing. A boss sprite may not
+      contradict a line the game says (the Overseer's especially).
+  R3  A boss reads as its family at a glance (ink, materials, shape language) and as a boss by mass.
+
+
+PLAYER EXPERIENCE
+-----------------
+  Void Shroud  "It goes for your back. Turn and face it before it gets there."
+  Overseer     "It telegraphs everything. Watch one full cycle before you commit."
+  Corruptor    "It tells you what's coming before it does it. Learn that, then punish it."
+  Hell Baron   "Timing, not reflexes. Read the mark, then move."
+
+
+TECHNICAL NOTES
+---------------
+Same pattern as orders 2-5. EnemyRenderer's boss placeholder mapping (CORRUPTOR / HELL_BARON ->
+blight quadrant) is overridden by the registry rows like every other type; the OVERSEER's dedicated
+texture field is overridden the same way (its removal is order 7's cleanup).
+
+
+VISUAL DESIGN
+-------------
+DESIGN BRIEF - VOID SHROUD (DEMON, SOLDIER, 0.80 walls, melee flanker)
+  The planet's pain given a shape: a tall, hooded drift of shadow-stuff with an ember core where a chest
+  would be, one long arm reaching out to the side and forward - the flank, the reach around you - and a
+  body that thins into smoke above the floor. Readable on a dark floor only by its rims (cyan rim from
+  the facility light, magma from its core): make the outline do the work.
+
+DESIGN BRIEF - THE OVERSEER (MACHINE boss, 1.80 walls, ranged, telegraphed phases)
+  The game's story says the Overseer is not a person - "It's a desk, not a person"; the chair is the
+  cruelty. So the boss is the CHAIR made into a war machine: a monumental administrative chassis - a
+  console-throne of Organization gunmetal and livery panels, a bank of cyan screens and lenses where a
+  face would be, filing-arm manipulators, cables running up out of the canvas into the ceiling. Nobody
+  sits in it. The cyan ink at its most intense: this is the source of the facility's light.
+
+DESIGN BRIEF - THE CORRUPTOR (ABERRATION boss, 1.60 walls, ranged, telegraphed)
+  Where the breach began: a towering mass of harvested tissue grown around the ruin of a containment
+  tank, the tank's ribs and glass shards still embedded in it. Many eyes (order 3's eyeball helper) in
+  rows down its front, all aimed at the player - it "tells you what's coming" by looking. Ichor ink,
+  the flesh ramps of order 3; the aberrations are visibly its offspring.
+
+DESIGN BRIEF - THE HELL BARON (DEMON boss, 2.00 walls, melee, read the mark)
+  The planet's immune champion - an antibody the size of a room. Armoured in the planet's own crust
+  (sculpted per order 5's stone rule, never slabs), an ember core, immense forearms built for the heavy,
+  telegraphed strike. Deliberately NOT the stock horned devil: its menace is mass and patience. One
+  Organization artefact embedded in it like a splinter - a drill bit, broken off in its shoulder: the
+  wound that woke the planet.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+BossHudRenderer (unchanged), the boss afterimage trail (inherits the region), telegraph and attack
+effects drawn over the sprite, boss contact shadow. Corruptor minions are the order-3/4 sprites.
+
+
+EDGE CASES
+----------
+Same as order 1. A 240x360 texture in a full-frame region: confirm nothing assumes the old 1024-wide
+source size (the renderer reads region width/height).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Owner approval of each of the four, individually, recorded in DECISIONS.
+  A2  In-engine: each boss in its arena (or spawned on floor 1 with bosshud) at 3 tiles, plus the Void
+      Shroud at 2 tiles, under two moods.
+  A3  The Overseer brief's story rule holds: no figure sits in the throne (owner confirms).
+  A4  The Corruptor and Hell Baron no longer draw the blight-sheet placeholder.
+  A5  Earlier sprites byte-identical. Build green. G1 respected.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          shadow material, smoke taper, 240x360 support
+  2. SPRITES      Void Shroud, then each boss; one gate per boss (sheet + in-engine)
+  3. WIRE         (libgdx-specialist) constants + four registry rows
+  4. TESTS        None. Not balance-bearing; verified by build + run.
+  5. DOCS         art-direction section 16 (roster, boss canvas), SKILL.md
+
+RISKS AND UNKNOWNS
+  - A 240x360 sprite drawn 2 walls tall is close enough to the player to show every flaw: budget extra
+    iteration for the bosses.
+  - The Void Shroud is dark-on-dark by design; if the owner finds it unreadable in the darkest mood,
+    raise its rim, never brighten its body.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit additions; earlier sprites byte-identical
+  CP2  Void Shroud generated, previewed, owner-approved (recorded)
+  CP3  Overseer generated, previewed, owner-approved (recorded)
+  CP4  Corruptor generated, previewed, owner-approved (recorded)
+  CP5  Hell Baron generated, previewed, owner-approved (recorded)
+  CP6  four rows wired; A2-A4 verified; build green
+  CP7  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  DEMON shares the magma ink with GOLEM (both are the planet defending itself).
+  AS2  The Overseer is drawn empty-throned because the story says the chair, not a person, is the enemy.
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt, -order-1..5.txt, boss-fight-mobile-overseer-order-*.txt (mechanics)
+  Docs:   docs/story-ui-system.txt (THE ORGANIZATION), docs/art-direction.txt section 16

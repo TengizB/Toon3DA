@@ -1,0 +1,151 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 7 - emissive layer and cleanup
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-6 (every EnemyType has a generated sprite).
+Read generated-enemy-art.txt first.
+
+
+OVERVIEW
+--------
+Finishes the series. Two jobs: (1) give the generated enemies back the light they lost - the kit's
+glow is translucent, the engine alpha-cuts it, and the mood grade + fog dim glowing eyes and cores
+like any surface, which breaks art-direction pillar V6 ("things that glow and mean something are never
+tinted"); (2) delete every trace of the old image-model textures.
+
+
+SCOPE
+-----
+IN
+  - EMISSIVE LAYER:
+      * kit.py writes, beside each sprite, <sprite>_glow.png: the emissive pixels only (binary alpha,
+        same canvas) - generated from the same functions, so it can never drift from the body.
+      * GeneratedEnemySprites rows gain the glow path; EnemyRenderer draws it as an additive re-draw of
+        the visible sprite columns after the body (the same per-column pattern the muzzle light already
+        uses), at full colour, NOT graded and NOT fogged (V6), respecting the wall z-buffer and the
+        SpriteOccluderBuffer exactly as the body does.
+      * a per-depth glow fade constant in RenderConstants so a distant enemy's eyes are a point of
+        light, not a flare.
+  - CLEANUP:
+      * delete the nine old PNGs (enemy_sheet_blight, enemy_sheet_infernal, enemy_sheet_elemental_golems,
+        enemy_corruptor, enemy_vortex_eye, enemy_ghoul, enemy_crawler, enemy_revenant,
+        enemy_boss_overseer) and their EnemyConstants paths, the buildTextureRegions quadrant code, the
+        per-texture fields and the boss placeholder mapping. The registry becomes the ONLY source.
+      * EnemySpriteSheets: the hard alpha-cut existed to clean the image models' baked halos; generated
+        sprites are binary already, so the conditioning pass is removed (load time only drops). The
+        cache, Nearest filter and fallback stay.
+      * a load-time warning (Gdx.app.error) naming any EnemyType without a registry row.
+  - Series check and docs: art-direction section 9 rewritten, section 16 completed (emissive layer),
+    docs/enemy-system.txt texture notes, CLAUDE.md render/ list, the enemy-art SKILL.md, the series
+    master file's roster marked done.
+
+OUT
+  - Animation (series AS3 - a separate future series), new enemies, renderer overlays other than glow.
+  - Soft/translucent halos (no custom shader, V2; the glow is binary + additive).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged.
+
+
+RULES
+-----
+  R1  Emissive pixels draw unshaded and unfogged; everything else about the enemy is graded as before.
+  R2  No enemy texture remains that was not written by bestiary.py.
+  R3  No allocation in render(); the glow pass adds no per-frame objects.
+
+
+PLAYER EXPERIENCE
+-----------------
+In a dark far corridor the first thing you see of an enemy is its eyes, its emitter or its core - the
+"threats read above the world" pillar, finally true for enemies.
+
+
+TECHNICAL NOTES
+---------------
+  - EnemyRenderer: one extra pass per visible enemy over its columns (blend GL_SRC_ALPHA, GL_ONE), batched
+    with the existing muzzle-light additive pass where possible to keep blend switches at two.
+  - Measure with run-game --probe cpu before and after (same session, docs/art-direction section 11
+    method); the glow pass must not add more than the muzzle light's measured cost.
+  - The kit change must leave every body PNG byte-identical (only new _glow files appear).
+
+
+VISUAL DESIGN
+-------------
+No new art. The glow files are derived from the approved sprites.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+Mood grade (AtmosphereGrade), fog, muzzle light, wall z-buffer, SpriteOccluderBuffer, hit flash (glow
+stays on during the flash), death (the glow goes with the body), boss afterimages (no glow - they are
+memories, not light).
+
+
+EDGE CASES
+----------
+A missing _glow file means no glow for that enemy, never a crash. GL context loss: same unmanaged-
+texture path as the bodies. A frozen-world overlay (pause, codex): glow is drawn with the body as usual.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  At 8+ tiles in cool_steel and corrupted_violet, an enemy's emissives are visibly brighter than its
+      body and the same colour under every mood (screenshots of the Warden and the Harvest Tick).
+  A2  `ls assets/textures/enemies/` shows only generated/; no EnemyConstants path names an old file.
+  A3  Every EnemyType draws its generated sprite; the load log has no missing-row warning.
+  A4  Frame cost of the glow pass measured and recorded in the IMPLEMENTATION NOTE.
+  A5  Every body PNG is byte-identical to its order's approved version. Build green.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT          (main thread)       _glow output; bodies unchanged
+  2. RENDER       (libgdx-specialist) glow pass, fade constant, registry glow path
+  3. CLEANUP      (libgdx-specialist) old files, constants, fields, quadrant code, alpha-cut pass
+  4. VERIFY       (main thread)       run-game shots, probe measurement
+  5. TESTS        None. Not balance-bearing; verified by build + run.
+  6. DOCS         art-direction 9 + 16, enemy-system.txt, CLAUDE.md, SKILL.md, series master
+
+RISKS AND UNKNOWNS
+  - Additive glow on the brightest mood (clinical_white) may wash out; the fade constant is the knob.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit writes _glow files for every sprite; bodies byte-identical
+  CP2  the glow pass draws in-engine; A1 screenshots; probe measured; build green
+  CP3  old textures, constants, fields and the alpha-cut pass removed; A2-A3 hold; build green
+  CP4  docs; reviewer PASS; STATUS: IMPLEMENTED; master file roster marked complete
+
+
+ASSUMPTIONS
+-----------
+  AS1  Removing the alpha-cut is safe because every input is binary alpha by construction (kit G8).
+  AS2  The glow is part of the same approved art; it needs no new owner gate unless it changes a body.
+
+
+DECISIONS
+---------
+(none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt, -order-1..6.txt, visual-identity-order-2.txt (conditioning, muzzle light)
+  Docs:   docs/art-direction.txt sections 5, 9, 11, 16

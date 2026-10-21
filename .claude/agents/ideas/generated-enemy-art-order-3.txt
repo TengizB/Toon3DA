@@ -1,0 +1,164 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 3 - the Aberrations
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires orders 1-2. Read generated-enemy-art.txt and
+.claude/skills/enemy-art/SKILL.md first.
+
+
+OVERVIEW
+--------
+Replaces the four regular ABERRATION textures - Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith -
+with generated sprites. Aberrations are the containment breach: harvested planet tissue that escaped
+the tanks and kept growing. Soft, fused, wet flesh is what the kit's smooth-union height fields do best,
+so this is the first order that designs a whole family from briefs. (The Corruptor boss is order 6.)
+
+
+SCOPE
+-----
+IN
+  - Four briefs (below) -> four bestiary.py functions -> generated/plague_hulk.png, eye_tyrant.png,
+    gore_biter.png, mire_wraith.png.
+  - Kit growth: flesh materials (a pale bruised flesh ramp and a darker raw one - desaturated rose-grey
+    and violet-grey, never saturated red, G5), a wet sheen setting (small, very bright specular), an
+    EYEBALL helper (sclera dome + iris + pupil + glint) and a TEETH-ROW helper (a curved run of small
+    bone spikes, reusing order 2's spike primitive).
+  - Owner approval gate (G11); then four GeneratedEnemySprites rows.
+  - Regenerate every earlier sprite byte-identical (series AS6).
+  - docs/art-direction.txt section 16 roster; SKILL.md API rows.
+
+OUT
+  - The Corruptor boss (order 6). Changing EYE_TYRANT's renderer hover or beam. Animation. Renaming.
+  - Gore. Tone is "cosmic horror by restraint" (premise): wrong anatomy and wet tissue, not blood
+    sprays or viscera (and red is a reserved semantic colour anyway).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged for all four.
+
+
+RULES
+-----
+  R1  Series rules G1-G12; order 1 R1-R4 for every new row.
+  R2  The four share the ichor ink and the flesh ramps (one family), and differ completely in silhouette.
+  R3  EYE_TYRANT stands on its canvas floor (the renderer adds its hover, G4); the others stand on the
+      floor line.
+
+
+PLAYER EXPERIENCE
+-----------------
+Each sprite must say what ORA says about it, before she says it:
+  Plague Hulk  "Big one. Don't trade punches - shoot it while it's walking."
+  Eye Tyrant   "It only fires straight down a row or a column. Step off its line."
+  Gore Biter   "They come as a pack. Find a doorway and make them queue."
+  Mire Wraith  "The acid stacks. Kill it first, argue later."
+
+
+TECHNICAL NOTES
+---------------
+bestiary.py functions + ENEMIES rows; kit.py materials + helpers; EnemyConstants paths; four registry
+rows. No other Java. The old blight/infernal sheet quadrants for these types stay on disk until order 7.
+
+
+VISUAL DESIGN
+-------------
+DESIGN BRIEF - PLAGUE HULK (SOLDIER, 0.95 walls, melee, AREA_STRIKE, tank)
+  A mass of tissue that grew inside a containment tank until it burst it. It still wears the tank's
+  broken steel collar ring around its middle like a belt it outgrew; flesh bulges over and under it.
+  Wide, low centre of gravity, no neck; two enormous forearms knuckled on the floor (the AREA_STRIKE is
+  a two-fisted slam). A cluster of ichor blisters across one shoulder. Small head sunk in the mass.
+
+DESIGN BRIEF - EYE TYRANT (CHAFF, 0.55 walls, ranged straight-line sniper, DEBUFF_PLAYER, hovers)
+  One huge eye that was being studied: it hangs in a cradle of fleshy lids and petals, and a surgical
+  speculum (gunmetal) still holds the lids open. Nerve tendrils trail beneath it. The iris is ichor and
+  points straight at the player - the whole sprite is the "line" ORA warns about. Small: it is chaff.
+
+DESIGN BRIEF - GORE BITER (CHAFF, 0.85 walls, melee swarmer)
+  A lean runner that is mostly mouth: the head splits vertically into a jaw lined with teeth, in a low
+  forward crouch on long digitigrade legs, ribs showing through thin flesh. An ear-tag clip from the
+  breeding pens. Built to be seen five at a time: simple, readable, no fussy detail.
+
+DESIGN BRIEF - MIRE WRAITH (SOLDIER, 0.80 walls, ranged acid artillery, DEBUFF_PLAYER)
+  A drooping, half-liquid shape that lived in the facility sump: a translucent sagging belly of glowing
+  acid glands (the stacking acid - the brightest thing on the sprite), a hunched draped body, and a long
+  proboscis-like spout aimed forward. A length of drainage hose has fused into its back. It looks heavy
+  with what it is about to throw.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+EYE_TYRANT's renderer hover, beam cache and contact-shadow alpha scale apply as today. The aberration
+family ORA lines, sounds and matchup trait (FLESH) are unchanged.
+
+
+EDGE CASES
+----------
+Same as order 1. The Eye Tyrant's beam origin is computed by the renderer from the sprite's screen
+rect - confirm it still leaves from the eye.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  Owner approval of all four (contact sheet with the whole family side by side + in-engine shots)
+      recorded in DECISIONS; a sprite the owner rejects is redesigned and re-gated, never wired.
+  A2  Each spawns in-engine (`spawn:<TYPE>:2:0`) showing its approved sprite; a pack of three Gore Biters
+      reads as a pack, not a blur.
+  A3  The Eye Tyrant hovers and its beam leaves from the eye.
+  A4  No sprite uses a saturated red, green, blue, purple or yellow (G5): checked on the contact sheet.
+  A5  All earlier sprites regenerate byte-identical. Build green. No existing enemy PNG was opened (G1).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT              (main thread, enemy-art skill)  flesh materials, wet sheen, eyeball + teeth helpers
+  2. SPRITES          (main thread)                   four functions, contact sheet, in-engine preview
+  3. OWNER GATE       stop; send; record
+  4. WIRE             (libgdx-specialist)             constants + four registry rows
+  5. TESTS            None. Not balance-bearing; verified by build + run.
+  6. DOCS             art-direction section 16 roster; SKILL.md API rows
+
+RISKS AND UNKNOWNS
+  - Flesh near the "red damage" colour: keep the flesh ramps cool-violet and grey. Check the hit flash
+    still reads on them.
+  - Four new sprites in one approval round may need iteration; budget for a second round.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit additions exist; earlier sprites regenerate byte-identical
+  CP2  four sprites generated; contact sheet + in-engine preview saved and sent to the owner
+  CP3  owner approval recorded in DECISIONS (stop here until it is)
+  CP4  four registry rows wired; in-engine A2-A3 verified; build green
+  CP5  docs; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  Aberrations share the INSECT ichor ink (series ink table): both are harvested planet tissue.
+  AS2  The Organization detail on each is equipment that held or studied the creature.
+
+
+DECISIONS
+---------
+(none yet - the owner's approval is recorded here at CP3)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt, -order-1.txt, -order-2.txt
+  Docs:   docs/art-direction.txt section 16, docs/enemy-system.txt, story/00-premise.md

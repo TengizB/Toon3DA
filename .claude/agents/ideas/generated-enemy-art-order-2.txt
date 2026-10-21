@@ -1,0 +1,150 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Generated enemy art 2 - Iron Stalker (insect complete)
+CREATED: 2026-10-21
+IMPLEMENTED: -
+---
+
+Part of the generated-enemy-art series. Requires order 1 (the GeneratedEnemySprites registry and the
+run-game `spawn` step). Read generated-enemy-art.txt and .claude/skills/enemy-art/SKILL.md first.
+
+
+OVERVIEW
+--------
+Completes the INSECT family: the Iron Stalker, the insect MINI_ELITE, gets a generated sprite that
+sits beside the approved Harvest Tick (Shell Brute) as clearly the same family and clearly the bigger
+threat. It is also the first sprite designed from a brief rather than approved in a session, so this
+order proves the full G11 loop: brief -> generate -> owner approval -> wire.
+
+
+SCOPE
+-----
+IN
+  - A design brief (below) turned into iron_stalker() in bestiary.py and generated/iron_stalker.png.
+  - Kit growth it needs: a tapered SPIKE / blade primitive (a capsule whose end radius reaches 0 with a
+    sharpened tip normal) and a riveted armour-plate helper (a slab plus a row of rivet bumps).
+  - Owner approval gate (G11), then one GeneratedEnemySprites row: IRON_STALKER -> generated/iron_stalker.png.
+  - Regenerate warden.png and harvest_tick.png and confirm byte-identical (series AS6).
+  - docs/art-direction.txt section 16 roster line; enemy-art SKILL.md API table rows for the new primitives.
+
+OUT
+  - Any other enemy. Animation. Renaming. Changing BUFF_SELF / AREA_STRIKE visuals (EnemyAttackEffectSystem
+    already draws them).
+  - Reusing the Harvest Tick's body with new parts - the Stalker must have its own silhouette (G6).
+
+
+GAMEPLAY LOOP
+-------------
+Unchanged. The Iron Stalker spawns as a mid-floor spike, buffs itself and area-strikes as today.
+
+
+RULES
+-----
+  R1  Series rules G1-G12 apply. R1-R4 of order 1 apply to the new row.
+  R2  The Stalker reads as INSECT (chitin + ichor ink, many legs) and as MINI_ELITE (taller and more
+      armoured than every non-boss insect, spiked).
+
+
+PLAYER EXPERIENCE
+-----------------
+ORA says "That's a step up. Spend something on it or walk around it." The sprite must say the same
+before she does: armour, height, blades - a thing to respect, not chaff.
+
+
+TECHNICAL NOTES
+---------------
+  - bestiary.py: one function + one ENEMIES row. kit.py: the spike primitive and the plate helper; no
+    change to the light rig, ramps or outline (G3).
+  - EnemyConstants path constant + one registry row. No other Java.
+
+
+VISUAL DESIGN
+-------------
+DESIGN BRIEF - IRON STALKER (INSECT, MINI_ELITE, 1.10 walls, melee, BUFF_SELF + AREA_STRIKE)
+  What it is: a harvest-line insect the Organization tried to use as a guard animal - bred from the
+  planet's tissue, then FITTED with riveted iron plates to make it survive the pens. It outgrew the
+  plates; chitin has grown around and over their edges.
+  Silhouette: TALL and upright, unlike the low, wide tick - a reared-up stance on four rear legs, the
+  front pair raised as two long scythe blades (the AREA_STRIKE is a sweep of both). Narrow waist, a
+  plated thorax, a small armoured head with a cluster of ichor eyes low on it.
+  Materials: chitin / chitin_dk body, gunmetal + darkmetal riveted plates bolted across the thorax and
+  the blade bases, bone-pale blade edges, ichor eyes and a glowing ichor seam where chitin has split
+  around a plate (BUFF_SELF reads as that seam - nothing animates, it is a static promise).
+  Story detail: a stencilled pen number on the largest plate, and a snapped restraint collar on the
+  neck.
+  Must differ from the Harvest Tick at two tiles: vertical vs horizontal mass, blades vs mandibles,
+  plates vs blisters.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+EnemyRenderer overlays and grade (order 1 R4); AREA_STRIKE and BUFF_SELF effects drawn by
+EnemyAttackEffectSystem over the sprite; the insect ORA family line and sound voice are unchanged.
+
+
+EDGE CASES
+----------
+Same as order 1 (missing PNG -> fallback; pause; per-run world rebuild).
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  The owner has seen the contact sheet (Stalker beside the Harvest Tick) and in-engine screenshots,
+      and approved them; the approval is recorded in DECISIONS.
+  A2  `spawn:IRON_STALKER:2:0` shows the approved sprite; it is visibly taller than the Shell Brute
+      spawned beside it.
+  A3  Under cool_steel and amber_hot it reads; its BUFF_SELF and AREA_STRIKE effects are visible over it.
+  A4  bestiary.py regenerates all three sprites; warden.png and harvest_tick.png are byte-identical.
+  A5  The sprite was designed from the brief only (G1): no existing enemy PNG was opened.
+  A6  Build green.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT + SPRITE     (main thread, enemy-art skill)   primitives, iron_stalker(), contact sheet
+  2. PREVIEW          (main thread, run-game)          in-engine screenshots via the texture-swap preview
+  3. OWNER GATE       stop; send sheet + screenshots; record the answer
+  4. WIRE             (libgdx-specialist)              constant + registry row
+  5. TESTS            None. Not balance-bearing; verified by build + run.
+  6. DOCS             art-direction section 16 roster; SKILL.md API rows
+
+RISKS AND UNKNOWNS
+  - Scythe blades are thin; at 4+ tiles they may vanish. Keep their base thick and give them the cyan
+    rim light; check at three tiles.
+
+
+CHECKPOINTS
+-----------
+  CP0  checkpoint file committed and pushed
+  CP1  kit primitives + iron_stalker() exist; generated/iron_stalker.png written; the two earlier sprites
+       regenerate byte-identical; contact sheet + in-engine preview shots saved
+  CP2  owner approval recorded in DECISIONS (implementation stops at CP1 until it is)
+  CP3  IRON_STALKER draws the generated sprite in-engine; build green
+  CP4  docs updated; reviewer PASS; STATUS: IMPLEMENTED
+
+
+ASSUMPTIONS
+-----------
+  AS1  Four walking legs + two blades = six limbs, true to the insect family.
+  AS2  The pen-number stencil is a story detail only (L7), not something the player must read.
+
+
+DECISIONS
+---------
+(none yet - the owner's approval of the sprite is recorded here at CP2)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art.txt, generated-enemy-art-order-1.txt
+  Docs:   docs/art-direction.txt section 16
