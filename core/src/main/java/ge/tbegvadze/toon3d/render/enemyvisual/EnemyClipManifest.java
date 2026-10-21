@@ -159,7 +159,7 @@ public final class EnemyClipManifest {
         for (JsonValue clipJson = root.get("clips").child; clipJson != null; clipJson = clipJson.next) {
             EnemyClipId id = EnemyClipId.fromManifestName(clipJson.name);
             if (id == null) continue;
-            Mode mode = Mode.valueOf(clipJson.getString("mode").toUpperCase());
+            Mode mode = Mode.valueOf(clipJson.getString("mode").toUpperCase(java.util.Locale.ROOT));
             JsonValue framesJson = clipJson.get("frames");
             Frame[] frames = new Frame[framesJson.size];
             int frameIndex = 0;
@@ -179,7 +179,7 @@ public final class EnemyClipManifest {
         JsonValue rect   = frameJson.get("rect");
         JsonValue offset = frameJson.get("offset");
         String eventName = frameJson.getString("event", null);
-        FrameEvent event = eventName == null ? FrameEvent.NONE : FrameEvent.valueOf(eventName.toUpperCase());
+        FrameEvent event = eventName == null ? FrameEvent.NONE : FrameEvent.valueOf(eventName.toUpperCase(java.util.Locale.ROOT));
         float[] anchors = new float[Anchor.values().length * 2];
         java.util.Arrays.fill(anchors, Float.NaN);
         JsonValue anchorsJson = frameJson.get("anchors");

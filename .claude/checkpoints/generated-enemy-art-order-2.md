@@ -52,7 +52,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP3** — animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types.
 - [x] **CP4** — every core clip plays from its moment in-engine; glow pass; legacy types unchanged.
 - [x] **CP5** — capture tooling; burst GIFs sent; owner approval recorded (stop until it is).
-- [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -122,3 +122,8 @@ GC (`--gclog`, 30 s idle in that room): 2 startup pauses (0.4 s, 0.6 s) on both,
 render import (the one hit, render.EventTextSystem in EnemyManager, is pre-existing on master). Docs: guide 8 (8.1 seam,
 8.2 clip selection) + 10, art-direction 16, enemy-system "Visual Moments", CLAUDE.md (structure, package row, render
 order, docs line counts). Build: 480 tests, only StoryBarkTest red. Next: reviewer gate, then STATUS.
+
+**CP6 (gate):** reviewer PASS WITH FIXES, no blocking. Applied: IMPLEMENTATION NOTE (must-fix); Locale.ROOT in
+EnemyClipManifest (Turkish-locale valueOf failure); HUNTED hunter type preloaded from World (no mid-turn atlas load);
+helper block moved above layoutUiClusters' javadoc; ENEMY_VISUAL_IDLE_PHASE_SPREAD in EffectConstants; currentClipId
+marked tooling-only. STATUS: IMPLEMENTED.

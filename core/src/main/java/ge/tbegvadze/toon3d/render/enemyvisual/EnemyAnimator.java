@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.render.enemyvisual;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.util.Constants;
+import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
@@ -13,9 +14,6 @@ import ge.tbegvadze.toon3d.util.GameMath;
  * <p>Rule R2: it READS the enemy (state, tile) and RECEIVES moments; it never writes to the enemy.
  */
 public final class EnemyAnimator {
-
-    // The golden-ratio fraction spreads consecutive enemy ids evenly over the idle loop (rule R3).
-    private static final float IDLE_PHASE_SPREAD = 0.618034f;
 
     int   enemyId = -1;
     EnemyAtlasCache.CreatureVisual visual;
@@ -42,7 +40,7 @@ public final class EnemyAnimator {
         enemyId  = newEnemyId;
         visual   = newVisual;
         float idleDuration = newVisual.manifest.clip(EnemyClipId.IDLE).durationSeconds;
-        float phaseFraction = (newEnemyId * IDLE_PHASE_SPREAD) % 1f;
+        float phaseFraction = (newEnemyId * EffectConstants.ENEMY_VISUAL_IDLE_PHASE_SPREAD) % 1f;
         loopSeconds     = phaseFraction * idleDuration;
         oneShotClip     = null;
         oneShotPriority = EnemyAnimationRules.PRIORITY_IDLE;
@@ -148,7 +146,7 @@ public final class EnemyAnimator {
         return clip.frames[clip.frameIndexAt(bestSeconds)];
     }
 
-    /** The clip currently chosen, for the capture tooling and logs. */
+    /** The clip currently chosen. TOOLING ONLY (capture driver, logs): it allocates — never call it from render(). */
     public EnemyClipId currentClipId(Enemy enemy) {
         EnemyClipManifest.Frame frame = currentFrame(enemy);
         for (EnemyClipId id : EnemyClipId.values()) {

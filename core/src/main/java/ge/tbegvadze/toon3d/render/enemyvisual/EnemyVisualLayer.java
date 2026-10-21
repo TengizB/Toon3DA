@@ -5,6 +5,7 @@ import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.IntMap;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.enemy.EnemyVisualEvent;
 import ge.tbegvadze.toon3d.enemy.EnemyVisualListener;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -45,6 +46,14 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
             atlasCache.ensureLoaded(enemy.type);
             atlasCache.ensureLoaded(enemy.type.summonType());
         }
+    }
+
+    /**
+     * Loads the creature for a type the floor will add later that the constructor could not see (the HUNTED
+     * trail hunter), so its first arrival never loads an atlas mid-turn (R5). Render thread only.
+     */
+    public void preload(EnemyType type) {
+        atlasCache.ensureLoaded(type);
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -278,6 +278,8 @@ public final class EffectConstants {
     public static final float ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE     = 0.33f;
     public static final float ENEMY_VISUAL_SLIDE_MAX_SECONDS          = 0.50f;   // a long charge still lands fast
     public static final float ENEMY_VISUAL_KNOCKBACK_SECONDS          = 0.12f;
+    // R3: the golden-ratio fraction that spreads consecutive enemy ids evenly over the idle loop.
+    public static final float ENEMY_VISUAL_IDLE_PHASE_SPREAD          = 0.618034f;
     // R4: dying instances that keep playing DEATH after the simulation removed the enemy; the oldest is dropped.
     public static final int   ENEMY_VISUAL_DYING_POOL_CAPACITY        = 8;
     // How long DEATH's last (corpse) frame holds before the dying instance hands over to the corpse decal.

@@ -1,9 +1,31 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 2 - the animated enemy runtime
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
+
+IMPLEMENTATION NOTE (2026-10-21)
+  - GLOW is a NORMAL-blend overlay of the glow atlas on the graded body (opacity 1 to 10 tiles, 0.6 at 20+),
+    not additive with the muzzle-light pass: order 1's glow atlas is a copy of the body's emissive pixels, so
+    additive doubled them to flat white near the camera. The emissive keeps its baked colour under every mood
+    (V6) and costs no blend switch. Approved by the owner (D2).
+  - COSMETIC SLIDE: ordinary enemies never slid between tiles (only bosses, via Enemy.beginSlide). R2 forbids
+    the visual layer writing Enemy, so MOVE_STARTED / KNOCKED_BACK carry from/to tiles and EnemyAnimator owns
+    a slide of one MOVE cycle per tile (0.33 s, max 0.5 s; a new slide starts from the current position).
+    Approved by the owner (D2).
+  - NEW CLASS render/enemyvisual/EnemyVisualLayer (not in SCOPE's list): the per-floor owner of the atlas
+    cache, the animator pool and the dying pool, and the EnemyVisualListener World wires. Also EnemyClipId
+    (the clip enum). Dying instances are merged into EnemyRenderer pass 1 in depth order, so no other pass
+    changed.
+  - A7 (llvmpipe, same session, 6 enemies alerted in one room, interleaved with master a99b493 drawing the same
+    types on the legacy path): animated 10.62 / 11.00 ms, legacy 10.87 / 10.89 ms per frame. GC log over 30 s
+    idle in the room: no pause on either (2 startup pauses each).
+  - NOT EXERCISED IN-ENGINE: STAGGERED and KNOCKED_BACK (rows mapped; need a shotgun stagger / knockback) and a
+    natural DEFEND (the Warden never braces; the Tick only without a charge lane) — DEFEND was shown to the
+    owner as a FORCED pose (capture `defend:`). DoT ticks fire no DAMAGED moment yet (order 3, status visuals).
+  - Reviewer follow-ups applied: Locale.ROOT in the manifest parser, the HUNTED hunter's creature preloaded on
+    arrival (EnemyVisualLayer.preload), idle-phase constant moved to EffectConstants.
 
 Part of the generated-enemy-art series. Requires order 1 (atlases, glow atlases, clip manifests for the
 Warden and the Harvest Tick). Read generated-enemy-art.txt and docs/sprite-art-creation-guide.txt

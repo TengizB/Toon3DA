@@ -1554,23 +1554,6 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
     }
 
-    /**
-     * UI-cluster DECLUTTER. Enemies queued up in one lane project their floating clusters (health bar,
-     * name tag, intent icon + word label) onto the same screen spot, and the passes that draw them would
-     * paint one enemy's label over another's name. This lays the clusters out before anything is drawn:
-     * <ol>
-     *   <li>A cluster whose anchor column is behind a wall is dropped (the test the bar / intent passes
-     *       used to run themselves — done here, at the UNSHIFTED anchor, so a slide never changes it).</li>
-     *   <li>Clusters are placed nearest-enemy-first: the enemy that can hit you soonest keeps its
-     *       natural spot over its sprite.</li>
-     *   <li>A farther cluster that would overlap a placed one moves to the cheapest free spot — stacked
-     *       just above a placed box, or slid just left / right of one — that stays fully on screen and
-     *       overlaps nothing. A leader line then ties it back to its own sprite.</li>
-     *   <li>With no free spot it is hidden. The nearer threats already own the space.</li>
-     * </ol>
-     * Rewrites barLeftPositions / barBottomPositions / intentCenterXs / intentClusterTops in place.
-     * Allocation-free: every box lives in the pre-sized placedCluster* arrays.
-     */
     // =====================================================================
     // ANIMATED ENEMY LAYER helpers (generated-enemy-art order 2)
     // =====================================================================
@@ -1670,6 +1653,23 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
     }
 
+    /**
+     * UI-cluster DECLUTTER. Enemies queued up in one lane project their floating clusters (health bar,
+     * name tag, intent icon + word label) onto the same screen spot, and the passes that draw them would
+     * paint one enemy's label over another's name. This lays the clusters out before anything is drawn:
+     * <ol>
+     *   <li>A cluster whose anchor column is behind a wall is dropped (the test the bar / intent passes
+     *       used to run themselves — done here, at the UNSHIFTED anchor, so a slide never changes it).</li>
+     *   <li>Clusters are placed nearest-enemy-first: the enemy that can hit you soonest keeps its
+     *       natural spot over its sprite.</li>
+     *   <li>A farther cluster that would overlap a placed one moves to the cheapest free spot — stacked
+     *       just above a placed box, or slid just left / right of one — that stays fully on screen and
+     *       overlaps nothing. A leader line then ties it back to its own sprite.</li>
+     *   <li>With no free spot it is hidden. The nearer threats already own the space.</li>
+     * </ol>
+     * Rewrites barLeftPositions / barBottomPositions / intentCenterXs / intentClusterTops in place.
+     * Allocation-free: every box lives in the pre-sized placedCluster* arrays.
+     */
     private void layoutUiClusters(List<Enemy> enemies, int visibleCount) {
         int placedCount = 0;
         float screenTop = WALL_PROJECTION_SCREEN_HEIGHT - ENEMY_UI_SCREEN_EDGE_MARGIN;

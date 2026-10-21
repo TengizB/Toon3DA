@@ -444,7 +444,7 @@ in its own metal and a tick bleeds its own ichor:
     state tints - Auric exposed, Cinderforge crust, Rimeshell shell/frost - the shard ring, boss
     afterimages). Keep body colours mid-value so every tint and flash reads.
   - Memory: an atlas is a GPU texture. Budget per creature <= 2048x2048 RGBA, loaded per floor for the
-    types on that floor (and what they summon; an unforeseen arrival loads on first sight) and disposed on
+    types on that floor (what they summon, and a HUNTED floor's hunter; anything else unforeseen loads on first sight) and disposed on
     floor teardown - render/enemyvisual/EnemyAtlasCache, owned by the per-floor EnemyVisualLayer. A 160x240 frame is 150 KB
     in RGBA; trim frames to their bounds.
   - Critical rules from CLAUDE.md hold: no allocation in render(), every Texture disposed, all GL work

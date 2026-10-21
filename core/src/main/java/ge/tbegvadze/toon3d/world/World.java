@@ -1296,6 +1296,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (twist.hunterEnemyTypeName() != null) {
             try {
                 EnemyType hunterType = EnemyType.valueOf(twist.hunterEnemyTypeName());
+                // generated-enemy-art order 2 (R5): the hunter arrives mid-floor; load its creature now.
+                if (enemyVisualLayer != null) enemyVisualLayer.preload(hunterType);
                 enemyManager.beginHunt(hunterType,
                         MathUtils.floor(player.positionX / Constants.CELL_SIZE),
                         MathUtils.floor(player.positionY / Constants.CELL_SIZE),
