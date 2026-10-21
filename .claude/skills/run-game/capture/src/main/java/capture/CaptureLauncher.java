@@ -760,13 +760,20 @@ public class CaptureLauncher extends ApplicationAdapter {
             int before = enemies.size();
             // Spawning alerts by design (a summon arrives awake); a capture wants it asleep, so the listener is
             // detached for the call and the state put back to DORMANT before any frame sees it.
-            Field listenerField = findField(manager.getClass(), "enemyVisualListener");
-            listenerField.setAccessible(true);
-            Object listener = listenerField.get(manager);
-            listenerField.set(manager, null);
+            // (A tree older than the visual seam has no listener field: then there is nothing to detach.)
+            Field listenerField = null;
+            Object listener = null;
+            try {
+                listenerField = findField(manager.getClass(), "enemyVisualListener");
+                listenerField.setAccessible(true);
+                listener = listenerField.get(manager);
+                listenerField.set(manager, null);
+            } catch (NoSuchFieldException olderTree) {
+                listenerField = null;
+            }
             manager.getClass().getMethod("spawnEnemy", enemyType, int.class, int.class, int.class)
                    .invoke(manager, Enum.valueOf(enemyType, typeName), column, row, depth);
-            listenerField.set(manager, listener);
+            if (listenerField != null) listenerField.set(manager, listener);
             if (enemies.size() == before) {
                 System.out.println("[capture] spawn " + typeName + " refused at tile (" + column + "," + row + ")");
                 return;

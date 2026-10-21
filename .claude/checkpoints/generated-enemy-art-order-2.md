@@ -50,7 +50,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       moment of the idea's list at its commit site, nothing in `sim/` changed, mirror build compiles.
 - [x] **CP2** — registry + manifest parser + per-floor atlas cache load the two creatures; build green.
 - [x] **CP3** — animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types.
-- [ ] **CP4** — every core clip plays from its moment in-engine; glow pass; legacy types unchanged.
+- [x] **CP4** — every core clip plays from its moment in-engine; glow pass; legacy types unchanged.
 - [ ] **CP5** — capture tooling; burst GIFs sent; owner approval recorded (stop until it is).
 - [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -89,3 +89,15 @@ bracket; dying instances are merged into pass 1 farthest-first (`drawDyingFarthe
 `GameMath.distanceFadeAlpha` (glow fade). Capture steps spawn/alert/damage/kill/clip/burst are already in
 CaptureLauncher (committed here, documented in SKILL.md at CP5). Verified: 1 Warden + 2 Ticks spawned dormant draw
 their DORMANT loop, frames advance between shots, ticks out of phase. Build: 480 tests, only StoryBarkTest red.
+
+**CP4 (clips from moments, verified in-engine):** clip prints every 0.1 s (`clip:INDEX`; time-SORTED scripts — steps run
+in list order, so a helper sorts them) showed: DORMANT -> `alert` -> ALERT (0.42/0.5 s) -> IDLE; Warden ATTACK on each
+ranged turn then IDLE; Warden MOVE while closing (off-lane spawn); Tick WIND_UP from its commit (15.2 s) held for the
+whole player turn to the charge (16.7 s), then ATTACK with the rush slide (MOVE tail); `damage` 2/45 -> HURT_LIGHT,
+15/45 and 32/95 -> HURT_HEAVY (25% rule); `kill` -> DEATH from the dying pool, corpse frame held, then the sim's corpse
+decal. A5: glow pixels identical colour under cool_steel vs corrupted_violet at 6-7 tiles. A6: GHOUL / CRAWLER /
+PLAGUE_HULK / IRON_STALKER spawned identically on master a99b493 (worktree + its own runtime dir) and here: bodies
+match; residual diffs <= 20 levels everywhere incl. the bare far wall (random floor weapons' light spill), so not
+attributable to the renderer; every changed line in EnemyRenderer's live loop is gated on `animator != null`.
+NOT exercised in-engine: STAGGERED / KNOCKED_BACK / DEFEND (rows exist; neither creature defends, stagger needs the
+shotgun). Capture `spawn` now tolerates a tree without the listener field (baseline runs).
