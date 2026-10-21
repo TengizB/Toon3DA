@@ -130,7 +130,14 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  OWNER GATE (CP2/CP3, 2026-10-21): the stills sheet (beside the Warden and the Harvest Tick), the 13 clip GIFs +
+      strip, the insect effect sheet and in-engine burst GIFs in cool_steel (default) + amber_hot - every standard clip,
+      BUFF_SELF and AREA_STRIKE triggered by the real sim, hurt light / heavy, resisted (plate spark), blocked, wounded,
+      stunned, kill -> death -> remains, DEFEND (forced) and the Stalker beside a Shell Brute (A3) - were sent; the owner
+      answered "Approved". The approval covers the STAND stretch (the figure stood up x1.065 on its canvas for A3) and the
+      runtime changes named in the IMPLEMENTATION NOTE.
+  D2  insect.fx.* may change (owner: "insect.fx change is fine"): it gains PLATE_SPARK / PLATE_STREAK / PLATE_FLECK, the
+      RESIST_PLATE burst and the iron_stalker creatures row; every earlier insect frame stays pixel-identical (repacked).
 
 
 OPEN QUESTIONS

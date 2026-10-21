@@ -53,7 +53,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP2** — full clip set + BUFF_SELF + AREA_STRIKE baked within 2048x2048; effects.py insect plate spark +
       iron_stalker row; *.fx.* byte-identical except insect (owner-visible change named); runtime ability-clip rows;
       clip GIFs + in-engine burst GIFs (default + one mood) sent. DONE WHEN: the GIFs are sent and the build is green.
-- [ ] **CP3** — owner approval recorded in the idea's DECISIONS (stop until it is).
+- [x] **CP3** — owner approval recorded in the idea's DECISIONS (stop until it is).
 - [ ] **CP4** — registry row wired; A2-A3 verified in-engine; build green.
 - [ ] **CP5** — docs (guide, art-direction 16, SKILL.md); reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -88,3 +88,5 @@ working tree only (needed for the captures) - CP4 commits it after approval; if 
 Captures: scratchpad a.txt / r.txt / h.txt via cap.sh; GIFs sent (clips_all + strip + insect fx sheet; in-engine
 default + amber_hot). Sim ability order is randomised: label segments from `logmoments`. Build: only StoryBarkTest red.
 WAITING for owner approval (CP3).
+
+**CP3 (gate):** owner approved 2026-10-21 ("Approved, insect.fx change is fine — wire it") -> idea DECISIONS D1, D2.
