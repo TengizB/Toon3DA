@@ -61,7 +61,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A6 holds on run; build green.
 - [x] **CP7** — Android XML (R10, A8), A9/A10 sweep, A11 series check, docs.
       DONE WHEN: build + test at baseline; handover lists A11 follow-ups; ready for reviewer.
-- [ ] **CP8** — reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP8** — reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -196,3 +196,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   (FACILITY INK, STORY PANELS, FRAMING SCREENS, FIRST IMPRESSION, THE INK TABLE) + HEAVY usage list; story-ui-system
   ACCENT SOURCES + STORY PAINT; route-map-system CHROME PAINT + the ENGAGE line; CLAUDE.md docs rows; SKILL.md capture
   steps + coordinates. Build + test: 480, the 1 known failure. Ready for reviewer.
+- **CP8:** reviewer r1 = PASS WITH FIXES, no blocking finding. Fixed: the owed IMPLEMENTATION NOTE (idea file); non-blocking 1
+  (DISABLED shop cards get an opaque UI_PANEL underlay); non-blocking 3 (SHOP_CONFIRM_PROMPT_SCALE TYPE_CAPTION).
+  Non-blocking 2 (event console title over the mini-map) and 4 (title touching the status lines) and the two nits are
+  logged as follow-ups in the note. STATUS: IMPLEMENTED 2026-10-21.

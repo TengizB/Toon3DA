@@ -261,7 +261,7 @@ public final class HudConstants {
     public static final float SHOP_CARD_PRICE_Y_ABOVE_BOTTOM = 20f;    // price baseline above card bottom
 
     // On-card CONFIRM step (bottom of the tapped card): "BUY N cr?" + CONFIRM / CANCEL.
-    public static final float SHOP_CONFIRM_PROMPT_SCALE      = ArtDirection.TYPE_BODY;
+    public static final float SHOP_CONFIRM_PROMPT_SCALE      = ArtDirection.TYPE_CAPTION;   // its anchor sits one line under the name
     public static final float SHOP_CONFIRM_LABEL_SCALE       = ArtDirection.TYPE_BODY;
     public static final float SHOP_CONFIRM_BUTTON_HEIGHT     = 52f;
     public static final float SHOP_CONFIRM_BUTTON_GAP        = 12f;

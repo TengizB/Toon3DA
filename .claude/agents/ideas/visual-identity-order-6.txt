@@ -1,9 +1,40 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: UI
 TITLE: Visual Identity 6 — Facility, story and first impression
 CREATED: 2026-10-19
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
+
+IMPLEMENTATION NOTE (2026-10-21) — where the build diverged from the plan, and why
+  1. World.java is touched (TECHNICAL NOTES did not list it), paint only, 3 call sites: the death beat and the MERGE
+     hold call FadeOverlayRenderer.render(..., showDepthReadout=false) - the old "SUBLEVEL N" banner sat on top of
+     THIS BODY DIED in every death (A4: alone on the black); the settings screen opened from the title passes
+     overLaunchScreen=true and draws the launch blackout, or the title showed through the 0.75 scrim.
+  2. UiKit gained one overload, screenHeaderRule(shapes, x, y, width, ink..., alpha) (the R1 rule with a FACILITY_CYAN
+     tick). TECHNICAL NOTES expected no new method.
+  3. A "FACILITY plate" is UiKit.card inked FACILITY_CYAN_DIM (lit FACILITY_CYAN when SELECTED / PRESSED), not plate()
+     with a cyan ink: an IDLE plate has a UI_LINE border and no ink, so it could not read as the machine's.
+  4. CONTINUE is a SELECTED SUIT plate (the card's one way onward; an IDLE plate carries no amber). REPORT / BACK /
+     RETURN have no PRESSED state: taps commit on touch, as at base.
+  5. Pause / settings brackets are SUIT_AMBER_DIM (the order-5 outer-frame rule for suit screens; no outer panel, so
+     they frame header + rows). Facility screens' outer brackets are full FACILITY_CYAN (R5 / R8 named it).
+  6. Shop: offer frames are FACILITY_CYAN_DIM per R9, so the offer's rarity colour stays on its ICON only (R9 wins
+     over the ink table's generic "rarity frames" SEMANTIC row). The offer name stays TYPE_CAPTION and the confirm
+     prompt TYPE_CAPTION: their fixed bands collide at TYPE_BODY. A DISABLED (unaffordable / sold) card gets an opaque
+     UI_PANEL underlay - most offers are unaffordable, and the half-alpha DISABLED fill let the HUD show through
+     (reviewer non-blocking 1).
+  7. EventChoiceOverlayRenderer TAP_Y bug fix: it was CARD_HEIGHT - 30 measured from the bottom, which drew "TAP TO
+     CHOOSE" over the choice label; it is 30 from the bottom, as its comment says. Text position only, no touch rect.
+  8. Android colours are written six-digit #RRGGBB (opaque): the old "#F5A623FF" was eight digits, which Android reads
+     as #AARRGGBB. A8 was verified by reading the XML only - this container cannot build the android module, and no
+     cold launch was seen.
+  9. The death stroke, title and every framing text are unshadowed (they sit on black or a scrim); story panels over
+     the 3D view use UiKit.text's shadow.
+ 10. Follow-ups (pre-existing, seen in the base build, not fixed here): the floor's event text is drawn over the shop,
+     the event console and the exchange prompt; at LARGEST a bark wraps to 3 lines but holds 2; MAP framing truncates
+     long node labels; the title's status block touches EREBUS at TYPE_DISPLAY and the settings header sits in the
+     status lines' rows; the event console's left-aligned title starts over the mini-map (reviewer non-blocking 2);
+     the HEAVY "#" reads as a blob; the A11 corridors are floor-1 geometry under forced moods with no close enemy.
 
 OVERVIEW
 --------

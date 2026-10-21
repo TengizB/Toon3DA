@@ -446,6 +446,13 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
      * multiplies it.
      */
     private void drawFacilityCard(float cardLeft, float cardBottom, float width, float height, PlateState state) {
+        if (state == PlateState.DISABLED) {
+            // A DISABLED card halves its fill alpha; on the fabricator most offers are unaffordable, so lay an
+            // opaque panel under it first, or the 3D view and the HUD show through the shelf.
+            shapes.setColor(ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                            ArtDirection.UI_PANEL_ALPHA_SCREEN * fade);
+            UiKit.fillOctagon(shapes, cardLeft, cardBottom, width, height, ArtDirection.UI_PLATE_CHAMFER);
+        }
         boolean lit = state == PlateState.SELECTED || state == PlateState.PRESSED;
         UiKit.card(shapes, cardLeft, cardBottom, width, height, ArtDirection.UI_PLATE_CHAMFER,
                    lit ? ArtDirection.FACILITY_CYAN_RED : ArtDirection.FACILITY_CYAN_DIM_RED,
