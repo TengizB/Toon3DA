@@ -570,11 +570,12 @@ class Clip:
         self.duration = float(duration if duration is not None else self.keys[-1][0])
         self.overrides = dict(overrides or {})
 
-    def variant(self, name, speed=1.0, keys=(), **overrides):
-        """A variant of this clip: time stretched by 1/speed, extra keys merged in, parameters pinned."""
+    def variant(self, name, speed=1.0, keys=(), fps=None, **overrides):
+        """A variant of this clip: time stretched by 1/speed, extra keys merged in, parameters pinned.
+        A slowed variant usually lowers fps too, so it costs no extra atlas frames."""
         scaled_keys = [(t / speed, v, e) for t, v, e in self.keys]
         merged = dict(self.overrides); merged.update(overrides)
-        return Clip(name, scaled_keys + list(keys), self.duration / speed, self.fps, self.mode,
+        return Clip(name, scaled_keys + list(keys), self.duration / speed, fps or self.fps, self.mode,
                     self.variant_of or self.name, merged)
 
     def value(self, param, t, default):
@@ -662,8 +663,10 @@ def bake(rig, clips, halo=False, log=print):
 
 def _check_edges(rig, clip, img, log):
     a = np.asarray(img.getchannel("A"))
-    if a[0].any() or a[-1].any() or a[:, 0].any() or a[:, -1].any():
-        log(f"  WARNING {rig.name}.{clip.name}: a part touches the canvas edge -- clamp the pose, never grow the canvas")
+    edges = [n for n, e in (("top", a[0]), ("bottom", a[-1]), ("left", a[:, 0]), ("right", a[:, -1])) if e.any()]
+    if edges:
+        log(f"  WARNING {rig.name}.{clip.name}: a part touches the canvas edge ({', '.join(edges)})"
+            f" -- clamp the pose, never grow the canvas")
 
 
 def pack(sizes):

@@ -46,7 +46,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: `kit.py` has Rig/Clip/easing + per-shape grain + anchors, and a test clip renders frames.
 - [x] **CP2** — packer + manifest + glow atlas + GIF preview work on a test clip.
       DONE WHEN: a test creature writes `<name>.atlas.png`, `.glow.png`, `.clips.json`, per-clip GIFs and a strip.
-- [ ] **CP3** — warden rig + full clip set (standard 9 + DORMANT + WOUNDED) generated; GIFs saved (scratch, not shipped).
+- [x] **CP3** — warden rig + full clip set (standard 9 + DORMANT + WOUNDED) generated; GIFs saved (scratch, not shipped).
 - [ ] **CP4** — harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner.
 - [ ] **CP5** — owner approval recorded in DECISIONS (stop here until it is).
 - [ ] **CP6** — outputs committed (old stills removed); guide section 7 + SKILL.md updated; reviewer PASS;
@@ -69,3 +69,11 @@ Packer/manifest/previews were written in the same pass; CP2 verifies them.
 atlases, byte-identical on re-run. Consecutive identical frames merge (durations sum); identical frames
 across clips share one atlas rect. One-shot tracks whose first key is late ease in from the rig default.
 Manifest coords: image space, top-left origin, y DOWN (order 2 must flip for LibGDX world space).
+
+**CP3 (warden):** `.claude/skills/enemy-art/warden_rig.py` — `WARDEN` rig (pose params in `WARDEN_POSE`) and
+`WARDEN_CLIPS` (IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK @20 fps = 0.30 s, HURT_LIGHT, HURT_HEAVY, DEFEND,
+WOUNDED, DEATH). 81 unique frames, atlas 1024x2048, no canvas-edge warnings. Anchors: ground, hit_centre, eye,
+muzzle (prod tip). Lessons: the 60 px prod must swing INWARD across the belly (a swing outward crosses the
+right canvas edge); the wreck needs zs<1 + crumpled cables (`slack`) to fit above row 239. Previews are in the
+session scratchpad only (not committed). `bestiary.py` still holds the old static functions — CP4 rewires it.
+Kit additions this step: edge warning names the edge; `Clip.variant(fps=)`.
