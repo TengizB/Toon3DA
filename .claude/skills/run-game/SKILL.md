@@ -75,6 +75,12 @@ count events with `grep -c Pause FILE`.
 | `damage:INDEX:AMOUNT` | `EnemyManager.applyDamageTo` — the REAL player-hit path (multipliers, Block, shards, death); prints HP before/after |
 | `kill:INDEX` | the same path with an overwhelming amount (DEATH, corpse decal, XP) |
 | `defend:INDEX` | a **FORCED** brace pose for a capture (state DEFENDING + the DEFEND_STARTED moment; no Block, no turn) — say "forced" when you show it |
+| `status:INDEX:STATUS_TYPE:TURNS` | (4 args = an ENEMY; 3 args = the player, above) the REAL status path on enemy INDEX: `BURNING` through `EnemyManager.applyBurningStatus` (also reports STATUS_APPLIED, as a fire weapon does), anything else through World's `StatusEffectController.apply` |
+| `block:INDEX:AMOUNT` | a **FORCED** Block buffer on the enemy (no brace, no turn) — the next hit is real and Block eats it (BLOCKED read). `block:INDEX:0` clears what is left |
+| `hit:INDEX:AMOUNT:DAMAGE_CLASS` | the real hit path with that `DamageClass` armed exactly as `Weapon.fire()` arms it, so the matchup classifies it (`BALLISTIC` on the Warden or the Harvest Tick = RESISTED) |
+| `equipmelee:ITEM_TYPE` | builds the melee weapon as a pickup does (`World.createMeleeWeaponForType`) and selects it, so FIRE swings it for real (`WEAPON_HAMMER`: 50% knockback roll per swing) |
+| `logmoments` | wraps the floor's `EnemyVisualListener` so every visual moment prints (`moment STAGGERED …`): proof a reaction came from a real weapon. Issue it once per floor |
+| `fx` | prints how many generated effect particles are alive (order-3 pool) |
 | `clip:INDEX` | prints `state=… clip=…` — which animated clip (`render/enemyvisual`) the enemy shows, or `LEGACY` |
 | `burst:NAME:COUNT:INTERVAL` | COUNT shots `NAME_00…` every INTERVAL s from now (one per frame at most; 0.05 at 30 fps ≈ every other frame) — turn them into a GIF with `burst2gif.sh` |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
@@ -134,7 +140,16 @@ helper that sorts the steps by time. The pattern that shows every core clip of a
 (SKIP_TURN advances the world: the Tick commits WIND_UP on the first skip and charges on the second; the Warden shoots on
 the second.) A creature spawned off-lane (`spawn:TYPE:4:2`) walks, which is how MOVE is seen. Then
 `burst2gif.sh DIR NAME --crop 800x500+239+70 --scale 60 --delay 5 --label "..."` per burst, and
-`convert a.gif b.gif … all.gif` for one labelled sequence. ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
+`convert a.gif b.gif … all.gif` for one labelled sequence.
+
+**Reactions and effects (generated-enemy-art order 3).** Same pattern, one segment per outcome:
+`damage:0:3` (HURT_LIGHT) · `damage:0:13` on 45 HP (HURT_HEAVY, ≥25%) · `hit:0:4:BALLISTIC` (RESISTED) ·
+`block:0:30;…damage:0:5` (BLOCKED) · `block:0:0;damage:0:N` to below 50% HP then a 2.5 s burst (WOUNDED + leak) ·
+two SKIP_TURNs with an aligned Warden (ATTACK: glob from the prod emitter, burst at 0.05) · `status:0:STUNNED:2` /
+`status:0:BURNING:6` · `kill:0` then a slow burst (REMAINS). Real STAGGER: `equip:0` (shotgun) + FIRE at a Harvest Tick
+two tiles ahead (the shotgun one-shots a Warden). Real KNOCKBACK: `equipmelee:WEAPON_HAMMER` + FIRE at a Tick one
+tile ahead, several swings, `logmoments` says which swing pushed. Traps: after a kill the indices shift (use `-1`);
+forced Block persists until spent or cleared; never pipe `run.sh` into `head` (SIGPIPE ends the game early). ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
 
 ### Muzzle light / anything needing game state
 `pulse:WEAPON_SHOTGUN` (or `WEAPON_PLASMA`, `WEAPON_INCINERATOR`, …) then `shot:` in the SAME second captures the

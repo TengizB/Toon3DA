@@ -119,3 +119,9 @@ the hull, Tick along the back), STUNNED stars orbiting the Tick's head; POISONED
 row exists). Telegraph: Tick WIND_UP throws grit + dust at its feet (recipe brightened: bone grit + DUST — chitin_dk
 grit was invisible on the floor); BURNING flame count 2-3. The Warden never winds up in the sim (no heavy), so its
 prod crackle is data-ready but not seen. Build: only StoryBarkTest red.
+
+**CP5a (gate prepared):** owner GIFs in the scratchpad `gifs/`: warden_default / warden_amber_hot (hurt light, hurt
+heavy, resisted, blocked, wounded + leak, attack projectile, stunned, kill, remains, burning) and harvest_tick_default /
+_amber_hot (the same outcomes + real shotgun STAGGER, real hammer KNOCKBACK, burning). Scripts: scratchpad
+warden.txt / tickA.txt / tickB.txt run through cap.sh (time-sorted). SKILL.md documents the new capture steps.
+WAITING for owner approval; CP5 is ticked only when the answer is in the idea's DECISIONS.
