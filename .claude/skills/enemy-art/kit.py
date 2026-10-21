@@ -211,14 +211,19 @@ def eyeball(cx, cy, r, look=(0.0, 0.0), iris=0.55, pupil=0.42, slit=1.0, lid_top
     if glint:
         shapes.append(blob(cx - r * 0.34, cy - r * 0.40, max(0.8, r * 0.09), max(0.8, r * 0.08), "flare",
                            op="add", depth=0.6, glow=1.2))
+    # A lid is a CAP of flesh: its outer edge sits a thin fold beyond the eye's rim, its inner edge at the lid line,
+    # so at 0 it is the crease of a lid drawn back and at 1 it covers the eye (two lids meeting at 0.5 each).
+    fold = r * 0.30
     if lids or lid_top > 0.01:
-        edge = cy - r + 2 * r * min(lid_top, 1.0)            # the upper lid's lower edge
-        ry = r * 1.05
-        shapes.append(blob(cx, edge - ry, r * 1.18, ry, lid_mat, depth=depth * 1.12, prio=prio + 40, k=k))
+        outer, inner = cy - r - fold, cy - r + 2 * r * min(lid_top, 1.0)
+        ry = max(1.0, (inner - outer) / 2)
+        shapes.append(blob(cx, (outer + inner) / 2, r * 1.10, ry, lid_mat, depth=depth * 1.1 + fold * 0.3,
+                           prio=prio + 40, k=k))
     if lids or lid_bottom > 0.01:
-        edge = cy + r - 2 * r * min(lid_bottom, 1.0)
-        ry = r * 0.95
-        shapes.append(blob(cx, edge + ry, r * 1.14, ry, lid_mat, depth=depth * 1.05, prio=prio + 40, k=k))
+        outer, inner = cy + r + fold * 0.8, cy + r - 2 * r * min(lid_bottom, 1.0)
+        ry = max(1.0, (outer - inner) / 2)
+        shapes.append(blob(cx, (outer + inner) / 2, r * 1.06, ry, lid_mat, depth=depth * 1.05 + fold * 0.3,
+                           prio=prio + 40, k=k))
     return shapes
 
 
