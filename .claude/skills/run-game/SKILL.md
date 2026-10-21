@@ -77,7 +77,7 @@ count events with `grep -c Pause FILE`.
 | `defend:INDEX` | a **FORCED** brace pose for a capture (state DEFENDING + the DEFEND_STARTED moment; no Block, no turn) — say "forced" when you show it |
 | `status:INDEX:STATUS_TYPE:TURNS` | (4 args = an ENEMY; 3 args = the player, above) the REAL status path on enemy INDEX: `BURNING` through `EnemyManager.applyBurningStatus` (also reports STATUS_APPLIED, as a fire weapon does), anything else through World's `StatusEffectController.apply` |
 | `block:INDEX:AMOUNT` | a **FORCED** Block buffer on the enemy (no brace, no turn) — the next hit is real and Block eats it (BLOCKED read). `block:INDEX:0` clears what is left |
-| `hit:INDEX:AMOUNT:DAMAGE_CLASS` | the real hit path with that `DamageClass` armed exactly as `Weapon.fire()` arms it, so the matchup classifies it (`BALLISTIC` on the Warden or the Harvest Tick = RESISTED) |
+| `hit:INDEX:AMOUNT:DAMAGE_CLASS` | the real hit path with that `DamageClass` armed exactly as `Weapon.fire()` arms it, so the matchup classifies it (`BALLISTIC` on the Warden, the Harvest Tick or the Iron Stalker = RESISTED) |
 | `equipmelee:ITEM_TYPE` | builds the melee weapon as a pickup does (`World.createMeleeWeaponForType`) and selects it, so FIRE swings it for real (`WEAPON_HAMMER`: 50% knockback roll per swing) |
 | `logmoments` | wraps the floor's `EnemyVisualListener` so every visual moment prints (`moment STAGGERED …`): proof a reaction came from a real weapon. Issue it once per floor |
 | `fx` | prints how many generated effect particles are alive (order-3 pool) |
@@ -149,7 +149,9 @@ two SKIP_TURNs with an aligned Warden (ATTACK: glob from the prod emitter, burst
 `status:0:BURNING:6` · `kill:0` then a slow burst (REMAINS). Real STAGGER: `equip:0` (shotgun) + FIRE at a Harvest Tick
 two tiles ahead (the shotgun one-shots a Warden). Real KNOCKBACK: `equipmelee:WEAPON_HAMMER` + FIRE at a Tick one
 tile ahead, several swings, `logmoments` says which swing pushed. Traps: after a kill the indices shift (use `-1`);
-forced Block persists until spent or cleared; never pipe `run.sh` into `head` (SIGPIPE ends the game early). ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
+forced Block persists until spent or cleared; abilities (BUFF_SELF, AREA_STRIKE: `spawn:IRON_STALKER:3:1`, alert, then
+SKIP_TURN every 2 s with a burst per turn) fire in a sim-randomised order - label each burst from `logmoments` / `clip:`;
+give the player HP first (`call:player:adjustMaxHealth:3000;call:player:applyHealing:3000`); never pipe `run.sh` into `head` (SIGPIPE ends the game early). ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
 
 ### Muzzle light / anything needing game state
 `pulse:WEAPON_SHOTGUN` (or `WEAPON_PLASMA`, `WEAPON_INCINERATOR`, …) then `shot:` in the SAME second captures the
@@ -187,6 +189,7 @@ splash ~1 frame after it fires. For other state, add a step to `capture/CaptureL
 | xdotool / java.awt.Robot clicks ignored | Same root cause; also GLFW under bare Xvfb never repaints without a window manager. Use the capture driver, not X input. |
 | Proxy installed but input still ignored | `Lwjgl3Application` re-assigns `Gdx.input` every frame — the driver re-installs its proxy before each `main.render()`. Keep that line. |
 | Screenshots of the X root show a frozen frame | Read the GL back buffer (`ScreenUtils.getFrameBufferPixels`) after `main.render()` — that is what `shot:` does. |
+| `Unable to initialize GLFW` on a resumed session | Xvfb from the earlier session is gone. Re-run `setup.sh`. |
 | Window is 1278x695, not 1280x720 | openbox decorations. The driver maps world → window through the FitViewport letterbox; always pass world coordinates. |
 | `assets/game-audio/`, `assets/story-audio/` appear in `git status` | The desktop game caches synthesised WAVs in `assets/`. `run.sh` deletes them; if you run the game another way, delete them yourself. Never commit them. |
 | Title says BEGIN vs CONTINUE, intro beats differ | The save lives in `/root/.prefs/toon3d_records` (LibGDX Preferences). Delete that file for a fresh-save run; add `<entry key="story.setting.render.resolution">0</entry>`-style keys to force a setting. |

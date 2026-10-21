@@ -96,3 +96,8 @@ mood) on the committed state: MOVE, BUFF_SELF x2, held WIND_UP x2 (CHASING and A
 RESISTED, WOUNDED, DIED -> remains; A3 frame: the Stalker clearly taller than the Shell Brute at 3 tiles. Regression:
 SHELL_BRUTE still holds WIND_UP (state WINDING_UP) with 19 grit particles alive, then charges (ATTACK). TRAP: Xvfb dies
 between sessions -> "Unable to initialize GLFW"; re-run setup.sh. Build: only StoryBarkTest red.
+
+**CP5a (docs):** guide (2, 3.1 spike + riveted_plate, 7.3 ability clips, 7.6 API, 7.7, 7.9, 8.2 ability rows +
+committed-heavy hold, 9.1 plate spark, 9.2 per-creature overrides, lessons 12.14-12.16, recipe), art-direction 16
+roster, enemy-system visual moments, enemy-art + run-game SKILL.md, CLAUDE.md enemyvisual row; idea IMPLEMENTATION
+NOTE, STATUS IN PROGRESS. Next: reviewer, then STATUS IMPLEMENTED.
