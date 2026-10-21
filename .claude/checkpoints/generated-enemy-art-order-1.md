@@ -44,7 +44,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — kit renders a rig at a pose; shape-local grain; anchors reported; a single test clip renders.
       DONE WHEN: `kit.py` has Rig/Clip/easing + per-shape grain + anchors, and a test clip renders frames.
-- [ ] **CP2** — packer + manifest + glow atlas + GIF preview work on a test clip.
+- [x] **CP2** — packer + manifest + glow atlas + GIF preview work on a test clip.
       DONE WHEN: a test creature writes `<name>.atlas.png`, `.glow.png`, `.clips.json`, per-clip GIFs and a strip.
 - [ ] **CP3** — warden rig + full clip set (standard 9 + DORMANT + WOUNDED) generated; GIFs saved (scratch, not shipped).
 - [ ] **CP4** — harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner.
@@ -63,3 +63,9 @@ integer lattice hash `value_noise_at`, seeded per material via crc32 — never P
 easings linear/in/out/inout/hold, modes loop/once/hold, `variant()`), and `render(..., return_glow=True)`.
 Rest-pose re-render of both stills: identical alpha, mean RGB diff 0.4 (warden) / 2.2 (tick) — expected (A2 re-approval).
 Packer/manifest/previews were written in the same pass; CP2 verifies them.
+
+**CP2 (bake):** `kit.write_creature(rig, clips, out_dir, preview_dir)` -> `<name>.atlas.png`, `.glow.png`,
+`.clips.json` (+ `<name>_<clip>.gif`, `<name>_strip.png`). Verified on a scratch test rig: binary alpha in both
+atlases, byte-identical on re-run. Consecutive identical frames merge (durations sum); identical frames
+across clips share one atlas rect. One-shot tracks whose first key is late ease in from the rig default.
+Manifest coords: image space, top-left origin, y DOWN (order 2 must flip for LibGDX world space).
