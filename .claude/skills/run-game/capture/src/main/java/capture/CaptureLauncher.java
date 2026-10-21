@@ -33,6 +33,14 @@ import java.util.List;
  *   hold:X:Y:SECONDS   press and hold
  *   shot:NAME          write {cap.out}/NAME.png after this frame renders
  *   pulse:ITEM_TYPE    reflection: World.atmosphereGrade.pulseMuzzleLight(ItemType.ITEM_TYPE)
+ *   spawn:TYPE:FORWARD:RIGHT   reflection: a DORMANT enemy of EnemyType TYPE, FORWARD tiles ahead and RIGHT tiles
+ *                      to the player's right (negative = behind / left), through EnemyManager.spawnEnemy
+ *   alert:INDEX        wakes enemy INDEX (list order; negative counts from the end, -1 = last spawned) and
+ *                      reports the ALERTED visual moment, as perception would
+ *   damage:INDEX:AMOUNT   EnemyManager.applyDamageTo(enemy, AMOUNT) — the real player-hit path
+ *   kill:INDEX         the real hit path with an overwhelming amount
+ *   clip:INDEX         prints the animated clip enemy INDEX is showing (render/enemyvisual)
+ *   burst:NAME:COUNT:INTERVAL   COUNT shots NAME_00.. every INTERVAL seconds from now (one per frame at most)
  *   timestart / timestop   average frame time (render + glFinish) between the two, printed to stdout
  *   exit               quit
  * </pre>
@@ -59,6 +67,11 @@ public class CaptureLauncher extends ApplicationAdapter {
     private boolean timing;
     private long frameNanosTotal;
     private int frameCount;
+    private String burstName;
+    private int burstTaken;
+    private int burstCount;
+    private float burstInterval;
+    private float burstNextAt;
 
     public static void main(String[] arguments) {
         Lwjgl3ApplicationConfiguration configuration = new Lwjgl3ApplicationConfiguration();
@@ -180,6 +193,28 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "barkspeaker":
                     reassignBarkSpeaker(step[2]);
                     break;
+                case "spawn":
+                    spawnDormantEnemy(step[2], Integer.parseInt(step[3]), Integer.parseInt(step[4]));
+                    break;
+                case "alert":
+                    alertEnemy(Integer.parseInt(step[2]));
+                    break;
+                case "damage":
+                    damageEnemy(Integer.parseInt(step[2]), Integer.parseInt(step[3]));
+                    break;
+                case "kill":
+                    damageEnemy(Integer.parseInt(step[2]), 1_000_000);
+                    break;
+                case "clip":
+                    printEnemyClip(Integer.parseInt(step[2]));
+                    break;
+                case "burst":
+                    burstName = step[2];
+                    burstCount = Integer.parseInt(step[3]);
+                    burstInterval = Float.parseFloat(step[4]);
+                    burstTaken = 0;
+                    burstNextAt = clockSeconds;
+                    break;
                 case "timestart":
                     timing = true;
                     frameNanosTotal = 0;
@@ -196,6 +231,11 @@ public class CaptureLauncher extends ApplicationAdapter {
                 default:
                     System.out.println("[capture] unknown step " + String.join(":", step));
             }
+        }
+        if (shotName == null && burstName != null && clockSeconds >= burstNextAt) {
+            shotName = String.format("%s_%02d", burstName, burstTaken++);
+            burstNextAt += burstInterval;
+            if (burstTaken >= burstCount) burstName = null;
         }
         // Lwjgl3Application re-points Gdx.input at the window's own input every frame: re-install the proxy.
         Gdx.input = scriptedInput;
@@ -693,6 +733,111 @@ public class CaptureLauncher extends ApplicationAdapter {
             phaseField.setAccessible(true);
             phaseField.set(world, Enum.valueOf((Class) phaseField.getType(), "SHOP_OPEN"));
             System.out.println("[capture] shop opened with " + credits + " credits");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    // ---- generated-enemy-art order 2: the animated enemy runtime -------------------------------------------
+
+    /** {@code spawn:TYPE:FORWARD:RIGHT} — a DORMANT enemy relative to the player, with no visual moment fired. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void spawnDormantEnemy(String typeName, int forward, int right) {
+        try {
+            Object world = worldObject();
+            Object player = fieldValue(world, "player");
+            Object manager = fieldValue(world, "enemyManager");
+            float cellSize = Class.forName("ge.tbegvadze.toon3d.util.Constants").getField("CELL_SIZE").getFloat(null);
+            int directionX = Math.round(fieldFloat(player, "directionX"));
+            int directionY = Math.round(fieldFloat(player, "directionY"));
+            int column = (int) Math.floor(fieldFloat(player, "positionX") / cellSize)
+                    + directionX * forward + directionY * right;
+            int row = (int) Math.floor(fieldFloat(player, "positionY") / cellSize)
+                    + directionY * forward - directionX * right;
+            Class enemyType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyType");
+            int depth = ((Number) fieldValue(world, "currentDepth")).intValue();
+            List<?> enemies = (List<?>) manager.getClass().getMethod("getEnemies").invoke(manager);
+            int before = enemies.size();
+            // Spawning alerts by design (a summon arrives awake); a capture wants it asleep, so the listener is
+            // detached for the call and the state put back to DORMANT before any frame sees it.
+            Field listenerField = findField(manager.getClass(), "enemyVisualListener");
+            listenerField.setAccessible(true);
+            Object listener = listenerField.get(manager);
+            listenerField.set(manager, null);
+            manager.getClass().getMethod("spawnEnemy", enemyType, int.class, int.class, int.class)
+                   .invoke(manager, Enum.valueOf(enemyType, typeName), column, row, depth);
+            listenerField.set(manager, listener);
+            if (enemies.size() == before) {
+                System.out.println("[capture] spawn " + typeName + " refused at tile (" + column + "," + row + ")");
+                return;
+            }
+            Object enemy = enemies.get(enemies.size() - 1);
+            Class stateType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyState");
+            findField(enemy.getClass(), "state").set(enemy, Enum.valueOf(stateType, "DORMANT"));
+            System.out.println("[capture] spawned dormant " + typeName + " #" + (enemies.size() - 1)
+                    + " at tile (" + column + "," + row + ")");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    private Object enemyAt(int index) throws ReflectiveOperationException {
+        Object manager = fieldValue(worldObject(), "enemyManager");
+        List<?> enemies = (List<?>) manager.getClass().getMethod("getEnemies").invoke(manager);
+        int resolved = index < 0 ? enemies.size() + index : index;
+        if (resolved < 0 || resolved >= enemies.size()) {
+            System.out.println("[capture] no enemy at index " + index + " (" + enemies.size() + " alive)");
+            return null;
+        }
+        return enemies.get(resolved);
+    }
+
+    /** {@code alert:INDEX} — Enemy.alert() plus the ALERTED visual moment perception would have reported. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void alertEnemy(int index) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            enemy.getClass().getMethod("alert").invoke(enemy);
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            Class momentType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyVisualMoment");
+            java.lang.reflect.Method fire = manager.getClass().getDeclaredMethod("fireVisual", enemy.getClass(), momentType);
+            fire.setAccessible(true);
+            fire.invoke(manager, enemy, Enum.valueOf(momentType, "ALERTED"));
+            System.out.println("[capture] alerted enemy " + index);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /** {@code damage:INDEX:AMOUNT} / {@code kill:INDEX} — EnemyManager.applyDamageTo, the real player-hit path. */
+    private void damageEnemy(int index, int amount) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            int healthBefore = findField(enemy.getClass(), "health").getInt(enemy);
+            manager.getClass().getMethod("applyDamageTo", Object.class, int.class).invoke(manager, enemy, amount);
+            int healthAfter = findField(enemy.getClass(), "health").getInt(enemy);
+            int maxHealth = findField(enemy.getClass(), "maxHealth").getInt(enemy);
+            System.out.println("[capture] damaged enemy " + index + ": " + healthBefore + " -> " + healthAfter
+                    + " of " + maxHealth);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /** {@code clip:INDEX} — which clip the animated layer is showing for that enemy. */
+    private void printEnemyClip(int index) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            Object layer = fieldValue(worldObject(), "enemyVisualLayer");
+            Object animator = layer.getClass().getMethod("animatorFor", enemy.getClass()).invoke(layer, enemy);
+            Object state = findField(enemy.getClass(), "state").get(enemy);
+            Object clip = animator == null ? "LEGACY" : animator.getClass()
+                    .getMethod("currentClipId", enemy.getClass()).invoke(animator, enemy);
+            System.out.println("[capture] enemy " + index + " state=" + state + " clip=" + clip + " at " + clockSeconds + "s");
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

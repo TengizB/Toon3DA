@@ -269,6 +269,25 @@ public final class EffectConstants {
     // Melee lunge: sprite grows and slides toward the camera bottom
     public static final float ENEMY_LUNGE_SCALE_BONUS             = 0.35f;   // +35% sprite size at peak
     public static final float ENEMY_LUNGE_DROP_FRACTION           = 0.18f;   // slide down 18% of wall height
+
+    // ANIMATED ENEMY RUNTIME (generated-enemy-art order 2) — cosmetic only; read by render/enemyvisual.
+    // R1: a hit costing at least this fraction of max HP plays HURT_HEAVY instead of HURT_LIGHT (AS2).
+    public static final float ENEMY_VISUAL_HURT_HEAVY_HEALTH_FRACTION = 0.25f;
+    // The cosmetic tile slide of a migrated enemy (the simulation moves it instantly; MOVE plays during this).
+    public static final float ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE     = 0.16f;
+    public static final float ENEMY_VISUAL_SLIDE_MAX_SECONDS          = 0.40f;   // a long charge still lands fast
+    public static final float ENEMY_VISUAL_KNOCKBACK_SECONDS          = 0.12f;
+    // R4: dying instances that keep playing DEATH after the simulation removed the enemy; the oldest is dropped.
+    public static final int   ENEMY_VISUAL_DYING_POOL_CAPACITY        = 8;
+    // How long DEATH's last (corpse) frame holds before the dying instance hands over to the corpse decal.
+    public static final float ENEMY_VISUAL_DEATH_HOLD_SECONDS         = 0.35f;
+    // Animators pre-allocated per floor (one per live migrated enemy); more is a logged legacy fallback.
+    public static final int   ENEMY_VISUAL_ANIMATOR_POOL_CAPACITY     = 64;
+    // Glow pass (art-direction V6: emissives are never graded or fogged): full strength up to START tiles,
+    // fading linearly to MIN at END tiles so a far emitter stays a point of light, never a blown-out disc.
+    public static final float ENEMY_GLOW_FADE_START_TILES             = 6f;
+    public static final float ENEMY_GLOW_FADE_END_TILES               = 16f;
+    public static final float ENEMY_GLOW_MIN_ALPHA                    = 0.45f;
     // Ranged recoil kick: sprite nudges away from the player on fire
     public static final float ENEMY_RECOIL_MAX_PIXELS             = 14f;
     // Muzzle flash quad: warm-white overlay at the firing sprite center

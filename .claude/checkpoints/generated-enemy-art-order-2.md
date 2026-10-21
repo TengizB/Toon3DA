@@ -49,7 +49,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: `enemy/EnemyVisualListener` + `EnemyVisualMoment` + payload exist, EnemyManager fires every
       moment of the idea's list at its commit site, nothing in `sim/` changed, mirror build compiles.
 - [x] **CP2** — registry + manifest parser + per-floor atlas cache load the two creatures; build green.
-- [ ] **CP3** — animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types.
+- [x] **CP3** — animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types.
 - [ ] **CP4** — every core clip plays from its moment in-engine; glow pass; legacy types unchanged.
 - [ ] **CP5** — capture tooling; burst GIFs sent; owner approval recorded (stop until it is).
 - [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
@@ -77,3 +77,15 @@ IMAGE-space coords; `Clip.frameIndexAt(seconds)` / `isFinishedAt`; anchors GROUN
 legacy, R5). Paths: `EnemyConstants.ENEMY_GENERATED_DIRECTORY` + `ENEMY_GENERATED_MANIFEST_SUFFIX`. Verified in-engine
 (with CP3's wiring in the tree): `loaded warden (1024x2048 + glow) in 178 ms`, `loaded harvest_tick (2048x2048 + glow)
 in 257 ms`.
+
+**CP3 (animator + draw):** `EnemyVisualLayer` (NEW facade, not in the idea's class list: the per-floor owner of the
+cache, the animator pool (IntMap by enemy id, `ENEMY_VISUAL_ANIMATOR_POOL_CAPACITY`), the `DyingEnemyPool`; it IS the
+`EnemyVisualListener`; `update(dt)` is called beside `enemyManager.advanceHitFlash` in World, so it freezes with the
+world). `EnemyAnimationRules` = R1 as rows (`Kind` enum with per-constant `apply`) + state->held-clip table.
+`EnemyAnimator.currentFrame(enemy)` picks the highest of one-shot / held state / slide MOVE / IDLE|DORMANT; idle phase =
+frac(id*0.618)*IDLE duration (R3). `EnemyBodyDrawer.prepare/drawColumns` places the CANVAS as the billboard and the
+frame at its manifest offset. EnemyRenderer: migrated types skip the lunge; glow rides the muzzle-light additive
+bracket; dying instances are merged into pass 1 farthest-first (`drawDyingFartherThan`), so no other pass changed.
+`GameMath.distanceFadeAlpha` (glow fade). Capture steps spawn/alert/damage/kill/clip/burst are already in
+CaptureLauncher (committed here, documented in SKILL.md at CP5). Verified: 1 Warden + 2 Ticks spawned dormant draw
+their DORMANT loop, frames advance between shots, ticks out of phase. Build: 480 tests, only StoryBarkTest red.
