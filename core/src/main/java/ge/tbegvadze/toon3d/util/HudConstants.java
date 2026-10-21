@@ -225,19 +225,21 @@ public final class HudConstants {
     // step before any credits are spent. Layout: header band on top, card grid in the
     // middle (reflowed so small shops stay centred), flavor + CLOSE button in the footer.
     // =====================================================================
-    public static final float SHOP_OVERLAY_DIM_ALPHA         = 0.72f;   // darken quad over the paused 3D view
     public static final float SHOP_OVERLAY_OPEN_FADE_SECONDS = 0.18f;   // cosmetic fade-in on open (world stays paused)
 
     // Header band (top of screen): title (left) + live credits readout (right).
     public static final float SHOP_HEADER_HEIGHT             = 76f;
-    public static final float SHOP_HEADER_TITLE_SCALE        = 1.35f;
-    public static final float SHOP_HEADER_CREDITS_SCALE      = 1.25f;
+    // visual-identity-order-6 R9: the header title is UiKit.screenHeaderTitle (HEAVY TYPE_HEADING); the scrim is
+    // ArtDirection.UI_SCRIM_ALPHA; every scale below is a TYPE_* step (the order-3 R8 sub-caption sites).
+    public static final float SHOP_HEADER_CREDITS_SCALE      = ArtDirection.TYPE_BODY;
+    /** "OUT OF STOCK" across the empty shelf (red: large text). */
+    public static final float SHOP_DEPLETED_SCALE            = ArtDirection.TYPE_LABEL;
     public static final float SHOP_HEADER_SIDE_INSET_X       = 44f;     // title left / credits right inset from screen edge
     public static final float SHOP_HEADER_TEXT_Y_BELOW_TOP   = 40f;     // baseline below screen top
 
     // Footer band (bottom of screen): rotating flavor line (left) + CLOSE button (right).
     public static final float SHOP_FOOTER_HEIGHT             = 96f;
-    public static final float SHOP_FOOTER_FLAVOR_SCALE       = 0.85f;
+    public static final float SHOP_FOOTER_FLAVOR_SCALE       = ArtDirection.TYPE_CAPTION;
     public static final float SHOP_FOOTER_FLAVOR_INSET_X     = 44f;
     public static final float SHOP_FOOTER_FLAVOR_Y_ABOVE_BOTTOM = 44f;
 
@@ -248,20 +250,19 @@ public final class HudConstants {
     public static final float SHOP_CARD_WIDTH                = 386f;
     public static final float SHOP_CARD_HEIGHT               = 164f;
     public static final float SHOP_CARD_GAP                  = 16f;
-    public static final float SHOP_CARD_BORDER_WIDTH         = 3f;
     public static final float SHOP_CARD_PAD                  = 18f;     // inner padding for card content
     public static final float SHOP_CARD_ICON_SIZE           = 32f;     // category glyph box (top-left)
-    public static final float SHOP_CARD_NAME_SCALE          = 0.92f;   // larger, more readable item name
-    public static final float SHOP_CARD_DESC_SCALE          = 0.80f;   // larger, more readable description
-    public static final float SHOP_CARD_PRICE_SCALE         = 1.05f;
-    public static final float SHOP_CARD_TAG_SCALE           = 0.92f;   // BUY affordance / SOLD stamp
+    public static final float SHOP_CARD_NAME_SCALE          = ArtDirection.TYPE_CAPTION;   // its band ends where the confirm prompt starts
+    public static final float SHOP_CARD_DESC_SCALE          = ArtDirection.TYPE_CAPTION;   // dense text in a fixed card
+    public static final float SHOP_CARD_PRICE_SCALE         = ArtDirection.TYPE_BODY;      // may be DAMAGE red
+    public static final float SHOP_CARD_TAG_SCALE           = ArtDirection.TYPE_BODY;      // BUY affordance / SOLD stamp
     public static final float SHOP_CARD_NAME_Y_BELOW_TOP    = 28f;     // name baseline below card top
     public static final float SHOP_CARD_DESC_Y_BELOW_TOP    = 70f;     // description baseline below card top
     public static final float SHOP_CARD_PRICE_Y_ABOVE_BOTTOM = 20f;    // price baseline above card bottom
 
     // On-card CONFIRM step (bottom of the tapped card): "BUY N cr?" + CONFIRM / CANCEL.
-    public static final float SHOP_CONFIRM_PROMPT_SCALE      = 0.84f;
-    public static final float SHOP_CONFIRM_LABEL_SCALE       = 0.86f;
+    public static final float SHOP_CONFIRM_PROMPT_SCALE      = ArtDirection.TYPE_BODY;
+    public static final float SHOP_CONFIRM_LABEL_SCALE       = ArtDirection.TYPE_BODY;
     public static final float SHOP_CONFIRM_BUTTON_HEIGHT     = 52f;
     public static final float SHOP_CONFIRM_BUTTON_GAP        = 12f;
     public static final float SHOP_CONFIRM_PROMPT_Y_BELOW_TOP = 40f;
@@ -270,10 +271,13 @@ public final class HudConstants {
     public static final float SHOP_OVERLAY_CLOSE_WIDTH       = 240f;
     public static final float SHOP_OVERLAY_CLOSE_HEIGHT      = 70f;
     public static final float SHOP_OVERLAY_CLOSE_MARGIN      = 26f;     // inset from screen bottom-right corner
-    public static final float SHOP_OVERLAY_CLOSE_LABEL_SCALE = 1.05f;
+    public static final float SHOP_OVERLAY_CLOSE_LABEL_SCALE = ArtDirection.TYPE_LABEL;
 
     // Purchase / denial feedback timers (cosmetic, real-time while paused).
     public static final float SHOP_PURCHASE_FLASH_SECONDS    = 0.55f;
+    /** Peak alpha of the FACILITY_CYAN purchase flash and the DAMAGE refusal blip over a card. */
+    public static final float SHOP_PURCHASE_FLASH_ALPHA      = 0.55f;
+    public static final float SHOP_DENY_FLASH_ALPHA          = 0.50f;
     public static final float SHOP_DENY_BLIP_SECONDS         = 0.32f;
     public static final float SHOP_BUY_PULSE_SPEED           = 6.0f;    // radians/sec for the BUY affordance pulse
 
@@ -281,7 +285,7 @@ public final class HudConstants {
     // rejection reason), so the player has a clear textual confirmation the goods were delivered.
     // Placed in the footer (clear of the card grid and the right-hand CLOSE button).
     public static final float SHOP_RECEIPT_SECONDS           = 2.4f;    // how long the receipt stays up
-    public static final float SHOP_RECEIPT_SCALE             = 1.0f;    // large, readable confirmation text
+    public static final float SHOP_RECEIPT_SCALE             = ArtDirection.TYPE_BODY;   // may be DAMAGE red
     public static final float SHOP_RECEIPT_Y_ABOVE_BOTTOM    = 72f;     // baseline above screen bottom (in footer)
 
     // -------------------------------------------------------------------------

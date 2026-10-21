@@ -57,7 +57,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A4 holds on run; build green.
 - [x] **CP5** — RouteMapOverlayRenderer frame/header/text/confirm bar (R8).
       DONE WHEN: A5 holds incl. the same-seed glyph comparison; build green.
-- [ ] **CP6** — ShopOverlayRenderer + EventChoiceOverlayRenderer (R9).
+- [x] **CP6** — ShopOverlayRenderer + EventChoiceOverlayRenderer (R9).
       DONE WHEN: A6 holds on run; build green.
 - [ ] **CP7** — Android XML (R10, A8), A9/A10 sweep, A11 series check, docs.
       DONE WHEN: build + test at baseline; handover lists A11 follow-ups; ready for reviewer.
@@ -155,3 +155,23 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   (commit animation), MAP toggle (DETAIL framing, SELECTED) and back, CANCEL (a documented no-op from the start
   room - unchanged). Seen: idle, focused, MAP framing. NOT seen: a region-tinted frame other than UNKNOWN SECTOR's
   cyan, red alert, the scanner readout, a twist line.
+- **CP6:** ShopOverlayRenderer (R9): one UI_INK_BLACK scrim at UI_SCRIM_ALPHA (SHOP_OVERLAY_DIM_ALPHA removed); header band
+  UI_PANEL at the screen alpha + R1 title (UiKit.screenHeaderTitle, HEAVY) with a FACILITY_CYAN-ticked rule; credits
+  CREDITS_GOLD; offers = UiKit.card inked FACILITY_CYAN_DIM (IDLE), the one being confirmed SELECTED in FACILITY_CYAN,
+  sold or unaffordable DISABLED; CONFIRM = SELECTED facility plate, CANCEL / CLOSE IDLE; the Line pass and every
+  Color literal are gone (SHOP_CARD_BORDER_WIDTH removed); purchase flash FACILITY_CYAN, deny blip DAMAGE, both
+  chamfered (alphas SHOP_PURCHASE_FLASH_ALPHA / SHOP_DENY_FLASH_ALPHA); prices CREDITS_GOLD / DAMAGE, SOLD tag DAMAGE,
+  BUY pulse FACILITY_CYAN, receipt FACILITY_CYAN / DAMAGE; offer NAME UI_TEXT_PRIMARY (rarity colour stays on the
+  ICON only - D2); FACILITY_CYAN brackets frame the whole screen (like the route console). Scales: credits BODY, name
+  CAPTION (0.92; at BODY it ran into the confirm prompt's band), desc CAPTION (0.80), price / tag / confirm prompt /
+  confirm labels / receipt BODY (red text is large text), CLOSE label LABEL, flavour CAPTION (0.85), new
+  SHOP_DEPLETED_SCALE LABEL ("OUT OF STOCK" used the title scale). EventChoiceOverlayRenderer (R9): scrim UI_INK_BLACK
+  .75 (.86); R1 title left-aligned on the card row (HEAVY HEADING, was 2.3 centred cyan) + FACILITY_CYAN rule across the
+  row; choices = UiKit.card FACILITY_CYAN_DIM IDLE with a cyan-ticked divider at the old strip edge (glow, drop shadow,
+  gradients, inner edge removed); FACILITY_CYAN brackets round title + cards (UI_SCREEN_FRAME_MARGIN); text unshadowed,
+  narrative / desc BODY primary, label LABEL, TAP TO CHOOSE CAPTION secondary (0.95). BUG FIX: TAP_Y was CARD_HEIGHT - 30
+  measured from the bottom, i.e. on top of the choice label (before shot); now 30 from the bottom as its comment says.
+  Taps: affordable offer (confirm step), CONFIRM (bought: 120 -> 37, SOLD), CANCEL, unaffordable offer (deny blip),
+  CLOSE, event choice (applied: credits haul, console closed). PRE-EXISTING (follow-up): the floor's event text
+  ("Bulkhead sealed...", "ENTERING: OUTER FACILITY", "THREAT LV 1") is drawn over the shop and the event console in
+  both builds.

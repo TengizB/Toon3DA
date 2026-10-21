@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -12,6 +11,7 @@ import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.route.EventChoice;
 import ge.tbegvadze.toon3d.route.FacilityEvent;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 
 import java.util.List;
@@ -19,16 +19,16 @@ import java.util.List;
 /**
  * Renders the full-screen narrative EVENT choice overlay for mobile (route-map order-10). It REUSES
  * the level-up card UI pattern ({@link ge.tbegvadze.toon3d.progression.LevelUpOverlayRenderer}): a
- * dimmed backdrop, a title + narrative flavour lines at the top, then 1-3 choice cards drawn
- * back-to-front (glow, shadow, gradient body, accent header strip, border) with word-wrapped text and
- * a "TAP TO CHOOSE" hint. World sets the current event via {@link #present(FacilityEvent)} before this
+ * dimmed backdrop, a title + narrative flavour lines at the top, then 1-3 choice cards (visual-identity-
+ * order-6 R9: UiKit cards inked FACILITY_CYAN_DIM under an R1 header) with word-wrapped text and a
+ * "TAP TO CHOOSE" hint. World sets the current event via {@link #present(FacilityEvent)} before this
  * renders, reads taps via {@link #getTappedChoiceIndex(float, float)}, and applies the chosen
  * {@link EventChoice}'s effect.
  *
  * <p>Every pixel is procedural (ShapeRenderer + BitmapFont) — no textures, no per-frame allocation in
- * {@link #render}. All layout / colour numbers are renderer-internal layout constants, matching the
- * sibling level-up overlay's local convention. Owns its ShapeRenderer / SpriteBatch / BitmapFont — all
- * disposed in {@link #dispose()}.
+ * {@link #render}. Layout numbers are renderer-internal constants, matching the sibling level-up overlay's
+ * local convention; colours come from util/ArtDirection. Owns its ShapeRenderer / SpriteBatch / two
+ * BitmapFonts — all disposed in {@link #dispose()}.
  */
 public final class EventChoiceOverlayRenderer implements Disposable {
 
@@ -37,50 +37,37 @@ public final class EventChoiceOverlayRenderer implements Disposable {
     private static final float CARD_HEIGHT  = 250f;
     private static final float CARD_GAP     = 24f;
     private static final float CARD_Y       = 120f;
+    private static final String TAP_HINT_TEXT = "TAP TO CHOOSE";
 
-    private static final float CARD_BORDER_THICK   = 3f;
     private static final float HEADER_STRIP_HEIGHT = 58f;
-    private static final float GLOW_INSET          = 10f;
     private static final float TEXT_HORIZONTAL_PAD = 24f;
 
     // Text Y offsets measured DOWN from the top of the card body.
-    private static final float HEADER_TEXT_Y = 38f;   // choice label, centred in the header strip
+    private static final float HEADER_TEXT_Y = 38f;   // choice label, centred in the header band
     private static final float DESC_Y        = 96f;   // wrapped description
-    private static final float TAP_Y         = CARD_HEIGHT - 30f; // "TAP TO CHOOSE" hint (from bottom-up)
+    private static final float TAP_Y         = 30f;   // "TAP TO CHOOSE" hint, measured UP from the card bottom
 
     // Title / narrative band above the cards.
     private static final float TITLE_Y       = CARD_Y + CARD_HEIGHT + 168f;
     private static final float NARRATIVE_TOP_Y = CARD_Y + CARD_HEIGHT + 118f;
     private static final float NARRATIVE_LINE_STEP = 34f;
 
-    private static final float SCALE_TITLE     = 2.3f;
-    private static final float SCALE_NARRATIVE = 1.15f;
-    private static final float SCALE_HEADER    = 1.5f;
-    private static final float SCALE_DESC      = 1.02f;
-    private static final float SCALE_TAP       = 0.95f;
+    // visual-identity-order-6 R9: TYPE_* steps (the title is UiKit.screenHeaderTitle, HEAVY TYPE_HEADING).
+    private static final float SCALE_NARRATIVE = ArtDirection.TYPE_BODY;
+    private static final float SCALE_HEADER    = ArtDirection.TYPE_LABEL;
+    private static final float SCALE_DESC      = ArtDirection.TYPE_BODY;
+    private static final float SCALE_TAP       = ArtDirection.TYPE_CAPTION;   // order-3 R8 deferred site (was 0.95)
 
-    private static final float SHADOW_OFFSET = 2.5f;
-
-    // ---- Palette -----------------------------------------------------------
-    private static final Color DIM_OVERLAY = new Color(0.02f, 0.02f, 0.05f, 0.86f);
-    private static final Color WHITE       = new Color(0.97f, 0.97f, 0.98f, 1.00f);
-    private static final Color TITLE_TINT  = new Color(0.42f, 0.86f, 0.98f, 1.00f); // comms cyan — the "signal"
-    private static final Color NARRATIVE_TINT = new Color(0.80f, 0.82f, 0.88f, 1.00f);
-    private static final Color DIM_HINT    = new Color(0.62f, 0.62f, 0.66f, 1.00f);
-    private static final Color CARD_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.50f);
-    private static final Color TEXT_SHADOW = new Color(0.00f, 0.00f, 0.00f, 0.72f);
-    private static final Color INNER_EDGE  = new Color(1.00f, 1.00f, 1.00f, 0.16f);
-
-    private static final Color ACCENT      = new Color(0.32f, 0.80f, 0.96f, 1.00f);
-    private static final Color BODY_TOP    = new Color(0.06f, 0.15f, 0.20f, 0.98f);
-    private static final Color BODY_BOTTOM = new Color(0.02f, 0.05f, 0.07f, 0.98f);
-    private static final Color STRIP_TOP   = new Color(0.16f, 0.70f, 0.90f, 1.00f);
-    private static final Color STRIP_BOTTOM = new Color(0.09f, 0.42f, 0.56f, 1.00f);
-    private static final Color GLOW        = new Color(0.32f, 0.80f, 0.96f, 0.22f);
+    // ---- Palette (visual-identity-order-6 R9: the FACILITY ink) ------------
+    // An event terminal is the facility talking: one UI_INK_BLACK scrim, an R1 header with a FACILITY_CYAN tick,
+    // FACILITY_CYAN brackets round the header + cards, and each choice a card inked FACILITY_CYAN_DIM. Every
+    // colour is read from util/ArtDirection; nothing on this screen is shadowed (it sits on the scrim).
 
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** HEAVY face for the R1 screen title. */
+    private final BitmapFont    heavyFont;
     private final GlyphLayout   glyphLayout;
 
     // Current event + its choices (set by World before each render). Never held across events.
@@ -94,6 +81,7 @@ public final class EventChoiceOverlayRenderer implements Disposable {
         this.shapes      = new ShapeRenderer();
         this.batch       = new SpriteBatch();
         this.font        = GameFonts.newFont(FontFace.REGULAR);
+        this.heavyFont   = GameFonts.newFont(FontFace.HEAVY);
         this.glyphLayout = new GlyphLayout();
         this.font.setUseIntegerPositions(false);
     }
@@ -161,52 +149,48 @@ public final class EventChoiceOverlayRenderer implements Disposable {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
-        // ---- Pass A: filled shapes ----
+        // ---- Pass A: filled shapes (the kit's single Filled pass) ----
+        float rowLeft  = cardLeftX(0);
+        float rowWidth = choiceCount * CARD_WIDTH + Math.max(0, choiceCount - 1) * CARD_GAP;
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(DIM_OVERLAY);
+        shapes.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE,
+                        ArtDirection.UI_SCRIM_ALPHA);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
 
+        UiKit.screenHeaderRule(shapes, rowLeft, UiKit.screenHeaderRuleY(TITLE_Y), rowWidth,
+                               ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                               ArtDirection.FACILITY_CYAN_BLUE, 1f);
         for (int choiceIndex = 0; choiceIndex < choiceCount; choiceIndex++) {
             float cardX = cardLeftX(choiceIndex);
-            shapes.setColor(GLOW);
-            shapes.rect(cardX - GLOW_INSET, CARD_Y - GLOW_INSET,
-                    CARD_WIDTH + GLOW_INSET * 2f, CARD_HEIGHT + GLOW_INSET * 2f);
-            shapes.setColor(CARD_SHADOW);
-            shapes.rect(cardX + 7f, CARD_Y - 7f, CARD_WIDTH, CARD_HEIGHT);
-            // rect(x, y, w, h, bottomLeft, bottomRight, topRight, topLeft)
-            shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT,
-                    BODY_BOTTOM, BODY_BOTTOM, BODY_TOP, BODY_TOP);
-            float stripY = cardTopY() - HEADER_STRIP_HEIGHT;
-            shapes.rect(cardX, stripY, CARD_WIDTH, HEADER_STRIP_HEIGHT,
-                    STRIP_BOTTOM, STRIP_BOTTOM, STRIP_TOP, STRIP_TOP);
+            UiKit.card(shapes, cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT,
+                       ArtDirection.FACILITY_CYAN_DIM_RED, ArtDirection.FACILITY_CYAN_DIM_GREEN,
+                       ArtDirection.FACILITY_CYAN_DIM_BLUE, PlateState.IDLE);
+            // A plain rule marks the label band (the old gradient strip's edge).
+            UiKit.divider(shapes, cardX + TEXT_HORIZONTAL_PAD, cardTopY() - HEADER_STRIP_HEIGHT,
+                          CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f,
+                          ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                          ArtDirection.FACILITY_CYAN_BLUE, 1f);
         }
-        shapes.end();
-
-        // ---- Pass B: line work ----
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        Gdx.gl.glLineWidth(CARD_BORDER_THICK);
-        for (int choiceIndex = 0; choiceIndex < choiceCount; choiceIndex++) {
-            float cardX = cardLeftX(choiceIndex);
-            shapes.setColor(INNER_EDGE);
-            shapes.rect(cardX + 3f, CARD_Y + 3f, CARD_WIDTH - 6f, CARD_HEIGHT - 6f);
-            shapes.setColor(ACCENT);
-            shapes.rect(cardX, CARD_Y, CARD_WIDTH, CARD_HEIGHT);
-        }
-        Gdx.gl.glLineWidth(1f);
+        // No single outer panel: FACILITY_CYAN brackets frame the title + card row (the order-5 card-screen rule).
+        float margin = ArtDirection.UI_SCREEN_FRAME_MARGIN;
+        float frameBottom = CARD_Y - margin;
+        UiKit.brackets(shapes, rowLeft - margin, frameBottom, rowWidth + margin * 2f,
+                       TITLE_Y + margin - frameBottom,
+                       ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                       ArtDirection.FACILITY_CYAN_BLUE, 1f);
         shapes.end();
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
 
-        // ---- Pass C: text ----
+        // ---- Pass B: text ----
         batch.begin();
 
-        font.getData().setScale(SCALE_TITLE);
-        drawCenteredTextWithShadow(event.title(), Constants.WORLD_WIDTH / 2f, TITLE_Y, TITLE_TINT);
+        UiKit.screenHeaderTitle(batch, heavyFont, event.title(), rowLeft, TITLE_Y);
 
         font.getData().setScale(SCALE_NARRATIVE);
         for (int lineIndex = 0; lineIndex < narrativeCount; lineIndex++) {
-            drawCenteredTextWithShadow(narrativeLines[lineIndex], Constants.WORLD_WIDTH / 2f,
-                    NARRATIVE_TOP_Y - lineIndex * NARRATIVE_LINE_STEP, NARRATIVE_TINT);
+            drawCenteredText(narrativeLines[lineIndex], Constants.WORLD_WIDTH / 2f,
+                    NARRATIVE_TOP_Y - lineIndex * NARRATIVE_LINE_STEP, true);
         }
 
         for (int choiceIndex = 0; choiceIndex < choiceCount; choiceIndex++) {
@@ -222,32 +206,29 @@ public final class EventChoiceOverlayRenderer implements Disposable {
         float top = cardTopY();
 
         font.getData().setScale(SCALE_HEADER);
-        drawCenteredTextWithShadow(choice.label(), cardCenterX, top - HEADER_TEXT_Y, WHITE);
+        drawCenteredText(choice.label(), cardCenterX, top - HEADER_TEXT_Y, true);
 
         font.getData().setScale(SCALE_DESC);
-        drawWrappedTextWithShadow(choice.description(), cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
-                CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, WHITE);
+        font.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                      ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+        font.draw(batch, choice.description(), cardX + TEXT_HORIZONTAL_PAD, top - DESC_Y,
+                  CARD_WIDTH - TEXT_HORIZONTAL_PAD * 2f, Align.center, true);
 
         font.getData().setScale(SCALE_TAP);
-        drawCenteredTextWithShadow("TAP TO CHOOSE", cardCenterX, CARD_Y + TAP_Y, DIM_HINT);
+        drawCenteredText(TAP_HINT_TEXT, cardCenterX, CARD_Y + TAP_Y, false);
     }
 
-    private void drawCenteredTextWithShadow(String text, float centerX, float baselineY, Color color) {
+    /** Centred, unshadowed text in UI_TEXT_PRIMARY ({@code primary}) or UI_TEXT_SECONDARY. */
+    private void drawCenteredText(String text, float centerX, float topY, boolean primary) {
         glyphLayout.setText(font, text);
-        float textX = centerX - glyphLayout.width / 2f;
-        font.setColor(TEXT_SHADOW);
-        font.draw(batch, text, textX + SHADOW_OFFSET, baselineY - SHADOW_OFFSET);
-        font.setColor(color);
-        font.draw(batch, text, textX, baselineY);
-    }
-
-    private void drawWrappedTextWithShadow(String text, float leftX, float baselineY,
-                                           float targetWidth, Color color) {
-        font.setColor(TEXT_SHADOW);
-        font.draw(batch, text, leftX + SHADOW_OFFSET, baselineY - SHADOW_OFFSET,
-                targetWidth, Align.center, true);
-        font.setColor(color);
-        font.draw(batch, text, leftX, baselineY, targetWidth, Align.center, true);
+        if (primary) {
+            font.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                          ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+        } else {
+            font.setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                          ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
+        }
+        font.draw(batch, text, centerX - glyphLayout.width / 2f, topY);
     }
 
     @Override
@@ -255,5 +236,6 @@ public final class EventChoiceOverlayRenderer implements Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        heavyFont.dispose();
     }
 }
