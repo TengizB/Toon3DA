@@ -48,7 +48,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: a test creature writes `<name>.atlas.png`, `.glow.png`, `.clips.json`, per-clip GIFs and a strip.
 - [x] **CP3** — warden rig + full clip set (standard 9 + DORMANT + WOUNDED) generated; GIFs saved (scratch, not shipped).
 - [x] **CP4** — harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner.
-- [ ] **CP5** — owner approval recorded in DECISIONS (stop here until it is).
+- [x] **CP5** — owner approval recorded in DECISIONS (stop here until it is).
 - [ ] **CP6** — outputs committed (old stills removed); guide section 7 + SKILL.md updated; reviewer PASS;
       STATUS: IMPLEMENTED.
 
@@ -89,3 +89,6 @@ in all four PNGs. Sent to the owner 2026-10-21: stills before/after, both strips
 Outputs were NOT written into assets/ yet — CP6 does that after approval:
 `python3 bestiary.py ../../../assets/textures/enemies/generated` from `.claude/skills/enemy-art`, then
 `git rm` the old `warden.png` / `harvest_tick.png`.
+
+**CP5 (gate):** owner answered "Approved" (2026-10-21) — recorded as D2 in the idea file's DECISIONS. Covers the
+motion, the re-rendered stills and the 2 px spur change. Next: CP6.

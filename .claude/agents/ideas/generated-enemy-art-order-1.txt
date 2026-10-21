@@ -173,6 +173,9 @@ ASSUMPTIONS
 DECISIONS
 ---------
   D1  The Warden and the Harvest Tick (six legs) are approved as stills (series D3, D4).
+  D2  The owner approved the motion of all 22 clips (11 per creature) from the GIF previews and strip
+      sheets, AND the re-rendered stills: shape-local grain shading, and the Harvest Tick's two
+      middle-leg spurs 2 px shorter (the approved still touched the canvas edge).          (2026-10-21)
 
 
 OPEN QUESTIONS
