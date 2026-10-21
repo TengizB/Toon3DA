@@ -27,6 +27,8 @@ public final class EnemyVisualRegistry {
         // Order 2: the two creatures order 1 rigged and animated (series AS1).
         register(EnemyType.ACID_DRONE,  "warden");
         register(EnemyType.SHELL_BRUTE, "harvest_tick");
+        // Order 4: the insect family's MINI_ELITE, the first creature built from its brief through the whole pipeline.
+        register(EnemyType.IRON_STALKER, "iron_stalker");
     }
 
     public static void register(EnemyType type, String creatureId) {

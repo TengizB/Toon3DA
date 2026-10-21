@@ -54,7 +54,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       iron_stalker row; *.fx.* byte-identical except insect (owner-visible change named); runtime ability-clip rows;
       clip GIFs + in-engine burst GIFs (default + one mood) sent. DONE WHEN: the GIFs are sent and the build is green.
 - [x] **CP3** — owner approval recorded in the idea's DECISIONS (stop until it is).
-- [ ] **CP4** — registry row wired; A2-A3 verified in-engine; build green.
+- [x] **CP4** — registry row wired; A2-A3 verified in-engine; build green.
 - [ ] **CP5** — docs (guide, art-direction 16, SKILL.md); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -90,3 +90,9 @@ default + amber_hot). Sim ability order is randomised: label segments from `logm
 WAITING for owner approval (CP3).
 
 **CP3 (gate):** owner approved 2026-10-21 ("Approved, insect.fx change is fine — wire it") -> idea DECISIONS D1, D2.
+
+**CP4 (wired, verified):** `EnemyVisualRegistry` row IRON_STALKER -> "iron_stalker" committed. Re-run of a/r/h (default
+mood) on the committed state: MOVE, BUFF_SELF x2, held WIND_UP x2 (CHASING and ATTACKING states), AREA_STRIKE x2,
+RESISTED, WOUNDED, DIED -> remains; A3 frame: the Stalker clearly taller than the Shell Brute at 3 tiles. Regression:
+SHELL_BRUTE still holds WIND_UP (state WINDING_UP) with 19 grit particles alive, then charges (ATTACK). TRAP: Xvfb dies
+between sessions -> "Unable to initialize GLFW"; re-run setup.sh. Build: only StoryBarkTest red.
