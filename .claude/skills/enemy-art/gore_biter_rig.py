@@ -72,7 +72,7 @@ def gore_biter_build(p):
     sink = 46 * p.fold
     body_xf = (Xf.scale(p.bs, p.bs, (80, 120)).then(Xf.turn(p.tilt, (80, 120))).then(Xf.move(p.bx, p.by + sink)).then(root))
     head_xf = (Xf.scale(p.hs, p.hs, HEAD).then(Xf.turn(p.tilt * 0.5, HEAD))
-               .then(Xf.move(p.hx + p.bx * 0.5, p.hy + p.by * 0.6 + sink * 0.82)).then(root))
+               .then(Xf.move(p.hx + p.bx * 0.5, p.hy + p.by * 0.6 + sink * 0.55)).then(root))
 
     heave = 1.0 + 0.04 * p.breath
     bristle = p.hackle + p.hackle_jig
@@ -149,4 +149,80 @@ def gore_biter_build(p):
 
 GORE_BITER = Rig("gore_biter", gore_biter_build, BITER_POSE, seed=41)
 
-BITER_CLIPS = []
+
+def _feet(a_y=0.0, a_x=0.0, b_y=0.0, b_x=0.0):
+    """A bound: A = left fore + right hind, B = the other diagonal."""
+    return {"fl_x": a_x, "fl_y": a_y, "hr_x": a_x, "hr_y": a_y, "fr_x": b_x, "fr_y": b_y, "hl_x": b_x, "hl_y": b_y}
+
+
+# IDLE: twitchy and irregular - the jaw clacks twice, the head jerks, the spine ridge shivers a beat behind it
+_IDLE = Clip("IDLE", [
+    (0.00, dict(jaw=0.0, hx=0.0, hy=0.0, breath=0.0, tilt=0.0)),
+    (0.17, dict(jaw=0.0), "linear"),
+    (0.22, dict(jaw=0.3), "linear"),
+    (0.27, dict(jaw=-0.03), "linear"),
+    (0.33, dict(jaw=0.25), "linear"),
+    (0.38, dict(jaw=0.0), "hold"),
+    (0.50, dict(hx=0.0, tilt=0.0), "out"),
+    (0.55, dict(hx=-3.0, tilt=-0.05), "hold"),
+    (0.85, dict(hx=-3.0, tilt=-0.05), "out"),
+    (0.92, dict(hx=2.0, tilt=0.03, hy=1.0), "hold"),
+    (0.60, dict(breath=1.0)),
+    (1.05, dict(hl_y=0.0)), (1.12, dict(hl_y=-3.0)), (1.20, dict(hl_y=0.0)),
+], duration=1.33, mode="loop")
+IDLE = Clip("IDLE", _IDLE.keys + jiggle(_IDLE, "hx", 1.33, out_param="hackle_jig", freq=3.0, damping=0.25, gain=0.25, fps=12),
+            duration=1.33, mode="loop")
+_LUNGE = dict(hs=1.28, hy=10.0, by=4.0, jaw=1.15, eye_glow=1.6, fl_y=4.0, fr_y=4.0, hl_x=-4.0, hr_x=-4.0, hackle=1.0)
+
+BITER_CLIPS = [
+    IDLE,
+    IDLE.variant("DORMANT", speed=0.5, fps=6, by=8.0, hy=6.0, hs=0.96, eye_glow=0.3, jaw=0.0, hackle=-0.5, breath=0.0),
+    Clip("ALERT", [        # it snaps up, the jaw splits wide, the spine bristles
+        (0.00, dict(by=0.0, hy=0.0, jaw=0.0, hackle=0.0, eye_glow=1.0, hs=1.0)),
+        (0.12, dict(by=-6.0, hy=-6.0, hs=1.06, jaw=1.1, hackle=1.3, eye_glow=1.8, fl_y=-6.0, fr_y=-6.0), "out"),
+        (0.28, dict(jaw=0.7, hackle=1.0, fl_y=0.0, fr_y=0.0)),
+        (0.42, dict(by=0.0, hy=0.0, hs=1.0, jaw=0.1, hackle=0.4, eye_glow=1.2)),
+    ], mode="once"),
+    Clip("MOVE", [         # a fast loping bound: the diagonals swap, the body pitches, the jaw hangs open
+        (0.000, dict(by=2.0, hy=4.0, tilt=-0.03, jaw=0.25, **_feet(a_y=-12.0, a_x=2.0))),
+        (0.083, dict(by=-4.0, hy=-3.0, tilt=0.0, jaw=0.35, **_feet())),
+        (0.167, dict(by=2.0, hy=4.0, tilt=0.03, jaw=0.25, **_feet(b_y=-12.0, b_x=2.0))),
+        (0.250, dict(by=-4.0, hy=-3.0, tilt=0.0, jaw=0.35, **_feet())),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # coils low, jaw half open, head drawn back - held
+        (0.00, dict(by=0.0, hy=0.0, hs=1.0, jaw=0.0, hackle=0.0, eye_glow=1.0)),
+        (0.50, dict(by=10.0, hy=8.0, hs=0.92, jaw=0.55, hackle=1.2, eye_glow=1.5, hl_x=4.0, hr_x=4.0, fl_x=3.0, fr_x=3.0)),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the lunging bite: the head shoots at you split wide, then snaps shut
+        (0.00, dict(by=0.0, hy=0.0, hs=1.0, jaw=0.2, eye_glow=1.0)),
+        (0.06, dict(_LUNGE), "out"),
+        (0.12, dict(hs=1.32, hy=12.0, jaw=-0.05, eye_glow=1.9), "out"),
+        (0.20, dict(hs=1.15, hy=6.0, jaw=0.15)),
+        (0.30, dict(by=0.0, hy=0.0, hs=1.0, jaw=0.1, eye_glow=1.0, fl_y=0.0, fr_y=0.0, hl_x=0.0, hr_x=0.0, hackle=0.3)),
+    ], fps=20, mode="once", events={0.12: "impact"}),
+    Clip("HURT_LIGHT", [   # a yelp: the head jerks back, the jaw gapes
+        (0.00, dict(hy=-4.0, hs=0.95, jaw=0.6, tilt=-0.06, eye_glow=0.5), "out"),
+        (0.17, dict(hy=0.0, hs=1.0, jaw=0.0, tilt=0.0, eye_glow=1.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # knocked back: it skids, legs splaying, the jaw flapping
+        (0.00, dict(cy=0.0, tilt=0.0, jaw=0.0, hs=1.0)),
+        (0.08, dict(cy=-5.0, tilt=-0.1, jaw=0.9, hs=0.88, hy=-6.0, eye_glow=0.4, fl_x=6.0, fr_x=6.0, hl_x=5.0, hr_x=5.0), "out"),
+        (0.25, dict(cy=-2.0, tilt=-0.04, jaw=0.4, hs=0.95, hy=-2.0, eye_glow=1.2)),
+        (0.42, dict(cy=0.0, tilt=0.0, jaw=0.0, hs=1.0, hy=0.0, eye_glow=1.0, fl_x=0.0, fr_x=0.0, hl_x=0.0, hr_x=0.0)),
+    ], mode="once"),
+    Clip("DEFEND", [       # it ducks: head down and in, jaw clamped, spine ridge up
+        (0.00, dict(by=0.0, hy=0.0, hs=1.0, jaw=0.0, hackle=0.0, tag=1.0)),
+        (0.33, dict(by=10.0, hy=14.0, hs=0.88, jaw=-0.05, hackle=1.5, eye_glow=0.7, fl_x=4.0, fr_x=4.0)),
+    ], mode="hold"),
+    IDLE.variant("WOUNDED", jaw=0.35, tilt=0.07, hl_y=4.0, hl_x=-3.0, by=3.0, eye_glow=0.85),
+    Clip("DEATH", [        # it skids, the legs give, it folds onto its belly, jaw slack
+        (0.00, dict(by=0.0, hy=0.0, hs=1.0, fold=0.0, jaw=0.0, tilt=0.0, eye_glow=1.0, dim=0.0, cy=0.0)),
+        (0.10, dict(jaw=1.1, hs=1.08, hy=4.0, eye_glow=1.7, cy=-2.0), "out"),
+        (0.30, dict(tilt=0.12, fold=0.35, jaw=0.6, hy=2.0, cx=-3.0), "in"),
+        (0.55, dict(tilt=0.18, fold=0.9, jaw=0.45, hy=0.0, cx=-4.0, hackle=-0.8), "in"),
+        (0.62, dict(fold=0.82), "out"),
+        (0.72, dict(fold=1.0, tilt=0.2, jaw=0.5), "hold"),
+        (0.25, dict(dim=0.0)),
+        (0.70, dict(dim=1.0)),
+    ], mode="hold"),
+]

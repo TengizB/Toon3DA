@@ -8119,6 +8119,40 @@ public final class GameMath {
     // =========================================================================
 
     /*
+     * Formula: Canvas point on a billboard (generated-enemy-art order 5 - where a manifest anchor sits on screen)
+     * Derivation:
+     *   A canvas is drawn spriteWidth x spriteHeight world units, centred on centerX, bottom at drawBottom.
+     *   Canvas x runs left -> right, canvas y runs DOWN (image space). So
+     *     worldX = centerX + (canvasX / canvasWidth - 0.5) * spriteWidth
+     *     worldY = drawBottom + (1 - canvasY / canvasHeight) * spriteHeight      (the one y flip)
+     * Edge cases:
+     *   canvasWidth / canvasHeight <= 0 -> the centre / bottom (no division by zero).
+     */
+    public static float billboardCanvasX(float centerX, float spriteWidth, float canvasX, float canvasWidth) {
+        if (canvasWidth <= 0f) return centerX;
+        return centerX + (canvasX / canvasWidth - 0.5f) * spriteWidth;
+    }
+
+    public static float billboardCanvasY(float drawBottom, float spriteHeight, float canvasY, float canvasHeight) {
+        if (canvasHeight <= 0f) return drawBottom;
+        return drawBottom + (1f - canvasY / canvasHeight) * spriteHeight;
+    }
+
+    /*
+     * Formula: Hover remaining while a hovering body falls (generated-enemy-art order 5 - a dying Eye Tyrant)
+     * Derivation:
+     *   t = min(1, progress / fallPortion)   (the fall takes the first fallPortion of the death clip)
+     *   remaining = 1 - t²                   (it drops like a weight: slow to leave, fast at the floor)
+     * Edge cases:
+     *   fallPortion <= 0 -> 0 (already down); progress < 0 is treated as 0 (full hover).
+     */
+    public static float hoverRemainingWhileFalling(float progress, float fallPortion) {
+        if (fallPortion <= 0f) return 0f;
+        float fraction = Math.min(1f, Math.max(0f, progress) / fallPortion);
+        return 1f - fraction * fraction;
+    }
+
+    /*
      * Formula: Recoil envelope (quadratic ease-out back to rest)
      * Derivation:
      *   remaining = 1 - elapsed / duration          (1 at the kick, 0 when it has eased out)

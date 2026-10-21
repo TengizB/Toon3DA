@@ -180,14 +180,39 @@ public final class EnemyAnimationRules {
         }
     }
 
-    /** A state that keeps a clip held on its last frame while the simulation stays in it. */
+    /**
+     * A state that keeps a clip held on its last frame while the simulation stays in it. Order 5: a hold may name a
+     * {@code fallback} for a creature that does not ship its clip (SELF_DESTRUCTING holds PRIMING, else WIND_UP).
+     */
     public static final class Hold {
         public final EnemyClipId clip;
+        public final EnemyClipId fallback;
         public final int         priority;
 
-        Hold(EnemyClipId clip, int priority) {
+        Hold(EnemyClipId clip, EnemyClipId fallback, int priority) {
             this.clip     = clip;
+            this.fallback = fallback;
             this.priority = priority;
+        }
+
+        /** The clip this hold shows on {@code manifest}: its own when shipped, else the fallback (may be null). */
+        public EnemyClipId clipIn(EnemyClipManifest manifest) {
+            return manifest.clip(clip) != null || fallback == null ? clip : fallback;
+        }
+    }
+
+    /**
+     * Order 5: how a creature dies by CAUSE - the clip the dying instance plays (its last frame is the remains) and
+     * the creature's own death burst. A cause without a row, or a creature that lacks the row's clip or burst, uses
+     * DEATH and the DEATH burst. A self-destruct bursts (the Plague Hulk's DEATH_BURST + DETONATE).
+     */
+    public static final class DeathRow {
+        public final EnemyClipId           clip;
+        public final EnemyEffectSet.BurstId burst;
+
+        DeathRow(EnemyClipId clip, EnemyEffectSet.BurstId burst) {
+            this.clip  = clip;
+            this.burst = burst;
         }
     }
 
@@ -197,9 +222,11 @@ public final class EnemyAnimationRules {
      * Order 4: a HEAVY committed without a winding-up state (AREA_STRIKE is planned as a heavy while the enemy
      * stays ATTACKING) holds WIND_UP for the telegraph turn, exactly as WINDING_UP does.
      */
-    private static final Hold HEAVY_COMMITTED_HOLD = new Hold(EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
+    private static final Hold HEAVY_COMMITTED_HOLD = new Hold(EnemyClipId.WIND_UP, null, PRIORITY_WIND_UP);
     /** Order 4: the clip an ability plays when the creature ships it (absent = the ABILITY_USED row's ATTACK). */
     private static final EnumMap<SpecialAbility, EnemyClipId> ABILITY_CLIPS = new EnumMap<>(SpecialAbility.class);
+    /** Order 5: death by cause (absent = DEATH with the DEATH burst). */
+    private static final EnumMap<EnemyVisualEvent.DeathCause, DeathRow> DEATHS = new EnumMap<>(EnemyVisualEvent.DeathCause.class);
 
     static {
         register(EnemyVisualMoment.ALERTED,          Kind.ONE_SHOT,  EnemyClipId.ALERT,      PRIORITY_ALERT);
@@ -214,13 +241,19 @@ public final class EnemyAnimationRules {
         register(EnemyVisualMoment.STATUS_APPLIED,   Kind.STATUS,    null,                   PRIORITY_IDLE);
         register(EnemyVisualMoment.DIED,             Kind.DEATH,     EnemyClipId.DEATH,      PRIORITY_DEATH);
 
-        hold(EnemyState.WINDING_UP,       EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
-        hold(EnemyState.SELF_DESTRUCTING, EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
-        hold(EnemyState.DEFENDING,        EnemyClipId.DEFEND,  PRIORITY_DEFEND);
+        hold(EnemyState.WINDING_UP,       EnemyClipId.WIND_UP, null,                PRIORITY_WIND_UP);
+        // Order 5 (R4): a priming self-destruct swells (PRIMING), never the brace; WIND_UP for a creature without it.
+        hold(EnemyState.SELF_DESTRUCTING, EnemyClipId.PRIMING, EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
+        hold(EnemyState.DEFENDING,        EnemyClipId.DEFEND,  null,                PRIORITY_DEFEND);
 
         // Order 4: ability -> clip. The strike area marker stays with EnemyAttackEffectSystem; the clip owns the body.
         abilityClip(SpecialAbility.BUFF_SELF,   EnemyClipId.BUFF_SELF);
         abilityClip(SpecialAbility.AREA_STRIKE, EnemyClipId.AREA_STRIKE);
+        // Order 5: the Aberrations' abilities (the self-destruct row plays on each countdown turn).
+        abilityClip(SpecialAbility.DEBUFF_PLAYER, EnemyClipId.DEBUFF_PLAYER);
+        abilityClip(SpecialAbility.SELF_DESTRUCT, EnemyClipId.SELF_DESTRUCT);
+
+        death(EnemyVisualEvent.DeathCause.SELF_DESTRUCT, EnemyClipId.DEATH_BURST, EnemyEffectSet.BurstId.DETONATE);
 
         for (EnemyVisualMoment moment : EnemyVisualMoment.values()) {
             if (ROWS[moment.ordinal()] == null) {
@@ -236,8 +269,24 @@ public final class EnemyAnimationRules {
         ROWS[moment.ordinal()] = new Row(moment, kind, clip, priority);
     }
 
-    private static void hold(EnemyState state, EnemyClipId clip, int priority) {
-        HOLDS.put(state, new Hold(clip, priority));
+    private static void hold(EnemyState state, EnemyClipId clip, EnemyClipId fallback, int priority) {
+        HOLDS.put(state, new Hold(clip, fallback, priority));
+    }
+
+    private static void death(EnemyVisualEvent.DeathCause cause, EnemyClipId clip, EnemyEffectSet.BurstId burst) {
+        DEATHS.put(cause, new DeathRow(clip, burst));
+    }
+
+    /** The clip a creature with {@code manifest} dies by {@code cause}: the cause's row when it ships it, else DEATH. */
+    public static EnemyClipId deathClipFor(EnemyVisualEvent.DeathCause cause, EnemyClipManifest manifest) {
+        DeathRow row = cause != null ? DEATHS.get(cause) : null;
+        return row != null && manifest.clip(row.clip) != null ? row.clip : EnemyClipId.DEATH;
+    }
+
+    /** The death burst for {@code cause} (the row's, else DEATH); the caller falls back to DEATH when a set lacks it. */
+    public static EnemyEffectSet.BurstId deathBurstFor(EnemyVisualEvent.DeathCause cause) {
+        DeathRow row = cause != null ? DEATHS.get(cause) : null;
+        return row != null ? row.burst : EnemyEffectSet.BurstId.DEATH;
     }
 
     private static void abilityClip(SpecialAbility ability, EnemyClipId clip) {
@@ -263,9 +312,9 @@ public final class EnemyAnimationRules {
         return hold;
     }
 
-    /** True while {@code enemy} holds its telegraph (WIND_UP): the CHARGE burst repeats. */
+    /** True while {@code enemy} holds its telegraph (WIND_UP, or the PRIMING swell that stands in for it): CHARGE repeats. */
     public static boolean holdsWindUp(Enemy enemy) {
         Hold hold = holdFor(enemy);
-        return hold != null && hold.clip == EnemyClipId.WIND_UP;
+        return hold != null && (hold.clip == EnemyClipId.WIND_UP || hold.fallback == EnemyClipId.WIND_UP);
     }
 }

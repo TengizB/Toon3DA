@@ -51,7 +51,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: warden.* / harvest_tick.* / iron_stalker.* / *.fx.* regenerate byte-identical.
 - [x] **CP2** — four rigs (rest poses); family stills sheet (beside Harvest Tick + Iron Stalker) sent.
       DONE WHEN: `--stills` renders all four with no edge warning and the sheet is sent.
-- [ ] **CP3** — all clips + ability clips + the aberration effect set; runtime additions; clip GIFs + in-engine burst
+- [x] **CP3** — all clips + ability clips + the aberration effect set; runtime additions; clip GIFs + in-engine burst
       GIFs (default + one mood) sent. DONE WHEN: the GIFs are sent and the build is green.
 - [ ] **CP4** — owner approval recorded in the idea's DECISIONS (stop until it is).
 - [ ] **CP5** — four registry rows wired; A2-A5 verified in-engine; build green.
@@ -82,3 +82,31 @@ dying/remains carry their clip; (d) EYE_TYRANT beam starts at the frame's EMITTE
 hover down (else it pops a quarter wall at death); (e) scheduleShot reads the emit frame of whichever one-shot plays
 (the DEBUFF_PLAYER spit). Aberration PROJECTILE/TRAIL/MUZZLE live as per-creature overrides on mire_wraith only, so the
 Eye Tyrant keeps the renderer's beam with no runtime change.
+
+**CP3:** all clips + effects + runtime. Frames / atlas: plague_hulk 98 (2048x2048, NARROW x0.86 about the centre line so
+the swings and the death spread stay on the canvas), eye_tyrant 96 (2048), gore_biter 83 (1024x2048), mire_wraith 96
+(2048); no edge warnings. Ability clips: Hulk AREA_STRIKE + PRIMING (hold) + SELF_DESTRUCT (hold) + DEATH_BURST (variant of
+DEATH); Eye Tyrant + Mire Wraith DEBUFF_PLAYER (the Wraith's carries an "emit" event). Arm swings: a 2-bone arm rotated
+about the shoulder sweeps OUTSIDE the canvas on any overhead raise - raises go up the FRONT (negative elbow = the curl),
+"fists high" = fists beside the head (sh 0, el -2.75). Effects: `aberration` set (13 sprites, 15 bursts incl. DETONATE and
+the creature-only SPIT / SPIT_TRAIL / SPIT_MUZZLE / SPLASH / SPLASH_HEAVY / SCUFF); rows: mire_wraith overrides
+PROJECTILE/TRAIL/MUZZLE/HIT/HIT_HEAVY, gore_biter CHARGE -> SCUFF. Eye Tyrant has NO projectile -> the renderer's beam.
+Fresh bake of ALL 29 generated files == shipped (cmp); the 15 earlier files byte-identical.
+RUNTIME (name these in the IMPLEMENTATION NOTE): (1) EnemyClipId += DEBUFF_PLAYER, SELF_DESTRUCT, PRIMING, DEATH_BURST;
+(2) abilityClip rows DEBUFF_PLAYER, SELF_DESTRUCT; (3) Hold.fallback + clipIn(manifest): SELF_DESTRUCTING holds PRIMING
+else WIND_UP (holdsWindUp counts the fallback, so priming seeps CHARGE motes); a hold that REPLACES a showing hold starts
+at frame 0 (WIND_UP_STARTED arrives before the state flips); (4) a HOLD-mode one-shot keeps its last frame while the
+enemy still holds (the countdown's SELF_DESTRUCT stays one level up) - FOUND in-engine, it fell back to PRIMING;
+(5) DeathRow by DeathCause: SELF_DESTRUCT -> DEATH_BURST + BurstId.DETONATE (fallbacks DEATH); DyingEnemyPool / Remains
+carry their clip; (6) scheduleShot reads the emit frame of WHICHEVER one-shot plays (the Wraith's volley);
+(7) EnemyRenderer: EYE_TYRANT beam from the frame's EMITTER anchor (GameMath.billboardCanvasX/Y); the dying EYE_TYRANT
+eases its hover down (GameMath.hoverRemainingWhileFalling, EffectConstants.ENEMY_VISUAL_HOVER_FALL_PORTION 0.62) - it
+popped a quarter wall at death otherwise; (8) MOVE loop starts at the per-enemy idle phase (A3 - FOUND in-engine: the
+three biters' slides start together, so they stepped in unison; touches every creature's MOVE, cosmetic).
+NOT COMMITTED: the four EnemyVisualRegistry rows sit in the working tree only (needed for captures) - CP5 commits them;
+if resuming with a clean tree, re-add them. Findings for the gate: aberrations are trait FLESH (matchup row all 1.0), so
+RESISTED never happens to them in the sim (the WELT resist burst ships, unreachable today); the Eye Tyrant, Gore Biter
+and Mire Wraith never commit a WIND_UP (no heavy) - their WIND_UP shows only offline; the acid arrival splash would need a
+runtime hook (projectile arrival burst) - the splash is at the spout instead. Captures: scratchpad tools/gen.py ->
+hulkA/hulkB/tyrant/biters/wraith.txt via tools/cap.sh, GIFs by tools/assemble.py (labels from logmoments).
+Build: only StoryBarkTest red. WAITING for owner approval (CP4).

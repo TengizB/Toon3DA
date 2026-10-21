@@ -9,6 +9,9 @@ import math
 from kit import blob, limb, chain, teeth_row, mirror, with_glow, Xf, Figure, Rig, Clip, jiggle, lerp, lerp_pt
 
 W, H, AX = 160, 240, 80
+# Designed on the 160x240 grid, then NARROWED about the centre line so the swinging arms and the death spread stay on
+# the canvas (the Stalker's STAND idea, sideways): every layer, anchor and stencil.
+NARROW = 0.86
 CORE = (80, 136)                  # the body scales and leans about the collar's middle
 SHOULDER = (48, 100)               # left arm root (the right arm is the mirror)
 ELBOW = (20, 146)                 # left elbow at rest
@@ -64,9 +67,9 @@ def _arm(sh, el, fist, side_shapes=True):
 
 def plague_hulk_build(p):
     root = Xf.move(p.cx, p.cy)
-    swell = 1.0 + 0.07 * p.swell + 0.035 * p.breath
-    spread = 1.0 + 0.30 * p.sag
-    body_xf = (Xf.scale(p.bs * p.sx * swell * spread, p.bs * p.sy * (swell ** 0.6) * (1 - 0.32 * p.sag), (80, 232))
+    swell = 1.0 + 0.09 * p.swell + 0.035 * p.breath
+    spread = 1.0 + 0.18 * p.sag
+    body_xf = (Xf.scale(p.bs * p.sx * (1 + 0.06 * p.swell + 0.035 * p.breath) * spread, p.bs * p.sy * swell * (1 - 0.32 * p.sag), (80, 232))
                .then(Xf.turn(p.lean, CORE)).then(Xf.move(p.bx, p.by)).then(root))
     wave = math.sin(p.ripple * math.pi * 2) * (1 - p.ripple) * 4.0 if p.ripple > 0 else 0.0
 
@@ -121,7 +124,7 @@ def plague_hulk_build(p):
         *teeth_row(72 + wave, 86.5 + 1.2 * p.jaw, 90 + wave, 85.5 + 1.2 * p.jaw, 5, 2.2 + 1.2 * p.jaw, 1.0, side=1, seed=6, jitter=0.35, op="add"),
     ]
     # ---- ichor blisters across the left shoulder (they pulse; priming swells and lights them each turn)
-    pulse = 1.0 + 0.08 * p.blister + 0.16 * p.swell
+    pulse = 1.0 + 0.08 * p.blister + 0.28 * p.swell
     level = p.blister_glow * (1.0 + 0.3 * p.blister + 0.45 * p.swell) * (1 - p.dim)
     blisters = []
     for i, (x, y, rx, ry, d) in enumerate(((46, 80, 9, 8, 6), (60, 72, 7, 6, 5), (36, 94, 6, 6, 4), (56, 90, 5, 4, 3),
@@ -136,11 +139,13 @@ def plague_hulk_build(p):
                      blob(102, 172, 5 * s, 5 * s, "membrane", op="add", depth=3 * s, glow=level)]
         mass += [limb(56, 164, 66, 196, 0.9, 0.7, "flesh_dk", op="carve"),
                  limb(100, 160, 92, 198, 0.9, 0.7, "flesh_dk", op="carve")]
-    if p.swell > 1.05:                                                        # about to go: the seams light up
-        s = min(1.0, p.swell - 1.0)
-        blisters += with_glow([limb(56, 164, 66, 196, 0.8 * s + 0.3, 0.6 * s + 0.3, "ichor", op="add", depth=0.8),
-                               limb(100, 160, 92, 198, 0.8 * s + 0.3, 0.6 * s + 0.3, "ichor", op="add", depth=0.8)],
-                              1.0 + 0.6 * s)
+    if p.swell > 0.5:                                                         # the strain lines light from inside
+        s = min(1.0, (p.swell - 0.5) / 1.5)
+        blisters += with_glow([limb(56, 164, 66, 196, 0.9 + 1.0 * s, 0.7 + 0.8 * s, "ichor", op="add", depth=0.8),
+                               limb(100, 160, 92, 198, 0.9 + 1.0 * s, 0.7 + 0.8 * s, "ichor", op="add", depth=0.8),
+                               limb(70, 104, 64, 122, 0.6 + 0.8 * s, 0.5 + 0.6 * s, "ichor", op="add", depth=0.6)],
+                              0.5 + 0.3 * s)
+        mass += [limb(70, 104, 64, 122, 0.9, 0.7, "flesh_dk", op="carve")]
     # wounded: a split above the collar, leaking ichor down over the steel
     if p.tear > 0.05:
         mass += [limb(94, 112, 108, 118, 1.6 * p.tear, 1.0 * p.tear, "flesh_dk", op="carve")]
@@ -152,8 +157,12 @@ def plague_hulk_build(p):
     # the burst: the mass tears open along the strain lines, ichor everywhere, the collar flies off its break
     if p.burst > 0.02:
         b = p.burst
-        mass += [blob(80, 150, 30 * b, 40 * b, "flesh_dk", op="carve", depth=18 * b)]
-        blisters += with_glow([blob(80, 150, 24 * b, 32 * b, "ichor", op="add", depth=4 * b)], 1.6 * (1.2 - b))
+        # the strain lines tear open into one ragged split down the belly, its lips curling out
+        mass += [limb(78, 150 - 20 * b, 82, 196 + 4 * b, 2 + 7 * b, 2 + 5 * b, "flesh_dk", op="carve"),
+                 limb(70, 158, 66 - 6 * b, 190, 2.5 * b, 1.5 * b, "flesh_dk", op="add"),
+                 limb(90, 158, 94 + 6 * b, 190, 2.5 * b, 1.5 * b, "flesh_dk", op="add")]
+        blisters += with_glow([limb(79, 152 - 18 * b, 81, 194, 1.2 + 2.2 * b, 1.0 + 1.6 * b, "ichor", op="add", depth=1.0)],
+                              0.7 + 0.4 * (1 - b))
 
     legs = [
         limb(63, 196, 60, 222, 13, 12, "flesh", k=7), blob(59, 225, 13, 5.5, "flesh_dk", depth=6, k=5),
@@ -164,8 +173,8 @@ def plague_hulk_build(p):
     right_raw, right_fist = _arm(p.r_sh, p.r_el, p.r_fist)
     right_arm = mirror(right_raw, AX)
     right_fist = (2 * AX - right_fist[0], right_fist[1])
-    arm_xf = (Xf.scale(p.bs * (1 + 0.05 * p.swell) * (1 + 0.18 * p.sag), p.bs * (1 - 0.12 * p.sag), (80, 232))
-              .then(Xf.move(p.bx * 0.6, p.by * 0.6)).then(root))
+    arm_xf = (Xf.scale(p.bs * (1 + 0.03 * p.swell) * (1 + 0.08 * p.sag), p.bs * (1 - 0.12 * p.sag), (80, 232))
+              .then(Xf.move(p.bx * 0.6, p.by * (0.6 + 0.3 * p.sag))).then(root))
 
     collar_layer = ring if p.burst < 0.5 else Xf.move(14 * p.burst, 10 * p.burst).then(Xf.turn(0.4 * p.burst, (110, 140)))(ring)
     layers = [
@@ -175,19 +184,131 @@ def plague_hulk_build(p):
         arm_xf(left_arm),
         arm_xf(right_arm),
     ]
+    narrow = Xf.scale(NARROW, 1.0, (80, 232))
+    layers = [narrow(layer) for layer in layers]
     anchors = {
-        "ground": (80.0 + p.cx, 232.0 + p.cy),
-        "hit_centre": body_xf.pt((80, 130)),
-        "eye": body_xf.pt((80, 71)),
-        "mouth": arm_xf.pt(lerp_pt(left_fist, right_fist, 0.5)),
+        "ground": narrow.pt((80.0 + p.cx, 232.0 + p.cy)),
+        "hit_centre": narrow.pt(body_xf.pt((80, 130))),
+        "eye": narrow.pt(body_xf.pt((80, 71))),
+        "mouth": narrow.pt(arm_xf.pt(lerp_pt(left_fist, right_fist, 0.5))),
     }
     stencils = []
     if p.tag > 0.5 and p.burst < 0.3:
-        sx, sy = body_xf.pt((68, 136))
+        sx, sy = narrow.pt(body_xf.pt((70, 136)))
         stencils.append(("T-09", sx, sy, (230, 228, 220)))
     return Figure(layers, anchors, stencils)
 
 
 PLAGUE_HULK = Rig("plague_hulk", plague_hulk_build, HULK_POSE, seed=31)
 
-HULK_CLIPS = []
+
+# Key poses
+_REST_ARMS = dict(l_sh=0.0, l_el=0.0, r_sh=0.0, r_el=0.0, l_fist=1.0, r_fist=1.0)
+_FISTS_HIGH = dict(l_sh=0.0, l_el=-2.75, r_sh=0.0, r_el=-2.75, by=-4.0, sy=1.04, sx=0.97, jaw=1.0, eye_glow=1.6, tag=1.0)
+_SLAMMED = dict(l_sh=-0.32, l_el=0.05, r_sh=-0.32, r_el=0.05, l_fist=1.45, r_fist=1.45, by=10.0, sy=0.88, sx=1.08,
+                jaw=0.2, eye_glow=1.9)
+_PRIMED = dict(swell=1.0, l_sh=0.12, r_sh=0.12, l_el=-0.3, r_el=-0.3, by=-3.0, jaw=0.9, eye_glow=1.7, blister=1.0)
+
+# IDLE: heavy breathing; the flesh rolls over the collar a beat behind the breath (jiggle); blisters pulse;
+# the weight shifts from one fist to the other.
+_IDLE = Clip("IDLE", [
+    (0.00, dict(breath=0.0, blister=0.0, lean=0.0, l_sh=0.0, r_sh=0.0, jaw=0.0)),
+    (0.55, dict(breath=1.0, blister=1.0, lean=0.015, l_sh=0.025, jaw=0.25)),
+    (0.70, dict(r_sh=-0.02), "inout"),
+    (1.20, dict(breath=0.0, blister=0.0, lean=-0.01, l_sh=0.0, r_sh=0.0, jaw=0.0)),
+], duration=1.2, mode="loop")
+IDLE = Clip("IDLE", _IDLE.keys + jiggle(_IDLE, "breath", 1.2, out_param="roll_jig", freq=2.2, damping=0.3, gain=1.6, fps=12),
+            duration=1.2, mode="loop")
+
+HULK_CLIPS = [
+    IDLE,
+    IDLE.variant("DORMANT", speed=0.5, fps=6, by=6.0, eye_glow=0.25, blister_glow=0.35, lean=0.03),
+    Clip("ALERT", [        # it heaves upright, the eyes ignite, a bellow (jaw wide)
+        (0.00, dict(_REST_ARMS, by=0.0, sy=1.0, eye_glow=1.0, jaw=0.0, breath=0.0)),
+        (0.15, dict(by=-7.0, sy=1.05, breath=1.0, jaw=1.4, eye_glow=1.9, blister=1.0, l_sh=0.18, r_sh=0.18), "out"),
+        (0.30, dict(by=-5.0, roll=1.0, jaw=1.1)),
+        (0.45, dict(_REST_ARMS, by=0.0, sy=1.0, breath=0.3, roll=0.0, jaw=0.2, eye_glow=1.2, blister=0.3)),
+    ], mode="once"),
+    Clip("MOVE", [         # a lurching knuckle-walk: one fist swings forward, the mass rolls after it
+        (0.000, dict(l_sh=-0.16, l_el=-0.12, r_sh=0.06, lean=-0.05, bx=-3.0, by=0.0, roll=-0.6, roll_jig=0.0)),
+        (0.083, dict(l_sh=0.0, l_el=0.0, r_sh=0.0, lean=0.0, bx=0.0, by=-3.0, roll=0.8, roll_jig=0.6)),
+        (0.167, dict(r_sh=-0.16, r_el=-0.12, l_sh=0.06, lean=0.05, bx=3.0, by=0.0, roll=-0.6, roll_jig=0.0)),
+        (0.250, dict(r_sh=0.0, r_el=0.0, l_sh=0.0, lean=0.0, bx=0.0, by=-3.0, roll=0.8, roll_jig=-0.6)),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # AREA_STRIKE's telegraph: both fists clasped high over its head - held all turn
+        (0.00, dict(_REST_ARMS, by=0.0, sy=1.0, sx=1.0, jaw=0.0, eye_glow=1.0, tag=1.0)),
+        (0.22, dict(l_sh=-0.2, l_el=-1.6, r_sh=-0.2, r_el=-1.6, by=-2.0), "linear"),   # up the front, never out
+        (0.50, _FISTS_HIGH, "inout"),
+    ], mode="hold"),
+    Clip("ATTACK", [       # a hammer blow: the right fist swings up and smashes down in front
+        (0.00, dict(_REST_ARMS, by=0.0, sy=1.0, sx=1.0, lean=0.0, eye_glow=1.0, jaw=0.0)),
+        (0.08, dict(r_sh=0.0, r_el=-2.6, lean=-0.06, by=-4.0, jaw=0.8, eye_glow=1.5), "out"),
+        (0.14, dict(r_sh=-0.36, r_el=0.05, r_fist=1.4, lean=0.05, by=6.0, sy=0.94, sx=1.04, eye_glow=1.8), "in"),
+        (0.22, dict(r_fist=1.2, by=4.0, sy=0.97)),
+        (0.30, dict(_REST_ARMS, by=0.0, sy=1.0, sx=1.0, lean=0.0, eye_glow=1.0, jaw=0.0)),
+    ], fps=20, mode="once", events={0.14: "impact"}),
+    Clip("HURT_LIGHT", [   # the mass ripples
+        (0.00, dict(ripple=0.25, by=-2.0, eye_glow=0.6, roll=0.8), "out"),
+        (0.17, dict(ripple=0.0, by=0.0, eye_glow=1.0, roll=0.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # knocked back: a big wave through the flesh, the fists skid, the split opens
+        (0.00, dict(cy=0.0, ripple=0.0, lean=0.0, sx=1.0, sy=1.0, tear=0.0)),
+        (0.08, dict(cy=-4.0, ripple=0.3, lean=-0.06, sx=1.06, sy=0.94, l_sh=0.25, r_sh=0.25, jaw=1.2, eye_glow=0.4,
+                    roll=1.0, tear=0.6), "out"),
+        (0.25, dict(cy=-2.0, ripple=0.7, lean=-0.03, sx=0.98, sy=1.02, roll=-0.6, eye_glow=1.2)),
+        (0.42, dict(cy=0.0, ripple=0.0, lean=0.0, sx=1.0, sy=1.0, l_sh=0.0, r_sh=0.0, jaw=0.0, eye_glow=1.0, roll=0.0,
+                    tear=0.0)),
+    ], mode="once"),
+    Clip("DEFEND", [       # braces: both forearms raised across the face and chest, crouched behind them
+        (0.00, dict(_REST_ARMS, by=0.0, sy=1.0, eye_glow=1.0, tag=1.0)),
+        (0.08, dict(tag=0.0), "hold"),
+        (0.33, dict(l_sh=-0.35, l_el=-2.1, r_sh=-0.35, r_el=-2.1, by=8.0, sy=0.95, sx=1.03, eye_glow=0.7, jaw=-0.2)),
+    ], mode="hold"),
+    IDLE.variant("WOUNDED", keys=[
+        (0.00, dict(drip=0.05)), (0.95, dict(drip=1.0), "hold"), (1.05, dict(drip=0.05)),
+    ], tear=1.0, lean=0.04, by=3.0, l_sh=0.08),
+    Clip("DEATH", [        # it sags and spreads: the arms give, the mass settles into a heap round its collar
+        (0.00, dict(_REST_ARMS, by=0.0, sag=0.0, eye_glow=1.0, dim=0.0, jaw=0.0, lean=0.0)),
+        (0.10, dict(by=-4.0, jaw=1.3, eye_glow=1.7, l_sh=0.2, r_sh=0.2), "out"),
+        (0.35, dict(l_sh=0.15, r_sh=0.12, l_el=-0.45, r_el=-0.4, by=3.0, sag=0.45, lean=0.03), "in"),
+        (0.65, dict(l_sh=-0.05, r_sh=-0.1, l_el=-0.9, r_el=-0.75, by=5.0, sag=0.95, lean=0.06, jaw=0.4), "in"),
+        (0.75, dict(by=1.0, sag=0.88), "inout"),
+        (0.85, dict(by=4.0, sag=1.0), "hold"),
+        (0.20, dict(dim=0.0)),
+        (0.80, dict(dim=1.0)),
+    ], mode="hold"),
+    Clip("AREA_STRIKE", [  # ability: from the clasped wind-up, both fists down - a squash, the floor takes it
+        (0.00, dict(_FISTS_HIGH)),
+        (0.06, dict(by=-7.0, sy=1.07, sx=0.95), "in"),
+        (0.14, dict(_SLAMMED), "in"),
+        (0.20, dict(by=7.0, sy=0.92, sx=1.05, roll=1.0, roll_jig=1.0, l_fist=1.25, r_fist=1.25), "out"),
+        (0.28, dict(roll=-0.5, roll_jig=-0.6)),
+        (0.40, dict(_REST_ARMS, by=0.0, sy=1.0, sx=1.0, jaw=0.0, eye_glow=1.0, roll=0.0, roll_jig=0.0)),
+    ], fps=20, mode="once", events={0.14: "impact"}),
+    # SELF_DESTRUCT (R4): never the brace. PRIMING is HELD by the SELF_DESTRUCTING state - it swells, the arms
+    # hang out from the stretched mass, the blisters brighten; SELF_DESTRUCT is the ability clip each countdown
+    # turn plays - it swells further and the strain lines light up, and stays there (one level brighter per turn).
+    Clip("PRIMING", [
+        (0.00, dict(_REST_ARMS, swell=0.0, by=0.0, jaw=0.0, eye_glow=1.0, blister=0.0, tag=1.0)),
+        (0.12, dict(swell=0.35, by=-2.0, jaw=0.5), "out"),
+        (0.20, dict(swell=0.25), "inout"),
+        (0.50, _PRIMED, "inout"),
+    ], mode="hold"),
+    Clip("SELF_DESTRUCT", [
+        (0.00, dict(_PRIMED)),
+        (0.10, dict(swell=1.45, by=-5.0, l_sh=0.2, r_sh=0.2, jaw=1.3, eye_glow=2.0, blister=1.4), "out"),
+        (0.20, dict(swell=1.25), "inout"),
+        (0.42, dict(_PRIMED, swell=2.0, by=-4.0, jaw=1.2, eye_glow=1.9, blister=1.3, l_sh=0.2, r_sh=0.2)),
+    ], mode="hold"),
+    # the self-destruct DEATH variant: it bursts - a flash of ichor from the strain lines, the collar flies off its
+    # break, and what is left slumps in a split heap (its remains)
+    Clip("DEATH_BURST", [
+        (0.00, dict(_PRIMED, swell=2.0, burst=0.0, sag=0.0, dim=0.0, l_sh=0.2, r_sh=0.2)),
+        (0.08, dict(swell=2.3, by=-6.0, jaw=1.5, eye_glow=2.2), "out"),
+        (0.16, dict(burst=0.75, swell=1.2, by=4.0, jaw=0.6), "out"),
+        (0.40, dict(burst=1.0, swell=0.4, sag=0.7, by=4.0, l_sh=0.15, r_sh=0.2, l_el=-0.2, r_el=-0.3), "in"),
+        (0.62, dict(swell=0.0, sag=1.0, by=4.0, jaw=0.3, l_sh=0.1, r_sh=0.15), "hold"),
+        (0.16, dict(dim=0.0)),
+        (0.55, dict(dim=1.0)),
+    ], mode="hold", variant_of="DEATH"),
+]

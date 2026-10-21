@@ -35,6 +35,8 @@ def mire_wraith_build(p):
     m = p.melt
     body_xf = (Xf.scale(p.bs * (1 + 0.55 * m) * (1 + 0.10 * p.splash), p.bs * (1 - 0.72 * m) * (1 - 0.07 * p.splash), BASE)
                .then(Xf.turn(p.lean, BASE)).then(Xf.move(p.bx, p.by)).then(root))
+    hose_xf = (Xf.scale(p.bs * (1 + 0.05 * m), p.bs * (1 - 0.72 * m), BASE).then(Xf.turn(p.lean, BASE))
+               .then(Xf.move(p.bx - 14 * m, p.by)).then(root))
     slosh = p.slosh + 2.5 * p.slosh_jig
 
     # ---- the puddle it slumps on (spreads when it melts)
@@ -67,7 +69,8 @@ def mire_wraith_build(p):
     rise = -22 * p.draw + 8 * p.squeeze
     width = 1.0 - 0.14 * p.squeeze - 0.06 * p.draw
     belly_c = (80 + slosh, 180 + rise * 0.5)
-    level = p.gland_glow * (1 + 0.35 * p.gland + 0.6 * p.draw + 0.5 * p.squeeze) * (1 - p.dim)
+    # capped: past ~1 the glow ramp tops out in near-white, and white belongs to the hit flash (V5)
+    level = min(1.12, p.gland_glow * (1 + 0.2 * p.gland + 0.25 * p.draw + 0.2 * p.squeeze)) * (1 - p.dim)
     belly = [
         blob(belly_c[0], belly_c[1], 40 * width, 36 + rise * -0.25, "membrane", depth=24, k=10, glow=level * 0.32),
         *with_glow([blob(belly_c[0] + dx * width, belly_c[1] + dy, r * (1 + 0.08 * p.gland), r * 0.9 * (1 + 0.08 * p.gland),
@@ -107,7 +110,7 @@ def mire_wraith_build(p):
     fuse = [blob(108, 106, 9, 7, "flesh_dk", op="add", depth=3)]
 
     layers = [
-        body_xf(hose),
+        hose_xf(hose),
         root(puddle),
         body_xf(draped + fuse),
         body_xf(belly),
@@ -122,11 +125,86 @@ def mire_wraith_build(p):
     }
     stencils = []
     if p.tag > 0.5 and m < 0.3:
-        sx, sy = body_xf.pt((125.5, 64.5))
+        sx, sy = hose_xf.pt((125.5, 64.5))
         stencils.append(("S4", sx, sy, (230, 228, 220)))
     return Figure(layers, anchors, stencils)
 
 
 MIRE_WRAITH = Rig("mire_wraith", mire_wraith_build, WRAITH_POSE, seed=43)
 
-WRAITH_CLIPS = []
+
+# IDLE: the belly sloshes side to side and wobbles after itself (jiggle), the glands pulse, the hood sags and
+# settles a beat behind, the torn hose drips
+_IDLE = Clip("IDLE", [
+    (0.00, dict(slosh=-3.0, gland=0.0, by=0.0, hood=0.0, lean=-0.01)),
+    (0.75, dict(slosh=3.0, gland=1.0, by=1.5, hood=0.6, lean=0.01)),
+    (1.30, dict(drip=1.0), "hold"), (1.40, dict(drip=0.0)), (0.10, dict(drip=0.0)),
+], duration=1.5, mode="loop")
+IDLE = Clip("IDLE", _IDLE.keys
+            + jiggle(_IDLE, "slosh", 1.5, out_param="slosh_jig", freq=2.6, damping=0.22, gain=0.6, fps=12)
+            + jiggle(_IDLE, "by", 1.5, out_param="hood_jig", freq=2.0, damping=0.3, gain=0.8, fps=12),
+            duration=1.5, mode="loop")
+_DRAWN = dict(draw=1.0, aim=1.0, gland=1.0, gland_glow=1.25, by=-4.0, hood=-0.6, eye_glow=1.5, spit=0.2)
+
+WRAITH_CLIPS = [
+    IDLE,
+    IDLE.variant("DORMANT", speed=0.5, fps=6, by=5.0, gland_glow=0.4, eye_glow=0.3, hood=1.2, bs=0.97),
+    Clip("ALERT", [        # it heaves up out of its puddle, the hood lifts, the glands flare, the spout comes up
+        (0.00, dict(by=0.0, hood=0.0, gland=0.0, aim=0.0, eye_glow=1.0, slosh=0.0)),
+        (0.15, dict(by=-8.0, bs=1.04, hood=-1.0, gland=1.0, gland_glow=1.25, aim=0.8, eye_glow=1.8, slosh=-4.0), "out"),
+        (0.30, dict(by=-5.0, slosh=3.0, hood=-0.6)),
+        (0.45, dict(by=0.0, bs=1.0, hood=0.0, gland=0.3, gland_glow=1.0, aim=0.3, eye_glow=1.1, slosh=0.0)),
+    ], mode="once"),
+    Clip("MOVE", [         # it oozes: a surge, the belly lagging and sloshing after it
+        (0.000, dict(by=0.0, bs=1.0, lean=-0.04, slosh=-5.0, splash=0.15, hood=0.3)),
+        (0.167, dict(by=-3.0, bs=1.02, lean=0.04, slosh=5.0, splash=0.0, hood=-0.2)),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # the belly draws up, the glands brighten, the spout levels at you - held
+        (0.00, dict(draw=0.0, aim=0.0, gland=0.0, gland_glow=1.0, by=0.0, hood=0.0, eye_glow=1.0, spit=0.0)),
+        (0.50, _DRAWN, "inout"),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the spit: the belly contracts, the spout flares on the emit frame, it recoils
+        (0.00, dict(_DRAWN)),
+        (0.06, dict(squeeze=1.0, draw=0.4, spit=1.0, gland_glow=1.6, by=2.0, slosh=0.0), "out"),
+        (0.16, dict(squeeze=0.6, spit=0.5, by=-2.0, slosh=-3.0, gland_glow=1.2)),
+        (0.30, dict(draw=0.0, squeeze=0.0, aim=0.2, spit=0.0, gland=0.0, gland_glow=1.0, by=0.0, hood=0.0, eye_glow=1.0,
+                    slosh=2.0)),
+    ], fps=20, mode="once", events={0.06: "emit"}),
+    Clip("HURT_LIGHT", [   # it splashes and re-forms
+        (0.00, dict(splash=0.6, slosh=4.0, hood=0.8, eye_glow=0.6), "out"),
+        (0.17, dict(splash=0.0, slosh=0.0, hood=0.0, eye_glow=1.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # knocked back: the whole mass splashes outward, then pulls itself back together
+        (0.00, dict(cy=0.0, splash=0.0, lean=0.0, slosh=0.0)),
+        (0.08, dict(cy=-3.0, splash=1.0, lean=-0.06, slosh=-7.0, hood=1.2, gland_glow=1.5, eye_glow=0.4, by=4.0), "out"),
+        (0.25, dict(cy=-1.0, splash=0.4, lean=-0.02, slosh=5.0, hood=0.4, gland_glow=1.1, eye_glow=1.2, by=1.0)),
+        (0.42, dict(cy=0.0, splash=0.0, lean=0.0, slosh=0.0, hood=0.0, gland_glow=1.0, eye_glow=1.0, by=0.0)),
+    ], mode="once"),
+    Clip("DEFEND", [       # it hunches into itself: hood down over the spout, belly tucked, glands dimmed
+        (0.00, dict(by=0.0, hood=0.0, draw=0.0, gland_glow=1.0, aim=0.0, tag=1.0)),
+        (0.33, dict(by=8.0, bs=0.95, hood=2.0, draw=0.45, gland_glow=0.6, eye_glow=0.5, aim=0.0, lean=0.02)),
+    ], mode="hold"),
+    IDLE.variant("WOUNDED", keys=[
+        (0.00, dict(drip=0.0)), (0.55, dict(drip=1.0), "hold"), (0.62, dict(drip=0.0)), (1.10, dict(drip=1.0), "hold"),
+        (1.17, dict(drip=0.0)),
+        (0.00, dict(gland_glow=1.0), "hold"), (0.40, dict(gland_glow=0.55), "hold"), (0.50, dict(gland_glow=1.0), "hold"),
+    ], lean=0.05, by=4.0, splash=0.2),
+    Clip("DEATH", [        # the glands go out one after another, it slumps into a puddle that stays
+        (0.00, dict(melt=0.0, dim=0.0, by=0.0, hood=0.0, splash=0.0, eye_glow=1.0, gland_glow=1.0)),
+        (0.10, dict(by=-5.0, hood=-0.8, gland_glow=1.6, eye_glow=1.7, splash=0.3), "out"),
+        (0.40, dict(melt=0.45, by=0.0, hood=1.5, splash=0.6, slosh=-4.0), "in"),
+        (0.70, dict(melt=1.0, splash=0.2, slosh=3.0), "in"),
+        (0.80, dict(melt=0.95, slosh=-1.0), "inout"),
+        (0.90, dict(melt=1.0, slosh=0.0), "hold"),
+        (0.20, dict(dim=0.0)),
+        (0.80, dict(dim=1.0)),
+    ], mode="hold"),
+    Clip("DEBUFF_PLAYER", [   # ability - the acid volley: the belly draws up and contracts hard, the spout spits
+        (0.00, dict(draw=0.0, aim=0.0, squeeze=0.0, spit=0.0, gland_glow=1.0, by=0.0)),
+        (0.15, dict(_DRAWN, draw=1.2, gland_glow=1.45), "inout"),
+        (0.25, dict(squeeze=1.2, draw=0.3, spit=1.0, gland_glow=1.7, by=3.0), "out"),
+        (0.38, dict(squeeze=0.4, spit=0.4, by=-2.0, slosh=-4.0)),
+        (0.55, dict(draw=0.0, squeeze=0.0, aim=0.2, spit=0.0, gland=0.0, gland_glow=1.0, by=0.0, hood=0.0, eye_glow=1.0,
+                    slosh=0.0)),
+    ], mode="once", events={0.25: "emit"}),
+]

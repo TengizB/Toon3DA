@@ -143,22 +143,24 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
      * A ranged shot of any kind (the ordinary attack AND the debuff shot — every caller of
      * {@code EnemyAttackListener.onRangedAttack}), aimed at the COMMITTED lane target tile, so a player who
      * stepped off the lane sees the glob fly down the old lane and miss — never curve into their new tile.
-     * It leaves the current frame's EMITTER anchor on the ATTACK clip's emit frame (guide 7.7) when that clip
-     * is playing, else at once. Returns false when this layer cannot draw it (a legacy type, no PROJECTILE in
-     * the family set, the animator pool exhausted): the caller then draws the procedural glob as before.
+     * It leaves the current frame's EMITTER anchor on the emit frame (guide 7.7) of the one-shot playing - ATTACK,
+     * or (order 5) an ability clip such as the Mire Wraith's DEBUFF_PLAYER volley - else at once. Returns false when
+     * this layer cannot draw it (a legacy type, no PROJECTILE in the family set, the animator pool exhausted): the
+     * caller then draws the procedural glob as before.
      */
     public boolean scheduleShot(Enemy enemy, int targetColumn, int targetRow) {
         EnemyAnimator animator = animatorFor(enemy, true);
         if (animator == null || animator.visual.burst(EnemyEffectSet.BurstId.PROJECTILE) == null) return false;
         float delaySeconds = 0f;
-        EnemyClipManifest.Clip attack = animator.visual.manifest.clip(EnemyClipId.ATTACK);
-        if (attack != null && animator.isPlayingOneShot(EnemyClipId.ATTACK)) {
+        EnemyClipId playing = animator.oneShotClip();
+        EnemyClipManifest.Clip playingClip = playing != null ? animator.visual.manifest.clip(playing) : null;
+        if (playingClip != null) {
             float emitSeconds = 0f;
-            for (EnemyClipManifest.Frame frame : attack.frames) {
+            for (EnemyClipManifest.Frame frame : playingClip.frames) {
                 if (frame.event == EnemyClipManifest.FrameEvent.EMIT) break;
                 emitSeconds += frame.durationSeconds;
             }
-            if (emitSeconds < attack.durationSeconds) {   // no emit frame: leave at once
+            if (emitSeconds < playingClip.durationSeconds) {   // no emit frame: leave at once
                 delaySeconds = Math.max(0f, emitSeconds - animator.oneShotElapsedSeconds());
             }
         }
@@ -186,13 +188,16 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
         if (cause == EnemyVisualEvent.DeathCause.WEAPON || cause == EnemyVisualEvent.DeathCause.HAZARD) {
             emitAt(animator, enemy, frame, null, animator.visual.burst(EnemyEffectSet.BurstId.KILL));
         }
-        emitAt(animator, enemy, frame, animator.visual.placement(EnemyEffectSet.PlacementId.BODY),
-                animator.visual.burst(EnemyEffectSet.BurstId.DEATH));
+        // Order 5: the death row for the cause (a self-destruct bursts: DEATH_BURST + DETONATE), else DEATH.
+        EnemyEffectSet.Burst deathBurst = animator.visual.burst(EnemyAnimationRules.deathBurstFor(cause));
+        if (deathBurst == null) deathBurst = animator.visual.burst(EnemyEffectSet.BurstId.DEATH);
+        emitAt(animator, enemy, frame, animator.visual.placement(EnemyEffectSet.PlacementId.BODY), deathBurst);
         float worldX = animator.renderCenterX(enemy);
         float worldY = animator.renderCenterY(enemy);
-        dyingPool.add(enemy.type, animator.visual, worldX, worldY, enemy.tileColumn, enemy.tileRow);
-        EnemyClipManifest.Clip death = animator.visual.manifest.clip(EnemyClipId.DEATH);
-        remains.add(enemy.type, animator.visual, worldX, worldY, enemy.tileColumn, enemy.tileRow,
+        EnemyClipId deathClip = EnemyAnimationRules.deathClipFor(cause, animator.visual.manifest);
+        dyingPool.add(enemy.type, animator.visual, deathClip, worldX, worldY, enemy.tileColumn, enemy.tileRow);
+        EnemyClipManifest.Clip death = animator.visual.manifest.clip(deathClip);
+        remains.add(enemy.type, animator.visual, deathClip, worldX, worldY, enemy.tileColumn, enemy.tileRow,
                 death != null ? death.durationSeconds : 0f);
         release(animator);
     }

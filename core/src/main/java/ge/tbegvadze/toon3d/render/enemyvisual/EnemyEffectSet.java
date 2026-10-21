@@ -31,7 +31,9 @@ public final class EnemyEffectSet implements Disposable {
     /** The bursts the runtime fires, by name in the manifest. A set ships the subset it needs. */
     public enum BurstId {
         HIT, HIT_HEAVY, RESIST, KILL, DEATH, LEAK, CHARGE, MUZZLE, PROJECTILE, TRAIL, BLEED,
-        BURNING, BURNING_ONSET, POISONED, STUNNED;
+        BURNING, BURNING_ONSET, POISONED, STUNNED,
+        /** Order 5: the death burst of a self-destruct (the Plague Hulk's detonation); a set without it uses DEATH. */
+        DETONATE;
 
         public static final int COUNT = values().length;
 

@@ -25,6 +25,8 @@ TYRANT_POSE = dict(
     wilt=0.0,                                    # DEATH: the cradle wilts (0..1)
     sway=0.0, sway_jig=0.0,                      # tendril sway (rad) and its lagging whip
     limp=0.0,                                    # tendrils hang limp and gather (0..1)
+    slump=0.0,                                   # DEATH: on the floor, the tendrils splay out sideways (0..1)
+    weep=0.0, drip=0.0,                          # WOUNDED: ichor weeping from the lower lid (0..1) and its drip phase
     rattle=0.0,                                  # HURT: the speculum rattles (0..1)
     tag=1.0,
 )
@@ -72,10 +74,14 @@ def eye_tyrant_build(p):
         swing = p.sway * math.sin(phase) + p.sway_jig * math.cos(phase)
         gather = (80 - x) * 0.35 * p.limp
         pts = []
+        spread_dir = -1 if x < 81 else 1
         for i in range(5):
             t = i / 4
             ox = curl * math.sin(t * math.pi) * (1 - 0.6 * p.limp) + swing * 30 * t * t + gather * t
-            pts.append((x + ox, 146 + length * t * (1 + 0.08 * p.limp)))
+            px, py = x + ox, 146 + length * t * (1 + 0.08 * p.limp)
+            # slumped on the floor: the tendril folds out sideways instead of hanging (it would go through the floor)
+            sx, sy = x + spread_dir * length * t * (0.55 + 0.15 * phase / 5), 146 + length * t * 0.12 + 6 * t
+            pts.append((lerp(px, sx, p.slump), lerp(py, sy, p.slump)))
         tendrils += chain(pts, thick, 1.4, "flesh_dk", k=4)
         tendrils.append(blob(pts[-1][0], pts[-1][1], 2.2, 2.6, "flesh", depth=2, k=2))     # a nerve bulb at the tip
 
@@ -87,6 +93,12 @@ def eye_tyrant_build(p):
     if p.cloud > 0.02:      # the eye clouds over: a milky film spreads from the centre over the iris
         eye.append(blob(EYE[0] + p.look_x * 10, EYE[1] + p.look_y * 10, EYE_R * 0.62 * p.cloud, EYE_R * 0.58 * p.cloud,
                         "sclera", op="add", depth=1.5))
+    if p.weep > 0.02:       # wounded: ichor weeping from the lower lid's corner, running down the cradle
+        run = 8 + 22 * p.weep
+        eye += with_glow([limb(66, 128, 64, 128 + run * 0.6, 1.4, 1.0, "ichor", op="add", depth=1.0),
+                          limb(64, 128 + run * 0.6, 65, 128 + run, 1.0, 0.8, "ichor", op="add", depth=1.0)], 1.0)
+        if p.drip > 0.02:
+            eye += with_glow([blob(65, 128 + run + 3 + 10 * p.drip, 1.4, 1.8, "ichor", prio=20)], 1.0)
     # veins over the sclera, running in from the rim
     eye += [limb(*a, *b, 0.7, 0.5, "flesh_dk", op="add", depth=0.5) for a, b in
             (((50, 108), (58, 106)), ((58, 106), (62, 110)), ((108, 92), (101, 95)), ((110, 104), (104, 103)),
@@ -144,4 +156,81 @@ def eye_tyrant_build(p):
 
 EYE_TYRANT = Rig("eye_tyrant", eye_tyrant_build, TYRANT_POSE, seed=37)
 
-TYRANT_CLIPS = []
+
+_LOOK = dict(look_x=0.0, look_y=0.0, pupil=0.42, slit=1.0, lid_top=0.0, lid_bot=0.0)
+
+# IDLE: the pupil saccades (sharp jumps, held), the petals breathe, the tendrils sway and whip a beat behind the bob
+_IDLE = Clip("IDLE", [
+    (0.00, dict(look_x=0.0, look_y=0.0), "hold"),
+    (0.30, dict(look_x=0.0, look_y=0.0), "out"),
+    (0.36, dict(look_x=-0.45, look_y=0.15), "hold"),
+    (0.72, dict(look_x=-0.45, look_y=0.15), "out"),
+    (0.78, dict(look_x=0.3, look_y=-0.25), "hold"),
+    (1.08, dict(look_x=0.3, look_y=-0.25), "out"),
+    (1.14, dict(look_x=0.0, look_y=0.0), "hold"),
+    (0.00, dict(petal=0.0, by=0.0, sway=-0.12, pupil=0.42)),
+    (0.75, dict(petal=1.0, by=-3.0, sway=0.12, pupil=0.38)),
+], duration=1.5, mode="loop")
+IDLE = Clip("IDLE", _IDLE.keys + jiggle(_IDLE, "by", 1.5, out_param="sway_jig", freq=1.6, damping=0.25, gain=0.06, fps=12),
+            duration=1.5, mode="loop")
+_DEATH_END = dict(cloud=1.0, dim=1.0, wilt=1.0, limp=1.0, slump=1.0, by=68.0, bs=0.92, tilt=0.25, pupil=0.7,
+                  lid_top=0.22, lid_bot=0.1, sway=0.0)
+
+TYRANT_CLIPS = [
+    IDLE,
+    IDLE.variant("DORMANT", speed=0.5, fps=6, lid_top=0.36, lid_bot=0.24, iris_glow=0.6, petal=-0.6, limp=0.4,
+                 look_x=0.0, look_y=0.35),
+    Clip("ALERT", [        # the iris snaps onto you: the lids fly open, the pupil pinches, then settles
+        (0.00, dict(_LOOK, look_x=-0.5, look_y=0.3, iris_glow=1.0, petal=0.0, lid_top=0.2, lid_bot=0.15)),
+        (0.08, dict(look_x=0.0, look_y=0.0, pupil=0.22, iris_glow=1.45, petal=1.4, lid_top=-0.1, lid_bot=-0.08, by=-4.0), "out"),
+        (0.25, dict(pupil=0.3, iris_glow=1.3, petal=1.0, by=-2.0)),
+        (0.42, dict(_LOOK, iris_glow=1.1, petal=0.3, by=0.0)),
+    ], mode="once"),
+    Clip("MOVE", [         # it drifts: a bob forward, the tendrils trail and whip
+        (0.000, dict(by=0.0, tilt=0.0, sway=-0.3, petal=0.3)),
+        (0.167, dict(by=-4.0, tilt=0.03, sway=0.3, petal=-0.2)),
+    ], duration=0.333, mode="loop"),
+    Clip("WIND_UP", [      # the telegraph: the pupil narrows to a line down its lane, the lids peel back, held
+        (0.00, dict(_LOOK, iris_glow=1.0, petal=0.0)),
+        (0.25, dict(slit=0.35, lid_top=-0.08, lid_bot=-0.06, petal=0.8), "inout"),
+        (0.50, dict(_LOOK, slit=0.1, pupil=0.48, lid_top=-0.14, lid_bot=-0.1, iris_glow=1.35, petal=1.2, by=-2.0)),
+    ], mode="hold"),
+    Clip("ATTACK", [       # the beam: the iris flares on the emit frame, the whole eye recoils
+        (0.00, dict(_LOOK, slit=0.1, pupil=0.48, lid_top=-0.14, lid_bot=-0.1, iris_glow=1.35, petal=1.2)),
+        (0.05, dict(slit=0.6, pupil=0.3, lid_top=-0.14, lid_bot=-0.1, iris_glow=2.1, by=-3.0, bs=1.05, petal=1.4), "out"),
+        (0.15, dict(by=3.0, bs=0.98, iris_glow=1.3, lid_top=0.08, lid_bot=0.0, petal=0.6)),
+        (0.30, dict(_LOOK, by=0.0, bs=1.0, iris_glow=1.0, petal=0.0)),
+    ], fps=20, mode="once", events={0.05: "emit"}),
+    Clip("HURT_LIGHT", [   # the lids try to shut against the speculum, which rattles
+        (0.00, dict(lid_top=0.22, lid_bot=0.18, rattle=1.0, pupil=0.3, by=-2.0, iris_glow=0.6), "out"),
+        (0.17, dict(lid_top=0.0, lid_bot=0.0, rattle=0.0, pupil=0.42, by=0.0, iris_glow=1.0)),
+    ], mode="once"),
+    Clip("HURT_HEAVY", [   # knocked back: the lids slam on the speculum, the cradle tilts, the tendrils whip
+        (0.00, dict(cy=0.0, tilt=0.0, lid_top=0.0, lid_bot=0.0, rattle=0.0, sway=0.0)),
+        (0.08, dict(cy=-5.0, tilt=-0.12, lid_top=0.34, lid_bot=0.26, rattle=1.0, pupil=0.25, iris_glow=0.4, sway=0.5,
+                    look_x=0.3, look_y=-0.3, petal=-0.6), "out"),
+        (0.25, dict(cy=-2.0, tilt=-0.05, lid_top=0.15, lid_bot=0.1, rattle=0.0, sway=-0.3, iris_glow=1.2)),
+        (0.42, dict(_LOOK, cy=0.0, tilt=0.0, sway=0.0, iris_glow=1.0, petal=0.0)),
+    ], mode="once"),
+    Clip("DEFEND", [       # braces: the petals fold over the eye, the lids clamp as far as the speculum lets them
+        (0.00, dict(_LOOK, petal=0.0, iris_glow=1.0, tag=1.0)),
+        (0.33, dict(lid_top=0.36, lid_bot=0.28, petal=-1.6, iris_glow=0.7, by=3.0, limp=0.3, pupil=0.3)),
+    ], mode="hold"),
+    IDLE.variant("WOUNDED", keys=[
+        (0.00, dict(drip=0.05)), (1.30, dict(drip=1.0), "hold"), (1.40, dict(drip=0.05)),
+    ], weep=1.0, tilt=0.06, lid_top=0.12, limp=0.25),
+    Clip("DEATH", [        # the eye clouds over, the cradle wilts, it drops (the renderer lowers its hover) and
+        (0.00, dict(_LOOK, cloud=0.0, dim=0.0, wilt=0.0, limp=0.0, slump=0.0, by=0.0, iris_glow=1.0)),   # sprawls
+        (0.10, dict(pupil=0.2, iris_glow=1.4, lid_top=-0.1, petal=1.2, by=-4.0), "out"),
+        (0.35, dict(cloud=0.6, dim=0.6, wilt=0.5, limp=0.6, pupil=0.6, lid_top=0.15, by=20.0, petal=0.0), "in"),
+        (0.55, dict(_DEATH_END, by=71.0), "in"),
+        (0.65, dict(by=64.0, slump=0.9), "out"),
+        (0.80, _DEATH_END, "hold"),
+    ], mode="hold"),
+    Clip("DEBUFF_PLAYER", [   # ability: the iris contracts to a pinpoint, the lids peel all the way back
+        (0.00, dict(_LOOK, iris_glow=1.0, petal=0.0)),
+        (0.15, dict(pupil=0.12, lid_top=-0.18, lid_bot=-0.14, iris_glow=1.5, petal=1.6, by=-3.0, bs=1.04), "out"),
+        (0.35, dict(pupil=0.1, iris_glow=1.6), "inout"),
+        (0.55, dict(_LOOK, iris_glow=1.1, petal=0.2, by=0.0, bs=1.0)),
+    ], mode="once"),
+]
