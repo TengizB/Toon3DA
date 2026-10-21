@@ -92,3 +92,12 @@ Outputs were NOT written into assets/ yet — CP6 does that after approval:
 
 **CP5 (gate):** owner answered "Approved" (2026-10-21) — recorded as D2 in the idea file's DECISIONS. Covers the
 motion, the re-rendered stills and the 2 px spur change. Next: CP6.
+
+**CP6a (outputs + docs):** shipped files written by `bestiary.py` into `assets/textures/enemies/generated/`
+(byte-identical to the approved preview run); old `warden.png` / `harvest_tick.png` removed. Guide section 7
+rewritten (API 7.6, manifest schema 7.7, previews 7.8, atlas budget 7.9; [PLANNED] markers for order 1 gone),
+lessons 12.11-12.13, SKILL.md API table + files + commands, CLAUDE.md docs-table line count, master idea file's
+"already committed" line. Build: mirror `:core:build` compiles; 480 tests, 1 FAILED —
+`StoryBarkTest.humourLivesNearTheSurfaceAndDiesNearTheCore` (bark.depth.core.2 is LEVITY). PRE-EXISTING: this branch
+changes nothing under core/, lwjgl3/, android/ or assets/story/ (git diff vs origin/master is empty there). Not
+ours to fix (SCOPE OUT). `:lwjgl3:compileJava` green. Next: CP6b = reviewer, then STATUS: IMPLEMENTED.

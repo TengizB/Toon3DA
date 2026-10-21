@@ -20,19 +20,25 @@ container), outside the Gradle build, never shipped. The game ships only the PNG
 
 | File | What it is |
 |---|---|
-| `kit.py` | The renderer. Shapes → per-layer height fields → normals → shading → palette → outline → cleanup. |
-| `bestiary.py` | ONE function per sprite + the `ENEMIES` table. A new sprite = one function + one row. |
+| `kit.py` | The renderer (shapes → per-layer height fields → normals → shading → palette → outline → cleanup) plus the animation layer: `Xf` transforms, `Rig`/`Pose`/`Figure`, `Clip`, and the bake (`write_creature`: atlas, glow atlas, manifest, previews). |
+| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`). |
+| `bestiary.py` | The `CREATURES` table of (rig, clips) + the command line. A new creature = one `_rig.py` + one row. |
 | `sheet.py` | Contact sheet of a folder of sprites, nearest-neighbour upscaled, on the game's near-black. |
 
-Shipped textures: `assets/textures/enemies/generated/<sprite>.png` (160x240, binary alpha).
+Shipped per creature, in `assets/textures/enemies/generated/`: `<name>.atlas.png` (every frame of every
+clip, trimmed and packed, binary alpha, <= 2048x2048), `<name>.glow.png` (emissive pixels only, same
+packing) and `<name>.clips.json` (the manifest: clips → frames with atlas rect, canvas offset, duration,
+loop mode, anchors). Schema: guide section 7.7. Canvas 160x240, ground line 232.
 
 ```bash
 cd .claude/skills/enemy-art
-python3 bestiary.py ../../../assets/textures/enemies/generated            # all sprites, shipping form
-python3 bestiary.py /tmp/preview --halo warden                            # presentation form (soft glow)
-python3 sheet.py /tmp/preview /tmp/preview/sheet.png 3
+python3 bestiary.py ../../../assets/textures/enemies/generated            # ship: atlases + manifests (~50 s)
+python3 bestiary.py /tmp/out --preview /tmp/out/preview warden            # + one GIF per clip + strip sheet
+python3 bestiary.py /tmp/out --stills [--halo] warden                     # rest pose only, for contact sheets
+python3 sheet.py /tmp/out /tmp/out/sheet.png 3
 ```
-Output is deterministic (every noise source is seeded): the same script writes byte-identical PNGs.
+Output is deterministic (every noise source is seeded, the grain hash is integer-only): the same script
+writes byte-identical files. Previews go to the owner and are never committed.
 
 ## The rules every sprite obeys (the style lock)
 
@@ -79,9 +85,28 @@ it must read as IN FRONT.
 | `mirror(shapes, axis)` | bilateral symmetry — design one half |
 | `stencil(img, "W-07", x, y, colour)` | 3x5 pixel serial stencil, painted after render |
 
-Shape options: `op="union"` (default) / `"add"` (raised detail painted in its own material: veins,
+Shape options: `glow=` (emissive/translucent light: 0 dead, 1 rest, > 1 flare); `op="union"` (default) / `"add"` (raised detail painted in its own material: veins,
 rivets, eyes, blisters) / `"carve"` (grooves, panel seams); `prio` biases which material wins where
 shapes overlap; `k` the blend radius (0 = hard union).
+
+## Animating a creature (kit.py API — full reference: guide section 7)
+
+| Call | What it does |
+|---|---|
+| `Xf.move / turn(angle, pivot) / scale(sx, sy, pivot) / reflect_x(axis)` | affine transforms; image space, y DOWN, positive angle = clockwise |
+| `Xf.segment(rest_a, rest_b, new_a, new_b, stretch=)` | carry a part riding a limb segment (a clamp on a leg, a spur) |
+| `a.then(b)`, `xf(shapes)`, `xf.pt(p)` | compose (child.then(parent)), transform shapes, transform a point |
+| `with_glow(shapes, level)` | set the glow of emissive / translucent shapes (eyes die, blisters dim) |
+| `Figure(layers, anchors, stencils)` | what a rig returns for one pose |
+| `Rig(name, build, defaults, seed)` | `build(pose) -> Figure`; `defaults` names every pose parameter; rest pose = the still |
+| `Clip(name, keys, duration, fps=12, mode=)` | keys `[(t, {param: v}, easing)]`, one track per parameter; easing `linear/in/out/inout/hold`; mode `loop/once/hold` |
+| `clip.variant(name, speed, keys, fps, **pinned)` | DORMANT / WOUNDED style variants of a clip |
+| `write_creature(rig, clips, out_dir, preview_dir)` | the bake: atlas + glow atlas + `clips.json` (+ GIFs, strip) |
+
+Grain is sampled in each shape's OWN coordinates (its `frame`), so texture rides a moving part. The
+standard clip set (guide 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK (<= 0.30 s: bake at fps 20),
+HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH (last frame = corpse). Anchors: ground, hit_centre, eye,
+plus muzzle / mouth. Fix every canvas-edge warning by clamping the pose, never by growing the canvas.
 
 ## Lessons already paid for
 
@@ -94,13 +119,15 @@ shapes overlap; `k` the blend radius (0 = hard union).
   glow loses its form.
 - **Bayer dither on flat areas turns into stipple.** Dither is 0.08; surface variety comes from
   material grain, not dither.
+- **Leave air around the rest pose.** A still that touches the canvas edge clips the moment it moves;
+  swing long parts across the body, not out past the edge.
 - **Mock-ups lie.** Pasting sprites onto a screenshot ignores the mood grade, fog, contact shadow and
   name tags. Judge in the engine (below).
 
 ## Seeing a sprite in the real game
 
-Use the `run-game` skill. Until series order 2 wires a sprite to its `EnemyType`, preview it by
-copying it over the texture of an existing type of similar height (in the WORKING TREE only — restore
+Use the `run-game` skill. Until series order 2 wires a creature's atlas to its `EnemyType`, preview a
+pose by writing it with `--stills` and copying that PNG over the texture of an existing type of similar height (in the WORKING TREE only — restore
 with `git checkout -- assets/textures/enemies/` afterwards, never commit the swap), and spawn that type
 in front of the player with the capture driver's `spawn:TYPE:FORWARD:RIGHT` step (added to
 `run-game/capture` by series order 2, together with `alert`, `damage`, `kill` and `burst`). Two tiles ahead is the standard judging distance; also capture

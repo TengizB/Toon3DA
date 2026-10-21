@@ -39,7 +39,7 @@ WHAT IS ALREADY COMMITTED
   docs/sprite-art-creation-guide.txt   the method (technique, materials, design, animation, reactions,
                                        effects, engine contract, verification, lessons, recipes)
   .claude/skills/enemy-art/            the generator: kit.py, bestiary.py, sheet.py, SKILL.md
-  assets/textures/enemies/generated/   warden.png, harvest_tick.png (approved stills, not wired)
+  assets/textures/enemies/generated/   warden + harvest_tick atlases, glow atlases, clips.json (order 1; not wired)
 
 
 SERIES RULES (every order, by reference)

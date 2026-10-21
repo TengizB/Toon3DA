@@ -24,7 +24,7 @@ CONTENTS
   4.  Materials, palettes and inks
   5.  Designing a creature (the brief and the build order)
   6.  Composition: canvas, scale, ground line, hover
-  7.  Animation: rigs, poses, clips                           [PLANNED: order 1]
+  7.  Animation: rigs, poses, clips, atlases, manifest
   8.  Reactions: how an enemy answers every event             [PLANNED: orders 2-3]
   9.  Effects: hits, deaths, projectiles, status              [PLANNED: order 3]
   10. Engine contract (what the game does with the output)
@@ -65,21 +65,26 @@ CONTENTS
 ====================================================================================================
   .claude/skills/enemy-art/            the generator (a dev tool, outside Gradle, never shipped)
     kit.py                             the renderer: shapes -> height fields -> shading -> pixels
-    bestiary.py                        one function per sprite + the ENEMIES table
+    <creature>_rig.py                  one per creature: its rig function, pose defaults and clips
+                                       (warden_rig.py, harvest_tick_rig.py)
+    bestiary.py                        the CREATURES table (rig, clips) + the command line
     sheet.py                           contact sheets
-  assets/textures/enemies/generated/   shipped output (PNG, binary alpha)
+  assets/textures/enemies/generated/   shipped output per creature: <name>.atlas.png, <name>.glow.png,
+                                       <name>.clips.json (PNG binary alpha; section 7.6)
 
   Requirements: Python 3, numpy, Pillow (pre-installed in the cloud container). Nothing else.
 
   Commands:
     cd .claude/skills/enemy-art
-    python3 bestiary.py ../../../assets/textures/enemies/generated        # ship form, all sprites
-    python3 bestiary.py /tmp/out --halo warden                            # presentation form
+    python3 bestiary.py ../../../assets/textures/enemies/generated        # ship: atlases + manifests
+    python3 bestiary.py /tmp/out --preview /tmp/out/preview warden         # + clip GIFs and strip sheet
+    python3 bestiary.py /tmp/out --stills [--halo] warden                  # rest pose only (sheets)
     python3 sheet.py /tmp/out /tmp/out/sheet.png 3                         # contact sheet at 3x
+  A full bake of both creatures takes ~50 s (~0.3 s per unique frame).
 
   Why offline Python and not Java at runtime: the kit is ~400 lines of array numerics that would
   have to be duplicated in Java, would add load time on phones, and buys nothing visible. The game
-  only needs the PNGs (and, from order 1, the clip manifests).
+  only needs the atlases and the clip manifests.
 
 
 ====================================================================================================
@@ -194,7 +199,7 @@ because every pixel's value comes from a real surface normal lit by one consiste
     Materials + ink   from section 4; the family ink
     Story detail      at least one (N6)
     Distinctness      how it differs from every other member of its family at two tiles
-    Motion character  [PLANNED: order 1] how it idles, moves, attacks, flinches and dies (section 7)
+    Motion character  how it idles, moves, attacks, flinches and dies (section 7)
 5.2 BUILD ORDER (each step judged at 1x before the next)
     a. Silhouette: big masses only, one layer, flat - does the black shape read the role and verb?
     b. Masses merged with smooth max; limbs as chains; decide which parts need their own layer.
@@ -218,12 +223,14 @@ because every pixel's value comes from a real surface normal lit by one consiste
   - A floating creature the renderer does NOT hover bakes its hover into the canvas (empty rows
     under it, like the Warden); a creature the renderer hovers (EYE_TYRANT) stands on the canvas floor.
   - Leave clear air where the renderer draws overlays on top (e.g. the Auric Sentinel's shard ring).
-  - Animation frames share ONE canvas and ONE ground line, so a creature never pops between clips
-    [PLANNED: order 1].
+  - Animation frames share ONE canvas and ONE ground line, so a creature never pops between clips.
+    A pose must never push a part off the canvas: the bake warns (naming the edge) and the fix is to
+    clamp the pose, never to grow the canvas. Long parts that rotate (the Warden's prod) swing across
+    the body, not outward past the edge.
 
 
 ====================================================================================================
-7. ANIMATION: RIGS, POSES, CLIPS                                           [PLANNED: order 1]
+7. ANIMATION: RIGS, POSES, CLIPS, ATLASES, MANIFEST
 ====================================================================================================
 7.1 The model. A sprite function becomes a RIG: build(pose) -> layers, where `pose` is a dict of
     named parameters (joint angles, offsets, squash, jaw open, lid closed, glow intensity, ...).
@@ -253,11 +260,94 @@ because every pixel's value comes from a real surface normal lit by one consiste
 7.5 Texture must stick to the body. Grain noise is sampled in each SHAPE'S OWN coordinates, not
     canvas coordinates, or the surface "swims" over a moving part. The Bayer dither is screen-fixed
     and may shimmer slightly on moving edges - acceptable, keep it at 0.08.
-7.6 Output: one ATLAS PNG per creature (frames packed, trimmed to their bounds), one GLOW atlas
-    (emissive pixels only), and one MANIFEST (clip name -> frames, frame durations, loop/hold, and
-    per-frame ANCHORS: ground point, hit centre, eye, muzzle/emitter) the runtime reads.
-7.7 Previews for the owner: an animated GIF per clip (nearest-neighbour, 3x) plus a clip strip.
+    How: every Shape carries `frame`, a 3x3 affine map canvas -> its own material coordinates. A new
+    shape gets an intrinsic frame (ellipse: centre + angle; capsule: start point + axis; slab:
+    centroid), and every rigging transform composes into it, so the grain rides the part. Grain is
+    `value_noise_at` - an integer lattice hash seeded per material by crc32 (never Python's hash(),
+    which is randomised per process) - blended across overlapping shapes by their height, so the
+    joints of a chain show no seam.
 
+7.6 THE API (kit.py)
+    Xf                    a 2D affine transform. Image space: origin top-left, y DOWN, so a positive
+                          angle turns CLOCKWISE on screen.
+      Xf.move(dx, dy)  Xf.turn(angle, pivot)  Xf.scale(sx, sy, pivot)  Xf.reflect_x(axis)
+      Xf.segment(rest_a, rest_b, new_a, new_b, stretch=True)   carries a part riding a limb segment
+      a.then(b)           apply a, then b (build a hierarchy: child.then(parent))
+      xf(shapes)          transformed copies of a shape list;  xf.pt((x, y)) a transformed point
+    with_glow(shapes, level)   glow level of emissive / translucent shapes: 0 dead (<= GLOW_DEAD 0.05
+                          is shaded at the ramp bottom and leaves the glow atlas), 1 rest, > 1 flare.
+                          Also Shape(..., glow=) on any primitive.
+    Figure(layers, anchors, stencils)   what a rig returns for one pose: layers back to front,
+                          anchors {name: (x, y)} on the canvas, stencils [(text, x, y, colour)].
+    Rig(name, build, defaults, seed, width=160, height=240, ground_y=232)
+                          build(pose) -> Figure. `defaults` names EVERY pose parameter (plain floats);
+                          the rest pose = all defaults = the approved still. rig.pose(**values),
+                          rig.render(pose, halo=False) -> (image, glow image, anchors).
+    Clip(name, keys, duration=None, fps=12, mode="loop", variant_of=None, overrides=None)
+      keys                [(time_s, {param: value}, easing), ...]. EACH PARAMETER IS ITS OWN TRACK: it
+                          interpolates only between the keys that name it, so a clip names only what
+                          moves. The easing shapes the segment LEAVING that key: linear, in, out, inout
+                          (default), hold (step). A loop wraps the last key back to the first; a
+                          one-shot track whose first key is late eases in from the rig default at t=0.
+      mode                loop | once (play, then the runtime moves on) | hold (hold the last frame:
+                          WIND_UP, DEFEND, DEATH).
+      sampling            n = round(duration x fps) frames, each duration / n long, so the clip lasts
+                          exactly `duration`. A loop samples t = 0 .. duration excluded; a one-shot
+                          samples t = 0 .. duration included, so its last frame IS the end pose.
+      clip.variant(name, speed=1, keys=(), fps=None, **overrides)   time-stretched copy with extra keys
+                          and pinned parameters (DORMANT = IDLE at half speed and fps 6, dimmed;
+                          WOUNDED = IDLE + damage parameters + its own extra tracks).
+    write_creature(rig, clips, out_dir, preview_dir=None)   the bake: render every frame, trim to the
+                          alpha bounds, merge consecutive identical frames (durations add), share one
+                          atlas rect between identical frames of different clips, shelf-pack into a
+                          power-of-two atlas (ERROR above 2048x2048), write the glow atlas in the same
+                          packing, the manifest and (optionally) the previews. Warns when any frame
+                          touches a canvas edge.
+    Timing that fits the game (rule R3 of order 1): ATTACK within EffectConstants.
+    ENEMY_ATTACK_ANIM_DURATION_SECONDS (0.30 s) - bake it at fps 20 for 6 frames; WIND_UP is a `hold`
+    clip whose last frame can be held for a whole player turn; MOVE is a short loop (0.33 s).
+
+7.7 THE MANIFEST (<name>.clips.json, MANIFEST_VERSION 1) - the contract order 2's runtime reads with
+    LibGDX's JsonReader. Plain JSON, one frame per line.
+    {
+     "version": 1,
+     "creature": "warden",
+     "canvas": [160,240],              the common canvas every frame was rendered on
+     "groundY": 232,                   the ground line on that canvas
+     "atlas": "warden.atlas.png",      sibling files, same folder
+     "glow": "warden.glow.png",
+     "atlasSize": [1024,2048],
+     "clips": {
+      "IDLE": {
+       "mode": "loop",                 loop | once | hold
+       "fps": 12,                      the rate it was sampled at (informational; use frame durations)
+       "duration": 1.33,               seconds; the sum of its frame durations
+       "variantOf": "IDLE",            only on a variant (DORMANT, WOUNDED)
+       "frames": [
+        {"rect":[x,y,w,h],             the trimmed frame in the atlas (and in the glow atlas)
+         "offset":[left,top],          where that rect's top-left sits on the canvas
+         "duration":0.0833,            seconds this frame shows
+         "glow":true,                  false = the glow rect is empty, skip the additive draw
+         "anchors":{"eye":[x,y], ...}} canvas coordinates, sorted by name
+       ]}}}
+    COORDINATES: everything is IMAGE space - origin TOP-LEFT, y DOWN - in pixels of the canvas or the
+    atlas. LibGDX's TextureRegion(texture, x, y, w, h) takes the atlas rect as-is; canvas positions
+    must be flipped (canvasHeight - y) when placed in the world's y-up space.
+    Shipped clip names (the standard set, 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK,
+    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH. The corpse frame is the last DEATH frame.
+    Anchors every creature reports: ground, hit_centre, eye; plus muzzle (anything that emits -
+    the Warden's prod tip) or mouth (the Harvest Tick's jaws).
+    Deterministic: the same script writes byte-identical atlases and manifests (rule R4).
+
+7.8 Previews for the owner (bestiary.py --preview DIR): an animated GIF per clip, nearest-neighbour
+    3x on the game's near-black, one-shot clips holding their last frame for a beat; plus
+    <name>_strip.png, every clip as a labelled row of frames at 2x with the frame durations and the
+    anchors marked. Previews are for the gate and are never committed.
+
+7.9 Atlas budget. The Warden (81 unique frames) packs into 1024x2048; the Harvest Tick (88) fills
+    2048x2048 exactly. A creature that needs more clips gets them by lowering frame counts (a slow
+    variant at a lower fps, shorter idles) or by splitting its atlas - a runtime change for the order
+    that owns the runtime - never by growing the limit.
 
 ====================================================================================================
 8. REACTIONS: HOW AN ENEMY ANSWERS EVERY EVENT                             [PLANNED: orders 2-3]
@@ -318,10 +408,10 @@ in its own metal and a tick bleeds its own ichor:
 11. VERIFICATION AND THE OWNER APPROVAL GATE
 ====================================================================================================
   1. Contact sheet: the creature beside the rest of its family at 3x, on the game's near-black.
-  2. Clip previews: one GIF per clip + a strip (from order 1).
+  2. Clip previews: one GIF per clip + a strip (bestiary.py --preview).
   3. In-engine (run-game skill): spawn it two tiles ahead (`spawn:TYPE:FORWARD:RIGHT`, plus `alert`, `damage`,
      `kill` and `burst` - added to run-game by series order 2), default mood + one other (`--mood amber_hot`); for reactions, capture a burst of
-     shots 0.05 s apart around a hit / a kill. Before a type is wired, preview by copying its PNG over
+     shots 0.05 s apart around a hit / a kill. Before a type is wired, preview a pose (bestiary.py --stills) by copying that PNG over
      a similar-height type's texture in the WORKING TREE only and restoring with
      `git checkout -- assets/textures/enemies/` - never commit a swap.
   4. Regeneration: every earlier sprite must come out byte-identical after a kit change, unless the
@@ -348,6 +438,14 @@ in its own metal and a tick bleeds its own ichor:
   12.9 A translucent halo does not survive the engine's alpha cut. Glow is a separate layer.
   12.10 What the owner liked: sculpted organic forms, wet/metal specular, visible Organization
        hardware on creatures, an off-centre detail that breaks symmetry, restrained glow.
+  12.11 The approved still is the rest pose, so it must leave room to move. The first Harvest Tick
+       still touched both canvas edges with a leg spur; any motion clipped it. Leave a few pixels of air
+       around the widest rest silhouette, and move long parts (the Warden's prod) across the body,
+       never outward past the edge.
+  12.12 A stencil is painted AFTER rendering onto whatever is opaque there - when its part is covered
+       (the tick's curled DEFEND), drop the stencil for that pose or it lands on the wrong surface.
+  12.13 A wreck must fit above the canvas floor: a hovering creature that lands needs a little depth
+       scale (it fell back) and crumpled dangling parts, or its limbs end below row 239.
 
 
 ====================================================================================================
@@ -355,7 +453,8 @@ in its own metal and a tick bleeds its own ichor:
 ====================================================================================================
 ADD AN ENEMY SPRITE
   [ ] brief written in the idea file (5.1); N2 respected - no old texture opened
-  [ ] rig function + ENEMIES row in bestiary.py; new materials in kit.MATERIALS if needed
+  [ ] <name>_rig.py (rig + pose defaults + clips) + one CREATURES row in bestiary.py; new materials
+      in kit.MATERIALS if needed; no canvas-edge warnings; atlas within 2048x2048
   [ ] the full clip set (7.3) + its ability clips + its reactions (8) + family effects (9)
   [ ] contact sheet, clip GIFs, in-engine screenshots (11)
   [ ] owner approval recorded
