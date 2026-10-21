@@ -80,9 +80,18 @@ public final class EnemyAnimator {
 
     void beginSlide(int fromColumn, int fromRow, int toColumn, int toRow, float durationSeconds) {
         if (durationSeconds <= 0f) return;
-        // Tile centres, exactly as Enemy.worldCenterX/Y place a settled enemy.
-        slideFromX = fromColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
-        slideFromY = fromRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+        // Tile centres, exactly as Enemy.worldCenterX/Y place a settled enemy — except that a slide begun
+        // while the last one is still running starts from where the body IS, so fast play never snaps it back.
+        if (sliding) {
+            float progress = slideProgress();
+            float currentX = GameMath.lerp(slideFromX, slideToX, progress);
+            float currentY = GameMath.lerp(slideFromY, slideToY, progress);
+            slideFromX = currentX;
+            slideFromY = currentY;
+        } else {
+            slideFromX = fromColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+            slideFromY = fromRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+        }
         slideToX   = toColumn   * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
         slideToY   = toRow      * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
         slideSeconds         = 0f;

@@ -39,6 +39,8 @@ import java.util.List;
  *                      reports the ALERTED visual moment, as perception would
  *   damage:INDEX:AMOUNT   EnemyManager.applyDamageTo(enemy, AMOUNT) — the real player-hit path
  *   kill:INDEX         the real hit path with an overwhelming amount
+ *   defend:INDEX       FORCED brace for a capture: state DEFENDING + the DEFEND_STARTED visual moment (no Block,
+ *                      no turn) — for a creature whose AI will not brace on cue
  *   clip:INDEX         prints the animated clip enemy INDEX is showing (render/enemyvisual)
  *   burst:NAME:COUNT:INTERVAL   COUNT shots NAME_00.. every INTERVAL seconds from now (one per frame at most)
  *   timestart / timestop   average frame time (render + glFinish) between the two, printed to stdout
@@ -204,6 +206,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                     break;
                 case "kill":
                     damageEnemy(Integer.parseInt(step[2]), 1_000_000);
+                    break;
+                case "defend":
+                    forceDefend(Integer.parseInt(step[2]));
                     break;
                 case "clip":
                     printEnemyClip(Integer.parseInt(step[2]));
@@ -812,6 +817,25 @@ public class CaptureLauncher extends ApplicationAdapter {
             fire.setAccessible(true);
             fire.invoke(manager, enemy, Enum.valueOf(momentType, "ALERTED"));
             System.out.println("[capture] alerted enemy " + index);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /** {@code defend:INDEX} — a FORCED brace pose for a capture (state DEFENDING + DEFEND_STARTED); no Block, no turn. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void forceDefend(int index) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            Class stateType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyState");
+            findField(enemy.getClass(), "state").set(enemy, Enum.valueOf(stateType, "DEFENDING"));
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            Class momentType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyVisualMoment");
+            java.lang.reflect.Method fire = manager.getClass().getDeclaredMethod("fireVisual", enemy.getClass(), momentType);
+            fire.setAccessible(true);
+            fire.invoke(manager, enemy, Enum.valueOf(momentType, "DEFEND_STARTED"));
+            System.out.println("[capture] forced DEFEND on enemy " + index);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

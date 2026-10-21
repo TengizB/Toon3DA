@@ -274,8 +274,9 @@ public final class EffectConstants {
     // R1: a hit costing at least this fraction of max HP plays HURT_HEAVY instead of HURT_LIGHT (AS2).
     public static final float ENEMY_VISUAL_HURT_HEAVY_HEALTH_FRACTION = 0.25f;
     // The cosmetic tile slide of a migrated enemy (the simulation moves it instantly; MOVE plays during this).
-    public static final float ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE     = 0.16f;
-    public static final float ENEMY_VISUAL_SLIDE_MAX_SECONDS          = 0.40f;   // a long charge still lands fast
+    // One tile = one full MOVE cycle (order 1 bakes MOVE at 0.33 s), so a step shows the whole scuttle.
+    public static final float ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE     = 0.33f;
+    public static final float ENEMY_VISUAL_SLIDE_MAX_SECONDS          = 0.50f;   // a long charge still lands fast
     public static final float ENEMY_VISUAL_KNOCKBACK_SECONDS          = 0.12f;
     // R4: dying instances that keep playing DEATH after the simulation removed the enemy; the oldest is dropped.
     public static final int   ENEMY_VISUAL_DYING_POOL_CAPACITY        = 8;
@@ -283,11 +284,12 @@ public final class EffectConstants {
     public static final float ENEMY_VISUAL_DEATH_HOLD_SECONDS         = 0.35f;
     // Animators pre-allocated per floor (one per live migrated enemy); more is a logged legacy fallback.
     public static final int   ENEMY_VISUAL_ANIMATOR_POOL_CAPACITY     = 64;
-    // Glow pass (art-direction V6: emissives are never graded or fogged): full strength up to START tiles,
-    // fading linearly to MIN at END tiles so a far emitter stays a point of light, never a blown-out disc.
-    public static final float ENEMY_GLOW_FADE_START_TILES             = 6f;
-    public static final float ENEMY_GLOW_FADE_END_TILES               = 16f;
-    public static final float ENEMY_GLOW_MIN_ALPHA                    = 0.45f;
+    // Glow pass (art-direction V6: an emissive keeps its own colour under every mood). The glow atlas holds
+    // the emissive pixels' baked colour and is laid over the graded body at this opacity: 1 (exactly the baked
+    // colour) up to START tiles, easing to MIN at END tiles so a far emitter recedes into the room.
+    public static final float ENEMY_GLOW_FADE_START_TILES             = 10f;
+    public static final float ENEMY_GLOW_FADE_END_TILES               = 20f;
+    public static final float ENEMY_GLOW_MIN_ALPHA                    = 0.60f;
     // Ranged recoil kick: sprite nudges away from the player on fire
     public static final float ENEMY_RECOIL_MAX_PIXELS             = 14f;
     // Muzzle flash quad: warm-white overlay at the firing sprite center

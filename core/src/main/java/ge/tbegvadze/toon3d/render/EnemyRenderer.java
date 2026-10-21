@@ -775,6 +775,13 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 lastColumn  = bodyDrawer.getLastColumn();
                 if (animatedVisible) {
                     bodyDrawer.drawColumns(batch, animator.getVisual().bodyAtlas, depth, wallRenderer, null);
+                    // GLOW (art-direction V6): the emissive layer laid over the graded body in its OWN colour —
+                    // never graded, never fogged, only faded with depth. Normal blend, not additive: the glow
+                    // atlas holds the emissive pixels' baked colour, so adding it would double them to white.
+                    if (animatedFrame.hasGlow) {
+                        batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
+                        bodyDrawer.drawColumns(batch, animator.getVisual().glowAtlas, depth, wallRenderer, null);
+                    }
                 }
             } else {
                 firstColumn = Math.max(0, leftScreenColumn);
@@ -806,35 +813,26 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             // R8 muzzle-light additive pass over the same columns (body only; tints, bars and shadows
             // never take it). Same wall z-test; columns hidden behind a nearer recorded prop are skipped.
-            // Order 2: an animated body's GLOW rides the same additive bracket — never graded, never fogged
-            // (art-direction V6), only faded with depth — so the blend still switches at most twice.
             boolean bodyLit = bodyLightRed + bodyLightGreen + bodyLightBlue > 0f;
-            boolean glowing = animatedVisible && animatedFrame.hasGlow;
-            if (bodyLit || glowing) {
+            if (bodyLit) {
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
-                if (bodyLit) {
-                    batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
-                    if (animator != null) {
-                        if (animatedVisible) {
-                            bodyDrawer.drawColumns(batch, animator.getVisual().bodyAtlas, depth, wallRenderer, occluderBuffer);
-                        }
-                    } else {
-                        for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
-                            if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                            if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
-                            int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
-                            localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
-                            batch.draw(region.getTexture(),
-                                       screenColumn * projectionColumnWidth, clampedBottom,
-                                       projectionColumnWidth, clampedTop - clampedBottom,
-                                       region.getRegionX() + localSrcX, texSrcY, 1, texSrcHeight,
-                                       false, false);
-                        }
+                batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
+                if (animator != null) {
+                    if (animatedVisible) {
+                        bodyDrawer.drawColumns(batch, animator.getVisual().bodyAtlas, depth, wallRenderer, occluderBuffer);
                     }
-                }
-                if (glowing) {
-                    batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
-                    bodyDrawer.drawColumns(batch, animator.getVisual().glowAtlas, depth, wallRenderer, occluderBuffer);
+                } else {
+                    for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                        if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                        if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+                        int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
+                        localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
+                        batch.draw(region.getTexture(),
+                                   screenColumn * projectionColumnWidth, clampedBottom,
+                                   projectionColumnWidth, clampedTop - clampedBottom,
+                                   region.getRegionX() + localSrcX, texSrcY, 1, texSrcHeight,
+                                   false, false);
+                    }
                 }
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             }
@@ -1588,7 +1586,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
         return animator != null ? animator.renderCenterY(enemy) : enemy.renderCenterY();
     }
 
-    /** Glow strength at a depth: full near, fading to a floor far away (never graded, never fogged). */
+    /**
+     * Glow opacity at a depth: the emissive layer's own colour up to the fade start, then a partial blend
+     * toward the graded body so a far emitter recedes instead of burning at full strength.
+     */
     private static float glowAlphaAtDepth(float depth) {
         return GameMath.distanceFadeAlpha(depth, EffectConstants.ENEMY_GLOW_FADE_START_TILES,
                 EffectConstants.ENEMY_GLOW_FADE_END_TILES, EffectConstants.ENEMY_GLOW_MIN_ALPHA);
@@ -1658,16 +1659,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
         }
         batch.setColor(red, green, blue, 1f);
         bodyDrawer.drawColumns(batch, dying.visual.bodyAtlas, depth, wallRenderer, null);
+        if (frame.hasGlow) {   // the emissive layer, ungraded (V6) — as for a live body
+            batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
+            bodyDrawer.drawColumns(batch, dying.visual.glowAtlas, depth, wallRenderer, null);
+        }
         SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
         if (occluderBuffer != null) {
             occluderBuffer.redrawInFrontRange(batch, bodyDrawer.getFirstColumn(), bodyDrawer.getLastColumn(), depth,
                     projectionColumnWidth, wallRenderer);
-        }
-        if (frame.hasGlow) {
-            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
-            batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
-            bodyDrawer.drawColumns(batch, dying.visual.glowAtlas, depth, wallRenderer, occluderBuffer);
-            batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         }
     }
 

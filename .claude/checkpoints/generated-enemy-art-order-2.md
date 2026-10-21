@@ -101,3 +101,15 @@ match; residual diffs <= 20 levels everywhere incl. the bare far wall (random fl
 attributable to the renderer; every changed line in EnemyRenderer's live loop is gated on `animator != null`.
 NOT exercised in-engine: STAGGERED / KNOCKED_BACK / DEFEND (rows exist; neither creature defends, stagger needs the
 shotgun). Capture `spawn` now tolerates a tree without the listener field (baseline runs).
+
+**CP5a (tooling + two fixes found in the owner captures):** `burst2gif.sh`, capture `defend:INDEX` (FORCED pose — neither
+creature braces on cue: the Warden never can, a threatened Warden can always fire; the Tick braces on its cadence only
+with no charge lane), SKILL.md rows + the animated-enemy recipe. FIX 1 — GLOW COMPOSITE: the glow atlas is an exact copy
+of the body's emissive pixels (kit.py render(): g[emissive] = out[emissive]), so the spec's ADDITIVE glow doubled them to
+flat white near the camera (guide lesson 12.3). Now a NORMAL-blend overlay of the glow layer on the graded body at
+`glowAlphaAtDepth` (1 up to 10 tiles, to 0.6 at 20): emissives show their baked colour under every mood (V6), and it
+costs no blend switch. Deviation from the idea's word "additively" -> record in the IMPLEMENTATION NOTE at CP6 and tell
+the owner. FIX 2 — SLIDE: 0.16 s/tile showed ~2 of MOVE's 4 frames; now one full MOVE cycle per tile (0.33 s, max 0.5 s)
+and a slide begun mid-slide starts from the body's current position (no snap-back under fast play).
+OWNER GATE: GIFs + key-frame sheets in the scratchpad `gifs/` (warden|harvest_tick x cool_steel|amber_hot, all clips
+labelled) sent; WAITING for approval. CP5 is ticked only when the answer is recorded in the idea's DECISIONS.
