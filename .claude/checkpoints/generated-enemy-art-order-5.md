@@ -103,7 +103,8 @@ carry their clip; (6) scheduleShot reads the emit frame of WHICHEVER one-shot pl
 eases its hover down (GameMath.hoverRemainingWhileFalling, EffectConstants.ENEMY_VISUAL_HOVER_FALL_PORTION 0.62) - it
 popped a quarter wall at death otherwise; (8) MOVE loop starts at the per-enemy idle phase (A3 - FOUND in-engine: the
 three biters' slides start together, so they stepped in unison; touches every creature's MOVE, cosmetic).
-NOT COMMITTED: the four EnemyVisualRegistry rows sit in the working tree only (needed for captures) - CP5 commits them;
+NOT COMMITTED: the four EnemyVisualRegistry rows (PLAGUE_HULK -> plague_hulk, EYE_TYRANT -> eye_tyrant, GORE_BITER ->
+gore_biter, MIRE_WRAITH -> mire_wraith) were used for the captures, then REMOVED from the tree (clean tree at the gate) - CP5 adds them;
 if resuming with a clean tree, re-add them. Findings for the gate: aberrations are trait FLESH (matchup row all 1.0), so
 RESISTED never happens to them in the sim (the WELT resist burst ships, unreachable today); the Eye Tyrant, Gore Biter
 and Mire Wraith never commit a WIND_UP (no heavy) - their WIND_UP shows only offline; the acid arrival splash would need a
