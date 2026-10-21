@@ -174,6 +174,12 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
      * visual position, and the remains are registered there to take over when it ends (A4).
      */
     void beginDying(EnemyAnimator animator, Enemy enemy, EnemyVisualEvent.DeathCause cause) {
+        // A shot committed but not yet out of the emitter still leaves now: scheduleShot already told the
+        // procedural glob to stand down, so dying before the emit frame must not swallow it.
+        if (animator.pendingEmitSeconds >= 0f) {
+            launchShot(animator, enemy);
+            animator.pendingEmitSeconds = -1f;
+        }
         EnemyClipManifest.Frame frame = animator.currentFrame(enemy);
         answeredTileColumn = enemy.tileColumn;
         answeredTileRow    = enemy.tileRow;

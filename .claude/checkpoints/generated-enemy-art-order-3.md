@@ -63,7 +63,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP3** — outcomes (hurt/resisted/blocked/kill), recoil, wounded idle + leak work for both creatures.
 - [x] **CP4** — status visuals; remains; projectile + muzzle; telegraph effects.
 - [x] **CP5** — burst GIFs sent; owner approval recorded (stop until it is).
-- [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -145,3 +145,6 @@ on the Warden's firing turn -> the glob flies down the old lane at the player's 
 recoil envelope, life tail fade, arrival fade, dazed sway and edge-on orbit moved into GameMath with derivation
 blocks; ENEMY_VISUAL_SHIMMER_DECAY; guide contents [PLANNED] markers + the stale order-2 "additive glow" line +
 the 32-remains cap note; `Arrays` import. Build: only StoryBarkTest red. Next: reviewer r2 on the shot code + guide.
+
+**CP6 (gate):** reviewer r2 PASS (report .reviewer-r2.md). Its optional nit applied: a shot still pending when the
+Warden dies is launched from beginDying. STATUS: IMPLEMENTED 2026-10-21.

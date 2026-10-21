@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 3 - reactions and effects
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
 
 IMPLEMENTATION NOTE (2026-10-21)
@@ -25,6 +25,9 @@ IMPLEMENTATION NOTE (2026-10-21)
   - Remains are drawn for the floor on the death tile even where an item landed instead of a corpse; on a corpse
     tile the decal is not drawn. The Warden's prod crackle (CHARGE) is data-ready but unseen: the Warden never
     winds up in the sim. POISONED was not captured (the Warden is immune).
+  - Reviewer r1 FAIL -> fixed: every ranged shot (the DEBUFF_PLAYER shot too) is scheduled from
+    EnemyAttackListener.onRangedAttack and aimed at the COMMITTED lane tile, so a dodged shot visibly misses;
+    falls back to the procedural glob without an animator. A shot pending at death leaves at once. r2 PASS.
   - A6 (llvmpipe, same session, interleaved, vs order 2 at 649c7a6; 6 alerted + 1 killed, 2 burning, 8 s):
     order 3 11.42 / 11.25 ms, order 2 11.27 / 11.52 ms. GC (--gclog, 30 s in the room, 2 burning + 1 stunned +
     1 wounded): 2 startup pauses each, none after floor start.
