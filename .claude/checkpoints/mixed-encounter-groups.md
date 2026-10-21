@@ -41,7 +41,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 ## STEP LEDGER
 
 - [x] **CP0** — this file + the idea file, committed and pushed before anything else changes.
-- [ ] **CP1** — the seven GROUP_* numbers in BalanceConfig + CONSTANT_SUBJECTS -> DENSITY.
+- [x] **CP1** — the seven GROUP_* numbers in BalanceConfig + CONSTANT_SUBJECTS -> DENSITY.
       DONE WHEN: `:core:test` shows only the baseline failure (C-CONSTANT green).
 - [ ] **CP2** — EncounterBehaviour, SlotFill, Slot.fill, 8 template rows, instantiate V1-V3.
       DONE WHEN: build green; no `sameType`, no PACK.

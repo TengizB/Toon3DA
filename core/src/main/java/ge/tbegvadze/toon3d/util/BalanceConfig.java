@@ -2391,6 +2391,24 @@ public final class BalanceConfig {
     /** E2: no single archetype may spend more than this fraction of the cap (variety, when alternatives exist). */
     public static final float GROUP_MAX_SINGLE_TYPE_FRACTION = 0.40f;
 
+    // --- MIXED ENCOUNTER GROUPS (mixed-encounter-groups, V1-V7) --------------------------------
+    // Chaff come in PAIRS of different archetypes and every group mixes behaviours (ranged / rusher /
+    // plodder), so a room asks "which one first". A monoculture survives only as the rare BROOD.
+    /** V1: no archetype appears more than this many times in one group (a BROOD excepted). */
+    public static final int   GROUP_MAX_SAME_TYPE_PER_GROUP       = 2;
+    /** V4: a BROOD group is exactly this many of ONE chaff archetype (the only same-type cluster above V1). */
+    public static final int   GROUP_BROOD_SIZE                    = 3;
+    /** V4: chance, rolled once per floor, that BROOD is eligible on that floor. */
+    public static final float GROUP_BROOD_FLOOR_CHANCE            = 0.25f;
+    /** V4: at most this many BROOD groups on one floor. */
+    public static final int   GROUP_BROOD_MAX_PER_FLOOR           = 1;
+    /** V3: a non-BROOD group of at least this many members spans at least two encounter behaviours. */
+    public static final int   GROUP_MIXED_BEHAVIOUR_MIN_SIZE      = 3;
+    /** V6: no archetype exceeds this fraction of a floor's body target (floor GROUP_CHAFF_SLOT_MIN) while alternatives exist. */
+    public static final float GROUP_MAX_SINGLE_TYPE_BODY_FRACTION = 0.30f;
+    /** V7: no room holds more than this many of one archetype when the placer puts two groups in it. */
+    public static final int   GROUP_ROOM_MAX_SAME_TYPE            = 3;
+
     // --- E5 FIRST CONTACT -------------------------------------------------------------------
     /** E5: the first group of >= 2 stands within this many walk tiles of the start. */
     public static final int   FIRST_CONTACT_MAX_WALK_TILES             = 18;

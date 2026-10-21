@@ -3447,8 +3447,18 @@ public final class BalanceSchema {
     // GRANDFATHERED (the end of this file) holds every field that existed before order 8; it is SHRINK-ONLY.
     // -------------------------------------------------------------------------------------
 
-    /** Fields a rule bands: field name -> the {@link RuleKind} that reads it. Empty until a new field is added. */
+    /** Fields a rule bands: field name -> the {@link RuleKind} that reads it. */
     private static final Map<String, RuleKind> CONSTANT_SUBJECTS = new java.util.LinkedHashMap<>();
+    static {
+        // mixed-encounter-groups: the group-variety numbers, banded by R-DENSITY's variety half.
+        CONSTANT_SUBJECTS.put("GROUP_MAX_SAME_TYPE_PER_GROUP",       RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_BROOD_SIZE",                    RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_BROOD_FLOOR_CHANCE",            RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_BROOD_MAX_PER_FLOOR",           RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_MIXED_BEHAVIOUR_MIN_SIZE",      RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_MAX_SINGLE_TYPE_BODY_FRACTION", RuleKind.DENSITY);
+        CONSTANT_SUBJECTS.put("GROUP_ROOM_MAX_SAME_TYPE",            RuleKind.DENSITY);
+    }
 
     /** Fields deliberately banded by no rule: field name -> a one-line reason. Empty until a new field needs it. */
     private static final Map<String, String> UNBANDED = new java.util.LinkedHashMap<>();
