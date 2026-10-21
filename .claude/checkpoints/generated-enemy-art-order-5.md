@@ -47,7 +47,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — kit additions (flesh materials appended, wet sheen, eyeball, teeth row, jiggle).
+- [x] **CP1** — kit additions (flesh materials appended, wet sheen, eyeball, teeth row, jiggle).
       DONE WHEN: warden.* / harvest_tick.* / iron_stalker.* / *.fx.* regenerate byte-identical.
 - [ ] **CP2** — four rigs (rest poses); family stills sheet (beside Harvest Tick + Iron Stalker) sent.
       DONE WHEN: `--stills` renders all four with no edge warning and the sheet is sent.
@@ -60,3 +60,11 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## NOTES CARRIED FORWARD
 
 **CP0:** baseline 7a3970d.
+
+**CP1:** kit.py APPENDS five materials (flesh, flesh_dk, sclera, membrane [translucent, glow=ichor], pupil), each with a
+`wet=(strength, shininess)` WET SHEEN (a tight second specular lobe -> WET_GLINT near-white; cleanup shade +1000 so a
+glint is its own shade). Helpers: `eyeball(cx, cy, r, look, iris, pupil, slit, lid_top, lid_bottom, lids, ...)`,
+`teeth_row(x1, y1, x2, y2, count, length, r, side, sag, rake, jitter, seed)`, `jiggle(source_clip, param, duration,
+out_param, freq, damping, gain, fps, loop)` -> keys for "<param>_jig" (a damped spring lagging its parent track, baked;
+a loop integrates 4 periods so it wraps seamlessly). Stencil glyphs T S G M A B. Verified: bestiary + effects
+regenerated into the scratchpad, all 15 shipped files byte-identical (cmp).
