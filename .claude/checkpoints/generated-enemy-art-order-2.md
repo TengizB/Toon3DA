@@ -48,7 +48,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP1** — the seam exists with a no-op default, fired at every site; build green; sim/ unchanged.
       DONE WHEN: `enemy/EnemyVisualListener` + `EnemyVisualMoment` + payload exist, EnemyManager fires every
       moment of the idea's list at its commit site, nothing in `sim/` changed, mirror build compiles.
-- [ ] **CP2** — registry + manifest parser + per-floor atlas cache load the two creatures; build green.
+- [x] **CP2** — registry + manifest parser + per-floor atlas cache load the two creatures; build green.
 - [ ] **CP3** — animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types.
 - [ ] **CP4** — every core clip plays from its moment in-engine; glow pass; legacy types unchanged.
 - [ ] **CP5** — capture tooling; burst GIFs sent; owner approval recorded (stop until it is).
@@ -69,3 +69,11 @@ visuals), boss moves (BossFloorController; bosses unmigrated). DECISION: ordinar
 (only bosses use Enemy.beginSlide). R2 forbids the visual layer writing Enemy, so MOVE_STARTED carries from/to and the
 visual layer owns a cosmetic slide for migrated types (CP3/CP4).
 Baseline build: only `narrative.StoryBarkTest` red (known).
+
+**CP2 (data):** `render/enemyvisual/EnemyVisualRegistry` (bootstrap rows ACID_DRONE->warden, SHELL_BRUTE->harvest_tick),
+`EnemyClipId` (the 11 standard clips; manifest names), `EnemyClipManifest.parse(FileHandle)` (immutable; frames keep
+IMAGE-space coords; `Clip.frameIndexAt(seconds)` / `isFinishedAt`; anchors GROUND/HIT_CENTRE/EYE/EMITTER(muzzle|mouth)),
+`EnemyAtlasCache` (per floor; `ensureLoaded(type)` render thread, `visualFor(type)`, failed creature logged once ->
+legacy, R5). Paths: `EnemyConstants.ENEMY_GENERATED_DIRECTORY` + `ENEMY_GENERATED_MANIFEST_SUFFIX`. Verified in-engine
+(with CP3's wiring in the tree): `loaded warden (1024x2048 + glow) in 178 ms`, `loaded harvest_tick (2048x2048 + glow)
+in 257 ms`.

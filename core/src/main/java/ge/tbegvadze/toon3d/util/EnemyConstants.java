@@ -33,6 +33,12 @@ public final class EnemyConstants {
     // Boss texture — not used in regular combat; reserved for the boss encounter.
     public static final String  ENEMY_BOSS_OVERSEER_PATH         = "textures/enemies/enemy_boss_overseer.png";
 
+    // GENERATED CREATURES (generated-enemy-art order 2): the folder order 1's bake writes into, and the
+    // manifest suffix. render/enemyvisual/EnemyVisualRegistry maps a type to a creature id; the files are
+    // <id>.clips.json, plus the atlas and glow names the manifest itself states.
+    public static final String  ENEMY_GENERATED_DIRECTORY        = "textures/enemies/generated/";
+    public static final String  ENEMY_GENERATED_MANIFEST_SUFFIX  = ".clips.json";
+
     // Enemy system — AI and combat
     // Only cosmetic fields (height/hover) stay here.
     // Probability (0–1) that a killed enemy drops an ammo pickup on its tile.
