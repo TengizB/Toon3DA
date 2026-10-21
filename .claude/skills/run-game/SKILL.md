@@ -70,6 +70,13 @@ count events with `grep -c Pause FILE`.
 | `event[:EVENT_ID]` | reflection: opens the FACILITY EVENT console on that registered event (the first one when omitted) |
 | `ending:VARIANT` | reflection: `World.presentEndingCard(BootCardVariant.VARIANT)` — `ENDING_FREE` / `ENDING_KILL` give the terminal card with the RETURN plate (constant names, not FREE/KILL) |
 | `barkspeaker:SPEAKER` | reflection: puts the first registered bark of `AI` / `ORGANIZATION` / `PLANET` on screen through BarkSystem's own `deliver` (no SYSTEM barks exist) — another speaker's panel without reaching their region |
+| `spawn:TYPE:FORWARD:RIGHT` | reflection: a **DORMANT** enemy of `EnemyType` TYPE, FORWARD tiles ahead and RIGHT tiles to the player's right (negatives = behind / left), through `EnemyManager.spawnEnemy` (the visual seam is detached for the call, so no ALERT plays). Prints its list index; a blocked tile is refused and said so |
+| `alert:INDEX` | wakes enemy INDEX (list order; negative counts from the end, `-1` = last spawned) and reports the ALERTED visual moment, exactly as perception would |
+| `damage:INDEX:AMOUNT` | `EnemyManager.applyDamageTo` — the REAL player-hit path (multipliers, Block, shards, death); prints HP before/after |
+| `kill:INDEX` | the same path with an overwhelming amount (DEATH, corpse decal, XP) |
+| `defend:INDEX` | a **FORCED** brace pose for a capture (state DEFENDING + the DEFEND_STARTED moment; no Block, no turn) — say "forced" when you show it |
+| `clip:INDEX` | prints `state=… clip=…` — which animated clip (`render/enemyvisual`) the enemy shows, or `LEGACY` |
+| `burst:NAME:COUNT:INTERVAL` | COUNT shots `NAME_00…` every INTERVAL s from now (one per frame at most; 0.05 at 30 fps ≈ every other frame) — turn them into a GIF with `burst2gif.sh` |
 | `timestart` / `timestop` | average frame time between them (render + `glFinish`); use `--fps 0` |
 | `exit` | quit (always end with it) |
 
@@ -115,6 +122,19 @@ PAUSE (48,336). USE_MACHINE (640,360, contextual). Title menu rows (x=640): y=39
 BEGIN-or-CONTINUE / NEW OPERATOR / ARCHIVE / SETTINGS / QUIT. Boot-card CONTINUE (640,144).
 If a layout constant changes, recompute from the constants — do not trust eyeballed screenshot positions (one
 "rotate" in 2026-10 was really STRAFE_RIGHT misread from a screenshot).
+
+### Animated enemies (generated-enemy-art order 2)
+Steps run in LIST order, not time order — a `clip:` sweep appended after `exit` never runs. Build long scripts with a
+helper that sorts the steps by time. The pattern that shows every core clip of a creature (index 0 = the spawn):
+```
+13:spawn:SHELL_BRUTE:3:0;13.5:burst:dormant:30:0.05;15.2:alert:0;15.2:burst:alert:24:0.05;
+18.3:tap:1196:488;18.3:burst:windup:36:0.05;20.3:tap:1196:488;20.3:burst:attack:30:0.05;
+22:damage:0:2;22:burst:hurt_light:12:0.05;23:damage:0:29;23:burst:hurt_heavy:18:0.05;24.3:kill:0;24.3:burst:death:30:0.05
+```
+(SKIP_TURN advances the world: the Tick commits WIND_UP on the first skip and charges on the second; the Warden shoots on
+the second.) A creature spawned off-lane (`spawn:TYPE:4:2`) walks, which is how MOVE is seen. Then
+`burst2gif.sh DIR NAME --crop 800x500+239+70 --scale 60 --delay 5 --label "..."` per burst, and
+`convert a.gif b.gif … all.gif` for one labelled sequence. ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
 
 ### Muzzle light / anything needing game state
 `pulse:WEAPON_SHOTGUN` (or `WEAPON_PLASMA`, `WEAPON_INCINERATOR`, …) then `shot:` in the SAME second captures the

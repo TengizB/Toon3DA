@@ -156,6 +156,25 @@ public final class GameMath {
         return clamped * clamped * (3f - 2f * clamped);
     }
 
+    /*
+     * Formula: Distance fade alpha (emissive glow)
+     * Derivation:
+     *   Full strength up to fadeStart, then linear toward minimumAlpha at fadeEnd, held there beyond:
+     *     t     = clamp((distance − fadeStart) / (fadeEnd − fadeStart), 0, 1)
+     *     alpha = lerp(1, minimumAlpha, t)
+     *   Used by the enemy glow pass (generated-enemy-art order 2): an emissive is never fogged or graded,
+     *   but a far emitter must shrink to a point of light rather than burn at full strength.
+     * Edge cases:
+     *   fadeEnd <= fadeStart is a step at fadeStart (no division by zero). A negative distance (behind the
+     *   camera, already culled) clamps to full strength. minimumAlpha is the caller's floor, not clamped.
+     */
+    public static float distanceFadeAlpha(float distance, float fadeStart, float fadeEnd, float minimumAlpha) {
+        if (distance <= fadeStart) return 1f;
+        if (fadeEnd <= fadeStart || distance >= fadeEnd) return minimumAlpha;
+        float interpolationFactor = (distance - fadeStart) / (fadeEnd - fadeStart);
+        return lerp(1f, minimumAlpha, interpolationFactor);
+    }
+
     // =========================================================================
     // WEAPON PICKUP BOB OFFSET
     // =========================================================================

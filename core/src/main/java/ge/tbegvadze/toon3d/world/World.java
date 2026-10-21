@@ -97,6 +97,7 @@ import ge.tbegvadze.toon3d.progression.PerkDeck;
 import ge.tbegvadze.toon3d.progression.PlayerBuild;
 import ge.tbegvadze.toon3d.progression.Attribute;
 import ge.tbegvadze.toon3d.render.*;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
 import ge.tbegvadze.toon3d.render.WeaponInspectOverlayRenderer;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TilesetGfxBootstrap;
@@ -260,6 +261,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
     // set on the wall/prop renderers each level, disposed on level teardown (leak-free across transitions).
     private EnvironmentTextureSet  environmentTextureSet;
     private EnemyRenderer          enemyRenderer;
+    // generated-enemy-art order 2: the animated enemy layer of the current floor (atlases, animators,
+    // dying instances). Built and disposed with the floor beside enemyRenderer; listens to enemyManager.
+    private EnemyVisualLayer       enemyVisualLayer;
     private LevelRenderer          levelRenderer;
     private EnemyManager           enemyManager;
     private AbilityResolver        abilityResolver;
@@ -1292,6 +1296,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (twist.hunterEnemyTypeName() != null) {
             try {
                 EnemyType hunterType = EnemyType.valueOf(twist.hunterEnemyTypeName());
+                // generated-enemy-art order 2 (R5): the hunter arrives mid-floor; load its creature now.
+                if (enemyVisualLayer != null) enemyVisualLayer.preload(hunterType);
                 enemyManager.beginHunt(hunterType,
                         MathUtils.floor(player.positionX / Constants.CELL_SIZE),
                         MathUtils.floor(player.positionY / Constants.CELL_SIZE),
@@ -1433,6 +1439,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
+        if (enemyVisualLayer != null) { enemyVisualLayer.dispose(); enemyVisualLayer = null; }
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
         if (bossHudRenderer != null) { bossHudRenderer.dispose(); bossHudRenderer = null; }
@@ -1583,6 +1590,11 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyManager.setRelicBlastTarget(explosiveBarrelManager);
         doorManager.setDoorOpenedListener(relicRuntime);
         enemyRenderer          = new EnemyRenderer(enemyManager, wallRenderer);
+        // The animated enemy layer (generated-enemy-art order 2): loads this floor's creature atlases now
+        // (rule R5), hears every visual moment the manager commits, and tells the renderer which frame to draw.
+        enemyVisualLayer       = new EnemyVisualLayer(enemyManager);
+        enemyManager.setEnemyVisualListener(enemyVisualLayer);
+        enemyRenderer.setEnemyVisualLayer(enemyVisualLayer);
         impactEffectSystem.setGameAudio(gameAudio);
         enemyManager.setImpactEventListener(impactEffectSystem);
         enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
@@ -2751,6 +2763,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
             equippedWeapon.update(deltaTime);
         }
         enemyManager.advanceHitFlash(deltaTime);
+        // Same clock as the hit flash, so the clips freeze whenever the world does (pause, overlays).
+        if (enemyVisualLayer != null) enemyVisualLayer.update(deltaTime);
         enemyAttackEffectSystem.update(deltaTime);
         statusEffectVignetteRenderer.update(deltaTime, player);
         impactEffectSystem.setPlayerState(player.positionX, player.positionY,
@@ -3144,6 +3158,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
+        if (enemyVisualLayer != null) { enemyVisualLayer.dispose(); enemyVisualLayer = null; }
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
         weaponHudRenderer.dispose();

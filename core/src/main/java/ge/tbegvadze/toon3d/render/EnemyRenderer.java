@@ -30,6 +30,11 @@ import ge.tbegvadze.toon3d.entity.boss.DangerTileSet;
 import ge.tbegvadze.toon3d.status.StatusEffect;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.render.enemyvisual.DyingEnemyPool;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyAnimator;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyBodyDrawer;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyClipManifest;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
 import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -195,6 +200,20 @@ public final class EnemyRenderer implements Renderable, Disposable {
     private int   projectionColumnCount = RenderResolution.HD.getProjectionColumnCount();
     private float projectionColumnWidth = WORLD_WIDTH / (float) projectionColumnCount;
 
+    // ANIMATED ENEMY LAYER (generated-enemy-art order 2). A type the layer animates is drawn from its clip
+    // atlas by the body drawer; every other type keeps the legacy region below. Null = all legacy. The
+    // dying-instance arrays are the depth-sorted scratch for merging DEATH clips into pass 1.
+    private EnemyVisualLayer      visualLayer;
+    private final EnemyBodyDrawer bodyDrawer      = new EnemyBodyDrawer();
+    private final int[]           dyingSlotOrder  = new int[EffectConstants.ENEMY_VISUAL_DYING_POOL_CAPACITY];
+    private final float[]         dyingDepths     = new float[EffectConstants.ENEMY_VISUAL_DYING_POOL_CAPACITY];
+    private int                   dyingVisibleCount;
+
+    /** Wires this floor's animated layer (non-owning: World disposes it). Null keeps every type legacy. */
+    public void setEnemyVisualLayer(EnemyVisualLayer layer) {
+        this.visualLayer = layer;
+    }
+
     public EnemyRenderer(EnemyManager enemyManager, WallRenderer wallRenderer) {
         this.enemyManager        = enemyManager;
         this.wallRenderer        = wallRenderer;
@@ -347,7 +366,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         List<Enemy> enemies = enemyManager.getEnemies();
         int enemyCount = enemies.size();
-        if (enemyCount == 0) return;
+        // Dying instances (order 2) outlive their enemy, so the last kill on a floor still plays its DEATH.
+        collectVisibleDying();
+        if (enemyCount == 0 && dyingVisibleCount == 0) return;
 
         // Advance the affliction overlay animation clock (wall-clock; cosmetic only).
         statusAnimationClock += Gdx.graphics.getDeltaTime();
@@ -360,8 +381,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             // ORDER 2: render at the interpolated slide position (renderCenter*), so a boss mid-dash
             // is culled/depth-sorted where the sprite actually is. No-op for a settled enemy.
-            float tileOffsetX = (enemy.renderCenterX() - playerWorldX) / CELL_SIZE;
-            float tileOffsetY = (enemy.renderCenterY() - playerWorldY) / CELL_SIZE;
+            float tileOffsetX = (visualCenterX(enemy) - playerWorldX) / CELL_SIZE;
+            float tileOffsetY = (visualCenterY(enemy) - playerWorldY) / CELL_SIZE;
             float depth       = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
             if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES) continue;
             if (depth > MAX_ENEMY_DRAW_DISTANCE_TILES)     continue;
@@ -373,7 +394,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             }
         }
 
-        if (visibleCount == 0) return;
+        if (visibleCount == 0 && dyingVisibleCount == 0) return;
 
         // --- Insertion-sort farthest-first (painter's algorithm) ---
         for (int sortPass = 1; sortPass < visibleCount; sortPass++) {
@@ -395,11 +416,14 @@ public final class EnemyRenderer implements Renderable, Disposable {
         // Pass 1: Enemy sprites with hit-flash tint
         // =====================================================================
         batch.begin();
+        int dyingCursor = 0;
 
         for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
             int   enemyIndex = sortedIndices[sortedPosition];
             float depth      = sortedDepths[sortedPosition];
             Enemy enemy      = enemies.get(enemyIndex);
+            // Painter's merge: every dying instance farther than this enemy is drawn first.
+            dyingCursor = drawDyingFartherThan(dyingCursor, depth);
 
             drawBarFlags[sortedPosition]    = false;
             drawBeamFlags[sortedPosition]   = false;
@@ -411,14 +435,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
             uiLeaderFlags[sortedPosition]   = false;
             float attackAnimStrength      = enemy.getAttackAnimStrength();
 
-            TextureRegion region = textureRegions.get(enemy.type);
-            if (region == null) continue;
+            // Order 2: an animated type draws the animator's frame from its creature atlas; region stays null.
+            EnemyAnimator animator = (visualLayer != null) ? visualLayer.animatorFor(enemy) : null;
+            EnemyClipManifest.Frame animatedFrame = (animator != null) ? animator.currentFrame(enemy) : null;
+            TextureRegion region = (animator == null) ? textureRegions.get(enemy.type) : null;
+            if (animator == null && region == null) continue;
 
             // ORDER 2: draw the billboard at the interpolated slide position so a dashing boss visibly
             // sweeps across the tiles it crossed instead of popping. Health bar / intent / beam passes
             // reuse the screenCenterColumn computed here, so they follow the slide automatically.
-            float tileOffsetX = (enemy.renderCenterX() - playerWorldX) / CELL_SIZE;
-            float tileOffsetY = (enemy.renderCenterY() - playerWorldY) / CELL_SIZE;
+            float tileOffsetX = (visualCenterX(enemy) - playerWorldX) / CELL_SIZE;
+            float tileOffsetY = (visualCenterY(enemy) - playerWorldY) / CELL_SIZE;
 
             float screenCenterColumn = GameMath.spriteScreenColumnCenter(
                     tileOffsetX, tileOffsetY, directionX, directionY,
@@ -427,8 +454,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float heightMultiplier   = enemy.type.heightMultiplier();
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
             float spriteScreenHeight = fullWallLineHeight * heightMultiplier;
-            int   regionWidth        = region.getRegionWidth();
-            int   regionHeight       = region.getRegionHeight();
+            // An animated body is placed by its whole CANVAS (the frame sits inside it at its manifest offset).
+            int   regionWidth        = (animator != null) ? animator.getVisual().manifest.canvasWidth  : region.getRegionWidth();
+            int   regionHeight       = (animator != null) ? animator.getVisual().manifest.canvasHeight : region.getRegionHeight();
             float aspectRatio        = (float) regionWidth / regionHeight;
             float spriteScreenWidth  = spriteScreenHeight * aspectRatio;
 
@@ -437,7 +465,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             // Melee lunge: scale sprite up during attack animation
             float lungeCurve = 0f;
-            if (!enemy.type.isRanged() && attackAnimStrength > 0f) {
+            // An animated type never lunges: its ATTACK clip does that job (order 2).
+            if (animator == null && !enemy.type.isRanged() && attackAnimStrength > 0f) {
                 lungeCurve         = GameMath.attackLungeCurve(attackAnimStrength);
                 float scaleBonus   = 1f + lungeCurve * EffectConstants.ENEMY_LUNGE_SCALE_BONUS;
                 spriteScreenHeight *= scaleBonus;
@@ -473,7 +502,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             int localSrcY    = GameMath.wallTextureClipSrcY(
                                     drawTop, WALL_PROJECTION_SCREEN_HEIGHT,
                                     spriteScreenHeight, regionHeight);
-            int texSrcY      = region.getRegionY() + localSrcY;
+            int texSrcY      = (region != null ? region.getRegionY() : 0) + localSrcY;
             int texSrcHeight = GameMath.wallTextureClipSrcHeight(
                                     clampedTop, clampedBottom,
                                     spriteScreenHeight, regionHeight);
@@ -714,7 +743,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // of the slide path so a multi-tile boss dash reads as a deliberate sprint, not a teleport
             // (Fairness F3). Emitted here — before the solid sprite's draw loop below — so the live sprite
             // renders over the ghosts. Only while a slide is active.
-            if (enemy instanceof Boss && enemy.isSliding()) {
+            if (region != null && enemy instanceof Boss && enemy.isSliding()) {
                 drawBossAfterimageTrail(enemy, region, heightMultiplier,
                         spriteRed, spriteGreen, spriteBlue);
             }
@@ -735,48 +764,75 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
             SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
 
-            int firstColumn = Math.max(0, leftScreenColumn);
-            int lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
-            for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
-                if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+            int     firstColumn;
+            int     lastColumn;
+            boolean animatedVisible = false;
+            if (animator != null) {
+                // Order 2: the animated body — same per-column wall test, drawn from the creature atlas.
+                animatedVisible = bodyDrawer.prepare(animatedFrame, regionWidth, regionHeight, worldCenterX, drawTop,
+                        spriteScreenHeight, projectionColumnWidth, projectionColumnCount);
+                firstColumn = bodyDrawer.getFirstColumn();
+                lastColumn  = bodyDrawer.getLastColumn();
+                if (animatedVisible) {
+                    bodyDrawer.drawColumns(batch, animator.getVisual().bodyAtlas, depth, wallRenderer, null);
+                    // GLOW (art-direction V6): the emissive layer laid over the graded body in its OWN colour —
+                    // never graded, never fogged, only faded with depth. Normal blend, not additive: the glow
+                    // atlas holds the emissive pixels' baked colour, so adding it would double them to white.
+                    if (animatedFrame.hasGlow) {
+                        batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
+                        bodyDrawer.drawColumns(batch, animator.getVisual().glowAtlas, depth, wallRenderer, null);
+                    }
+                }
+            } else {
+                firstColumn = Math.max(0, leftScreenColumn);
+                lastColumn  = Math.min(projectionColumnCount - 1, rightScreenColumn);
+                for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                    if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
 
-                // Map screen column to a pixel x within the region, then offset to sheet coords
-                int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
-                localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
-                int texSrcX = region.getRegionX() + localSrcX;
+                    // Map screen column to a pixel x within the region, then offset to sheet coords
+                    int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
+                    localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
+                    int texSrcX = region.getRegionX() + localSrcX;
 
-                batch.draw(region.getTexture(),
-                           screenColumn * projectionColumnWidth, clampedBottom,
-                           projectionColumnWidth, clampedTop - clampedBottom,
-                           texSrcX, texSrcY, 1, texSrcHeight,
-                           false, false);
+                    batch.draw(region.getTexture(),
+                               screenColumn * projectionColumnWidth, clampedBottom,
+                               projectionColumnWidth, clampedTop - clampedBottom,
+                               texSrcX, texSrcY, 1, texSrcHeight,
+                               false, false);
+                }
             }
 
             // Props (and shop machines) were drawn before enemies. Where one stands nearer than this enemy,
             // re-draw its column slice on top: its opaque pixels hide the enemy and its transparent pixels
             // let the enemy show through — never a hole cut through the enemy. After all of the enemy's
             // slices (R19), so the enemy's sheet is bound once instead of alternating every column.
-            if (occluderBuffer != null) {
+            if (occluderBuffer != null && (animator == null || animatedVisible)) {
                 occluderBuffer.redrawInFrontRange(batch, firstColumn, lastColumn, depth,
                         projectionColumnWidth, wallRenderer);
             }
 
             // R8 muzzle-light additive pass over the same columns (body only; tints, bars and shadows
             // never take it). Same wall z-test; columns hidden behind a nearer recorded prop are skipped.
-            // Two blend switches, only for a lit enemy.
-            if (bodyLightRed + bodyLightGreen + bodyLightBlue > 0f) {
+            boolean bodyLit = bodyLightRed + bodyLightGreen + bodyLightBlue > 0f;
+            if (bodyLit) {
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
                 batch.setColor(bodyLightRed, bodyLightGreen, bodyLightBlue, 1f);
-                for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
-                    if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
-                    if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
-                    int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
-                    localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
-                    batch.draw(region.getTexture(),
-                               screenColumn * projectionColumnWidth, clampedBottom,
-                               projectionColumnWidth, clampedTop - clampedBottom,
-                               region.getRegionX() + localSrcX, texSrcY, 1, texSrcHeight,
-                               false, false);
+                if (animator != null) {
+                    if (animatedVisible) {
+                        bodyDrawer.drawColumns(batch, animator.getVisual().bodyAtlas, depth, wallRenderer, occluderBuffer);
+                    }
+                } else {
+                    for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+                        if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+                        if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+                        int localSrcX = (screenColumn - leftScreenColumn) * regionWidth / columnSpan;
+                        localSrcX = MathUtils.clamp(localSrcX, 0, regionWidth - 1);
+                        batch.draw(region.getTexture(),
+                                   screenColumn * projectionColumnWidth, clampedBottom,
+                                   projectionColumnWidth, clampedTop - clampedBottom,
+                                   region.getRegionX() + localSrcX, texSrcY, 1, texSrcHeight,
+                                   false, false);
+                    }
                 }
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             }
@@ -852,8 +908,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
             }
         }
 
+        drawDyingFartherThan(dyingCursor, -1f);   // the dying instances nearer than every live enemy
         batch.setColor(Color.WHITE);
         batch.end();
+        if (visibleCount == 0) return;   // only dying instances were on screen: no bars, icons or overlays
 
         // Resolve overlapping UI clusters BEFORE any overlay pass reads the cached positions.
         layoutUiClusters(enemies, visibleCount);
@@ -1493,6 +1551,105 @@ public final class EnemyRenderer implements Renderable, Disposable {
             }
             shapeRenderer.end();
             Gdx.gl.glDisable(GL20.GL_BLEND);
+        }
+    }
+
+    // =====================================================================
+    // ANIMATED ENEMY LAYER helpers (generated-enemy-art order 2)
+    // =====================================================================
+
+    /** World X the body is drawn at: the animator's cosmetic slide for an animated type, else the enemy's own. */
+    private float visualCenterX(Enemy enemy) {
+        EnemyAnimator animator = (visualLayer != null) ? visualLayer.animatorFor(enemy) : null;
+        return animator != null ? animator.renderCenterX(enemy) : enemy.renderCenterX();
+    }
+
+    private float visualCenterY(Enemy enemy) {
+        EnemyAnimator animator = (visualLayer != null) ? visualLayer.animatorFor(enemy) : null;
+        return animator != null ? animator.renderCenterY(enemy) : enemy.renderCenterY();
+    }
+
+    /**
+     * Glow opacity at a depth: the emissive layer's own colour up to the fade start, then a partial blend
+     * toward the graded body so a far emitter recedes instead of burning at full strength.
+     */
+    private static float glowAlphaAtDepth(float depth) {
+        return GameMath.distanceFadeAlpha(depth, EffectConstants.ENEMY_GLOW_FADE_START_TILES,
+                EffectConstants.ENEMY_GLOW_FADE_END_TILES, EffectConstants.ENEMY_GLOW_MIN_ALPHA);
+    }
+
+    /** Culls the dying pool and depth-sorts the visible instances farthest-first into the scratch arrays. */
+    private void collectVisibleDying() {
+        dyingVisibleCount = 0;
+        if (visualLayer == null) return;
+        DyingEnemyPool pool = visualLayer.getDyingPool();
+        for (int slotIndex = 0; slotIndex < pool.capacity(); slotIndex++) {
+            DyingEnemyPool.DyingEnemy dying = pool.get(slotIndex);
+            if (!dying.active) continue;
+            float depth = GameMath.spriteDepth((dying.worldX - playerWorldX) / CELL_SIZE,
+                    (dying.worldY - playerWorldY) / CELL_SIZE, directionX, directionY);
+            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES || depth > MAX_ENEMY_DRAW_DISTANCE_TILES) continue;
+            int insertAt = dyingVisibleCount - 1;
+            while (insertAt >= 0 && dyingDepths[insertAt] < depth) {
+                dyingSlotOrder[insertAt + 1] = dyingSlotOrder[insertAt];
+                dyingDepths[insertAt + 1]    = dyingDepths[insertAt];
+                insertAt--;
+            }
+            dyingSlotOrder[insertAt + 1] = slotIndex;
+            dyingDepths[insertAt + 1]    = depth;
+            dyingVisibleCount++;
+        }
+    }
+
+    /** Draws every sorted dying instance from {@code cursor} that is farther than {@code depth}; returns the new cursor. */
+    private int drawDyingFartherThan(int cursor, float depth) {
+        while (cursor < dyingVisibleCount && dyingDepths[cursor] > depth) {
+            drawDyingEnemy(visualLayer.getDyingPool().get(dyingSlotOrder[cursor]), dyingDepths[cursor]);
+            cursor++;
+        }
+        return cursor;
+    }
+
+    /**
+     * One DEATH frame (rule R4): the body under the same light, grade and blackout floor as a live one, but
+     * none of the live tints, bars or shadow — it is already dead. Batch is begun (pass 1).
+     */
+    private void drawDyingEnemy(DyingEnemyPool.DyingEnemy dying, float depth) {
+        float screenCenterColumn = GameMath.spriteScreenColumnCenter(
+                (dying.worldX - playerWorldX) / CELL_SIZE, (dying.worldY - playerWorldY) / CELL_SIZE,
+                directionX, directionY, planeX, planeY, projectionColumnCount);
+        float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+        float spriteScreenHeight = fullWallLineHeight * dying.type.heightMultiplier();
+        float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+        EnemyClipManifest manifest = dying.visual.manifest;
+        EnemyClipManifest.Frame frame = dying.currentFrame();
+        if (!bodyDrawer.prepare(frame, manifest.canvasWidth, manifest.canvasHeight,
+                screenCenterColumn * projectionColumnWidth, drawBottom + spriteScreenHeight, spriteScreenHeight,
+                projectionColumnWidth, projectionColumnCount)) {
+            return;
+        }
+        float tileBrightness = (level != null)
+                ? level.getTileBrightness(dying.tileColumn, dying.tileRow, lightingTimeSeconds) : 1f;
+        float shade = Math.max(Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
+                MAX_LIGHTING_SHADE), ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
+        shade = GameMath.darkenedShadeWithFloor(shade, lightMultiplier, RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
+        float red = shade, green = shade, blue = shade;
+        if (atmosphereGrade != null) {
+            atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENEMY);
+            red   = Math.min(1f, shade * atmosphereGrade.red);
+            green = Math.min(1f, shade * atmosphereGrade.green);
+            blue  = Math.min(1f, shade * atmosphereGrade.blue);
+        }
+        batch.setColor(red, green, blue, 1f);
+        bodyDrawer.drawColumns(batch, dying.visual.bodyAtlas, depth, wallRenderer, null);
+        if (frame.hasGlow) {   // the emissive layer, ungraded (V6) — as for a live body
+            batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
+            bodyDrawer.drawColumns(batch, dying.visual.glowAtlas, depth, wallRenderer, null);
+        }
+        SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
+        if (occluderBuffer != null) {
+            occluderBuffer.redrawInFrontRange(batch, bodyDrawer.getFirstColumn(), bodyDrawer.getLastColumn(), depth,
+                    projectionColumnWidth, wallRenderer);
         }
     }
 
