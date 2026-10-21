@@ -5,41 +5,38 @@ import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.narrative.SpeakerIcon;
-import ge.tbegvadze.toon3d.narrative.TypeStyle;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
 
 /**
  * Story UI order-1 — the shared renderer for the four speakers' visual language.  Draws one
- * story panel: a rounded dark panel (so text reads over ANY 3D backdrop) carrying a speaker
- * chip (colored accent bar + procedural icon + name) and light, high-contrast, pre-wrapped
- * body text.  Every later story-UI order (bark toast, exchange panel, boot card, codex)
+ * story panel: a dark UiKit panel (so text reads over ANY 3D backdrop) framed by corner brackets in
+ * the speaker's ink (visual-identity-order-6 R3), carrying a speaker chip (colored accent bar +
+ * procedural icon + name) and light, high-contrast, pre-wrapped body text.  Every later story-UI order (bark toast, exchange panel, boot card, codex)
  * reuses this primitive with its own rect from {@link StoryUiConstants}.
  *
  * Identity, never colour alone: each speaker is told apart by accent colour AND icon AND
  * name — so it stays legible for colour-blind players (accessibility baseline).
  *
- * Owns its {@link SpriteBatch}, {@link ShapeRenderer} and {@link BitmapFont}; all disposed
- * in {@link #dispose()}.  No allocation in the draw path: the caller pre-wraps body text
- * (narrative/StoryText) and passes the line array; {@link GlyphLayout} and the scratch
- * {@link Color} are pre-allocated (measuring reuses the shared layout, matching
- * EventTextRenderer's established pattern).
+ * Owns its {@link SpriteBatch}, {@link ShapeRenderer} and two {@link BitmapFont}s (REGULAR + HEAVY);
+ * all disposed in {@link #dispose()}.  No allocation in the draw path: the caller pre-wraps body
+ * text (narrative/StoryText) and passes the line array.
  */
 public final class StoryPanelRenderer implements Disposable {
 
     private final SpriteBatch   batch;
     private final ShapeRenderer shapes;
     private final BitmapFont    font;
-    private final GlyphLayout   layout;
-    private final Color         scratchColor = new Color();
+    /** The HEAVY face, for a panel whose speaker name is a machine header (the reprint card's status block). */
+    private final BitmapFont    heavyFont;
 
-    // Number of quarter-circle segments per rounded corner (cheap, smooth enough at UI scale).
+    // Circle segments for the speaker icons' discs (cheap, smooth enough at UI scale).
     private static final int CORNER_SEGMENTS = 10;
 
     // ACCESSIBILITY (order-6 Part D) — the two settings that change how a panel DRAWS.  Both default
@@ -51,7 +48,7 @@ public final class StoryPanelRenderer implements Disposable {
         this.batch  = new SpriteBatch();
         this.shapes = new ShapeRenderer();
         this.font   = GameFonts.newFont(FontFace.REGULAR);
-        this.layout = new GlyphLayout();
+        this.heavyFont = GameFonts.newFont(FontFace.HEAVY);
     }
 
     /**
@@ -93,42 +90,58 @@ public final class StoryPanelRenderer implements Disposable {
                           float panelX, float panelY, float panelWidth, float panelHeight,
                           float visibleFraction, float elapsedSeconds, boolean drawCloseGlyph) {
         int speakerIndex = speaker.ordinal();
+        drawPanel(camera, speaker, speakerName, bodyLines, bodyLineCount,
+                  panelX, panelY, panelWidth, panelHeight, visibleFraction, elapsedSeconds, drawCloseGlyph,
+                  StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex], StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex],
+                  StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex], false);
+    }
+
+    /**
+     * The general form (visual-identity-order-6 R3/R5): the corner brackets take {@code bracketRed/Green/Blue}
+     * instead of the speaker accent — the reprint card's SYSTEM block is framed in the machine's FACILITY_CYAN,
+     * not in its speaker's bone — and {@code heavySpeakerName} draws the chip's name in the HEAVY face (the card's
+     * status header). The chip, accent bar and icon always keep the speaker's own accent.
+     */
+    public void drawPanel(OrthographicCamera camera, Speaker speaker, String speakerName,
+                          String[] bodyLines, int bodyLineCount,
+                          float panelX, float panelY, float panelWidth, float panelHeight,
+                          float visibleFraction, float elapsedSeconds, boolean drawCloseGlyph,
+                          float bracketRed, float bracketGreen, float bracketBlue, boolean heavySpeakerName) {
+        int speakerIndex = speaker.ordinal();
         float accentRed   = StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex];
         float accentGreen = StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex];
         float accentBlue  = StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex];
         float fade        = MathUtils.clamp(visibleFraction, 0f, 1f);
 
         drawPanelShapes(camera, speaker, panelX, panelY, panelWidth, panelHeight,
-                        accentRed, accentGreen, accentBlue, fade, drawCloseGlyph);
+                        accentRed, accentGreen, accentBlue, bracketRed, bracketGreen, bracketBlue,
+                        fade, drawCloseGlyph);
         drawPanelText(camera, speaker, speakerName, bodyLines, bodyLineCount,
                       panelX, panelY, panelHeight,
-                      accentRed, accentGreen, accentBlue, fade, elapsedSeconds);
+                      accentRed, accentGreen, accentBlue, fade, elapsedSeconds, heavySpeakerName);
     }
 
     // -------------------------------------------------------------------------
-    // Pass 1 — ShapeRenderer: border, panel fill, accent bar, icon (all Filled).
+    // Pass 1 — ShapeRenderer: panel, brackets, accent bar, icon, close plate (all Filled).
     // -------------------------------------------------------------------------
 
     private void drawPanelShapes(OrthographicCamera camera, Speaker speaker,
                                  float panelX, float panelY, float panelWidth, float panelHeight,
-                                 float accentRed, float accentGreen, float accentBlue, float fade,
+                                 float accentRed, float accentGreen, float accentBlue,
+                                 float bracketRed, float bracketGreen, float bracketBlue, float fade,
                                  boolean drawCloseGlyph) {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.setProjectionMatrix(camera.combined);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        float radius    = StoryUiConstants.STORY_PANEL_CORNER_RADIUS;
-        float border    = StoryUiConstants.STORY_PANEL_BORDER_THICKNESS;
-
-        // Accent-tinted border: draw a slightly larger accent rect, then inset the dark fill.
-        shapes.setColor(accentRed, accentGreen, accentBlue, StoryUiConstants.STORY_PANEL_BORDER_ALPHA * fade);
-        drawRoundedRect(panelX, panelY, panelWidth, panelHeight, radius);
-
-        shapes.setColor(StoryUiConstants.STORY_PANEL_BG_R, StoryUiConstants.STORY_PANEL_BG_G,
-                        StoryUiConstants.STORY_PANEL_BG_B, StoryUiConstants.STORY_PANEL_ALPHA * fade);
-        drawRoundedRect(panelX + border, panelY + border,
-                        panelWidth - border * 2f, panelHeight - border * 2f, radius);
+        // R3: the kit panel (UI_PANEL at the in-play chrome alpha, UI_LINE border), its brackets in the ink.
+        UiKit.panel(shapes, panelX, panelY, panelWidth, panelHeight, ArtDirection.UI_CHAMFER,
+                    StoryUiConstants.STORY_PANEL_BG_R, StoryUiConstants.STORY_PANEL_BG_G,
+                    StoryUiConstants.STORY_PANEL_BG_B, StoryUiConstants.STORY_PANEL_ALPHA * fade,
+                    ArtDirection.UI_LINE_RED, ArtDirection.UI_LINE_GREEN, ArtDirection.UI_LINE_BLUE, fade,
+                    ArtDirection.UI_BORDER_THICKNESS);
+        UiKit.brackets(shapes, panelX, panelY, panelWidth, panelHeight, bracketRed, bracketGreen, bracketBlue, fade);
 
         // Vertical accent bar at the panel's left edge — the primary colour cue.
         float barX = panelX + StoryUiConstants.STORY_PANEL_PADDING;
@@ -146,13 +159,13 @@ public final class StoryPanelRenderer implements Disposable {
         drawSpeakerIcon(speaker.getIcon(), iconX, iconY, iconSize,
                         accentRed, accentGreen, accentBlue, fade);
 
-        // CLOSE affordance (order-2 bark): an X in the top-right corner.  Drawn in the body's light
-        // colour, not the accent, so it reads as a control rather than part of the speaker chip.
+        // CLOSE affordance (order-2 bark): an X on a small IDLE plate in the top-right corner (R3).  The
+        // glyph is UI_TEXT_SECONDARY, not the accent, so it reads as a control rather than part of the chip.
         if (drawCloseGlyph) {
             drawCloseGlyph(StoryUiConstants.STORY_BARK_CLOSE_CENTER_X,
                            StoryUiConstants.STORY_BARK_CLOSE_CENTER_Y,
                            StoryUiConstants.STORY_BARK_CLOSE_GLYPH_SIZE,
-                           StoryUiConstants.STORY_BARK_CLOSE_STROKE, fade);
+                           StoryUiConstants.STORY_BARK_CLOSE_STROKE, accentRed, accentGreen, accentBlue, fade);
         }
 
         shapes.end();
@@ -160,12 +173,19 @@ public final class StoryPanelRenderer implements Disposable {
     }
 
     /**
-     * Draws an X from two crossed bars (Filled ShapeRenderer only, so it shares the single shape
-     * pass).  {@code size} is the glyph's full width/height; {@code stroke} its bar thickness.
+     * Draws the close plate (IDLE, STORY_BARK_CLOSE_PLATE_SIZE — visual only; the touch rect is the glyph
+     * plus STORY_BARK_CLOSE_TOUCH_PADDING) and an X from two crossed bars on it (Filled ShapeRenderer only, so
+     * it shares the single shape pass).  {@code size} is the glyph's full width/height; {@code stroke} its bar
+     * thickness.
      */
-    private void drawCloseGlyph(float centerX, float centerY, float size, float stroke, float fade) {
-        shapes.setColor(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                        StoryUiConstants.STORY_BODY_B, fade);
+    private void drawCloseGlyph(float centerX, float centerY, float size, float stroke,
+                                float accentRed, float accentGreen, float accentBlue, float fade) {
+        float plateSize = StoryUiConstants.STORY_BARK_CLOSE_PLATE_SIZE;
+        UiKit.plate(shapes, centerX - plateSize / 2f, centerY - plateSize / 2f, plateSize, plateSize,
+                    ArtDirection.UI_CHAMFER, ArtDirection.UI_BRACKET_LENGTH_COMPACT, PlateState.IDLE,
+                    StoryUiConstants.STORY_PANEL_ALPHA, accentRed, accentGreen, accentBlue, fade);
+        shapes.setColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                        ArtDirection.UI_TEXT_SECONDARY_BLUE, fade);
         float half = size / 2f;
         // rectLine draws a thick line between two points — the two diagonals of the glyph box.
         shapes.rectLine(centerX - half, centerY - half, centerX + half, centerY + half, stroke);
@@ -234,7 +254,7 @@ public final class StoryPanelRenderer implements Disposable {
                                String[] bodyLines, int bodyLineCount,
                                float panelX, float panelY, float panelHeight,
                                float accentRed, float accentGreen, float accentBlue,
-                               float fade, float elapsedSeconds) {
+                               float fade, float elapsedSeconds, boolean heavySpeakerName) {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
 
@@ -245,15 +265,15 @@ public final class StoryPanelRenderer implements Disposable {
                 + StoryUiConstants.STORY_CHIP_ACCENT_BAR_WIDTH
                 + StoryUiConstants.STORY_CHIP_ELEMENT_GAP;
         float chipTopY    = panelY + panelHeight - StoryUiConstants.STORY_PANEL_PADDING;
-        float shadow      = StoryUiConstants.STORY_TEXT_SHADOW_OFFSET;
 
         // Speaker name — sits after the icon, coloured with the accent (part of the chip).  The icon
         // occupies contentLeft .. contentLeft + iconSize, so the name clears it by one gap.
         float nameX = contentLeft + StoryUiConstants.STORY_CHIP_ICON_SIZE
                 + StoryUiConstants.STORY_CHIP_ELEMENT_GAP;
         float nameTopY = chipTopY - 4f;
-        font.getData().setScale(StoryUiConstants.STORY_NAME_TEXT_SIZE);
-        drawWithShadow(speakerName, nameX, nameTopY, accentRed, accentGreen, accentBlue, fade, shadow);
+        BitmapFont nameFont = heavySpeakerName ? heavyFont : font;
+        nameFont.getData().setScale(StoryUiConstants.STORY_NAME_TEXT_SIZE);
+        UiKit.text(batch, nameFont, speakerName, nameX, nameTopY, accentRed, accentGreen, accentBlue, fade);
 
         // Body — light text, pre-wrapped.  Planet gets a tiny bounded vertical jitter, unless the
         // "reduce motion" accessibility setting is on: movement under text is exactly the kind of
@@ -267,48 +287,17 @@ public final class StoryPanelRenderer implements Disposable {
         font.getData().setScale(bodyTextScale);
         float lineTopY = chipTopY - StoryUiConstants.STORY_CHIP_HEIGHT - StoryUiConstants.STORY_CHIP_TO_BODY_GAP;
         for (int lineIndex = 0; lineIndex < bodyLineCount; lineIndex++) {
-            drawWithShadow(bodyLines[lineIndex], contentLeft, lineTopY + jitter,
-                           StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                           StoryUiConstants.STORY_BODY_B, fade, shadow);
+            UiKit.text(batch, font, bodyLines[lineIndex], contentLeft, lineTopY + jitter,
+                       StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
+                       StoryUiConstants.STORY_BODY_B, fade);
             lineTopY -= StoryUiConstants.STORY_BODY_LINE_PITCH;
         }
 
         // Restore shared font state for other renderers.
         font.getData().setScale(1f);
         font.setColor(Color.WHITE);
+        heavyFont.getData().setScale(1f);
         batch.end();
-    }
-
-    /** Draws one string with a dark drop-shadow beneath the coloured glyphs. */
-    private void drawWithShadow(String text, float textX, float textTopY,
-                                float red, float green, float blue, float fade, float shadowOffset) {
-        scratchColor.set(0f, 0f, 0f, StoryUiConstants.STORY_TEXT_SHADOW_ALPHA * fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX + shadowOffset, textTopY - shadowOffset);
-
-        scratchColor.set(red, green, blue, fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX, textTopY);
-    }
-
-    // -------------------------------------------------------------------------
-    // Rounded-rect primitive (Filled): centre + two side rects + four corner discs.
-    // -------------------------------------------------------------------------
-
-    private void drawRoundedRect(float left, float bottom, float width, float height, float radius) {
-        float clampedRadius = Math.min(radius, Math.min(width, height) / 2f);
-        shapes.rect(left + clampedRadius, bottom, width - clampedRadius * 2f, height);
-        shapes.rect(left, bottom + clampedRadius, clampedRadius, height - clampedRadius * 2f);
-        shapes.rect(left + width - clampedRadius, bottom + clampedRadius, clampedRadius, height - clampedRadius * 2f);
-
-        float leftCenterX  = left + clampedRadius;
-        float rightCenterX = left + width - clampedRadius;
-        float bottomCenterY = bottom + clampedRadius;
-        float topCenterY    = bottom + height - clampedRadius;
-        shapes.arc(leftCenterX,  bottomCenterY, clampedRadius, 180f, 90f, CORNER_SEGMENTS);
-        shapes.arc(rightCenterX, bottomCenterY, clampedRadius, 270f, 90f, CORNER_SEGMENTS);
-        shapes.arc(rightCenterX, topCenterY,    clampedRadius, 0f,   90f, CORNER_SEGMENTS);
-        shapes.arc(leftCenterX,  topCenterY,    clampedRadius, 90f,  90f, CORNER_SEGMENTS);
     }
 
     @Override
@@ -316,5 +305,6 @@ public final class StoryPanelRenderer implements Disposable {
         batch.dispose();
         shapes.dispose();
         font.dispose();
+        heavyFont.dispose();
     }
 }

@@ -1,7 +1,6 @@
 package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -15,6 +14,8 @@ import ge.tbegvadze.toon3d.shop.OfferCategory;
 import ge.tbegvadze.toon3d.shop.ShopEntry;
 import ge.tbegvadze.toon3d.shop.ShopStock;
 import ge.tbegvadze.toon3d.shop.VendingMachine;
+import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.HudConstants;
 
@@ -64,36 +65,17 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         "Thank you for your service. Now pay up."
     };
 
-    // ---- Palette (cold UAC steel + cyan phosphor) --------------------------
-    private static final Color DIM_BACKGROUND = new Color(0f, 0f, 0f, HudConstants.SHOP_OVERLAY_DIM_ALPHA);
-    private static final Color HEADER_BAND     = new Color(0.05f, 0.08f, 0.10f, 0.95f);
-    private static final Color CARD_BG          = new Color(0.07f, 0.09f, 0.11f, 0.97f);
-    private static final Color CARD_BG_SOLD      = new Color(0.05f, 0.05f, 0.06f, 0.92f);
-    private static final Color TITLE_COLOR      = new Color(0.55f, 0.85f, 0.95f, 1f);
-    private static final Color CREDITS_COLOR    = new Color(0.55f, 0.85f, 0.95f, 1f);   // matches inventory credits readout
-    private static final Color DESC_COLOR       = new Color(0.62f, 0.64f, 0.70f, 1f);
-    private static final Color FLAVOR_COLOR     = new Color(0.45f, 0.50f, 0.55f, 1f);
-    private static final Color SOLD_TINT        = new Color(0.42f, 0.42f, 0.46f, 1f);
-    private static final Color PRICE_AFFORD     = new Color(0.36f, 0.90f, 0.42f, 1f);
-    private static final Color PRICE_DENY       = new Color(0.95f, 0.34f, 0.30f, 1f);
-    private static final Color BUY_TAG_COLOR    = new Color(0.36f, 0.90f, 0.42f, 1f);
-    private static final Color SOLD_TAG_COLOR   = new Color(0.95f, 0.34f, 0.30f, 1f);
-    private static final Color CONFIRM_BG        = new Color(0.10f, 0.30f, 0.14f, 1f);
-    private static final Color CONFIRM_BORDER    = new Color(0.36f, 0.90f, 0.42f, 1f);
-    private static final Color CANCEL_BG         = new Color(0.28f, 0.10f, 0.10f, 1f);
-    private static final Color CANCEL_BORDER     = new Color(0.95f, 0.34f, 0.30f, 1f);
-    private static final Color BUTTON_LABEL      = new Color(0.94f, 0.96f, 0.98f, 1f);
-    private static final Color CONFIRM_PROMPT    = new Color(0.85f, 0.88f, 0.92f, 1f);
-    private static final Color CLOSE_BG          = new Color(0.12f, 0.16f, 0.20f, 1f);
-    private static final Color CLOSE_BORDER      = new Color(0.55f, 0.85f, 0.95f, 1f);
-    private static final Color CLOSE_LABEL       = new Color(0.92f, 0.95f, 0.98f, 1f);
-    private static final Color PURCHASE_FLASH    = new Color(0.36f, 0.90f, 0.42f, 0.55f);
-    private static final Color DENY_FLASH        = new Color(0.95f, 0.34f, 0.30f, 0.50f);
-    private static final Color DEPLETED_COLOR    = new Color(0.95f, 0.34f, 0.30f, 1f);
+    // ---- Palette (visual-identity-order-6 R9: the FACILITY ink) ----------------
+    // Everything is read from util/ArtDirection + util/CombatPalette at draw time — no colour literal here.
+    // Offers are cards inked FACILITY_CYAN_DIM (the one being confirmed SELECTED in FACILITY_CYAN); an offer the
+    // player cannot take (sold, or unaffordable) is a DISABLED card; prices are CREDITS_GOLD, an unaffordable
+    // price CombatPalette.DAMAGE (TYPE_BODY: red text is large text only). The offer's rarity stays on its ICON.
 
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** HEAVY face for the R1 screen title (visual-identity-order-6 R9). */
+    private final BitmapFont    heavyFont;
     private final GlyphLayout   layout;   // used only outside render() to precompute positions
 
     // Live wallet balance (World pushes it every frame via setCredits).
@@ -143,6 +125,7 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         shapes = new ShapeRenderer();
         batch  = new SpriteBatch();
         font   = GameFonts.newFont(FontFace.REGULAR);
+        heavyFont = GameFonts.newFont(FontFace.HEAVY);
         layout = new GlyphLayout();
 
         float closeWidth  = HudConstants.SHOP_OVERLAY_CLOSE_WIDTH;
@@ -154,7 +137,7 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         closeLabelX = closeX + closeWidth / 2f - layout.width / 2f;
         closeLabelY = closeY + closeHeight / 2f + layout.height / 2f;
 
-        font.getData().setScale(HudConstants.SHOP_HEADER_TITLE_SCALE);
+        font.getData().setScale(HudConstants.SHOP_DEPLETED_SCALE);
         headerTitleX = HudConstants.SHOP_HEADER_SIDE_INSET_X;
         layout.setText(font, DEPLETED_TEXT);
         depletedX = Constants.WORLD_WIDTH / 2f - layout.width / 2f;
@@ -386,7 +369,6 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
         drawFilledPass();
-        drawLinePass();
         drawTextPass();
 
         Gdx.gl.glDisable(GL20.GL_BLEND);
@@ -395,18 +377,29 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
     private void drawFilledPass() {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        setShape(DIM_BACKGROUND);
+        // One scrim (UI_SCRIM_ALPHA), then the header band as the palette's panel with the R1 rule.
+        shapes.setColor(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN, ArtDirection.UI_INK_BLACK_BLUE,
+                        ArtDirection.UI_SCRIM_ALPHA * fade);
         shapes.rect(0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT);
-
-        setShape(HEADER_BAND);
+        shapes.setColor(ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                        ArtDirection.UI_PANEL_ALPHA_SCREEN * fade);
         shapes.rect(0f, Constants.WORLD_HEIGHT - HudConstants.SHOP_HEADER_HEIGHT,
                     Constants.WORLD_WIDTH, HudConstants.SHOP_HEADER_HEIGHT);
+        float headerInset = HudConstants.SHOP_HEADER_SIDE_INSET_X;
+        UiKit.screenHeaderRule(shapes, headerInset, UiKit.screenHeaderRuleY(headerTitleTopY()),
+                               Constants.WORLD_WIDTH - 2f * headerInset,
+                               ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                               ArtDirection.FACILITY_CYAN_BLUE, fade);
 
         for (int index = 0; index < entryCount; index++) {
             ShopEntry entry = stock.get(index);
             boolean sold = entry.isSoldOut();
-            setShape(sold ? CARD_BG_SOLD : CARD_BG);
-            shapes.rect(cardX[index], cardY[index], HudConstants.SHOP_CARD_WIDTH, HudConstants.SHOP_CARD_HEIGHT);
+            PlateState state;
+            if (index == confirmingIndex)                  state = PlateState.SELECTED;
+            else if (sold || credits < entry.price)        state = PlateState.DISABLED;
+            else                                           state = PlateState.IDLE;
+            drawFacilityCard(cardX[index], cardY[index], HudConstants.SHOP_CARD_WIDTH, HudConstants.SHOP_CARD_HEIGHT,
+                             state);
 
             drawCategoryIcon(entry.category, index, sold);
 
@@ -414,17 +407,57 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
                 drawConfirmButtonBodies(index);
             }
             if (index == flashIndex && flashTimer > 0f) {
-                drawCardFlash(index, PURCHASE_FLASH, flashTimer / HudConstants.SHOP_PURCHASE_FLASH_SECONDS);
+                // A completed purchase: the facility's own cyan, washing off.
+                shapes.setColor(ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                                ArtDirection.FACILITY_CYAN_BLUE,
+                                HudConstants.SHOP_PURCHASE_FLASH_ALPHA * fade
+                                        * (flashTimer / HudConstants.SHOP_PURCHASE_FLASH_SECONDS));
+                drawCardFlash(index);
             }
             if (index == denyIndex && denyTimer > 0f) {
-                drawCardFlash(index, DENY_FLASH, denyTimer / HudConstants.SHOP_DENY_BLIP_SECONDS);
+                // A refused tap: the harm red, blipping off.
+                shapes.setColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE,
+                                HudConstants.SHOP_DENY_FLASH_ALPHA * fade
+                                        * (denyTimer / HudConstants.SHOP_DENY_BLIP_SECONDS));
+                drawCardFlash(index);
             }
         }
 
-        setShape(CLOSE_BG);
-        shapes.rect(closeX, closeY, HudConstants.SHOP_OVERLAY_CLOSE_WIDTH, HudConstants.SHOP_OVERLAY_CLOSE_HEIGHT);
+        // CLOSE is a FACILITY plate.
+        drawFacilityCard(closeX, closeY, HudConstants.SHOP_OVERLAY_CLOSE_WIDTH, HudConstants.SHOP_OVERLAY_CLOSE_HEIGHT,
+                         PlateState.IDLE);
+
+        // The fabricator has no single outer panel: its FACILITY_CYAN brackets frame the whole screen (the
+        // route console's frame, so the facility's full-screen machines match).
+        UiKit.brackets(shapes, 0f, 0f, Constants.WORLD_WIDTH, Constants.WORLD_HEIGHT,
+                       ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                       ArtDirection.FACILITY_CYAN_BLUE, fade);
 
         shapes.end();
+    }
+
+    /** Top of the R1 title, at the header's existing text anchor. */
+    private static float headerTitleTopY() {
+        return Constants.WORLD_HEIGHT - HudConstants.SHOP_HEADER_TEXT_Y_BELOW_TOP;
+    }
+
+    /**
+     * A FACILITY card: inked FACILITY_CYAN_DIM, lit FACILITY_CYAN when SELECTED or PRESSED; the open fade
+     * multiplies it.
+     */
+    private void drawFacilityCard(float cardLeft, float cardBottom, float width, float height, PlateState state) {
+        if (state == PlateState.DISABLED) {
+            // A DISABLED card halves its fill alpha; on the fabricator most offers are unaffordable, so lay an
+            // opaque panel under it first, or the 3D view and the HUD show through the shelf.
+            shapes.setColor(ArtDirection.UI_PANEL_RED, ArtDirection.UI_PANEL_GREEN, ArtDirection.UI_PANEL_BLUE,
+                            ArtDirection.UI_PANEL_ALPHA_SCREEN * fade);
+            UiKit.fillOctagon(shapes, cardLeft, cardBottom, width, height, ArtDirection.UI_PLATE_CHAMFER);
+        }
+        boolean lit = state == PlateState.SELECTED || state == PlateState.PRESSED;
+        UiKit.card(shapes, cardLeft, cardBottom, width, height, ArtDirection.UI_PLATE_CHAMFER,
+                   lit ? ArtDirection.FACILITY_CYAN_RED : ArtDirection.FACILITY_CYAN_DIM_RED,
+                   lit ? ArtDirection.FACILITY_CYAN_GREEN : ArtDirection.FACILITY_CYAN_DIM_GREEN,
+                   lit ? ArtDirection.FACILITY_CYAN_BLUE : ArtDirection.FACILITY_CYAN_DIM_BLUE, state, fade);
     }
 
     private void drawConfirmButtonBodies(int index) {
@@ -433,15 +466,17 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         float buttonBottom = cardY[index] + HudConstants.SHOP_CARD_PAD;
         float confirmLeft  = cardX[index] + HudConstants.SHOP_CARD_PAD;
         float cancelLeft   = confirmLeft + buttonWidth + HudConstants.SHOP_CONFIRM_BUTTON_GAP;
-        setShape(CONFIRM_BG);
-        shapes.rect(confirmLeft, buttonBottom, buttonWidth, HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT);
-        setShape(CANCEL_BG);
-        shapes.rect(cancelLeft, buttonBottom, buttonWidth, HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT);
+        // CONFIRM is the SELECTED commit action, CANCEL an IDLE plate — both the facility's.
+        drawFacilityCard(confirmLeft, buttonBottom, buttonWidth, HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT,
+                         PlateState.SELECTED);
+        drawFacilityCard(cancelLeft, buttonBottom, buttonWidth, HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT,
+                         PlateState.IDLE);
     }
 
-    private void drawCardFlash(int index, Color base, float intensity) {
-        shapes.setColor(base.r, base.g, base.b, base.a * intensity * fade);
-        shapes.rect(cardX[index], cardY[index], HudConstants.SHOP_CARD_WIDTH, HudConstants.SHOP_CARD_HEIGHT);
+    /** Fills a card's chamfered shape with the renderer's current colour (the purchase / refusal flash). */
+    private void drawCardFlash(int index) {
+        UiKit.fillOctagon(shapes, cardX[index], cardY[index], HudConstants.SHOP_CARD_WIDTH,
+                          HudConstants.SHOP_CARD_HEIGHT, ArtDirection.UI_PLATE_CHAMFER);
     }
 
     /** Small procedural category glyph in the card's top-left corner, tinted by rarity (or grey if sold). */
@@ -455,14 +490,16 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
 
         ShopEntry entry = stock.get(index);
         if (category == OfferCategory.MEDKIT) {
-            setShape(sold ? SOLD_TINT : SOLD_TAG_COLOR); // red cross
+            // Red cross (icon art keeps its colour; a sold offer's icon is the disabled grey).
+            if (sold) setDisabledIconColor();
+            else      shapes.setColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE, fade);
             float armThickness = size * 0.30f;
             shapes.rect(centerX - armThickness / 2f, bottom, armThickness, size);
             shapes.rect(left, centerY - armThickness / 2f, size, armThickness);
             return;
         }
 
-        if (sold) shapes.setColor(SOLD_TINT.r, SOLD_TINT.g, SOLD_TINT.b, SOLD_TINT.a * fade);
+        if (sold) setDisabledIconColor();
         else      shapes.setColor(entry.rarity.colorRed, entry.rarity.colorGreen, entry.rarity.colorBlue, fade);
 
         switch (category) {
@@ -489,53 +526,22 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         }
     }
 
-    private void drawLinePass() {
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        Gdx.gl.glLineWidth(HudConstants.SHOP_CARD_BORDER_WIDTH);
-
-        for (int index = 0; index < entryCount; index++) {
-            ShopEntry entry = stock.get(index);
-            if (entry.isSoldOut()) {
-                setShape(SOLD_TINT);
-            } else {
-                shapes.setColor(entry.rarity.colorRed, entry.rarity.colorGreen, entry.rarity.colorBlue, fade);
-            }
-            shapes.rect(cardX[index], cardY[index], HudConstants.SHOP_CARD_WIDTH, HudConstants.SHOP_CARD_HEIGHT);
-
-            if (index == confirmingIndex) {
-                drawConfirmButtonBorders(index);
-            }
-        }
-
-        setShape(CLOSE_BORDER);
-        shapes.rect(closeX, closeY, HudConstants.SHOP_OVERLAY_CLOSE_WIDTH, HudConstants.SHOP_OVERLAY_CLOSE_HEIGHT);
-
-        Gdx.gl.glLineWidth(1f);
-        shapes.end();
-    }
-
-    private void drawConfirmButtonBorders(int index) {
-        float buttonWidth = (HudConstants.SHOP_CARD_WIDTH - 2f * HudConstants.SHOP_CARD_PAD
-                             - HudConstants.SHOP_CONFIRM_BUTTON_GAP) / 2f;
-        float buttonBottom = cardY[index] + HudConstants.SHOP_CARD_PAD;
-        float confirmLeft  = cardX[index] + HudConstants.SHOP_CARD_PAD;
-        float cancelLeft   = confirmLeft + buttonWidth + HudConstants.SHOP_CONFIRM_BUTTON_GAP;
-        setShape(CONFIRM_BORDER);
-        shapes.rect(confirmLeft, buttonBottom, buttonWidth, HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT);
-        setShape(CANCEL_BORDER);
-        shapes.rect(cancelLeft, buttonBottom, buttonWidth, HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT);
+    /** A sold offer's icon: the palette's disabled grey. */
+    private void setDisabledIconColor() {
+        shapes.setColor(ArtDirection.UI_TEXT_DISABLED_RED, ArtDirection.UI_TEXT_DISABLED_GREEN,
+                        ArtDirection.UI_TEXT_DISABLED_BLUE, fade);
     }
 
     private void drawTextPass() {
         batch.begin();
 
-        font.getData().setScale(HudConstants.SHOP_HEADER_TITLE_SCALE);
-        setFont(TITLE_COLOR);
-        font.draw(batch, HEADER_TEXT, headerTitleX,
-                  Constants.WORLD_HEIGHT - HudConstants.SHOP_HEADER_TEXT_Y_BELOW_TOP);
+        // R9: the fabricator's screen header (HEAVY title, the cyan-ticked rule drawn in the shape pass).
+        heavyFont.setColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                           ArtDirection.UI_TEXT_PRIMARY_BLUE, fade);
+        UiKit.screenHeaderTitle(batch, heavyFont, HEADER_TEXT, headerTitleX, headerTitleTopY());
 
         font.getData().setScale(HudConstants.SHOP_HEADER_CREDITS_SCALE);
-        setFont(CREDITS_COLOR);
+        setFontColor(ArtDirection.CREDITS_GOLD_RED, ArtDirection.CREDITS_GOLD_GREEN, ArtDirection.CREDITS_GOLD_BLUE);
         font.draw(batch, creditsText, creditsX,
                   Constants.WORLD_HEIGHT - HudConstants.SHOP_HEADER_TEXT_Y_BELOW_TOP);
 
@@ -544,26 +550,32 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         }
 
         if (stock != null && entryCount > 0 && stock.isDepleted()) {
-            font.getData().setScale(HudConstants.SHOP_HEADER_TITLE_SCALE);
-            setFont(DEPLETED_COLOR);
+            font.getData().setScale(HudConstants.SHOP_DEPLETED_SCALE);
+            setFontColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE);
             font.draw(batch, DEPLETED_TEXT, depletedX, depletedY);
         }
 
         if (receiptTimer > 0f && !receiptText.isEmpty()) {
             // Fade out over the last portion of the receipt's lifetime so it dismisses gently.
             float receiptAlpha = Math.min(1f, receiptTimer / HudConstants.SHOP_RECEIPT_SECONDS + 0.35f);
-            Color receiptColor = receiptSuccess ? PRICE_AFFORD : PRICE_DENY;
+            // What a buy delivered: the facility's cyan; why it was refused: harm red (TYPE_BODY).
             font.getData().setScale(HudConstants.SHOP_RECEIPT_SCALE);
-            font.setColor(receiptColor.r, receiptColor.g, receiptColor.b, receiptAlpha * fade);
+            if (receiptSuccess) {
+                font.setColor(ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                              ArtDirection.FACILITY_CYAN_BLUE, receiptAlpha * fade);
+            } else {
+                font.setColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE,
+                              receiptAlpha * fade);
+            }
             font.draw(batch, receiptText, receiptX, HudConstants.SHOP_RECEIPT_Y_ABOVE_BOTTOM);
         }
 
         font.getData().setScale(HudConstants.SHOP_FOOTER_FLAVOR_SCALE);
-        setFont(FLAVOR_COLOR);
+        setSecondaryFont();
         font.draw(batch, flavorText, HudConstants.SHOP_FOOTER_FLAVOR_INSET_X, flavorBaselineY);
 
         font.getData().setScale(HudConstants.SHOP_OVERLAY_CLOSE_LABEL_SCALE);
-        setFont(CLOSE_LABEL);
+        setPrimaryFont();
         font.draw(batch, CLOSE_TEXT, closeLabelX, closeLabelY);
 
         batch.end();
@@ -579,17 +591,17 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         float wrapWidth  = textRight - textLeft;
         float nameWrap   = textRight - nameLeft;
 
-        // Name — rarity colour (grey when sold), wrapped past the icon.
+        // Name — primary (secondary when sold), wrapped past the icon. Rarity colour lives on the icon.
         font.getData().setScale(HudConstants.SHOP_CARD_NAME_SCALE);
-        if (sold) setFont(SOLD_TINT);
-        else      font.setColor(entry.rarity.colorRed, entry.rarity.colorGreen, entry.rarity.colorBlue, fade);
+        if (sold) setSecondaryFont();
+        else      setPrimaryFont();
         font.draw(batch, cardName[index], nameLeft, cardTop - HudConstants.SHOP_CARD_NAME_Y_BELOW_TOP,
                   nameWrap, Align.left, true);
 
         // On a card mid-confirm, the lower half is the prompt + buttons — skip description/price/tag.
         if (index == confirmingIndex) {
             font.getData().setScale(HudConstants.SHOP_CONFIRM_PROMPT_SCALE);
-            setFont(CONFIRM_PROMPT);
+            setPrimaryFont();
             font.draw(batch, cardPrompt[index], cardPromptX[index],
                       cardTop - HudConstants.SHOP_CONFIRM_PROMPT_Y_BELOW_TOP);
             drawConfirmButtonLabels(index);
@@ -598,26 +610,29 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
 
         // Description.
         font.getData().setScale(HudConstants.SHOP_CARD_DESC_SCALE);
-        setFont(sold ? SOLD_TINT : DESC_COLOR);
+        setSecondaryFont();
         font.draw(batch, entry.description, textLeft, cardTop - HudConstants.SHOP_CARD_DESC_Y_BELOW_TOP,
                   wrapWidth, Align.left, true);
 
-        // Price — green if affordable, red if not (grey when sold).
+        // Price — credits gold if affordable, harm red if not (secondary when sold).
         float priceBaselineY = cardY[index] + HudConstants.SHOP_CARD_PRICE_Y_ABOVE_BOTTOM;
         font.getData().setScale(HudConstants.SHOP_CARD_PRICE_SCALE);
-        if (sold)                      setFont(SOLD_TINT);
-        else if (credits < entry.price) setFont(PRICE_DENY);
-        else                            setFont(PRICE_AFFORD);
+        if (sold)                       setSecondaryFont();
+        else if (credits < entry.price) setFontColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN,
+                                                     CombatPalette.DAMAGE_BLUE);
+        else                            setFontColor(ArtDirection.CREDITS_GOLD_RED, ArtDirection.CREDITS_GOLD_GREEN,
+                                                     ArtDirection.CREDITS_GOLD_BLUE);
         font.draw(batch, cardPrice[index], cardPriceX[index], priceBaselineY);
 
-        // Bottom-left tag: SOLD stamp, or a pulsing BUY affordance when affordable.
+        // Bottom-left tag: SOLD stamp (harm red), or a pulsing BUY affordance in the facility's cyan.
         font.getData().setScale(HudConstants.SHOP_CARD_TAG_SCALE);
         if (sold) {
-            setFont(SOLD_TAG_COLOR);
+            setFontColor(CombatPalette.DAMAGE_RED, CombatPalette.DAMAGE_GREEN, CombatPalette.DAMAGE_BLUE);
             font.draw(batch, SOLD_TEXT, textLeft, priceBaselineY);
         } else if (credits >= entry.price) {
             float pulse = 0.55f + 0.45f * MathUtils.sin(animationTime * HudConstants.SHOP_BUY_PULSE_SPEED);
-            font.setColor(BUY_TAG_COLOR.r, BUY_TAG_COLOR.g, BUY_TAG_COLOR.b, pulse * fade);
+            font.setColor(ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                          ArtDirection.FACILITY_CYAN_BLUE, pulse * fade);
             font.draw(batch, BUY_TEXT, textLeft, priceBaselineY);
         }
     }
@@ -630,7 +645,7 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         float cancelLeft   = confirmLeft + buttonWidth + HudConstants.SHOP_CONFIRM_BUTTON_GAP;
 
         font.getData().setScale(HudConstants.SHOP_CONFIRM_LABEL_SCALE);
-        setFont(BUTTON_LABEL);
+        setPrimaryFont();
         layout.setText(font, CONFIRM_TEXT);
         float labelBaselineY = buttonBottom + HudConstants.SHOP_CONFIRM_BUTTON_HEIGHT / 2f + layout.height / 2f;
         font.draw(batch, CONFIRM_TEXT, confirmLeft + buttonWidth / 2f - layout.width / 2f, labelBaselineY);
@@ -638,12 +653,18 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         font.draw(batch, CANCEL_TEXT, cancelLeft + buttonWidth / 2f - layout.width / 2f, labelBaselineY);
     }
 
-    private void setShape(Color color) {
-        shapes.setColor(color.r, color.g, color.b, color.a * fade);
+    private void setFontColor(float red, float green, float blue) {
+        font.setColor(red, green, blue, fade);
     }
 
-    private void setFont(Color color) {
-        font.setColor(color.r, color.g, color.b, color.a * fade);
+    private void setPrimaryFont() {
+        setFontColor(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                     ArtDirection.UI_TEXT_PRIMARY_BLUE);
+    }
+
+    private void setSecondaryFont() {
+        setFontColor(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                     ArtDirection.UI_TEXT_SECONDARY_BLUE);
     }
 
     @Override
@@ -651,5 +672,6 @@ public final class ShopOverlayRenderer implements Renderable, Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        heavyFont.dispose();
     }
 }

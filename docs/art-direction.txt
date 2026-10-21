@@ -370,8 +370,9 @@ COVERAGE (both faces): printable ASCII 32-126 plus — · … × ▶ ◀ → ●
 FACES: HEAVY = each REGULAR glyph OR-ed with itself shifted 1 px right (ink width +1, advance +1),
   derived in GameFonts, never a second table. HEAVY is used for: FramingScreenRenderer's title and death
   stroke, BossHudRenderer.nameFont, HudRenderer's ammo readout, EventTextRenderer, ImpactEffectRenderer
-  (damage numbers). Everything else is REGULAR. (The reprint card's SYSTEM block is drawn by the shared
-  StoryPanelRenderer, which also draws every bark, so it is REGULAR until a later order styles panels.)
+  (damage numbers), every screen title (UiKit.screenHeaderTitle, orders 5-6), the reprint card's SYSTEM
+  header and instance counter, the run report's number column, the floor-transition depth readout and the
+  route console's header (order 6). Everything else is REGULAR.
 ATLAS: each font pixel rasterised as a solid 4x4-texel white square (PIXEL_FONT_ATLAS_TEXELS_PER_PIXEL),
   1 font pixel of transparent padding between glyphs, both faces + fallback shelf-packed into ONE
   power-of-two atlas at most 512x512 (currently 512x512), Linear min/mag (crisp-chunky at FitViewport's
@@ -558,8 +559,61 @@ WHO DRAWS WHAT
                              plate with a secondary label.
   CodexOverlayRenderer       panel + brackets, R1 header, tab / BACK / close / settings plates, flat rows with
                              dividers (amber tick under the pinned page), amber selection bar, NEW markers.
-SUIT vs FACILITY (so far)
-  SUIT (order 5): everything above — the player's own suit display: gunmetal panels, SUIT_AMBER brackets
-    and ticks, the player's resources in their semantic colours.
-  FACILITY (order 6): route map, shop, event console, story panels, boot card, title, pause / settings,
-    report — the facility's screens, in FACILITY_CYAN where the facility speaks.
+SUIT vs FACILITY: the full ink table is SECTION 15 (order 6).
+
+
+15. FACILITY, STORY AND FIRST IMPRESSION (visual-identity-order-6)
+------------------------------------------------------------------
+The last order of the series: every remaining screen is on the kit, in the ink the fiction assigns. INK BY
+DIEGESIS — who is showing it to you. FACILITY_CYAN is what the facility shows you (the nav console, the
+fabricator, an event terminal, the reprint machine); SUIT_AMBER is what is yours (the pause menu, your answers,
+CONTINUE); a story panel takes its brackets from its speaker.
+FACILITY INK
+  A FACILITY PLATE is UiKit.card inked FACILITY_CYAN_DIM (IDLE / DISABLED), lit FACILITY_CYAN when PRESSED or
+  SELECTED — so the machine's controls read as the machine's before they are touched (no new primitive; the
+  route console blends the ink between the two for ENGAGE's ready-pulse). A facility screen header is
+  UiKit.screenHeaderTitle + the order-6 overload UiKit.screenHeaderRule(..., ink...) with a FACILITY_CYAN tick.
+  A facility screen's outer brackets are FACILITY_CYAN (full ink; suit screens use SUIT_AMBER_DIM): the run
+  report's panel, the boot card's status block, a facility confirmation, the route console and the shop
+  (whole-screen frames), the event console (title + card row, UI_SCREEN_FRAME_MARGIN). Prices CREDITS_GOLD, an
+  unaffordable one DAMAGE on a DISABLED card; an offer's rarity colour lives on its ICON only.
+  Dim cyan as text: FACILITY_CYAN_DIM (3.6:1 on black) is allowed for text only in the HEAVY face (large text):
+  the reprint counter and the "SUBLEVEL" label of the depth readout.
+STORY PANELS
+  StoryPanelRenderer: UiKit.panel (UI_PANEL at STORY_PANEL_ALPHA 0.82 = UI_PANEL_ALPHA_HUD, UI_LINE border) +
+  brackets in the speaker's accent (StoryUiConstants.SPEAKER_ACCENT_*, sourced here: ORA SUIT_AMBER, the
+  Organization FACILITY_CYAN, the Planet PLANET_RED, SYSTEM UI_TEXT_PRIMARY); chip, accent bar and icon
+  unchanged in geometry; body UI_TEXT_PRIMARY through UiKit.text (shadowed — a bark sits on the 3D view); the
+  bark's close X a UI_TEXT_SECONDARY glyph on a 38-unit IDLE plate. A general drawPanel overload takes the bracket
+  ink and a HEAVY speaker name (the reprint card's SYSTEM block: FACILITY_CYAN brackets, HEAVY header). Exchange
+  answers and the acknowledge are SUIT plates (IDLE / PRESSED) at TYPE_LABEL, whoever speaks.
+FRAMING SCREENS
+  Title / launch FACILITY: status lines UI_TEXT_PRIMARY on black, the title HEAVY at TYPE_DISPLAY over a
+  FACILITY_CYAN-ticked rule its own width, rows = facility plates with BEGIN / CONTINUE DESCENT SELECTED.
+  Pause / settings SUIT: R1 header on the row column, SUIT plates, SUIT_AMBER_DIM brackets round header + rows
+  (no outer panel); settings values SUIT_AMBER; from the title, settings draws over the launch blackout.
+  Confirmation: the opener's ink (title -> FACILITY, pause -> SUIT), PROCEED SELECTED, CANCEL IDLE.
+  Death stroke: HEAVY TYPE_DISPLAY bone (UI_TEXT_PRIMARY) alone on the finished black — no brackets, no panel,
+  no shadow, and no depth readout (FadeOverlayRenderer.render(..., showDepthReadout=false)).
+  Boot card: SYSTEM block FACILITY_CYAN brackets + HEAVY header; counter HEAVY TYPE_BODY FACILITY_CYAN_DIM; ORA's
+  panel amber; CONTINUE a SELECTED SUIT plate; REPORT a facility plate; terminal RETURN a DISABLED facility plate.
+  Run report: a FACILITY panel, R1 header with a cyan tick, the number column HEAVY, lines TYPE_BODY primary, a
+  FACILITY_CYAN_DIM rule between the stats and the RUN AUTOPSY. Depth readout: "SUBLEVEL" FACILITY_CYAN_DIM +
+  the number UI_TEXT_PRIMARY, HEAVY TYPE_HEADING, on UI_INK_BLACK.
+  Screens on black or a scrim draw text unshadowed (the order-5 rule); one scrim each (UI_SCRIM_ALPHA 0.75).
+FIRST IMPRESSION (Android, R10)
+  android/res/values/color.xml: background = #090A0D (UI_INK_BLACK), ic_background_color = #FAC247 (SUIT_AMBER,
+  the adaptive icon's background; the foreground art is unchanged). styles.xml: GdxTheme sets
+  android:windowBackground = @color/background, so the window before the first GL frame is near-black — no white
+  flash before a black horror title. Colours are six-digit #RRGGBB (opaque): Android reads eight digits as
+  #AARRGGBB, which is how the old "#F5A623FF" was really a violet.
+SUIT vs FACILITY — THE INK TABLE (the series' map; a new screen picks its row by who is showing it)
+  SUIT (amber)      HUD, touch controls, mini-map frame, the inventory family, weapon inspect, level-up, relic
+                    offer, codex, pause, settings, exchange answers + acknowledge, CONTINUE, ORA's panel
+  FACILITY (cyan)   route map console, fabricator shop, event console, title / launch, boot card status, run
+                    report, depth readout, the Organization's panel, the mini-map EXIT marker, the BLACKOUT
+                    plate text
+  NEUTRAL           the SYSTEM speaker (bone), the death stroke
+  SEMANTIC          health, armour, damage, defence, special, movement, buff, credits, rarity / tier / tag
+                    frames, the Planet's red, the route map's node accents / pips / hazard amber / violet
+

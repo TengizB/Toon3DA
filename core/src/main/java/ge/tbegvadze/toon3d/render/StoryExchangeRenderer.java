@@ -13,6 +13,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.narrative.ExchangeSystem;
 import ge.tbegvadze.toon3d.narrative.Speaker;
 import ge.tbegvadze.toon3d.narrative.StoryStrings;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.StoryUiConstants;
@@ -30,12 +31,13 @@ import ge.tbegvadze.toon3d.util.StoryUiConstants;
  *
  * <p>THUMB TARGETS: plates are {@code STORY_EXCHANGE_BUTTON_HEIGHT} tall and span the panel's full
  * width, stacked from a fixed top edge so the first answer is always in the same place.  A pressed
- * plate is drawn much brighter — a tap on an answer must be visibly acknowledged before the panel
- * changes, or a player who has just committed cannot tell whether the game heard them.
+ * plate turns PRESSED (raised fill, SUIT_AMBER border) — a tap on an answer must be visibly
+ * acknowledged before the panel changes, or a player who has just committed cannot tell whether the
+ * game heard them.
  *
  * <p>Nothing is allocated on the draw path: body and answer text arrive pre-resolved and pre-wrapped
  * from the system, answer labels are re-measured only when the text actually changes, and the
- * scratch {@link Color} / {@link GlyphLayout} are pre-allocated.  Owns a {@link StoryPanelRenderer},
+ * {@link GlyphLayout} is pre-allocated.  Owns a {@link StoryPanelRenderer},
  * a {@link ShapeRenderer}, a {@link SpriteBatch} and a {@link BitmapFont} — all disposed in
  * {@link #dispose()}.
  */
@@ -46,7 +48,6 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
     private final SpriteBatch        batch;
     private final BitmapFont         font;
     private final GlyphLayout        layout;
-    private final Color              scratchColor = new Color();
 
     private ExchangeSystem exchangeSystem;
     private StoryAudio     storyAudio;
@@ -172,25 +173,19 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    /** One answer plate: an accent border with a dim fill inset, brightened while pressed. */
+    /**
+     * One answer plate (visual-identity-order-6 R4): the player is speaking, so it is a SUIT plate whatever the
+     * speaker — IDLE, and PRESSED in SUIT_AMBER while the thumb is on it.  The reply's single acknowledge plate
+     * is the same plate.
+     */
     private void drawPlate(int buttonIndex, boolean pressed, float fade) {
-        int   speakerIndex = Speaker.AI.ordinal();   // the player's own voice borrows ORA's amber
-        float accentRed    = StoryUiConstants.SPEAKER_ACCENT_R[speakerIndex];
-        float accentGreen  = StoryUiConstants.SPEAKER_ACCENT_G[speakerIndex];
-        float accentBlue   = StoryUiConstants.SPEAKER_ACCENT_B[speakerIndex];
-        float border       = StoryUiConstants.STORY_EXCHANGE_BUTTON_BORDER;
-        float fill         = pressed ? StoryUiConstants.STORY_EXCHANGE_BUTTON_PRESSED_ALPHA
-                                     : StoryUiConstants.STORY_EXCHANGE_BUTTON_FILL_ALPHA;
-        float buttonBottom = buttonBottomY(buttonIndex);
-
-        shapes.setColor(accentRed, accentGreen, accentBlue, fade);
-        shapes.rect(StoryUiConstants.STORY_EXCHANGE_BUTTON_X, buttonBottom,
-                    StoryUiConstants.STORY_CHOICE_BUTTON_WIDTH,
-                    StoryUiConstants.STORY_EXCHANGE_BUTTON_HEIGHT);
-        shapes.setColor(accentRed * fill, accentGreen * fill, accentBlue * fill, fade);
-        shapes.rect(StoryUiConstants.STORY_EXCHANGE_BUTTON_X + border, buttonBottom + border,
-                    StoryUiConstants.STORY_CHOICE_BUTTON_WIDTH - border * 2f,
-                    StoryUiConstants.STORY_EXCHANGE_BUTTON_HEIGHT - border * 2f);
+        UiKit.plate(shapes, StoryUiConstants.STORY_EXCHANGE_BUTTON_X, buttonBottomY(buttonIndex),
+                    StoryUiConstants.STORY_CHOICE_BUTTON_WIDTH, StoryUiConstants.STORY_EXCHANGE_BUTTON_HEIGHT,
+                    ArtDirection.UI_PLATE_CHAMFER, ArtDirection.UI_BRACKET_LENGTH,
+                    pressed ? PlateState.PRESSED : PlateState.IDLE,
+                    pressed ? StoryUiConstants.STORY_EXCHANGE_BUTTON_PRESSED_ALPHA
+                            : StoryUiConstants.STORY_EXCHANGE_BUTTON_FILL_ALPHA,
+                    ArtDirection.SUIT_AMBER_RED, ArtDirection.SUIT_AMBER_GREEN, ArtDirection.SUIT_AMBER_BLUE, fade);
     }
 
     /** Pass 2 — the answer text, centred in each plate, in one SpriteBatch. */
@@ -210,7 +205,9 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
             //     top = Y + (H + h) / 2   -> equal margins above and below.
             float labelTopY = buttonBottomY(buttonIndex)
                     + (StoryUiConstants.STORY_EXCHANGE_BUTTON_HEIGHT + measuredLabelHeight[buttonIndex]) / 2f;
-            drawWithShadow(label, measuredLabelX[buttonIndex], labelTopY, fade);
+            UiKit.text(batch, font, label, measuredLabelX[buttonIndex], labelTopY,
+                       StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G, StoryUiConstants.STORY_BODY_B,
+                       fade);
         }
 
         font.getData().setScale(1f);
@@ -229,19 +226,6 @@ public final class StoryExchangeRenderer implements Renderable, Disposable {
         measuredLabelX[buttonIndex]      = StoryUiConstants.STORY_EXCHANGE_BUTTON_X
                 + (StoryUiConstants.STORY_CHOICE_BUTTON_WIDTH - layout.width) / 2f;
         measuredLabelHeight[buttonIndex] = layout.height;
-    }
-
-    /** Draws one label with a dark drop-shadow beneath it, matching the story panel's text. */
-    private void drawWithShadow(String text, float textX, float textTopY, float fade) {
-        float shadow = StoryUiConstants.STORY_TEXT_SHADOW_OFFSET;
-        scratchColor.set(0f, 0f, 0f, StoryUiConstants.STORY_TEXT_SHADOW_ALPHA * fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX + shadow, textTopY - shadow);
-
-        scratchColor.set(StoryUiConstants.STORY_BODY_R, StoryUiConstants.STORY_BODY_G,
-                         StoryUiConstants.STORY_BODY_B, fade);
-        font.setColor(scratchColor);
-        font.draw(batch, text, textX, textTopY);
     }
 
     // -------------------------------------------------------------------------

@@ -33,6 +33,7 @@ import ge.tbegvadze.toon3d.route.RouteNode;
 import ge.tbegvadze.toon3d.route.RouteNodeType;
 import ge.tbegvadze.toon3d.route.RouteRegion;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
@@ -91,6 +92,8 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private final ShapeRenderer shapes;
     private final SpriteBatch   batch;
     private final BitmapFont    font;
+    /** HEAVY face for the console header: the title and the region name (visual-identity-order-6 R8). */
+    private final BitmapFont    heavyFont;
     private final GlyphLayout   layout;                 // used only outside render()
     private final RouteMapColorPalette palette;
     private final NodeTypeRegistry     nodeTypes;
@@ -190,6 +193,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.setAutoShapeType(true);
         batch   = new SpriteBatch();
         font    = GameFonts.newFont(FontFace.REGULAR);
+        heavyFont = GameFonts.newFont(FontFace.HEAVY);
         layout  = new GlyphLayout();
         palette = new RouteMapColorPalette();
         nodeTypes = RouteRegistries.nodeTypes();
@@ -203,9 +207,10 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
     /** Title + confirm-bar label positions never move, so they are laid out once. */
     private void precomputeStaticText() {
-        font.getData().setScale(RouteMapConstants.TITLE_TEXT_SCALE);
-        layout.setText(font, TITLE_TEXT);
+        heavyFont.getData().setScale(RouteMapConstants.TITLE_TEXT_SCALE);
+        layout.setText(heavyFont, TITLE_TEXT);   // measured in the face it is drawn in
         titleBaselineX = viewportCenterX - layout.width / 2f;
+        heavyFont.getData().setScale(1f);
 
         float barMidY = (RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + RouteMapConstants.CONFIRM_BAR_TOP_Y) / 2f;
         float cancelLeft = RouteMapConstants.CONFIRM_BUTTON_MARGIN;
@@ -996,8 +1001,8 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         Color trim = trimColor();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        // Title plate + confirm-bar bands (brushed steel). The legend strip band was retired; its hint
-        // line now sits in the confirm bar's centre gap.
+        // Title plate + confirm-bar bands (the palette's raised panel). The legend strip band was retired; its
+        // hint line now sits in the confirm bar's centre gap.
         setShape(palette.steel, 0.92f);
         shapes.rect(0f, RouteMapConstants.TITLE_PLATE_BOTTOM_Y, worldWidth,
                     RouteMapConstants.TITLE_PLATE_TOP_Y - RouteMapConstants.TITLE_PLATE_BOTTOM_Y);
@@ -1005,27 +1010,26 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.rect(0f, RouteMapConstants.CONFIRM_BAR_BOTTOM_Y, worldWidth,
                     RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y);
 
-        // Confirm-bar buttons. CANCEL is a dim no-op affordance; ENGAGE is GATED — dim/disabled until
-        // a node is focused, then it lights and ready-pulses (order-6 two-step selection safety).
+        // Confirm-bar buttons as FACILITY plates (visual-identity-order-6 R8). CANCEL is an IDLE plate; ENGAGE is
+        // GATED — a DISABLED plate until a node is focused, then the SELECTED commit action whose cyan ink
+        // ready-pulses between FACILITY_CYAN_DIM and FACILITY_CYAN (order-6 two-step selection safety).
         float barBottom = RouteMapConstants.CONFIRM_BAR_BOTTOM_Y + 6f;
         float barHeight = RouteMapConstants.CONFIRM_BAR_TOP_Y - RouteMapConstants.CONFIRM_BAR_BOTTOM_Y - 12f;
-        setShape(palette.holoDim, 0.45f);
-        shapes.rect(RouteMapConstants.CONFIRM_BUTTON_MARGIN, barBottom,
-                    RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight);
-        float engageAlpha;
+        drawFacilityPlate(RouteMapConstants.CONFIRM_BUTTON_MARGIN, barBottom,
+                          RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight, PlateState.IDLE, 0f);
         if (focusNode == null) {
-            engageAlpha = RouteMapConstants.ENGAGE_DISABLED_ALPHA;
+            drawFacilityPlate(engageButtonLeft(), barBottom, RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight,
+                              PlateState.DISABLED, 0f);
         } else {
             float pulse = 0.5f + 0.5f * MathUtils.sin(overlayTimeSeconds * RouteMapConstants.ENGAGE_PULSE_SPEED);
-            engageAlpha = RouteMapConstants.ENGAGE_ENABLED_ALPHA + 0.28f * pulse;
+            drawFacilityPlate(engageButtonLeft(), barBottom, RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight,
+                              PlateState.SELECTED, pulse);
         }
-        setShape(palette.holoCyan, engageAlpha);
-        shapes.rect(engageButtonLeft(), barBottom, RouteMapConstants.CONFIRM_BUTTON_WIDTH, barHeight);
 
-        // MAP / DETAIL framing toggle (top-right of the map viewport).
-        setShape(mapFraming ? palette.holoCyan : palette.holoDim, 0.4f);
-        shapes.rect(toggleLeft(), toggleBottom(),
-                    RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT);
+        // MAP / DETAIL framing toggle (top-right of the map viewport): SELECTED while the map framing is on.
+        drawFacilityPlate(toggleLeft(), toggleBottom(),
+                          RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT,
+                          mapFraming ? PlateState.SELECTED : PlateState.IDLE, 1f);
 
         // Hazard chevron trim along the top and bottom of the map viewport. The bottom trim sits on
         // top of the confirm bar, filling the gap up to the (lowered) map viewport bottom edge.
@@ -1039,22 +1043,35 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.circle(worldWidth - inset, RouteMapConstants.TITLE_PLATE_BOTTOM_Y + inset, RouteMapConstants.RIVET_RADIUS);
         shapes.circle(inset, RouteMapConstants.TITLE_PLATE_TOP_Y - inset, RouteMapConstants.RIVET_RADIUS);
         shapes.circle(worldWidth - inset, RouteMapConstants.TITLE_PLATE_TOP_Y - inset, RouteMapConstants.RIVET_RADIUS);
-        shapes.end();
 
-        // Frame border (line pass) — the screen edge + band separators, trim-tinted.
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        Gdx.gl.glLineWidth(RouteMapConstants.FRAME_BORDER_WIDTH);
-        setShape(trim, 0.8f);
-        shapes.rect(2f, 2f, worldWidth - 4f, worldHeight - 4f);
+        // The console FRAME (R8): a chamfered UiKit panel border at the screen edge — still trim-tinted, so the
+        // region tint and the red-alert pulse keep their contrast (route-map-visual-legibility-fixes) — with the
+        // facility's FACILITY_CYAN corner brackets. Then the band separators, as filled rules (no Line pass).
+        float borderWidth = RouteMapConstants.FRAME_BORDER_WIDTH;
+        UiKit.panel(shapes, 0f, 0f, worldWidth, worldHeight, ArtDirection.UI_CHAMFER,
+                    0f, 0f, 0f, 0f, trim.r, trim.g, trim.b, 0.8f, borderWidth);
+        UiKit.brackets(shapes, 0f, 0f, worldWidth, worldHeight,
+                       ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                       ArtDirection.FACILITY_CYAN_BLUE, 1f);
         setShape(trim, 0.5f);
-        shapes.line(0f, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y, worldWidth, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y);
-        shapes.line(0f, RouteMapConstants.MAP_VIEWPORT_TOP_Y, worldWidth, RouteMapConstants.MAP_VIEWPORT_TOP_Y);
-        // MAP / DETAIL toggle outline.
-        setShape(mapFraming ? palette.holoCyan : palette.textDim, 0.85f);
-        shapes.rect(toggleLeft(), toggleBottom(),
-                    RouteMapConstants.FRAMING_TOGGLE_WIDTH, RouteMapConstants.FRAMING_TOGGLE_HEIGHT);
-        Gdx.gl.glLineWidth(1f);
+        shapes.rect(0f, RouteMapConstants.MAP_VIEWPORT_BOTTOM_Y - borderWidth / 2f, worldWidth, borderWidth);
+        shapes.rect(0f, RouteMapConstants.MAP_VIEWPORT_TOP_Y - borderWidth / 2f, worldWidth, borderWidth);
         shapes.end();
+    }
+
+    /**
+     * A FACILITY plate (visual-identity-order-6 R8): a UiKit card inked FACILITY_CYAN_DIM, lit FACILITY_CYAN when
+     * SELECTED or PRESSED. {@code litFraction} 0..1 blends a SELECTED plate's ink from the dim ink to the full one
+     * (the ENGAGE ready-pulse; 1 = fully lit).
+     */
+    private void drawFacilityPlate(float plateX, float plateY, float plateWidth, float plateHeight,
+                                   PlateState state, float litFraction) {
+        boolean lit = state == PlateState.SELECTED || state == PlateState.PRESSED;
+        float blend = lit ? MathUtils.clamp(litFraction, 0f, 1f) : 0f;
+        UiKit.card(shapes, plateX, plateY, plateWidth, plateHeight, ArtDirection.UI_PLATE_CHAMFER,
+                   GameMath.lerp(palette.holoDim.r, palette.holoCyan.r, blend),
+                   GameMath.lerp(palette.holoDim.g, palette.holoCyan.g, blend),
+                   GameMath.lerp(palette.holoDim.b, palette.holoCyan.b, blend), state, 1f);
     }
 
     /** A row of filled parallelograms forming a diagonal hazard stripe. */
@@ -1471,22 +1488,24 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
     private void drawChromeText() {
         batch.begin();
 
-        font.getData().setScale(RouteMapConstants.TITLE_TEXT_SCALE);
-        setFont(palette.textBright, 1f);
+        // R8: the console header is HEAVY — the title and the region name (still in its region tint).
+        heavyFont.getData().setScale(RouteMapConstants.TITLE_TEXT_SCALE);
+        heavyFont.setColor(palette.textBright.r, palette.textBright.g, palette.textBright.b, 1f);
         float titleY = (RouteMapConstants.TITLE_PLATE_BOTTOM_Y + RouteMapConstants.TITLE_PLATE_TOP_Y) / 2f + 8f;
-        font.draw(batch, TITLE_TEXT, titleBaselineX, titleY);
+        heavyFont.draw(batch, TITLE_TEXT, titleBaselineX, titleY);
 
-        font.getData().setScale(RouteMapConstants.REGION_TEXT_SCALE);
-        setFont(regionTint, 1f);
-        font.draw(batch, regionText, regionTextX, titleY);
+        heavyFont.getData().setScale(RouteMapConstants.REGION_TEXT_SCALE);
+        heavyFont.setColor(regionTint.r, regionTint.g, regionTint.b, 1f);
+        heavyFont.draw(batch, regionText, regionTextX, titleY);
+        heavyFont.getData().setScale(1f);
 
         font.getData().setScale(RouteMapConstants.DEPTH_TEXT_SCALE);
         setFont(palette.textDim, 1f);
         font.draw(batch, depthText, depthTextX, titleY);
 
         // UAC stencil on the title plate.
-        font.getData().setScale(0.7f);
-        setFont(palette.textDim, 0.55f);
+        font.getData().setScale(RouteMapConstants.UAC_STENCIL_TEXT_SCALE);
+        setFont(palette.textDim, 1f);
         font.draw(batch, UAC_STENCIL, regionTextX, RouteMapConstants.TITLE_PLATE_BOTTOM_Y + 20f);
 
         // Legend hint — now rendered in the confirm bar's centre gap (between CANCEL and ENGAGE), since
@@ -1519,14 +1538,15 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
 
         // Confirm-bar labels. ENGAGE copy is dynamic (forced-node verbs) and dims when un-armed.
         font.getData().setScale(RouteMapConstants.CONFIRM_LABEL_SCALE);
-        setFont(palette.textDim, 0.9f);
+        setFont(palette.textBright, 1f);
         font.draw(batch, CANCEL_TEXT, cancelLabelX, cancelLabelY);
-        setFont(palette.holoCyan, focusNode != null ? 1f : 0.4f);
+        // Armed: the facility's cyan; un-armed: secondary text on the DISABLED plate (still readable).
+        setFont(focusNode != null ? palette.holoCyan : palette.textDim, 1f);
         font.draw(batch, engageText, engageLabelXDynamic, engageLabelY);
 
         // MAP / DETAIL framing toggle label (positions precomputed — no GlyphLayout in render()).
         font.getData().setScale(RouteMapConstants.FRAMING_TOGGLE_LABEL_SCALE);
-        setFont(mapFraming ? palette.holoCyan : palette.textBright, 0.95f);
+        setFont(mapFraming ? palette.holoCyan : palette.textBright, 1f);
         font.draw(batch, mapFraming ? TOGGLE_DETAIL_TEXT : TOGGLE_MAP_TEXT,
                   mapFraming ? toggleLabelXDetail : toggleLabelXMap, toggleLabelY);
 
@@ -1563,7 +1583,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         if (anyScanlines) {
             float scroll = (overlayTimeSeconds * RouteMapConstants.SCANLINE_SCROLL_SPEED)
                          % RouteMapConstants.SCANLINE_SPACING;
-            shapes.setColor(0f, 0f, 0f, RouteMapConstants.SCANLINE_ALPHA);
+            setShape(palette.screenBlack, RouteMapConstants.SCANLINE_ALPHA);
             for (float lineY = viewportBottom + scroll; lineY < viewportTop; lineY += RouteMapConstants.SCANLINE_SPACING) {
                 shapes.rect(0f, lineY, worldWidth, 1f);
             }
@@ -1574,7 +1594,7 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         // opaque backdrop now supplies the display feel. Pass skipped when alpha <= 0.
         if (anyVignette) {
             float band = RouteMapConstants.VIGNETTE_BAND;
-            shapes.setColor(0f, 0f, 0f, RouteMapConstants.VIGNETTE_ALPHA);
+            setShape(palette.screenBlack, RouteMapConstants.VIGNETTE_ALPHA);
             shapes.rect(0f, viewportBottom, band, viewportTop - viewportBottom);
             shapes.rect(worldWidth - band, viewportBottom, band, viewportTop - viewportBottom);
             shapes.rect(0f, viewportTop - band, worldWidth, band);
@@ -1749,5 +1769,6 @@ public final class RouteMapOverlayRenderer implements Renderable, Disposable {
         shapes.dispose();
         batch.dispose();
         font.dispose();
+        heavyFont.dispose();
     }
 }

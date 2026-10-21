@@ -1,5 +1,7 @@
 <resources>
     <style name="GdxTheme" parent="android:Theme.Material.Light.NoActionBar.Fullscreen">
         <item name="android:colorBackground">@color/background</item>
+        <!-- visual-identity-order-6 R10: the pre-GL launch window is near-black, not the light theme's white. -->
+        <item name="android:windowBackground">@color/background</item>
     </style>
 </resources>

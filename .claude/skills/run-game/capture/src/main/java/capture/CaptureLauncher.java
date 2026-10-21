@@ -165,6 +165,21 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "additem":
                     addInventoryItem(step[2], Integer.parseInt(step[3]));
                     break;
+                case "seed":
+                    setRunSeed(Long.parseLong(step[2]));
+                    break;
+                case "ending":
+                    presentEndingCard(step[2]);
+                    break;
+                case "event":
+                    openEventConsole(step.length > 2 ? step[2] : "");
+                    break;
+                case "shop":
+                    openFirstShop();
+                    break;
+                case "barkspeaker":
+                    reassignBarkSpeaker(step[2]);
+                    break;
                 case "timestart":
                     timing = true;
                     frameNanosTotal = 0;
@@ -551,6 +566,133 @@ public class CaptureLauncher extends ApplicationAdapter {
                 field.setInt(effect, name.equals("remainingTurns") ? turns : name.equals("magnitude") ? 5 : 1);
             }
             System.out.println("[capture] status " + typeName + " " + turns);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code seed:N} — overwrites World.runSeed (a final field, set by reflection) and drops any route map already
+     * generated, so the next {@code call:.:onDescentRequested} builds the SAME map in every run (the map is
+     * otherwise time-seeded). Use it before opening the map. A dev hook for reaching a screen, never game logic.
+     */
+    private void setRunSeed(long seed) {
+        try {
+            Object world = worldObject();
+            Field seedField = findField(world.getClass(), "runSeed");
+            seedField.setAccessible(true);
+            seedField.setLong(world, seed);
+            Field mapField = findField(world.getClass(), "routeMap");
+            mapField.setAccessible(true);
+            mapField.set(world, null);
+            System.out.println("[capture] run seed " + seed);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code ending:VARIANT} — World.presentEndingCard(BootCardVariant.VARIANT) (FREE / KILL give the terminal card
+     * with the RETURN plate; OBEY a continuing card). A dev hook for reaching a screen, never game logic.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void presentEndingCard(String variantName) {
+        try {
+            Object world = worldObject();
+            Class variantClass = Class.forName("ge.tbegvadze.toon3d.narrative.BootCardVariant");
+            Object result = world.getClass().getMethod("presentEndingCard", variantClass)
+                    .invoke(world, Enum.valueOf(variantClass, variantName));
+            System.out.println("[capture] ending " + variantName + " -> " + result);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code event[:EVENT_ID]} — opens the FACILITY EVENT console on the registered event EVENT_ID (the first one
+     * registered when omitted) exactly as World.updateEventStations does on arrival at a station: activeEvent,
+     * eventChoiceOverlayRenderer.present(event), runPhase EVENT_CHOICE. A dev hook for reaching a screen, never
+     * game logic.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void openEventConsole(String eventId) {
+        try {
+            Object world = worldObject();
+            Object registry = Class.forName("ge.tbegvadze.toon3d.route.RouteRegistries").getMethod("events").invoke(null);
+            Object event = eventId.isEmpty()
+                    ? ((java.util.List<?>) registry.getClass().getMethod("all").invoke(registry)).get(0)
+                    : registry.getClass().getMethod("get", String.class).invoke(registry, eventId);
+            if (event == null) { System.out.println("[capture] event: no event " + eventId); return; }
+            Field activeField = findField(world.getClass(), "activeEvent");
+            activeField.setAccessible(true);
+            activeField.set(world, event);
+            Object renderer = fieldValue(world, "eventChoiceOverlayRenderer");
+            for (java.lang.reflect.Method method : renderer.getClass().getMethods()) {
+                if (method.getName().equals("present") && method.getParameterCount() == 1) {
+                    method.invoke(renderer, event);
+                    break;
+                }
+            }
+            Field phaseField = findField(world.getClass(), "runPhase");
+            phaseField.setAccessible(true);
+            phaseField.set(world, Enum.valueOf((Class) phaseField.getType(), "EVENT_CHOICE"));
+            System.out.println("[capture] event console " + event);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code barkspeaker:SPEAKER} — puts the first registered bark of that Speaker (AI / ORGANIZATION / PLANET) on
+     * screen through BarkSystem's own private deliver(definition), skipping gating and pacing, so another speaker's
+     * panel can be seen without reaching their region. A dev hook for reaching a screen, never game logic.
+     */
+    private void reassignBarkSpeaker(String speakerName) {
+        try {
+            Object system = fieldValue(worldObject(), "barkSystem");
+            Object registry = fieldValue(system, "registry");
+            Object chosen = null;
+            for (Object definition : (Iterable<?>) registry.getClass().getMethod("getAll").invoke(registry)) {
+                Object speaker = definition.getClass().getMethod("getSpeaker").invoke(definition);
+                if (String.valueOf(speaker).equals(speakerName)) { chosen = definition; break; }
+            }
+            if (chosen == null) { System.out.println("[capture] barkspeaker: none for " + speakerName); return; }
+            java.lang.reflect.Method deliver = system.getClass().getDeclaredMethod("deliver", chosen.getClass());
+            deliver.setAccessible(true);
+            deliver.invoke(system, chosen);
+            System.out.println("[capture] bark speaker -> " + speakerName);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code shop} — opens the fabricator shop on the floor's first vending machine exactly as World.openShop does
+     * for the machine in front of the player (openMachine, shopOverlayRenderer.open(machine, credits), runPhase
+     * SHOP_OPEN), so the shop can be captured without walking to a machine. A dev hook, never game logic.
+     */
+    private void openFirstShop() {
+        try {
+            Object world = worldObject();
+            java.util.List<?> machines = (java.util.List<?>) fieldValue(world, "vendingMachines");
+            if (machines.isEmpty()) { System.out.println("[capture] shop: no vending machine on this floor"); return; }
+            Object machine = machines.get(0);
+            Field openField = findField(world.getClass(), "openMachine");
+            openField.setAccessible(true);
+            openField.set(world, machine);
+            Object stats = fieldValue(world, "playerStats");
+            int credits = (Integer) stats.getClass().getMethod("getCredits").invoke(stats);
+            Object renderer = fieldValue(world, "shopOverlayRenderer");
+            for (java.lang.reflect.Method method : renderer.getClass().getMethods()) {
+                if (method.getName().equals("open") && method.getParameterCount() == 2) {
+                    method.invoke(renderer, machine, credits);
+                    break;
+                }
+            }
+            Field phaseField = findField(world.getClass(), "runPhase");
+            phaseField.setAccessible(true);
+            phaseField.set(world, Enum.valueOf((Class) phaseField.getType(), "SHOP_OPEN"));
+            System.out.println("[capture] shop opened with " + credits + " credits");
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

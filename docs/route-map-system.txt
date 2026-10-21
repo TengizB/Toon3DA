@@ -672,6 +672,22 @@ amber->red.
 CRT TREATMENT: upward-scrolling scanlines + edge vignette over the viewport, ~2% whole-hologram
 flicker, and a rare sync brighten.
 
+CHROME PAINT (visual-identity-order-6 R8 — the console is a FACILITY screen; docs/art-direction.txt SECTION 15):
+  FRAME       a UiKit.panel BORDER at the screen edge (chamfered UI_CHAMFER, FRAME_BORDER_WIDTH thick, no fill),
+              still in the trim colour (region tint; amber->red in RED ALERT) at 0.8, with FACILITY_CYAN UiKit
+              corner brackets. The band separators are filled rules: the console draws no Line pass of its own.
+  HEADER      "FACILITY NAV — SELECT VECTOR" and the region name in the HEAVY face at TYPE_BODY (the region name
+              keeps its region tint); "FLOOR n / 25" and the UAC stencil UI_TEXT_SECONDARY at TYPE_CAPTION.
+  PLATES      CANCEL = an IDLE "facility plate" (UiKit.card inked FACILITY_CYAN_DIM); ENGAGE = DISABLED until a
+              node is focused, then SELECTED, its ink pulsing FACILITY_CYAN_DIM -> FACILITY_CYAN (ENGAGE_PULSE_SPEED);
+              the MAP / DETAIL toggle = IDLE / SELECTED. Labels TYPE_BODY (toggle TYPE_CAPTION).
+  PALETTE     RouteMapColorPalette's base colours read util/ArtDirection: holoCyan/holoDim = FACILITY_CYAN/_DIM,
+              creditGold = CREDITS_GOLD, medGreen = HEALTH_GREEN, scrimNavy/screenBlack = UI_INK_BLACK,
+              steel = UI_PANEL_RAISED, textBright/textDim = UI_TEXT_PRIMARY/_SECONDARY.
+  UNCHANGED   node accents, danger pips, hazard amber, mystery violet, rivets, region tints, crests, icons, glows
+              and conduits — the map's own glyph language (route-map-visual-legibility-fixes). A same-seed
+              before/after shows them pixel-identical; only the node LABEL text moved (to UI_TEXT_PRIMARY).
+
 ANIMATION: single overlayTimeSeconds/phaseTimeSeconds drive OPENING (0.35s boot sweep reveals nodes
 bottom->top) -> IDLE (bob/flicker/pulse loops) -> COMMIT (0.4s: chosen conduit flares, chosen card
 grows, others recede) -> DONE. No allocations in render(); the whole layout is precomputed in
@@ -753,8 +769,8 @@ INPUT ROUTING
 SELECTION MODEL — tap-to-focus, tap-to-ENGAGE (two-step; a descent is irreversible)
   1. TAP a candidate card -> FOCUSED (ring + scale-up + glow; its hint slides into the legend strip;
      the conduit brightens). One focus at a time; tapping empty space clears it (unless forced).
-  2. ENGAGE button is DISABLED/dimmed (ENGAGE_DISABLED_ALPHA) until a node is focused; then it lights
-     and ready-pulses. TAP ENGAGE -> COMMIT flare -> World.commitRouteNode -> FADING_OUT.
+  2. ENGAGE button is a DISABLED facility plate until a node is focused; then it is SELECTED and its cyan
+     ink ready-pulses (visual-identity-order-6; see CHROME PAINT). TAP ENGAGE -> COMMIT flare -> World.commitRouteNode -> FADING_OUT.
   RouteMapOverlayRenderer.onTap() returns a PointerResult {NONE, FOCUS_CHANGED, ENGAGED, INVALID,
   FRAMING_TOGGLED, CANCEL}; World reacts (thunk shake on ENGAGED, back-out on CANCEL).
   FORCED node (single candidate / all-BOSS layer): auto-focused; ENGAGE copy becomes DESCEND TO BOSS /

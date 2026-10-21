@@ -337,17 +337,21 @@ public final class RouteMapConstants {
     public static final float AUTO_SELECT_HOLD_SECONDS = 1.25f;
 
     // ---- Text scales -------------------------------------------------------
-    public static final float TITLE_TEXT_SCALE   = 1.2f;
-    public static final float DEPTH_TEXT_SCALE   = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
+    /** Console title, HEAVY (visual-identity-order-6 R8). */
+    public static final float TITLE_TEXT_SCALE   = ArtDirection.TYPE_BODY;
+    public static final float DEPTH_TEXT_SCALE   = ArtDirection.TYPE_CAPTION;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
     /**
      * NAV header (balance-overhaul order 6, F6): "FLOOR n / 25" — n is the floor the console is about to
      * send the player to (the staging room reads FLOOR 1), out of BalanceConfig.RUN_FINAL_DEPTH.
      */
     public static final String NAV_FLOOR_HEADER_PREFIX    = "FLOOR ";
     public static final String NAV_FLOOR_HEADER_SEPARATOR = " / ";
-    public static final float REGION_TEXT_SCALE  = 1.0f;
-    public static final float NODE_LABEL_SCALE   = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.9)
-    public static final float LEGEND_TEXT_SCALE  = 1.0f;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
+    /** Region name in the header, HEAVY (visual-identity-order-6 R8). */
+    public static final float REGION_TEXT_SCALE  = ArtDirection.TYPE_BODY;
+    /** The "UAC" stencil under the region name (was a raw 0.7 literal in the renderer; TYPE_CAPTION is the floor). */
+    public static final float UAC_STENCIL_TEXT_SCALE = ArtDirection.TYPE_CAPTION;
+    public static final float NODE_LABEL_SCALE   = ArtDirection.TYPE_CAPTION;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.9)
+    public static final float LEGEND_TEXT_SCALE  = ArtDirection.TYPE_CAPTION;  // TYPE_CAPTION floor (visual-identity-order-3 R8; was 0.95)
     /**
      * The focused node's C1 supply promise (balance-overhaul order 2): two stacked lines in the confirm
      * bar's centre gap — the threat word above (node accent colour), the reward promise below (grey).
@@ -368,7 +372,7 @@ public final class RouteMapConstants {
     public static final String LEGEND_TWIST_SEPARATOR = " - ";
     /** The widest the twist line may draw: the confirm bar's centre gap between CANCEL and ENGAGE, less padding. */
     public static final float LEGEND_TWIST_MAX_WIDTH = 640f;
-    public static final float CONFIRM_LABEL_SCALE = 1.1f;
+    public static final float CONFIRM_LABEL_SCALE = ArtDirection.TYPE_BODY;
 
     // =========================================================================
     // NODE ICON + REGION CREST SPEC (order-5) — the procedural IconPainter system.
@@ -500,7 +504,7 @@ public final class RouteMapConstants {
     public static final float FRAMING_TOGGLE_HEIGHT = 46f;
     /** Inset of the toggle button from the map viewport's top-right corner. */
     public static final float FRAMING_TOGGLE_MARGIN = 20f;
-    public static final float FRAMING_TOGGLE_LABEL_SCALE = 0.8f;
+    public static final float FRAMING_TOGGLE_LABEL_SCALE = ArtDirection.TYPE_CAPTION;   // order-3 R8 deferred site (was 0.8)
 
     // ---- Fog / reveal policy -----------------------------------------------
     /**
@@ -516,10 +520,8 @@ public final class RouteMapConstants {
     public static final float   SCAN_SWEEP_SECONDS = 0.85f;
 
     // ---- ENGAGE gating visuals ---------------------------------------------
-    /** Alpha of the ENGAGE button fill when no node is focused (disabled/dimmed). */
-    public static final float ENGAGE_DISABLED_ALPHA = 0.14f;
-    /** Base alpha of the ENGAGE button fill once a node is focused (before the pulse). */
-    public static final float ENGAGE_ENABLED_ALPHA  = 0.42f;
+    // visual-identity-order-6 R8: ENGAGE is a DISABLED facility plate until a node is focused, then a SELECTED
+    // one whose ink pulses between FACILITY_CYAN_DIM and FACILITY_CYAN.
     /** ENGAGE ready-pulse rate once a node is focused. */
     public static final float ENGAGE_PULSE_SPEED    = 5f;
 

@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.render;
 
 import com.badlogic.gdx.graphics.Color;
 import ge.tbegvadze.toon3d.route.DangerTier;
+import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.RouteMapConstants;
 
 /**
@@ -18,20 +19,32 @@ import ge.tbegvadze.toon3d.util.RouteMapConstants;
 final class RouteMapColorPalette {
 
     // ---- Base palette (see the idea's COLOUR SYSTEM section) ----------------
-    final Color holoCyan     = new Color(0.42f, 0.86f, 0.98f, 1f);
-    final Color holoDim      = new Color(0.24f, 0.44f, 0.52f, 1f);
-    final Color scrimNavy    = new Color(0.03f, 0.05f, 0.09f, 1f);
-    /** Near-black phosphor screen behind the schematic (a touch cooler than scrimNavy) so the cyan pops. */
-    final Color screenBlack  = new Color(0.03f, 0.05f, 0.07f, 1f);
-    final Color steel        = new Color(0.14f, 0.17f, 0.21f, 1f);
+    // visual-identity-order-6 R2: the console's neutrals and inks come from util/ArtDirection (the hologram cyan
+    // IS the facility ink). hazardAmber, dangerRed, mysteryViolet, rivet and every per-node accent below are map
+    // glyph colours, tuned for legibility, and stay as they are.
+    final Color holoCyan     = new Color(ArtDirection.FACILITY_CYAN_RED, ArtDirection.FACILITY_CYAN_GREEN,
+                                         ArtDirection.FACILITY_CYAN_BLUE, 1f);
+    final Color holoDim      = new Color(ArtDirection.FACILITY_CYAN_DIM_RED, ArtDirection.FACILITY_CYAN_DIM_GREEN,
+                                         ArtDirection.FACILITY_CYAN_DIM_BLUE, 1f);
+    final Color scrimNavy    = new Color(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                                         ArtDirection.UI_INK_BLACK_BLUE, 1f);
+    /** The phosphor screen behind the schematic: the palette's ink black, so the cyan pops. */
+    final Color screenBlack  = new Color(ArtDirection.UI_INK_BLACK_RED, ArtDirection.UI_INK_BLACK_GREEN,
+                                         ArtDirection.UI_INK_BLACK_BLUE, 1f);
+    final Color steel        = new Color(ArtDirection.UI_PANEL_RAISED_RED, ArtDirection.UI_PANEL_RAISED_GREEN,
+                                         ArtDirection.UI_PANEL_RAISED_BLUE, 1f);
     final Color rivet        = new Color(0.34f, 0.40f, 0.46f, 1f);
     final Color hazardAmber  = new Color(0.98f, 0.72f, 0.16f, 1f);
     final Color dangerRed    = new Color(0.95f, 0.28f, 0.24f, 1f);
-    final Color medGreen     = new Color(0.36f, 0.90f, 0.46f, 1f);
-    final Color creditGold   = new Color(0.98f, 0.82f, 0.34f, 1f);
+    final Color medGreen     = new Color(ArtDirection.HEALTH_GREEN_RED, ArtDirection.HEALTH_GREEN_GREEN,
+                                         ArtDirection.HEALTH_GREEN_BLUE, 1f);
+    final Color creditGold   = new Color(ArtDirection.CREDITS_GOLD_RED, ArtDirection.CREDITS_GOLD_GREEN,
+                                         ArtDirection.CREDITS_GOLD_BLUE, 1f);
     final Color mysteryViolet = new Color(0.74f, 0.46f, 0.98f, 1f);
-    final Color textBright   = new Color(0.92f, 0.97f, 1f, 1f);
-    final Color textDim      = new Color(0.60f, 0.68f, 0.74f, 1f);
+    final Color textBright   = new Color(ArtDirection.UI_TEXT_PRIMARY_RED, ArtDirection.UI_TEXT_PRIMARY_GREEN,
+                                         ArtDirection.UI_TEXT_PRIMARY_BLUE, 1f);
+    final Color textDim      = new Color(ArtDirection.UI_TEXT_SECONDARY_RED, ArtDirection.UI_TEXT_SECONDARY_GREEN,
+                                         ArtDirection.UI_TEXT_SECONDARY_BLUE, 1f);
 
     // ---- Per-node accent colours (keyed by NodeTypeDefinition.accentColorId) -
     private final Color accentCombat  = new Color(0.42f, 0.78f, 0.98f, 1f);
