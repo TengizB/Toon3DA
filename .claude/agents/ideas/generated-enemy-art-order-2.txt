@@ -1,4 +1,4 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IN PROGRESS
 CATEGORY: Visual
 TITLE: Enemy visual rework 2 - the animated enemy runtime
 CREATED: 2026-10-21

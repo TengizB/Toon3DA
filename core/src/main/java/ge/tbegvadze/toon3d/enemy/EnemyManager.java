@@ -99,6 +99,9 @@ public final class EnemyManager implements EnemyHitTarget {
     private EnemyDeathHazardListener enemyDeathHazardListener;
     private EnemyAttackListener enemyAttackListener;
     private EnemyVoiceListener  enemyVoiceListener;
+    // generated-enemy-art order 2: the visual seam (null by default -> the simulator and tests see no change)
+    private EnemyVisualListener enemyVisualListener;
+    private final EnemyVisualEvent visualEvent = new EnemyVisualEvent();
     private SpecialResolvedListener specialResolvedListener;
     /** Fired when a hit lands from an attack committed and shown a full turn ahead (narrative-rework order-4 READ_INTENT/GUARD evidence). Param = was the player guarding. Nullable. */
     private java.util.function.Consumer<Boolean> telegraphedHitLandedListener;
@@ -649,6 +652,68 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private void announceWindUp(Enemy enemy) {
         if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.WIND_UP);
+        fireVisual(enemy, EnemyVisualMoment.WIND_UP_STARTED);
+    }
+
+    // -------------------------------------------------------------------------
+    // ENEMY VISUAL MOMENTS (generated-enemy-art order 2) — cosmetic, null-guarded, never allocating.
+    // The payload is one reused object; the listener reads it inside the call (EnemyVisualListener).
+    // -------------------------------------------------------------------------
+
+    public void setEnemyVisualListener(EnemyVisualListener listener) {
+        this.enemyVisualListener = listener;
+    }
+
+    private void fireVisual(Enemy enemy, EnemyVisualMoment moment) {
+        if (enemyVisualListener == null) return;
+        enemyVisualListener.onEnemyVisualMoment(visualEvent.reset(enemy, moment));
+    }
+
+    /** MOVE_STARTED / KNOCKED_BACK: the enemy already stands on its new tile; {@code from*} is where it left. */
+    private void fireVisualMotion(Enemy enemy, EnemyVisualMoment moment, int fromColumn, int fromRow) {
+        if (enemyVisualListener == null) return;
+        if (fromColumn == enemy.tileColumn && fromRow == enemy.tileRow) return;   // nothing moved
+        EnemyVisualEvent event = visualEvent.reset(enemy, moment);
+        event.fromColumn = fromColumn;
+        event.fromRow    = fromRow;
+        enemyVisualListener.onEnemyVisualMoment(event);
+    }
+
+    /** DAMAGED: {@code healthLost} is what reached HP; the source is the player's tile when known. */
+    private void fireVisualDamage(Enemy enemy, int healthLost, MatchupOutcome outcome,
+                                  boolean absorbed, boolean blocked) {
+        if (enemyVisualListener == null) return;
+        EnemyVisualEvent event = visualEvent.reset(enemy, EnemyVisualMoment.DAMAGED);
+        event.amount         = healthLost;
+        event.healthFraction = enemy.maxHealth > 0
+                ? Math.min(1f, Math.max(0f, healthLost / (float) enemy.maxHealth)) : 0f;
+        event.outcome        = outcome;
+        event.absorbed       = absorbed;
+        event.blocked        = blocked;
+        event.sourceColumn   = cachedPlayerColumn;
+        event.sourceRow      = cachedPlayerRow;
+        enemyVisualListener.onEnemyVisualMoment(event);
+    }
+
+    private void fireVisualAbility(Enemy enemy, SpecialAbility ability) {
+        if (enemyVisualListener == null) return;
+        EnemyVisualEvent event = visualEvent.reset(enemy, EnemyVisualMoment.ABILITY_USED);
+        event.ability = ability;
+        enemyVisualListener.onEnemyVisualMoment(event);
+    }
+
+    private void fireVisualStatus(Enemy enemy, StatusType status) {
+        if (enemyVisualListener == null) return;
+        EnemyVisualEvent event = visualEvent.reset(enemy, EnemyVisualMoment.STATUS_APPLIED);
+        event.status = status;
+        enemyVisualListener.onEnemyVisualMoment(event);
+    }
+
+    private void fireVisualDeath(Enemy enemy, EnemyVisualEvent.DeathCause cause) {
+        if (enemyVisualListener == null) return;
+        EnemyVisualEvent event = visualEvent.reset(enemy, EnemyVisualMoment.DIED);
+        event.deathCause = cause;
+        enemyVisualListener.onEnemyVisualMoment(event);
     }
 
     // -------------------------------------------------------------------------
@@ -858,6 +923,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.spawnedByBossSummon = spawnedByBossSummon;
         enemies.add(enemy);
         occupancy[tileColumn][tileRow] = true;
+        fireVisual(enemy, EnemyVisualMoment.ALERTED);   // a summoned / hunted arrival wakes on the spot
     }
 
     // -------------------------------------------------------------------------
@@ -909,6 +975,7 @@ public final class EnemyManager implements EnemyHitTarget {
         hunter.trailSequence      = 0;
         anyAlertedEver            = true;
         if (enemyVoiceListener != null) enemyVoiceListener.onEnemyVoice(hunter, EnemyVoiceMoment.ALERT);
+        fireVisual(hunter, EnemyVisualMoment.ALERTED);
         return true;
     }
 
@@ -1170,10 +1237,12 @@ public final class EnemyManager implements EnemyHitTarget {
 
         int blockBefore = enemy.block;
         int shardsBefore = enemy.shardCount;
+        int healthBefore = enemy.health;
         enemy.applyDamage(totalDamage, exposed, activationBlockPierceFraction);
         if (exposed) enemy.consumeExposed();
         if (enemy.shardCount < shardsBefore) {
             spawnShardAbsorbFeedback(enemy);
+            fireVisualDamage(enemy, 0, matchupOutcome, true, false);
             return;   // the shard ate the whole hit: no hit flash, no damage number, no HP change
         }
         // A shard-absorbed hit returned above: only a hit that reached the body reads as a matchup word.
@@ -1188,6 +1257,8 @@ public final class EnemyManager implements EnemyHitTarget {
         }
 
         enemy.triggerHitFlash();
+        fireVisualDamage(enemy, healthBefore - enemy.health, matchupOutcome, false,
+                blockAbsorbed > 0 && enemy.health == healthBefore);
 
         if (!enemy.isAlive()) {
             // THE BUILD's kill terms (balance-overhaul order 5) — a weapon kill only (a barrel is not one).
@@ -1203,7 +1274,8 @@ public final class EnemyManager implements EnemyHitTarget {
             if (killCreditListener != null) {
                 killCreditListener.onEnemyKilledForCredits(depthScaledCreditReward(enemy.type), currentDepth);
             }
-            killEnemy(enemy);
+            killEnemy(enemy, activationHazardBlast ? EnemyVisualEvent.DeathCause.HAZARD
+                                                   : EnemyVisualEvent.DeathCause.WEAPON);
             if (impactEventListener != null) {
                 impactEventListener.onEnemyKilled(worldX, worldY, heightMultiplier, totalDamage);
             }
@@ -1398,6 +1470,7 @@ public final class EnemyManager implements EnemyHitTarget {
         // WILDFIRE (balance-overhaul order 5): every burn the player applies lasts burnTurnBonus() longer.
         statusEffectController.apply(enemy, StatusType.BURNING, turns + buildStats.burnTurnBonus(),
                 matchedStatusMagnitude(enemy, magnitudePerTurn), this);
+        fireVisualStatus(enemy, StatusType.BURNING);
     }
 
     /**
@@ -1413,6 +1486,7 @@ public final class EnemyManager implements EnemyHitTarget {
         // WILDFIRE: +burnTurnBonus() turns; ACCELERANT: +burnMaxStackBonus() stacks (balance-overhaul order 5).
         statusEffectController.applyStacking(enemy, StatusType.BURNING, turns + buildStats.burnTurnBonus(),
                 matchedStatusMagnitude(enemy, magnitudePerStack), maxStacks + buildStats.burnMaxStackBonus(), this);
+        fireVisualStatus(enemy, StatusType.BURNING);
     }
 
     /**
@@ -1451,6 +1525,7 @@ public final class EnemyManager implements EnemyHitTarget {
         enemy.plannedAction.verb = IntentVerb.STUNNED;
         enemy.plannedAction.clearHeavy();            // a cancelled heavy shows no danger tiles
         enemy.notifyCommitted(IntentVerb.STUNNED);   // the existing intent pop marks the change
+        fireVisual(enemy, EnemyVisualMoment.STAGGERED);
         return true;
     }
 
@@ -1468,6 +1543,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemy instanceof Boss || enemy.type.role() == EnemyRole.BOSS) return;
         enemy.skipNextAction = true;
         enemy.plannedAction.clearHeavy();
+        fireVisual(enemy, EnemyVisualMoment.STAGGERED);
         // RIPOSTE DRILL (balance-overhaul order 5): the VULNERABLE lasts riposteVulnerableBonusTurns() longer and,
         // for that window, the player's hits on this enemy take riposteDamageBonus() (applyDamageTo).
         int vulnerableTurns = EffectConstants.VULNERABLE_DURATION + buildStats.riposteVulnerableBonusTurns();
@@ -1526,6 +1602,7 @@ public final class EnemyManager implements EnemyHitTarget {
     public void applyVulnerableStatus(Object enemyObject, int turns) {
         if (statusEffectController == null) return;
         statusEffectController.apply((Enemy) enemyObject, StatusType.VULNERABLE, turns, 0, this);
+        fireVisualStatus((Enemy) enemyObject, StatusType.VULNERABLE);
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("VULNERABLE", EventTextSystem.COLOR_GOLD);
         }
@@ -1540,6 +1617,7 @@ public final class EnemyManager implements EnemyHitTarget {
     public void applyExposedStatus(Object enemyObject, int turns) {
         if (statusEffectController == null) return;
         statusEffectController.apply((Enemy) enemyObject, StatusType.EXPOSED, turns, 0, this);
+        fireVisualStatus((Enemy) enemyObject, StatusType.EXPOSED);
         showCombatTipOnce("exposed", "EXPOSED — your next hit ignores its shield");
     }
 
@@ -1663,6 +1741,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 if (enemyVoiceListener != null) {
                     enemyVoiceListener.onEnemyVoice(enemy, EnemyVoiceMoment.ALERT);
                 }
+                fireVisual(enemy, EnemyVisualMoment.ALERTED);
                 chainAlertQueue[chainQueueSize++] = index;
             }
         }
@@ -1683,6 +1762,7 @@ public final class EnemyManager implements EnemyHitTarget {
                     if (enemyVoiceListener != null) {
                         enemyVoiceListener.onEnemyVoice(candidate, EnemyVoiceMoment.ALERT);
                     }
+                    fireVisual(candidate, EnemyVisualMoment.ALERTED);
                     chainAlertQueue[chainQueueSize++] = index;
                 }
             }
@@ -1730,7 +1810,9 @@ public final class EnemyManager implements EnemyHitTarget {
         // Apply any self-inflicted deaths (e.g. a detonating Plague Hulk) AFTER the loop above
         // finishes, so removing them never shifts enemies.get(index) mid-iteration (R-self-destruct).
         for (int deathIndex = 0; deathIndex < pendingExecuteDeathCount; deathIndex++) {
-            killEnemy(pendingExecuteDeaths[deathIndex]);
+            Enemy deferredDeath = pendingExecuteDeaths[deathIndex];
+            killEnemy(deferredDeath, deferredDeath.selfDestructed ? EnemyVisualEvent.DeathCause.SELF_DESTRUCT
+                                                                  : EnemyVisualEvent.DeathCause.OTHER);
             pendingExecuteDeaths[deathIndex] = null;
         }
     }
@@ -1870,6 +1952,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeMeleeAttack(Enemy enemy, PlannedAction plan, int playerColumn, int playerRow, Player player) {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
+        fireVisual(enemy, EnemyVisualMoment.ATTACK_COMMITTED);
         faceEnemyToward(enemy, playerColumn, playerRow); // order-6: face the target so flanking it is meaningful
         if (isCardinallyAdjacent(enemy, playerColumn, playerRow)) {
             int damage = enemy.scaledAttackDamage();
@@ -1908,6 +1991,7 @@ public final class EnemyManager implements EnemyHitTarget {
         }
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
+        fireVisual(enemy, EnemyVisualMoment.ATTACK_COMMITTED);
         faceEnemyToward(enemy, playerColumn, playerRow); // order-6: a kiter that fires without moving still faces its shot
         boolean stillValid = GameMath.chebyshevDistanceTiles(
                         enemy.tileColumn, enemy.tileRow, playerColumn, playerRow) <= enemy.type.attackRangeTiles()
@@ -1971,6 +2055,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeLanceBeam(Enemy enemy, int playerColumn, int playerRow, Player player) {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
+        fireVisual(enemy, EnemyVisualMoment.ATTACK_COMMITTED);
         int stepColumn = enemy.lanceDirectionColumn;
         int stepRow    = enemy.lanceDirectionRow;
         int lanceDamage = enemy.heavyDamage(enemy.type.heavyWindUp());
@@ -2038,7 +2123,9 @@ public final class EnemyManager implements EnemyHitTarget {
      */
     private void damageAllyInLane(Enemy ally, int allyDamage) {
         if (!ally.isAlive()) return;
+        int allyHealthBefore = ally.health;
         ally.applyDamage(allyDamage);
+        fireVisualDamage(ally, allyHealthBefore - ally.health, MatchupOutcome.NEUTRAL, false, false);
         if (impactEventListener != null) {
             impactEventListener.onEnemyHit(ally.worldCenterX(), ally.worldCenterY(),
                     ally.type.heightMultiplier(), allyDamage);
@@ -2079,6 +2166,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeDefend(Enemy enemy, PlannedAction plan) {
         enemy.state = EnemyState.DEFENDING;
         enemy.gainBlock(plan.blockGain, depthScaledBlockCap(enemy), BalanceConfig.BLOCK_DECAY_TURNS);
+        fireVisual(enemy, EnemyVisualMoment.DEFEND_STARTED);
     }
 
     /**
@@ -2114,6 +2202,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (enemy.tileColumn != originColumn || enemy.tileRow != originRow) {
             igniteMoltenTrail(enemy, originColumn, originRow);
             notifyHeavyFootfall(enemy, playerColumn, playerRow);
+            fireVisualMotion(enemy, EnemyVisualMoment.MOVE_STARTED, originColumn, originRow);
         }
     }
 
@@ -2168,6 +2257,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (specialResolvedListener != null) {
             specialResolvedListener.onSpecialResolved(plan.specialAbility);
         }
+        fireVisualAbility(enemy, plan.specialAbility);
         switch (plan.specialAbility) {
             case BUFF_SELF:     executeBuffSelf(enemy);                                      break;
             case DEBUFF_PLAYER: executeDebuffPlayer(enemy, playerColumn, playerRow, player); break;
@@ -2189,6 +2279,7 @@ public final class EnemyManager implements EnemyHitTarget {
         if (statusEffectController != null) {
             statusEffectController.apply(enemy, StatusType.EMPOWERED,
                     EnemyConstants.BUFF_SELF_DURATION_TURNS, EnemyConstants.BUFF_SELF_EMPOWERED_PERCENT, this);
+            fireVisualStatus(enemy, StatusType.EMPOWERED);
         }
         if (eventTextSystem != null) {
             eventTextSystem.spawnWithColor("EMPOWERED", EventTextSystem.COLOR_GOLD);
@@ -2451,6 +2542,7 @@ public final class EnemyManager implements EnemyHitTarget {
         int lockedLaneColumn = enemy.tileColumn; // fixed axis for a vertical charge (stepColumn == 0)
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerAttackAnim();
+        fireVisual(enemy, EnemyVisualMoment.ATTACK_COMMITTED);
 
         int maxRushTiles = enemy.type.chargeTriggerMaxTiles();
         for (int step = 0; step < maxRushTiles; step++) {
@@ -2466,6 +2558,8 @@ public final class EnemyManager implements EnemyHitTarget {
             if (!isPassableForEnemy(nextColumn, nextRow, playerColumn, playerRow)) break;
             commitMove(enemy, nextColumn, nextRow);
         }
+        // The whole rush is ONE visual move, from the lane origin to where the brute stopped.
+        fireVisualMotion(enemy, EnemyVisualMoment.MOVE_STARTED, lockedLaneColumn, lockedLaneRow);
 
         boolean playerOnLane = (stepRow == 0) ? (playerRow == lockedLaneRow)
                                                : (playerColumn == lockedLaneColumn);
@@ -2752,6 +2846,7 @@ public final class EnemyManager implements EnemyHitTarget {
     private void executeSow(Enemy enemy, int playerColumn, int playerRow) {
         enemy.state = EnemyState.ATTACKING;
         enemy.triggerTelegraph();
+        fireVisual(enemy, EnemyVisualMoment.ATTACK_COMMITTED);
         if (spireHitTarget != null) {
             for (int targetIndex = 0; targetIndex < enemy.sowTargetCount; targetIndex++) {
                 if (spireHitTarget.liveSpireCountForOwner(enemy.getId())
@@ -3445,11 +3540,14 @@ public final class EnemyManager implements EnemyHitTarget {
         if (targetRow    < 0 || targetRow    >= level.getHeight()) return false;
         if (level.isBlockedAt(targetColumn, targetRow, doorManager)) return false;
         if (isTileOccupiedByEnemy(targetColumn, targetRow)) return false;
+        int pushedFromColumn = enemy.tileColumn;
+        int pushedFromRow    = enemy.tileRow;
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
         enemy.tileColumn = targetColumn;
         enemy.tileRow    = targetRow;
         occupancy[targetColumn][targetRow] = true;
         refreshHeavyDangerTiles(enemy);   // a pushed heavy re-marks its tiles from the new tile (order 4)
+        fireVisualMotion(enemy, EnemyVisualMoment.KNOCKED_BACK, pushedFromColumn, pushedFromRow);
         return true;
     }
 
@@ -3511,10 +3609,13 @@ public final class EnemyManager implements EnemyHitTarget {
             impactEventListener.onEnemyKilled(enemy.worldCenterX(), enemy.worldCenterY(),
                     enemy.type.heightMultiplier(), 0);
         }
-        killEnemy(enemy);
+        killEnemy(enemy, EnemyVisualEvent.DeathCause.STATUS);
     }
 
-    private void killEnemy(Enemy enemy) {
+    private void killEnemy(Enemy enemy, EnemyVisualEvent.DeathCause cause) {
+        // generated-enemy-art order 2: reported FIRST, while the enemy still stands on its tile, so the
+        // visual layer captures the dying instance where the body actually was.
+        fireVisualDeath(enemy, cause);
         occupancy[enemy.tileColumn][enemy.tileRow] = false;
         // CP7b: the source died before its committed heavy resolved (a resolved self-destruct cleared its
         // flag already, so the detonation is never counted as a kill-first).
@@ -3641,8 +3742,10 @@ public final class EnemyManager implements EnemyHitTarget {
         // PYROMANIAC: "from every source" — a burning attacker takes the burning-target term on the reflect too.
         reflected = Math.round(reflected * buildStats.burningTargetMultiplier(
                 attacker.getActiveEffects().get(StatusType.BURNING).isActive()));
+        int attackerHealthBefore = attacker.health;
         attacker.applyDamage(reflected);
         attacker.triggerHitFlash();
+        fireVisualDamage(attacker, attackerHealthBefore - attacker.health, MatchupOutcome.NEUTRAL, false, false);
         if (impactEventListener != null) {
             impactEventListener.onEnemyHit(attacker.worldCenterX(), attacker.worldCenterY(),
                     attacker.type.heightMultiplier(), reflected);

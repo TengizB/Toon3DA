@@ -45,7 +45,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — the seam exists with a no-op default, fired at every site; build green; sim/ unchanged.
+- [x] **CP1** — the seam exists with a no-op default, fired at every site; build green; sim/ unchanged.
       DONE WHEN: `enemy/EnemyVisualListener` + `EnemyVisualMoment` + payload exist, EnemyManager fires every
       moment of the idea's list at its commit site, nothing in `sim/` changed, mirror build compiles.
 - [ ] **CP2** — registry + manifest parser + per-floor atlas cache load the two creatures; build green.
@@ -56,4 +56,16 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 
 ## NOTES CARRIED FORWARD
 
-(none yet)
+**CP1 (seam):** `enemy/EnemyVisualListener.onEnemyVisualMoment(EnemyVisualEvent)`; `EnemyManager.setEnemyVisualListener`.
+The payload is ONE reused `EnemyVisualEvent` (enemy, moment, amount/healthFraction/outcome/absorbed/blocked/source*,
+from*/to*, ability, status, deathCause). Sites: ALERTED (phaseA x2, hunter, spawnEnemyInternal), WIND_UP_STARTED
+(announceWindUp = every committed wind-up), ATTACK_COMMITTED (melee, ranged after the shard check, lance, charge, sow),
+ABILITY_USED (executeSpecial, before dispatch — area strike / debuff / summon / self-destruct ride this, never also
+ATTACK), MOVE_STARTED (executeMove after a real step; the charge's whole rush is ONE move fired after the loop),
+DAMAGED (applyDamageTo incl. shard-absorbed path, lance ally splash, reflect), STAGGERED (stagger + riposte),
+KNOCKED_BACK (tryPushEnemy), DEFEND_STARTED, STATUS_APPLIED (burn, burn stack, vulnerable, exposed, empowered),
+DIED (killEnemy(enemy, cause) fires FIRST, enemy still on its tile). NOT fired: DoT tick damage (order 3 — status
+visuals), boss moves (BossFloorController; bosses unmigrated). DECISION: ordinary enemies never slid between tiles
+(only bosses use Enemy.beginSlide). R2 forbids the visual layer writing Enemy, so MOVE_STARTED carries from/to and the
+visual layer owns a cosmetic slide for migrated types (CP3/CP4).
+Baseline build: only `narrative.StoryBarkTest` red (known).
