@@ -282,8 +282,6 @@ public final class EffectConstants {
     public static final float ENEMY_VISUAL_IDLE_PHASE_SPREAD          = 0.618034f;
     // R4: dying instances that keep playing DEATH after the simulation removed the enemy; the oldest is dropped.
     public static final int   ENEMY_VISUAL_DYING_POOL_CAPACITY        = 8;
-    // How long DEATH's last (corpse) frame holds before the dying instance hands over to the corpse decal.
-    public static final float ENEMY_VISUAL_DEATH_HOLD_SECONDS         = 0.35f;
     // Animators pre-allocated per floor (one per live migrated enemy); more is a logged legacy fallback.
     public static final int   ENEMY_VISUAL_ANIMATOR_POOL_CAPACITY     = 64;
     // Glow pass (art-direction V6: an emissive keeps its own colour under every mood). The glow atlas holds
@@ -292,6 +290,51 @@ public final class EffectConstants {
     public static final float ENEMY_GLOW_FADE_START_TILES             = 10f;
     public static final float ENEMY_GLOW_FADE_END_TILES               = 20f;
     public static final float ENEMY_GLOW_MIN_ALPHA                    = 0.60f;
+
+    // REACTIONS AND EFFECTS (generated-enemy-art order 3) — cosmetic only; read by render/enemyvisual.
+    // AS3: below this fraction of max HP a migrated creature idles WOUNDED and leaks its family LEAK effect.
+    public static final float ENEMY_VISUAL_WOUNDED_HEALTH_FRACTION    = 0.50f;
+    // RECOIL: a hit pushes the billboard AWAY from the hit's source (the player, or the blast tile for splash)
+    // by this many TILES and drops it this many canvas px, then eases back over the duration ((1 - t)^2).
+    // Hits in one turn add up but never past the caps (a chaingun burst does not walk the body off its tile).
+    public static final float ENEMY_VISUAL_RECOIL_SECONDS             = 0.22f;
+    public static final float ENEMY_VISUAL_RECOIL_LIGHT_TILES         = 0.06f;
+    public static final float ENEMY_VISUAL_RECOIL_HEAVY_TILES         = 0.11f;
+    public static final float ENEMY_VISUAL_RECOIL_RESIST_TILES        = 0.035f;   // the "ringing shove"
+    public static final float ENEMY_VISUAL_RECOIL_BLOCK_TILES         = 0.02f;
+    public static final float ENEMY_VISUAL_RECOIL_MAX_TILES           = 0.16f;
+    public static final float ENEMY_VISUAL_RECOIL_LIGHT_DROP_PIXELS   = 3f;
+    public static final float ENEMY_VISUAL_RECOIL_HEAVY_DROP_PIXELS   = 6f;
+    public static final float ENEMY_VISUAL_RECOIL_MAX_DROP_PIXELS     = 9f;
+    // RESISTED / BLOCKED hits do not flash white (R2: they must not read as a hit that hurt).
+    public static final float ENEMY_VISUAL_FLASH_SUPPRESS_SECONDS     = 0.25f;
+    // BLOCKED: a band of steel-blue light sweeps down the body (Block's own tint colour), top to bottom.
+    public static final float ENEMY_VISUAL_SHIMMER_SECONDS            = 0.32f;
+    public static final float ENEMY_VISUAL_SHIMMER_BAND_FRACTION      = 0.22f;    // band height / canvas height
+    public static final float ENEMY_VISUAL_SHIMMER_STRENGTH           = 0.85f;
+    // STUNNED / staggered: HURT_HEAVY's last pose held, swaying across the screen by this many canvas px.
+    public static final float ENEMY_VISUAL_DAZED_SWAY_PIXELS          = 3f;
+    public static final float ENEMY_VISUAL_DAZED_SWAY_HZ              = 0.9f;
+    // Remains (A4): one per tile, the oldest recycled past the cap. They sort a hair behind a live enemy on the
+    // same tile, so a creature standing on a carcass is drawn over it.
+    public static final int   ENEMY_VISUAL_REMAINS_CAPACITY           = 32;
+    public static final float ENEMY_VISUAL_REMAINS_DEPTH_BIAS_TILES   = 0.02f;
+    // Particles (R4): the pool, the cosmetic random seed, the flattening of an orbit seen edge-on, how far a
+    // spawn's vertical jitter reaches relative to its horizontal spread, the shortest life a particle gets, and
+    // the nudge toward the viewer that keeps an effect in front of the body it leaves.
+    public static final int   ENEMY_EFFECT_PARTICLE_CAPACITY          = 320;
+    public static final long  ENEMY_EFFECT_RANDOM_SEED                = 0x51A7E3L;
+    public static final float ENEMY_EFFECT_ORBIT_FLATTEN              = 0.35f;
+    public static final float ENEMY_EFFECT_VERTICAL_JITTER_SCALE      = 0.6f;
+    public static final float ENEMY_EFFECT_MIN_LIFE_SECONDS           = 0.02f;
+    public static final float ENEMY_EFFECT_FRONT_NUDGE_TILES          = 0.06f;
+    // Effect sprites are drawn this many times the throwing creature's own pixel size (V8: a 3 px spark must
+    // still read on a phone at four tiles). Positions and speeds are NOT scaled — only the drawn sprite.
+    public static final float ENEMY_EFFECT_DRAW_SCALE                 = 2.0f;
+    // A particle fades over the last fraction of its life (binary-alpha art; only the batch alpha fades).
+    public static final float ENEMY_EFFECT_FADE_TAIL_FRACTION         = 0.30f;
+    // The generated projectile flies to the player's eye height (half a wall: the horizon line).
+    public static final float ENEMY_EFFECT_PROJECTILE_TARGET_HEIGHT   = 0.5f;
     // Ranged recoil kick: sprite nudges away from the player on fire
     public static final float ENEMY_RECOIL_MAX_PIXELS             = 14f;
     // Muzzle flash quad: warm-white overlay at the firing sprite center

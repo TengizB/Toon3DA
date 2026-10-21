@@ -6,9 +6,10 @@ import ge.tbegvadze.toon3d.util.EffectConstants;
 /**
  * Visual instances that keep playing DEATH after the simulation has removed the enemy (generated-enemy-art
  * order 2, rule R4). The position, tile and creature are captured at the moment of death; the instance
- * then plays DEATH, holds its corpse frame for {@code ENEMY_VISUAL_DEATH_HOLD_SECONDS} and hands over to
- * the corpse decal the simulation already stamped. Fixed capacity, pre-allocated: when it is full the
- * OLDEST instance is dropped — never an allocation. Cleared with the floor (the layer is per floor).
+ * then plays DEATH and, on its last frame, hands the body over to the creature's own REMAINS
+ * ({@link RemainsRegistry}, order 3), registered at the same moment with the same position, so the corpse
+ * never blinks. Fixed capacity, pre-allocated: when it is full the OLDEST instance is dropped — never an
+ * allocation (its remains still appear on time). Cleared with the floor (the layer is per floor).
  */
 public final class DyingEnemyPool {
 
@@ -61,8 +62,7 @@ public final class DyingEnemyPool {
         for (DyingEnemy slot : slots) {
             if (!slot.active) continue;
             slot.seconds += deltaTime;
-            float lifetime = slot.visual.manifest.clip(EnemyClipId.DEATH).durationSeconds
-                    + EffectConstants.ENEMY_VISUAL_DEATH_HOLD_SECONDS;
+            float lifetime = slot.visual.manifest.clip(EnemyClipId.DEATH).durationSeconds;
             if (slot.seconds >= lifetime) {
                 slot.active = false;
                 slot.visual = null;

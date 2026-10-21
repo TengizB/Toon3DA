@@ -1439,6 +1439,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
+        impactEffectSystem.setBodyEffectsOwner(null);
         if (enemyVisualLayer != null) { enemyVisualLayer.dispose(); enemyVisualLayer = null; }
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();
@@ -1595,6 +1596,9 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyVisualLayer       = new EnemyVisualLayer(enemyManager);
         enemyManager.setEnemyVisualListener(enemyVisualLayer);
         enemyRenderer.setEnemyVisualLayer(enemyVisualLayer);
+        // Order 3: a creature's own remains replace the corpse decal on its tile (drawing only; the tile is untouched).
+        propRenderer.setRemainsRegistry(enemyVisualLayer.getRemains());
+        impactEffectSystem.setBodyEffectsOwner(enemyVisualLayer);
         impactEffectSystem.setGameAudio(gameAudio);
         enemyManager.setImpactEventListener(impactEffectSystem);
         enemyManager.setKillXpListener(xpAwarded -> playerProgress.addXp(xpAwarded));
@@ -1639,6 +1643,8 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         enemyRenderer.setLevel(targetLevel);
 
         enemyAttackEffectSystem = new EnemyAttackEffectSystem(wallRenderer);
+        // Order 3: migrated ranged types fire the generated projectile from their rig's emitter instead.
+        enemyAttackEffectSystem.setGeneratedProjectiles(enemyVisualLayer);
         // The attack drives the existing visuals AND its sound, placed at the attacker so the
         // player can hear which direction it came from. EnemyManager keeps its single-listener API.
         enemyManager.setEnemyAttackListener(
@@ -2764,7 +2770,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         }
         enemyManager.advanceHitFlash(deltaTime);
         // Same clock as the hit flash, so the clips freeze whenever the world does (pause, overlays).
-        if (enemyVisualLayer != null) enemyVisualLayer.update(deltaTime);
+        if (enemyVisualLayer != null) {
+            enemyVisualLayer.setViewer(player.positionX, player.positionY, player.directionX, player.directionY);
+            enemyVisualLayer.update(deltaTime);
+        }
         enemyAttackEffectSystem.update(deltaTime);
         statusEffectVignetteRenderer.update(deltaTime, player);
         impactEffectSystem.setPlayerState(player.positionX, player.positionY,
@@ -3158,6 +3167,7 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         if (environmentTextureSet != null) { environmentTextureSet.dispose(); environmentTextureSet = null; }
         if (shopMachineRenderer != null) shopMachineRenderer.dispose();
         enemyRenderer.dispose();
+        impactEffectSystem.setBodyEffectsOwner(null);
         if (enemyVisualLayer != null) { enemyVisualLayer.dispose(); enemyVisualLayer = null; }
         enemyAttackEffectSystem.dispose();
         levelRenderer.dispose();

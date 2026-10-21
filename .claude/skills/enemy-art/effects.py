@@ -257,9 +257,14 @@ def Xturn(angle):
 # Bursts: emitter recipes. Every number in creature canvas pixels (see the module docstring).
 # ---------------------------------------------------------------------------------------------------
 def emitter(sprite, count, life, speed, angle=90.0, spread=180.0, toward=(0.0, 0.0), gravity=0.0, drag=0.0,
-            radius=0.0):
-    return dict(sprite=sprite, count=list(count), life=list(life), speed=list(speed), angle=angle, spread=spread,
-                toward=list(toward), gravity=gravity, drag=drag, radius=radius)
+            radius=0.0, orbit=None):
+    """`orbit` = (radius px, period s): the particles circle their spawn point (seen edge-on, so the circle is
+    flattened) instead of flying - the dazed stars. Particles of one orbiting emitter are spread evenly round it."""
+    out = dict(sprite=sprite, count=list(count), life=list(life), speed=list(speed), angle=angle, spread=spread,
+               toward=list(toward), gravity=gravity, drag=drag, radius=radius)
+    if orbit is not None:
+        out["orbit"] = list(orbit)
+    return out
 
 
 def burst(*emitters, interval=None):
@@ -386,8 +391,8 @@ SETS = {
             "BURNING_ONSET": burst(emitter("FLAME", (5, 7), (0.30, 0.45), (30, 80), angle=90, spread=70, gravity=-90, radius=1)),
             "POISONED": burst(emitter("BUBBLE", (1, 1), (0.50, 0.80), (12, 26), angle=90, spread=40, gravity=-20, radius=1),
                               interval=(0.18, 0.35)),
-            # STUNNED: three stars circling the head (the runtime orbits them; the burst only spawns them).
-            "STUNNED": burst(emitter("STUN", (1, 1), (0.60, 0.60), (0, 0)), interval=(0.20, 0.20)),
+            # STUNNED: three stars circling the head; each wave lives exactly one interval, so they never blink.
+            "STUNNED": burst(emitter("STUN", (3, 3), (0.60, 0.60), (0, 0), orbit=(15, 1.2)), interval=(0.60, 0.60)),
         },
         creatures={},
     ),

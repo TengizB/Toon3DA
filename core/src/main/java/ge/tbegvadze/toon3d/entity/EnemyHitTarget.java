@@ -153,6 +153,13 @@ public interface EnemyHitTarget {
     default void setActivationOrigin(int tileColumn, int tileRow) {}
 
     /**
+     * COSMETIC ONLY (generated-enemy-art order 3): the tile the next hits' blast centres on (a grenade's
+     * impact, a barrel, a relic blast), so the enemy visual layer recoils a splashed body AWAY from the blast
+     * instead of from the player. Never read by any rule; {@code -1, -1} clears it.
+     */
+    default void setVisualBlastOrigin(int tileColumn, int tileRow) {}
+
+    /**
      * While armed, the hit is a HAZARD blast (a barrel) rather than a weapon hit: the build's weapon terms do
      * not apply (a barrel carries its own Sapper / DEMOLITIONIST multiplier) and it never spends an enemy's
      * "first hit". Armed by ExplosiveBarrelManager around its blast and restored after. Default: no-op.

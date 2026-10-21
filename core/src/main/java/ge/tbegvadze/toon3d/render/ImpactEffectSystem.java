@@ -3,6 +3,7 @@ package ge.tbegvadze.toon3d.render;
 import ge.tbegvadze.toon3d.audio.GameAudio;
 import ge.tbegvadze.toon3d.audio.GameSoundId;
 import ge.tbegvadze.toon3d.entity.ImpactEventListener;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
@@ -218,6 +219,22 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         playAtTile(GameSoundId.STONE_CRUMBLE, tileColumn, tileRow, 1f);   // order 7 — sound only
     }
 
+    private EnemyVisualLayer bodyEffectsOwner;
+
+    /**
+     * generated-enemy-art order 3: the floor's animated layer, which answers a migrated creature's hits and death
+     * with its own family effects; the generic hit spray / death burst below then stand down for that body
+     * (shake, damage number and sound stay). Non-owning, per floor; null = every body gets the generic spray.
+     */
+    public void setBodyEffectsOwner(EnemyVisualLayer layer) {
+        this.bodyEffectsOwner = layer;
+    }
+
+    private boolean bodyEffectsOwnedAt(float worldX, float worldY) {
+        return bodyEffectsOwner != null && bodyEffectsOwner.answeredHitAt(
+                (int) Math.floor(worldX / Constants.CELL_SIZE), (int) Math.floor(worldY / Constants.CELL_SIZE));
+    }
+
     @Override
     public void onEnemyHit(float worldX, float worldY, float heightMultiplier, int damageDealt) {
         triggerShake(EffectConstants.HIT_SHAKE_MAGNITUDE, EffectConstants.HIT_SHAKE_DURATION_SECONDS);
@@ -225,7 +242,9 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         float screenX = projectToScreenX(worldX, worldY);
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
 
-        spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT, false);
+        if (!bodyEffectsOwnedAt(worldX, worldY)) {
+            spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT, false);
+        }
         spawnDamageNumber(worldX, worldY, damageDealt, false);
         if (gameAudio != null) gameAudio.playWeaponImpactAt(worldX, worldY, heightMultiplier);
     }
@@ -241,9 +260,12 @@ public final class ImpactEffectSystem implements ImpactEventListener {
         float screenX = projectToScreenX(worldX, worldY);
         float screenY = projectToScreenY(worldX, worldY, heightMultiplier);
 
-        // Kill debris: twice the particle count, hot white-orange colour
-        spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT * 2, true);
-        spawnDeathBurst(screenX, screenY, heightMultiplier);
+        // Kill debris: twice the particle count, hot white-orange colour — unless the body is a migrated
+        // creature, whose own kill + death bursts were just thrown by the animated layer (order 3).
+        if (!bodyEffectsOwnedAt(worldX, worldY)) {
+            spawnHitParticles(screenX, screenY, EffectConstants.HIT_PARTICLE_COUNT * 2, true);
+            spawnDeathBurst(screenX, screenY, heightMultiplier);
+        }
         spawnDamageNumber(worldX, worldY, killingBlowDamage, true);
     }
 

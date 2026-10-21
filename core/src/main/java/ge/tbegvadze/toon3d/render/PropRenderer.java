@@ -13,6 +13,7 @@ import ge.tbegvadze.toon3d.entity.WeaponTier;
 import ge.tbegvadze.toon3d.item.GroundItem;
 import ge.tbegvadze.toon3d.item.ItemType;
 import ge.tbegvadze.toon3d.level.Level;
+import ge.tbegvadze.toon3d.render.enemyvisual.RemainsRegistry;
 import ge.tbegvadze.toon3d.render.tilesetgfx.EnvironmentTextureSet;
 import ge.tbegvadze.toon3d.render.tilesetgfx.TextureGeneratorRegistry;
 import ge.tbegvadze.toon3d.tileset.EnvironmentSpriteRegistry;
@@ -250,6 +251,15 @@ public class PropRenderer implements Renderable, Disposable {
         float worldCenterY = tileRow    * CELL_SIZE + CELL_SIZE / 2f;
         dynamicPropPlacements.add(new PropPlacement(tileColumn, tileRow, propChar,
                                                      worldCenterX, worldCenterY));
+    }
+
+    // Order 3 of generated-enemy-art: where a migrated creature died, its own REMAINS are drawn by EnemyRenderer
+    // instead of the generic corpse decal stamped on that tile. Non-owning, per floor; null = every decal draws.
+    private RemainsRegistry remainsRegistry;
+
+    /** Wires the floor's creature remains (generated-enemy-art order 3); a corpse decal under remains is not drawn. */
+    public void setRemainsRegistry(RemainsRegistry registry) {
+        this.remainsRegistry = registry;
     }
 
     /** Clears all dynamic prop placements (called when loading a new level). */
@@ -887,6 +897,10 @@ public class PropRenderer implements Renderable, Disposable {
             PropPlacement prop = dynamicPropPlacements.get(dynamicIndex);
             // Skip once the tile has been consumed (player picked up the drop).
             if (level.getCell(prop.tileColumn, prop.tileRow) != prop.propChar) continue;
+            // A creature's own remains stand on this corpse tile: the generic decal is not drawn (the tile is
+            // still a corpse to the simulation — only what is drawn there changes).
+            if (prop.propChar == CORPSE_DECAL_SYMBOL && remainsRegistry != null
+                    && remainsRegistry.hasRemainsAt(prop.tileColumn, prop.tileRow)) continue;
 
             float tileOffsetX = (prop.worldCenterX - playerWorldX) / CELL_SIZE;
             float tileOffsetY = (prop.worldCenterY - playerWorldY) / CELL_SIZE;

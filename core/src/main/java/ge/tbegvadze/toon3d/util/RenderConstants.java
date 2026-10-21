@@ -163,6 +163,9 @@ public final class RenderConstants {
     public static final float PROP_HEIGHT_LOCKER               = 0.90f; // 'L' locker
     public static final float PROP_HEIGHT_CRATE                = 0.50f; // 'C' crate
     public static final float PROP_HEIGHT_CORPSE               = 0.35f; // 'm' corpse decal
+    // The corpse decal symbol (docs/tile-symbols.txt): where a generated creature's REMAINS stand on it, the
+    // decal is not drawn (generated-enemy-art order 3).
+    public static final char  CORPSE_DECAL_SYMBOL              = 'm';
     public static final float PROP_HEIGHT_BLOOD_ALT            = 0.22f; // 's' blood stain (alt) decal
     public static final float PROP_HEIGHT_BLOOD                = 0.18f; // '.' blood stain decal
     public static final float PROP_HEIGHT_OIL                  = 0.18f; // 'O' oil/fluid pool decal

@@ -172,6 +172,9 @@ public final class EnemyManager implements EnemyHitTarget {
     private int     activationOriginColumn = -1;
     private int     activationOriginRow    = -1;
     private boolean activationHazardBlast  = false;
+    /** COSMETIC (generated-enemy-art order 3): the blast tile a splashed enemy recoils from; -1 = the player. */
+    private int     visualBlastOriginColumn = -1;
+    private int     visualBlastOriginRow    = -1;
     /** Armed around a relic blast (R8): its kills take the relic kill terms, minus the corpse burst. */
     private boolean activationRelicBlast   = false;
     /** The run's build aggregate (balance-overhaul order 5); read live. Never null. */
@@ -690,8 +693,9 @@ public final class EnemyManager implements EnemyHitTarget {
         event.outcome        = outcome;
         event.absorbed       = absorbed;
         event.blocked        = blocked;
-        event.sourceColumn   = cachedPlayerColumn;
-        event.sourceRow      = cachedPlayerRow;
+        // A splash hit names its blast tile (cosmetic: the body recoils away from the blast), else the player.
+        event.sourceColumn   = visualBlastOriginColumn >= 0 ? visualBlastOriginColumn : cachedPlayerColumn;
+        event.sourceRow      = visualBlastOriginColumn >= 0 ? visualBlastOriginRow    : cachedPlayerRow;
         enemyVisualListener.onEnemyVisualMoment(event);
     }
 
@@ -1410,6 +1414,12 @@ public final class EnemyManager implements EnemyHitTarget {
     public void setActivationOrigin(int tileColumn, int tileRow) {
         activationOriginColumn = tileColumn;
         activationOriginRow    = tileRow;
+    }
+
+    @Override
+    public void setVisualBlastOrigin(int tileColumn, int tileRow) {
+        visualBlastOriginColumn = tileColumn;
+        visualBlastOriginRow    = tileRow;
     }
 
     @Override
