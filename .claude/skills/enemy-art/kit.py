@@ -110,6 +110,61 @@ def chain(points, r1, r2, mat, **kw):
     return out
 
 
+def spike(x1, y1, x2, y2, r, mat, bend=0.0, tip=0.4, segments=5, edge=None, edge_side=1.0, **kw):
+    """A tapered SPIKE / BLADE from its base (x1, y1) to its tip (x2, y2), generated-enemy-art order 4.
+    The spine is a quadratic curve whose control point sits `bend` px from the midpoint along (-dy, dx)
+    (the base->tip direction turned a quarter: for a spike pointing DOWN the screen, + bows it to the
+    screen-left). The radius falls from r at the base to `tip` at the point, fast near the tip, so the base
+    stays thick (thin parts vanish first at range - guide 5.4). `edge` paints a raised cutting edge of that
+    material along one flank (edge_side +1 = the (-dy, dx) side, -1 = the other): the bone-pale blade edge.
+    Returns a list of shapes (a chain), so it rides any transform like every other part."""
+    dx, dy = x2 - x1, y2 - y1
+    length = math.hypot(dx, dy) or 1e-6
+    nx, ny = -dy / length, dx / length
+    cx, cy = (x1 + x2) / 2 + nx * bend, (y1 + y2) / 2 + ny * bend
+    points, radii, normals = [], [], []
+    for i in range(segments + 1):
+        t = i / segments
+        px = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * cx + t * t * x2
+        py = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * cy + t * t * y2
+        tx = 2 * (1 - t) * (cx - x1) + 2 * t * (x2 - cx)
+        ty = 2 * (1 - t) * (cy - y1) + 2 * t * (y2 - cy)
+        tl = math.hypot(tx, ty) or 1e-6
+        points.append((px, py)); normals.append((-ty / tl, tx / tl))
+        radii.append(r * (1 - t) ** 0.9 + tip * t)
+    shapes = [limb(*points[i], *points[i + 1], radii[i], radii[i + 1], mat, **kw) for i in range(segments)]
+    if edge:
+        for i in range(segments):
+            off = [(points[j][0] + normals[j][0] * edge_side * 0.55 * radii[j],
+                    points[j][1] + normals[j][1] * edge_side * 0.55 * radii[j]) for j in (i, i + 1)]
+            shapes.append(limb(*off[0], *off[1], 0.35 * radii[i] + 0.45, 0.35 * radii[i + 1] + 0.45, edge,
+                               op="add", depth=0.6 + 0.12 * radii[i]))
+    return shapes
+
+
+def riveted_plate(points, mat, rivet_mat="darkmetal", spacing=8.0, inset=2.6, rivet_r=1.25, bevel=2.5, **kw):
+    """A riveted ARMOUR PLATE (generated-enemy-art order 4): a bevelled slab plus rivets set `inset` px in
+    from its edge, one at every corner and then every ~`spacing` px along each side. The rivets are raised
+    `add` details, so they ride the plate through any transform. Keyword args (op, tilt, prio, k, slope)
+    go to the slab: op="add" fits the plate ON a body (it follows the body's curve, edges step up);
+    a union slab in its own layer reads as a separate, liftable piece."""
+    pts = np.array(points, float)
+    centre = pts.mean(axis=0)
+    shapes = [slab(points, mat, bevel=bevel, **kw)]
+    rivet_points = []
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        a_in = a + (centre - a) / (np.linalg.norm(centre - a) or 1) * inset * 1.4
+        b_in = b + (centre - b) / (np.linalg.norm(centre - b) or 1) * inset * 1.4
+        steps = max(1, int(round(np.linalg.norm(b - a) / spacing)))
+        for s in range(steps):
+            rivet_points.append(a_in + (b_in - a_in) * (s / steps))
+    for x, y in rivet_points:
+        shapes.append(blob(float(x), float(y), rivet_r, rivet_r, rivet_mat, op="add", depth=rivet_r * 0.9))
+    return shapes
+
+
 def mirror(shapes, axis):
     """Bilateral symmetry: reflect shapes about the vertical line x = axis. Design one half."""
     return Xf.reflect_x(axis)(shapes)
@@ -485,7 +540,8 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
 STENCIL_FONT = {"0": "111101101101111", "1": "010110010010111", "2": "111001111100111", "3": "111001011001111",
                 "4": "101101111001001", "5": "111100111001111", "6": "111100111101111", "7": "111001010010010",
                 "8": "111101111101111", "9": "111101111001111", "-": "000000111000000", "D": "110101101101110",
-                "K": "101101110101101", "W": "101101101111101", "R": "110101110101101", "E": "111100110100111"}
+                "K": "101101110101101", "W": "101101101111101", "R": "110101110101101", "E": "111100110100111",
+                "P": "110101110100100"}
 
 
 def stencil(img, text, x, y, color, alpha=255):

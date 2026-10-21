@@ -47,7 +47,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — spike + riveted-plate primitives in kit.py; `iron_stalker_rig.py` rest pose; stills sheet beside
+- [x] **CP1** — spike + riveted-plate primitives in kit.py; `iron_stalker_rig.py` rest pose; stills sheet beside
       Warden + Harvest Tick sent. DONE WHEN: `bestiary.py` regenerates warden.* / harvest_tick.* byte-identical and
       `--stills iron_stalker` renders with no edge warning.
 - [ ] **CP2** — full clip set + BUFF_SELF + AREA_STRIKE baked within 2048x2048; effects.py insect plate spark +
@@ -60,3 +60,12 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## NOTES CARRIED FORWARD
 
 **CP0:** baseline 27725f1.
+
+**CP1:** kit.py gained `spike(x1, y1, x2, y2, r, mat, bend, tip, segments, edge, edge_side)` (tapered curved blade, optional
+raised edge material) and `riveted_plate(points, mat, rivet_mat, spacing, inset, rivet_r, bevel, **slab kw)` (slab +
+`add` rivets; op="add" fits it ON a body, a union slab in its own layer is a liftable piece), plus a "P" stencil glyph.
+No MATERIALS change. Regenerated warden.*, harvest_tick.*, machine/insect/status .fx.* into the scratchpad: ALL
+byte-identical (cmp). `iron_stalker_rig.py`: rest pose only (STALKER_CLIPS = [] - the default bestiary bake must not be
+run for it until CP2 adds the clips; `--stills` works). Pose params already include everything the clips need (blade
+arms l_/r_ sh/el/reach/smear, lift, ring, tear, drip, collar, tuck/splay, tag). Silhouette: canvas x 17..142,
+y 24..232 (no edge). Stills sheet (beside Warden + Tick, 3x + in-game relative scale) sent to the owner for an early read.

@@ -15,11 +15,13 @@ import sys
 import kit
 from warden_rig import WARDEN, WARDEN_CLIPS
 from harvest_tick_rig import HARVEST_TICK, TICK_CLIPS
+from iron_stalker_rig import IRON_STALKER, STALKER_CLIPS
 
 # creature -> (rig, clips). A new creature is one <name>_rig.py plus one row here.
 CREATURES = [
     (WARDEN, WARDEN_CLIPS),
     (HARVEST_TICK, TICK_CLIPS),
+    (IRON_STALKER, STALKER_CLIPS),
 ]
 
 if __name__ == "__main__":
