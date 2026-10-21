@@ -46,7 +46,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP2** — EncounterBehaviour, SlotFill, Slot.fill, 8 template rows, instantiate V1-V3.
       DONE WHEN: build green; no `sameType`, no PACK.
 - [x] **CP3** — planner V4 / V5 / V6. DONE WHEN: scratch measurement meets A1-A5, A7-A8 (figures below).
-- [ ] **CP4** — placer V7 + brood first-contact skip; densityVarietyResults + "room variety"; the one test.
+- [x] **CP4** — placer V7 + brood first-contact skip; densityVarietyResults + "room variety"; the one test.
       DONE WHEN: `:core:test` shows only the baseline failure.
 - [ ] **CP5** — balanceSim green (tuning recorded), snapshot data regenerated.
 - [ ] **CP6** — docs updated; A13 run check noted; reviewer gate; STATUS IMPLEMENTED.
@@ -81,3 +81,19 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
     37-62%: the old PACK underspent) — the gates judge it.
 - OPEN REDS carried into CP4/CP5: [HAZARD] linear_corridor COMBAT d5 barrel rooms (H14) shortfall 1 (worst floor);
   LevelGeneratorSnapshotTest hash (legit regeneration at CP5).
+- CP4 (all 75 BalanceAuditTest green; only LevelGeneratorSnapshotTest [legit, CP5] + baseline StoryBarkTest red):
+  * V7 in EncounterPlacer: Region.archetypeCounts; a LARGE room's second group only if merged max <= 3; fallback
+    leastCrowdedFor (min merged max, ties roomiest); if even that passes the cap, the group stands in the
+    CORRIDORS (collectConnectorPocket, unlimited walk) — needed on small d1 linear_corridor floors where rooms ran
+    out (4-same rooms on ~3% of them otherwise). placeGroup's overflow spills member-by-member into the room with
+    the fewest of that archetype. First contact skips a BROOD while another group of 2+ exists.
+  * FloorContentReport.roomMaximumSameArchetype (computed in FloorPopulator.buildReport from spawns x survey rooms;
+    corridor tiles are not a room).
+  * BalanceSchema.densityVarietyResults() (in the full sweep) + "room variety (V7)" in densitySweepResults;
+    BalanceAuditTest.encounterGroupsMixArchetypesAndBehaviours asserts both.
+  * salvage_hook bonus LOWERED 0.03 -> 0.01: at 0.03 the RELIC_CACHE outcome pushed R-MYSTERY-EV to 1.30004 (> 1.30
+    ceiling; it was 1.29994 before — a pre-existing 0.00006 margin). At 0.01: mystery 1.29998, salvage_hook
+    1.064 / 1.066 / 1.064. Both soft spots are documented in docs/relic-system.txt 11 — update at CP6.
+  * GroupBarrelPlacer: hostableCandidates now applies plugsAPassage too (placeInRoom already did), so a room whose
+    every tile plugs a passage is not counted eligible-but-unservable. Fixed "[HAZARD] linear_corridor COMBAT d5
+    barrel rooms (H14) shortfall 1" that the new layouts exposed (latent pre-existing mismatch).

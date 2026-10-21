@@ -36,6 +36,8 @@ public final class FloorContentReport {
     public final int             anchorRegionId;
     /** The shortest walk into the anchor group's room, or -1 (C2: "in or past its room"). */
     public final int             anchorWalkDistance;
+    /** V7: the most enemies of one archetype in any one room (corridors excluded). */
+    public final int             roomMaximumSameArchetype;
     public final SupplyPlan      plan;
     public final SupplyPlacement placement;
 
@@ -43,7 +45,7 @@ public final class FloorContentReport {
                        int targetWalkableTiles, int enemyCount, float threatSpent, float threatCap,
                        int bodyTarget, int[] groupSizes, int loneEnemies, int firstContactWalkTiles,
                        boolean groupInStartRegion, int anchorRegionId, int anchorWalkDistance,
-                       SupplyPlan plan, SupplyPlacement placement) {
+                       int roomMaximumSameArchetype, SupplyPlan plan, SupplyPlacement placement) {
         this.generatorName         = generatorName;
         this.spec                  = spec;
         this.depth                 = depth;
@@ -59,6 +61,7 @@ public final class FloorContentReport {
         this.groupInStartRegion    = groupInStartRegion;
         this.anchorRegionId        = anchorRegionId;
         this.anchorWalkDistance    = anchorWalkDistance;
+        this.roomMaximumSameArchetype = roomMaximumSameArchetype;
         this.plan                  = plan;
         this.placement             = placement;
     }

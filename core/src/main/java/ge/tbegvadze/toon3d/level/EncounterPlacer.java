@@ -21,8 +21,10 @@ import java.util.TreeMap;
  *       of the start ({@link BalanceConfig#FIRST_CONTACT_FIRST_FLOOR_MAX_WALK_TILES} on depth 1).</li>
  *   <li>The ANCHOR group takes the deepest room by walk distance (it guards the floor's far end, and an
  *       ELITE's reward weapon is placed in or past its room).</li>
- *   <li>Every other group takes a room no group holds yet (a LARGE room may hold two), spreading the
- *       fights across the floor; only when rooms run out do groups share.</li>
+ *   <li>Every other group takes a room no group holds yet (a LARGE room may hold two, unless that would
+ *       put more than {@link BalanceConfig#GROUP_ROOM_MAX_SAME_TYPE} of one archetype in it — V7), spreading
+ *       the fights across the floor; only when rooms run out do groups share, in the room they crowd least.</li>
+ *   <li>A BROOD is never the first contact while another group of two or more exists (V4).</li>
  * </ul>
  * Rooms come from the generator's {@link SupplySlotProvider} via the {@link SupplySlotSurvey}; which tiles
  * an enemy may stand on comes from the generator's own {@link SpawnTileRule}.
@@ -54,6 +56,8 @@ public final class EncounterPlacer {
         int maximumWalk = -1;
         int groups;
         int used;
+        /** Members placed here per archetype (EnemyType ordinal) — V7's room cap reads it. */
+        final int[] archetypeCounts = new int[EnemyType.values().length];
 
         Region(int id, boolean large) {
             this.id    = id;
@@ -61,6 +65,15 @@ public final class EncounterPlacer {
         }
 
         int freeTiles() { return tiles.size() - used; }
+
+        /** The most members of one archetype this room would hold with {@code group} added (V7). */
+        int mergedMaximumSameArchetype(EncounterGroup group) {
+            int[] merged = archetypeCounts.clone();
+            int most = 0;
+            for (int count : merged) most = Math.max(most, count);
+            for (EnemyType type : group.members) most = Math.max(most, ++merged[type.ordinal()]);
+            return most;
+        }
     }
 
     private EncounterPlacer() {}
@@ -91,11 +104,15 @@ public final class EncounterPlacer {
 
         // --- E5 first contact: the lightest group of two or more, in the nearest room, near the start.
         if (firstContactRule) {
+            // A BROOD is the first contact only when no other group of two or more exists (V4).
             int contactGroup = -1;
-            for (int index = 0; index < groups.size(); index++) {
-                EncounterGroup group = groups.get(index);
-                if (group.size() < 2 || group.anchor) continue;
-                if (contactGroup < 0 || group.threat < groups.get(contactGroup).threat) contactGroup = index;
+            for (int pass = 0; pass < 2 && contactGroup < 0; pass++) {
+                for (int index = 0; index < groups.size(); index++) {
+                    EncounterGroup group = groups.get(index);
+                    if (group.size() < 2 || group.anchor) continue;
+                    if (pass == 0 && isBrood(group)) continue;
+                    if (contactGroup < 0 || group.threat < groups.get(contactGroup).threat) contactGroup = index;
+                }
             }
             if (contactGroup >= 0) {
                 Region nearest = null;
@@ -134,18 +151,33 @@ public final class EncounterPlacer {
             placedGroup[index] = true;
         }
 
-        // --- Everyone else: largest first, each into a room no group holds yet (a LARGE room takes two).
+        // --- Everyone else: largest first, each into a room no group holds yet (a LARGE room takes two, but
+        // only while no archetype there passes GROUP_ROOM_MAX_SAME_TYPE — V7).
         List<Integer> order = new ArrayList<>();
         for (int index = 0; index < groups.size(); index++) if (!placedGroup[index]) order.add(index);
         order.sort((left, right) -> Integer.compare(groups.get(right).size(), groups.get(left).size()));
+        Region corridors = null;
         for (int index : order) {
             EncounterGroup group = groups.get(index);
             List<Region> free = new ArrayList<>();
             for (Region region : regions.values()) {
                 if (region.freeTiles() < group.size()) continue;
-                if (region.groups == 0 || (region.large && region.groups < 2)) free.add(region);
+                if (region.groups == 0 || (region.large && region.groups < 2
+                        && region.mergedMaximumSameArchetype(group) <= BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE)) {
+                    free.add(region);
+                }
             }
-            Region target = free.isEmpty() ? roomiest(regions) : free.get(random.nextInt(free.size()));
+            Region target = free.isEmpty() ? leastCrowdedFor(group, regions) : free.get(random.nextInt(free.size()));
+            // Every room with space would pass the V7 cap (a small floor whose rooms ran out): the group stands
+            // in the corridors instead, as a first contact already may ("corridor pockets", E3).
+            if (target != null && free.isEmpty()
+                    && target.mergedMaximumSameArchetype(group) > BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE) {
+                if (corridors == null) corridors = collectConnectorPocket(grid, survey, rule, Integer.MAX_VALUE);
+                if (corridors.freeTiles() >= group.size()
+                        && corridors.mergedMaximumSameArchetype(group) <= BalanceConfig.GROUP_ROOM_MAX_SAME_TYPE) {
+                    target = corridors;
+                }
+            }
             if (target != null) placeGroup(group, index, target, Integer.MAX_VALUE, used, random, spawns, regions);
         }
         return new Placement(spawns, anchorSpawnIndex);
@@ -196,6 +228,47 @@ public final class EncounterPlacer {
             }
         }
         return pocket;
+    }
+
+    /**
+     * V7's overflow home when every room already holds its groups: among the rooms that can seat the whole
+     * group, the one where the group raises the same-archetype count least (ties to the roomiest); else
+     * the roomiest room.
+     */
+    private static Region leastCrowdedFor(EncounterGroup group, Map<Integer, Region> regions) {
+        Region best = null;
+        int bestCrowding = Integer.MAX_VALUE;
+        for (Region region : regions.values()) {
+            if (region.freeTiles() < group.size()) continue;
+            int crowding = region.mergedMaximumSameArchetype(group);
+            if (best == null || crowding < bestCrowding
+                    || (crowding == bestCrowding && region.freeTiles() > best.freeTiles())) {
+                best = region;
+                bestCrowding = crowding;
+            }
+        }
+        return best != null ? best : roomiest(regions);
+    }
+
+    /** The room with a free tile holding the fewest of {@code type} (ties to the roomiest), or null when all are full. */
+    private static Region leastOfArchetype(EnemyType type, Map<Integer, Region> regions) {
+        Region best = null;
+        for (Region region : regions.values()) {
+            if (region.freeTiles() <= 0) continue;
+            if (best == null
+                    || region.archetypeCounts[type.ordinal()] < best.archetypeCounts[type.ordinal()]
+                    || (region.archetypeCounts[type.ordinal()] == best.archetypeCounts[type.ordinal()]
+                        && region.freeTiles() > best.freeTiles())) {
+                best = region;
+            }
+        }
+        return best;
+    }
+
+    /** Whether the group was drawn from a BROOD shape (V4). */
+    private static boolean isBrood(EncounterGroup group) {
+        EncounterGroupTemplate template = EncounterGroupTemplateRegistry.shared().get(group.templateId);
+        return template != null && template.brood();
     }
 
     /** The room with the most free tiles (the overflow home), or null when every room is full. */
@@ -249,14 +322,16 @@ public final class EncounterPlacer {
             claim(region, tile, members.get(placed), groupId, used, spawns);
             placed++;
         }
+        // The room is full: each remaining member spills, one at a time, into the room holding the fewest of
+        // its archetype (V7; ties to the roomiest) — never piling one archetype into a single overflow room.
         while (placed < members.size()) {
-            Region overflow = roomiest(regions);
+            Region overflow = leastOfArchetype(members.get(placed), regions);
             if (overflow == null) return;
             for (int[] tile : overflow.tiles) {
-                if (placed >= members.size()) break;
                 if (used[tile[1]][tile[0]]) continue;
                 claim(overflow, tile, members.get(placed), groupId, used, spawns);
                 placed++;
+                break;
             }
         }
         region.groups++;
@@ -266,6 +341,7 @@ public final class EncounterPlacer {
                               List<EnemySpawnPoint> spawns) {
         used[tile[1]][tile[0]] = true;
         region.used++;
+        region.archetypeCounts[type.ordinal()]++;
         spawns.add(new EnemySpawnPoint(type.spawnChar(), tile[0], tile[1], (char) 0, groupId));
     }
 

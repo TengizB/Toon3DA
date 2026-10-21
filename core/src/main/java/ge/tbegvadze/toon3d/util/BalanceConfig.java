@@ -3252,7 +3252,7 @@ public final class BalanceConfig {
     public static final float RELIC_THRESHOLD_STIM_DOOR_OPEN_HEAL            = 0.04f;
     public static final float RELIC_SALVAGE_HOOK_CARRIER_EXTRA_DROP          = 1.00f;
     /** mixed-encounter-groups: the re-composition docs/relic-system.txt 11 asked for (the CARRIER term is clamped at 1.00). */
-    public static final float RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS           = 0.03f;
+    public static final float RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS           = 0.01f;
     public static final float RELIC_MEDICS_GLOVE_HEAL_BONUS                  = 0.13f;
     public static final float RELIC_RECOIL_SPRING_KILL_AMMO_REFUND           = 0.50f;
     public static final float RELIC_RECOIL_SPRING_AMMO_PICKUP_BONUS          = 0.35f;
