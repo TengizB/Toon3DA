@@ -50,7 +50,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP1** — spike + riveted-plate primitives in kit.py; `iron_stalker_rig.py` rest pose; stills sheet beside
       Warden + Harvest Tick sent. DONE WHEN: `bestiary.py` regenerates warden.* / harvest_tick.* byte-identical and
       `--stills iron_stalker` renders with no edge warning.
-- [ ] **CP2** — full clip set + BUFF_SELF + AREA_STRIKE baked within 2048x2048; effects.py insect plate spark +
+- [x] **CP2** — full clip set + BUFF_SELF + AREA_STRIKE baked within 2048x2048; effects.py insect plate spark +
       iron_stalker row; *.fx.* byte-identical except insect (owner-visible change named); runtime ability-clip rows;
       clip GIFs + in-engine burst GIFs (default + one mood) sent. DONE WHEN: the GIFs are sent and the build is green.
 - [ ] **CP3** — owner approval recorded in the idea's DECISIONS (stop until it is).
@@ -69,3 +69,22 @@ byte-identical (cmp). `iron_stalker_rig.py`: rest pose only (STALKER_CLIPS = [] 
 run for it until CP2 adds the clips; `--stills` works). Pose params already include everything the clips need (blade
 arms l_/r_ sh/el/reach/smear, lift, ring, tear, drip, collar, tuck/splay, tag). Silhouette: canvas x 17..142,
 y 24..232 (no edge). Stills sheet (beside Warden + Tick, 3x + in-game relative scale) sent to the owner for an early read.
+
+**CP2:** 13 clips (standard set + BUFF_SELF + AREA_STRIKE), 100 unique frames, atlas 2048x2048, no edge warnings. Rig
+details settled here: `STAND = 1.065` stretches the whole figure about the ground line (A3: the first in-engine read
+had it only ~6% taller than the Shell Brute; top row now 10); `reach` scales an arm mostly sideways (y at 35%) so a
+lunge never lifts the elbow off the top; smear is SIGNED (+ trails outward on an inward swing, - inward on an outward
+one). Effects: insect set APPENDS PLATE_SPARK / PLATE_STREAK / PLATE_FLECK + burst RESIST_PLATE, and an `iron_stalker`
+creatures row whose `"bursts": {"RESIST": "RESIST_PLATE"}` is a per-creature override; every pre-existing insect frame
+is pixel-identical (only atlas positions repacked), old bursts/rows unchanged; machine + status byte-identical.
+RUNTIME (name these in the IMPLEMENTATION NOTE): (1) EnemyClipId += BUFF_SELF, AREA_STRIKE (the manifest parser picks
+them up by name); (2) EnemyAnimationRules: ABILITY_USED row is Kind.ABILITY + two `abilityClip(SpecialAbility, clip)`
+rows, falling back to the row's ATTACK when a creature lacks the clip; (3) `holdFor(Enemy)`: a committed heavy
+(`plannedAction.heavyAttack != null`) holds WIND_UP - FOUND in-engine: AREA_STRIKE is committed as a planned heavy
+while the state stays ATTACKING/CHASING, so the state-keyed hold dropped the telegraph pose; `holdsWindUp` also drives
+the CHARGE burst; (4) EnemyEffectSet parses every burst by name + per-creature `bursts` overrides, read first by
+`CreatureVisual.burst()`. NOT COMMITTED: the `EnemyVisualRegistry` row IRON_STALKER -> "iron_stalker" sits in the
+working tree only (needed for the captures) - CP4 commits it after approval; if resuming with a clean tree, re-add it.
+Captures: scratchpad a.txt / r.txt / h.txt via cap.sh; GIFs sent (clips_all + strip + insect fx sheet; in-engine
+default + amber_hot). Sim ability order is randomised: label segments from `logmoments`. Build: only StoryBarkTest red.
+WAITING for owner approval (CP3).

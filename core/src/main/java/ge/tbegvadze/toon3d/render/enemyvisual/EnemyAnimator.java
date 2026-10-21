@@ -174,7 +174,7 @@ public final class EnemyAnimator {
             oneShotSeconds += deltaTime;
             if (visual.manifest.clip(oneShotClip).isFinishedAt(oneShotSeconds)) oneShotClip = null;
         }
-        EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy.state);
+        EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy);
         if (hold == null) {
             holdClip = null;
         } else {
@@ -221,7 +221,7 @@ public final class EnemyAnimator {
         if (sliding && manifest.clip(EnemyClipId.MOVE) != null) {
             bestClip = EnemyClipId.MOVE; bestPriority = EnemyAnimationRules.PRIORITY_MOVE; bestSeconds = slideSeconds;
         }
-        EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy.state);
+        EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy);
         if (hold != null && holdClip == hold.clip && manifest.clip(holdClip) != null && hold.priority > bestPriority) {
             bestClip = holdClip; bestPriority = hold.priority; bestSeconds = holdSeconds;
         }
