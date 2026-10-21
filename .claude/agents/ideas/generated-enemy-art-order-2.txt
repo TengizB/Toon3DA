@@ -200,6 +200,11 @@ DECISIONS
 ---------
   D1  The enemy visual code may be rewritten from scratch (series D8); this order builds the new layer
       beside the legacy one and order 9 removes the legacy one.
+  D2  OWNER GATE (CP5, 2026-10-21): the in-engine burst GIFs of the Warden (ACID_DRONE) and the Harvest Tick
+      (SHELL_BRUTE), every core clip, cool_steel + amber_hot, were sent; the owner approved and asked for the
+      order to be completed and merged ("you have my approval"), returning to this work for any fixes. The
+      approval covers the two deviations shown in those captures: the glow drawn as an ungraded NORMAL-blend
+      overlay (not additive), and the cosmetic one-MOVE-cycle tile slide.
 
 
 OPEN QUESTIONS

@@ -51,7 +51,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP2** — registry + manifest parser + per-floor atlas cache load the two creatures; build green.
 - [x] **CP3** — animator + rules + dying pool; EnemyBodyDrawer draws IDLE in-engine for both types.
 - [x] **CP4** — every core clip plays from its moment in-engine; glow pass; legacy types unchanged.
-- [ ] **CP5** — capture tooling; burst GIFs sent; owner approval recorded (stop until it is).
+- [x] **CP5** — capture tooling; burst GIFs sent; owner approval recorded (stop until it is).
 - [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -113,3 +113,5 @@ the owner. FIX 2 — SLIDE: 0.16 s/tile showed ~2 of MOVE's 4 frames; now one fu
 and a slide begun mid-slide starts from the body's current position (no snap-back under fast play).
 OWNER GATE: GIFs + key-frame sheets in the scratchpad `gifs/` (warden|harvest_tick x cool_steel|amber_hot, all clips
 labelled) sent; WAITING for approval. CP5 is ticked only when the answer is recorded in the idea's DECISIONS.
+
+**CP5 (gate):** owner approved 2026-10-21 -> idea DECISIONS D2. Proceed with CP6.
