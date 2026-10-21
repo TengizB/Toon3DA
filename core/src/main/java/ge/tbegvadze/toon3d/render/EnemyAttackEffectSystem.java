@@ -8,6 +8,7 @@ import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyAttackListener;
 import ge.tbegvadze.toon3d.enemy.EnemyType;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.EnemyConstants;
@@ -49,6 +50,10 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
     private float planeX       = 0f;
     private float planeY       = 1f;
 
+    // generated-enemy-art order 3: a type whose shot the animated layer draws as a generated projectile (launched
+    // from its rig's emitter on the ATTACK clip's emit frame) gets no procedural glob here. Non-owning; per floor.
+    private EnemyVisualLayer generatedProjectiles;
+
     public EnemyAttackEffectSystem(WallRenderer wallRenderer) {
         this.wallRenderer  = wallRenderer;
         this.projectiles   = new EnemyProjectile[EffectConstants.ENEMY_PROJECTILE_POOL_SIZE];
@@ -75,8 +80,15 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
         // Melee lunge is handled purely in EnemyRenderer via attackAnimStrength — no projectile needed.
     }
 
+    /** Wires (or clears, with null) the floor's animated layer, which draws its migrated types' projectiles. */
+    public void setGeneratedProjectiles(EnemyVisualLayer layer) {
+        this.generatedProjectiles = layer;
+    }
+
     @Override
     public void onRangedAttack(Enemy enemy, int playerColumn, int playerRow) {
+        // The animated layer launches the generated glob (down the committed lane) when it can; else the procedural one.
+        if (generatedProjectiles != null && generatedProjectiles.scheduleShot(enemy, playerColumn, playerRow)) return;
         if (enemy.type == EnemyType.EYE_TYRANT) {
             // EYE_TYRANT fires an instant beam drawn by EnemyRenderer — no pool entry needed.
             return;

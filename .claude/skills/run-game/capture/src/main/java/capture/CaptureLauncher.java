@@ -169,10 +169,14 @@ public class CaptureLauncher extends ApplicationAdapter {
                     spawnEventText(Byte.parseByte(step[2]), step[3]);
                     break;
                 case "status":
-                    setPlayerStatus(step[2], Integer.parseInt(step[3]));
+                    if (step.length > 4) setEnemyStatus(Integer.parseInt(step[2]), step[3], Integer.parseInt(step[4]));
+                    else setPlayerStatus(step[2], Integer.parseInt(step[3]));
                     break;
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
+                    break;
+                case "equipmelee":
+                    equipMeleeWeapon(step[2]);
                     break;
                 case "inspectweapon":
                     inspectFirstGroundWeapon();
@@ -209,6 +213,18 @@ public class CaptureLauncher extends ApplicationAdapter {
                     break;
                 case "defend":
                     forceDefend(Integer.parseInt(step[2]));
+                    break;
+                case "block":
+                    forceBlock(Integer.parseInt(step[2]), Integer.parseInt(step[3]));
+                    break;
+                case "hit":
+                    hitEnemyWithClass(Integer.parseInt(step[2]), Integer.parseInt(step[3]), step[4]);
+                    break;
+                case "fx":
+                    printEffectCount();
+                    break;
+                case "logmoments":
+                    logVisualMoments();
                     break;
                 case "clip":
                     printEnemyClip(Integer.parseInt(step[2]));
@@ -370,6 +386,31 @@ public class CaptureLauncher extends ApplicationAdapter {
             loadout.getClass().getMethod("tryEquip", weaponType).invoke(loadout, weapon);
             inventory.getClass().getMethod("selectLoadoutWeapon", weaponType).invoke(inventory, weapon);
             System.out.println("[capture] equipped arsenal weapon " + arsenalIndex);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code equipmelee:ITEM_TYPE} (generated-enemy-art order 3) — builds the melee weapon exactly as a pickup does
+     * ({@code World.createMeleeWeaponForType}), puts it in the melee slot and selects it, so FIRE swings it for
+     * real (WEAPON_HAMMER: the knockback roll, WEAPON_KNIFE, WEAPON_CHAINSAW).
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void equipMeleeWeapon(String itemTypeName) {
+        try {
+            Object world = worldObject();
+            Class itemType = Class.forName("ge.tbegvadze.toon3d.item.ItemType");
+            java.lang.reflect.Method create = world.getClass().getDeclaredMethod("createMeleeWeaponForType", itemType);
+            create.setAccessible(true);
+            Object melee = create.invoke(world, Enum.valueOf(itemType, itemTypeName));
+            Object inventory = fieldValue(world, "inventory");
+            Class meleeType = Class.forName("ge.tbegvadze.toon3d.entity.MeleeWeapon");
+            inventory.getClass().getMethod("setMeleeWeapon", meleeType).invoke(inventory, melee);
+            Field selected = findField(inventory.getClass(), "meleeSelected");
+            selected.setAccessible(true);
+            selected.setBoolean(inventory, true);
+            System.out.println("[capture] equipped melee " + itemTypeName);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }
@@ -853,6 +894,113 @@ public class CaptureLauncher extends ApplicationAdapter {
             int maxHealth = findField(enemy.getClass(), "maxHealth").getInt(enemy);
             System.out.println("[capture] damaged enemy " + index + ": " + healthBefore + " -> " + healthAfter
                     + " of " + maxHealth);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code status:INDEX:STATUS_TYPE:TURNS} (generated-enemy-art order 3) — the REAL status path on an enemy:
+     * BURNING through EnemyManager.applyBurningStatus (which also reports STATUS_APPLIED, as a fire weapon does),
+     * every other type through World's StatusEffectController.apply, as a weapon ability does.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void setEnemyStatus(int index, String typeName, int turns) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            if (typeName.equals("BURNING")) {
+                manager.getClass().getMethod("applyBurningStatus", Object.class, int.class, int.class)
+                        .invoke(manager, enemy, turns, 3);
+            } else {
+                Object controller = fieldValue(worldObject(), "statusEffectController");
+                Class statusType = Class.forName("ge.tbegvadze.toon3d.status.StatusType");
+                Class hostType = Class.forName("ge.tbegvadze.toon3d.status.StatusHost");
+                controller.getClass().getMethod("apply", hostType, statusType, int.class, int.class, Object.class)
+                        .invoke(controller, enemy, Enum.valueOf(statusType, typeName), turns, 2, null);
+            }
+            System.out.println("[capture] enemy " + index + " status " + typeName + " " + turns);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /** {@code block:INDEX:AMOUNT} — a FORCED Block buffer on the enemy (no brace, no turn); the next hit is real. */
+    private void forceBlock(int index, int amount) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            findField(enemy.getClass(), "block").setInt(enemy, amount);
+            System.out.println("[capture] forced Block " + amount + " on enemy " + index);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code hit:INDEX:AMOUNT:DAMAGE_CLASS} — the real hit path with a weapon damage class armed, exactly as
+     * Weapon.fire() arms it, so the matchup classifies it (BALLISTIC on the Warden or the Tick is RESISTED).
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void hitEnemyWithClass(int index, int amount, String className) {
+        try {
+            Object enemy = enemyAt(index);
+            if (enemy == null) return;
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            Class damageClass = Class.forName("ge.tbegvadze.toon3d.entity.DamageClass");
+            java.lang.reflect.Method arm = manager.getClass().getMethod("setActivationDamageClass", damageClass);
+            int healthBefore = findField(enemy.getClass(), "health").getInt(enemy);
+            arm.invoke(manager, Enum.valueOf(damageClass, className));
+            try {
+                manager.getClass().getMethod("applyDamageTo", Object.class, int.class).invoke(manager, enemy, amount);
+            } finally {
+                arm.invoke(manager, new Object[] {null});
+            }
+            int healthAfter = findField(enemy.getClass(), "health").getInt(enemy);
+            System.out.println("[capture] " + className + " hit on enemy " + index + ": " + healthBefore + " -> " + healthAfter);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code logmoments} — wraps the floor's EnemyVisualListener in a proxy that prints every moment the
+     * simulation reports (moment, enemy index, outcome / status / cause) before forwarding it: proof that a
+     * STAGGERED or KNOCKED_BACK came from a real weapon. Re-issue after a floor change.
+     */
+    private void logVisualMoments() {
+        try {
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            Class<?> listenerType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyVisualListener");
+            Field listenerField = findField(manager.getClass(), "enemyVisualListener");
+            listenerField.setAccessible(true);
+            Object target = listenerField.get(manager);
+            Object proxy = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[] {listenerType},
+                    (instance, method, arguments) -> {
+                        if (method.getName().equals("onEnemyVisualMoment")) {
+                            Object event = arguments[0];
+                            System.out.println("[capture] moment " + fieldValue(event, "moment")
+                                    + " outcome=" + fieldValue(event, "outcome") + " absorbed=" + fieldValue(event, "absorbed")
+                                    + " blocked=" + fieldValue(event, "blocked") + " status=" + fieldValue(event, "status")
+                                    + " cause=" + fieldValue(event, "deathCause") + " at " + clockSeconds + "s");
+                        }
+                        return target == null ? null : method.invoke(target, arguments);
+                    });
+            listenerField.set(manager, proxy);
+            System.out.println("[capture] logging visual moments");
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /** {@code fx} — how many generated effect particles are alive (the order-3 pool). */
+    private void printEffectCount() {
+        try {
+            Object layer = fieldValue(worldObject(), "enemyVisualLayer");
+            Object effects = layer.getClass().getMethod("getEffects").invoke(layer);
+            Object count = effects.getClass().getMethod("activeCount").invoke(effects);
+            System.out.println("[capture] effect particles alive=" + count + " at " + clockSeconds + "s");
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

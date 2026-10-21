@@ -25,8 +25,8 @@ CONTENTS
   5.  Designing a creature (the brief and the build order)
   6.  Composition: canvas, scale, ground line, hover
   7.  Animation: rigs, poses, clips, atlases, manifest
-  8.  Reactions: how an enemy answers every event             [PLANNED: orders 2-3]
-  9.  Effects: hits, deaths, projectiles, status              [PLANNED: order 3]
+  8.  Reactions: how an enemy answers every event             [shipped: orders 2-3]
+  9.  Effects: hits, deaths, projectiles, status              [shipped: order 3]
   10. Engine contract (what the game does with the output)
   11. Verification and the owner approval gate
   12. Lessons already paid for
@@ -160,8 +160,9 @@ because every pixel's value comes from a real surface normal lit by one consiste
 
 3.11 Glow halo (presentation only).
   --halo paints a soft translucent spill around emissives. The engine alpha-cuts enemy textures,
-  so shipped sprites are written WITHOUT it; in-game glow comes from the emissive layer
-  [PLANNED: order 2], drawn additively and exempt from the mood grade (art-direction V6).
+  so shipped sprites are written WITHOUT it; in-game glow comes from the emissive (glow) layer, laid
+  over the body as a NORMAL-blend overlay in its baked colour, exempt from the mood grade (art-direction
+  V6; order 2 D2 — never additive, the glow pixels are a copy of the body's and adding doubles them).
 
 
 ====================================================================================================
@@ -362,7 +363,7 @@ because every pixel's value comes from a real surface normal lit by one consiste
     that owns the runtime - never by growing the limit.
 
 ====================================================================================================
-8. REACTIONS: HOW AN ENEMY ANSWERS EVERY EVENT              [order 2: core clips; order 3: the rest]
+8. REACTIONS: HOW AN ENEMY ANSWERS EVERY EVENT              [order 2: core clips; order 3: reactions]
 ====================================================================================================
 The simulation stays headless: EnemyManager fires visual MOMENTS through a listener seam (the same
 idiom as enemy/EnemyVoiceListener, so the enemy package never imports a renderer). The visual layer
@@ -395,7 +396,10 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
       DAMAGED           every player hit (amount, healthFraction, matchup outcome, absorbed, blocked, source)
       STAGGERED / KNOCKED_BACK / DEFEND_STARTED / STATUS_APPLIED
       DIED              killEnemy(enemy, cause) - FIRST, while the enemy still stands on its tile
-    Not fired yet: damage-over-time ticks (order 3). Bosses are moved by BossFloorController (unmigrated).
+    Damage-over-time ticks fire no DAMAGED on purpose (order 3): status visuals are read from the enemy every
+    frame, and a DoT death still fires DIED (cause STATUS). A splash hit names its BLAST tile as the source
+    (EnemyHitTarget.setVisualBlastOrigin - grenade impact, barrel, relic blast; cosmetic, no rule reads it).
+    Bosses are moved by BossFloorController (unmigrated).
 8.2 CLIP SELECTION (shipped, order 2) - render/enemyvisual/EnemyAnimationRules, data rows, highest wins:
       DEATH 7 > HURT_HEAVY / HURT_LIGHT 6 > ATTACK 5 > WIND_UP (held) 4 > DEFEND (held) 3 > ALERT 2 >
       MOVE 1 > IDLE / DORMANT 0
@@ -406,21 +410,89 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
     MOVE: the simulation moves an enemy instantly; the visual layer slides a migrated body one MOVE cycle
     per tile (ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE 0.33 s, max 0.5 s), never snapping back mid-slide.
     Idle phase = frac(enemyId x 0.618) x IDLE duration, so a pack never breathes in unison.
-    DEATH plays from DyingEnemyPool (8 slots, oldest dropped) at the body's last visual position, holds
-    its corpse frame ENEMY_VISUAL_DEATH_HOLD_SECONDS and hands over to the corpse decal.
+    DEATH plays from DyingEnemyPool (8 slots, oldest dropped) at the body's last visual position and, on its
+    last frame, hands the body to the creature's REMAINS (8.6).
+8.3 HOW A HIT IS ANSWERED (order 3) - EnemyAnimationRules.HitReaction, one data row per outcome, so the
+    four reads can never collapse into one (R2):
+      outcome      clip        family burst  recoil (tiles)  drop   white flash  extra
+      HURT_LIGHT   HURT_LIGHT  HIT           0.06            3 px   yes
+      HURT_HEAVY   HURT_HEAVY  HIT_HEAVY     0.11            6 px   yes          >= 25% of max HP
+      STAGGERED    HURT_HEAVY  -             0.11            6 px   (the hit's)
+      RESISTED     none        RESIST        0.035 (shove)   0      NO           one hard spark / a dull chip
+      BLOCKED      none        -             0.02            0      NO           steel-blue band down the body
+      ABSORBED     none        -             -               -      (gold)       the Auric gold flash, untouched
+    Classified in that order: shard absorb > Block > matchup RESISTED > the 25% rule. A KILLING blow is not a
+    row: DIED follows it at once and plays DEATH with the KILL burst. RECOIL pushes the body AWAY from the hit's
+    source tile (the blast tile for splash, else the player; on the source tile itself, straight back into the
+    screen) and eases out over 0.22 s as (1 - t)^2; hits in one turn add up to a cap (0.16 tiles, 9 px) so a
+    chaingun never walks the body off its tile. The BLOCKED band is a LIGHT pass (the body atlas, additive,
+    Block's tint) like the muzzle light - never the glow atlas. Constants: EffectConstants ENEMY_VISUAL_*.
+8.4 WOUNDED (order 3): below ENEMY_VISUAL_WOUNDED_HEALTH_FRACTION (50%) an awake creature's resting loop is
+    its WOUNDED clip and its family LEAK burst repeats from its leak placement (the Warden's cracked visor
+    sparks, the Tick's burst blister drips). Read live from health every frame - no moment needed.
+8.5 STATUSES AND THE DAZED HOLD (order 3) - render/enemyvisual/EnemyStatusVisuals, one row per StatusType:
+    the repeating burst while active and where it comes from, the onset burst (STATUS_APPLIED: a fire catching),
+    a body tint for a status the shared pass does not already tint (EMPOWERED = buff green). Shipped: BURNING
+    flames + smoke, POISONED toxin bubbles, BLEED the family leak, STUNNED three orbiting stars. A STUNNED enemy
+    (or one whose next action is still cancelled) holds HURT_HEAVY's last pose with a slow sway (DAZED, which
+    wins a tie with a held WIND_UP). A shotgun stagger reads as the heavy flinch + kick: the sim cancels that
+    turn's action at once and the enemy may commit a fresh wind-up, so a long daze would lie.
+8.6 DEATH AND REMAINS (order 3, A4): DIED fires the KILL burst (weapon / blast kills) at the hit centre and the
+    DEATH burst of the creature's own materials from its body placement, on the killing frame. The dying
+    instance plays DEATH; its remains are registered at the same moment and revealed when DEATH ends - the last
+    DEATH frame, standing on the tile for the rest of the floor (RemainsRegistry: 32 slots, one per tile, the
+    oldest recycled - past 32 kills on a floor the OLDEST kill's tile shows the generic corpse decal again,
+    allowed by R4). PropRenderer skips a stamped corpse decal 'm' on a tile with remains; the corpse TILE is
+    untouched (R5). Remains sort a hair behind a live enemy on the same tile. Cleared with the floor.
+8.7 TELEGRAPH AND ATTACK EFFECTS (order 3): while WINDING_UP / SELF_DESTRUCTING (and not dazed) the CHARGE
+    burst repeats from the charge placement (the Tick's grit + dust at its feet; the Warden's prod crackle is
+    ready but the Warden never winds up in the sim). A ranged creature whose family ships PROJECTILE: on
+    EVERY ranged shot (the attack AND the debuff shot - every EnemyAttackListener.onRangedAttack) is scheduled
+    by EnemyVisualLayer.scheduleShot for the ATTACK clip's emit frame (at once when that clip is not playing),
+    then a MUZZLE flash and the projectile leave the current frame's EMITTER anchor for the COMMITTED lane
+    target tile - a player who stepped off the lane sees it fly down the old lane and miss (the cardinal-line
+    rule stays visible). It sheds TRAIL drops and fades 1 - t^2 as it arrives. When the layer cannot draw it
+    (no animator, no PROJECTILE) scheduleShot returns false and the procedural glob is drawn as before.
 
 
 ====================================================================================================
-9. EFFECTS                                                                  [PLANNED: order 3]
+9. EFFECTS                                                                  [shipped: order 3]
 ====================================================================================================
-Effects are generated by the same kit, from the same materials, so a hit on a machine throws sparks
-in its own metal and a tick bleeds its own ichor:
-    machine   sparks + a cyan arc            insect / aberration   ichor droplets + chitin flecks
-    undead    soul wisps                     golem / demon         rock chips + embers
-  Kinds: hit burst, death burst (debris of the creature's own materials), muzzle/emit flash,
-  projectile and trail for every ranged enemy, status particles. Each is a small generated atlas;
-  the runtime draws them pooled (no allocation in render()).
-
+Effects are generated by the same kit, from the same materials, so a hit on a machine throws sparks in its
+own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-art/effects.py.
+9.1 SETS. One per FAMILY, named by the EnemyFamily constant in lower case (machine, insect; later orders add
+    undead, golem, ...), plus the shared "status" set (fire, smoke, toxin bubbles, dazed stars) whose colours
+    are semantic (art-direction V5), so they are the same on every family. Each set is <set>.fx.png (every
+    frame of every sprite, trimmed and packed, binary alpha) + <set>.fx.json beside the creatures.
+      machine   SPARK (white-hot streak cooling to cyan, 4 orientations), ARC (cyan), DEBRIS / DEBRIS_DARK
+                (hull flecks), PANEL (livery plate), HARD_SPARK (the resisted star), GLOB + TRAIL (the Warden's
+                corrosive agent, cyan-tinted - AS1), MUZZLE (emit flash)
+      insect    ICHOR (droplet), FLECK / FLECK_DARK (chitin), GRIT, DRIP, MIST (the death pop), CHIP + DUST
+                (the resisted chip)
+      status    FLAME, SMOKE, BUBBLE, STUN
+    No gore: sparks, ichor, dust - never blood (R3, the premise's restraint).
+9.2 THE FX MANIFEST (FX_VERSION 1): "sprites" {NAME: emissive, mode life|loop, fps, frames[orientation][frame]
+    {rect, pivot}}, "bursts" {NAME: {emitters[...], interval?}}, "creatures" {creature id: {leak | burn |
+    charge | stun | poison | body: {anchor, offset, radius}}}. An emitter: sprite, count, life, speed, angle
+    (degrees, 0 = right on screen, 90 = up), spread, toward (px/s at the viewer), gravity (+ = down), drag,
+    radius, optional orbit (radius px, period s). EVERY NUMBER IS IN CANVAS PIXELS of the creature that throws
+    it; the runtime converts with that creature's own pixel scale. Burst names the runtime reads
+    (EnemyEffectSet.BurstId): HIT, HIT_HEAVY, RESIST, KILL, DEATH, LEAK, CHARGE, MUZZLE, PROJECTILE, TRAIL,
+    BLEED (family) and BURNING, BURNING_ONSET, POISONED, STUNNED (status). A family ships what it needs.
+9.3 EMISSIVE vs LIT. An emissive sprite keeps only its emissive pixels (no kit outline - it reads as soot on a
+    2 px spark) and is drawn in its baked colour, UNGRADED, NORMAL alpha blend, faded with depth like the glow
+    atlas (V6; the order-2 D2 rule - never additive). A lit sprite (debris, chitin, smoke) keeps its outline
+    and takes the body's distance shade, tile light, blackout floor and mood grade.
+9.4 THE RUNTIME - render/enemyvisual/EnemyEffectSystem: 320 pooled world-space particles (floor-plane tiles +
+    height in walls), the oldest recycled (R4), integrated on the frozen-with-the-world clock; drawn by
+    EnemyRenderer.drawEffectParticles right after the bodies and under every bar and tag, z-tested at the
+    centre column against the walls and nearer props. Drawn at ENEMY_EFFECT_DRAW_SCALE (2x the creature's
+    pixel - 1x read too small on screen); a sprite stops growing inside 1.2 tiles (a glob at the lens). Each
+    particle fades over the last 30% of its life (batch alpha only; the art stays binary). The generic
+    screen-space hit spray / death burst (ImpactEffectSystem) stands down for a migrated body.
+9.5 ADD A FAMILY'S EFFECTS: one SETS entry in effects.py (sprites from that family's materials and ink, the
+    bursts it needs, a creatures row per creature); regenerate; earlier sets and creatures byte-identical.
+    Checked in-engine with run-game (guide 11 + run-game SKILL.md "Reactions and effects").
 
 ====================================================================================================
 10. ENGINE CONTRACT (what the game does with the output)
@@ -502,7 +574,8 @@ ADD AN ENEMY SPRITE
   [ ] brief written in the idea file (5.1); N2 respected - no old texture opened
   [ ] <name>_rig.py (rig + pose defaults + clips) + one CREATURES row in bestiary.py; new materials
       in kit.MATERIALS if needed; no canvas-edge warnings; atlas within 2048x2048
-  [ ] the full clip set (7.3) + its ability clips + its reactions (8) + family effects (9)
+  [ ] the full clip set (7.3) + its ability clips + its reactions (8) + family effects (9: an effects.py
+      creatures row with leak / burn / charge / stun / poison / body placements, and its family set)
   [ ] contact sheet, clip GIFs, in-engine screenshots (11)
   [ ] owner approval recorded
   [ ] registry row binding the EnemyType to its atlas (see the series order that owns the runtime)

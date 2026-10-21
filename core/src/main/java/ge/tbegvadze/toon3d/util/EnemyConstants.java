@@ -38,6 +38,10 @@ public final class EnemyConstants {
     // <id>.clips.json, plus the atlas and glow names the manifest itself states.
     public static final String  ENEMY_GENERATED_DIRECTORY        = "textures/enemies/generated/";
     public static final String  ENEMY_GENERATED_MANIFEST_SUFFIX  = ".clips.json";
+    // Effect sets (generated-enemy-art order 3): <family>.fx.json + .fx.png beside the creatures; the family set
+    // is named by the EnemyFamily constant in lower case, plus one shared set for semantic status effects.
+    public static final String  ENEMY_EFFECT_MANIFEST_SUFFIX     = ".fx.json";
+    public static final String  ENEMY_EFFECT_STATUS_SET_ID       = "status";
 
     // Enemy system — AI and combat
     // Only cosmetic fields (height/hover) stay here.

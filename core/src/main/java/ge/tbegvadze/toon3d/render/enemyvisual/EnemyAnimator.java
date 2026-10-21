@@ -2,16 +2,23 @@ package ge.tbegvadze.toon3d.render.enemyvisual;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
+import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
+import java.util.Arrays;
+
 /**
  * One live enemy's visual state (generated-enemy-art order 2): the one-shot clip playing on top, the clip
  * a held state keeps on its last frame, the cosmetic tile slide, and the loop clock with the enemy's own
- * idle phase. Pooled by {@link EnemyVisualLayer}, reset on reuse; nothing here allocates.
+ * idle phase. Order 3 adds the REACTION state: the recoil kick, the white-flash suppression of a resisted or
+ * blocked hit, the block shimmer, the WOUNDED resting loop and the dazed hold, plus the countdowns of every
+ * repeating effect (leak, wind-up crackle, status particles) and a pending projectile emit. Pooled by
+ * {@link EnemyVisualLayer}, reset on reuse; nothing here allocates.
  *
- * <p>Rule R2: it READS the enemy (state, tile) and RECEIVES moments; it never writes to the enemy.
+ * <p>Rule R2 (order 2) / R1 (order 3): it READS the enemy (state, tile, health, statuses) and RECEIVES
+ * moments; it never writes to the enemy.
  */
 public final class EnemyAnimator {
 
@@ -31,6 +38,24 @@ public final class EnemyAnimator {
     private float   slideFromX, slideFromY, slideToX, slideToY;
     private float   slideSeconds, slideDurationSeconds;
 
+    // ---- order 3: reactions ----
+    private float recoilDirectionX, recoilDirectionY;   // unit, world floor plane, AWAY from the hit
+    private float recoilPeakTiles, recoilPeakDropPixels;
+    private float recoilSeconds = Float.MAX_VALUE;
+    private float flashSuppressSeconds;
+    private float shimmerSeconds = Float.MAX_VALUE;
+    /** Screen-right at the last advance (world floor plane), for the dazed sway. */
+    private float rightX, rightY;
+    private boolean dazed;
+
+    // ---- order 3: effect countdowns (seconds until the repeating burst fires again) ----
+    float   leakTimerSeconds;
+    float   chargeTimerSeconds;
+    final float[] statusTimerSeconds = new float[StatusType.values().length];
+    /** Seconds until the committed shot leaves the emitter; negative = no shot pending. */
+    float   pendingEmitSeconds = -1f;
+    float   pendingTargetX, pendingTargetY;
+
     /** The creature this animator draws (its manifest and atlases). */
     public EnemyAtlasCache.CreatureVisual getVisual() {
         return visual;
@@ -48,11 +73,30 @@ public final class EnemyAnimator {
         holdClip        = null;
         holdSeconds     = 0f;
         sliding         = false;
+        recoilPeakTiles      = 0f;
+        recoilPeakDropPixels = 0f;
+        recoilSeconds        = Float.MAX_VALUE;
+        flashSuppressSeconds = 0f;
+        shimmerSeconds       = Float.MAX_VALUE;
+        dazed                = false;
+        leakTimerSeconds     = 0f;
+        chargeTimerSeconds   = 0f;
+        Arrays.fill(statusTimerSeconds, 0f);
+        pendingEmitSeconds   = -1f;
     }
 
     void release() {
         enemyId = -1;
         visual  = null;
+    }
+
+    /** True while {@code clip} is the one-shot playing (the shot schedule reads where in ATTACK the body is). */
+    boolean isPlayingOneShot(EnemyClipId clip) {
+        return oneShotClip == clip;
+    }
+
+    float oneShotElapsedSeconds() {
+        return oneShotSeconds;
     }
 
     /** Starts {@code clip} once unless a higher-priority one-shot is still playing (equal priority restarts). */
@@ -97,9 +141,35 @@ public final class EnemyAnimator {
         sliding              = true;
     }
 
+    /**
+     * RECOIL (order 3): pushes the body {@code tiles} along the unit floor-plane direction ({@code awayX},
+     * {@code awayY}) and drops it {@code dropPixels} canvas px, easing back over ENEMY_VISUAL_RECOIL_SECONDS.
+     * A kick during a kick adds to what is still showing, never past the caps.
+     */
+    void kick(float awayX, float awayY, float tiles, float dropPixels) {
+        float remaining = recoilEnvelope();
+        recoilPeakTiles      = Math.min(EffectConstants.ENEMY_VISUAL_RECOIL_MAX_TILES, recoilPeakTiles * remaining + tiles);
+        recoilPeakDropPixels = Math.min(EffectConstants.ENEMY_VISUAL_RECOIL_MAX_DROP_PIXELS,
+                recoilPeakDropPixels * remaining + dropPixels);
+        recoilDirectionX = awayX;
+        recoilDirectionY = awayY;
+        recoilSeconds    = 0f;
+    }
+
+    /** The next {@code seconds} of hit flash are not drawn (a resisted or blocked hit). */
+    void suppressHitFlash(float seconds) {
+        flashSuppressSeconds = Math.max(flashSuppressSeconds, seconds);
+    }
+
+    void beginShimmer() {
+        shimmerSeconds = 0f;
+    }
+
     /** Advances every clock by {@code deltaTime}; ends a finished one-shot and a finished slide. */
-    void advance(float deltaTime, Enemy enemy) {
+    void advance(float deltaTime, Enemy enemy, float screenRightX, float screenRightY) {
         loopSeconds += deltaTime;
+        rightX = screenRightX;
+        rightY = screenRightY;
         if (oneShotClip != null) {
             oneShotSeconds += deltaTime;
             if (visual.manifest.clip(oneShotClip).isFinishedAt(oneShotSeconds)) oneShotClip = null;
@@ -120,16 +190,32 @@ public final class EnemyAnimator {
             slideSeconds += deltaTime;
             if (slideSeconds >= slideDurationSeconds) sliding = false;
         }
+        if (recoilSeconds < Float.MAX_VALUE) recoilSeconds += deltaTime;
+        if (flashSuppressSeconds > 0f) flashSuppressSeconds -= deltaTime;
+        if (shimmerSeconds < Float.MAX_VALUE) shimmerSeconds += deltaTime;
+        // Dazed (order 3): a STUNNED status, or a stagger / riposte that cancelled its next action.
+        dazed = enemy.isAlive() && enemy.state != EnemyState.DORMANT
+                && (enemy.skipNextAction || EnemyVisualLayer.hasStatus(enemy, StatusType.STUNNED));
+    }
+
+    /** True below the WOUNDED threshold (AS3), awake and alive: the WOUNDED idle and the leak. */
+    boolean isWounded(Enemy enemy) {
+        return enemy.isAlive() && enemy.state != EnemyState.DORMANT && enemy.maxHealth > 0
+                && enemy.health < enemy.maxHealth * EffectConstants.ENEMY_VISUAL_WOUNDED_HEALTH_FRACTION;
     }
 
     /**
-     * The frame to draw now: the highest-priority candidate among the one-shot, the state's held clip,
-     * the slide's MOVE loop and the resting loop (DORMANT while asleep, else IDLE).
+     * The frame to draw now: the highest-priority candidate among the one-shot, the state's held clip, the
+     * dazed hold, the slide's MOVE loop and the resting loop (DORMANT asleep, WOUNDED when hurt, else IDLE).
      */
     public EnemyClipManifest.Frame currentFrame(Enemy enemy) {
         EnemyClipManifest manifest = visual.manifest;
-        EnemyClipId bestClip     = enemy.state == EnemyState.DORMANT && manifest.clip(EnemyClipId.DORMANT) != null
-                ? EnemyClipId.DORMANT : EnemyClipId.IDLE;
+        EnemyClipId bestClip = EnemyClipId.IDLE;
+        if (enemy.state == EnemyState.DORMANT && manifest.clip(EnemyClipId.DORMANT) != null) {
+            bestClip = EnemyClipId.DORMANT;
+        } else if (isWounded(enemy) && manifest.clip(EnemyClipId.WOUNDED) != null) {
+            bestClip = EnemyClipId.WOUNDED;
+        }
         int         bestPriority = EnemyAnimationRules.PRIORITY_IDLE;
         float       bestSeconds  = loopSeconds;
         if (sliding && manifest.clip(EnemyClipId.MOVE) != null) {
@@ -138,6 +224,13 @@ public final class EnemyAnimator {
         EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy.state);
         if (hold != null && holdClip == hold.clip && manifest.clip(holdClip) != null && hold.priority > bestPriority) {
             bestClip = holdClip; bestPriority = hold.priority; bestSeconds = holdSeconds;
+        }
+        // Dazed wins a tie with a held wind-up: a staggered enemy may still COMMIT a wind-up that turn, but the
+        // stagger cancels it, so the body must read dazed (and the intent already says STUNNED).
+        if (dazed && manifest.clip(EnemyClipId.HURT_HEAVY) != null && EnemyAnimationRules.PRIORITY_DAZED >= bestPriority) {
+            // HURT_HEAVY's last pose, held (the sway is a position offset, see renderCenterX).
+            bestClip = EnemyClipId.HURT_HEAVY; bestPriority = EnemyAnimationRules.PRIORITY_DAZED;
+            bestSeconds = Float.MAX_VALUE;
         }
         if (oneShotClip != null && oneShotPriority > bestPriority) {
             bestClip = oneShotClip; bestSeconds = oneShotSeconds;
@@ -159,15 +252,55 @@ public final class EnemyAnimator {
         return EnemyClipId.IDLE;
     }
 
-    /** World X of the body: the eased slide position while sliding, else the enemy's own render centre. */
+    /** World X of the body: the eased slide (or the enemy's own centre), plus the recoil and the dazed sway. */
     public float renderCenterX(Enemy enemy) {
-        if (!sliding) return enemy.renderCenterX();
-        return GameMath.lerp(slideFromX, slideToX, slideProgress());
+        float base = sliding ? GameMath.lerp(slideFromX, slideToX, slideProgress()) : enemy.renderCenterX();
+        return base + (recoilDirectionX * recoilTiles() * Constants.CELL_SIZE) + rightX * swayWorldUnits(enemy);
     }
 
     public float renderCenterY(Enemy enemy) {
-        if (!sliding) return enemy.renderCenterY();
-        return GameMath.lerp(slideFromY, slideToY, slideProgress());
+        float base = sliding ? GameMath.lerp(slideFromY, slideToY, slideProgress()) : enemy.renderCenterY();
+        return base + (recoilDirectionY * recoilTiles() * Constants.CELL_SIZE) + rightY * swayWorldUnits(enemy);
+    }
+
+    /** How far the recoil drops the body right now, in canvas pixels (the renderer scales it to the screen). */
+    public float recoilDropPixels() {
+        return recoilPeakDropPixels * recoilEnvelope();
+    }
+
+    /** True while a resisted / blocked hit's white flash must not be drawn. */
+    public boolean suppressesHitFlash() {
+        return flashSuppressSeconds > 0f;
+    }
+
+    /**
+     * The block shimmer: -1 when none, else how far its band has swept down the body, 0 (top) to 1 (gone
+     * below the feet).
+     */
+    public float shimmerProgress() {
+        if (shimmerSeconds >= EffectConstants.ENEMY_VISUAL_SHIMMER_SECONDS) return -1f;
+        return shimmerSeconds / EffectConstants.ENEMY_VISUAL_SHIMMER_SECONDS;
+    }
+
+    public boolean isDazed() {
+        return dazed;
+    }
+
+    private float recoilTiles() {
+        return recoilPeakTiles * recoilEnvelope();
+    }
+
+    /** 1 at the kick, easing out to 0 over the recoil time: (1 - t)^2. */
+    private float recoilEnvelope() {
+        return GameMath.recoilEnvelope(recoilSeconds, EffectConstants.ENEMY_VISUAL_RECOIL_SECONDS);
+    }
+
+    /** The dazed sway across the screen, in WORLD units (canvas px scaled by the creature's own pixel size). */
+    private float swayWorldUnits(Enemy enemy) {
+        if (!dazed) return 0f;
+        float tilesPerPixel = enemy.type.heightMultiplier() / visual.manifest.canvasHeight;
+        return GameMath.swayOffset(loopSeconds, EffectConstants.ENEMY_VISUAL_DAZED_SWAY_HZ,
+                EffectConstants.ENEMY_VISUAL_DAZED_SWAY_PIXELS * tilesPerPixel * Constants.CELL_SIZE);
     }
 
     private float slideProgress() {

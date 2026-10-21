@@ -34,7 +34,12 @@ import ge.tbegvadze.toon3d.render.enemyvisual.DyingEnemyPool;
 import ge.tbegvadze.toon3d.render.enemyvisual.EnemyAnimator;
 import ge.tbegvadze.toon3d.render.enemyvisual.EnemyBodyDrawer;
 import ge.tbegvadze.toon3d.render.enemyvisual.EnemyClipManifest;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyAtlasCache;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyEffectSet;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyEffectSystem;
+import ge.tbegvadze.toon3d.render.enemyvisual.EnemyStatusVisuals;
 import ge.tbegvadze.toon3d.render.enemyvisual.EnemyVisualLayer;
+import ge.tbegvadze.toon3d.render.enemyvisual.RemainsRegistry;
 import ge.tbegvadze.toon3d.util.ArtDirection;
 import ge.tbegvadze.toon3d.util.CombatPalette;
 import ge.tbegvadze.toon3d.util.EffectConstants;
@@ -205,8 +210,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
     // dying-instance arrays are the depth-sorted scratch for merging DEATH clips into pass 1.
     private EnemyVisualLayer      visualLayer;
     private final EnemyBodyDrawer bodyDrawer      = new EnemyBodyDrawer();
-    private final int[]           dyingSlotOrder  = new int[EffectConstants.ENEMY_VISUAL_DYING_POOL_CAPACITY];
-    private final float[]         dyingDepths     = new float[EffectConstants.ENEMY_VISUAL_DYING_POOL_CAPACITY];
+    // Order 3: the same depth-sorted scratch also holds the floor's REMAINS (encoded as -(slot + 1)).
+    private final int[]           dyingSlotOrder  = new int[EffectConstants.ENEMY_VISUAL_DYING_POOL_CAPACITY
+                                                           + EffectConstants.ENEMY_VISUAL_REMAINS_CAPACITY];
+    private final float[]         dyingDepths     = new float[EffectConstants.ENEMY_VISUAL_DYING_POOL_CAPACITY
+                                                           + EffectConstants.ENEMY_VISUAL_REMAINS_CAPACITY];
     private int                   dyingVisibleCount;
 
     /** Wires this floor's animated layer (non-owning: World disposes it). Null keeps every type legacy. */
@@ -366,9 +374,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
 
         List<Enemy> enemies = enemyManager.getEnemies();
         int enemyCount = enemies.size();
-        // Dying instances (order 2) outlive their enemy, so the last kill on a floor still plays its DEATH.
+        // Dying instances (order 2) outlive their enemy, so the last kill on a floor still plays its DEATH;
+        // remains and particles (order 3) outlive it too.
         collectVisibleDying();
-        if (enemyCount == 0 && dyingVisibleCount == 0) return;
+        boolean anyParticles = visualLayer != null && visualLayer.getEffects().activeCount() > 0;
+        if (enemyCount == 0 && dyingVisibleCount == 0 && !anyParticles) return;
 
         // Advance the affliction overlay animation clock (wall-clock; cosmetic only).
         statusAnimationClock += Gdx.graphics.getDeltaTime();
@@ -394,7 +404,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             }
         }
 
-        if (visibleCount == 0 && dyingVisibleCount == 0) return;
+        if (visibleCount == 0 && dyingVisibleCount == 0 && !anyParticles) return;
 
         // --- Insertion-sort farthest-first (painter's algorithm) ---
         for (int sortPass = 1; sortPass < visibleCount; sortPass++) {
@@ -553,6 +563,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float baseBlue  = gradedBlue * (1f - alertPulse * ALERT_WALL_GB_DAMPEN);
 
             float hitFlashStrength = enemy.getHitFlashStrength();
+            // Order 3 (R2): a RESISTED or BLOCKED hit on a migrated creature never flashes white — it did not hurt.
+            if (animator != null && animator.suppressesHitFlash()) hitFlashStrength = 0f;
             float spriteRed   = GameMath.lerpTowardWhite(baseRed,   hitFlashStrength);
             float spriteGreen = GameMath.lerpTowardWhite(baseGreen, hitFlashStrength);
             float spriteBlue  = GameMath.lerpTowardWhite(baseBlue,  hitFlashStrength);
@@ -590,6 +602,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 spriteRed   = GameMath.lerp(spriteRed,   CombatPalette.WEAK_RED,   tintStrength);
                 spriteGreen = GameMath.lerp(spriteGreen, CombatPalette.WEAK_GREEN, tintStrength);
                 spriteBlue  = GameMath.lerp(spriteBlue,  CombatPalette.WEAK_BLUE,  tintStrength);
+            }
+            // Order 3: the status rows a migrated creature adds (EMPOWERED's buff green) — data, never a switch.
+            if (animator != null) {
+                for (int rowIndex = 0; rowIndex < EnemyStatusVisuals.count(); rowIndex++) {
+                    EnemyStatusVisuals.Row row = EnemyStatusVisuals.get(rowIndex);
+                    if (row.tintStrength <= 0f || !EnemyVisualLayer.hasStatus(enemy, row.status)) continue;
+                    spriteRed   = GameMath.lerp(spriteRed,   row.tintRed,   row.tintStrength);
+                    spriteGreen = GameMath.lerp(spriteGreen, row.tintGreen, row.tintStrength);
+                    spriteBlue  = GameMath.lerp(spriteBlue,  row.tintBlue,  row.tintStrength);
+                }
             }
 
             // Telegraph tint: brief danger flash at the instant of attack. A priming SELF_DESTRUCT
@@ -769,8 +791,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
             boolean animatedVisible = false;
             if (animator != null) {
                 // Order 2: the animated body — same per-column wall test, drawn from the creature atlas.
-                animatedVisible = bodyDrawer.prepare(animatedFrame, regionWidth, regionHeight, worldCenterX, drawTop,
-                        spriteScreenHeight, projectionColumnWidth, projectionColumnCount);
+                // Order 3: the recoil drops the body a few canvas px (eased out); bars and tags stay put.
+                float recoilDrop = animator.recoilDropPixels() * spriteScreenHeight / regionHeight;
+                animatedVisible = bodyDrawer.prepare(animatedFrame, regionWidth, regionHeight, worldCenterX,
+                        drawTop - recoilDrop, spriteScreenHeight, projectionColumnWidth, projectionColumnCount);
                 firstColumn = bodyDrawer.getFirstColumn();
                 lastColumn  = bodyDrawer.getLastColumn();
                 if (animatedVisible) {
@@ -834,6 +858,24 @@ public final class EnemyRenderer implements Renderable, Disposable {
                                    false, false);
                     }
                 }
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            }
+
+            // Order 3 — BLOCKED: a band of Block's steel-blue light sweeps down the body, top to bottom. A LIGHT
+            // pass over the body atlas (additive, like the muzzle light above) so it rides the silhouette; it is
+            // not the glow atlas, whose emissive copy must stay a normal-blend overlay (order 2, D2).
+            if (animatedVisible && animator.shimmerProgress() >= 0f) {
+                float progress   = animator.shimmerProgress();
+                float bandHeight = regionHeight * EffectConstants.ENEMY_VISUAL_SHIMMER_BAND_FRACTION;
+                float bandTop    = -bandHeight + progress * (regionHeight + bandHeight);
+                float strength   = EffectConstants.ENEMY_VISUAL_SHIMMER_STRENGTH
+                        * (1f - progress * EffectConstants.ENEMY_VISUAL_SHIMMER_DECAY);
+                SpriteOccluderBuffer shimmerOccluder = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
+                batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
+                batch.setColor(ENEMY_BLOCK_TINT_RED * strength, ENEMY_BLOCK_TINT_GREEN * strength,
+                        ENEMY_BLOCK_TINT_BLUE * strength, 1f);
+                bodyDrawer.drawBand(batch, animator.getVisual().bodyAtlas, depth, wallRenderer, shimmerOccluder,
+                        bandTop, bandTop + bandHeight);
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
             }
 
@@ -911,6 +953,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         drawDyingFartherThan(dyingCursor, -1f);   // the dying instances nearer than every live enemy
         batch.setColor(Color.WHITE);
         batch.end();
+        // Order 3: the generated effect particles, over every body and under every bar, tag and overlay.
+        if (anyParticles) drawEffectParticles();
         if (visibleCount == 0) return;   // only dying instances were on screen: no bars, icons or overlays
 
         // Resolve overlapping UI clusters BEFORE any overlay pass reads the cached positions.
@@ -924,7 +968,10 @@ public final class EnemyRenderer implements Renderable, Disposable {
         boolean anyAffliction = false;
         for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
             if (!fxDrawFlags[sortedPosition]) continue;
-            if (hasAnyAffliction(enemies.get(sortedIndices[sortedPosition]))) { anyAffliction = true; break; }
+            Enemy candidate = enemies.get(sortedIndices[sortedPosition]);
+            // Order 3: a migrated creature's statuses are its generated particles, not these procedural quads.
+            if (isAnimated(candidate)) continue;
+            if (hasAnyAffliction(candidate)) { anyAffliction = true; break; }
         }
 
         if (anyAffliction) {
@@ -933,6 +980,7 @@ public final class EnemyRenderer implements Renderable, Disposable {
             for (int sortedPosition = 0; sortedPosition < visibleCount; sortedPosition++) {
                 if (!fxDrawFlags[sortedPosition]) continue;
                 Enemy enemy = enemies.get(sortedIndices[sortedPosition]);
+                if (isAnimated(enemy)) continue;   // order 3: generated status particles instead
 
                 // fxCenterWorldXs holds a WORLD X (see the pass-1 comment above); convert back to a
                 // column index only for the z-buffer occlusion test.
@@ -1578,7 +1626,16 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 EffectConstants.ENEMY_GLOW_FADE_END_TILES, EffectConstants.ENEMY_GLOW_MIN_ALPHA);
     }
 
-    /** Culls the dying pool and depth-sorts the visible instances farthest-first into the scratch arrays. */
+    /** True when {@code enemy} is drawn by the animated layer. */
+    private boolean isAnimated(Enemy enemy) {
+        return visualLayer != null && visualLayer.animatorFor(enemy) != null;
+    }
+
+    /**
+     * Culls the dying pool and the floor's revealed REMAINS (order 3) and depth-sorts them farthest-first into
+     * the scratch arrays. A dying slot is stored as its index, a remains slot as {@code -(slot + 1)}. Remains
+     * sort a hair farther than their true depth, so a live enemy standing on a carcass is drawn over it.
+     */
     private void collectVisibleDying() {
         dyingVisibleCount = 0;
         if (visualLayer == null) return;
@@ -1586,50 +1643,75 @@ public final class EnemyRenderer implements Renderable, Disposable {
         for (int slotIndex = 0; slotIndex < pool.capacity(); slotIndex++) {
             DyingEnemyPool.DyingEnemy dying = pool.get(slotIndex);
             if (!dying.active) continue;
-            float depth = GameMath.spriteDepth((dying.worldX - playerWorldX) / CELL_SIZE,
-                    (dying.worldY - playerWorldY) / CELL_SIZE, directionX, directionY);
-            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES || depth > MAX_ENEMY_DRAW_DISTANCE_TILES) continue;
-            int insertAt = dyingVisibleCount - 1;
-            while (insertAt >= 0 && dyingDepths[insertAt] < depth) {
-                dyingSlotOrder[insertAt + 1] = dyingSlotOrder[insertAt];
-                dyingDepths[insertAt + 1]    = dyingDepths[insertAt];
-                insertAt--;
-            }
-            dyingSlotOrder[insertAt + 1] = slotIndex;
-            dyingDepths[insertAt + 1]    = depth;
-            dyingVisibleCount++;
+            insertDying(slotIndex, dying.worldX, dying.worldY, 0f);
+        }
+        RemainsRegistry remains = visualLayer.getRemains();
+        for (int slotIndex = 0; slotIndex < remains.capacity(); slotIndex++) {
+            RemainsRegistry.Remains corpse = remains.get(slotIndex);
+            if (!corpse.isRevealed()) continue;
+            insertDying(-(slotIndex + 1), corpse.worldX, corpse.worldY, EffectConstants.ENEMY_VISUAL_REMAINS_DEPTH_BIAS_TILES);
         }
     }
 
-    /** Draws every sorted dying instance from {@code cursor} that is farther than {@code depth}; returns the new cursor. */
+    private void insertDying(int encodedSlot, float worldX, float worldY, float sortBias) {
+        float depth = GameMath.spriteDepth((worldX - playerWorldX) / CELL_SIZE,
+                (worldY - playerWorldY) / CELL_SIZE, directionX, directionY);
+        if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES || depth > MAX_ENEMY_DRAW_DISTANCE_TILES) return;
+        if (dyingVisibleCount >= dyingSlotOrder.length) return;
+        float sortDepth = depth + sortBias;
+        int insertAt = dyingVisibleCount - 1;
+        while (insertAt >= 0 && dyingDepths[insertAt] < sortDepth) {
+            dyingSlotOrder[insertAt + 1] = dyingSlotOrder[insertAt];
+            dyingDepths[insertAt + 1]    = dyingDepths[insertAt];
+            insertAt--;
+        }
+        dyingSlotOrder[insertAt + 1] = encodedSlot;
+        dyingDepths[insertAt + 1]    = sortDepth;
+        dyingVisibleCount++;
+    }
+
+    /** Draws every sorted dying instance / remains from {@code cursor} farther than {@code depth}; returns the new cursor. */
     private int drawDyingFartherThan(int cursor, float depth) {
         while (cursor < dyingVisibleCount && dyingDepths[cursor] > depth) {
-            drawDyingEnemy(visualLayer.getDyingPool().get(dyingSlotOrder[cursor]), dyingDepths[cursor]);
+            int encodedSlot = dyingSlotOrder[cursor];
+            if (encodedSlot >= 0) {
+                DyingEnemyPool.DyingEnemy dying = visualLayer.getDyingPool().get(encodedSlot);
+                drawCorpseBillboard(dying.type, dying.visual, dying.currentFrame(), dying.worldX, dying.worldY,
+                        dying.tileColumn, dying.tileRow);
+            } else {
+                RemainsRegistry.Remains corpse = visualLayer.getRemains().get(-encodedSlot - 1);
+                drawCorpseBillboard(corpse.type, corpse.visual, corpse.corpseFrame(), corpse.worldX, corpse.worldY,
+                        corpse.tileColumn, corpse.tileRow);
+            }
             cursor++;
         }
         return cursor;
     }
 
     /**
-     * One DEATH frame (rule R4): the body under the same light, grade and blackout floor as a live one, but
-     * none of the live tints, bars or shadow — it is already dead. Batch is begun (pass 1).
+     * One DEATH frame (rule R4) or the remains' corpse frame (order 3): the body under the same light, grade
+     * and blackout floor as a live one, but none of the live tints, bars or shadow — it is already dead.
+     * Batch is begun (pass 1).
      */
-    private void drawDyingEnemy(DyingEnemyPool.DyingEnemy dying, float depth) {
-        float screenCenterColumn = GameMath.spriteScreenColumnCenter(
-                (dying.worldX - playerWorldX) / CELL_SIZE, (dying.worldY - playerWorldY) / CELL_SIZE,
+    private void drawCorpseBillboard(EnemyType type, EnemyAtlasCache.CreatureVisual visual,
+                                     EnemyClipManifest.Frame frame, float worldX, float worldY,
+                                     int tileColumn, int tileRow) {
+        float tileOffsetX = (worldX - playerWorldX) / CELL_SIZE;
+        float tileOffsetY = (worldY - playerWorldY) / CELL_SIZE;
+        float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+        float screenCenterColumn = GameMath.spriteScreenColumnCenter(tileOffsetX, tileOffsetY,
                 directionX, directionY, planeX, planeY, projectionColumnCount);
         float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
-        float spriteScreenHeight = fullWallLineHeight * dying.type.heightMultiplier();
+        float spriteScreenHeight = fullWallLineHeight * type.heightMultiplier();
         float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
-        EnemyClipManifest manifest = dying.visual.manifest;
-        EnemyClipManifest.Frame frame = dying.currentFrame();
+        EnemyClipManifest manifest = visual.manifest;
         if (!bodyDrawer.prepare(frame, manifest.canvasWidth, manifest.canvasHeight,
                 screenCenterColumn * projectionColumnWidth, drawBottom + spriteScreenHeight, spriteScreenHeight,
                 projectionColumnWidth, projectionColumnCount)) {
             return;
         }
         float tileBrightness = (level != null)
-                ? level.getTileBrightness(dying.tileColumn, dying.tileRow, lightingTimeSeconds) : 1f;
+                ? level.getTileBrightness(tileColumn, tileRow, lightingTimeSeconds) : 1f;
         float shade = Math.max(Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
                 MAX_LIGHTING_SHADE), ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
         shade = GameMath.darkenedShadeWithFloor(shade, lightMultiplier, RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
@@ -1641,15 +1723,94 @@ public final class EnemyRenderer implements Renderable, Disposable {
             blue  = Math.min(1f, shade * atmosphereGrade.blue);
         }
         batch.setColor(red, green, blue, 1f);
-        bodyDrawer.drawColumns(batch, dying.visual.bodyAtlas, depth, wallRenderer, null);
+        bodyDrawer.drawColumns(batch, visual.bodyAtlas, depth, wallRenderer, null);
         if (frame.hasGlow) {   // the emissive layer, ungraded (V6) — as for a live body
             batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth));
-            bodyDrawer.drawColumns(batch, dying.visual.glowAtlas, depth, wallRenderer, null);
+            bodyDrawer.drawColumns(batch, visual.glowAtlas, depth, wallRenderer, null);
         }
         SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
         if (occluderBuffer != null) {
             occluderBuffer.redrawInFrontRange(batch, bodyDrawer.getFirstColumn(), bodyDrawer.getLastColumn(), depth,
                     projectionColumnWidth, wallRenderer);
+        }
+    }
+
+    /**
+     * Order 3 — THE EFFECT PARTICLES (render/enemyvisual/EnemyEffectSystem): each a world point carrying a
+     * generated sprite frame, projected like a billboard and z-tested at its centre column against the walls
+     * and nearer props. EMISSIVE particles (sparks, ichor, flame, the glob) are drawn in their baked colour,
+     * ungraded, NORMAL blend, faded with depth like the glow atlas (V6, order 2 D2); lit particles (debris,
+     * chitin, smoke) take the body's distance shade, tile light, blackout floor and mood grade. Every
+     * particle fades over the tail of its life (batch alpha only; the art stays binary). One batch, one
+     * texture per effect set; no allocation.
+     */
+    private void drawEffectParticles() {
+        EnemyEffectSystem system = visualLayer.getEffects();
+        SpriteOccluderBuffer occluderBuffer = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
+        float playerTileX = playerWorldX / CELL_SIZE;
+        float playerTileY = playerWorldY / CELL_SIZE;
+        boolean begun = false;
+        for (int slotIndex = 0; slotIndex < system.capacity(); slotIndex++) {
+            EnemyEffectSystem.Particle particle = system.get(slotIndex);
+            if (!particle.active) continue;
+            float tileOffsetX = particle.tileX - playerTileX;
+            float tileOffsetY = particle.tileY - playerTileY;
+            float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
+            if (depth <= PROP_BEHIND_PLAYER_EPSILON_TILES || depth > MAX_ENEMY_DRAW_DISTANCE_TILES) continue;
+            float screenColumn = GameMath.spriteScreenColumnCenter(tileOffsetX, tileOffsetY,
+                    directionX, directionY, planeX, planeY, projectionColumnCount);
+            int centreColumn = (int) screenColumn;
+            if (centreColumn < 0 || centreColumn >= projectionColumnCount) continue;
+            if (depth >= wallRenderer.getZBufferUnchecked(centreColumn)) continue;
+            if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(centreColumn)) continue;
+
+            float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
+            // The sprite's size stops growing inside ENEMY_EFFECT_MIN_SIZE_DEPTH_TILES, so a glob flying into the
+            // camera never becomes a screen of giant blocks; its position still projects at its true depth.
+            float sizeWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT,
+                    Math.max(depth, EffectConstants.ENEMY_EFFECT_MIN_SIZE_DEPTH_TILES));
+            float worldUnitsPerPixel = particle.tilesPerPixel * sizeWallLineHeight * EffectConstants.ENEMY_EFFECT_DRAW_SCALE;
+            EnemyEffectSet.SpriteFrame frame = particle.currentFrame();
+            float pointX = screenColumn * projectionColumnWidth;
+            float pointY = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight)
+                    + particle.height * fullWallLineHeight;
+            float drawWidth  = frame.width  * worldUnitsPerPixel;
+            float drawHeight = frame.height * worldUnitsPerPixel;
+            float drawLeft   = pointX - frame.pivotX * worldUnitsPerPixel;
+            float drawTop    = pointY + frame.pivotY * worldUnitsPerPixel;
+
+            float lifeFraction = particle.ageSeconds / particle.lifeSeconds;
+            float fade = GameMath.lifeTailFade(lifeFraction, EffectConstants.ENEMY_EFFECT_FADE_TAIL_FRACTION);
+            // A projectile fades as it reaches the player (the legacy glob's 1 - t^2), never popping at the lens.
+            if (particle.projectile) fade = GameMath.arrivalFade(lifeFraction);
+            if (particle.sprite.emissive) {
+                batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth) * fade);
+            } else {
+                float tileBrightness = (level != null) ? level.getTileBrightness(
+                        (int) particle.tileX, (int) particle.tileY, lightingTimeSeconds) : 1f;
+                float shade = Math.max(Math.min(GameMath.wallShade(depth, WALL_SHADING_FALLOFF) * tileBrightness,
+                        MAX_LIGHTING_SHADE), ENEMY_SPRITE_SHADE_MIN_BRIGHTNESS);
+                shade = GameMath.darkenedShadeWithFloor(shade, lightMultiplier,
+                        RenderConstants.TWIST_BLACKOUT_ENEMY_MIN_SHADE);
+                float red = shade, green = shade, blue = shade;
+                if (atmosphereGrade != null) {
+                    atmosphereGrade.evaluate(depth, ArtDirection.GRADE_STRENGTH_ENEMY);
+                    red   = Math.min(1f, shade * atmosphereGrade.red);
+                    green = Math.min(1f, shade * atmosphereGrade.green);
+                    blue  = Math.min(1f, shade * atmosphereGrade.blue);
+                }
+                batch.setColor(red, green, blue, fade);
+            }
+            if (!begun) {
+                batch.begin();
+                begun = true;
+            }
+            batch.draw(particle.sprite.owner.atlas, drawLeft, drawTop - drawHeight, drawWidth, drawHeight,
+                    frame.atlasX, frame.atlasY, frame.width, frame.height, false, false);
+        }
+        if (begun) {
+            batch.setColor(Color.WHITE);
+            batch.end();
         }
     }
 

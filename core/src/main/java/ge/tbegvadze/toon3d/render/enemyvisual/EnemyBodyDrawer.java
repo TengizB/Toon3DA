@@ -36,6 +36,8 @@ public final class EnemyBodyDrawer {
     private float columnWidth;
     private int   firstColumn;
     private int   lastColumn;
+    private float canvasTop;                  // world y of the canvas top (order 3: the shimmer band)
+    private float worldUnitsPerPixel;
 
     /**
      * Places {@code frameToDraw} for a billboard whose canvas is {@code spriteScreenHeight} world units tall,
@@ -48,6 +50,8 @@ public final class EnemyBodyDrawer {
         frame       = frameToDraw;
         columnWidth = projectionColumnWidth;
         float worldUnitsPerCanvasPixel = spriteScreenHeight / canvasHeight;
+        canvasTop          = canvasTopY;
+        worldUnitsPerPixel = worldUnitsPerCanvasPixel;
         float canvasLeftX = worldCenterX - canvasWidth * worldUnitsPerCanvasPixel * 0.5f;
         float frameLeftX  = canvasLeftX + frameToDraw.offsetLeft * worldUnitsPerCanvasPixel;
         float frameRightX = frameLeftX  + frameToDraw.width      * worldUnitsPerCanvasPixel;
@@ -94,6 +98,40 @@ public final class EnemyBodyDrawer {
                        screenColumn * columnWidth, clampedBottom,
                        columnWidth, clampedTop - clampedBottom,
                        frame.atlasX + localSourceX, sourceY, 1, sourceHeight,
+                       false, false);
+        }
+    }
+
+    /**
+     * Order 3 (the BLOCKED shimmer): draws only the prepared frame's rows that fall inside the canvas band
+     * [{@code bandTopCanvasY}, {@code bandBottomCanvasY}) (canvas pixels, y down), same columns and tests as
+     * {@link #drawColumns}. Used as a light pass (additive, the body atlas tinted), like the muzzle light.
+     */
+    public void drawBand(SpriteBatch batch, Texture texture, float depth, WallRenderer wallRenderer,
+                         SpriteOccluderBuffer occluderBuffer, float bandTopCanvasY, float bandBottomCanvasY) {
+        float top    = Math.max(bandTopCanvasY, frame.offsetTop);
+        float bottom = Math.min(bandBottomCanvasY, frame.offsetTop + frame.height);
+        if (bottom <= top) return;
+        int rowStart = (int) (top - frame.offsetTop);
+        int rowEnd   = Math.min(frame.height, (int) Math.ceil(bottom - frame.offsetTop));
+        float bandTopY    = canvasTop - (frame.offsetTop + rowStart) * worldUnitsPerPixel;
+        float bandBottomY = canvasTop - (frame.offsetTop + rowEnd) * worldUnitsPerPixel;
+        float clippedTop    = Math.min(bandTopY, (float) WALL_PROJECTION_SCREEN_HEIGHT);
+        float clippedBottom = Math.max(bandBottomY, 0f);
+        if (clippedTop <= clippedBottom) return;
+        rowStart += (int) ((bandTopY - clippedTop) / worldUnitsPerPixel);
+        rowEnd   -= (int) ((clippedBottom - bandBottomY) / worldUnitsPerPixel);
+        if (rowEnd <= rowStart) return;
+        float spanColumns = rightColumnPosition - leftColumnPosition;
+        for (int screenColumn = firstColumn; screenColumn <= lastColumn; screenColumn++) {
+            if (depth >= wallRenderer.getZBufferUnchecked(screenColumn)) continue;
+            if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(screenColumn)) continue;
+            float across       = (screenColumn + 0.5f - leftColumnPosition) / spanColumns;
+            int   localSourceX = MathUtils.clamp((int) (across * frame.width), 0, frame.width - 1);
+            batch.draw(texture,
+                       screenColumn * columnWidth, clippedBottom,
+                       columnWidth, clippedTop - clippedBottom,
+                       frame.atlasX + localSourceX, frame.atlasY + rowStart, 1, rowEnd - rowStart,
                        false, false);
         }
     }

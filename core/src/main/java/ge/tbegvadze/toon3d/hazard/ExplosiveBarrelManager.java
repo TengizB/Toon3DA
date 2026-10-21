@@ -164,7 +164,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget, RelicBlast
                 if (enemy != null) {
                     int blastDamage = Math.round((centreTile ? enemyCentreDamage : enemyRingDamage)
                             * player.getBuildStats().barrelDamageMultiplier(detonatedByPlayer));
-                    applyHazardBlastToEnemy(enemy, blastDamage);
+                    applyHazardBlastToEnemy(enemy, blastDamage, tileColumn, tileRow);
                     enemyBlastDamageDealt += blastDamage;
                 }
             }
@@ -193,7 +193,7 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget, RelicBlast
      * (no weapon build terms, no kill terms). Restores whatever the target had armed — a blast can fire
      * mid-activation (a shot into a barrel) or inside a kill resolving (a corpse burst).
      */
-    private void applyHazardBlastToEnemy(Object enemy, int blastDamage) {
+    private void applyHazardBlastToEnemy(Object enemy, int blastDamage, int blastColumn, int blastRow) {
         // AS6 (balance-overhaul order 3): a barrel blast is EXPLOSIVE against traits.
         DamageClass previousClass = enemyHitTarget.getActivationDamageClass();
         boolean previousFloorNeutral = enemyHitTarget.isActivationMatchupFloorNeutral();
@@ -203,7 +203,9 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget, RelicBlast
         // A barrel is a HAZARD blast: no weapon build terms; its own Sapper / DEMOLITIONIST
         // multiplier (balance-overhaul order 5) scales it instead.
         enemyHitTarget.setActivationHazardBlast(true);
+        enemyHitTarget.setVisualBlastOrigin(blastColumn, blastRow);   // cosmetic: the body recoils from the blast
         enemyHitTarget.applyDamageTo(enemy, blastDamage);
+        enemyHitTarget.setVisualBlastOrigin(-1, -1);
         enemyHitTarget.setActivationHazardBlast(previousHazardBlast);
         enemyHitTarget.setActivationDamageClass(previousClass);
         enemyHitTarget.setActivationMatchupFloorNeutral(previousFloorNeutral);
@@ -244,7 +246,8 @@ public final class ExplosiveBarrelManager implements BarrelHitTarget, RelicBlast
             if (Level.isWall(level.getCell(blastColumn, blastRow))) continue;
             Object enemy = enemyHitTarget.enemyAt(blastColumn, blastRow);
             if (enemy != null) {
-                applyHazardBlastToEnemy(enemy, GameMath.relicBlastDamage(fraction, referenceSoldierMaxHealth));
+                applyHazardBlastToEnemy(enemy, GameMath.relicBlastDamage(fraction, referenceSoldierMaxHealth),
+                        tileColumn, tileRow);
             }
         }
     }

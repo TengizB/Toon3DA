@@ -821,6 +821,11 @@ it inside the call and never keeps it. Moments and where they fire:
   STATUS_APPLIED    burn, burn stack, vulnerable, exposed, empowered
   DIED              killEnemy(enemy, cause) — first thing, while the enemy still stands on its tile;
                     cause WEAPON / HAZARD / STATUS / SELF_DESTRUCT / OTHER
+A DAMAGED payload's source tile is the player's, or the BLAST tile while setVisualBlastOrigin is armed
+(grenade splash, barrel blast, relic blast — generated-enemy-art order 3, cosmetic only: the body recoils away
+from the blast). DoT ticks report no DAMAGED (status visuals read the enemy each frame; a DoT death still
+reports DIED). Order 3 maps every moment to a reaction (docs/sprite-art-creation-guide.txt 8.3-8.7): outcomes,
+recoil, wounded, statuses, the dazed hold, remains, projectiles, telegraph effects.
 Rule (series G9): the visual layer never writes back to an enemy, the manager or the world. Adding a fire
 site is one fireVisual...(…) call; adding a moment is one enum constant plus its rule row in
 render/enemyvisual/EnemyAnimationRules (the rule table refuses to load with a moment unmapped).

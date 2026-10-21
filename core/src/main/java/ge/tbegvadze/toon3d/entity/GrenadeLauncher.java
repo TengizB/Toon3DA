@@ -210,7 +210,9 @@ public class GrenadeLauncher extends Weapon {
             if (enemyHitTarget != null) {
                 Object splashEnemy = enemyHitTarget.enemyAt(splashColumn, splashRow);
                 if (splashEnemy != null) {
+                    enemyHitTarget.setVisualBlastOrigin(impactColumn, impactRow);   // cosmetic recoil direction
                     enemyHitTarget.applyDamageTo(splashEnemy, splashDamage);
+                    enemyHitTarget.setVisualBlastOrigin(-1, -1);
                 }
             }
         }

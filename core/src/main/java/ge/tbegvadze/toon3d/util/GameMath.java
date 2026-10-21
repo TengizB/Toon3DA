@@ -8113,4 +8113,79 @@ public final class GameMath {
         }
         return outputCount;
     }
+
+    // =========================================================================
+    // ENEMY REACTIONS AND EFFECTS (generated-enemy-art order 3) — cosmetic curves
+    // =========================================================================
+
+    /*
+     * Formula: Recoil envelope (quadratic ease-out back to rest)
+     * Derivation:
+     *   remaining = 1 - elapsed / duration          (1 at the kick, 0 when it has eased out)
+     *   envelope  = remaining²
+     *   The body is pushed fully at the kick and returns fast, then slowly settles: the derivative is
+     *   -2·remaining/duration, steepest at the kick and zero at rest, so the return never snaps.
+     * Edge cases:
+     *   elapsed >= duration (or duration <= 0) -> 0; elapsed < 0 is treated as 0 (envelope 1).
+     */
+    public static float recoilEnvelope(float elapsedSeconds, float durationSeconds) {
+        if (durationSeconds <= 0f || elapsedSeconds >= durationSeconds) return 0f;
+        float remaining = 1f - Math.max(0f, elapsedSeconds) / durationSeconds;
+        return remaining * remaining;
+    }
+
+    /*
+     * Formula: Life tail fade (linear fade over the last fraction of a lifetime)
+     * Derivation:
+     *   With lifeFraction = age / life in [0, 1] and a tail of length tailFraction:
+     *     fade = 1                                   for lifeFraction <= 1 - tailFraction
+     *     fade = (1 - lifeFraction) / tailFraction   after it (1 at the tail's start, 0 at death)
+     * Edge cases:
+     *   tailFraction <= 0 -> 1 until death (no fade). Result clamped to [0, 1].
+     */
+    public static float lifeTailFade(float lifeFraction, float tailFraction) {
+        if (tailFraction <= 0f || lifeFraction <= 1f - tailFraction) return 1f;
+        return Math.max(0f, Math.min(1f, (1f - lifeFraction) / tailFraction));
+    }
+
+    /*
+     * Formula: Arrival fade (quadratic fade-out as a projectile reaches its target)
+     * Derivation:
+     *   fade = 1 - t², t = flight fraction in [0, 1]. Barely fades early in flight (the shot reads) and
+     *   reaches 0 exactly on arrival, so it never pops at the lens (the legacy glob's curve).
+     * Edge cases:
+     *   t clamped to [0, 1].
+     */
+    public static float arrivalFade(float flightFraction) {
+        float clamped = Math.max(0f, Math.min(1f, flightFraction));
+        return 1f - clamped * clamped;
+    }
+
+    /*
+     * Formula: Sway offset (sinusoid)
+     * Derivation:
+     *   offset = amplitude · sin(2π · frequency · seconds) — one full side-to-side cycle per 1/frequency s.
+     * Edge cases:
+     *   frequency 0 -> 0. Large seconds lose float precision only after many hours of continuous play.
+     */
+    public static float swayOffset(float seconds, float frequencyHz, float amplitude) {
+        return amplitude * (float) Math.sin(seconds * frequencyHz * Math.PI * 2.0);
+    }
+
+    /*
+     * Formula: Edge-on orbit offsets (a circle seen from the side)
+     * Derivation:
+     *   angle  = phase + angularSpeed · age
+     *   across = radius · cos(angle)                  (along screen-right)
+     *   up     = radius · sin(angle) · flatten        (height; flatten < 1 squashes the circle seen edge-on)
+     * Edge cases:
+     *   radius 0 -> both 0. Returned via the two separate accessors so nothing allocates.
+     */
+    public static float orbitAcross(float phaseRadians, float angularSpeed, float ageSeconds, float radius) {
+        return radius * (float) Math.cos(phaseRadians + angularSpeed * ageSeconds);
+    }
+
+    public static float orbitUp(float phaseRadians, float angularSpeed, float ageSeconds, float radius, float flatten) {
+        return radius * flatten * (float) Math.sin(phaseRadians + angularSpeed * ageSeconds);
+    }
 }

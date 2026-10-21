@@ -9,6 +9,7 @@ import ge.tbegvadze.toon3d.util.EnemyConstants;
 
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -27,12 +28,20 @@ public final class EnemyAtlasCache implements Disposable {
 
     private static final String LOG_TAG = "EnemyAtlasCache";
 
-    /** One loaded creature: its manifest and its two atlases. */
+    /**
+     * One loaded creature: its manifest and its two atlases, plus (order 3) its family's effect set, the
+     * shared status set and where on this creature each kind of effect comes from. The effect fields are
+     * null when the sets failed to load: the creature then animates without effects (never a crash).
+     */
     public static final class CreatureVisual {
         public final String            creatureId;
         public final EnemyClipManifest manifest;
         public final Texture           bodyAtlas;
         public final Texture           glowAtlas;
+        EnemyEffectSet                 familyEffects;
+        EnemyEffectSet                 statusEffects;
+        /** Indexed by {@link EnemyEffectSet.PlacementId}; null when the family set has no row for this creature. */
+        EnemyEffectSet.Placement[]     placements;
 
         CreatureVisual(String creatureId, EnemyClipManifest manifest, Texture bodyAtlas, Texture glowAtlas) {
             this.creatureId = creatureId;
@@ -40,10 +49,24 @@ public final class EnemyAtlasCache implements Disposable {
             this.bodyAtlas  = bodyAtlas;
             this.glowAtlas  = glowAtlas;
         }
+
+        /** {@code id} from the family set (or, for a status burst, the status set); null when not shipped. */
+        public EnemyEffectSet.Burst burst(EnemyEffectSet.BurstId id) {
+            EnemyEffectSet.Burst found = familyEffects != null ? familyEffects.burst(id) : null;
+            if (found == null && statusEffects != null) found = statusEffects.burst(id);
+            return found;
+        }
+
+        /** Where {@code id} effects come from on this creature, or null (then the hit centre is used). */
+        public EnemyEffectSet.Placement placement(EnemyEffectSet.PlacementId id) {
+            return placements != null ? placements[id.ordinal()] : null;
+        }
     }
 
     private final Map<String, CreatureVisual> creaturesById = new HashMap<>();
     private final Map<String, Boolean>        failedIds     = new HashMap<>();
+    /** Effect sets (order 3) by set id, loaded once per floor for the families on it; a failed id maps to null. */
+    private final Map<String, EnemyEffectSet> effectSetsById = new HashMap<>();
     /** Per-type resolution, filled by {@link #ensureLoaded}; read every frame without hashing a string. */
     private final EnumMap<EnemyType, CreatureVisual> visualsByType = new EnumMap<>(EnemyType.class);
 
@@ -64,6 +87,7 @@ public final class EnemyAtlasCache implements Disposable {
             visual = load(creatureId);
             if (visual == null) return;
             creaturesById.put(creatureId, visual);
+            attachEffects(visual, type);
         }
         visualsByType.put(type, visual);
     }
@@ -100,6 +124,30 @@ public final class EnemyAtlasCache implements Disposable {
         }
     }
 
+    /**
+     * Order 3: the creature's family effect set ({@code <family>.fx.json}, the EnemyFamily name in lower
+     * case) and the shared status set. A set that fails is logged once and its effects are simply absent.
+     */
+    private void attachEffects(CreatureVisual visual, EnemyType type) {
+        visual.familyEffects = effectSet(type.family().name().toLowerCase(Locale.ROOT));
+        visual.statusEffects = effectSet(EnemyConstants.ENEMY_EFFECT_STATUS_SET_ID);
+        if (visual.familyEffects != null) visual.placements = visual.familyEffects.placementsFor(visual.creatureId);
+    }
+
+    private EnemyEffectSet effectSet(String setId) {
+        if (effectSetsById.containsKey(setId)) return effectSetsById.get(setId);
+        EnemyEffectSet set = null;
+        try {
+            set = EnemyEffectSet.load(Gdx.files.internal(EnemyConstants.ENEMY_GENERATED_DIRECTORY), setId);
+            Gdx.app.log(LOG_TAG, "loaded effect set " + setId + " (" + set.atlas.getWidth() + "x"
+                    + set.atlas.getHeight() + ")");
+        } catch (RuntimeException failure) {
+            Gdx.app.error(LOG_TAG, "effect set '" + setId + "' failed to load; its creatures draw no effects", failure);
+        }
+        effectSetsById.put(setId, set);
+        return set;
+    }
+
     private static Texture loadNearest(FileHandle file) {
         Texture texture = new Texture(file);
         texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
@@ -112,7 +160,11 @@ public final class EnemyAtlasCache implements Disposable {
             visual.bodyAtlas.dispose();
             visual.glowAtlas.dispose();
         }
+        for (EnemyEffectSet set : effectSetsById.values()) {
+            if (set != null) set.dispose();
+        }
         creaturesById.clear();
         visualsByType.clear();
+        effectSetsById.clear();
     }
 }

@@ -49,6 +49,11 @@ MATERIALS = {
     "ichor":  dict(ramp=ramp("4e1426", "8f2c3d", "d0504f", "f57f66", "ffb293", "ffeadb"), emissive=True),
     # translucent membrane over a glowing interior
     "sac":    dict(ramp=ramp("2a1018", "4d1d27", "7c3138", "b0524c", "dd8a70", "f8c6a8"), glow="ichor", spec=(0.6, 40), grain=(0.03, 3)),
+    # EFFECT inks (generated-enemy-art order 3, effects.py). Appended LAST so every earlier material keeps
+    # its index and every creature regenerates byte-identical. flare = white-hot (sparks, a hard armour
+    # spark, the dazed stars: the hit-flash white of V5); toxin = the POISONED status green (V5 semantic).
+    "flare":  dict(ramp=ramp("4a3a2c", "8a6a48", "c99c64", "f2cf96", "fff0d2", "fffdf6"), emissive=True),
+    "toxin":  dict(ramp=ramp("0d3313", "15591f", "1f8a2e", "3fc24e", "8fe89a", "e2fbe4"), emissive=True),
 }
 
 # An emissive (or translucent) shape whose glow level is at or below this is DEAD: it is shaded at the

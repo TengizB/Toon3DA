@@ -1,9 +1,36 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 3 - reactions and effects
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
+
+IMPLEMENTATION NOTE (2026-10-21)
+  - EMISSIVE effect particles are drawn UNGRADED with NORMAL alpha blend, faded with depth like the glow atlas
+    (order-2 D2), not "additively" as SCOPE says. The one additive element is the BLOCKED shimmer: a light pass
+    of the body atlas in Block's tint (like the muzzle light), never the glow atlas. Approved (D2).
+  - NEW classes beyond SCOPE's list: EnemyEffectSet (the fx manifest), EnemyStatusVisuals (status rows);
+    RemainsRegistry and EnemyEffectSystem as planned. Effect SETS are one per EnemyFamily (file = family name in
+    lower case) plus a shared "status" set for semantic colours (fire, toxin, dazed stars). kit.MATERIALS gained
+    two APPENDED emissive inks (flare, toxin); every creature regenerates byte-identical.
+  - Small cosmetic seams outside render/: EnemyHitTarget.setVisualBlastOrigin (grenade / barrel / relic blast
+    tile -> the DAMAGED payload's source, so splash recoils away from the blast); ImpactEffectSystem's generic
+    red hit spray / death burst stands down for a migrated body (EnemyVisualLayer.answeredHitAt);
+    EnemyAttackEffectSystem skips the procedural glob for a type the layer launches a projectile for.
+  - Effects are drawn at 2x the creature's pixel (1x read too small in-engine); sprites stop growing inside 1.2
+    tiles and a projectile fades 1 - t^2 (it blew up into blocks at the lens).
+  - DoT ticks fire NO DAMAGED moment: status visuals are read every frame; a DoT death still fires DIED.
+  - A shotgun STAGGER reads as the heavy flinch + heavy kick: the sim cancels that turn's action at once and
+    the enemy may then commit a fresh wind-up, so the held DAZED pose is reserved for STUNNED.
+  - Remains are drawn for the floor on the death tile even where an item landed instead of a corpse; on a corpse
+    tile the decal is not drawn. The Warden's prod crackle (CHARGE) is data-ready but unseen: the Warden never
+    winds up in the sim. POISONED was not captured (the Warden is immune).
+  - Reviewer r1 FAIL -> fixed: every ranged shot (the DEBUFF_PLAYER shot too) is scheduled from
+    EnemyAttackListener.onRangedAttack and aimed at the COMMITTED lane tile, so a dodged shot visibly misses;
+    falls back to the procedural glob without an animator. A shot pending at death leaves at once. r2 PASS.
+  - A6 (llvmpipe, same session, interleaved, vs order 2 at 649c7a6; 6 alerted + 1 killed, 2 burning, 8 s):
+    order 3 11.42 / 11.25 ms, order 2 11.27 / 11.52 ms. GC (--gclog, 30 s in the room, 2 burning + 1 stunned +
+    1 wounded): 2 startup pauses each, none after floor start.
 
 Part of the generated-enemy-art series. Requires orders 1-2. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt (sections 8, 9, 10) before starting.
@@ -180,7 +207,24 @@ ASSUMPTIONS
 DECISIONS
 ---------
   D1  Enemies must react to damage and other events (series D7).
+  D2  OWNER GATE (CP5, 2026-10-21): in-engine burst GIFs of the Warden (ACID_DRONE) and the Harvest Tick
+      (SHELL_BRUTE), default mood (cool_steel) + amber_hot, every segment labelled — hurt light, hurt heavy,
+      resisted, blocked, kill, wounded idle + leak, burning, stunned, remains, the Warden's projectile from its
+      emitter, a real shotgun stagger and a real hammer knockback on the Tick — were sent; the owner answered
+      "Approved". The approval covers the deviations shown in them: emissive effect particles as ungraded
+      NORMAL-blend sprites (never additive, D2 of order 2), the BLOCKED shimmer as an additive LIGHT pass over the
+      body atlas (like the muzzle light), effect sprites drawn at 2x the creature's pixel, the generic red hit
+      spray standing down for migrated bodies, and a stagger read as a heavy flinch + kick (the sim cancels the
+      action that turn) with the held daze reserved for STUNNED.
 
+  D3  COMPLETION (2026-10-21): the owner accepted the order as complete and DEFERRED these to a later order
+      ("leave for later and mark completed"):
+        - the Harvest Tick's blisters DIMMING while BURNING (VISUAL DESIGN; only the flames were built);
+        - a visible trigger for the Warden's prod crackle (CHARGE is wired to WIND_UP, which the Acid Drone never
+          enters - choosing another trigger is a design call);
+        - in-engine captures of what is built but was not seen: splash recoil away from a grenade / barrel /
+          relic blast, POISONED bubbles, BLEED drips, the EMPOWERED tint, the chaingun recoil cap, remains under a
+          live enemy on the same tile, a door closing over remains.
 
 OPEN QUESTIONS
 --------------
