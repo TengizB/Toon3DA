@@ -42,7 +42,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — kit renders a rig at a pose; shape-local grain; anchors reported; a single test clip renders.
+- [x] **CP1** — kit renders a rig at a pose; shape-local grain; anchors reported; a single test clip renders.
       DONE WHEN: `kit.py` has Rig/Clip/easing + per-shape grain + anchors, and a test clip renders frames.
 - [ ] **CP2** — packer + manifest + glow atlas + GIF preview work on a test clip.
       DONE WHEN: a test creature writes `<name>.atlas.png`, `.glow.png`, `.clips.json`, per-clip GIFs and a strip.
@@ -55,3 +55,11 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## NOTES CARRIED FORWARD
 
 (none yet)
+
+**CP1 (kit core):** `kit.py` now has `Xf` (affine transforms: move/turn/scale/reflect_x/segment, `a.then(b)`,
+callable on a shape list, `.pt()`), `Shape.frame` (canvas -> shape-local 3x3; grain sampled there with an
+integer lattice hash `value_noise_at`, seeded per material via crc32 — never Python `hash()`), per-shape
+`glow` (0 dead / 1 rest / >1 flare; `GLOW_DEAD` = 0.05), `Pose`/`Figure`/`Rig`/`Clip` (per-parameter tracks,
+easings linear/in/out/inout/hold, modes loop/once/hold, `variant()`), and `render(..., return_glow=True)`.
+Rest-pose re-render of both stills: identical alpha, mean RGB diff 0.4 (warden) / 2.2 (tick) — expected (A2 re-approval).
+Packer/manifest/previews were written in the same pass; CP2 verifies them.
