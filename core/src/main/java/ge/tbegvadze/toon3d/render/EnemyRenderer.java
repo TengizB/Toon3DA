@@ -1764,7 +1764,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
             if (occluderBuffer != null && depth > occluderBuffer.getNearestDepth(centreColumn)) continue;
 
             float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
-            float worldUnitsPerPixel = particle.tilesPerPixel * fullWallLineHeight * EffectConstants.ENEMY_EFFECT_DRAW_SCALE;
+            // The sprite's size stops growing inside ENEMY_EFFECT_MIN_SIZE_DEPTH_TILES, so a glob flying into the
+            // camera never becomes a screen of giant blocks; its position still projects at its true depth.
+            float sizeWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT,
+                    Math.max(depth, EffectConstants.ENEMY_EFFECT_MIN_SIZE_DEPTH_TILES));
+            float worldUnitsPerPixel = particle.tilesPerPixel * sizeWallLineHeight * EffectConstants.ENEMY_EFFECT_DRAW_SCALE;
             EnemyEffectSet.SpriteFrame frame = particle.currentFrame();
             float pointX = screenColumn * projectionColumnWidth;
             float pointY = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight)
@@ -1777,6 +1781,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float lifeFraction = particle.ageSeconds / particle.lifeSeconds;
             float tail = EffectConstants.ENEMY_EFFECT_FADE_TAIL_FRACTION;
             float fade = lifeFraction > 1f - tail ? Math.max(0f, (1f - lifeFraction) / tail) : 1f;
+            // A projectile fades as it reaches the player (the legacy glob's 1 - t^2), never popping at the lens.
+            if (particle.projectile) fade = 1f - lifeFraction * lifeFraction;
             if (particle.sprite.emissive) {
                 batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth) * fade);
             } else {

@@ -61,7 +61,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       (two runs byte-identical), and `bestiary.py` still regenerates warden.* / harvest_tick.* byte-identical.
 - [x] **CP2** — EnemyEffectSystem draws hit effects at the hit anchor in-engine; build green.
 - [x] **CP3** — outcomes (hurt/resisted/blocked/kill), recoil, wounded idle + leak work for both creatures.
-- [ ] **CP4** — status visuals; remains; projectile + muzzle; telegraph effects.
+- [x] **CP4** — status visuals; remains; projectile + muzzle; telegraph effects.
 - [ ] **CP5** — burst GIFs sent; owner approval recorded (stop until it is).
 - [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
 
@@ -109,3 +109,13 @@ stagger is shown on the Tick. FOUND: a stagger cancels the action of THAT turn (
 the enemy then commits a fresh WIND_UP, so a stagger reads as the heavy flinch + heavy kick; the DAZED hold is the
 STUNNED status (or a still-pending skipNextAction) and now wins a tie with a held WIND_UP (no crackle while dazed).
 New capture steps: `equipmelee:ITEM_TYPE`, `logmoments`.
+
+**CP4 (verified in-engine, t8-t10):** Warden ATTACK_COMMITTED -> muzzle flash at the prod tip (EMITTER anchor) on the
+emit frame + the cyan glob with dripping trail flying to the player; the procedural glob is gone for ACID_DRONE. FIX:
+near the lens the glob blew up into giant blocks — effect sprites now stop growing inside
+ENEMY_EFFECT_MIN_SIZE_DEPTH_TILES (1.2) and a projectile fades 1 - t^2 (the legacy glob's curve). Remains: Warden
+and Tick carcasses stand on their tiles after DEATH (decal suppressed). Statuses: BURNING flames + smoke (Warden under
+the hull, Tick along the back), STUNNED stars orbiting the Tick's head; POISONED not shown (Warden is immune; Tick
+row exists). Telegraph: Tick WIND_UP throws grit + dust at its feet (recipe brightened: bone grit + DUST — chitin_dk
+grit was invisible on the floor); BURNING flame count 2-3. The Warden never winds up in the sim (no heavy), so its
+prod crackle is data-ready but not seen. Build: only StoryBarkTest red.

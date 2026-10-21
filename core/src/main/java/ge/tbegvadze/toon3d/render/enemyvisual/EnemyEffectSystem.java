@@ -41,7 +41,8 @@ public final class EnemyEffectSystem {
         float          orbitRadiusTiles, orbitAngularSpeed, orbitPhase;
         float          orbitCentreX, orbitCentreY, orbitCentreHeight;
         float          orbitRightX, orbitRightY;
-        // A projectile sheds its trail burst on the trail's interval.
+        // A projectile sheds its trail burst on the trail's interval, and fades out as it reaches the viewer.
+        public boolean projectile;
         EnemyEffectSet.Burst trailBurst;
         float          trailTimerSeconds;
 
@@ -121,6 +122,7 @@ public final class EnemyEffectSystem {
         particle.velocityHeight = (toHeight - fromHeight) / travelSeconds;
         particle.trailBurst     = trail;
         particle.trailTimerSeconds = 0f;
+        particle.projectile     = true;
     }
 
     /** Advances every particle; ages out the finished ones. Call from the update path (frozen with the world). */
@@ -273,6 +275,7 @@ public final class EnemyEffectSystem {
         particle.tilesPerPixel   = tilesPerPixel;
         particle.orbitRadiusTiles = 0f;
         particle.trailBurst      = null;
+        particle.projectile      = false;
         particle.sequence        = nextSequence++;
     }
 

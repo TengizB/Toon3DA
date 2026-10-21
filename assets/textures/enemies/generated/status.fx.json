@@ -10,7 +10,7 @@
   "STUN": {"emissive":true,"mode":"loop","fps":8,"frames":[[{"rect":[0,13,7,7],"pivot":[3.5,3.5]},{"rect":[40,13,4,4],"pivot":[2.5,2.5]}]]}
  },
  "bursts": {
-  "BURNING": {"emitters":[{"sprite":"FLAME","count":[1,2],"life":[0.3,0.45],"speed":[10,30],"angle":90,"spread":40,"toward":[0.0,0.0],"gravity":-90,"drag":0.0,"radius":1},{"sprite":"SMOKE","count":[0,1],"life":[0.7,1.0],"speed":[15,30],"angle":90,"spread":30,"toward":[0.0,0.0],"gravity":-30,"drag":0.0,"radius":1}],"interval":[0.07,0.14]},
+  "BURNING": {"emitters":[{"sprite":"FLAME","count":[2,3],"life":[0.3,0.45],"speed":[10,30],"angle":90,"spread":40,"toward":[0.0,0.0],"gravity":-90,"drag":0.0,"radius":1},{"sprite":"SMOKE","count":[0,1],"life":[0.7,1.0],"speed":[15,30],"angle":90,"spread":30,"toward":[0.0,0.0],"gravity":-30,"drag":0.0,"radius":1}],"interval":[0.07,0.14]},
   "BURNING_ONSET": {"emitters":[{"sprite":"FLAME","count":[5,7],"life":[0.3,0.45],"speed":[30,80],"angle":90,"spread":70,"toward":[0.0,0.0],"gravity":-90,"drag":0.0,"radius":1}]},
   "POISONED": {"emitters":[{"sprite":"BUBBLE","count":[1,1],"life":[0.5,0.8],"speed":[12,26],"angle":90,"spread":40,"toward":[0.0,0.0],"gravity":-20,"drag":0.0,"radius":1}],"interval":[0.18,0.35]},
   "STUNNED": {"emitters":[{"sprite":"STUN","count":[3,3],"life":[0.6,0.6],"speed":[0,0],"angle":90.0,"spread":180.0,"toward":[0.0,0.0],"gravity":0.0,"drag":0.0,"radius":0.0,"orbit":[15,1.2]}],"interval":[0.6,0.6]}

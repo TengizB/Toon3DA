@@ -174,7 +174,7 @@ def _fleck(o, f, mat="chitin"):
 def _grit(o, f):
     """Grit kicked up by dug-in legs: a speck of shell dust."""
     c = 2.5
-    return [[blob(c + (0.3 if f else 0), c, 1.3, 1.0 if f else 1.3, "chitin_dk", depth=1.0)]]
+    return [[blob(c + (0.3 if f else 0), c, 1.6, 1.2 if f else 1.6, "bone", depth=1.0)]]
 
 
 def _drip(o, f):
@@ -366,7 +366,8 @@ SETS = {
             "LEAK": burst(emitter("DRIP", (1, 1), (0.40, 0.55), (0, 10), angle=-90, spread=20, gravity=420, radius=1.5),
                           interval=(0.35, 0.90)),
             # WIND_UP: grit kicked up by the dug-in legs.
-            "CHARGE": burst(emitter("GRIT", (2, 4), (0.25, 0.40), (40, 100), angle=90, spread=110, gravity=480, radius=44),
+            "CHARGE": burst(emitter("GRIT", (3, 5), (0.30, 0.45), (50, 120), angle=90, spread=110, gravity=480, radius=44),
+                            emitter("DUST", (1, 1), (0.30, 0.40), (5, 15), angle=90, spread=60, gravity=-20, radius=44),
                             interval=(0.06, 0.12)),
             "BLEED": burst(emitter("DRIP", (1, 1), (0.40, 0.55), (0, 10), angle=-90, spread=20, gravity=420, radius=10),
                            interval=(0.22, 0.45)),
@@ -386,7 +387,7 @@ SETS = {
             Sprite("STUN", 7, 2, _stun, emissive=True, mode="loop", fps=8),
         ],
         bursts={
-            "BURNING": burst(emitter("FLAME", (1, 2), (0.30, 0.45), (10, 30), angle=90, spread=40, gravity=-90, radius=1),
+            "BURNING": burst(emitter("FLAME", (2, 3), (0.30, 0.45), (10, 30), angle=90, spread=40, gravity=-90, radius=1),
                              emitter("SMOKE", (0, 1), (0.70, 1.00), (15, 30), angle=90, spread=30, gravity=-30, radius=1),
                              interval=(0.07, 0.14)),
             "BURNING_ONSET": burst(emitter("FLAME", (5, 7), (0.30, 0.45), (30, 80), angle=90, spread=70, gravity=-90, radius=1)),

@@ -331,6 +331,8 @@ public final class EffectConstants {
     // Effect sprites are drawn this many times the throwing creature's own pixel size (V8: a 3 px spark must
     // still read on a phone at four tiles). Positions and speeds are NOT scaled — only the drawn sprite.
     public static final float ENEMY_EFFECT_DRAW_SCALE                 = 2.0f;
+    // Inside this depth an effect sprite stops growing (a projectile reaching the lens).
+    public static final float ENEMY_EFFECT_MIN_SIZE_DEPTH_TILES       = 1.2f;
     // A particle fades over the last fraction of its life (binary-alpha art; only the batch alpha fades).
     public static final float ENEMY_EFFECT_FADE_TAIL_FRACTION         = 0.30f;
     // The generated projectile flies to the player's eye height (half a wall: the horizon line).
