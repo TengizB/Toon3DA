@@ -127,3 +127,11 @@ warden.txt / tickA.txt / tickB.txt run through cap.sh (time-sorted). SKILL.md do
 WAITING for owner approval; CP5 is ticked only when the answer is in the idea's DECISIONS.
 
 **CP5 (gate):** owner approved 2026-10-21 ("Approved") -> idea DECISIONS D2. Proceed with CP6.
+
+**CP6a (perf + docs):** A6 — llvmpipe, `--fps 0`, 3 Warden + 4 Tick alerted in one room, 2 burning, one killed at the
+start of an 8 s timing window, interleaved with order 2 (649c7a6, detached worktree in the scratchpad `base/` with
+its own runtime `/tmp/toon3d-base` and THIS capture driver): order 2 11.27 / 11.52 ms, order 3 11.42 / 11.25 ms.
+GC (`--gclog`, 30 s in that room, 2 burning + 1 stunned + 1 wounded): 2 startup pauses on each, none after floor
+start. Docs: guide 8 (8.1 note, 8.3-8.7 new) + 9 (rewritten, [PLANNED] dropped) + recipe, art-direction 16 (EFFECTS,
+REACTIONS, REMAINS + the measurement), enemy-system (blast origin, DoT), CLAUDE.md (package row, tree, doc line
+counts), idea IMPLEMENTATION NOTE. Next: reviewer gate, then STATUS.

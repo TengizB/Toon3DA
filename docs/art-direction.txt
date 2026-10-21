@@ -635,6 +635,18 @@ legacy region path untouched until generated-enemy-art order 9.
   DYING     a dying instance (DEATH clip after the enemy is removed) takes the body shade and grade but no
             tints, bars or shadow; it is merged into pass 1 in depth order with the live enemies.
   NO LUNGE  the legacy melee lunge (scale + drop) is skipped — the ATTACK clip carries the strike.
+  EFFECTS   (generated-enemy-art order 3) generated particles from the family's own materials (guide 9): EMISSIVE
+            sprites (sparks, arcs, ichor, flame, the glob) are the V6 exemption like the glow atlas — ungraded,
+            NORMAL blend, faded with depth; LIT sprites (debris, chitin, smoke) take the body's shade and grade.
+            Status colours are semantic (V5): fire orange, toxin green, the dazed stars hit-flash white —
+            shared across families; BLEED uses the family leak, never blood. Drawn at 2x the creature's pixel.
+  REACTIONS a hit that hurt flinches, recoils and flashes white; RESISTED and BLOCKED never flash white;
+            BLOCKED sweeps a band of Block's steel-blue light down the body (a light pass, like the muzzle light).
+  REMAINS   the last DEATH frame stays on the tile for the floor, graded like a body, in place of the corpse
+            decal (R5: drawing only). The legacy red hit spray does not draw on a migrated body.
 Measured (llvmpipe, same session, 6 enemies alerted in one room, 8 s each, two interleaved runs): animated
 10.6 / 11.0 ms vs legacy sprites 10.9 / 10.9 ms per frame — no measurable cost; no GC pause during 30 s idle
 in the room on either.
+Order 3 (same method, 6 alerted + 1 killed in the window, 2 burning; vs order 2 at 649c7a6): 11.42 / 11.25 ms vs
+11.27 / 11.52 ms — no measurable cost; 30 s in the room with 2 burning, 1 stunned, 1 wounded: no GC pause after
+startup on either.

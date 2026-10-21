@@ -5,6 +5,30 @@ CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
+IMPLEMENTATION NOTE (2026-10-21)
+  - EMISSIVE effect particles are drawn UNGRADED with NORMAL alpha blend, faded with depth like the glow atlas
+    (order-2 D2), not "additively" as SCOPE says. The one additive element is the BLOCKED shimmer: a light pass
+    of the body atlas in Block's tint (like the muzzle light), never the glow atlas. Approved (D2).
+  - NEW classes beyond SCOPE's list: EnemyEffectSet (the fx manifest), EnemyStatusVisuals (status rows);
+    RemainsRegistry and EnemyEffectSystem as planned. Effect SETS are one per EnemyFamily (file = family name in
+    lower case) plus a shared "status" set for semantic colours (fire, toxin, dazed stars). kit.MATERIALS gained
+    two APPENDED emissive inks (flare, toxin); every creature regenerates byte-identical.
+  - Small cosmetic seams outside render/: EnemyHitTarget.setVisualBlastOrigin (grenade / barrel / relic blast
+    tile -> the DAMAGED payload's source, so splash recoils away from the blast); ImpactEffectSystem's generic
+    red hit spray / death burst stands down for a migrated body (EnemyVisualLayer.answeredHitAt);
+    EnemyAttackEffectSystem skips the procedural glob for a type the layer launches a projectile for.
+  - Effects are drawn at 2x the creature's pixel (1x read too small in-engine); sprites stop growing inside 1.2
+    tiles and a projectile fades 1 - t^2 (it blew up into blocks at the lens).
+  - DoT ticks fire NO DAMAGED moment: status visuals are read every frame; a DoT death still fires DIED.
+  - A shotgun STAGGER reads as the heavy flinch + heavy kick: the sim cancels that turn's action at once and
+    the enemy may then commit a fresh wind-up, so the held DAZED pose is reserved for STUNNED.
+  - Remains are drawn for the floor on the death tile even where an item landed instead of a corpse; on a corpse
+    tile the decal is not drawn. The Warden's prod crackle (CHARGE) is data-ready but unseen: the Warden never
+    winds up in the sim. POISONED was not captured (the Warden is immune).
+  - A6 (llvmpipe, same session, interleaved, vs order 2 at 649c7a6; 6 alerted + 1 killed, 2 burning, 8 s):
+    order 3 11.42 / 11.25 ms, order 2 11.27 / 11.52 ms. GC (--gclog, 30 s in the room, 2 burning + 1 stunned +
+    1 wounded): 2 startup pauses each, none after floor start.
+
 Part of the generated-enemy-art series. Requires orders 1-2. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt (sections 8, 9, 10) before starting.
 
