@@ -35,7 +35,7 @@ public final class EnemyAnimationRules {
     public static final int PRIORITY_ALERT   = 2;
     public static final int PRIORITY_DEFEND  = 3;
     public static final int PRIORITY_WIND_UP = 4;
-    /** Order 3: STUNNED / staggered — HURT_HEAVY's last pose, held while the enemy is dazed. */
+    /** Order 3: STUNNED / staggered — HURT_HEAVY's last pose, held while dazed; wins a tie with a held WIND_UP. */
     public static final int PRIORITY_DAZED   = 4;
     public static final int PRIORITY_ATTACK  = 5;
     public static final int PRIORITY_HURT    = 6;

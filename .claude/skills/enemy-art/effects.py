@@ -315,8 +315,9 @@ SETS = {
                            emitter("DEBRIS_DARK", (3, 4), (0.55, 0.85), (60, 160), spread=360, gravity=560, radius=10),
                            emitter("MUZZLE", (1, 1), (0.18, 0.22), (0, 0))),
             # WOUNDED: intermittent sparks from the cracked visor.
-            "LEAK": burst(emitter("SPARK", (1, 3), (0.14, 0.26), (50, 120), angle=-60, spread=120, gravity=380, radius=2),
-                          interval=(0.45, 1.30)),
+            "LEAK": burst(emitter("SPARK", (2, 4), (0.25, 0.45), (50, 120), angle=-60, spread=120, gravity=380, radius=2),
+                          emitter("ARC", (0, 1), (0.08, 0.12), (0, 0), radius=1),
+                          interval=(0.30, 0.80)),
             # WIND_UP: the prod crackles.
             "CHARGE": burst(emitter("SPARK", (1, 2), (0.08, 0.14), (30, 70), spread=360, radius=3),
                             emitter("ARC", (0, 1), (0.08, 0.10), (0, 0), radius=2), interval=(0.10, 0.22)),

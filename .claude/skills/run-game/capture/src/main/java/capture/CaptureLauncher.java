@@ -175,6 +175,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                 case "equip":
                     equipArsenalWeapon(Integer.parseInt(step[2]));
                     break;
+                case "equipmelee":
+                    equipMeleeWeapon(step[2]);
+                    break;
                 case "inspectweapon":
                     inspectFirstGroundWeapon();
                     break;
@@ -219,6 +222,9 @@ public class CaptureLauncher extends ApplicationAdapter {
                     break;
                 case "fx":
                     printEffectCount();
+                    break;
+                case "logmoments":
+                    logVisualMoments();
                     break;
                 case "clip":
                     printEnemyClip(Integer.parseInt(step[2]));
@@ -380,6 +386,31 @@ public class CaptureLauncher extends ApplicationAdapter {
             loadout.getClass().getMethod("tryEquip", weaponType).invoke(loadout, weapon);
             inventory.getClass().getMethod("selectLoadoutWeapon", weaponType).invoke(inventory, weapon);
             System.out.println("[capture] equipped arsenal weapon " + arsenalIndex);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code equipmelee:ITEM_TYPE} (generated-enemy-art order 3) — builds the melee weapon exactly as a pickup does
+     * ({@code World.createMeleeWeaponForType}), puts it in the melee slot and selects it, so FIRE swings it for
+     * real (WEAPON_HAMMER: the knockback roll, WEAPON_KNIFE, WEAPON_CHAINSAW).
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void equipMeleeWeapon(String itemTypeName) {
+        try {
+            Object world = worldObject();
+            Class itemType = Class.forName("ge.tbegvadze.toon3d.item.ItemType");
+            java.lang.reflect.Method create = world.getClass().getDeclaredMethod("createMeleeWeaponForType", itemType);
+            create.setAccessible(true);
+            Object melee = create.invoke(world, Enum.valueOf(itemType, itemTypeName));
+            Object inventory = fieldValue(world, "inventory");
+            Class meleeType = Class.forName("ge.tbegvadze.toon3d.entity.MeleeWeapon");
+            inventory.getClass().getMethod("setMeleeWeapon", meleeType).invoke(inventory, melee);
+            Field selected = findField(inventory.getClass(), "meleeSelected");
+            selected.setAccessible(true);
+            selected.setBoolean(inventory, true);
+            System.out.println("[capture] equipped melee " + itemTypeName);
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }
@@ -928,6 +959,36 @@ public class CaptureLauncher extends ApplicationAdapter {
             }
             int healthAfter = findField(enemy.getClass(), "health").getInt(enemy);
             System.out.println("[capture] " + className + " hit on enemy " + index + ": " + healthBefore + " -> " + healthAfter);
+        } catch (ReflectiveOperationException exception) {
+            exception.printStackTrace();
+        }
+    }
+
+    /**
+     * {@code logmoments} — wraps the floor's EnemyVisualListener in a proxy that prints every moment the
+     * simulation reports (moment, enemy index, outcome / status / cause) before forwarding it: proof that a
+     * STAGGERED or KNOCKED_BACK came from a real weapon. Re-issue after a floor change.
+     */
+    private void logVisualMoments() {
+        try {
+            Object manager = fieldValue(worldObject(), "enemyManager");
+            Class<?> listenerType = Class.forName("ge.tbegvadze.toon3d.enemy.EnemyVisualListener");
+            Field listenerField = findField(manager.getClass(), "enemyVisualListener");
+            listenerField.setAccessible(true);
+            Object target = listenerField.get(manager);
+            Object proxy = Proxy.newProxyInstance(listenerType.getClassLoader(), new Class<?>[] {listenerType},
+                    (instance, method, arguments) -> {
+                        if (method.getName().equals("onEnemyVisualMoment")) {
+                            Object event = arguments[0];
+                            System.out.println("[capture] moment " + fieldValue(event, "moment")
+                                    + " outcome=" + fieldValue(event, "outcome") + " absorbed=" + fieldValue(event, "absorbed")
+                                    + " blocked=" + fieldValue(event, "blocked") + " status=" + fieldValue(event, "status")
+                                    + " cause=" + fieldValue(event, "deathCause") + " at " + clockSeconds + "s");
+                        }
+                        return target == null ? null : method.invoke(target, arguments);
+                    });
+            listenerField.set(manager, proxy);
+            System.out.println("[capture] logging visual moments");
         } catch (ReflectiveOperationException exception) {
             exception.printStackTrace();
         }

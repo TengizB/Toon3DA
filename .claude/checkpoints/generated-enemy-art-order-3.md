@@ -60,7 +60,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: `python3 effects.py <dir>` writes `machine.fx.png` / `insect.fx.png` + `.fx.json` deterministically
       (two runs byte-identical), and `bestiary.py` still regenerates warden.* / harvest_tick.* byte-identical.
 - [x] **CP2** — EnemyEffectSystem draws hit effects at the hit anchor in-engine; build green.
-- [ ] **CP3** — outcomes (hurt/resisted/blocked/kill), recoil, wounded idle + leak work for both creatures.
+- [x] **CP3** — outcomes (hurt/resisted/blocked/kill), recoil, wounded idle + leak work for both creatures.
 - [ ] **CP4** — status visuals; remains; projectile + muzzle; telegraph effects.
 - [ ] **CP5** — burst GIFs sent; owner approval recorded (stop until it is).
 - [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
@@ -99,3 +99,13 @@ CP3 / CP4 are their VERIFICATION + fixes. Capture steps added: `status:INDEX:TYP
 steps by time. TRAP: after a kill, enemy indices shift — address the survivor with `-1`/new index.
 Seen in-engine (t3): light/heavy sprays on both, RESIST star (Warden) / chip (Tick), BLOCKED shimmer on both, Tick
 WOUNDED, burning flames under the Warden, stun stars on the Tick, Warden kill burst + remains. Build: only StoryBarkTest red.
+
+**CP3 (verified in-engine, t4-t7):** heavy hit = HURT_HEAVY + spray + visible recoil on both; WOUNDED clip chosen
+below 50% (`clip:` printed WOUNDED for both); Tick burst blister + drips; Warden LEAK recipe bumped (2-4 sparks + an
+arc, 0.30-0.80 s — 1-3 short sparks were invisible). REAL weapon reactions (capture `logmoments` proves them):
+`equipmelee:WEAPON_HAMMER` + FIRE on a Tick 1 tile ahead -> KNOCKED_BACK on the 3rd swing (50% roll); `equip:0`
+(shotgun) + FIRE on a Tick 2 tiles ahead -> DAMAGED EFFECTIVE + STAGGERED. The shotgun one-shots a Warden (45 HP), so
+stagger is shown on the Tick. FOUND: a stagger cancels the action of THAT turn (skipNextAction consumed at once) and
+the enemy then commits a fresh WIND_UP, so a stagger reads as the heavy flinch + heavy kick; the DAZED hold is the
+STUNNED status (or a still-pending skipNextAction) and now wins a tie with a held WIND_UP (no crackle while dazed).
+New capture steps: `equipmelee:ITEM_TYPE`, `logmoments`.

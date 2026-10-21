@@ -210,14 +210,16 @@ public final class EnemyAnimator {
         if (sliding && manifest.clip(EnemyClipId.MOVE) != null) {
             bestClip = EnemyClipId.MOVE; bestPriority = EnemyAnimationRules.PRIORITY_MOVE; bestSeconds = slideSeconds;
         }
-        if (dazed && manifest.clip(EnemyClipId.HURT_HEAVY) != null && EnemyAnimationRules.PRIORITY_DAZED > bestPriority) {
-            // HURT_HEAVY's last pose, held (the sway is a position offset, see renderCenterX).
-            bestClip = EnemyClipId.HURT_HEAVY; bestPriority = EnemyAnimationRules.PRIORITY_DAZED;
-            bestSeconds = Float.MAX_VALUE;
-        }
         EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy.state);
         if (hold != null && holdClip == hold.clip && manifest.clip(holdClip) != null && hold.priority > bestPriority) {
             bestClip = holdClip; bestPriority = hold.priority; bestSeconds = holdSeconds;
+        }
+        // Dazed wins a tie with a held wind-up: a staggered enemy may still COMMIT a wind-up that turn, but the
+        // stagger cancels it, so the body must read dazed (and the intent already says STUNNED).
+        if (dazed && manifest.clip(EnemyClipId.HURT_HEAVY) != null && EnemyAnimationRules.PRIORITY_DAZED >= bestPriority) {
+            // HURT_HEAVY's last pose, held (the sway is a position offset, see renderCenterX).
+            bestClip = EnemyClipId.HURT_HEAVY; bestPriority = EnemyAnimationRules.PRIORITY_DAZED;
+            bestSeconds = Float.MAX_VALUE;
         }
         if (oneShotClip != null && oneShotPriority > bestPriority) {
             bestClip = oneShotClip; bestSeconds = oneShotSeconds;
