@@ -2403,7 +2403,7 @@ public final class BalanceConfig {
     /** V4: at most this many BROOD groups on one floor. */
     public static final int   GROUP_BROOD_MAX_PER_FLOOR           = 1;
     /** V3: a non-BROOD group of at least this many members spans at least two encounter behaviours. */
-    public static final int   GROUP_MIXED_BEHAVIOUR_MIN_SIZE      = 3;
+    public static final int   GROUP_MIXED_BEHAVIOUR_MIN_SIZE      = 4;
     /** V6: no archetype exceeds this fraction of a floor's body target (floor GROUP_CHAFF_SLOT_MIN) while alternatives exist. */
     public static final float GROUP_MAX_SINGLE_TYPE_BODY_FRACTION = 0.30f;
     /** V7: no room holds more than this many of one archetype when the placer puts two groups in it. */

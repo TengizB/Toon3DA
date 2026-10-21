@@ -48,7 +48,7 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
 - [x] **CP3** — planner V4 / V5 / V6. DONE WHEN: scratch measurement meets A1-A5, A7-A8 (figures below).
 - [x] **CP4** — placer V7 + brood first-contact skip; densityVarietyResults + "room variety"; the one test.
       DONE WHEN: `:core:test` shows only the baseline failure.
-- [ ] **CP5** — balanceSim green (tuning recorded), snapshot data regenerated.
+- [x] **CP5** — balanceSim green (tuning recorded), snapshot data regenerated.
 - [ ] **CP6** — docs updated; A13 run check noted; reviewer gate; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -97,3 +97,16 @@ in the same commit as the work**. Never more than one checkpoint uncommitted. Ne
   * GroupBarrelPlacer: hostableCandidates now applies plugsAPassage too (placeInRoom already did), so a room whose
     every tile plugs a passage is not counted eligible-but-unservable. Fixed "[HAZARD] linear_corridor COMBAT d5
     barrel rooms (H14) shortfall 1" that the new layouts exposed (latent pre-existing mismatch).
+- CP5 (both gates green; :core:test only the baseline StoryBarkTest red; snapshot stable over two JVM runs):
+  * First balanceSim on CP4 code: exit 1 — SR3 rarity felt 0.99 (< 1.00) and SR4 salvage_hook lift 0.67 (13
+    probe runs). TACTICAL-NO-RELIC mean depth 3.14 -> 2.98, NAIVE median depth 2.0 -> 1.0: mixed rooms are a bit
+    harder (expected — the synergy is not priced).
+  * Tuning order (idea BALANCE NOTES): step 1 weights RABBLE 3 -> 3.5, SKIRMISH 2 -> 1.5, BATTERY 2 -> 1.5:
+    still SR3 0.98 / SR4 breaching_charge + second_heart 0.75 (edge). Step 3 tried OUT OF ORDER first
+    (ENCOUNTER_BUDGET_FILL_TARGET_FRACTION 0.95 -> 0.90): sim green BUT the fast gate broke R-MYSTERY-EV (1.32)
+    and TWIST T3 hunted hunter TP share (0.81 > 0.78) — both are priced off the fill fraction. REVERTED to 0.95.
+    Step 2 GROUP_MIXED_BEHAVIOUR_MIN_SIZE 3 -> 4 (+ step-1 weights kept): sim GREEN, NAIVE median depth back
+    to 2.0, TACTICAL-NO-RELIC 3.0 median. V3 now applies from FOUR members (a 3-body group still fields 2+
+    archetypes by V1); the top-up honours V3 too (a group grown to 4+ must mix — needed once the threshold
+    moved, else 1% of 4+ groups grew single-behaviour).
+  * LevelGeneratorSnapshotTest EXPECTED_DIGEST re-baselined -> 5f3baeb8... with a RE-BASELINE comment.

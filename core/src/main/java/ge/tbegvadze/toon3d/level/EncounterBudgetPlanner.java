@@ -223,9 +223,16 @@ public final class EncounterBudgetPlanner {
             EncounterGroupTemplate.Slot slot = slots.get(index);
             int step = slot.fill.membersPerArchetype();
             if (step != wantedStep || group.slotCounts[index] + step > slot.maximumCount) continue;
+            // A group grown to GROUP_MIXED_BEHAVIOUR_MIN_SIZE+ must still mix behaviours (V3).
+            EnumSet<EncounterBehaviour> behaviours = EnumSet.noneOf(EncounterBehaviour.class);
+            for (EnemyType member : group.members) behaviours.add(EncounterBehaviour.of(member));
+            boolean needsMix = behaviours.size() < 2
+                    && group.size() + step >= BalanceConfig.GROUP_MIXED_BEHAVIOUR_MIN_SIZE;
             List<EnemyType> candidates = new ArrayList<>();
             for (EnemyType type : ledger.admitted(slot.role, step)) {
-                if (!group.members.contains(type) && threatOf(type) * step <= remainingThreat) candidates.add(type);
+                if (group.members.contains(type) || threatOf(type) * step > remainingThreat) continue;
+                if (needsMix && behaviours.contains(EncounterBehaviour.of(type))) continue;
+                candidates.add(type);
             }
             if (candidates.isEmpty()) continue;
             EnemyType added = candidates.get(random.nextInt(candidates.size()));

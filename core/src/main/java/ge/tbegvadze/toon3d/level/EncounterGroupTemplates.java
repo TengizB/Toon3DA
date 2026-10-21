@@ -39,12 +39,12 @@ public final class EncounterGroupTemplates {
         // RABBLE — 2-3 pairs of DIFFERENT chaff: the bread-and-butter group (was PACK, 3-5 of one type).
         registry.register(new EncounterGroupTemplate(RABBLE, Arrays.asList(
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.CHAFF, 2 * pair, 3 * pair, SlotFill.PAIRS)),
-                1, everyFight, false, false, 3f));
+                1, everyFight, false, false, 3.5f));
         // SKIRMISH — 1-2 soldiers + a chaff pair: the small mixed shape every fight kind can field.
         registry.register(new EncounterGroupTemplate(SKIRMISH, Arrays.asList(
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.SOLDIER, 1, 2, SlotFill.SINGLES),
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.CHAFF, pair, pair, SlotFill.PAIRS)),
-                1, everyFight, false, false, 2f));
+                1, everyFight, false, false, 1.5f));
         // FIRETEAM — 2 different soldiers + a chaff pair.
         registry.register(new EncounterGroupTemplate(FIRETEAM, Arrays.asList(
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.SOLDIER, 2, 2, SlotFill.SINGLES),
@@ -59,7 +59,7 @@ public final class EncounterGroupTemplates {
         registry.register(new EncounterGroupTemplate(BATTERY, Arrays.asList(
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.RANGED_SOLDIER, 1, 2, SlotFill.SINGLES),
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.MELEE_CHAFF, pair, pair, SlotFill.PAIRS)),
-                1, realFights, false, false, 2f));
+                1, realFights, false, false, 1.5f));
         // WARBAND — 1 mini-elite + 2 different soldiers: an ELITE floor's anchor, from depth 3.
         registry.register(new EncounterGroupTemplate(WARBAND, Arrays.asList(
                 new EncounterGroupTemplate.Slot(EncounterGroupRole.MINI_ELITE, 1, 1, SlotFill.SINGLES),
