@@ -1,19 +1,32 @@
-"""Enemy sprite kit -- sculpted height fields, one shared light rig. See SKILL.md.
+"""Enemy sprite kit -- sculpted height fields, one shared light rig, rigs and clips. See SKILL.md and
+docs/sprite-art-creation-guide.txt (sections 3 and 7).
 
 A sprite is a stack of LAYERS (back to front). Inside a layer every shape is a signed HEIGHT field and
 the shapes are merged with a smooth maximum, so a leg grows out of a body instead of being glued on.
 The surface normal comes from the gradient of the merged height, which gives real form shading,
 crevice occlusion and specular highlights. Detail (veins, seams, rivets, grain) is height too.
+
+ANIMATION: a creature is a RIG -- build(pose) -> Figure (layers + anchors + stencils). A CLIP is a set
+of keyframes on the rig's pose parameters; every frame is rendered by the same light rig, then the
+frames are trimmed, de-duplicated and packed into an atlas, a glow atlas and a JSON manifest.
 """
+import json
 import math
+import os
+import zlib
+
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 LIGHT = np.array([-0.50, -0.72, 0.48]); LIGHT /= np.linalg.norm(LIGHT)
 HALF = LIGHT + np.array([0, 0, 1.0]); HALF /= np.linalg.norm(HALF)
 RIM = np.array([0.80, -0.35, 0.10]); RIM /= np.linalg.norm(RIM)
 RIM_COLOR = np.array([0.42, 0.86, 0.98])        # FACILITY_CYAN -- the machine lights everything
 BAYER = (np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]) / 16.0) - 0.47
+BACKGROUND = (14, 18, 24, 255)                  # the game's near-black, for previews and sheets
+ATLAS_LIMIT = 2048
+ATLAS_PADDING = 2
+MANIFEST_VERSION = 1
 
 
 def ramp(*codes):
@@ -38,10 +51,36 @@ MATERIALS = {
     "sac":    dict(ramp=ramp("2a1018", "4d1d27", "7c3138", "b0524c", "dd8a70", "f8c6a8"), glow="ichor", spec=(0.6, 40), grain=(0.03, 3)),
 }
 
+# An emissive (or translucent) shape whose glow level is at or below this is DEAD: it is shaded at the
+# bottom of its ramp and contributes nothing to the glow atlas (a powered-down eye, a dimmed blister).
+GLOW_DEAD = 0.05
 
+
+# ---------------------------------------------------------------------------------------------------
+# Shapes
+# ---------------------------------------------------------------------------------------------------
 class Shape:
-    def __init__(self, kind, mat, op="union", k=4.0, prio=0.0, **g):
-        self.kind, self.mat, self.op, self.k, self.prio, self.g = kind, mat, op, k, prio, g
+    """One primitive. `frame` maps canvas coordinates to the shape's OWN material coordinates (3x3
+    affine); grain is sampled there, so texture sticks to a moving part. `glow` scales an emissive or
+    translucent shape's light (0 = dead, 1 = rest, > 1 = flare)."""
+
+    def __init__(self, kind, mat, op="union", k=4.0, prio=0.0, glow=1.0, frame=None, **g):
+        self.kind, self.mat, self.op, self.k, self.prio, self.glow, self.g = kind, mat, op, k, prio, glow, g
+        self.frame = frame if frame is not None else _intrinsic_frame(kind, g)
+
+    def copy(self, **g):
+        merged = dict(self.g); merged.update(g)
+        return Shape(self.kind, self.mat, self.op, self.k, self.prio, self.glow, self.frame.copy(), **merged)
+
+
+def _intrinsic_frame(kind, g):
+    if kind == "ellipse":
+        return Xf.turn(-g["angle"]).m @ Xf.move(-g["cx"], -g["cy"]).m
+    if kind == "capsule":
+        axis = math.atan2(g["y2"] - g["y1"], g["x2"] - g["x1"])
+        return Xf.turn(-axis).m @ Xf.move(-g["x1"], -g["y1"]).m
+    cx, cy = g["pts"].mean(axis=0)
+    return Xf.move(-cx, -cy).m
 
 
 def blob(cx, cy, rx, ry, mat, depth=None, angle=0.0, **kw):
@@ -67,26 +106,120 @@ def chain(points, r1, r2, mat, **kw):
 
 
 def mirror(shapes, axis):
-    out = []
-    for s in shapes:
+    """Bilateral symmetry: reflect shapes about the vertical line x = axis. Design one half."""
+    return Xf.reflect_x(axis)(shapes)
+
+
+# ---------------------------------------------------------------------------------------------------
+# Transforms (rigging). Image space: origin top-left, y DOWN, so a positive angle turns CLOCKWISE.
+# ---------------------------------------------------------------------------------------------------
+class Xf:
+    """A 2D affine transform. `a.then(b)` applies a, then b. Calling it on a list of shapes returns
+    transformed copies; `.pt((x, y))` transforms a point."""
+
+    def __init__(self, m=None):
+        self.m = np.eye(3) if m is None else m
+
+    @staticmethod
+    def move(dx, dy):
+        return Xf(np.array([[1, 0, dx], [0, 1, dy], [0, 0, 1.0]]))
+
+    @staticmethod
+    def turn(angle, pivot=(0.0, 0.0)):
+        c, s = math.cos(angle), math.sin(angle)
+        r = Xf(np.array([[c, -s, 0], [s, c, 0], [0, 0, 1.0]]))
+        return Xf.move(-pivot[0], -pivot[1]).then(r).then(Xf.move(*pivot))
+
+    @staticmethod
+    def scale(sx, sy=None, pivot=(0.0, 0.0)):
+        sy = sx if sy is None else sy
+        s = Xf(np.array([[sx, 0, 0], [0, sy, 0], [0, 0, 1.0]]))
+        return Xf.move(-pivot[0], -pivot[1]).then(s).then(Xf.move(*pivot))
+
+    @staticmethod
+    def reflect_x(axis):
+        return Xf(np.array([[-1, 0, 2 * axis], [0, 1, 0], [0, 0, 1.0]]))
+
+    @staticmethod
+    def segment(rest_a, rest_b, new_a, new_b, stretch=True):
+        """The similarity that carries the rest segment a->b onto the posed one (for parts riding a limb).
+        stretch=False keeps the part's size (it only turns and moves with the segment)."""
+        ra = math.atan2(rest_b[1] - rest_a[1], rest_b[0] - rest_a[0])
+        na = math.atan2(new_b[1] - new_a[1], new_b[0] - new_a[0])
+        rl = math.hypot(rest_b[0] - rest_a[0], rest_b[1] - rest_a[1]) or 1e-6
+        nl = math.hypot(new_b[0] - new_a[0], new_b[1] - new_a[1])
+        return (Xf.move(-rest_a[0], -rest_a[1]).then(Xf.turn(na - ra)).then(Xf.scale(nl / rl))
+                .then(Xf.move(*new_a))) if stretch else \
+            Xf.move(-rest_a[0], -rest_a[1]).then(Xf.turn(na - ra)).then(Xf.move(*new_a))
+
+    def then(self, other):
+        return Xf(other.m @ self.m)
+
+    def pt(self, p):
+        v = self.m @ np.array([p[0], p[1], 1.0])
+        return (float(v[0]), float(v[1]))
+
+    def pts(self, points):
+        return [self.pt(p) for p in points]
+
+    def __call__(self, shapes):
+        return [self._shape(s) for s in shapes]
+
+    def _shape(self, s):
+        lin = self.m[:2, :2]
+        det = abs(np.linalg.det(lin)) or 1e-9
+        uniform = math.sqrt(det)
         g = dict(s.g)
         if s.kind == "ellipse":
-            g["cx"] = 2 * axis - g["cx"]; g["angle"] = -g["angle"]
+            g["cx"], g["cy"] = self.pt((g["cx"], g["cy"]))
+            e1 = lin @ np.array([math.cos(g["angle"]), math.sin(g["angle"])])
+            e2 = lin @ np.array([-math.sin(g["angle"]), math.cos(g["angle"])])
+            g["rx"] = g["rx"] * float(np.linalg.norm(e1)); g["ry"] = g["ry"] * float(np.linalg.norm(e2))
+            g["angle"] = math.atan2(e1[1], e1[0])
+            if np.linalg.det(lin) < 0:          # a reflection: keep the ellipse right-handed
+                g["angle"] = math.atan2(-e1[1], -e1[0])
+            g["depth"] = g["depth"] * uniform
         elif s.kind == "capsule":
-            g["x1"] = 2 * axis - g["x1"]; g["x2"] = 2 * axis - g["x2"]
+            g["x1"], g["y1"] = self.pt((g["x1"], g["y1"]))
+            g["x2"], g["y2"] = self.pt((g["x2"], g["y2"]))
+            g["r1"] = g["r1"] * uniform; g["r2"] = g["r2"] * uniform
         else:
-            p = g["pts"].copy(); p[:, 0] = 2 * axis - p[:, 0]; g["pts"] = p[::-1]
-            g["tilt"] = (-g["tilt"][0], g["tilt"][1])
-        out.append(Shape(s.kind, s.mat, s.op, s.k, s.prio, **g))
-    return out
+            pts = np.array(self.pts(g["pts"]))
+            g["pts"] = pts[::-1] if np.linalg.det(lin) < 0 else pts
+            tilt = np.linalg.inv(lin).T @ np.array(g["tilt"])
+            g["tilt"] = (float(tilt[0]), float(tilt[1]))
+        frame = s.frame @ np.linalg.inv(self.m)
+        return Shape(s.kind, s.mat, s.op, s.k, s.prio, s.glow, frame, **g)
 
 
+def scaled(shapes, factor, pivot):
+    return Xf.scale(factor, factor, pivot)(shapes)
+
+
+def lerp(a, b, t):
+    return a + (b - a) * t
+
+
+def lerp_pt(a, b, t):
+    return (lerp(a[0], b[0], t), lerp(a[1], b[1], t))
+
+
+def with_glow(shapes, level):
+    """Set the glow level of every shape in the list (emissive and translucent shapes read it)."""
+    for s in shapes:
+        s.glow = level
+    return shapes
+
+
+# ---------------------------------------------------------------------------------------------------
+# Height fields, noise
+# ---------------------------------------------------------------------------------------------------
 def _height(s, X, Y):
     g = s.g
     if s.kind == "ellipse":
         c, sn = math.cos(g["angle"]), math.sin(g["angle"])
         dx, dy = X - g["cx"], Y - g["cy"]
-        u = (dx * c + dy * sn) / g["rx"]; v = (-dx * sn + dy * c) / g["ry"]
+        u = (dx * c + dy * sn) / max(g["rx"], 1e-3); v = (-dx * sn + dy * c) / max(g["ry"], 1e-3)
         q = np.sqrt(u * u + v * v)
         return np.where(q < 1, g["depth"] * np.sqrt(np.clip(1 - q * q, 0, 1)), g["depth"] * (1 - q))
     if s.kind == "capsule":
@@ -111,6 +244,10 @@ def _height(s, X, Y):
     return np.where(inside, np.maximum(inner, 0.01), -dist)
 
 
+def _depth_of(s, fallback):
+    return s.g.get("depth", max(s.g.get("r1", 0), s.g.get("r2", 0)) or s.g.get("bevel", fallback))
+
+
 def _smax(a, b, k):
     if k <= 0:
         return np.maximum(a, b)
@@ -118,15 +255,41 @@ def _smax(a, b, k):
     return np.maximum(a, b) + h * h * k * 0.25
 
 
-def value_noise(h, w, cell, rng):
-    gh, gw = int(h / cell) + 3, int(w / cell) + 3
-    grid = rng.random((gh, gw))
-    Y, X = np.mgrid[0:h, 0:w] / cell
-    y0, x0 = Y.astype(int), X.astype(int); fy, fx = Y - y0, X - x0
-    fy, fx = fy * fy * (3 - 2 * fy), fx * fx * (3 - 2 * fx)
-    a = grid[y0, x0] * (1 - fx) + grid[y0, x0 + 1] * fx
-    b = grid[y0 + 1, x0] * (1 - fx) + grid[y0 + 1, x0 + 1] * fx
+def _hash01(ix, iy, seed):
+    """Deterministic lattice hash -> [0, 1). Integer-only, so it is identical on every machine."""
+    h = (ix.astype(np.int64) * 374761393 + iy.astype(np.int64) * 668265263 + seed * 1442695041) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    h = h ^ (h >> 16)
+    return h / 4294967296.0
+
+
+def value_noise_at(U, V, cell, seed):
+    """Smooth value noise in [-0.5, 0.5) sampled at arbitrary (U, V) -- any coordinate frame."""
+    x, y = U / cell, V / cell
+    x0, y0 = np.floor(x), np.floor(y)
+    fx, fy = x - x0, y - y0
+    fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+    x0, y0 = x0.astype(np.int64), y0.astype(np.int64)
+    a = _hash01(x0, y0, seed) * (1 - fx) + _hash01(x0 + 1, y0, seed) * fx
+    b = _hash01(x0, y0 + 1, seed) * (1 - fx) + _hash01(x0 + 1, y0 + 1, seed) * fx
     return a * (1 - fy) + b * fy - 0.5
+
+
+def _material_seed(seed, mat):
+    return (seed * 7919 + zlib.crc32(mat.encode())) & 0x7FFFFFFF
+
+
+def _grain(s, X, Y, seed):
+    """The material's grain in the shape's OWN coordinates (guide 7.5): it moves with the part."""
+    m = MATERIALS[s.mat]
+    if "grain" not in m:
+        return None
+    cell = m["grain"][1]
+    f = s.frame
+    U = f[0, 0] * X + f[0, 1] * Y + f[0, 2]
+    V = f[1, 0] * X + f[1, 1] * Y + f[1, 2]
+    ms = _material_seed(seed, s.mat)
+    return value_noise_at(U, V, cell, ms) + 0.5 * value_noise_at(U, V, cell / 2, ms + 1)
 
 
 def _blur(a, r):
@@ -148,18 +311,22 @@ def _shift(a, sx, sy, fill):
     return out
 
 
-def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55):
-    """layers: list of lists of Shape, back to front. Returns RGBA PIL image."""
-    rng = np.random.default_rng(seed)
+# ---------------------------------------------------------------------------------------------------
+# The renderer
+# ---------------------------------------------------------------------------------------------------
+def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return_glow=False):
+    """layers: list of lists of Shape, back to front. Returns an RGBA PIL image, or (image, glow image)
+    when return_glow is set: the glow image holds the emissive pixels only (binary alpha)."""
     Y, X = np.mgrid[0:height, 0:width].astype(float) + 0.5
     mat_names = list(MATERIALS)
     layer_id = np.full((height, width), -1)
     Hfinal = np.zeros((height, width)); Mfinal = np.full((height, width), -1); Ifinal = np.zeros((height, width))
-    grain_cache = {}
+    Gfinal = np.ones((height, width))
 
     for li, shapes in enumerate(layers):
         H = np.full((height, width), -1e3); best = np.full((height, width), -1e9)
-        M = np.full((height, width), -1); peak = np.zeros((height, width))
+        M = np.full((height, width), -1); peak = np.zeros((height, width)); glow = np.ones((height, width))
+        grain_acc = np.zeros((height, width)); grain_w = np.zeros((height, width))
         for s in shapes:
             h = _height(s, X, Y)
             mi = mat_names.index(s.mat)
@@ -168,32 +335,37 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55):
                 score = h + s.prio
                 win = (h > 0) & (score > best)
                 best = np.where(win, score, best); M = np.where(win, mi, M)
-                depth = s.g.get("depth", max(s.g.get("r1", 0), s.g.get("r2", 0)) or s.g.get("bevel", 4))
-                peak = np.where(win, np.clip(h / max(depth, 1e-3), 0, 1), peak)
+                peak = np.where(win, np.clip(h / max(_depth_of(s, 4), 1e-3), 0, 1), peak)
+                glow = np.where(win, s.glow, glow)
+                weight = np.clip(h, 0, None) ** 2
             elif s.op == "add":       # raised detail painted with its own material (veins, rivets)
                 bump = np.clip(h, 0, None)
                 H = H + bump
                 painted = (bump > 0) & (H > 0)
                 M = np.where(painted, mi, M)
-                depth = s.g.get("depth", max(s.g.get("r1", 0), s.g.get("r2", 0)) or 2)
-                peak = np.where(painted, np.clip(bump / max(depth, 1e-3), 0, 1), peak)
-            elif s.op == "carve":     # grooves and seams
+                peak = np.where(painted, np.clip(bump / max(_depth_of(s, 2), 1e-3), 0, 1), peak)
+                glow = np.where(painted, s.glow, glow)
+                weight = np.where(painted, 1e4, 0.0)
+            else:                     # carve: grooves and seams
                 H = H - np.clip(h, 0, None)
+                continue
+            if weight.any():
+                gr = _grain(s, X, Y, seed)
+                if gr is not None:
+                    grain_acc += weight * gr; grain_w += weight
         inside = (H > 0) & (M >= 0)
-        # surface grain as height, per material
+        # surface grain as height, per material, sampled in each shape's own frame and blended
+        grain = np.where(grain_w > 0, grain_acc / np.maximum(grain_w, 1e-12), 0.0)
         for mi in np.unique(M[inside]):
             m = MATERIALS[mat_names[mi]]
             if "grain" in m:
-                amp, cell = m["grain"]
-                key = (cell, li)
-                if key not in grain_cache:
-                    grain_cache[key] = value_noise(height, width, cell, rng) + 0.5 * value_noise(height, width, cell / 2, rng)
                 sel = inside & (M == mi)
-                H[sel] += amp * 10 * grain_cache[key][sel]
+                H[sel] += m["grain"][0] * 10 * grain[sel]
         layer_id[inside] = li
         Hfinal[inside] = H[inside] + li * 1000   # later layers sit in front
         Mfinal[inside] = M[inside]
         Ifinal[inside] = peak[inside]
+        Gfinal[inside] = glow[inside]
 
     solid = layer_id >= 0
     # normals from the height gradient inside each layer
@@ -226,8 +398,9 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55):
         m = MATERIALS[mat_names[mi]]; sel = solid & (Mfinal == mi)
         r = m["ramp"]
         if m.get("emissive"):
-            v = np.clip(0.22 + 0.74 * Ifinal[sel] ** 1.4 + bay[sel] * 0.10, 0, 0.999)
-            emissive_mask |= sel
+            v = (0.22 + 0.74 * Ifinal[sel] ** 1.4) * Gfinal[sel]
+            v = np.clip(v + bay[sel] * 0.10, 0, 0.999)
+            emissive_mask |= sel & (Gfinal > GLOW_DEAD)
         else:
             v = 0.06 + 0.62 * wrap[sel] + 0.30 * diffuse[sel] - 0.55 * cav[sel] - 0.30 * occl[sel]
             v = np.clip(v + bay[sel] * 0.08, 0, 0.999)
@@ -243,10 +416,13 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55):
             rgb[sel] = col + (rim[sel][:, None] * RIM_COLOR * 140)
             if "glow" in m:   # translucent membrane: the interior glow shows through, strongest where thick
                 gl = MATERIALS[m["glow"]]["ramp"]
-                t = np.clip(Ifinal[sel] ** 0.8 * 1.05 + bay[sel] * 0.1, 0, 0.999)
+                level = np.clip(Gfinal[sel], 0, 1.4)
+                t = np.clip((Ifinal[sel] ** 0.8 * 1.05 + bay[sel] * 0.1) * level, 0, 0.999)
                 gcol = gl[(t * len(gl)).astype(int)]
                 rgb[sel] = rgb[sel] * (1 - 0.65 * t[:, None]) + gcol * 0.65 * t[:, None]
-                emissive_mask |= sel & (Ifinal > 0.55)
+                emissive_mask |= sel & (Ifinal > 0.55) & (Gfinal > 0.5)
+                # the shade index must see the glow, or cleanup would merge lit and unlit membrane
+                shade_idx[sel] = shade_idx[sel] + 100 * (t * 6).astype(int)
 
     # cleanup: an isolated pixel (all 4 neighbours agree on another shade) takes the neighbours' colour
     for _ in range(2):
@@ -279,7 +455,13 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55):
         ring |= new
     out[ring, :3] = ring_col[ring]; out[ring, 3] = 255
 
-    # smooth light spill around emissives (outside the silhouette only)
+    glow_img = None
+    if return_glow:
+        g = np.zeros((height, width, 4))
+        g[emissive_mask, :3] = out[emissive_mask, :3]; g[emissive_mask, 3] = 255
+        glow_img = Image.fromarray(g.astype(np.uint8), "RGBA")
+
+    # smooth light spill around emissives (outside the silhouette only) -- presentation only
     if glow_radius:
         em = _blur(emissive_mask.astype(float), glow_radius)
         em = _blur(em, glow_radius // 2 + 1)
@@ -291,23 +473,376 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55):
         glow_col /= max(count, 1)
         out[spill, :3] = glow_col
         out[spill, 3] = np.clip(em[spill] * 3.0, 0, 1) * 255 * glow_alpha
-    return Image.fromarray(out.astype(np.uint8), "RGBA").copy()
+    img = Image.fromarray(out.astype(np.uint8), "RGBA").copy()
+    return (img, glow_img) if return_glow else img
+
+
+STENCIL_FONT = {"0": "111101101101111", "1": "010110010010111", "2": "111001111100111", "3": "111001011001111",
+                "4": "101101111001001", "5": "111100111001111", "6": "111100111101111", "7": "111001010010010",
+                "8": "111101111101111", "9": "111101111001111", "-": "000000111000000", "D": "110101101101110",
+                "K": "101101110101101", "W": "101101101111101", "R": "110101110101101", "E": "111100110100111"}
 
 
 def stencil(img, text, x, y, color, alpha=255):
     """3x5 pixel stencil digits/letters, painted only onto opaque pixels."""
-    font = {"0": "111101101101111", "1": "010110010010111", "2": "111001111100111", "3": "111001011001111",
-            "4": "101101111001001", "5": "111100111001111", "6": "111100111101111", "7": "111001010010010",
-            "8": "111101111101111", "9": "111101111001111", "-": "000000111000000", "D": "110101101101110",
-            "K": "101101110101101", "W": "101101101111101", "R": "110101110101101", "E": "111100110100111"}
     px = img.load()
+    x, y = int(round(x)), int(round(y))
     for ci, ch in enumerate(text):
-        bits = font[ch]
+        bits = STENCIL_FONT[ch]
         for r in range(5):
             for c in range(3):
                 if bits[r * 3 + c] == "1":
                     qx, qy = x + ci * 4 + c, y + r
+                    if not (0 <= qx < img.width and 0 <= qy < img.height):
+                        continue
                     p = px[qx, qy]
                     if p[3] == 255:
                         px[qx, qy] = (int(p[0] * 0.3 + color[0] * 0.7), int(p[1] * 0.3 + color[1] * 0.7),
                                       int(p[2] * 0.3 + color[2] * 0.7), 255)
+
+
+# ---------------------------------------------------------------------------------------------------
+# Rigs, poses, clips
+# ---------------------------------------------------------------------------------------------------
+class Pose(dict):
+    """Named pose parameters (plain floats) with the rig's defaults behind them: p.jaw, p["jaw"]."""
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(f"pose has no parameter '{name}' (add it to the rig's defaults)")
+
+
+class Figure:
+    """What a rig builds for one pose: layers (back to front), named anchors {name: (x, y)} on the
+    canvas, and stencils [(text, x, y, colour)] painted after rendering."""
+
+    def __init__(self, layers, anchors=None, stencils=None):
+        self.layers, self.anchors, self.stencils = layers, anchors or {}, stencils or []
+
+
+class Rig:
+    """A creature: build(pose) -> Figure, the pose defaults, the canvas and the render seed."""
+
+    def __init__(self, name, build, defaults, seed, width=160, height=240, ground_y=232):
+        self.name, self.build, self.defaults, self.seed = name, build, dict(defaults), seed
+        self.width, self.height, self.ground_y = width, height, ground_y
+
+    def pose(self, **values):
+        unknown = set(values) - set(self.defaults)
+        if unknown:
+            raise KeyError(f"{self.name}: unknown pose parameters {sorted(unknown)}")
+        p = Pose(self.defaults); p.update(values)
+        return p
+
+    def render(self, pose, halo=False):
+        """-> (RGBA image, glow image, anchors) for one pose."""
+        fig = self.build(pose)
+        img, glow = render(fig.layers, self.width, self.height, seed=self.seed,
+                           glow_radius=5 if halo else 0, return_glow=True)
+        for text, x, y, colour in fig.stencils:
+            stencil(img, text, x, y, colour)
+        return img, glow, fig.anchors
+
+
+EASINGS = {
+    "linear": lambda t: t,
+    "in": lambda t: t * t,
+    "out": lambda t: 1 - (1 - t) * (1 - t),
+    "inout": lambda t: t * t * (3 - 2 * t),
+    "hold": lambda t: 0.0,
+}
+MODES = ("loop", "once", "hold")   # loop forever | play once, then the runtime moves on | hold the last frame
+
+
+class Clip:
+    """Keyframes on pose parameters. keys = [(time_seconds, {param: value}, easing), ...] -- the easing
+    shapes the segment LEAVING that key. Each parameter is its own track: it interpolates between the
+    keys that name it, so a clip names only what moves. Parameters a clip never names use the rig's
+    defaults. `overrides` pin parameters to a constant for the whole clip. `events` = {time_seconds:
+    name} marks the frame the runtime acts on ("emit": a ranged shot leaves the muzzle anchor;
+    "impact": a melee hit lands) -- written to the manifest on the frame sampled nearest that time."""
+
+    def __init__(self, name, keys, duration=None, fps=12, mode="loop", variant_of=None, overrides=None,
+                 events=None):
+        assert mode in MODES, mode
+        self.events = dict(events or {})
+        self.name, self.fps, self.mode, self.variant_of = name, fps, mode, variant_of
+        self.keys = sorted([(float(k[0]), dict(k[1]), k[2] if len(k) > 2 else "inout") for k in keys],
+                           key=lambda k: k[0])
+        for _, _, ease in self.keys:
+            assert ease in EASINGS, ease
+        self.duration = float(duration if duration is not None else self.keys[-1][0])
+        self.overrides = dict(overrides or {})
+
+    def variant(self, name, speed=1.0, keys=(), fps=None, **overrides):
+        """A variant of this clip: time stretched by 1/speed, extra keys merged in, parameters pinned.
+        A slowed variant usually lowers fps too, so it has no more frames than its source; its frames are
+        still new atlas frames whenever its pinned parameters change the picture (DORMANT's dimmed eyes)."""
+        scaled_keys = [(t / speed, v, e) for t, v, e in self.keys]
+        merged = dict(self.overrides); merged.update(overrides)
+        return Clip(name, scaled_keys + list(keys), self.duration / speed, fps or self.fps, self.mode,
+                    self.variant_of or self.name, merged, {t / speed: e for t, e in self.events.items()})
+
+    def value(self, param, t, default):
+        if param in self.overrides:
+            return self.overrides[param]
+        track = [(kt, v[param], e) for kt, v, e in self.keys if param in v]
+        if not track:
+            return default
+        if self.mode == "loop" and len(track) > 1:
+            # wrap: the segment after the last key runs to the first key one period later
+            track = [(kt - self.duration, val, e) for kt, val, e in track[-1:]] + track + \
+                    [(kt + self.duration, val, e) for kt, val, e in track[:1]]
+        elif self.mode != "loop" and track[0][0] > 0:
+            # a one-shot track that starts late eases in from the rig's default at t = 0
+            track = [(0.0, default, "inout")] + track
+        if t <= track[0][0]:
+            return track[0][1]
+        for (t0, v0, e0), (t1, v1, _) in zip(track, track[1:]):
+            if t0 <= t <= t1:
+                u = 0.0 if t1 == t0 else (t - t0) / (t1 - t0)
+                return v0 + (v1 - v0) * EASINGS[e0](u)
+        return track[-1][1]
+
+    def sample(self, rig):
+        """-> [(pose, frame_duration_seconds)]. A loop samples n frames over the period (the frame at t =
+        duration would repeat frame 0); a one-shot samples n frames from t = 0 to t = duration inclusive
+        so its last frame IS the end pose. Every frame lasts duration / n, so the clip lasts `duration`."""
+        times = self.times()
+        names = set(rig.defaults)
+        out = []
+        for t in times:
+            values = {p: self.value(p, t, rig.defaults[p]) for p in names}
+            out.append((rig.pose(**values), self.duration / len(times)))
+        return out
+
+    def times(self):
+        """The sample times of sample(), in order."""
+        n = max(2, int(round(self.duration * self.fps)))
+        if self.mode == "loop":
+            return [self.duration * i / n for i in range(n)]
+        return [self.duration * i / (n - 1) for i in range(n)]
+
+    def event_at_sample(self):
+        """{sample index: event name}: each event lands on the sample nearest its time."""
+        times = self.times()
+        out = {}
+        for t, name in sorted(self.events.items()):
+            i = min(range(len(times)), key=lambda j: (abs(times[j] - t), j))
+            out[i] = name
+        return out
+
+
+# ---------------------------------------------------------------------------------------------------
+# Baking: render every clip, trim, de-duplicate, pack, manifest, previews
+# ---------------------------------------------------------------------------------------------------
+def _pose_key(pose):
+    return tuple(sorted((k, round(float(v), 5)) for k, v in pose.items()))
+
+
+def _trim(img):
+    box = img.getchannel("A").getbbox()
+    if box is None:
+        box = (0, 0, 1, 1)
+    return box
+
+
+def bake(rig, clips, halo=False, log=print):
+    """Render every clip of a rig. -> dict with frames (unique trimmed images), and per clip the frame
+    list [(unique_index, duration, anchors, event)]. Consecutive identical frames merge into one longer
+    frame, unless the later one carries an event."""
+    cache = {}
+    uniques = []          # [(rgba_trimmed, glow_trimmed, (left, top))]
+    unique_index = {}     # bytes signature -> index
+    baked = []
+    for clip in clips:
+        frames = []
+        events = clip.event_at_sample()
+        for sample_index, (pose, duration) in enumerate(clip.sample(rig)):
+            event = events.get(sample_index)
+            key = _pose_key(pose)
+            if key not in cache:
+                img, glow, anchors = rig.render(pose, halo=halo)
+                box = _trim(img)
+                _check_edges(rig, clip, img, log)
+                rgba, gl = img.crop(box), glow.crop(box)
+                sig = (box, rgba.tobytes(), gl.tobytes())
+                if sig not in unique_index:
+                    unique_index[sig] = len(uniques)
+                    uniques.append((rgba, gl, (box[0], box[1]), img, glow))
+                cache[key] = (unique_index[sig], anchors)
+            idx, anchors = cache[key]
+            if frames and frames[-1][0] == idx and frames[-1][2] == anchors and event is None:
+                frames[-1] = (idx, frames[-1][1] + duration, anchors, frames[-1][3])
+            else:
+                frames.append((idx, duration, anchors, event))
+        baked.append((clip, frames))
+        log(f"  {rig.name}.{clip.name}: {len(frames)} frames, {clip.duration:.2f} s, {clip.mode}")
+    return uniques, baked
+
+
+def _check_edges(rig, clip, img, log):
+    a = np.asarray(img.getchannel("A"))
+    edges = [n for n, e in (("top", a[0]), ("bottom", a[-1]), ("left", a[:, 0]), ("right", a[:, -1])) if e.any()]
+    if edges:
+        log(f"  WARNING {rig.name}.{clip.name}: a part touches the canvas edge ({', '.join(edges)})"
+            f" -- clamp the pose, never grow the canvas")
+
+
+def pack(sizes):
+    """Shelf-pack rectangles (w, h). -> (atlas_w, atlas_h, [(x, y)]) with power-of-two sides, the
+    smallest area that fits; raises if nothing within ATLAS_LIMIT x ATLAS_LIMIT does."""
+    order = sorted(range(len(sizes)), key=lambda i: (-sizes[i][1], -sizes[i][0], i))
+    best = None
+    side = 64
+    widths = []
+    while side <= ATLAS_LIMIT:
+        widths.append(side); side *= 2
+    for aw in widths:
+        x = y = shelf = 0
+        pos = [None] * len(sizes)
+        ok = True
+        for i in order:
+            w, h = sizes[i][0] + ATLAS_PADDING, sizes[i][1] + ATLAS_PADDING
+            if w > aw:
+                ok = False; break
+            if x + w > aw:
+                x, y, shelf = 0, y + shelf, 0
+            pos[i] = (x, y); x += w; shelf = max(shelf, h)
+        if not ok:
+            continue
+        used_h = y + shelf
+        ah = 64
+        while ah < used_h:
+            ah *= 2
+        if ah > ATLAS_LIMIT:
+            continue
+        if best is None or aw * ah < best[0] * best[1] or (aw * ah == best[0] * best[1] and abs(aw - ah) < abs(best[0] - best[1])):
+            best = (aw, ah, pos)
+    if best is None:
+        raise ValueError(f"atlas budget exceeded: frames do not fit in {ATLAS_LIMIT}x{ATLAS_LIMIT}")
+    return best
+
+
+def _r(v, nd=4):
+    return float(round(v, nd))
+
+
+def write_creature(rig, clips, out_dir, preview_dir=None, log=print):
+    """Bake a rig's clips and write <name>.atlas.png, <name>.glow.png, <name>.clips.json (and previews)."""
+    os.makedirs(out_dir, exist_ok=True)
+    uniques, baked = bake(rig, clips, log=log)
+    aw, ah, positions = pack([u[0].size for u in uniques])
+    atlas = Image.new("RGBA", (aw, ah), (0, 0, 0, 0))
+    glow = Image.new("RGBA", (aw, ah), (0, 0, 0, 0))
+    has_glow = []
+    for (rgba, gl, _, _, _), (x, y) in zip(uniques, positions):
+        atlas.paste(rgba, (x, y)); glow.paste(gl, (x, y))
+        has_glow.append(gl.getchannel("A").getbbox() is not None)
+    manifest = {
+        "version": MANIFEST_VERSION,
+        "creature": rig.name,
+        "canvas": [rig.width, rig.height],
+        "groundY": rig.ground_y,
+        "atlas": f"{rig.name}.atlas.png",
+        "glow": f"{rig.name}.glow.png",
+        "atlasSize": [aw, ah],
+        "clips": {},
+    }
+    for clip, frames in baked:
+        entry = {"mode": clip.mode, "fps": clip.fps, "duration": _r(clip.duration)}
+        if clip.variant_of:
+            entry["variantOf"] = clip.variant_of
+        entry["frames"] = []
+        for idx, duration, anchors, event in frames:
+            rgba, _, (left, top), _, _ = uniques[idx]
+            x, y = positions[idx]
+            frame = {
+                "rect": [x, y, rgba.width, rgba.height],
+                "offset": [left, top],
+                "duration": _r(duration),
+                "glow": has_glow[idx],
+                "anchors": {k: [_r(v[0], 1), _r(v[1], 1)] for k, v in sorted(anchors.items())},
+            }
+            if event:
+                frame["event"] = event
+            entry["frames"].append(frame)
+        manifest["clips"][clip.name] = entry
+    atlas.save(os.path.join(out_dir, f"{rig.name}.atlas.png"), optimize=False)
+    glow.save(os.path.join(out_dir, f"{rig.name}.glow.png"), optimize=False)
+    with open(os.path.join(out_dir, f"{rig.name}.clips.json"), "w", newline="\n") as fh:
+        fh.write(manifest_json(manifest))
+    log(f"wrote {rig.name}: {len(uniques)} unique frames, atlas {aw}x{ah}")
+    if preview_dir:
+        write_previews(rig, uniques, baked, preview_dir)
+    return manifest
+
+
+def manifest_json(manifest):
+    """Readable, diff-friendly JSON: one frame per line. Plain JSON -- LibGDX's JsonReader reads it."""
+    compact = lambda v: json.dumps(v, separators=(",", ":"))
+    head = {k: v for k, v in manifest.items() if k != "clips"}
+    lines = ["{"] + [f' "{k}": {compact(v)},' for k, v in head.items()] + [' "clips": {']
+    names = list(manifest["clips"])
+    for ci, name in enumerate(names):
+        clip = manifest["clips"][name]
+        lines.append(f'  "{name}": {{')
+        for k, v in clip.items():
+            if k != "frames":
+                lines.append(f'   "{k}": {compact(v)},')
+        lines.append('   "frames": [')
+        frames = clip["frames"]
+        for fi, frame in enumerate(frames):
+            lines.append("    " + compact(frame) + ("," if fi < len(frames) - 1 else ""))
+        lines.append("   ]")
+        lines.append("  }" + ("," if ci < len(names) - 1 else ""))
+    lines += [" }", "}"]
+    return "\n".join(lines) + "\n"
+
+
+def _frame_on_canvas(rig, uniques, idx, with_glow=False):
+    rgba, gl, (left, top), _, _ = uniques[idx]
+    canvas = Image.new("RGBA", (rig.width, rig.height), BACKGROUND)
+    canvas.alpha_composite(rgba, (left, top))
+    return canvas
+
+
+def write_previews(rig, uniques, baked, preview_dir, scale=3, strip_scale=2):
+    """One animated GIF per clip (nearest, `scale`x, one-shots hold their last frame for a beat) and one
+    strip sheet with every clip as a labelled row of frames."""
+    os.makedirs(preview_dir, exist_ok=True)
+    for clip, frames in baked:
+        images, durations = [], []
+        for idx, duration, _, _ in frames:
+            im = _frame_on_canvas(rig, uniques, idx).convert("RGB")
+            images.append(im.resize((rig.width * scale, rig.height * scale), Image.NEAREST))
+            durations.append(max(20, int(round(duration * 1000))))
+        if clip.mode != "loop":
+            durations[-1] = max(durations[-1], 900)
+        if len(images) == 1:
+            images.append(images[0]); durations.append(durations[0])
+        images[0].save(os.path.join(preview_dir, f"{rig.name}_{clip.name.lower()}.gif"), save_all=True,
+                       append_images=images[1:], duration=durations, loop=0, disposal=1, optimize=False)
+    label_w, pad = 150, 6
+    fw, fh = rig.width * strip_scale, rig.height * strip_scale
+    cols = max(len(f) for _, f in baked)
+    sheet = Image.new("RGB", (label_w + cols * (fw + pad) + pad, len(baked) * (fh + pad + 14) + pad), BACKGROUND[:3])
+    draw = ImageDraw.Draw(sheet)
+    for row, (clip, frames) in enumerate(baked):
+        y = pad + row * (fh + pad + 14)
+        draw.text((8, y + 4), clip.name, fill=(230, 228, 220))
+        draw.text((8, y + 18), f"{clip.mode}  {clip.duration:.2f}s", fill=(140, 150, 160))
+        draw.text((8, y + 32), f"{len(frames)} frames", fill=(140, 150, 160))
+        for col, (idx, duration, anchors, event) in enumerate(frames):
+            im = _frame_on_canvas(rig, uniques, idx).convert("RGB").resize((fw, fh), Image.NEAREST)
+            x = label_w + pad + col * (fw + pad)
+            sheet.paste(im, (x, y))
+            draw.rectangle([x, y, x + fw - 1, y + fh - 1], outline=(40, 48, 58))
+            draw.text((x + 4, y + fh + 1), f"{int(round(duration * 1000))}ms" + (f"  {event.upper()}" if event else ""),
+                      fill=(250, 90, 200) if event else (120, 130, 140))
+            for name, (ax, ay) in anchors.items():
+                px, py = x + ax * strip_scale, y + ay * strip_scale
+                draw.line([px - 3, py, px + 3, py], fill=(250, 90, 200)); draw.line([px, py - 3, px, py + 3], fill=(250, 90, 200))
+    sheet.save(os.path.join(preview_dir, f"{rig.name}_strip.png"), optimize=False)
