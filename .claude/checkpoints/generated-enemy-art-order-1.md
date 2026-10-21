@@ -47,7 +47,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP2** — packer + manifest + glow atlas + GIF preview work on a test clip.
       DONE WHEN: a test creature writes `<name>.atlas.png`, `.glow.png`, `.clips.json`, per-clip GIFs and a strip.
 - [x] **CP3** — warden rig + full clip set (standard 9 + DORMANT + WOUNDED) generated; GIFs saved (scratch, not shipped).
-- [ ] **CP4** — harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner.
+- [x] **CP4** — harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner.
 - [ ] **CP5** — owner approval recorded in DECISIONS (stop here until it is).
 - [ ] **CP6** — outputs committed (old stills removed); guide section 7 + SKILL.md updated; reviewer PASS;
       STATUS: IMPLEMENTED.
@@ -77,3 +77,15 @@ muzzle (prod tip). Lessons: the 60 px prod must swing INWARD across the belly (a
 right canvas edge); the wreck needs zs<1 + crumpled cables (`slack`) to fit above row 239. Previews are in the
 session scratchpad only (not committed). `bestiary.py` still holds the old static functions — CP4 rewires it.
 Kit additions this step: edge warning names the edge; `Clip.variant(fps=)`.
+
+**CP4 (tick + gate sent):** `harvest_tick_rig.py` — `HARVEST_TICK` rig (`TICK_POSE`: body/abdomen groups, six legs
+with planted feet + per-foot offsets `<leg>_x/_y`, tripod gait helper `_feet`, tuck/splay, `curl` re-orders the
+abdomen in front of the head) and `TICK_CLIPS`. 88 unique frames, atlas 2048x2048 (AT the budget limit; a later
+clip for this creature needs fewer IDLE frames or a lower fps). `bestiary.py` rewritten: `CREATURES` table of
+(rig, clips); `OUT_DIR [--preview DIR] [--stills] [--halo]`. Two 2 px REST-POSE changes on the tick, both because
+the approved still touched the canvas edge at x=0/159: middle-leg spurs end at (4,146)/(3,174) instead of
+(2,146)/(1,174) — raised with the owner at the gate. Determinism verified (two runs, md5 identical); binary alpha
+in all four PNGs. Sent to the owner 2026-10-21: stills before/after, both strips, all 22 clip GIFs.
+Outputs were NOT written into assets/ yet — CP6 does that after approval:
+`python3 bestiary.py ../../../assets/textures/enemies/generated` from `.claude/skills/enemy-art`, then
+`git rm` the old `warden.png` / `harvest_tick.png`.

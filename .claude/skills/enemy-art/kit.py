@@ -141,14 +141,16 @@ class Xf:
         return Xf(np.array([[-1, 0, 2 * axis], [0, 1, 0], [0, 0, 1.0]]))
 
     @staticmethod
-    def segment(rest_a, rest_b, new_a, new_b):
-        """The similarity that carries the rest segment a->b onto the posed one (for parts riding a limb)."""
+    def segment(rest_a, rest_b, new_a, new_b, stretch=True):
+        """The similarity that carries the rest segment a->b onto the posed one (for parts riding a limb).
+        stretch=False keeps the part's size (it only turns and moves with the segment)."""
         ra = math.atan2(rest_b[1] - rest_a[1], rest_b[0] - rest_a[0])
         na = math.atan2(new_b[1] - new_a[1], new_b[0] - new_a[0])
         rl = math.hypot(rest_b[0] - rest_a[0], rest_b[1] - rest_a[1]) or 1e-6
         nl = math.hypot(new_b[0] - new_a[0], new_b[1] - new_a[1])
         return (Xf.move(-rest_a[0], -rest_a[1]).then(Xf.turn(na - ra)).then(Xf.scale(nl / rl))
-                .then(Xf.move(*new_a)))
+                .then(Xf.move(*new_a))) if stretch else \
+            Xf.move(-rest_a[0], -rest_a[1]).then(Xf.turn(na - ra)).then(Xf.move(*new_a))
 
     def then(self, other):
         return Xf(other.m @ self.m)
