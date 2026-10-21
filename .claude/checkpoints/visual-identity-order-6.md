@@ -55,7 +55,7 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
       DONE WHEN: A3 and A7 hold on run; build green.
 - [x] **CP4** — FramingScreenRenderer: title, pause, settings, confirmation, terminal RETURN, death stroke (R6).
       DONE WHEN: A4 holds on run; build green.
-- [ ] **CP5** — RouteMapOverlayRenderer frame/header/text/confirm bar (R8).
+- [x] **CP5** — RouteMapOverlayRenderer frame/header/text/confirm bar (R8).
       DONE WHEN: A5 holds incl. the same-seed glyph comparison; build green.
 - [ ] **CP6** — ShopOverlayRenderer + EventChoiceOverlayRenderer (R9).
       DONE WHEN: A6 holds on run; build green.
@@ -138,3 +138,20 @@ the same commit. Never `git add -A`. Never commit `assets/game-audio/` or `asset
   PROCEED (destructive; its rect is the unchanged static isInsideConfirmYes), ARCHIVE, QUIT, CONTINUE DESCENT.
   PRE-EXISTING (follow-up): the title's settings header sits over the launch status lines' rows (now hidden by the
   blackout).
+- **CP5:** RouteMapOverlayRenderer (R8), only drawBezel / drawChromeText / the CRT literals changed: console FRAME =
+  UiKit.panel border only (fill alpha 0) chamfered UI_CHAMFER, FRAME_BORDER_WIDTH thick, still in trimColor() at
+  0.8 (region tint + red-alert pulse keep the legibility fix's contrast) + FACILITY_CYAN UiKit.brackets; the band
+  separators are filled rects - the bezel's Line pass is gone. Confirm bar: CANCEL = IDLE facility plate (UiKit.card
+  inked holoDim = FACILITY_CYAN_DIM), ENGAGE = DISABLED plate until a node is focused, then SELECTED with its ink
+  pulsing holoDim -> holoCyan (ENGAGE_PULSE_SPEED kept; ENGAGE_DISABLED/ENABLED_ALPHA removed); MAP/DETAIL toggle =
+  IDLE / SELECTED (map framing). Header HEAVY (new heavyFont field): title + region name at TYPE_BODY (title 1.2,
+  region 1.0); TITLE measured with the heavy font. Scales: CONFIRM_LABEL TYPE_BODY (1.1), FRAMING_TOGGLE_LABEL
+  TYPE_CAPTION (0.8, the order-3 R8 site), DEPTH/NODE_LABEL/LEGEND -> ArtDirection.TYPE_CAPTION (same 1.0), new
+  UAC_STENCIL_TEXT_SCALE TYPE_CAPTION (was a raw 0.7 literal, alpha .55 -> 1). Labels: CANCEL primary, ENGAGE cyan
+  armed / secondary unarmed. CRT black literals -> palette.screenBlack (all CRT alphas are 0 anyway). A5: seed 12345
+  map before/after (route.png / route_focus.png): diff inside the map band = ONLY the node label text (R2 re-points
+  textBright to UI_TEXT_PRIMARY - card text, allowed by R8) and the MAP toggle; icons, pips, conduits, glows, card
+  bodies/borders, crest identical (/tmp/claude-0/diff_route*.png). Taps: node (focused, ENGAGE armed), ENGAGE
+  (commit animation), MAP toggle (DETAIL framing, SELECTED) and back, CANCEL (a documented no-op from the start
+  room - unchanged). Seen: idle, focused, MAP framing. NOT seen: a region-tinted frame other than UNKNOWN SECTOR's
+  cyan, red alert, the scanner readout, a twist line.
