@@ -239,18 +239,23 @@ because every pixel's value comes from a real surface normal lit by one consiste
     is automatically consistent across frames - the core advantage of generating animation in code.
 7.2 Why pre-rendered frames and not a runtime skeleton: the smooth-max merging and per-pixel
     lighting cannot be decomposed into rigid quads without losing the look. Frames keep the quality.
-7.3 THE STANDARD CLIP SET (every enemy; durations are real seconds, the game is turn-based)
-    IDLE        loop, 4-8 frames, 0.8-1.6 s: breathing, hover sway, antenna twitch, blister pulse.
-                Alive even when nothing happens. DORMANT plays it slowed, eyes dimmed.
-    ALERT       one-shot, 2-4 frames: the startle when it wakes (eyes ignite, rears up).
+7.3 THE STANDARD CLIP SET (every enemy; durations are real seconds, the game is turn-based). Frame
+    counts follow from duration x fps (12 fps default, AS1); the shipped Warden / Harvest Tick counts are
+    in brackets. IDLE is the atlas's biggest cost - a creature that must fit more clips lowers it first.
+    IDLE        loop, 0.8-1.6 s at 12 fps [16 / 18 frames]: breathing, hover sway, antenna twitch,
+                blister pulse. Alive even when nothing happens. DORMANT plays it at half speed and
+                6 fps (same frame count), eyes dimmed.
+    ALERT       one-shot, 0.3-0.5 s [5 / 6 frames]: the startle when it wakes (eyes ignite, rears up).
     MOVE        loop, 4 frames, plays during the tile slide: a step cycle, a scuttle, a thrust surge.
     WIND_UP     one-shot into a HELD last frame: the telegraph. It holds for the whole player turn,
                 so the anticipation pose IS the warning (pillar: readable threats).
-    ATTACK      one-shot, 3-5 frames within ENEMY_ATTACK_ANIM_DURATION (0.30 s today): anticipation ->
-                strike (smear frame allowed) -> recovery. Ranged: a muzzle/emit frame with an anchor.
-    HURT_LIGHT  2 frames: a flinch.     HURT_HEAVY  3-4 frames: a knock back, a stagger.
+    ATTACK      one-shot within ENEMY_ATTACK_ANIM_DURATION (0.30 s today), baked at 20 fps [6 frames]:
+                anticipation -> strike (smear frame allowed) -> recovery. The strike frame carries a
+                manifest EVENT: "emit" for a ranged shot (it leaves the muzzle anchor), "impact" for a
+                melee hit (Clip(events={time: name}), 7.7).
+    HURT_LIGHT  2 frames: a flinch.     HURT_HEAVY  ~0.4 s [5 frames]: a knock back, a stagger.
     DEFEND      one-shot into a held brace.
-    DEATH       6-10 frames, 0.6-1.0 s: collapse / break apart / power down - in the creature's
+    DEATH       0.6-1.0 s [11 frames]: collapse / break apart / power down - in the creature's
                 own character - ending on the frame that becomes its corpse.
     + ability clips where the type has one (SUMMON, AREA_STRIKE, SELF_DESTRUCT priming, the lance,
       a shard absorb ...), named in the order that builds the type.
@@ -328,13 +333,20 @@ because every pixel's value comes from a real surface normal lit by one consiste
          "offset":[left,top],          where that rect's top-left sits on the canvas
          "duration":0.0833,            seconds this frame shows
          "glow":true,                  false = the glow rect is empty, skip the additive draw
-         "anchors":{"eye":[x,y], ...}} canvas coordinates, sorted by name
+         "anchors":{"eye":[x,y], ...}, canvas coordinates, sorted by name
+         "event":"emit"}               OPTIONAL, only on the frame the runtime acts on: "emit" (a ranged
+                                       shot leaves the muzzle anchor) | "impact" (a melee hit lands).
+                                       Shipped: Warden ATTACK frame 1 = emit, Harvest Tick ATTACK
+                                       frame 2 = impact. Never merged into a neighbouring frame.
        ]}}}
     COORDINATES: everything is IMAGE space - origin TOP-LEFT, y DOWN - in pixels of the canvas or the
     atlas. LibGDX's TextureRegion(texture, x, y, w, h) takes the atlas rect as-is; canvas positions
     must be flipped (canvasHeight - y) when placed in the world's y-up space.
     Shipped clip names (the standard set, 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK,
-    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH. The corpse frame is the last DEATH frame.
+    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH. The corpse frame is the last DEATH frame. Its
+    lowest pixels may sit a few rows BELOW groundY (the Warden's wreck reaches row 236): parts lying
+    toward the viewer read lower on screen. Place a frame by its offset on the canvas, never by
+    snapping its bottom edge to the ground line.
     Anchors every creature reports: ground, hit_centre, eye; plus muzzle (anything that emits -
     the Warden's prod tip) or mouth (the Harvest Tick's jaws).
     Deterministic: the same script writes byte-identical atlases and manifests (rule R4).

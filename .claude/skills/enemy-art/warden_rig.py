@@ -220,7 +220,7 @@ WARDEN_CLIPS = [
         (0.15, dict(flash=0.35)),
         (0.20, dict(flash=0.0)),
         (0.30, dict(r_sh=0.0, r_el=0.0, prod=0.0, claw=0.0, eye_open=1.0, eye_glow=1.0, l_sh=0.0, tilt=0.0, zs=1.0, hy=0.0)),
-    ], fps=20, mode="once"),
+    ], fps=20, mode="once", events={0.06: "emit"}),     # the brightest flash frame: the glob leaves the muzzle
     Clip("HURT_LIGHT", [
         (0.00, dict(hx=4.0, tilt=0.07, eye_glow=0.25, hy=-1.0, zs=0.98), "out"),
         (0.17, dict(hx=0.0, tilt=0.0, eye_glow=1.0, hy=0.0, zs=1.0)),

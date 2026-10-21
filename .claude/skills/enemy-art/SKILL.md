@@ -99,7 +99,7 @@ shapes overlap; `k` the blend radius (0 = hard union).
 | `with_glow(shapes, level)` | set the glow of emissive / translucent shapes (eyes die, blisters dim) |
 | `Figure(layers, anchors, stencils)` | what a rig returns for one pose |
 | `Rig(name, build, defaults, seed)` | `build(pose) -> Figure`; `defaults` names every pose parameter; rest pose = the still |
-| `Clip(name, keys, duration, fps=12, mode=)` | keys `[(t, {param: v}, easing)]`, one track per parameter; easing `linear/in/out/inout/hold`; mode `loop/once/hold` |
+| `Clip(name, keys, duration, fps=12, mode=, events=)` | keys `[(t, {param: v}, easing)]`, one track per parameter; easing `linear/in/out/inout/hold`; mode `loop/once/hold`; `events={t: "emit"\|"impact"}` marks the strike frame in the manifest |
 | `clip.variant(name, speed, keys, fps, **pinned)` | DORMANT / WOUNDED style variants of a clip |
 | `write_creature(rig, clips, out_dir, preview_dir)` | the bake: atlas + glow atlas + `clips.json` (+ GIFs, strip) |
 

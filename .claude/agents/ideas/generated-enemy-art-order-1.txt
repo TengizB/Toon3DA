@@ -1,9 +1,19 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 1 - animation kit, Warden + Tick clips
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
+IMPLEMENTATION NOTE (2026-10-21): built as planned, with these differences.
+  - Each creature's rig and clips live in their own <name>_rig.py; bestiary.py is a CREATURES table +
+    the command line (--preview, --stills, --halo).
+  - The manifest carries an optional per-frame "event" ("emit" / "impact") on the ATTACK strike frame,
+    added after review so order 2/3 never hard-code a frame index (guide 7.7).
+  - Two Harvest Tick spur tips moved 2 px inward (the approved still touched the canvas edge); approved
+    at the gate (D2). The Tick atlas fills the 2048x2048 budget exactly (guide 7.9).
+  - Verification: the mirror build compiles; one pre-existing narrative test failure
+    (StoryBarkTest.humourLivesNearTheSurfaceAndDiesNearTheCore) is unrelated - no core/ or story file
+    changed. Reviewer: PASS WITH FIXES; the fixes that touch no approved pixel were applied.
 
 Part of the generated-enemy-art series. Read generated-enemy-art.txt (rules G1-G13, decisions D1-D9)
 and docs/sprite-art-creation-guide.txt (sections 3-7, 11-12) before starting.

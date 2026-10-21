@@ -49,7 +49,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP3** — warden rig + full clip set (standard 9 + DORMANT + WOUNDED) generated; GIFs saved (scratch, not shipped).
 - [x] **CP4** — harvest_tick rig + full clip set generated; GIFs saved; both sent to the owner.
 - [x] **CP5** — owner approval recorded in DECISIONS (stop here until it is).
-- [ ] **CP6** — outputs committed (old stills removed); guide section 7 + SKILL.md updated; reviewer PASS;
+- [x] **CP6** — outputs committed (old stills removed); guide section 7 + SKILL.md updated; reviewer PASS;
       STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -101,3 +101,11 @@ lessons 12.11-12.13, SKILL.md API table + files + commands, CLAUDE.md docs-table
 `StoryBarkTest.humourLivesNearTheSurfaceAndDiesNearTheCore` (bark.depth.core.2 is LEVITY). PRE-EXISTING: this branch
 changes nothing under core/, lwjgl3/, android/ or assets/story/ (git diff vs origin/master is empty there). Not
 ours to fix (SCOPE OUT). `:lwjgl3:compileJava` green. Next: CP6b = reviewer, then STATUS: IMPLEMENTED.
+
+**CP6b (gate closed):** reviewer PASS WITH FIXES (no blocking findings). Applied: the dead `leak` pose parameter
+removed (it was never read — frames unchanged); per-frame manifest `event` (Warden ATTACK frame 1 "emit", Tick
+ATTACK frame 2 "impact") via `Clip(events=)`; guide 7.3 frame counts reconciled with the 12 fps reality;
+`Clip.variant` docstring corrected; corpse-below-groundY note in 7.7; `.gitignore` for `__pycache__`. Re-bake:
+all four PNGs byte-identical to the approved ones, only the two manifests gained the event line. Left as is (owner
+approved the look): the Tick HURT_LIGHT flinches every blister, not one; the Warden's emit flash spans two frames
+(frame 1 is the peak and carries the event). STATUS: IMPLEMENTED. Order 2 consumes guide 7.7.

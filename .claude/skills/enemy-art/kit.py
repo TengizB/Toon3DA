@@ -560,10 +560,14 @@ class Clip:
     """Keyframes on pose parameters. keys = [(time_seconds, {param: value}, easing), ...] -- the easing
     shapes the segment LEAVING that key. Each parameter is its own track: it interpolates between the
     keys that name it, so a clip names only what moves. Parameters a clip never names use the rig's
-    defaults. `overrides` pin parameters to a constant for the whole clip."""
+    defaults. `overrides` pin parameters to a constant for the whole clip. `events` = {time_seconds:
+    name} marks the frame the runtime acts on ("emit": a ranged shot leaves the muzzle anchor;
+    "impact": a melee hit lands) -- written to the manifest on the frame sampled nearest that time."""
 
-    def __init__(self, name, keys, duration=None, fps=12, mode="loop", variant_of=None, overrides=None):
+    def __init__(self, name, keys, duration=None, fps=12, mode="loop", variant_of=None, overrides=None,
+                 events=None):
         assert mode in MODES, mode
+        self.events = dict(events or {})
         self.name, self.fps, self.mode, self.variant_of = name, fps, mode, variant_of
         self.keys = sorted([(float(k[0]), dict(k[1]), k[2] if len(k) > 2 else "inout") for k in keys],
                            key=lambda k: k[0])
@@ -574,11 +578,12 @@ class Clip:
 
     def variant(self, name, speed=1.0, keys=(), fps=None, **overrides):
         """A variant of this clip: time stretched by 1/speed, extra keys merged in, parameters pinned.
-        A slowed variant usually lowers fps too, so it costs no extra atlas frames."""
+        A slowed variant usually lowers fps too, so it has no more frames than its source; its frames are
+        still new atlas frames whenever its pinned parameters change the picture (DORMANT's dimmed eyes)."""
         scaled_keys = [(t / speed, v, e) for t, v, e in self.keys]
         merged = dict(self.overrides); merged.update(overrides)
         return Clip(name, scaled_keys + list(keys), self.duration / speed, fps or self.fps, self.mode,
-                    self.variant_of or self.name, merged)
+                    self.variant_of or self.name, merged, {t / speed: e for t, e in self.events.items()})
 
     def value(self, param, t, default):
         if param in self.overrides:
@@ -605,16 +610,28 @@ class Clip:
         """-> [(pose, frame_duration_seconds)]. A loop samples n frames over the period (the frame at t =
         duration would repeat frame 0); a one-shot samples n frames from t = 0 to t = duration inclusive
         so its last frame IS the end pose. Every frame lasts duration / n, so the clip lasts `duration`."""
-        n = max(2, int(round(self.duration * self.fps)))
-        if self.mode == "loop":
-            times = [self.duration * i / n for i in range(n)]
-        else:
-            times = [self.duration * i / (n - 1) for i in range(n)]
+        times = self.times()
         names = set(rig.defaults)
         out = []
         for t in times:
             values = {p: self.value(p, t, rig.defaults[p]) for p in names}
-            out.append((rig.pose(**values), self.duration / n))
+            out.append((rig.pose(**values), self.duration / len(times)))
+        return out
+
+    def times(self):
+        """The sample times of sample(), in order."""
+        n = max(2, int(round(self.duration * self.fps)))
+        if self.mode == "loop":
+            return [self.duration * i / n for i in range(n)]
+        return [self.duration * i / (n - 1) for i in range(n)]
+
+    def event_at_sample(self):
+        """{sample index: event name}: each event lands on the sample nearest its time."""
+        times = self.times()
+        out = {}
+        for t, name in sorted(self.events.items()):
+            i = min(range(len(times)), key=lambda j: (abs(times[j] - t), j))
+            out[i] = name
         return out
 
 
@@ -634,14 +651,17 @@ def _trim(img):
 
 def bake(rig, clips, halo=False, log=print):
     """Render every clip of a rig. -> dict with frames (unique trimmed images), and per clip the frame
-    list [(unique_index, duration, anchors)]. Consecutive identical frames merge into one longer frame."""
+    list [(unique_index, duration, anchors, event)]. Consecutive identical frames merge into one longer
+    frame, unless the later one carries an event."""
     cache = {}
     uniques = []          # [(rgba_trimmed, glow_trimmed, (left, top))]
     unique_index = {}     # bytes signature -> index
     baked = []
     for clip in clips:
         frames = []
-        for pose, duration in clip.sample(rig):
+        events = clip.event_at_sample()
+        for sample_index, (pose, duration) in enumerate(clip.sample(rig)):
+            event = events.get(sample_index)
             key = _pose_key(pose)
             if key not in cache:
                 img, glow, anchors = rig.render(pose, halo=halo)
@@ -654,10 +674,10 @@ def bake(rig, clips, halo=False, log=print):
                     uniques.append((rgba, gl, (box[0], box[1]), img, glow))
                 cache[key] = (unique_index[sig], anchors)
             idx, anchors = cache[key]
-            if frames and frames[-1][0] == idx and frames[-1][2] == anchors:
-                frames[-1] = (idx, frames[-1][1] + duration, anchors)
+            if frames and frames[-1][0] == idx and frames[-1][2] == anchors and event is None:
+                frames[-1] = (idx, frames[-1][1] + duration, anchors, frames[-1][3])
             else:
-                frames.append((idx, duration, anchors))
+                frames.append((idx, duration, anchors, event))
         baked.append((clip, frames))
         log(f"  {rig.name}.{clip.name}: {len(frames)} frames, {clip.duration:.2f} s, {clip.mode}")
     return uniques, baked
@@ -736,16 +756,19 @@ def write_creature(rig, clips, out_dir, preview_dir=None, log=print):
         if clip.variant_of:
             entry["variantOf"] = clip.variant_of
         entry["frames"] = []
-        for idx, duration, anchors in frames:
+        for idx, duration, anchors, event in frames:
             rgba, _, (left, top), _, _ = uniques[idx]
             x, y = positions[idx]
-            entry["frames"].append({
+            frame = {
                 "rect": [x, y, rgba.width, rgba.height],
                 "offset": [left, top],
                 "duration": _r(duration),
                 "glow": has_glow[idx],
                 "anchors": {k: [_r(v[0], 1), _r(v[1], 1)] for k, v in sorted(anchors.items())},
-            })
+            }
+            if event:
+                frame["event"] = event
+            entry["frames"].append(frame)
         manifest["clips"][clip.name] = entry
     atlas.save(os.path.join(out_dir, f"{rig.name}.atlas.png"), optimize=False)
     glow.save(os.path.join(out_dir, f"{rig.name}.glow.png"), optimize=False)
@@ -792,7 +815,7 @@ def write_previews(rig, uniques, baked, preview_dir, scale=3, strip_scale=2):
     os.makedirs(preview_dir, exist_ok=True)
     for clip, frames in baked:
         images, durations = [], []
-        for idx, duration, _ in frames:
+        for idx, duration, _, _ in frames:
             im = _frame_on_canvas(rig, uniques, idx).convert("RGB")
             images.append(im.resize((rig.width * scale, rig.height * scale), Image.NEAREST))
             durations.append(max(20, int(round(duration * 1000))))
@@ -812,12 +835,13 @@ def write_previews(rig, uniques, baked, preview_dir, scale=3, strip_scale=2):
         draw.text((8, y + 4), clip.name, fill=(230, 228, 220))
         draw.text((8, y + 18), f"{clip.mode}  {clip.duration:.2f}s", fill=(140, 150, 160))
         draw.text((8, y + 32), f"{len(frames)} frames", fill=(140, 150, 160))
-        for col, (idx, duration, anchors) in enumerate(frames):
+        for col, (idx, duration, anchors, event) in enumerate(frames):
             im = _frame_on_canvas(rig, uniques, idx).convert("RGB").resize((fw, fh), Image.NEAREST)
             x = label_w + pad + col * (fw + pad)
             sheet.paste(im, (x, y))
             draw.rectangle([x, y, x + fw - 1, y + fh - 1], outline=(40, 48, 58))
-            draw.text((x + 4, y + fh + 1), f"{int(round(duration * 1000))}ms", fill=(120, 130, 140))
+            draw.text((x + 4, y + fh + 1), f"{int(round(duration * 1000))}ms" + (f"  {event.upper()}" if event else ""),
+                      fill=(250, 90, 200) if event else (120, 130, 140))
             for name, (ax, ay) in anchors.items():
                 px, py = x + ax * strip_scale, y + ay * strip_scale
                 draw.line([px - 3, py, px + 3, py], fill=(250, 90, 200)); draw.line([px, py - 3, px, py + 3], fill=(250, 90, 200))

@@ -13,7 +13,7 @@ TICK_POSE = dict(
     ab_y=0.0, ab_s=1.0, curl=0.0,           # abdomen raise (negative = up), scale, curled over the head (> 0.5)
     jaw=0.0,                                # mandibles: + open, - snapped shut
     eye_glow=1.0, blister=0.0, blister_glow=1.0, dim=0.0,   # eyes; blister pulse; blister light; death dimming
-    burst=0.0, leak=0.0,                    # the right blister burst (0..1); its leak drip phase
+    burst=0.0,                              # the right blister burst (0..1)
     drip=0.0, hose=0.0,                     # torn hose drip phase (0..1), hose sway (rad)
     tuck=0.0, splay=0.0,                    # all legs folded in / thrown out
     **{f"{leg}_{axis}": 0.0 for leg in LEGS for axis in ("x", "y")},   # per-foot offsets (x outward, y down)
@@ -226,7 +226,7 @@ TICK_CLIPS = [
         (0.10, dict(bs=1.26, sx=1.1, sy=0.92, ml_x=-7.0, mr_x=-7.0, jaw=-0.35, eye_glow=1.8), "out"),
         (0.30, dict(bs=1.0, sx=1.0, sy=1.0, by=0.0, ab_y=0.0, ab_s=1.0, jaw=0.0, eye_glow=1.0, blister=0.0,
                     fl_x=0.0, fl_y=0.0, fr_x=0.0, fr_y=0.0, ml_x=0.0, mr_x=0.0, rl_x=0.0, rr_x=0.0)),
-    ], fps=20, mode="once"),
+    ], fps=20, mode="once", events={0.10: "impact"}),   # the mandibles snap shut: the hit lands
     Clip("HURT_LIGHT", [
         (0.00, dict(by=-3.0, tilt=-0.05, blister=-1.5, jaw=0.5, eye_glow=0.5), "out"),
         (0.17, dict(by=0.0, tilt=0.0, blister=0.0, jaw=0.0, eye_glow=1.0)),
@@ -242,9 +242,7 @@ TICK_CLIPS = [
         (0.17, dict(curl=1.0), "hold"),
         (0.33, dict(tuck=0.6, by=12.0, bs=0.84, ab_y=46.0, ab_s=0.92, jaw=-0.25, eye_glow=0.5, curl=1.0)),
     ], mode="hold"),
-    IDLE.variant("WOUNDED", keys=[
-        (0.00, dict(leak=0.0)), (1.5, dict(leak=1.0)),
-    ], burst=1.0, rr_x=-6.0, rr_y=6.0, tilt=0.04),
+    IDLE.variant("WOUNDED", burst=1.0, rr_x=-6.0, rr_y=6.0, tilt=0.04),
     Clip("DEATH", [
         (0.00, dict(by=0.0, tuck=0.0, eye_glow=1.0, dim=0.0, jaw=0.0, ab_y=0.0, blister=0.0)),
         (0.08, dict(by=-6.0, jaw=1.2, eye_glow=1.6, splay=0.6), "out"),
