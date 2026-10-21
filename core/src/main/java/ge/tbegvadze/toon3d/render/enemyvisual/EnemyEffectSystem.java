@@ -4,6 +4,7 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.RandomXS128;
 import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
+import ge.tbegvadze.toon3d.util.GameMath;
 
 /**
  * The pooled WORLD-SPACE particles of the animated enemy layer (generated-enemy-art order 3): hit sprays,
@@ -137,12 +138,13 @@ public final class EnemyEffectSystem {
                 continue;
             }
             if (particle.orbitRadiusTiles > 0f) {
-                float angleRadians = particle.orbitPhase + particle.orbitAngularSpeed * particle.ageSeconds;
-                float across = MathUtils.cos(angleRadians) * particle.orbitRadiusTiles;
+                float across = GameMath.orbitAcross(particle.orbitPhase, particle.orbitAngularSpeed,
+                        particle.ageSeconds, particle.orbitRadiusTiles);
                 particle.tileX  = particle.orbitCentreX + particle.orbitRightX * across;
                 particle.tileY  = particle.orbitCentreY + particle.orbitRightY * across;
-                particle.height = particle.orbitCentreHeight + MathUtils.sin(angleRadians) * particle.orbitRadiusTiles
-                        * EffectConstants.ENEMY_EFFECT_ORBIT_FLATTEN;
+                particle.height = particle.orbitCentreHeight + GameMath.orbitUp(particle.orbitPhase,
+                        particle.orbitAngularSpeed, particle.ageSeconds, particle.orbitRadiusTiles,
+                        EffectConstants.ENEMY_EFFECT_ORBIT_FLATTEN);
                 continue;
             }
             if (particle.drag > 0f) {

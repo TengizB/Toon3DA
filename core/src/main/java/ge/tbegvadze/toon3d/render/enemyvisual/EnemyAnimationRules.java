@@ -25,7 +25,8 @@ import java.util.EnumMap;
  * shard, eaten by Block, RESISTED by the matchup, heavy or light by the 25% rule) and each answer is a row of
  * data — the clip, the family burst, the recoil, the drop, whether the white flash shows, the block shimmer —
  * so hurt / resisted / blocked / absorbed always differ (R2). STATUS_APPLIED fires the status's onset burst
- * ({@link EnemyStatusVisuals}); ATTACK_COMMITTED schedules a ranged creature's projectile; DIED adds the kill
+ * ({@link EnemyStatusVisuals}); a ranged shot is scheduled from {@code EnemyAttackListener.onRangedAttack} (aimed at the committed lane, see
+ * {@link EnemyVisualLayer#scheduleShot}); DIED adds the kill
  * and death bursts and the remains. A STUNNED / staggered enemy holds HURT_HEAVY's last pose (DAZED 4).
  */
 public final class EnemyAnimationRules {
@@ -47,13 +48,6 @@ public final class EnemyAnimationRules {
         ONE_SHOT {
             @Override void apply(EnemyVisualLayer layer, EnemyAnimator animator, EnemyVisualEvent event, Row row) {
                 animator.playOneShot(row.clip, row.priority);
-            }
-        },
-        /** Order 3: the strike's clip, and a ranged creature's shot scheduled for the clip's emit frame. */
-        ATTACK {
-            @Override void apply(EnemyVisualLayer layer, EnemyAnimator animator, EnemyVisualEvent event, Row row) {
-                animator.playOneShot(row.clip, row.priority);
-                layer.scheduleShot(animator, event.enemy);
             }
         },
         /** Order 3: a player hit, answered by its {@link HitReaction} row. */
@@ -191,7 +185,7 @@ public final class EnemyAnimationRules {
         register(EnemyVisualMoment.ALERTED,          Kind.ONE_SHOT,  EnemyClipId.ALERT,      PRIORITY_ALERT);
         register(EnemyVisualMoment.MOVE_STARTED,     Kind.SLIDE,     EnemyClipId.MOVE,       PRIORITY_MOVE);
         register(EnemyVisualMoment.WIND_UP_STARTED,  Kind.HOLD,      EnemyClipId.WIND_UP,    PRIORITY_WIND_UP);
-        register(EnemyVisualMoment.ATTACK_COMMITTED, Kind.ATTACK,    EnemyClipId.ATTACK,     PRIORITY_ATTACK);
+        register(EnemyVisualMoment.ATTACK_COMMITTED, Kind.ONE_SHOT,  EnemyClipId.ATTACK,     PRIORITY_ATTACK);
         register(EnemyVisualMoment.ABILITY_USED,     Kind.ONE_SHOT,  EnemyClipId.ATTACK,     PRIORITY_ATTACK);
         register(EnemyVisualMoment.DAMAGED,          Kind.HIT,       null,                   PRIORITY_HURT);
         register(EnemyVisualMoment.STAGGERED,        Kind.STAGGER,   EnemyClipId.HURT_HEAVY, PRIORITY_HURT);

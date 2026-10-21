@@ -868,7 +868,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 float progress   = animator.shimmerProgress();
                 float bandHeight = regionHeight * EffectConstants.ENEMY_VISUAL_SHIMMER_BAND_FRACTION;
                 float bandTop    = -bandHeight + progress * (regionHeight + bandHeight);
-                float strength   = EffectConstants.ENEMY_VISUAL_SHIMMER_STRENGTH * (1f - progress * 0.5f);
+                float strength   = EffectConstants.ENEMY_VISUAL_SHIMMER_STRENGTH
+                        * (1f - progress * EffectConstants.ENEMY_VISUAL_SHIMMER_DECAY);
                 SpriteOccluderBuffer shimmerOccluder = (propRenderer != null) ? propRenderer.getOccluderBuffer() : null;
                 batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
                 batch.setColor(ENEMY_BLOCK_TINT_RED * strength, ENEMY_BLOCK_TINT_GREEN * strength,
@@ -1779,10 +1780,9 @@ public final class EnemyRenderer implements Renderable, Disposable {
             float drawTop    = pointY + frame.pivotY * worldUnitsPerPixel;
 
             float lifeFraction = particle.ageSeconds / particle.lifeSeconds;
-            float tail = EffectConstants.ENEMY_EFFECT_FADE_TAIL_FRACTION;
-            float fade = lifeFraction > 1f - tail ? Math.max(0f, (1f - lifeFraction) / tail) : 1f;
+            float fade = GameMath.lifeTailFade(lifeFraction, EffectConstants.ENEMY_EFFECT_FADE_TAIL_FRACTION);
             // A projectile fades as it reaches the player (the legacy glob's 1 - t^2), never popping at the lens.
-            if (particle.projectile) fade = 1f - lifeFraction * lifeFraction;
+            if (particle.projectile) fade = GameMath.arrivalFade(lifeFraction);
             if (particle.sprite.emissive) {
                 batch.setColor(1f, 1f, 1f, glowAlphaAtDepth(depth) * fade);
             } else {

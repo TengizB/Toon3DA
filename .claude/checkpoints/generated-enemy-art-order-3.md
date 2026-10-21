@@ -135,3 +135,13 @@ GC (`--gclog`, 30 s in that room, 2 burning + 1 stunned + 1 wounded): 2 startup 
 start. Docs: guide 8 (8.1 note, 8.3-8.7 new) + 9 (rewritten, [PLANNED] dropped) + recipe, art-direction 16 (EFFECTS,
 REACTIONS, REMAINS + the measurement), enemy-system (blast origin, DoT), CLAUDE.md (package row, tree, doc line
 counts), idea IMPLEMENTATION NOTE. Next: reviewer gate, then STATUS.
+
+**CP6b (reviewer r1 = FAIL, fixes applied):** BLOCKING 1+2 fixed as one change — the shot is no longer scheduled from
+ATTACK_COMMITTED (row back to ONE_SHOT): `EnemyAttackEffectSystem.onRangedAttack` calls the public
+`EnemyVisualLayer.scheduleShot(enemy, targetColumn, targetRow)`, so the DEBUFF_PLAYER shot (which fires only
+ABILITY_USED) is drawn, and the glob aims at the COMMITTED lane tile; emit-frame delay only while ATTACK plays;
+returns false (procedural glob drawn) without an animator / PROJECTILE. Verified (t12): player strafes off the lane
+on the Warden's firing turn -> the glob flies down the old lane at the player's left and misses. Should-fix: the
+recoil envelope, life tail fade, arrival fade, dazed sway and edge-on orbit moved into GameMath with derivation
+blocks; ENEMY_VISUAL_SHIMMER_DECAY; guide contents [PLANNED] markers + the stale order-2 "additive glow" line +
+the 32-remains cap note; `Arrays` import. Build: only StoryBarkTest red. Next: reviewer r2 on the shot code + guide.

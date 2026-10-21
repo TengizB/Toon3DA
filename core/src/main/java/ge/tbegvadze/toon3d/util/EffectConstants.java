@@ -312,6 +312,7 @@ public final class EffectConstants {
     public static final float ENEMY_VISUAL_SHIMMER_SECONDS            = 0.32f;
     public static final float ENEMY_VISUAL_SHIMMER_BAND_FRACTION      = 0.22f;    // band height / canvas height
     public static final float ENEMY_VISUAL_SHIMMER_STRENGTH           = 0.85f;
+    public static final float ENEMY_VISUAL_SHIMMER_DECAY              = 0.5f;     // strength lost by the band's end
     // STUNNED / staggered: HURT_HEAVY's last pose held, swaying across the screen by this many canvas px.
     public static final float ENEMY_VISUAL_DAZED_SWAY_PIXELS          = 3f;
     public static final float ENEMY_VISUAL_DAZED_SWAY_HZ              = 0.9f;

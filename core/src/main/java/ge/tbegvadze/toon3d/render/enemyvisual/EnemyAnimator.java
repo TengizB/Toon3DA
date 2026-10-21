@@ -7,6 +7,8 @@ import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 import ge.tbegvadze.toon3d.util.GameMath;
 
+import java.util.Arrays;
+
 /**
  * One live enemy's visual state (generated-enemy-art order 2): the one-shot clip playing on top, the clip
  * a held state keeps on its last frame, the cosmetic tile slide, and the loop clock with the enemy's own
@@ -79,13 +81,22 @@ public final class EnemyAnimator {
         dazed                = false;
         leakTimerSeconds     = 0f;
         chargeTimerSeconds   = 0f;
-        java.util.Arrays.fill(statusTimerSeconds, 0f);
+        Arrays.fill(statusTimerSeconds, 0f);
         pendingEmitSeconds   = -1f;
     }
 
     void release() {
         enemyId = -1;
         visual  = null;
+    }
+
+    /** True while {@code clip} is the one-shot playing (the shot schedule reads where in ATTACK the body is). */
+    boolean isPlayingOneShot(EnemyClipId clip) {
+        return oneShotClip == clip;
+    }
+
+    float oneShotElapsedSeconds() {
+        return oneShotSeconds;
     }
 
     /** Starts {@code clip} once unless a higher-priority one-shot is still playing (equal priority restarts). */
@@ -281,17 +292,15 @@ public final class EnemyAnimator {
 
     /** 1 at the kick, easing out to 0 over the recoil time: (1 - t)^2. */
     private float recoilEnvelope() {
-        if (recoilSeconds >= EffectConstants.ENEMY_VISUAL_RECOIL_SECONDS) return 0f;
-        float remaining = 1f - recoilSeconds / EffectConstants.ENEMY_VISUAL_RECOIL_SECONDS;
-        return remaining * remaining;
+        return GameMath.recoilEnvelope(recoilSeconds, EffectConstants.ENEMY_VISUAL_RECOIL_SECONDS);
     }
 
     /** The dazed sway across the screen, in WORLD units (canvas px scaled by the creature's own pixel size). */
     private float swayWorldUnits(Enemy enemy) {
         if (!dazed) return 0f;
         float tilesPerPixel = enemy.type.heightMultiplier() / visual.manifest.canvasHeight;
-        return (float) Math.sin(loopSeconds * EffectConstants.ENEMY_VISUAL_DAZED_SWAY_HZ * Math.PI * 2.0)
-                * EffectConstants.ENEMY_VISUAL_DAZED_SWAY_PIXELS * tilesPerPixel * Constants.CELL_SIZE;
+        return GameMath.swayOffset(loopSeconds, EffectConstants.ENEMY_VISUAL_DAZED_SWAY_HZ,
+                EffectConstants.ENEMY_VISUAL_DAZED_SWAY_PIXELS * tilesPerPixel * Constants.CELL_SIZE);
     }
 
     private float slideProgress() {

@@ -140,23 +140,32 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
     }
 
     /**
-     * ATTACK_COMMITTED of a ranged creature whose family ships a PROJECTILE: the shot leaves the emitter
-     * anchor on the ATTACK clip's emit frame (guide 7.7), aimed at where the player stands now.
+     * A ranged shot of any kind (the ordinary attack AND the debuff shot — every caller of
+     * {@code EnemyAttackListener.onRangedAttack}), aimed at the COMMITTED lane target tile, so a player who
+     * stepped off the lane sees the glob fly down the old lane and miss — never curve into their new tile.
+     * It leaves the current frame's EMITTER anchor on the ATTACK clip's emit frame (guide 7.7) when that clip
+     * is playing, else at once. Returns false when this layer cannot draw it (a legacy type, no PROJECTILE in
+     * the family set, the animator pool exhausted): the caller then draws the procedural glob as before.
      */
-    void scheduleShot(EnemyAnimator animator, Enemy enemy) {
-        if (!enemy.type.isRanged() || animator.visual.burst(EnemyEffectSet.BurstId.PROJECTILE) == null) return;
+    public boolean scheduleShot(Enemy enemy, int targetColumn, int targetRow) {
+        EnemyAnimator animator = animatorFor(enemy, true);
+        if (animator == null || animator.visual.burst(EnemyEffectSet.BurstId.PROJECTILE) == null) return false;
+        float delaySeconds = 0f;
         EnemyClipManifest.Clip attack = animator.visual.manifest.clip(EnemyClipId.ATTACK);
-        float emitSeconds = 0f;
-        if (attack != null) {
+        if (attack != null && animator.isPlayingOneShot(EnemyClipId.ATTACK)) {
+            float emitSeconds = 0f;
             for (EnemyClipManifest.Frame frame : attack.frames) {
                 if (frame.event == EnemyClipManifest.FrameEvent.EMIT) break;
                 emitSeconds += frame.durationSeconds;
             }
-            if (emitSeconds >= attack.durationSeconds) emitSeconds = 0f;   // no emit frame: leave at once
+            if (emitSeconds < attack.durationSeconds) {   // no emit frame: leave at once
+                delaySeconds = Math.max(0f, emitSeconds - animator.oneShotElapsedSeconds());
+            }
         }
-        animator.pendingEmitSeconds = emitSeconds;
-        animator.pendingTargetX     = viewerWorldX;
-        animator.pendingTargetY     = viewerWorldY;
+        animator.pendingEmitSeconds = delaySeconds;
+        animator.pendingTargetX     = targetColumn * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+        animator.pendingTargetY     = targetRow    * Constants.CELL_SIZE + Constants.CELL_SIZE / 2f;
+        return true;
     }
 
     /**
@@ -354,12 +363,6 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
      */
     public boolean answeredHitAt(int tileColumn, int tileRow) {
         return tileColumn == answeredTileColumn && tileRow == answeredTileRow;
-    }
-
-    /** True when this floor draws {@code type}'s shots as a generated projectile (the procedural glob stands down). */
-    public boolean drawsProjectileFor(EnemyType type) {
-        EnemyAtlasCache.CreatureVisual visual = atlasCache.visualFor(type);
-        return visual != null && visual.burst(EnemyEffectSet.BurstId.PROJECTILE) != null;
     }
 
     /** Null-safe active test (an enemy's status map holds a row per type; this never trusts it blindly). */

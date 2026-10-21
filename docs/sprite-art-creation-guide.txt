@@ -25,8 +25,8 @@ CONTENTS
   5.  Designing a creature (the brief and the build order)
   6.  Composition: canvas, scale, ground line, hover
   7.  Animation: rigs, poses, clips, atlases, manifest
-  8.  Reactions: how an enemy answers every event             [PLANNED: orders 2-3]
-  9.  Effects: hits, deaths, projectiles, status              [PLANNED: order 3]
+  8.  Reactions: how an enemy answers every event             [shipped: orders 2-3]
+  9.  Effects: hits, deaths, projectiles, status              [shipped: order 3]
   10. Engine contract (what the game does with the output)
   11. Verification and the owner approval gate
   12. Lessons already paid for
@@ -160,8 +160,9 @@ because every pixel's value comes from a real surface normal lit by one consiste
 
 3.11 Glow halo (presentation only).
   --halo paints a soft translucent spill around emissives. The engine alpha-cuts enemy textures,
-  so shipped sprites are written WITHOUT it; in-game glow comes from the emissive layer
-  [PLANNED: order 2], drawn additively and exempt from the mood grade (art-direction V6).
+  so shipped sprites are written WITHOUT it; in-game glow comes from the emissive (glow) layer, laid
+  over the body as a NORMAL-blend overlay in its baked colour, exempt from the mood grade (art-direction
+  V6; order 2 D2 — never additive, the glow pixels are a copy of the body's and adding doubles them).
 
 
 ====================================================================================================
@@ -440,14 +441,18 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
     DEATH burst of the creature's own materials from its body placement, on the killing frame. The dying
     instance plays DEATH; its remains are registered at the same moment and revealed when DEATH ends - the last
     DEATH frame, standing on the tile for the rest of the floor (RemainsRegistry: 32 slots, one per tile, the
-    oldest recycled). PropRenderer skips a stamped corpse decal 'm' on a tile with remains; the corpse TILE is
+    oldest recycled - past 32 kills on a floor the OLDEST kill's tile shows the generic corpse decal again,
+    allowed by R4). PropRenderer skips a stamped corpse decal 'm' on a tile with remains; the corpse TILE is
     untouched (R5). Remains sort a hair behind a live enemy on the same tile. Cleared with the floor.
 8.7 TELEGRAPH AND ATTACK EFFECTS (order 3): while WINDING_UP / SELF_DESTRUCTING (and not dazed) the CHARGE
     burst repeats from the charge placement (the Tick's grit + dust at its feet; the Warden's prod crackle is
     ready but the Warden never winds up in the sim). A ranged creature whose family ships PROJECTILE: on
-    ATTACK_COMMITTED the shot is scheduled for the ATTACK clip's emit frame, then a MUZZLE flash and the
-    projectile leave the current frame's EMITTER anchor for where the player stood, shedding TRAIL drops and
-    fading 1 - t^2 as it arrives; EnemyAttackEffectSystem draws no procedural glob for that type.
+    EVERY ranged shot (the attack AND the debuff shot - every EnemyAttackListener.onRangedAttack) is scheduled
+    by EnemyVisualLayer.scheduleShot for the ATTACK clip's emit frame (at once when that clip is not playing),
+    then a MUZZLE flash and the projectile leave the current frame's EMITTER anchor for the COMMITTED lane
+    target tile - a player who stepped off the lane sees it fly down the old lane and miss (the cardinal-line
+    rule stays visible). It sheds TRAIL drops and fades 1 - t^2 as it arrives. When the layer cannot draw it
+    (no animator, no PROJECTILE) scheduleShot returns false and the procedural glob is drawn as before.
 
 
 ====================================================================================================

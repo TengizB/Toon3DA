@@ -87,7 +87,8 @@ public final class EnemyAttackEffectSystem implements EnemyAttackListener, Dispo
 
     @Override
     public void onRangedAttack(Enemy enemy, int playerColumn, int playerRow) {
-        if (generatedProjectiles != null && generatedProjectiles.drawsProjectileFor(enemy.type)) return;
+        // The animated layer launches the generated glob (down the committed lane) when it can; else the procedural one.
+        if (generatedProjectiles != null && generatedProjectiles.scheduleShot(enemy, playerColumn, playerRow)) return;
         if (enemy.type == EnemyType.EYE_TYRANT) {
             // EYE_TYRANT fires an instant beam drawn by EnemyRenderer — no pool entry needed.
             return;
