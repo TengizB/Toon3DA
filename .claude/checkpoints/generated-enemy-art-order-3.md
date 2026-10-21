@@ -62,7 +62,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP2** — EnemyEffectSystem draws hit effects at the hit anchor in-engine; build green.
 - [x] **CP3** — outcomes (hurt/resisted/blocked/kill), recoil, wounded idle + leak work for both creatures.
 - [x] **CP4** — status visuals; remains; projectile + muzzle; telegraph effects.
-- [ ] **CP5** — burst GIFs sent; owner approval recorded (stop until it is).
+- [x] **CP5** — burst GIFs sent; owner approval recorded (stop until it is).
 - [ ] **CP6** — performance measured; docs; reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -125,3 +125,5 @@ heavy, resisted, blocked, wounded + leak, attack projectile, stunned, kill, rema
 _amber_hot (the same outcomes + real shotgun STAGGER, real hammer KNOCKBACK, burning). Scripts: scratchpad
 warden.txt / tickA.txt / tickB.txt run through cap.sh (time-sorted). SKILL.md documents the new capture steps.
 WAITING for owner approval; CP5 is ticked only when the answer is in the idea's DECISIONS.
+
+**CP5 (gate):** owner approved 2026-10-21 ("Approved") -> idea DECISIONS D2. Proceed with CP6.

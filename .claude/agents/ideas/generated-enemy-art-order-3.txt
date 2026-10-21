@@ -180,6 +180,15 @@ ASSUMPTIONS
 DECISIONS
 ---------
   D1  Enemies must react to damage and other events (series D7).
+  D2  OWNER GATE (CP5, 2026-10-21): in-engine burst GIFs of the Warden (ACID_DRONE) and the Harvest Tick
+      (SHELL_BRUTE), default mood (cool_steel) + amber_hot, every segment labelled — hurt light, hurt heavy,
+      resisted, blocked, kill, wounded idle + leak, burning, stunned, remains, the Warden's projectile from its
+      emitter, a real shotgun stagger and a real hammer knockback on the Tick — were sent; the owner answered
+      "Approved". The approval covers the deviations shown in them: emissive effect particles as ungraded
+      NORMAL-blend sprites (never additive, D2 of order 2), the BLOCKED shimmer as an additive LIGHT pass over the
+      body atlas (like the muzzle light), effect sprites drawn at 2x the creature's pixel, the generic red hit
+      spray standing down for migrated bodies, and a stagger read as a heavy flinch + kick (the sim cancels the
+      action that turn) with the held daze reserved for STUNNED.
 
 
 OPEN QUESTIONS
