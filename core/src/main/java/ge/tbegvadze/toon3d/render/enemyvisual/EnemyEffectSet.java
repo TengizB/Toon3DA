@@ -25,6 +25,8 @@ import java.util.Map;
 public final class EnemyEffectSet implements Disposable {
 
     public static final int SUPPORTED_VERSION = 1;
+    /** Order 4: the key in a creatures row that holds its burst overrides (not a placement). */
+    private static final String CREATURE_BURST_OVERRIDES_KEY = "bursts";
 
     /** The bursts the runtime fires, by name in the manifest. A set ships the subset it needs. */
     public enum BurstId {
@@ -153,6 +155,8 @@ public final class EnemyEffectSet implements Disposable {
     public final Texture atlas;
     private final Burst[] bursts = new Burst[BurstId.COUNT];
     private final Map<String, Placement[]> placementsByCreature = new HashMap<>();
+    /** Order 4: per-creature burst overrides (indexed by {@link BurstId}; null entries = the set's own burst). */
+    private final Map<String, Burst[]> burstOverridesByCreature = new HashMap<>();
 
     private EnemyEffectSet(String setId, Texture atlas) {
         this.setId = setId;
@@ -162,6 +166,14 @@ public final class EnemyEffectSet implements Disposable {
     /** The burst {@code id}, or null when this set does not ship it. */
     public Burst burst(BurstId id) {
         return bursts[id.ordinal()];
+    }
+
+    /**
+     * Order 4: the bursts {@code creatureId} takes IN PLACE of the set's own (its creatures row's
+     * {@code "bursts": {"RESIST": "RESIST_PLATE"}}), indexed by {@link BurstId}; null when it overrides none.
+     */
+    public Burst[] burstOverridesFor(String creatureId) {
+        return burstOverridesByCreature.get(creatureId);
     }
 
     /** The placement table of {@code creatureId} (indexed by {@link PlacementId}), or null when the set has none. */
@@ -189,14 +201,21 @@ public final class EnemyEffectSet implements Disposable {
             for (JsonValue spriteJson = root.get("sprites").child; spriteJson != null; spriteJson = spriteJson.next) {
                 sprites.put(spriteJson.name, parseSprite(set, spriteJson));
             }
+            Map<String, Burst> burstsByName = new HashMap<>();
             for (JsonValue burstJson = root.get("bursts").child; burstJson != null; burstJson = burstJson.next) {
+                Burst burst = parseBurst(sprites, burstJson, manifestFile);
+                burstsByName.put(burstJson.name, burst);   // also a creature-only burst (RESIST_PLATE)
                 BurstId id = BurstId.fromManifestName(burstJson.name);
-                if (id == null) continue;   // a burst a later runtime knows; this one skips it
-                set.bursts[id.ordinal()] = parseBurst(sprites, burstJson, manifestFile);
+                if (id != null) set.bursts[id.ordinal()] = burst;
             }
             for (JsonValue creatureJson = root.get("creatures").child; creatureJson != null; creatureJson = creatureJson.next) {
                 Placement[] placements = new Placement[PlacementId.COUNT];
                 for (JsonValue placementJson = creatureJson.child; placementJson != null; placementJson = placementJson.next) {
+                    if (CREATURE_BURST_OVERRIDES_KEY.equals(placementJson.name)) {
+                        set.burstOverridesByCreature.put(creatureJson.name,
+                                parseBurstOverrides(burstsByName, placementJson, manifestFile));
+                        continue;
+                    }
                     PlacementId id = PlacementId.fromManifestName(placementJson.name);
                     if (id == null) continue;
                     EnemyClipManifest.Anchor anchor = EnemyClipManifest.Anchor.fromManifestName(
@@ -213,6 +232,21 @@ public final class EnemyEffectSet implements Disposable {
             atlas.dispose();
             throw failure;
         }
+    }
+
+    /** A creatures row's {@code "bursts"} map: runtime burst name -> a burst of this set it takes instead. */
+    private static Burst[] parseBurstOverrides(Map<String, Burst> burstsByName, JsonValue json, FileHandle manifestFile) {
+        Burst[] overrides = new Burst[BurstId.COUNT];
+        for (JsonValue entry = json.child; entry != null; entry = entry.next) {
+            BurstId id = BurstId.fromManifestName(entry.name);
+            Burst replacement = burstsByName.get(entry.asString());
+            if (replacement == null) {
+                throw new IllegalStateException("burst override " + entry.name + " names unknown burst "
+                        + entry.asString() + " in " + manifestFile.path());
+            }
+            if (id != null) overrides[id.ordinal()] = replacement;
+        }
+        return overrides;
     }
 
     /** "emitter" names the slot (the muzzle or the mouth), not a manifest anchor; anything unknown is the hit centre. */

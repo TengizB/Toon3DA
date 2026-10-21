@@ -620,7 +620,8 @@ SUIT vs FACILITY — THE INK TABLE (the series' map; a new screen picks its row 
 
 16. ENEMY VISUAL LAYER (generated-enemy-art order 2)
 ----------------------------------------------------
-Migrated enemy types (EnemyVisualRegistry rows: ACID_DRONE = warden, SHELL_BRUTE = harvest_tick) are drawn
+Migrated enemy types (EnemyVisualRegistry rows: ACID_DRONE = warden, SHELL_BRUTE = harvest_tick, IRON_STALKER =
+iron_stalker - order 4, the insect family complete) are drawn
 from generated clip atlases by render/enemyvisual, inside EnemyRenderer's pass 1; every other type keeps the
 legacy region path untouched until generated-enemy-art order 9.
   BODY      the frame from the body atlas, at its manifest offset on the 160x240 canvas, under EXACTLY the
@@ -642,6 +643,9 @@ legacy region path untouched until generated-enemy-art order 9.
             shared across families; BLEED uses the family leak, never blood. Drawn at 2x the creature's pixel.
   REACTIONS a hit that hurt flinches, recoils and flashes white; RESISTED and BLOCKED never flash white;
             BLOCKED sweeps a band of Block's steel-blue light down the body (a light pass, like the muzzle light).
+  ROSTER    warden (MACHINE, cyan ink), harvest_tick (INSECT BRUISER, ichor), iron_stalker (INSECT MINI_ELITE:
+            tall and reared, two bone-edged scythes, riveted gunmetal/darkmetal plates, an ichor seam - its
+            RESISTED hits throw the white-hot plate spark, not the shell chip). Same inks, same light.
   REMAINS   the last DEATH frame stays on the tile for the floor, graded like a body, in place of the corpse
             decal (R5: drawing only). The legacy red hit spray does not draw on a migrated body.
 Measured (llvmpipe, same session, 6 enemies alerted in one room, 8 s each, two interleaved runs): animated

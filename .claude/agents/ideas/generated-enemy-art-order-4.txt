@@ -1,9 +1,30 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 4 - Iron Stalker (insect complete)
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-21
 ---
+
+IMPLEMENTATION NOTE (2026-10-21)
+  - RUNTIME CHANGES (TECHNICAL NOTES asks for them by name), all in render/enemyvisual, all data rows, no switch:
+      1. EnemyClipId += BUFF_SELF, AREA_STRIKE (ability clips; the manifest parser reads them by name).
+      2. EnemyAnimationRules: ABILITY_USED is Kind.ABILITY + two abilityClip(SpecialAbility, EnemyClipId) rows;
+         a creature without the clip plays ATTACK as before (Warden, Tick unchanged).
+      3. EnemyAnimationRules.holdFor(Enemy): a COMMITTED HEAVY (plannedAction.heavyAttack != null) holds WIND_UP.
+         Found in-engine: AREA_STRIKE is planned as a heavy while the state stays ATTACKING / CHASING, so the
+         state-keyed hold dropped the telegraph pose. holdsWindUp(Enemy) also drives the CHARGE burst. The Harvest
+         Tick's charge wind-up re-checked: unchanged.
+      4. EnemyEffectSet / EnemyAtlasCache: per-creature burst OVERRIDES from the fx creatures row
+         ("bursts": {"RESIST": "RESIST_PLATE"}), so the Stalker's resisted hit is the iron plate spark while the
+         Tick keeps its chip. The strike area marker stays with EnemyAttackEffectSystem.
+  - KIT: spike() + riveted_plate() + a "P" stencil glyph; no material added. warden.*, harvest_tick.*, machine.fx.*,
+    status.fx.* byte-identical; insect.fx.* gains three sprites, one burst and the iron_stalker row, every earlier
+    frame pixel-identical (approved, D2).
+  - ART: the rig is STOOD UP x1.065 on its canvas (STAND) so A3 reads in-engine (it first stood only ~6% above
+    the Shell Brute); arm reach grows mostly sideways and smear arcs are signed, to keep strikes on the canvas.
+    The DEATH fold ends with both blades crossed on the floor in front of the heap. 100 unique frames, 2048x2048.
+  - A2: every clip triggered for real (skip turns + logmoments) except DEFEND, which the Stalker never chooses
+    in a short fight - shown with the forced capture step. No tests (G12).
 
 Part of the generated-enemy-art series. Requires orders 1-3 (the animation kit, the runtime, reactions
 and effects). Read generated-enemy-art.txt and docs/sprite-art-creation-guide.txt (all of it - this is
@@ -130,7 +151,14 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  OWNER GATE (CP2/CP3, 2026-10-21): the stills sheet (beside the Warden and the Harvest Tick), the 13 clip GIFs +
+      strip, the insect effect sheet and in-engine burst GIFs in cool_steel (default) + amber_hot - every standard clip,
+      BUFF_SELF and AREA_STRIKE triggered by the real sim, hurt light / heavy, resisted (plate spark), blocked, wounded,
+      stunned, kill -> death -> remains, DEFEND (forced) and the Stalker beside a Shell Brute (A3) - were sent; the owner
+      answered "Approved". The approval covers the STAND stretch (the figure stood up x1.065 on its canvas for A3) and the
+      runtime changes named in the IMPLEMENTATION NOTE.
+  D2  insect.fx.* may change (owner: "insect.fx change is fine"): it gains PLATE_SPARK / PLATE_STREAK / PLATE_FLECK, the
+      RESIST_PLATE burst and the iron_stalker creatures row; every earlier insect frame stays pixel-identical (repacked).
 
 
 OPEN QUESTIONS

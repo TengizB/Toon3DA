@@ -241,7 +241,7 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
             animator.leakTimerSeconds = tick(animator, enemy, animator.leakTimerSeconds, deltaTime,
                     visual.burst(EnemyEffectSet.BurstId.LEAK), EnemyEffectSet.PlacementId.LEAK);
         }
-        if ((enemy.state == EnemyState.WINDING_UP || enemy.state == EnemyState.SELF_DESTRUCTING) && !animator.isDazed()) {
+        if (EnemyAnimationRules.holdsWindUp(enemy) && !animator.isDazed()) {
             animator.chargeTimerSeconds = tick(animator, enemy, animator.chargeTimerSeconds, deltaTime,
                     visual.burst(EnemyEffectSet.BurstId.CHARGE), EnemyEffectSet.PlacementId.CHARGE);
         } else {

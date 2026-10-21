@@ -21,10 +21,10 @@ container), outside the Gradle build, never shipped. The game ships only the PNG
 | File | What it is |
 |---|---|
 | `kit.py` | The renderer (shapes → per-layer height fields → normals → shading → palette → outline → cleanup) plus the animation layer: `Xf` transforms, `Rig`/`Pose`/`Figure`, `Clip`, and the bake (`write_creature`: atlas, glow atlas, manifest, previews). |
-| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`). |
+| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`, `iron_stalker_rig.py`). |
 | `bestiary.py` | The `CREATURES` table of (rig, clips) + the command line. A new creature = one `_rig.py` + one row. |
 | `sheet.py` | Contact sheet of a folder of sprites, nearest-neighbour upscaled, on the game's near-black. |
-| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`) + the shared `status` set — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
+| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`) + the shared `status` set; a creatures row may override a family burst for one creature (`bursts={"RESIST": "RESIST_PLATE"}`, order 4) — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
 
 Shipped per creature, in `assets/textures/enemies/generated/`: `<name>.atlas.png` (every frame of every
 clip, trimmed and packed, binary alpha, <= 2048x2048), `<name>.glow.png` (emissive pixels only, same
@@ -84,6 +84,8 @@ it must read as IN FRONT.
 | `limb(x1, y1, x2, y2, r1, r2, mat)` | tapered capsule |
 | `chain([(x, y), ...], r1, r2, mat)` | bent limb: capsules with a tapering radius |
 | `slab(points, mat, bevel=, slope=, tilt=)` | bevelled plate (armour, stone) |
+| `spike(x1, y1, x2, y2, r, mat, bend=, tip=, edge=, edge_side=)` | tapered curved blade / spike, optional raised edge material (order 4) |
+| `riveted_plate(points, mat, rivet_mat=, spacing=, inset=, ...)` | armour plate + inset rivets; `op="add"` fits it on a body (order 4) |
 | `mirror(shapes, axis)` | bilateral symmetry — design one half |
 | `stencil(img, "W-07", x, y, colour)` | 3x5 pixel serial stencil, painted after render |
 
@@ -107,7 +109,8 @@ shapes overlap; `k` the blend radius (0 = hard union).
 
 Grain is sampled in each shape's OWN coordinates (its `frame`), so texture rides a moving part. The
 standard clip set (guide 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK (<= 0.30 s: bake at fps 20),
-HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH (last frame = corpse). Anchors: ground, hit_centre, eye,
+HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH (last frame = corpse), plus ability clips named after the
+`SpecialAbility` (BUFF_SELF, AREA_STRIKE - the Iron Stalker). Anchors: ground, hit_centre, eye,
 plus muzzle / mouth. Fix every canvas-edge warning by clamping the pose, never by growing the canvas.
 
 ## Lessons already paid for

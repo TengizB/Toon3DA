@@ -214,6 +214,35 @@ def _dust(o, f):
     return [[blob(c, c, r, r * 0.8, "bone", depth=r * 0.4), blob(c + r * 0.6, c - r * 0.3, r * 0.5, r * 0.45, "bone", depth=r * 0.3)]]
 
 
+def _plate_spark(o, f):
+    """RESISTED on an IRON PLATE (the Iron Stalker, order 4): a hard white-hot star off the riveted iron, bigger
+    and brighter than a chip - the shell did not take it, the metal did."""
+    c, n = 8.5, 3
+    arm = _fade(f, n, 7.5, 2.5)
+    glow = _fade(f, n, 2.4, 1.3)
+    return [[limb(c - arm, c, c + arm, c, 1.2, 0.5, "flare", glow=glow),
+             limb(c, c - arm * 0.8, c, c + arm * 0.8, 1.1, 0.5, "flare", glow=glow),
+             limb(c - arm * 0.45, c - arm * 0.45, c + arm * 0.45, c + arm * 0.45, 0.7, 0.4, "flare", glow=glow),
+             blob(c, c, 1.8, 1.8, "flare", glow=glow + 0.3)]]
+
+
+def _plate_streak(o, f, n=3, size=9):
+    """A spark thrown off the plate: a white-hot streak that shortens as it cools (4 orientations)."""
+    c = size / 2
+    ax, ay = _axis(o, 4)
+    length = _fade(f, n, 3.4, 1.0)
+    return [[limb(c - ax * length, c - ay * length, c + ax * length, c + ay * length, 0.9, 0.7, "flare",
+                  glow=_fade(f, n, 2.0, 1.1))]]
+
+
+def _plate_fleck(o, f):
+    """A fleck of iron scale knocked off the plate, tumbling (lit: graded with the body)."""
+    c = 3.5
+    pts = [(-2.2, -1.2), (2.2, -1.4), (2.0, 1.4), (-1.8, 1.2)]
+    r = Xturn(f * math.pi / 4)
+    return [[slab([(c + x, c + y) for x, y in (r(p) for p in pts)], "gunmetal", bevel=1.0)]]
+
+
 # --- status (shared, semantic colours) ---------------------------------------------------------------
 def _flame(o, f):
     """A flame lick: rises, peaks, gutters. Fire is a status colour (V5), so it is the same on every family."""
@@ -345,6 +374,10 @@ SETS = {
             Sprite("MIST", 17, 4, _mist, emissive=True),
             Sprite("CHIP", 9, 4, _chip, emissive=False, mode="loop", fps=12),
             Sprite("DUST", 9, 3, _dust, emissive=False),
+            # order 4: the Iron Stalker's riveted plates (appended: earlier sprites keep their frames)
+            Sprite("PLATE_SPARK", 17, 3, _plate_spark, emissive=True),
+            Sprite("PLATE_STREAK", 9, 3, _plate_streak, emissive=True, orientations=4),
+            Sprite("PLATE_FLECK", 7, 4, _plate_fleck, emissive=False, mode="loop", fps=13),
         ],
         bursts={
             # HURT: coral ichor droplets + chitin flecks.
@@ -371,11 +404,21 @@ SETS = {
                             interval=(0.06, 0.12)),
             "BLEED": burst(emitter("DRIP", (1, 1), (0.40, 0.55), (0, 10), angle=-90, spread=20, gravity=420, radius=10),
                            interval=(0.22, 0.45)),
+            # RESISTED on iron (order 4): a hard star off the plate, a few hot streaks, a fleck of scale. A creature
+            # takes it in place of the family's RESIST through its row's "bursts" override (the Iron Stalker).
+            "RESIST_PLATE": burst(emitter("PLATE_SPARK", (1, 1), (0.16, 0.22), (0, 0), toward=(40, 40)),
+                                  emitter("PLATE_STREAK", (3, 4), (0.14, 0.24), (140, 230), spread=360, toward=(10, 40), gravity=380),
+                                  emitter("PLATE_FLECK", (1, 1), (0.40, 0.55), (60, 100), angle=70, spread=60, gravity=520)),
         },
         creatures={
             "harvest_tick": dict(leak=placement("hit_centre", (24, -50), 1.5), burn=placement("hit_centre", (0, -66), 34),
                                  charge=placement("ground", (0, -3), 0), stun=placement("eye", (0, -26), 17),
                                  poison=placement("hit_centre", (0, -40), 30), body=placement("hit_centre", (0, -10), 10)),
+            # order 4: the leak is the ichor seam on the right flank; resisted hits ring off the plates
+            "iron_stalker": dict(leak=placement("hit_centre", (20, 12), 2), burn=placement("hit_centre", (0, -6), 24),
+                                 charge=placement("ground", (0, -3), 0), stun=placement("eye", (0, -24), 15),
+                                 poison=placement("hit_centre", (0, -8), 22), body=placement("hit_centre", (0, 0), 12),
+                                 bursts={"RESIST": "RESIST_PLATE"}),
         },
     ),
     # ---------------------------------------------------------------------------------------- STATUS (shared)
@@ -456,6 +499,9 @@ def _check(manifest):
     for burst_name, b in manifest["bursts"].items():
         for e in b["emitters"]:
             assert e["sprite"] in manifest["sprites"], f"{manifest['set']}.{burst_name}: unknown sprite {e['sprite']}"
+    for creature, row in manifest["creatures"].items():
+        for slot, burst_name in row.get("bursts", {}).items():   # per-creature burst override (order 4)
+            assert burst_name in manifest["bursts"], f"{manifest['set']}.{creature}: override {slot} -> unknown {burst_name}"
 
 
 def fx_json(manifest):

@@ -1,8 +1,10 @@
 package ge.tbegvadze.toon3d.render.enemyvisual;
 
+import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyState;
 import ge.tbegvadze.toon3d.enemy.EnemyVisualEvent;
 import ge.tbegvadze.toon3d.enemy.EnemyVisualMoment;
+import ge.tbegvadze.toon3d.enemy.SpecialAbility;
 import ge.tbegvadze.toon3d.entity.MatchupOutcome;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 
@@ -48,6 +50,17 @@ public final class EnemyAnimationRules {
         ONE_SHOT {
             @Override void apply(EnemyVisualLayer layer, EnemyAnimator animator, EnemyVisualEvent event, Row row) {
                 animator.playOneShot(row.clip, row.priority);
+            }
+        },
+        /**
+         * Order 4: a SpecialAbility resolved — the ability's own clip from the ability rows when the creature
+         * ships it (BUFF_SELF, AREA_STRIKE), otherwise the row's clip (ATTACK), at the row's priority.
+         */
+        ABILITY {
+            @Override void apply(EnemyVisualLayer layer, EnemyAnimator animator, EnemyVisualEvent event, Row row) {
+                EnemyClipId clip = abilityClipFor(event.ability);
+                if (clip == null || animator.getVisual().manifest.clip(clip) == null) clip = row.clip;
+                animator.playOneShot(clip, row.priority);
             }
         },
         /** Order 3: a player hit, answered by its {@link HitReaction} row. */
@@ -180,13 +193,20 @@ public final class EnemyAnimationRules {
 
     private static final Row[] ROWS = new Row[EnemyVisualMoment.COUNT];
     private static final EnumMap<EnemyState, Hold> HOLDS = new EnumMap<>(EnemyState.class);
+    /**
+     * Order 4: a HEAVY committed without a winding-up state (AREA_STRIKE is planned as a heavy while the enemy
+     * stays ATTACKING) holds WIND_UP for the telegraph turn, exactly as WINDING_UP does.
+     */
+    private static final Hold HEAVY_COMMITTED_HOLD = new Hold(EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
+    /** Order 4: the clip an ability plays when the creature ships it (absent = the ABILITY_USED row's ATTACK). */
+    private static final EnumMap<SpecialAbility, EnemyClipId> ABILITY_CLIPS = new EnumMap<>(SpecialAbility.class);
 
     static {
         register(EnemyVisualMoment.ALERTED,          Kind.ONE_SHOT,  EnemyClipId.ALERT,      PRIORITY_ALERT);
         register(EnemyVisualMoment.MOVE_STARTED,     Kind.SLIDE,     EnemyClipId.MOVE,       PRIORITY_MOVE);
         register(EnemyVisualMoment.WIND_UP_STARTED,  Kind.HOLD,      EnemyClipId.WIND_UP,    PRIORITY_WIND_UP);
         register(EnemyVisualMoment.ATTACK_COMMITTED, Kind.ONE_SHOT,  EnemyClipId.ATTACK,     PRIORITY_ATTACK);
-        register(EnemyVisualMoment.ABILITY_USED,     Kind.ONE_SHOT,  EnemyClipId.ATTACK,     PRIORITY_ATTACK);
+        register(EnemyVisualMoment.ABILITY_USED,     Kind.ABILITY,   EnemyClipId.ATTACK,     PRIORITY_ATTACK);
         register(EnemyVisualMoment.DAMAGED,          Kind.HIT,       null,                   PRIORITY_HURT);
         register(EnemyVisualMoment.STAGGERED,        Kind.STAGGER,   EnemyClipId.HURT_HEAVY, PRIORITY_HURT);
         register(EnemyVisualMoment.KNOCKED_BACK,     Kind.KNOCKBACK, EnemyClipId.HURT_HEAVY, PRIORITY_HURT);
@@ -197,6 +217,10 @@ public final class EnemyAnimationRules {
         hold(EnemyState.WINDING_UP,       EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
         hold(EnemyState.SELF_DESTRUCTING, EnemyClipId.WIND_UP, PRIORITY_WIND_UP);
         hold(EnemyState.DEFENDING,        EnemyClipId.DEFEND,  PRIORITY_DEFEND);
+
+        // Order 4: ability -> clip. The strike area marker stays with EnemyAttackEffectSystem; the clip owns the body.
+        abilityClip(SpecialAbility.BUFF_SELF,   EnemyClipId.BUFF_SELF);
+        abilityClip(SpecialAbility.AREA_STRIKE, EnemyClipId.AREA_STRIKE);
 
         for (EnemyVisualMoment moment : EnemyVisualMoment.values()) {
             if (ROWS[moment.ordinal()] == null) {
@@ -216,12 +240,32 @@ public final class EnemyAnimationRules {
         HOLDS.put(state, new Hold(clip, priority));
     }
 
+    private static void abilityClip(SpecialAbility ability, EnemyClipId clip) {
+        ABILITY_CLIPS.put(ability, clip);
+    }
+
+    /** The clip {@code ability} plays when a creature ships it, or null (then ABILITY_USED plays ATTACK). */
+    public static EnemyClipId abilityClipFor(SpecialAbility ability) {
+        return ability != null ? ABILITY_CLIPS.get(ability) : null;
+    }
+
     public static Row rowFor(EnemyVisualMoment moment) {
         return ROWS[moment.ordinal()];
     }
 
-    /** The clip {@code state} holds, or null when the state holds nothing. */
-    public static Hold holdFor(EnemyState state) {
-        return HOLDS.get(state);
+    /**
+     * The clip {@code enemy} holds: its state's row, else (order 4) WIND_UP while a heavy is committed; null when
+     * it holds nothing.
+     */
+    public static Hold holdFor(Enemy enemy) {
+        Hold hold = HOLDS.get(enemy.state);
+        if (hold == null && enemy.plannedAction.heavyAttack != null) hold = HEAVY_COMMITTED_HOLD;
+        return hold;
+    }
+
+    /** True while {@code enemy} holds its telegraph (WIND_UP): the CHARGE burst repeats. */
+    public static boolean holdsWindUp(Enemy enemy) {
+        Hold hold = holdFor(enemy);
+        return hold != null && hold.clip == EnemyClipId.WIND_UP;
     }
 }

@@ -66,7 +66,7 @@ CONTENTS
   .claude/skills/enemy-art/            the generator (a dev tool, outside Gradle, never shipped)
     kit.py                             the renderer: shapes -> height fields -> shading -> pixels
     <creature>_rig.py                  one per creature: its rig function, pose defaults and clips
-                                       (warden_rig.py, harvest_tick_rig.py)
+                                       (warden_rig.py, harvest_tick_rig.py, iron_stalker_rig.py)
     bestiary.py                        the CREATURES table (rig, clips) + the command line
     sheet.py                           contact sheets
   assets/textures/enemies/generated/   shipped output per creature: <name>.atlas.png, <name>.glow.png,
@@ -80,7 +80,7 @@ CONTENTS
     python3 bestiary.py /tmp/out --preview /tmp/out/preview warden         # + clip GIFs and strip sheet
     python3 bestiary.py /tmp/out --stills [--halo] warden                  # rest pose only (sheets)
     python3 sheet.py /tmp/out /tmp/out/sheet.png 3                         # contact sheet at 3x
-  A full bake of both creatures takes ~50 s (~0.3 s per unique frame).
+  A full bake takes ~0.3 s per unique frame (the Iron Stalker's 100 frames ~80 s).
 
   Why offline Python and not Java at runtime: the kit is ~400 lines of array numerics that would
   have to be duplicated in Java, would add load time on phones, and buys nothing visible. The game
@@ -100,6 +100,13 @@ because every pixel's value comes from a real surface normal lit by one consiste
     limb      tapered capsule: the same profile around a segment, radius r1 -> r2
     chain     a bent limb = consecutive limbs with a tapering radius
     slab      bevelled plate: rises from the edge at `slope` to a plateau, optionally tilted
+    spike     (order 4) a tapered, curved blade/spike: a chain along a quadratic spine whose radius falls
+              from the base to a point, fast near the tip, with an optional raised EDGE strip of another
+              material along one flank (the Iron Stalker's bone-pale scythe edges, its spines, mandibles)
+    riveted_plate (order 4) a slab plus `add` rivets inset from its edge (one per corner, then every
+              ~spacing px). op="add" fits the plate ON a body - it follows the body's curve and its edges
+              step up (the Stalker's chest plate, helm, collar, arm cuffs); a union plate in its own layer
+              reads as a separate, liftable piece (its pauldrons: they lift, ring and tear)
   Why: a height field has a gradient, so lighting, occlusion and outlines all come for free and
   stay consistent between every sprite.
 
@@ -242,7 +249,7 @@ because every pixel's value comes from a real surface normal lit by one consiste
     lighting cannot be decomposed into rigid quads without losing the look. Frames keep the quality.
 7.3 THE STANDARD CLIP SET (every enemy; durations are real seconds, the game is turn-based). Frame
     counts follow from duration x fps (12 fps default, AS1); the shipped Warden / Harvest Tick counts are
-    in brackets. IDLE is the atlas's biggest cost - a creature that must fit more clips lowers it first.
+    in brackets (the Iron Stalker: IDLE 18, ALERT 5, ATTACK 6, DEATH 11). IDLE is the atlas's biggest cost - a creature that must fit more clips lowers it first.
     IDLE        loop, 0.8-1.6 s at 12 fps [16 / 18 frames]: breathing, hover sway, antenna twitch,
                 blister pulse. Alive even when nothing happens. DORMANT plays it at half speed and
                 6 fps (same frame count), eyes dimmed.
@@ -259,7 +266,11 @@ because every pixel's value comes from a real surface normal lit by one consiste
     DEATH       0.6-1.0 s [11 frames]: collapse / break apart / power down - in the creature's
                 own character - ending on the frame that becomes its corpse.
     + ability clips where the type has one (SUMMON, AREA_STRIKE, SELF_DESTRUCT priming, the lance,
-      a shard absorb ...), named in the order that builds the type.
+      a shard absorb ...), named in the order that builds the type. SHIPPED (order 4, the Iron Stalker):
+      BUFF_SELF (once, 0.58 s: plates lift and LOCK, the ichor seam flares) and AREA_STRIKE (once, 0.40 s
+      at 20 fps, "impact" on the crossing frame: from the WIND_UP's cocked blades, a two-blade scissor sweep
+      with smear frames). An ability clip is named exactly as the SpecialAbility constant; the runtime maps
+      the ability to it by a rule row (8.2) and plays ATTACK for a creature that does not ship one.
 7.4 Principles (they matter more at low frame counts): anticipation before every action; squash
     and stretch on impacts; overlapping action (cables, antennae, tails lag a frame); hold the key
     pose longer than the in-betweens; a clip must read in its first two frames.
@@ -274,6 +285,10 @@ because every pixel's value comes from a real surface normal lit by one consiste
     joints of a chain show no seam.
 
 7.6 THE API (kit.py)
+    spike(x1, y1, x2, y2, r, mat, bend=0, tip=0.4, segments=5, edge=None, edge_side=1)   (order 4) a blade:
+                          base -> tip, bowed `bend` px toward (-dy, dx); `edge` = the cutting-edge material.
+    riveted_plate(points, mat, rivet_mat="darkmetal", spacing=8, inset=2.6, rivet_r=1.25, bevel=2.5, **slab)
+                          (order 4) an armour plate with rivets; slab kwargs (op, tilt, prio, k, slope) pass through.
     Xf                    a 2D affine transform. Image space: origin top-left, y DOWN, so a positive
                           angle turns CLOCKWISE on screen.
       Xf.move(dx, dy)  Xf.turn(angle, pivot)  Xf.scale(sx, sy, pivot)  Xf.reflect_x(axis)
@@ -338,13 +353,13 @@ because every pixel's value comes from a real surface normal lit by one consiste
          "event":"emit"}               OPTIONAL, only on the frame the runtime acts on: "emit" (a ranged
                                        shot leaves the muzzle anchor) | "impact" (a melee hit lands).
                                        Shipped: Warden ATTACK frame 1 = emit, Harvest Tick ATTACK
-                                       frame 2 = impact. Never merged into a neighbouring frame.
+                                       frame 2 = impact, Iron Stalker ATTACK + AREA_STRIKE = impact. Never merged into a neighbouring frame.
        ]}}}
     COORDINATES: everything is IMAGE space - origin TOP-LEFT, y DOWN - in pixels of the canvas or the
     atlas. LibGDX's TextureRegion(texture, x, y, w, h) takes the atlas rect as-is; canvas positions
     must be flipped (canvasHeight - y) when placed in the world's y-up space.
     Shipped clip names (the standard set, 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK,
-    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH. The corpse frame is the last DEATH frame. Its
+    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH; ability clips BUFF_SELF, AREA_STRIKE (order 4). The corpse frame is the last DEATH frame. Its
     lowest pixels may sit a few rows BELOW groundY (the Warden's wreck reaches row 236): parts lying
     toward the viewer read lower on screen. Place a frame by its offset on the canvas, never by
     snapping its bottom edge to the ground line.
@@ -358,7 +373,7 @@ because every pixel's value comes from a real surface normal lit by one consiste
     anchors marked. Previews are for the gate and are never committed.
 
 7.9 Atlas budget. The Warden (81 unique frames) packs into 1024x2048; the Harvest Tick (88) fills
-    2048x2048 exactly. A creature that needs more clips gets them by lowering frame counts (a slow
+    2048x2048 exactly; the Iron Stalker (100, 13 clips incl. two ability clips) fits 2048x2048. A creature that needs more clips gets them by lowering frame counts (a slow
     variant at a lower fps, shorter idles) or by splitting its atlas - a runtime change for the order
     that owns the runtime - never by growing the limit.
 
@@ -403,10 +418,16 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
 8.2 CLIP SELECTION (shipped, order 2) - render/enemyvisual/EnemyAnimationRules, data rows, highest wins:
       DEATH 7 > HURT_HEAVY / HURT_LIGHT 6 > ATTACK 5 > WIND_UP (held) 4 > DEFEND (held) 3 > ALERT 2 >
       MOVE 1 > IDLE / DORMANT 0
+    ABILITY_USED (order 4) is Kind.ABILITY: the ability's own clip from the ability rows (abilityClip(BUFF_SELF,
+    BUFF_SELF), abilityClip(AREA_STRIKE, AREA_STRIKE)) when the creature ships it, else ATTACK, at ATTACK's
+    priority. A new ability clip is one EnemyClipId constant + one abilityClip row. The strike AREA MARKER stays
+    with EnemyAttackEffectSystem: the clip owns the body, the system owns the marker.
     HURT_HEAVY when the hit cost >= EffectConstants.ENEMY_VISUAL_HURT_HEAVY_HEALTH_FRACTION (25%) of max HP,
     and always for a stagger or knockback; a hit a shard absorbed or Block swallowed does not flinch.
     WIND_UP is held while the enemy is WINDING_UP / SELF_DESTRUCTING, DEFEND while DEFENDING (a state
-    table, not a timer). A finished one-shot falls back to the best ongoing condition every frame.
+    table, not a timer) - and (order 4) WIND_UP while a HEAVY is committed (plannedAction.heavyAttack): a heavy
+    SPECIAL such as AREA_STRIKE is planned while the state stays ATTACKING / CHASING, so the state row alone
+    dropped its telegraph. EnemyAnimationRules.holdFor(Enemy) is the one lookup; holdsWindUp drives CHARGE. A finished one-shot falls back to the best ongoing condition every frame.
     MOVE: the simulation moves an enemy instantly; the visual layer slides a migrated body one MOVE cycle
     per tile (ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE 0.33 s, max 0.5 s), never snapping back mid-slide.
     Idle phase = frac(enemyId x 0.618) x IDLE duration, so a pack never breathes in unison.
@@ -468,7 +489,8 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
                 (hull flecks), PANEL (livery plate), HARD_SPARK (the resisted star), GLOB + TRAIL (the Warden's
                 corrosive agent, cyan-tinted - AS1), MUZZLE (emit flash)
       insect    ICHOR (droplet), FLECK / FLECK_DARK (chitin), GRIT, DRIP, MIST (the death pop), CHIP + DUST
-                (the resisted chip)
+                (the resisted chip); order 4: PLATE_SPARK + PLATE_STREAK (white-hot) + PLATE_FLECK (gunmetal) =
+                the RESIST_PLATE burst - a resisted hit on the Iron Stalker rings off its iron plates
       status    FLAME, SMOKE, BUBBLE, STUN
     No gore: sparks, ichor, dust - never blood (R3, the premise's restraint).
 9.2 THE FX MANIFEST (FX_VERSION 1): "sprites" {NAME: emissive, mode life|loop, fps, frames[orientation][frame]
@@ -479,6 +501,9 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
     it; the runtime converts with that creature's own pixel scale. Burst names the runtime reads
     (EnemyEffectSet.BurstId): HIT, HIT_HEAVY, RESIST, KILL, DEATH, LEAK, CHARGE, MUZZLE, PROJECTILE, TRAIL,
     BLEED (family) and BURNING, BURNING_ONSET, POISONED, STUNNED (status). A family ships what it needs.
+    PER-CREATURE OVERRIDE (order 4): a creatures row may carry "bursts": {"RESIST": "RESIST_PLATE"} - that
+    creature takes the named burst of the same set IN PLACE of the family's (a set may hold bursts no runtime
+    id names, for exactly this). CreatureVisual.burst() reads the override first. effects.py checks the name.
 9.3 EMISSIVE vs LIT. An emissive sprite keeps only its emissive pixels (no kit outline - it reads as soot on a
     2 px spark) and is drawn in its baked colour, UNGRADED, NORMAL alpha blend, faded with depth like the glow
     atlas (V6; the order-2 D2 rule - never additive). A lit sprite (debris, chitin, smoke) keeps its outline
@@ -565,6 +590,15 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
        (the tick's curled DEFEND), drop the stencil for that pose or it lands on the wrong surface.
   12.13 A wreck must fit above the canvas floor: a hovering creature that lands needs a little depth
        scale (it fell back) and crumpled dangling parts, or its limbs end below row 239.
+  12.14 (order 4) A creature that must read TALLER than a neighbour of similar heightMultiplier gets there on
+       its canvas, never through heightMultiplier: the Iron Stalker (1.10) first stood only ~6% above the Shell
+       Brute (1.05) in-engine because the Tick's hose reaches row 26; the rig is now STOOD UP (a vertical STAND
+       x1.065 about the ground line on every layer, anchor and stencil). Check A3-style claims in-engine.
+  12.15 (order 4) Scaling an arm "toward the viewer" about its shoulder lifts its far joint off the canvas top.
+       Grow reach mostly sideways (y at 35%), and make a smear arc SIGNED: it trails the way the part came from,
+       so an outward swing trails inward (a trail on the wrong side pushed the open frame past both edges).
+  12.16 (order 4) A held telegraph must be read from what the sim COMMITTED, not only its state: AREA_STRIKE
+       never enters WINDING_UP. Trigger abilities for real (skip turns, logmoments) before trusting a clip.
 
 
 ====================================================================================================
@@ -578,7 +612,8 @@ ADD AN ENEMY SPRITE
       creatures row with leak / burn / charge / stun / poison / body placements, and its family set)
   [ ] contact sheet, clip GIFs, in-engine screenshots (11)
   [ ] owner approval recorded
-  [ ] registry row binding the EnemyType to its atlas (see the series order that owns the runtime)
+  [ ] registry row binding the EnemyType to its atlas (see the series order that owns the runtime); an ability
+      clip named after its SpecialAbility + its abilityClip row if the ability has no row yet (8.2)
   [ ] earlier sprites regenerate byte-identical
   [ ] docs: this guide if the method changed; art-direction section 16 roster
 

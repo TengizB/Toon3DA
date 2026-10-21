@@ -42,6 +42,8 @@ public final class EnemyAtlasCache implements Disposable {
         EnemyEffectSet                 statusEffects;
         /** Indexed by {@link EnemyEffectSet.PlacementId}; null when the family set has no row for this creature. */
         EnemyEffectSet.Placement[]     placements;
+        /** Order 4: bursts this creature takes in place of its family's (by {@link EnemyEffectSet.BurstId}); may be null. */
+        EnemyEffectSet.Burst[]         burstOverrides;
 
         CreatureVisual(String creatureId, EnemyClipManifest manifest, Texture bodyAtlas, Texture glowAtlas) {
             this.creatureId = creatureId;
@@ -50,9 +52,10 @@ public final class EnemyAtlasCache implements Disposable {
             this.glowAtlas  = glowAtlas;
         }
 
-        /** {@code id} from the family set (or, for a status burst, the status set); null when not shipped. */
+        /** {@code id}: this creature's override (order 4), else the family set's, else (a status burst) the status set's; null when not shipped. */
         public EnemyEffectSet.Burst burst(EnemyEffectSet.BurstId id) {
-            EnemyEffectSet.Burst found = familyEffects != null ? familyEffects.burst(id) : null;
+            EnemyEffectSet.Burst found = burstOverrides != null ? burstOverrides[id.ordinal()] : null;
+            if (found == null && familyEffects != null) found = familyEffects.burst(id);
             if (found == null && statusEffects != null) found = statusEffects.burst(id);
             return found;
         }
@@ -131,7 +134,10 @@ public final class EnemyAtlasCache implements Disposable {
     private void attachEffects(CreatureVisual visual, EnemyType type) {
         visual.familyEffects = effectSet(type.family().name().toLowerCase(Locale.ROOT));
         visual.statusEffects = effectSet(EnemyConstants.ENEMY_EFFECT_STATUS_SET_ID);
-        if (visual.familyEffects != null) visual.placements = visual.familyEffects.placementsFor(visual.creatureId);
+        if (visual.familyEffects != null) {
+            visual.placements     = visual.familyEffects.placementsFor(visual.creatureId);
+            visual.burstOverrides = visual.familyEffects.burstOverridesFor(visual.creatureId);
+        }
     }
 
     private EnemyEffectSet effectSet(String setId) {
