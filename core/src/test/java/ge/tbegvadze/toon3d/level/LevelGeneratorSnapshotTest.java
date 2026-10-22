@@ -162,7 +162,7 @@ class LevelGeneratorSnapshotTest {
     // fixed symbol are unchanged for every seed (R1, proven separately over 200 seeds x every generator x
     // depths 1-25 — see .claude/checkpoints/generated-wall-art-order-2.md). Stable across two JVM runs.
     private static final String EXPECTED_DIGEST =
-            "d03a7f0c80e691bb00f7db855156626afd0a7c6b3e076db442c3bea9450af5b0";
+            "f00a581da9550a16febf055bb6d2916b308482f81d20c15de9a12f4d2591828e";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

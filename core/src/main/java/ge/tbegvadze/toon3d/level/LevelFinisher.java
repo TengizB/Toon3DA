@@ -29,6 +29,15 @@ import java.util.Random;
  *       becomes its family's BASE, with the family ACCENT on 1-3 tiles, the wall facing the entrance first.
  *       A special floor names one group for every wall that no room claims (MED_BAY MEDICAL, gate
  *       SECURITY, event + boss SIGNATURE).</li>
+ *   <li>P4 — along a straight exposed hall run of 5+ tiles every 4th tile is STRUCTURE (phase seeded per
+ *       run); the walls flanking a door, in line with it, are STRUCTURE (door frames).</li>
+ *   <li>P5 — no exposed hall run of 7 tiles without a LIGHT; never two LIGHTs adjacent.</li>
+ *   <li>P6 — 1-3 MARKERs per floor, near the arrival point and the exit; SERVICE / VENT on 6-10% of the
+ *       remaining hall base in 1-3 tile clusters.</li>
+ *   <li>P7 — BREACH on breachBase + floorIndexInRegion x breachStep of the hall base (more in a cavern), in
+ *       seeded clusters, never on a door frame.</li>
+ *   <li>P9 — focal walls (LIGHT, MARKER, ACCENT) are never adjacent and keep 2+ tiles apart, 4+ for the same
+ *       focal wall.</li>
  *   <li>P1 — the palette binds every wall symbol to the region set's picture (RegionPaletteBuilder).</li>
  * </ol>
  * It draws from its OWN random stream ({@link GameMath#wallSetSeed}), never the generator's, so the
@@ -37,6 +46,7 @@ import java.util.Random;
 public final class LevelFinisher {
 
     private static final char PLAIN_WALL = 'x';
+    private static final char ARRIVAL_SYMBOL = 'p';
     private static final int[] NEIGHBOUR_COLUMN = { 0, 0, 1, -1 };
     private static final int[] NEIGHBOUR_ROW    = { 1, -1, 0, 0 };
 
@@ -183,6 +193,31 @@ public final class LevelFinisher {
             placeFloorAccents(grid, owner, ownerRoom, request.floorGroup, random, focals);
         }
 
+        // P4-P7: the hall placement. Rhythm walls are the HALL's and, on a special floor, the walls of the
+        // floor's own group that no room claims (a boss arena's SIGNATURE base still gets its frames and lights).
+        boolean[][] rhythm = new boolean[levelHeight][levelWidth];
+        for (int tileRow = 0; tileRow < levelHeight; tileRow++) {
+            for (int tileColumn = 0; tileColumn < levelWidth; tileColumn++) {
+                WallGroup group = owner[tileRow][tileColumn];
+                rhythm[tileRow][tileColumn] = group == WallGroup.HALL
+                        || group == request.floorGroup && ownerRoom[tileRow][tileColumn] == -1;
+            }
+        }
+        char rhythmBase = WallSlotTable.symbolFor(request.floorGroup, WallSlot.BASE);
+        List<List<int[]>> runs = findRuns(grid, rhythm);
+        frameDoors(grid, exposed);
+        placeRhythm(grid, runs, rhythmBase, random);
+        placeLights(grid, runs, rhythmBase, random, focals);
+        placeMarkers(grid, owner, random, focals);
+        float breachDensity = set.breachBase()
+                + (request.config != null ? request.config.floorIndexInRegion : 0) * set.breachStep()
+                + (request.cavern ? LevelGenConstants.WALL_SET_CAVERN_BREACH_BONUS : 0f);
+        placeHallClusters(grid, owner, breachDensity, new char[]{ symbol(WallSlot.BREACH) }, random);
+        float varietyFraction = LevelGenConstants.WALL_SET_VARIETY_MIN_FRACTION + random.nextFloat()
+                * (LevelGenConstants.WALL_SET_VARIETY_MAX_FRACTION - LevelGenConstants.WALL_SET_VARIETY_MIN_FRACTION);
+        placeHallClusters(grid, owner, varietyFraction,
+                new char[]{ symbol(WallSlot.SERVICE), symbol(WallSlot.VENT) }, random);
+
         LevelPalette base = request.basePalette != null
                 ? request.basePalette : ge.tbegvadze.toon3d.tileset.LevelPalettes.legacy();
         return RegionPaletteBuilder.build(set, base);
@@ -290,11 +325,215 @@ public final class LevelFinisher {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // P4-P7 — the hall placement
+    // ---------------------------------------------------------------------------------------------
+
+    private static char symbol(WallSlot hallSlot) {
+        return WallSlotTable.symbolFor(WallGroup.HALL, hallSlot);
+    }
+
+    /**
+     * Every straight run of rhythm walls that share the same open side: for each of the four sides, the
+     * maximal row (north / south) or column (east / west) sequences of rhythm walls open on that side.
+     * A wall open on two sides belongs to two runs.
+     */
+    private static List<List<int[]>> findRuns(char[][] grid, boolean[][] rhythm) {
+        List<List<int[]>> runs = new ArrayList<>();
+        int levelHeight = grid.length;
+        int levelWidth  = levelHeight > 0 ? grid[0].length : 0;
+        for (int direction = 0; direction < 4; direction++) {
+            int openColumn = NEIGHBOUR_COLUMN[direction];
+            int openRow    = NEIGHBOUR_ROW[direction];
+            boolean alongRow = openRow != 0;          // north / south faces run along a row
+            int lineCount   = alongRow ? levelHeight : levelWidth;
+            int lineLength  = alongRow ? levelWidth : levelHeight;
+            for (int line = 0; line < lineCount; line++) {
+                List<int[]> run = new ArrayList<>();
+                for (int step = 0; step <= lineLength; step++) {
+                    int tileColumn = alongRow ? step : line;
+                    int tileRow    = alongRow ? line : step;
+                    boolean member = step < lineLength && rhythm[tileRow][tileColumn]
+                            && isOpen(grid, tileColumn + openColumn, tileRow + openRow);
+                    if (member) {
+                        run.add(new int[]{ tileColumn, tileRow });
+                    } else if (!run.isEmpty()) {
+                        runs.add(run);
+                        run = new ArrayList<>();
+                    }
+                }
+            }
+        }
+        return runs;
+    }
+
+    /** P4: the exposed walls flanking a door, in line with it (a door on a corner frames only those). */
+    private static void frameDoors(char[][] grid, boolean[][] exposed) {
+        char structure = symbol(WallSlot.STRUCTURE);
+        for (int tileRow = 0; tileRow < grid.length; tileRow++) {
+            for (int tileColumn = 0; tileColumn < grid[tileRow].length; tileColumn++) {
+                if (!Level.isDoor(grid[tileRow][tileColumn])) continue;
+                frameIfInLine(grid, exposed, tileColumn - 1, tileRow, tileColumn + 1, tileRow, structure);
+                frameIfInLine(grid, exposed, tileColumn, tileRow - 1, tileColumn, tileRow + 1, structure);
+            }
+        }
+    }
+
+    private static void frameIfInLine(char[][] grid, boolean[][] exposed, int firstColumn, int firstRow,
+                                      int secondColumn, int secondRow, char structure) {
+        if (!isWallTile(grid, firstColumn, firstRow) || !isWallTile(grid, secondColumn, secondRow)) return;
+        if (exposed[firstRow][firstColumn])   grid[firstRow][firstColumn]   = structure;
+        if (exposed[secondRow][secondColumn]) grid[secondRow][secondColumn] = structure;
+    }
+
+    /** P4: every WALL_SET_RHYTHM_PERIOD-th tile of a run of WALL_SET_RHYTHM_MIN_RUN+ is STRUCTURE. */
+    private static void placeRhythm(char[][] grid, List<List<int[]>> runs, char rhythmBase, Random random) {
+        char structure = symbol(WallSlot.STRUCTURE);
+        int period = LevelGenConstants.WALL_SET_RHYTHM_PERIOD;
+        for (List<int[]> run : runs) {
+            if (run.size() < LevelGenConstants.WALL_SET_RHYTHM_MIN_RUN) continue;
+            int phase = random.nextInt(period);
+            for (int index = 0; index < run.size(); index++) {
+                if ((index + phase) % period != 0) continue;
+                int[] tile = run.get(index);
+                if (grid[tile[1]][tile[0]] == rhythmBase) grid[tile[1]][tile[0]] = structure;
+            }
+        }
+    }
+
+    /**
+     * P5: walks each run and, before a stretch of WALL_SET_LIGHT_MAX_GAP tiles closes without a LIGHT,
+     * places one on the latest base tile P9 allows inside that stretch (a LIGHT another run already put in
+     * this run counts). The first LIGHT comes 3-5 tiles in (seeded). P9 wins over P5 when no tile is allowed.
+     */
+    private static void placeLights(char[][] grid, List<List<int[]>> runs, char rhythmBase, Random random,
+                                    FocalSpacing focals) {
+        char light = symbol(WallSlot.LIGHT);
+        int window = LevelGenConstants.WALL_SET_LIGHT_MAX_GAP - 1;
+        for (List<int[]> run : runs) {
+            if (run.size() < LevelGenConstants.WALL_SET_LIGHT_MAX_GAP) continue;
+            int lastLight = -1 - random.nextInt(3);
+            for (int index = 0; index < run.size(); index++) {
+                int[] tile = run.get(index);
+                if (grid[tile[1]][tile[0]] == light) {
+                    lastLight = index;
+                    continue;
+                }
+                if (index - lastLight < window) continue;
+                // A lamp reads best between two plain panels, so a tile flanked by base on both sides wins;
+                // any allowed base tile in the stretch is the fallback.
+                int chosen = latestLightTile(grid, run, index, lastLight, rhythmBase, light, focals, true);
+                if (chosen < 0) chosen = latestLightTile(grid, run, index, lastLight, rhythmBase, light, focals, false);
+                if (chosen >= 0) {
+                    place(grid, run.get(chosen), light, focals);
+                    lastLight = chosen;
+                } else {
+                    lastLight = index; // no allowed tile: P9 wins, move on
+                }
+            }
+        }
+    }
+
+    /** The latest run index in (lastLight + focal gap, index] that can take a LIGHT; -1 when none can. */
+    private static int latestLightTile(char[][] grid, List<int[]> run, int index, int lastLight, char rhythmBase,
+                                       char light, FocalSpacing focals, boolean flankedByBase) {
+        for (int candidate = index; candidate > lastLight + LevelGenConstants.WALL_SET_FOCAL_MIN_GAP
+                && candidate >= 0; candidate--) {
+            int[] option = run.get(candidate);
+            if (grid[option[1]][option[0]] != rhythmBase || !focals.allows(option[0], option[1], light)) continue;
+            if (flankedByBase && !(isRunBase(grid, run, candidate - 1, rhythmBase)
+                                && isRunBase(grid, run, candidate + 1, rhythmBase))) continue;
+            return candidate;
+        }
+        return -1;
+    }
+
+    private static boolean isRunBase(char[][] grid, List<int[]> run, int index, char rhythmBase) {
+        if (index < 0 || index >= run.size()) return false;
+        int[] tile = run.get(index);
+        return grid[tile[1]][tile[0]] == rhythmBase;
+    }
+
+    /** P6: 1-3 MARKERs per floor — one near the arrival point, one near the exit, then anywhere. */
+    private static void placeMarkers(char[][] grid, WallGroup[][] owner, Random random, FocalSpacing focals) {
+        char marker = symbol(WallSlot.MARKER);
+        char hallBase = symbol(WallSlot.BASE);
+        int[] arrival = findSymbol(grid, ARRIVAL_SYMBOL);
+        int[] exit    = findSymbol(grid, ge.tbegvadze.toon3d.util.RenderConstants.STAIRS_DOWN_CHAR);
+        int span = LevelGenConstants.WALL_SET_MARKER_MAX - LevelGenConstants.WALL_SET_MARKER_MIN + 1;
+        int wanted = LevelGenConstants.WALL_SET_MARKER_MIN + random.nextInt(span);
+        int[][] anchors = { arrival, exit, null };
+        for (int markerIndex = 0; markerIndex < wanted; markerIndex++) {
+            int[] anchor = anchors[Math.min(markerIndex, anchors.length - 1)];
+            if (markerIndex < 2 && anchor == null) continue;
+            List<int[]> candidates = new ArrayList<>();
+            for (int tileRow = 0; tileRow < grid.length; tileRow++) {
+                for (int tileColumn = 0; tileColumn < grid[tileRow].length; tileColumn++) {
+                    if (owner[tileRow][tileColumn] != WallGroup.HALL || grid[tileRow][tileColumn] != hallBase) continue;
+                    if (anchor != null && Math.max(Math.abs(tileColumn - anchor[0]), Math.abs(tileRow - anchor[1]))
+                            > LevelGenConstants.WALL_SET_MARKER_NEAR_TILES) continue;
+                    candidates.add(new int[]{ tileColumn, tileRow });
+                }
+            }
+            scatterFocal(grid, candidates, marker, 1, random, focals);
+        }
+    }
+
+    /**
+     * P6 / P7: dresses {@code fraction} of the remaining exposed hall base with {@code kinds} (one kind per
+     * cluster, picked at random), in clusters of 1..WALL_SET_CLUSTER_MAX tiles along a straight line of hall
+     * base. Door frames are already STRUCTURE, so a cluster never lands on one.
+     */
+    private static void placeHallClusters(char[][] grid, WallGroup[][] owner, float fraction, char[] kinds,
+                                          Random random) {
+        char hallBase = symbol(WallSlot.BASE);
+        List<int[]> candidates = new ArrayList<>();
+        for (int tileRow = 0; tileRow < grid.length; tileRow++) {
+            for (int tileColumn = 0; tileColumn < grid[tileRow].length; tileColumn++) {
+                if (owner[tileRow][tileColumn] == WallGroup.HALL && grid[tileRow][tileColumn] == hallBase) {
+                    candidates.add(new int[]{ tileColumn, tileRow });
+                }
+            }
+        }
+        int target = Math.round(candidates.size() * Math.min(1f, Math.max(0f, fraction)));
+        int placed = 0;
+        for (int attempt = 0; attempt < candidates.size() * 2 && placed < target; attempt++) {
+            int[] seedTile = candidates.get(random.nextInt(candidates.size()));
+            if (grid[seedTile[1]][seedTile[0]] != hallBase) continue;
+            char kind = kinds[random.nextInt(kinds.length)];
+            int length = 1 + random.nextInt(LevelGenConstants.WALL_SET_CLUSTER_MAX);
+            boolean alongRow = random.nextBoolean();
+            int stepColumn = alongRow ? 1 : 0;
+            int stepRow    = alongRow ? 0 : 1;
+            for (int offset = 0; offset < length && placed < target; offset++) {
+                int tileColumn = seedTile[0] + offset * stepColumn;
+                int tileRow    = seedTile[1] + offset * stepRow;
+                if (!inBounds(grid, tileColumn, tileRow) || owner[tileRow][tileColumn] != WallGroup.HALL
+                        || grid[tileRow][tileColumn] != hallBase) break;
+                grid[tileRow][tileColumn] = kind;
+                placed++;
+            }
+        }
+    }
+
+    private static int[] findSymbol(char[][] grid, char symbol) {
+        for (int tileRow = 0; tileRow < grid.length; tileRow++) {
+            for (int tileColumn = 0; tileColumn < grid[tileRow].length; tileColumn++) {
+                if (grid[tileRow][tileColumn] == symbol) return new int[]{ tileColumn, tileRow };
+            }
+        }
+        return null;
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Shared predicates
     // ---------------------------------------------------------------------------------------------
 
     private static boolean inBounds(char[][] grid, int tileColumn, int tileRow) {
         return tileRow >= 0 && tileRow < grid.length && tileColumn >= 0 && tileColumn < grid[tileRow].length;
+    }
+
+    private static boolean isWallTile(char[][] grid, int tileColumn, int tileRow) {
+        return inBounds(grid, tileColumn, tileRow) && WallSlotTable.isWallSymbol(grid[tileRow][tileColumn]);
     }
 
     /** Open = in bounds and not a wall: a floor, a door, a prop, a pickup, a column — anything a face is seen from. */

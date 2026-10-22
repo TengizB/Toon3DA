@@ -52,7 +52,7 @@ Never `git add -A`.
       TilesetConstants. DONE WHEN: they exist and the mirror build is green.
 - [x] **CP2** — LevelFinisher exists, every generator's final Level goes through it with family stamping + the region
       palette; no generator writes a wall picture char. DONE WHEN: build green and R1 script shows no difference.
-- [ ] **CP3** — route wallSetId + World resolution + LevelGenConfig fields; hall placement P4-P9. DONE WHEN: build
+- [x] **CP3** — route wallSetId + World resolution + LevelGenConfig fields; hall placement P4-P9. DONE WHEN: build
       green, R1 holds.
 - [ ] **CP4** — RegionWallAtlas loads per floor; walls, doors, columns draw from the atlas (base pass). DONE WHEN:
       run-game shows set A walls/doors/columns.
@@ -67,6 +67,9 @@ Never `git add -A`.
   separately), stable across two JVM runs.
 - CP2 `level/RoomBlueprintBuildDemandTest` — unchanged and green: the blueprint demands lost their wall rows
   (build() no longer stamps a wall picture), so "stamped flexible symbols == declared demand" still holds.
+- CP3 `level/LevelGeneratorSnapshotTest` — re-baselined again for the hall placement (f00a581d...).
+- CP3 `route/Order10RegistriesTest.everyRegionCarriesCompleteThemingData` — asserts each region's `wallSetId()` is
+  registered (was: non-empty `wallPalette()`).
 
 ## NOTES CARRIED FORWARD
 
@@ -115,3 +118,19 @@ char (research-lab force-field barrier 'F', observatory shell '`') now write 'x'
 TEMPORARY STATE (until CP4): EnvironmentTextureSet skips sprite ids without a generator and WallRenderer draws
 unrealized wall/column ids with the white pixel (walls render flat-shaded). Both marked TEMPORARY in code; CP4
 replaces the path, CP7 deletes it.
+
+**CP3:** R1 PROVEN again (`r1-cp3.txt`: 35 200 / 35 200 identical). `RegionAmbience.wallSetId()` replaces
+`wallPalette()`; `RouteMapConstants.REGION_*_WALL_SET` (= TilesetConstants ids) replace `REGION_*_WALL_PALETTE`;
+`RouteRegistries.requireRegisteredWallSet` fails startup on an unregistered set. `World.applyFloorWallSet(config)`
+(in `buildFloorForNode`, beside applyFloorSupplyInputs) sets `config.wallSetId` from the route plan's region for the
+current depth (like the mood) and `floorIndexInRegion = depth - region.firstDepth()`; fallback outer_facility + log
+"WallSet". The route-less dev path (`pickLevelGenerator`) passes no config -> set A. LevelFinisher now runs P4 door
+frames (in-line flanking walls, any owner) + rhythm (runs = maximal straight lines of rhythm walls sharing an open
+side; rhythm walls = HALL, or the special floor's group walls no room claims), P5 lights (latest allowed base tile
+before a 7-stretch closes, preferring a tile flanked by base; P9 wins when nothing is allowed), P6 markers (near 'p'
+then '>' then anywhere), P7 breach (base + index x step, +0.04 in caverns) and P6 SERVICE/VENT (6-10%), clusters
+1-3 along a line. MEASURED (40 seeds/generator, exposed walls): ROOMS_MST hall base 46% + room bases ~26% (= ~72%
+base, inside the guide's 65-75%), STRUCTURE 16-18% (P4's literal "every 4th" + frames — above the guide's rough
+"~10% structure/light"; record in guide 7 at CP8), LIGHT ~4%, SERVICE+VENT ~4%; breach 0% on a region's first floor,
+~6% of exposed (12% of hall base) on its last; caverns 80% base. Scratchpad tools: `dumpsrc/r1/Dump.java` (print a
+floor), `Stats.java` (fractions).
