@@ -52,7 +52,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP0** — this file, committed and pushed before anything else changes.
 - [x] **CP1** — kit.py additions in (environment materials, stencil capitals, helpers).
       DONE WHEN: every committed enemy atlas/glow/manifest + fx file regenerates byte-identical.
-- [ ] **CP2** — walls.py writes a valid manifest + atlas + glow + mips for the HALL group alone.
+- [x] **CP2** — walls.py writes a valid manifest + atlas + glow + mips for the HALL group alone.
       DONE WHEN: `python3 walls.py <dir> outer_facility` writes the files; twice -> byte-identical; hall strips seamless.
 - [ ] **CP3** — all six room families + SIGNATURE generated and in the manifest.
       DONE WHEN: manifest lists 30 walls; every room-family strip seamless; 6-copy BASE strips pass.
@@ -74,3 +74,19 @@ keycard values live in `RenderConstants.KEYCARD_AURA_*` (not ItemConstants/Comba
 Helpers `kit.chamfer_rect(x0,y0,x1,y1,c)` and `kit.tile_copies(shapes, period, columns=3, rows=1)`.
 Verified: bestiary.py + effects.py into the scratchpad -> 32 of 32 committed enemy files byte-identical. A full enemy
 regen takes ~5.5 min in this container (not ~50 s).
+
+**CP2:** `walls.py` = the bake (`bake_face` 3-face canvas, `bake_surface` 3x3), primitives (backing, band, rail,
+grammar, panel, tile_field, pipe_run, grille, tear_edge, vein, lock_panel), `mip_chain`, a deterministic SKYLINE
+packer (faces + glow-frame slots first, then the 128 mips, then the 64 mips, each in manifest order; smallest
+power-of-two square), the manifest writer (R11 + "atlas"/"glow"/"atlasSize" keys), previews (per-group sheets, base
+x6 strips, runs, focal-alone, surfaces 3x3, flicker GIF, `<region>_seams.txt` join ratios). DEVIATION (record in
+the IMPLEMENTATION NOTE): region builders live in `outer_facility_walls.py` (REGION row imported by walls.py),
+mirroring `<name>_rig.py` + bestiary.py; walls.py aliases itself into sys.modules["walls"] when run as __main__.
+LESSON (guide 15.14 at CP5): shapes crossing the tile edge must be `grammar()` - k=0 (smax of equal heights raises
+the overlap by k/4) and a BRUSHED grain frame (y only), and never carve/add across the edge (overlaps SUM) - the
+first bake showed tiny repeating marks at x~244-268 on the rail and kick plate. A joint = two bands with a gap.
+ONE render seed (SEED=101) for the whole A set so trims carry identical grain on every face.
+Glow frame level 0 is baked at 0.06 (just above GLOW_DEAD) so the "off" frame holds the dark tube and covers the
+lit lamp of the base face. Material `grime` is defined at runtime in outer_facility_walls.py - MOVE IT TO kit.py
+(appended) before CP4 and re-run the enemy regen check.
+Verified: 9 hall faces, LIGHT 4 frames animate=some (glow 1.07%), two runs byte-identical, join ratios 0.24-0.32.
