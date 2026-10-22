@@ -55,6 +55,7 @@ public final class RegionWallAtlas implements Disposable {
     private final int[][]   glowFrameX;       // [face][frame], frame 0 = the face's own glow rect
     private final int[][]   glowFrameY;
     private final float[][] glowFrameSeconds;
+    private final float[]   glowCycleSeconds;  // sum of a face's frame durations
 
     private RegionWallAtlas(String setId, Texture atlasTexture, Texture glowTexture, String floorFileName,
                             String ceilingFileName, List<FaceEntry> faces) {
@@ -73,6 +74,7 @@ public final class RegionWallAtlas implements Disposable {
         glowFrameX       = new int[faceCount][];
         glowFrameY       = new int[faceCount][];
         glowFrameSeconds = new float[faceCount][];
+        glowCycleSeconds = new float[faceCount];
         for (int faceIndex = 0; faceIndex < faceCount; faceIndex++) {
             FaceEntry face = faces.get(faceIndex);
             faceIndexById.put(face.id, faceIndex);
@@ -85,6 +87,7 @@ public final class RegionWallAtlas implements Disposable {
             glowFrameX[faceIndex]       = face.frameX;
             glowFrameY[faceIndex]       = face.frameY;
             glowFrameSeconds[faceIndex] = face.frameSeconds;
+            for (float seconds : face.frameSeconds) glowCycleSeconds[faceIndex] += seconds;
         }
     }
 
@@ -226,6 +229,11 @@ public final class RegionWallAtlas implements Disposable {
     /** The frame durations of {@code face}, in seconds (shared array: read-only). */
     public float[] glowFrameSeconds(int face) {
         return glowFrameSeconds[face];
+    }
+
+    /** Length of {@code face}'s glow animation cycle, in seconds. */
+    public float glowCycleSeconds(int face) {
+        return glowCycleSeconds[face];
     }
 
     @Override

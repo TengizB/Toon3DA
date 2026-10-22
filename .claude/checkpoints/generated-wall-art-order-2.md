@@ -56,7 +56,7 @@ Never `git add -A`.
       green, R1 holds.
 - [x] **CP4** — RegionWallAtlas loads per floor; walls, doors, columns draw from the atlas (base pass). DONE WHEN:
       run-game shows set A walls/doors/columns.
-- [ ] **CP5** — variants + LOD + glow + animation; captures A4-A6 sent.
+- [x] **CP5** — variants + LOD + glow + animation; captures A4-A6 sent.
 - [ ] **CP6** — floor/ceiling from the set's surfaces; capture sent.
 - [ ] **CP7** — Part 3 deletion; tests updated; build green; A3 grep clean; A7.
 - [ ] **CP8** — probe + leak check (A8); docs (A9); reviewer gate; STATUS IMPLEMENTED.
@@ -147,3 +147,14 @@ glow fade, some-animate 1 in 6, pick sides, phase buckets). Verified in run-game
 set A hall base + structure ribs on a generated floor. run-game opening for a generated floor: standard opening,
 `13:tap:644:100;14:seed:7;14.5:set:startRoomChoiceResolved:true;15:call:.:onDescentRequested;17:engage;
 23:tap:640:450;24.5:tap:640:450;26:tap:644:80;27:tap:644:100;28:tap:915:667` (briefing answer + ack, relic LEAVE IT).
+
+**CP5:** WallRenderer: BASE variant per face (`side` 0 W / 1 E / 2 S / 3 N from the DDA step), mip per stripe
+(`wallMipLevel(lineHeight)`, faceSize >> mip, both atlases share packing), glow per column (`assignGlow`: static glow at
+the face's mip rect; at mip 0 an animated face picks its frame via `GameMath.wallGlowFrameIndex` with a per-face phase
+bucket; "some" = `wallVariantIndex(col,row,side, seed ^ face, 6) == 0`; alpha = distance fade x
+`level.getLightMultiplier()`), Phase 4 glow pass after the muzzle pass (NORMAL blend, white x alpha, one bind; a door
+column shows only the panel's glow). `RegionWallAtlas.glowCycleSeconds(face)`. Capture driver gained
+`lookat:SYMBOL:INDEX:BACK[:SIDE]` (SKILL.md row). Captures (seed 7, first node): hall at 9 tiles (x#105) and 8 tiles
+(x#35), medical room (M#12 from 6), door (d#0 from 3), research room (t#0), flicker = LIGHT 49,27 west face
+(`lookat:S:2:4:W`), turn burst at x#105; A5 under amber_hot: lamp + cyan seams keep colour, panels take the grade.
+Verified: forcing ONE_IN=1 animates every lamp; the 1-in-6 hash measured 2383/14400. Sent to the owner (not a stop).

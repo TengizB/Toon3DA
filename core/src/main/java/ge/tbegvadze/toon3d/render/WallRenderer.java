@@ -180,6 +180,17 @@ public class WallRenderer implements Renderable, Disposable {
         float   doorPanelLightRed;
         float   doorPanelLightGreen;
         float   doorPanelLightBlue;
+
+        // Wall GLOW (generated-wall-art order 2): the emissive layer of the surface / door panel, drawn after the
+        // base and muzzle passes from the glow atlas, NORMAL blend, ungraded; alpha = distance fade x blackout.
+        boolean drawSurfaceGlow;
+        int     surfaceGlowTexColumn;
+        int     surfaceGlowTexSrcY;
+        float   surfaceGlowAlpha;
+        boolean drawDoorPanelGlow;
+        int     doorPanelGlowTexColumn;
+        int     doorPanelGlowTexSrcY;
+        float   doorPanelGlowAlpha;
     }
 
     // -------------------------------------------------------------------------
@@ -2266,9 +2277,90 @@ public class WallRenderer implements Renderable, Disposable {
             batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         }
 
+        // Phase 4 - WALL GLOW (generated-wall-art order 2, R4/R5): the emissive layer from the glow atlas (one bind),
+        // NORMAL blend, exempt from the grade, the red-alert dampen and the muzzle light; only the distance fade
+        // and BLACKOUT's light multiplier dim it. A column with a door panel shows the panel's glow only.
+        RegionWallAtlas atlas = regionWallAtlas;
+        if (atlas != null) {
+            Texture glowTexture = atlas.glowTexture();
+            for (int screenColumn = 0; screenColumn < projectionColumnCount; screenColumn++) {
+                WallColumnResult result = columnResults[screenColumn];
+                if (result.drawDoorPanel) {
+                    if (!result.drawDoorPanelGlow) continue;
+                    batch.setColor(1f, 1f, 1f, result.doorPanelGlowAlpha);
+                    batch.draw(glowTexture,
+                               screenColumn * columnWidth, result.doorPanelDrawBottom,
+                               columnWidth, result.doorPanelDrawTop - result.doorPanelDrawBottom,
+                               result.doorPanelGlowTexColumn, result.doorPanelGlowTexSrcY,
+                               1, result.doorPanelTexSrcHeight,
+                               false, false);
+                } else if (result.drawSurface && result.drawSurfaceGlow) {
+                    batch.setColor(1f, 1f, 1f, result.surfaceGlowAlpha);
+                    batch.draw(glowTexture,
+                               screenColumn * columnWidth, result.surfaceDrawBottom,
+                               columnWidth, result.surfaceDrawTop - result.surfaceDrawBottom,
+                               result.surfaceGlowTexColumn, result.surfaceGlowTexSrcY,
+                               1, result.surfaceTexSrcHeight,
+                               false, false);
+                }
+            }
+        }
+
         // Reset to white so no alert tint leaks into other renderers that share GL state.
         batch.setColor(Color.WHITE);
         batch.end();
+    }
+
+    /** Distance LOD (R6): mip 0/1/2 from the stripe height; always 0 for the white-pixel fallback. */
+    private int wallMipLevel(float lineHeight) {
+        if (regionWallAtlas == null) return 0;
+        return GameMath.wallMipLevel(lineHeight, WALL_FACE_SIZE, WALL_MIP_BIAS, WALL_MAX_MIP);
+    }
+
+    /**
+     * Fills the surface (or door panel) GLOW of one column when {@code face} has emissive pixels: the glow atlas
+     * rect at the same mip and texel, or — at mip 0 on an animated face — the current animation frame. The frame
+     * is a pure function of the world clock and a per-face phase hashed from (tile, side, floor seed); an
+     * "animate": "some" face runs on a seeded one face in WALL_GLOW_SOME_ANIMATE_ONE_IN, the others hold frame 0
+     * (R6). Alpha = distance fade x the floor's light multiplier (BLACKOUT dims glow by its factor only, R5).
+     * Allocation-free; called from the worker threads.
+     */
+    private void assignGlow(WallColumnResult result, boolean doorPanel, int face, int mip, int texColumn, int texSrcY,
+                            float distanceTiles, int tileColumn, int tileRow, int side) {
+        RegionWallAtlas atlas = regionWallAtlas;
+        if (atlas == null || !atlas.isGlowing(face)) return;
+        int originX = atlas.sourceX(mip, face);
+        int originY = atlas.sourceY(mip, face);
+        int frameCount = atlas.glowFrameCount(face);
+        int mode = atlas.animateMode(face);
+        if (mip == 0 && frameCount > 1 && mode != RegionWallAtlas.ANIMATE_NONE) {
+            boolean animated = mode == RegionWallAtlas.ANIMATE_ALL
+                    || GameMath.wallVariantIndex(tileColumn, tileRow, side, wallVariantSeed ^ face,
+                                                 WALL_GLOW_SOME_ANIMATE_ONE_IN) == 0;
+            int frame = 0;
+            if (animated) {
+                int bucket = GameMath.wallVariantIndex(tileColumn, tileRow, side + WALL_GLOW_PHASE_SIDE_OFFSET,
+                                                       wallVariantSeed, WALL_GLOW_PHASE_BUCKETS);
+                float phaseSeconds = atlas.glowCycleSeconds(face) * bucket / WALL_GLOW_PHASE_BUCKETS;
+                frame = GameMath.wallGlowFrameIndex(lightingTimeSeconds, phaseSeconds,
+                                                    atlas.glowFrameSeconds(face), frameCount);
+            }
+            originX = atlas.glowFrameX(face, frame);
+            originY = atlas.glowFrameY(face, frame);
+        }
+        float alpha = GameMath.wallGlowDistanceAlpha(distanceTiles, WALL_GLOW_FADE_START_TILES,
+                WALL_GLOW_FADE_END_TILES, WALL_GLOW_MIN_ALPHA) * clampUnit(level.getLightMultiplier());
+        if (doorPanel) {
+            result.drawDoorPanelGlow      = true;
+            result.doorPanelGlowTexColumn = originX + texColumn;
+            result.doorPanelGlowTexSrcY   = originY + texSrcY;
+            result.doorPanelGlowAlpha     = alpha;
+        } else {
+            result.drawSurfaceGlow      = true;
+            result.surfaceGlowTexColumn = originX + texColumn;
+            result.surfaceGlowTexSrcY   = originY + texSrcY;
+            result.surfaceGlowAlpha     = alpha;
+        }
     }
 
     /** Top-left atlas x of {@code face} at {@code mip}; 0 for the white-pixel fallback. */
@@ -2304,8 +2396,10 @@ public class WallRenderer implements Renderable, Disposable {
      */
     private void computeWallColumn(int screenColumn) {
         WallColumnResult result = columnResults[screenColumn];
-        result.drawSurface   = false;
-        result.drawDoorPanel = false;
+        result.drawSurface       = false;
+        result.drawDoorPanel     = false;
+        result.drawSurfaceGlow   = false;
+        result.drawDoorPanelGlow = false;
 
         float playerTileX = cachedPlayerTileX;
         float playerTileY = cachedPlayerTileY;
@@ -2427,7 +2521,8 @@ public class WallRenderer implements Renderable, Disposable {
                 float columnU         = GameMath.columnTextureU(hitTileX, hitTileY,
                                                                  columnCenterTileX, columnCenterTileY);
                 int   face            = columnFace;
-                int   faceSize        = wallFaceSize;
+                int   mip             = wallMipLevel(lineHeight);
+                int   faceSize        = wallFaceSize >> mip;
                 int   columnTexColumn = GameMath.textureColumn(columnU, faceSize);
 
                 // Lambert shading: dot of the outward surface normal with the world light direction.
@@ -2457,8 +2552,10 @@ public class WallRenderer implements Renderable, Disposable {
 
                 result.drawSurface         = true;
                 result.surfaceTexture      = wallSourceTexture;
-                result.surfaceTexColumn    = faceOriginX(0, face) + columnTexColumn;
-                result.surfaceTexSrcY      = faceOriginY(0, face) + texSrcY;
+                result.surfaceTexColumn    = faceOriginX(mip, face) + columnTexColumn;
+                result.surfaceTexSrcY      = faceOriginY(mip, face) + texSrcY;
+                assignGlow(result, false, face, mip, columnTexColumn, texSrcY, perpWallDistance,
+                           tileColumn, tileRow, 0);
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
@@ -2487,10 +2584,16 @@ public class WallRenderer implements Renderable, Disposable {
                 float wallTileBrightness  = level.getTileBrightness(adjacentFloorColumn, adjacentFloorRow, lightingTimeSeconds);
 
                 // O(1) array reads into this level's pre-resolved face tables (setRegionWallAtlas).
+                // BASE variant per FACE (R6): a pure hash of (tile, side, floor seed), so turning never pops.
                 int     hitCharIndex          = hitWallCell & 0x7F;
-                int     face                  = wallFaceIndices[wallFaceStart[hitCharIndex]];
-                int     selectedTextureWidth  = wallFaceSize;
-                int     selectedTextureHeight = wallFaceSize;
+                int     side                  = crossedVerticalLine ? (stepColumn > 0 ? 0 : 1) : (stepRow > 0 ? 2 : 3);
+                int     variantCount          = wallFaceCount[hitCharIndex];
+                int     variant               = variantCount > 1
+                        ? GameMath.wallVariantIndex(tileColumn, tileRow, side, wallVariantSeed, variantCount) : 0;
+                int     face                  = wallFaceIndices[wallFaceStart[hitCharIndex] + variant];
+                int     mip                   = wallMipLevel(lineHeight);
+                int     selectedTextureWidth  = wallFaceSize >> mip;
+                int     selectedTextureHeight = wallFaceSize >> mip;
                 int     wallTextureColumn     = GameMath.textureColumn(wallHitFractionMirrored, selectedTextureWidth);
 
                 float shade = GameMath.wallShade(perpWallDistance, WALL_SHADING_FALLOFF);
@@ -2508,8 +2611,10 @@ public class WallRenderer implements Renderable, Disposable {
 
                 result.drawSurface         = true;
                 result.surfaceTexture      = wallSourceTexture;
-                result.surfaceTexColumn    = faceOriginX(0, face) + wallTextureColumn;
-                result.surfaceTexSrcY      = faceOriginY(0, face) + texSrcY;
+                result.surfaceTexColumn    = faceOriginX(mip, face) + wallTextureColumn;
+                result.surfaceTexSrcY      = faceOriginY(mip, face) + texSrcY;
+                assignGlow(result, false, face, mip, wallTextureColumn, texSrcY, perpWallDistance,
+                           tileColumn, tileRow, side);
                 result.surfaceTexSrcHeight = texSrcHeight;
                 result.surfaceDrawBottom   = drawBottom;
                 result.surfaceDrawTop      = drawTop;
@@ -2564,8 +2669,9 @@ public class WallRenderer implements Renderable, Disposable {
                     // independently of the file-loaded plain door), so clip against the SELECTED
                     // texture's own dimensions rather than a shared plain-door size.
                     int     doorFace              = doorFaceByChar[doorHitCell & 0x7F];
-                    int     selectedDoorTexWidth  = wallFaceSize;
-                    int     selectedDoorTexHeight = wallFaceSize;
+                    int     doorMip               = wallMipLevel(doorLineHeight);
+                    int     selectedDoorTexWidth  = wallFaceSize >> doorMip;
+                    int     selectedDoorTexHeight = wallFaceSize >> doorMip;
 
                     int doorTexSrcY      = GameMath.wallTextureClipSrcY(
                                                doorUnclampedTop, WALL_PROJECTION_SCREEN_HEIGHT,
@@ -2583,8 +2689,11 @@ public class WallRenderer implements Renderable, Disposable {
 
                     result.drawDoorPanel          = true;
                     result.doorPanelTexture       = wallSourceTexture;
-                    result.doorPanelTexColumn     = faceOriginX(0, doorFace) + doorTexColumn;
-                    result.doorPanelTexSrcY       = faceOriginY(0, doorFace) + doorTexSrcY;
+                    result.doorPanelTexColumn     = faceOriginX(doorMip, doorFace) + doorTexColumn;
+                    result.doorPanelTexSrcY       = faceOriginY(doorMip, doorFace) + doorTexSrcY;
+                    int doorSide = doorHitCrossedVerticalLine ? (stepColumn > 0 ? 0 : 1) : (stepRow > 0 ? 2 : 3);
+                    assignGlow(result, true, doorFace, doorMip, doorTexColumn, doorTexSrcY, doorPerpWallDistance,
+                               doorHitTileColumn, doorHitTileRow, doorSide);
                     result.doorPanelTexSrcHeight  = doorTexSrcHeight;
                     result.doorPanelDrawBottom    = clampedPanelBottom;
                     result.doorPanelDrawTop       = clampedPanelTop;
