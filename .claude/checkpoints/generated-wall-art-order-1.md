@@ -50,7 +50,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## STEP LEDGER
 
 - [x] **CP0** — this file, committed and pushed before anything else changes.
-- [ ] **CP1** — kit.py additions in (environment materials, stencil capitals, helpers).
+- [x] **CP1** — kit.py additions in (environment materials, stencil capitals, helpers).
       DONE WHEN: every committed enemy atlas/glow/manifest + fx file regenerates byte-identical.
 - [ ] **CP2** — walls.py writes a valid manifest + atlas + glow + mips for the HALL group alone.
       DONE WHEN: `python3 walls.py <dir> outer_facility` writes the files; twice -> byte-identical; hall strips seamless.
@@ -64,3 +64,13 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 ## NOTES CARRIED FORWARD
 
 **CP0:** baseline 59c8e7a.
+
+**CP1:** kit.py APPENDS 16 materials after `pupil`: the 8 prototype ones (concrete, concrete_dk, ceramic, rubber, rust,
+soul [emissive], nacre, capsule [translucent, glow=soul; glow=0 on a shape = plain glass]) + region A's livery_dk (ring
+panels, one step under livery - lesson 15.8), paint_teal (medical care band), insulation, frost, cloth, and the three
+EMISSIVE keycard inks key_red/key_yellow/key_blue whose top 3 ramp steps are the EXACT colours. NOTE: the exact
+keycard values live in `RenderConstants.KEYCARD_AURA_*` (not ItemConstants/CombatPalette as R10 says): red
+(255,46,41), yellow (255,219,46), blue (56,148,255). STENCIL_FONT gains C H I L N O U V Y F X Z J Q (all capitals now).
+Helpers `kit.chamfer_rect(x0,y0,x1,y1,c)` and `kit.tile_copies(shapes, period, columns=3, rows=1)`.
+Verified: bestiary.py + effects.py into the scratchpad -> 32 of 32 committed enemy files byte-identical. A full enemy
+regen takes ~5.5 min in this container (not ~50 s).
