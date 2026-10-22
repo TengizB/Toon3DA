@@ -137,3 +137,8 @@ the shield design, kept as a documented skeleton option). effects.py: CHARGE_BAT
 family motes at the shield. Revenant 62 frames, atlas 1024x2048, no edge warnings. Re-bake: only revenant.* and
 undead.fx.json changed. In-engine (temporary row, removed): real WIND_UP (braced), real ATTACKs (the bash), hurt, wounded,
 burning, death - default + corrupted_violet. WAITING for owner approval (CP4).
+
+**CP3c (pending owner approval):** owner: the Ghoul "is too thin and looks weak" - thicker, no muscles; show a single image
+first. `ghoul_rig.py`: BULK = 1.35 on limb / torso / joint / boot / cuff radii, fingers 1.45 + palm 4.0, shoulder_half 17.5,
+hip_half 9.5, belt and hip band widened. Rest still sent (before/after). COMMITTED UNBAKED: the shipped ghoul.* atlas is
+still the thin one. On approval: rebake ghoul, re-check in-engine, send GIFs; on rejection: adjust BULK.

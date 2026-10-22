@@ -12,7 +12,11 @@ from kit import lerp_pt, blob, limb, chain, slab, fold_lines, hand, Humanoid, wi
 
 SNOUT_END = 30.0                  # the canister's centre below the head centre (head space, px)
 
-SKELETON = Humanoid(pelvis=(80.0, 112.0), spine=58.0, neck=9.0, head=11.0, shoulder_half=15.0, hip_half=7.5,
+# BULK (owner, 2026-10-22: "too thin, looks weak"): limb, torso and joint radii x BULK, shoulders and hips set wider
+# so the thicker limbs keep their gaps. No muscle detail - the suit is just fuller over a heavier frame.
+BULK = 1.35
+
+SKELETON = Humanoid(pelvis=(80.0, 112.0), spine=58.0, neck=9.0, head=11.0, shoulder_half=17.5, hip_half=9.5,
                     upper_arm=44.0, fore_arm=42.0, hand=12.0, thigh=58.0, shin=60.0, foot=9.0,
                     arm_rest=0.11, leg_rest=0.035)
 
@@ -83,18 +87,18 @@ def _arm(j, p, side, s):
     sh, el, wr = j[f"{side}_shoulder"], j[f"{side}_elbow"], j[f"{side}_wrist"]
     curl = p[f"{side}_curl"]
     shapes = [
-        limb(*sh, *el, 5.6, 4.6, "overalls", k=4),
-        limb(*el, *wr, 4.6, 3.6, "overalls", k=4),
-        blob(*el, 4.4, 4.4, "overalls", depth=4.4, k=3),
+        limb(*sh, *el, 5.6 * BULK, 4.6 * BULK, "overalls", k=4),
+        limb(*el, *wr, 4.6 * BULK, 3.6 * BULK, "overalls", k=4),
+        blob(*el, 4.4 * BULK, 4.4 * BULK, "overalls", depth=4.4 * BULK, k=3),
         # the elbow bunches the suit; a reflective-less seam down the sleeve
         *fold_lines(el[0] - 3, el[1] - 4, el[0] + 3, el[1] + 4, 3, 5.5, mat="overalls", seed=11 + s, angle=0.2),
         limb(*sh, *el, 0.6, 0.5, "overalls", op="carve"),
         # the rubber gauntlet over the forearm's last third, and the glove: LONG fingers
-        limb(wr[0] + (el[0] - wr[0]) * 0.32, wr[1] + (el[1] - wr[1]) * 0.32, *wr, 4.4, 3.9, "rubber", op="add", depth=1.2),
+        limb(wr[0] + (el[0] - wr[0]) * 0.32, wr[1] + (el[1] - wr[1]) * 0.32, *wr, 4.4 * BULK, 3.9 * BULK, "rubber", op="add", depth=1.2),
         # the taped cuff where the glove seals to the sleeve
-        limb(*lerp_pt(wr, el, 0.34), *lerp_pt(wr, el, 0.28), 4.9, 4.9, "darkmetal", op="add", depth=1.4),
-        *hand(wr, j[f"{side}_hand_angle"], s, 11.0, "rubber", fingers=4, finger_length=29.0, finger_r=1.2,
-              palm_r=3.3, spread=0.40, curl=curl),
+        limb(*lerp_pt(wr, el, 0.34), *lerp_pt(wr, el, 0.28), 4.9 * BULK, 4.9 * BULK, "darkmetal", op="add", depth=1.4),
+        *hand(wr, j[f"{side}_hand_angle"], s, 11.0, "rubber", fingers=4, finger_length=29.0, finger_r=1.45,
+              palm_r=4.0, spread=0.40, curl=curl),
     ]
     return shapes
 
@@ -102,15 +106,15 @@ def _arm(j, p, side, s):
 def _leg(j, side, s):
     hp, kn, an, to = j[f"{side}_hip"], j[f"{side}_knee"], j[f"{side}_ankle"], j[f"{side}_toe"]
     return [
-        limb(*hp, *kn, 7.0, 5.0, "overalls", k=4),
-        limb(*kn, *an, 5.0, 3.8, "overalls", k=4),
-        blob(*kn, 5.2, 5.6, "overalls", depth=5, k=3),
+        limb(*hp, *kn, 7.0 * BULK, 5.0 * BULK, "overalls", k=4),
+        limb(*kn, *an, 5.0 * BULK, 3.8 * BULK, "overalls", k=4),
+        blob(*kn, 5.2 * BULK, 5.6 * BULK, "overalls", depth=5 * BULK, k=3),
         *fold_lines(kn[0] - 3.5, kn[1] - 5, kn[0] + 3.5, kn[1] + 5, 3, 6, mat="overalls", seed=21 + s, angle=-0.25),
         # the boot: rubber to mid-shin, the toe turned out
-        limb(an[0] + (kn[0] - an[0]) * 0.38, an[1] + (kn[1] - an[1]) * 0.38, *an, 4.6, 4.4, "rubber", op="add", depth=1.4),
-        limb(*lerp_pt(an, kn, 0.40), *lerp_pt(an, kn, 0.34), 5.1, 5.1, "darkmetal", op="add", depth=1.6),
-        limb(*an, *to, 4.6, 3.6, "rubber", k=3),
-        blob(an[0] + s * 1.5, an[1] + 1.8, 5.0, 3.0, "rubber", depth=3, k=3),
+        limb(an[0] + (kn[0] - an[0]) * 0.38, an[1] + (kn[1] - an[1]) * 0.38, *an, 4.6 * BULK, 4.4 * BULK, "rubber", op="add", depth=1.4),
+        limb(*lerp_pt(an, kn, 0.40), *lerp_pt(an, kn, 0.34), 5.1 * BULK, 5.1 * BULK, "darkmetal", op="add", depth=1.6),
+        limb(*an, *to, 4.6 * BULK, 3.6 * BULK, "rubber", k=3),
+        blob(an[0] + s * 1.5, an[1] + 1.8, 5.0 * BULK, 3.0 * BULK, "rubber", depth=3, k=3),
     ]
 
 
@@ -120,20 +124,20 @@ def ghoul_build(p):
     cx, cy = j["chest"]
     wx, wy = j["waist"]
     torso = [
-        # a thin, long torso: the suit hangs off the shoulders and pinches at the belt
-        limb(cx, cy - 2, wx, wy, 13.0, 9.5, "overalls", k=8),
-        limb(wx, wy, px, py, 9.5, 10.5, "overalls", k=8),
-        blob(*j["l_shoulder"], 6.5, 5.5, "overalls", depth=5.5, k=6),
-        blob(*j["r_shoulder"], 6.5, 5.5, "overalls", depth=5.5, k=6),
-        limb(*j["neck"], cx, cy, 5.0, 6.0, "overalls", k=5),
+        # a long torso: the suit hangs off the shoulders and narrows at the belt
+        limb(cx, cy - 2, wx, wy, 13.0 * BULK, 9.5 * BULK, "overalls", k=8),
+        limb(wx, wy, px, py, 9.5 * BULK, 10.5 * BULK, "overalls", k=8),
+        blob(*j["l_shoulder"], 6.5 * BULK, 5.5 * BULK, "overalls", depth=5.5 * BULK, k=6),
+        blob(*j["r_shoulder"], 6.5 * BULK, 5.5 * BULK, "overalls", depth=5.5 * BULK, k=6),
+        limb(*j["neck"], cx, cy, 5.0 * 1.15, 6.0 * 1.15, "overalls", k=5),
         # the zip down the front, the belt, the creases pulling from shoulder to hip
         limb(cx, cy + 4, px, py - 6, 0.7, 0.7, "overalls", op="carve"),
-        limb(px - 11, py - 7, px + 11, py - 7, 2.2, 2.2, "rubber", op="add", depth=1.6),
+        limb(px - 14, py - 7, px + 14, py - 7, 2.2, 2.2, "rubber", op="add", depth=1.6),
         blob(px - 1.0, py - 7, 2.4, 2.0, "darkmetal", op="add", depth=1.2),
         *fold_lines(cx - 10, cy + 6, wx - 4, wy + 10, 3, 9, mat="overalls", seed=31, angle=0.9),
         *fold_lines(cx + 10, cy + 6, wx + 4, wy + 10, 3, 9, mat="overalls", seed=32, angle=-0.9, side=-1),
         # the hips of the suit, the thighs grow out of them
-        limb(px - 7, py + 1, px + 7, py + 1, 7.5, 7.5, "overalls", k=6),
+        limb(px - 9, py + 1, px + 9, py + 1, 7.5 * BULK, 7.5 * BULK, "overalls", k=6),
     ]
     # the ID badge on its lanyard, clipped left of the zip, swinging a little
     bx, by = cx - 8 + 2.0 * p.badge, cy + 24
