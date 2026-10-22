@@ -21,10 +21,10 @@ container), outside the Gradle build, never shipped. The game ships only the PNG
 | File | What it is |
 |---|---|
 | `kit.py` | The renderer (shapes → per-layer height fields → normals → shading → palette → outline → cleanup) plus the animation layer: `Xf` transforms, `Rig`/`Pose`/`Figure`, `Clip`, and the bake (`write_creature`: atlas, glow atlas, manifest, previews). |
-| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`, `iron_stalker_rig.py`). |
+| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`, `iron_stalker_rig.py`; order 5: `plague_hulk_rig.py`, `eye_tyrant_rig.py`, `gore_biter_rig.py`, `mire_wraith_rig.py`, and `sump_wretch_rig.py` - the first Mire Wraith, kept for its own enemy). |
 | `bestiary.py` | The `CREATURES` table of (rig, clips) + the command line. A new creature = one `_rig.py` + one row. |
 | `sheet.py` | Contact sheet of a folder of sprites, nearest-neighbour upscaled, on the game's near-black. |
-| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`) + the shared `status` set; a creatures row may override a family burst for one creature (`bursts={"RESIST": "RESIST_PLATE"}`, order 4) — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
+| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`, `aberration` - order 5) + the shared `status` set; a creatures row may override a family burst for one creature (`bursts={"RESIST": "RESIST_PLATE"}`, order 4) — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
 
 Shipped per creature, in `assets/textures/enemies/generated/`: `<name>.atlas.png` (every frame of every
 clip, trimmed and packed, binary alpha, <= 2048x2048), `<name>.glow.png` (emissive pixels only, same
@@ -52,13 +52,14 @@ writes byte-identical files. Previews go to the owner and are never committed.
 2. **Canvas.** Regular enemies 160x240 (2:3, the aspect the renderer already draws), feet on row ~232,
    centred on x = 80. Bosses 240x360. A floating enemy whose type the renderer does NOT hover bakes the
    hover into the canvas (empty rows under it, like the Warden); a type the renderer hovers
-   (`EYE_TYRANT`) stands on the canvas floor.
+   (`EYE_TYRANT`) stands on the canvas floor (its death falls from the hover - a runtime row).
 3. **One light rig, never per sprite.** Key light upper-left-front, FACILITY_CYAN rim from the right
    ("lit by the machine"), wrap shading, cavity occlusion, layer cast occlusion, Blinn specular per
    material. Changing `LIGHT`/`RIM` changes every enemy — that is the point.
 4. **Palette.** Only `MATERIALS` ramps (6 steps, hue-shifted: cool shadows, warm lights). Add a
    material rather than tinting a sprite by hand. Semantic colours stay sacred (art-direction V5):
-   no pure red / green / blue / purple / yellow as decoration. Family glow inks: MACHINE = `cyan`
+   no pure red / green / blue / purple / yellow as decoration. Flesh (order 5: `flesh`, `flesh_dk`, `sclera`,
+   `membrane`, `pupil`) is rose-grey / violet-grey with a `wet` sheen - never red; cap glow near 1.1 (it tops out in white). Family glow inks: MACHINE = `cyan`
    (the Organization's), INSECT + ABERRATION = `ichor` (harvested planet tissue), GOLEM = `magma` (and
    elemental variants), others decided by their order.
 5. **Silhouette first.** Readable as a black shape at two tiles; distinct from every other enemy of its
@@ -87,6 +88,8 @@ it must read as IN FRONT.
 | `spike(x1, y1, x2, y2, r, mat, bend=, tip=, edge=, edge_side=)` | tapered curved blade / spike, optional raised edge material (order 4) |
 | `riveted_plate(points, mat, rivet_mat=, spacing=, inset=, ...)` | armour plate + inset rivets; `op="add"` fits it on a body (order 4) |
 | `mirror(shapes, axis)` | bilateral symmetry — design one half |
+| `eyeball(cx, cy, r, look=, iris=, pupil=, slit=, lid_top=, lid_bottom=, lids=)` | wet sclera, emissive iris, pupil, glint, flesh-cap lids (order 5) |
+| `teeth_row(x1, y1, x2, y2, count, length, r, side=, sag=, rake=, seed=)` | seeded teeth along a jaw line; `op="add"` on a face (order 5) |
 | `stencil(img, "W-07", x, y, colour)` | 3x5 pixel serial stencil, painted after render |
 
 Shape options: `glow=` (emissive/translucent light: 0 dead, 1 rest, > 1 flare); `op="union"` (default) / `"add"` (raised detail painted in its own material: veins,
@@ -105,6 +108,7 @@ shapes overlap; `k` the blend radius (0 = hard union).
 | `Rig(name, build, defaults, seed)` | `build(pose) -> Figure`; `defaults` names every pose parameter; rest pose = the still |
 | `Clip(name, keys, duration, fps=12, mode=, events=)` | keys `[(t, {param: v}, easing)]`, one track per parameter; easing `linear/in/out/inout/hold`; mode `loop/once/hold`; `events={t: "emit"\|"impact"}` marks the strike frame in the manifest |
 | `clip.variant(name, speed, keys, fps, **pinned)` | DORMANT / WOUNDED style variants of a clip |
+| `jiggle(clip, param, duration, out_param=, freq=, damping=, gain=)` | keys for a damped spring LAGGING `param` (secondary motion: flesh, shrouds, tendrils; order 5) |
 | `write_creature(rig, clips, out_dir, preview_dir)` | the bake: atlas + glow atlas + `clips.json` (+ GIFs, strip) |
 
 Grain is sampled in each shape's OWN coordinates (its `frame`), so texture rides a moving part. The

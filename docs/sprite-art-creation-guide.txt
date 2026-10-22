@@ -66,7 +66,9 @@ CONTENTS
   .claude/skills/enemy-art/            the generator (a dev tool, outside Gradle, never shipped)
     kit.py                             the renderer: shapes -> height fields -> shading -> pixels
     <creature>_rig.py                  one per creature: its rig function, pose defaults and clips
-                                       (warden_rig.py, harvest_tick_rig.py, iron_stalker_rig.py)
+                                       (warden_rig.py, harvest_tick_rig.py, iron_stalker_rig.py; order 5:
+                                       plague_hulk_rig.py, eye_tyrant_rig.py, gore_biter_rig.py, mire_wraith_rig.py,
+                                       sump_wretch_rig.py - the first Mire Wraith, kept for its own enemy)
     bestiary.py                        the CREATURES table (rig, clips) + the command line
     sheet.py                           contact sheets
   assets/textures/enemies/generated/   shipped output per creature: <name>.atlas.png, <name>.glow.png,
@@ -183,12 +185,18 @@ because every pixel's value comes from a real surface normal lit by one consiste
 4.3 The library (kit.py MATERIALS):
     gunmetal, darkmetal, livery (Organization white)       Organization hardware
     chitin, chitin_dk, bone, sac (translucent, ichor glow) creatures of harvested tissue
+    flesh, flesh_dk, sclera, membrane (translucent,       (order 5) the aberrations: desaturated rose-grey and
+      ichor glow), pupil                                  violet-grey, never red; every one carries the WET SHEEN
     basalt, basalt_lt                                      stone (see lesson 12.2 before using)
     cyan, ichor, magma                                     emissives
 4.4 Family glow inks (one per family, so a family reads at a glance):
-    MACHINE cyan (the Organization's light) | INSECT + ABERRATION ichor (harvested tissue, coral) |
+    MACHINE cyan (the Organization's light) | INSECT + ABERRATION ichor (harvested tissue, coral; shipped for both) |
     UNDEAD soul [PLANNED: order 6: pale cold bone-white, low saturation] | GOLEM + DEMON magma
     (the planet's heat; elemental golems add their element on the surface).
+4.4b WET SHEEN (order 5): a material may carry wet=(strength, shininess) - a second, tight specular lobe that
+    leaves a near-white glint (kit.WET_GLINT, never pure white) on the lit curve; the glint is its own cleanup shade.
+    Only the flesh materials carry it, so no earlier sprite changes. Glow ceiling: a translucent or emissive part whose
+    glow passes ~1.1 tops out in the ramp's near-white - cap gland / iris light (white belongs to the hit flash, V5).
 4.5 Adding a material: add a row to MATERIALS, never tint one sprite by hand. Check it beside the
     existing ramps on a contact sheet and under the darkest and the brightest mood.
 
@@ -269,7 +277,10 @@ because every pixel's value comes from a real surface normal lit by one consiste
       a shard absorb ...), named in the order that builds the type. SHIPPED (order 4, the Iron Stalker):
       BUFF_SELF (once, 0.58 s: plates lift and LOCK, the ichor seam flares) and AREA_STRIKE (once, 0.40 s
       at 20 fps, "impact" on the crossing frame: from the WIND_UP's cocked blades, a two-blade scissor sweep
-      with smear frames). An ability clip is named exactly as the SpecialAbility constant; the runtime maps
+      with smear frames). SHIPPED (order 5): DEBUFF_PLAYER (the Eye Tyrant's pinpoint iris, the Mire Wraith's volley
+      with an "emit"), SELF_DESTRUCT (the Plague Hulk's countdown swell - a HOLD clip played as a one-shot, it stays
+      one level up while the state holds), plus PRIMING (HELD by the SELF_DESTRUCTING state) and DEATH_BURST (variant
+      of DEATH for a self-destruct). An ability clip is named exactly as the SpecialAbility constant; the runtime maps
       the ability to it by a rule row (8.2) and plays ATTACK for a creature that does not ship one.
 7.4 Principles (they matter more at low frame counts): anticipation before every action; squash
     and stretch on impacts; overlapping action (cables, antennae, tails lag a frame); hold the key
@@ -289,6 +300,17 @@ because every pixel's value comes from a real surface normal lit by one consiste
                           base -> tip, bowed `bend` px toward (-dy, dx); `edge` = the cutting-edge material.
     riveted_plate(points, mat, rivet_mat="darkmetal", spacing=8, inset=2.6, rivet_r=1.25, bevel=2.5, **slab)
                           (order 4) an armour plate with rivets; slab kwargs (op, tilt, prio, k, slope) pass through.
+    eyeball(cx, cy, r, look=(0, 0), iris=0.55, pupil=0.42, slit=1, lid_top=0, lid_bottom=0, lids=False, ...)
+                          (order 5) wet sclera + emissive iris (family ink) + pupil + a fixed catch-light glint; `look`
+                          moves and foreshortens the iris, `slit` narrows the pupil to a line; a lid is a CAP of flesh
+                          (a crease at 0, shut at 1; lids=True always builds them so they never pop). One layer.
+    teeth_row(x1, y1, x2, y2, count, length, r, mat="bone", side=1, sag=0, rake=0, jitter=0.25, seed=0, **kw)
+                          (order 5) seeded spikes along a jaw line, pointing along its normal x side. On a face pass
+                          op="add" (a union tooth loses to the head's height); protruding teeth stay union in a front layer.
+    jiggle(source_clip, param, duration, out_param=None, freq=4, damping=0.35, gain=1, fps=24, loop=True)
+                          (order 5) SECONDARY MOTION: keys for "<param>_jig" = a damped spring LAGGING the param's track
+                          (flesh rolling after the breath, a shroud after the sway). Baked (a rig has no memory); a loop
+                          integrates four periods so it wraps without a seam. Merge into the clip's keys.
     Xf                    a 2D affine transform. Image space: origin top-left, y DOWN, so a positive
                           angle turns CLOCKWISE on screen.
       Xf.move(dx, dy)  Xf.turn(angle, pivot)  Xf.scale(sx, sy, pivot)  Xf.reflect_x(axis)
@@ -359,12 +381,14 @@ because every pixel's value comes from a real surface normal lit by one consiste
     atlas. LibGDX's TextureRegion(texture, x, y, w, h) takes the atlas rect as-is; canvas positions
     must be flipped (canvasHeight - y) when placed in the world's y-up space.
     Shipped clip names (the standard set, 7.3): IDLE, DORMANT, ALERT, MOVE, WIND_UP, ATTACK,
-    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH; ability clips BUFF_SELF, AREA_STRIKE (order 4). The corpse frame is the last DEATH frame. Its
+    HURT_LIGHT, HURT_HEAVY, DEFEND, WOUNDED, DEATH; ability clips BUFF_SELF, AREA_STRIKE (order 4), DEBUFF_PLAYER,
+    SELF_DESTRUCT, PRIMING, DEATH_BURST (order 5). The corpse frame is the last DEATH frame. Its
     lowest pixels may sit a few rows BELOW groundY (the Warden's wreck reaches row 236): parts lying
     toward the viewer read lower on screen. Place a frame by its offset on the canvas, never by
     snapping its bottom edge to the ground line.
     Anchors every creature reports: ground, hit_centre, eye; plus muzzle (anything that emits -
-    the Warden's prod tip) or mouth (the Harvest Tick's jaws).
+    the Warden's prod tip, the Eye Tyrant's PUPIL (the beam leaves it), the Mire Wraith's maw) or mouth (the Harvest
+    Tick's jaws).
     Deterministic: the same script writes byte-identical atlases and manifests (rule R4).
 
 7.8 Previews for the owner (bestiary.py --preview DIR): an animated GIF per clip, nearest-neighbour
@@ -372,7 +396,8 @@ because every pixel's value comes from a real surface normal lit by one consiste
     <name>_strip.png, every clip as a labelled row of frames at 2x with the frame durations and the
     anchors marked. Previews are for the gate and are never committed.
 
-7.9 Atlas budget. The Warden (81 unique frames) packs into 1024x2048; the Harvest Tick (88) fills
+7.9 Atlas budget. Order 5: plague_hulk 98, eye_tyrant 96, mire_wraith 95, sump_wretch 96 (all 2048x2048),
+    gore_biter 83 (1024x2048). The Warden (81 unique frames) packs into 1024x2048; the Harvest Tick (88) fills
     2048x2048 exactly; the Iron Stalker (100, 13 clips incl. two ability clips) fits 2048x2048. A creature that needs more clips gets them by lowering frame counts (a slow
     variant at a lower fps, shorter idles) or by splitting its atlas - a runtime change for the order
     that owns the runtime - never by growing the limit.
@@ -428,9 +453,16 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
     table, not a timer) - and (order 4) WIND_UP while a HEAVY is committed (plannedAction.heavyAttack): a heavy
     SPECIAL such as AREA_STRIKE is planned while the state stays ATTACKING / CHASING, so the state row alone
     dropped its telegraph. EnemyAnimationRules.holdFor(Enemy) is the one lookup; holdsWindUp drives CHARGE. A finished one-shot falls back to the best ongoing condition every frame.
+    ORDER 5 rows: a Hold may name a FALLBACK (SELF_DESTRUCTING holds PRIMING, else WIND_UP; holdsWindUp counts the
+    fallback, so a priming body seeps its CHARGE burst); a hold that REPLACES one already showing starts at frame 0
+    (WIND_UP_STARTED arrives before the state flips to SELF_DESTRUCTING); a HOLD-mode one-shot keeps its last frame while
+    the enemy still holds a clip; DEATH by CAUSE is a DeathRow (SELF_DESTRUCT -> DEATH_BURST + the DETONATE burst, else
+    DEATH), and the dying instance and its remains keep that clip. A hovered type (EYE_TYRANT) falls from its hover to
+    the floor over ENEMY_VISUAL_HOVER_FALL_PORTION of its death clip (GameMath.hoverRemainingWhileFalling).
     MOVE: the simulation moves an enemy instantly; the visual layer slides a migrated body one MOVE cycle
     per tile (ENEMY_VISUAL_SLIDE_SECONDS_PER_TILE 0.33 s, max 0.5 s), never snapping back mid-slide.
-    Idle phase = frac(enemyId x 0.618) x IDLE duration, so a pack never breathes in unison.
+    Idle phase = frac(enemyId x 0.618) x IDLE duration, so a pack never breathes in unison - and (order 5, A3) the MOVE
+    loop starts at the same phase fraction of MOVE, or a pack whose slides begin on one turn steps in lock-step.
     DEATH plays from DyingEnemyPool (8 slots, oldest dropped) at the body's last visual position and, on its
     last frame, hands the body to the creature's REMAINS (8.6).
 8.3 HOW A HIT IS ANSWERED (order 3) - EnemyAnimationRules.HitReaction, one data row per outcome, so the
@@ -474,6 +506,10 @@ Nothing here changes a rule, a number or a turn: reactions are cosmetic and neve
     target tile - a player who stepped off the lane sees it fly down the old lane and miss (the cardinal-line
     rule stays visible). It sheds TRAIL drops and fades 1 - t^2 as it arrives. When the layer cannot draw it
     (no animator, no PROJECTILE) scheduleShot returns false and the procedural glob is drawn as before.
+    ORDER 5: the shot leaves on the emit frame of WHICHEVER one-shot is playing (the Mire Wraith's DEBUFF_PLAYER
+    volley), and a creature whose set gives it an IMPACT burst (the acid) bursts ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES
+    (1.1) short of its target (GameMath.projectileImpactSeconds) - at the target itself it sat at the lens, clamped tiny.
+    The Eye Tyrant ships NO projectile: the renderer's beam stays, launched from the frame's EMITTER anchor.
 
 
 ====================================================================================================
@@ -491,6 +527,11 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
       insect    ICHOR (droplet), FLECK / FLECK_DARK (chitin), GRIT, DRIP, MIST (the death pop), CHIP + DUST
                 (the resisted chip); order 4: PLATE_SPARK + PLATE_STREAK (white-hot) + PLATE_FLECK (gunmetal) =
                 the RESIST_PLATE burst - a resisted hit on the Iron Stalker rings off its iron plates
+      aberration (order 5, the insect's ichor ink - AS1) ICHOR, FLESH / FLESH_DARK (wet flecks), CHUNK (death gobbets),
+                SPLAT, WELT (the resisted read - unreachable today: aberrations are trait FLESH, a neutral matchup row),
+                DRIP, MOTE (the wind-up / priming seep), SCUFF, SPIT + SPIT_TRAIL + SPIT_MUZZLE (the acid), DETONATE
+                (the self-destruct flash). Creature-only bursts taken through overrides: SPIT / SPIT_TRAIL / SPIT_MUZZLE,
+                ACID_SPLASH (IMPACT), SPLASH / SPLASH_HEAVY (the Wraith is half liquid), SCUFF (the Gore Biter's CHARGE).
       status    FLAME, SMOKE, BUBBLE, STUN
     No gore: sparks, ichor, dust - never blood (R3, the premise's restraint).
 9.2 THE FX MANIFEST (FX_VERSION 1): "sprites" {NAME: emissive, mode life|loop, fps, frames[orientation][frame]
@@ -500,7 +541,8 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
     radius, optional orbit (radius px, period s). EVERY NUMBER IS IN CANVAS PIXELS of the creature that throws
     it; the runtime converts with that creature's own pixel scale. Burst names the runtime reads
     (EnemyEffectSet.BurstId): HIT, HIT_HEAVY, RESIST, KILL, DEATH, LEAK, CHARGE, MUZZLE, PROJECTILE, TRAIL,
-    BLEED (family) and BURNING, BURNING_ONSET, POISONED, STUNNED (status). A family ships what it needs.
+    BLEED (family), DETONATE + IMPACT (order 5) and BURNING, BURNING_ONSET, POISONED, STUNNED (status). A family ships
+    what it needs; a projectile lives in a creatures row's overrides when only one member of the family shoots it.
     PER-CREATURE OVERRIDE (order 4): a creatures row may carry "bursts": {"RESIST": "RESIST_PLATE"} - that
     creature takes the named burst of the same set IN PLACE of the family's (a set may hold bursts no runtime
     id names, for exactly this). CreatureVisual.burst() reads the override first. effects.py checks the name.
@@ -599,6 +641,16 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
        so an outward swing trails inward (a trail on the wrong side pushed the open frame past both edges).
   12.16 (order 4) A held telegraph must be read from what the sim COMMITTED, not only its state: AREA_STRIKE
        never enters WINDING_UP. Trigger abilities for real (skip turns, logmoments) before trusting a clip.
+  12.17 (order 5) A 2-bone arm rotated about its shoulder sweeps OUTSIDE the canvas on any overhead raise. Raise up the
+       FRONT (fold the elbow inward first - the curl) and solve the key angles numerically before keying; "fists high"
+       on the Hulk is beside the head, not over it. Lowering a raised forearm folds it INWARD too.
+  12.18 (order 5) The owner rejected a soft round body as "an egg ... weak": a threat needs a predatory silhouette -
+       a raised limb, a mouth turned at the viewer, hunched shoulders over the head. The first Mire Wraith was kept as
+       sump_wretch for a low-level enemy instead of deleted - a rejected design can still be the right weak creature.
+  12.19 (order 5) Separate blobs down a column read as a stack of tyres; tube drapes read as extra arms. One tapering
+       chain merged INTO the torso layer, and flat bevelled slabs for cloth-like skin.
+  12.20 (order 5) Wide creatures: narrow the whole figure about the centre line (NARROW, the STAND idea sideways)
+       rather than redesign; widening effects (sag, swell) scale x much less than y.
 
 
 ====================================================================================================
@@ -612,6 +664,8 @@ ADD AN ENEMY SPRITE
       creatures row with leak / burn / charge / stun / poison / body placements, and its family set)
   [ ] contact sheet, clip GIFs, in-engine screenshots (11)
   [ ] owner approval recorded
+  [ ] (order 5) an Eye-Tyrant-like hovered type: its death falls from the hover (runtime row), a beam type ships no
+      PROJECTILE; a shooter that is the only one in its family takes its projectile through overrides
   [ ] registry row binding the EnemyType to its atlas (see the series order that owns the runtime); an ability
       clip named after its SpecialAbility + its abilityClip row if the ability has no row yet (8.2)
   [ ] earlier sprites regenerate byte-identical

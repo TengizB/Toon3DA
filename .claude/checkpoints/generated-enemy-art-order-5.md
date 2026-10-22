@@ -149,3 +149,8 @@ amber_hot, a 2-tile close-up and the full reaction run). WAITING for owner appro
 **CP5c:** owner approved the new Mire Wraith (D5, "Now I like everything, you have my approvals to continue" - the same
 message approves .claude/agents/ideas/sump-wretch-acid-death.txt, separate work). Row MIRE_WRAITH -> mire_wraith committed.
 Re-run on the committed state: all four aberrations animated (ALERT clip), Wraith ATTACK + DEBUFF_PLAYER, no exception.
+
+**CP6a (docs):** guide (2, 4.3, 4.4b wet sheen + glow ceiling, 7.3, 7.6 API, 7.7, 7.9, 8.2 order-5 rows + MOVE phase, 8.7
+shot/impact, 9.1 aberration set, 9.2 burst ids, lessons 12.17-12.20, recipe), art-direction 16 (rows, roster, G13 number),
+enemy-system (order 5 + the chainAlertQueue finding), enemy-art + run-game SKILL.md, CLAUDE.md enemyvisual row; idea
+IMPLEMENTATION NOTE, STATUS IN PROGRESS. Next: reviewer, then STATUS IMPLEMENTED.

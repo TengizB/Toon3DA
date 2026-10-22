@@ -829,6 +829,13 @@ recoil, wounded, statuses, the dazed hold, remains, projectiles, telegraph effec
 Order 4 (Iron Stalker): ABILITY_USED plays the ability's own clip (BUFF_SELF, AREA_STRIKE) when the creature
 ships it, else ATTACK; a committed heavy (plannedAction.heavyAttack) holds the WIND_UP pose even outside
 WINDING_UP, because AREA_STRIKE is planned while the enemy stays ATTACKING / CHASING. No sim change.
+Order 5 (the Aberrations): DEBUFF_PLAYER and SELF_DESTRUCT play their own clips; a SELF_DESTRUCTING Hulk HOLDS its
+PRIMING swell (never the DEFEND brace) and each countdown turn's ABILITY_USED leaves it one level further swollen; DIED
+with cause SELF_DESTRUCT plays the DEATH_BURST variant and the DETONATE burst (a primed Hulk killed by a weapon plays
+the normal DEATH). The Eye Tyrant's beam starts at the pupil (the frame's EMITTER anchor); its dying body falls from
+the hover. No sim change. KNOWN (pre-existing, not fixed): chainAlertQueue is sized to the floor's STARTING enemy count,
+so several DORMANT enemies added after the floor starts that wake in one turn overflow it - only the capture tool's
+dormant spawns do that today (summons and the HUNTED hunter arrive awake).
 Rule (series G9): the visual layer never writes back to an enemy, the manager or the world. Adding a fire
 site is one fireVisual...(…) call; adding a moment is one enum constant plus its rule row in
 render/enemyvisual/EnemyAnimationRules (the rule table refuses to load with a moment unmapped).

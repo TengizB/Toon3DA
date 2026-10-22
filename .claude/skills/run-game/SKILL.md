@@ -151,7 +151,11 @@ two tiles ahead (the shotgun one-shots a Warden). Real KNOCKBACK: `equipmelee:WE
 tile ahead, several swings, `logmoments` says which swing pushed. Traps: after a kill the indices shift (use `-1`);
 forced Block persists until spent or cleared; abilities (BUFF_SELF, AREA_STRIKE: `spawn:IRON_STALKER:3:1`, alert, then
 SKIP_TURN every 2 s with a burst per turn) fire in a sim-randomised order - label each burst from `logmoments` / `clip:`;
-give the player HP first (`call:player:adjustMaxHealth:3000;call:player:applyHealing:3000`); never pipe `run.sh` into `head` (SIGPIPE ends the game early). ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
+give the player HP first (`call:player:adjustMaxHealth:3000;call:player:applyHealing:3000`); never pipe `run.sh` into `head` (SIGPIPE ends the game early). Order 5: WAKE SPAWNS BY INDEX (`alert:0;alert:1;…`), never by letting several dormant spawns wake on one turn -
+`EnemyManager.chainAlertQueue` is sized to the floor's starting enemy count and overflows (ArrayIndexOutOfBounds in phaseA);
+`alertall` wakes them without the ALERTED moment (no ALERT clip). A self-destruct is real: `damage` a PLAGUE_HULK to <= 30% and
+SKIP_TURN (PRIMING), again (SELF_DESTRUCT), again (DEATH_BURST); `defend:` a second Hulk beside it for the A4 read. Kill switch:
+`pkill -f` matches your own shell - kill CaptureLauncher by PID. ORA's tutorial barks appear on floor 1 — `tap:915:667` closes one.
 
 ### Muzzle light / anything needing game state
 `pulse:WEAPON_SHOTGUN` (or `WEAPON_PLASMA`, `WEAPON_INCINERATOR`, …) then `shot:` in the SAME second captures the

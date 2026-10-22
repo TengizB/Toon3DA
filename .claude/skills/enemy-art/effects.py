@@ -7,7 +7,7 @@ Usage:  python3 effects.py OUT_DIR [--preview DIR] [set ...]
   <set>.fx.json (the FX MANIFEST: sprites -> frames, bursts -> emitters, creatures -> where they emit).
   --preview  also writes <set>_fx_sheet.png: every sprite frame at 4x on the game's near-black.
 
-SETS. One per enemy FAMILY, named exactly as the family enum in lower case ("machine", "insect"), plus the
+SETS. One per enemy FAMILY, named exactly as the family enum in lower case ("machine", "insect", "aberration"), plus the
 shared "status" set (fire, smoke, toxin bubbles, the dazed stars) that every family uses for statuses whose
 colour is semantic (art-direction V5), not a family ink. A later family order adds ONE entry to SETS.
 

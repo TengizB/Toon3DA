@@ -621,7 +621,8 @@ SUIT vs FACILITY — THE INK TABLE (the series' map; a new screen picks its row 
 16. ENEMY VISUAL LAYER (generated-enemy-art order 2)
 ----------------------------------------------------
 Migrated enemy types (EnemyVisualRegistry rows: ACID_DRONE = warden, SHELL_BRUTE = harvest_tick, IRON_STALKER =
-iron_stalker - order 4, the insect family complete) are drawn
+iron_stalker - order 4, the insect family complete; order 5, the aberrations: PLAGUE_HULK = plague_hulk, EYE_TYRANT =
+eye_tyrant, GORE_BITER = gore_biter, MIRE_WRAITH = mire_wraith) are drawn
 from generated clip atlases by render/enemyvisual, inside EnemyRenderer's pass 1; every other type keeps the
 legacy region path untouched until generated-enemy-art order 9.
   BODY      the frame from the body atlas, at its manifest offset on the 160x240 canvas, under EXACTLY the
@@ -646,11 +647,19 @@ legacy region path untouched until generated-enemy-art order 9.
   ROSTER    warden (MACHINE, cyan ink), harvest_tick (INSECT BRUISER, ichor), iron_stalker (INSECT MINI_ELITE:
             tall and reared, two bone-edged scythes, riveted gunmetal/darkmetal plates, an ichor seam - its
             RESISTED hits throw the white-hot plate spark, not the shell chip). Same inks, same light.
+            Order 5, ABERRATION (ichor ink, flesh + wet sheen): plague_hulk (wide tank in its tank's broken steel collar,
+            club forearms; it SWELLS when primed - never the brace - and bursts on a self-destruct), eye_tyrant (one
+            studied eye in a cradle of petals held open by a gunmetal speculum; the beam leaves the pupil; it falls from
+            its hover when it dies), gore_biter (a head that splits vertically into a toothed jaw; packs step out of
+            phase), mire_wraith (a shrouded sludge predator with a lamprey maw and an acid gullet; its acid bursts in a
+            splash where it lands). sump_wretch (the first Mire Wraith, kept) is not wired yet.
   REMAINS   the last DEATH frame stays on the tile for the floor, graded like a body, in place of the corpse
             decal (R5: drawing only). The legacy red hit spray does not draw on a migrated body.
 Measured (llvmpipe, same session, 6 enemies alerted in one room, 8 s each, two interleaved runs): animated
 10.6 / 11.0 ms vs legacy sprites 10.9 / 10.9 ms per frame — no measurable cost; no GC pause during 30 s idle
 in the room on either.
+Order 5 (same session, 6 alerted aberrations, 8 s each, two interleaved runs): animated 10.11 / 10.10 ms vs legacy
+sprites 10.33 / 10.03 ms per frame - no measurable cost.
 Order 3 (same method, 6 alerted + 1 killed in the window, 2 burning; vs order 2 at 649c7a6): 11.42 / 11.25 ms vs
 11.27 / 11.52 ms — no measurable cost; 30 s in the room with 2 burning, 1 stunned, 1 wounded: no GC pause after
 startup on either.
