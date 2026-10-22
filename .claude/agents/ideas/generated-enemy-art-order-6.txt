@@ -165,6 +165,11 @@ DECISIONS
       Built as the GHOUL. The red eyes are an owner-approved exception to G5 (material `redeye`).
   D2  OWNER GATE ORDER (same request): the concept still of every enemy is shown and approved BEFORE any animation is
       made; this replaces the Ghoul-alone early read of A1 / RISKS.
+  D3  GHOUL MASK (owner, 2026-10-22, after the first concept): a LONG gas mask. The owner supplied a reference image of
+      a figure in a hazard suit and gas mask, to be used as a loose reference only: ignore the device on its chest and
+      do not make the in-game enemy look too similar to it. Built as a long ribbed rubber respirator snout hanging to
+      the chest, ending in a filter canister, plus taped glove and boot cuffs; the slate suit, the single visor, the red
+      eyes and the long limbs stay ours.
 
 
 OPEN QUESTIONS

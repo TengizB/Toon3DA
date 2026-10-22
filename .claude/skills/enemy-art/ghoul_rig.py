@@ -8,7 +8,9 @@ Motion character: patient, swaying, the head cocked; it walks like something rem
 """
 import math
 
-from kit import blob, limb, chain, slab, fold_lines, hand, Humanoid, with_glow, Xf, Figure, Rig, Clip, lag
+from kit import lerp_pt, blob, limb, chain, slab, fold_lines, hand, Humanoid, with_glow, Xf, Figure, Rig, Clip, lag
+
+SNOUT_END = 30.0                  # the canister's centre below the head centre (head space, px)
 
 SKELETON = Humanoid(pelvis=(80.0, 112.0), spine=58.0, neck=9.0, head=11.0, shoulder_half=15.0, hip_half=7.5,
                     upper_arm=44.0, fore_arm=42.0, hand=12.0, thigh=58.0, shin=60.0, foot=9.0,
@@ -51,10 +53,16 @@ def _head(j, p):
         limb(-7.6, 4.8, 7.6, 4.8, 1.0, 1.0, "darkmetal", prio=70, k=0),
         limb(-9.0, -7.2, -10.2, -1.5, 1.0, 1.0, "darkmetal", prio=70, k=0),
         limb(9.0, -7.2, 10.2, -1.5, 1.0, 1.0, "darkmetal", prio=70, k=0),
-        # the filter: one squat canister on a short snout under the visor
-        limb(0, 7, 0, 11.5, 4.0, 4.8, "rubber", op="add", depth=3.0),
-        blob(0, 14.0, 5.8, 4.2, "gunmetal", depth=5, prio=30),
-        *[limb(-3.6 + 1.8 * i, 12.6, -3.6 + 1.8 * i, 15.6, 0.45, 0.45, "gunmetal", op="carve") for i in range(5)],
+        # the LONG respirator (owner, 2026-10-22): a ribbed rubber snout hanging far below the visor, past where a
+        # chin would be, ending in a filter canister - it swings with every tilt of the head
+        limb(0, 6, 0, SNOUT_END - 3.0, 6.4, 4.4, "rubber", k=2, prio=40),
+        # raised corrugation rings: they catch the key light and the cyan rim, so the tube reads as a TUBE
+        *[limb(-(6.2 - 0.35 * i), 9.5 + 3.0 * i, 6.2 - 0.35 * i, 9.5 + 3.0 * i, 0.9, 0.9, "rubber", op="add", depth=1.1)
+          for i in range(6)],
+        blob(0, SNOUT_END, 6.0, 4.6, "gunmetal", depth=5, prio=50, k=1),
+        limb(-5.4, SNOUT_END + 3.4, 5.4, SNOUT_END + 3.4, 1.2, 1.2, "darkmetal", prio=55, k=0),
+        *[limb(-3.6 + 1.8 * i, SNOUT_END - 2.2, -3.6 + 1.8 * i, SNOUT_END + 2.0, 0.45, 0.45, "gunmetal", op="carve")
+          for i in range(5)],
         # the head straps over the hood
         limb(-10.0, -1, -13.0, -11, 1.1, 1.0, "rubber", op="add", depth=1.0),
         limb(10.0, -1, 13.0, -11, 1.1, 1.0, "rubber", op="add", depth=1.0),
@@ -82,6 +90,8 @@ def _arm(j, p, side, s):
         limb(*sh, *el, 0.6, 0.5, "overalls", op="carve"),
         # the rubber gauntlet over the forearm's last third, and the glove: LONG fingers
         limb(wr[0] + (el[0] - wr[0]) * 0.32, wr[1] + (el[1] - wr[1]) * 0.32, *wr, 4.4, 3.9, "rubber", op="add", depth=1.2),
+        # the taped cuff where the glove seals to the sleeve
+        limb(*lerp_pt(wr, el, 0.34), *lerp_pt(wr, el, 0.28), 4.9, 4.9, "darkmetal", op="add", depth=1.4),
         *hand(wr, j[f"{side}_hand_angle"], s, 11.0, "rubber", fingers=4, finger_length=29.0, finger_r=1.2,
               palm_r=3.3, spread=0.40, curl=curl),
     ]
@@ -97,6 +107,7 @@ def _leg(j, side, s):
         *fold_lines(kn[0] - 3.5, kn[1] - 5, kn[0] + 3.5, kn[1] + 5, 3, 6, mat="overalls", seed=21 + s, angle=-0.25),
         # the boot: rubber to mid-shin, the toe turned out
         limb(an[0] + (kn[0] - an[0]) * 0.38, an[1] + (kn[1] - an[1]) * 0.38, *an, 4.6, 4.4, "rubber", op="add", depth=1.4),
+        limb(*lerp_pt(an, kn, 0.40), *lerp_pt(an, kn, 0.34), 5.1, 5.1, "darkmetal", op="add", depth=1.6),
         limb(*an, *to, 4.6, 3.6, "rubber", k=3),
         blob(an[0] + s * 1.5, an[1] + 1.8, 5.0, 3.0, "rubber", depth=3, k=3),
     ]
@@ -124,7 +135,7 @@ def ghoul_build(p):
         limb(px - 7, py + 1, px + 7, py + 1, 7.5, 7.5, "overalls", k=6),
     ]
     # the ID badge on its lanyard, clipped left of the zip, swinging a little
-    bx, by = cx - 6 + 2.0 * p.badge, cy + 15
+    bx, by = cx - 8 + 2.0 * p.badge, cy + 24
     badge = [
         limb(cx - 4, cy - 1, bx, by - 4, 0.5, 0.5, "darkmetal", op="add", depth=0.4),
         slab([(bx - 5.0, by - 4), (bx + 5.0, by - 4), (bx + 5.0, by + 5.0), (bx - 5.0, by + 5.0)], "livery", bevel=0.9,
@@ -133,9 +144,9 @@ def ghoul_build(p):
     hood, mask = _head(j, p)
     # the breathing hose: from the canister down to a pack on the right hip, lagging the head
     hx, hy = j["head"]
-    cx2, cy2 = Xf.turn(j["head_angle"], (0, 0)).then(Xf.move(hx, hy)).pt((0, 15))
+    cx2, cy2 = Xf.turn(j["head_angle"], (0, 0)).then(Xf.move(hx, hy)).pt((0, SNOUT_END))
     sag = 3.0 * p.hood_lag
-    hose = chain([(cx2 + 2, cy2 + 2), (cx2 + 9 + sag, cy2 + 16), (cx + 13 + sag, cy + 30), (px + 12, py - 8)],
+    hose = chain([(cx2 + 3, cy2 + 1), (cx2 + 10 + sag, cy2 + 10), (cx + 14 + sag, cy + 32), (px + 12, py - 8)],
                  1.9, 1.7, "rubber", k=2, prio=10)
     hose += [blob(px + 12.5, py - 6, 3.6, 5.2, "gunmetal", depth=4, k=2, prio=12)]
     layers = [

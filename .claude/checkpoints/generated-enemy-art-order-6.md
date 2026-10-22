@@ -89,3 +89,8 @@ olive-grey hazmat, two-lens mask, spore pods riding skeleton joints (own layer, 
 grabber with long fingers; its 0.90 walls makes it fill its canvas top to bottom). The hazmat ramp was desaturated after
 the CP1 cmp - a new material no earlier sprite uses. A1: the owner's own instruction ("send the image of each enemy
 before animations") replaces the idea's Ghoul-alone early read; all five concepts were sent together.
+
+**CP2a (revision):** owner asked for a LONG gas mask on the Ghoul (D3; a reference image given, used loosely - no chest
+device, not a copy). `ghoul_rig.py`: SNOUT_END = 30 (head space): a ribbed rubber snout (6 raised rings) to a gunmetal filter
+canister, the hose now leaves the canister; taped cuffs (darkmetal rings) at glove and boot tops; badge moved to cy+24.
+Revised Ghoul + family sheet sent. Still WAITING for the concept approval (CP2b).
