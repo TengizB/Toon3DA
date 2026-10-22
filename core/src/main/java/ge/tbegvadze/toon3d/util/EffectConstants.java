@@ -298,6 +298,11 @@ public final class EffectConstants {
     // by this many TILES and drops it this many canvas px, then eases back over the duration ((1 - t)^2).
     // Hits in one turn add up but never past the caps (a chaingun burst does not walk the body off its tile).
     public static final float ENEMY_VISUAL_RECOIL_SECONDS             = 0.22f;
+    /**
+     * Order 5: a HOVERING type (the Eye Tyrant) that dies falls from its hover to the floor over this fraction of its
+     * death clip (it lands as the clip sprawls), so the dying instance never pops a quarter wall down at death.
+     */
+    public static final float ENEMY_VISUAL_HOVER_FALL_PORTION         = 0.62f;
     public static final float ENEMY_VISUAL_RECOIL_LIGHT_TILES         = 0.06f;
     public static final float ENEMY_VISUAL_RECOIL_HEAVY_TILES         = 0.11f;
     public static final float ENEMY_VISUAL_RECOIL_RESIST_TILES        = 0.035f;   // the "ringing shove"
@@ -338,6 +343,11 @@ public final class EffectConstants {
     public static final float ENEMY_EFFECT_FADE_TAIL_FRACTION         = 0.30f;
     // The generated projectile flies to the player's eye height (half a wall: the horizon line).
     public static final float ENEMY_EFFECT_PROJECTILE_TARGET_HEIGHT   = 0.5f;
+    /**
+     * Order 5: a projectile with an IMPACT burst (the acid) bursts this many tiles short of its target tile's centre,
+     * which is the viewer's own position on a hit - so the splash happens in front of the camera, where it is seen.
+     */
+    public static final float ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES = 1.1f;
     // Ranged recoil kick: sprite nudges away from the player on fire
     public static final float ENEMY_RECOIL_MAX_PIXELS             = 14f;
     // Muzzle flash quad: warm-white overlay at the firing sprite center

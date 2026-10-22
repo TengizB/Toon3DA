@@ -2240,6 +2240,29 @@ public final class GameMath {
     }
 
     /*
+     * Formula: Death Splash Threat Points (sump-wretch-acid-death — the TP term of an enemy's DEATH SPLASH)
+     * Derivation:
+     *   A death splash puts S POISONED stacks on an orthogonally adjacent player. Poison ticks perStack x liveStacks
+     *   each turn, then decays by one stack, so the splash alone deals
+     *       splashDamage = perStack x (S + (S - 1) + ... + 1) = perStack x S x (S + 1) / 2
+     *   (S = 3, perStack 2 -> 2 x 3 x 4 / 2 = 12 HP). Only the share of deaths that happen next to the player
+     *   actually lands it, so the threat the archetype adds is
+     *       threat = splashDamage x adjacentDeathShare
+     *   (12 x 0.4 = 4.8 at the shipped DEATH_SPLASH_ADJACENT_SHARE). It is ADDED to the stat-block TP in EnemyType.baseThreatPoints.
+     * Edge cases:
+     *   splashStacks <= 0 or adjacentDeathShare <= 0 -> 0 (an archetype with no splash adds nothing, so every
+     *   other archetype's TP is byte-identical). perStack < 0 is clamped to 0. Pre-existing poison and the
+     *   POISON_MAX_STACKS cap are ignored (the splash alone sits under the cap). Integer product computed in long
+     *   arithmetic before the float multiply, so no overflow for any sane stack count.
+     */
+    public static float deathSplashThreatPoints(int playerPoisonPerStack, int splashStacks, float adjacentDeathShare) {
+        if (splashStacks <= 0 || adjacentDeathShare <= 0f) return 0f;
+        long stackTurns   = (long) splashStacks * (splashStacks + 1) / 2;
+        float splashDamage = (float) (Math.max(0, playerPoisonPerStack) * stackTurns);
+        return splashDamage * adjacentDeathShare;
+    }
+
+    /*
      * Formula: Toxic Average Stacks (balance-overhaul order 4, H10 — hazard pricing read-out)
      * Derivation:
      *   A host standing in a toxic tile gains stacksPerTurn each turn (capped at maxStacks); the status
@@ -8117,6 +8140,53 @@ public final class GameMath {
     // =========================================================================
     // ENEMY REACTIONS AND EFFECTS (generated-enemy-art order 3) — cosmetic curves
     // =========================================================================
+
+    /*
+     * Formula: Canvas point on a billboard (generated-enemy-art order 5 - where a manifest anchor sits on screen)
+     * Derivation:
+     *   A canvas is drawn spriteWidth x spriteHeight world units, centred on centerX, bottom at drawBottom.
+     *   Canvas x runs left -> right, canvas y runs DOWN (image space). So
+     *     worldX = centerX + (canvasX / canvasWidth - 0.5) * spriteWidth
+     *     worldY = drawBottom + (1 - canvasY / canvasHeight) * spriteHeight      (the one y flip)
+     * Edge cases:
+     *   canvasWidth / canvasHeight <= 0 -> the centre / bottom (no division by zero).
+     */
+    public static float billboardCanvasX(float centerX, float spriteWidth, float canvasX, float canvasWidth) {
+        if (canvasWidth <= 0f) return centerX;
+        return centerX + (canvasX / canvasWidth - 0.5f) * spriteWidth;
+    }
+
+    public static float billboardCanvasY(float drawBottom, float spriteHeight, float canvasY, float canvasHeight) {
+        if (canvasHeight <= 0f) return drawBottom;
+        return drawBottom + (1f - canvasY / canvasHeight) * spriteHeight;
+    }
+
+    /*
+     * Formula: Projectile impact time (generated-enemy-art order 5 - when the acid bursts, short of its target)
+     * Derivation:
+     *   A projectile covers distanceTiles in travelSeconds at constant speed, so it is leadTiles short of the target at
+     *   t = travelSeconds * (1 - leadTiles / distanceTiles).
+     * Edge cases:
+     *   distanceTiles <= leadTiles (a point-blank shot) -> 0: it bursts at once; distanceTiles <= 0 -> 0.
+     */
+    public static float projectileImpactSeconds(float travelSeconds, float distanceTiles, float leadTiles) {
+        if (distanceTiles <= 0f || distanceTiles <= leadTiles) return 0f;
+        return travelSeconds * (1f - leadTiles / distanceTiles);
+    }
+
+    /*
+     * Formula: Hover remaining while a hovering body falls (generated-enemy-art order 5 - a dying Eye Tyrant)
+     * Derivation:
+     *   t = min(1, progress / fallPortion)   (the fall takes the first fallPortion of the death clip)
+     *   remaining = 1 - t²                   (it drops like a weight: slow to leave, fast at the floor)
+     * Edge cases:
+     *   fallPortion <= 0 -> 0 (already down); progress < 0 is treated as 0 (full hover).
+     */
+    public static float hoverRemainingWhileFalling(float progress, float fallPortion) {
+        if (fallPortion <= 0f) return 0f;
+        float fraction = Math.min(1f, Math.max(0f, progress) / fallPortion);
+        return 1f - fraction * fraction;
+    }
 
     /*
      * Formula: Recoil envelope (quadratic ease-out back to rest)

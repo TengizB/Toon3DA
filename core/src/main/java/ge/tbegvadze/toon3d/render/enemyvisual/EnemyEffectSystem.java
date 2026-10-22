@@ -46,6 +46,9 @@ public final class EnemyEffectSystem {
         public boolean projectile;
         EnemyEffectSet.Burst trailBurst;
         float          trailTimerSeconds;
+        // Order 5: a projectile with an IMPACT burst bursts into it just short of its target (where the acid lands).
+        EnemyEffectSet.Burst impactBurst;
+        float          impactAtSeconds;
 
         /** The sprite frame to draw now. */
         public EnemyEffectSet.SpriteFrame currentFrame() {
@@ -110,9 +113,11 @@ public final class EnemyEffectSystem {
 
     /**
      * A projectile: the burst's first emitter's sprite flying in a straight line from the start point to the
-     * target point over {@code travelSeconds}, shedding {@code trail} on its interval.
+     * target point over {@code travelSeconds}, shedding {@code trail} on its interval. Order 5: with an
+     * {@code impact} burst it ends ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES short of the target and bursts into it
+     * there - in front of the viewer, so the splash is seen (null = it flies on and fades, as before).
      */
-    public void launch(EnemyEffectSet.Burst projectile, EnemyEffectSet.Burst trail,
+    public void launch(EnemyEffectSet.Burst projectile, EnemyEffectSet.Burst trail, EnemyEffectSet.Burst impact,
                        float fromTileX, float fromTileY, float fromHeight,
                        float toTileX, float toTileY, float toHeight, float travelSeconds, float tilesPerPixel) {
         if (projectile == null || projectile.emitters.length == 0 || travelSeconds <= 0f) return;
@@ -124,6 +129,12 @@ public final class EnemyEffectSystem {
         particle.trailBurst     = trail;
         particle.trailTimerSeconds = 0f;
         particle.projectile     = true;
+        if (impact != null) {
+            float distanceTiles = GameMath.distance(fromTileX, fromTileY, toTileX, toTileY);
+            particle.impactBurst     = impact;
+            particle.impactAtSeconds = GameMath.projectileImpactSeconds(travelSeconds, distanceTiles,
+                    EffectConstants.ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES);
+        }
     }
 
     /** Advances every particle; ages out the finished ones. Call from the update path (frozen with the world). */
@@ -132,6 +143,19 @@ public final class EnemyEffectSystem {
         for (Particle particle : particles) {
             if (!particle.active) continue;
             particle.ageSeconds += deltaTime;
+            if (particle.impactBurst != null && particle.ageSeconds >= particle.impactAtSeconds) {
+                // Order 5: the glob bursts where it lands. Read its state first: emit() may recycle this particle.
+                EnemyEffectSet.Burst impact = particle.impactBurst;
+                float tileX = particle.tileX;
+                float tileY = particle.tileY;
+                float height = particle.height;
+                float tilesPerPixel = particle.tilesPerPixel;
+                particle.active = false;
+                particle.trailBurst = null;
+                particle.impactBurst = null;
+                emit(impact, tileX, tileY, height, tilesPerPixel, 0f, 0f);
+                continue;
+            }
             if (particle.ageSeconds >= particle.lifeSeconds) {
                 particle.active = false;
                 particle.trailBurst = null;
@@ -205,6 +229,7 @@ public final class EnemyEffectSystem {
             particle.active = false;
             particle.sprite = null;
             particle.trailBurst = null;
+            particle.impactBurst = null;
         }
     }
 
@@ -277,6 +302,7 @@ public final class EnemyEffectSystem {
         particle.tilesPerPixel   = tilesPerPixel;
         particle.orbitRadiusTiles = 0f;
         particle.trailBurst      = null;
+        particle.impactBurst     = null;
         particle.projectile      = false;
         particle.sequence        = nextSequence++;
     }

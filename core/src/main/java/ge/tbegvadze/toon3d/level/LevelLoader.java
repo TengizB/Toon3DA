@@ -55,6 +55,7 @@ public class LevelLoader {
         //   '!'=Iron Stalker '$'=Acid Drone    '^'=Void Shroud
         //   '~'=Ghoul        'z'=Crawler       'K'=Revenant   'V'=Vortex Eye   '*'=Blight Corruptor
         //   '('=Auric Sentinel  '{'=Cinderforge Colossus  '['=Rimeshell Lancer (elemental golems)
+        //   'o'=Sump Wretch (aberration chaff that bursts into acid on death)
         // Record each spawn, then replace the cell with lit-floor so the grid
         // stays traversable and existing renderers need no changes.
         List<EnemySpawnPoint> spawnPoints = new ArrayList<>();
@@ -64,7 +65,8 @@ public class LevelLoader {
                 if (cell == '1' || cell == '2' || cell == '3' || cell == '4' || cell == '5'
                         || cell == '!' || cell == '$' || cell == '^'
                         || cell == '~' || cell == 'z' || cell == 'K' || cell == 'V' || cell == '*'
-                        || cell == '(' || cell == '{' || cell == '[' || cell == 'n') {
+                        || cell == '(' || cell == '{' || cell == '[' || cell == 'n'
+                        || cell == 'o') {
                     spawnPoints.add(new EnemySpawnPoint(cell, tileColumn, tileRow));
                     matrix[tileRow][tileColumn] = ' ';
                 }

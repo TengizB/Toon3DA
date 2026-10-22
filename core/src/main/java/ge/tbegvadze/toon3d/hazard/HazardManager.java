@@ -2,6 +2,7 @@ package ge.tbegvadze.toon3d.hazard;
 
 import ge.tbegvadze.toon3d.enemy.Enemy;
 import ge.tbegvadze.toon3d.enemy.EnemyManager;
+import ge.tbegvadze.toon3d.enemy.EnemyType;
 import ge.tbegvadze.toon3d.entity.DamageClass;
 import ge.tbegvadze.toon3d.entity.HazardIgniteTarget;
 import ge.tbegvadze.toon3d.entity.MatchupCatalog;
@@ -11,6 +12,7 @@ import ge.tbegvadze.toon3d.status.StatusEffectController;
 import ge.tbegvadze.toon3d.status.StatusHost;
 import ge.tbegvadze.toon3d.status.StatusType;
 import ge.tbegvadze.toon3d.util.BalanceConfig;
+import ge.tbegvadze.toon3d.util.Constants;
 import ge.tbegvadze.toon3d.util.EffectConstants;
 
 import java.util.List;
@@ -62,6 +64,15 @@ public final class HazardManager implements HazardIgniteTarget {
         void onHazardTilePlaced(int tileColumn, int tileRow, char hazardChar);
     }
 
+    /**
+     * Notified once per tile an enemy's DEATH SPLASH reaches (the death tile and each non-wall orthogonal neighbour) so
+     * the visual layer can play the creature's splash there (sump-wretch-acid-death). Cosmetic only: null in the
+     * balance simulator, and nothing in the simulation depends on it.
+     */
+    public interface AcidSplashListener {
+        void onAcidSplash(EnemyType type, int tileColumn, int tileRow);
+    }
+
     private final Level                  level;
     private final EnemyManager           enemyManager;
     private final StatusEffectController statusEffectController;
@@ -88,6 +99,7 @@ public final class HazardManager implements HazardIgniteTarget {
     // Fire spreads onto explosive barrels by detonating them; the chain may ignite more fire.
     private ExplosiveBarrelManager explosiveBarrelManager;
     private HazardVisualListener   visualListener;
+    private AcidSplashListener     acidSplashListener;
 
     /** Seed used by the seedless constructor so hazard behaviour stays reproducible in tests/tools. */
     private static final long DEFAULT_RANDOM_SEED = 987654321L;
@@ -130,6 +142,11 @@ public final class HazardManager implements HazardIgniteTarget {
         this.visualListener = listener;
     }
 
+    /** Wires the cosmetic death-splash hook (World only; the simulator leaves it null). */
+    public void setAcidSplashListener(AcidSplashListener listener) {
+        this.acidSplashListener = listener;
+    }
+
     // -------------------------------------------------------------------------
     // Public ignition API — used by enemy deaths, barrel chains and level seeding
     // -------------------------------------------------------------------------
@@ -154,7 +171,81 @@ public final class HazardManager implements HazardIgniteTarget {
 
     /** Spawns (or refreshes) a toxic pool, if the tile is an eligible floor/stain cell. */
     public void igniteToxic(int tileColumn, int tileRow) {
-        ignite(tileColumn, tileRow, TOXIC, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS);
+        igniteToxic(tileColumn, tileRow, BalanceConfig.HAZARD_TOXIC_LIFETIME_TURNS);
+    }
+
+    /**
+     * Spawns (or refreshes) a toxic pool with a CALLER-CHOSEN lifetime (sump-wretch-acid-death: the puddle a dying Sump
+     * Wretch leaves, {@code EnemyType.deathPuddleTurns()}), mirroring the igniteFire lifetime overload. Same eligibility
+     * rules: a no-op on walls, pickups and non-spreadable cells, never over fire; an existing toxic tile takes the new
+     * lifetime.
+     */
+    public void igniteToxic(int tileColumn, int tileRow, int lifetimeTurns) {
+        ignite(tileColumn, tileRow, TOXIC, lifetimeTurns);
+    }
+
+    /**
+     * THE ENEMY DEATH HAZARD - the ONE place an enemy's death leaves a hazard, called by BOTH World and SimWorld through
+     * {@code EnemyManager.EnemyDeathHazardListener}, so the game and the balance simulator can never drift
+     * (sump-wretch-acid-death). In order:
+     * <ul>
+     *   <li>a Plague Hulk leaves a lingering toxic cloud; one that survived its self-destruct countdown to detonate leaves
+     *       the MASSIVE cloud instead (plague-hulk-self-destruct.txt) - killing it first is the reward;</li>
+     *   <li>a dying magma construct leaves ONE last fire tile under itself (its {@code leavesTrailFireTurns()});</li>
+     *   <li>a type with a DEATH SPLASH ({@code deathSplashPlayerStacks()} / {@code deathSplashEnemyStacks()} &gt; 0)
+     *       poisons every living host on the 4 orthogonal neighbours of its tile (R2-R6: status only, no direct damage,
+     *       so one death never causes another in the same resolution; not a hit, so armour, guard and the first-hit
+     *       shield are not involved - the same rule as a toxic tile);</li>
+     *   <li>and leaves a short toxic puddle on its tile ({@code deathPuddleTurns()}, R7).</li>
+     * </ul>
+     * Data-driven off the archetype: a type declares the data and inherits the behaviour.
+     */
+    public void applyEnemyDeathHazard(EnemyType deadType, int tileColumn, int tileRow, boolean selfDestructMassive,
+                                      Player player) {
+        if (deadType == EnemyType.PLAGUE_HULK) {
+            int radius = selfDestructMassive
+                    ? BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
+                    : BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS;
+            spawnToxicCloud(tileColumn, tileRow, radius);
+        }
+        if (deadType.leavesTrailFireTurns() > 0) {
+            igniteFire(tileColumn, tileRow, deadType.leavesTrailFireTurns());
+        }
+        if (deadType.deathSplashPlayerStacks() > 0 || deadType.deathSplashEnemyStacks() > 0) {
+            splashAcid(deadType, tileColumn, tileRow, player);
+        }
+        if (deadType.deathPuddleTurns() > 0) {
+            igniteToxic(tileColumn, tileRow, deadType.deathPuddleTurns());
+        }
+    }
+
+    /** The death splash: POISONED stacks on every living host orthogonally adjacent to the death tile (R3-R6). */
+    private void splashAcid(EnemyType deadType, int tileColumn, int tileRow, Player player) {
+        int playerColumn = -1;
+        int playerRow    = -1;
+        if (player != null) {
+            playerColumn = (int) Math.floor(player.positionX / Constants.CELL_SIZE);
+            playerRow    = (int) Math.floor(player.positionY / Constants.CELL_SIZE);
+        }
+        if (acidSplashListener != null) acidSplashListener.onAcidSplash(deadType, tileColumn, tileRow);
+        List<Enemy> enemies = enemyManager.getEnemies();
+        for (int direction = 0; direction < 4; direction++) {
+            int neighborColumn = tileColumn + STEP_COLUMNS[direction];
+            int neighborRow    = tileRow    + STEP_ROWS[direction];
+            if (!inBounds(neighborColumn, neighborRow) || Level.isWall(level.getCell(neighborColumn, neighborRow))) continue;
+            if (acidSplashListener != null) acidSplashListener.onAcidSplash(deadType, neighborColumn, neighborRow);
+            if (statusEffectController == null) continue;
+            if (player != null && playerColumn == neighborColumn && playerRow == neighborRow) {
+                statusEffectController.applyPoisonStacks(player, deadType.deathSplashPlayerStacks(), null);
+            }
+            // Status only (R4): nobody is removed, so iterating the live list is safe even inside a status-tick loop.
+            for (int enemyIndex = 0; enemyIndex < enemies.size(); enemyIndex++) {
+                Enemy enemy = enemies.get(enemyIndex);
+                if (enemy.isAlive() && enemy.tileColumn == neighborColumn && enemy.tileRow == neighborRow) {
+                    statusEffectController.applyPoisonStacks(enemy, deadType.deathSplashEnemyStacks(), null);
+                }
+            }
+        }
     }
 
     /**

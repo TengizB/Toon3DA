@@ -1,9 +1,43 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 5 - the Aberrations
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
+
+IMPLEMENTATION NOTE (2026-10-22)
+  - OWNER GATE: Hulk, Eye Tyrant, Gore Biter approved first time (D1). The first Mire Wraith was rejected (D2) and KEPT as
+    the creature `sump_wretch` (D3, pixel-identical, not wired - its own idea file, sump-wretch-acid-death.txt, wires it);
+    the second Mire Wraith (lamprey maw, acid gullet, hooked arms, shroud) was approved (D5). The acid landing splash was
+    added at the owner's request (D4).
+  - KIT: five materials APPENDED (flesh, flesh_dk, sclera, membrane, pupil) with a per-material wet sheen; eyeball(),
+    teeth_row(), jiggle(); stencil glyphs T S G M A B. Every earlier creature and *.fx.* set regenerates byte-identical;
+    `aberration` is a new set (AS1: the insect ichor ink).
+  - RUNTIME CHANGES (all in render/enemyvisual + EnemyRenderer, data rows where a rule exists, no sim change):
+      1. EnemyClipId += DEBUFF_PLAYER, SELF_DESTRUCT, PRIMING, DEATH_BURST; abilityClip rows DEBUFF_PLAYER, SELF_DESTRUCT.
+      2. SELF_DESTRUCT priming as a HELD clip: Hold.fallback + clipIn(manifest) - SELF_DESTRUCTING holds PRIMING, else WIND_UP
+         (holdsWindUp counts the fallback); a hold that replaces a showing hold starts at frame 0 (the wind-up moment
+         arrives before the state flips).
+      3. A HOLD-mode one-shot keeps its last frame while the enemy still holds - so each countdown turn's SELF_DESTRUCT clip
+         leaves the Hulk one level more swollen (found in-engine: it fell back to PRIMING).
+      4. The self-destruct DEATH variant: DeathRow by DeathCause (SELF_DESTRUCT -> DEATH_BURST + BurstId.DETONATE, falling
+         back to DEATH); DyingEnemyPool / RemainsRegistry carry their clip.
+      5. The Eye Tyrant beam leaves the frame's EMITTER anchor (the pupil) - GameMath.billboardCanvasX/Y; no projectile.
+      6. The dying Eye Tyrant falls from its hover (GameMath.hoverRemainingWhileFalling, ENEMY_VISUAL_HOVER_FALL_PORTION) -
+         otherwise it popped a quarter wall at death.
+      7. scheduleShot reads the emit frame of whichever one-shot plays (the Mire Wraith's DEBUFF_PLAYER volley).
+      8. MOVE loop phase offset per enemy (A3, found in-engine: a pack's slides start on one turn, so they stepped in unison).
+      9. The acid's landing splash: BurstId.IMPACT; a projectile with an IMPACT burst bursts ENEMY_EFFECT_PROJECTILE_IMPACT_
+         LEAD_TILES (1.1) short of its target (GameMath.projectileImpactSeconds). The Warden ships none: unchanged.
+  - FINDINGS: aberrations are trait FLESH (neutral matchup row), so RESISTED never happens to them (the WELT burst ships,
+    unreachable); the Eye Tyrant, Gore Biter and Mire Wraith never commit a WIND_UP (no heavy). Pre-existing, not fixed:
+    EnemyManager.chainAlertQueue overflows when several DORMANT enemies added after the floor starts wake in one turn.
+  - G13: 6 alerted aberrations, animated 10.11 / 10.10 ms vs legacy 10.33 / 10.03 ms per frame (llvmpipe) - no cost.
+  - A2-A5 verified in-engine (real sim; DEFEND and Block forced, as the capture tool provides). No tests (G12).
+  - REVIEWER r1: PASS WITH FIXES - the one required fix applied (EnemyEffectSystem uses GameMath.distance). Accepted as is
+    (cosmetic, recorded): a HURT during the self-destruct countdown drops the Hulk back to PRIMING's swell until its next
+    countdown turn; a hold that replaces another hold now starts at frame 0 for every creature; the dying-hover check is a
+    type check matching the existing live-hover check; sump_wretch's art ships unwired until its own idea lands (D3).
 
 Part of the generated-enemy-art series. Requires orders 1-4. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt before starting.
@@ -155,7 +189,21 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  OWNER GATE (CP3, 2026-10-22): the family stills sheet, the clip GIFs + strips, the aberration effect sheet and the
+      in-engine burst GIFs (cool_steel + amber_hot) were sent. The owner APPROVED the Plague Hulk, the Eye Tyrant and the
+      Gore Biter ("Everything else looks really good and you have my approval"), including the runtime changes named in
+      the CP3 checkpoint notes. They are wired.
+  D2  The Mire Wraith is REJECTED as drawn ("looks like an egg ... doesn't look like a dangerous enemy, it looks really
+      weak"). Per A1 it is redesigned and re-gated, never wired as drawn.
+  D3  The rejected Mire Wraith art is KEPT, not deleted: it becomes the creature `sump_wretch` (sump_wretch_rig.py +
+      its shipped atlas/glow/manifest, pixels unchanged) for a NEW low-level enemy that "will splash acid when killed".
+      That enemy is new gameplay content (a new EnemyType + an on-death mechanic, balance-bearing), so it is OUT of this
+      order: its own idea file comes from creative-game-designer and the owner approves it separately.
+  D4  The acid gets an ARRIVAL SPLASH where it lands (owner: "yes also add a splash where the acid lands") - a runtime
+      projectile-arrival burst, named in the IMPLEMENTATION NOTE.
+  D5  OWNER GATE 2 (CP5b, 2026-10-22): the REDESIGNED Mire Wraith (lamprey maw, acid gullet, hooked arms, ragged shroud;
+      stills, clip GIF + strip, in-engine bursts incl. a 2-tile close-up of the spit and the landing splash, cool_steel +
+      amber_hot) - owner: "Now I like everything, you have my approvals to continue". Wired.
 
 
 OPEN QUESTIONS

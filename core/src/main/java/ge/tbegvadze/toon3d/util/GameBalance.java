@@ -372,6 +372,7 @@ public final class GameBalance {
     public static final int   CREDIT_REWARD_CRAWLER          = BalanceConfig.CREDIT_REWARD_CRAWLER;
     public static final int   CREDIT_REWARD_REVENANT         = BalanceConfig.CREDIT_REWARD_REVENANT;
     public static final int   CREDIT_REWARD_VORTEX_EYE       = BalanceConfig.CREDIT_REWARD_VORTEX_EYE;
+    public static final int   CREDIT_REWARD_SUMP_WRETCH      = BalanceConfig.CREDIT_REWARD_SUMP_WRETCH;
     public static final int   CREDIT_REWARD_BLIGHT_CORRUPTOR = BalanceConfig.CREDIT_REWARD_BLIGHT_CORRUPTOR;
     public static final int   CREDIT_REWARD_AURIC_SENTINEL    = BalanceConfig.CREDIT_REWARD_AURIC_SENTINEL;
     public static final int   CREDIT_REWARD_CINDERFORGE_COLOSSUS = BalanceConfig.CREDIT_REWARD_CINDERFORGE_COLOSSUS;

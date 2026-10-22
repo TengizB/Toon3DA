@@ -493,6 +493,8 @@ public final class BarkStrings {
                                                      "Armoured until it fires. Bait the lance, step off the lane, then hit it.");
         strings.put("story.bark.enemy.verdant_spiresower",
                                                      "The spires heal it. Break those first or it never dies.");
+        strings.put("story.bark.enemy.sump_wretch",
+                                                     "It bursts when it dies. Not next to you - next to its friends.");
         strings.put("story.bark.enemy.overseer",
                                                      "It telegraphs everything. Watch one full cycle before you commit.");
         strings.put("story.bark.enemy.corruptor",

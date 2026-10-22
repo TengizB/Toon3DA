@@ -649,6 +649,7 @@ public final class BalanceSchema {
     private static List<TelegraphAttackSpec> buildTelegraphAttackRegistry() {
         List<TelegraphAttackSpec> registry = new ArrayList<>();
         registry.add(new TelegraphAttackSpec("Gore Biter bite",    BalanceConfig.GORE_BITER_ATTACK_DAMAGE,  "NONE", false));
+        registry.add(new TelegraphAttackSpec("Sump Wretch spit",   BalanceConfig.SUMP_WRETCH_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Plague Hulk smash",  BalanceConfig.PLAGUE_HULK_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Void Shroud strike", BalanceConfig.VOID_SHROUD_ATTACK_DAMAGE, "NONE", false));
         registry.add(new TelegraphAttackSpec("Void Shroud flank",
@@ -2876,6 +2877,12 @@ public final class BalanceSchema {
                 new String[]{"HAZARD_TOXIC_ENEMY_STACKS_PER_TURN"}, ge.tbegvadze.toon3d.status.StatusType.POISONED,
                 null, "poison stacks are not a weapon damage class — the matchup table has no poison column",
                 hazardPackage + "hazard.HazardManager"));
+        // sump-wretch-acid-death K11: the death splash (POISONED on the 4 orthogonal neighbours) + the toxic puddle
+        // it leaves; never placed by a generator, created only by HazardManager.applyEnemyDeathHazard.
+        rows.add(new HazardDeclaration("sump_wretch_acid_splash", 'q', new String[]{"POISON_TICK_FRACTION"},
+                new String[]{"SUMP_WRETCH_SPLASH_ENEMY_STACKS"}, ge.tbegvadze.toon3d.status.StatusType.POISONED,
+                null, "poison stacks are not a weapon damage class — the matchup table has no poison column",
+                hazardPackage + "hazard.HazardManager"));
         return Collections.unmodifiableList(rows);
     }
 
@@ -3462,6 +3469,16 @@ public final class BalanceSchema {
         CONSTANT_SUBJECTS.put("GROUP_LOOKOUT_MAX_PER_FLOOR",         RuleKind.DENSITY);
         // ...and salvage_hook's re-composition (its CARRIER term sits at the 1.00 clamp), banded by R-RELIC.
         CONSTANT_SUBJECTS.put("RELIC_SALVAGE_HOOK_KILL_CREDIT_BONUS", RuleKind.RELIC);
+        // sump-wretch-acid-death (K1 + K11 + K18): the archetype's stat block is banded by R-ENEMY's hits-to-kill /
+        // hits-to-die read, its credits by R-CREDITS, and its death splash + puddle by R-HAZARD (HAZARD_DECLARATIONS).
+        CONSTANT_SUBJECTS.put("SUMP_WRETCH_MAX_HEALTH",               RuleKind.ENEMY_HITS);
+        CONSTANT_SUBJECTS.put("SUMP_WRETCH_ATTACK_DAMAGE",            RuleKind.ENEMY_HITS);
+        CONSTANT_SUBJECTS.put("SUMP_WRETCH_MOVE_EVERY_N_TURNS",       RuleKind.ENEMY_THREAT_POINTS);
+        CONSTANT_SUBJECTS.put("CREDIT_REWARD_SUMP_WRETCH",            RuleKind.CREDITS);
+        CONSTANT_SUBJECTS.put("SUMP_WRETCH_SPLASH_PLAYER_STACKS",     RuleKind.HAZARD);
+        CONSTANT_SUBJECTS.put("SUMP_WRETCH_SPLASH_ENEMY_STACKS",      RuleKind.HAZARD);
+        CONSTANT_SUBJECTS.put("SUMP_WRETCH_PUDDLE_LIFETIME_TURNS",    RuleKind.HAZARD);
+        CONSTANT_SUBJECTS.put("DEATH_SPLASH_ADJACENT_SHARE",          RuleKind.ENEMY_THREAT_POINTS);
     }
 
     /** Fields deliberately banded by no rule: field name -> a one-line reason. Empty until a new field needs it. */

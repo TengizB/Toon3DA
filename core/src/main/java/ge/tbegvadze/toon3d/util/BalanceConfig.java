@@ -135,6 +135,12 @@ public final class BalanceConfig {
     public static final int MIRE_WRAITH_RANGE_TILES        = 3;
     public static final int MIRE_WRAITH_MOVE_EVERY_N_TURNS = 2;
 
+    // SUMP_WRETCH (spawn 'o') - slow, weak melee CHAFF that bursts into acid on death (sump-wretch-acid-death).
+    // R8 depth-1 reads: 2 hits to kill (24 / 15.2), 20.5 hits to die (205 / 10). Ranges: HP 20-28, damage 8-12.
+    public static final int SUMP_WRETCH_MAX_HEALTH         = 24;
+    public static final int SUMP_WRETCH_ATTACK_DAMAGE      = 10;
+    public static final int SUMP_WRETCH_MOVE_EVERY_N_TURNS = 2;
+
     // SHELL_BRUTE (spawn '4') — heavy CHARGER melee (Pillar 2). (was 38 HP / 13 dmg)
     public static final int SHELL_BRUTE_MAX_HEALTH         = 95;
     public static final int SHELL_BRUTE_ATTACK_DAMAGE      = 35;
@@ -510,6 +516,7 @@ public final class BalanceConfig {
     public static final int CREDIT_REWARD_CRAWLER          = 5;
     public static final int CREDIT_REWARD_REVENANT         = 11;
     public static final int CREDIT_REWARD_VORTEX_EYE       = 5;
+    public static final int CREDIT_REWARD_SUMP_WRETCH      = 5;
     public static final int CREDIT_REWARD_BLIGHT_CORRUPTOR = 13;
     /** Sits between Void Shroud (12) and Mire Wraith (15) — consistent with its mid-soldier TP. */
     public static final int CREDIT_REWARD_AURIC_SENTINEL    = 14;
@@ -537,6 +544,15 @@ public final class BalanceConfig {
      * Used by GameMath.specialEquivalentDebuffWeak / specialEquivalentDebuffControl. Range: 0.4–0.8.
      */
     public static final float DEBUFF_TP_EQUIVALENCE       = 0.6f;
+
+    /**
+     * The share of a death-splashing enemy's deaths assumed to happen ORTHOGONALLY NEXT TO THE PLAYER, used to price
+     * the splash into its Threat Points (GameMath.deathSplashThreatPoints, sump-wretch-acid-death AS14). 0.4: two in
+     * five wretch deaths land next to the player. Designed at 0.5; tuned to 0.4 at build time because from 0.45 the
+     * higher wretch TP thins the depth-1 combat floor enough to push MYSTERY_EV to its 1.30 ceiling and a
+     * linear-corridor room to four of one archetype (V7). The sim validates it. Range: 0.3-0.7.
+     */
+    public static final float DEATH_SPLASH_ADJACENT_SHARE = 0.4f;
     /**
      * Bodies a SUMMON verb is expected to add over one fight, for TP pricing (GameMath.specialEquivalent-
      * Summon). Priced CONSERVATIVELY below the max batch (SUMMON_COUNT_MIN..MAX in EnemyConstants): a
@@ -1186,6 +1202,19 @@ public final class BalanceConfig {
     public static final int   HAZARD_FIRE_LIFETIME_TURNS   = 3;
     /** Turns a toxic pool lingers before dissipating. Range: 3–8. */
     public static final int   HAZARD_TOXIC_LIFETIME_TURNS  = 6;
+
+    /**
+     * The Sump Wretch's DEATH SPLASH (sump-wretch-acid-death, K11 hazard "sump_wretch_acid_splash"): POISONED stacks
+     * put on the PLAYER standing orthogonally next to a dying wretch. Status only - not a hit (armour, guard and the
+     * relic first-hit shield are not involved). 3 stacks = 3+2+1 stack-turns = ~9% max HP before the player's
+     * DoT pipeline (toughness flat reduction, armour absorption) - a start player really loses 7 HP, ~5%. Range: 2-4.
+     */
+    public static final int   SUMP_WRETCH_SPLASH_PLAYER_STACKS  = 3;
+    /** POISONED stacks the same splash puts on each ENEMY orthogonally next to it (more than the player's, so
+     *  killing it beside its pack is worth it). Range: 3-6. */
+    public static final int   SUMP_WRETCH_SPLASH_ENEMY_STACKS   = 4;
+    /** Turns the toxic puddle ('q') a dying wretch leaves on its own tile lingers. Range: 2-4. */
+    public static final int   SUMP_WRETCH_PUDDLE_LIFETIME_TURNS = 3;
 
     /**
      * BURNING duration (turns) a fire tile applies to a host on it each turn. Short: standing in

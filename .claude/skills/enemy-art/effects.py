@@ -7,7 +7,7 @@ Usage:  python3 effects.py OUT_DIR [--preview DIR] [set ...]
   <set>.fx.json (the FX MANIFEST: sprites -> frames, bursts -> emitters, creatures -> where they emit).
   --preview  also writes <set>_fx_sheet.png: every sprite frame at 4x on the game's near-black.
 
-SETS. One per enemy FAMILY, named exactly as the family enum in lower case ("machine", "insect"), plus the
+SETS. One per enemy FAMILY, named exactly as the family enum in lower case ("machine", "insect", "aberration"), plus the
 shared "status" set (fire, smoke, toxin bubbles, the dazed stars) that every family uses for statuses whose
 colour is semantic (art-direction V5), not a family ink. A later family order adds ONE entry to SETS.
 
@@ -243,6 +243,119 @@ def _plate_fleck(o, f):
     return [[slab([(c + x, c + y) for x, y in (r(p) for p in pts)], "gunmetal", bevel=1.0)]]
 
 
+# --- aberration (order 5: harvested tissue that escaped the tanks - flesh, membrane, the shared ichor ink) ----------
+def _ab_ichor(o, f):
+    """An ichor droplet thrown from torn flesh (the insect ink, AS1), stretched, rounding, then a bead."""
+    c = 4.5
+    stretch, radius = ((3.2, 1.4), (1.7, 1.7), (0.6, 1.3))[f]
+    return [[limb(c, c - stretch, c, c + 0.4, 0.9, radius, "ichor", glow=_fade(f, 3, 1.15, 0.85))]]
+
+
+def _gobbet(o, f, mat="flesh", size=9):
+    """A fleck of wet flesh, tumbling (lit: graded with the body; the wet sheen catches the light)."""
+    c = size / 2
+    pts = [(-2.8, -1.2), (1.6, -2.2), (3.0, 0.6), (0.6, 2.4), (-2.4, 1.6)]
+    r = Xturn(f * math.pi / 4)
+    shapes = [blob(c, c, 3.0, 2.2, mat, depth=2.2, angle=f * math.pi / 4)]
+    shapes += [blob(c + x * 0.6, c + y * 0.6, 1.3, 1.1, mat, depth=1.4) for x, y in (r(p) for p in pts[:3])]
+    return [shapes]
+
+
+def _chunk(o, f):
+    """A big gobbet torn off in a death or the self-destruct: flesh with a raw dark side, tumbling."""
+    c = 8.5
+    a = f * math.pi / 4
+    return [[blob(c, c, 5.2, 3.6, "flesh", depth=3.5, angle=a, k=3),
+             blob(c + math.cos(a) * 2.2, c + math.sin(a) * 2.2, 3.4, 2.4, "flesh_dk", depth=2.6, angle=a, k=3),
+             blob(c - math.cos(a) * 1.8, c - math.sin(a) * 1.8, 1.2, 1.0, "ichor", op="add", depth=0.8, glow=0.9)]]
+
+
+def _splat(o, f):
+    """The wet splash a hit knocks off (emissive ichor): a ragged burst that spreads and thins."""
+    c, n = 8.5, 4
+    rng = random.Random(1300 + f)
+    r = _fade(f, n, 2.4, 6.4)
+    glow = _fade(f, n, 1.1, 0.72)
+    shapes = [blob(c, c, r * 0.55, r * 0.45, "ichor", glow=glow)]
+    for i in range(6):
+        a = i * math.pi / 3 + rng.uniform(-0.3, 0.3)
+        d = r * rng.uniform(0.7, 1.0)
+        shapes.append(blob(c + math.cos(a) * d, c + math.sin(a) * d * 0.8, 1.2 + 0.5 * (1 - f / n), 1.0 + 0.4 * (1 - f / n),
+                           "ichor", glow=glow))
+    return [shapes]
+
+
+def _welt(o, f):
+    """RESISTED on flesh: no wound - a dull dark welt puffs up and the flesh shudders (lit, no ink of its own)."""
+    c, n = 5.5, 3
+    r = _fade(f, n, 2.0, 4.2)
+    return [[blob(c, c, r, r * 0.75, "flesh_dk", depth=r * 0.5, k=2),
+             blob(c - r * 0.3, c - r * 0.25, r * 0.45, r * 0.35, "flesh", op="add", depth=r * 0.2)]]
+
+
+def _ab_drip(o, f):
+    """A drip from a wound or the torn hose, lengthening before it lets go."""
+    c = 2.5
+    run = (1.4, 2.6, 3.6)[f]
+    return [[limb(c, 1.5, c, 1.5 + run, 0.8, 1.1, "ichor", glow=1.0)]]
+
+
+def _mote(o, f):
+    """A glowing mote drawn up out of the glands while the creature winds up (the telegraph's seep)."""
+    c = 2.5
+    r = (1.0, 1.4, 0.9)[f]
+    return [[blob(c, c, r, r, "ichor", glow=_fade(f, 3, 1.0, 1.15))]]
+
+
+def _scuff(o, f):
+    """Floor grime kicked up by claws digging in - a dull, lit puff."""
+    c, n = 4.5, 3
+    r = _fade(f, n, 1.6, 3.4)
+    return [[blob(c, c, r, r * 0.75, "flesh_dk", depth=r * 0.3, k=2)]]
+
+
+def _spit(o, f):
+    """The Mire Wraith's acid spit: a wobbling glob of glowing ichor with a hotter heart (projectile)."""
+    c = 6.5
+    rx, ry = ((4.0, 3.4), (3.5, 4.0), (3.8, 3.6))[f]
+    return [[blob(c, c, rx, ry, "ichor", glow=0.95), blob(c - 1.0, c - 0.8, 1.6, 1.4, "ichor", op="add", depth=1.0, glow=1.15)]]
+
+
+def _spit_trail(o, f):
+    """A drop shed by the spit as it flies."""
+    c = 3.5
+    stretch = (2.6, 1.8, 1.0)[f]
+    return [[limb(c, c - stretch, c, c + 0.6, 0.7, 1.2, "ichor", glow=_fade(f, 3, 1.0, 0.75))]]
+
+
+def _spit_muzzle(o, f):
+    """The spray at the spout's mouth as it spits: a ragged fan of droplets around a hot core."""
+    c, n = 9.5, 3
+    rng = random.Random(1500 + f)
+    reach = _fade(f, n, 4.0, 8.0)
+    shapes = [blob(c, c, _fade(f, n, 3.0, 1.6), _fade(f, n, 2.6, 1.4), "ichor", glow=_fade(f, n, 1.15, 0.8))]
+    for i in range(7):
+        a = i * 2 * math.pi / 7 + rng.uniform(-0.25, 0.25)
+        d = reach * rng.uniform(0.6, 1.0)
+        shapes.append(limb(c + math.cos(a) * d * 0.4, c + math.sin(a) * d * 0.4, c + math.cos(a) * d, c + math.sin(a) * d,
+                           1.0, 0.6, "ichor", glow=_fade(f, n, 1.05, 0.7)))
+    return [shapes]
+
+
+def _detonate(o, f):
+    """THE SELF-DESTRUCT: the Hulk's mass tears open - a big ragged flash of ichor that swells and thins (emissive)."""
+    c, n = 15.5, 5
+    rng = random.Random(1700 + f)
+    r = _fade(f, n, 5.0, 13.0)
+    glow = (1.1, 1.0, 0.92, 0.82, 0.72)[f]
+    shapes = [blob(c, c, r * 0.6, r * 0.5, "ichor", glow=glow)]
+    for i in range(9):
+        a = i * 2 * math.pi / 9 + rng.uniform(-0.2, 0.2)
+        d = r * rng.uniform(0.75, 1.05)
+        shapes.append(blob(c + math.cos(a) * d, c + math.sin(a) * d * 0.85, r * 0.22, r * 0.18, "ichor", glow=glow))
+    return [shapes]
+
+
 # --- status (shared, semantic colours) ---------------------------------------------------------------
 def _flame(o, f):
     """A flame lick: rises, peaks, gutters. Fire is a status colour (V5), so it is the same on every family."""
@@ -419,6 +532,109 @@ SETS = {
                                  charge=placement("ground", (0, -3), 0), stun=placement("eye", (0, -24), 15),
                                  poison=placement("hit_centre", (0, -8), 22), body=placement("hit_centre", (0, 0), 12),
                                  bursts={"RESIST": "RESIST_PLATE"}),
+        },
+    ),
+    # ---------------------------------------------------------------------------------------- ABERRATION
+    # order 5: harvested planet tissue that escaped the tanks. Flesh flecks and the INSECT family's ichor ink (AS1:
+    # both are harvested tissue). No blood (R3, premise): wet flesh and ichor, never red.
+    "aberration": dict(
+        sprites=[
+            Sprite("ICHOR", 9, 3, _ab_ichor, emissive=True),
+            Sprite("FLESH", 9, 4, lambda o, f: _gobbet(o, f), emissive=False, mode="loop", fps=13),
+            Sprite("FLESH_DARK", 9, 4, lambda o, f: _gobbet(o, f, mat="flesh_dk"), emissive=False, mode="loop", fps=11),
+            Sprite("CHUNK", 17, 4, _chunk, emissive=False, mode="loop", fps=9),
+            Sprite("SPLAT", 17, 4, _splat, emissive=True),
+            Sprite("WELT", 11, 3, _welt, emissive=False),
+            Sprite("DRIP", 5, 3, _ab_drip, emissive=True),
+            Sprite("MOTE", 5, 3, _mote, emissive=True, mode="loop", fps=8),
+            Sprite("SCUFF", 9, 3, _scuff, emissive=False),
+            Sprite("SPIT", 13, 3, _spit, emissive=True, mode="loop", fps=12),
+            Sprite("SPIT_TRAIL", 7, 3, _spit_trail, emissive=True),
+            Sprite("SPIT_MUZZLE", 19, 3, _spit_muzzle, emissive=True),
+            Sprite("DETONATE", 31, 5, _detonate, emissive=True),
+        ],
+        bursts={
+            # HURT: ichor droplets and wet flecks of flesh.
+            "HIT": burst(emitter("ICHOR", (5, 7), (0.30, 0.50), (70, 160), spread=360, toward=(20, 60), gravity=520, drag=1.0, radius=6),
+                         emitter("FLESH", (2, 3), (0.40, 0.60), (60, 130), spread=360, toward=(10, 40), gravity=560, radius=6)),
+            "HIT_HEAVY": burst(emitter("ICHOR", (9, 12), (0.35, 0.60), (90, 210), spread=360, toward=(30, 90), gravity=520, drag=0.8, radius=9),
+                               emitter("SPLAT", (1, 1), (0.22, 0.28), (0, 0), toward=(30, 30), radius=4),
+                               emitter("FLESH", (3, 4), (0.45, 0.70), (70, 160), spread=360, toward=(10, 50), gravity=560, radius=9),
+                               emitter("FLESH_DARK", (2, 3), (0.45, 0.70), (70, 160), spread=360, gravity=560, radius=9)),
+            # RESISTED: no wound - a dull welt and one dark fleck; no ichor at all, so it never reads as a hit that hurt.
+            "RESIST": burst(emitter("WELT", (1, 1), (0.24, 0.30), (0, 0), toward=(20, 20)),
+                            emitter("FLESH_DARK", (1, 1), (0.35, 0.45), (50, 80), angle=60, spread=60, gravity=520)),
+            "KILL": burst(emitter("ICHOR", (13, 16), (0.40, 0.65), (110, 250), spread=360, toward=(40, 110), gravity=520, drag=0.8, radius=12),
+                          emitter("SPLAT", (1, 2), (0.24, 0.30), (0, 0), toward=(30, 30), radius=8),
+                          emitter("FLESH", (4, 5), (0.50, 0.75), (80, 180), spread=360, toward=(10, 50), gravity=560, radius=12)),
+            # DEATH: gobbets slough off and a last splash, from the body.
+            "DEATH": burst(emitter("CHUNK", (2, 3), (0.60, 0.90), (50, 110), angle=90, spread=140, toward=(10, 40), gravity=560, radius=18),
+                           emitter("FLESH_DARK", (3, 5), (0.50, 0.80), (60, 140), spread=360, gravity=560, radius=18),
+                           emitter("ICHOR", (6, 8), (0.40, 0.60), (60, 140), angle=90, spread=140, gravity=520, radius=16)),
+            # THE SELF-DESTRUCT (a Plague Hulk that survived its countdown): the runtime's DETONATE, the death's own burst.
+            "DETONATE": burst(emitter("DETONATE", (1, 1), (0.40, 0.40), (0, 0), toward=(20, 20), radius=4),
+                              emitter("SPLAT", (3, 4), (0.30, 0.40), (40, 90), spread=360, radius=20),
+                              emitter("ICHOR", (22, 28), (0.45, 0.80), (140, 320), spread=360, toward=(40, 140), gravity=480, drag=0.6, radius=18),
+                              emitter("CHUNK", (5, 7), (0.70, 1.05), (110, 220), angle=90, spread=170, toward=(20, 80), gravity=560, radius=22),
+                              emitter("FLESH", (6, 8), (0.55, 0.85), (100, 220), spread=360, toward=(10, 60), gravity=560, radius=22)),
+            # WOUNDED: a drip from the wound.
+            "LEAK": burst(emitter("DRIP", (1, 1), (0.40, 0.55), (0, 10), angle=-90, spread=20, gravity=420, radius=1.5),
+                          interval=(0.35, 0.90)),
+            # WIND_UP: motes seep up out of the glands and blisters - the body is charging.
+            "CHARGE": burst(emitter("MOTE", (1, 2), (0.35, 0.55), (10, 30), angle=90, spread=70, gravity=-60, radius=1),
+                            interval=(0.08, 0.16)),
+            "BLEED": burst(emitter("DRIP", (1, 1), (0.40, 0.55), (0, 10), angle=-90, spread=20, gravity=420, radius=10),
+                           interval=(0.22, 0.45)),
+            # creature-only (no runtime id): the Mire Wraith's acid takes these through its overrides, so the Eye Tyrant -
+            # same family - has no PROJECTILE and keeps the renderer's beam.
+            "SPIT": burst(emitter("SPIT", (1, 1), (0.30, 0.30), (0, 0))),
+            "SPIT_TRAIL": burst(emitter("SPIT_TRAIL", (1, 1), (0.22, 0.34), (5, 15), angle=-90, spread=60, gravity=260), interval=(0.025, 0.04)),
+            "SPIT_MUZZLE": burst(emitter("SPIT_MUZZLE", (1, 1), (0.16, 0.16), (0, 0)),
+                                 emitter("ICHOR", (3, 4), (0.20, 0.35), (60, 120), angle=-90, spread=90, gravity=420)),
+            # the acid LANDS (order 5, owner D4): the glob bursts short of its target - a splat and a spray of droplets
+            # thrown at the viewer, falling. Taken through a creature's "IMPACT" override.
+            "ACID_SPLASH": burst(emitter("DETONATE", (1, 1), (0.26, 0.26), (0, 0), radius=1),
+                                 emitter("SPLAT", (2, 3), (0.24, 0.32), (60, 120), spread=360, toward=(10, 30), radius=6),
+                                 emitter("ICHOR", (12, 16), (0.35, 0.60), (90, 220), spread=360, toward=(20, 80), gravity=520,
+                                         drag=0.8, radius=6)),
+            # the Gore Biter digs its claws in to spring (it has no glands to seep)
+            "SCUFF": burst(emitter("SCUFF", (2, 3), (0.30, 0.45), (30, 80), angle=90, spread=110, gravity=-10, radius=30),
+                           interval=(0.08, 0.14)),
+            # the Mire Wraith is half liquid: a hit splashes it (more ichor, a splat) and it re-forms
+            "SPLASH": burst(emitter("SPLAT", (1, 1), (0.22, 0.28), (0, 0), toward=(20, 20), radius=4),
+                            emitter("ICHOR", (6, 8), (0.30, 0.50), (70, 160), spread=360, toward=(20, 60), gravity=520, drag=1.0, radius=8)),
+            "SPLASH_HEAVY": burst(emitter("SPLAT", (2, 2), (0.24, 0.30), (20, 40), spread=360, toward=(30, 30), radius=8),
+                                  emitter("ICHOR", (11, 14), (0.35, 0.60), (90, 210), spread=360, toward=(30, 90), gravity=520, drag=0.8, radius=12),
+                                  emitter("FLESH_DARK", (2, 3), (0.45, 0.70), (70, 160), spread=360, gravity=560, radius=10)),
+        },
+        creatures={
+            # the leak is the split above the collar; resisted hits raise a welt
+            "plague_hulk": dict(leak=placement("hit_centre", (18, -15), 2), burn=placement("hit_centre", (0, -10), 34),
+                                charge=placement("eye", (-20, 10), 12), stun=placement("eye", (0, -26), 16),
+                                poison=placement("hit_centre", (0, -20), 30), body=placement("hit_centre", (0, 6), 28)),
+            # the leak weeps from the lower lid; the wind-up motes gather at the pupil
+            "eye_tyrant": dict(leak=placement("hit_centre", (-15, 38), 1.5), burn=placement("hit_centre", (0, 4), 28),
+                               charge=placement("eye", (0, 0), 14), stun=placement("hit_centre", (0, -46), 14),
+                               poison=placement("hit_centre", (0, 8), 26), body=placement("hit_centre", (0, 10), 22)),
+            # the leak drools from the jaw; the wind-up scuffs the floor under its claws
+            "gore_biter": dict(leak=placement("emitter", (0, 22), 3), burn=placement("hit_centre", (0, -30), 30),
+                               charge=placement("ground", (0, -3), 32), stun=placement("eye", (0, -36), 14),
+                               poison=placement("hit_centre", (0, -20), 26), body=placement("hit_centre", (0, -10), 24),
+                               bursts={"CHARGE": "SCUFF"}),
+            # the SECOND Mire Wraith (owner gate 2026-10-22): acid drools from the lamprey maw; the wind-up motes rise off
+            # the swelling gullet; the acid and its landing splash are its own (overrides, the order 4 idiom).
+            "mire_wraith": dict(leak=placement("emitter", (4, 14), 2), burn=placement("hit_centre", (0, 4), 32),
+                                charge=placement("hit_centre", (0, 4), 12), stun=placement("eye", (0, -26), 14),
+                                poison=placement("hit_centre", (0, 20), 30), body=placement("hit_centre", (0, 40), 30),
+                                bursts={"PROJECTILE": "SPIT", "TRAIL": "SPIT_TRAIL", "MUZZLE": "SPIT_MUZZLE",
+                                        "IMPACT": "ACID_SPLASH", "HIT": "SPLASH", "HIT_HEAVY": "SPLASH_HEAVY"}),
+            # the leak is the torn hose; the acid is its own, so the projectile is a per-creature override (order 4 idiom).
+            # The first Mire Wraith design, kept as its own creature for a new enemy (owner, 2026-10-22).
+            "sump_wretch": dict(leak=placement("hit_centre", (60, -38), 1), burn=placement("hit_centre", (0, -20), 34),
+                                charge=placement("hit_centre", (0, 30), 26), stun=placement("eye", (0, -30), 14),
+                                poison=placement("hit_centre", (0, 0), 30), body=placement("hit_centre", (0, 20), 30),
+                                bursts={"PROJECTILE": "SPIT", "TRAIL": "SPIT_TRAIL", "MUZZLE": "SPIT_MUZZLE",
+                                        "IMPACT": "ACID_SPLASH", "HIT": "SPLASH", "HIT_HEAVY": "SPLASH_HEAVY"}),
         },
     ),
     # ---------------------------------------------------------------------------------------- STATUS (shared)

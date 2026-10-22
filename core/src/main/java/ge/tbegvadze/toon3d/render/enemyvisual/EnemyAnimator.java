@@ -28,6 +28,8 @@ public final class EnemyAnimator {
     int   seenStamp;
 
     private float       loopSeconds;
+    /** Order 5 (A3): where in its MOVE cycle this enemy starts each slide - the idle phase, so a pack never steps in unison. */
+    private float       movePhaseSeconds;
     private EnemyClipId oneShotClip;
     private int         oneShotPriority;
     private float       oneShotSeconds;
@@ -67,6 +69,8 @@ public final class EnemyAnimator {
         float idleDuration = newVisual.manifest.clip(EnemyClipId.IDLE).durationSeconds;
         float phaseFraction = (newEnemyId * EffectConstants.ENEMY_VISUAL_IDLE_PHASE_SPREAD) % 1f;
         loopSeconds     = phaseFraction * idleDuration;
+        EnemyClipManifest.Clip move = newVisual.manifest.clip(EnemyClipId.MOVE);
+        movePhaseSeconds = move != null ? phaseFraction * move.durationSeconds : 0f;
         oneShotClip     = null;
         oneShotPriority = EnemyAnimationRules.PRIORITY_IDLE;
         oneShotSeconds  = 0f;
@@ -90,13 +94,13 @@ public final class EnemyAnimator {
         visual  = null;
     }
 
-    /** True while {@code clip} is the one-shot playing (the shot schedule reads where in ATTACK the body is). */
-    boolean isPlayingOneShot(EnemyClipId clip) {
-        return oneShotClip == clip;
-    }
-
     float oneShotElapsedSeconds() {
         return oneShotSeconds;
+    }
+
+    /** The one-shot playing, or null (order 5: a shot leaves on THAT clip's emit frame - ATTACK or an ability). */
+    EnemyClipId oneShotClip() {
+        return oneShotClip;
     }
 
     /** Starts {@code clip} once unless a higher-priority one-shot is still playing (equal priority restarts). */
@@ -170,19 +174,27 @@ public final class EnemyAnimator {
         loopSeconds += deltaTime;
         rightX = screenRightX;
         rightY = screenRightY;
+        EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy);
         if (oneShotClip != null) {
             oneShotSeconds += deltaTime;
-            if (visual.manifest.clip(oneShotClip).isFinishedAt(oneShotSeconds)) oneShotClip = null;
+            EnemyClipManifest.Clip playing = visual.manifest.clip(oneShotClip);
+            // Order 5: a HOLD-mode one-shot (the self-destruct countdown's swell) keeps its last frame while the
+            // enemy's state still holds a clip, so each countdown turn leaves the body a step further along.
+            boolean heldOn = playing.mode == EnemyClipManifest.Mode.HOLD && hold != null;
+            if (playing.isFinishedAt(oneShotSeconds) && !heldOn) oneShotClip = null;
         }
-        EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy);
         if (hold == null) {
             holdClip = null;
         } else {
-            if (holdClip != hold.clip) {
-                // The state holds a clip whose moment never reached us (e.g. a re-commit): show the held pose.
-                holdClip    = hold.clip;
-                holdSeconds = visual.manifest.clip(hold.clip) != null
-                        ? visual.manifest.clip(hold.clip).durationSeconds : 0f;
+            EnemyClipId wanted = hold.clipIn(visual.manifest);
+            if (holdClip != wanted) {
+                // The state holds a clip whose moment never reached us (e.g. a re-commit): show the held pose. Order 5:
+                // a hold that REPLACES one already showing (the wind-up moment of a self-destruct, then the
+                // SELF_DESTRUCTING state's PRIMING) plays from frame 0, so the swell is seen.
+                boolean replacing = holdClip != null;
+                holdClip    = wanted;
+                holdSeconds = (!replacing && visual.manifest.clip(wanted) != null)
+                        ? visual.manifest.clip(wanted).durationSeconds : 0f;
             }
             holdSeconds += deltaTime;
         }
@@ -219,10 +231,11 @@ public final class EnemyAnimator {
         int         bestPriority = EnemyAnimationRules.PRIORITY_IDLE;
         float       bestSeconds  = loopSeconds;
         if (sliding && manifest.clip(EnemyClipId.MOVE) != null) {
-            bestClip = EnemyClipId.MOVE; bestPriority = EnemyAnimationRules.PRIORITY_MOVE; bestSeconds = slideSeconds;
+            bestClip = EnemyClipId.MOVE; bestPriority = EnemyAnimationRules.PRIORITY_MOVE;
+            bestSeconds = slideSeconds + movePhaseSeconds;
         }
         EnemyAnimationRules.Hold hold = EnemyAnimationRules.holdFor(enemy);
-        if (hold != null && holdClip == hold.clip && manifest.clip(holdClip) != null && hold.priority > bestPriority) {
+        if (hold != null && holdClip == hold.clipIn(manifest) && manifest.clip(holdClip) != null && hold.priority > bestPriority) {
             bestClip = holdClip; bestPriority = hold.priority; bestSeconds = holdSeconds;
         }
         // Dazed wins a tie with a held wind-up: a staggered enemy may still COMMIT a wind-up that turn, but the

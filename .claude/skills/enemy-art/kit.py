@@ -54,7 +54,21 @@ MATERIALS = {
     # spark, the dazed stars: the hit-flash white of V5); toxin = the POISONED status green (V5 semantic).
     "flare":  dict(ramp=ramp("4a3a2c", "8a6a48", "c99c64", "f2cf96", "fff0d2", "fffdf6"), emissive=True),
     "toxin":  dict(ramp=ramp("0d3313", "15591f", "1f8a2e", "3fc24e", "8fe89a", "e2fbe4"), emissive=True),
+    # FLESH (generated-enemy-art order 5, the Aberrations). Appended LAST, like the effect inks, so every earlier
+    # material keeps its index and every earlier sprite regenerates byte-identical. Desaturated rose-grey and
+    # violet-grey, never a saturated red (G5: gore is wrong anatomy and wet tissue, not blood). `wet` is the
+    # WET SHEEN: a second, tight specular lobe (strength, shininess) that leaves a near-white glint on the lit
+    # curve of the surface - only these materials carry it, so no earlier sprite changes.
+    "flesh":    dict(ramp=ramp("1d141b", "38262f", "5b434c", "846973", "ad9396", "d4c1b8"), spec=(0.28, 16), grain=(0.04, 3), wet=(0.55, 70)),
+    "flesh_dk": dict(ramp=ramp("110b13", "221725", "392838", "553e4e", "735a67", "967e84"), spec=(0.32, 18), grain=(0.05, 2.5), wet=(0.60, 80)),
+    "sclera":   dict(ramp=ramp("29222a", "4c4249", "7a6d6f", "a69a94", "cdc3b7", "ebe4d8"), spec=(0.40, 30), grain=(0.01, 4), wet=(0.85, 90)),
+    # translucent gland membrane over the family's ichor light (the Mire Wraith's acid glands, the Hulk's blisters)
+    "membrane": dict(ramp=ramp("1c1019", "36202d", "553342", "7a4e5a", "a17470", "c79f92"), glow="ichor", spec=(0.55, 44), grain=(0.03, 3), wet=(0.70, 80)),
+    "pupil":    dict(ramp=ramp("060408", "0c0910", "151019", "1f1924", "2b2331", "3a3042"), spec=(0.60, 60), grain=(0.0, 4), wet=(0.90, 110)),
 }
+
+# The wet sheen's glint colour: near-white with the slightest warmth (never pure white: the hit flash owns it).
+WET_GLINT = np.array([236.0, 230.0, 222.0])
 
 # An emissive (or translucent) shape whose glow level is at or below this is DEAD: it is shaded at the
 # bottom of its ramp and contributes nothing to the glow atlas (a powered-down eye, a dimmed blister).
@@ -162,6 +176,78 @@ def riveted_plate(points, mat, rivet_mat="darkmetal", spacing=8.0, inset=2.6, ri
             rivet_points.append(a_in + (b_in - a_in) * (s / steps))
     for x, y in rivet_points:
         shapes.append(blob(float(x), float(y), rivet_r, rivet_r, rivet_mat, op="add", depth=rivet_r * 0.9))
+    return shapes
+
+
+def eyeball(cx, cy, r, look=(0.0, 0.0), iris=0.55, pupil=0.42, slit=1.0, lid_top=0.0, lid_bottom=0.0, lids=False,
+            sclera="sclera", iris_mat="ichor", lid_mat="flesh", glow=1.0, glint=True, depth=None, prio=0.0, k=4.0):
+    """An EYEBALL (generated-enemy-art order 5): a wet sclera dome, an emissive iris (the family ink), a pupil and
+    a catch-light glint, optionally with fleshy lids. All in ONE layer with the flesh around it.
+      look       (x, y) where the iris points, as a fraction of the free travel (|look| <= 1); the iris
+                 foreshortens along that direction, as a disc turning on a sphere does
+      iris       iris radius / r;  pupil  pupil radius / iris radius
+      slit       pupil WIDTH scale: 1 round, -> 0 a vertical line (the Eye Tyrant's narrowing telegraph)
+      lid_top    fraction of the eye's height the upper lid covers (0 open .. 1 shut); lid_bottom from below.
+                 With lids=True the lids are always built (at 0 they sit as a fold above / below the eye),
+                 so a lid that opens never pops in or out of existence between frames.
+      glow       the iris light (0 dead, 1 rest, > 1 flare - with_glow semantics)
+    The glint does not follow `look`: it is the light's reflection, fixed toward the key light (upper left).
+    Returns a list of shapes (ride any transform; keep them in one layer)."""
+    depth = depth if depth is not None else r * 0.85
+    shapes = [blob(cx, cy, r, r, sclera, depth=depth, prio=prio, k=k)]
+    lx, ly = look
+    reach = math.hypot(lx, ly)
+    if reach > 1.0:
+        lx, ly = lx / reach, ly / reach
+        reach = 1.0
+    ri = r * iris
+    travel = r - ri * 0.9
+    ix, iy = cx + lx * travel, cy + ly * travel
+    squash = math.sqrt(max(0.15, 1.0 - 0.55 * reach * reach))
+    angle = math.atan2(ly, lx) if reach > 1e-6 else 0.0
+    shapes.append(blob(ix, iy, ri * squash, ri, iris_mat, op="add", depth=ri * 0.30, angle=angle, glow=glow))
+    rp = ri * pupil
+    shapes.append(blob(ix, iy, max(0.45, rp * slit * squash), rp, "pupil", op="add", depth=rp * 0.25))
+    if glint:
+        shapes.append(blob(cx - r * 0.34, cy - r * 0.40, max(0.8, r * 0.09), max(0.8, r * 0.08), "flare",
+                           op="add", depth=0.6, glow=1.2))
+    # A lid is a CAP of flesh: its outer edge sits a thin fold beyond the eye's rim, its inner edge at the lid line,
+    # so at 0 it is the crease of a lid drawn back and at 1 it covers the eye (two lids meeting at 0.5 each).
+    fold = r * 0.30
+    if lids or lid_top > 0.01:
+        outer, inner = cy - r - fold, cy - r + 2 * r * min(lid_top, 1.0)
+        ry = max(1.0, (inner - outer) / 2)
+        shapes.append(blob(cx, (outer + inner) / 2, r * 1.10, ry, lid_mat, depth=depth * 1.1 + fold * 0.3,
+                           prio=prio + 40, k=k))
+    if lids or lid_bottom > 0.01:
+        outer, inner = cy + r + fold * 0.8, cy + r - 2 * r * min(lid_bottom, 1.0)
+        ry = max(1.0, (outer - inner) / 2)
+        shapes.append(blob(cx, (outer + inner) / 2, r * 1.06, ry, lid_mat, depth=depth * 1.05 + fold * 0.3,
+                           prio=prio + 40, k=k))
+    return shapes
+
+
+def teeth_row(x1, y1, x2, y2, count, length, r, mat="bone", side=1.0, sag=0.0, rake=0.0, jitter=0.25, seed=0,
+              tip=0.3, k=1.0, **kw):
+    """A TEETH ROW (generated-enemy-art order 5): `count` tapered teeth set along the jaw line (x1, y1) -> (x2, y2),
+    each pointing along the line's normal (-dy, dx) * side. `sag` bows the jaw line (px along that normal, at the
+    middle), `rake` leans every tooth toward the far end (radians), `jitter` varies length and spacing (seeded, so
+    deterministic: a row of identical teeth reads as a zip). Each tooth is a spike(), so it rides any transform."""
+    import random
+    rng = random.Random(seed)
+    dx, dy = x2 - x1, y2 - y1
+    length_line = math.hypot(dx, dy) or 1e-6
+    nx, ny = -dy / length_line * side, dx / length_line * side
+    shapes = []
+    for i in range(count):
+        t = (i + 0.5 + rng.uniform(-jitter, jitter) * 0.6) / count
+        bow = sag * 4 * t * (1 - t)
+        bx, by = x1 + dx * t + nx * bow, y1 + dy * t + ny * bow
+        size = 1.0 + rng.uniform(-jitter, jitter)
+        ca, sa = math.cos(rake), math.sin(rake)
+        tx, ty = nx * ca - ny * sa, nx * sa + ny * ca
+        shapes += spike(bx, by, bx + tx * length * size, by + ty * length * size, r * (0.85 + 0.3 * size), mat,
+                        tip=tip, segments=3, k=k, **kw)
     return shapes
 
 
@@ -473,6 +559,12 @@ def render(layers, width, height, seed=3, glow_radius=5, glow_alpha=0.55, return
             hot = sp > 0.28
             col = rgb[sel]
             col[hot] = col[hot] * 0.35 + r[-1] * 0.65 + 25
+            if "wet" in m:    # WET SHEEN (order 5): a tight second lobe -> a near-white glint on the lit curve
+                wet_strength, wet_shiny = m["wet"]
+                wsp = wet_strength * np.clip(N[sel] @ HALF, 0, 1) ** wet_shiny
+                glint = wsp > 0.22
+                col[glint] = col[glint] * 0.25 + WET_GLINT * 0.75
+                shade_idx[sel] = np.where(glint, shade_idx[sel] + 1000, shade_idx[sel])   # its own shade for cleanup
             rgb[sel] = col + (rim[sel][:, None] * RIM_COLOR * 140)
             if "glow" in m:   # translucent membrane: the interior glow shows through, strongest where thick
                 gl = MATERIALS[m["glow"]]["ramp"]
@@ -541,7 +633,10 @@ STENCIL_FONT = {"0": "111101101101111", "1": "010110010010111", "2": "1110011111
                 "4": "101101111001001", "5": "111100111001111", "6": "111100111101111", "7": "111001010010010",
                 "8": "111101111101111", "9": "111101111001111", "-": "000000111000000", "D": "110101101101110",
                 "K": "101101110101101", "W": "101101101111101", "R": "110101110101101", "E": "111100110100111",
-                "P": "110101110100100"}
+                "P": "110101110100100",
+                # order 5 (the Aberrations): tank, specimen, pen and sump marks
+                "T": "111010010010010", "S": "111100111001111", "G": "111100101101111", "M": "101111111101101",
+                "A": "010101111101101", "B": "110101110101110"}
 
 
 def stencil(img, text, x, y, color, alpha=255):
@@ -694,6 +789,39 @@ class Clip:
             i = min(range(len(times)), key=lambda j: (abs(times[j] - t), j))
             out[i] = name
         return out
+
+
+def jiggle(source, param, duration, out_param=None, freq=4.0, damping=0.35, gain=1.0, fps=24, loop=True,
+           default=0.0):
+    """SECONDARY MOTION (generated-enemy-art order 5): a damped spring that LAGS its parent mass. `source` is a
+    Clip (or any callable t -> value); its `param` track drives a spring (natural frequency `freq` Hz, damping
+    ratio `damping`), and the keys returned put the spring's OFFSET from its parent - (follower - parent) x gain -
+    on `out_param` (default "<param>_jig"). Merge them into a clip: flesh rolls after the breath, a belly sloshes
+    after the step, overshooting and settling.
+    Every frame is still rendered from its pose alone (a rig has no memory), so the lag is baked into keys here:
+    the spring is integrated at 240 Hz and sampled at `fps`. A loop is integrated over four periods and the last
+    is kept, so it starts in its steady state and wraps without a seam."""
+    drive = source if callable(source) else (lambda t: source.value(param, t, default))
+    out_param = out_param or f"{param}_jig"
+    omega = 2 * math.pi * freq
+    dt = 1.0 / 240
+    periods = 4 if loop else 1
+    n = max(2, int(round(duration * fps)))
+    times = [duration * i / n for i in range(n + 1)]
+    last_start = duration * (periods - 1)
+    y, v = drive(0.0), 0.0
+    keys, next_index = [], 0
+    for step in range(int(round(duration * periods / dt)) + 1):
+        t = step * dt
+        local = t - duration * math.floor(t / duration + 1e-9) if loop else t
+        parent = drive(local)
+        while next_index < len(times) and t - last_start >= times[next_index] - dt * 0.5:
+            keys.append((times[next_index], {out_param: (y - parent) * gain}, "linear"))
+            next_index += 1
+        acceleration = omega * omega * (parent - y) - 2 * damping * omega * v
+        v += acceleration * dt
+        y += v * dt
+    return keys
 
 
 # ---------------------------------------------------------------------------------------------------

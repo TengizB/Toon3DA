@@ -22,12 +22,20 @@ public final class DyingEnemyPool {
         public int       tileColumn;
         public int       tileRow;
         public float     seconds;
+        /** Order 5: the death clip playing - DEATH, or its variant for the cause (DEATH_BURST). */
+        public EnemyClipId clip = EnemyClipId.DEATH;
         long             sequence;
 
-        /** The DEATH frame showing now (the last one once the clip has played). */
+        /** The death frame showing now (the last one once the clip has played). */
         public EnemyClipManifest.Frame currentFrame() {
-            EnemyClipManifest.Clip death = visual.manifest.clip(EnemyClipId.DEATH);
+            EnemyClipManifest.Clip death = visual.manifest.clip(clip);
             return death.frames[death.frameIndexAt(seconds)];
+        }
+
+        /** How far the death clip has played, 0 .. 1 (order 5: a hovered type eases down to the floor with it). */
+        public float progress() {
+            float duration = visual.manifest.clip(clip).durationSeconds;
+            return duration > 0f ? Math.min(1f, seconds / duration) : 1f;
         }
     }
 
@@ -38,10 +46,10 @@ public final class DyingEnemyPool {
         for (int slotIndex = 0; slotIndex < slots.length; slotIndex++) slots[slotIndex] = new DyingEnemy();
     }
 
-    /** Starts a death at the captured position. A creature without a DEATH clip simply vanishes, as before. */
-    void add(EnemyType type, EnemyAtlasCache.CreatureVisual visual, float worldX, float worldY,
+    /** Starts a death ({@code clip}) at the captured position. A creature without that clip simply vanishes, as before. */
+    void add(EnemyType type, EnemyAtlasCache.CreatureVisual visual, EnemyClipId clip, float worldX, float worldY,
              int tileColumn, int tileRow) {
-        if (visual.manifest.clip(EnemyClipId.DEATH) == null) return;
+        if (visual.manifest.clip(clip) == null) return;
         DyingEnemy target = null;
         for (DyingEnemy slot : slots) {
             if (!slot.active) { target = slot; break; }
@@ -50,6 +58,7 @@ public final class DyingEnemyPool {
         target.active     = true;
         target.type       = type;
         target.visual     = visual;
+        target.clip       = clip;
         target.worldX     = worldX;
         target.worldY     = worldY;
         target.tileColumn = tileColumn;
@@ -62,7 +71,7 @@ public final class DyingEnemyPool {
         for (DyingEnemy slot : slots) {
             if (!slot.active) continue;
             slot.seconds += deltaTime;
-            float lifetime = slot.visual.manifest.clip(EnemyClipId.DEATH).durationSeconds;
+            float lifetime = slot.visual.manifest.clip(slot.clip).durationSeconds;
             if (slot.seconds >= lifetime) {
                 slot.active = false;
                 slot.visual = null;

@@ -456,6 +456,7 @@ public final class EnemyManager implements EnemyHitTarget {
                 case '{': type = EnemyType.CINDERFORGE_COLOSSUS; break;
                 case '[': type = EnemyType.RIMESHELL_LANCER;  break;
                 case '}': type = EnemyType.VERDANT_SPIRESOWER; break;
+                case 'o': type = EnemyType.SUMP_WRETCH;      break;
                 case 'n': continue; // Boss spawn — BossFloorController seeds the correct boss by depth
                 default:  type = EnemyType.PLAGUE_HULK;   break;
             }

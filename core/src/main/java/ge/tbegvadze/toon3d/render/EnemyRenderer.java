@@ -734,10 +734,21 @@ public final class EnemyRenderer implements Renderable, Disposable {
             // space. screenCenterColumn is a COLUMN (from spriteScreenColumnCenter); convert once here.
             float worldCenterX = screenCenterColumn * projectionColumnWidth;
 
-            // EYE_TYRANT instant beam: cache screen position for pass 3
+            // EYE_TYRANT instant beam: cache screen position for pass 3. Order 5 (A5): an animated body launches it from
+            // the current frame's EMITTER anchor (the pupil); the legacy sprite from the billboard's middle.
             if (enemy.type == EnemyType.EYE_TYRANT && attackAnimStrength > 0f) {
-                beamScreenXs[sortedPosition]  = worldCenterX;
-                beamScreenYs[sortedPosition]  = drawBottom + spriteScreenHeight / 2f;
+                float beamX = worldCenterX;
+                float beamY = drawBottom + spriteScreenHeight / 2f;
+                if (animatedFrame != null) {
+                    float anchorX = animatedFrame.anchors[EnemyClipManifest.Anchor.EMITTER.ordinal() * 2];
+                    float anchorY = animatedFrame.anchors[EnemyClipManifest.Anchor.EMITTER.ordinal() * 2 + 1];
+                    if (!Float.isNaN(anchorX)) {
+                        beamX = GameMath.billboardCanvasX(worldCenterX, spriteScreenWidth, anchorX, regionWidth);
+                        beamY = GameMath.billboardCanvasY(drawBottom, spriteScreenHeight, anchorY, regionHeight);
+                    }
+                }
+                beamScreenXs[sortedPosition]  = beamX;
+                beamScreenYs[sortedPosition]  = beamY;
                 beamStrengths[sortedPosition] = attackAnimStrength;
                 drawBeamFlags[sortedPosition] = true;
             }
@@ -1676,12 +1687,17 @@ public final class EnemyRenderer implements Renderable, Disposable {
             int encodedSlot = dyingSlotOrder[cursor];
             if (encodedSlot >= 0) {
                 DyingEnemyPool.DyingEnemy dying = visualLayer.getDyingPool().get(encodedSlot);
+                // Order 5: a hovering type falls from its hover to the floor while it dies (no pop at death).
+                float hoverFraction = (dying.type == EnemyType.EYE_TYRANT)
+                        ? EYE_TYRANT_HOVER_OFFSET_FRACTION * GameMath.hoverRemainingWhileFalling(dying.progress(),
+                                EffectConstants.ENEMY_VISUAL_HOVER_FALL_PORTION)
+                        : 0f;
                 drawCorpseBillboard(dying.type, dying.visual, dying.currentFrame(), dying.worldX, dying.worldY,
-                        dying.tileColumn, dying.tileRow);
+                        dying.tileColumn, dying.tileRow, hoverFraction);
             } else {
                 RemainsRegistry.Remains corpse = visualLayer.getRemains().get(-encodedSlot - 1);
                 drawCorpseBillboard(corpse.type, corpse.visual, corpse.corpseFrame(), corpse.worldX, corpse.worldY,
-                        corpse.tileColumn, corpse.tileRow);
+                        corpse.tileColumn, corpse.tileRow, 0f);
             }
             cursor++;
         }
@@ -1691,11 +1707,11 @@ public final class EnemyRenderer implements Renderable, Disposable {
     /**
      * One DEATH frame (rule R4) or the remains' corpse frame (order 3): the body under the same light, grade
      * and blackout floor as a live one, but none of the live tints, bars or shadow — it is already dead.
-     * Batch is begun (pass 1).
+     * Order 5: {@code hoverFraction} lifts a falling hovered body (walls; 0 on the floor). Batch is begun (pass 1).
      */
     private void drawCorpseBillboard(EnemyType type, EnemyAtlasCache.CreatureVisual visual,
                                      EnemyClipManifest.Frame frame, float worldX, float worldY,
-                                     int tileColumn, int tileRow) {
+                                     int tileColumn, int tileRow, float hoverFraction) {
         float tileOffsetX = (worldX - playerWorldX) / CELL_SIZE;
         float tileOffsetY = (worldY - playerWorldY) / CELL_SIZE;
         float depth = GameMath.spriteDepth(tileOffsetX, tileOffsetY, directionX, directionY);
@@ -1703,7 +1719,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
                 directionX, directionY, planeX, planeY, projectionColumnCount);
         float fullWallLineHeight = GameMath.spriteScreenHeight(WALL_PROJECTION_SCREEN_HEIGHT, depth);
         float spriteScreenHeight = fullWallLineHeight * type.heightMultiplier();
-        float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight);
+        float drawBottom = GameMath.wallStripeDrawBottom(WALL_PROJECTION_SCREEN_HEIGHT, fullWallLineHeight)
+                + fullWallLineHeight * hoverFraction;
         EnemyClipManifest manifest = visual.manifest;
         if (!bodyDrawer.prepare(frame, manifest.canvasWidth, manifest.canvasHeight,
                 screenCenterColumn * projectionColumnWidth, drawBottom + spriteScreenHeight, spriteScreenHeight,
@@ -2701,6 +2718,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.EYE_TYRANT,   new TextureRegion(blightSheet, blightHalfW, 0,          blightHalfW, blightHalfH));
         map.put(EnemyType.IRON_STALKER, new TextureRegion(blightSheet, 0,          blightHalfH, blightHalfW, blightHalfH));
         map.put(EnemyType.MIRE_WRAITH,  new TextureRegion(blightSheet, blightHalfW, blightHalfH, blightHalfW, blightHalfH));
+        // SUMP_WRETCH has no legacy art: the Mire Wraith's region is its fallback if the generated atlas fails to load.
+        map.put(EnemyType.SUMP_WRETCH,  new TextureRegion(blightSheet, blightHalfW, blightHalfH, blightHalfW, blightHalfH));
 
         // Infernal sheet
         int infernalHalfW = infernalSheet.getWidth()  / 2;

@@ -603,6 +603,7 @@ the 205-eHP start player. eHP / hit / cadence -> hits to kill | hits the player 
   Ghoul '~'            30 / 13 / 1  -> 2 | 16     CHAFF
   Crawler 'z'          15 / 15 / 1  -> 1 | 14     CHAFF (fragile glass)
   Vortex Eye 'V'       24 /  9 / 1  -> 2 | 23     CHAFF (ranged caster)
+  Sump Wretch 'o'      24 / 10 / 1  -> 2 | 21     CHAFF (slow melee; death splash priced: TP 9.6 + 4.8 = 14.4)
   Acid Drone '$'       45 / 24 / 1  -> 3 | 9      SOLDIER (ranged)
   Void Shroud '^'      50 / 25 / 1  -> 4 | 9      SOLDIER (flank x1.6 from behind)
   Mire Wraith '5'      52 / 23 / 1  -> 4 | 9      SOLDIER (ranged acid)
@@ -624,6 +625,16 @@ R8 HIT BANDS (replace the golden-ratio bands; no exemptions any more):
   CHAFF 1-2 | >= 10   SOLDIER 3-4 | 7-9   BRUISER 5-7 | 4-6   MINI_ELITE 8-12 | 3-5
 ENEMY TP BANDS — DERIVED from the R8 box centres (x0.5 .. x1.6):
   chaff ~6.2-20 | soldier ~27-87 | bruiser ~75-240 | mini-elite ~156-499 | boss: own rules
+
+DEATH SPLASH TP TERM (sump-wretch-acid-death): EnemyType.baseThreatPoints() = the stat-block product PLUS
+deathSplashThreatPoints() = GameMath.deathSplashThreatPoints(perStack, S, DEATH_SPLASH_ADJACENT_SHARE), where
+perStack = statusTickDamage(POISON_TICK_FRACTION, depth-1 on-curve max HP 130) = 2 and S = deathSplashPlayerStacks():
+perStack x S(S+1)/2 x share = 2 x 6 x 0.4 = 4.8 for the Sump Wretch, exactly 0 for every archetype that does not
+splash. DEATH_SPLASH_ADJACENT_SHARE (BalanceConfig SECTION 6 beside DEBUFF_TP_EQUIVALENCE) was designed at 0.5 and
+tuned to 0.4 at build time: from 0.45 the higher TP thinned the depth-1 COMBAT floor enough to push MYSTERY_EV to its
+1.30 ceiling and a linear-corridor room to four of one archetype (V7). The term slightly OVER-prices the splash: the
+player's poison ticks go through the TOUGHNESS flat reduction (Player.applyDoTDamage), so a start player takes
+4 + 2 + 1 = 7 HP, not 12 (conservative; same as a toxic tile).
 
 GLOBAL ENEMY AI KNOBS (BalanceConfig SECTION 2):
   ALERT_RADIUS_TILES=4, CHAIN_ALERT_RADIUS_TILES=5, LOS_MAX_RANGE_TILES=8,
@@ -973,6 +984,12 @@ Knobs (BalanceConfig SECTION 12):
   HAZARD_TOXIC_SPREAD_CHANCE=0.10.
   HAZARD_EXPLOSION_IGNITE_CHANCE=0.50 (barrel -> fire chain).
   HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS=1.
+  DEATH SPLASH (sump-wretch-acid-death, hazard row "sump_wretch_acid_splash"): SUMP_WRETCH_SPLASH_PLAYER_STACKS=3,
+  SUMP_WRETCH_SPLASH_ENEMY_STACKS=4 POISONED on the 4 orthogonal neighbours of a dying wretch (player AND enemies),
+  SUMP_WRETCH_PUDDLE_LIFETIME_TURNS=3 for the toxic puddle on its tile. Resolved by the ONE shared
+  HazardManager.applyEnemyDeathHazard (World and SimWorld), which also owns the Plague Hulk cloud and the magma
+  construct's last fire tile. Priced into the archetype's TP (SECTION 7), not the floor hazard budget, because it
+  only exists where a wretch was budgeted; the puddle prices as an ordinary toxic 'q' tile.
 Actual per-turn hazard damage comes from the BURN_TICK_FRACTION / POISON_TICK_FRACTION magnitudes (SECTION 23).
 
 ORDER 4 HAZARDS (balance-overhaul order 4, CP6 — H13/H14; contract: authority doc R-HAZARD):

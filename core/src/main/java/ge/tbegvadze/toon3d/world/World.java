@@ -1681,6 +1681,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
                 gameAudio.playAt(GameSoundId.TOXIC_SPILL, tileColumn, tileRow);
             }
         });
+        // A death splash (sump-wretch-acid-death) is SEEN on every tile it reaches: the creature's IMPACT burst.
+        hazardManager.setAcidSplashListener((deadType, tileColumn, tileRow) -> {
+            if (enemyVisualLayer != null) enemyVisualLayer.onAcidSplash(deadType, tileColumn, tileRow);
+        });
         // The loudest event in the game, placed at the barrel so a chain reaction sweeps across the
         // stereo field the way it sweeps across the room.
         explosiveBarrelManager.setDetonationListener((tileColumn, tileRow) -> {
@@ -1705,25 +1709,10 @@ public class World implements Renderable, Disposable, LevelTransitionListener {
         spireManager.setVisualListener(propRenderer::addDynamicProp);
         spireManager.setImpactEventListener(impactEffectSystem);
         enemyManager.setSpireHitTarget(spireManager);
-        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) -> {
-            // Plague Hulk leaves a lingering toxic cloud where it dies (area-denial verb). A Hulk
-            // that survived its self-destruct countdown to detonate (plague-hulk-self-destruct.txt)
-            // leaves the MASSIVE cloud instead of the ordinary minimal one — killing it first is
-            // the reward for committing the damage.
-            if (deadType == EnemyType.PLAGUE_HULK) {
-                int radius = selfDestructMassive
-                        ? BalanceConfig.PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES
-                        : BalanceConfig.HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS;
-                hazardManager.spawnToxicCloud(tileColumn, tileRow, radius);
-            }
-            // A dying magma construct leaves ONE last fire tile under itself
-            // (elemental-golem-cinderforge-colossus): the furnace goes out where it fell. Data-driven off
-            // the archetype's own trail duration rather than a type switch, so any future magma golem
-            // inherits the beat by declaring leavesTrailFireTurns().
-            if (deadType.leavesTrailFireTurns() > 0) {
-                hazardManager.igniteFire(tileColumn, tileRow, deadType.leavesTrailFireTurns());
-            }
-        });
+        // The ONE death-hazard path, shared with the balance simulator (sump-wretch-acid-death): the Plague Hulk's
+        // cloud, a magma construct's last fire tile, a Sump Wretch's acid splash + puddle.
+        enemyManager.setEnemyDeathHazardListener((deadType, tileColumn, tileRow, selfDestructMassive) ->
+                hazardManager.applyEnemyDeathHazard(deadType, tileColumn, tileRow, selfDestructMassive, player));
 
         // Boss encounter — built before the pipeline so TickPipeline can slot it in ahead of the
         // ordinary roster (the boss acts first each turn).

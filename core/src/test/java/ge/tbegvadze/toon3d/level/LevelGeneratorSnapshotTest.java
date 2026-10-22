@@ -152,8 +152,12 @@ class LevelGeneratorSnapshotTest {
     // different archetypes, every group of four or more mixing behaviours, a rare BROOD rolled once per
     // floor), the placer caps any room at three of one archetype, and the barrel placer's eligibility applies
     // its passage guard — so every generated roster, spawn tile and barrel moved. A deliberate change.
+    // RE-BASELINE (sump-wretch-acid-death): a new CHAFF archetype, SUMP_WRETCH, joins EncounterBudgetPlanner's
+    // SPAWN_POOL (minSpawnDepth 1), so the chaff roulette draws differently from floor 1 and every generated
+    // roster, spawn tile and later RNG-consuming pass moved; pricing its death splash into its TP (CP3) moved the
+    // planner's budget arithmetic again. A deliberate change.
     private static final String EXPECTED_DIGEST =
-            "5f3baeb81664b4fabd927cb47b74514cdc0e36cb59b36dc673efdfaede57a060";
+            "62efb6fbf3d7c64b515977ef6d1b979c2e903aa79ab0477e1581e37cbd05e633";
 
     @Test
     void generatedGridsAreByteForByteStableAcrossSeedsAndDepths() {

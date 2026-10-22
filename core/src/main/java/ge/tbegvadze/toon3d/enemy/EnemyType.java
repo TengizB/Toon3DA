@@ -435,6 +435,31 @@ public enum EnemyType {
         @Override public SpecialAbility[] moveSet()          { return MOVESET_NONE; }
     },
 
+    // SUMP_WRETCH (sump-wretch-acid-death) - slow, weak melee CHAFF whose danger is its corpse: on death, by any cause,
+    // it splashes acid on its 4 orthogonal neighbours (POISONED, player AND enemies) and leaves a short toxic puddle.
+    // Resolved by HazardManager.applyEnemyDeathHazard off the three death-splash data methods below.
+    SUMP_WRETCH {
+        @Override public int    maxHealth()          { return EnemyConstants.SUMP_WRETCH_MAX_HEALTH; }
+        @Override public int    attackDamage()        { return EnemyConstants.SUMP_WRETCH_ATTACK_DAMAGE; }
+        @Override public int    attackRangeTiles()    { return 1; }
+        @Override public int    moveEveryNTurns()     { return EnemyConstants.SUMP_WRETCH_MOVE_EVERY_N_TURNS; }
+        @Override public boolean isRanged()           { return false; }
+        @Override public float  heightMultiplier()    { return EnemyConstants.SUMP_WRETCH_HEIGHT_MULTIPLIER; }
+        @Override public int    baseCreditReward()    { return GameBalance.CREDIT_REWARD_SUMP_WRETCH; }
+        @Override public String displayName()         { return "Sump Wretch"; }
+        @Override public EnemyFamily family()         { return EnemyFamily.ABERRATION; }
+        @Override public EnemyRole role()             { return EnemyRole.CHAFF; }
+        @Override public float  positionalMultiplier() { return BalanceConfig.POSITIONAL_MULT_MELEE; }
+        @Override public int    attackCadenceTurns()  { return 1; }
+        @Override public char   spawnChar()           { return 'o'; }
+        @Override public String tacticalVerb()        { return "BURSTER: it splashes acid when it dies - kill it a step away, or beside its friends."; }
+        @Override public HeavyAttack heavyWindUp()    { return null; }
+        @Override public SpecialAbility[] moveSet()   { return MOVESET_NONE; }
+        @Override public int    deathSplashPlayerStacks() { return BalanceConfig.SUMP_WRETCH_SPLASH_PLAYER_STACKS; }
+        @Override public int    deathSplashEnemyStacks()  { return BalanceConfig.SUMP_WRETCH_SPLASH_ENEMY_STACKS; }
+        @Override public int    deathPuddleTurns()        { return BalanceConfig.SUMP_WRETCH_PUDDLE_LIFETIME_TURNS; }
+    },
+
     // -------------------------------------------------------------------------
     // Boss archetypes — BossFloorController sets actual scaled HP/damage at spawn;
     // values here are used for initial Enemy construction and XP budget.
@@ -696,6 +721,19 @@ public enum EnemyType {
     public int leavesTrailFireTurns() { return 0; }
 
     /**
+     * POISONED stacks this archetype's DEATH SPLASH puts on the PLAYER standing orthogonally next to it when it dies, by
+     * any cause; 0 (the default) means it does not splash (sump-wretch-acid-death R2). Resolved by the shared
+     * {@code HazardManager.applyEnemyDeathHazard}: status only, never a hit (R4, R5).
+     */
+    public int deathSplashPlayerStacks() { return 0; }
+
+    /** POISONED stacks the same death splash puts on each ENEMY standing orthogonally next to it; 0 = none. */
+    public int deathSplashEnemyStacks() { return 0; }
+
+    /** Turns of the toxic puddle this archetype leaves on its death tile; 0 (the default) = no puddle (R7). */
+    public int deathPuddleTurns() { return 0; }
+
+    /**
      * The shallowest floor the encounter planner may spend budget on this archetype (1 = any floor).
      * A DATA gate, not a switch: {@code EncounterBudgetPlanner} filters BOTH its anchor pool and its fill
      * pool by this value, so banding a new archetype to deeper floors costs one override and no generator
@@ -778,7 +816,21 @@ public enum EnemyType {
      */
     public float baseThreatPoints() {
         float survivalTurns = effectiveHitPoints() / BalanceConfig.REFERENCE_PLAYER_DPT;
-        return cycleAveragedDamagePerTurn() * survivalTurns * positionalMultiplier();
+        return cycleAveragedDamagePerTurn() * survivalTurns * positionalMultiplier() + deathSplashThreatPoints();
+    }
+
+    /**
+     * The TP term of this archetype's DEATH SPLASH (sump-wretch-acid-death): the poison its splash deals an
+     * orthogonally adjacent depth-1 on-curve player, priced at DEATH_SPLASH_ADJACENT_SHARE of deaths
+     * (GameMath.deathSplashThreatPoints). 0 for every archetype that does not splash.
+     */
+    public float deathSplashThreatPoints() {
+        int splashStacks = deathSplashPlayerStacks();
+        if (splashStacks <= 0) return 0f;
+        int playerPoisonPerStack = GameMath.statusTickDamage(BalanceConfig.POISON_TICK_FRACTION,
+                Math.round(GameMath.expectedPlayerAtDepth(1).maxHealth), 1);
+        return GameMath.deathSplashThreatPoints(playerPoisonPerStack, splashStacks,
+                BalanceConfig.DEATH_SPLASH_ADJACENT_SHARE);
     }
 
     /**

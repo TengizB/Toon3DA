@@ -25,6 +25,8 @@ public final class RemainsRegistry {
         public float     worldX, worldY;
         public int       tileColumn, tileRow;
         float            secondsUntilRevealed;
+        /** Order 5: the death clip whose last frame these remains are (DEATH, or DEATH_BURST after a self-destruct). */
+        public EnemyClipId clip = EnemyClipId.DEATH;
         long             sequence;
 
         /** True once DEATH has played and the dying instance has handed the body over. */
@@ -32,9 +34,9 @@ public final class RemainsRegistry {
             return active && secondsUntilRevealed <= 0f;
         }
 
-        /** The corpse frame: the last DEATH frame. */
+        /** The corpse frame: the last frame of the death clip it died by. */
         public EnemyClipManifest.Frame corpseFrame() {
-            EnemyClipManifest.Clip death = visual.manifest.clip(EnemyClipId.DEATH);
+            EnemyClipManifest.Clip death = visual.manifest.clip(clip);
             return death.frames[death.frames.length - 1];
         }
     }
@@ -47,9 +49,9 @@ public final class RemainsRegistry {
     }
 
     /** Registers the remains of a death that will finish playing in {@code revealAfterSeconds}. */
-    void add(EnemyType type, EnemyAtlasCache.CreatureVisual visual, float worldX, float worldY,
+    void add(EnemyType type, EnemyAtlasCache.CreatureVisual visual, EnemyClipId clip, float worldX, float worldY,
              int tileColumn, int tileRow, float revealAfterSeconds) {
-        if (visual.manifest.clip(EnemyClipId.DEATH) == null) return;
+        if (visual.manifest.clip(clip) == null) return;
         Remains target = null;
         for (Remains slot : slots) {
             if (slot.active && slot.tileColumn == tileColumn && slot.tileRow == tileRow) { target = slot; break; }
@@ -63,6 +65,7 @@ public final class RemainsRegistry {
         target.active               = true;
         target.type                 = type;
         target.visual               = visual;
+        target.clip                 = clip;
         target.worldX               = worldX;
         target.worldY               = worldY;
         target.tileColumn           = tileColumn;

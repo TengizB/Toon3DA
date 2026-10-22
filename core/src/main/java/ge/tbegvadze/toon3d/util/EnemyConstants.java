@@ -100,6 +100,12 @@ public final class EnemyConstants {
     public static final int     MIRE_WRAITH_MOVE_EVERY_N_TURNS   = BalanceConfig.MIRE_WRAITH_MOVE_EVERY_N_TURNS;
     public static final float   MIRE_WRAITH_HEIGHT_MULTIPLIER    = 0.80f;
 
+    // SUMP_WRETCH — slow, weak melee chaff that bursts into acid on death (spawn 'o')
+    public static final int     SUMP_WRETCH_MAX_HEALTH           = BalanceConfig.SUMP_WRETCH_MAX_HEALTH;
+    public static final int     SUMP_WRETCH_ATTACK_DAMAGE        = BalanceConfig.SUMP_WRETCH_ATTACK_DAMAGE;
+    public static final int     SUMP_WRETCH_MOVE_EVERY_N_TURNS   = BalanceConfig.SUMP_WRETCH_MOVE_EVERY_N_TURNS;
+    public static final float   SUMP_WRETCH_HEIGHT_MULTIPLIER    = 0.75f;
+
     // IRON_STALKER — armored elite, melee + ranged (spawn '!')
     public static final int     IRON_STALKER_MAX_HEALTH          = BalanceConfig.IRON_STALKER_MAX_HEALTH;
     public static final int     IRON_STALKER_MELEE_DAMAGE        = BalanceConfig.IRON_STALKER_MELEE_DAMAGE;

@@ -1,0 +1,241 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Systems
+TITLE: Four bugs found building order 5 and the Sump Wretch
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+
+OVERVIEW
+--------
+Four pre-existing or side-effect bugs found while building generated-enemy-art-order-5 and
+sump-wretch-acid-death. None was fixed there, because each was out of that work's scope. One of them
+(B1) can CRASH THE GAME in normal play. The other three are small. Each bug is independent and can
+ship on its own; they are collected here so none is lost.
+
+  B1  CRASH   EnemyManager's chain-alert queue overflows when enemies added after floor start wake.
+  B2  LEVEL   LevelLoader's spawn-character list is missing '}' (Verdant Spiresower).
+  B3  LEVEL   Linear-corridor floors can put four of one archetype in a room (the cap is three).
+  B4  VISUAL  A closed door next to a dying Sump Wretch still shows an acid-splash burst.
+
+Recommended order: B1 first (a crash), then B3, B2, B4.
+
+
+SCOPE
+-----
+IN
+  - B1: the chain-alert queue never overflows, however many enemies the floor gains after it starts.
+  - B2: '}' in a hand-made level spawns a Verdant Spiresower (D1): add '}' to LevelLoader's list.
+  - B3: EncounterPlacer never puts more than GROUP_ROOM_MAX_SAME_TYPE of one archetype in one room,
+    on every generator, including linear_corridor.
+  - B4: no splash burst is drawn on a closed-door tile.
+
+OUT (deliberately not doing now)
+  - Any change to the alert rules themselves (radius, line of sight, chain radius). B1 is a capacity
+    bug only; who wakes stays exactly the same.
+  - Placing the Spiresower or any new enemy in hand-made level files. B2 fixes the loader only.
+  - Retuning GROUP_ROOM_MAX_SAME_TYPE or any other balance number. B3 makes the existing cap hold.
+  - Changing who the death splash POISONS. B4 is cosmetic: the status logic in
+    HazardManager.splashAcid is correct and stays as it is (a host standing in an OPEN doorway is
+    still splashed, by design).
+
+
+GAMEPLAY LOOP
+-------------
+No gameplay changes. After the fixes:
+  1. B1: a Blight Corruptor summons, the HUNTED trail hunter arrives, or a boss summons minions;
+     several of those new enemies wake on the same turn -> they alert and chain-alert normally, and
+     the game does not crash.
+  2. B2: a hand-made level containing '}' spawns a Verdant Spiresower.
+  3. B3: every generated room holds at most three of one archetype.
+  4. B4: a wretch dies beside a closed door -> bursts on the floor tiles only, none on the door.
+
+
+RULES
+-----
+  R1  (B1) The chain-alert queue holds at least as many entries as there are enemies in the list at
+      the moment alerting runs. It never relies on the floor's STARTING enemy count.
+  R2  (B1) Each enemy enters the queue at most once per alert pass (it already does: an enemy is
+      queued only when it changes from not-alerted to alerted). The fix must keep that true.
+  R3  (B1) No allocation per turn. Grow the array only when the enemy count exceeds its length
+      (amortised, rare), or size it once from a fixed upper bound.
+  R4  (B3) The per-room cap is enforced at PLACEMENT, for every generator; the density audit V7 then
+      passes without any waiver.
+  R5  (B4) The burst skip is for closed doors (and any solid, non-walkable cell); open doorways keep
+      their burst because a host can stand there.
+
+
+PLAYER EXPERIENCE
+-----------------
+B1 is the only one a player can feel today, and they feel it as the app closing in the middle of a
+fight. After the fix nothing is visible; the fight simply continues. B2-B4 are invisible or nearly so.
+
+
+TECHNICAL NOTES
+---------------
+B1  CRASH — enemy/EnemyManager.java
+    - The queue is allocated once, in the constructor (~line 286):
+          this.chainAlertQueue = new int[Math.max(1, enemyCount)];
+      where enemyCount = the enemies built from the level's spawn points.
+    - Enemies are added later by spawnEnemy() (~line 904, enemies.add at ~929: summons, the HUNTED
+      trail hunter, test spawns) and by the boss path (~line 1932).
+    - The alert pass (~lines 1749-1778) writes chainAlertQueue[chainQueueSize++] for every newly
+      alerted enemy, then again for every chain-alerted one. With more enemies in the list than the
+      array's length, it throws ArrayIndexOutOfBoundsException.
+    - Reproduced twice with the run-game skill: spawn two dormant enemies, let them wake on the same
+      turn -> "ArrayIndexOutOfBoundsException: Index 1 out of bounds for length 1" (a floor whose
+      start count was 1). Workaround used in testing: wake spawns one by one (alert:INDEX).
+    - Fix: before the alert pass, if chainAlertQueue.length < enemies.size(), replace it with an
+      array of at least enemies.size() (e.g. double it). That is a rare reallocation, not a per-turn
+      one (R3).
+    - Also check SimWorld: it uses the same EnemyManager, so the balance sim gets the fix for free.
+
+B2  LEVEL — level/LevelLoader.java (~line 65)
+    - The spawn test lists '1' '2' '3' '4' '5' '!' '$' '^' '~' 'z' 'K' 'V' '*' '(' '{' '[' 'n' 'o'
+      but not '}'. EnemyManager.buildInitialEnemies DOES map '}' -> VERDANT_SPIRESOWER, and
+      docs/tile-symbols.txt lists '}' as a spawn marker.
+    - EncounterBudgetPlanner's comment says the Spiresower is "placed by its own systems", so the
+      omission may be deliberate for GENERATED floors. In a HAND-MADE level, '}' is currently left in
+      the grid as an unknown character instead of becoming an enemy.
+    - Fix (D1): add '}' to the list and to the comment.
+
+B3  LEVEL — level/EncounterPlacer.java (~lines 150-180)
+    - The placer merges a group into a room only while
+      region.mergedMaximumSameArchetype(group) <= GROUP_ROOM_MAX_SAME_TYPE, but on linear_corridor
+      floors a room can still end up with four of one archetype.
+    - Found when adding SUMP_WRETCH to the spawn pool shifted rosters: BalanceSchema density rule
+      "linear_corridor COMBAT d1 room variety (V7)" went to 4.00 (band 0..3). It went back in band
+      only because the wretch's TP was tuned; the underlying hole is still there and any future roster
+      change can reopen it.
+    - Likely cause to check first: linear_corridor's "rooms" are corridor segments, and a group placed
+      across two segments (or a fallback path that ignores the cap when no region fits) bypasses the
+      merged-count check.
+    - Fix in the placer, not in the audit. Re-baseline LevelGeneratorSnapshotTest if the digest
+      moves (an existing test; legitimate behaviour change).
+
+B4  VISUAL — hazard/HazardManager.java, splashAcid (~line 235)
+    - Neighbours are skipped only when Level.isWall(cell). A closed door is not a wall cell, so it gets
+      an AcidSplashListener call and EnemyVisualLayer.onAcidSplash draws a burst on the door.
+    - Fix: skip the LISTENER call (only the listener call) for a closed door / non-walkable cell.
+      Whether a door is closed lives in DoorManager, not the cell; HazardManager may need a small
+      query seam, or the check can move to World's listener lambda, which already sees the door state.
+      The poison application must not change.
+
+
+VISUAL DESIGN
+-------------
+B4 only: the splash burst appears on floor tiles and open doorways, never on a closed door.
+
+
+BALANCE NOTES
+-------------
+  - B1 changes no number. The balance sim already runs through the same code, so both gates must stay
+    green and the sim summary should be identical (the crash was never hit in the sim, or it would
+    have failed).
+  - B3 touches encounter placement, which feeds the density audit and the sim. Both gates are owed:
+    ./gradlew test and ./gradlew balanceSim. No BalanceConfig number may move.
+  - B2 and B4 are not balance-bearing.
+
+
+BALANCE ADMISSION
+-----------------
+Not applicable: no new content and no new balance number.
+
+
+INTERACTIONS
+------------
+  - B1 interacts with every system that adds enemies mid-floor: Blight Corruptor summons, boss
+    summons, the HUNTED twist's trail hunter, and the run-game capture tool's spawn command.
+  - B3 interacts with LevelGeneratorSnapshotTest (digest) and the V7 density rule.
+  - B4 interacts with DoorManager (door state) and the order-5 effect system.
+
+
+EDGE CASES
+----------
+  - B1: a floor that starts with ZERO enemies (array length 1) and then gains several -> must grow.
+  - B1: many enemies dying and new ones spawning on the same floor -> the list length, not the live
+    count, is what the queue must cover (indices are list indices).
+  - B3: a corridor segment too small for any group -> the group goes to another room, never over the
+    cap; if no room can take it, follow the placer's existing "drop / spread" rule rather than break
+    the cap.
+  - B4: a door that is opening or closing the same turn -> treat "not fully open" as closed.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  (B1) With the run-game skill: spawn three dormant enemies near the player on one floor and let
+      them wake on the same turn (no alert:INDEX workaround) -> no exception; all three alert.
+  A2  (B1) A Blight Corruptor that summons repeatedly in an open room never crashes the game.
+  A3  (B2) The decision is written under DECISIONS, and LevelLoader + docs/tile-symbols.txt agree with
+      it.
+  A4  (B3) BalanceSchema's V7 room-variety rule is <= 3 for every generator and node at every audited
+      depth, and stays so with DEATH_SPLASH_ADJACENT_SHARE set to 0.5 (the value that exposed it),
+      checked locally and then set back to 0.4.
+  A5  (B4) A wretch killed beside a closed door shows no burst on the door; a host in an open
+      doorway beside it is still poisoned and still shows a burst.
+  A6  ./gradlew build green (only the known StoryBarkTest failure), ./gradlew test and
+      ./gradlew balanceSim green.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. B1 (java-architect): grow-on-demand chainAlertQueue in EnemyManager; verify A1-A2 in the
+     run-game mirror.
+  2. B3 (java-architect): find the corridor path that bypasses the cap in EncounterPlacer; fix it;
+     both balance gates; re-baseline the snapshot if needed.
+  3. B2 (java-architect): apply the DECISIONS answer to LevelLoader + docs/tile-symbols.txt.
+  4. B4 (libgdx-specialist): skip the splash listener on closed doors; verify A5 on screen.
+  5. TESTS: none new (Testing Policy: these are not balance changes). Existing tests stay green; the
+     snapshot digest may be re-baselined.
+  6. DOCS: docs/enemy-system.txt (chain-alert note), docs/procedural-level-generation.txt (B3 if the
+     placer rule is described there), docs/tile-symbols.txt (B2).
+
+
+RISKS AND UNKNOWNS
+------------------
+  - B3's root cause is not yet confirmed; the fix may be in the corridor generator's region split
+    rather than in EncounterPlacer.
+
+
+CHECKPOINTS
+-----------
+  CP   DONE WHEN - a state that can be CHECKED, never an action
+  ---  ---------------------------------------------------------------
+  CP0  .claude/checkpoints/bugs-found-during-aberrations-and-sump-wretch.md exists, committed, pushed.
+  CP1  B1 fixed: A1 + A2 verified in the run-game mirror; build green.
+  CP2  B3 fixed: A4 holds; both balance gates green; snapshot re-baselined if it moved.
+  CP3  B2 + B4 fixed: A3 + A5 hold; build green.
+  CP4  docs updated; reviewer PASS; STATUS: IMPLEMENTED with the date.
+
+
+ASSUMPTIONS
+-----------
+  AS1  One idea file for four bugs is fine because each bug is small; each still gets its own
+       checkpoint and commit.
+  AS2  B1 is fixed by growing the array, not by switching to a collection, to keep the no-allocation
+       style of the turn loop.
+
+
+DECISIONS
+---------
+  D1  (B2, owner delegated the call to the agent, 2026-10-22) YES: '}' in a HAND-MADE level spawns a
+      Verdant Spiresower. Reasons: docs/tile-symbols.txt already lists '}' as its spawn marker,
+      EnemyManager already maps '}' -> VERDANT_SPIRESOWER, and every other spawn marker works in hand
+      levels, so the omission is an inconsistency rather than a design. Generated floors are
+      unaffected: the planner keeps the Spiresower out of SPAWN_POOL ("placed by its own systems"),
+      so this changes nothing about how often it appears in normal runs. Fix = add '}' to
+      LevelLoader's spawn test and its comment; no doc change needed beyond confirming the
+      tile-symbols row.
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  Ideas:  generated-enemy-art-order-5.txt, sump-wretch-acid-death.txt (where these were found),
+          mixed-encounter-groups.txt (V7 room cap), elemental-golem-verdant-spiresower.txt (the '}' marker)
+  Docs:   docs/enemy-system.txt, docs/tile-symbols.txt, docs/procedural-level-generation.txt,
+          docs/game-balance-authority.txt (DENSITY / V7)
