@@ -221,3 +221,4 @@ RoomBlueprints, LevelGenerator and WallRenderer. Not taken (nits): SurfaceMateri
 RegionWallAtlas.MANIFEST_VERSION placement, World import order, the float modulo in wallGlowFrameIndex (cosmetic
 after hours of play). Verified after the fixes: mirror compile green, run-game start room loads set A (36 faces).
 STATUS IMPLEMENTED 2026-10-22. ORDER 2 IS DONE; order 3 was not started.
+OWNER ACCEPTANCE 2026-10-22: "Everything looks ok to me. Mark as implemented and complete." A4/A6 eye checks and D1-D8 accepted. ORDER 2 COMPLETE.

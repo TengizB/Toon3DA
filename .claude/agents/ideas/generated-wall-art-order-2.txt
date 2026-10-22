@@ -10,6 +10,8 @@ IMPLEMENTATION NOTE (2026-10-22, reviewer PASS WITH FIXES, fixes applied in CP8b
   Measured: R1 35 200 / 35 200 cases identical (7 generators x 200 seeds x depths 1-25 + 200 start rooms);
   wall pass +5.4% (0.826 -> 0.871 ms), wall draw calls 4 -> 2; 20 floor transitions without texture growth;
   exposed-wall mix ~72% BASE, STRUCTURE 16-18%. The divergences are listed under DECISIONS.
+  OWNER ACCEPTANCE (2026-10-22): the owner reviewed the captures and accepted the order as complete, closing the
+  eye-only checks (A4 variants + flicker, A6 no shimmer while turning) and the decisions D1-D8 as recorded.
 
 THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
 and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
