@@ -57,7 +57,7 @@ Never `git add -A`.
 - [x] **CP4** — RegionWallAtlas loads per floor; walls, doors, columns draw from the atlas (base pass). DONE WHEN:
       run-game shows set A walls/doors/columns.
 - [x] **CP5** — variants + LOD + glow + animation; captures A4-A6 sent.
-- [ ] **CP6** — floor/ceiling from the set's surfaces; capture sent.
+- [x] **CP6** — floor/ceiling from the set's surfaces; capture sent.
 - [ ] **CP7** — Part 3 deletion; tests updated; build green; A3 grep clean; A7.
 - [ ] **CP8** — probe + leak check (A8); docs (A9); reviewer gate; STATUS IMPLEMENTED.
 
@@ -158,3 +158,10 @@ column shows only the panel's glow). `RegionWallAtlas.glowCycleSeconds(face)`. C
 (x#35), medical room (M#12 from 6), door (d#0 from 3), research room (t#0), flicker = LIGHT 49,27 west face
 (`lookat:S:2:4:W`), turn burst at x#105; A5 under amber_hot: lamp + cyan seams keep colour, panels take the grade.
 Verified: forcing ONE_IN=1 animates every lamp; the 1-in-6 hash measured 2383/14400. Sent to the owner (not a stop).
+
+**CP6:** `render/SurfaceMaterials` rewritten: two lazy loaders per registered wall set id (aliases included) —
+`floorMaterialId(setId)` = "<id>.floor", `ceilingMaterialId(setId)` = "<id>.ceiling" — reading the resolved set's PNG,
+flipped to the generator layout (row 0 = south), R7 fallback to set A. The ten procedural material generators and
+`ArtDirection.MATERIAL_ID_*` are DELETED here (Part 3 item done early, because the switch replaces them). Moods bind
+their region's set surfaces in LightingMoods (cool_steel A, clinical_white B, amber_hot C, corrupted_violet D,
+core_white_violet E — B-E alias A today). FloorCeilingRenderer untouched. Captured + sent (hall 9 tiles, medical, door).

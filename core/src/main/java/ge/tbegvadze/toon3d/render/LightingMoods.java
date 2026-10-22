@@ -5,6 +5,7 @@ import ge.tbegvadze.toon3d.route.RegionPlan;
 import ge.tbegvadze.toon3d.route.RegionSpec;
 import ge.tbegvadze.toon3d.route.RouteRegistries;
 import ge.tbegvadze.toon3d.util.ArtDirection;
+import ge.tbegvadze.toon3d.util.TilesetConstants;
 
 /**
  * The one place the five {@link LightingMood}s are registered (one {@code register()} row each, numbers
@@ -41,7 +42,8 @@ public final class LightingMoods {
                 .fog(ArtDirection.MOOD_COOL_STEEL_FOG_START_TILES, ArtDirection.MOOD_COOL_STEEL_FOG_END_TILES)
                 .horizon(ArtDirection.MOOD_COOL_STEEL_HORIZON_FLOOR_PACKED, ArtDirection.MOOD_COOL_STEEL_HORIZON_CEILING_PACKED)
                 .vignetteAlpha(ArtDirection.MOOD_COOL_STEEL_VIGNETTE_ALPHA)
-                .materials(ArtDirection.MATERIAL_ID_DECK_GRATING_STEEL, ArtDirection.MATERIAL_ID_CEILING_STRIP_LIGHTS)
+                .materials(SurfaceMaterials.floorMaterialId(TilesetConstants.WALL_SET_OUTER_FACILITY),
+                           SurfaceMaterials.ceilingMaterialId(TilesetConstants.WALL_SET_OUTER_FACILITY))
                 .build();
         REGISTRY.register(coolSteel);
         REGISTRY.register(LightingMood.builder(ArtDirection.MOOD_ID_CLINICAL_WHITE)
@@ -50,7 +52,8 @@ public final class LightingMoods {
                 .fog(ArtDirection.MOOD_CLINICAL_WHITE_FOG_START_TILES, ArtDirection.MOOD_CLINICAL_WHITE_FOG_END_TILES)
                 .horizon(ArtDirection.MOOD_CLINICAL_WHITE_HORIZON_FLOOR_PACKED, ArtDirection.MOOD_CLINICAL_WHITE_HORIZON_CEILING_PACKED)
                 .vignetteAlpha(ArtDirection.MOOD_CLINICAL_WHITE_VIGNETTE_ALPHA)
-                .materials(ArtDirection.MATERIAL_ID_LAB_TILE_WHITE, ArtDirection.MATERIAL_ID_CEILING_PANEL_GRID)
+                .materials(SurfaceMaterials.floorMaterialId(TilesetConstants.WALL_SET_RESEARCH_WING),
+                           SurfaceMaterials.ceilingMaterialId(TilesetConstants.WALL_SET_RESEARCH_WING))
                 .build());
         REGISTRY.register(LightingMood.builder(ArtDirection.MOOD_ID_AMBER_HOT)
                 .nearTint(ArtDirection.MOOD_AMBER_HOT_NEAR_R, ArtDirection.MOOD_AMBER_HOT_NEAR_G, ArtDirection.MOOD_AMBER_HOT_NEAR_B)
@@ -58,7 +61,8 @@ public final class LightingMoods {
                 .fog(ArtDirection.MOOD_AMBER_HOT_FOG_START_TILES, ArtDirection.MOOD_AMBER_HOT_FOG_END_TILES)
                 .horizon(ArtDirection.MOOD_AMBER_HOT_HORIZON_FLOOR_PACKED, ArtDirection.MOOD_AMBER_HOT_HORIZON_CEILING_PACKED)
                 .vignetteAlpha(ArtDirection.MOOD_AMBER_HOT_VIGNETTE_ALPHA)
-                .materials(ArtDirection.MATERIAL_ID_REACTOR_GRATE_HOT, ArtDirection.MATERIAL_ID_CEILING_PIPES)
+                .materials(SurfaceMaterials.floorMaterialId(TilesetConstants.WALL_SET_REACTOR_DEPTHS),
+                           SurfaceMaterials.ceilingMaterialId(TilesetConstants.WALL_SET_REACTOR_DEPTHS))
                 .build());
         REGISTRY.register(LightingMood.builder(ArtDirection.MOOD_ID_CORRUPTED_VIOLET)
                 .nearTint(ArtDirection.MOOD_CORRUPTED_VIOLET_NEAR_R, ArtDirection.MOOD_CORRUPTED_VIOLET_NEAR_G, ArtDirection.MOOD_CORRUPTED_VIOLET_NEAR_B)
@@ -66,7 +70,8 @@ public final class LightingMoods {
                 .fog(ArtDirection.MOOD_CORRUPTED_VIOLET_FOG_START_TILES, ArtDirection.MOOD_CORRUPTED_VIOLET_FOG_END_TILES)
                 .horizon(ArtDirection.MOOD_CORRUPTED_VIOLET_HORIZON_FLOOR_PACKED, ArtDirection.MOOD_CORRUPTED_VIOLET_HORIZON_CEILING_PACKED)
                 .vignetteAlpha(ArtDirection.MOOD_CORRUPTED_VIOLET_VIGNETTE_ALPHA)
-                .materials(ArtDirection.MATERIAL_ID_BREACH_FLESH_MEMBRANE, ArtDirection.MATERIAL_ID_CEILING_TORN_CONDUIT)
+                .materials(SurfaceMaterials.floorMaterialId(TilesetConstants.WALL_SET_THE_BREACH),
+                           SurfaceMaterials.ceilingMaterialId(TilesetConstants.WALL_SET_THE_BREACH))
                 .build());
         REGISTRY.register(LightingMood.builder(ArtDirection.MOOD_ID_CORE_WHITE_VIOLET)
                 .nearTint(ArtDirection.MOOD_CORE_WHITE_VIOLET_NEAR_R, ArtDirection.MOOD_CORE_WHITE_VIOLET_NEAR_G, ArtDirection.MOOD_CORE_WHITE_VIOLET_NEAR_B)
@@ -74,7 +79,8 @@ public final class LightingMoods {
                 .fog(ArtDirection.MOOD_CORE_WHITE_VIOLET_FOG_START_TILES, ArtDirection.MOOD_CORE_WHITE_VIOLET_FOG_END_TILES)
                 .horizon(ArtDirection.MOOD_CORE_WHITE_VIOLET_HORIZON_FLOOR_PACKED, ArtDirection.MOOD_CORE_WHITE_VIOLET_HORIZON_CEILING_PACKED)
                 .vignetteAlpha(ArtDirection.MOOD_CORE_WHITE_VIOLET_VIGNETTE_ALPHA)
-                .materials(ArtDirection.MATERIAL_ID_CORE_CIRCUIT_PLATE, ArtDirection.MATERIAL_ID_CEILING_LATTICE)
+                .materials(SurfaceMaterials.floorMaterialId(TilesetConstants.WALL_SET_THE_CORE),
+                           SurfaceMaterials.ceilingMaterialId(TilesetConstants.WALL_SET_THE_CORE))
                 .build());
         REGISTRY.setFallback(coolSteel);
 
