@@ -282,7 +282,7 @@ public final class EnemyVisualLayer implements EnemyVisualListener, Disposable {
         emitResolved(visual.burst(EnemyEffectSet.BurstId.MUZZLE), 0f);
         float fromTileX = resolvedTileX, fromTileY = resolvedTileY, fromHeight = resolvedHeight;
         effects.launch(visual.burst(EnemyEffectSet.BurstId.PROJECTILE), visual.burst(EnemyEffectSet.BurstId.TRAIL),
-                fromTileX, fromTileY, fromHeight,
+                visual.burst(EnemyEffectSet.BurstId.IMPACT), fromTileX, fromTileY, fromHeight,
                 animator.pendingTargetX / Constants.CELL_SIZE, animator.pendingTargetY / Constants.CELL_SIZE,
                 EffectConstants.ENEMY_EFFECT_PROJECTILE_TARGET_HEIGHT,
                 EffectConstants.ENEMY_PROJECTILE_TRAVEL_SECONDS, resolvedTilesPerPixel);

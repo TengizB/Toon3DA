@@ -591,6 +591,12 @@ SETS = {
             "SPIT_TRAIL": burst(emitter("SPIT_TRAIL", (1, 1), (0.22, 0.34), (5, 15), angle=-90, spread=60, gravity=260), interval=(0.025, 0.04)),
             "SPIT_MUZZLE": burst(emitter("SPIT_MUZZLE", (1, 1), (0.16, 0.16), (0, 0)),
                                  emitter("ICHOR", (3, 4), (0.20, 0.35), (60, 120), angle=-90, spread=90, gravity=420)),
+            # the acid LANDS (order 5, owner D4): the glob bursts short of its target - a splat and a spray of droplets
+            # thrown at the viewer, falling. Taken through a creature's "IMPACT" override.
+            "ACID_SPLASH": burst(emitter("DETONATE", (1, 1), (0.26, 0.26), (0, 0), radius=1),
+                                 emitter("SPLAT", (2, 3), (0.24, 0.32), (60, 120), spread=360, toward=(10, 30), radius=6),
+                                 emitter("ICHOR", (12, 16), (0.35, 0.60), (90, 220), spread=360, toward=(20, 80), gravity=520,
+                                         drag=0.8, radius=6)),
             # the Gore Biter digs its claws in to spring (it has no glands to seep)
             "SCUFF": burst(emitter("SCUFF", (2, 3), (0.30, 0.45), (30, 80), angle=90, spread=110, gravity=-10, radius=30),
                            interval=(0.08, 0.14)),
@@ -621,7 +627,7 @@ SETS = {
                                 charge=placement("hit_centre", (0, 30), 26), stun=placement("eye", (0, -30), 14),
                                 poison=placement("hit_centre", (0, 0), 30), body=placement("hit_centre", (0, 20), 30),
                                 bursts={"PROJECTILE": "SPIT", "TRAIL": "SPIT_TRAIL", "MUZZLE": "SPIT_MUZZLE",
-                                        "HIT": "SPLASH", "HIT_HEAVY": "SPLASH_HEAVY"}),
+                                        "IMPACT": "ACID_SPLASH", "HIT": "SPLASH", "HIT_HEAVY": "SPLASH_HEAVY"}),
         },
     ),
     # ---------------------------------------------------------------------------------------- STATUS (shared)

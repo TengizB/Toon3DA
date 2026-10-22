@@ -56,7 +56,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP4** — owner answer recorded (D1-D4): Hulk / Eye Tyrant / Gore Biter approved; Mire Wraith rejected -> redesign;
       its art kept as `sump_wretch`; arrival splash approved. DONE WHEN: DECISIONS written, sump_wretch renamed
       pixel-identical, committed.
-- [ ] **CP5** — three rows wired (PLAGUE_HULK, EYE_TYRANT, GORE_BITER) + the acid arrival splash (runtime IMPACT burst);
+- [x] **CP5** — three rows wired (PLAGUE_HULK, EYE_TYRANT, GORE_BITER) + the acid arrival splash (runtime IMPACT burst);
       A2-A5 for the three re-verified in-engine; build green.
 - [ ] **CP5b** — the NEW Mire Wraith (dangerous, alive, not an egg): rig + full clip set + effects row; stills, clip GIFs
       and in-engine bursts (default + one mood) sent. DONE WHEN: sent; build green.
@@ -123,3 +123,15 @@ Build: only StoryBarkTest red. WAITING for owner approval (CP4).
 the effects creatures row renamed. The new-enemy idea file (acid splash on death, built on sump_wretch) was handed to
 creative-game-designer - separate full-lane work, owner approves it separately; NOT part of this order. The new Mire
 Wraith needs its own effects creatures row (mire_wraith) at CP5b - none exists at this commit.
+
+**CP5:** rows PLAGUE_HULK -> plague_hulk, EYE_TYRANT -> eye_tyrant, GORE_BITER -> gore_biter COMMITTED. Arrival splash
+(runtime #9 for the IMPLEMENTATION NOTE): BurstId.IMPACT; EnemyEffectSystem.launch(..., impact, ...) - a projectile with an
+IMPACT burst ends EffectConstants.ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES (1.1) short of its target and bursts there
+(GameMath.projectileImpactSeconds); EnemyVisualLayer.launchShot passes visual.burst(IMPACT). Data: aberration burst
+ACID_SPLASH (DETONATE flash + SPLAT + ICHOR rain), taken through an "IMPACT" override (sump_wretch now; the new
+mire_wraith row must carry it too). 0.6 tiles was tried first: the splash sat at the lens, clamped tiny - 1.1 reads.
+The Warden has no IMPACT: unchanged. Verified in-engine with a TEMPORARY capture-only row MIRE_WRAITH -> sump_wretch
+(removed, never committed). PRE-EXISTING bug found (not fixed, out of scope): EnemyManager.chainAlertQueue is sized to the
+floor's STARTING enemy count, so several dormant enemies added later that wake in one turn overflow it
+(ArrayIndexOutOfBoundsException in phaseA) - capture spawns hit it; capture scripts alert spawns by index instead.
+Build: only StoryBarkTest red. Designer delivered .claude/agents/ideas/sump-wretch-acid-death.txt (separate work).

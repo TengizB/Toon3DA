@@ -8139,6 +8139,19 @@ public final class GameMath {
     }
 
     /*
+     * Formula: Projectile impact time (generated-enemy-art order 5 - when the acid bursts, short of its target)
+     * Derivation:
+     *   A projectile covers distanceTiles in travelSeconds at constant speed, so it is leadTiles short of the target at
+     *   t = travelSeconds * (1 - leadTiles / distanceTiles).
+     * Edge cases:
+     *   distanceTiles <= leadTiles (a point-blank shot) -> 0: it bursts at once; distanceTiles <= 0 -> 0.
+     */
+    public static float projectileImpactSeconds(float travelSeconds, float distanceTiles, float leadTiles) {
+        if (distanceTiles <= 0f || distanceTiles <= leadTiles) return 0f;
+        return travelSeconds * (1f - leadTiles / distanceTiles);
+    }
+
+    /*
      * Formula: Hover remaining while a hovering body falls (generated-enemy-art order 5 - a dying Eye Tyrant)
      * Derivation:
      *   t = min(1, progress / fallPortion)   (the fall takes the first fallPortion of the death clip)

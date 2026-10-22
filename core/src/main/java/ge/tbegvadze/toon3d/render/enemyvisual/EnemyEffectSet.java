@@ -33,7 +33,9 @@ public final class EnemyEffectSet implements Disposable {
         HIT, HIT_HEAVY, RESIST, KILL, DEATH, LEAK, CHARGE, MUZZLE, PROJECTILE, TRAIL, BLEED,
         BURNING, BURNING_ONSET, POISONED, STUNNED,
         /** Order 5: the death burst of a self-destruct (the Plague Hulk's detonation); a set without it uses DEATH. */
-        DETONATE;
+        DETONATE,
+        /** Order 5: where a projectile lands (the acid's splash); without it the projectile flies on and fades. */
+        IMPACT;
 
         public static final int COUNT = values().length;
 

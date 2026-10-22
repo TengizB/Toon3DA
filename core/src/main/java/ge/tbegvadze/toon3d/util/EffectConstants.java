@@ -343,6 +343,11 @@ public final class EffectConstants {
     public static final float ENEMY_EFFECT_FADE_TAIL_FRACTION         = 0.30f;
     // The generated projectile flies to the player's eye height (half a wall: the horizon line).
     public static final float ENEMY_EFFECT_PROJECTILE_TARGET_HEIGHT   = 0.5f;
+    /**
+     * Order 5: a projectile with an IMPACT burst (the acid) bursts this many tiles short of its target tile's centre,
+     * which is the viewer's own position on a hit - so the splash happens in front of the camera, where it is seen.
+     */
+    public static final float ENEMY_EFFECT_PROJECTILE_IMPACT_LEAD_TILES = 1.1f;
     // Ranged recoil kick: sprite nudges away from the player on fire
     public static final float ENEMY_RECOIL_MAX_PIXELS             = 14f;
     // Muzzle flash quad: warm-white overlay at the firing sprite center
