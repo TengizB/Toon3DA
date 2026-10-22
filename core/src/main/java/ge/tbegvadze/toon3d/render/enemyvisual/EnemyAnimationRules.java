@@ -54,7 +54,8 @@ public final class EnemyAnimationRules {
         },
         /**
          * Order 4: a SpecialAbility resolved — the ability's own clip from the ability rows when the creature
-         * ships it (BUFF_SELF, AREA_STRIKE), otherwise the row's clip (ATTACK), at the row's priority.
+         * ships it (BUFF_SELF, AREA_STRIKE; order 5 DEBUFF_PLAYER, SELF_DESTRUCT; order 6 SUMMON), otherwise the row's
+         * clip (ATTACK), at the row's priority.
          */
         ABILITY {
             @Override void apply(EnemyVisualLayer layer, EnemyAnimator animator, EnemyVisualEvent event, Row row) {

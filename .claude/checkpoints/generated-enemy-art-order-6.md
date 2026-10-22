@@ -61,7 +61,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       re-baked, in-engine re-checked, clip + in-engine GIFs sent. DONE WHEN: sent; others byte-identical.
 - [x] **CP4** — owner approval of all five recorded (stop until it is).
 - [x] **CP5** — five registry rows + SUMMON clip row wired; A3-A5 verified in-engine; build green.
-- [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system, CLAUDE.md row); reviewer PASS; STATUS: IMPLEMENTED.
+- [x] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system, CLAUDE.md row); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -176,3 +176,7 @@ Next: CP6 - docs, reviewer, STATUS.
 / hand / fold_lines / lag / Figure.transformed, 7.7 names + anchors, 7.9 budget, 8.2 SUMMON row, 9.1 undead set, 10 rows,
 lessons 12.21-12.24), art-direction 16 (rows + roster), enemy-system (order 6), enemy-art SKILL.md, CLAUDE.md enemyvisual
 rows; idea IMPLEMENTATION NOTE. Next: reviewer, then STATUS IMPLEMENTED.
+
+**CP6:** reviewer r1 PASS (generated-enemy-art-order-6.reviewer-r1.md). Applied: the ABILITY rule comment now names every
+ability clip; the A4 note under D7. Kept: the `// ---- order 6 ----` separator in EnemyClipId (it matches the file's existing
+order-4/5 separators). STATUS: IMPLEMENTED 2026-10-22. Order complete.

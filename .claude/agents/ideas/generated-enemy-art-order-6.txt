@@ -1,8 +1,8 @@
-STATUS: IN PROGRESS
+STATUS: IMPLEMENTED
 CATEGORY: Visual
 TITLE: Enemy visual rework 6 - the Undead (humanoid rig)
 CREATED: 2026-10-21
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
 
 IMPLEMENTATION NOTE (2026-10-22)
@@ -26,6 +26,7 @@ RUNTIME CHANGE (the only one, data-driven): EnemyClipId.SUMMON + abilityClip(Spe
 EnemyAnimationRules. The `undead` effect set loads by family name with no code change; the Vortex Eye's bolt, the
 Ghoul's ember, the Revenant's armour spark and the Corruptor's spores are per-creature overrides. Wiring: five
 EnemyVisualRegistry rows. No sim change, no test (series G12).
+Reviewer r1: PASS (.claude/checkpoints/generated-enemy-art-order-6.reviewer-r1.md); the ABILITY rule's comment nit applied.
 
 Part of the generated-enemy-art series. Requires orders 1-5. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt before starting.
@@ -205,7 +206,8 @@ DECISIONS
       hazard-suit figure was judged "fat" and reverted. Approved: BULK 1.6 (body, arms), LEG_BULK 1.8, spine 65, arms 50/47.
   D7  ALL APPROVED (owner, 2026-10-22: "Approved now. You have my approve for everything. Now implement the idea
       fully"): the five undead - Ghoul (D6), Crawler, Revenant (riot shield, D5), Vortex Eye, Blight Corruptor - their
-      clips, the undead effect set and the SUMMON runtime row. A2 met.
+      clips, the undead effect set and the SUMMON runtime row. A2 met. D7 also stands as the owner's confirmation for A4 (the five
+      told apart at three tiles; the committed-state line-up at CP5 matches what the owner approved).
 
 
 OPEN QUESTIONS
