@@ -35,6 +35,13 @@ public final class EnemyVisualRegistry {
         register(EnemyType.GORE_BITER,  "gore_biter");
         register(EnemyType.MIRE_WRAITH, "mire_wraith");
         register(EnemyType.SUMP_WRETCH, "sump_wretch");
+        // Order 6: the Undead on the humanoid rig (the Ghoul is the owner's tall gas-masked figure, the Revenant carries
+        // a riot shield - owner decisions D1, D5, D6).
+        register(EnemyType.GHOUL,            "ghoul");
+        register(EnemyType.CRAWLER,          "crawler");
+        register(EnemyType.REVENANT,         "revenant");
+        register(EnemyType.VORTEX_EYE,       "vortex_eye");
+        register(EnemyType.BLIGHT_CORRUPTOR, "blight_corruptor");
     }
 
     public static void register(EnemyType type, String creatureId) {

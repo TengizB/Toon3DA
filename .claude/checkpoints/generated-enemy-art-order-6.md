@@ -60,7 +60,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
 - [x] **CP3b** — the Revenant redesigned after the owner's clip-gate feedback (D5: no club; riot shield + shield bash);
       re-baked, in-engine re-checked, clip + in-engine GIFs sent. DONE WHEN: sent; others byte-identical.
 - [x] **CP4** — owner approval of all five recorded (stop until it is).
-- [ ] **CP5** — five registry rows + SUMMON clip row wired; A3-A5 verified in-engine; build green.
+- [x] **CP5** — five registry rows + SUMMON clip row wired; A3-A5 verified in-engine; build green.
 - [ ] **CP6** — docs (guide, art-direction 16, SKILL.md, enemy-system, CLAUDE.md row); reviewer PASS; STATUS: IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
@@ -162,3 +162,12 @@ clamps for its heavier feet (the soles reached row 237/240, so any 3 px body dro
 the foot capsule at x1.6 instead of LEG_BULK, the sole blob raised 1.4 px; DEATH's knee drop by 44 -> 41; HURT_HEAVY's arm
 fling 0.30/0.34 -> 0.20/0.22 (the longer arms reached the right edge). No edge warnings. Only ghoul.* changed.
 Next: CP5 - the five EnemyVisualRegistry rows, build, in-engine re-verification of all five.
+
+**CP5:** five EnemyVisualRegistry rows committed (GHOUL ghoul, CRAWLER crawler, REVENANT revenant, VORTEX_EYE vortex_eye,
+BLIGHT_CORRUPTOR blight_corruptor); the SUMMON clip row was already in at CP3. Mirror build: 481 tests, only
+StoryBarkTest.humourLivesNearTheSurfaceAndDiesNearTheCore red (known). In-engine on the COMMITTED state (no exception in any
+log; every clip query animated, none LEGACY): A3 - each creature dormant, ALERT, MOVE, real ATTACKs, HURT_LIGHT, HURT_HEAVY,
+WOUNDED + leak, BURNING, DEATH -> remains; the Revenant's real WIND_UP (braced shield), the Vortex Eye's real ABILITY
+(DEBUFF_PLAYER) and bolts, the Corruptor's real SUMMON (its summons ALERTED). A4 - the five apart at 3 tiles in default /
+corrupted_violet / core_white_violet (lineup_three_tiles.png). A5 - soul cold white under both violet moods.
+Next: CP6 - docs, reviewer, STATUS.
