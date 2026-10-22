@@ -49,7 +49,7 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
       BalanceAuditTest method. DONE WHEN: test green, A12 + A13.
 - [x] **CP4** — registry row + AcidSplash seam -> ACID_SPLASH bursts; A1, A2-A8, A15 verified in-engine.
 - [x] **CP5** — balanceSim green (A14).
-- [ ] **CP6** — docs; reviewer PASS; STATUS IMPLEMENTED.
+- [x] **CP6** — docs; reviewer PASS; STATUS IMPLEMENTED.
 
 ## NOTES CARRIED FORWARD
 
@@ -117,3 +117,9 @@ baseline: median depth per policy unchanged (NAIVE 2 / TACTICAL 3), every ROUND 
 cannot be read from the summary (it has no per-archetype column), so it was checked from the planner directly with a
 scratch class (scratchpad/probe/CountWretch.java, not committed): depth 1-5 = 326/329/383/321/447 wretches over 200
 planned floors each (12-14% of bodies, on 121-155 of 200 floors).
+
+**CP6:** docs (enemy-system, game-balance-knowledge, game-balance-authority, sprite-art guide, art-direction, CLAUDE.md)
++ DECISIONS D1-D3 + IMPLEMENTATION NOTE in 1acea45. reviewer r1: PASS (`sump-wretch-acid-death.reviewer-r1.md`). Applied its
+optional items 1 (GameMath worked example 0.4 -> 4.8), 2 (splash-stacks javadoc: ~5% real loss) and 4/nit (A8 code-read
+only; A2 armour clause holds at armour 0). Left item 3 (closed-door neighbour still gets a cosmetic burst) — noted in the
+IMPLEMENTATION NOTE. STATUS: IMPLEMENTED 2026-10-22.

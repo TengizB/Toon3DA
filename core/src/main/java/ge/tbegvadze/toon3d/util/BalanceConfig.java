@@ -1206,7 +1206,8 @@ public final class BalanceConfig {
     /**
      * The Sump Wretch's DEATH SPLASH (sump-wretch-acid-death, K11 hazard "sump_wretch_acid_splash"): POISONED stacks
      * put on the PLAYER standing orthogonally next to a dying wretch. Status only - not a hit (armour, guard and the
-     * relic first-hit shield are not involved). 3 stacks = 3+2+1 stack-turns = ~9% max HP. Range: 2-4.
+     * relic first-hit shield are not involved). 3 stacks = 3+2+1 stack-turns = ~9% max HP before the player's
+     * DoT pipeline (toughness flat reduction, armour absorption) - a start player really loses 7 HP, ~5%. Range: 2-4.
      */
     public static final int   SUMP_WRETCH_SPLASH_PLAYER_STACKS  = 3;
     /** POISONED stacks the same splash puts on each ENEMY orthogonally next to it (more than the player's, so

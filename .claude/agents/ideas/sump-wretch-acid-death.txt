@@ -1,8 +1,8 @@
-STATUS: NOT IMPLEMENTED
+STATUS: IMPLEMENTED
 CATEGORY: Enemies
 TITLE: Sump Wretch - low-level chaff that bursts into acid
 CREATED: 2026-10-22
-IMPLEMENTED: -
+IMPLEMENTED: 2026-10-22
 ---
 IMPLEMENTATION NOTE (2026-10-22): built as designed, with three build-time decisions recorded under
 DECISIONS (D1 adjacent share 0.4, D2 the poison ticks use the existing DoT pipeline, D3 the splash
@@ -10,7 +10,8 @@ listener carries the type). LevelGeneratorSnapshotTest's digest was re-baselined
 pool member legitimately reshuffles generated rosters). Reported, not fixed: LevelLoader's spawn list
 lacks '}' (EncounterBudgetPlanner says the Spiresower is "placed by its own systems"); EnemyManager's
 chainAlertQueue overflows when several dormant spawns wake on one turn; linear_corridor rooms can exceed
-the 3-per-archetype cap when rosters shift.
+the 3-per-archetype cap when rosters shift; a closed-door neighbour still shows a (cosmetic) splash burst
+(reviewer optional item, left as is). A8 was verified by code reading only (no barrel spawner in the capture tool).
 
 
 OVERVIEW
@@ -567,7 +568,8 @@ DECISIONS
       do, so a start player takes 4 + 2 + 1 = 7 HP from a splash, not the 12 A2 predicted. R5 holds for the
       splash itself (its APPLICATION is not a hit: no armour cost, no guard, no shield). The shared poison
       path is not changed (out of scope); the TP term therefore slightly over-prices the splash, which is
-      the conservative side.
+      the conservative side. A2's "armour value does not change" therefore holds only at armour 0: an
+      armoured player's armour absorbs the ticks, as on a toxic tile.
   D3  AcidSplashListener carries the dead EnemyType as well as the tile (onAcidSplash(type, col, row)):
       the burst is the CREATURE's IMPACT burst (sump_wretch overrides it to ACID_SPLASH), so the visual
       layer needs to know whose. No order-5 "burst at a tile" seam existed to reuse.

@@ -2248,7 +2248,7 @@ public final class GameMath {
      *   (S = 3, perStack 2 -> 2 x 3 x 4 / 2 = 12 HP). Only the share of deaths that happen next to the player
      *   actually lands it, so the threat the archetype adds is
      *       threat = splashDamage x adjacentDeathShare
-     *   (12 x 0.5 = 6.0). It is ADDED to the stat-block TP in EnemyType.baseThreatPoints.
+     *   (12 x 0.4 = 4.8 at the shipped DEATH_SPLASH_ADJACENT_SHARE). It is ADDED to the stat-block TP in EnemyType.baseThreatPoints.
      * Edge cases:
      *   splashStacks <= 0 or adjacentDeathShare <= 0 -> 0 (an archetype with no splash adds nothing, so every
      *   other archetype's TP is byte-identical). perStack < 0 is clamped to 0. Pre-existing poison and the
