@@ -173,6 +173,13 @@ R-ENEMY (RuleKind.ENEMY_THREAT_POINTS + ENEMY_HITS) — RE-BANDED by balance-ove
   wide enough for ranged/status positional (<= 1.55) and cadence-2 archetypes.
   WHY: the owner's "no more sponges": fights are short and hits land hard, and
   the TP currency stays priced against the same box the fight is.
+  DEATH SPLASH TERM (sump-wretch-acid-death): an archetype whose death poisons its
+  orthogonal neighbours (EnemyType.deathSplashPlayerStacks() > 0) adds
+  GameMath.deathSplashThreatPoints(perStack, stacks, DEATH_SPLASH_ADJACENT_SHARE) =
+  perStack x S(S+1)/2 x share to its TP (perStack from the depth-1 on-curve max HP).
+  The term is exactly 0 for every other archetype (asserted by BalanceAuditTest
+  deathSplashIsPricedOnlyWhereItExistsAndTheWretchStaysInBand); R-ENEMY bands the
+  sum. Sump Wretch: 9.6 + 4.8 = 14.4 (CHAFF).
   OVERRIDE RECORD: GOLDEN_RATIO_* bands and the hand-set ENEMY_TP_* bands (chaff
   16-34 | soldier 36-66 | bruiser 70-120 | mini-elite 160-310) -> the rules above.
   Every archetype's depth-1 HP/damage was rebased (BalanceConfig SECTION 2 note);
@@ -1555,7 +1562,8 @@ WHAT EACH C-RULE CHECKS (the build's half of each checklist; BalanceSchema.admis
   C-STATUS     every StatusType: a STATUS_DECLARATIONS row (shape DOT_FRACTION / DOT_FLAT / MULTIPLIER / CONTROL,
                magnitude + duration constants that resolve and are > 0, a DoT fraction in (0, 1), armour-shield
                interaction, a cleanse item that is a consumable).
-  C-HAZARD     every HAZARD_DECLARATIONS row (barrel 'E', barrel 'g', fire 'i', toxic 'q'): fraction constants resolve
+  C-HAZARD     every HAZARD_DECLARATIONS row (barrel 'E', barrel 'g', fire 'i', toxic 'q', the Sump Wretch's death
+               splash 'q'): fraction constants resolve
                (player side in (0, 1]), the symbol is a real hazard cell, its status is declared, a DamageClass (or a
                stated reason), a placement owner that exists. BalanceReport HAZARDS lists the registry.
   C-ROOM       every RoomBlueprint: supplyStance(); a SUPPLY_NEUTRAL room stamped in isolation over 120 seeds places
@@ -2357,6 +2365,7 @@ Barrel ctr       39.0     39.0          1        234.0
     radioactive_barrel 'g' class EXPLOSIVE, status none, placed by ge.tbegvadze.toon3d.level.RoomBlueprints
     fire 'i' class FIRE, status BURNING, placed by ge.tbegvadze.toon3d.hazard.HazardManager
     toxic 'q' class none, status POISONED, placed by ge.tbegvadze.toon3d.hazard.HazardManager
+    sump_wretch_acid_splash 'q' class none, status POISONED, placed by ge.tbegvadze.toon3d.hazard.HazardManager
 
 BARREL BLAST (H13) — centre 1.2 / ring 0.6 x reference SOLDIER HP (VOID_SHROUD base 50)
 depth  soldier    ring  centre | soldier left: 1 ring   | soldier left: 2 rings  | every chaff killed by ring?

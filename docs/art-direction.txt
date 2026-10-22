@@ -622,7 +622,7 @@ SUIT vs FACILITY — THE INK TABLE (the series' map; a new screen picks its row 
 ----------------------------------------------------
 Migrated enemy types (EnemyVisualRegistry rows: ACID_DRONE = warden, SHELL_BRUTE = harvest_tick, IRON_STALKER =
 iron_stalker - order 4, the insect family complete; order 5, the aberrations: PLAGUE_HULK = plague_hulk, EYE_TYRANT =
-eye_tyrant, GORE_BITER = gore_biter, MIRE_WRAITH = mire_wraith) are drawn
+eye_tyrant, GORE_BITER = gore_biter, MIRE_WRAITH = mire_wraith; sump-wretch-acid-death: SUMP_WRETCH = sump_wretch) are drawn
 from generated clip atlases by render/enemyvisual, inside EnemyRenderer's pass 1; every other type keeps the
 legacy region path untouched until generated-enemy-art order 9.
   BODY      the frame from the body atlas, at its manifest offset on the 160x240 canvas, under EXACTLY the
@@ -652,7 +652,9 @@ legacy region path untouched until generated-enemy-art order 9.
             studied eye in a cradle of petals held open by a gunmetal speculum; the beam leaves the pupil; it falls from
             its hover when it dies), gore_biter (a head that splits vertically into a toothed jaw; packs step out of
             phase), mire_wraith (a shrouded sludge predator with a lamprey maw and an acid gullet; its acid bursts in a
-            splash where it lands). sump_wretch (the first Mire Wraith, kept) is not wired yet.
+            splash where it lands), sump_wretch (the first Mire Wraith, kept for its own low-level enemy: a slumped
+            glowing sack that bursts into acid when it dies - its ACID_SPLASH burst plays on every tile the death
+            splash reaches, through HazardManager.AcidSplashListener -> EnemyVisualLayer.onAcidSplash).
   REMAINS   the last DEATH frame stays on the tile for the floor, graded like a body, in place of the corpse
             decal (R5: drawing only). The legacy red hit spray does not draw on a migrated body.
 Measured (llvmpipe, same session, 6 enemies alerted in one room, 8 s each, two interleaved runs): animated

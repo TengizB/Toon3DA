@@ -568,7 +568,13 @@ own metal and a tick bleeds its own ichor. The builder is .claude/skills/enemy-a
     the legacy EnemySpriteSheets path), so output must already be BINARY alpha (0 or 255).
   - Wiring a creature is ONE row in render/enemyvisual/EnemyVisualRegistry.bootstrap() (EnemyType ->
     creature id); files come from EnemyConstants.ENEMY_GENERATED_DIRECTORY. A type without a row keeps
-    the legacy sprite (until order 9).
+    the legacy sprite (until order 9). Rows today: ACID_DRONE warden, SHELL_BRUTE harvest_tick, IRON_STALKER
+    iron_stalker, PLAGUE_HULK plague_hulk, EYE_TYRANT eye_tyrant, GORE_BITER gore_biter, MIRE_WRAITH
+    mire_wraith, SUMP_WRETCH sump_wretch (sump-wretch-acid-death; a new type with no legacy art falls back to
+    the Mire Wraith's legacy region if its atlas fails to load).
+  - A creature's IMPACT burst doubles as its DEATH-SPLASH burst: EnemyVisualLayer.onAcidSplash plays it on
+    every tile a death splash reaches (HazardManager.AcidSplashListener), at the tile's floor, or just in
+    front of the camera when the tile is the viewer's own.
   - The billboard is the whole CANVAS: heightMultiplier() wall heights tall, bottom on the floor line,
     canvas width x the same scale. Each frame is drawn at its manifest offset inside it (y-down canvas,
     flipped once in EnemyBodyDrawer), per screen column against the wall z-buffer; the contact shadow

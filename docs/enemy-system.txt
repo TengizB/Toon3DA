@@ -47,7 +47,7 @@ The first wakeup sets World.gameState.redAlert = true (drives the red wall pulse
 Every ALERTED/CHASING/ATTACKING enemy acts once:
 
   MELEE enemies (PLAGUE_HULK, GORE_BITER, SHELL_BRUTE, IRON_STALKER, VOID_SHROUD, CINDERFORGE_COLOSSUS,
-  VERDANT_SPIRESOWER):
+  VERDANT_SPIRESOWER, SUMP_WRETCH):
     - Manhattan distance == 1 (cardinal adjacent only, never diagonal) → swing.
     - Else → step toward player via greedy Manhattan minimizer.
     - Move cooldown governed by moveEveryNTurns() per type.
@@ -230,7 +230,7 @@ of the bodies filling those roles.
 
   family       archetypes
   ---------------------------------------------------------------------------------------
-  ABERRATION   Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith, The Corruptor (boss)
+  ABERRATION   Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith, Sump Wretch, The Corruptor (boss)
   UNDEAD       Ghoul, Crawler, Revenant, Vortex Eye, Blight Corruptor
   INSECT       Shell Brute, Iron Stalker
   MACHINE      Acid Drone, The Overseer (boss)
@@ -339,6 +339,8 @@ A NEW ARCHETYPE OR FAMILY THEREFORE NEEDS ITS ORA LINES: see docs/story-ui-syste
                                    then burst it through the open shell.
   Verdant Spiresower '}' SOLDIER   SOWER: break the spires first — they heal it and wall you in, and it
                                    will never die while one is standing.
+  Sump Wretch    'o'   CHAFF       BURSTER: it splashes acid when it dies - kill it a step away, or beside
+                                   its friends.
 
 Two BRUISERS, two different failures: the Shell Brute is a POSITIONING puzzle (sidestep the lane, punish
 the recovery); the Cinderforge Colossus is a TEMPO puzzle (never let the damage stop). The Rimeshell
@@ -413,8 +415,28 @@ labels them:
     the player; when it strikes from that blind side executeMeleeAttack recomputes the bonus live and
     deals base * VOID_SHROUD_FLANK_DAMAGE_MULTIPLIER. Counterplay: "rotate to face it / keep your back
     covered."
-  - PLAGUE_HULK — AREA DENIAL. On death (EnemyManager.EnemyDeathHazardListener, wired in World) it
-    leaves a lingering toxic cloud (HazardManager.spawnToxicCloud, radius
+  - THE ENEMY DEATH HAZARD (sump-wretch-acid-death). EVERY death hazard runs through ONE method,
+    HazardManager.applyEnemyDeathHazard(type, column, row, selfDestructMassive, player), which BOTH World and
+    SimWorld pass to EnemyManager.setEnemyDeathHazardListener — so the played game and the balance simulator
+    can never drift. In order: the Plague Hulk cloud (below), a magma construct's last fire tile
+    (leavesTrailFireTurns), then the data-driven DEATH SPLASH and its puddle. The splash is ARCHETYPE DATA
+    on EnemyType, all defaulting to 0 (a type declares it and inherits the behaviour, the Cinderforge-trail
+    idiom): deathSplashPlayerStacks() / deathSplashEnemyStacks() put POISONED stacks (applyPoisonStacks, the
+    toxic-tile path) on every living host on the 4 ORTHOGONAL neighbours of the death tile — never
+    diagonals, never range 2 — and deathPuddleTurns() ignites the death tile as toxic 'q' for that many turns
+    (HazardManager.igniteToxic(column, row, lifetimeTurns); skipped on a pickup / fire / non-spreadable tile;
+    the splash still happens). Status only, no direct damage, so one death can never cause another inside
+    the same resolution — chains run through later poison ticks. Not a hit: armour, guard and the relic
+    first-hit shield are not involved in the APPLICATION (the later poison ticks go through the player's
+    ordinary DoT pipeline — armour absorption and the TOUGHNESS flat reduction — exactly as a toxic tile's
+    do). Acid never touches barrels. The cosmetic burst rides HazardManager.AcidSplashListener (World ->
+    EnemyVisualLayer.onAcidSplash: the creature's IMPACT burst on every splashed tile; null in SimWorld).
+  - SUMP_WRETCH — BURSTER (the death splash above: 3 player stacks / 4 enemy stacks / a 3-turn puddle).
+    Slow (moves every 2 turns), weak melee CHAFF whose danger is its corpse. Its splash is priced into its
+    TP (GameMath.deathSplashThreatPoints, DEATH_SPLASH_ADJACENT_SHARE). Counterplay: "kill it a step away —
+    or next to its pack, where it fights for you."
+  - PLAGUE_HULK — AREA DENIAL. On death (EnemyManager.EnemyDeathHazardListener -> the shared
+    HazardManager.applyEnemyDeathHazard above) it leaves a lingering toxic cloud (HazardManager.spawnToxicCloud, radius
     HAZARD_PLAGUE_HULK_DEATH_CLOUD_RADIUS). Counterplay: "kill at range — don't melee into its cloud."
   - PLAGUE_HULK — SELF_DESTRUCT finisher (.claude/agents/ideas/plague-hulk-self-destruct.txt). Once
     HP drops to or below PLAGUE_HULK_SELF_DESTRUCT_HP_PERCENT it PRIMES (sticky —
@@ -425,7 +447,7 @@ labels them:
     wall-stopped cardinal cross blast (applySelfDestructBlast) against the player plus a MASSIVE
     toxic cloud (PLAGUE_HULK_SELF_DESTRUCT_TOXIC_RADIUS_TILES). Killing it before detonation leaves
     only the ordinary minimal cloud instead — the EnemyDeathHazardListener carries a
-    selfDestructMassive flag so World picks the right radius. Counterplay: "burst it down before the
+    selfDestructMassive flag so the shared death-hazard method picks the right radius. Counterplay: "burst it down before the
     countdown hits zero, or get out of the blast radius." Because the detonation removes the enemy
     from inside phaseBExecute's own iteration, the kill is deferred via
     EnemyManager.pendingExecuteDeaths and applied in a second pass after the phaseB loop finishes.
@@ -620,7 +642,8 @@ ENEMY TRAITS AND MATCHUPS (balance-overhaul order 3)
 Every EnemyFamily declares one enemy/EnemyTrait (EnemyFamily.trait()); EnemyType.trait() defaults
 to the family's and an archetype MAY override it (none does today). Bosses carry their family's.
 
-  ABERRATION -> FLESH     no glyph (neutral)  Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith, Corruptor (boss)
+  ABERRATION -> FLESH     no glyph (neutral)  Plague Hulk, Eye Tyrant, Gore Biter, Mire Wraith, Sump Wretch,
+                                              Corruptor (boss)
   MACHINE    -> SHIELDED  hexagon             Acid Drone, Overseer (boss)
   GOLEM      -> PLATED    square plate        Auric Sentinel, Cinderforge Colossus, Rimeshell Lancer,
                                               Verdant Spiresower

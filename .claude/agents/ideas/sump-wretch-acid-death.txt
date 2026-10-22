@@ -4,6 +4,13 @@ TITLE: Sump Wretch - low-level chaff that bursts into acid
 CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
+IMPLEMENTATION NOTE (2026-10-22): built as designed, with three build-time decisions recorded under
+DECISIONS (D1 adjacent share 0.4, D2 the poison ticks use the existing DoT pipeline, D3 the splash
+listener carries the type). LevelGeneratorSnapshotTest's digest was re-baselined (an existing test; the new
+pool member legitimately reshuffles generated rosters). Reported, not fixed: LevelLoader's spawn list
+lacks '}' (EncounterBudgetPlanner says the Spiresower is "placed by its own systems"); EnemyManager's
+chainAlertQueue overflows when several dormant spawns wake on one turn; linear_corridor rooms can exceed
+the 3-per-archetype cap when rosters shift.
 
 
 OVERVIEW
@@ -550,7 +557,20 @@ ASSUMPTIONS
 
 DECISIONS
 ---------
-(none yet)
+  D1  (build time, inside the BALANCE NOTES range) DEATH_SPLASH_ADJACENT_SHARE = 0.4, not 0.5. Swept
+      0.3 / 0.4 / 0.45 / 0.5 / 0.6 / 0.7: from 0.45 up the higher wretch TP thins the depth-1 COMBAT floor
+      enough to push MYSTERY_EV to its 1.30 ceiling and a linear-corridor room to four of one archetype
+      (V7); 0.7 also tips R-RELIC salvage_hook d15. 0.3 and 0.4 are green. So the A12 reading is TP 14.4
+      (9.6 + 4.8), not "15.6 +/- 1"; XP stays 5 either way.
+  D2  (found in play) The player's poison TICKS go through the existing DoT pipeline
+      (Player.applyDoTDamage: armour absorption + the TOUGHNESS flat reduction), exactly as a toxic tile's
+      do, so a start player takes 4 + 2 + 1 = 7 HP from a splash, not the 12 A2 predicted. R5 holds for the
+      splash itself (its APPLICATION is not a hit: no armour cost, no guard, no shield). The shared poison
+      path is not changed (out of scope); the TP term therefore slightly over-prices the splash, which is
+      the conservative side.
+  D3  AcidSplashListener carries the dead EnemyType as well as the tile (onAcidSplash(type, col, row)):
+      the burst is the CREATURE's IMPACT burst (sump_wretch overrides it to ACID_SPLASH), so the visual
+      layer needs to know whose. No order-5 "burst at a tile" seam existed to reuse.
 
 
 OPEN QUESTIONS
