@@ -42,6 +42,12 @@ python3 effects.py ../../../assets/textures/enemies/generated [--preview /tmp/fx
 Output is deterministic (every noise source is seeded, the grain hash is integer-only): the same script
 writes byte-identical files. Previews go to the owner and are never committed.
 
+## Walls, doors, columns, floors, ceilings
+
+The same kit makes the environment (the generated-wall-art series). THE METHOD for that lives in
+`docs/wall-art-creation-guide.txt` — read it first. `walls_prototype.py` is the record of the 2026-10-22
+prototypes (`python3 walls_prototype.py /tmp/w [A_ C_ ...]`); `walls.py` replaces it in order 1.
+
 ## The rules every sprite obeys (the style lock)
 
 1. **Originality.** Never open, trace, recolour or "improve" an existing enemy texture in

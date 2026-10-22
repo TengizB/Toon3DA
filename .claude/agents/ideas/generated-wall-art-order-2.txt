@@ -1,0 +1,238 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 2 - the switch: region sets live, old walls gone
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
+and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
+design and repetition rules, materials, glow, output, verification, every lesson and every piece of owner
+feedback. Read it before any work in this order; update it in the same commit as any change to what it
+describes. The enemy-art kit's technique (docs/sprite-art-creation-guide.txt sections 1-4) is the tool.
+
+Series: generated-wall-art.txt - THE REGION WALL SET, THE SYMBOL TABLE and THE PLACEMENT RULES sections
+are this order's spec. Consumes order 1's manifest (order 1 R11). Read docs/environment-tileset-system.txt,
+docs/wall-renderer-guide.txt and art-direction sections 3-6 + RENDER RESOLUTION TIERS first.
+
+
+OVERVIEW
+--------
+The single engine order of the series. It replaces how walls are CHOSEN (the level layer), how they are
+DRAWN (the wall runtime), and DELETES the old wall layer - all in one order, so the game goes from "any
+wall on any floor" straight to "every floor built from its region's set" with no period of old walls.
+Regions whose own set has not shipped (B-E until orders 3-4) borrow set A (D8).
+
+Three parts, each a group of checkpoints:
+  PART 1 - CHOOSING: region sets, room families, the slot table, the placement rules, every generator
+           through one finisher. (headless: tileset, level, route, world)
+  PART 2 - DRAWING: the region atlas runtime - walls, variants, glow, animation, LOD, doors, columns,
+           floor/ceiling from the set. (render)
+  PART 3 - DELETING: the whole old wall/door/column/floor layer. (both)
+
+
+SCOPE
+-----
+IN - PART 1 (choosing)
+  - tileset: WallGroup (HALL MEDICAL SECURITY CONTAINMENT MACHINERY RESEARCH STORAGE SIGNATURE) and
+    WallSlot (BASE STRUCTURE LIGHT SERVICE VENT MARKER BREACH ACCENT) enums with per-constant data;
+    RegionWallSet (immutable: id, per (group, slot) the ordered sprite ids incl. variants, door ids,
+    column ids, surface ids, breachBase/breachStep); RegionWallSetRegistry + RegionWallSets.bootstrap()
+    reading the shipped manifests' ids (set A real; B-E rows that ALIAS set A until orders 3-4 - an
+    alias is one registry row, "borrows": "outer_facility").
+  - The SYMBOL -> (group, slot) table (master) in TilesetConstants; a RegionPaletteBuilder:
+    (region set) -> LevelPalette binding every wall symbol to its slot's sprite (variant 0; variants are
+    the renderer's), 'P' to the set's columns.
+  - route: RegionAmbience.wallPalette + RouteMapConstants.REGION_*_WALL_PALETTE deleted; replaced by
+    wallSetId per region; World resolves the floor's set like the lighting mood (fallback
+    outer_facility + one log line); startup fails loud if a region names an unregistered set.
+  - level: LevelGenConfig gains wallSetId + floorIndexInRegion (set by World with its other per-floor
+    fields); a `LevelFinisher` that EVERY generator's final Level goes through (dungeon, corridor,
+    cavern, boss arena, med bay, event, gate airlock, start room): stamp room-family walls (P2/P3),
+    run the hall placement (P4-P8), build the region palette.
+  - level: each RoomBlueprint registration names its WallGroup (master's family table); each special
+    generator names its group (MED_BAY -> MEDICAL, gate -> SECURITY, event + boss -> SIGNATURE). The
+    per-room wall-theming passes in LevelGenerator / LinearCorridorGenerator / CavernGenerator that
+    stamp old-meaning chars ('Z' cryo, 'M' medical ...) and the cavern biome char lists are REPLACED by
+    the finisher's family stamping - no generator writes a wall picture symbol again.
+  - The placement rules P1-P9 (guide section 7, incl. P9 focal spacing) with constants WALL_SET_* in LevelGenConstants; their own RNG stream
+    (GameMath.wallSetSeed: the paletteSymbolSeed derivation with a new salt) so the generator's random
+    sequence is untouched.
+IN - PART 2 (drawing)
+  - render/tilesetgfx: RegionWallAtlas (parses <region>.walls.json, loads atlas + glow textures and the
+    two surface PNGs; Disposable; built in World.buildLevelDependentResources for the floor's set,
+    disposed with the floor - replaces EnvironmentTextureSet's wall/door/column role).
+  - WallRenderer: per level, pre-resolve char -> atlas region arrays (no map lookup per column, as
+    today); BASE VARIANTS per face (GameMath.wallVariantIndex); GLOW pass after the base pass (NORMAL
+    blend, ungraded, BLACKOUT-dimmed, distance alpha fade WALL_GLOW_FADE_START_TILES 10 /
+    WALL_GLOW_MIN_ALPHA 0.6); glow FRAME animation from the world clock with per-face phase ("all" =
+    every face of that sprite, "some" = a seeded ~1 in 6); distance LOD mip 0/1/2 (GameMath.wallMipLevel);
+    the opaque fast path (R16) and equal-column merge (R18) kept, merge key (srcX, srcY, mip).
+  - Doors (d R Y B) and columns (P) drawn from the same atlas: the door slide animation and keycard
+    logic unchanged, only their texture source.
+  - Floor / ceiling: SurfaceMaterialRegistry loads the region's floor/ceiling PNGs (converted once to its
+    packed int[] layout: row 0 = south edge, column 0 = west) instead of generating the ten procedural
+    materials; mood bindings point at the region set's surfaces; FloorCeilingRenderer's pipeline,
+    mips, bands and batching are unchanged.
+  - docs/wall-art-creation-guide.txt: sections 6.4, 7 and 13 lose their [PLANNED: order 2] markers and
+    describe the shipped symbol table, placement rules (incl. P9 spacing) and engine contract.
+  - art-direction: V6 exemption list gains "wall emissives"; new section "WALLS" (sets, atlas,
+    variants, glow, LOD); section 6 rewritten for surfaces from region sets.
+IN - PART 3 (deleting) - the old layer goes completely (W12)
+  - WallRenderer: every generate*WallTexture, generateProceduralDoorTexture, loadOrGenerateDoorTexture,
+    generateColumn*Texture, loadWallTexture's JPEG path, registerTextureGenerators' wall/column rows.
+  - Files: assets/textures/lab/lab_wall_*.jpg, lab_door_*.jpg, assets/textures/wall.png (grep first:
+    barrel_radioactive.png is a PROP and stays).
+  - tileset: every old wall_* / column_* sprite id and registration, VARIETY_ONLY_SPRITE_IDS' wall and
+    column entries, the base-wall alternates, SymbolBudget's base-wall candidates, SymbolAllocator's
+    wall branch (it keeps props/decals only), LevelPalettes.legacy()'s wall part and
+    generatedWithBaseWall() (hand levels -> set A through the same RegionPaletteBuilder).
+  - GameBalance PALETTE_* knobs used only by the wall grab; RenderConstants *_WALL_TEXTURE_SIZE, door
+    and column constants and colour tables used only by deleted generators; the ten procedural
+    SurfaceMaterials generators.
+  - Existing tests encoding the old catalog/allocator are UPDATED to the new model (W10): the guard
+    "every wall symbol resolves to a registered sprite" stays, now per region set.
+  - Docs in the same commits: environment-tileset-system.txt (new section 15 "REGION WALL SETS",
+    sections 1/2/4/6/7/8/9 marked superseded for walls with a pointer), tile-symbols.txt (wall symbols
+    described by GROUP/SLOT, e.g. 'M' = MEDICAL room base), wall-renderer-guide.txt,
+    procedural-level-generation.txt (the finisher + placement rules), art-direction.txt, CLAUDE.md
+    (tileset row, WallRenderer paragraph, Level quick summary, the RECIPE A text for walls).
+OUT
+  - Region B-E art (orders 3-4). Props, decals, pickups, the shop machine - unchanged.
+  - Any shader (V2). Any rule or balance change (W7).
+
+
+RULES
+-----
+  R1  2D GAME UNTOUCHED (W7): for 200 seeds x every generator x depths 1-25, the walkable mask and every
+      FIXED symbol (doors, spawns, pickups, props, hazards, start, exit) are identical to the build
+      before this order - checked by a throwaway script whose output is pasted in the checkpoint file.
+  R2  Determinism: same seed + depth -> byte-identical grid, palette and variant choices.
+  R3  Every wall on a floor resolves to the floor's region set (or its alias) - never another region,
+      never null. A slot a set lacks falls back by WallSlot.fallback (data): ACCENT -> BASE,
+      BREACH -> BASE, others -> HALL BASE.
+  R4  No allocation in render(); one atlas bind for walls+doors+columns per pass; one for glow.
+  R5  Glow is exempt from the grade and the red-alert dampen; BLACKOUT dims it by its factor only.
+  R6  Variant, animation phase and mip are pure functions of (face, floor seed, distance, clock) -
+      no popping when turning, identical across runs of a seed.
+  R7  A manifest that fails to load -> log + the floor uses set A (never a crash, never a missing wall).
+
+
+TECHNICAL NOTES
+---------------
+  - Flow: World -> LevelGenConfig(wallSetId, floorIndexInRegion) -> generator -> LevelFinisher.finish(
+    grid, rooms+groups, spawns, ..., config) -> family stamping -> placement -> RegionPaletteBuilder ->
+    new Level(...). Rooms reach the finisher with their WallGroup (the dungeon generator already has its
+    Room list + blueprint ids; the special generators pass one group for the whole floor).
+  - "Exposed" = a wall with a walkable 4-neighbour (Level predicates). A room's perimeter = the
+    exposed walls whose walkable neighbour is inside the room's interior rectangle.
+  - Straight runs: scan rows and columns for exposed faces sharing the same open side.
+  - GameMath (math-expert, mandatory comment blocks): wallSetSeed, wallVariantIndex (splitMix64 of
+    column, row, side, seed mod count), wallMipLevel (texelsPerPixel = 256 / lineHeight; mip =
+    clamp(floor(log2(max(1, texelsPerPixel x WALL_MIP_BIAS))), 0, 2)).
+  - Atlas column draw: batch.draw(texture, x, y, w, h, srcX + texColumnAtMip, srcY, 1, sizeAtMip, false,
+    false) - srcY = the region's top row (the LibGDX Y-up rule is unchanged).
+  - Worker threads read the per-level arrays via the existing publication contract (set before dispatch).
+  - Perf: run-game --probe cpu, region-A floor, this order vs the commit before it, interleaved twice.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content. R1 guarantees spawns and supply are unchanged; both gates run.
+
+
+INTERACTIONS
+------------
+  - Muzzle light additive splash applies to atlas columns (same code path).
+  - PropRenderer / EnemyRenderer read the wall z-buffer - unchanged.
+  - Mini-map draws walls by category - unchanged.
+  - Snapshot tests (LevelGeneratorSnapshotTest, RoomBlueprintBuildDemandTest, tileset tests): wall
+    symbols and demands change by design - updated, with R1 proven separately; never weakened.
+  - Doors: DoorManager untouched; keycard reads now come from the doors' lock panels (order 1 R10).
+
+
+EDGE CASES
+----------
+  - Start room / dev runs / hand-made levels: set A, rooms not detected -> walls stay as written, the
+    palette maps them through the slot table.
+  - Boss arenas: SIGNATURE base; P4/P5 still light them.
+  - Tiny rooms (< 3 wide): P2 places at most one ACCENT; P4 skips.
+  - A door on a corner: P4 frames only walls in line with it.
+  - Floor transition / app pause / GL loss: the atlas reloads with the floor's textures; 20 transitions
+    keep a stable texture count.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  ./gradlew build green (updated tests listed in the checkpoint file).
+  A2  R1 proven (script output in the checkpoint file).
+  A3  grep: no reference to any deleted generator, file, sprite id, constant or the wallPalette string.
+  A4  run-game, region-A floor (cool_steel): hall base in 3 variants, structure rhythm, lights (some
+      flickering), framed doors, a medical / security / storage room each visibly its own set, the
+      region's doors and columns, set A's floor and ceiling.
+  A5  Forced mood amber_hot: lamps keep their colour, panels take the grade.
+  A6  A turn burst at 8+ tiles shows no shimmer on long walls.
+  A7  Regions B-E (forced depth or route) render set A with their own moods; the start room, a boss
+      arena, a cavern floor and a hand-made level render with no missing texture.
+  A8  Probe: wall pass time within +10% of the previous build on the same floor, draw calls not growing
+      with the number of distinct walls; 20 floor transitions without texture growth.
+  A9  Every doc in SCOPE updated in the same commits.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. MATH      (math-expert)         wallSetSeed, wallVariantIndex, wallMipLevel
+  2. MODEL     (java-architect)      enums, RegionWallSet + registry, slot table, RegionPaletteBuilder
+  3. LEVEL     (java-architect)      LevelFinisher, family stamping, placement rules, generators rewired,
+                                     route wallSetId, World resolution
+  4. RENDER    (libgdx-specialist)   RegionWallAtlas, WallRenderer atlas/variants/glow/animation/LOD,
+                                     doors + columns, surfaces into SurfaceMaterialRegistry
+  5. DELETE    (both)                Part 3
+  6. TESTS     None new. Existing tests updated to the new model (W10).
+  7. DOCS      the list in Part 3
+
+RISKS AND UNKNOWNS
+  - LevelGenerator / LinearCorridorGenerator / CavernGenerator are 1500-3400 lines and theme walls in
+    several passes; removing those passes without touching their RNG draws is the delicate part - keep
+    every random draw they make (R1), only stop writing the char.
+  - The equal-column merge loses some merges where variants alternate; measure (A8).
+  - The ten mood->material bindings become region-set surfaces; the mood resolution path must not change.
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  GameMath helpers + WallGroup/WallSlot/RegionWallSet/registry/bootstrap (A real, B-E alias A) +
+       slot table exist; build green
+  CP2  LevelFinisher exists and every generator builds through it with family stamping + the region
+       palette (no hall placement yet); the old wall-theming passes no longer write chars; R1 holds
+  CP3  route wallSetId + World resolution + LevelGenConfig fields; hall placement P4-P8; R1 holds
+  CP4  RegionWallAtlas loads per floor; walls, doors and columns draw from the atlas (base pass only)
+  CP5  variants + LOD + glow pass + animation; captures A4-A6
+  CP6  floor/ceiling from the set's surfaces; capture
+  CP7  Part 3 deletion done; tests updated; build green; A3, A7
+  CP8  probe + leak check (A8); docs (A9)
+
+
+ASSUMPTIONS
+-----------
+  AS1  The slot table in the master is final unless a generator's use of a symbol makes it unworkable;
+       any change is a DECISIONS note in this file.
+  AS2  floorIndexInRegion comes from RegionPlan (depth - region.firstDepth), never a modulo.
+  AS3  Hand-made levels are not room-detected (they are dev/test levels).
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt, -order-1, docs/wall-art-creation-guide.txt, symbol-sprite-reuse-system*.txt, render-performance-full-hd (R16/R18),
+  docs/environment-tileset-system.txt, docs/wall-renderer-guide.txt, docs/art-direction.txt

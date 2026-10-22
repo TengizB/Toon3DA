@@ -1,0 +1,159 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 3 - Research Wing + Reactor Depths sets
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
+and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
+design and repetition rules, materials, glow, output, verification, every lesson and every piece of owner
+feedback. Read it before any work in this order; update it in the same commit as any change to what it
+describes. The enemy-art kit's technique (docs/sprite-art-creation-guide.txt sections 1-4) is the tool.
+
+Series: generated-wall-art.txt (region-set model, symbol table, rules W1-W12). Method: order 1's rules
+R1-R12 (face/surface size, tiling, trim lines, variants, rooms read as rooms, glow, animation, mips,
+atlas, keycard doors, manifest, determinism) apply UNCHANGED. CONTENT ONLY plus one registry edit per
+region: its RegionWallSet row stops aliasing set A and loads its own manifest (order 2's mechanism).
+
+
+OVERVIEW
+--------
+The second and third region sets. B, the HARVESTING GALLERIES (route: Research Wing), is an industrial
+abattoir passed off as a lab - the first crack in the briefing lives in its tiles. C, the RELIQUARY
+(route: Reactor Depths), is the resurrection heart where the planet's soul is rendered into printer
+fuel - where the player comes from. After this order three regions look like themselves; D and E still
+borrow set A.
+
+
+SCOPE
+-----
+IN
+  - walls.py: the REGIONS rows for research_wing and reactor_depths, each a complete set: HALL (BASE x3, STRUCTURE,
+    LIGHT, SERVICE, VENT, MARKER, BREACH), the six room families (BASE x2 + ACCENT each), SIGNATURE
+    (BASE x2 + ACCENT), 4 doors, 2 columns, floor + ceiling.
+  - New materials, if any, APPENDED to kit.MATERIALS (enemies and earlier regions regenerate
+    byte-identical).
+  - Shipped per region: assets/textures/walls/generated/<region>.walls.png / .glow.png / .walls.json /
+    .floor.png / .ceiling.png.
+  - RegionWallSets: the two rows switch from the set-A alias to their own manifests.
+  - Docs: docs/wall-art-creation-guide.txt sections 5 (trim lines), 15 (lessons), 16 B and C (final designs); art-direction WALLS roster;
+    environment-tileset-system section 15 roster.
+OUT
+  - Any engine change (order 2 owns it; a bug found in it is fixed in a separate short-lane commit).
+  - Changing a region's mood numbers - if a set fights its mood, the SET changes (W6).
+
+
+VISUAL DESIGN - REGION B, THE HARVESTING GALLERIES (mood clinical_white)
+-----------------------------------------------------------------------
+Glazed greige-celadon tile to shoulder height, form-tied concrete above, a hook rail at row ~52, a steel
+drain at the floor (the approved prototype). Clean surfaces, wrong stains (flesh_dk, never red).
+  HALL      BASE x3 the prototype's tile field - chips/cracks/missing tiles and grime differ; ONLY ONE
+            variant carries a hook (a hook on every tile was the wallpaper problem). STRUCTURE a concrete
+            pier with a downpipe. LIGHT a caged bulkhead lamp (cyan-white lens). SERVICE a hose reel +
+            standpipe. VENT a floor-level extraction grille with a stained mouth. MARKER a yield board
+            (tally slots, some plugged - "quota" without words, stencil G2-xx). BREACH chitin plates
+            pushing tiles off from below, ichor in the cracks.
+  MEDICAL   a surgical bay: white tile full height, a stainless scrub trough, a floor drain.
+            ACCENT a mirror panel over the trough (capsule glass, no glow).
+  SECURITY  a sliding barred gate over tile, a guard's hatch. ACCENT a shackle rail with cuffs.
+  CONTAINMENT a specimen wall: rows of small sealed hatches. ACCENT a recessed specimen tank, cloudy,
+            drifting tissue strands, faint ichor glow (no shape, no figure - W14).
+  MACHINERY rendering press housings, heavy steel, a hopper. ACCENT a gauge cluster (cyan needles).
+  RESEARCH  dissection-lab panels with sample shelves. ACCENT a tally terminal with a paper strip.
+  STORAGE   cold-store doors with frost bands. ACCENT a meat-hook rack of empty hooks.
+  SIGNATURE THE KILLING FLOOR: a full hook bay - BASE x2 hooks on trolleys at different heights, stained
+            tile below; ACCENT an empty hook bay: chains swinging at rest, a drip channel, a hose (no
+            carcass, no shape - W14).
+  DOORS     a stainless swing-door pair with kick plates and a drain at the sill; keycard panels.
+  COLUMNS   a tiled pier (round: a tiled drum).
+  FLOOR     tile with a drain grid; CEILING hook rails and caged lamps.
+
+VISUAL DESIGN - REGION C, THE RELIQUARY (mood amber_hot)
+-------------------------------------------------------
+Heavy riveted gunmetal/darkmetal, fuel manifolds under the ceiling, the pale SOUL light as the region's
+only light. Under amber_hot the steel goes bronze and the soul light stays white.
+  HALL      BASE x3 the revised prototype reliquary_plate: riveted heavy plate in uneven widths, a fuel
+            manifold along the cornice, a thin CONTINUOUS soul trickle in the floor channel (a line, never a
+            spot - guide 8.3 R-3); variants move the plate seams and rivets only. STRUCTURE a massive rib with a hydraulic ram.
+            LIGHT a soul conduit window (capsule glass, soul flowing - 6 glow frames, animate=all).
+            SERVICE a valve-wheel cluster. VENT a coolant jacket grille with frost bands. MARKER a
+            reprint counter plate (stencil KR-xx, a column of tally marks). BREACH a soul leak: a
+            cracked fuel line, pale light pooling down the plate.
+  MEDICAL   the pattern infirmary: drawer walls of stored patterns. ACCENT one drawer open, dark.
+  SECURITY  Organization seal plates over shutters (livery, stencilled). ACCENT a sealed cradle-key
+            lock with a cyan lamp.
+  CONTAINMENT sealed fuel-holding tanks, dark. ACCENT a tank with cracked glass, the soul dregs low.
+  MACHINERY the renderer: furnace doors with a soul-white seam. ACCENT a pressure gauge bank.
+  RESEARCH  a pattern bank: a lattice of small soul-lit cells. ACCENT a pattern reader console.
+  STORAGE   fuel canister racks (capsule glass, faint soul). ACCENT an empty rack, one canister broken.
+  SIGNATURE THE SOUL REFINERY (replaces the dropped cradle bank - D13): BASE x2 refinery plating with
+            condenser feed lines and outflow pipes (no focal point - W13); ACCENT the SOUL CONDENSER (the
+            revised prototype: a glass column of rendered soul, a filtration coil, a gauge, a valve, a
+            cyan status lamp; 6-frame pulse, animate=all; fully inside its face).
+  DOORS     a riveted pressure door with a soul-lit seam; keycard panels.
+  COLUMNS   a ribbed reactor stanchion (square: a fuel riser).
+  FLOOR     grating over soul-lit channels (no emissive - texels only); CEILING fuel manifolds.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  walls.py writes both regions' files byte-identically twice; enemy atlases and set A regenerate
+      byte-identical.
+  A2  Each manifest: 9 HALL + 18 room + 3 SIGNATURE walls, 4 doors, 2 columns, 2 surfaces; C's LIGHT and SIGNATURE ACCENT with 6 glow frames.
+  A3  Hall strip, every room-family strip and the surfaces tile with no seam; trim lines meet.
+  A4  Each room family identifiable at 1x without its label, and distinct from the SAME family of every
+      earlier region (contact sheet: this region's family beside set A's).
+  A5  In-engine per region (run-game, its mood): hall variants + rhythm + lights, at least two room
+      families, the signature room or boss arena, the doors (keycard colours read at 6 tiles), the
+      floor and ceiling; on the region's LAST floor, BREACH clusters visible (P7).
+  A6  Enemies of the region read in front of its walls at 2 and 4 tiles (SHELL_BRUTE, IRON_STALKER, ACID_DRONE and the region's other spawns).
+  A7  Owner verdict per region recorded in DECISIONS (W9).
+
+
+IMPLEMENTATION PLAN
+-------------------
+  0. READ      docs/wall-art-creation-guide.txt (sections 4-8, 15, 16 B/C)
+  1. CONTENT   Region B: hall -> rooms -> signature -> doors/columns -> surfaces; GATE
+  2. DATA      (java-architect) its RegionWallSets row; captures
+  3. CONTENT   Region C: the same; GATE
+  4. DATA      its row; captures
+  5. TESTS     None. Not balance-bearing; verified by regeneration, previews and run-game captures.
+  6. DOCS      the guide roster + lessons, art-direction WALLS roster, tileset section 15
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  Region B set generated and shipped; enemy + set A atlases byte-identical
+  CP2  Region B row live; in-engine captures; owner verdict recorded (or changes done and re-shown)
+  CP3  Region C set generated and shipped
+  CP4  Region C row live; in-engine captures; owner verdict recorded
+  CP5  docs
+
+
+ASSUMPTIONS
+-----------
+  AS1  Region B stains stay desaturated flesh_dk (V5) and low-contrast on BASE walls (W13).
+  AS2  The soul condenser is the revised prototype; refinements only. No cradle with a body anywhere.
+  AS3  A soul pulse is a glow-level curve 0.75 -> 1.1 -> 0.75, never above the kit's glow ceiling.
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt, -order-1 (rules, set A), -order-2 (engine), story/05-descent-structure.md

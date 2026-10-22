@@ -684,6 +684,10 @@ ADD A CLIP
 ADD A MATERIAL
   [ ] ramp per 4.2; spec + grain; contact-sheet check beside existing ramps; both extreme moods
 
+WALLS, DOORS, COLUMNS, FLOORS, CEILINGS
+  Made with this kit, but their method lives in docs/wall-art-creation-guide.txt (tiling, trim lines,
+  region sets, placement, the no-focal-point and no-figure rules). Read that guide, not this section.
+
 OTHER CONTENT (props, pickups, effect particles, room dressing)
   The same kit and the same rules apply. A new kind of content gets its own builder file beside
   bestiary.py (e.g. props.py), its own output folder under assets/, and its own section here.

@@ -1,0 +1,218 @@
+STATUS: NOT IMPLEMENTED
+CATEGORY: Visual
+TITLE: Wall art order 1 - wall kit + Outer Facility region set
+CREATED: 2026-10-22
+IMPLEMENTED: -
+---
+
+THE WALL KNOWLEDGE DOCUMENT IS docs/wall-art-creation-guide.txt - how walls, doors, columns, floors
+and ceilings must be created: the format, tiling, trim lines, the region set, the placement rules, the
+design and repetition rules, materials, glow, output, verification, every lesson and every piece of owner
+feedback. Read it before any work in this order; update it in the same commit as any change to what it
+describes. The enemy-art kit's technique (docs/sprite-art-creation-guide.txt sections 1-4) is the tool.
+
+Series: generated-wall-art.txt (read it first: the region-set model, the symbol table, rules W1-W12,
+decisions). OFFLINE ONLY: no Java.
+
+
+OVERVIEW
+--------
+Turn the approved prototype script (.claude/skills/enemy-art/walls_prototype.py) into the real builder,
+walls.py, and make the COMPLETE REGION A SET - the Outer Facility / Habitation Rings: hall base +
+variety, the six room-family sets, the signature set, doors, columns, floor and ceiling. The output is
+exactly what order 2's runtime loads: one atlas + one glow atlas + a manifest per region, plus the
+region's two surface PNGs. Nothing is wired here; the gate is the owner's approval of set A.
+
+
+SCOPE
+-----
+IN
+  - kit.py, APPENDED only (enemy sprites regenerate byte-identical): environment materials (concrete,
+    concrete_dk, ceramic, rubber, rust, soul, nacre, capsule - the prototype's, tuned), the missing
+    stencil capitals (at least C, H, I, L, N, O, U, V, Y), helpers chamfer_rect / tiled bake.
+  - walls.py: the tiling bake (3-tile canvas for walls; 3x3 for surfaces), wall primitives (panel,
+    tile_field, pipe_run, grille, tear_edge, vein, lock_panel), the REGIONS table (one row per region:
+    trim lines, breachBase/breachStep, and its walls by group/slot/variant), the atlas + glow + mips +
+    manifest writer, surface writer, previews, CLI mirroring bestiary.py.
+  - The region A set: 36 wall faces + floor + ceiling (VISUAL DESIGN below).
+  - Shipped: assets/textures/walls/generated/outer_facility.walls.png, .glow.png, .walls.json,
+    outer_facility.floor.png, outer_facility.ceiling.png.
+  - docs/wall-art-creation-guide.txt: sections 2 and 12 lose their [PLANNED: order 1] markers and
+    describe the shipped walls.py and output; section 16 A records the final region A design; new
+    lessons go into section 15. docs/sprite-art-creation-guide.txt section 13 "OTHER CONTENT" gains a
+    one-line pointer to the wall guide; SKILL.md gains walls.py commands and the same pointer.
+OUT
+  - Any Java (order 2). Regions B-E (orders 3-4). Committing previews (never - guide 11).
+
+
+RULES
+-----
+  R1  WALL FACE 256x256 RGB, opaque, row 0 = ceiling line, row 255 = floor line. Surface 64x64, opaque.
+  R2  TILING: walls stamped at x-256, x, x+256 and cropped; surfaces on a 3x3 canvas. A strip of every
+      hall wall beside every other shows no seam; each room set's strip likewise; trim lines meet.
+  R3  TRIM LINES (region A): cornice 0-30, cable tray 24-33, panel field 40-196, bump rail 205, kick
+      plate 214-255. Every A wall honours them (a room wall may change what is BETWEEN the lines).
+  R4  VARIANTS: hall BASE x3 and each room BASE x2 are one design with seeded differences (a dent, a
+      different vent, a scuff, a stencil number) - unnoticeable at 4 tiles, noticed up close.
+  R5  ROOM SETS READ AS ROOMS (W6): at 4 tiles a player can tell hall from medical from security etc. by
+      shape and material (silhouette of fixtures, panel division, surface), checked on the contact sheet
+      at 1x and in-engine.
+  R6  GLOW: emissive pixels to the glow atlas at the same rect; <= ~6% of a wall's pixels; a wall without
+      emissives has glowRect null.
+  R7  ANIMATION: the LIGHT face carries 4 FLICKER glow frames (1.0, 0.25, 1.0, 0.0), 0.08-0.4 s, flagged
+      "animate": "some" in the manifest - the runtime (order 2) plays them on a seeded ~1 in 6 LIGHT faces
+      (a failing tube) and shows frame 0 everywhere else.
+  R8  MIPS: 256 / 128 / 64, 2x2 box filter, packed in the same atlas; surfaces get no mips (the floor
+      pipeline builds its own from the 64x64).
+  R9  ATLAS <= 2048x2048, 2 px padding filled with duplicated edge texels; packing order = manifest order.
+  R10 KEYCARD DOORS: the door body is region A's; the lock panel and a frame stripe carry the keycard
+      colour (exact ItemConstants / CombatPalette keycard values), emissive, so no mood shifts them.
+  R11 MANIFEST <region>.walls.json, version 1:
+        { "version": 1, "region": "outer_facility", "size": 256, "mips": 3,
+          "trim": {...}, "breach": {"base": 0.0, "step": 0.03},
+          "walls":   [ {"id": "wall_a_hall_base_0", "group": "HALL", "slot": "BASE", "variant": 0,
+                        "rect": [x,y], "mipRects": [[x,y],[x,y]], "glowRect": [x,y] | null,
+                        "glowFrames": [{"rect": [x,y], "duration": 0.08}, ...] | null,
+                        "animate": "all" | "some" | null }, ... ],
+          "doors":   [ {"id": "door_a_plain" | "door_a_red" | "door_a_yellow" | "door_a_blue", ...same fields} ],
+          "columns": [ {"id": "column_a_round" | "column_a_square", ...same fields} ],
+          "surfaces": {"floor": "outer_facility.floor.png", "ceiling": "outer_facility.ceiling.png"} }
+      group in HALL / MEDICAL / SECURITY / CONTAINMENT / MACHINERY / RESEARCH / STORAGE / SIGNATURE;
+      slot in BASE / ACCENT for room groups, BASE / STRUCTURE / LIGHT / SERVICE / VENT / MARKER / BREACH
+      for HALL. Ids are STABLE: wall_<region letter>_<group>_<slot>[_<variant>], never renamed.
+  R12 Determinism: walls.py twice -> byte-identical files; bestiary.py output unchanged.
+
+
+VISUAL DESIGN - REGION A, THE OUTER FACILITY / HABITATION RINGS (mood cool_steel)
+---------------------------------------------------------------------------------
+An evacuated company town. Everything is Organization issue and recently lived in. The wrongness is
+small: notices torn off, name plates scratched out, a hairline seep at a seam on the deep floors.
+Value note from the captures: the livery panels read slightly too bright and flat at range - drop them
+one ramp step and add grime at the panel foot.
+
+HALL
+  BASE x3       the approved prototype: two chamfered livery panels, vent inset, bump rail, kick plate.
+  STRUCTURE     a gunmetal pilaster with a ring serial stencil, the rail running behind it.
+  LIGHT         a recessed cyan strip lamp in the panel field (some flicker at runtime - R7).
+  SERVICE       an exposed riser pipe pair through a panel cut-out.
+  VENT          a full-height access hatch with a grille and a pull handle.
+  MARKER        an evacuation board: empty frames, torn notices, an arrow stencil, "R1".
+  BREACH        the base panel with a cracked seam weeping a thin ichor line (emissive, 1-2 px).
+MEDICAL         clean white livery, rounded corners, a cyan "care" band at rail height (NO cross),
+                BASE x2 + ACCENT = a wall dispenser unit with a sealed scrub hatch.
+SECURITY        dark gunmetal plating, a chevron-grooved lower half (carved, not painted yellow),
+                BASE x2 + ACCENT = a weapons locker / gun rack niche behind a mesh.
+CONTAINMENT     heavy insulated panels with frost-pale seams (capsule material),
+                BASE x2 + ACCENT = a sealed porthole hatch with frosted glass.
+MACHINERY       breaker cabinets and conduit bundles, darkmetal,
+                BASE x2 + ACCENT = a big breaker panel with a cyan status lamp and a lever.
+RESEARCH        dark panels with thin cyan data seams,
+                BASE x2 + ACCENT = a wall terminal (dark bezel, a few cyan text lines, keys).
+STORAGE         corrugated steel shutters and stacked crate slots,
+                BASE x2 + ACCENT = a roll-up shutter half open (dark gap, a crate edge).
+SIGNATURE       CREW QUARTERS of the company town - the region's special-room look:
+                BASE x2 = rows of crew lockers, name plates scratched off;
+                ACCENT = one locker door ajar, dark inside, a scarf left on its hook (no figure - W14).
+DOORS           a painted livery sliding door with a porthole and rubber seal; keycard doors add the
+                coloured lock panel + frame stripe (R10).
+COLUMNS         round: a painted steel pillar with the bump rail ring; square: a boxed cable riser.
+FLOOR           deck plates with a worn rubber runner; CEILING: cable trays and strip-lamp housings
+                (no glow - the pipeline has no surface emissives). Value bands: floor 0.10-0.24,
+                ceiling 0.06-0.18 average luminance (art-direction section 6).
+Story details (W8): ring serials, the evacuation board, the scratched name plates, the left scarf.
+
+
+TECHNICAL NOTES
+---------------
+  - walls.py: `tiled()`, `bake_face(layers, seed, stencils, glow_level)`, builders as functions of
+    (variant, seed, glow_level), REGIONS = {"outer_facility": dict(trim=..., breach=..., walls=[(id,
+    group, slot, variant, builder, frames?)], doors=[...], columns=[...], surfaces=(floor_fn,
+    ceiling_fn))}, `write_region(name, out_dir, preview_dir)`.
+  - Glow frames: bake the builder at each frame's glow level, keep only the glow image per frame.
+  - Columns are drawn by the column path as a wall stripe: author them as a 256x256 face like walls.
+  - Previews (never committed): contact sheet per group at 2x, the HALL strip in a plausible sequence
+    (BASE BASE STRUCTURE BASE LIGHT BASE SERVICE BASE BASE ...), one strip per room family (BASE BASE
+    ACCENT BASE), doors at 1x, surfaces 3x3 tiled, the flicker GIF.
+  - In-engine preview before order 2 exists: the throwaway trick used for the prototypes (TEMP edit of
+    TextureGeneratorRegistry.generate() reading a PNG from an env var for wall_* ids), working tree
+    only, reverted, never committed. Show at least: the hall, a medical room, a door.
+
+
+BALANCE NOTES / BALANCE ADMISSION
+---------------------------------
+None - adds no balance-bearing content.
+
+
+INTERACTIONS
+------------
+  - Enemy art shares kit.py: regenerate with bestiary.py and cmp against the committed atlases.
+  - Order 2 consumes R11 exactly - change it only together with order 2.
+
+
+EDGE CASES
+----------
+  - A stencil glyph missing: add it to STENCIL_FONT (appended), never drop the stencil.
+  - A shape beyond one tile of the face on the 3-tile canvas: the bake warns; keep shapes within it.
+
+
+ACCEPTANCE CRITERIA
+-------------------
+  A1  `python3 walls.py <dir> outer_facility` writes the five shipped files; twice -> byte-identical.
+  A2  bestiary.py regenerates every committed enemy atlas byte-identical.
+  A3  The manifest lists 9 HALL + 18 room + 3 SIGNATURE faces (= 30 walls), 4 doors, 2 columns, the 2
+      surfaces; ids per R11; the LIGHT face has 4 glow frames flagged animate=some; atlas <= 2048x2048 and fully opaque.
+  A4  The hall strip and every room-family strip tile with no seam; the surfaces tile 3x3 with no seam.
+  A5  On the contact sheet at 1x, each room family is identifiable without its label (R5).
+  A6  docs/wall-art-creation-guide.txt updated (sections 2, 12, 15, 16 A); SKILL.md + sprite guide pointer.
+  A6b Every BASE (hall + six room bases + signature base) passes the 6-copy strip test (guide 8.3 R-1)
+      and no focal shape crosses a tile edge (guide section 4 EDGE RULE).
+  A7  The owner has seen the sheets, strips, flicker GIF and in-engine captures (hall, a room, a door)
+      under cool_steel; the verdict is recorded in DECISIONS.
+
+
+IMPLEMENTATION PLAN
+-------------------
+  1. KIT       materials + glyphs + helpers appended to kit.py
+  2. BUILDER   walls.py: bake, REGIONS table, writers, previews
+  3. CONTENT   hall -> rooms -> signature -> doors/columns -> surfaces
+  4. TESTS     None. Not balance-bearing; verified by regeneration, previews and in-engine captures.
+  5. DOCS      docs/wall-art-creation-guide.txt, SKILL.md, the sprite guide pointer
+  6. GATE      send everything; STOP; record the verdict.
+
+RISKS AND UNKNOWNS
+  - 38 textures at ~4 s each: ~3 min per region bake - fine.
+  - Room sets that differ only in colour fail R5: design fixtures (silhouettes) first.
+
+
+CHECKPOINTS
+-----------
+  CP0  the checkpoint file exists on the branch, committed and pushed
+  CP1  kit.py additions in; bestiary.py regenerates enemy atlases byte-identical
+  CP2  walls.py writes a valid manifest + atlas + glow + mips for the HALL group alone
+  CP3  all six room families + SIGNATURE generated and in the manifest
+  CP4  doors, columns, floor, ceiling generated; shipped files committed
+  CP5  docs/wall-art-creation-guide.txt + SKILL.md + sprite guide pointer updated
+  CP6  owner verdict recorded in DECISIONS (approval, or the requested changes done and re-shown)
+
+
+ASSUMPTIONS
+-----------
+  AS1  Output folder assets/textures/walls/generated/ (parallel to enemies/generated/).
+  AS2  Three mips suffice for walls: past ~8 tiles the fog covers the rest.
+  AS3  Doors are 256x256 faces (the old 512 procedural door was over-resolved for its stripe).
+
+
+DECISIONS
+---------
+  (none yet)
+
+
+OPEN QUESTIONS
+--------------
+None.
+
+
+RELATED
+-------
+  generated-wall-art.txt, docs/wall-art-creation-guide.txt, docs/sprite-art-creation-guide.txt,
+  .claude/skills/enemy-art/
