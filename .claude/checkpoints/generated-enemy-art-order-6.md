@@ -171,3 +171,8 @@ WOUNDED + leak, BURNING, DEATH -> remains; the Revenant's real WIND_UP (braced s
 (DEBUFF_PLAYER) and bolts, the Corruptor's real SUMMON (its summons ALERTED). A4 - the five apart at 3 tiles in default /
 corrupted_violet / core_white_violet (lineup_three_tiles.png). A5 - soul cold white under both violet moods.
 Next: CP6 - docs, reviewer, STATUS.
+
+**CP6a (docs):** sprite-art-creation-guide (2 tools, 4.3 materials, 4.4 soul shipped, 7.3 SUMMON + DEBUFF_PLAYER, 7.6 Humanoid
+/ hand / fold_lines / lag / Figure.transformed, 7.7 names + anchors, 7.9 budget, 8.2 SUMMON row, 9.1 undead set, 10 rows,
+lessons 12.21-12.24), art-direction 16 (rows + roster), enemy-system (order 6), enemy-art SKILL.md, CLAUDE.md enemyvisual
+rows; idea IMPLEMENTATION NOTE. Next: reviewer, then STATUS IMPLEMENTED.

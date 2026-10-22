@@ -21,10 +21,10 @@ container), outside the Gradle build, never shipped. The game ships only the PNG
 | File | What it is |
 |---|---|
 | `kit.py` | The renderer (shapes → per-layer height fields → normals → shading → palette → outline → cleanup) plus the animation layer: `Xf` transforms, `Rig`/`Pose`/`Figure`, `Clip`, and the bake (`write_creature`: atlas, glow atlas, manifest, previews). |
-| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`, `iron_stalker_rig.py`; order 5: `plague_hulk_rig.py`, `eye_tyrant_rig.py`, `gore_biter_rig.py`, `mire_wraith_rig.py`, and `sump_wretch_rig.py` - the first Mire Wraith, kept for its own enemy). |
+| `<name>_rig.py` | One per creature: its rig function, its pose defaults and its clips (`warden_rig.py`, `harvest_tick_rig.py`, `iron_stalker_rig.py`; order 5: `plague_hulk_rig.py`, `eye_tyrant_rig.py`, `gore_biter_rig.py`, `mire_wraith_rig.py`, and `sump_wretch_rig.py` - the first Mire Wraith, kept for its own enemy; order 6, the undead on `kit.Humanoid`: `ghoul_rig.py`, `crawler_rig.py`, `revenant_rig.py`, `vortex_eye_rig.py`, `blight_corruptor_rig.py`). |
 | `bestiary.py` | The `CREATURES` table of (rig, clips) + the command line. A new creature = one `_rig.py` + one row. |
 | `sheet.py` | Contact sheet of a folder of sprites, nearest-neighbour upscaled, on the game's near-black. |
-| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`, `aberration` - order 5) + the shared `status` set; a creatures row may override a family burst for one creature (`bursts={"RESIST": "RESIST_PLATE"}`, order 4) — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
+| `effects.py` | The EFFECT sets (generated-enemy-art order 3): per family (`machine`, `insect`, `aberration` - order 5, `undead` - order 6) + the shared `status` set; a creatures row may override a family burst for one creature (`bursts={"RESIST": "RESIST_PLATE"}`, order 4) — particle sprites sculpted by the kit + the burst recipes and per-creature emit points → `<set>.fx.png` + `<set>.fx.json`. Guide section 9. |
 
 Shipped per creature, in `assets/textures/enemies/generated/`: `<name>.atlas.png` (every frame of every
 clip, trimmed and packed, binary alpha, <= 2048x2048), `<name>.glow.png` (emissive pixels only, same
@@ -78,7 +78,8 @@ prototypes (`python3 walls_prototype.py /tmp/w [A_ C_ ...]`), deleted by series 
    material rather than tinting a sprite by hand. Semantic colours stay sacred (art-direction V5):
    no pure red / green / blue / purple / yellow as decoration. Flesh (order 5: `flesh`, `flesh_dk`, `sclera`,
    `membrane`, `pupil`) is rose-grey / violet-grey with a `wet` sheen - never red; cap glow near 1.1 (it tops out in white). Family glow inks: MACHINE = `cyan`
-   (the Organization's), INSECT + ABERRATION = `ichor` (harvested planet tissue), GOLEM = `magma` (and
+   (the Organization's), INSECT + ABERRATION = `ichor` (harvested planet tissue), UNDEAD = `soul` (order 6; the Ghoul's
+   `redeye` is the owner's one red exception), GOLEM = `magma` (and
    elemental variants), others decided by their order.
 5. **Silhouette first.** Readable as a black shape at two tiles; distinct from every other enemy of its
    family; the size reads the role (chaff small, soldier medium, bruiser heavy, mini-elite spiked, boss
@@ -108,6 +109,8 @@ it must read as IN FRONT.
 | `mirror(shapes, axis)` | bilateral symmetry — design one half |
 | `eyeball(cx, cy, r, look=, iris=, pupil=, slit=, lid_top=, lid_bottom=, lids=)` | wet sclera, emissive iris, pupil, glint, flesh-cap lids (order 5) |
 | `teeth_row(x1, y1, x2, y2, count, length, r, side=, sag=, rake=, seed=)` | seeded teeth along a jaw line; `op="add"` on a face (order 5) |
+| `fold_lines(x1, y1, x2, y2, count, length, mat=, angle=, seed=)` | seeded carved cloth creases along a line (order 6) |
+| `hand(wrist, angle, side, length, mat, fingers=, finger_length=, curl=)` | palm + chained fingers on a Humanoid wrist - OPEN hands only, never one gripping a prop (order 6, guide 12.21) |
 | `stencil(img, "W-07", x, y, colour)` | 3x5 pixel serial stencil, painted after render |
 
 Shape options: `glow=` (emissive/translucent light: 0 dead, 1 rest, > 1 flare); `op="union"` (default) / `"add"` (raised detail painted in its own material: veins,
@@ -127,6 +130,9 @@ shapes overlap; `k` the blend radius (0 = hard union).
 | `Clip(name, keys, duration, fps=12, mode=, events=)` | keys `[(t, {param: v}, easing)]`, one track per parameter; easing `linear/in/out/inout/hold`; mode `loop/once/hold`; `events={t: "emit"\|"impact"}` marks the strike frame in the manifest |
 | `clip.variant(name, speed, keys, fps, **pinned)` | DORMANT / WOUNDED style variants of a clip |
 | `jiggle(clip, param, duration, out_param=, freq=, damping=, gain=)` | keys for a damped spring LAGGING `param` (secondary motion: flesh, shrouds, tendrils; order 5) |
+| `lag(clip, param, delay, duration, out_param=)` | keys for the param's own track, `delay` s late (a hem, a badge, a hose following its limb; order 6) |
+| `Humanoid(...)`, `Humanoid.params(**d)`, `joints(p)` | THE HUMANOID RIG (order 6): named joints from mirrored joint angles (+ = outward), `<limb>_fore` / `<side>_upper_fore` foreshortening, `squat`; a negative spine hangs it on all fours. Guide 7.6 |
+| `Figure.transformed(xf)` | carry a posed figure (layers, anchors, stencils) through one more transform: a DEATH collapse, a NARROW (order 6) |
 | `write_creature(rig, clips, out_dir, preview_dir)` | the bake: atlas + glow atlas + `clips.json` (+ GIFs, strip) |
 
 Grain is sampled in each shape's OWN coordinates (its `frame`), so texture rides a moving part. The
@@ -150,6 +156,9 @@ plus muzzle / mouth. Fix every canvas-edge warning by clamping the pose, never b
   swing long parts across the body, not out past the edge.
 - **Mock-ups lie.** Pasting sprites onto a screenshot ignores the mood grade, fog, contact shadow and
   name tags. Judge in the engine (below).
+- **No hand grips a prop** (order 6): the Revenant's baton hand was rejected twice as "cursed". A humanoid's weapon is
+  one rigid plate moved with the body (the riot shield and its bash) or nothing; fists stay closed. Guide 12.21-12.22.
+- **No human face** on an undead (owner rule): hood / respirator / helmet, glowing eyes behind glass at most.
 
 ## Seeing a sprite in the real game
 

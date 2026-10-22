@@ -5,6 +5,28 @@ CREATED: 2026-10-21
 IMPLEMENTED: -
 ---
 
+IMPLEMENTATION NOTE (2026-10-22)
+--------------------------------
+Built as planned with the owner's overrides (DECISIONS D1-D7), which supersede VISUAL DESIGN where they clash:
+  - NO HUMAN FACE on any undead (D1): every one is sealed in a hood / respirator / helmet; at most glowing eyes behind
+    glass. The GHOUL is the owner's tall gas-masked figure (slate hazard suit, a long ribbed gas mask with ONE panoramic
+    visor, RED eyes - kit material `redeye`, an owner exception to G5), later made heavier with a longer body and arms
+    (D6; a reference-matched version was rejected as "fat" and reverted).
+  - The REVENANT carries a RIOT SHIELD, not a baton (D5): its attack is a shield bash, its WIND_UP a crouch behind the
+    raised shield. Two baton attempts were rejected ("the right hand is cursed") - guide lesson 12.21.
+  - A1: the owner asked to see every enemy's concept before any animation (D2), so all five concepts were shown at once
+    instead of the Ghoul alone; the early read happened before any clip was built.
+Kit growth (kit.py, every earlier creature and fx set byte-identical): materials APPENDED - overalls, hazmat, labcoat,
+visor, deadskin, spore (translucent, soul glow), redeye; `soul` (wall-art order 1) is the UNDEAD ink. Helpers: Humanoid
+(the humanoid rig; incl. <side>_upper_fore), hand, fold_lines, lag, Figure.transformed.
+Rig-level adjustments vs the approved stills: the Crawler is narrowed to 0.90 of its width and lifted 2 px (its rest pose
+spanned the canvas, so every clip clipped - lesson 12.20); the Ghoul's shins are 2 px shorter and its feet slimmer than the
+approved still (the heavier soles touched the canvas bottom in three clips) - invisible at game scale.
+RUNTIME CHANGE (the only one, data-driven): EnemyClipId.SUMMON + abilityClip(SpecialAbility.SUMMON, EnemyClipId.SUMMON) in
+EnemyAnimationRules. The `undead` effect set loads by family name with no code change; the Vortex Eye's bolt, the
+Ghoul's ember, the Revenant's armour spark and the Corruptor's spores are per-creature overrides. Wiring: five
+EnemyVisualRegistry rows. No sim change, no test (series G12).
+
 Part of the generated-enemy-art series. Requires orders 1-5. Read generated-enemy-art.txt and
 docs/sprite-art-creation-guide.txt before starting.
 
