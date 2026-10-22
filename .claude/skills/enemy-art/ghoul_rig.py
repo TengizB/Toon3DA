@@ -15,8 +15,9 @@ SNOUT_END = 30.0                  # the canister's centre below the head centre 
 # BULK (owner, 2026-10-22: "too thin, looks weak"): limb, torso and joint radii x BULK, shoulders and hips set wider
 # so the thicker limbs keep their gaps. No muscle detail - the suit is just fuller over a heavier frame.
 BULK = 1.35
+LEG_BULK = 1.55                   # the legs a touch heavier again (owner, 2026-10-22: "a little more thicker legs")
 
-SKELETON = Humanoid(pelvis=(80.0, 112.0), spine=58.0, neck=9.0, head=11.0, shoulder_half=17.5, hip_half=9.5,
+SKELETON = Humanoid(pelvis=(80.0, 112.0), spine=58.0, neck=9.0, head=11.0, shoulder_half=17.5, hip_half=10.5,
                     upper_arm=44.0, fore_arm=42.0, hand=12.0, thigh=58.0, shin=60.0, foot=9.0,
                     arm_rest=0.11, leg_rest=0.035)
 
@@ -106,15 +107,15 @@ def _arm(j, p, side, s):
 def _leg(j, side, s):
     hp, kn, an, to = j[f"{side}_hip"], j[f"{side}_knee"], j[f"{side}_ankle"], j[f"{side}_toe"]
     return [
-        limb(*hp, *kn, 7.0 * BULK, 5.0 * BULK, "overalls", k=4),
-        limb(*kn, *an, 5.0 * BULK, 3.8 * BULK, "overalls", k=4),
-        blob(*kn, 5.2 * BULK, 5.6 * BULK, "overalls", depth=5 * BULK, k=3),
+        limb(*hp, *kn, 7.0 * LEG_BULK, 5.0 * LEG_BULK, "overalls", k=4),
+        limb(*kn, *an, 5.0 * LEG_BULK, 3.8 * LEG_BULK, "overalls", k=4),
+        blob(*kn, 5.2 * LEG_BULK, 5.6 * LEG_BULK, "overalls", depth=5 * LEG_BULK, k=3),
         *fold_lines(kn[0] - 3.5, kn[1] - 5, kn[0] + 3.5, kn[1] + 5, 3, 6, mat="overalls", seed=21 + s, angle=-0.25),
         # the boot: rubber to mid-shin, the toe turned out
-        limb(an[0] + (kn[0] - an[0]) * 0.38, an[1] + (kn[1] - an[1]) * 0.38, *an, 4.6 * BULK, 4.4 * BULK, "rubber", op="add", depth=1.4),
-        limb(*lerp_pt(an, kn, 0.40), *lerp_pt(an, kn, 0.34), 5.1 * BULK, 5.1 * BULK, "darkmetal", op="add", depth=1.6),
-        limb(*an, *to, 4.6 * BULK, 3.6 * BULK, "rubber", k=3),
-        blob(an[0] + s * 1.5, an[1] + 1.8, 5.0 * BULK, 3.0 * BULK, "rubber", depth=3, k=3),
+        limb(an[0] + (kn[0] - an[0]) * 0.38, an[1] + (kn[1] - an[1]) * 0.38, *an, 4.6 * LEG_BULK, 4.4 * LEG_BULK, "rubber", op="add", depth=1.4),
+        limb(*lerp_pt(an, kn, 0.40), *lerp_pt(an, kn, 0.34), 5.1 * LEG_BULK, 5.1 * LEG_BULK, "darkmetal", op="add", depth=1.6),
+        limb(*an, *to, 4.6 * LEG_BULK, 3.6 * LEG_BULK, "rubber", k=3),
+        blob(an[0] + s * 1.5, an[1] + 1.8, 5.0 * LEG_BULK, 3.0 * LEG_BULK, "rubber", depth=3, k=3),
     ]
 
 

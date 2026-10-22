@@ -142,3 +142,5 @@ burning, death - default + corrupted_violet. WAITING for owner approval (CP4).
 first. `ghoul_rig.py`: BULK = 1.35 on limb / torso / joint / boot / cuff radii, fingers 1.45 + palm 4.0, shoulder_half 17.5,
 hip_half 9.5, belt and hip band widened. Rest still sent (before/after). COMMITTED UNBAKED: the shipped ghoul.* atlas is
 still the thin one. On approval: rebake ghoul, re-check in-engine, send GIFs; on rejection: adjust BULK.
+Owner: "better, but a little more thicker legs, just a bit" -> LEG_BULK = 1.55 on the legs only (hips, knees, shins,
+boots), hip_half 10.5. Still re-sent; still awaiting approval, still UNBAKED.
