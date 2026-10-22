@@ -2718,6 +2718,8 @@ public final class EnemyRenderer implements Renderable, Disposable {
         map.put(EnemyType.EYE_TYRANT,   new TextureRegion(blightSheet, blightHalfW, 0,          blightHalfW, blightHalfH));
         map.put(EnemyType.IRON_STALKER, new TextureRegion(blightSheet, 0,          blightHalfH, blightHalfW, blightHalfH));
         map.put(EnemyType.MIRE_WRAITH,  new TextureRegion(blightSheet, blightHalfW, blightHalfH, blightHalfW, blightHalfH));
+        // SUMP_WRETCH has no legacy art: the Mire Wraith's region is its fallback if the generated atlas fails to load.
+        map.put(EnemyType.SUMP_WRETCH,  new TextureRegion(blightSheet, blightHalfW, blightHalfH, blightHalfW, blightHalfH));
 
         // Infernal sheet
         int infernalHalfW = infernalSheet.getWidth()  / 2;

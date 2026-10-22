@@ -43,7 +43,7 @@ One commit per checkpoint, pushed immediately, prefixed `sump-wretch-acid-death/
 - [x] **CP0** — this file, committed and pushed.
 - [x] **CP1** — shared `HazardManager.applyEnemyDeathHazard` + `igniteToxic(c, r, lifetime)` + EnemyType death-splash data
       (all 0); World + SimWorld call it. DONE WHEN: build + test green, behaviour unchanged (A9).
-- [ ] **CP2** — SUMP_WRETCH + constants + schema rows + 'o' (STRICT RULE) + ORA line + legacy fallback + SPAWN_POOL; splash
+- [x] **CP2** — SUMP_WRETCH + constants + schema rows + 'o' (STRICT RULE) + ORA line + legacy fallback + SPAWN_POOL; splash
       live. DONE WHEN: build + test green.
 - [ ] **CP3** — GameMath.deathSplashThreatPoints + baseThreatPoints term + DEATH_SPLASH_ADJACENT_SHARE + the one
       BalanceAuditTest method. DONE WHEN: test green, A12 + A13.
@@ -63,3 +63,15 @@ death tile + each non-wall neighbour; `setAcidSplashListener` — CP4 wires it f
 null). `igniteToxic(c, r, lifetime)` overload; the 2-arg one delegates. EnemyType `deathSplashPlayerStacks()` /
 `deathSplashEnemyStacks()` / `deathPuddleTurns()` default 0. Gates: build red only on the known StoryBarkTest;
 balanceSim summary byte-identical to the pre-change baseline (scratchpad sim_baseline_summary.txt) → A9 holds.
+
+**CP2:** SUMP_WRETCH sits after VERDANT_SPIRESOWER, before the bosses (ordinals of the bosses shifted by one — nothing
+persists ordinals). Numbers: BalanceConfig stats block after MIRE_WRAITH, credits after VORTEX_EYE, splash/puddle after
+HAZARD_TOXIC_LIFETIME_TURNS; CONSTANT_SUBJECTS rows after RELIC_SALVAGE_HOOK (stats -> ENEMY_HITS, move -> ENEMY_THREAT_POINTS,
+credits -> CREDITS, splash/puddle -> HAZARD). TELEGRAPH "Sump Wretch spit"; HAZARD_DECLARATIONS "sump_wretch_acid_splash".
+'o' wired in LevelLoader + EnemyManager + tile-symbols.txt (91/4) + CLAUDE.md (16) in this commit; Level.java / renderers
+need NO change (a spawn marker is replaced with floor at load). SPAWN_POOL: after VORTEX_EYE. Legacy fallback = Mire Wraith
+blight region. ORA line in properties + BarkStrings. LevelGeneratorSnapshotTest RE-BASELINED (existing test, legitimate
+behaviour change: the new pool member reshuffles every generated roster from floor 1) — new digest stable across 2 JVMs.
+DEVIATION: the in-engine scratch-level check of A2-A6/A8 is folded into CP4's run-game session (one session, with the
+animated sprite + bursts live) rather than run twice. Splash TP not yet priced (CP3).
+LevelLoader '}' gap: EncounterBudgetPlanner's comment says the Spiresower is "placed by its own systems" — still report it.

@@ -50,6 +50,7 @@ public final class EncounterBudgetPlanner {
      */
     private static final EnemyType[] SPAWN_POOL = {
             EnemyType.GORE_BITER, EnemyType.EYE_TYRANT, EnemyType.GHOUL, EnemyType.CRAWLER, EnemyType.VORTEX_EYE,
+            EnemyType.SUMP_WRETCH,
             EnemyType.ACID_DRONE, EnemyType.VOID_SHROUD, EnemyType.MIRE_WRAITH, EnemyType.PLAGUE_HULK,
             EnemyType.BLIGHT_CORRUPTOR, EnemyType.AURIC_SENTINEL, EnemyType.RIMESHELL_LANCER,
             EnemyType.SHELL_BRUTE, EnemyType.CINDERFORGE_COLOSSUS, EnemyType.REVENANT,
