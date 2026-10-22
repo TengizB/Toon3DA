@@ -538,14 +538,26 @@ def door(ink=None):
 # COLUMNS - drawn by the column path as a wall stripe, so authored as a 256x256 face
 def column_round(glow):
     """A painted steel pillar with the bump rail ring: a cylinder (a vertical capsule as wide as the face)."""
-    # a FACETED cylinder: eight painted staves, each a slab tilted to the cylinder's slope at its centre, so the
-    # shading falls in clean bands (a smooth dome dithers into blotches across its slow gradient)
-    body = []
+    # a FACETED cylinder: eight planes tangent to a circular profile, each a slab tilted to the circle's slope at
+    # its stave centre and spanning exactly to where it meets its neighbours (+3 px of overlap, so no groove), so
+    # the facets shade in clean bands. A smooth dome dithers into blotches across its slow gradient; staves with
+    # grooves between them catch the cyan rim as bars (lesson 15.17).
+    radius, depth = 140.0, 110.0
+    planes = []
     for n in range(8):
-        x0, x1 = n * 32, n * 32 + 32
-        u = ((x0 + x1) / 2 - 128) / 128
-        body.append(slab([(x0, -4), (x1, -4), (x1, 260), (x0, 260)], "livery_dk", bevel=2.5, slope=16,
-                         tilt=(-1.1 * u / math.sqrt(1 - u * u * 0.98), 0.0), k=0))
+        xn = n * 32 + 16
+        u = (xn - 128) / radius
+        planes.append((xn, depth * math.sqrt(1 - u * u), -depth * u / (radius * math.sqrt(1 - u * u))))
+    def meet(p, q):
+        (xa, ha, da), (xb, hb, db) = p, q
+        return (hb - ha + da * xa - db * xb) / (da - db)
+    body = []
+    for n, (xn, h, dh) in enumerate(planes):
+        x0 = -4 if n == 0 else meet(planes[n - 1], planes[n]) - 3
+        x1 = 260 if n == 7 else meet(planes[n], planes[n + 1]) + 3
+        centre = (x0 + x1) / 2
+        body.append(slab([(x0, -4), (x1, -4), (x1, 260), (x0, 260)], "livery_dk", bevel=(h + dh * (centre - xn)) / 200,
+                         slope=200, tilt=(dh, 0.0), k=0))
     body += [slab([(-4, -4), (260, -4), (260, 24), (-4, 24)], "gunmetal", bevel=2, slope=0.9, op="add", depth=3),
              slab([(-4, 199), (260, 199), (260, 211), (-4, 211)], "rubber", bevel=2, slope=0.9, op="add", depth=4),
              slab([(-4, 222), (260, 222), (260, 260), (-4, 260)], "gunmetal", bevel=2, slope=0.9, op="add", depth=3)]

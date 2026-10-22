@@ -120,3 +120,11 @@ THE EDGE SAFELY + the bake's focal warning), 5 (region A trim shipped), 9 (regio
 floor 0.06), 11.1 (exact keycard values from RenderConstants), 11.2 (staves), 12 rewritten as SHIPPED (no [PLANNED:
 order 1] marker left), 15.14-15.19 new lessons, 16 A = the shipped design. SKILL.md walls section; sprite guide 13
 pointer; CLAUDE.md docs-table line count 456 -> 550. Remaining: CP6 = owner gate (HARD STOP).
+
+**CP4b (after CP5, before the gate):** column_a_round rebuilt: eight planes TANGENT to a circular profile (radius 140,
+depth 110), each a slab spanning exactly to its neighbours' intersection lines (+3 px overlap) with slope 200 (a 1 px
+edge) - the CP4 staves had grooves that caught the cyan rim as bars, and a max over full-width tangent planes picks
+the OUTER planes (the profile is concave). Guide 11.2 / 15.17 still describe it correctly. Ship files re-baked,
+byte-identical on a second bake. The in-engine preview hack (TextureGeneratorRegistry.previewFace + WallRenderer door
+lines, env TOON3D_WALL_PREVIEW=<faces dir> TOON3D_WALL_PREVIEW_MODE=hall|medical|security) is in the WORKING TREE
+ONLY - `git restore` both Java files before any commit.
