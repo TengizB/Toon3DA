@@ -58,6 +58,12 @@ class Face:
         self.layers, self.stencils, self.focal = layers, list(stencils), list(focal)
 
 
+def surface_backing(mat, bevel=1.0, overlap=6):
+    """The backing slab of one SURFACE tile, overlapping its 8 neighbours (see grammar2d)."""
+    return grammar2d([slab([(-overlap, -overlap), (SURFACE + overlap, -overlap), (SURFACE + overlap, SURFACE + overlap),
+                            (-overlap, SURFACE + overlap)], mat, bevel=bevel, slope=0.5)])[0]
+
+
 class Entry:
     """One face of a region set: a wall (group/slot/variant), a door or a column. `frames` animates its
     GLOW layer: [(glow level, seconds), ...]; `animate` is "all" / "some" / None (guide section 10)."""
@@ -89,6 +95,19 @@ def grammar(shapes):
     for s in shapes:
         s.k = 0
         s.frame = BRUSHED.copy()
+    return shapes
+
+
+FLAT = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+
+
+def grammar2d(shapes):
+    """grammar() for a SURFACE (it tiles in both axes, so no frame that moves with a copy is safe): a hard
+    union and a FLAT grain frame (the material's grain is constant on the shape - its surface variety comes
+    from the shapes and their bevels instead)."""
+    for s in shapes:
+        s.k = 0
+        s.frame = FLAT.copy()
     return shapes
 
 

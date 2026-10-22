@@ -56,7 +56,7 @@ file's tick in the same commit as the work**. Never more than one checkpoint unc
       DONE WHEN: `python3 walls.py <dir> outer_facility` writes the files; twice -> byte-identical; hall strips seamless.
 - [x] **CP3** — all six room families + SIGNATURE generated and in the manifest.
       DONE WHEN: manifest lists 30 walls; every room-family strip seamless; 6-copy BASE strips pass.
-- [ ] **CP4** — doors, columns, floor, ceiling generated; the five shipped files committed.
+- [x] **CP4** — doors, columns, floor, ceiling generated; the five shipped files committed.
       DONE WHEN: A1, A3, A4 hold on the committed files.
 - [ ] **CP5** — docs/wall-art-creation-guide.txt (2, 12, 15, 16 A) + SKILL.md + sprite guide pointer updated (A6).
 - [ ] **CP6** — owner verdict recorded in DECISIONS (approval, or the requested changes done and re-shown).
@@ -101,3 +101,16 @@ scratched name plates / one ajar, a short scarf on a hook. E5 note: the first sc
 limb, the second (two equal tails) as trousers - the shipped one is a flat band, one long fringed tail + a short
 fold (lesson for the guide). 6-copy base strips: pass (only architecture repeats). Deterministic (cmp). No warnings.
 Dev helper (not committed): scratchpad/one.py <region> <out.png> <id substrings...> bakes chosen faces fast.
+
+**CP4:** `grime` moved into kit.py (appended after cloth, before the key inks) -> enemy regen 32/32 identical.
+Doors: a framed livery sliding leaf, porthole (capsule glass glow=0 in a rubber ring), grab recess, ribbed kick
+strip; plain = a cyan status lamp in a small housing; keycard = walls.lock_panel in the exact ink + a header frame
+stripe (glow 2.33%). LESSON: a fixture in the SAME layer as a higher-prio/higher plateau panel vanishes (union picks
+the panel) - give fixtures their own layer. Columns: round = EIGHT tilted staves (a smooth cylinder dome dithers into
+blotches across its slow gradient - lesson), rail ring + caps as adds; square = boxed cable riser. Surfaces use
+`walls.grammar2d` (FLAT grain frame: a frame that moves with a copy is unsafe when tiling in both axes) + 
+`surface_backing`. Luminance: floor 0.176, ceiling 0.177 (concrete_dk panels + tray; darkmetal read 0.205-0.259).
+Shipped: assets/textures/walls/generated/outer_facility.{walls.png (RGB 2048, opaque), glow.png, walls.json,
+floor.png, ceiling.png}; a second bake into the scratchpad is byte-identical (A1). A3: 30 walls + 4 doors + 2
+columns + surfaces. A4: every join ratio in the seams report <= 1.6 (cross-family joins expected > 1), self-seams
+0.27-0.32, surfaces 0.0 / 0.2.

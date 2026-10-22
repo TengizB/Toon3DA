@@ -14,7 +14,8 @@ import random
 
 import kit
 from kit import blob, limb, slab, chain, chamfer_rect, riveted_plate
-from walls import Face, wall, backing, band, rail, panel, pipe_run, grille
+from walls import Face, Entry, wall, backing, band, rail, panel, pipe_run, grille, lock_panel, \
+    grammar2d, surface_backing
 
 LETTER = "a"
 SEED = 101                     # ONE render seed for the whole set: the shared trim gets the same grain on every
@@ -23,11 +24,6 @@ TRIM = {"cornice": [0, 30], "cableTray": [24, 33], "panelField": [40, 196], "bum
 BREACH = {"base": 0.0, "step": 0.03}
 STENCIL = (70, 74, 82)         # dark stencil paint on the livery panels
 STENCIL_LT = (150, 156, 164)   # pale stencil paint on dark metal
-
-# Region A's own environment materials during development (moved into kit.py before shipping - CP4)
-kit.MATERIALS.setdefault("grime", dict(ramp=kit.ramp("15140f", "26241f", "39372f", "4e4b42", "666256", "7f7a6c"),
-                                       spec=(0.08, 10), grain=(0.06, 2)))
-
 
 # ---------------------------------------------------------------------------------------------------
 # The shared grammar
@@ -506,6 +502,99 @@ def signature_accent(glow):
 
 
 # ---------------------------------------------------------------------------------------------------
+# DOORS - a painted livery sliding door with a porthole and rubber seal (an authored CLOSED door; the
+# slide is the engine's). Keycard doors add the lock panel and a frame stripe in the exact keycard ink.
+# ---------------------------------------------------------------------------------------------------
+def door(ink=None):
+    def build(glow):
+        frame = [backing("darkmetal", bevel=0.5),
+                 slab([(4, -4), (252, -4), (252, 38), (4, 38)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3),   # header
+                 slab([(4, -4), (30, -4), (30, 260), (4, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3),   # jambs
+                 slab([(226, -4), (252, -4), (252, 260), (226, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=3)]
+        for y in range(54, 250, 40):
+            frame += [blob(17, y, 1.8, 1.8, "darkmetal", op="add", depth=1.6), blob(239, y, 1.8, 1.8, "darkmetal", op="add", depth=1.6)]
+        seal = [slab([(30, 38), (226, 38), (226, 258), (30, 258)], "rubber", bevel=3, slope=0.9, k=0)]
+        leaf = [panel(36, 42, 220, 262, "livery_dk", chamfer=6, bevel=6, slope=0.9, k=0, prio=2),
+                slab(chamfer_rect(46, 196, 210, 246, 4), "gunmetal", bevel=3, slope=0.9, op="add", depth=2.5),   # kick strip
+                limb(60, 150, 108, 150, 3.0, 3.0, "livery_dk", op="carve")]                                         # grab recess
+        for x in range(66, 200, 24):
+            leaf.append(limb(x, 206, x + 10, 236, 1.2, 1.2, "gunmetal", op="carve"))
+        leaf.append(blob(128, 98, 31, 31, "livery_dk", depth=5, op="carve"))                                 # porthole bore
+        port = [blob(128, 98, 29, 29, "rubber", depth=4, k=0), blob(128, 98, 22, 22, "rubber", depth=4, op="carve"),
+                blob(128, 98, 22, 22, "capsule", depth=2, k=0, prio=3, glow=0.0),
+                limb(114, 86, 122, 81, 1.0, 1.0, "frost", op="add", depth=0.5)]                                    # a glint scratch
+        stencils = [("R1-D", 46, 52, STENCIL)]
+        if ink:
+            lamp = lock_panel(196, 150, ink, w=26, h=42, glow=glow)
+            frame.append(slab([(34, 24), (222, 24), (222, 31), (34, 31)], ink, bevel=1.5, slope=1.0, op="add", depth=1.2,
+                              glow=glow))                                                                       # the frame stripe
+        else:
+            lamp = [slab(chamfer_rect(186, 138, 206, 162, 3), "darkmetal", bevel=2.5, slope=0.8, k=0),
+                    blob(196, 150, 3.5, 3.5, "cyan", depth=2.5, op="add", glow=glow)]
+        return Face([frame, seal, leaf, port, lamp], stencils=stencils)
+    return build
+
+
+# COLUMNS - drawn by the column path as a wall stripe, so authored as a 256x256 face
+def column_round(glow):
+    """A painted steel pillar with the bump rail ring: a cylinder (a vertical capsule as wide as the face)."""
+    # a FACETED cylinder: eight painted staves, each a slab tilted to the cylinder's slope at its centre, so the
+    # shading falls in clean bands (a smooth dome dithers into blotches across its slow gradient)
+    body = []
+    for n in range(8):
+        x0, x1 = n * 32, n * 32 + 32
+        u = ((x0 + x1) / 2 - 128) / 128
+        body.append(slab([(x0, -4), (x1, -4), (x1, 260), (x0, 260)], "livery_dk", bevel=2.5, slope=16,
+                         tilt=(-1.1 * u / math.sqrt(1 - u * u * 0.98), 0.0), k=0))
+    body += [slab([(-4, -4), (260, -4), (260, 24), (-4, 24)], "gunmetal", bevel=2, slope=0.9, op="add", depth=3),
+             slab([(-4, 199), (260, 199), (260, 211), (-4, 211)], "rubber", bevel=2, slope=0.9, op="add", depth=4),
+             slab([(-4, 222), (260, 222), (260, 260), (-4, 260)], "gunmetal", bevel=2, slope=0.9, op="add", depth=3)]
+    return Face([body], stencils=[("R1", 118, 120, STENCIL)])
+
+
+def column_square(glow):
+    """A boxed cable riser: steel corner posts, a ribbed access cover, the cables showing through a slot."""
+    l0 = [backing("darkmetal", bevel=0.5), band(-4, 26, "gunmetal", bevel=3, prio=3), band(222, 260, "gunmetal", bevel=3, prio=3)]
+    l0 += [slab([(4, -4), (28, -4), (28, 260), (4, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=4),
+           slab([(228, -4), (252, -4), (252, 260), (228, 260)], "gunmetal", bevel=4, slope=0.9, k=0, prio=4)]
+    cover = [panel(36, 34, 220, 214, "livery_dk", chamfer=5, bevel=5, slope=0.9, k=0, prio=2),
+             slab(chamfer_rect(110, 50, 146, 198, 4), "livery_dk", bevel=5, slope=0.8, op="carve")]
+    cables = [limb(118, 30, 118, 218, 5, 5, "rubber"), limb(128, 30, 128, 218, 4.2, 4.2, "rubber"),
+              limb(138, 30, 138, 218, 5, 5, "rubber")]
+    for y in (70, 132, 180):
+        cables.append(limb(108, y, 148, y, 2.2, 2.2, "gunmetal"))
+    for x0, x1 in ((48, 100), (156, 208)):
+        cover += grille(x0, 52, x1, 196, 9, r=1.3)
+    return Face([l0, cover, cables], stencils=[("RSR-2", 52, 200, STENCIL)])
+
+
+# ---------------------------------------------------------------------------------------------------
+# SURFACES - 64x64, tiling in both axes, no glow. Floors 0.10-0.24, ceilings 0.06-0.18 mean luminance.
+# ---------------------------------------------------------------------------------------------------
+def floor():
+    """Dark deck plates with a worn rubber runner: two plates per tile, bolts, the runner across them."""
+    shapes = [surface_backing("darkmetal")]
+    for y0, y1 in ((2, 30), (34, 62)):
+        shapes.append(slab(chamfer_rect(2, y0, 62, y1, 2), "darkmetal", bevel=2.5, slope=0.8, k=0, prio=1))
+        shapes += [blob(7, y0 + 5, 1.5, 1.5, "gunmetal", op="add", depth=1.0), blob(57, y1 - 5, 1.5, 1.5, "gunmetal", op="add", depth=1.0)]
+    shapes += grammar2d([slab([(-6, 22), (70, 22), (70, 42), (-6, 42)], "rubber", bevel=1.4, slope=0.8, prio=3)])   # the runner
+    for x, w in ((14, 9), (40, 6)):                                               # worn through to the plate
+        shapes.append(blob(x, 32, w, 4, "rubber", op="carve", depth=0.7))
+    return Face([shapes])
+
+
+def ceiling():
+    """Ceiling panels between a cable tray and a strip-lamp housing (the lens is dark: no surface glow)."""
+    shapes = [surface_backing("concrete_dk"),
+              slab(chamfer_rect(2, 2, 62, 40, 2), "concrete_dk", bevel=2, slope=0.8, k=0, prio=1)]
+    shapes += grammar2d([slab([(-6, 44), (70, 44), (70, 62), (-6, 62)], "concrete_dk", bevel=2, slope=0.9, prio=2)])  # the tray
+    shapes += grammar2d([limb(-8, 50, 72, 50, 2.6, 2.6, "rubber"), limb(-8, 56, 72, 56, 2.2, 2.2, "rubber")])
+    shapes += [slab(chamfer_rect(16, 14, 48, 28, 3), "darkmetal", bevel=2.5, slope=0.9, op="add", depth=2),
+               slab(chamfer_rect(20, 17, 44, 25, 2), "capsule", bevel=1.2, slope=0.8, op="add", depth=0.6, glow=0.0)]
+    return Face([shapes])
+
+
+# ---------------------------------------------------------------------------------------------------
 # The region row (walls.py REGIONS)
 # ---------------------------------------------------------------------------------------------------
 FLICKER = [(1.0, 0.40), (0.25, 0.08), (1.0, 0.20), (0.0, 0.12)]   # R7: a failing tube
@@ -529,5 +618,9 @@ for group, base, accent in ROOMS:
     WALLS += [wall(LETTER, group, "BASE", base(0), variant=0), wall(LETTER, group, "BASE", base(1), variant=1),
               wall(LETTER, group, "ACCENT", accent)]
 
-REGION = dict(letter=LETTER, seed=SEED, trim=TRIM, breach=BREACH, walls=WALLS, doors=[], columns=[],
-              surfaces={"floor": None, "ceiling": None})
+DOORS = [Entry(f"door_{LETTER}_plain", door()), Entry(f"door_{LETTER}_red", door("key_red")),
+         Entry(f"door_{LETTER}_yellow", door("key_yellow")), Entry(f"door_{LETTER}_blue", door("key_blue"))]
+COLUMNS = [Entry(f"column_{LETTER}_round", column_round), Entry(f"column_{LETTER}_square", column_square)]
+
+REGION = dict(letter=LETTER, seed=SEED, trim=TRIM, breach=BREACH, walls=WALLS, doors=DOORS, columns=COLUMNS,
+              surfaces={"floor": floor, "ceiling": ceiling})

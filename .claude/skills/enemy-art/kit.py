@@ -94,6 +94,8 @@ MATERIALS = {
     "frost":       dict(ramp=ramp("1e262b", "36434a", "55646b", "77878d", "9eacb0", "c4cfd1"), spec=(0.50, 30), grain=(0.05, 2)),
     # cloth: the crew's left-behind fabric - faded, dusty, low saturation
     "cloth":       dict(ramp=ramp("16130f", "28221c", "3d342b", "54493d", "6d6052", "897b6b"), spec=(0.03, 6), grain=(0.08, 1.5)),
+    # grime: the dirt at a panel's foot and under a seep - a warm dark grey within two steps of livery_dk (R-2)
+    "grime":       dict(ramp=ramp("15140f", "26241f", "39372f", "4e4b42", "666256", "7f7a6c"), spec=(0.08, 10), grain=(0.06, 2)),
     # KEYCARD inks: the exact keycard colours (RenderConstants.KEYCARD_AURA_*: red 1.00/0.18/0.16, yellow
     # 1.00/0.86/0.18, blue 0.22/0.58/1.00), emissive, so no mood shifts them. Only on keycard doors (guide 11.1).
     # The upper three steps ARE the exact colour; the lower ones only shade a lamp's rim.
