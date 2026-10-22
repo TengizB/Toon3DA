@@ -1,61 +1,95 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Wall art order 4 - Harvesting Galleries kit
+TITLE: Wall art order 4 - Breach + Core sets, series close
 CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
 
-Series: generated-wall-art.txt (concept, rules W1-W12, roles, dressing). Method: order 1's rules R1-R11
-(texture, tiling, trim lines, variants, glow, animation, mips, atlas, manifest, story detail,
-determinism) apply UNCHANGED - this order is CONTENT ONLY plus one registry swap.
+Series: generated-wall-art.txt (region-set model, symbol table, rules W1-W12). Method: order 1's rules
+R1-R12 (face/surface size, tiling, trim lines, variants, rooms read as rooms, glow, animation, mips,
+atlas, keycard doors, manifest, determinism) apply UNCHANGED. CONTENT ONLY plus one registry edit per
+region: its RegionWallSet row stops aliasing set A and loads its own manifest (order 2's mechanism).
 
 
 OVERVIEW
 --------
-The second stratum: an industrial abattoir disguised as a research wing. Something was grown and
-cut here at scale, and the walls were built to be hosed down. The first crack in the briefing lives in
-the architecture: the tiles are the tiles of a slaughterhouse, not a lab.
+The last two region sets and the close of the series. D, the WOUND (route: The Breach): the facility
+gives way to the being's raw body - here the hall base is what was BREACH above, the inversion of the
+whole descent. E, the CORE: the being's mind, beautiful rather than grotesque, with the Organization's
+last camp bolted into it as the foreign body. Then the series' final performance pass, the deletion
+of the prototype script and the closing docs.
 
 
 SCOPE
 -----
 IN
-  - walls.py: the research_wing STRATA row (trim lines + 16 walls: BASE x3, STRUCTURE, LIGHT, SERVICE x2,
-    MARKER, FEATURE, BREACH, CLINICAL, CONTAINMENT, MACHINERY, SECURITY, DATA).
-  - New materials, if any, APPENDED to kit.MATERIALS (enemies + earlier strata regenerate byte-identical).
-  - Shipped: assets/textures/walls/generated/research_wing.walls.png / .glow.png / .walls.json.
-  - WallStrata: the research_wing row switches from placeholders to wall_b_* atlas sprites
-    (order 3's mechanism - one registry edit, no renderer change).
-  - Docs: sprite-art-creation-guide WALLS roster line; art-direction WALLS roster; tileset section 15.
+  - walls.py: the REGIONS rows for the_breach and the_core, each a complete set: HALL (BASE x3, STRUCTURE,
+    LIGHT, SERVICE, VENT, MARKER, BREACH), the six room families (BASE x2 + ACCENT each), SIGNATURE
+    (BASE x2 + ACCENT), 4 doors, 2 columns, floor + ceiling.
+  - New materials, if any, APPENDED to kit.MATERIALS (enemies and earlier regions regenerate
+    byte-identical).
+  - Shipped per region: assets/textures/walls/generated/<region>.walls.png / .glow.png / .walls.json /
+    .floor.png / .ceiling.png.
+  - RegionWallSets: the two rows switch from the set-A alias to their own manifests.
+  - Docs: the guide's WALLS AND SURFACES roster + any new lessons; art-direction WALLS roster;
+    environment-tileset-system section 15 roster.
+  - SERIES CLOSE: delete .claude/skills/enemy-art/walls_prototype.py; final run-game probe of every
+    region (interleaved against the order-3 build) recorded here; APK asset size before order 2 vs now
+    recorded; the master's STATUS -> IMPLEMENTED after reviewer passes.
 OUT
-  - Any runtime or allocator change (order 2/3 own them). Doors, columns, floors (8, 9).
-  - Changing the region's mood numbers - if the kit fights the mood, the KIT changes (W6), unless the
-    owner decides otherwise in DECISIONS.
+  - Any engine change (order 2 owns it; a bug found in it is fixed in a separate short-lane commit).
+  - Changing a region's mood numbers - if a set fights its mood, the SET changes (W6).
 
 
-VISUAL DESIGN - STRATUM B, THE HARVESTING GALLERIES (mood clinical_white)
--------------------------------------------------------------------------
-Glazed greige-celadon tile to shoulder height (the approved prototype), form-tied concrete above, a
-continuous hook rail at row ~52 and a steel drain gutter at the floor. Clean surfaces, wrong stains.
-  BASE (x3)     the approved prototype: tile field (seeded chips/cracks/missing tiles), rail, drain; the
-                three variants differ in which tiles are chipped and where the grime runs - only ONE of
-                three carries a hook (hooks are FEATURE-rare, the prototype's hook on every tile was the
-                wallpaper problem).
-  STRUCTURE     a concrete pier with a drainage downpipe, the rail bracketed to it.
-  LIGHT         a caged bulkhead lamp over the tile line (cyan-white lens), cage shadow carved.
-  SERVICE (x2)  a hose reel + standpipe; a row of steel sampling ports with capped nozzles.
-  MARKER        a yield board: a steel frame of tally slots (stencilled numbers, some slots filled with
-                dark plugs) - the "quota" read without words. Stencil G2-xx.
-  FEATURE       a hook bay: three hooks on trolleys, chains at different lengths, stains under them.
-  BREACH        chitin growth: dark plates (chitin_dk) pushing tiles off the wall from below, ichor in
-                the cracks.
-  CLINICAL      white tile with a stainless scrub trough and a mirror panel (capsule glass, no glow).
-  CONTAINMENT   a specimen tank recessed in the wall: membrane-like glass, a dark curled shape inside,
-                faint ichor glow (emissive, small).
-  MACHINERY     a rendering press: heavy steel, a hopper mouth, a gauge (cyan needle light).
-  SECURITY      a sliding steel gate (bars, carved) over tile.
-  DATA          a tally terminal: cyan screen, a printer slot with a paper strip.
-Palette: ceramic, concrete, darkmetal, gunmetal, flesh_dk (stains), chitin_dk (breach), ichor. No red.
+VISUAL DESIGN - REGION D, THE WOUND (mood corrupted_violet)
+-----------------------------------------------------------
+Muscle under strain (dense swollen fibre bundles with constrictions - the prototype's third pass),
+translucent glands lit by ichor (op="add", or the muscle buries them), branching ichor veins, the torn
+facility edge along the top with rivets still in it. No red: the wound reads through anatomy and glow.
+  HALL      BASE x3 the prototype WITHOUT the drill (the drill on every tile was wallpaper): torn plating
+            at different heights; one variant pure tissue. STRUCTURE a surviving steel column wrapped
+            and half-swallowed. LIGHT a gland cluster (8 glow frames, a double heartbeat, animate=all).
+            SERVICE a severed pipe dripping into tissue. VENT cables grown through like nerves. MARKER
+            a facility sign plate (D-xx) half absorbed. BREACH an open wound: a vertical split showing
+            ribs (bone) and a deep ichor glow.
+  MEDICAL   a medical wall overgrown: white livery visible through membrane. ACCENT a dispenser
+            swallowed, its cyan lamp still lit inside the membrane.
+  SECURITY  a blast-door section bent inward by tissue. ACCENT a gun rack fused into muscle.
+  CONTAINMENT membrane sacs in the wall. ACCENT a large sac with a shape inside (glow frames, animate=some).
+  MACHINERY a reactor housing crushed by a fist of muscle. ACCENT a drill motor, still on its mount.
+  RESEARCH  terminals swallowed by membrane, screens glowing through. ACCENT a cable bundle like a
+            nerve trunk ending in a terminal.
+  STORAGE   crates pulled into the tissue. ACCENT a shutter jammed open by a growth.
+  SIGNATURE THE DRILL FACE: BASE x2 the buried drill bit (the prototype's), scarred tissue around it;
+            ACCENT the drill's collar and a severed drive shaft.
+  DOORS     a facility door forced half shut by tissue, membrane over its edges; keycard panels.
+  COLUMNS   a tissue-wrapped column (square: a bone-ribbed pillar).
+  FLOOR     membrane over deck fragments; CEILING torn conduit and hanging tissue.
+  LESSONS (into the guide): separate lobes read as sausages; parallel full-height bundles read as planks
+  unless constricted and varied; glands must be op="add".
+
+VISUAL DESIGN - REGION E, THE CORE (mood core_white_violet)
+----------------------------------------------------------
+A nacre-bone lattice grown like a neural mesh (the approved prototype), calmer than the prototype -
+fewer, thicker struts, bigger hollows (it read busy at range) - with deep membrane and soul light in the
+hollows. Purple is semantic (V5): the violet comes from the MOOD; materials stay pearl and pale.
+  HALL      BASE x3 the lattice at three phases of one mesh (struts meet across tile edges). STRUCTURE a
+            thick spine-like trunk strut. LIGHT a synapse node: a bright soul core with dendrites (8
+            glow frames, a pulse travelling outward, animate=all). SERVICE a dead Organization cable run
+            pulled taut through the lattice. VENT a bore hole with a drill sleeve, the lattice healing
+            over it. MARKER the last survey plate ("SEAM" stencil), cracked. BREACH none -> fallback
+            BASE (the planet does not breach itself; breachBase 0, breachStep 0).
+  ROOM FAMILIES - THE LAST FORWARD CAMP: the Organization's rooms here are prefabricated set-A panels
+            CLAMPED onto the nacre (one builder per family reused from set A, with a nacre clamp layer
+            and lattice showing at the edges): MEDICAL, SECURITY, CONTAINMENT, MACHINERY, RESEARCH,
+            STORAGE each BASE x2 + ACCENT. The facility is the foreign body now.
+  SIGNATURE THE MEMORY HOLLOW: BASE x2 large hollows of soul light with lattice framing; ACCENT the
+            memory window - a faint human silhouette in the light (the original self, story/03; no face,
+            no text; animate=all, slow).
+  DOORS     a lattice iris (nacre leaves meeting at a soul-lit centre); keycard panels as nacre-set lenses
+            in the keycard colour.
+  COLUMNS   a nacre trunk (square: a camp-built steel post wrapped by lattice).
+  FLOOR     the lattice's floor (pearl ridges over dark membrane); CEILING the lattice vault.
 
 
 BALANCE NOTES / BALANCE ADMISSION
@@ -65,40 +99,45 @@ None - adds no balance-bearing content.
 
 ACCEPTANCE CRITERIA
 -------------------
-  A1  walls.py writes the research_wing files byte-identically twice; enemy atlases and earlier strata
-      regenerate byte-identical.
-  A2  The manifest lists the 16 walls of the design table.
-  A3  Tiled strip of the whole kit: no seams, trim lines meet.
-  A4  On a generated floor of this region (run-game, mood clinical_white): base variants, structure rhythm,
-      lights, at least one FEATURE and the room-role walls of any signature room on that floor; on the
-      region's LAST floor, BREACH clusters are visible (dressing D9).
-  A5  Enemies of this region read in front of the walls at 2 and 4 tiles (capture with spawn:TYPE -
-      SHELL_BRUTE, IRON_STALKER, ACID_DRONE).
-  A6  Owner verdict recorded in DECISIONS (W9).
+  A1  walls.py writes both regions' files byte-identically twice; enemy atlases and set A regenerate
+      byte-identical.
+  A2  Each manifest: 9 HALL + 18 room + 3 SIGNATURE walls, 4 doors, 2 columns, 2 surfaces; D's LIGHT and E's LIGHT/SIGNATURE ACCENT with 8 glow frames.
+  A3  Hall strip, every room-family strip and the surfaces tile with no seam; trim lines meet.
+  A4  Each room family identifiable at 1x without its label, and distinct from the SAME family of every
+      earlier region (contact sheet: this region's family beside set A's).
+  A5  In-engine per region (run-game, its mood): hall variants + rhythm + lights, at least two room
+      families, the signature room or boss arena, the doors (keycard colours read at 6 tiles), the
+      floor and ceiling; on the region's LAST floor, BREACH clusters visible (P7).
+  A6  Enemies of the region read in front of its walls at 2 and 4 tiles (PLAGUE_HULK, GORE_BITER, MIRE_WRAITH, EYE_TYRANT, the Core's spawns and the final boss arena).
+  A7  Owner verdict per region recorded in DECISIONS (W9).
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. CONTENT   walls.py stratum row + materials (Python)
-  2. DATA      (java-architect) WallStrata row swap
-  3. TESTS     None. Not balance-bearing; verified by regeneration + previews + run-game captures.
-  4. DOCS      guide roster, art-direction roster, tileset section 15
-  5. GATE      contact sheet + strip + glow GIFs + in-engine captures; STOP; record the verdict.
+  1. CONTENT   Region D: hall -> rooms -> signature -> doors/columns -> surfaces; GATE
+  2. DATA      (java-architect) its RegionWallSets row; captures
+  3. CONTENT   Region E: the same; GATE
+  4. DATA      its row; captures
+  5. TESTS     None. Not balance-bearing; verified by regeneration, previews and run-game captures.
+  6. DOCS      the guide roster + lessons (final), art-direction WALLS (final), tileset section 15 (final),
+               CLAUDE.md where it still describes the old walls
 
 
 CHECKPOINTS
 -----------
   CP0  the checkpoint file exists on the branch, committed and pushed
-  CP1  the BASE x3 + STRUCTURE + LIGHT walls exist and tile (strip preview); enemy atlases byte-identical
-  CP2  all 16 walls exist; shipped files committed
-  CP3  the WallStrata row points at the new art; build green; region capture taken
-  CP4  owner verdict recorded (or the requested changes done and re-shown)
+  CP1  Region D set generated and shipped; enemy + set A atlases byte-identical
+  CP2  Region D row live; in-engine captures; owner verdict recorded (or changes done and re-shown)
+  CP3  Region E set generated and shipped
+  CP4  Region E row live; in-engine captures; owner verdict recorded
+  CP5  docs; prototype script deleted; final probe + asset size recorded; reviewer PASS; master STATUS set
 
 
 ASSUMPTIONS
 -----------
-  AS1  The hook stays in the design but moves to one base variant + the FEATURE (W6 / wallpaper lesson).
-  AS2  Stains stay desaturated flesh_dk, never red (V5).
+  AS1  D's breachBase is 0 (its base is already tissue); its BREACH slot is the open wound.
+  AS2  E's camp rooms reuse set A's family builders plus a clamp layer - one builder, two regions.
+  AS3  The memory-window figure is a silhouette only.
 
 
 DECISIONS
@@ -113,4 +152,4 @@ None.
 
 RELATED
 -------
-  generated-wall-art.txt, -order-1 (rules), -order-3 (runtime), story/05-descent-structure.md
+  generated-wall-art.txt, -order-1 (rules, set A), -order-2 (engine), story/05-descent-structure.md

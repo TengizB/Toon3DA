@@ -1,266 +1,263 @@
 STATUS: SPLIT INTO ORDER FILES
 CATEGORY: Visual
-TITLE: Wall visual rework - the strata, generated in code
+TITLE: Wall visual rework - region wall sets, generated in code
 CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
 
 MASTER INDEX of the generated-wall-art series. The work lives in generated-wall-art-order-1.txt ..
-generated-wall-art-order-10.txt, built strictly in ascending order, each with its own STATUS and
-CHECKPOINTS. This file holds what every order shares: the need, the concept, the series rules, the
-wall-role model, the dressing rules, the roster and the owner's decisions. An order that contradicts
-this file is wrong; change this file first (with the owner).
+generated-wall-art-order-4.txt, built strictly in ascending order, each with its own STATUS and
+CHECKPOINTS. This file holds what every order shares: the need, the region-set model, the series rules,
+the symbol table, the placement rules and the owner's decisions. An order that contradicts this file is
+wrong; change this file first (with the owner).
 
 THE METHOD IS docs/sprite-art-creation-guide.txt (the enemy-art kit). Walls are made with THE SAME KIT,
-the same light rig, the same material library, the same outline and cleanup rules. Order 1 adds a WALLS
+light rig, material library, outline and cleanup rules as the generated enemies. Order 1 adds a WALLS
 section to the guide; every later order updates it in the same commit as any change to the method.
 
-Written by the main thread directly from the owner's request (2026-10-22), not by creative-game-designer,
-because the request came with an explicit prototype step that needed the kit run in the same session.
+Written by the main thread directly with the owner (2026-10-22), not by creative-game-designer, because
+the request came with a prototype step that needed the kit run in the same session. Revised the same day
+after the owner's review (D5-D9): region separation, room sets, region doors, the old system removed
+completely, and four orders instead of ten.
 
 
 OVERVIEW
 --------
-The walls are the one thing on screen every frame, so they make the atmosphere - and they are the
-weakest art in the game. They are a mix of image-model JPEGs (lab_wall_*.jpg) and flat Java Pixmap
-programs (rectangles, stripes, rivets), with no shared light, no shared palette and no sense of place:
-the same "conduit", "hazard stripe" and "holo data" wall can appear on floor 1 and floor 24. Meanwhile
-the enemies are being rebuilt as sculpted, lit, generated sprites (generated-enemy-art orders 1-5), and
-the walls behind them now look like they come from a different, older game.
+The walls are on screen every frame, so they make the atmosphere - and they are the weakest art in the
+game: image-model JPEGs (lab_wall_*.jpg) and flat Java Pixmap programs, with no shared light or palette.
+Worse, there is NO REGION SEPARATION: any wall can appear on any floor. SymbolAllocator binds wall
+symbols with a seeded weighted grab, the cavern generator reskins walls with random chars, six other
+generators use one global legacy table, and RegionAmbience carries a per-region `wallPalette` string
+that nothing reads. One screenshot cannot tell you where you are.
 
-The need is not "new wall textures". It is that the WORLD SHOULD TELL THE DESCENT. The story is a
-descent through five strata of a living planet (story/05-descent-structure.md): a company town, an
-abattoir, the resurrection heart, the wound where the facility gives way to flesh, and the mind at the
-core. Today one screenshot cannot tell you where you are. After this series it must.
-
-This series REBUILDS THE WALL VISUAL LAYER from scratch:
-  - every wall is redesigned from the story and generated with the enemy-art kit (no old wall is
-    reference material, none survives);
-  - walls are organised as five REGION STRATA, each a coherent kit of WALL ROLES (base, structure,
-    light, service, marker, feature, breach, and five room roles), instead of one global grab-bag;
-  - the level "wall randomizer" (SymbolAllocator's seeded pick + the generators' random reskins) is
-    replaced by a STRATUM-AWARE ALLOCATOR and a rule-driven WALL DRESSING PASS: architecture rhythm,
-    lights, door frames, features where a room faces you, and the planet breaking through more the
-    deeper you go - decided by rules, never by a random grab;
-  - a new wall runtime: one atlas per floor, several BASE VARIANTS per tile (no wallpaper repetition),
-    an emissive GLOW layer exempt from the mood grade (like the enemy glow), a few ANIMATED walls, and
-    distance LOD so detailed pixel art does not shimmer.
+The story is a descent through five strata of a living planet (story/05-descent-structure.md). The
+walls must tell it. This series REPLACES THE WHOLE WALL LAYER:
+  - every region gets its own large REGION WALL SET, and only that set builds the region's halls and
+    rooms - nothing crosses regions;
+  - inside a region: a dominant BASE wall (with variants), VARIETY walls from the same set appearing now
+    and then by rule, a distinct ROOM SET per room family (a medical room looks medical and different
+    from the hall, in that region's style), a SIGNATURE set for the region's special rooms, the region's
+    own DOORS and COLUMNS, and its own FLOOR and CEILING;
+  - the old walls, their generators and files, and the old random picking are deleted in the same order
+    that switches the game over (order 2) - no old wall is ever drawn again;
+  - a new wall runtime: one atlas per region, base variants per tile face, an emissive glow layer exempt
+    from the mood grade, a few animated walls, and distance LOD so detailed pixel art does not shimmer.
 
 
-THE CONCEPT - "THE STRATA"
---------------------------
-One region = one stratum = one material story. Moods (art-direction section 3) already colour the
-regions; the strata give them a SURFACE. The descent reads as the facility being progressively
-consumed: Organization hardware dominates at the top, the planet's body at the bottom, and the BREACH
-role is how the bottom leaks upward.
+THE FIVE REGIONS (one set each)
+-------------------------------
+  set  route region     story region            surface                                          mood
+  ---  ---------------  ----------------------  -----------------------------------------------  -----------------
+  A    OUTER FACILITY   1 Habitation Rings      painted Organization panels (livery), rubber      cool_steel
+                                                bump rails, riveted kick plates, cable trays. An
+                                                evacuated company town: ordered, clean, wrong.
+  B    RESEARCH WING    2 Harvesting Galleries  glazed abattoir tile, hook rails, form-tied        clinical_white
+                                                concrete, steel drains, stains. Grown and cut.
+  C    REACTOR DEPTHS   3 The Reliquary         heavy riveted steel, cradle print bays lit by the  amber_hot
+                                                rendered SOUL, pattern archives, fuel lines.
+  D    THE BREACH       4 The Wound             plating torn back, muscle and glands pushing       corrupted_violet
+                                                through, ichor veins, dead drills in tissue.
+  E    THE CORE         5 The Core              a nacre-bone neural lattice, soul light in the     core_white_violet
+                                                hollows. The facility is the foreign body now.
 
-  stratum  route region     story region            surface                                          mood
-  -------  ---------------  ----------------------  -----------------------------------------------  -----------------
-  A        OUTER FACILITY   1 Habitation Rings      painted Organization panels (livery), rubber      cool_steel
-                                                    bump rails, riveted kick plates, cable trays.
-                                                    An evacuated company town: ordered, clean, wrong.
-  B        RESEARCH WING    2 Harvesting Galleries  glazed abattoir tile to shoulder height, hook      clinical_white
-                                                    rails, form-tied concrete, steel drains, stains.
-                                                    Something was grown and cut here at scale.
-  C        REACTOR DEPTHS   3 The Reliquary         heavy riveted steel, cradle print bays with the   amber_hot
-                                                    rendered SOUL light, pattern-archive racks, fuel
-                                                    lines. The resurrection heart - where YOU come from.
-  D        THE BREACH       4 The Wound             the facility torn open: plating peeled back,      corrupted_violet
-                                                    muscle and glands pushing through, ichor veins,
-                                                    dead drill bits buried in living tissue.
-  E        THE CORE         5 The Core              no facility left: a nacre-bone lattice like a     core_white_violet
-                                                    neural mesh, soul light in the hollows, synapse
-                                                    nodes pulsing. The mind the Cradles were burning.
+The descent reads as the facility being consumed: Organization hardware dominates at the top, the
+planet's body at the bottom, and each region's BREACH wall is how the next region leaks upward.
 
-The five prototypes that define the look (approved or not - see DECISIONS D1) are the rest-state
-textures of these five strata: ring panel (A base), gallery tile (B base), cradle bay (C feature),
-breach (D base), lattice (E base). Their source is .claude/skills/enemy-art/walls_prototype.py.
+The approved prototypes (D4): ring panel (A hall base), gallery tile (B hall base), cradle bay (C
+signature), breach (D hall base), lattice (E hall base). Source: .claude/skills/enemy-art/walls_prototype.py.
+The in-engine captures of the prototypes proved: the style reads at wall scale under every mood; a
+signature picture on every tile becomes wallpaper (hence base + rare variety by rule); the old floors
+clash (hence floors in the set); distant detail aliases (hence LOD).
 
-What the in-engine prototype captures already proved (2026-10-22, run-game, every wall swapped to one
-texture per region, under the region's mood):
-  - the kit's style reads at wall scale and under every mood; the Wound and the Reliquary are the
-    strongest; the soul light and ichor read through the grade;
-  - a FEATURE used as every tile (cradle bays, the drill) becomes wallpaper: features must be rare and
-    placed by rule (the dressing pass), and the base needs several variants (the runtime);
-  - the old floor/ceiling materials (flat grids, tread plates) now clash with the walls (order 9);
-  - at distance the detailed texture aliases; LOD is part of the runtime (order 3).
+
+THE REGION WALL SET (every region ships all of it)
+--------------------------------------------------
+  group       walls                                                                    count
+  ----------  -----------------------------------------------------------------------  -----
+  HALL        BASE x3 variants (the dominant look of halls and generic rooms)           3
+              variety: STRUCTURE (pilaster / rib), LIGHT (the region's lamp, emissive),  6
+              SERVICE (pipes / risers), VENT (grilles / hatches), MARKER (signage,
+              stencils, quota boards), BREACH (the next region leaking through)
+  ROOM SETS   per room family: room BASE x2 variants + room ACCENT x1                   3 x 6 = 18
+                MEDICAL       medical_bay, the MED_BAY floor (MedBayGenerator)
+                SECURITY      armory, command_center, the gate airlock (GateAirlockGenerator)
+                CONTAINMENT   cryo_chamber, containment_block
+                MACHINERY     power_plant, atmospheric_plant
+                RESEARCH      server_room, research_lab
+                STORAGE       salvage_bay, supply_cache
+  SIGNATURE   the region's own special-room look: base x2 + accent x1                  3
+                used by: stellar_observatory, gore_nest, the boss arena, the EVENT room
+                (EventRoomGenerator) - "special rooms have different walls"
+  DOORS       plain + red / yellow / blue keycard                                         4
+  COLUMNS     round + square                                                              2
+  SURFACES    floor + ceiling (64x64, tiling both axes)                                   2
+  ------------------------------------------------------------------------------------------
+  per region  36 wall-face textures (256x256) + 2 surfaces; ~180 textures for the series
+
+Room families are DATA: each RoomBlueprint (and each special generator) names its family in its
+registration row. A new room is one row naming an existing family; a new family is one enum row plus a
+room set in every region's kit. Never a switch.
+
+How each region's room set differs: SAME FAMILY, REGION'S STYLE. A MEDICAL room in A is white livery
+with a dispenser and a sealed scrub hatch; in B it is a tiled surgical bay with a drain; in C a pattern-
+archive infirmary; in D a medical wall overgrown with membrane; in E an Organization field-medical panel
+bolted into the lattice. Each order's VISUAL DESIGN lists all six families + signature for its regions.
+
+
+THE SYMBOL TABLE (21 wall symbols, no new symbol, no removed symbol)
+-------------------------------------------------------------------
+A wall symbol no longer names a picture. It names a SLOT; the floor's region set decides the picture.
+21 wall symbols exactly cover the slots (data in TilesetConstants; order 2):
+  HALL         x BASE   k STRUCTURE   S LIGHT   c SERVICE   ' VENT   h MARKER   G BREACH
+  MEDICAL      M base   Q accent
+  SECURITY     X base   w accent
+  CONTAINMENT  Z base   N accent
+  MACHINERY    U base   j accent
+  RESEARCH     t base   D accent
+  STORAGE      v base   " accent
+  SIGNATURE    F base   ` accent
+BASE slots (x and every room base) carry their variants: the RENDERER picks the variant per tile face
+(stable hash), so variants need no symbols. Doors (d R Y B) and the column (P) are FIXED symbols whose
+pictures come from the region set. Every symbol stays a WALL exactly as today (Level.isWall) - the 2D
+game cannot tell the difference.
+
+
+THE PLACEMENT RULES - how a level's walls are chosen (order 2 builds them)
+--------------------------------------------------------------------------
+Replaces the old randomizer entirely. Seeded from the floor seed on its OWN RNG stream (never the
+generator's), so layout, spawns and supply are untouched. Rates in LevelGenConstants (WALL_SET_*).
+  P1  REGION: the floor's region (RegionPlan, like the lighting mood) picks the region set. Every wall
+      on the floor comes from that set. Start room and hand-made levels: set A.
+  P2  ROOMS: every room's perimeter walls are its family's room BASE; the room ACCENT appears on
+      1-3 tiles per room (the wall facing the entrance first, never adjacent to another accent).
+      Generic rooms (entrance, standard) and corridors are HALL.
+  P3  SPECIAL FLOORS: MED_BAY floor -> MEDICAL; gate airlock -> SECURITY; event room, boss arena ->
+      SIGNATURE; cavern floors -> HALL with BREACH weighted up.
+  P4  HALL RHYTHM: along a straight exposed hall run >= 5 tiles, every 4th tile (phase seeded per run)
+      is STRUCTURE; the tiles flanking a door are STRUCTURE (door frames).
+  P5  HALL LIGHT: no exposed hall run >= 7 tiles without a LIGHT; never two LIGHTs adjacent.
+  P6  HALL VARIETY: SERVICE / VENT scattered on 6-10% of remaining hall base, in 1-3 tile clusters;
+      MARKER 1-3 per floor, near the arrival point and the exit.
+  P7  BREACH: hall density = breachBase(region) + floorIndexInRegion x breachStep(region), grown as
+      seeded clusters, never on a door frame. 0 on a region's first floor; clearly visible on its last.
+  P8  Only exposed wall tiles (a walkable 4-neighbour) are dressed; only a wall symbol is ever written
+      over a wall symbol (rule W7 below).
+Result on a typical floor: ~65-75% hall base (in 3 variants), a steady rhythm of structure and light,
+an occasional service/marker wall, rooms that read as what they are, and the region's own doors.
 
 
 SERIES RULES (every order, by reference)
 ----------------------------------------
-  W1  ORIGINALITY. No existing wall/door/column texture or generator is reference material - never
-      opened for inspiration, traced, recoloured or re-created (the enemy series' G1, applied to the
-      environment). Designs come from story/00-premise.md, 03-the-planet.md, 05-descent-structure.md,
-      the region's mood and the room's purpose.
-  W2  GENERATED IN CODE with the enemy-art kit (guide N1). A wall is a script; the game ships only the
-      PNG atlases + JSON manifests it writes. Deterministic, byte-identical regeneration, no hand edits.
-      Enemy sprites regenerate byte-identical after every kit change (new materials are APPENDED).
+  W1  ORIGINALITY. No existing wall/door/column/floor texture or generator is reference material -
+      never opened for inspiration, traced, recoloured or re-created. Designs come from story/00-premise.md,
+      03-the-planet.md, 05-descent-structure.md, the region's mood and the room family's purpose.
+  W2  GENERATED IN CODE with the enemy-art kit (guide N1). The game ships only the PNG atlases + JSON
+      manifests the script writes. Deterministic, byte-identical regeneration, no hand edits. Enemy
+      sprites regenerate byte-identical after every kit change (new materials are APPENDED).
   W3  ONE STYLE LOCK. Same LIGHT / RIM / wrap / cavity / cast occlusion / ramps / cleanup / outline as
-      the enemies. A wall never gets its own light rig. New environment materials are added to
-      kit.MATERIALS (appended), never tinted per wall.
-  W4  TILEABLE. A wall texture is one TILE FACE, 256x256 (row 0 = ceiling line, row 255 = floor line),
-      and tiles HORIZONTALLY with itself AND with every other wall of its stratum (shared trim heights:
-      the kick plate, rail and cornice lines meet across tiles). Built on a 3-tile canvas and cropped
-      (the prototype's method). It never needs to tile vertically.
-  W5  SEMANTIC COLOURS SACRED (art-direction V5, guide N4). No saturated red/green/blue/purple/yellow
-      decoration; SUIT_AMBER never on a wall. Facility light = cyan; planet tissue = ichor; harvested
-      soul = the new pale SOUL ink; reactor heat = magma. Hazard-stripe yellow is retired from walls.
-  W6  READABILITY BEATS MOOD (V8). Walls are the backdrop: mid-value, low contrast at range, so every
-      enemy, pickup, intent icon and door reads in front of them. A wall may never be brighter than
-      the enemies standing before it; emissives stay small (lamps, seams, cores - guide lesson 12.8).
-  W7  THE 2D GAME IS UNTOUCHED. No tile symbol is added or removed, no wall becomes walkable or vice
-      versa, no rule, turn, balance number, spawn, supply slot or persistence key changes. The dressing
-      pass only ever swaps one WALL symbol for another WALL symbol on a tile that was already a wall.
-  W8  STORY ON THE WALL. Every stratum carries story details - Organization stencils and serials,
-      quota boards, a cradle print, a buried drill - as small things a player notices, never text the
-      player must read.
-  W9  OWNER APPROVAL GATE (guide N7). Each stratum kit: contact sheet (every role, every variant, the
-      tiled strip) + in-engine captures under its mood, then STOP until the owner answers; the answer
-      goes into that order's DECISIONS. An agent's opinion is never the gate.
+      the enemies. New environment materials are appended to kit.MATERIALS, never tinted per wall.
+  W4  TILEABLE. A wall is one TILE FACE, 256x256 (row 0 = ceiling line, row 255 = floor line), and tiles
+      HORIZONTALLY with every wall of its region set: each region declares TRIM LINES (cornice, rail,
+      kick plate) that every wall of the set honours, so different walls join along the same lines.
+      Built on a 3-tile canvas and cropped (the prototype's method). Surfaces tile in both axes.
+  W5  SEMANTIC COLOURS SACRED (art-direction V5). No saturated red/green/blue/purple/yellow decoration;
+      SUIT_AMBER never on a wall; no red medical cross. Facility light = cyan; planet tissue = ichor;
+      harvested soul = the pale SOUL ink. Keycard colours appear ONLY on keycard doors' lock panel and
+      frame stripe, emissive, in the exact keycard colours.
+  W6  READABILITY BEATS MOOD (V8). Walls are the backdrop: mid-value, never brighter than the enemies
+      in front of them; emissives small (lamps, seams, cores - guide lesson 12.8). A room set must read
+      as different from the hall at 4 tiles by SHAPE and MATERIAL, not by colour alone.
+  W7  THE 2D GAME IS UNTOUCHED. No tile symbol added or removed, no wall becomes walkable or vice versa,
+      no rule, turn, balance number, spawn, supply slot or persistence key changes.
+  W8  STORY ON THE WALL. Every region set carries story details (serials, quota boards, a cradle
+      print, a buried drill) as things a player notices, never text the player must read.
+  W9  OWNER APPROVAL GATE (guide N7): per region set, a contact sheet (every wall, every variant, the
+      tiled hall strip, one strip per room family) + in-engine captures under its mood; STOP until the
+      owner answers; the answer goes into that order's DECISIONS.
   W10 NO TESTS (Testing Policy). Not balance-bearing. Existing tileset / level tests that encode the
-      old catalog are UPDATED in the same commit when behaviour legitimately changes - never deleted,
+      old catalog or the old allocator are UPDATED in the same commit - never deleted wholesale,
       disabled or weakened. Verified by build + run-game captures.
-  W11 PERFORMANCE IS PART OF DONE. No allocation in render(); one wall atlas bind per floor; the base
-      pass keeps its opaque/unblended + equal-column merge (render-performance-full-hd R16/R18);
-      measured with run-game --probe against the order before it.
-  W12 ALWAYS BUILDING, ALWAYS PLAYABLE. Until order 10 the game runs mixed: strata whose kit has
-      shipped draw the new art, the rest draw placeholder rows that point at the old sprites.
-
-
-THE WALL ROLE MODEL (decided here; order 2 builds it)
-----------------------------------------------------
-A level symbol no longer names a picture. It names a ROLE; the floor's STRATUM decides what that role
-looks like. Every stratum supplies every role (or names a fallback role for it - data, never a switch).
-
-  role         what it is                                                      typical share of a floor's exposed wall
-  -----------  --------------------------------------------------------------  ---------------------------------------
-  BASE         the ordinary wall. Ships 3 VARIANTS that tile with each other;  ~70-80%
-               the renderer picks one per tile face (order 3), so a long
-               corridor never repeats one picture.
-  STRUCTURE    pilaster / rib / frame: the rhythm of the architecture.         every 4th tile of a long run + door frames
-  LIGHT        the stratum's light source (lamp, lit seam, gland, synapse);    roughly one per 7 tiles of run
-               emissive; may animate (flicker, pulse).
-  SERVICE      pipes, vents, conduit, fuel lines - the building working.        scattered, 5-10%
-  MARKER       signage / Organization stencil / quota board / region serial.   1-3 per floor
-  FEATURE      the stratum's signature (A notice window, B hook rail bay,       0-2 per room, facing the room
-               C cradle print bay, D buried drill, E synapse node). Rare by rule.
-  BREACH       the planet coming through: A hairline seep, B chitin growth,    0% on a region's first floor, rising
-               C soul leak, D open wound (D's base is already breach), E none. toward the region's last floor
-  CLINICAL     room role: medical / heal rooms                                 signature rooms only
-  CONTAINMENT  room role: cryo / bio / specimen / quarantine                   signature rooms only
-  MACHINERY    room role: power / reactor / generator                          signature rooms only
-  SECURITY     room role: armory / blast / command                             signature rooms only
-  DATA         room role: server / research / terminal                         signature rooms only
-
-THE SYMBOL -> ROLE TABLE (data in TilesetConstants; order 2). Existing symbols keep being WALLS; only
-the meaning of their PICTURE changes. Default table (order 2 may adjust with a DECISIONS note):
-  x BASE | k STRUCTURE | S LIGHT | c v w SERVICE | h MARKER | F N FEATURE | G j BREACH |
-  M CLINICAL | Z Q CONTAINMENT | U MACHINERY | X SECURITY | t D DATA |
-  " ' `  (the stellar observatory) -> STRUCTURE / FEATURE / BASE of the floor's stratum - the
-  observatory keeps its room shape and props, but its walls belong to the stratum it is in.
-
-THE WALL DRESSING PASS (decided here; order 2 builds it) - how a level's walls are arranged
-  D1  Runs after every generator (dungeon, corridor, cavern, boss arena, med bay, event, gate, start
-      room) except hand-made .txt levels; seeded from the floor seed; pure grid -> grid.
-  D2  Touches only EXPOSED BASE wall tiles (an 'x' with a walkable 4-neighbour) and only ever writes
-      another wall symbol (W7). Tiles that a signature room stamped keep their room role.
-  D3  RHYTHM: along a straight exposed run of >= 5 tiles, every 4th tile (phase seeded per run)
-      becomes STRUCTURE.
-  D4  THRESHOLDS: the wall tiles flanking a door or a room entrance become STRUCTURE (door frames).
-  D5  LIGHT: no exposed run of >= 7 tiles is left without a LIGHT; never two LIGHTs adjacent; a LIGHT
-      prefers the middle of a run.
-  D6  FEATURE: at most 2 per room, on the wall facing the room's long axis, never in a corridor.
-  D7  MARKER: 1-3 per floor, near the arrival point and the exit.
-  D8  SERVICE: seeded scatter on the remaining base, 5-10%, clustered in 2-3 tile runs.
-  D9  BREACH: density = stratum.breachBase + floorIndexInRegion x stratum.breachStep; grown as seeded
-      clusters (not salt), never on a threshold. Deeper floors of a region visibly rot toward the next.
-  D10 Rates and probabilities live in LevelGenConstants (WALL_DRESSING_*), never inline.
+  W11 PERFORMANCE IS PART OF DONE. No allocation in render(); one region atlas per floor (one bind for
+      walls, doors and columns); the base pass keeps its opaque/unblended + equal-column merge
+      (render-performance-full-hd R16/R18); measured with run-game --probe.
+  W12 THE OLD LAYER GOES COMPLETELY, in order 2: every old wall/door/column/floor generator, file,
+      sprite id, the variety grab and the legacy table. Until a region's own set ships (orders 3-4), that
+      region borrows set A (D8) - never an old wall.
 
 
 ROSTER AND ORDER PLAN
 ---------------------
   order  what
   -----  ---------------------------------------------------------------------------------------
-  1      WALL KIT + STRATUM A (offline): walls.py builder (tiling bake, environment materials, wall
-         primitives, roles, variants, atlas + glow atlas + manifest + mips + previews), the guide's
-         WALLS section, and the complete Habitation Rings kit. Owner gate.
-  2      THE STRATA MODEL (headless): WallRole, WallStratum + registry (region -> stratum), the
-         role-based allocator replacing the seeded grab, the symbol->role table, room demands as
-         roles, every generator stratum-aware, the WALL DRESSING PASS. Placeholder strata rows point
-         at old sprites, so the game builds and looks "arranged" before the art lands.
-  3      THE WALL ART RUNTIME + STRATUM A LIVE: per-floor wall atlas from the manifest, BASE variants
-         per tile face, the wall GLOW pass (exempt from the grade), simple frame animation, distance
-         LOD, the opaque/merge fast path kept. Region A floors show the new walls.
-  4      STRATUM B - the Harvesting Galleries kit. Owner gate.
-  5      STRATUM C - the Reliquary kit (cradle bays animated). Owner gate.
-  6      STRATUM D - the Wound kit (gland pulse animated). Owner gate.
-  7      STRATUM E - the Core kit (synapse pulse animated). Owner gate.
-  8      DOORS AND COLUMNS: the four doors (keycard colours stay semantic) and the columns, per
-         stratum, in the same kit. Owner gate.
-  9      FLOORS AND CEILINGS: the ten surface materials regenerated with the kit to match the strata
-         (64x64 + mips, the existing GPU pipeline unchanged). Owner gate. (See OPEN QUESTIONS Q2.)
-  10     RETIRE THE OLD WALL LAYER: delete every old wall/door/column generator, the lab_wall_*.jpg /
-         wall.png assets, the old sprite ids and VARIETY_ONLY lists, the legacy 1:1 table (hand levels
-         bind to stratum A), the placeholder rows; final performance pass; docs.
+  1      THE KIT + REGION A SET (offline): walls.py (tiling bake, environment materials, wall
+         primitives, region-set table, atlas + glow + mips + manifest, previews), the guide's WALLS
+         section, and the complete Outer Facility set (36 walls + floor/ceiling). Owner gate.
+  2      THE SWITCH: region sets + room families + slot table + placement rules in the level layer,
+         every generator through one finisher; the atlas wall runtime (variants, glow, animation, LOD,
+         doors, columns, surfaces from the set); DELETION of the entire old wall layer. Set A live
+         everywhere (B-E borrow it).
+  3      REGION B + REGION C SETS (Harvesting Galleries, Reliquary). Owner gate per set.
+  4      REGION D + REGION E SETS (Wound, Core) + the final performance pass, the prototype script's
+         deletion and the closing docs. Owner gate per set.
 
-Why this order: 1-3 build and prove the whole pipeline on ONE stratum (the same shape as the enemy
-series), so 4-7 are content only. The strata go top to bottom, which is also simple to hardest
-(painted panels -> organic -> the abstract Core). Doors/columns and floors come after the walls they
-must match. Retirement is last so the game is never broken.
+Why this order: order 1 proves the look on one full set before any engine work; order 2 is the single
+engine change and removes the old system in one go (the owner's requirement); 3-4 are content only, top
+to bottom, simplest materials to hardest.
 
 
 DECISIONS (owner)
 -----------------
   D1  Walls are completely reworked: redesigned from scratch, existing walls are not reference, walls
-      may be deleted/added, levels' look may be re-imagined, and how textures are chosen for level
-      generation may be completely reworked.                                              (2026-10-22)
-  D2  Walls are made with the enemy-art kit (docs/sprite-art-creation-guide.txt), in the same style
-      as the generated enemies, consistent across the whole game's textures.               (2026-10-22)
+      may be deleted/added, levels' look may be re-imagined, texture choice for generation reworked. (2026-10-22)
+  D2  Walls are made with the enemy-art kit, in the enemies' style, consistent across all textures. (2026-10-22)
   D3  Most walls are static; a few may animate.                                            (2026-10-22)
-  D4  Before the rework, the owner sees prototype wall textures to confirm design and concept.
-      Delivered 2026-10-22: five prototypes (one per stratum) as a contact sheet + in-engine captures
-      under each region's mood. Verdict: PENDING - see OPEN QUESTIONS Q1.                  (2026-10-22)
+  D4  Prototype step done: five prototypes (one per region) shown as a contact sheet + in-engine
+      captures. Owner approved the plan and delegated the open questions to Claude; the prototypes
+      are APPROVED AS THE DIRECTION of the five sets.                                      (2026-10-22)
+  D5  REGION SEPARATION: each region has its own wall set; only that set builds the region's halls and
+      rooms. The current "any wall on any level" situation is outdated and goes completely. (2026-10-22)
+  D6  Inside a region: one base wall dominates, other walls of the same set appear now and then for
+      variety; the set is relatively LARGE; room types (medical, ...) have walls distinct from the base
+      and the generic hall; special rooms may have different walls.                        (2026-10-22)
+  D7  Doors differ per region.                                                              (2026-10-22)
+  D8  (delegated) Regions whose set has not shipped borrow set A after the switch; the old walls are
+      never kept as stand-ins.                                                              (2026-10-22)
+  D9  Four order files instead of ten (orders combined as in the ROSTER).                   (2026-10-22)
+  D10 (delegated) Floors and ceilings are part of each region set (regenerated with the kit); the
+      GPU floor/ceiling pipeline is unchanged, only its texels.                             (2026-10-22)
+  D11 (delegated) Columns are part of each region set.                                      (2026-10-22)
 
 
 ASSUMPTIONS (series-wide)
 -------------------------
-  AS1  Stratum = route region (RegionPlan.defaultPlan(): A..E), keyed by RegionAmbience like the mood.
-       Story region names (Habitation Rings ...) are the design names; code ids follow the route themeIds.
-  AS2  256x256 per tile face (enemy texel density: ~240 px per wall height), opaque, Nearest filter.
-  AS3  Static PNG atlases are shipped (as the enemy art is). This overrides visual-identity V1 ("no new
-       image assets") the same way the enemy series did: the PNGs are generator OUTPUT, never authored.
-  AS4  Same LIGHT direction as enemies (upper-left-front). A directional light on a periodic height
-       field shades periodically, so tiling is unaffected; Doom-era wall textures used the same convention.
-  AS5  The wall glow layer reuses the enemy idea: emissive pixels copied to a glow atlas, drawn over
-       the graded base with NORMAL blend, exempt from the grade (art-direction V6 gains "wall emissives").
-  AS6  Animation = a short frame cycle of the GLOW layer only (2-8 frames); the base stays one frame,
-       so animation costs one extra textured column, never a second base pass.
-  AS7  Hand-made levels (assets/levels/*.txt) render with stratum A and are not dressed (D1).
-  AS8  The 2D grid is the authority; the dressing pass is cosmetic and seeded, so the same seed gives
-       the same walls (fairness, seed sharing).
-  AS9  The enemy-art skill folder keeps its name; walls.py lives beside bestiary.py (guide 13 "OTHER
-       CONTENT"). A rename to an "art" skill is out of scope.
+  AS1  Region = route region (RegionPlan.defaultPlan(): A..E), resolved like the lighting mood.
+  AS2  256x256 per wall face (enemy texel density ~240 px per wall height), opaque, Nearest.
+  AS3  PNG atlases are shipped (generator OUTPUT, never authored) - this overrides visual-identity V1
+       ("no new image assets") exactly as the enemy series did.
+  AS4  Same LIGHT as enemies (upper-left-front). Directional light on a periodic height field shades
+       periodically, so tiling is unaffected.
+  AS5  Wall glow = enemy glow idea: emissive pixels in a glow atlas, NORMAL blend over the graded base,
+       exempt from the grade (art-direction V6 gains "wall emissives").
+  AS6  Animation = a 2-8 frame cycle of the GLOW layer only. Animated walls: A LIGHT flicker (a seeded
+       ~1 in 6 lamps), C LIGHT + cradle-bay pulse, D LIGHT heartbeat + one containment sac, E LIGHT
+       synapse pulse + the memory window. The manifest flags each ("animate": all / some).
+  AS7  One region atlas <= 2048x2048 (36 faces x 256^2 with 3 mips ~3.1 Mpx fits) + one glow atlas.
+       Only the floor's region is resident (~16 MB GPU worst case), disposed on floor teardown.
+  AS8  Same seed -> same walls (fairness, seed sharing).
+  AS9  walls.py lives beside bestiary.py in .claude/skills/enemy-art/ (guide 13 "OTHER CONTENT").
+  AS10 The stellar observatory and gore nest keep their room shapes and props; their walls become the
+       region's SIGNATURE set (their old themed walls are deleted with the rest).
 
 
 OPEN QUESTIONS
 --------------
-Raised once, with defaults. Orders 1-10 are NOT implementable until Q1 is answered.
-
-  Q1  Do the five prototypes confirm the direction (one coherent kit per region, sculpted with the
-      enemy kit, the facility progressively consumed by the planet)? Specific notes per prototype are
-      welcome (e.g. "A too clean", "E too busy").
-      Default: approved as direction; order 1 refines A into a full kit.
-  Q2  Should floors and ceilings also be regenerated with the kit (order 9)? The captures show the old
-      grid/tread floors now clash with the new walls.
-      Default: yes.
-  Q3  Should doors and columns be redesigned in the same series (order 8)?
-      Default: yes - they are wall stripes and are always in view.
+None. (Q1-Q3 were delegated to Claude by the owner on 2026-10-22 and are recorded as D4, D10, D11.)
 
 
 RELATED
 -------
-  Ideas:  generated-enemy-art.txt (+ order 1-9) - the sibling series and the method's origin
-          symbol-sprite-reuse-system*.txt - the tileset subsystem this series rewires
+  Ideas:  generated-enemy-art.txt (+ orders) - the sibling series and the method's origin
+          symbol-sprite-reuse-system*.txt - the tileset subsystem this series replaces for walls
           visual-identity*.txt - moods, grade, materials, UI kit
   Docs:   docs/sprite-art-creation-guide.txt, docs/environment-tileset-system.txt, docs/art-direction.txt,
           docs/tile-symbols.txt, docs/wall-renderer-guide.txt, docs/procedural-level-generation.txt

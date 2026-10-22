@@ -1,82 +1,90 @@
 STATUS: NOT IMPLEMENTED
 CATEGORY: Visual
-TITLE: Wall art order 3 - wall atlas runtime + Habitation Rings live
+TITLE: Wall art order 3 - Research Wing + Reactor Depths sets
 CREATED: 2026-10-22
 IMPLEMENTED: -
 ---
 
-Series: generated-wall-art.txt. Consumes order 1's manifest (R9 of order 1) and order 2's strata model.
-Read docs/wall-renderer-guide.txt and art-direction sections 4-5 + RENDER RESOLUTION TIERS first.
+Series: generated-wall-art.txt (region-set model, symbol table, rules W1-W12). Method: order 1's rules
+R1-R12 (face/surface size, tiling, trim lines, variants, rooms read as rooms, glow, animation, mips,
+atlas, keycard doors, manifest, determinism) apply UNCHANGED. CONTENT ONLY plus one registry edit per
+region: its RegionWallSet row stops aliasing set A and loads its own manifest (order 2's mechanism).
 
 
 OVERVIEW
 --------
-Make WallRenderer draw generated walls the way the enemy layer draws generated creatures: textures from
-a per-floor ATLAS described by a manifest, the emissive layer drawn ungraded over the graded base, and a
-little life - all without giving back any of render-performance-full-hd's speed. Then switch stratum A's
-registry rows from placeholders to the generated art, so every region-A floor shows the new walls.
+The second and third region sets. B, the HARVESTING GALLERIES (route: Research Wing), is an industrial
+abattoir passed off as a lab - the first crack in the briefing lives in its tiles. C, the RELIQUARY
+(route: Reactor Depths), is the resurrection heart where the planet's soul is rendered into printer
+fuel - where the player comes from. After this order three regions look like themselves; D and E still
+borrow set A.
 
 
 SCOPE
 -----
 IN
-  - render/tilesetgfx: WallAtlas (parsed <stratum>.walls.json + its two textures; Disposable, per floor,
-    loaded in buildLevelDependentResources beside EnvironmentTextureSet, disposed with it) and a
-    "generated" sprite source: a registered sprite id may resolve to an ATLAS REGION instead of a
-    stand-alone Texture (one row in the existing registry idiom - never a switch).
-  - WallRenderer:
-      * column texture lookup returns (texture, srcX, srcY, size) for atlas sprites; pre-resolved per
-        level into char-indexed arrays exactly like today (no map lookup per column);
-      * BASE VARIANTS: a BASE-role symbol has up to 3 regions; the column picks one by
-        GameMath.wallVariantIndex(tileColumn, tileRow, side, floorSeed, variantCount) - stable per face;
-      * GLOW PASS: after the base pass, for columns whose sprite has a glow region, draw the glow
-        column (same stripe geometry) with NORMAL blend, ungraded, fogged only by
-        ENEMY-style alpha fade with distance (new WALL_GLOW_FADE_START/MIN_ALPHA constants);
-      * ANIMATION: a sprite with glow frames picks the frame from the world clock (frame durations from
-        the manifest); per-face phase offset from the same hash so lamps do not flicker in sync;
-      * LOD: the column picks mip 0/1/2 by its on-screen texels per column (GameMath.wallMipLevel:
-        texture texels covered by one screen column = 256 / lineWidthInColumns... see TECHNICAL NOTES),
-        killing distant shimmer;
-      * the opaque fast path (R16) and equal-neighbour column merge (R18) still apply: the atlas is
-        opaque; merge compares (texture, srcX, srcY, mip) instead of (texture, srcX).
-  - Stratum A rows in WallStrata point at wall_a_* ids; their sprites are registered as atlas sprites.
-  - art-direction.txt section 5 gains "wall emissives" in the exemption list; a new subsection
-    "WALLS" (atlas, variants, glow, LOD); wall-renderer-guide.txt updated; environment-tileset-system
-    section 15 updated.
+  - walls.py: the REGIONS rows for research_wing and reactor_depths, each a complete set: HALL (BASE x3, STRUCTURE,
+    LIGHT, SERVICE, VENT, MARKER, BREACH), the six room families (BASE x2 + ACCENT each), SIGNATURE
+    (BASE x2 + ACCENT), 4 doors, 2 columns, floor + ceiling.
+  - New materials, if any, APPENDED to kit.MATERIALS (enemies and earlier regions regenerate
+    byte-identical).
+  - Shipped per region: assets/textures/walls/generated/<region>.walls.png / .glow.png / .walls.json /
+    .floor.png / .ceiling.png.
+  - RegionWallSets: the two rows switch from the set-A alias to their own manifests.
+  - Docs: the guide's WALLS AND SURFACES roster + any new lessons; art-direction WALLS roster;
+    environment-tileset-system section 15 roster.
 OUT
-  - Doors and columns (order 8) - they keep their current textures and paths.
-  - Strata B-E art (4-7); they keep placeholders.
-  - Any shader (V2) - SpriteBatch only.
+  - Any engine change (order 2 owns it; a bug found in it is fixed in a separate short-lane commit).
+  - Changing a region's mood numbers - if a set fights its mood, the SET changes (W6).
 
 
-RULES
------
-  R1  No allocation in render(); all atlas lookups resolved at level load.
-  R2  One wall-atlas texture bind for the base pass and one for the glow pass per frame (plus the
-      untouched door/column textures).
-  R3  The glow column is exempt from the mood grade and the red-alert dampen (V6); BLACKOUT dims it
-      by the existing BLACKOUT factor only (a lamp in a blackout reads as a lamp, slightly dimmed).
-  R4  Variant choice is a pure function of the face, so the same wall face always shows the same
-      variant (no popping when turning) and two runs of the same seed look identical.
-  R5  Mip choice never flickers between frames for a static view (pure function of distance).
-  R6  Full HD and HD tiers both supported; the mip formula uses the tier's column width.
+VISUAL DESIGN - REGION B, THE HARVESTING GALLERIES (mood clinical_white)
+-----------------------------------------------------------------------
+Glazed greige-celadon tile to shoulder height, form-tied concrete above, a hook rail at row ~52, a steel
+drain at the floor (the approved prototype). Clean surfaces, wrong stains (flesh_dk, never red).
+  HALL      BASE x3 the prototype's tile field - chips/cracks/missing tiles and grime differ; ONLY ONE
+            variant carries a hook (a hook on every tile was the wallpaper problem). STRUCTURE a concrete
+            pier with a downpipe. LIGHT a caged bulkhead lamp (cyan-white lens). SERVICE a hose reel +
+            standpipe. VENT a floor-level extraction grille with a stained mouth. MARKER a yield board
+            (tally slots, some plugged - "quota" without words, stencil G2-xx). BREACH chitin plates
+            pushing tiles off from below, ichor in the cracks.
+  MEDICAL   a surgical bay: white tile full height, a stainless scrub trough, a floor drain.
+            ACCENT a mirror panel over the trough (capsule glass, no glow).
+  SECURITY  a sliding barred gate over tile, a guard's hatch. ACCENT a shackle rail with cuffs.
+  CONTAINMENT a specimen wall: rows of small sealed hatches. ACCENT a recessed specimen tank, a dark
+            curled shape inside, faint ichor glow.
+  MACHINERY rendering press housings, heavy steel, a hopper. ACCENT a gauge cluster (cyan needles).
+  RESEARCH  dissection-lab panels with sample shelves. ACCENT a tally terminal with a paper strip.
+  STORAGE   cold-store doors with frost bands. ACCENT a meat-hook rack of empty hooks.
+  SIGNATURE THE KILLING FLOOR: a full hook bay - BASE x2 hooks on trolleys at different heights, stained
+            tile below; ACCENT a carcass silhouette in a plastic shroud on a hook (no gore - wrong shape).
+  DOORS     a stainless swing-door pair with kick plates and a drain at the sill; keycard panels.
+  COLUMNS   a tiled pier (round: a tiled drum).
+  FLOOR     tile with a drain grid; CEILING hook rails and caged lamps.
 
-
-TECHNICAL NOTES
----------------
-  - Texels per screen column at a face: the stripe of lineHeight pixels shows 256 texel rows, and one
-    ray column covers (columnWidth / lineWidthOfTile) of the texture's 256 columns. Use the vertical
-    term: texelsPerPixel = 256 / lineHeight; mip = clamp(floor(log2(max(1, texelsPerPixel * BIAS))), 0, 2).
-    GameMath.wallMipLevel with the mandatory comment block. (math-expert)
-  - GameMath.wallVariantIndex: splitMix64 of (tileColumn, tileRow, side, floorSeed) mod count.
-  - Sampling an atlas sub-rect per column: batch.draw(texture, x, y, w, h, srcX + texColumnAtMip,
-    srcY, 1, sizeAtMip, false, false) - srcY is the region's top row (LibGDX Y-up rule unchanged).
-  - Padding: order 1 duplicates edge texels into the 2 px padding, so Nearest sampling at u=0 / u=1
-    never bleeds a neighbour.
-  - Worker threads: the pre-resolved arrays are immutable per level (same publication contract as
-    today's levelWallTextures).
-  - Perf: measure base + glow pass with run-game --probe cpu on a region-A floor vs the placeholder
-    build of order 2, same session, interleaved A/B twice (run-game section 4).
+VISUAL DESIGN - REGION C, THE RELIQUARY (mood amber_hot)
+-------------------------------------------------------
+Heavy riveted gunmetal/darkmetal, fuel manifolds under the ceiling, the pale SOUL light as the region's
+only light. Under amber_hot the steel goes bronze and the soul light stays white.
+  HALL      BASE x3 riveted heavy plate in three widths, a fuel manifold along the cornice; one variant
+            has a thin soul trickle in a floor channel. STRUCTURE a massive rib with a hydraulic ram.
+            LIGHT a soul conduit window (capsule glass, soul flowing - 6 glow frames, animate=all).
+            SERVICE a valve-wheel cluster. VENT a coolant jacket grille with frost bands. MARKER a
+            reprint counter plate (stencil KR-xx, a column of tally marks). BREACH a soul leak: a
+            cracked fuel line, pale light pooling down the plate.
+  MEDICAL   the pattern infirmary: drawer walls of stored patterns. ACCENT one drawer open, dark.
+  SECURITY  Organization seal plates over shutters (livery, stencilled). ACCENT a sealed cradle-key
+            lock with a cyan lamp.
+  CONTAINMENT decommissioned cradles, dark and empty. ACCENT a cradle with cracked glass.
+  MACHINERY the renderer: furnace doors with a soul-white seam. ACCENT a pressure gauge bank.
+  RESEARCH  a pattern bank: a lattice of small soul-lit cells. ACCENT a pattern reader console.
+  STORAGE   fuel canister racks (capsule glass, faint soul). ACCENT an empty rack, one canister broken.
+  SIGNATURE THE CRADLE BANK - the approved prototype: BASE x2 cradle print bays (a half-formed body
+            curled in soul light, a feed line to the skull, a cyan status lamp; 6-frame pulse,
+            animate=all); ACCENT an empty bay, its feed line cut.
+  DOORS     a riveted pressure door with a soul-lit seam; keycard panels.
+  COLUMNS   a ribbed reactor stanchion (square: a fuel riser).
+  FLOOR     grating over soul-lit channels (no emissive - texels only); CEILING fuel manifolds.
 
 
 BALANCE NOTES / BALANCE ADMISSION
@@ -84,68 +92,46 @@ BALANCE NOTES / BALANCE ADMISSION
 None - adds no balance-bearing content.
 
 
-INTERACTIONS
-------------
-  - Muzzle light (art-direction 11): the additive splash must also apply to atlas columns (same code
-    path, texture differs).
-  - PropRenderer / EnemyRenderer read the wall z-buffer: unchanged.
-  - Mini-map: unchanged. Floor/ceiling: unchanged.
-
-
-EDGE CASES
-----------
-  - A manifest that fails to load: log it, the stratum falls back to its placeholder rows for that
-    floor (never a crash, never a missing wall) - mirrors EnemyAtlasCache's rule.
-  - A sprite with no glow region: no glow column drawn.
-  - Floor transition mid-flicker: the clock is world time; the new floor simply starts its own phase.
-  - App pause / GL context loss: the atlas reloads with the floor's other textures.
-
-
 ACCEPTANCE CRITERIA
 -------------------
-  A1  On a generated region-A floor (run-game, cool_steel), the walls are the order-1 kit: three base
-      variants visible along a corridor, structure rhythm, lit strip lamps, one flickering lamp.
-  A2  Lamps keep their colour when the mood is forced to amber_hot (glow ungraded) while the panels
-      take the amber grade.
-  A3  At 8+ tiles a long wall shows no moire/shimmer when the player turns (capture a turn burst).
-  A4  run-game --probe cpu: wall base + glow pass time within +10% of order 2's placeholder walls on
-      the same floor, same session (numbers recorded in the checkpoint file); draw calls do not grow
-      per wall sprite (one atlas).
-  A5  Regions B-E floors still render (placeholders), the start room renders, hand levels render.
-  A6  20 floor transitions: texture count stable (no leak) - the probe's texture/bind readout or a log.
-  A7  Docs updated (art-direction WALLS + V6 list, wall-renderer-guide, tileset section 15).
+  A1  walls.py writes both regions' files byte-identically twice; enemy atlases and set A regenerate
+      byte-identical.
+  A2  Each manifest: 9 HALL + 18 room + 3 SIGNATURE walls, 4 doors, 2 columns, 2 surfaces; C's LIGHT and SIGNATURE BASE with 6 glow frames.
+  A3  Hall strip, every room-family strip and the surfaces tile with no seam; trim lines meet.
+  A4  Each room family identifiable at 1x without its label, and distinct from the SAME family of every
+      earlier region (contact sheet: this region's family beside set A's).
+  A5  In-engine per region (run-game, its mood): hall variants + rhythm + lights, at least two room
+      families, the signature room or boss arena, the doors (keycard colours read at 6 tiles), the
+      floor and ceiling; on the region's LAST floor, BREACH clusters visible (P7).
+  A6  Enemies of the region read in front of its walls at 2 and 4 tiles (SHELL_BRUTE, IRON_STALKER, ACID_DRONE and the region's other spawns).
+  A7  Owner verdict per region recorded in DECISIONS (W9).
 
 
 IMPLEMENTATION PLAN
 -------------------
-  1. MATH       (math-expert)        GameMath.wallMipLevel, wallVariantIndex
-  2. LOAD       (libgdx-specialist)  WallAtlas + manifest parser + per-floor lifecycle
-  3. RENDER     (libgdx-specialist)  atlas columns, variants, glow pass, animation, LOD, merge key
-  4. DATA       (java-architect)     stratum A rows -> wall_a_*; atlas sprite registration
-  5. TESTS      None. Not balance-bearing; verified by build + run-game captures + probe.
-  6. DOCS       art-direction, wall-renderer-guide, environment-tileset-system
-
-RISKS AND UNKNOWNS
-  - The glow pass doubles textured columns where lamps are; bounded by role density (LIGHT ~1/7).
-  - Column merge (R18) loses some merges where variants alternate; measure.
+  1. CONTENT   Region B: hall -> rooms -> signature -> doors/columns -> surfaces; GATE
+  2. DATA      (java-architect) its RegionWallSets row; captures
+  3. CONTENT   Region C: the same; GATE
+  4. DATA      its row; captures
+  5. TESTS     None. Not balance-bearing; verified by regeneration, previews and run-game captures.
+  6. DOCS      the guide roster + lessons, art-direction WALLS roster, tileset section 15
 
 
 CHECKPOINTS
 -----------
   CP0  the checkpoint file exists on the branch, committed and pushed
-  CP1  GameMath helpers exist with comment blocks; build green
-  CP2  WallAtlas loads/disposes per floor; a region-A floor draws atlas walls (base only); build green
-  CP3  variants + LOD in; turn burst shows no shimmer
-  CP4  glow pass + animation in; A2 capture
-  CP5  probe numbers recorded (A4), leak check (A6)
-  CP6  docs updated
+  CP1  Region B set generated and shipped; enemy + set A atlases byte-identical
+  CP2  Region B row live; in-engine captures; owner verdict recorded (or changes done and re-shown)
+  CP3  Region C set generated and shipped
+  CP4  Region C row live; in-engine captures; owner verdict recorded
+  CP5  docs
 
 
 ASSUMPTIONS
 -----------
-  AS1  Glow fade-with-distance reuses the enemy glow's numbers (start 10 tiles, min alpha 0.6) as defaults.
-  AS2  Three base variants are enough; the hash avoids two neighbours sharing a variant only by chance -
-       acceptable (variants are subtle by design).
+  AS1  Region B stains stay desaturated flesh_dk (V5); the carcass is a wrapped shape, never anatomy.
+  AS2  The cradle bay is the approved prototype; refinements only (a darker bay, a smaller lamp).
+  AS3  A soul pulse is a glow-level curve 0.75 -> 1.1 -> 0.75, never above the kit's glow ceiling.
 
 
 DECISIONS
@@ -160,5 +146,4 @@ None.
 
 RELATED
 -------
-  generated-wall-art.txt, -order-1, -order-2, docs/wall-renderer-guide.txt, docs/art-direction.txt,
-  render-performance-full-hd idea (R16/R18)
+  generated-wall-art.txt, -order-1 (rules, set A), -order-2 (engine), story/05-descent-structure.md
