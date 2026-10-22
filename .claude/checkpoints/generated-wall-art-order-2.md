@@ -58,7 +58,7 @@ Never `git add -A`.
       run-game shows set A walls/doors/columns.
 - [x] **CP5** — variants + LOD + glow + animation; captures A4-A6 sent.
 - [x] **CP6** — floor/ceiling from the set's surfaces; capture sent.
-- [ ] **CP7** — Part 3 deletion; tests updated; build green; A3 grep clean; A7.
+- [x] **CP7** — Part 3 deletion; tests updated; build green; A3 grep clean; A7.
 - [ ] **CP8** — probe + leak check (A8); docs (A9); reviewer gate; STATUS IMPLEMENTED.
 
 ## UPDATED TESTS (W10)
@@ -70,6 +70,21 @@ Never `git add -A`.
 - CP3 `level/LevelGeneratorSnapshotTest` — re-baselined again for the hall placement (f00a581d...).
 - CP3 `route/Order10RegistriesTest.everyRegionCarriesCompleteThemingData` — asserts each region's `wallSetId()` is
   registered (was: non-empty `wallPalette()`).
+- CP7 `tileset/TilesetRegistriesTest` — wall/column catalog checks merged into
+  `everyWallSymbolAndTheColumnResolveInEveryRegionWallSet` (every Level.isWall char is a slot and resolves inside
+  every set; 'P' a column; 2 columns + 4 doors per set); duplicate/unknown/bootstrap probes use prop ids; the
+  height/occluder probe checks a crate instead of the deleted wall. (481 tests: two old methods merged into one.)
+- CP7 `tileset/LevelPaletteTest` — legacy maps walls through set A (spot ids), props unchanged;
+  `regionPaletteRebindsOnlyTheWallsAndTheColumn`, `regionPaletteBindsEveryWallSymbolToAFaceOfItsOwnSet` (THE guard
+  "every wall symbol resolves", now per region set) replace the two base-wall tests; catalog coverage skips set ids.
+- CP7 `tileset/SymbolAllocatorTest` — every rule (reservation, freed symbol, containment, anti-repetition, coherence,
+  capacity, clash) re-targeted from WALL slots to SOLID_PROP slots; `allocatorNeverBindsAWallOrTheColumn` and
+  `registryWithoutAnyWallOrColumnSpriteAllocates` replace the base-wall tests; themed registry holds themed props.
+- CP7 `tileset/SymbolBudgetTest` — 'x' FIXED with no sprite; wall chars == slot table, never reassignable; 'P' a
+  column outside the budget; unmodifiable/populated checks on SOLID_PROP.
+- CP7 `tileset/TilesetExtensibilityAcceptanceTest` — RECIPE A for walls: one alias row reaches a palette; hand levels
+  read set A. `tileset/LevelPaletteDistinctSpriteIdsTest`, `render/tilesetgfx/TextureGeneratorRegistryTest` — the
+  legacy catalog-coverage checks subtract set A's faces; synthetic ids renamed to set-A ids.
 
 ## NOTES CARRIED FORWARD
 
@@ -165,3 +180,18 @@ flipped to the generator layout (row 0 = south), R7 fallback to set A. The ten p
 `ArtDirection.MATERIAL_ID_*` are DELETED here (Part 3 item done early, because the switch replaces them). Moods bind
 their region's set surfaces in LightingMoods (cool_steel A, clinical_white B, amber_hot C, corrupted_violet D,
 core_white_violet E — B-E alias A today). FloorCeilingRenderer untouched. Captured + sent (hall 9 tiles, medical, door).
+
+**CP7:** DELETED: every WallRenderer generator/loader/door texture/opacity record (3311 -> ~970 lines) and
+`registerTextureGenerators`; `assets/textures/lab/lab_wall_*.jpg`, `lab_door_*.jpg`, `assets/textures/wall.png`
+(barrel_radioactive.png stays; assets/assets.txt is build-generated, untracked); tileset wall/column registrations +
+SPRITE_ID constants (VARIETY_ONLY_SPRITE_IDS kept, now empty), SymbolBudget base wall + WALL/COLUMN slots,
+SymbolAllocator base-wall branch, LevelPalettes.generatedWithBaseWall (legacy() = props/decals + set A via
+RegionPaletteBuilder), TilesetConstants FIXED_WALL_* / BASE_WALL_ALTERNATE / FLEXIBLE_WALL / FLEXIBLE_COLUMN;
+119 RenderConstants orphaned by the generators (LAB_* paths, *_WALL_TEXTURE_SIZE / seeds / feature counts, column
+texture constants, wall-only STELLAR colour rows) + their comment blocks. SymbolCategories derives WALL from the slot
+table and COLUMN from 'P'. DECISION: GameBalance PALETTE_* knobs are KEPT — the prop/decal allocator still reads all
+four (no wall-only knob existed), and GameBalance is balance-gated; no balance number changed. A3: grep for deleted
+ids/files/constants/wallPalette over core + assets + skills is clean (docs come in CP8). A7 in run-game: depth 9
+(region B alias, cavern), depth 5 boss arena (SIGNATURE lockers), depth 21 (region E), start room — all set A, no
+missing texture, no fallback log. Hand-made levels: legacy palette covered by LevelPaletteTest (LevelLoader path is
+dev-only).

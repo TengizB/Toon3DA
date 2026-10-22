@@ -4,7 +4,6 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.utils.Disposable;
 import ge.tbegvadze.toon3d.render.PropRenderer;
-import ge.tbegvadze.toon3d.render.WallRenderer;
 import ge.tbegvadze.toon3d.tileset.LevelPalette;
 
 import java.util.HashMap;
@@ -18,10 +17,8 @@ import java.util.Set;
  * frees them on teardown. Small GPU footprint per level; unbounded art library overall.
  *
  * <p>Built at level load via {@link #realize} (on the GL thread — it creates {@link Texture}s), owned by
- * {@code World}, and set on {@code WallRenderer}/{@code PropRenderer} per level. order-6 wires this supply
- * and its dispose path; order-7 flips the renderers to actually DRAW from it. Because it is fully built
- * before any frame renders, {@code WallRenderer}'s worker threads can read {@link #textureFor} results
- * without synchronisation (happens-before from level construction).
+ * {@code World}, and set on {@code PropRenderer} per level. It holds the palette's props and decals only:
+ * walls, doors and columns come from the floor's {@link RegionWallAtlas} (generated-wall-art order 2).
  *
  * <p>MEMORY RULE: exactly the palette's distinct sprites are resident, nothing else — de-duplicated so two
  * symbols bound to the same sprite id share one {@link Texture}. {@link #dispose()} frees every realized
@@ -55,8 +52,8 @@ public final class EnvironmentTextureSet implements Disposable {
         Map<String, Integer> widths   = new HashMap<>();
         Map<String, Integer> heights  = new HashMap<>();
         for (String spriteId : spriteIds) {
-            // TEMPORARY (generated-wall-art order 2, CP2-CP3): region wall set faces have no generator; the
-            // RegionWallAtlas (CP4) supplies them. Deleted with the old wall layer in CP7.
+            // Wall and column faces come from the floor's RegionWallAtlas (generated-wall-art order 2), not from
+            // a generator: this set realizes the palette's props and decals only.
             if (!generators.has(spriteId)) continue;
             Texture texture = generators.generate(spriteId);
             textures.put(spriteId, texture);
@@ -124,7 +121,6 @@ public final class EnvironmentTextureSet implements Disposable {
     public void dispose() {
         for (Texture texture : texturesBySpriteId.values()) {
             // Wall/column textures also drop their render-performance R16 opacity record (no-op for props).
-            WallRenderer.forgetWallTextureOpacity(texture);
             PropRenderer.disposeGeneratedTexture(texture);
         }
         texturesBySpriteId.clear();

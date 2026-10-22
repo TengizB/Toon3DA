@@ -17,8 +17,9 @@ import java.util.Map;
  *
  * <p>SymbolBudget stores STRUCTURE only — which char is which {@link SymbolClass} and, for flexible
  * symbols, which {@link TileCategory} it belongs to. It does NOT decide which sprite fills a flexible
- * slot (that is the allocator's job). The only sprites named here are the FIXED ones bound permanently
- * (e.g. 'x' → "wall_plain", the shop '@' → "prop_vendor").
+ * slot (that is the allocator's job). The only sprite named here is a FIXED one bound permanently (the
+ * shop '@' → "prop_vendor"). Walls and the column are not in the budget: since generated-wall-art order 2 a
+ * wall symbol names a SLOT of the floor's region wall set ({@link WallSlotTable}), never a sprite.
  *
  * <p>FAIL-SAFE RULE: any char not explicitly listed as flexible is {@link SymbolClass#FIXED}. Doors,
  * pickups, ammo, hazards, enemy spawns, player-start, exit — none of them appear in the flexible tables,
@@ -34,22 +35,14 @@ public final class SymbolBudget {
     // concerns things that map to environment sprites.
     private final Map<Character, String> fixedAssignments;
 
-    // The reassignable symbols per category (WALL -> [c,v,t,...], COLUMN -> ['P'], ...).
+    // The reassignable symbols per category (SOLID_PROP -> [g,E,...], FLOOR_DECAL -> [m,s,...]).
     private final Map<TileCategory, List<Character>> flexibleSlots;
 
     // Fast reverse lookup char -> its flexible category, built once from flexibleSlots.
     private final Map<Character, TileCategory> flexibleCategoryByChar;
 
-    // The bulk wall symbol ('x') and the ordered list of base-wall sprite ids the allocator may pick for
-    // it per GENERATED level (the default sprite first). See baseWallSpriteIds() for the full contract.
-    private final char baseWallSymbol;
-    private final List<String> baseWallSpriteIds;
-
     private SymbolBudget(Map<Character, String> fixedAssignments,
-                         Map<TileCategory, List<Character>> flexibleSlots,
-                         char baseWallSymbol, List<String> baseWallSpriteIds) {
-        this.baseWallSymbol    = baseWallSymbol;
-        this.baseWallSpriteIds = Collections.unmodifiableList(new ArrayList<>(baseWallSpriteIds));
+                         Map<TileCategory, List<Character>> flexibleSlots) {
         this.fixedAssignments = Collections.unmodifiableMap(new LinkedHashMap<>(fixedAssignments));
 
         Map<TileCategory, List<Character>> copiedSlots = new EnumMap<>(TileCategory.class);
@@ -67,34 +60,18 @@ public final class SymbolBudget {
     }
 
     /**
-     * Builds the canonical v1 partition from {@link TilesetConstants}: 'x' fixed to "wall_plain", the
-     * shop '@' fixed to "prop_vendor", and the accent walls / column 'P' / decoration props / decals as
-     * flexible category slots. This is the single source the allocator consumes.
+     * Builds the canonical partition from {@link TilesetConstants}: the shop '@' fixed to "prop_vendor", and
+     * the decoration props / decals as flexible category slots. This is the single source the allocator
+     * consumes.
      */
     public static SymbolBudget standard() {
-        char baseWallSymbol = TilesetConstants.FIXED_WALL_SYMBOL.charAt(0);
-
         Map<Character, String> fixed = new LinkedHashMap<>();
-        fixed.put(baseWallSymbol, TilesetConstants.FIXED_WALL_SPRITE_ID);
         putFixedSpriteExceptions(fixed);
 
         Map<TileCategory, List<Character>> flexible = new EnumMap<>(TileCategory.class);
-        flexible.put(TileCategory.WALL,       toCharList(TilesetConstants.FLEXIBLE_WALL_SYMBOLS));
-        flexible.put(TileCategory.COLUMN,     toCharList(TilesetConstants.FLEXIBLE_COLUMN_SYMBOLS));
         flexible.put(TileCategory.SOLID_PROP, toCharList(TilesetConstants.FLEXIBLE_SOLIDPROP_SYMBOLS));
         flexible.put(TileCategory.FLOOR_DECAL, toCharList(TilesetConstants.FLEXIBLE_DECAL_SYMBOLS));
-
-        // Ordered base-wall candidates: the default sprite first, then the alternates from the constant.
-        List<String> baseWalls = new ArrayList<>();
-        baseWalls.add(TilesetConstants.FIXED_WALL_SPRITE_ID);
-        for (String alternateId : TilesetConstants.BASE_WALL_ALTERNATE_SPRITE_IDS.split(",")) {
-            String trimmed = alternateId.trim();
-            if (!trimmed.isEmpty()) {
-                baseWalls.add(trimmed);
-            }
-        }
-
-        return new SymbolBudget(fixed, flexible, baseWallSymbol, baseWalls);
+        return new SymbolBudget(fixed, flexible);
     }
 
     /**
@@ -111,27 +88,6 @@ public final class SymbolBudget {
      */
     public Map<TileCategory, List<Character>> flexibleSlots() {
         return flexibleSlots;
-    }
-
-    /**
-     * The bulk wall symbol whose base-wall sprite the allocator varies per level (today 'x'). It is still
-     * a FIXED symbol (its category and gameplay meaning never change, and {@link #fixedSpriteId(char)}
-     * returns its default sprite) — only WHICH base wall fills it varies, and only on generated levels.
-     */
-    public char baseWallSymbol() {
-        return baseWallSymbol;
-    }
-
-    /**
-     * The ordered candidate base-wall sprite ids the allocator may pick for {@link #baseWallSymbol()} on a
-     * generated level, the default {@link TilesetConstants#FIXED_WALL_SPRITE_ID} first followed by the
-     * {@link TilesetConstants#BASE_WALL_ALTERNATE_SPRITE_IDS}. Unmodifiable; never empty (always contains
-     * at least the default). Hand-crafted / legacy levels never consult this — they keep the default via
-     * {@link LevelPalettes#legacy()}. The allocator filters this list to the ids actually registered in the
-     * request's sprite registry, so a minimal test registry with only the default still resolves safely.
-     */
-    public List<String> baseWallSpriteIds() {
-        return baseWallSpriteIds;
     }
 
     /**
@@ -162,8 +118,8 @@ public final class SymbolBudget {
     }
 
     /**
-     * The permanently-bound sprite id for a FIXED symbol that maps to an environment sprite (e.g. 'x' →
-     * "wall_plain"), or {@code null} for a FIXED symbol with no sprite (doors, pickups, …) or any
+     * The permanently-bound sprite id for a FIXED symbol that maps to an environment sprite (e.g. '@' →
+     * "prop_vendor"), or {@code null} for a FIXED symbol with no sprite (doors, pickups, …) or any
      * flexible symbol.
      */
     public String fixedSpriteId(char symbol) {

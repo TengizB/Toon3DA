@@ -38,7 +38,7 @@ public final class EnvironmentSpriteDefinition {
         this.themeTags          = Collections.unmodifiableSet(new LinkedHashSet<>(builder.themeTags));
     }
 
-    /** Stable sprite id (e.g. "wall_plain", "prop_locker", "decal_blood"). Never rename once shipped. */
+    /** Stable sprite id (e.g. "prop_locker", "decal_blood"). Never rename once shipped. */
     public String id() {
         return id;
     }

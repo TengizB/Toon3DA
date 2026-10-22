@@ -15,9 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * order-9 (docs/environment-tileset-system.txt §9), beyond the registry-integrity tests elsewhere:
  *
  * <ul>
- *   <li>RECIPE A — "wall_hex_plate" was added by registration alone (one sprite definition + one texture
- *       generator, marked variety-only). This test proves it actually REACHES a generated level: the
- *       allocator's per-level wall variety binds it to some flexible WALL symbol across seeds.</li>
+ *   <li>RECIPE A (walls, since generated-wall-art order 2) — a region wall set is ONE registry row (a real
+ *       set, or an alias that borrows one). This test proves a row added by registration alone reaches a
+ *       floor's palette: every wall symbol and the column resolve to the set it names.</li>
  *   <li>RECIPE B — "supply_cache" was added by registration alone (one RoomBlueprint, no RoomType
  *       constant, no bespoke generator helper). This test proves it can be SELECTED: it is registered,
  *       eligible on an ordinary room, and carries a positive selection weight, so it competes in the
@@ -29,39 +29,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TilesetExtensibilityAcceptanceTest {
 
     @Test
-    void recipeA_hexPlateWallReachesAGeneratedPaletteAcrossSeeds() {
-        EnvironmentSpriteRegistry registry = productionRegistry();
-        SymbolBudget budget = SymbolBudget.standard();
-
-        // It is a real WALL sprite, variety-only (no legacy symbol binds it), so it can only appear via
-        // the allocator's variety fill — never on a hand level.
-        assertTrue(registry.contains(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE));
-        assertTrue(TilesetRegistries.VARIETY_ONLY_SPRITE_IDS.contains(
-                TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE));
-
-        // With NO rooms reserving anything, every flexible WALL symbol falls to variety, so the hex-plate
-        // sprite is eligible to be chosen. Over a spread of seeds it must land on some symbol at least once.
-        boolean appeared = false;
-        for (long seed = 1; seed <= 400 && !appeared; seed++) {
-            LevelPalette palette = SymbolAllocator.allocate(
-                    SymbolAllocationRequest.builder(seed, budget, registry).depth(3).build());
-            for (char wallSymbol : budget.flexibleSlots().get(TileCategory.WALL)) {
-                if (TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE.equals(palette.spriteIdOf(wallSymbol))) {
-                    appeared = true;
-                    break;
-                }
-            }
+    void recipeA_aRegionSetRowAloneReachesAFloorPalette() {
+        // One alias row, registered alone in a fresh registry beside set A, is enough for a floor of that set
+        // to resolve every wall symbol and 'P' — no allocator, generator or renderer edit.
+        RegionWallSetRegistry registry = new RegionWallSetRegistry();
+        RegionWallSets.registerAll(registry);
+        registry.register(RegionWallSet.alias("test_annex", "outer_facility"));
+        registry.validate();
+        RegionWallSet set = registry.resolve("test_annex");
+        LevelPalette palette = RegionPaletteBuilder.build(set, LevelPalettes.legacy());
+        for (char symbol : WallSlotTable.symbols().toCharArray()) {
+            assertTrue(set.allWallIds().contains(palette.spriteIdOf(symbol)),
+                    "'" + symbol + "' did not resolve inside the registered set");
         }
-        assertTrue(appeared,
-                "wall_hex_plate (RECIPE A) never appeared on any generated palette across 400 seeds");
+        assertTrue(set.columnIds().contains(palette.spriteIdOf('P')));
     }
 
     @Test
-    void recipeA_hexPlateWallNeverAppearsOnHandLevels() {
-        // Hand-crafted levels use the LEGACY palette; a variety-only sprite must never be bound there.
+    void recipeA_handLevelsReadRegionSetA() {
+        // Hand-crafted levels use the LEGACY palette, whose walls come from set A through the slot table.
         LevelPalette legacy = LevelPalettes.legacy();
-        assertFalse(legacy.distinctSpriteIds().contains(TilesetRegistries.SPRITE_ID_WALL_HEX_PLATE),
-                "variety-only wall_hex_plate must not appear on legacy (hand) levels");
+        RegionWallSet setA = RegionWallSets.registry().resolve("outer_facility");
+        for (char symbol : WallSlotTable.symbols().toCharArray()) {
+            assertTrue(setA.allWallIds().contains(legacy.spriteIdOf(symbol)),
+                    "hand-level wall '" + symbol + "' is not a set-A face");
+        }
+        for (String spriteId : legacy.distinctSpriteIds()) {
+            assertTrue(spriteId.startsWith("wall_a_") || spriteId.startsWith("column_a_")
+                    || spriteId.startsWith("prop_") || spriteId.startsWith("decal_"),
+                    "an old wall sprite survived: " + spriteId);
+        }
     }
 
     @Test
@@ -95,8 +92,4 @@ class TilesetExtensibilityAcceptanceTest {
                 "supply_cache (GENERIC) must reserve no sprite");
     }
 
-    private static EnvironmentSpriteRegistry productionRegistry() {
-        TilesetRegistries.bootstrap();
-        return TilesetRegistries.sprites();
-    }
 }

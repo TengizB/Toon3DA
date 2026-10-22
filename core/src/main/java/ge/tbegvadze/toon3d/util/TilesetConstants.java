@@ -15,50 +15,13 @@ package ge.tbegvadze.toon3d.util;
  * matching sprite id lives in the environment-sprite registry (order-1). The chars here mirror
  * {@code Level}'s predicates and {@code TilesetRegistries}'s registration order, minus the fixed
  * exceptions called out in {@link #FIXED_SPRITE_SYMBOLS}.
+ *
+ * <p>Walls and the column are not in the partition (generated-wall-art order 2): a wall symbol names a SLOT of
+ * the floor's region wall set — see {@link #WALL_SLOT_TABLE} and the REGION WALL SETS block below.
  */
 public final class TilesetConstants {
 
     private TilesetConstants() {}
-
-    // ── FIXED WALL (the plain-wall default) ──────────────────────────────────────────────────────
-    // 'x' is the 80-90% default wall and every hand-crafted level leans on it heavily; it stays a
-    // FIXED WALL slot permanently bound to "wall_plain" so generic corridors always read the same and
-    // existing hand levels render their bulk walls unchanged. Flexibility applies to the ACCENT walls.
-    /** The single plain-wall symbol, permanently bound to {@link #FIXED_WALL_SPRITE_ID}. */
-    public static final String FIXED_WALL_SYMBOL    = "x";
-    /**
-     * The DEFAULT sprite 'x' is bound to (registered in order-1's wall pool). Hand-crafted levels and the
-     * legacy palette always render 'x' as this. GENERATED levels may instead pick one of the alternate
-     * base walls below, seeded from the floor seed (see {@link #BASE_WALL_ALTERNATE_SPRITE_IDS}).
-     */
-    public static final String FIXED_WALL_SPRITE_ID = "wall_plain";
-
-    /**
-     * Extra base-wall sprites (beyond {@link #FIXED_WALL_SPRITE_ID}) the per-level allocator may pick for
-     * the bulk wall symbol 'x' on GENERATED levels, so two seeds no longer share one base wall — the fix
-     * for "every level looks the same". Each carries a distinct FACILITY IDENTITY (material + hue) and is
-     * LIGHT, not gray: "wall_plain_sandstone" (a warm sandstone-block facility), "wall_plain_clean" (a
-     * bright clinical-lab facility), and "wall_plain_tiled" (a sage/teal glazed ceramic-tile facility).
-     * Comma-separated stable sprite ids, all registered in the WALL pool
-     * with their own procedural texture generators (and listed in
-     * {@code TilesetRegistries.VARIETY_ONLY_SPRITE_IDS}, since no legacy symbol maps to them). Together
-     * with {@link #FIXED_WALL_SPRITE_ID} these form the ordered base-wall candidate list the allocator
-     * rolls against. Adding another base wall is: register the sprite + generator, then append its id here.
-     * Hand-crafted / legacy levels ignore this list entirely and keep {@link #FIXED_WALL_SPRITE_ID}.
-     */
-    public static final String BASE_WALL_ALTERNATE_SPRITE_IDS =
-            "wall_plain_sandstone,wall_plain_clean,wall_plain_tiled";
-
-    // ── FLEXIBLE slots (category fixed, sprite assigned per level by the allocator, order-4) ──────
-    /**
-     * Reassignable WALL accent symbols — every {@code Level.isWall} char EXCEPT the plain 'x'. Includes
-     * the three STELLAR_OBSERVATORY walls ('"' viewport, ''' magrail, '`' hull plate); the allocator
-     * keeps room-contained art in its room via the sprite theme tags, not via this budget.
-     */
-    public static final String FLEXIBLE_WALL_SYMBOLS      = "cvtwhjGkNQSMZUXDF\"'`";
-
-    /** Reassignable COLUMN symbol: 'P'. Its MEANING (column) is fixed; the filling sprite is flexible. */
-    public static final String FLEXIBLE_COLUMN_SYMBOLS    = "P";
 
     /**
      * Reassignable SOLID_PROP decoration symbols — every {@code Level.isPropSolid} char EXCEPT the

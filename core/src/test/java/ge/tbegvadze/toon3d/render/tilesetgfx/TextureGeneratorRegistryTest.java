@@ -51,10 +51,15 @@ class TextureGeneratorRegistryTest {
     void legacyPaletteReferencesTheWholeCatalogExceptVarietyOnlyArt() {
         // order-6 "no visual change" contract, NARROWED by order-8: a legacy level's palette references
         // every registered sprite exactly once EXCEPT the variety-only additions that no legacy symbol
-        // maps to (e.g. "column_square" — REQUIREMENT PROOF 2, an alternative COLUMN sprite reached only
-        // through the allocator). Legacy still realizes today's full historic wall/prop set.
+        // maps to (none since generated-wall-art order 2 moved walls and columns to the region sets).
         LevelPalette legacy = LevelPalettes.legacy();
-        Set<String> referenced = legacy.distinctSpriteIds();
+        // generated-wall-art order 2: walls and the column are region-set A faces realized by the atlas, so
+        // the generator-backed set is everything else the palette references.
+        Set<String> referenced = new java.util.LinkedHashSet<>(legacy.distinctSpriteIds());
+        ge.tbegvadze.toon3d.tileset.RegionWallSet setA =
+                ge.tbegvadze.toon3d.tileset.RegionWallSets.registry().resolve("outer_facility");
+        referenced.removeAll(setA.allWallIds());
+        referenced.removeAll(setA.columnIds());
         Set<String> expected = new java.util.LinkedHashSet<>(TilesetRegistries.sprites().ids());
         expected.removeAll(TilesetRegistries.VARIETY_ONLY_SPRITE_IDS);
         assertEquals(expected, referenced);

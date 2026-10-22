@@ -46,8 +46,8 @@ class SymbolCategoriesTest {
 
     @Test
     void fixedSpriteExceptionsResolveToTheirDefinitionCategory() {
-        // 'x' -> "wall_plain" (WALL) and '@' -> "prop_vendor" (SOLID_PROP): FIXED-sprite symbols whose
-        // category flows from the registered sprite definition, not a flexible slot.
+        // 'x' is a WALL through the wall slot table (generated-wall-art order 2) and '@' -> "prop_vendor"
+        // (SOLID_PROP) takes its category from the registered sprite definition, not a flexible slot.
         assertEquals(TileCategory.WALL, SymbolCategories.categoryOf('x'));
         assertEquals(TileCategory.SOLID_PROP, SymbolCategories.categoryOf('@'));
     }

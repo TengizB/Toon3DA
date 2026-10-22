@@ -11,10 +11,11 @@ import java.util.Set;
  * The PER-LEVEL BINDING for the symbol/sprite-reuse migration (order-3): the immutable map that says,
  * for ONE level, which {@link TileCategory} each environment symbol belongs to and which
  * {@link EnvironmentSpriteDefinition} (by stable id) that symbol renders. A level's SYMBOL is a SLOT in a
- * fixed category, but WHICH sprite fills that slot is chosen per level — for FIXED symbols it is a
- * permanent binding ('x' → "wall_plain"); for FLEXIBLE symbols it is whatever the allocator (order-4)
- * assigned. Every level carries one of these (see {@code Level.getPalette()}); hand-crafted levels and,
- * for now, generated levels use the shared {@link LevelPalettes#legacy()} instance.
+ * fixed category, but WHICH sprite fills that slot is chosen per level — for a FIXED symbol it is a
+ * permanent binding ('@' → "prop_vendor"); for FLEXIBLE symbols it is whatever the allocator (order-4)
+ * assigned; for a wall symbol and 'P' it is the floor's region wall set face (generated-wall-art order 2,
+ * {@link RegionPaletteBuilder}). Every level carries one of these (see {@code Level.getPalette()});
+ * hand-crafted levels use the shared {@link LevelPalettes#legacy()} instance.
  *
  * <p>ID-ONLY, HEADLESS: LevelPalette resolves symbol → category + sprite id (a string). It holds NO
  * textures — the render layer turns sprite ids into textures later (order-6). Keeping it id-only keeps
@@ -72,7 +73,7 @@ public final class LevelPalette {
     /**
      * The DISTINCT sprite ids this level actually renders — the small set the render layer realizes into
      * textures for this level (order-6). De-duplicated: several symbols bound to the same sprite id (e.g.
-     * two levels' worth of walls collapsing onto "wall_plain") contribute that id once, so exactly one
+     * every BASE wall symbol of a family collapsing onto its variant-0 face) contribute that id once, so exactly one
      * texture is built per shared sprite. Unmodifiable snapshot; order is unspecified.
      */
     public Set<String> distinctSpriteIds() {

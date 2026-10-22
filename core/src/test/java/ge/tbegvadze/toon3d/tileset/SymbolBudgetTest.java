@@ -18,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Partition-integrity tests for the symbol budget (order-2): the fixed and flexible sets are disjoint,
  * every gameplay symbol (doors, pickups, ammo, hazards, enemy spawns, start, exit) resolves to FIXED,
- * 'x' is fixed and bound to "wall_plain", and every flexible symbol maps to a real order-1 category
+ * walls and the column are outside the budget (generated-wall-art order 2: they name a slot of the floor's
+ * region wall set, never a sprite), and every flexible symbol maps to a real order-1 category
  * whose sprite pool actually contains it. These guard the SAFETY BOUNDARY the allocator relies on.
  * Headless — no LibGDX.
  */
@@ -30,11 +31,12 @@ class SymbolBudgetTest {
     private final SymbolBudget budget = SymbolBudget.standard();
 
     @Test
-    void plainWallIsFixedAndBoundToWallPlain() {
+    void plainWallIsFixedAndNamesNoSprite() {
+        // 'x' is the HALL BASE slot: never reassignable by the allocator, and no sprite of its own.
         assertSame(SymbolClass.FIXED, budget.symbolClassOf('x'));
         assertTrue(budget.isFixed('x'));
         assertFalse(budget.isFlexible('x'));
-        assertEquals("wall_plain", budget.fixedSpriteId('x'));
+        assertNull(budget.fixedSpriteId('x'));
         assertNull(budget.categoryOfFlexibleSymbol('x'));
     }
 
@@ -92,30 +94,28 @@ class SymbolBudgetTest {
     }
 
     @Test
-    void everyWallSymbolIsPartitionedAndFlexibleWallsAreWalls() {
-        // Every char Level treats as a wall is either the fixed plain wall or a flexible WALL slot,
-        // and every flexible WALL symbol really is a wall to Level. No wall char is left unclassified.
+    void everyWallSymbolIsASlotOfTheTableAndNeverReassignable() {
+        // Every char Level treats as a wall is exactly a symbol of the wall slot table, and the allocator
+        // can never reassign it (FIXED, no flexible category). No wall char is left unclassified.
         for (char candidate = FIRST_PRINTABLE; candidate <= LAST_PRINTABLE; candidate++) {
+            assertEquals(Level.isWall(candidate), WallSlotTable.isWallSymbol(candidate),
+                    "'" + candidate + "' wall status disagrees with the slot table");
             if (!Level.isWall(candidate)) {
                 continue;
             }
-            if (candidate == 'x') {
-                assertSame(SymbolClass.FIXED, budget.symbolClassOf(candidate));
-            } else {
-                assertSame(SymbolClass.FLEXIBLE, budget.symbolClassOf(candidate));
-                assertSame(TileCategory.WALL, budget.categoryOfFlexibleSymbol(candidate));
-            }
+            assertSame(SymbolClass.FIXED, budget.symbolClassOf(candidate));
+            assertNull(budget.categoryOfFlexibleSymbol(candidate));
         }
-        for (Character wallSymbol : budget.flexibleSlots().get(TileCategory.WALL)) {
-            assertTrue(Level.isWall(wallSymbol), "flexible WALL symbol '" + wallSymbol + "' is not a wall");
-        }
+        assertFalse(budget.flexibleSlots().containsKey(TileCategory.WALL));
     }
 
     @Test
-    void columnSymbolIsFlexible() {
-        assertSame(SymbolClass.FLEXIBLE, budget.symbolClassOf('P'));
-        assertSame(TileCategory.COLUMN, budget.categoryOfFlexibleSymbol('P'));
+    void columnSymbolIsAColumnOutsideTheBudget() {
+        // 'P' keeps its COLUMN meaning; its picture comes from the floor's region set, not the allocator.
+        assertSame(SymbolClass.FIXED, budget.symbolClassOf('P'));
+        assertNull(budget.categoryOfFlexibleSymbol('P'));
         assertTrue(Level.isColumn('P'));
+        assertFalse(budget.flexibleSlots().containsKey(TileCategory.COLUMN));
     }
 
     @Test
@@ -157,14 +157,12 @@ class SymbolBudgetTest {
     void flexibleSlotsAndFixedAssignmentsAreUnmodifiable() {
         assertThrowsUnsupported(() -> budget.fixedAssignments().put('Z', "x"));
         assertThrowsUnsupported(() -> budget.flexibleSlots().put(TileCategory.WALL, null));
-        assertThrowsUnsupported(() -> budget.flexibleSlots().get(TileCategory.WALL).add('z'));
+        assertThrowsUnsupported(() -> budget.flexibleSlots().get(TileCategory.SOLID_PROP).add('z'));
     }
 
     @Test
-    void allFourFlexibleCategoriesArePopulated() {
-        assertNotNull(budget.flexibleSlots().get(TileCategory.WALL));
-        assertFalse(budget.flexibleSlots().get(TileCategory.WALL).isEmpty());
-        assertFalse(budget.flexibleSlots().get(TileCategory.COLUMN).isEmpty());
+    void bothFlexibleCategoriesArePopulated() {
+        assertNotNull(budget.flexibleSlots().get(TileCategory.SOLID_PROP));
         assertFalse(budget.flexibleSlots().get(TileCategory.SOLID_PROP).isEmpty());
         assertFalse(budget.flexibleSlots().get(TileCategory.FLOOR_DECAL).isEmpty());
     }

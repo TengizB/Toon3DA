@@ -1,5 +1,7 @@
 package ge.tbegvadze.toon3d.tileset;
 
+import ge.tbegvadze.toon3d.util.TilesetConstants;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -12,11 +14,12 @@ import java.util.Map;
  * hand-maintained char lists.
  *
  * <p>A symbol's CATEGORY is fixed and symbol-intrinsic — it never depends on which sprite a level's
- * {@link LevelPalette} assigns to it. A FLEXIBLE wall symbol is ALWAYS a wall regardless of the accent
- * texture that fills it; a FIXED symbol keeps its permanent meaning. So category membership can be resolved
+ * {@link LevelPalette} assigns to it. A wall symbol is ALWAYS a wall regardless of the region-set picture
+ * that fills it; a FIXED symbol keeps its permanent meaning. So category membership can be resolved
  * STATICALLY and PALETTE-FREE: this class derives it entirely from the {@link SymbolBudget} partition
- * (order-2) plus, for the two fixed-sprite exceptions ('x' → "wall_plain", '@' → "prop_vendor"), the
- * category recorded on their sprite definitions in the {@link EnvironmentSpriteRegistry} (order-1).
+ * (order-2), the wall slot table ({@link WallSlotTable}: every wall symbol is a WALL and 'P' the COLUMN,
+ * generated-wall-art order 2) plus, for the fixed-sprite exception ('@' → "prop_vendor"), the category
+ * recorded on its sprite definition in the {@link EnvironmentSpriteRegistry} (order-1).
  *
  * <p>Because category is symbol-intrinsic, {@link #categoryOf(char)} takes NO palette — it is safe to call
  * from hot movement / AI / collision code that has no render dependency. Only the SPRITE that fills the
@@ -48,22 +51,27 @@ public final class SymbolCategories {
     }
 
     private static Map<Character, TileCategory> build() {
-        // Idempotent; guarantees the shared registry holds the v1 inventory before we read a category off
-        // the two fixed-sprite exceptions' definitions.
+        // Idempotent; guarantees the shared registry holds the inventory before we read a category off the
+        // fixed-sprite exceptions' definitions.
         TilesetRegistries.bootstrap();
         EnvironmentSpriteRegistry registry = TilesetRegistries.sprites();
         SymbolBudget budget = SymbolBudget.standard();
 
         Map<Character, TileCategory> map = new HashMap<>();
-        // FLEXIBLE symbols carry their category directly in the budget (WALL accents, 'P', decoration
-        // props, pure decals).
+        // Walls and the column (generated-wall-art order 2): every symbol of the slot table is a WALL and 'P'
+        // the COLUMN, whatever picture the floor's region set gives them.
+        String wallSymbols = WallSlotTable.symbols();
+        for (int index = 0; index < wallSymbols.length(); index++) {
+            map.put(wallSymbols.charAt(index), TileCategory.WALL);
+        }
+        map.put(TilesetConstants.WALL_SET_COLUMN_SYMBOL, TileCategory.COLUMN);
+        // FLEXIBLE symbols carry their category directly in the budget (decoration props, pure decals).
         for (Map.Entry<TileCategory, List<Character>> entry : budget.flexibleSlots().entrySet()) {
             for (Character symbol : entry.getValue()) {
                 map.put(symbol, entry.getKey());
             }
         }
-        // FIXED sprite-bound symbols ('x', '@') take their category from the sprite definition they are
-        // permanently bound to, so the category still flows from one place (the registry).
+        // FIXED sprite symbols ('@') take the category recorded on their sprite definition.
         for (Map.Entry<Character, String> entry : budget.fixedAssignments().entrySet()) {
             map.put(entry.getKey(), registry.get(entry.getValue()).category());
         }
